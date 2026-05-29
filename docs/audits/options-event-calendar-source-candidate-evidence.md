@@ -26,6 +26,8 @@ Current repository state remains observation-only and non-authoritative:
 
 - an event source-candidate gap contract exists
 - event source registry candidate metadata exists
+- an inert runtime-safe `EventCalendarSourceCandidateEvidence` contract exists
+- candidate-evidence runtime projection exists and remains observation-only
 - event helper/registry/runtime projection status is still diagnostic-only and non-authoritative
 - existing event intelligence DTO, timeline, and provider protocol code is observation scaffolding only
 - no current repo-local path proves licensed provider, exchange, issuer, or official-calendar authority
@@ -134,11 +136,9 @@ If any box remains unchecked, do not proceed to implementation.
    Update this worksheet only after verified facts exist; do not backfill assumptions, current provider IDs, or provider self-claims.
 3. Read-only implementation audit
    Inspect current adapter, diagnostic, API, runtime, and policy boundaries without editing runtime code.
-4. Inert source-candidate evidence contract only if approved
-   If separately approved, limit the first implementation to an inert candidate-evidence contract with no live calls and no authority grant.
-5. Runtime projection only after inert contract validation
-   Any runtime-facing projection must wait until the inert contract is validated and still remains diagnostic-only.
-6. Authority grant only in a separate future policy task
+4. Keep the inert source-candidate evidence contract observation-only
+   The existing candidate-evidence contract and runtime projection must stay diagnostic-only, candidate-only, `authorityGrant=false`, and must not enable live calls or decision use.
+5. Authority grant only in a separate future policy task
    Any authority decision requires a distinct policy task with explicit approval, completed manual external verification, verified facts, and separate validation.
 
 ## Locked Invariants

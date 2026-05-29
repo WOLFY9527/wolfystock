@@ -15,7 +15,7 @@ All three tracks remain non-authoritative. No current repo-local provider or sou
 | Surface | Observation-only status | Current artifact status | External blocker |
 | --- | --- | --- | --- |
 | `expiration-calendar` | Closest future onboarding candidate, still observation-only | Full observation-only scaffold exists end to end, but no authority path is feasible yet | Manual external verification for provenance, rights, freshness, coverage, taxonomy, and adjusted deliverables still missing |
-| `event-calendar` | Observation-only | Gap + registry + helper/runtime projection scaffolding remain diagnostic-only; no runtime-safe candidate-evidence artifact exists | Manual external verification for provenance, official backing, rights, freshness, taxonomy, confirmation, timezone/session, and coverage still missing |
+| `event-calendar` | Observation-only | Gap + registry + helper/runtime projection scaffolding plus an inert runtime-safe candidate-evidence artifact exist; all remain diagnostic-only/candidate-only and non-authoritative | Manual external verification for provenance, official backing, rights, freshness, taxonomy, confirmation, timezone/session, and coverage still missing |
 | `IV-rank` | Observation-only | Gap contract + registry metadata + worksheet exist; compact operator-summary coverage is observation-only and not authority | Manual external verification for provenance, rights, freshness, methodology, universe, and missing-data policy still missing |
 
 ## Per Surface
@@ -52,10 +52,11 @@ All three tracks remain non-authoritative. No current repo-local provider or sou
   - gap contract
   - registry metadata
   - helper/runtime projection scaffolding
+  - source-candidate evidence packet/contract as a runtime-safe inert artifact
+  - evidence runtime projection
   - external verification worksheet
 - Missing scaffolding:
-  - source-candidate evidence packet/contract as a runtime-safe artifact
-  - evidence runtime projection
+  - none inside the current observation-only scaffold set
 - External verification still required:
   - source identity and provenance chain
   - licensed provider / exchange / issuer / official-calendar backing
