@@ -109,6 +109,8 @@ operator workflows.
   sanitized real-operator evidence collection.
 - [Operator Evidence Dry-Run Handoff](./audits/operator-evidence-dry-run-handoff.md):
   synthetic rehearsal flow for evidence workflow.
+- [Release Evidence Operator Handoff](./audits/release-evidence-operator-handoff.md):
+  current foundation-vs-launch-evidence release handoff checklist.
 - [Operator Evidence Redaction Checklist](./audits/operator-evidence-redaction-checklist.md):
   redaction before handoff.
 - [Release Rollback Runbook](./audits/release-rollback-runbook.md):
