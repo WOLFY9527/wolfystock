@@ -932,6 +932,7 @@ const CommandBar: React.FC<{
           value={searchQuery}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="搜索主题、英文名或成员"
+          aria-label="搜索主题、英文名或成员"
         />
       </label>
       <div

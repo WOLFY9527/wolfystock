@@ -16,7 +16,9 @@ import {
   FixedRegionGrid,
   MetricStrip,
 } from '../components/linear/LinearPrimitives';
-import { Button, ConfirmDialog, Drawer } from '../components/common';
+import { Button } from '../components/common/Button';
+import { ConfirmDialog } from '../components/common/ConfirmDialog';
+import { Drawer } from '../components/common/Drawer';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useUiPreferences } from '../contexts/UiPreferencesContext';
 import {
@@ -4996,6 +4998,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               autoComplete="off"
               disabled={isBusy}
               placeholder={copy?.omnibarPlaceholder || standbyCopy.omnibarPlaceholder}
+              aria-label={copy?.omnibarPlaceholder || standbyCopy.omnibarPlaceholder}
             />
           </div>
         </CompactFilterBar>

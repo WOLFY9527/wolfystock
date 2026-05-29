@@ -462,11 +462,10 @@ export function ScannerCandidateDiagnosticRow({
 }) {
   const resolvedTrustSources = trustSources?.length ? trustSources : [candidate];
   return (
-    <div
+    <button
+      type="button"
       data-testid={`scanner-ranked-row-${candidate.symbol}`}
       data-selected={isSelectedCandidate ? 'true' : undefined}
-      role="button"
-      tabIndex={0}
       onClick={onSelect}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -474,7 +473,7 @@ export function ScannerCandidateDiagnosticRow({
           onSelect();
         }
       }}
-      className={`cursor-pointer border-b border-white/7 px-3 py-2.5 text-sm transition-colors ${
+      className={`cursor-pointer appearance-none border-b border-white/7 px-3 py-2.5 text-left text-sm transition-colors ${
         isSelectedCandidate
           ? 'bg-emerald-400/[0.045] shadow-[inset_2px_0_0_rgba(52,211,153,0.32)]'
           : 'bg-transparent hover:bg-white/[0.028]'
@@ -618,7 +617,7 @@ export function ScannerCandidateDiagnosticRow({
           {detailPanel}
         </div>
       ) : null}
-    </div>
+    </button>
   );
 }
 
@@ -672,10 +671,9 @@ export function ScannerCandidateCard({
   backtestItem?: ScannerBacktestItem;
 }) {
   return (
-    <div
+    <button
+      type="button"
       data-testid={`scanner-result-card-${candidateIdentity}`}
-      role="button"
-      tabIndex={0}
       onClick={() => onSelect()}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -683,7 +681,7 @@ export function ScannerCandidateCard({
           onSelect();
         }
       }}
-      className="rounded-xl border border-white/5 bg-white/[0.02] p-3 transition-colors hover:border-white/16 hover:bg-white/[0.04]"
+      className="appearance-none rounded-xl border border-white/5 bg-white/[0.02] p-3 text-left transition-colors hover:border-white/16 hover:bg-white/[0.04]"
     >
       <div className="flex justify-between items-start gap-3">
         <div className="min-w-0 flex flex-col gap-1.5">
@@ -785,7 +783,7 @@ export function ScannerCandidateCard({
       </div>
 
       {isExpanded ? detailPanel : null}
-    </div>
+    </button>
   );
 }
 
