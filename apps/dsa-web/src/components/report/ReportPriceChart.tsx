@@ -250,6 +250,42 @@ const buildTickIndices = (count: number, maxTicks = 6): number[] => {
   return [...new Set(values)];
 };
 
+type PageScrollLockState = {
+  bodyOverflow: string;
+  htmlOverflow: string;
+  bodyTouchAction: string;
+};
+
+const lockPageScroll = (lockRef: React.MutableRefObject<PageScrollLockState | null>) => {
+  if (typeof document === 'undefined') {
+    return;
+  }
+  if (lockRef.current != null) {
+    return;
+  }
+  lockRef.current = {
+    bodyOverflow: document.body.style.overflow,
+    htmlOverflow: document.documentElement.style.overflow,
+    bodyTouchAction: document.body.style.touchAction,
+  };
+  document.documentElement.style.overflow = 'hidden';
+  document.body.style.overflow = 'hidden';
+  document.body.style.touchAction = 'none';
+};
+
+const unlockPageScroll = (lockRef: React.MutableRefObject<PageScrollLockState | null>) => {
+  if (typeof document === 'undefined') {
+    return;
+  }
+  if (lockRef.current == null) {
+    return;
+  }
+  document.body.style.overflow = lockRef.current.bodyOverflow;
+  document.documentElement.style.overflow = lockRef.current.htmlOverflow;
+  document.body.style.touchAction = lockRef.current.bodyTouchAction;
+  lockRef.current = null;
+};
+
 const buildPath = (points: Array<{ x: number; y?: number }>): string => {
   let path = '';
   let started = false;
@@ -373,42 +409,8 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
   const dragStateRef = useRef<{ pointerX: number; window: ViewWindow } | null>(null);
   const chartStageRef = useRef<HTMLDivElement | null>(null);
   const activeTouchPointerIdRef = useRef<number | null>(null);
-  const pageScrollLockStateRef = useRef<{
-    bodyOverflow: string;
-    htmlOverflow: string;
-    bodyTouchAction: string;
-  } | null>(null);
+  const pageScrollLockStateRef = useRef<PageScrollLockState | null>(null);
   const { ref: chartRef, size } = useElementSize<HTMLDivElement>();
-
-  const lockPageScroll = () => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    if (pageScrollLockStateRef.current != null) {
-      return;
-    }
-    pageScrollLockStateRef.current = {
-      bodyOverflow: document.body.style.overflow,
-      htmlOverflow: document.documentElement.style.overflow,
-      bodyTouchAction: document.body.style.touchAction,
-    };
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.overflow = 'hidden';
-    document.body.style.touchAction = 'none';
-  };
-
-  const unlockPageScroll = () => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    if (pageScrollLockStateRef.current == null) {
-      return;
-    }
-    document.body.style.overflow = pageScrollLockStateRef.current.bodyOverflow;
-    document.documentElement.style.overflow = pageScrollLockStateRef.current.htmlOverflow;
-    document.body.style.touchAction = pageScrollLockStateRef.current.bodyTouchAction;
-    pageScrollLockStateRef.current = null;
-  };
 
   useEffect(() => {
     setActiveView('minute1');
@@ -433,16 +435,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
   }, [stockCode]);
 
   useEffect(() => () => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    if (pageScrollLockStateRef.current == null) {
-      return;
-    }
-    document.body.style.overflow = pageScrollLockStateRef.current.bodyOverflow;
-    document.documentElement.style.overflow = pageScrollLockStateRef.current.htmlOverflow;
-    document.body.style.touchAction = pageScrollLockStateRef.current.bodyTouchAction;
-    pageScrollLockStateRef.current = null;
+    unlockPageScroll(pageScrollLockStateRef);
   }, []);
 
   useEffect(() => {
@@ -705,7 +698,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
       event.preventDefault();
       event.stopPropagation();
       activeTouchPointerIdRef.current = event.pointerId;
-      lockPageScroll();
+      lockPageScroll(pageScrollLockStateRef);
     }
     dragStateRef.current = {
       pointerX: event.clientX,
@@ -725,7 +718,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     }
     if (activeTouchPointerIdRef.current === event.pointerId) {
       activeTouchPointerIdRef.current = null;
-      unlockPageScroll();
+      unlockPageScroll(pageScrollLockStateRef);
     }
   };
 
@@ -734,7 +727,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     setHoveredIndex(null);
     if (activeTouchPointerIdRef.current != null) {
       activeTouchPointerIdRef.current = null;
-      unlockPageScroll();
+      unlockPageScroll(pageScrollLockStateRef);
     }
   };
 
@@ -745,7 +738,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     }
     if (activeTouchPointerIdRef.current === event.pointerId) {
       activeTouchPointerIdRef.current = null;
-      unlockPageScroll();
+      unlockPageScroll(pageScrollLockStateRef);
     }
   };
 
