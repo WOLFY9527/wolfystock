@@ -428,7 +428,7 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
     };
   }, [robustnessEvidenceItem?.available, robustnessPreview.status, runId, t]);
 
-  const handleDownload = async (definition: SupportExportDefinition) => {
+  const handleDownload = useCallback(async (definition: SupportExportDefinition) => {
     setDownloadError(null);
     setDownloadingId(definition.id);
     try {
@@ -439,7 +439,7 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
     } finally {
       setDownloadingId(null);
     }
-  };
+  }, [runId, code, t]);
 
   const getAvailabilityText = (item: RuleBacktestSupportExportIndexItem | null): string => {
     if (!item) {
