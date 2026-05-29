@@ -182,12 +182,13 @@ function compactMetaText(meta?: Partial<MarketDataMeta>): string {
 
 function sanitizeConsumerDetails(details?: string[] | null): string[] {
   return (details || []).reduce<string[]>((acc, detail) => {
-    const trimmed = String(detail || '').trim();
-    if (trimmed && !CONSUMER_UNSAFE_DETAIL_PATTERN.test(trimmed)) {
-      acc.push(trimmed);
+    if (acc.length >= 2) return acc;
+    const normalized = String(detail || '').trim();
+    if (normalized && !CONSUMER_UNSAFE_DETAIL_PATTERN.test(normalized)) {
+      acc.push(normalized);
     }
     return acc;
-  }, []).slice(0, 2);
+  }, []);
 }
 
 function metadataTitle(parts: string[], warning?: string | null, hoverDetails?: string[] | null): string | undefined {

@@ -110,15 +110,23 @@ function candidateEvidenceContainer(candidate: unknown): Record<string, unknown>
 }
 
 function pickScannerCandidate(detail: Record<string, unknown>): Record<string, unknown> | null {
-  const candidateGroups = [
-    Array.isArray(detail.selected) ? detail.selected : [],
-    Array.isArray(detail.shortlist) ? detail.shortlist : [],
-    Array.isArray(detail.candidates) ? detail.candidates : [],
+  const allCandidates = [
+    ...(Array.isArray(detail.selected) ? detail.selected : []),
+    ...(Array.isArray(detail.shortlist) ? detail.shortlist : []),
+    ...(Array.isArray(detail.candidates) ? detail.candidates : []),
   ];
 
-  for (const group of candidateGroups) {
-    const match = group.find((candidate) => Boolean(candidateEvidenceContainer(candidate)));
-    if (isRecord(match)) return match;
+  const candidateMap = new Map<Record<string, unknown>, Record<string, unknown> | null>();
+  for (const candidate of allCandidates) {
+    if (isRecord(candidate)) {
+      candidateMap.set(candidate, candidateEvidenceContainer(candidate));
+    }
+  }
+
+  for (const candidate of allCandidates) {
+    if (isRecord(candidate) && candidateMap.get(candidate)) {
+      return candidate;
+    }
   }
   return null;
 }
