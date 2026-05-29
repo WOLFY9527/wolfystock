@@ -1,4 +1,4 @@
-import { useContext, useEffect } from 'react';
+import { use, useEffect } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -55,7 +55,7 @@ afterEach(() => {
 });
 
 const ShellRailFixture = () => {
-  const { setRailContent } = useContext(ShellRailContext);
+  const { setRailContent } = use(ShellRailContext);
 
   useEffect(() => {
     setRailContent(<div>archive content</div>);

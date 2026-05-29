@@ -150,9 +150,17 @@ const TERMINAL_BUTTON_CLASSES: Record<TerminalButtonVariant, string> = {
   danger: 'border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-transparent text-[color:var(--wolfy-market-down)] hover:bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_10%,transparent)] px-3 py-1.5 rounded-md text-xs transition-colors',
 };
 
-export const TerminalButton = /* @__PURE__ */ React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & {
+export const TerminalButton = /* @__PURE__ */ ({
+  variant = 'secondary',
+  className,
+  type = 'button',
+  children,
+  ref,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: TerminalButtonVariant;
-}>(({ variant = 'secondary', className, type = 'button', children, ...props }, ref) => (
+  ref?: React.Ref<HTMLButtonElement>;
+}) => (
   <button
     ref={ref}
     type={type}
@@ -162,8 +170,7 @@ export const TerminalButton = /* @__PURE__ */ React.forwardRef<HTMLButtonElement
   >
     {children}
   </button>
-));
-TerminalButton.displayName = 'TerminalButton';
+);
 
 type TerminalChipVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info';
 

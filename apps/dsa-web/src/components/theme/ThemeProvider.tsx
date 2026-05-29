@@ -2,7 +2,7 @@
 import type React from 'react';
 import {
   createContext,
-  useContext,
+  use,
   useEffect,
   useState,
 } from 'react';
@@ -65,7 +65,7 @@ const ThemeStyleController: React.FC<{ children: React.ReactNode }> = ({ childre
 };
 
 export function useThemeStyle(): ThemeStyleContextValue {
-  const context = useContext(ThemeStyleContext);
+  const context = use(ThemeStyleContext);
   if (!context) {
     throw new Error('useThemeStyle must be used within ThemeProvider');
   }

@@ -1,5 +1,5 @@
 import type React from 'react';
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, use, useEffect, useState } from 'react';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import type { CurrentUser } from '../api/auth';
 import { authApi } from '../api/auth';
@@ -233,7 +233,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 // eslint-disable-next-line react-refresh/only-export-components -- useAuth is a hook, co-located for context access
 export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
+  const ctx = use(AuthContext);
   if (!ctx) {
     throw new Error('useAuth must be used within AuthProvider');
   }

@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import type React from 'react';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, use, useEffect, useState } from 'react';
 import {
   DEFAULT_MARKET_COLOR_CONVENTION,
   getMarketColorPalette,
@@ -189,5 +189,5 @@ export const UiPreferencesProvider: React.FC<{ children: React.ReactNode }> = ({
 };
 
 export function useUiPreferences(): UiPreferencesContextValue {
-  return useContext(UiPreferencesContext);
+  return use(UiPreferencesContext);
 }

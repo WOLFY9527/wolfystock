@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import type React from 'react';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, use, useEffect, useState } from 'react';
 import {
   getStoredUiLanguage,
   normalizeUiLanguage,
@@ -92,5 +92,5 @@ export const UiLanguageProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 };
 
 export function useI18n(): UiLanguageContextValue {
-  return useContext(UiLanguageContext);
+  return use(UiLanguageContext);
 }
