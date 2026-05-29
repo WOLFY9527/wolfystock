@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type React from 'react';
-import { Badge, Select, Input } from '../common/Badge';
+import { Badge } from '../common/Badge';
+import { Select } from '../common/Select';
+import { Input } from '../common/Input';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import type { ConfigValidationIssue, SystemConfigFieldSchema, SystemConfigItem } from '../../types/systemConfig';
 import { getFieldDescription, getFieldTitle } from '../../utils/systemConfigI18n';

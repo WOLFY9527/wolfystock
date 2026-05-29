@@ -5,7 +5,12 @@ import { getParsedApiError } from '../../api/error';
 import { systemConfigApi } from '../../api/systemConfig';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import type { SystemConfigUpdateItem } from '../../types/systemConfig';
-import { ApiErrorAlert, Badge, Button, Input, Select, SupportBanner, SupportPanel } from '../common/ApiErrorAlert';
+import { ApiErrorAlert } from '../common/ApiErrorAlert';
+import { Badge } from '../common/Badge';
+import { Button } from '../common/Button';
+import { Input } from '../common/Input';
+import { Select } from '../common/Select';
+import { SupportBanner, SupportPanel } from '../common/SupportSurface';
 
 type ChannelProtocol = 'openai' | 'deepseek' | 'gemini' | 'anthropic' | 'vertex_ai' | 'ollama';
 

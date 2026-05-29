@@ -14,7 +14,8 @@ import {
   type MarketProviderOperationsSummary,
 } from '../api/marketProviderOperations';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert, Input } from '../components/common/ApiErrorAlert';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Input } from '../components/common/Input';
 import { DataFreshnessBadge } from '../components/market-overview/marketOverviewPrimitives';
 import {
   TerminalButton,

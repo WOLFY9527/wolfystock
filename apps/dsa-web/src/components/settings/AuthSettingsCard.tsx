@@ -4,7 +4,10 @@ import { authApi } from '../../api/auth';
 import { getParsedApiError, isParsedApiError, type ParsedApiError } from '../../api/error';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { useAuth } from '../../hooks/useAuth';
-import { Badge, Button, Input, Checkbox } from '../common/Badge';
+import { Badge } from '../common/Badge';
+import { Button } from '../common/Button';
+import { Input } from '../common/Input';
+import { Checkbox } from '../common/Checkbox';
 import { SettingsAlert } from './SettingsAlert';
 import { SettingsSectionCard } from './SettingsSectionCard';
 

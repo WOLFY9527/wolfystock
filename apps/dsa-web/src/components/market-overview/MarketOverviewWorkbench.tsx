@@ -2685,9 +2685,9 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
       coverage,
     };
   });
-  const heroRows = activeRows.reduce<React.ReactNode[]>((acc, row) => { if (row.tier === 'hero') { const node = renderPlannedRow(row); if (node) acc.push(node); } return acc; }, []);
-  const secondaryRows = activeRows.reduce<React.ReactNode[]>((acc, row) => { if (row.tier === 'secondary') { const node = renderPlannedRow(row); if (node) acc.push(node); } return acc; }, []);
-  const deepRows = activeRows.reduce<React.ReactNode[]>((acc, row) => { if (row.tier === 'deep') { const node = renderPlannedRow(row); if (node) acc.push(node); } return acc; }, []);
+  const heroRows = activeRows.reduce<React.ReactNode[]>((acc, row, index) => { if (row.tier === 'hero') { const node = renderPlannedRow(row, index); if (node) acc.push(node); } return acc; }, []);
+  const secondaryRows = activeRows.reduce<React.ReactNode[]>((acc, row, index) => { if (row.tier === 'secondary') { const node = renderPlannedRow(row, index); if (node) acc.push(node); } return acc; }, []);
+  const deepRows = activeRows.reduce<React.ReactNode[]>((acc, row, index) => { if (row.tier === 'deep') { const node = renderPlannedRow(row, index); if (node) acc.push(node); } return acc; }, []);
 
   return (
     <div

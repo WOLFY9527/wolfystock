@@ -15,7 +15,9 @@ import { backtestApi } from '../api/backtest';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { watchlistApi } from '../api/watchlist';
 import { ConsumerProtectedFrame, ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
-import { ApiErrorAlert, Input, Select } from '../components/common/ApiErrorAlert';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Input } from '../components/common/Input';
+import { Select } from '../components/common/Select';
 import {
   ConsoleBoard,
   ConsoleContextRail,
@@ -1122,7 +1124,7 @@ const WatchlistPage: React.FC = () => {
       } : { force: true });
       const listResponse = await watchlistApi.listWatchlistItems();
       const failures = Object.fromEntries(
-        (response.results || []).reduce<Array<[string, string]>>((acc, result) => {
+        (response.results || []).reduce<Array<[string, BatchFailure]>>((acc, result) => {
           if (normalizeText(result.status).toLowerCase() === 'failed') {
             acc.push([result.symbol, sanitizeFailureReason(result.message || '', '扫描失败')]);
           }

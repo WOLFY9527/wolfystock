@@ -1,5 +1,6 @@
 import type React from 'react';
-import { Button, GlassCard } from '../common/Button';
+import { Button } from '../common/Button';
+import { GlassCard } from '../common/GlassCard';
 import { StatusBadge } from '../ui/StatusBadge';
 import { ApiSourceCard } from './ApiSourceCard';
 import { SettingsSectionCard } from './SettingsSectionCard';

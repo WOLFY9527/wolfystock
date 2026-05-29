@@ -6,10 +6,8 @@ import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { publicAnalysisApi } from '../api/publicAnalysis';
 import { normalizeReportQuality } from '../api/reportNormalizer';
 import { withFallback } from '../api/withFallback';
-import {
-  DeepReportDrawer,
-  type SignalTone,
-} from '../components/home-bento/DeepReportDrawer';
+import { DeepReportDrawer } from '../components/home-bento/DeepReportDrawer';
+import type { SignalTone } from '../components/home-bento/theme';
 import type { HomeCandlestickChartContext } from '../components/home-bento/HomeCandlestickChart';
 import {
   CompactFilterBar,

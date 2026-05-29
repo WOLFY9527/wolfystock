@@ -10,7 +10,10 @@ import {
   type NotificationSeverity,
 } from '../api/adminNotifications';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert, Checkbox, Input, Select } from '../components/common/ApiErrorAlert';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Checkbox } from '../components/common/Checkbox';
+import { Input } from '../components/common/Input';
+import { Select } from '../components/common/Select';
 import {
   TerminalButton,
   TerminalChip,

@@ -20,7 +20,8 @@ import type {
   StandardReportTableSection,
 } from '../../types/analysis';
 import { getSentimentColor, getSentimentLabel } from '../../types/analysis';
-import { Badge, Disclosure } from '../common/Badge';
+import { Badge } from '../common/Badge';
+import { Disclosure } from '../common/Disclosure';
 import { cn } from '../../utils/cn';
 import { ReportPriceChart, type ReportPriceChartFixtures } from './ReportPriceChart';
 import {

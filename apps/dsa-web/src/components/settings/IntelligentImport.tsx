@@ -3,7 +3,9 @@ import { useState } from 'react';
 import { getApiErrorMessage } from '../../api/error';
 import { stocksApi, type ExtractItem } from '../../api/stocks';
 import { SystemConfigConflictError } from '../../api/systemConfig';
-import { Badge, Button, SupportBanner, SupportPanel } from '../common/Badge';
+import { Badge } from '../common/Badge';
+import { Button } from '../common/Button';
+import { SupportBanner, SupportPanel } from '../common/SupportSurface';
 
 const IMG_EXT = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
 const IMG_MAX = 5 * 1024 * 1024; // 5MB

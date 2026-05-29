@@ -1,7 +1,10 @@
 import type React from 'react';
 import { Button } from '../common/Button';
 import type { BentoHeroItem } from '../home-bento';
-import { DensityRail, GuidedDisclosure, InsightStack, SectionIntro } from '../guidance/DensityRail';
+import { DensityRail } from '../guidance/DensityRail';
+import { GuidedDisclosure } from '../guidance/GuidedDisclosure';
+import { InsightStack } from '../guidance/InsightStack';
+import { SectionIntro } from '../guidance/SectionIntro';
 import {
   describeSettingsSystemHealthStatus,
   type DisplayStatusTone,

@@ -3,7 +3,14 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import { PanelRightOpen } from 'lucide-react';
 import { getParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigValidationError } from '../api/systemConfig';
-import { ApiErrorAlert, Button, ConfirmDialog, Disclosure, Drawer, GlassCard, Input, Select } from '../components/common/ApiErrorAlert';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Button } from '../components/common/Button';
+import { ConfirmDialog } from '../components/common/ConfirmDialog';
+import { Disclosure } from '../components/common/Disclosure';
+import { Drawer } from '../components/common/Drawer';
+import { GlassCard } from '../components/common/GlassCard';
+import { Input } from '../components/common/Input';
+import { Select } from '../components/common/Select';
 import { PageBriefDrawer } from '../components/home-bento/PageBriefDrawer';
 import { useIsDesktopViewport } from '../components/layout/useIsDesktopViewport';
 import SystemControlPlane from '../components/settings/SystemControlPlane';
@@ -12,7 +19,8 @@ import {
 } from '../components/settings/dataSourceLibraryShared';
 import { useDataSourceLibraryController } from '../components/settings/useDataSourceLibraryController';
 import { useI18n } from '../contexts/UiLanguageContext';
-import { useAuth, useSystemConfig } from '../hooks/useAuth';
+import { useAuth } from '../hooks/useAuth';
+import { useSystemConfig } from '../hooks/useSystemConfig';
 import type { SystemConfigCategory } from '../types/systemConfig';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { productSetupSurfaceFromCurrentQuery } from '../utils/productSetupSurface';
@@ -30,16 +38,14 @@ import {
   buildSystemControlPlaneState,
   isRawEditableConfigItem,
 } from '../components/settings/settingsDerivedState';
-import {
-  AuthSettingsCard,
-  ChangePasswordCard,
-  IntelligentImport,
-  SettingsAlert,
-  SettingsCategoryNav,
-  SettingsField,
-  SettingsLoading,
-  SettingsSectionCard,
-} from '../components/settings/AuthSettingsCard';
+import { AuthSettingsCard } from '../components/settings/AuthSettingsCard';
+import { ChangePasswordCard } from '../components/settings/ChangePasswordCard';
+import { IntelligentImport } from '../components/settings/IntelligentImport';
+import { SettingsAlert } from '../components/settings/SettingsAlert';
+import { SettingsCategoryNav } from '../components/settings/SettingsCategoryNav';
+import { SettingsField } from '../components/settings/SettingsField';
+import { SettingsLoading } from '../components/settings/SettingsLoading';
+import { SettingsSectionCard } from '../components/settings/SettingsSectionCard';
 
 type SettingsDomain = 'ai_models' | 'data_sources' | 'notifications' | 'advanced';
 type SettingsWorkspacePanel = 'overview' | SettingsDomain;

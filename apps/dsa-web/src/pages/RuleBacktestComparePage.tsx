@@ -4,7 +4,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Button } from '../components/common/ApiErrorAlert';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Button } from '../components/common/Button';
 import {
   TerminalChip,
   TerminalEmptyState,

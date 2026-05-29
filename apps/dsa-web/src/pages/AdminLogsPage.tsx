@@ -20,7 +20,8 @@ import {
 } from '../api/adminLogs';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Drawer } from '../components/common/ApiErrorAlert';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Drawer } from '../components/common/Drawer';
 import {
   TerminalButton,
   TerminalChip,

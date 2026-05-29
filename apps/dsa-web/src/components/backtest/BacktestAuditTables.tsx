@@ -1,5 +1,7 @@
 import type React from 'react';
-import { ApiErrorAlert, Button, Card } from '../common/ApiErrorAlert';
+import { ApiErrorAlert } from '../common/ApiErrorAlert';
+import { Button } from '../common/Button';
+import { Card } from '../common/Card';
 import {
   AssumptionList,
   Disclosure,

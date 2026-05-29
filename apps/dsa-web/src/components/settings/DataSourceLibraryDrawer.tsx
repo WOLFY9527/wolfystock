@@ -1,5 +1,9 @@
 import type React from 'react';
-import { Button, ConfirmDialog, Drawer, Input, Select } from '../common/Button';
+import { Button } from '../common/Button';
+import { ConfirmDialog } from '../common/ConfirmDialog';
+import { Drawer } from '../common/Drawer';
+import { Input } from '../common/Input';
+import { Select } from '../common/Select';
 import { formatDateTime, formatDurationMs } from '../../utils/format';
 import type { BuiltinDataSourceEndpointCheck } from '../../types/systemConfig';
 import {
