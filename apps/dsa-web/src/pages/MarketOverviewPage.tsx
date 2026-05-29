@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MarketDataMeta, MarketOverviewPanel } from '../api/marketOverview';
 import { marketOverviewApi } from '../api/marketOverview';
 import type {
@@ -666,19 +666,15 @@ const MarketOverviewPage = () => {
   const latestPanelsRef = useRef(panels);
   const latestRefreshingPanelRef = useRef<PanelKey | null>(null);
 
-  const clearAutoRevalidateTimer = (panelKey: PanelKey) => {
+  const resetAutoRevalidatePanel = useCallback((panelKey: PanelKey) => {
     const timer = autoRevalidateTimersRef.current[panelKey];
     if (timer != null) {
       window.clearTimeout(timer);
       delete autoRevalidateTimersRef.current[panelKey];
     }
-  };
-
-  const resetAutoRevalidatePanel = (panelKey: PanelKey) => {
-    clearAutoRevalidateTimer(panelKey);
     delete autoRevalidateAttemptsRef.current[panelKey];
     delete autoRevalidateInFlightRef.current[panelKey];
-  };
+  }, []);
 
   const loadPanels = async (cancelledRef?: { current: boolean }) => {
     setLoading(true);
@@ -745,7 +741,7 @@ const MarketOverviewPage = () => {
     await Promise.allSettled([...primaryPromises, ...stagedPromises]);
   };
 
-  const refreshPanel = async (
+  const refreshPanel = useCallback(async (
     panelKey: PanelKey,
     loadPanel: () => Promise<PanelState[PanelKey]>,
     options?: { silent?: boolean },
@@ -787,7 +783,7 @@ const MarketOverviewPage = () => {
         setRefreshingPanel((currentPanel) => (currentPanel === panelKey ? null : currentPanel));
       }
     }
-  };
+  }, []);
 
   useEffect(() => {
     const cancelledRef = { current: false };
@@ -860,7 +856,11 @@ const MarketOverviewPage = () => {
 
   useEffect(() => () => {
     AUTO_REVALIDATE_PANEL_KEYS.forEach((panelKey) => {
-      clearAutoRevalidateTimer(panelKey);
+      const timer = autoRevalidateTimersRef.current[panelKey];
+      if (timer != null) {
+        window.clearTimeout(timer);
+        delete autoRevalidateTimersRef.current[panelKey];
+      }
     });
   }, []);
 
