@@ -1,0 +1,143 @@
+{
+  "fixture_meta": {
+    "surface": "backend_metrics_snapshot_contract",
+    "read_only": true,
+    "data_origin": "repo_local",
+    "source_class": "synthetic",
+    "aggregation_scope": "process_local"
+  },
+  "normalization": {
+    "count_names_stable": true,
+    "count_value_type": "non_negative_integer",
+    "percentile_claims": false,
+    "rate_claims": false,
+    "sla_claims": false,
+    "durable_time_series": false,
+    "multi_process_aggregation": false
+  },
+  "groups": {
+    "provider_diagnostics": {
+      "provenance": {
+        "data_origin": "repo_local",
+        "source_class": "synthetic",
+        "aggregation_scope": "process_local"
+      },
+      "sources": [
+        "provider_read_models_fixture",
+        "provider_usage_ledger_diagnostics"
+      ],
+      "counts": {
+        "configured_provider_count": 3,
+        "missing_credential_count": 1,
+        "permission_denied_count": 1,
+        "timeout_count": 1,
+        "fallback_served_count": 1,
+        "stale_cache_count": 1,
+        "budget_skip_count": 0
+      }
+    },
+    "market_cache_diagnostics": {
+      "provenance": {
+        "data_origin": "repo_local",
+        "source_class": "synthetic",
+        "aggregation_scope": "process_local"
+      },
+      "sources": [
+        "market_cache_event_summary"
+      ],
+      "counts": {
+        "hit_count": 4,
+        "miss_count": 1,
+        "stale_served_count": 2,
+        "cold_fallback_count": 1,
+        "refresh_started_count": 1,
+        "refresh_completed_count": 1,
+        "refresh_failed_count": 0
+      }
+    },
+    "backtest_diagnostics_readiness_exports": {
+      "provenance": {
+        "data_origin": "repo_local",
+        "source_class": "synthetic",
+        "aggregation_scope": "process_local"
+      },
+      "sources": [
+        "backtest_export_index_contracts",
+        "stored_readiness_exports"
+      ],
+      "counts": {
+        "rule_run_count": 2,
+        "export_index_count": 2,
+        "execution_model_metadata_export_count": 1,
+        "oos_parameter_readiness_export_count": 1,
+        "regime_attribution_readiness_export_count": 1,
+        "robustness_evidence_export_count": 1,
+        "support_bundle_manifest_export_count": 1
+      }
+    },
+    "release_gate_foundation_evidence_diagnostics": {
+      "provenance": {
+        "data_origin": "repo_local",
+        "source_class": "synthetic",
+        "aggregation_scope": "process_local"
+      },
+      "sources": [
+        "release_gate_summary_contract",
+        "foundation_evidence_fixtures"
+      ],
+      "counts": {
+        "foundation_evidence_category_count": 6,
+        "accepted_evidence_count": 4,
+        "review_required_evidence_count": 1,
+        "missing_evidence_count": 1,
+        "operator_validator_ready_count": 2
+      }
+    }
+  },
+  "sanitization_rules": [
+    "no_external_calls",
+    "no_live_calls",
+    "credential_values_omitted",
+    "payload_content_removed",
+    "production_paths_omitted",
+    "bounded_counts_only"
+  ],
+  "deferred_production_metrics_stack": {
+    "open_telemetry": {
+      "status": "deferred",
+      "implemented": false
+    },
+    "prometheus": {
+      "status": "deferred",
+      "implemented": false
+    },
+    "grafana": {
+      "status": "deferred",
+      "implemented": false
+    },
+    "sentry": {
+      "status": "deferred",
+      "implemented": false
+    },
+    "exporters": {
+      "status": "deferred",
+      "implemented": false
+    },
+    "scrape_endpoints": {
+      "status": "deferred",
+      "implemented": false
+    },
+    "alerts": {
+      "status": "deferred",
+      "implemented": false
+    },
+    "durable_storage": {
+      "status": "deferred",
+      "implemented": false
+    },
+    "multi_process_aggregation": {
+      "status": "deferred",
+      "implemented": false
+    }
+  }
+}

@@ -72,6 +72,85 @@ PROVIDER_OPS_READ_ROUTES = {
     "GET /api/v1/admin/providers/operations-matrix",
     "GET /api/v1/admin/market-providers/operations",
 }
+METRICS_SNAPSHOT_GROUPS = {
+    "provider_diagnostics",
+    "market_cache_diagnostics",
+    "backtest_diagnostics_readiness_exports",
+    "release_gate_foundation_evidence_diagnostics",
+}
+METRICS_SNAPSHOT_PROVENANCE = {
+    "data_origin": "repo_local",
+    "source_class": "synthetic",
+    "aggregation_scope": "process_local",
+}
+METRICS_SNAPSHOT_COUNT_NAMES = {
+    "provider_diagnostics": {
+        "configured_provider_count",
+        "missing_credential_count",
+        "permission_denied_count",
+        "timeout_count",
+        "fallback_served_count",
+        "stale_cache_count",
+        "budget_skip_count",
+    },
+    "market_cache_diagnostics": {
+        "hit_count",
+        "miss_count",
+        "stale_served_count",
+        "cold_fallback_count",
+        "refresh_started_count",
+        "refresh_completed_count",
+        "refresh_failed_count",
+    },
+    "backtest_diagnostics_readiness_exports": {
+        "rule_run_count",
+        "export_index_count",
+        "execution_model_metadata_export_count",
+        "oos_parameter_readiness_export_count",
+        "regime_attribution_readiness_export_count",
+        "robustness_evidence_export_count",
+        "support_bundle_manifest_export_count",
+    },
+    "release_gate_foundation_evidence_diagnostics": {
+        "foundation_evidence_category_count",
+        "accepted_evidence_count",
+        "review_required_evidence_count",
+        "missing_evidence_count",
+        "operator_validator_ready_count",
+    },
+}
+DEFERRED_PRODUCTION_METRICS_STACK_FIELDS = {
+    "open_telemetry",
+    "prometheus",
+    "grafana",
+    "sentry",
+    "exporters",
+    "scrape_endpoints",
+    "alerts",
+    "durable_storage",
+    "multi_process_aggregation",
+}
+FORBIDDEN_METRICS_SNAPSHOT_TERMS = (
+    "http://",
+    "https://",
+    "authorization",
+    "bearer ",
+    "cookie",
+    "set-cookie",
+    "api_key",
+    "access_token",
+    "refresh_token",
+    "password",
+    "provider_payload",
+    "request_body",
+    "response_body",
+    "/users/",
+    "/var/",
+    "/srv/",
+    "s3://",
+    "gs://",
+    ".env",
+)
 
 
 @dataclass(frozen=True)
@@ -102,6 +181,19 @@ def _assert_no_sensitive_terms(value: Any) -> None:
     serialized = "\n".join(_iter_strings(value)).lower()
     for term in FORBIDDEN_SENSITIVE_TERMS:
         assert term not in serialized
+
+
+def _assert_metrics_snapshot_group_contract(group: dict[str, Any], expected_counts: set[str]) -> None:
+    assert group["provenance"] == METRICS_SNAPSHOT_PROVENANCE
+    assert isinstance(group["sources"], list)
+    assert group["sources"]
+
+    counts = group["counts"]
+    assert set(counts) == expected_counts
+    for value in counts.values():
+        assert isinstance(value, int)
+        assert not isinstance(value, bool)
+        assert value >= 0
 
 
 def _build_provider_health_examples() -> _ProviderHealthExamples:
@@ -564,6 +656,7 @@ def test_admin_observability_fixtures_stay_sanitized_and_do_not_claim_other_doma
     fixture_paths = sorted(FIXTURE_DIR.glob("*.json"))
 
     assert {path.name for path in fixture_paths} == {
+        "backend_metrics_snapshot_contract.json",
         "cost_read_models.json",
         "logs_read_models.json",
         "mutation_boundary_inventory.json",
@@ -712,3 +805,52 @@ def test_provider_health_public_models_remain_read_only_sanitized_and_query_only
         assert "mode" not in drill["query"]
         assert "dryRun" not in drill["query"]
         assert "cleanup" not in str(drill).lower()
+
+
+def test_backend_metrics_snapshot_fixture_locks_stable_groups_and_normalization() -> None:
+    payload = _load_fixture("backend_metrics_snapshot_contract.json")
+
+    assert payload["fixture_meta"] == {
+        "surface": "backend_metrics_snapshot_contract",
+        "read_only": True,
+        "data_origin": "repo_local",
+        "source_class": "synthetic",
+        "aggregation_scope": "process_local",
+    }
+    assert payload["normalization"] == {
+        "count_names_stable": True,
+        "count_value_type": "non_negative_integer",
+        "percentile_claims": False,
+        "rate_claims": False,
+        "sla_claims": False,
+        "durable_time_series": False,
+        "multi_process_aggregation": False,
+    }
+    assert set(payload["groups"]) == METRICS_SNAPSHOT_GROUPS
+
+    for group_name, expected_counts in METRICS_SNAPSHOT_COUNT_NAMES.items():
+        _assert_metrics_snapshot_group_contract(payload["groups"][group_name], expected_counts)
+
+
+def test_backend_metrics_snapshot_fixture_stays_sanitized_and_deferred_only() -> None:
+    payload = _load_fixture("backend_metrics_snapshot_contract.json")
+
+    assert payload["sanitization_rules"] == [
+        "no_external_calls",
+        "no_live_calls",
+        "credential_values_omitted",
+        "payload_content_removed",
+        "production_paths_omitted",
+        "bounded_counts_only",
+    ]
+    assert set(payload["deferred_production_metrics_stack"]) == DEFERRED_PRODUCTION_METRICS_STACK_FIELDS
+    for field in DEFERRED_PRODUCTION_METRICS_STACK_FIELDS:
+        assert payload["deferred_production_metrics_stack"][field] == {
+            "status": "deferred",
+            "implemented": False,
+        }
+
+    _assert_no_sensitive_terms(payload)
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True).lower()
+    for term in FORBIDDEN_METRICS_SNAPSHOT_TERMS:
+        assert term not in serialized
