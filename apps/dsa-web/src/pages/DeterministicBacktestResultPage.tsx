@@ -267,6 +267,394 @@ function downloadTextFile(filename: string, content: string, mimeType: string): 
   URL.revokeObjectURL(url);
 }
 
+type RunStatusSectionProps = {
+  run: RuleBacktestRunResponse | null;
+  isLoadingRun: boolean;
+  runError: ParsedApiError | null;
+  cancelError: ParsedApiError | null;
+  statusSummaryItems: Array<{ label: string; value: string; note: string }>;
+  isPollingStatus: boolean;
+  isCancellingRun: boolean;
+  canCancelCurrentRun: boolean;
+  canExportTrace: boolean;
+  presetNotice: string | null;
+  availablePresets: RuleBacktestPreset[];
+  resultPage: (key: string, vars?: Record<string, string | number | undefined>) => string;
+  fetchRun: () => void;
+  handleCancelRun: () => void;
+  handleExportDecisionReport: (format: 'md' | 'html') => void;
+};
+
+const RunStatusSection: React.FC<RunStatusSectionProps> = ({
+  run,
+  isLoadingRun,
+  runError,
+  cancelError,
+  statusSummaryItems,
+  isPollingStatus,
+  isCancellingRun,
+  canCancelCurrentRun,
+  canExportTrace,
+  presetNotice,
+  availablePresets,
+  resultPage,
+  fetchRun,
+  handleCancelRun,
+  handleExportDecisionReport,
+}) => {
+  if (!run && isLoadingRun) {
+    return (
+      <section className="backtest-display-section" data-testid="deterministic-result-page-status">
+        <ConsoleBoard>
+          <div className="flex flex-col gap-3 p-4 md:p-5">
+            <div>
+              <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('statusCard.loadingSubtitle')}</p>
+              <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPage('statusCard.title')}</h2>
+            </div>
+            <div className="text-sm text-[color:var(--wolfy-text-secondary)]">{resultPage('statusCard.loadingBody')}</div>
+          </div>
+        </ConsoleBoard>
+      </section>
+    );
+  }
+
+  if (!run) {
+    return (
+      <section className="backtest-display-section" data-testid="deterministic-result-page-status">
+        <ConsoleBoard>
+          <div className="flex flex-col gap-3 p-4 md:p-5">
+            <div>
+              <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('statusCard.unavailableSubtitle')}</p>
+              <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPage('statusCard.title')}</h2>
+            </div>
+            {runError ? <ApiErrorAlert error={runError} /> : (
+              <div className="text-sm text-[color:var(--wolfy-text-secondary)]">{resultPage('statusCard.unavailableBody')}</div>
+            )}
+          </div>
+        </ConsoleBoard>
+      </section>
+    );
+  }
+
+  return (
+    <section className="backtest-display-section" data-testid="deterministic-result-page-status">
+      <ConsoleBoard>
+        <div className="flex flex-col gap-4 p-4 md:p-5">
+          <div>
+            <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('statusCard.controlsSubtitle')}</p>
+            <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPage('statusCard.title')}</h2>
+          </div>
+        <RuleRunStatusBanner run={run} />
+        <ConsoleStatusStrip
+          items={statusSummaryItems.map((item) => ({
+            key: item.label,
+            label: item.label,
+            value: item.value,
+          }))}
+        />
+        {!isRuleRunTerminal(run.status) ? (
+          <div>
+            <Banner
+              tone="info"
+              title={resultPage('statusCard.autoTrackingTitle')}
+              body={resultPage('statusCard.autoTrackingBody')}
+            />
+          </div>
+        ) : null}
+        {run.status === 'completed' ? (
+          <div>
+            <Banner
+              tone="success"
+              title={resultPage('statusCard.completedTitle')}
+              body={resultPage('statusCard.completedBody')}
+            />
+          </div>
+        ) : null}
+        {run.status === 'cancelled' ? (
+          <div>
+            <Banner
+              tone="warning"
+              title={resultPage('statusCard.cancelledTitle')}
+              body={resultPage('statusCard.cancelledBody')}
+            />
+          </div>
+        ) : null}
+        {run.status === 'failed' ? (
+          <div>
+            <Banner
+              tone="danger"
+              title={resultPage('statusCard.failedTitle')}
+              body={resultPage('statusCard.failedBody')}
+            />
+          </div>
+        ) : null}
+        <div className="product-action-row">
+          <Button variant="ghost" onClick={() => void fetchRun()} disabled={isCancellingRun}>
+            {isPollingStatus || isLoadingRun ? resultPage('statusCard.refreshing') : resultPage('statusCard.refreshStatus')}
+          </Button>
+          {canCancelCurrentRun ? (
+            <Button
+              variant="danger-subtle"
+              onClick={() => void handleCancelRun()}
+              isLoading={isCancellingRun}
+              loadingText={resultPage('statusCard.cancelling')}
+            >
+              {resultPage('statusCard.cancelRun')}
+            </Button>
+          ) : null}
+          {isRuleRunTerminal(run.status) && canExportTrace ? (
+            <>
+              <Button variant="secondary" onClick={() => downloadExecutionTraceCsv(run)}>
+                {resultPage('statusCard.exportCsv')}
+              </Button>
+              <Button variant="ghost" onClick={() => downloadExecutionTraceJson(run)}>
+                {resultPage('statusCard.exportJson')}
+              </Button>
+              <Button variant="ghost" onClick={() => handleExportDecisionReport('md')}>
+                {resultPage('statusCard.exportSummaryMd')}
+              </Button>
+            </>
+          ) : null}
+        </div>
+        {run.statusHistory?.length ? (
+          <Disclosure summary={resultPage('statusCard.viewStatusTimeline', { count: run.statusHistory.length })}>
+            <div className="product-chip-list">
+              {run.statusHistory.map((item, index) => (
+                <span key={`${item.status}-${item.at || index}`} className="product-chip">
+                  {index + 1}. {`${String(item.status || '--')} · ${item.at ? formatDateTime(item.at) : '--'}`}
+                </span>
+              ))}
+            </div>
+          </Disclosure>
+        ) : null}
+        {runError ? <ApiErrorAlert error={runError} /> : null}
+        {cancelError ? <ApiErrorAlert error={cancelError} /> : null}
+        {presetNotice ? (
+          <div>
+            <Banner tone="success" title={presetNotice} body={resultPage('statusCard.reusableBanner', { count: availablePresets.length })} />
+          </div>
+        ) : null}
+        </div>
+      </ConsoleBoard>
+    </section>
+  );
+};
+
+type CompletedTabPanelProps = {
+  run: RuleBacktestRunResponse;
+  normalized: ReturnType<typeof normalizeDeterministicBacktestResult>;
+  activeTab: ResultPageTabKey;
+  resultPage: (key: string, vars?: Record<string, string | number | undefined>) => string;
+  backtestCopy: (key: string, vars?: Record<string, string | number | undefined>) => string;
+  language: UiLanguage;
+  selectedBenchmarkLabel: string;
+  buyAndHoldLabel: string;
+  benchmarkStatusNote: string;
+  walkForwardOverview: BacktestWalkForwardOverview;
+  decisionReportMarkdown: string;
+  handleExportDecisionReport: (format: 'md' | 'html') => void;
+  hasRobustnessAnalysis: boolean;
+  robustnessAnalysis: Record<string, unknown> | null;
+  robustnessLensRows: CoverageTrackItem[];
+  riskControlRows: RiskControlVisualRow[];
+  activeRobustnessKey: string | null;
+  activeRiskControlKey: RiskControlVisualRow['key'] | null;
+  walkForward: Record<string, unknown> | null;
+  monteCarlo: Record<string, unknown> | null;
+  stressTests: Record<string, unknown> | null;
+  walkForwardAggregate: Record<string, unknown> | null;
+  monteCarloAggregate: Record<string, unknown> | null;
+  worstScenarioLabel: string;
+  monteCarloDetailRows: RobustnessMetricRow[];
+  monteCarloDetailEmptyText: string;
+  stressScenarioRows: StressScenarioDetail[];
+  stressScenarioDetailEmptyText: string;
+  strategySummaryRows: Array<{ key: string; label: string; value: string }>;
+  parsedSummaryEntries: Array<{ label: string; value: string }>;
+  strategyWarningEntries: string[];
+  comparisonItems: RuleComparisonItem[];
+  compareRunIds: number[];
+  historyItems: RuleBacktestHistoryItem[];
+  historyError: ParsedApiError | null;
+  compareError: ParsedApiError | null;
+  isLoadingHistory: boolean;
+  isLoadingCompareRuns: boolean;
+  fetchHistory: (code?: string) => void;
+  handleOpenCompareWorkbench: () => void;
+  setCompareRunIds: React.Dispatch<React.SetStateAction<number[]>>;
+  handleOpenHistoryRun: (item: RuleBacktestHistoryItem) => void;
+  handleToggleCompareRun: (item: RuleBacktestHistoryItem) => void;
+  scenarioPlans: RuleScenarioPlan[];
+  selectedScenarioPlanId: string | null;
+  setSelectedScenarioPlanId: React.Dispatch<React.SetStateAction<string | null>>;
+  handleRunScenarioPlan: () => Promise<void>;
+  isSubmittingScenarioRuns: boolean;
+  scenarioRuns: ScenarioRunState[];
+  scenarioError: ParsedApiError | null;
+  scenarioComparisonItems: RuleComparisonItem[];
+  availablePresets: RuleBacktestPreset[];
+  handleSavePreset: () => void;
+  navigate: (path: string) => void;
+};
+
+const CompletedTabPanel: React.FC<CompletedTabPanelProps> = ({
+  run,
+  normalized,
+  activeTab,
+  resultPage,
+  backtestCopy,
+  language,
+  selectedBenchmarkLabel,
+  buyAndHoldLabel,
+  benchmarkStatusNote,
+  walkForwardOverview,
+  decisionReportMarkdown,
+  handleExportDecisionReport,
+  hasRobustnessAnalysis,
+  robustnessAnalysis,
+  robustnessLensRows,
+  riskControlRows,
+  activeRobustnessKey,
+  activeRiskControlKey,
+  walkForward,
+  monteCarlo,
+  stressTests,
+  walkForwardAggregate,
+  monteCarloAggregate,
+  worstScenarioLabel,
+  monteCarloDetailRows,
+  monteCarloDetailEmptyText,
+  stressScenarioRows,
+  stressScenarioDetailEmptyText,
+  strategySummaryRows,
+  parsedSummaryEntries,
+  strategyWarningEntries,
+  comparisonItems,
+  compareRunIds,
+  historyItems,
+  historyError,
+  compareError,
+  isLoadingHistory,
+  isLoadingCompareRuns,
+  fetchHistory,
+  handleOpenCompareWorkbench,
+  setCompareRunIds,
+  handleOpenHistoryRun,
+  handleToggleCompareRun,
+  scenarioPlans,
+  selectedScenarioPlanId,
+  setSelectedScenarioPlanId,
+  handleRunScenarioPlan,
+  isSubmittingScenarioRuns,
+  scenarioRuns,
+  scenarioError,
+  scenarioComparisonItems,
+  availablePresets,
+  handleSavePreset,
+  navigate,
+}) => {
+  if (activeTab === 'overview') {
+    return (
+      <BacktestOverviewSummary
+        resultPage={resultPage}
+        run={run}
+        normalized={normalized}
+        selectedBenchmarkLabel={selectedBenchmarkLabel}
+        buyAndHoldLabel={buyAndHoldLabel}
+        benchmarkStatusNote={benchmarkStatusNote}
+        walkForwardOverview={walkForwardOverview}
+        decisionReportMarkdown={decisionReportMarkdown}
+        onExportDecisionReport={handleExportDecisionReport}
+      />
+    );
+  }
+
+  const activeTabLabel = backtestCopy(`resultPage.tabs.${activeTab}`);
+
+  return (
+    <Suspense
+      fallback={(
+        <section
+          className="backtest-display-section"
+          data-testid="deterministic-result-tab-lazy-fallback"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="rounded-[16px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-md">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
+                  WolfyStock
+                </p>
+                <p className="truncate text-sm text-white/78">{activeTabLabel}</p>
+              </div>
+              <span
+                className="inline-flex size-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
+                aria-hidden="true"
+              />
+            </div>
+            <p className="mt-2 text-xs text-white/45">正在加载该分区的回测明细。</p>
+          </div>
+        </section>
+      )}
+    >
+      <BacktestAuditTables
+        activeTab={activeTab}
+        resultPage={resultPage}
+        backtestCopy={backtestCopy}
+        language={language}
+        run={run}
+        normalized={normalized}
+        selectedBenchmarkLabel={selectedBenchmarkLabel}
+        buyAndHoldLabel={buyAndHoldLabel}
+        benchmarkStatusNote={benchmarkStatusNote}
+        hasRobustnessAnalysis={hasRobustnessAnalysis}
+        robustnessAnalysisStateLabel={getRobustnessStateLabel(getObjectField(robustnessAnalysis, 'state'), language)}
+        robustnessLensRows={robustnessLensRows}
+        riskControlRows={riskControlRows}
+        activeRobustnessKey={activeRobustnessKey}
+        activeRiskControlKey={activeRiskControlKey}
+        walkForwardWindowCount={formatNumber(getObjectField(walkForward, 'windowCount') as number | null | undefined, 0)}
+        monteCarloSimulationCount={formatNumber(getObjectField(monteCarlo, 'simulationCount') as number | null | undefined, 0)}
+        stressScenarioCount={formatNumber(getObjectField(stressTests, 'scenarioCount') as number | null | undefined, 0)}
+        walkForwardMeanReturn={pct(getObjectField(walkForwardAggregate, 'meanTotalReturnPct') as number | null | undefined)}
+        monteCarloMedianReturn={pct(getObjectField(monteCarloAggregate, 'medianTotalReturnPct') as number | null | undefined)}
+        worstScenarioLabel={worstScenarioLabel}
+        monteCarloDetailRows={monteCarloDetailRows}
+        monteCarloDetailEmptyText={monteCarloDetailEmptyText}
+        stressScenarioRows={stressScenarioRows}
+        stressScenarioDetailEmptyText={stressScenarioDetailEmptyText}
+        strategySummaryRows={strategySummaryRows}
+        parsedSummaryEntries={parsedSummaryEntries}
+        strategyWarningEntries={strategyWarningEntries}
+        comparisonItems={comparisonItems}
+        compareRunIds={compareRunIds}
+        historyItems={historyItems}
+        historyError={historyError}
+        compareError={compareError}
+        isLoadingHistory={isLoadingHistory}
+        isLoadingCompareRuns={isLoadingCompareRuns}
+        onRefreshHistory={() => void fetchHistory(run.code)}
+        onOpenCompareWorkbench={handleOpenCompareWorkbench}
+        onClearComparison={() => setCompareRunIds([])}
+        onOpenHistoryRun={handleOpenHistoryRun}
+        onToggleCompareRun={handleToggleCompareRun}
+        scenarioPlans={scenarioPlans}
+        selectedScenarioPlanId={selectedScenarioPlanId}
+        onSelectScenarioPlanId={setSelectedScenarioPlanId}
+        onRunScenarioPlan={handleRunScenarioPlan}
+        isSubmittingScenarioRuns={isSubmittingScenarioRuns}
+        scenarioRuns={scenarioRuns}
+        scenarioError={scenarioError}
+        scenarioComparisonItems={scenarioComparisonItems}
+        availablePresets={availablePresets}
+        onSavePreset={handleSavePreset}
+        onOpenScenarioRun={(runId) => navigate(`/backtest/results/${runId}`)}
+      />
+    </Suspense>
+  );
+};
+
 const DeterministicBacktestResultPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -961,250 +1349,6 @@ const DeterministicBacktestResultPage: React.FC = () => {
     }
   }, [run, isCancellingRun, fetchRun, fetchHistory, resultPage]);
 
-  const renderRunStatusSection = () => {
-    if (!run && isLoadingRun) {
-      return (
-        <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-          <ConsoleBoard>
-            <div className="flex flex-col gap-3 p-4 md:p-5">
-              <div>
-                <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('statusCard.loadingSubtitle')}</p>
-                <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPage('statusCard.title')}</h2>
-              </div>
-              <div className="text-sm text-[color:var(--wolfy-text-secondary)]">{resultPage('statusCard.loadingBody')}</div>
-            </div>
-          </ConsoleBoard>
-        </section>
-      );
-    }
-
-    if (!run) {
-      return (
-        <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-          <ConsoleBoard>
-            <div className="flex flex-col gap-3 p-4 md:p-5">
-              <div>
-                <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('statusCard.unavailableSubtitle')}</p>
-                <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPage('statusCard.title')}</h2>
-              </div>
-              {runError ? <ApiErrorAlert error={runError} /> : (
-                <div className="text-sm text-[color:var(--wolfy-text-secondary)]">{resultPage('statusCard.unavailableBody')}</div>
-              )}
-            </div>
-          </ConsoleBoard>
-        </section>
-      );
-    }
-
-    return (
-      <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-        <ConsoleBoard>
-          <div className="flex flex-col gap-4 p-4 md:p-5">
-            <div>
-              <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('statusCard.controlsSubtitle')}</p>
-              <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPage('statusCard.title')}</h2>
-            </div>
-          <RuleRunStatusBanner run={run} />
-          <ConsoleStatusStrip
-            items={statusSummaryItems.map((item) => ({
-              key: item.label,
-              label: item.label,
-              value: item.value,
-            }))}
-          />
-          {!isRuleRunTerminal(run.status) ? (
-            <div>
-              <Banner
-                tone="info"
-                title={resultPage('statusCard.autoTrackingTitle')}
-                body={resultPage('statusCard.autoTrackingBody')}
-              />
-            </div>
-          ) : null}
-          {run.status === 'completed' ? (
-            <div>
-              <Banner
-                tone="success"
-                title={resultPage('statusCard.completedTitle')}
-                body={resultPage('statusCard.completedBody')}
-              />
-            </div>
-          ) : null}
-          {run.status === 'cancelled' ? (
-            <div>
-              <Banner
-                tone="warning"
-                title={resultPage('statusCard.cancelledTitle')}
-                body={resultPage('statusCard.cancelledBody')}
-              />
-            </div>
-          ) : null}
-          {run.status === 'failed' ? (
-            <div>
-              <Banner
-                tone="danger"
-                title={resultPage('statusCard.failedTitle')}
-                body={resultPage('statusCard.failedBody')}
-              />
-            </div>
-          ) : null}
-          <div className="product-action-row">
-            <Button variant="ghost" onClick={() => void fetchRun()} disabled={isCancellingRun}>
-              {isPollingStatus || isLoadingRun ? resultPage('statusCard.refreshing') : resultPage('statusCard.refreshStatus')}
-            </Button>
-            {canCancelCurrentRun ? (
-              <Button
-                variant="danger-subtle"
-                onClick={() => void handleCancelRun()}
-                isLoading={isCancellingRun}
-                loadingText={resultPage('statusCard.cancelling')}
-              >
-                {resultPage('statusCard.cancelRun')}
-              </Button>
-            ) : null}
-            {isRuleRunTerminal(run.status) && canExportTrace ? (
-              <>
-                <Button variant="secondary" onClick={() => downloadExecutionTraceCsv(run)}>
-                  {resultPage('statusCard.exportCsv')}
-                </Button>
-                <Button variant="ghost" onClick={() => downloadExecutionTraceJson(run)}>
-                  {resultPage('statusCard.exportJson')}
-                </Button>
-                <Button variant="ghost" onClick={() => handleExportDecisionReport('md')}>
-                  {resultPage('statusCard.exportSummaryMd')}
-                </Button>
-              </>
-            ) : null}
-          </div>
-          {run.statusHistory?.length ? (
-            <Disclosure summary={resultPage('statusCard.viewStatusTimeline', { count: run.statusHistory.length })}>
-              <div className="product-chip-list">
-                {run.statusHistory.map((item, index) => (
-                  <span key={`${item.status}-${item.at || index}`} className="product-chip">
-                    {index + 1}. {`${String(item.status || '--')} · ${item.at ? formatDateTime(item.at) : '--'}`}
-                  </span>
-                ))}
-              </div>
-            </Disclosure>
-          ) : null}
-          {runError ? <ApiErrorAlert error={runError} /> : null}
-          {cancelError ? <ApiErrorAlert error={cancelError} /> : null}
-          {presetNotice ? (
-            <div>
-              <Banner tone="success" title={presetNotice} body={resultPage('statusCard.reusableBanner', { count: availablePresets.length })} />
-            </div>
-          ) : null}
-          </div>
-        </ConsoleBoard>
-      </section>
-    );
-  };
-
-  const renderCompletedTabPanel = () => {
-    if (!run || !normalized) return null;
-
-    if (activeTab === 'overview') {
-      return (
-        <BacktestOverviewSummary
-          resultPage={resultPage}
-          run={run}
-          normalized={normalized}
-          selectedBenchmarkLabel={selectedBenchmarkLabel}
-          buyAndHoldLabel={buyAndHoldLabel}
-          benchmarkStatusNote={benchmarkStatusNote}
-          walkForwardOverview={walkForwardOverview}
-          decisionReportMarkdown={decisionReportMarkdown}
-          onExportDecisionReport={handleExportDecisionReport}
-        />
-      );
-    }
-
-    const activeTabLabel = backtestCopy(`resultPage.tabs.${activeTab}`);
-
-    return (
-      <Suspense
-        fallback={(
-          <section
-            className="backtest-display-section"
-            data-testid="deterministic-result-tab-lazy-fallback"
-            role="status"
-            aria-live="polite"
-          >
-            <div className="rounded-[16px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-md">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
-                    WolfyStock
-                  </p>
-                  <p className="truncate text-sm text-white/78">{activeTabLabel}</p>
-                </div>
-                <span
-                  className="inline-flex size-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
-                  aria-hidden="true"
-                />
-              </div>
-              <p className="mt-2 text-xs text-white/45">正在加载该分区的回测明细。</p>
-            </div>
-          </section>
-        )}
-      >
-        <BacktestAuditTables
-          activeTab={activeTab}
-          resultPage={resultPage}
-          backtestCopy={backtestCopy}
-          language={language}
-          run={run}
-          normalized={normalized}
-          selectedBenchmarkLabel={selectedBenchmarkLabel}
-          buyAndHoldLabel={buyAndHoldLabel}
-          benchmarkStatusNote={benchmarkStatusNote}
-          hasRobustnessAnalysis={hasRobustnessAnalysis}
-          robustnessAnalysisStateLabel={getRobustnessStateLabel(getObjectField(robustnessAnalysis, 'state'), language)}
-          robustnessLensRows={robustnessLensRows}
-          riskControlRows={riskControlRows}
-          activeRobustnessKey={activeRobustnessKey}
-          activeRiskControlKey={activeRiskControlKey}
-          walkForwardWindowCount={formatNumber(getObjectField(walkForward, 'windowCount') as number | null | undefined, 0)}
-          monteCarloSimulationCount={formatNumber(getObjectField(monteCarlo, 'simulationCount') as number | null | undefined, 0)}
-          stressScenarioCount={formatNumber(getObjectField(stressTests, 'scenarioCount') as number | null | undefined, 0)}
-          walkForwardMeanReturn={pct(getObjectField(walkForwardAggregate, 'meanTotalReturnPct') as number | null | undefined)}
-          monteCarloMedianReturn={pct(getObjectField(monteCarloAggregate, 'medianTotalReturnPct') as number | null | undefined)}
-          worstScenarioLabel={worstScenarioLabel}
-          monteCarloDetailRows={monteCarloDetailRows}
-          monteCarloDetailEmptyText={monteCarloDetailEmptyText}
-          stressScenarioRows={stressScenarioRows}
-          stressScenarioDetailEmptyText={stressScenarioDetailEmptyText}
-          strategySummaryRows={strategySummaryRows}
-          parsedSummaryEntries={parsedSummaryEntries}
-          strategyWarningEntries={strategyWarningEntries}
-          comparisonItems={comparisonItems}
-          compareRunIds={compareRunIds}
-          historyItems={historyItems}
-          historyError={historyError}
-          compareError={compareError}
-          isLoadingHistory={isLoadingHistory}
-          isLoadingCompareRuns={isLoadingCompareRuns}
-          onRefreshHistory={() => void fetchHistory(run.code)}
-          onOpenCompareWorkbench={handleOpenCompareWorkbench}
-          onClearComparison={() => setCompareRunIds([])}
-          onOpenHistoryRun={handleOpenHistoryRun}
-          onToggleCompareRun={handleToggleCompareRun}
-          scenarioPlans={scenarioPlans}
-          selectedScenarioPlanId={selectedScenarioPlanId}
-          onSelectScenarioPlanId={setSelectedScenarioPlanId}
-          onRunScenarioPlan={handleRunScenarioPlan}
-          isSubmittingScenarioRuns={isSubmittingScenarioRuns}
-          scenarioRuns={scenarioRuns}
-          scenarioError={scenarioError}
-          scenarioComparisonItems={scenarioComparisonItems}
-          availablePresets={availablePresets}
-          onSavePreset={handleSavePreset}
-          onOpenScenarioRun={(runId) => navigate(`/backtest/results/${runId}`)}
-        />
-      </Suspense>
-    );
-  };
-
   const renderCompletedConsole = () => {
     if (!run || !normalized) return null;
 
@@ -1517,7 +1661,25 @@ const DeterministicBacktestResultPage: React.FC = () => {
             </section>
           ) : null}
 
-          {run?.status === 'completed' && normalized ? null : renderRunStatusSection()}
+          {run?.status === 'completed' && normalized ? null : (
+            <RunStatusSection
+              run={run}
+              isLoadingRun={isLoadingRun}
+              runError={runError}
+              cancelError={cancelError}
+              statusSummaryItems={statusSummaryItems}
+              isPollingStatus={isPollingStatus}
+              isCancellingRun={isCancellingRun}
+              canCancelCurrentRun={canCancelCurrentRun}
+              canExportTrace={canExportTrace}
+              presetNotice={presetNotice}
+              availablePresets={availablePresets}
+              resultPage={resultPage}
+              fetchRun={() => void fetchRun()}
+              handleCancelRun={() => void handleCancelRun()}
+              handleExportDecisionReport={handleExportDecisionReport}
+            />
+          )}
 
           {run?.status === 'completed' && normalized ? (
             <>
@@ -1540,7 +1702,62 @@ const DeterministicBacktestResultPage: React.FC = () => {
                 </div>
               </section>
 
-              {renderCompletedTabPanel()}
+              <CompletedTabPanel
+                run={run}
+                normalized={normalized}
+                activeTab={activeTab}
+                resultPage={resultPage}
+                backtestCopy={backtestCopy}
+                language={language}
+                selectedBenchmarkLabel={selectedBenchmarkLabel}
+                buyAndHoldLabel={buyAndHoldLabel}
+                benchmarkStatusNote={benchmarkStatusNote}
+                walkForwardOverview={walkForwardOverview}
+                decisionReportMarkdown={decisionReportMarkdown}
+                handleExportDecisionReport={handleExportDecisionReport}
+                hasRobustnessAnalysis={hasRobustnessAnalysis}
+                robustnessAnalysis={robustnessAnalysis}
+                robustnessLensRows={robustnessLensRows}
+                riskControlRows={riskControlRows}
+                activeRobustnessKey={activeRobustnessKey}
+                activeRiskControlKey={activeRiskControlKey}
+                walkForward={walkForward}
+                monteCarlo={monteCarlo}
+                stressTests={stressTests}
+                walkForwardAggregate={walkForwardAggregate}
+                monteCarloAggregate={monteCarloAggregate}
+                worstScenarioLabel={worstScenarioLabel}
+                monteCarloDetailRows={monteCarloDetailRows}
+                monteCarloDetailEmptyText={monteCarloDetailEmptyText}
+                stressScenarioRows={stressScenarioRows}
+                stressScenarioDetailEmptyText={stressScenarioDetailEmptyText}
+                strategySummaryRows={strategySummaryRows}
+                parsedSummaryEntries={parsedSummaryEntries}
+                strategyWarningEntries={strategyWarningEntries}
+                comparisonItems={comparisonItems}
+                compareRunIds={compareRunIds}
+                historyItems={historyItems}
+                historyError={historyError}
+                compareError={compareError}
+                isLoadingHistory={isLoadingHistory}
+                isLoadingCompareRuns={isLoadingCompareRuns}
+                fetchHistory={fetchHistory}
+                handleOpenCompareWorkbench={handleOpenCompareWorkbench}
+                setCompareRunIds={setCompareRunIds}
+                handleOpenHistoryRun={handleOpenHistoryRun}
+                handleToggleCompareRun={handleToggleCompareRun}
+                scenarioPlans={scenarioPlans}
+                selectedScenarioPlanId={selectedScenarioPlanId}
+                setSelectedScenarioPlanId={setSelectedScenarioPlanId}
+                handleRunScenarioPlan={handleRunScenarioPlan}
+                isSubmittingScenarioRuns={isSubmittingScenarioRuns}
+                scenarioRuns={scenarioRuns}
+                scenarioError={scenarioError}
+                scenarioComparisonItems={scenarioComparisonItems}
+                availablePresets={availablePresets}
+                handleSavePreset={handleSavePreset}
+                navigate={navigate}
+              />
             </>
           ) : null}
         </div>
