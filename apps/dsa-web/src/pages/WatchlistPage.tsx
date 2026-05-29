@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentProps } from 'react';
+import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import {
   BarChart3,
   CheckSquare,
@@ -85,6 +85,8 @@ const SCANNER_FORMAT_FAILED_STATUSES = new Set(['data_failed', 'provider_down', 
 const SCANNER_FORMAT_VERIFIED_STATUSES = new Set(['selected', 'verified', 'ready', 'fresh']);
 const SCANNER_FORMAT_PASSED_STATUSES = new Set(['preview', 'candidate', 'passed']);
 const SCANNER_FORMAT_REJECTED_STATUSES = new Set(['rejected', 'not_selected', 'failed_filter']);
+const BACKTEST_DANGER_STATUSES = new Set(['回测失败', '行情缺失', '服务暂不可用', '超时']);
+const BACKTEST_CAUTION_STATUSES = new Set(['样本不足', '数据缺失']);
 
 function normalizeText(value?: string | null): string {
   return String(value || '').trim();
@@ -951,29 +953,43 @@ const WatchlistPage: React.FC = () => {
     ];
   })();
 
-  const summary = (() => {
-    const markets = new Set(items.flatMap((item) => { const v = normalizeText(item.market).toLowerCase(); return v ? [v] : []; }));
-    const scannerSourced = items.filter((item) => normalizeText(item.source).toLowerCase() === 'scanner').length;
-    const latestTime = items.reduce<string | null>((best, item) => {
+  const summary = useMemo(() => {
+    const markets = new Set<string>();
+    let scannerSourced = 0;
+    let recent = 0;
+    let scannerResults = 0;
+    let backtestResults = 0;
+    let stale = 0;
+    let failedOrNoData = 0;
+    let latestTime: string | null = null;
+
+    for (const item of items) {
+      const market = normalizeText(item.market).toLowerCase();
+      if (market) markets.add(market);
+      if (normalizeText(item.source).toLowerCase() === 'scanner') scannerSourced += 1;
+      if (isRecentlyAdded(item)) recent += 1;
+      if (hasScannerEvidence(item)) scannerResults += 1;
+      if (hasBacktestEvidence(item)) backtestResults += 1;
+      if (isStaleIntelligence(item)) stale += 1;
+      if (hasFailureOrNoData(item)) failedOrNoData += 1;
       const v = getLatestIntelligenceTime(item);
-      if (!v) return best;
-      if (!best) return v;
-      return getTime(v) > getTime(best) ? v : best;
-    }, null);
+      if (v && (!latestTime || getTime(v) > getTime(latestTime))) latestTime = v;
+    }
+
     return {
       total: items.length,
       markets: markets.size,
       scannerSourced,
-      recent: items.filter(isRecentlyAdded).length,
-      scannerResults: items.filter(hasScannerEvidence).length,
-      backtestResults: items.filter(hasBacktestEvidence).length,
-      stale: items.filter(isStaleIntelligence).length,
-      failedOrNoData: items.filter(hasFailureOrNoData).length,
+      recent,
+      scannerResults,
+      backtestResults,
+      stale,
+      failedOrNoData,
       latestTime,
     };
-  })();
+  }, [items]);
 
-  const filteredItems = (() => {
+  const filteredItems = useMemo(() => {
     const search = query.trim().toLowerCase();
     const rows = items.filter((item) => {
       const matchesSearch = !search
@@ -1009,7 +1025,7 @@ const WatchlistPage: React.FC = () => {
       if (sortKey === 'recentlyBacktested') return getTime(right.intelligence?.backtest?.testedAt) - getTime(left.intelligence?.backtest?.testedAt);
       return getItemTime(right) - getItemTime(left);
     });
-  })();
+  }, [items, query, marketFilter, sourceFilter, contextFilter, evidenceFilter, sortKey]);
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -1551,9 +1567,9 @@ const WatchlistPage: React.FC = () => {
                     const scoreFreshnessVariant = scoreDisclosureChipVariant(scoreDisclosureState);
                     const backtestStatusVariant = backtestStatusLabel === '已回测'
                       ? 'success'
-                      : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(backtestStatusLabel)
+                      : BACKTEST_DANGER_STATUSES.has(backtestStatusLabel)
                         ? 'danger'
-                        : ['样本不足', '数据缺失'].includes(backtestStatusLabel)
+                        : BACKTEST_CAUTION_STATUSES.has(backtestStatusLabel)
                           ? 'caution'
                           : 'neutral';
                     const batchDisplayStatus = batchStatus
@@ -1769,7 +1785,7 @@ const WatchlistPage: React.FC = () => {
                     <TerminalChip variant={scoreDisclosureChipVariant(activeScoreDisclosureState)}>
                       {formatScoreDisclosureStatus(activeScoreDisclosureState, language)}
                     </TerminalChip>
-                    <TerminalChip variant={activeBacktestStatusLabel === '已回测' ? 'success' : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(activeBacktestStatusLabel) ? 'danger' : ['样本不足', '数据缺失'].includes(activeBacktestStatusLabel) ? 'caution' : 'neutral'}>
+                    <TerminalChip variant={activeBacktestStatusLabel === '已回测' ? 'success' : BACKTEST_DANGER_STATUSES.has(activeBacktestStatusLabel) ? 'danger' : BACKTEST_CAUTION_STATUSES.has(activeBacktestStatusLabel) ? 'caution' : 'neutral'}>
                       {activeBacktestStatusLabel}
                     </TerminalChip>
                   </div>
