@@ -511,6 +511,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
               <div
                 id="shell-account-center-menu"
                 role="menu"
+                tabIndex={-1}
                 aria-label={accountCopy.menuLabel}
                 aria-orientation="vertical"
                 data-testid="shell-account-center-menu"

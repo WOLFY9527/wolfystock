@@ -38,7 +38,7 @@ export const GlobalLoader: React.FC<GlobalLoaderProps> = ({ fading = false }) =>
 
   return (
     <output
-      className={`block fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden bg-black px-6 transition-opacity duration-300 ${
+      className={`block fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden bg-black px-6 transition-opacity duration-200 ${
         fading ? 'pointer-events-none opacity-0' : 'opacity-100'
       }`}
       aria-live="polite"

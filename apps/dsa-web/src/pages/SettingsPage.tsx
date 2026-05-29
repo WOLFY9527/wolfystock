@@ -2475,9 +2475,10 @@ const SettingsPage: React.FC = () => {
                     label={t('settings.sourceBackup')}
                     value={activeDataRoutingGroup.route.backup}
                     onChange={(value) => setRouteTier(activeDataRoutingGroup.key, 'backup', value)}
-                    options={activeDataRoutingGroup.available
-                      .filter((source) => source !== activeDataRoutingGroup.route.primary)
-                      .map((source) => ({ value: source, label: prettySourceLabel(source) }))}
+                    options={activeDataRoutingGroup.available.reduce<Array<{ value: string; label: string }>>((acc, source) => {
+                      if (source !== activeDataRoutingGroup.route.primary) acc.push({ value: source, label: prettySourceLabel(source) });
+                      return acc;
+                    }, [])}
                     placeholder={activeDataRoutingGroup.available.length ? t('settings.selectPlaceholder') : t('settings.notConfigured')}
                     disabled={adminLocked || isSaving || activeDataRoutingGroup.available.length < 2}
                   />
@@ -2486,9 +2487,10 @@ const SettingsPage: React.FC = () => {
                       label={t('settings.sourceSecondaryBackup')}
                       value={('fallback' in activeDataRoutingGroup.route ? activeDataRoutingGroup.route.fallback : '') || ''}
                       onChange={(value) => setRouteTier(activeDataRoutingGroup.key, 'fallback', value)}
-                      options={activeDataRoutingGroup.available
-                        .filter((source) => source !== activeDataRoutingGroup.route.primary && source !== activeDataRoutingGroup.route.backup)
-                        .map((source) => ({ value: source, label: prettySourceLabel(source) }))}
+                      options={activeDataRoutingGroup.available.reduce<Array<{ value: string; label: string }>>((acc, source) => {
+                        if (source !== activeDataRoutingGroup.route.primary && source !== activeDataRoutingGroup.route.backup) acc.push({ value: source, label: prettySourceLabel(source) });
+                        return acc;
+                      }, [])}
                       placeholder={activeDataRoutingGroup.available.length ? t('settings.selectPlaceholder') : t('settings.notConfigured')}
                       disabled={adminLocked || isSaving || activeDataRoutingGroup.available.length < 3}
                     />
@@ -2794,9 +2796,10 @@ const SettingsPage: React.FC = () => {
                       },
                     }));
                   }}
-                  options={aiGatewaySelectorOptions
-                    .filter((channel) => channel !== routingDraft.ai.primaryChannel)
-                    .map((channel) => ({ value: channel, label: providerLabel(channel) }))}
+                  options={aiGatewaySelectorOptions.reduce<Array<{ value: string; label: string }>>((acc, channel) => {
+                    if (channel !== routingDraft.ai.primaryChannel) acc.push({ value: channel, label: providerLabel(channel) });
+                    return acc;
+                  }, [])}
                   placeholder={aiGatewaySelectorOptions.length ? t('settings.selectPlaceholder') : t('settings.notConfigured')}
                   disabled={!canSelectBackupGateway || adminLocked || isSaving}
                 />

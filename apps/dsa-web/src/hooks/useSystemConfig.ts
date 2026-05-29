@@ -299,20 +299,15 @@ export function useSystemConfig() {
   }, []);
 
   const getChangedItems = useCallback((): SystemConfigUpdateItem[] => {
-    return dirtyKeys
-      .map((key) => {
-        const serverItem = serverItemByKey[key];
-        const normalizedValue = normalizeFieldValue(draftValues[key] ?? '', serverItem?.schema);
-        return {
-          key,
-          value: normalizedValue,
-        };
-      })
-      .filter((item) => {
-        const serverItem = serverItemByKey[item.key];
-        const normalizedCurrent = normalizeFieldValue(serverItem?.value ?? '', serverItem?.schema);
-        return item.value !== normalizedCurrent;
-      });
+    return dirtyKeys.reduce<SystemConfigUpdateItem[]>((acc, key) => {
+      const serverItem = serverItemByKey[key];
+      const normalizedValue = normalizeFieldValue(draftValues[key] ?? '', serverItem?.schema);
+      const normalizedCurrent = normalizeFieldValue(serverItem?.value ?? '', serverItem?.schema);
+      if (normalizedValue !== normalizedCurrent) {
+        acc.push({ key, value: normalizedValue });
+      }
+      return acc;
+    }, []);
   }, [dirtyKeys, draftValues, serverItemByKey]);
 
   const setAdminUnlockSession = useCallback((token: string, expiresAt: number) => {

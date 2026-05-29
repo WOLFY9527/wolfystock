@@ -243,8 +243,16 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
     }
   };
 
-  const validCount = items.filter((i) => i.code).length;
-  const checkedCount = items.filter((i) => i.checked && i.code).length;
+  const { validCount, checkedCount } = items.reduce<{ validCount: number; checkedCount: number }>(
+    (acc, i) => {
+      if (i.code) {
+        acc.validCount++;
+        if (i.checked) acc.checkedCount++;
+      }
+      return acc;
+    },
+    { validCount: 0, checkedCount: 0 },
+  );
 
   return (
     <div className="space-y-4">
@@ -268,18 +276,19 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
             <Button type="button" variant="settings-secondary" disabled={disabled || isLoading}>
               选择图片
             </Button>
-            <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif" className="hidden" onChange={onImageInput} disabled={disabled || isLoading} />
+            <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif" className="hidden" onChange={onImageInput} disabled={disabled || isLoading} aria-label="选择图片" />
           </label>
           <label className="cursor-pointer">
             <Button type="button" variant="settings-secondary" disabled={disabled || isLoading}>
               选择文件
             </Button>
-            <input type="file" accept=".csv,.xlsx,.txt" className="hidden" onChange={onDataFileInput} disabled={disabled || isLoading} />
+            <input type="file" accept=".csv,.xlsx,.txt" className="hidden" onChange={onDataFileInput} disabled={disabled || isLoading} aria-label="选择文件" />
           </label>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <textarea
             placeholder="或粘贴 CSV/Excel 复制的文本..."
+            aria-label="粘贴文本"
             className="input-surface settings-surface-strong settings-border-strong min-h-[72px] w-full rounded-xl border px-3 py-2 text-sm text-foreground shadow-soft-card transition-colors placeholder:text-muted-text focus:outline-none"
             value={pasteText}
             onChange={(e) => setPasteText(e.target.value)}
@@ -349,6 +358,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
                     checked={it.checked}
                     onChange={() => toggleChecked(it.id)}
                     disabled={!it.code || disabled}
+                    aria-label={it.code || '解析失败'}
                   />
                   <span className={it.code ? 'font-medium text-foreground' : 'font-medium text-danger'}>
                     {it.code || '解析失败'}

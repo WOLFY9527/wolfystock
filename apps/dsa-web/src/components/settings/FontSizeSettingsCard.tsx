@@ -18,7 +18,7 @@ export const FontSizeSettingsCard: React.FC = () => {
         </p>
       </div>
       <div className="min-w-0">
-        <div className="grid grid-cols-5 gap-2" role="group" aria-label={t('settings.fontSizeTitle')}>
+        <fieldset className="grid grid-cols-5 gap-2 border-0 p-0 m-0" aria-label={t('settings.fontSizeTitle')}>
           {OPTIONS.map((option) => (
             <button
               key={option}
@@ -35,7 +35,7 @@ export const FontSizeSettingsCard: React.FC = () => {
               {t(`settings.fontSize${option.toUpperCase()}`)}
             </button>
           ))}
-        </div>
+        </fieldset>
       </div>
     </div>
   );

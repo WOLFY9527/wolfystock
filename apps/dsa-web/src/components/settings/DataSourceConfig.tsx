@@ -76,7 +76,7 @@ const DATA_SOURCE_LIBRARY_GROUPS: Array<{
 
 const groupedDataSources = (sources: DataSourceLibraryEntry[]) => {
   const assigned = new Set<string>();
-  return DATA_SOURCE_LIBRARY_GROUPS.map((group) => {
+  return DATA_SOURCE_LIBRARY_GROUPS.reduce<Array<typeof DATA_SOURCE_LIBRARY_GROUPS[number] & { items: DataSourceLibraryEntry[] }>>((acc, group) => {
     const items = sources.filter((source) => {
       if (assigned.has(source.key) || !group.matches(source)) {
         return false;
@@ -84,8 +84,9 @@ const groupedDataSources = (sources: DataSourceLibraryEntry[]) => {
       assigned.add(source.key);
       return true;
     });
-    return { ...group, items };
-  }).filter((group) => group.items.length > 0);
+    if (items.length > 0) acc.push({ ...group, items });
+    return acc;
+  }, []);
 };
 
 function getValidationBadgeStatus(state: DataSourceValidationState): string {

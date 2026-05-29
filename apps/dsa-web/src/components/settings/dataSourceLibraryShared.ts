@@ -340,13 +340,15 @@ const parseDataSourceCapabilities = (value: unknown): DataSourceCapability[] => 
   return result;
 };
 
+const VALID_VALIDATION_STATUSES = new Set(['pending', 'validated', 'failed']);
+
 const normalizeDataSourceValidationState = (value: unknown): CustomDataSourceValidation | undefined => {
   if (!value || typeof value !== 'object') {
     return undefined;
   }
   const raw = value as Record<string, unknown>;
   const status = String(raw.status || '').trim().toLowerCase();
-  if (!['pending', 'validated', 'failed'].includes(status)) {
+  if (!VALID_VALIDATION_STATUSES.has(status)) {
     return undefined;
   }
   return {
@@ -366,28 +368,24 @@ export const parseCustomDataSourceLibrary = (rawValue: string): CustomDataSource
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return parsed.flatMap((item) => {
-      if (!item || typeof item !== 'object') {
-        return [];
-      }
-      const source = item as Record<string, unknown>;
-      const name = String(source.name || '').trim();
-      const id = slugifyDataSourceId(String(source.id || name));
-      if (!name) {
-        return [];
-      }
-      return [{
-        id,
-        name,
-        credentialSchema: normalizeDataSourceCredentialSchema(source.credentialSchema || source.credential_schema),
-        credential: String(source.credential || '').trim(),
-        secret: String(source.secret || source.secretKey || source.secret_key || '').trim(),
-        baseUrl: String(source.baseUrl || source.base_url || '').trim(),
-        description: String(source.description || '').trim(),
-        capabilities: parseDataSourceCapabilities(source.capabilities),
-        validation: normalizeDataSourceValidationState(source.validation),
-      }];
-    });
+    return parsed
+      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && Boolean(String((item as Record<string, unknown>).name || '').trim()))
+      .map((item) => {
+        const source = item as Record<string, unknown>;
+        const name = String(source.name || '').trim();
+        const id = slugifyDataSourceId(String(source.id || name));
+        return {
+          id,
+          name,
+          credentialSchema: normalizeDataSourceCredentialSchema(source.credentialSchema || source.credential_schema),
+          credential: String(source.credential || '').trim(),
+          secret: String(source.secret || source.secretKey || source.secret_key || '').trim(),
+          baseUrl: String(source.baseUrl || source.base_url || '').trim(),
+          description: String(source.description || '').trim(),
+          capabilities: parseDataSourceCapabilities(source.capabilities),
+          validation: normalizeDataSourceValidationState(source.validation),
+        };
+      });
   } catch {
     return [];
   }
@@ -848,13 +846,16 @@ export function buildDataCoverageGaps(sources: DataSourceLibraryEntry[], t: Tran
     },
   ];
 
-  return gaps
-    .filter((gap) => !gap.profiles?.some((profileKey) => hasConfiguredProfile(sources, profileKey)))
-    .map((gap) => ({
-      key: gap.key,
-      surfaces: translateList(gap.surfaces, DATA_SOURCE_IMPACT_SURFACE_LABEL_KEYS, t),
-      missing: 'missingText' in gap ? gap.missingText : t(gap.missingKey),
-      impact: 'impactText' in gap ? gap.impactText : t(gap.impactKey),
-    }))
-    .slice(0, 4);
+  return gaps.reduce<Array<{ key: string; surfaces: string[]; missing: string; impact: string }>>((acc, gap) => {
+    if (acc.length >= 4) return acc;
+    if (!gap.profiles?.some((profileKey) => hasConfiguredProfile(sources, profileKey))) {
+      acc.push({
+        key: gap.key,
+        surfaces: translateList(gap.surfaces, DATA_SOURCE_IMPACT_SURFACE_LABEL_KEYS, t),
+        missing: 'missingText' in gap ? gap.missingText : t(gap.missingKey),
+        impact: 'impactText' in gap ? gap.impactText : t(gap.impactKey),
+      });
+    }
+    return acc;
+  }, []);
 }

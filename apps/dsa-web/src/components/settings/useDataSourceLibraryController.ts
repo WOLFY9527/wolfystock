@@ -155,10 +155,13 @@ export function useDataSourceLibraryController({
         && record.capabilities.length,
       );
       const capabilityLabels = record.capabilities.map((capability) => t(DATA_SOURCE_CAPABILITY_LABEL_KEYS[capability]));
-      const routeUsage = record.capabilities
-        .map((capability) => DATA_SOURCE_ROUTING_CAPABILITY_MAP[capability])
-        .filter((routeKey): routeKey is DataRouteKey => Boolean(routeKey))
-        .filter((routeKey) => dataSummary[routeKey].includes(record.id));
+      const routeUsage = record.capabilities.reduce<DataRouteKey[]>((acc, capability) => {
+        const routeKey = DATA_SOURCE_ROUTING_CAPABILITY_MAP[capability];
+        if (routeKey && dataSummary[routeKey].includes(record.id)) {
+          acc.push(routeKey);
+        }
+        return acc;
+      }, []);
       const usable = configured && validationState !== 'failed';
       return {
         key: record.id,

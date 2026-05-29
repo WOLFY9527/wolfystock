@@ -67,6 +67,7 @@ function renderFieldControl(
     return (
       <textarea
         id={controlId}
+        aria-label={item.key}
         className={`${commonClass} min-h-[92px] resize-y`}
         value={value}
         disabled={disabled || !schema?.isEditable}
@@ -79,6 +80,7 @@ function renderFieldControl(
     return (
         <Select
           id={controlId}
+          aria-label={item.key}
           value={value}
           onChange={onChange}
           options={normalizeSelectOptions(schema.options)}
@@ -180,6 +182,7 @@ function renderFieldControl(
   return (
     <input
       id={controlId}
+      aria-label={item.key}
       type={inputType}
       className={commonClass}
       value={value}

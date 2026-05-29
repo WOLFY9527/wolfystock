@@ -314,16 +314,15 @@ function buildProviderOpsTopSummary(
   checks: MarketDataReadinessCheck[],
 ): ProviderOpsTopSummaryData {
   const availableSources = uniqueLabels([
-    ...items.flatMap((item) => operationItemIsAvailable(item) ? [providerLabel(item)] : []),
-    ...rows.flatMap((row) => matrixRowIsPrimaryAvailable(row) ? [sourceGapName(row)] : []),
+    ...items.filter(operationItemIsAvailable).map(providerLabel),
+    ...rows.filter(matrixRowIsPrimaryAvailable).map(sourceGapName),
   ]);
   const missingSources = uniqueLabels([
-    ...rows.flatMap((row) => matrixRowHasMissingSetup(row) ? [sourceGapName(row)] : []),
-    ...checks.flatMap((check) => shouldIncludeChecklistReadinessCheck(check) ? [readinessCheckName(check)] : []),
+    ...rows.filter(matrixRowHasMissingSetup).map(sourceGapName),
+    ...checks.filter(shouldIncludeChecklistReadinessCheck).map(readinessCheckName),
   ]);
   const diagnosticSources = uniqueLabels(
-    rows
-      .flatMap((row) => matrixRowIsDiagnosticOnly(row) ? [sourceGapName(row)] : []),
+    rows.filter(matrixRowIsDiagnosticOnly).map(sourceGapName),
   );
   const affectedSurfaces = uniqueLabels([
     ...rows.flatMap(resolveChecklistMatrixSurfaces),
@@ -1039,19 +1038,16 @@ const TickflowEntitlementRow: React.FC<{ projection: TickflowProjection }> = ({ 
   );
 };
 
+function providerScore(item: MarketProviderOperationItem): number {
+  return Number(Boolean(item.errorSummary)) * 10
+    + Number(Boolean(item.isFallback || item.fallbackUsed)) * 6
+    + Number(Boolean(item.isStale)) * 4
+    + Number(Boolean(item.isRefreshing)) * 2;
+}
+
 function selectPreferredProvider(items: MarketProviderOperationItem[]): MarketProviderOperationItem | null {
   if (!items.length) return null;
-  return [...items].sort((left, right) => {
-    const leftScore = Number(Boolean(left.errorSummary)) * 10
-      + Number(Boolean(left.isFallback || left.fallbackUsed)) * 6
-      + Number(Boolean(left.isStale)) * 4
-      + Number(Boolean(left.isRefreshing)) * 2;
-    const rightScore = Number(Boolean(right.errorSummary)) * 10
-      + Number(Boolean(right.isFallback || right.fallbackUsed)) * 6
-      + Number(Boolean(right.isStale)) * 4
-      + Number(Boolean(right.isRefreshing)) * 2;
-    return rightScore - leftScore;
-  })[0];
+  return items.reduce((best, current) => providerScore(current) > providerScore(best) ? current : best);
 }
 
 const DrillLink: React.FC<{ drill?: AdminLogDrillThrough; className?: string }> = ({ drill, className }) => {

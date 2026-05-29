@@ -81,10 +81,15 @@ const providerCapabilities = (provider: ProviderCard, t: TranslateFn): string[] 
 
 const groupedProviders = (providers: ProviderCard[]) => {
   const byKey = new Map(providers.map((provider) => [provider.key, provider]));
-  return PROVIDER_LIBRARY_GROUPS.map((group) => ({
-    ...group,
-    items: group.keys.map((key) => byKey.get(key)).filter((provider): provider is ProviderCard => Boolean(provider)),
-  })).filter((group) => group.items.length > 0);
+  return PROVIDER_LIBRARY_GROUPS.reduce<Array<typeof PROVIDER_LIBRARY_GROUPS[number] & { items: ProviderCard[] }>>((acc, group) => {
+    const items = group.keys.reduce<ProviderCard[]>((itemsAcc, key) => {
+      const provider = byKey.get(key);
+      if (provider) itemsAcc.push(provider);
+      return itemsAcc;
+    }, []);
+    if (items.length > 0) acc.push({ ...group, items });
+    return acc;
+  }, []);
 };
 
 const StatusDot: React.FC<{ active: boolean }> = ({ active }) => (

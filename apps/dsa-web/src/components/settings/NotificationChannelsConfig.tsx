@@ -331,6 +331,7 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
                           <label htmlFor={fieldId} className="theme-field-label mb-2 block">{fieldLabel(field)}</label>
                           <textarea
                             id={fieldId}
+                            aria-label={fieldLabel(field)}
                             className="input-surface input-focus-glow min-h-[84px] w-full resize-y rounded-xl border px-4 py-3 text-sm text-foreground transition-all placeholder:text-muted-text focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                             value={fieldValue}
                             disabled={disabled || isSaving}
@@ -348,6 +349,7 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
                           <input
                             id={fieldId}
                             type="checkbox"
+                            aria-label={fieldLabel(field)}
                             className="settings-input-checkbox size-4 rounded border-border/70 bg-base"
                             checked={checked}
                             disabled={disabled || isSaving}

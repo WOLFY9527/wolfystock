@@ -244,6 +244,7 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
           type="checkbox"
           checked={channel.enabled}
           disabled={busy}
+          aria-label={`${channel.name} enabled`}
           className="settings-input-checkbox size-4 shrink-0 rounded border-border/70 bg-base"
           onClick={(e) => e.stopPropagation()}
           onChange={(e) => onUpdate(index, 'enabled', e.target.checked)}
@@ -635,7 +636,7 @@ function channelsToUpdateItems(
   includeRuntimeConfig: boolean,
 ): Array<{ key: string; value: string }> {
   const updates: Array<{ key: string; value: string }> = [];
-  const activeNames = channels.map((channel) => channel.name.toUpperCase());
+  const activeNames = new Set(channels.map((channel) => channel.name.toUpperCase()));
 
   updates.push({ key: 'LLM_CHANNELS', value: channels.map((channel) => channel.name).join(',') });
   if (includeRuntimeConfig) {
@@ -660,7 +661,7 @@ function channelsToUpdateItems(
 
   for (const oldName of previousChannelNames) {
     const upperName = oldName.toUpperCase();
-    if (activeNames.includes(upperName)) {
+    if (activeNames.has(upperName)) {
       continue;
     }
 
@@ -1105,6 +1106,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                 <Select
                   value={addPreset}
                   onChange={setAddPreset}
+                  aria-label={t('settings.llmEditor.selectPreset')}
                   options={Object.entries(CHANNEL_PRESETS).map(([value, preset]) => ({
                     value,
                     label: presetLabels[value] || preset.label,
@@ -1194,6 +1196,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                 <div className="flex items-center gap-3">
                   <input
                     type="range"
+                    aria-label={t('settings.llmEditor.temperatureLabel')}
                     className="settings-input-checkbox h-1.5 flex-1 cursor-pointer rounded-full bg-border/60"
                     min="0"
                     max="2"

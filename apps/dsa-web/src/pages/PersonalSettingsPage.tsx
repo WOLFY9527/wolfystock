@@ -11,7 +11,7 @@ import {
   WolfyShellSurface,
 } from '../components/linear/LinearPrimitives';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
-import { TerminalButton, TerminalChip, TerminalPageHeading } from '../components/terminal';
+import { TerminalButton, TerminalChip, TerminalPageHeading } from '../components/terminal/TerminalPrimitives';
 import { authApi } from '../api/auth';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { ChangePasswordCard } from '../components/settings/ChangePasswordCard';
@@ -155,7 +155,7 @@ function SettingsChoiceRow<T extends string>({
         {description ? <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{description}</p> : null}
       </div>
       <div className="min-w-0">
-        <div className="flex flex-wrap gap-2" role="group" aria-label={title}>
+        <fieldset className="flex flex-wrap gap-2 border-0 p-0 m-0" aria-label={title}>
           {options.map((option) => {
             const active = option.value === value;
             return (
@@ -170,7 +170,7 @@ function SettingsChoiceRow<T extends string>({
               </button>
             );
           })}
-        </div>
+        </fieldset>
       </div>
     </div>
   );
@@ -579,6 +579,7 @@ const PersonalSettingsPage: React.FC = () => {
                             checked={notificationEmailEnabled}
                             onChange={(event) => setNotificationEmailEnabled(event.target.checked)}
                             disabled={notificationLoading || notificationSaving}
+                            aria-label={t('settings.personalNotificationEmailToggle')}
                           />
                           <span>{t('settings.personalNotificationEmailToggle')}</span>
                         </label>
@@ -606,6 +607,7 @@ const PersonalSettingsPage: React.FC = () => {
                             checked={notificationDiscordEnabled}
                             onChange={(event) => setNotificationDiscordEnabled(event.target.checked)}
                             disabled={notificationLoading || notificationSaving}
+                            aria-label={t('settings.personalNotificationDiscordToggle')}
                           />
                           <span>{t('settings.personalNotificationDiscordToggle')}</span>
                         </label>
@@ -733,9 +735,8 @@ const PersonalSettingsPage: React.FC = () => {
                       <TerminalChip variant="success">{t('settings.portfolioDisplaySaved')}</TerminalChip>
                     ) : null}
                   </div>
-                  <div
-                    className="mt-2 flex flex-wrap gap-2"
-                    role="group"
+                  <fieldset
+                    className="mt-2 flex flex-wrap gap-2 border-0 p-0 m-0"
                     aria-label={t('settings.portfolioDisplayDefaultCurrency')}
                   >
                     {PORTFOLIO_DISPLAY_CURRENCY_OPTIONS.map((currency) => {
@@ -752,7 +753,7 @@ const PersonalSettingsPage: React.FC = () => {
                         </button>
                       );
                     })}
-                  </div>
+                  </fieldset>
                 </div>
               </div>
 

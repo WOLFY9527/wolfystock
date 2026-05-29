@@ -77,6 +77,15 @@ type WatchlistMonitoringTone = 'success' | 'caution' | 'neutral';
 
 const ROW_SELECTION_BUTTON_CLASS = 'inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-lg border transition hover:border-white/30 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/35';
 
+const SCANNER_FAILURE_STATUSES = new Set(['data_failed', 'provider_down', 'provider_error', 'error', 'failed', 'critical']);
+const SIMULATION_FAILURE_STATUSES = new Set(['insufficient_history', 'data_failed', 'no_data', 'missing_data', 'partial']);
+const SCORE_DISCLOSURE_FAILED_STATUSES = new Set(['data_failed', 'provider_down', 'provider_error', 'failed', 'error', 'critical']);
+const SCORE_DISCLOSURE_STALE_STATUSES = new Set(['stale', 'partial']);
+const SCANNER_FORMAT_FAILED_STATUSES = new Set(['data_failed', 'provider_down', 'provider_error', 'error', 'failed', 'critical']);
+const SCANNER_FORMAT_VERIFIED_STATUSES = new Set(['selected', 'verified', 'ready', 'fresh']);
+const SCANNER_FORMAT_PASSED_STATUSES = new Set(['preview', 'candidate', 'passed']);
+const SCANNER_FORMAT_REJECTED_STATUSES = new Set(['rejected', 'not_selected', 'failed_filter']);
+
 function normalizeText(value?: string | null): string {
   return String(value || '').trim();
 }
@@ -206,8 +215,8 @@ function isStaleIntelligence(item: WatchlistItem): boolean {
 function hasFailureOrNoData(item: WatchlistItem): boolean {
   const scannerStatus = normalizeText(item.intelligence?.scanner?.status || item.scoreStatus).toLowerCase();
   const simulationStatus = normalizeText(item.intelligence?.strategySimulation?.status).toLowerCase();
-  return ['data_failed', 'provider_down', 'provider_error', 'error', 'failed', 'critical'].includes(scannerStatus)
-    || ['insufficient_history', 'data_failed', 'no_data', 'missing_data', 'partial'].includes(simulationStatus)
+  return SCANNER_FAILURE_STATUSES.has(scannerStatus)
+    || SIMULATION_FAILURE_STATUSES.has(simulationStatus)
     || (!hasScannerEvidence(item) && !hasBacktestEvidence(item));
 }
 
@@ -218,7 +227,10 @@ function getLatestIntelligenceTime(item: WatchlistItem): string | null {
     item.lastScoredAt,
     item.updatedAt,
   ].filter(Boolean) as string[];
-  return values.sort((left, right) => getTime(right) - getTime(left))[0] || null;
+  return values.reduce<string | null>((best, current) => {
+    if (!best) return current;
+    return getTime(current) > getTime(best) ? current : best;
+  }, null);
 }
 
 function formatFreshness(value?: string | null): string {
@@ -250,11 +262,11 @@ function hasLimitedConfidenceScoreContext(item: WatchlistItem): boolean {
 
 function getScoreDisclosureState(item: WatchlistItem): WatchlistScoreDisclosureState {
   const status = normalizeToken(item.scoreStatus);
-  if (['data_failed', 'provider_down', 'provider_error', 'failed', 'error', 'critical'].includes(status)) {
+  if (SCORE_DISCLOSURE_FAILED_STATUSES.has(status)) {
     return 'failed';
   }
   if (hasLimitedConfidenceScoreContext(item)) return 'limitedConfidence';
-  if (['stale', 'partial'].includes(status)) return 'stale';
+  if (SCORE_DISCLOSURE_STALE_STATUSES.has(status)) return 'stale';
   if (status === 'fresh') return 'fresh';
   return 'unknown';
 }
@@ -317,12 +329,12 @@ function formatScannerStatus(item: WatchlistItem): string {
   const simulationStatus = normalizeText(item.intelligence?.strategySimulation?.status).toLowerCase();
   const scoreDisclosureState = getScoreDisclosureState(item);
   if (scoreDisclosureState === 'failed') return '扫描失败';
-  if (['data_failed', 'provider_down', 'provider_error', 'error', 'failed', 'critical'].includes(status)) return '扫描失败';
+  if (SCANNER_FORMAT_FAILED_STATUSES.has(status)) return '扫描失败';
   if (scoreDisclosureState === 'stale' || scoreDisclosureState === 'limitedConfidence') return '置信度较低';
   if (scoreDisclosureState === 'unknown') return hasScannerEvidence(item) ? '数据更新中' : '未扫描';
-  if (['selected', 'verified', 'ready', 'fresh'].includes(status)) return '已验证';
-  if (['preview', 'candidate', 'passed'].includes(status)) return '通过筛选';
-  if (['rejected', 'not_selected', 'failed_filter'].includes(status)) return '未通过';
+  if (SCANNER_FORMAT_VERIFIED_STATUSES.has(status)) return '已验证';
+  if (SCANNER_FORMAT_PASSED_STATUSES.has(status)) return '通过筛选';
+  if (SCANNER_FORMAT_REJECTED_STATUSES.has(status)) return '未通过';
   if (simulationStatus === 'insufficient_history' || status === 'insufficient_history') return '数据不足';
   if (!hasScannerEvidence(item)) return '未扫描';
   return '通过筛选';
@@ -385,9 +397,11 @@ function buildWatchlistConclusion(items: WatchlistItem[], language: 'zh' | 'en')
     }
   });
 
-  const topItem = [...items]
-    .filter((item) => getTrustState(item) === 'fresh' && getScannerScore(item) !== null)
-    .sort((left, right) => (getScannerScore(right) ?? Number.NEGATIVE_INFINITY) - (getScannerScore(left) ?? Number.NEGATIVE_INFINITY))[0] || null;
+  const topItem = items.reduce<WatchlistItem | null>((best, item) => {
+    if (getTrustState(item) !== 'fresh' || getScannerScore(item) === null) return best;
+    if (!best) return item;
+    return (getScannerScore(item) ?? Number.NEGATIVE_INFINITY) > (getScannerScore(best) ?? Number.NEGATIVE_INFINITY) ? item : best;
+  }, null);
   if (!items.length) {
     return {
       title: language === 'en' ? 'Needs watch items' : '需要观察标的',
@@ -940,7 +954,12 @@ const WatchlistPage: React.FC = () => {
   const summary = (() => {
     const markets = new Set(items.flatMap((item) => { const v = normalizeText(item.market).toLowerCase(); return v ? [v] : []; }));
     const scannerSourced = items.filter((item) => normalizeText(item.source).toLowerCase() === 'scanner').length;
-    const latestTime = items.flatMap((item) => { const v = getLatestIntelligenceTime(item); return v ? [v] : []; }).sort((left, right) => getTime(right) - getTime(left))[0] || null;
+    const latestTime = items.reduce<string | null>((best, item) => {
+      const v = getLatestIntelligenceTime(item);
+      if (!v) return best;
+      if (!best) return v;
+      return getTime(v) > getTime(best) ? v : best;
+    }, null);
     return {
       total: items.length,
       markets: markets.size,

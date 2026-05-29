@@ -68,7 +68,7 @@ export const PageBriefDrawer: React.FC<PageBriefDrawerProps> = ({
       <div className="space-y-3">
         {bullets.map((bullet, index) => (
           <div
-            key={index}
+            key={`${bullet}-${index}`}
             className="rounded-[28px] border border-white/[0.08] bg-white/[0.02] px-5 py-4 text-sm leading-6 text-white/64 backdrop-blur-xl"
           >
             {bullet}
