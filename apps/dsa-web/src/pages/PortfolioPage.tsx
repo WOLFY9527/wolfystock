@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MoreHorizontal, PenSquare, RefreshCw, Trash2 } from 'lucide-react';
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
@@ -906,6 +906,7 @@ const PortfolioPage: React.FC = () => {
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
   const copy = getPortfolioCopy(t, language);
+  const riskFallbackMessage = useMemo(() => copy.riskFallback, [copy.riskFallback]);
 
   useEffect(() => {
     document.title = copy.documentTitle;
@@ -1098,7 +1099,7 @@ const PortfolioPage: React.FC = () => {
     );
   };
 
-  const loadAccounts = async () => {
+  const loadAccounts = useCallback(async () => {
     try {
       const response = await portfolioApi.getAccounts(false);
       const items = response.accounts || [];
@@ -1119,9 +1120,9 @@ const PortfolioPage: React.FC = () => {
     } catch (err) {
       setError(getParsedApiError(err));
     }
-  };
+  }, []);
 
-  const loadBrokers = async () => {
+  const loadBrokers = useCallback(async () => {
     try {
       const response = await portfolioApi.listImportBrokers();
       const brokerItems = response.brokers || [];
@@ -1148,9 +1149,9 @@ const PortfolioPage: React.FC = () => {
           : FALLBACK_BROKERS[0].broker
       ));
     }
-  };
+  }, []);
 
-  const loadBrokerConnections = async (accountId?: number) => {
+  const loadBrokerConnections = useCallback(async (accountId?: number) => {
     if (!accountId) {
       setBrokerConnections([]);
       return;
@@ -1161,9 +1162,9 @@ const PortfolioPage: React.FC = () => {
     } catch {
       setBrokerConnections([]);
     }
-  };
+  }, []);
 
-  const loadSnapshotAndRisk = async () => {
+  const loadSnapshotAndRisk = useCallback(async () => {
     setIsLoading(true);
     setRiskWarning(null);
     try {
@@ -1181,7 +1182,7 @@ const PortfolioPage: React.FC = () => {
         });
       } catch (riskErr) {
         const parsed = getParsedApiError(riskErr);
-        setRiskWarning(parsed.message || copy.riskFallback);
+        setRiskWarning(parsed.message || riskFallbackMessage);
       }
     } catch (err) {
       setSnapshot(null);
@@ -1189,7 +1190,7 @@ const PortfolioPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [queryAccountId, costMethod, riskFallbackMessage]);
 
   const loadEventsPage = async (page: number) => {
 
@@ -1233,9 +1234,46 @@ const PortfolioPage: React.FC = () => {
     }
   };
 
-  const loadEvents = async () => {
-    await loadEventsPage(eventPage);
-  };
+  const loadEvents = useCallback(async () => {
+    try {
+      if (eventType === 'trade') {
+        const response = await portfolioApi.listTrades({
+          accountId: queryAccountId,
+          dateFrom: eventDateFrom || undefined,
+          dateTo: eventDateTo || undefined,
+          symbol: eventSymbol || undefined,
+          side: eventSide || undefined,
+          includeVoided: true,
+          page: eventPage,
+          pageSize: DEFAULT_PAGE_SIZE,
+        });
+        setTradeEvents(response.items || []);
+      } else if (eventType === 'cash') {
+        const response = await portfolioApi.listCashLedger({
+          accountId: queryAccountId,
+          dateFrom: eventDateFrom || undefined,
+          dateTo: eventDateTo || undefined,
+          direction: eventDirection || undefined,
+          page: eventPage,
+          pageSize: DEFAULT_PAGE_SIZE,
+        });
+        setCashEvents(response.items || []);
+      } else {
+        const response = await portfolioApi.listCorporateActions({
+          accountId: queryAccountId,
+          dateFrom: eventDateFrom || undefined,
+          dateTo: eventDateTo || undefined,
+          symbol: eventSymbol || undefined,
+          actionType: eventActionType || undefined,
+          page: eventPage,
+          pageSize: DEFAULT_PAGE_SIZE,
+        });
+        setCorporateEvents(response.items || []);
+      }
+    } catch (err) {
+      setError(getParsedApiError(err));
+    }
+  }, [eventType, queryAccountId, eventDateFrom, eventDateTo, eventSymbol, eventSide, eventDirection, eventActionType, eventPage]);
 
   const refreshPortfolioData = async (page = eventPage) => {
     await Promise.all([loadSnapshotAndRisk(), loadEventsPage(page)]);
