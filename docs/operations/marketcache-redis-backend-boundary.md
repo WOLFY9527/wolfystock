@@ -9,6 +9,16 @@ Status: mirror-policy boundary only. A real Redis/Valkey adapter is deferred, no
 - The seam is mirror-only: current runtime may project a JSON-safe document for persistence, but it does not read, hydrate, or re-authorize payloads from any remote store.
 - No Redis/Valkey package, import, env flag, config flag, or runtime enablement is required in the current implementation.
 
+## Request-path persist policy
+
+- Current remote persist is synchronous today: `MarketCache.set(...)` calls the remote mirror directly after storing the local entry, and `_payload(...)` calls the same mirror path before returning the response payload.
+- Current remote persist therefore sits on request-adjacent local entry set/payload paths, not on a deferred worker or separate non-blocking dispatcher.
+- A real network adapter on this seam could add request-path latency to fresh hits, stale serves, cold fallback returns, and cold fetch success responses because those paths currently pass through `_payload(...)`, while direct `set(...)` writes are also synchronous.
+- Redis/Valkey remains deferred until there is an explicit timeout-bounded, deferred, non-blocking mirror policy for this seam.
+- Remote write success must remain best-effort only: request success must not depend on remote persist success, and remote persist must not become a provider route failure source.
+- Remote persist must not change or gate fresh hit behavior, stale serve behavior, cold fallback behavior, cold fetch success behavior, background refresh behavior, payload freshness/fallback labels, provider calls, or local entry authority.
+- `NullMarketCacheRemoteBackend` remains the default backend, and the local in-memory `MarketCache` remains authoritative.
+
 ## Current MarketCache semantics to preserve
 
 - TTL remains per cache key/category.
@@ -48,9 +58,11 @@ Status: mirror-policy boundary only. A real Redis/Valkey adapter is deferred, no
 - A first remote backend may store only JSON-safe payload projections.
 - Remote reads, hydration, cache-warming authority, and fallback/live authority are out of scope for the first real adapter.
 - Distributed locking, distributed SWR, leases, and cross-process cold-start coalescing are separate design problems and must be specified before enablement.
+- A safe first networked mirror direction is an in-process best-effort dispatcher with a bounded queue, drop-on-full behavior, no retries in the request path, and debug-only sanitized error reporting.
 - A real network adapter must define explicit timeout, failure, and backpressure policy before enablement.
 - Request success must not depend on remote write success.
 - Remote persist must not become a provider route failure source.
+- Remote reads remain out of scope, and the first safe implementation must not introduce distributed locks, distributed SWR, leases, cold-start coalescing, or multi-process generation semantics.
 
 ## Explicitly forbidden in a first Redis implementation
 
