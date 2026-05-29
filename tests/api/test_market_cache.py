@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import inspect
 import json
 import threading
@@ -12,7 +13,12 @@ from concurrent.futures import Future
 from datetime import timedelta
 from unittest.mock import Mock
 
-from src.services.market_cache import MarketCache, MarketCacheRemoteBackend, NullMarketCacheRemoteBackend
+from src.services.market_cache import (
+    MarketCache,
+    MarketCacheRemoteBackend,
+    MarketCacheRemoteMirrorDispatcher,
+    NullMarketCacheRemoteBackend,
+)
 from src.services.llm_instrumentation import (
     reset_llm_event_counters,
     set_llm_event_sink,
@@ -51,6 +57,40 @@ class _FakeRemoteMarketCacheBackend(MarketCacheRemoteBackend):
         self.documents[key] = json.loads(json.dumps(document, ensure_ascii=False, sort_keys=True))
 
 
+class _BlockingRemoteMarketCacheBackend(MarketCacheRemoteBackend):
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.release = threading.Event()
+        self.documents: list[dict] = []
+        self.write_calls = 0
+        self._lock = threading.Lock()
+
+    def persist(self, key: str, document: dict) -> None:
+        with self._lock:
+            self.write_calls += 1
+        self.started.set()
+        self.release.wait(2)
+        self.documents.append(json.loads(json.dumps(document, ensure_ascii=False, sort_keys=True)))
+
+
+class _FailingRemoteMarketCacheBackend(MarketCacheRemoteBackend):
+    def __init__(self) -> None:
+        self.write_calls = 0
+
+    def persist(self, key: str, document: dict) -> None:
+        self.write_calls += 1
+        raise _RemoteBackendUnavailable("redis backend unavailable token=SECRET")
+
+
+class _MutatingRemoteMarketCacheBackend(MarketCacheRemoteBackend):
+    def __init__(self) -> None:
+        self.write_calls = 0
+
+    def persist(self, key: str, document: dict) -> None:
+        self.write_calls += 1
+        document["data"]["source"] = "mutated-by-backend"
+
+
 class MarketCacheTestCase(unittest.TestCase):
     def setUp(self) -> None:
         reset_llm_event_counters()
@@ -70,6 +110,27 @@ class MarketCacheTestCase(unittest.TestCase):
                 return True
             time.sleep(0.01)
         return bool(predicate())
+
+    def _assert_payload_path_matches_control(
+        self,
+        scenario,
+        *,
+        expected_provider_calls: int,
+    ) -> None:
+        backend = _FakeRemoteMarketCacheBackend()
+        dispatcher = MarketCacheRemoteMirrorDispatcher(backend, queue_size=8)
+        control_cache = MarketCache(max_workers=1)
+        dispatcher_cache = MarketCache(max_workers=1, remote_backend=dispatcher)
+        try:
+            expected_payload, expected_calls = scenario(control_cache)
+            actual_payload, actual_calls = scenario(dispatcher_cache)
+            self.assertEqual(actual_payload, expected_payload)
+            self.assertEqual(actual_calls, expected_calls)
+            self.assertEqual(actual_calls, expected_provider_calls)
+            self.assertEqual(backend.read_calls, 0)
+            self.assertTrue(dispatcher.drain(timeout=2))
+        finally:
+            dispatcher.shutdown(timeout=2)
 
     def test_fresh_cache_hit_does_not_call_fetcher(self) -> None:
         cache = MarketCache(max_workers=1)
@@ -478,6 +539,320 @@ class MarketCacheTestCase(unittest.TestCase):
         cache = MarketCache(max_workers=1)
 
         self.assertIsInstance(cache._remote_backend, NullMarketCacheRemoteBackend)
+
+    def test_remote_mirror_dispatcher_is_explicitly_injected_not_default(self) -> None:
+        cache = MarketCache(max_workers=1)
+        backend = _FakeRemoteMarketCacheBackend()
+        dispatcher = MarketCacheRemoteMirrorDispatcher(backend, queue_size=1)
+        try:
+            remote_cache = MarketCache(max_workers=1, remote_backend=dispatcher)
+
+            self.assertIsInstance(cache._remote_backend, NullMarketCacheRemoteBackend)
+            self.assertIs(remote_cache._remote_backend, dispatcher)
+        finally:
+            dispatcher.shutdown(timeout=2)
+
+    def test_remote_mirror_dispatcher_does_not_read_remote_data(self) -> None:
+        backend = _FakeRemoteMarketCacheBackend()
+        dispatcher = MarketCacheRemoteMirrorDispatcher(backend, queue_size=4)
+        cache = MarketCache(max_workers=1, remote_backend=dispatcher)
+        try:
+            cache.set("crypto", {"source": "binance", "value": 1, "freshness": "live"}, ttl_seconds=30)
+            self.assertTrue(dispatcher.drain(timeout=2))
+            backend.seed(
+                "crypto",
+                {
+                    "key": "crypto",
+                    "ttlSeconds": 30,
+                    "fetchedAt": "2026-05-29T09:30:00+08:00",
+                    "expiresAt": "2026-05-29T09:31:00+08:00",
+                    "data": {"source": "fallback", "value": 999, "freshness": "fallback", "isFallback": True},
+                },
+            )
+
+            payload = cache.get_or_refresh(
+                "crypto",
+                30,
+                Mock(side_effect=AssertionError("fresh local cache should stay authoritative")),
+            )
+
+            self.assertEqual(payload["source"], "binance")
+            self.assertEqual(payload["value"], 1)
+            self.assertEqual(payload["freshness"], "live")
+            self.assertEqual(backend.read_calls, 0)
+        finally:
+            dispatcher.shutdown(timeout=2)
+
+    def test_remote_mirror_dispatcher_drop_on_full_preserves_local_payload(self) -> None:
+        backend = _BlockingRemoteMarketCacheBackend()
+        dispatcher = MarketCacheRemoteMirrorDispatcher(backend, queue_size=1)
+        cache = MarketCache(max_workers=1, remote_backend=dispatcher)
+        try:
+            seed_payload = {"source": "binance", "value": 7, "freshness": "live"}
+            first = cache.get_or_refresh("crypto", 30, Mock(return_value=seed_payload))
+            self.assertEqual(first, {**seed_payload, "isRefreshing": False})
+            self.assertTrue(backend.started.wait(1))
+
+            second = cache.get_or_refresh(
+                "crypto",
+                30,
+                Mock(side_effect=AssertionError("fresh cache should not fetch")),
+            )
+            third = cache.get_or_refresh(
+                "crypto",
+                30,
+                Mock(side_effect=AssertionError("fresh cache should not fetch")),
+            )
+
+            self.assertEqual(second, first)
+            self.assertEqual(third, first)
+            backend.release.set()
+            self.assertTrue(dispatcher.drain(timeout=2))
+            self.assertEqual(backend.write_calls, 2)
+        finally:
+            backend.release.set()
+            dispatcher.shutdown(timeout=2)
+
+    def test_remote_mirror_dispatcher_slow_backend_does_not_block_payload_return(self) -> None:
+        backend = _BlockingRemoteMarketCacheBackend()
+        dispatcher = MarketCacheRemoteMirrorDispatcher(backend, queue_size=2)
+        cache = MarketCache(max_workers=1, remote_backend=dispatcher)
+        try:
+            cache.set("crypto", {"source": "binance", "value": 7, "freshness": "live"}, ttl_seconds=30)
+            self.assertTrue(backend.started.wait(1))
+            result: list[dict] = []
+            returned = threading.Event()
+
+            def request_payload() -> None:
+                result.append(
+                    cache.get_or_refresh(
+                        "crypto",
+                        30,
+                        Mock(side_effect=AssertionError("fresh cache should not fetch")),
+                    )
+                )
+                returned.set()
+
+            thread = threading.Thread(target=request_payload)
+            thread.start()
+
+            self.assertTrue(returned.wait(1))
+            self.assertFalse(backend.release.is_set())
+            self.assertEqual(result[0]["source"], "binance")
+            self.assertEqual(result[0]["value"], 7)
+            self.assertEqual(result[0]["freshness"], "live")
+            backend.release.set()
+            thread.join(2)
+            self.assertTrue(dispatcher.drain(timeout=2))
+        finally:
+            backend.release.set()
+            dispatcher.shutdown(timeout=2)
+
+    def test_remote_mirror_dispatcher_backend_error_is_swallowed_and_sanitized(self) -> None:
+        backend = _FailingRemoteMarketCacheBackend()
+        dispatcher = MarketCacheRemoteMirrorDispatcher(backend, queue_size=4)
+        cache = MarketCache(max_workers=1, remote_backend=dispatcher)
+        try:
+            with self.assertLogs("src.services.market_cache", level="DEBUG") as captured:
+                payload = cache.get_or_refresh(
+                    "crypto",
+                    30,
+                    Mock(return_value={"source": "binance", "value": 7, "freshness": "live"}),
+                )
+                self.assertTrue(dispatcher.drain(timeout=2))
+
+            logs = "\n".join(captured.output)
+            self.assertEqual(payload["source"], "binance")
+            self.assertEqual(payload["value"], 7)
+            self.assertEqual(backend.write_calls, 1)
+            self.assertIn("backend_error", logs)
+            self.assertNotIn("SECRET", logs)
+            self.assertNotIn("redis backend unavailable", logs)
+            self.assertNotIn("binance", logs)
+        finally:
+            dispatcher.shutdown(timeout=2)
+
+    def test_remote_mirror_dispatcher_persists_json_safe_projection_without_transient_fields(self) -> None:
+        backend = _FakeRemoteMarketCacheBackend()
+        dispatcher = MarketCacheRemoteMirrorDispatcher(backend, queue_size=4)
+        cache = MarketCache(max_workers=1, remote_backend=dispatcher)
+        try:
+            cache.set(
+                "crypto",
+                {
+                    "source": "binance",
+                    "sourceLabel": "Binance",
+                    "freshness": "partial",
+                    "isFallback": False,
+                    "isStale": True,
+                    "isPartial": True,
+                    "isSynthetic": False,
+                    "isRefreshing": True,
+                    "lastError": "provider token=SECRET",
+                    "refreshError": "provider token=SECRET",
+                    "providerHealth": {"status": "refreshing", "isRefreshing": True},
+                    "evidenceSnapshot": {
+                        "freshness": "partial",
+                        "isRefreshing": True,
+                        "scoreReliabilityAllowed": False,
+                    },
+                    "sourceConfidence": {
+                        "freshness": "partial",
+                        "scoreReliabilityAllowed": False,
+                    },
+                    "scoreReliabilityAllowed": False,
+                },
+                ttl_seconds=30,
+            )
+            payload = cache.get_or_refresh(
+                "crypto",
+                30,
+                Mock(side_effect=AssertionError("fresh cache should not fetch")),
+            )
+            self.assertTrue(dispatcher.drain(timeout=2))
+
+            document = backend.documents["crypto"]
+            encoded = json.dumps(document, ensure_ascii=False, sort_keys=True)
+            self.assertEqual(payload["source"], "binance")
+            self.assertEqual(document["data"]["source"], "binance")
+            self.assertEqual(document["data"]["freshness"], "partial")
+            self.assertTrue(document["data"]["isStale"])
+            self.assertTrue(document["data"]["isPartial"])
+            self.assertFalse(document["data"]["isSynthetic"])
+            self.assertFalse(document["data"]["scoreReliabilityAllowed"])
+            self.assertNotIn("isRefreshing", encoded)
+            self.assertNotIn("lastError", encoded)
+            self.assertNotIn("refreshError", encoded)
+            self.assertNotIn("SECRET", encoded)
+        finally:
+            dispatcher.shutdown(timeout=2)
+
+    def test_remote_mirror_dispatcher_does_not_mutate_persist_document(self) -> None:
+        backend = _MutatingRemoteMarketCacheBackend()
+        dispatcher = MarketCacheRemoteMirrorDispatcher(backend, queue_size=1)
+        document = {"key": "crypto", "data": {"source": "binance", "value": 7}}
+        try:
+            dispatcher.persist("crypto", document)
+            self.assertTrue(dispatcher.drain(timeout=2))
+
+            self.assertEqual(document, {"key": "crypto", "data": {"source": "binance", "value": 7}})
+            self.assertEqual(backend.write_calls, 1)
+        finally:
+            dispatcher.shutdown(timeout=2)
+
+    def test_remote_mirror_dispatcher_preserves_representative_payload_paths(self) -> None:
+        def live_payload(value: int) -> dict:
+            return {
+                "source": "binance",
+                "sourceLabel": "Binance",
+                "freshness": "live",
+                "isFallback": False,
+                "isStale": False,
+                "isPartial": False,
+                "isSynthetic": False,
+                "providerHealth": {"status": "live"},
+                "evidenceSnapshot": {
+                    "freshness": "live",
+                    "isFallback": False,
+                    "isStale": False,
+                    "isPartial": False,
+                    "isSynthetic": False,
+                    "scoreReliabilityAllowed": False,
+                },
+                "sourceConfidence": {
+                    "freshness": "live",
+                    "scoreReliabilityAllowed": False,
+                },
+                "scoreReliabilityAllowed": False,
+                "value": value,
+            }
+
+        def fresh_hit(cache: MarketCache) -> tuple[dict, int]:
+            fetcher = Mock(side_effect=AssertionError("fresh cache should not fetch"))
+            cache.set("crypto", live_payload(1), ttl_seconds=30)
+            return cache.get_or_refresh("crypto", 30, fetcher), fetcher.call_count
+
+        def stale_serve(cache: MarketCache) -> tuple[dict, int]:
+            release_refresh = threading.Event()
+            refresh_started = threading.Event()
+            calls = 0
+
+            def fetcher() -> dict:
+                nonlocal calls
+                calls += 1
+                refresh_started.set()
+                release_refresh.wait(2)
+                return live_payload(2)
+
+            stale_payload = live_payload(1)
+            stale_payload.update({"freshness": "stale", "isStale": True})
+            cache.set("crypto", stale_payload, ttl_seconds=1)
+            entry = cache.get("crypto")
+            self.assertIsNotNone(entry)
+            assert entry is not None
+            entry.expires_at = entry.fetched_at - timedelta(seconds=1)
+            payload = cache.get_or_refresh("crypto", 1, fetcher, allow_stale=True, background_refresh=True)
+            self.assertTrue(refresh_started.wait(1))
+            release_refresh.set()
+            self.assertTrue(cache.wait_for_refreshes(timeout=2))
+            return payload, calls
+
+        def cold_fallback(cache: MarketCache) -> tuple[dict, int]:
+            release_fetch = threading.Event()
+            fetch_started = threading.Event()
+            calls = 0
+
+            def fetcher() -> dict:
+                nonlocal calls
+                calls += 1
+                fetch_started.set()
+                release_fetch.wait(2)
+                return live_payload(2)
+
+            fallback = {
+                "source": "fallback",
+                "sourceLabel": "备用数据",
+                "freshness": "fallback",
+                "isFallback": True,
+                "isStale": False,
+                "isPartial": False,
+                "isSynthetic": False,
+                "providerHealth": {"status": "fallback"},
+                "evidenceSnapshot": {
+                    "freshness": "fallback",
+                    "isFallback": True,
+                    "isStale": False,
+                    "isPartial": False,
+                    "isSynthetic": False,
+                    "scoreReliabilityAllowed": False,
+                },
+                "sourceConfidence": {
+                    "freshness": "fallback",
+                    "scoreReliabilityAllowed": False,
+                },
+                "scoreReliabilityAllowed": False,
+                "value": 0,
+            }
+            payload = cache.get_or_refresh(
+                "crypto",
+                30,
+                fetcher,
+                fallback_factory=lambda: copy.deepcopy(fallback),
+                cold_start_timeout_seconds=0.01,
+            )
+            self.assertTrue(fetch_started.wait(1))
+            release_fetch.set()
+            self.assertTrue(cache.wait_for_refreshes(timeout=2))
+            return payload, calls
+
+        def cold_success(cache: MarketCache) -> tuple[dict, int]:
+            fetcher = Mock(return_value=live_payload(3))
+            return cache.get_or_refresh("crypto", 30, fetcher), fetcher.call_count
+
+        self._assert_payload_path_matches_control(fresh_hit, expected_provider_calls=0)
+        self._assert_payload_path_matches_control(stale_serve, expected_provider_calls=1)
+        self._assert_payload_path_matches_control(cold_fallback, expected_provider_calls=1)
+        self._assert_payload_path_matches_control(cold_success, expected_provider_calls=1)
 
     def test_market_cache_remote_seam_requires_no_redis_dependency_or_env_flag(self) -> None:
         import src.services.market_cache as market_cache_module

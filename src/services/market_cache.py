@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import logging
+import queue
 import re
 import threading
 import time
@@ -78,6 +79,118 @@ class NullMarketCacheRemoteBackend:
 
     def persist(self, key: str, document: dict) -> None:
         return None
+
+
+class MarketCacheRemoteMirrorDispatcher:
+    """Asynchronous mirror-only wrapper for best-effort remote persistence."""
+
+    _STOP = object()
+
+    def __init__(self, backend: MarketCacheRemoteBackend, queue_size: int = 256) -> None:
+        if queue_size < 1:
+            raise ValueError("queue_size must be positive")
+        self._backend = backend
+        self._queue: queue.Queue[object] = queue.Queue(maxsize=queue_size)
+        self._state_lock = threading.Lock()
+        self._pending_done = threading.Condition()
+        self._pending = 0
+        self._closed = False
+        self._worker = threading.Thread(
+            target=self._run,
+            name="market-cache-remote-mirror",
+            daemon=True,
+        )
+        self._worker.start()
+
+    def persist(self, key: str, document: dict) -> None:
+        try:
+            document_copy = copy.deepcopy(document)
+        except Exception:
+            logger.debug(
+                "[MarketCacheRemoteMirrorDispatcher] mirror skipped key_hash=%s reason=document_copy_failed",
+                self._safe_key_hash(key),
+            )
+            return
+        with self._state_lock:
+            if self._closed:
+                logger.debug(
+                    "[MarketCacheRemoteMirrorDispatcher] mirror skipped key_hash=%s reason=closed",
+                    self._safe_key_hash(key),
+                )
+                return
+            try:
+                self._increment_pending()
+                self._queue.put_nowait((key, document_copy))
+            except queue.Full:
+                self._decrement_pending()
+                logger.debug(
+                    "[MarketCacheRemoteMirrorDispatcher] mirror skipped key_hash=%s reason=queue_full queue_size=%s",
+                    self._safe_key_hash(key),
+                    self._queue.maxsize,
+                )
+
+    def drain(self, timeout: float = 5.0) -> bool:
+        deadline = time.monotonic() + timeout
+        with self._pending_done:
+            while self._pending:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                self._pending_done.wait(remaining)
+        return True
+
+    def shutdown(self, timeout: float = 5.0) -> bool:
+        with self._state_lock:
+            already_closed = self._closed
+            self._closed = True
+        drained = self.drain(timeout=timeout)
+        with self._state_lock:
+            if not already_closed:
+                try:
+                    self._queue.put_nowait(self._STOP)
+                except queue.Full:
+                    return False
+        self._worker.join(timeout=timeout)
+        return drained and not self._worker.is_alive()
+
+    def _run(self) -> None:
+        while True:
+            item = self._queue.get()
+            try:
+                if item is self._STOP:
+                    return
+                key, document = item
+                try:
+                    self._backend.persist(key, document)
+                except Exception:
+                    logger.debug(
+                        "[MarketCacheRemoteMirrorDispatcher] mirror skipped key_hash=%s reason=backend_error backend=%s",
+                        self._safe_key_hash(key),
+                        self._safe_backend_name(),
+                    )
+                finally:
+                    self._decrement_pending()
+            finally:
+                self._queue.task_done()
+
+    def _increment_pending(self) -> None:
+        with self._pending_done:
+            self._pending += 1
+
+    def _decrement_pending(self) -> None:
+        with self._pending_done:
+            if self._pending > 0:
+                self._pending -= 1
+            if self._pending == 0:
+                self._pending_done.notify_all()
+
+    def _safe_backend_name(self) -> str:
+        name = type(self._backend).__name__
+        return re.sub(r"[^A-Za-z0-9_.-]", "_", name)[:80] or "unknown"
+
+    @staticmethod
+    def _safe_key_hash(key: str) -> str:
+        return hashlib.sha256(str(key).encode("utf-8")).hexdigest()[:12]
 
 
 class MarketCache:

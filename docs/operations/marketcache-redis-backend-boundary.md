@@ -6,15 +6,16 @@ Status: mirror-policy boundary only. A real Redis/Valkey adapter is deferred, no
 
 - `MarketCache` currently exposes only a best-effort remote mirror seam behind `MarketCacheRemoteBackend`.
 - The default backend remains `NullMarketCacheRemoteBackend`, so current behavior stays local-only unless a caller injects a test double.
+- `MarketCacheRemoteMirrorDispatcher` exists as explicitly injected in-process mirror infrastructure. It wraps a supplied backend with a bounded single-worker queue, but it is not enabled by default.
 - The seam is mirror-only: current runtime may project a JSON-safe document for persistence, but it does not read, hydrate, or re-authorize payloads from any remote store.
 - No Redis/Valkey package, import, env flag, config flag, or runtime enablement is required in the current implementation.
 
 ## Request-path persist policy
 
-- Current remote persist is synchronous today: `MarketCache.set(...)` calls the remote mirror directly after storing the local entry, and `_payload(...)` calls the same mirror path before returning the response payload.
-- Current remote persist therefore sits on request-adjacent local entry set/payload paths, not on a deferred worker or separate non-blocking dispatcher.
-- A real network adapter on this seam could add request-path latency to fresh hits, stale serves, cold fallback returns, and cold fetch success responses because those paths currently pass through `_payload(...)`, while direct `set(...)` writes are also synchronous.
-- Redis/Valkey remains deferred until there is an explicit timeout-bounded, deferred, non-blocking mirror policy for this seam.
+- Directly injected remote persist remains synchronous: `MarketCache.set(...)` calls the remote mirror after storing the local entry, and `_payload(...)` calls the same mirror path before returning the response payload.
+- The dispatcher is the only current non-blocking mirror wrapper. It is process-local, drop-on-full, no-retry, and mirror-only; callers must inject it explicitly around an existing backend.
+- A real network adapter must sit behind the dispatcher or another explicitly scoped non-blocking policy before enablement, otherwise it could add request-path latency to fresh hits, stale serves, cold fallback returns, and cold fetch success responses.
+- Redis/Valkey remains deferred until a real adapter, timeout policy, config selection, deployment plan, and production validation are separately scoped.
 - Remote write success must remain best-effort only: request success must not depend on remote persist success, and remote persist must not become a provider route failure source.
 - Remote persist must not change or gate fresh hit behavior, stale serve behavior, cold fallback behavior, cold fetch success behavior, background refresh behavior, payload freshness/fallback labels, provider calls, or local entry authority.
 - `NullMarketCacheRemoteBackend` remains the default backend, and the local in-memory `MarketCache` remains authoritative.
@@ -58,7 +59,7 @@ Status: mirror-policy boundary only. A real Redis/Valkey adapter is deferred, no
 - A first remote backend may store only JSON-safe payload projections.
 - Remote reads, hydration, cache-warming authority, and fallback/live authority are out of scope for the first real adapter.
 - Distributed locking, distributed SWR, leases, and cross-process cold-start coalescing are separate design problems and must be specified before enablement.
-- A safe first networked mirror direction is an in-process best-effort dispatcher with a bounded queue, drop-on-full behavior, no retries in the request path, and debug-only sanitized error reporting.
+- A safe first networked mirror direction now exists as `MarketCacheRemoteMirrorDispatcher`: an in-process best-effort dispatcher with a bounded queue, drop-on-full behavior, no retries in the request path, and debug-only sanitized error reporting.
 - A real network adapter must define explicit timeout, failure, and backpressure policy before enablement.
 - Request success must not depend on remote write success.
 - Remote persist must not become a provider route failure source.
