@@ -8,9 +8,26 @@ import os
 import tempfile
 import unittest
 from datetime import date, timedelta
-from typing import Any
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
+
+from tests.litellm_stub import ensure_litellm_stub
+
+ensure_litellm_stub()
+
+import litellm
+
+# 某些离线测试环境里 litellm 只是 namespace package，不导出 Router。
+if not hasattr(litellm, "Router"):
+    class _InertRouter:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+    litellm.Router = _InertRouter
+
+if not hasattr(litellm, "completion"):
+    litellm.completion = lambda **kwargs: None
 
 from src.config import Config
 from src.services.rule_backtest_service import RuleBacktestService
