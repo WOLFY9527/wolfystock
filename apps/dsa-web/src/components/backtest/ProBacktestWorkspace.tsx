@@ -122,9 +122,11 @@ function readRiskControls(parsed: RuleBacktestParseResponse | null) {
 function getParseWarnings(parsed: RuleBacktestParseResponse | null): string[] {
   const topLevel = Array.isArray(parsed?.parseWarnings) ? parsed.parseWarnings : [];
   const nested = Array.isArray(parsed?.parsedStrategy.parseWarnings) ? parsed?.parsedStrategy.parseWarnings : [];
-  return [...topLevel, ...nested]
-    .map((item) => String((item as Record<string, unknown>).message || '').trim())
-    .filter(Boolean);
+  return [...topLevel, ...nested].reduce<string[]>((acc, item) => {
+    const msg = String((item as Record<string, unknown>).message || '').trim();
+    if (msg) acc.push(msg);
+    return acc;
+  }, []);
 }
 
 function getAssumptionItems(parsed: RuleBacktestParseResponse | null, language: BacktestLanguage): string[] {

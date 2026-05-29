@@ -480,18 +480,21 @@ export const AssumptionList: React.FC<{
   emptyText: string;
 }> = ({ assumptions, emptyText }) => {
   const { language } = useI18n();
-  const entries = Object.entries(assumptions || {})
-    .filter(([, value]) => value != null && value !== '')
-    .map(([key, value]) => ({
-      key,
-      label: (() => {
-        const label = bt(language, `assumptionLabels.${key}`);
-        return label === `backtest.assumptionLabels.${key}` ? key.replace(/_/g, ' ') : label;
-      })(),
-      value: typeof value === 'boolean'
-        ? (value ? bt(language, 'common.yes') : bt(language, 'common.no'))
-        : Array.isArray(value) ? value.join(', ') : String(value),
-    }));
+  const entries = Object.entries(assumptions || {}).reduce<Array<{ key: string; label: string; value: string }>>((acc, [key, value]) => {
+    if (value != null && value !== '') {
+      acc.push({
+        key,
+        label: (() => {
+          const label = bt(language, `assumptionLabels.${key}`);
+          return label === `backtest.assumptionLabels.${key}` ? key.replace(/_/g, ' ') : label;
+        })(),
+        value: typeof value === 'boolean'
+          ? (value ? bt(language, 'common.yes') : bt(language, 'common.no'))
+          : Array.isArray(value) ? value.join(', ') : String(value),
+      });
+    }
+    return acc;
+  }, []);
 
   if (entries.length === 0) {
     return <p className="product-empty-note">{emptyText}</p>;

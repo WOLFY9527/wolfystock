@@ -56,10 +56,12 @@ export const MarketSentimentCard: React.FC<{
   };
   const items = panel?.items || [];
   const primary = resolvePrimaryItem(items);
-  const supporting = items
-    .filter((item) => item.symbol !== primary?.symbol)
-    .filter(isConsumerSafeSupportItem)
-    .slice(0, 2);
+  const supporting = items.reduce<typeof items>((acc, item) => {
+    if (item.symbol !== primary?.symbol && isConsumerSafeSupportItem(item)) {
+      acc.push(item);
+    }
+    return acc;
+  }, []).slice(0, 2);
   const score = primary?.value ?? 50;
   const gaugeRatio = Math.min(1, Math.max(0, score / 100));
   const title = t('marketOverviewPage.cards.sentiment.title');

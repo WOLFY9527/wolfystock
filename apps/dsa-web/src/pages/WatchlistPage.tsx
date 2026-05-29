@@ -1120,9 +1120,12 @@ const WatchlistPage: React.FC = () => {
       } : { force: true });
       const listResponse = await watchlistApi.listWatchlistItems();
       const failures = Object.fromEntries(
-        (response.results || [])
-          .filter((result) => normalizeText(result.status).toLowerCase() === 'failed')
-          .map((result) => [result.symbol, sanitizeFailureReason(result.message || '', '扫描失败')]),
+        (response.results || []).reduce<Array<[string, string]>>((acc, result) => {
+          if (normalizeText(result.status).toLowerCase() === 'failed') {
+            acc.push([result.symbol, sanitizeFailureReason(result.message || '', '扫描失败')]);
+          }
+          return acc;
+        }, []),
       );
       setItems(listResponse.items || []);
       setBatchFailures(failures);

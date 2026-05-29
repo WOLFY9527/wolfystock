@@ -1912,9 +1912,11 @@ const PortfolioPage: React.FC = () => {
     hasHoldings && (analytics?.risk.holdingCount ?? positionRows.length) < 3 ? (language === 'zh' ? '持仓数量较少' : 'Few holdings') : null,
     analytics?.risk.fxUnavailable ? (language === 'zh' ? '汇率数据暂不可用' : 'Exchange-rate data unavailable') : null,
   ].filter(Boolean) as string[];
-  const safeRiskWarningLabels = (analytics?.risk.warnings || [])
-    .map((warning) => riskWarningLabels[warning])
-    .filter(Boolean);
+  const safeRiskWarningLabels = (analytics?.risk.warnings || []).reduce<string[]>((acc, warning) => {
+    const label = riskWarningLabels[warning];
+    if (label) acc.push(label);
+    return acc;
+  }, []);
   const portfolioEvidenceSummary = snapshot ? normalizePortfolioRiskEvidence(snapshot, { maxLimitationLabels: 6 }) : null;
   const hasPortfolioEvidenceSummary = Boolean(
     portfolioEvidenceSummary

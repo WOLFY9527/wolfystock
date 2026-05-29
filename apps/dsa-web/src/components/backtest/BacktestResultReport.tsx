@@ -268,12 +268,12 @@ function assumptionEntries(run: RuleBacktestRunResponse): Array<[string, string]
       .flatMap(([key, value]) => value != null && value !== '' ? [[key, String(value)]] : []);
   }
 
-  const explicit = Object.entries(source)
-    .map(([key, value]): [string, string] | null => {
-      if (value == null || value === '') return null;
-      return [humanToken(key), typeof value === 'object' ? JSON.stringify(value) : humanToken(value)];
-    })
-    .flatMap((entry) => entry != null ? [entry] : []);
+  const explicit = Object.entries(source).reduce<[string, string][]>((acc, [key, value]) => {
+    if (value != null && value !== '') {
+      acc.push([humanToken(key), typeof value === 'object' ? JSON.stringify(value) : humanToken(value)]);
+    }
+    return acc;
+  }, []);
   if (explicit.length) return explicit;
 
   const inferred: Array<[string, string | number | null | undefined]> = [

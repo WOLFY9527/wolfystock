@@ -356,9 +356,12 @@ function getOrderedDrawdownAttributionBuckets(
     return [];
   }
 
-  return DRAWDOWN_ATTRIBUTION_BUCKET_ORDER
-    .filter((key) => asObjectRecord(bucketCounts[key]))
-    .map((key) => [key, bucketCounts[key]!] as [string, NonNullable<RuleBacktestDrawdownRegimeAttribution['bucketCounts']>[string]]);
+  return DRAWDOWN_ATTRIBUTION_BUCKET_ORDER.reduce((acc, key) => {
+    if (asObjectRecord(bucketCounts[key])) {
+      acc.push([key, bucketCounts[key]!]);
+    }
+    return acc;
+  }, [] as Array<[string, NonNullable<RuleBacktestDrawdownRegimeAttribution['bucketCounts']>[string]]>);
 }
 
 function buildDrawdownAttributionAppendix(

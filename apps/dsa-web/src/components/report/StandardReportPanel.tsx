@@ -1004,9 +1004,13 @@ const CoverageAuditPanel: React.FC<{
 }> = ({ coverageNotes, missingFieldAudit }) => {
   const buckets = missingFieldAudit.buckets.filter((bucket) => bucket.entries.length > 0);
   const missingFieldSemanticKeys = new Set(
-    buckets
-      .flatMap((bucket) => bucket.entries.map((entry) => coverageFieldSemanticKey(entry.field)))
-      .filter((token) => token.length > 0),
+    buckets.reduce<string[]>((acc, bucket) => {
+      for (const entry of bucket.entries) {
+        const token = coverageFieldSemanticKey(entry.field);
+        if (token.length > 0) acc.push(token);
+      }
+      return acc;
+    }, []),
   );
   const coverageGapItems = collectDedupedItems({
     items: coverageNotes?.coverageGaps || coverageNotes?.missingFieldNotes || [],
@@ -1307,9 +1311,12 @@ const ExecutionPlanLayer: React.FC<{
   });
   const baseConditionsAndRiskControl = collectDedupedItems({
     items: [
-      ...checklistItems
-        .filter((item) => isPendingChecklistStatus(item.status))
-        .map((item) => localizeReportHeadingLabel(item.text, reportLanguage())),
+      ...checklistItems.reduce<string[]>((acc, item) => {
+        if (isPendingChecklistStatus(item.status)) {
+          acc.push(localizeReportHeadingLabel(item.text, reportLanguage()));
+        }
+        return acc;
+      }, []),
       isPresentValue(decisionPanel?.stopLoss) ? joinLabelValue(ui('report.stopLoss'), softenControlledValue(decisionPanel?.stopLoss)) : undefined,
       isPresentValue(decisionPanel?.targetOne || decisionPanel?.target) ? joinLabelValue(ui('report.targetOne'), softenControlledValue(decisionPanel?.targetOne || decisionPanel?.target)) : undefined,
       isPresentValue(decisionPanel?.targetTwo) ? joinLabelValue(ui('report.targetTwo'), softenControlledValue(decisionPanel?.targetTwo)) : undefined,

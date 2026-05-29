@@ -204,9 +204,11 @@ function formatGapLabel(value?: string | null): string {
 
 function themeDataGaps(theme: MarketRotationTheme): string[] {
   const gaps = Array.isArray(theme.dataGaps) ? theme.dataGaps : [];
-  return gaps
-    .map((gap) => String(gap || '').trim())
-    .filter((gap, index, array) => gap && array.indexOf(gap) === index);
+  return gaps.reduce<string[]>((acc, gap) => {
+    const g = String(gap || '').trim();
+    if (g && acc.indexOf(g) === -1) acc.push(g);
+    return acc;
+  }, []);
 }
 
 function consumerThemeSubtitle(theme: MarketRotationTheme): string {
@@ -350,9 +352,11 @@ function sanitizeRotationText(value?: string | null, fallback = '数据不足，
 }
 
 function sanitizeRotationNotes(notes?: string[]): string[] {
-  return (notes || [])
-    .map((note) => sanitizeRotationText(note, ''))
-    .filter((note, index, array) => Boolean(note) && array.indexOf(note) === index);
+  return (notes || []).reduce<string[]>((acc, note) => {
+    const n = sanitizeRotationText(note, '');
+    if (n && acc.indexOf(n) === -1) acc.push(n);
+    return acc;
+  }, []);
 }
 
 function isThemeStale(theme: DataStateFields): boolean {
@@ -517,7 +521,12 @@ function deriveMissingEvidence(
     !hasBreadthEvidence(summaryThemes) || tiers.confirmedLeaders.length === 0 ? '广度信息不足' : '',
     payload.isFallback ? '最近数据不足' : '',
     payload.isStale ? '最近数据不足' : '',
-    ...summaryThemes.flatMap((theme) => themeDataGaps(theme).slice(0, 2)).map(formatGapLabel),
+    ...summaryThemes.reduce<string[]>((acc, theme) => {
+      for (const gap of themeDataGaps(theme).slice(0, 2)) {
+        acc.push(formatGapLabel(gap));
+      }
+      return acc;
+    }, []),
   ];
   return uniqueReadinessItems(
     missing,
@@ -871,24 +880,29 @@ const CommandBar: React.FC<{
           市场
         </div>
         <div className="flex min-w-0 gap-2 overflow-x-auto no-scrollbar">
-          {MARKET_OPTIONS.filter((market) => !supportedMarkets.length || supportedMarkets.includes(market.id)).map((market) => (
-            <TerminalButton
-              key={market.id}
-              type="button"
-              variant="compact"
-              data-testid={`rotation-market-tab-${market.id}`}
-              aria-pressed={selectedMarket === market.id}
-              className={cn(
-                'shrink-0',
-                selectedMarket === market.id
-                  ? 'border-cyan-200/24 bg-cyan-200/[0.08] text-cyan-50 hover:bg-cyan-200/[0.1] hover:text-cyan-50'
-                  : 'text-white/48 hover:border-white/10 hover:bg-white/[0.04] hover:text-white/75',
-              )}
-              onClick={() => onMarketChange(market.id)}
-            >
-              {market.label}
-            </TerminalButton>
-          ))}
+          {MARKET_OPTIONS.reduce<React.ReactNode[]>((acc, market) => {
+            if (!supportedMarkets.length || supportedMarkets.includes(market.id)) {
+              acc.push(
+                <TerminalButton
+                  key={market.id}
+                  type="button"
+                  variant="compact"
+                  data-testid={`rotation-market-tab-${market.id}`}
+                  aria-pressed={selectedMarket === market.id}
+                  className={cn(
+                    'shrink-0',
+                    selectedMarket === market.id
+                      ? 'border-cyan-200/24 bg-cyan-200/[0.08] text-cyan-50 hover:bg-cyan-200/[0.1] hover:text-cyan-50'
+                      : 'text-white/48 hover:border-white/10 hover:bg-white/[0.04] hover:text-white/75',
+                  )}
+                  onClick={() => onMarketChange(market.id)}
+                >
+                  {market.label}
+                </TerminalButton>,
+              );
+            }
+            return acc;
+          }, [])}
         </div>
       </div>
     )}

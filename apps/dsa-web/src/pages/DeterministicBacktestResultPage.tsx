@@ -243,14 +243,17 @@ function getRiskControlVisualRows(
     },
   ];
 
-  return controls
-    .filter((item) => typeof item.value === 'number' && Number.isFinite(item.value))
-    .map((item) => ({
-      key: item.key,
-      label: item.label,
-      value: Number(item.value),
-      valueLabel: formatPercent(Number(item.value), { digits: 2 }),
-    }));
+  return controls.reduce<Array<{ key: string; label: string; value: number; valueLabel: string }>>((acc, item) => {
+    if (typeof item.value === 'number' && Number.isFinite(item.value)) {
+      acc.push({
+        key: item.key,
+        label: item.label,
+        value: item.value,
+        valueLabel: formatPercent(item.value, { digits: 2 }),
+      });
+    }
+    return acc;
+  }, []);
 }
 
 function downloadTextFile(filename: string, content: string, mimeType: string): void {
@@ -744,14 +747,18 @@ const DeterministicBacktestResultPage: React.FC = () => {
     })
     : resultPage('headerDescriptionEmpty');
   const parsedSummaryEntries = Object.entries(run?.parsedStrategy?.summary || {})
-    .filter(([, value]) => typeof value === 'string' && value.trim())
-    .map(([key, value]) => ({
-      label: key
-        .replaceAll(/([a-z])([A-Z])/g, '$1 $2')
-        .replaceAll('_', ' ')
-        .trim(),
-      value: String(value),
-    }));
+    .reduce<Array<{ label: string; value: string }>>((acc, [key, value]) => {
+      if (typeof value === 'string' && value.trim()) {
+        acc.push({
+          label: key
+            .replaceAll(/([a-z])([A-Z])/g, '$1 $2')
+            .replaceAll('_', ' ')
+            .trim(),
+          value: String(value),
+        });
+      }
+      return acc;
+    }, []);
   const strategySummaryRows = run
     ? buildRuleStrategySummaryRows(run.parsedStrategy, run.code, run.startDate || '', run.endDate || '', undefined, language)
     : [];

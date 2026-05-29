@@ -2685,9 +2685,9 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
       coverage,
     };
   });
-  const heroRows = activeRows.flatMap((row) => row.tier === 'hero' ? [renderPlannedRow(row)] : []).filter(Boolean) as React.ReactNode[];
-  const secondaryRows = activeRows.flatMap((row) => row.tier === 'secondary' ? [renderPlannedRow(row)] : []).filter(Boolean) as React.ReactNode[];
-  const deepRows = activeRows.flatMap((row) => row.tier === 'deep' ? [renderPlannedRow(row)] : []).filter(Boolean) as React.ReactNode[];
+  const heroRows = activeRows.reduce<React.ReactNode[]>((acc, row) => { if (row.tier === 'hero') { const node = renderPlannedRow(row); if (node) acc.push(node); } return acc; }, []);
+  const secondaryRows = activeRows.reduce<React.ReactNode[]>((acc, row) => { if (row.tier === 'secondary') { const node = renderPlannedRow(row); if (node) acc.push(node); } return acc; }, []);
+  const deepRows = activeRows.reduce<React.ReactNode[]>((acc, row) => { if (row.tier === 'deep') { const node = renderPlannedRow(row); if (node) acc.push(node); } return acc; }, []);
 
   return (
     <div

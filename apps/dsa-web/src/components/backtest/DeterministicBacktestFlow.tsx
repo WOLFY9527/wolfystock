@@ -409,14 +409,17 @@ function getRiskControlRows(parsed: RuleBacktestParseResponse | null): StrategyP
     },
   ];
 
-  return controls
-    .filter((item) => typeof item.value === 'number' && Number.isFinite(item.value))
-    .map((item) => ({
-      label: item.label,
-      value: `${Number(item.value).toFixed(2)}%`,
-      numericValue: Number(item.value),
-      source: 'explicit',
-    }));
+  return controls.reduce<Array<{ label: string; value: string; numericValue: number; source: string }>>((acc, item) => {
+    if (typeof item.value === 'number' && Number.isFinite(item.value)) {
+      acc.push({
+        label: item.label,
+        value: `${Number(item.value).toFixed(2)}%`,
+        numericValue: Number(item.value),
+        source: 'explicit',
+      });
+    }
+    return acc;
+  }, []);
 }
 
 function StrategyParseDetails({

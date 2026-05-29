@@ -341,8 +341,11 @@ const AdminNotificationsPage: React.FC = () => {
       severityMin: draft.severityMin,
       eventTypes: draft.eventTypesText
         .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean),
+        .reduce<string[]>((acc, item) => {
+          const trimmed = item.trim();
+          if (trimmed) acc.push(trimmed);
+          return acc;
+        }, []),
       config,
     };
   })();

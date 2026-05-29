@@ -535,27 +535,28 @@ function buildCompareCostSlippagePanelData({
   }
 
   const scenarioLabelsByRun = new Map(scenarios.map((scenario) => [scenario.runId, scenario.label]));
-  const signals = Object.entries(metricDeltas || {})
-    .filter(([, metric]) => metric.deltas.some((entry) => entry.runId !== baselineRunId && entry.deltaVsBaseline != null))
-    .slice(0, 3)
-    .map(([metricKey, metric]) => {
-      const highlight = highlights[metricKey];
-      const entries = metric.deltas
-        .filter((entry) => entry.runId !== baselineRunId && entry.deltaVsBaseline != null)
-        .map((entry) => {
-          const scenarioLabel = scenarioLabelsByRun.get(entry.runId) || `#${entry.runId}`;
-          const role = highlight?.winnerRunIds.includes(entry.runId) ? '领先' : '相对基准';
-          return `${scenarioLabel} · ${role} ${formatSignedPct(entry.deltaVsBaseline)}`;
-        });
-
-      return {
+  const signals = Object.entries(metricDeltas || {}).reduce<Array<{ metricKey: string; label: string; state: string; entries: string[] }>>((acc, [metricKey, metric]) => {
+    if (acc.length >= 3) return acc;
+    if (!metric.deltas.some((entry) => entry.runId !== baselineRunId && entry.deltaVsBaseline != null)) return acc;
+    const highlight = highlights[metricKey];
+    const entries = metric.deltas.reduce<string[]>((innerAcc, entry) => {
+      if (entry.runId !== baselineRunId && entry.deltaVsBaseline != null) {
+        const scenarioLabel = scenarioLabelsByRun.get(entry.runId) || `#${entry.runId}`;
+        const role = highlight?.winnerRunIds.includes(entry.runId) ? '领先' : '相对基准';
+        innerAcc.push(`${scenarioLabel} · ${role} ${formatSignedPct(entry.deltaVsBaseline)}`);
+      }
+      return innerAcc;
+    }, []);
+    if (entries.length > 0) {
+      acc.push({
         metricKey,
         label: formatMetricLabel(metricKey, metric.label),
         state: highlight?.state || metric.state,
         entries,
-      };
-    })
-    .filter((signal) => signal.entries.length > 0);
+      });
+    }
+    return acc;
+  }, []);
 
   return {
     scenarios,
@@ -569,9 +570,11 @@ function DiagnosticChipList({ diagnostics }: { diagnostics?: string[] }) {
   if (!diagnostics?.length) {
     return <p className="product-footnote">无额外限制。</p>;
   }
-  const labels = diagnostics
-    .map((diagnostic) => formatCompareStateLabel(diagnostic))
-    .filter((label, index, allLabels) => allLabels.indexOf(label) === index);
+  const labels = diagnostics.reduce<string[]>((acc, diagnostic) => {
+    const label = formatCompareStateLabel(diagnostic);
+    if (acc.indexOf(label) === -1) acc.push(label);
+    return acc;
+  }, []);
 
   return (
     <div className="product-chip-list">

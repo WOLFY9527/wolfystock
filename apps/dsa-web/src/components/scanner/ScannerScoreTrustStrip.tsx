@@ -48,9 +48,10 @@ function getStringArray(parent: Record<string, unknown> | null, ...keys: string[
   for (const key of keys) {
     const value = parent?.[key];
     if (Array.isArray(value)) {
-      return value
-        .map((item) => (typeof item === 'string' ? item.trim() : ''))
-        .filter(Boolean);
+      return value.reduce<string[]>((acc, item) => {
+        if (typeof item === 'string' && item.trim()) acc.push(item.trim());
+        return acc;
+      }, []);
     }
   }
   return [];

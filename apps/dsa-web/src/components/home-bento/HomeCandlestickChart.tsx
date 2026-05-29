@@ -361,14 +361,13 @@ const buildTooltip = (
       };
 
   const indicatorRows = enabledIndicators
-    .map(({ label, key }) => {
+    .reduce<string[]>((acc, { label, key }) => {
       const value = point[key];
-      if (!isFiniteNumber(value)) {
-        return null;
+      if (isFiniteNumber(value)) {
+        acc.push(`<div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">${label}</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatPrice(value)}</strong></div>`);
       }
-      return `<div style="display:flex;justify-content:space-between;gap:16px;"><span style="color:rgba(248,250,252,.48);">${label}</span><strong style="color:rgba(248,250,252,.86);font-weight:600;">${formatPrice(value)}</strong></div>`;
-    })
-    .filter(Boolean)
+      return acc;
+    }, [])
     .join('');
 
   const reportReferenceRow = isFiniteNumber(reportReferencePrice)
@@ -924,8 +923,10 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
               {enabledIndicators.length ? (
                 <p className="text-white/48">
                   {enabledIndicators
-                    .map(({ key, label }) => (isFiniteNumber(hoveredCandle[key]) ? `${label} ${formatPrice(hoveredCandle[key])}` : null))
-                    .filter(Boolean)
+                    .reduce<string[]>((acc, { key, label }) => {
+                      if (isFiniteNumber(hoveredCandle[key])) acc.push(`${label} ${formatPrice(hoveredCandle[key])}`);
+                      return acc;
+                    }, [])
                     .join(' · ')}
                 </p>
               ) : null}

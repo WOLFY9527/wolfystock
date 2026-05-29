@@ -230,9 +230,11 @@ function surfaceLabel(surface: string): string {
 }
 
 function uniqueLabels(values: Array<string | null | undefined>): string[] {
-  return values
-    .map((value) => String(value || '').trim())
-    .filter((value, index, list) => Boolean(value) && list.indexOf(value) === index);
+  return values.reduce<string[]>((acc, value) => {
+    const v = String(value || '').trim();
+    if (v && acc.indexOf(v) === -1) acc.push(v);
+    return acc;
+  }, []);
 }
 
 function formatReadableList(values: string[], empty = '暂无可展示项'): string {
@@ -658,8 +660,7 @@ function sourceGapBadges(row: ProviderOperationsMatrixRow): Array<{ label: strin
 
 function sourceGapRowsForCapability(rows: ProviderOperationsMatrixRow[], capability: SourceGapCapability): ProviderOperationsMatrixRow[] {
   return rows
-    .filter((row) => capability.match(row))
-    .filter((row) => sourceGapBlocksScoreGrade(row) || row.sourceType === 'missing' || row.inertMetadataOnly)
+    .filter((row) => capability.match(row) && (sourceGapBlocksScoreGrade(row) || row.sourceType === 'missing' || row.inertMetadataOnly))
     .slice(0, 3);
 }
 
@@ -887,39 +888,37 @@ function buildSetupChecklistEntries(
 ): SetupChecklistEntry[] {
   const entries: SetupChecklistEntry[] = [];
 
-  rows
-    .filter(shouldIncludeChecklistMatrixRow)
-    .forEach((row) => {
-      const copy = checklistCopyForMatrixRow(row);
-      const badges = checklistBadgesForMatrixRow(row);
-      resolveChecklistMatrixSurfaces(row).forEach((surface) => {
-        entries.push({
-          key: `matrix:${row.providerId}:${surface}`,
-          surface,
-          title: copy.title,
-          whyItMatters: copy.whyItMatters,
-          safeNextStep: copy.safeNextStep,
-          badges,
-        });
+  for (const row of rows) {
+    if (!shouldIncludeChecklistMatrixRow(row)) continue;
+    const copy = checklistCopyForMatrixRow(row);
+    const badges = checklistBadgesForMatrixRow(row);
+    resolveChecklistMatrixSurfaces(row).forEach((surface) => {
+      entries.push({
+        key: `matrix:${row.providerId}:${surface}`,
+        surface,
+        title: copy.title,
+        whyItMatters: copy.whyItMatters,
+        safeNextStep: copy.safeNextStep,
+        badges,
       });
     });
+  }
 
-  checks
-    .filter(shouldIncludeChecklistReadinessCheck)
-    .forEach((check) => {
-      const copy = checklistCopyForReadinessCheck(check);
-      const badges = checklistBadgesForReadinessCheck(check);
-      resolveChecklistReadinessSurfaces(check).forEach((surface) => {
-        entries.push({
-          key: `readiness:${check.id}:${surface}`,
-          surface,
-          title: copy.title,
-          whyItMatters: copy.whyItMatters,
-          safeNextStep: copy.safeNextStep,
-          badges,
-        });
+  for (const check of checks) {
+    if (!shouldIncludeChecklistReadinessCheck(check)) continue;
+    const copy = checklistCopyForReadinessCheck(check);
+    const badges = checklistBadgesForReadinessCheck(check);
+    resolveChecklistReadinessSurfaces(check).forEach((surface) => {
+      entries.push({
+        key: `readiness:${check.id}:${surface}`,
+        surface,
+        title: copy.title,
+        whyItMatters: copy.whyItMatters,
+        safeNextStep: copy.safeNextStep,
+        badges,
       });
     });
+  }
 
   return entries;
 }
@@ -1231,14 +1230,13 @@ const ProviderSetupChecklistPanel: React.FC<{
 }> = ({ rows, checks, isLoading, surfaceFocus }) => {
   const entries = buildSetupChecklistEntries(rows, checks);
   const visibleEntries = surfaceFocus ? entries.filter((entry) => entry.surface === surfaceFocus.label) : entries;
-  const groups = CHECKLIST_SURFACE_ORDER
-    .map((surface) => ({
-      surface,
-      items: visibleEntries
-        .filter((entry) => entry.surface === surface)
-        .sort((left, right) => left.title.localeCompare(right.title)),
-    }))
-    .filter((group) => group.items.length > 0);
+  const groups = CHECKLIST_SURFACE_ORDER.reduce<Array<{ surface: string; items: SetupChecklistEntry[] }>>((acc, surface) => {
+    const items = visibleEntries
+      .filter((entry) => entry.surface === surface)
+      .sort((left, right) => left.title.localeCompare(right.title));
+    if (items.length > 0) acc.push({ surface, items });
+    return acc;
+  }, []);
 
   return (
     <TerminalNestedBlock data-testid="market-provider-setup-checklist" className="mt-4 bg-black/10 p-3">
@@ -1693,14 +1691,13 @@ const MarketDataReadinessPanel: React.FC<{
   onSymbolSubmit: () => void;
 }> = ({ data, isLoading, error, symbolInput, onSymbolInputChange, onSymbolSubmit }) => {
   const checks = data?.checks ?? EMPTY_READINESS_CHECKS;
-  const groupedChecks = READINESS_DIAGNOSTIC_GROUPS
-    .map((group) => ({
-      ...group,
-      items: checks
-        .filter((check) => readinessDiagnosticGroupId(check) === group.id)
-        .sort((left, right) => left.severity.localeCompare(right.severity) || left.status.localeCompare(right.status) || readinessCheckName(left).localeCompare(readinessCheckName(right))),
-    }))
-    .filter((group) => group.items.length > 0);
+  const groupedChecks = READINESS_DIAGNOSTIC_GROUPS.reduce<Array<typeof READINESS_DIAGNOSTIC_GROUPS[number] & { items: typeof checks }>>((acc, group) => {
+    const items = checks
+      .filter((check) => readinessDiagnosticGroupId(check) === group.id)
+      .sort((left, right) => left.severity.localeCompare(right.severity) || left.status.localeCompare(right.status) || readinessCheckName(left).localeCompare(readinessCheckName(right)));
+    if (items.length > 0) acc.push({ ...group, items });
+    return acc;
+  }, []);
 
   return (
     <TerminalPanel as="section" className="col-span-12">

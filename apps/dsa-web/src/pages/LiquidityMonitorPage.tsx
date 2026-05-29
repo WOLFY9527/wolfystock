@@ -624,12 +624,13 @@ function topIndicatorNames(
   predicate: (indicator: LiquidityMonitorIndicator) => boolean,
   limit = 3,
 ): string[] {
-  return indicators
-    .filter((indicator): indicator is LiquidityMonitorIndicator => Boolean(indicator))
-    .filter(predicate)
-    .map((indicator) => displayLabel(indicator))
-    .filter((label, index, array) => array.indexOf(label) === index)
-    .slice(0, limit);
+  return indicators.reduce<string[]>((acc, indicator) => {
+    if (acc.length >= limit) return acc;
+    if (!indicator || !predicate(indicator)) return acc;
+    const label = displayLabel(indicator);
+    if (label && acc.indexOf(label) === -1) acc.push(label);
+    return acc;
+  }, []);
 }
 
 function summarizeIndicatorBucket(

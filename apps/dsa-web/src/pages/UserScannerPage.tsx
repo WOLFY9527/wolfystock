@@ -291,9 +291,10 @@ function getNestedStringArray(parent: Record<string, unknown> | null, ...keys: s
   for (const key of keys) {
     const value = parent?.[key];
     if (Array.isArray(value)) {
-      return value
-        .map((item) => (typeof item === 'string' ? item.trim() : ''))
-        .filter(Boolean);
+      return value.reduce<string[]>((acc, item) => {
+        if (typeof item === 'string' && item.trim()) acc.push(item.trim());
+        return acc;
+      }, []);
     }
   }
   return [];
@@ -482,10 +483,13 @@ function sanitizeScannerUserText(value: string | null | undefined, language: 'zh
 }
 
 function sanitizeScannerNotes(notes: Array<string | null | undefined>, language: 'zh' | 'en'): string[] {
-  return notes
-    .filter((item): item is string => Boolean(String(item || '').trim()))
-    .map((item) => sanitizeScannerUserText(item, language, ''))
-    .filter((item, index, array) => Boolean(item) && array.indexOf(item) === index);
+  return notes.reduce<string[]>((acc, item) => {
+    const raw = String(item || '').trim();
+    if (!raw) return acc;
+    const sanitized = sanitizeScannerUserText(item, language, '');
+    if (sanitized && acc.indexOf(sanitized) === -1) acc.push(sanitized);
+    return acc;
+  }, []);
 }
 
 function sanitizeScannerFieldLabel(label: string, language: 'zh' | 'en'): string {
@@ -984,10 +988,12 @@ function isPreviewSelected(candidate: ScannerCandidateDiagnostic, threshold: num
 }
 
 function inferPreviewThreshold(runDetail: ScannerRunDetail | null, diagnostics: ScannerCandidateDiagnostic[]): number {
-  const selectedScores = diagnostics
-    .filter(isOfficialSelected)
-    .map((candidate) => candidate.score)
-    .filter((score): score is number => score != null && Number.isFinite(score));
+  const selectedScores = diagnostics.reduce<number[]>((acc, candidate) => {
+    if (isOfficialSelected(candidate) && candidate.score != null && Number.isFinite(candidate.score)) {
+      acc.push(candidate.score);
+    }
+    return acc;
+  }, []);
   if (selectedScores.length) {
     const floor = Math.floor(Math.min(...selectedScores) / 10) * 10 - 10;
     return Math.max(40, Math.min(60, floor || 50));
@@ -1071,16 +1077,17 @@ function normalizeRejectionBucket(candidate: ScannerCandidateDiagnostic): Reject
 
 function buildRejectionBuckets(candidates: ScannerCandidateDiagnostic[], language: 'zh' | 'en'): ScannerLabeledValue[] {
   const counts = new Map<RejectionBucketKey, number>();
-  candidates
-    .filter((candidate) => candidate.status !== 'selected')
-    .forEach((candidate) => {
-      const bucket = normalizeRejectionBucket(candidate);
-      counts.set(bucket, (counts.get(bucket) || 0) + 1);
-    });
+  for (const candidate of candidates) {
+    if (candidate.status === 'selected') continue;
+    const bucket = normalizeRejectionBucket(candidate);
+    counts.set(bucket, (counts.get(bucket) || 0) + 1);
+  }
   const order: RejectionBucketKey[] = ['trend', 'momentum', 'liquidity', 'risk', 'data', 'score', 'other'];
-  return order
-    .map((key) => ({ label: rejectionBucketLabel(key, language), value: String(counts.get(key) || 0) }))
-    .filter((item) => item.value !== '0');
+  return order.reduce<Array<{ label: string; value: string }>>((acc, key) => {
+    const value = String(counts.get(key) || 0);
+    if (value !== '0') acc.push({ label: rejectionBucketLabel(key, language), value });
+    return acc;
+  }, []);
 }
 
 function diagnosticToCandidate(candidate: ScannerCandidateDiagnostic): ScannerCandidate {
