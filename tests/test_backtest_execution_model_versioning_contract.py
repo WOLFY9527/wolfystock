@@ -8,6 +8,7 @@ from pathlib import Path
 
 from api.v1.schemas.backtest import _default_rule_backtest_execution_model
 from src.core.rule_backtest_engine import RuleBacktestEngine
+from src.services import rule_backtest_support_exports
 
 
 FIXTURE_PATH = (
@@ -116,3 +117,29 @@ def test_rule_backtest_execution_model_fixture_locks_current_default_metadata_co
     }
 
     _assert_no_forbidden_promotions(payload)
+
+
+def test_rule_backtest_execution_model_export_projection_matches_fixture_contract() -> None:
+    assert hasattr(rule_backtest_support_exports, "build_execution_model_metadata_export")
+
+    payload = _load_fixture()
+    export_payload = rule_backtest_support_exports.build_execution_model_metadata_export(
+        {
+            "id": 42,
+            "code": "AAPL",
+            "status": "completed",
+            "timeframe": "daily",
+        }
+    )
+
+    assert export_payload["export_kind"] == "rule_backtest_execution_model_metadata"
+    assert export_payload["version"] == payload["fixture_version"]
+    assert export_payload["run_id"] == 42
+    assert export_payload["code"] == "AAPL"
+    assert export_payload["status"] == "completed"
+    assert export_payload["timeframe"] == "daily"
+    assert export_payload["execution_model"] == payload["execution_model"]
+    assert export_payload["semantics"] == payload["semantics"]
+    assert export_payload["guardrails"] == payload["guardrails"]
+
+    _assert_no_forbidden_promotions(export_payload)

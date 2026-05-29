@@ -274,6 +274,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
 
     def _assert_export_payload_is_sanitized(self, payload: object) -> None:
         payload = self._payload_without_allowed_oos_authority_flags(payload)
+        payload = self._payload_without_allowed_execution_model_guardrails(payload)
         serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
         for sentinel in RAW_PROVIDER_SENTINELS:
             self.assertNotIn(sentinel, serialized)
@@ -374,6 +375,20 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                     authority.pop("optimizer_executed")
         return normalized
 
+    @staticmethod
+    def _payload_without_allowed_execution_model_guardrails(payload: object) -> object:
+        normalized = copy.deepcopy(payload)
+        if (
+            isinstance(normalized, dict)
+            and normalized.get("export_kind") == "rule_backtest_execution_model_metadata"
+        ):
+            guardrails = normalized.get("guardrails")
+            if isinstance(guardrails, dict):
+                for key in ("optimizer_executed", "parameter_sweep_executed", "winner_promotion"):
+                    if guardrails.get(key) is False:
+                        guardrails.pop(key)
+        return normalized
+
     def _fetch_support_bundle_surface(self, run_id: int) -> dict:
         export_index_response = self.client.get(f"/api/v1/backtest/rule/runs/{run_id}/export-index")
         self.assertEqual(export_index_response.status_code, 200)
@@ -389,6 +404,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 "execution_trace_csv",
                 "robustness_evidence_json",
                 "regime_attribution_readiness_json",
+                "execution_model_metadata_json",
             ],
         )
         self.assertEqual(
@@ -402,6 +418,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 ("json", "application/json", "api", "heavy"),
                 ("csv", "text/csv", "api", "heavy"),
                 ("json", "application/json", "api", "heavy"),
+                ("json", "application/json", "api", "compact"),
                 ("json", "application/json", "api", "compact"),
             ],
         )
@@ -441,15 +458,18 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         trace_csv_path = payloads["export_index"]["exports"][3]["endpoint_path"]
         robustness_path = payloads["export_index"]["exports"][4]["endpoint_path"]
         readiness_path = payloads["export_index"]["exports"][5]["endpoint_path"]
+        execution_model_metadata_path = payloads["export_index"]["exports"][6]["endpoint_path"]
         trace_json_response = self.client.get(trace_json_path)
         trace_csv_response = self.client.get(trace_csv_path)
         robustness_response = self.client.get(robustness_path)
         readiness_response = self.client.get(readiness_path)
+        execution_model_metadata_response = self.client.get(execution_model_metadata_path)
         self.assertEqual(readiness_response.status_code, 200)
         self.assertEqual(
             service.get_regime_attribution_readiness_export(run_id),
             readiness_response.json(),
         )
+        self.assertEqual(execution_model_metadata_response.status_code, 200)
 
         if trace_available:
             self.assertEqual(service.get_execution_trace_export_json(run_id), trace_json_response.json())
@@ -493,6 +513,25 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         else:
             with self.assertRaisesRegex(ValueError, "has no stored robustness evidence to export"):
                 service.get_robustness_evidence_export_json(run_id)
+
+        execution_model_metadata = execution_model_metadata_response.json()
+        self.assertEqual(
+            execution_model_metadata["execution_model"]["model_id"],
+            "rule_backtest_default_execution_model_v1",
+        )
+        self.assertEqual(execution_model_metadata["execution_model"]["version"], "v1")
+        self.assertEqual(
+            execution_model_metadata["semantics"]["engine_identity"],
+            "existing_rule_backtest_behavior",
+        )
+        self.assertFalse(execution_model_metadata["semantics"]["institutional_execution_realism"])
+        self.assertFalse(execution_model_metadata["semantics"]["decision_grade"])
+        self.assertFalse(execution_model_metadata["semantics"]["provider_calls_required"])
+        self.assertFalse(execution_model_metadata["semantics"]["live_provider_calls_required"])
+        self.assertEqual(
+            execution_model_metadata["guardrails"]["future_semantic_changes_require_new_version"],
+            True,
+        )
 
     def _assert_support_bundle_surface(
         self,
@@ -555,6 +594,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
                 f"/api/v1/backtest/rule/runs/{run_id}/execution-trace.csv",
                 f"/api/v1/backtest/rule/runs/{run_id}/robustness-evidence.json",
                 f"/api/v1/backtest/rule/runs/{run_id}/regime-attribution-readiness.json",
+                f"/api/v1/backtest/rule/runs/{run_id}/execution-model-metadata.json",
             ],
         )
         self.assertTrue(
@@ -570,27 +610,58 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         trace_csv_path = export_index["exports"][3]["endpoint_path"]
         robustness_path = export_index["exports"][4]["endpoint_path"]
         readiness_path = export_index["exports"][5]["endpoint_path"]
+        execution_model_metadata_path = export_index["exports"][6]["endpoint_path"]
         trace_json_response = self.client.get(trace_json_path)
         trace_csv_response = self.client.get(trace_csv_path)
         robustness_response = self.client.get(robustness_path)
         readiness_response = self.client.get(readiness_path)
+        execution_model_metadata_response = self.client.get(execution_model_metadata_path)
         self.assertTrue(export_index["exports"][5]["available"])
         self.assertEqual(
             export_index["exports"][5]["availability_reason"],
             "run_exists_readiness_projection_available",
         )
+        self.assertTrue(export_index["exports"][6]["available"])
+        self.assertEqual(
+            export_index["exports"][6]["availability_reason"],
+            "run_exists_execution_model_metadata_projection_available",
+        )
         self.assertEqual(readiness_response.status_code, 200)
+        self.assertEqual(execution_model_metadata_response.status_code, 200)
         self.assertTrue(
             readiness_response.headers.get("content-type", "").startswith(
                 export_index["exports"][5]["media_type"]
             )
         )
+        self.assertTrue(
+            execution_model_metadata_response.headers.get("content-type", "").startswith(
+                export_index["exports"][6]["media_type"]
+            )
+        )
         payloads["regime_attribution_readiness"] = readiness_response.json()
+        payloads["execution_model_metadata"] = execution_model_metadata_response.json()
         self.assertTrue(payloads["regime_attribution_readiness"]["diagnosticOnly"])
         self.assertFalse(payloads["regime_attribution_readiness"]["engineReexecuted"])
         self.assertFalse(payloads["regime_attribution_readiness"]["mathChanged"])
         self.assertFalse(payloads["regime_attribution_readiness"]["attributionEngineAvailable"])
         self.assertFalse(payloads["regime_attribution_readiness"]["pnlCausalityAvailable"])
+        self.assertEqual(
+            payloads["execution_model_metadata"]["execution_model"]["model_id"],
+            "rule_backtest_default_execution_model_v1",
+        )
+        self.assertEqual(payloads["execution_model_metadata"]["execution_model"]["version"], "v1")
+        self.assertEqual(
+            payloads["execution_model_metadata"]["semantics"]["cost_realism"],
+            "baseline_bps_assumptions_only_when_present",
+        )
+        self.assertFalse(payloads["execution_model_metadata"]["semantics"]["decision_grade"])
+        self.assertFalse(
+            payloads["execution_model_metadata"]["semantics"]["institutional_execution_realism"]
+        )
+        self.assertEqual(
+            payloads["execution_model_metadata"]["guardrails"]["provider_calls_executed"],
+            False,
+        )
 
         if trace_available:
             self.assertTrue(export_index["exports"][2]["available"])
@@ -942,6 +1013,7 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         self._assert_export_payload_is_sanitized(payloads["trace_json"])
         self._assert_export_payload_is_sanitized(payloads["trace_csv_rows"])
         self._assert_export_payload_is_sanitized(payloads["regime_attribution_readiness"])
+        self._assert_export_payload_is_sanitized(payloads["execution_model_metadata"])
 
         trace_execution_model = payloads["trace_json"]["execution_model"]
         self.assertEqual(trace_execution_model["signal_evaluation_timing"], "bar_close")

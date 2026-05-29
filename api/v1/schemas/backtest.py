@@ -1343,6 +1343,20 @@ class RuleBacktestRegimeAttributionReadinessExportResponse(BaseModel):
     limitations: List[str] = Field(default_factory=list)
 
 
+class RuleBacktestExecutionModelMetadataExportResponse(BaseModel):
+    export_kind: str
+    version: str
+    run_id: int
+    code: Optional[str] = None
+    status: Optional[str] = None
+    timeframe: Optional[str] = None
+    source: str
+    read_mode: str
+    execution_model: Dict[str, Any] = Field(default_factory=dict)
+    semantics: Dict[str, Any] = Field(default_factory=dict)
+    guardrails: Dict[str, Any] = Field(default_factory=dict)
+
+
 class RuleBacktestSupportExportIndexItem(BaseModel):
     key: str
     available: bool

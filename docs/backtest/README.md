@@ -40,9 +40,13 @@ public-safety wording.
   `support_bundle_manifest_json`,
   `support_bundle_reproducibility_manifest_json`, `execution_trace_json`,
   `execution_trace_csv`, `robustness_evidence_json` when stored robustness
-  evidence exists, and `regime_attribution_readiness_json` as a stored
+  evidence exists, `regime_attribution_readiness_json` as a stored
   diagnostic/readiness projection rather than validated institutional PnL
-  attribution.
+  attribution, and `execution_model_metadata_json` as a read-only v1 execution
+  model metadata projection. That metadata export documents the current/default
+  rule backtest execution assumptions and guardrails only; it does not imply
+  market impact, spread simulation, partial fills, PIT universe guarantees, or
+  decision-grade institutional execution realism.
 - Backtest pages lead with result, risk metrics, assumptions, and evidence
   quality before export, rerun, trace, ledger, or raw controls.
 - Execution assumptions and data quality can be professional evidence when

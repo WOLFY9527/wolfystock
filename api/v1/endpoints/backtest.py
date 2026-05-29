@@ -29,6 +29,7 @@ from api.v1.schemas.backtest import (
     RuleBacktestStatusResponse,
     RuleBacktestCancelResponse,
     RuleBacktestExecutionTraceExportResponse,
+    RuleBacktestExecutionModelMetadataExportResponse,
     RuleBacktestRegimeAttributionReadinessExportResponse,
     RuleBacktestRobustnessEvidenceExportResponse,
     RuleBacktestSupportBundleManifestResponse,
@@ -46,6 +47,7 @@ from api.v1.schemas.backtest import (
 from api.v1.schemas.common import ErrorResponse
 from src.services.backtest_service import BacktestService
 from src.services.rule_backtest_service import RuleBacktestService
+from src.services.rule_backtest_support_exports import build_execution_model_metadata_export
 from src.storage import DatabaseManager
 
 logger = logging.getLogger(__name__)
@@ -1049,6 +1051,35 @@ def get_rule_backtest_regime_attribution_readiness_json(
         return _build_model(RuleBacktestRegimeAttributionReadinessExportResponse, data)
 
     return _run_endpoint("查询规则回测 regime attribution readiness JSON export 失败", _operation)
+
+
+@router.get(
+    "/rule/runs/{run_id}/execution-model-metadata.json",
+    response_model=RuleBacktestExecutionModelMetadataExportResponse,
+    responses={
+        200: {"description": "规则回测 execution model metadata JSON export"},
+        404: {"description": "记录不存在", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取规则回测 execution model metadata JSON export",
+    description="只读返回当前规则回测 execution model v1 metadata 投影，用于 support bundle readback、backend handoff 与自动化脚本读取；不会重跑引擎，也不提升为 institutional execution realism。",
+)
+def get_rule_backtest_execution_model_metadata_json(
+    run_id: int,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> RuleBacktestExecutionModelMetadataExportResponse:
+    def _operation() -> RuleBacktestExecutionModelMetadataExportResponse:
+        service = _build_rule_backtest_service(db_manager, current_user)
+        run = service.get_run(run_id)
+        if run is None:
+            raise _not_found_error("规则回测记录不存在")
+        return _build_model(
+            RuleBacktestExecutionModelMetadataExportResponse,
+            build_execution_model_metadata_export(run),
+        )
+
+    return _run_endpoint("查询规则回测 execution model metadata JSON export 失败", _operation)
 
 
 @router.get(
