@@ -272,7 +272,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const location = useLocation();
   const { language, t } = useI18n();
   const backtestCopy = useCallback((key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.${key}`, vars), [t]);
-  const resultPage = (key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.resultPage.${key}`, vars);
+  const resultPage = useCallback((key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.resultPage.${key}`, vars), [t]);
   const { runId } = useParams<{ runId: string }>();
   const locationState = location.state as ResultPageLocationState | null;
   const initialRun = locationState?.initialRun || null;
@@ -654,9 +654,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
     };
   }, [scenarioRuns]);
 
-  const handleOpenHistoryRun = (item: RuleBacktestHistoryItem) => {
+  const handleOpenHistoryRun = useCallback((item: RuleBacktestHistoryItem) => {
     navigate(`/backtest/results/${item.id}`);
-  };
+  }, [navigate]);
 
   const benchmarkSummary = run?.benchmarkSummary;
   const buyAndHoldSummary = run?.buyAndHoldSummary;
@@ -854,22 +854,22 @@ const DeterministicBacktestResultPage: React.FC = () => {
     },
   ] : [];
 
-  const handleToggleCompareRun = (item: RuleBacktestHistoryItem) => {
+  const handleToggleCompareRun = useCallback((item: RuleBacktestHistoryItem) => {
     setCompareRunIds((current) => {
       if (current.includes(item.id)) return current.filter((id) => id !== item.id);
       return [...current, item.id].slice(0, 3);
     });
-  };
+  }, []);
 
-  const handleOpenCompareWorkbench = () => {
+  const handleOpenCompareWorkbench = useCallback(() => {
     if (!run || compareRunIds.length === 0) return;
     const params = new URLSearchParams({
       runIds: [run.id, ...compareRunIds].join(','),
     });
     navigate(`/backtest/compare?${params.toString()}`);
-  };
+  }, [run, compareRunIds, navigate]);
 
-  const handleSavePreset = () => {
+  const handleSavePreset = useCallback(() => {
     if (!run) return;
     const suggestedName = `${run.code} · ${getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language)}`;
     const name = window.prompt(resultPage('promptSavePreset'), suggestedName);
@@ -880,9 +880,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
     }));
     setAvailablePresets(next);
     setPresetNotice(resultPage('presetSaved', { name: name.trim() }));
-  };
+  }, [run, language, resultPage]);
 
-  const handleExportDecisionReport = (format: 'md' | 'html') => {
+  const handleExportDecisionReport = useCallback((format: 'md' | 'html') => {
     if (!run || !normalized || !decisionReportMarkdown) return;
     if (format === 'md') {
       downloadTextFile(`backtest-run-${run.id}-summary.md`, decisionReportMarkdown, 'text/markdown;charset=utf-8');
@@ -899,9 +899,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
       '</body></html>',
     ].join('');
     downloadTextFile(`backtest-run-${run.id}-summary.html`, html, 'text/html;charset=utf-8');
-  };
+  }, [run, normalized, decisionReportMarkdown, resultPage]);
 
-  const handleRunScenarioPlan = async () => {
+  const handleRunScenarioPlan = useCallback(async () => {
     if (!run || !selectedScenarioPlan) return;
     setIsSubmittingScenarioRuns(true);
     setScenarioError(null);
@@ -935,9 +935,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
     } finally {
       setIsSubmittingScenarioRuns(false);
     }
-  };
+  }, [run, selectedScenarioPlan]);
 
-  const handleCancelRun = async () => {
+  const handleCancelRun = useCallback(async () => {
     if (!run || !canCancelRuleRun(run.status) || isCancellingRun) return;
     const confirmed = window.confirm(resultPage('cancelConfirm'));
     if (!confirmed) return;
@@ -959,7 +959,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     } finally {
       setIsCancellingRun(false);
     }
-  };
+  }, [run, isCancellingRun, fetchRun, fetchHistory, resultPage]);
 
   const renderRunStatusSection = () => {
     if (!run && isLoadingRun) {
