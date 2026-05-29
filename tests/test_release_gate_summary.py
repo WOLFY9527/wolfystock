@@ -79,6 +79,11 @@ ALLOWED_BLOCKER_CLASSIFICATIONS = {
     "frontend_owned",
     "unknown",
 }
+EXPECTED_COMPLETED_FOUNDATION_BLOCKER_IDS = {
+    "api_abuse_request_safety",
+    "admin_log_retention_capacity_rehearsal",
+    "market_data_freshness_fallback_evidence",
+}
 
 
 def _run(cmd, cwd: Path, **kwargs):
@@ -218,6 +223,57 @@ def test_release_gate_summary_go_no_go_json_keeps_launch_blocked(tmp_path):
     assert "launch-ready" not in result.stdout
     assert "launch-" + "approved" not in result.stdout.lower()
     assert "production-" + "ready" not in result.stdout.lower()
+
+
+def test_release_gate_summary_completed_foundation_evidence_stays_non_approving(tmp_path):
+    repo = _init_repo(tmp_path)
+
+    result = _summary(repo, "--go-no-go-json")
+
+    assert result.returncode == 0
+    summary = json.loads(result.stdout)
+    support = summary["completedFoundationEvidence"]
+    support_by_blocker = {
+        item["blockerId"]: item for item in support if "blockerId" in item
+    }
+
+    assert set(support_by_blocker) == EXPECTED_COMPLETED_FOUNDATION_BLOCKER_IDS
+
+    expected_scope = {
+        "api_abuse_request_safety": "request-safety regression anchors stay repo-local and offline only",
+        "admin_log_retention_capacity_rehearsal": "retention/capacity rehearsal anchors stay repo-local and offline only",
+        "market_data_freshness_fallback_evidence": "freshness/fallback disclosure anchors stay repo-local and offline only",
+    }
+    for blocker_id, scope_note in expected_scope.items():
+        foundation = support_by_blocker[blocker_id]
+        assert foundation["id"] == blocker_id + "_completed_foundation_evidence"
+        assert foundation["status"] == "completed_foundation_evidence_only"
+        assert foundation["foundationStatus"] == "completed"
+        assert foundation["evidenceScope"] == "repo_local_offline_only"
+        assert foundation["acceptedLaunchArtifactRequired"] is True
+        assert foundation["releaseApprovalEvidence"] is False
+        assert foundation["releaseApproved"] is False
+        assert any(scope_note == note for note in foundation["evidence"])
+        assert any("accepted launch artifact still required" in note for note in foundation["evidence"])
+        assert any("no approval semantics granted" in note for note in foundation["evidence"])
+
+    hard_blockers = {item["id"]: item for item in summary["hardBlockers"]}
+    assert set(hard_blockers) == set(EXPECTED_OPERATOR_CATEGORY_IDS)
+    for blocker_id in EXPECTED_COMPLETED_FOUNDATION_BLOCKER_IDS:
+        blocker = hard_blockers[blocker_id]
+        assert blocker["status"] == "blocking"
+        assert blocker["blockerClassification"] == "internal_validation"
+
+    assert summary["finalStatus"] == "NO-GO"
+    assert summary["releaseApproved"] is False
+
+    unexpected_foundation_blockers = {
+        item["blockerId"]: hard_blockers[item["blockerId"]]["blockerClassification"]
+        for item in support
+        if "blockerId" in item
+        and item["blockerId"] not in EXPECTED_COMPLETED_FOUNDATION_BLOCKER_IDS
+    }
+    assert unexpected_foundation_blockers == {}
 
 
 def test_release_gate_summary_fails_on_dirty_repo_without_allow_dirty(tmp_path):
