@@ -433,6 +433,130 @@ def test_launch_acceptance_evidence_admin_log_retention_capacity_rehearsal_is_ba
     assert "\"synthetic\"" in execution_log_source
 
 
+def test_launch_acceptance_evidence_market_data_freshness_fallback_is_backed_by_repo_local_offline_anchors() -> None:
+    result = _run_checker("--evidence", str(ACCEPTED_FIXTURE))
+
+    assert result.returncode == 0
+    evidence = _json(result)
+    category = next(item for item in evidence["categories"] if item["id"] == "market_data_freshness_fallback_evidence")
+    assert category["status"] == "accepted"
+    assert category["requiredChecks"] == [
+        "providerAndAsOfLabelsRecorded",
+        "staleFallbackDisclosureVerified",
+        "confidenceCapBehaviorVerified",
+        "rawProviderPayloadsRedacted",
+        "runtimeDefaultUnchanged",
+    ]
+
+    accepted_payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
+    fixture_category = accepted_payload["categories"]["market_data_freshness_fallback_evidence"]
+    assert fixture_category["evidenceRef"] == "market-data-freshness-fallback-evidence-synthetic-json"
+    assert fixture_category["sanitization"] == {
+        "externalServicesCalledByChecker": False,
+        "realSecretsIncluded": False,
+        "rawCredentialValuesIncluded": False,
+        "rawProviderPayloadsIncluded": False,
+        "responseBodiesIncluded": False,
+        "productionDataPathsIncluded": False,
+    }
+
+    market_cache_source = (REPO_ROOT / "tests" / "api" / "test_market_cache.py").read_text(encoding="utf-8")
+    fallback_contracts_source = (REPO_ROOT / "tests" / "test_market_cache_fallback_contracts.py").read_text(
+        encoding="utf-8"
+    )
+    provider_operations_source = (
+        REPO_ROOT / "tests" / "api" / "test_market_provider_operations.py"
+    ).read_text(encoding="utf-8")
+    provider_freshness_source = (REPO_ROOT / "tests" / "test_provider_freshness_contracts.py").read_text(
+        encoding="utf-8"
+    )
+    stock_freshness_source = (REPO_ROOT / "tests" / "test_stock_api_freshness_contract.py").read_text(
+        encoding="utf-8"
+    )
+    provider_reliability_audit_source = (REPO_ROOT / "scripts" / "provider_reliability_audit.py").read_text(
+        encoding="utf-8"
+    )
+
+    expected_anchor_tests = {
+        "providerAndAsOfLabelsRecorded": [
+            (
+                fallback_contracts_source,
+                "def test_market_overview_live_payload_round_trips_through_json() -> None:",
+            ),
+            (
+                stock_freshness_source,
+                "def test_quote_endpoint_exposes_provider_source_and_market_timestamp_without_breaking_existing_fields() -> None:",
+            ),
+            (
+                stock_freshness_source,
+                "def test_intraday_endpoint_preserves_old_fields_and_adds_proxy_provenance_metadata() -> None:",
+            ),
+        ],
+        "staleFallbackDisclosureVerified": [
+            (
+                provider_freshness_source,
+                "def test_fallback_mock_and_synthetic_sources_are_never_labeled_live(source: str, expected_freshness: str) -> None:",
+            ),
+            (
+                market_cache_source,
+                "def test_fetcher_failure_uses_fallback_without_changing_freshness(self) -> None:",
+            ),
+            (
+                fallback_contracts_source,
+                "def test_process_local_scores_fallback_is_marked_stale_without_losing_source_metadata() -> None:",
+            ),
+            (
+                provider_operations_source,
+                "def test_unavailable_cache_metadata_is_represented_honestly() -> None:",
+            ),
+        ],
+        "confidenceCapBehaviorVerified": [
+            (
+                market_cache_source,
+                "def test_entry_metadata_can_be_projected_to_json_safe_shape(self) -> None:",
+            ),
+            (
+                stock_freshness_source,
+                "\"capReason\": None,",
+            ),
+        ],
+        "rawProviderPayloadsRedacted": [
+            (
+                provider_freshness_source,
+                "def test_provider_failure_cases_fall_back_without_relabeling_primary_as_live(primary, expected_reason: str) -> None:",
+            ),
+            (
+                provider_operations_source,
+                "def test_timeout_fallback_and_stale_cache_health_signals_stay_distinct_and_read_only() -> None:",
+            ),
+        ],
+        "runtimeDefaultUnchanged": [
+            (
+                provider_freshness_source,
+                "def test_offline_reliability_audit_cli_outputs_bounded_json_without_network_calls() -> None:",
+            ),
+            (
+                provider_operations_source,
+                "def test_aggregator_does_not_call_external_providers_or_cache_refresh() -> None:",
+            ),
+        ],
+    }
+
+    for check_name, anchor_tests in expected_anchor_tests.items():
+        assert check_name in category["requiredChecks"]
+        for source, anchor_test in anchor_tests:
+            assert anchor_test in source
+
+    assert "These tests are intentionally synthetic/offline. They must not call live" in provider_freshness_source
+    assert "providers or change provider routing." in provider_freshness_source
+    assert "\"networkCallsExecuted\": False," in provider_reliability_audit_source
+    assert "without provider calls" in provider_reliability_audit_source
+    assert "scoreReliabilityAllowed" in market_cache_source
+    assert "\"sourceConfidence\"" in stock_freshness_source
+    assert "assert \"authority\" not in str(summary).lower()" in provider_operations_source
+    assert "assert \"decision\" not in str(summary).lower()" in provider_operations_source
+
+
 def test_launch_acceptance_evidence_api_abuse_request_safety_is_backed_by_repo_local_offline_anchors() -> None:
     result = _run_checker("--evidence", str(ACCEPTED_FIXTURE))
 
