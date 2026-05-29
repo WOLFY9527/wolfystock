@@ -313,17 +313,39 @@ function buildProviderOpsTopSummary(
   rows: ProviderOperationsMatrixRow[],
   checks: MarketDataReadinessCheck[],
 ): ProviderOpsTopSummaryData {
-  const availableSources = uniqueLabels([
-    ...items.filter(operationItemIsAvailable).map(providerLabel),
-    ...rows.filter(matrixRowIsPrimaryAvailable).map(sourceGapName),
-  ]);
-  const missingSources = uniqueLabels([
-    ...rows.filter(matrixRowHasMissingSetup).map(sourceGapName),
-    ...checks.filter(shouldIncludeChecklistReadinessCheck).map(readinessCheckName),
-  ]);
-  const diagnosticSources = uniqueLabels(
-    rows.filter(matrixRowIsDiagnosticOnly).map(sourceGapName),
-  );
+  const availableSourceCandidates: string[] = [];
+  for (const item of items) {
+    if (operationItemIsAvailable(item)) {
+      availableSourceCandidates.push(providerLabel(item));
+    }
+  }
+  for (const row of rows) {
+    if (matrixRowIsPrimaryAvailable(row)) {
+      availableSourceCandidates.push(sourceGapName(row));
+    }
+  }
+  const availableSources = uniqueLabels(availableSourceCandidates);
+
+  const missingSourceCandidates: string[] = [];
+  for (const row of rows) {
+    if (matrixRowHasMissingSetup(row)) {
+      missingSourceCandidates.push(sourceGapName(row));
+    }
+  }
+  for (const check of checks) {
+    if (shouldIncludeChecklistReadinessCheck(check)) {
+      missingSourceCandidates.push(readinessCheckName(check));
+    }
+  }
+  const missingSources = uniqueLabels(missingSourceCandidates);
+
+  const diagnosticSourceCandidates: string[] = [];
+  for (const row of rows) {
+    if (matrixRowIsDiagnosticOnly(row)) {
+      diagnosticSourceCandidates.push(sourceGapName(row));
+    }
+  }
+  const diagnosticSources = uniqueLabels(diagnosticSourceCandidates);
   const affectedSurfaces = uniqueLabels([
     ...rows.flatMap(resolveChecklistMatrixSurfaces),
     ...checks.flatMap(resolveChecklistReadinessSurfaces),
