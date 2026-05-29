@@ -609,6 +609,104 @@ def test_launch_acceptance_evidence_api_abuse_request_safety_is_backed_by_repo_l
             assert anchor_test in public_api_safety_source
 
 
+def test_launch_acceptance_evidence_user_data_privacy_rehearsal_is_backed_by_repo_local_offline_anchors() -> None:
+    result = _run_checker("--evidence", str(ACCEPTED_FIXTURE))
+
+    assert result.returncode == 0
+    evidence = _json(result)
+    category = next(item for item in evidence["categories"] if item["id"] == "user_data_privacy_export_deletion_rehearsal")
+    assert category["status"] == "accepted"
+    assert category["requiredChecks"] == [
+        "privacyExportProjectionSanitized",
+        "deletionPreviewRehearsed",
+        "ownerIsolationEvidenceRecorded",
+        "privacyAuditEvidenceSanitized",
+        "rawUserDataNotExposed",
+    ]
+
+    accepted_payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
+    fixture_category = accepted_payload["categories"]["user_data_privacy_export_deletion_rehearsal"]
+    assert fixture_category["evidenceRef"] == "user-data-privacy-export-deletion-rehearsal-synthetic-json"
+    assert fixture_category["sanitization"] == {
+        "externalServicesCalledByChecker": False,
+        "realSecretsIncluded": False,
+        "rawCredentialValuesIncluded": False,
+        "rawProviderPayloadsIncluded": False,
+        "responseBodiesIncluded": False,
+        "productionDataPathsIncluded": False,
+    }
+
+    admin_users_source = (REPO_ROOT / "tests" / "api" / "test_admin_users.py").read_text(encoding="utf-8")
+    admin_user_activity_source = (REPO_ROOT / "tests" / "api" / "test_admin_user_activity.py").read_text(
+        encoding="utf-8"
+    )
+
+    expected_anchor_tests = {
+        "privacyExportProjectionSanitized": [
+            (
+                admin_users_source,
+                "def test_user_directory_privacy_export_projection_is_read_only_and_sanitized(self) -> None:",
+            ),
+        ],
+        "deletionPreviewRehearsed": [
+            (
+                admin_users_source,
+                "def test_destructive_user_delete_route_remains_unsupported_and_read_only(self) -> None:",
+            ),
+        ],
+        "ownerIsolationEvidenceRecorded": [
+            (
+                admin_users_source,
+                "def test_cross_user_admin_detail_attempt_is_denied_with_sanitized_error(self) -> None:",
+            ),
+            (
+                admin_user_activity_source,
+                "def test_user_targeted_timeline_is_scoped_and_redacted(self) -> None:",
+            ),
+            (
+                admin_user_activity_source,
+                "def test_user_route_rejects_mismatched_target_user_filter(self) -> None:",
+            ),
+        ],
+        "privacyAuditEvidenceSanitized": [
+            (
+                admin_user_activity_source,
+                "def test_user_targeted_timeline_is_scoped_and_redacted(self) -> None:",
+            ),
+        ],
+        "rawUserDataNotExposed": [
+            (
+                admin_users_source,
+                "def test_user_directory_privacy_export_projection_is_read_only_and_sanitized(self) -> None:",
+            ),
+            (
+                admin_user_activity_source,
+                "def test_user_targeted_timeline_is_scoped_and_redacted(self) -> None:",
+            ),
+        ],
+    }
+
+    for check_name, anchor_tests in expected_anchor_tests.items():
+        assert check_name in category["requiredChecks"]
+        for source, anchor_test in anchor_tests:
+            assert anchor_test in source
+
+    assert "self._assert_no_privacy_export_leaks(response)" in admin_users_source
+    assert 'self.assertTrue(set(getattr(route, "methods", set())) <= {"GET"})' in admin_users_source
+    assert 'self.assertEqual(response.status_code, 405)' in admin_users_source
+    assert 'self.assertEqual(self._count(AppUser), before_users)' in admin_users_source
+    assert 'self.assertEqual(self._count(AppUserSession), before_sessions)' in admin_users_source
+    assert 'self.assertNotIn("user-2", self._json_text(response))' in admin_users_source
+    assert 'self.assertTrue(all(item["targetUser"]["id"] == "user-1" for item in payload["items"]))' in (
+        admin_user_activity_source
+    )
+    assert 'self.assertNotIn("raw-token-value", text)' in admin_user_activity_source
+    assert 'self.assertNotIn("RAW_PROVIDER_PAYLOAD", text)' in admin_user_activity_source
+    assert 'self.assertNotIn("RAW_STACK_TRACE", text)' in admin_user_activity_source
+    assert 'self.assertNotIn("RAW_REQUEST_BODY", text)' in admin_user_activity_source
+    assert 'self.assertNotIn("MSFT", text)' in admin_user_activity_source
+
+
 def test_launch_acceptance_evidence_input_release_approved_true_is_ignored(tmp_path: Path) -> None:
     payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
     payload["releaseApproved"] = True
