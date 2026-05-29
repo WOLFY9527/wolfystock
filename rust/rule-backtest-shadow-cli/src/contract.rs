@@ -59,45 +59,20 @@ pub struct ParsedStrategy {
     pub version: String,
     pub timeframe: String,
     pub strategy_kind: String,
-    pub entry: ComparisonNode,
-    pub exit: ComparisonNode,
+    pub entry: serde_json::Value,
+    pub exit: serde_json::Value,
     pub max_lookback: usize,
     pub confidence: f64,
     pub needs_confirmation: bool,
     pub ambiguities: Vec<serde_json::Value>,
     pub summary: StrategySummary,
-    pub strategy_spec: StrategySpec,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct ComparisonNode {
-    #[serde(rename = "type")]
-    pub node_type: String,
-    pub left: Operand,
-    pub compare: String,
-    pub right: Operand,
-    pub text: String,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct Operand {
-    pub kind: String,
-    pub indicator: String,
-    pub period: Option<usize>,
+    pub strategy_spec: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct StrategySummary {
     pub entry: String,
     pub exit: String,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct StrategySpec {
-    pub strategy_type: String,
-    pub indicator_family: String,
-    pub price_basis: String,
-    pub signal_window: usize,
 }
 
 #[allow(dead_code)]

@@ -22,6 +22,14 @@ runtime.
   locks terminal `same_bar_close` forced-close behavior for one allowlisted
   `case_id`; Rust remains shadow-only and still fail-closes outside the
   documented fixture set.
+- T-715 adds
+  `tests/fixtures/backtest/rule_backtest_compute_shadow_cli_v4_ma_crossover.json`
+  as a fourth parser-free, Python-authoritative shadow fixture for one
+  allowlisted normalized `moving_average_crossover` case
+  (`moving_average_crossover_fast_slow_long_cash`): fast SMA 3 / slow SMA 5,
+  long/cash only, full-notional single position, and next-bar-open fills. This
+  support remains Rust shadow-only and is not imported by Python production
+  runtime.
 
 ## Safest first spike
 
@@ -34,9 +42,11 @@ runtime.
   `Close > MA3` entry, `Close < MA3` exit, SMA close indicator,
   single-position full-notional long/cash, `next_bar_open` entry/exit,
   `same_bar_close` terminal fallback, and bps fee/slippage.
-- Covered fixtures now include one realized trade path, one no-trade path, and
-  one terminal forced-close path; any other fixture shape remains out of scope
-  unless a future task explicitly extends the allowlisted shadow contract.
+- Covered fixtures now include the original rule-conditions realized-trade,
+  no-trade, and terminal forced-close paths, plus one allowlisted normalized MA
+  crossover path (fast SMA 3 / slow SMA 5). Any other fixture shape remains out
+  of scope unless a future task explicitly extends the allowlisted shadow
+  contract.
 - Any future expansion must continue to fail closed outside the documented
   normalized fixture contract.
 

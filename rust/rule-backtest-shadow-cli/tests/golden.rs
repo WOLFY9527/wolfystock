@@ -17,6 +17,7 @@ fn golden_fixtures_match_python_authoritative_expected_output() {
         "rule_backtest_compute_shadow_cli_v1.json",
         "rule_backtest_compute_shadow_cli_v2.json",
         "rule_backtest_compute_shadow_cli_v3_terminal_forced_close.json",
+        "rule_backtest_compute_shadow_cli_v4_ma_crossover.json",
     ] {
         let fixture = contract::load_fixture(&fixture_path(fixture_name)).expect("fixture should load");
         let actual = compute::run_fixture(&fixture).expect("fixture should compute");
@@ -40,6 +41,10 @@ fn cli_reports_success_for_supported_fixtures() {
         (
             "rule_backtest_compute_shadow_cli_v3_terminal_forced_close.json",
             "rule_conditions_close_vs_ma3_terminal_forced_close",
+        ),
+        (
+            "rule_backtest_compute_shadow_cli_v4_ma_crossover.json",
+            "moving_average_crossover_fast_slow_long_cash",
         ),
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_rule-backtest-shadow-cli"))

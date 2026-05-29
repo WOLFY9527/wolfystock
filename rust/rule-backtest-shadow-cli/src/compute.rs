@@ -2,15 +2,59 @@ use std::collections::HashSet;
 
 use crate::contract::{
     Bar, ExecutionAssumptions, ExecutionModel, ExpectedOutput, ExpectedTrade, FixtureEnvelope,
-    FixtureInput, MarketRules, Metrics, SelectedEquityPoint,
+    FixtureInput, MarketRules, Metrics, ParsedStrategy, SelectedEquityPoint,
 };
+use serde_json::Value;
 
 const FLOAT_TOLERANCE: f64 = 1e-4;
-const SUPPORTED_CASE_IDS: [&str; 3] = [
+const SUPPORTED_CASE_IDS: [&str; 4] = [
     "rule_conditions_close_vs_ma3_long_cash",
     "rule_conditions_close_vs_ma3_no_trade",
     "rule_conditions_close_vs_ma3_terminal_forced_close",
+    "moving_average_crossover_fast_slow_long_cash",
 ];
+const RULE_CONDITIONS_SELECTED_DATES: [&str; 4] = [
+    "2024-01-04",
+    "2024-01-05",
+    "2024-01-06",
+    "2024-01-07",
+];
+const TERMINAL_FORCED_CLOSE_SELECTED_DATES: [&str; 4] = [
+    "2024-01-05",
+    "2024-01-06",
+    "2024-01-07",
+    "2024-01-08",
+];
+const MOVING_AVERAGE_CROSSOVER_SELECTED_DATES: [&str; 4] = [
+    "2024-01-06",
+    "2024-01-07",
+    "2024-01-09",
+    "2024-01-10",
+];
+
+#[derive(Debug, Clone, Copy)]
+enum SignalLogic {
+    PriceVsSma {
+        period: usize,
+        entry_operator: &'static str,
+        exit_operator: &'static str,
+    },
+    MovingAverageCrossover {
+        fast_period: usize,
+        slow_period: usize,
+    },
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StrategyRuntimeConfig {
+    signal_logic: SignalLogic,
+    entry_signal_summary: &'static str,
+    exit_signal_summary: &'static str,
+    entry_fill_note: &'static str,
+    exit_fill_note: &'static str,
+    signal_reason: &'static str,
+    selected_dates: &'static [&'static str],
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ComputedOutput {
@@ -53,11 +97,16 @@ struct PendingSignal {
 pub fn validate_fixture(fixture: &FixtureEnvelope) -> Result<(), String> {
     let input = &fixture.input;
 
-    if fixture.contract_version != "shadow_cli_v1" || input.contract_version != "shadow_cli_v1" {
-        return Err("unsupported fixture contract_version".to_string());
-    }
-    if !is_supported_case_id(&fixture.case_id) || !is_supported_case_id(&input.case_id) {
+    if !is_supported_case_id(&fixture.case_id)
+        || !is_supported_case_id(&input.case_id)
+        || fixture.case_id != input.case_id
+    {
         return Err("unsupported case_id".to_string());
+    }
+    if !is_supported_contract_version(&fixture.case_id, &fixture.contract_version)
+        || !is_supported_contract_version(&input.case_id, &input.contract_version)
+    {
+        return Err("unsupported fixture contract_version".to_string());
     }
     if input.code != "SAFE" {
         return Err(format!("unsupported code {}", input.code));
@@ -87,6 +136,74 @@ pub fn validate_fixture(fixture: &FixtureEnvelope) -> Result<(), String> {
     }
 
     let strategy = &input.parsed_strategy;
+    match fixture.case_id.as_str() {
+        "moving_average_crossover_fast_slow_long_cash" => {
+            validate_moving_average_crossover_strategy(strategy)?
+        }
+        _ => validate_rule_conditions_strategy(strategy)?,
+    }
+
+    if input.bars.is_empty() {
+        return Err("fixture bars cannot be empty".to_string());
+    }
+
+    Ok(())
+}
+
+fn validate_comparison_node(
+    node: &Value,
+    expected_compare: &str,
+    expected_period: usize,
+    expected_text: &str,
+) -> Result<(), String> {
+    if value_at_path(node, &["type"]).and_then(Value::as_str) != Some("comparison")
+        || value_at_path(node, &["compare"]).and_then(Value::as_str) != Some(expected_compare)
+        || value_at_path(node, &["text"]).and_then(Value::as_str) != Some(expected_text)
+        || value_at_path(node, &["left", "kind"]).and_then(Value::as_str) != Some("indicator")
+        || value_at_path(node, &["left", "indicator"]).and_then(Value::as_str) != Some("close")
+        || value_at_path(node, &["right", "kind"]).and_then(Value::as_str) != Some("indicator")
+        || value_at_path(node, &["right", "indicator"]).and_then(Value::as_str) != Some("ma")
+        || value_at_path(node, &["right", "period"]).and_then(Value::as_u64)
+            != Some(expected_period as u64)
+    {
+        return Err("unsupported strategy node".to_string());
+    }
+    Ok(())
+}
+
+fn validate_group_node(node: &Value, expected_operator: &str) -> Result<(), String> {
+    if value_at_path(node, &["type"]).and_then(Value::as_str) != Some("group")
+        || value_at_path(node, &["operator"]).and_then(Value::as_str) != Some(expected_operator)
+        || value_at_path(node, &["conditions"])
+            .and_then(Value::as_array)
+            .map(|conditions| !conditions.is_empty())
+            != Some(false)
+    {
+        return Err("unsupported strategy node".to_string());
+    }
+    Ok(())
+}
+
+fn value_at_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
+    let mut current = value;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    Some(current)
+}
+
+fn is_supported_case_id(case_id: &str) -> bool {
+    SUPPORTED_CASE_IDS.contains(&case_id)
+}
+
+fn is_supported_contract_version(case_id: &str, contract_version: &str) -> bool {
+    match case_id {
+        "moving_average_crossover_fast_slow_long_cash" => contract_version == "shadow_cli_v4",
+        _ => contract_version == "shadow_cli_v1",
+    }
+}
+
+fn validate_rule_conditions_strategy(strategy: &ParsedStrategy) -> Result<(), String> {
     if strategy.version != "v1"
         || strategy.timeframe != "daily"
         || strategy.strategy_kind != "rule_conditions"
@@ -102,46 +219,84 @@ pub fn validate_fixture(fixture: &FixtureEnvelope) -> Result<(), String> {
     {
         return Err("parsed_strategy summary does not match supported subset".to_string());
     }
-    if strategy.strategy_spec.strategy_type != "rule_conditions"
-        || strategy.strategy_spec.indicator_family != "sma_close_rule_conditions"
-        || strategy.strategy_spec.price_basis != "close"
-        || strategy.strategy_spec.signal_window != 3
+    if value_at_path(&strategy.strategy_spec, &["strategy_type"]).and_then(Value::as_str)
+        != Some("rule_conditions")
+        || value_at_path(&strategy.strategy_spec, &["indicator_family"]).and_then(Value::as_str)
+            != Some("sma_close_rule_conditions")
+        || value_at_path(&strategy.strategy_spec, &["price_basis"]).and_then(Value::as_str)
+            != Some("close")
+        || value_at_path(&strategy.strategy_spec, &["signal_window"]).and_then(Value::as_u64)
+            != Some(3)
     {
         return Err("strategy_spec does not match supported subset".to_string());
     }
 
-    validate_node(&strategy.entry, ">", 3, "Close > MA3")?;
-    validate_node(&strategy.exit, "<", 3, "Close < MA3")?;
-
-    if input.bars.is_empty() {
-        return Err("fixture bars cannot be empty".to_string());
-    }
+    validate_comparison_node(&strategy.entry, ">", 3, "Close > MA3")?;
+    validate_comparison_node(&strategy.exit, "<", 3, "Close < MA3")?;
 
     Ok(())
 }
 
-fn validate_node(
-    node: &crate::contract::ComparisonNode,
-    expected_compare: &str,
-    expected_period: usize,
-    expected_text: &str,
-) -> Result<(), String> {
-    if node.node_type != "comparison"
-        || node.compare != expected_compare
-        || node.text != expected_text
-        || node.left.kind != "indicator"
-        || node.left.indicator != "close"
-        || node.right.kind != "indicator"
-        || node.right.indicator != "ma"
-        || node.right.period != Some(expected_period)
+fn validate_moving_average_crossover_strategy(strategy: &ParsedStrategy) -> Result<(), String> {
+    if strategy.version != "v1"
+        || strategy.timeframe != "daily"
+        || strategy.strategy_kind != "moving_average_crossover"
+        || strategy.max_lookback != 5
+        || !approx_eq(strategy.confidence, 1.0)
+        || strategy.needs_confirmation
+        || !strategy.ambiguities.is_empty()
     {
-        return Err(format!("unsupported strategy node {}", node.text));
+        return Err("parsed_strategy header does not match supported subset".to_string());
     }
-    Ok(())
-}
+    if strategy.summary.entry != "买入条件：SMA3 上穿 SMA5"
+        || strategy.summary.exit != "卖出条件：SMA3 下穿 SMA5"
+    {
+        return Err("parsed_strategy summary does not match supported subset".to_string());
+    }
 
-fn is_supported_case_id(case_id: &str) -> bool {
-    SUPPORTED_CASE_IDS.contains(&case_id)
+    validate_group_node(&strategy.entry, "and")?;
+    validate_group_node(&strategy.exit, "or")?;
+
+    let spec = &strategy.strategy_spec;
+    if value_at_path(spec, &["strategy_type"]).and_then(Value::as_str)
+        != Some("moving_average_crossover")
+        || value_at_path(spec, &["strategy_family"]).and_then(Value::as_str)
+            != Some("moving_average_crossover")
+        || value_at_path(spec, &["timeframe"]).and_then(Value::as_str) != Some("daily")
+        || value_at_path(spec, &["max_lookback"]).and_then(Value::as_u64) != Some(5)
+        || value_at_path(spec, &["signal", "indicator_family"]).and_then(Value::as_str)
+            != Some("moving_average")
+        || value_at_path(spec, &["signal", "fast_period"]).and_then(Value::as_u64) != Some(3)
+        || value_at_path(spec, &["signal", "slow_period"]).and_then(Value::as_u64) != Some(5)
+        || value_at_path(spec, &["signal", "fast_type"]).and_then(Value::as_str)
+            != Some("simple")
+        || value_at_path(spec, &["signal", "slow_type"]).and_then(Value::as_str)
+            != Some("simple")
+        || value_at_path(spec, &["signal", "entry_condition"]).and_then(Value::as_str)
+            != Some("fast_crosses_above_slow")
+        || value_at_path(spec, &["signal", "exit_condition"]).and_then(Value::as_str)
+            != Some("fast_crosses_below_slow")
+        || value_at_path(spec, &["execution", "signal_timing"]).and_then(Value::as_str)
+            != Some("bar_close")
+        || value_at_path(spec, &["execution", "fill_timing"]).and_then(Value::as_str)
+            != Some("next_bar_open")
+        || value_at_path(spec, &["position_behavior", "direction"]).and_then(Value::as_str)
+            != Some("long_only")
+        || value_at_path(spec, &["position_behavior", "entry_sizing"]).and_then(Value::as_str)
+            != Some("all_in")
+        || value_at_path(spec, &["position_behavior", "max_positions"]).and_then(Value::as_u64)
+            != Some(1)
+        || value_at_path(spec, &["position_behavior", "pyramiding"]).and_then(Value::as_bool)
+            != Some(false)
+        || value_at_path(spec, &["end_behavior", "policy"]).and_then(Value::as_str)
+            != Some("liquidate_at_end")
+        || value_at_path(spec, &["end_behavior", "price_basis"]).and_then(Value::as_str)
+            != Some("close")
+    {
+        return Err("strategy_spec does not match supported subset".to_string());
+    }
+
+    Ok(())
 }
 
 pub fn run_fixture(fixture: &FixtureEnvelope) -> Result<ComputedOutput, String> {
@@ -470,10 +625,23 @@ fn compare_trades(
 }
 
 fn compute_output(input: &FixtureInput) -> Result<ComputedOutput, String> {
+    let config = runtime_config_for_case_id(&input.case_id)
+        .ok_or_else(|| "unsupported case_id".to_string())?;
     let fee_rate = input.execution_model.fee_bps_per_side / 10_000.0;
     let slippage_rate = input.execution_model.slippage_bps_per_side / 10_000.0;
     let closes: Vec<f64> = input.bars.iter().map(|bar| bar.close).collect();
-    let ma3 = build_sma(&closes, 3);
+    let signal_sma = match config.signal_logic {
+        SignalLogic::PriceVsSma { period, .. } => build_sma(&closes, period),
+        SignalLogic::MovingAverageCrossover { .. } => Vec::new(),
+    };
+    let fast_sma = match config.signal_logic {
+        SignalLogic::PriceVsSma { .. } => Vec::new(),
+        SignalLogic::MovingAverageCrossover { fast_period, .. } => build_sma(&closes, fast_period),
+    };
+    let slow_sma = match config.signal_logic {
+        SignalLogic::PriceVsSma { .. } => Vec::new(),
+        SignalLogic::MovingAverageCrossover { slow_period, .. } => build_sma(&closes, slow_period),
+    };
 
     let start_index = input
         .bars
@@ -532,15 +700,15 @@ fn compute_output(input: &FixtureInput) -> Result<ComputedOutput, String> {
                 slippage: round6(state.entry_slippage_amount + exit_slippage_amount),
                 entry_reason: "signal_entry".to_string(),
                 exit_reason: "signal_exit".to_string(),
-                signal_reason: "rule_conditions".to_string(),
-                notes: "exit_signal_next_bar_open".to_string(),
+                signal_reason: config.signal_reason.to_string(),
+                notes: config.exit_fill_note.to_string(),
             });
             pending_exit = None;
             active_trade = None;
             shares = 0.0;
             position = false;
             executed_action = Some("sell".to_string());
-            notes = Some("exit_signal_next_bar_open".to_string());
+            notes = Some(config.exit_fill_note.to_string());
         }
 
         if let Some(signal) = &pending_entry {
@@ -573,7 +741,7 @@ fn compute_output(input: &FixtureInput) -> Result<ComputedOutput, String> {
                         cash_buffer: cash,
                     });
                     executed_action = Some("buy".to_string());
-                    notes = Some("entry_signal_next_bar_open".to_string());
+                    notes = Some(config.entry_fill_note.to_string());
                 }
             }
             pending_entry = None;
@@ -607,17 +775,41 @@ fn compute_output(input: &FixtureInput) -> Result<ComputedOutput, String> {
         };
 
         if index < end_index {
-            if position && compare_signal(bar.close, ma3[index], "<") {
-                pending_exit = Some(PendingSignal {
-                    signal_date: bar.date.clone(),
-                });
-                point.signal_summary = Some("Close < MA3".to_string());
-            } else if !position && compare_signal(bar.close, ma3[index], ">") {
-                trade_entry_signals += 1;
-                pending_entry = Some(PendingSignal {
-                    signal_date: bar.date.clone(),
-                });
-                point.signal_summary = Some("Close > MA3".to_string());
+            match config.signal_logic {
+                SignalLogic::PriceVsSma {
+                    entry_operator,
+                    exit_operator,
+                    ..
+                } => {
+                    if position && compare_signal(bar.close, signal_sma[index], exit_operator) {
+                        pending_exit = Some(PendingSignal {
+                            signal_date: bar.date.clone(),
+                        });
+                        point.signal_summary = Some(config.exit_signal_summary.to_string());
+                    } else if !position
+                        && compare_signal(bar.close, signal_sma[index], entry_operator)
+                    {
+                        trade_entry_signals += 1;
+                        pending_entry = Some(PendingSignal {
+                            signal_date: bar.date.clone(),
+                        });
+                        point.signal_summary = Some(config.entry_signal_summary.to_string());
+                    }
+                }
+                SignalLogic::MovingAverageCrossover { .. } => {
+                    if position && crosses_below(&fast_sma, &slow_sma, index) {
+                        pending_exit = Some(PendingSignal {
+                            signal_date: bar.date.clone(),
+                        });
+                        point.signal_summary = Some(config.exit_signal_summary.to_string());
+                    } else if !position && crosses_above(&fast_sma, &slow_sma, index) {
+                        trade_entry_signals += 1;
+                        pending_entry = Some(PendingSignal {
+                            signal_date: bar.date.clone(),
+                        });
+                        point.signal_summary = Some(config.entry_signal_summary.to_string());
+                    }
+                }
             }
         }
 
@@ -656,7 +848,7 @@ fn compute_output(input: &FixtureInput) -> Result<ComputedOutput, String> {
             slippage: round6(state.entry_slippage_amount + exit_slippage_amount),
             entry_reason: "signal_entry".to_string(),
             exit_reason: "final_close".to_string(),
-            signal_reason: "rule_conditions".to_string(),
+            signal_reason: config.signal_reason.to_string(),
             notes: "forced_close_at_window_end".to_string(),
         });
 
@@ -677,9 +869,7 @@ fn compute_output(input: &FixtureInput) -> Result<ComputedOutput, String> {
 
     }
 
-    let selected_dates: HashSet<&str> = selected_dates_for_case_id(&input.case_id)
-        .into_iter()
-        .collect();
+    let selected_dates: HashSet<&str> = config.selected_dates.iter().copied().collect();
     let selected_equity_points = equity_curve
         .iter()
         .filter(|point| selected_dates.contains(point.date.as_str()))
@@ -820,6 +1010,28 @@ fn compare_signal(close: f64, ma_value: Option<f64>, operator: &str) -> bool {
     }
 }
 
+fn crosses_above(fast: &[Option<f64>], slow: &[Option<f64>], index: usize) -> bool {
+    if index == 0 {
+        return false;
+    }
+    matches!(
+        (fast[index - 1], slow[index - 1], fast[index], slow[index]),
+        (Some(previous_fast), Some(previous_slow), Some(current_fast), Some(current_slow))
+            if previous_fast <= previous_slow && current_fast > current_slow
+    )
+}
+
+fn crosses_below(fast: &[Option<f64>], slow: &[Option<f64>], index: usize) -> bool {
+    if index == 0 {
+        return false;
+    }
+    matches!(
+        (fast[index - 1], slow[index - 1], fast[index], slow[index]),
+        (Some(previous_fast), Some(previous_slow), Some(current_fast), Some(current_slow))
+            if previous_fast >= previous_slow && current_fast < current_slow
+    )
+}
+
 fn build_sma(values: &[f64], period: usize) -> Vec<Option<f64>> {
     let mut output = Vec::with_capacity(values.len());
     for index in 0..values.len() {
@@ -880,15 +1092,48 @@ fn resolve_terminal_exit_fill_price(bar: &Bar, execution_model: &ExecutionModel)
     }
 }
 
-fn selected_dates_for_case_id(case_id: &str) -> [&'static str; 4] {
+fn runtime_config_for_case_id(case_id: &str) -> Option<StrategyRuntimeConfig> {
     match case_id {
-        "rule_conditions_close_vs_ma3_terminal_forced_close" => [
-            "2024-01-05",
-            "2024-01-06",
-            "2024-01-07",
-            "2024-01-08",
-        ],
-        _ => ["2024-01-04", "2024-01-05", "2024-01-06", "2024-01-07"],
+        "rule_conditions_close_vs_ma3_long_cash"
+        | "rule_conditions_close_vs_ma3_no_trade" => Some(StrategyRuntimeConfig {
+            signal_logic: SignalLogic::PriceVsSma {
+                period: 3,
+                entry_operator: ">",
+                exit_operator: "<",
+            },
+            entry_signal_summary: "Close > MA3",
+            exit_signal_summary: "Close < MA3",
+            entry_fill_note: "entry_signal_next_bar_open",
+            exit_fill_note: "exit_signal_next_bar_open",
+            signal_reason: "rule_conditions",
+            selected_dates: &RULE_CONDITIONS_SELECTED_DATES,
+        }),
+        "rule_conditions_close_vs_ma3_terminal_forced_close" => Some(StrategyRuntimeConfig {
+            signal_logic: SignalLogic::PriceVsSma {
+                period: 3,
+                entry_operator: ">",
+                exit_operator: "<",
+            },
+            entry_signal_summary: "Close > MA3",
+            exit_signal_summary: "Close < MA3",
+            entry_fill_note: "entry_signal_next_bar_open",
+            exit_fill_note: "exit_signal_next_bar_open",
+            signal_reason: "rule_conditions",
+            selected_dates: &TERMINAL_FORCED_CLOSE_SELECTED_DATES,
+        }),
+        "moving_average_crossover_fast_slow_long_cash" => Some(StrategyRuntimeConfig {
+            signal_logic: SignalLogic::MovingAverageCrossover {
+                fast_period: 3,
+                slow_period: 5,
+            },
+            entry_signal_summary: "买入条件：SMA3 上穿 SMA5",
+            exit_signal_summary: "卖出条件：SMA3 下穿 SMA5",
+            entry_fill_note: "moving_average_crossover_entry_next_bar_open",
+            exit_fill_note: "moving_average_crossover_exit_next_bar_open",
+            signal_reason: "rule_conditions",
+            selected_dates: &MOVING_AVERAGE_CROSSOVER_SELECTED_DATES,
+        }),
+        _ => None,
     }
 }
 
