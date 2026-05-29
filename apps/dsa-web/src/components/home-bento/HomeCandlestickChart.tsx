@@ -506,12 +506,13 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
     };
   }, [isLocked, ticker]);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- ticker changes reset local chart controls to their defaults
+  const [prevTicker, setPrevTicker] = useState(ticker);
+  if (prevTicker !== ticker) {
+    setPrevTicker(ticker);
     setActiveTimeframe('1D');
     setHoveredIndex(null);
     setIndicatorVisibility(DEFAULT_INDICATORS);
-  }, [ticker]);
+  }
 
   const aggregatedCandles = aggregateCandles(dailyCandles, activeTimeframe);
   const candles = withIndicators(aggregatedCandles);
