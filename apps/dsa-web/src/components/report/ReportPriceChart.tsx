@@ -526,24 +526,6 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     : Math.max(visibleData.length - 1, 0);
   const activeBar = visibleData[activeIndex];
 
-  useEffect(() => {
-    if (activeData.length === 0) {
-      return;
-    }
-    const existing = viewWindowByView[activeView];
-    if (
-      !existing
-      || existing.start >= activeData.length
-      || existing.end >= activeData.length
-      || existing.end <= existing.start
-    ) {
-      setViewWindowByView((current) => ({
-        ...current,
-        [activeView]: createDefaultViewWindow(activeView, activeData.length),
-      }));
-    }
-  }, [activeData.length, activeView, viewWindowByView]);
-
   const annotationLines = resolveAnnotationLines(decisionPanel);
   const chartGeometry: ChartGeometry | null = (() => {
     if (size.width <= 0 || size.height <= 0) {
