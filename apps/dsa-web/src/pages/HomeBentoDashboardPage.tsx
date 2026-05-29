@@ -30,7 +30,7 @@ import {
 import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
 import type { AnalysisReport, DataQualityReport, DecisionTrace, HistoryItem, ReportQuality, StandardReport, StandardReportField, TaskProgressModule } from '../types/analysis';
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
-import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores';
+import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores/stockPoolStore';
 import {
   buildInstitutionalReportMarkdown,
   getCompanyDisplayName,
