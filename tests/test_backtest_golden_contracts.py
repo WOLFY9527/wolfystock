@@ -252,88 +252,105 @@ def test_rule_backtest_compute_golden_fixture_is_compact_deterministic_and_sanit
     _assert_no_live_provider_authority(payload)
 
 
-def test_rule_backtest_shadow_cli_fixture_is_parser_free_explicit_and_sanitized() -> None:
-    fixture_path = FIXTURE_DIR / "rule_backtest_compute_shadow_cli_v1.json"
-    payload = json.loads(fixture_path.read_text(encoding="utf-8"))
-    serialized = fixture_path.read_text(encoding="utf-8").lower()
-
-    assert payload["contract_version"] == "shadow_cli_v1"
-    assert payload["case_id"] == "rule_conditions_close_vs_ma3_long_cash"
-    assert set(payload) == {"contract_version", "case_id", "input", "expected_output"}
-    assert "strategy_text" not in serialized
-    assert "pyo3" not in serialized
-    assert "maturin" not in serialized
-    assert "cargo" not in serialized
-    assert "runtime integration" not in serialized
-
-    fixture_input = payload["input"]
-    assert fixture_input["contract_version"] == payload["contract_version"]
-    assert fixture_input["case_id"] == payload["case_id"]
-    assert fixture_input["code"] == "SAFE"
-    assert fixture_input["initial_capital"] == 100000.0
-    assert fixture_input["lookback_bars"] == 20
-    assert fixture_input["date_window"] == {"start_date": "2024-01-01", "end_date": "2024-01-08"}
-    assert fixture_input["execution_model"]["entry_timing"] == "next_bar_open"
-    assert fixture_input["execution_model"]["exit_timing"] == "next_bar_open"
-    assert fixture_input["execution_model"]["market_rules"]["terminal_bar_fill_fallback"] == "same_bar_close"
-    assert fixture_input["parsed_strategy"]["strategy_kind"] == "rule_conditions"
-    assert fixture_input["parsed_strategy"]["entry"]["text"] == "Close > MA3"
-    assert fixture_input["parsed_strategy"]["exit"]["text"] == "Close < MA3"
-    assert fixture_input["parsed_strategy"]["max_lookback"] == 3
-    assert fixture_input["parsed_strategy"]["strategy_spec"] == {
-        "strategy_type": "rule_conditions",
-        "indicator_family": "sma_close_rule_conditions",
-        "price_basis": "close",
-        "signal_window": 3,
+def test_rule_backtest_shadow_cli_fixtures_are_parser_free_explicit_and_sanitized() -> None:
+    expected_cases = {
+        "rule_backtest_compute_shadow_cli_v1.json": {
+            "case_id": "rule_conditions_close_vs_ma3_long_cash",
+            "trade_count": 1,
+            "final_equity": 77620.334341,
+            "total_return_pct": -22.3797,
+            "selected_actions": [None, "buy", None, "sell"],
+            "trades": [
+                {
+                    "entry_signal_date": "2024-01-04",
+                    "entry_date": "2024-01-05",
+                    "exit_signal_date": "2024-01-06",
+                    "exit_date": "2024-01-07",
+                    "entry_price": 11.2014,
+                    "exit_price": 8.698912,
+                    "return_pct": -22.3797,
+                    "quantity": 8925.224191,
+                    "fees": 44.403688,
+                    "slippage": 22.201495,
+                    "entry_reason": "signal_entry",
+                    "exit_reason": "signal_exit",
+                    "signal_reason": "rule_conditions",
+                    "notes": "exit_signal_next_bar_open",
+                }
+            ],
+        },
+        "rule_backtest_compute_shadow_cli_v2.json": {
+            "case_id": "rule_conditions_close_vs_ma3_no_trade",
+            "trade_count": 0,
+            "final_equity": 100000.0,
+            "total_return_pct": 0.0,
+            "selected_actions": [None, None, None, None],
+            "trades": [],
+        },
     }
-    assert len(fixture_input["bars"]) == 8
-    assert all(
-        set(bar) == {"date", "open", "high", "low", "close", "volume"}
-        for bar in fixture_input["bars"]
-    )
 
-    expected_output = payload["expected_output"]
-    assert expected_output["contract_version"] == payload["contract_version"]
-    assert expected_output["case_id"] == payload["case_id"]
-    assert expected_output["execution_model"] == fixture_input["execution_model"]
-    assert expected_output["execution_assumptions"]["entry_fill_timing"] == "next_bar_open"
-    assert expected_output["execution_assumptions"]["exit_fill_timing"] == "next_bar_open; same_bar_close"
-    assert expected_output["metrics"]["trade_count"] == 1
-    assert expected_output["metrics"]["final_equity"] == 77620.334341
-    assert expected_output["metrics"]["total_return_pct"] == -22.3797
-    assert [point["date"] for point in expected_output["selected_equity_points"]] == [
-        "2024-01-04",
-        "2024-01-05",
-        "2024-01-06",
-        "2024-01-07",
-    ]
-    assert [point["executed_action"] for point in expected_output["selected_equity_points"]] == [
-        None,
-        "buy",
-        None,
-        "sell",
-    ]
-    assert expected_output["trades"] == [
-        {
-            "entry_signal_date": "2024-01-04",
-            "entry_date": "2024-01-05",
-            "exit_signal_date": "2024-01-06",
-            "exit_date": "2024-01-07",
-            "entry_price": 11.2014,
-            "exit_price": 8.698912,
-            "return_pct": -22.3797,
-            "quantity": 8925.224191,
-            "fees": 44.403688,
-            "slippage": 22.201495,
-            "entry_reason": "signal_entry",
-            "exit_reason": "signal_exit",
-            "signal_reason": "rule_conditions",
-            "notes": "exit_signal_next_bar_open",
+    for fixture_name, expected_case in expected_cases.items():
+        fixture_path = FIXTURE_DIR / fixture_name
+        payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+        serialized = fixture_path.read_text(encoding="utf-8").lower()
+
+        assert payload["contract_version"] == "shadow_cli_v1"
+        assert payload["case_id"] == expected_case["case_id"]
+        assert set(payload) == {"contract_version", "case_id", "input", "expected_output"}
+        assert "strategy_text" not in serialized
+        assert "pyo3" not in serialized
+        assert "maturin" not in serialized
+        assert "cargo" not in serialized
+        assert "runtime integration" not in serialized
+
+        fixture_input = payload["input"]
+        assert fixture_input["contract_version"] == payload["contract_version"]
+        assert fixture_input["case_id"] == payload["case_id"]
+        assert fixture_input["code"] == "SAFE"
+        assert fixture_input["initial_capital"] == 100000.0
+        assert fixture_input["lookback_bars"] == 20
+        assert fixture_input["date_window"] == {"start_date": "2024-01-01", "end_date": "2024-01-08"}
+        assert fixture_input["execution_model"]["entry_timing"] == "next_bar_open"
+        assert fixture_input["execution_model"]["exit_timing"] == "next_bar_open"
+        assert fixture_input["execution_model"]["market_rules"]["terminal_bar_fill_fallback"] == "same_bar_close"
+        assert fixture_input["parsed_strategy"]["strategy_kind"] == "rule_conditions"
+        assert fixture_input["parsed_strategy"]["entry"]["text"] == "Close > MA3"
+        assert fixture_input["parsed_strategy"]["exit"]["text"] == "Close < MA3"
+        assert fixture_input["parsed_strategy"]["max_lookback"] == 3
+        assert fixture_input["parsed_strategy"]["strategy_spec"] == {
+            "strategy_type": "rule_conditions",
+            "indicator_family": "sma_close_rule_conditions",
+            "price_basis": "close",
+            "signal_window": 3,
         }
-    ]
+        assert len(fixture_input["bars"]) == 8
+        assert all(
+            set(bar) == {"date", "open", "high", "low", "close", "volume"}
+            for bar in fixture_input["bars"]
+        )
 
-    _assert_no_sensitive_public_payload(payload)
-    _assert_no_live_provider_authority(payload)
+        expected_output = payload["expected_output"]
+        assert expected_output["contract_version"] == payload["contract_version"]
+        assert expected_output["case_id"] == payload["case_id"]
+        assert expected_output["execution_model"] == fixture_input["execution_model"]
+        assert expected_output["execution_assumptions"]["entry_fill_timing"] == "next_bar_open"
+        assert expected_output["execution_assumptions"]["exit_fill_timing"] == "next_bar_open; same_bar_close"
+        assert expected_output["metrics"]["trade_count"] == expected_case["trade_count"]
+        assert expected_output["metrics"]["final_equity"] == expected_case["final_equity"]
+        assert expected_output["metrics"]["total_return_pct"] == expected_case["total_return_pct"]
+        assert [point["date"] for point in expected_output["selected_equity_points"]] == [
+            "2024-01-04",
+            "2024-01-05",
+            "2024-01-06",
+            "2024-01-07",
+        ]
+        assert [point["executed_action"] for point in expected_output["selected_equity_points"]] == expected_case[
+            "selected_actions"
+        ]
+        assert expected_output["trades"] == expected_case["trades"]
+
+        _assert_no_sensitive_public_payload(payload)
+        _assert_no_live_provider_authority(payload)
 
 
 def test_execution_trace_export_fixture_freezes_compact_public_trace_shape() -> None:
@@ -632,6 +649,7 @@ def test_all_backtest_golden_fixtures_are_sanitized_and_explicitly_enumerated() 
     assert {path.name for path in fixture_paths} == {
         "rule_backtest_compute_basic_long_cash.json",
         "rule_backtest_compute_shadow_cli_v1.json",
+        "rule_backtest_compute_shadow_cli_v2.json",
         "rule_backtest_compare_dto.json",
         "rule_backtest_compare_heatmap_dto.json",
         "rule_backtest_execution_model_v1_metadata.json",

@@ -13,6 +13,9 @@ runtime.
   `tests/fixtures/backtest/rule_backtest_compute_shadow_cli_v1.json`,
   computes the first normalized `rule_conditions` subset, and validates the
   result against the Python-authoritative expected output.
+- T-700 adds `tests/fixtures/backtest/rule_backtest_compute_shadow_cli_v2.json`
+  as a second parser-free, explicit-bars, Python-authoritative no-trade
+  fixture; the Rust CLI still fail-closes on unsupported `case_id` values.
 
 ## Safest first spike
 
@@ -25,6 +28,9 @@ runtime.
   `Close > MA3` entry, `Close < MA3` exit, SMA close indicator,
   single-position full-notional long/cash, `next_bar_open` entry/exit,
   `same_bar_close` terminal fallback, and bps fee/slippage.
+- Covered fixtures now include one realized trade path and one no-trade path;
+  any other fixture shape remains out of scope unless a future task explicitly
+  extends the allowlisted shadow contract.
 - Any future expansion must continue to fail closed outside the documented
   normalized fixture contract.
 

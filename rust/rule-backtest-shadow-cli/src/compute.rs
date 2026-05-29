@@ -6,6 +6,10 @@ use crate::contract::{
 };
 
 const FLOAT_TOLERANCE: f64 = 1e-4;
+const SUPPORTED_CASE_IDS: [&str; 2] = [
+    "rule_conditions_close_vs_ma3_long_cash",
+    "rule_conditions_close_vs_ma3_no_trade",
+];
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ComputedOutput {
@@ -51,9 +55,7 @@ pub fn validate_fixture(fixture: &FixtureEnvelope) -> Result<(), String> {
     if fixture.contract_version != "shadow_cli_v1" || input.contract_version != "shadow_cli_v1" {
         return Err("unsupported fixture contract_version".to_string());
     }
-    if fixture.case_id != "rule_conditions_close_vs_ma3_long_cash"
-        || input.case_id != "rule_conditions_close_vs_ma3_long_cash"
-    {
+    if !is_supported_case_id(&fixture.case_id) || !is_supported_case_id(&input.case_id) {
         return Err("unsupported case_id".to_string());
     }
     if input.code != "SAFE" {
@@ -135,6 +137,10 @@ fn validate_node(
         return Err(format!("unsupported strategy node {}", node.text));
     }
     Ok(())
+}
+
+fn is_supported_case_id(case_id: &str) -> bool {
+    SUPPORTED_CASE_IDS.contains(&case_id)
 }
 
 pub fn run_fixture(fixture: &FixtureEnvelope) -> Result<ComputedOutput, String> {
