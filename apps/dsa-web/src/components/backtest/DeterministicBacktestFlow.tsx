@@ -553,6 +553,205 @@ export type FlowProps = {
   panelMode: 'normal' | 'professional';
 };
 
+function PresetQuickList({
+  presets,
+  onApplyPreset,
+  onDeletePreset,
+}: {
+  presets: RuleBacktestPreset[];
+  onApplyPreset: (preset: RuleBacktestPreset) => void;
+  onDeletePreset: (presetId: string) => void;
+}) {
+  const { language } = useI18n();
+  const visiblePresets = presets.slice(0, 3);
+
+  return (
+    <div className="bg-white/[0.02] border border-white/5 rounded-[24px] p-6" data-testid="backtest-setup-presets">
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h3 className="text-xs font-bold text-white/40 uppercase tracking-[0.22em]">{language === 'en' ? 'Preset shortcuts' : '快速预设'}</h3>
+          <p className="mt-2 text-sm text-white/50 leading-relaxed">
+            {language === 'en' ? 'Apply a saved setup and continue editing in the launch panel.' : '直接复用最近预设，再在右侧发射台继续微调参数。'}
+          </p>
+        </div>
+        <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/45">{presets.length}</span>
+      </div>
+      {visiblePresets.length === 0 ? (
+        <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] p-4 text-sm text-white/45">
+          {language === 'en' ? 'No saved presets yet. Recent drafts will appear here after your first run.' : '当前还没有保存的预设。完成一次回测后，最近草稿会显示在这里。'}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {visiblePresets.map((preset) => (
+            <div key={preset.id} className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">
+                    {preset.kind === 'saved' ? (language === 'en' ? 'Saved preset' : '已保存预设') : (language === 'en' ? 'Recent draft' : '最近草稿')}
+                  </p>
+                  <div className="mt-2 text-sm font-medium text-white">{language === 'en' && containsCjk(preset.name) ? preset.code : preset.name}</div>
+                  <div className="mt-1 text-xs text-white/35">{preset.startDate || '--'} {'->'} {preset.endDate || '--'}</div>
+                </div>
+                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/55">{preset.code}</span>
+              </div>
+              <div className="product-action-row mt-4">
+                <Button size="sm" variant="secondary" onClick={() => onApplyPreset(preset)}>{language === 'en' ? 'Apply' : '应用'}</Button>
+                {preset.kind === 'saved' ? (
+                  <Button size="sm" variant="ghost" onClick={() => onDeletePreset(preset.id)}>{language === 'en' ? 'Delete' : '删除'}</Button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HistoryQuickList({
+  historyItems,
+  historyTotal,
+  historyPage,
+  selectedRunId,
+  isLoadingHistory,
+  historyError,
+  onRefreshHistory,
+  onOpenHistoryRun,
+}: {
+  historyItems: RuleBacktestHistoryItem[];
+  historyTotal: number;
+  historyPage: number;
+  selectedRunId: number | null;
+  isLoadingHistory: boolean;
+  historyError: ParsedApiError | null;
+  onRefreshHistory: () => void;
+  onOpenHistoryRun: (run: RuleBacktestHistoryItem) => void;
+}) {
+  const { language } = useI18n();
+  const isEmptyHistory = historyItems.length === 0 && !isLoadingHistory && !historyError;
+  const visibleHistoryItems = historyItems.slice(0, 3);
+
+  return (
+    <div className="bg-white/[0.02] border border-white/5 rounded-[24px] p-6" data-testid="backtest-setup-history">
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h3 className="text-xs font-bold text-white/40 uppercase tracking-[0.22em]">{language === 'en' ? 'Recent history' : '最近历史回测'}</h3>
+          <p className="mt-2 text-sm text-white/50 leading-relaxed">
+            {language === 'en' ? 'Reopen the latest result pages directly from here.' : '最近完成的回测可以从这里直接重开独立结果页。'}
+          </p>
+        </div>
+        <Button size="sm" variant="ghost" onClick={onRefreshHistory} disabled={isLoadingHistory}>
+          {isLoadingHistory ? (language === 'en' ? 'Refreshing…' : '刷新中…') : (language === 'en' ? 'Refresh' : '刷新')}
+        </Button>
+      </div>
+      {historyError ? <ApiErrorAlert error={historyError} className="mb-4" /> : null}
+      {visibleHistoryItems.length === 0 ? (
+        <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] p-4 text-sm text-white/45">
+          {isEmptyHistory
+            ? (language === 'en' ? 'No saved rule-backtest runs yet. Your first completed run will appear here.' : '当前还没有已保存的规则回测记录。完成第一次回测后，最近历史会显示在这里。')
+            : (language === 'en' ? 'History is loading or temporarily unavailable.' : '历史记录正在加载，或暂时不可用。')}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {visibleHistoryItems.map((item) => (
+            <div key={item.id} className={`rounded-2xl border bg-white/[0.02] p-4 ${selectedRunId === item.id ? 'border-indigo-400/40' : 'border-white/8'}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-white">{item.code || '--'} / {language === 'en' ? 'Rule backtest' : '规则回测'}</div>
+                  <div className="mt-1 text-xs text-white/35">{item.runAt?.slice(0, 10) || '--'} {'->'} {item.completedAt?.slice(0, 10) || item.runAt?.slice(0, 10) || '--'}</div>
+                  <div className="mt-2 text-xs text-white/45">{language === 'en' ? 'Status' : '状态'}: {item.status || '--'}</div>
+                </div>
+                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/55">#{item.id}</span>
+              </div>
+              <div className="product-action-row mt-4">
+                <Button size="sm" variant="secondary" onClick={() => onOpenHistoryRun(item)}>
+                  {language === 'en' ? 'Open' : '查看'}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="mt-4 text-xs text-white/35">
+        {language === 'en' ? `${historyTotal} deterministic runs in history. Page ${historyPage}.` : `历史中共 ${historyTotal} 条确定性回测记录。当前页 ${historyPage}。`}
+      </p>
+    </div>
+  );
+}
+
+function SetupSidebar({
+  code,
+  startDate,
+  endDate,
+  presets,
+  onApplyPreset,
+  onDeletePreset,
+  historyItems,
+  historyTotal,
+  historyPage,
+  selectedRunId,
+  isLoadingHistory,
+  historyError,
+  onRefreshHistory,
+  onOpenHistoryRun,
+}: {
+  code: string;
+  startDate: string;
+  endDate: string;
+  presets: RuleBacktestPreset[];
+  onApplyPreset: (preset: RuleBacktestPreset) => void;
+  onDeletePreset: (presetId: string) => void;
+  historyItems: RuleBacktestHistoryItem[];
+  historyTotal: number;
+  historyPage: number;
+  selectedRunId: number | null;
+  isLoadingHistory: boolean;
+  historyError: ParsedApiError | null;
+  onRefreshHistory: () => void;
+  onOpenHistoryRun: (run: RuleBacktestHistoryItem) => void;
+}) {
+  const { language } = useI18n();
+  const subCardClass = 'rounded-[24px] border border-white/5 bg-white/[0.02] p-6';
+  const compactFieldLabelClass = 'mb-2 text-[10px] font-bold uppercase tracking-widest text-white/40';
+
+  return (
+    <aside className="w-full min-w-0 shrink-0 flex flex-col gap-6" data-testid="backtest-cockpit-console">
+      <div className="bg-white/[0.02] border border-white/5 rounded-[24px] p-6" data-testid="backtest-entry-shell">
+        <SectionEyebrow>{language === 'en' ? 'Deterministic lane' : '确定性链路'}</SectionEyebrow>
+        <div className="mt-4 grid gap-3">
+          <div className={subCardClass}>
+            <p className={compactFieldLabelClass}>{language === 'en' ? 'Flow' : '流程'}</p>
+            <p className="mt-2 text-sm text-white">{language === 'en' ? 'Setup -> Compile -> Execute' : '配置 -> 编译 -> 执行'}</p>
+          </div>
+          <div className={subCardClass}>
+            <p className={compactFieldLabelClass}>{language === 'en' ? 'Current symbol' : '当前标的'}</p>
+            <p className="mt-2 text-sm text-white">{code || '--'}</p>
+          </div>
+          <div className={subCardClass}>
+            <p className={compactFieldLabelClass}>{language === 'en' ? 'Window' : '区间'}</p>
+            <p className="mt-2 text-sm text-white">{startDate || '--'} {'->'} {endDate || '--'}</p>
+          </div>
+        </div>
+      </div>
+      <PresetQuickList
+        presets={presets}
+        onApplyPreset={onApplyPreset}
+        onDeletePreset={onDeletePreset}
+      />
+      <HistoryQuickList
+        historyItems={historyItems}
+        historyTotal={historyTotal}
+        historyPage={historyPage}
+        selectedRunId={selectedRunId}
+        isLoadingHistory={isLoadingHistory}
+        historyError={historyError}
+        onRefreshHistory={onRefreshHistory}
+        onOpenHistoryRun={onOpenHistoryRun}
+      />
+    </aside>
+  );
+}
+
 const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   code,
   onCodeChange,
@@ -1235,127 +1434,25 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   );
 
 
-  const isEmptyHistory = historyItems.length === 0 && !isLoadingHistory && !historyError;
-  const visiblePresets = presets.slice(0, 3);
-  const visibleHistoryItems = historyItems.slice(0, 3);
-
-  const renderPresetQuickList = () => (
-    <div className="bg-white/[0.02] border border-white/5 rounded-[24px] p-6" data-testid="backtest-setup-presets">
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <div>
-          <h3 className="text-xs font-bold text-white/40 uppercase tracking-[0.22em]">{language === 'en' ? 'Preset shortcuts' : '快速预设'}</h3>
-          <p className="mt-2 text-sm text-white/50 leading-relaxed">
-            {language === 'en' ? 'Apply a saved setup and continue editing in the launch panel.' : '直接复用最近预设，再在右侧发射台继续微调参数。'}
-          </p>
-        </div>
-        <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/45">{presets.length}</span>
-      </div>
-      {visiblePresets.length === 0 ? (
-        <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] p-4 text-sm text-white/45">
-          {language === 'en' ? 'No saved presets yet. Recent drafts will appear here after your first run.' : '当前还没有保存的预设。完成一次回测后，最近草稿会显示在这里。'}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {visiblePresets.map((preset) => (
-            <div key={preset.id} className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">
-                    {preset.kind === 'saved' ? (language === 'en' ? 'Saved preset' : '已保存预设') : (language === 'en' ? 'Recent draft' : '最近草稿')}
-                  </p>
-                  <div className="mt-2 text-sm font-medium text-white">{language === 'en' && containsCjk(preset.name) ? preset.code : preset.name}</div>
-                  <div className="mt-1 text-xs text-white/35">{preset.startDate || '--'} {'->'} {preset.endDate || '--'}</div>
-                </div>
-                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/55">{preset.code}</span>
-              </div>
-              <div className="product-action-row mt-4">
-                <Button size="sm" variant="secondary" onClick={() => handleApplyPreset(preset)}>{language === 'en' ? 'Apply' : '应用'}</Button>
-                {preset.kind === 'saved' ? (
-                  <Button size="sm" variant="ghost" onClick={() => handleDeletePreset(preset.id)}>{language === 'en' ? 'Delete' : '删除'}</Button>
-                ) : null}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-
-  const renderHistoryQuickList = () => (
-    <div className="bg-white/[0.02] border border-white/5 rounded-[24px] p-6" data-testid="backtest-setup-history">
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <div>
-          <h3 className="text-xs font-bold text-white/40 uppercase tracking-[0.22em]">{language === 'en' ? 'Recent history' : '最近历史回测'}</h3>
-          <p className="mt-2 text-sm text-white/50 leading-relaxed">
-            {language === 'en' ? 'Reopen the latest result pages directly from here.' : '最近完成的回测可以从这里直接重开独立结果页。'}
-          </p>
-        </div>
-        <Button size="sm" variant="ghost" onClick={onRefreshHistory} disabled={isLoadingHistory}>
-          {isLoadingHistory ? (language === 'en' ? 'Refreshing…' : '刷新中…') : (language === 'en' ? 'Refresh' : '刷新')}
-        </Button>
-      </div>
-      {historyError ? <ApiErrorAlert error={historyError} className="mb-4" /> : null}
-      {visibleHistoryItems.length === 0 ? (
-        <div className="rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] p-4 text-sm text-white/45">
-          {isEmptyHistory
-            ? (language === 'en' ? 'No saved rule-backtest runs yet. Your first completed run will appear here.' : '当前还没有已保存的规则回测记录。完成第一次回测后，最近历史会显示在这里。')
-            : (language === 'en' ? 'History is loading or temporarily unavailable.' : '历史记录正在加载，或暂时不可用。')}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {visibleHistoryItems.map((item) => (
-            <div key={item.id} className={`rounded-2xl border bg-white/[0.02] p-4 ${selectedRunId === item.id ? 'border-indigo-400/40' : 'border-white/8'}`}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-white">{item.code || '--'} / {language === 'en' ? 'Rule backtest' : '规则回测'}</div>
-                  <div className="mt-1 text-xs text-white/35">{item.runAt?.slice(0, 10) || '--'} {'->'} {item.completedAt?.slice(0, 10) || item.runAt?.slice(0, 10) || '--'}</div>
-                  <div className="mt-2 text-xs text-white/45">{language === 'en' ? 'Status' : '状态'}: {item.status || '--'}</div>
-                </div>
-                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/55">#{item.id}</span>
-              </div>
-              <div className="product-action-row mt-4">
-                <Button size="sm" variant="secondary" onClick={() => onOpenHistoryRun(item)}>
-                  {language === 'en' ? 'Open' : '查看'}
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      <p className="mt-4 text-xs text-white/35">
-        {language === 'en' ? `${historyTotal} deterministic runs in history. Page ${historyPage}.` : `历史中共 ${historyTotal} 条确定性回测记录。当前页 ${historyPage}。`}
-      </p>
-    </div>
-  );
-
-  const renderSetupSidebar = () => (
-    <aside className="w-full min-w-0 shrink-0 flex flex-col gap-6" data-testid="backtest-cockpit-console">
-      <div className="bg-white/[0.02] border border-white/5 rounded-[24px] p-6" data-testid="backtest-entry-shell">
-        <SectionEyebrow>{language === 'en' ? 'Deterministic lane' : '确定性链路'}</SectionEyebrow>
-        <div className="mt-4 grid gap-3">
-          <div className={subCardClass}>
-            <p className={compactFieldLabelClass}>{language === 'en' ? 'Flow' : '流程'}</p>
-            <p className="mt-2 text-sm text-white">{language === 'en' ? 'Setup -> Compile -> Execute' : '配置 -> 编译 -> 执行'}</p>
-          </div>
-          <div className={subCardClass}>
-            <p className={compactFieldLabelClass}>{language === 'en' ? 'Current symbol' : '当前标的'}</p>
-            <p className="mt-2 text-sm text-white">{code || '--'}</p>
-          </div>
-          <div className={subCardClass}>
-            <p className={compactFieldLabelClass}>{language === 'en' ? 'Window' : '区间'}</p>
-            <p className="mt-2 text-sm text-white">{startDate || '--'} {'->'} {endDate || '--'}</p>
-          </div>
-        </div>
-      </div>
-      {renderPresetQuickList()}
-      {renderHistoryQuickList()}
-    </aside>
-  );
-
   return (
     <div className="w-full min-w-0 grid gap-8 xl:grid-cols-5 xl:items-start" data-testid="backtest-cockpit" data-module="rule" data-panel-mode={panelMode}>
       <div className="xl:col-span-1">
-        {renderSetupSidebar()}
+        <SetupSidebar
+          code={code}
+          startDate={startDate}
+          endDate={endDate}
+          presets={presets}
+          onApplyPreset={handleApplyPreset}
+          onDeletePreset={handleDeletePreset}
+          historyItems={historyItems}
+          historyTotal={historyTotal}
+          historyPage={historyPage}
+          selectedRunId={selectedRunId}
+          isLoadingHistory={isLoadingHistory}
+          historyError={historyError}
+          onRefreshHistory={onRefreshHistory}
+          onOpenHistoryRun={onOpenHistoryRun}
+        />
       </div>
       <main className="relative flex min-w-0 flex-col gap-6 rounded-[32px] border border-white/5 bg-white/[0.02] shadow-2xl backtest-setup-main xl:col-span-4" data-testid="backtest-cockpit-monitor">
         <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />

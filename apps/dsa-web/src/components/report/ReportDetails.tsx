@@ -5,6 +5,35 @@ import { Card } from '../common/Card';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
 import { isDeveloperDiagnosticAllowed, type DiagnosticAudience } from '../../utils/userFacingDataIssues';
 
+type JsonPanel = 'raw' | 'snapshot';
+
+interface JsonPreviewPanelProps {
+  data: unknown;
+  panel: JsonPanel;
+  copied: boolean;
+  onCopy: (text: string, panel: JsonPanel) => void;
+  copyLabel: string;
+  copiedLabel: string;
+}
+
+const JsonPreviewPanel: React.FC<JsonPreviewPanelProps> = ({ data, panel, copied, onCopy, copyLabel, copiedLabel }) => {
+  const jsonStr = JSON.stringify(data, null, 2);
+  return (
+    <div className="relative overflow-hidden">
+      <button
+        type="button"
+        className="home-accent-link absolute top-2 right-2 z-10 text-xs text-muted-text"
+        onClick={() => onCopy(jsonStr, panel)}
+      >
+        {copied ? copiedLabel : copyLabel}
+      </button>
+      <pre className="max-h-80 w-0 min-w-full overflow-x-auto overflow-y-auto no-scrollbar rounded-[var(--cohere-radius-small)] border border-[var(--theme-panel-subtle-border)] bg-[var(--theme-panel-subtle-bg)] p-3 text-left font-mono text-xs text-secondary-text">
+        {jsonStr}
+      </pre>
+    </div>
+  );
+};
+
 interface ReportDetailsProps {
   details?: ReportDetailsType;
   recordId?: number;  // 分析历史记录主键 ID
@@ -21,7 +50,6 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
   language = 'zh',
   audience = 'user',
 }) => {
-  type JsonPanel = 'raw' | 'snapshot';
   type CopiedPanelState = Record<JsonPanel, boolean>;
 
   const reportLanguage = normalizeReportLanguage(language);
@@ -79,24 +107,6 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
     }
   };
 
-  const renderJson = (data: unknown, panel: JsonPanel) => {
-    const jsonStr = JSON.stringify(data, null, 2);
-    return (
-      <div className="relative overflow-hidden">
-        <button
-          type="button"
-          className="home-accent-link absolute top-2 right-2 z-10 text-xs text-muted-text"
-          onClick={() => copyToClipboard(jsonStr, panel)}
-        >
-          {copiedPanels[panel] ? text.copied : text.copy}
-        </button>
-        <pre className="max-h-80 w-0 min-w-full overflow-x-auto overflow-y-auto no-scrollbar rounded-[var(--cohere-radius-small)] border border-[var(--theme-panel-subtle-border)] bg-[var(--theme-panel-subtle-bg)] p-3 text-left font-mono text-xs text-secondary-text">
-          {jsonStr}
-        </pre>
-      </div>
-    );
-  };
-
   return (
     <Card variant="bordered" padding="md" className="home-panel-card report-support-card text-left">
       <div className="mb-3 flex items-baseline gap-2">
@@ -143,7 +153,7 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
             </button>
             {showRaw && (
               <div className="mt-2 animate-fade-in min-w-0 overflow-hidden">
-                {renderJson(details.rawResult, 'raw')}
+                <JsonPreviewPanel data={details.rawResult} panel="raw" copied={copiedPanels.raw} onCopy={copyToClipboard} copyLabel={text.copy} copiedLabel={text.copied} />
               </div>
             )}
           </div>
@@ -169,7 +179,7 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
             </button>
             {showSnapshot && (
               <div className="mt-2 animate-fade-in min-w-0 overflow-hidden">
-                {renderJson(details.contextSnapshot, 'snapshot')}
+                <JsonPreviewPanel data={details.contextSnapshot} panel="snapshot" copied={copiedPanels.snapshot} onCopy={copyToClipboard} copyLabel={text.copy} copiedLabel={text.copied} />
               </div>
             )}
           </div>

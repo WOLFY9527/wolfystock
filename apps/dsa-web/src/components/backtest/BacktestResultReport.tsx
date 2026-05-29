@@ -127,7 +127,7 @@ function valueToneClass(tone?: MetricItem['tone']): string {
   return 'text-white';
 }
 
-function renderValue(value: string, tone?: MetricItem['tone']) {
+function RenderedValue({ value, tone }: { value: string; tone?: MetricItem['tone'] }) {
   return <span className={`${VALUE_CLASS} ${valueToneClass(tone)}`}>{value}</span>;
 }
 
@@ -650,7 +650,7 @@ function MetricCard({ item }: { item: MetricItem }) {
   return (
     <div className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3">
       <p className={LABEL_CLASS}>{item.label}</p>
-      <p className="mt-2 truncate">{renderValue(item.value, item.tone)}</p>
+      <p className="mt-2 truncate">{<RenderedValue value={item.value} tone={item.tone} />}</p>
     </div>
   );
 }
@@ -912,14 +912,14 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                 <span className="font-mono text-xs text-white/38">{dateRange}</span>
               </div>
               <div className="mt-3 flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-xs text-white/58">
-                <span>总收益 {renderValue(signedPct(normalized.metrics.totalReturnPct), toneFor(normalized.metrics.totalReturnPct))}</span>
-                <span>基准 {renderValue(signedPct(normalized.metrics.benchmarkReturnPct), toneFor(normalized.metrics.benchmarkReturnPct))}</span>
-                <span>超额 {renderValue(signedPct(normalized.metrics.excessReturnVsBenchmarkPct), toneFor(normalized.metrics.excessReturnVsBenchmarkPct))}</span>
+                <span>总收益 <RenderedValue value={signedPct(normalized.metrics.totalReturnPct)} tone={toneFor(normalized.metrics.totalReturnPct)} /></span>
+                <span>基准 <RenderedValue value={signedPct(normalized.metrics.benchmarkReturnPct)} tone={toneFor(normalized.metrics.benchmarkReturnPct)} /></span>
+                <span>超额 <RenderedValue value={signedPct(normalized.metrics.excessReturnVsBenchmarkPct)} tone={toneFor(normalized.metrics.excessReturnVsBenchmarkPct)} /></span>
               </div>
               <div className="mt-2 flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-xs text-white/50">
-                <span>最大回撤 {renderValue(signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), 'negative')}</span>
-                <span>夏普 {renderValue(signedNumber(normalized.metrics.sharpeRatio), toneFor(normalized.metrics.sharpeRatio))}</span>
-                <span>胜率 {renderValue(signedPct(normalized.metrics.winRatePct), toneFor(normalized.metrics.winRatePct))}</span>
+                <span>最大回撤 <RenderedValue value={signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct))} tone="negative" /></span>
+                <span>夏普 <RenderedValue value={signedNumber(normalized.metrics.sharpeRatio)} tone={toneFor(normalized.metrics.sharpeRatio)} /></span>
+                <span>胜率 <RenderedValue value={signedPct(normalized.metrics.winRatePct)} tone={toneFor(normalized.metrics.winRatePct)} /></span>
                 <span>交易次数 <span className="font-mono text-white">{normalized.metrics.tradeCount}</span></span>
               </div>
             </div>

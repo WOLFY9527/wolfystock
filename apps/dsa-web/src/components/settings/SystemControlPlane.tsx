@@ -85,6 +85,183 @@ const renderStatusRows = (cards: SystemHealthStatusCard[]) => (
   </div>
 );
 
+type SystemHealthSummaryProps = {
+  summaryCards: SystemHealthSummaryCard[];
+};
+
+const SystemHealthSummary: React.FC<SystemHealthSummaryProps> = ({ summaryCards }) => (
+  <section
+    data-testid="system-health-summary"
+    className="rounded-[16px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md"
+  >
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-300">当前状态</p>
+        <p className="mt-1 text-sm font-semibold text-foreground">系统健康、可用能力、待处理风险和检查快照先合并查看</p>
+      </div>
+      <span className={GHOST_TAG_CLASS}>当前配置快照</span>
+    </div>
+    <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+      {summaryCards.map((item) => (
+        <div key={item.key} className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3">
+          <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-white/35">{item.label}</p>
+          <p className={`mt-2 truncate text-sm font-semibold ${item.status ? STATUS_TEXT_CLASS[describeSettingsSystemHealthStatus(item.status).tone] : 'text-white'}`}>
+            {item.value}
+          </p>
+          <p className="mt-1 truncate text-[11px] text-white/45">{item.detail}</p>
+        </div>
+      ))}
+    </div>
+  </section>
+);
+
+type SystemPrioritySettingsProps = {
+  t: TranslateFn;
+  safetyCards: SystemHealthStatusCard[];
+  dataAccessCards: SystemHealthStatusCard[];
+  adminEntryCards: SystemHealthStatusCard[];
+  onOpenAdminLogs: () => void;
+};
+
+const SystemPrioritySettings: React.FC<SystemPrioritySettingsProps> = ({
+  t,
+  safetyCards,
+  dataAccessCards,
+  adminEntryCards,
+  onOpenAdminLogs,
+}) => (
+  <section
+    data-testid="system-priority-settings"
+    className="rounded-[16px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md"
+  >
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">风险与操作意图</p>
+        <p className="mt-1 text-sm font-semibold text-foreground">按 WolfyStock 运维意图分组，不把配置键或探测按钮铺在首屏</p>
+      </div>
+      <span className={GHOST_TAG_CLASS}>IA 分组</span>
+    </div>
+    <div data-testid="system-subsystem-cards" className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-3">
+      <section data-testid="system-credential-boundary" className={INTENT_PANEL_CLASS}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-white">安全与凭证</h3>
+            <p className="mt-1 text-xs leading-5 text-white/45">只展示凭证就绪状态；不显示密钥、token、Webhook 或未遮蔽原值。</p>
+          </div>
+          <span className={GHOST_TAG_CLASS}>敏感</span>
+        </div>
+        {renderStatusRows(safetyCards)}
+      </section>
+
+      <section data-testid="system-data-probe-boundary" className={INTENT_PANEL_CLASS}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-white">数据接入与探测</h3>
+            <p className="mt-1 text-xs leading-5 text-white/45">数据路径和 Provider 探测只给出状态；远端校验仍需进入数据源详情显式触发。</p>
+          </div>
+          <span className={GHOST_TAG_CLASS}>探测二级</span>
+        </div>
+        {renderStatusRows(dataAccessCards)}
+      </section>
+
+      <section data-testid="system-admin-entry-boundary" className={INTENT_PANEL_CLASS}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-white">管理入口</h3>
+            <p className="mt-1 text-xs leading-5 text-white/45">审计日志和运行边界入口集中呈现，危险动作留在下方隔离区。</p>
+          </div>
+          <span className={GHOST_TAG_CLASS}>入口</span>
+        </div>
+        {renderStatusRows(adminEntryCards)}
+        <div className="mt-3 flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="settings-secondary"
+            className={CONTROL_GHOST_BUTTON_CLASS}
+            onClick={onOpenAdminLogs}
+          >
+            {t('settings.viewAdminLogs')}
+          </Button>
+        </div>
+      </section>
+    </div>
+  </section>
+);
+
+type RiskBoundaryStripProps = {
+  cards: SystemHealthStatusCard[];
+};
+
+const RiskBoundaryStrip: React.FC<RiskBoundaryStripProps> = ({ cards }) => (
+  <section
+    data-testid="system-risk-boundary-strip"
+    className="rounded-[16px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md"
+  >
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">风险边界</p>
+        <h3 className="mt-1 text-sm font-semibold text-white">运行能力与可选模块</h3>
+      </div>
+      <span className={GHOST_TAG_CLASS}>只读汇总</span>
+    </div>
+    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+      {cards.map((card) => {
+        const status = describeSettingsSystemHealthStatus(card.status);
+        return (
+          <article key={card.key} className="rounded-xl border border-white/[0.04] bg-black/20 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="truncate text-sm font-semibold text-foreground">{card.label}</p>
+              <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${STATUS_CLASS[status.tone]}`}>
+                {status.label}
+              </span>
+            </div>
+            <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/50">{card.reason}</p>
+          </article>
+        );
+      })}
+    </div>
+  </section>
+);
+
+type DeveloperCompatibilityDisclosureProps = {
+  compatibilityCards: SystemHealthStatusCard[];
+  duckdbConfigEnabledState: DuckDBConfigState;
+};
+
+const DeveloperCompatibilityDisclosure: React.FC<DeveloperCompatibilityDisclosureProps> = ({
+  compatibilityCards,
+  duckdbConfigEnabledState,
+}) => (
+  <details
+    data-testid="system-duckdb-disclosure"
+    className="group rounded-[16px] border border-white/5 bg-white/[0.02] backdrop-blur-md transition-colors open:border-cyan-200/15 open:bg-white/[0.03]"
+  >
+    <summary className={DISCLOSURE_SUMMARY_CLASS}>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-white">开发者 / 兼容层</span>
+        <span className="mt-1 block text-xs leading-5 text-white/48">DuckDB、原始字段、兼容键和深层诊断默认收起，不作为首屏焦点。</span>
+      </span>
+      <span className={GHOST_TAG_CLASS}>深层配置</span>
+    </summary>
+    <div className="grid gap-4 border-t border-white/[0.04] p-4">
+      {compatibilityCards.length ? (
+        <section className="rounded-2xl border border-white/5 bg-black/20 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">兼容层状态</p>
+              <p className="mt-1 text-sm font-semibold text-white">可选依赖和深层引擎只做状态提示</p>
+            </div>
+            <span className={GHOST_TAG_CLASS}>可选</span>
+          </div>
+          {renderStatusRows(compatibilityCards)}
+        </section>
+      ) : null}
+      <DuckDBQuantPanel configEnabledState={duckdbConfigEnabledState} />
+    </div>
+  </details>
+);
+
 const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
   t,
   overviewStats,
@@ -153,87 +330,15 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
             status={{ label: String(healthCard?.value || '等待配置快照'), tone: introTone }}
           />
 
-          <section
-            data-testid="system-health-summary"
-            className="rounded-[16px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-300">当前状态</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">系统健康、可用能力、待处理风险和检查快照先合并查看</p>
-              </div>
-              <span className={GHOST_TAG_CLASS}>当前配置快照</span>
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
-              {summaryCards.map((item) => (
-                <div key={item.key} className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3">
-                  <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-white/35">{item.label}</p>
-                  <p className={`mt-2 truncate text-sm font-semibold ${item.status ? STATUS_TEXT_CLASS[describeSettingsSystemHealthStatus(item.status).tone] : 'text-white'}`}>
-                    {item.value}
-                  </p>
-                  <p className="mt-1 truncate text-[11px] text-white/45">{item.detail}</p>
-                </div>
-              ))}
-            </div>
-          </section>
+          <SystemHealthSummary summaryCards={summaryCards} />
 
-          <section
-            data-testid="system-priority-settings"
-            className="rounded-[16px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">风险与操作意图</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">按 WolfyStock 运维意图分组，不把配置键或探测按钮铺在首屏</p>
-              </div>
-              <span className={GHOST_TAG_CLASS}>IA 分组</span>
-            </div>
-            <div data-testid="system-subsystem-cards" className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-3">
-              <section data-testid="system-credential-boundary" className={INTENT_PANEL_CLASS}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-white">安全与凭证</h3>
-                    <p className="mt-1 text-xs leading-5 text-white/45">只展示凭证就绪状态；不显示密钥、token、Webhook 或未遮蔽原值。</p>
-                  </div>
-                  <span className={GHOST_TAG_CLASS}>敏感</span>
-                </div>
-                {renderStatusRows(safetyCards)}
-              </section>
-
-              <section data-testid="system-data-probe-boundary" className={INTENT_PANEL_CLASS}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-white">数据接入与探测</h3>
-                    <p className="mt-1 text-xs leading-5 text-white/45">数据路径和 Provider 探测只给出状态；远端校验仍需进入数据源详情显式触发。</p>
-                  </div>
-                  <span className={GHOST_TAG_CLASS}>探测二级</span>
-                </div>
-                {renderStatusRows(dataAccessCards)}
-              </section>
-
-              <section data-testid="system-admin-entry-boundary" className={INTENT_PANEL_CLASS}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-white">管理入口</h3>
-                    <p className="mt-1 text-xs leading-5 text-white/45">审计日志和运行边界入口集中呈现，危险动作留在下方隔离区。</p>
-                  </div>
-                  <span className={GHOST_TAG_CLASS}>入口</span>
-                </div>
-                {renderStatusRows(adminEntryCards)}
-                <div className="mt-3 flex justify-end">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="settings-secondary"
-                    className={CONTROL_GHOST_BUTTON_CLASS}
-                    onClick={onOpenAdminLogs}
-                  >
-                    {t('settings.viewAdminLogs')}
-                  </Button>
-                </div>
-              </section>
-            </div>
-          </section>
+          <SystemPrioritySettings
+            t={t}
+            safetyCards={safetyCards}
+            dataAccessCards={dataAccessCards}
+            adminEntryCards={adminEntryCards}
+            onOpenAdminLogs={onOpenAdminLogs}
+          />
         </div>
 
         <div className="min-w-0 space-y-5">
@@ -271,34 +376,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
         </div>
       </div>
 
-      <section
-        data-testid="system-risk-boundary-strip"
-        className="rounded-[16px] border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md"
-      >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">风险边界</p>
-            <h3 className="mt-1 text-sm font-semibold text-white">运行能力与可选模块</h3>
-          </div>
-          <span className={GHOST_TAG_CLASS}>只读汇总</span>
-        </div>
-        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-          {riskBoundaryCards.map((card) => {
-            const status = describeSettingsSystemHealthStatus(card.status);
-            return (
-              <article key={card.key} className="rounded-xl border border-white/[0.04] bg-black/20 p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="truncate text-sm font-semibold text-foreground">{card.label}</p>
-                  <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${STATUS_CLASS[status.tone]}`}>
-                    {status.label}
-                  </span>
-                </div>
-                <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/50">{card.reason}</p>
-              </article>
-            );
-          })}
-        </div>
-      </section>
+      <RiskBoundaryStrip cards={riskBoundaryCards} />
 
       <div data-testid="system-secondary-zones" className="grid gap-4 xl:grid-cols-2">
         <details
@@ -381,33 +459,10 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
           </div>
         </details>
 
-        <details
-          data-testid="system-duckdb-disclosure"
-          className="group rounded-[16px] border border-white/5 bg-white/[0.02] backdrop-blur-md transition-colors open:border-cyan-200/15 open:bg-white/[0.03]"
-        >
-          <summary className={DISCLOSURE_SUMMARY_CLASS}>
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold text-white">开发者 / 兼容层</span>
-              <span className="mt-1 block text-xs leading-5 text-white/48">DuckDB、原始字段、兼容键和深层诊断默认收起，不作为首屏焦点。</span>
-            </span>
-            <span className={GHOST_TAG_CLASS}>深层配置</span>
-          </summary>
-          <div className="grid gap-4 border-t border-white/[0.04] p-4">
-            {compatibilityCards.length ? (
-              <section className="rounded-2xl border border-white/5 bg-black/20 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">兼容层状态</p>
-                    <p className="mt-1 text-sm font-semibold text-white">可选依赖和深层引擎只做状态提示</p>
-                  </div>
-                  <span className={GHOST_TAG_CLASS}>可选</span>
-                </div>
-                {renderStatusRows(compatibilityCards)}
-              </section>
-            ) : null}
-            <DuckDBQuantPanel configEnabledState={duckdbConfigEnabledState} />
-          </div>
-        </details>
+        <DeveloperCompatibilityDisclosure
+          compatibilityCards={compatibilityCards}
+          duckdbConfigEnabledState={duckdbConfigEnabledState}
+        />
 
         <GuidedDisclosure
           title="原始配置与兼容层"
