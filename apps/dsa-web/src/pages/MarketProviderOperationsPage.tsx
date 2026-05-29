@@ -584,8 +584,10 @@ function capabilityHaystack(row: ProviderOperationsMatrixRow): string[] {
     ...(row.missingMetrics || []),
     ...(row.requiredSourceTiers || []),
   ]
-    .map((value) => String(value || '').trim().toLowerCase())
-    .filter(Boolean);
+    .flatMap((value) => {
+      const normalized = String(value || '').trim().toLowerCase();
+      return normalized ? [normalized] : [];
+    });
 }
 
 function sourceGapCurrentState(row: ProviderOperationsMatrixRow): string {

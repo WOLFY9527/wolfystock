@@ -274,8 +274,10 @@ const collectDedupedItems = ({
   const accepted: string[] = [];
   const localNormalized: string[] = [];
   const blockedNormalized = (blockedTexts || [])
-    .map((item) => normalizeComparableText(String(item || '').trim()))
-    .filter(Boolean);
+    .flatMap((item) => {
+      const normalized = normalizeComparableText(String(item || '').trim());
+      return normalized ? [normalized] : [];
+    });
   const globalSeen = seenKeys || new Set<string>();
 
   items.forEach((item) => {

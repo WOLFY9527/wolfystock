@@ -1315,8 +1315,10 @@ function parseCustomSymbols(value: string): string[] {
     new Set(
       value
         .split(/[\s,，;；]+/)
-        .map((symbol) => symbol.trim().toUpperCase())
-        .filter(Boolean),
+        .flatMap((symbol) => {
+          const trimmed = symbol.trim().toUpperCase();
+          return trimmed ? [trimmed] : [];
+        }),
     ),
   );
 }
@@ -1355,8 +1357,10 @@ function dedupeTickerSymbols(symbols: string[]): string[] {
   return Array.from(
     new Set(
       symbols
-        .map((symbol) => symbol.trim())
-        .filter(Boolean),
+        .flatMap((symbol) => {
+          const trimmed = symbol.trim();
+          return trimmed ? [trimmed] : [];
+        }),
     ),
   );
 }
