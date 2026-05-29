@@ -42,7 +42,8 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
 
   useEffect(() => {
     return () => {
-      Object.values(copyResetTimerRef.current).forEach((timerId) => {
+      const timers = copyResetTimerRef.current;
+      Object.values(timers).forEach((timerId) => {
         if (timerId !== undefined) {
           window.clearTimeout(timerId);
         }

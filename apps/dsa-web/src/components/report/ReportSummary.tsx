@@ -141,9 +141,7 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
     contractMeta.standardReportSource,
     fallbackMode,
     isLegacyFallback,
-    meta.id,
-    meta.queryId,
-    meta.stockCode,
+    meta,
   ]);
 
   return (

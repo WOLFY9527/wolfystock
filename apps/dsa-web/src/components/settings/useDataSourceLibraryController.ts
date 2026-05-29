@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getApiErrorMessage, getParsedApiError } from '../../api/error';
 import { systemConfigApi } from '../../api/systemConfig';
 import {
@@ -63,16 +63,13 @@ export function useDataSourceLibraryController({
 }: UseDataSourceLibraryControllerArgs) {
   const [dataSourceValidationStatus, setDataSourceValidationStatus] = useState<Record<string, DataSourceValidationState>>({});
   const [builtinDataSourceValidationResults, setBuiltinDataSourceValidationResults] = useState<Record<string, BuiltinDataSourceValidationResult>>({});
-  const customDataSourceLibrary = useMemo(
-    () => parseCustomDataSourceLibrary(allItemMap.get(CUSTOM_DATA_SOURCE_LIBRARY_KEY) || ''),
-    [allItemMap],
-  );
+  const customDataSourceLibrary = parseCustomDataSourceLibrary(allItemMap.get(CUSTOM_DATA_SOURCE_LIBRARY_KEY) || '');
   const [customDataSourceLibraryDraft, setCustomDataSourceLibraryDraft] = useState<CustomDataSourceRecord[]>(customDataSourceLibrary);
   useEffect(() => {
     setCustomDataSourceLibraryDraft(customDataSourceLibrary);
   }, [customDataSourceLibrary]);
 
-  const dataSourceLibrary = useMemo<DataSourceLibraryEntry[]>(() => {
+  const dataSourceLibrary: DataSourceLibraryEntry[] = (() => {
     const hasCredential = (patterns: RegExp[]): boolean => {
       if (!patterns.length) {
         return false;
@@ -197,9 +194,9 @@ export function useDataSourceLibraryController({
     });
 
     return [...builtInEntries, ...customEntries];
-  }, [allItemMap, builtinDataSourceValidationResults, customDataSourceLibraryDraft, dataSourceValidationStatus, dataSummary, prettySourceLabel, t]);
+  })();
 
-  const dataSourceRouteOptions = useMemo(() => {
+  const dataSourceRouteOptions = (() => {
     const grouped: Record<DataRouteKey, string[]> = {
       market: [],
       fundamentals: [],
@@ -223,12 +220,9 @@ export function useDataSourceLibraryController({
     });
 
     return grouped;
-  }, [dataSourceLibrary]);
+  })();
 
-  const dataSourceLibraryMap = useMemo(
-    () => new Map<string, DataSourceLibraryEntry>(dataSourceLibrary.map((entry) => [entry.key, entry])),
-    [dataSourceLibrary],
-  );
+  const dataSourceLibraryMap = new Map<string, DataSourceLibraryEntry>(dataSourceLibrary.map((entry) => [entry.key, entry]));
 
   const [dataSourceLibraryDrawerOpen, setDataSourceLibraryDrawerOpen] = useState(false);
   const [dataSourceEditorId, setDataSourceEditorId] = useState<string | null>(null);
@@ -240,34 +234,28 @@ export function useDataSourceLibraryController({
   });
   const [dataSourceDeleteTargetId, setDataSourceDeleteTargetId] = useState<string | null>(null);
 
-  const dataSourceEditorEntry = useMemo(
-    () => (dataSourceEditorId && dataSourceEditorId !== 'new'
-      ? dataSourceLibraryMap.get(dataSourceEditorId) || null
-      : null),
-    [dataSourceEditorId, dataSourceLibraryMap],
-  );
-  const dataSourceDeleteTarget = useMemo(
-    () => (dataSourceDeleteTargetId ? dataSourceLibraryMap.get(dataSourceDeleteTargetId) || null : null),
-    [dataSourceDeleteTargetId, dataSourceLibraryMap],
-  );
+  const dataSourceEditorEntry = dataSourceEditorId && dataSourceEditorId !== 'new'
+    ? dataSourceLibraryMap.get(dataSourceEditorId) || null
+    : null;
+  const dataSourceDeleteTarget = dataSourceDeleteTargetId ? dataSourceLibraryMap.get(dataSourceDeleteTargetId) || null : null;
 
-  const openCreateDataSourceDrawer = useCallback(() => {
+  const openCreateDataSourceDrawer = () => {
     setDataSourceEditorId('new');
     setDataSourceEditorDraft(createEmptyCustomDataSource());
     setDataSourceLibraryDrawerOpen(true);
-  }, []);
+  };
 
-  const openEditDataSourceDrawer = useCallback((sourceId: string) => {
+  const openEditDataSourceDrawer = (sourceId: string) => {
     setDataSourceEditorId(sourceId);
     setDataSourceLibraryDrawerOpen(true);
-  }, []);
+  };
 
-  const closeDataSourceDrawer = useCallback(() => {
+  const closeDataSourceDrawer = () => {
     setDataSourceLibraryDrawerOpen(false);
     setDataSourceEditorId(null);
-  }, []);
+  };
 
-  const saveDataSourceEditor = useCallback(async () => {
+  const saveDataSourceEditor = async () => {
     if (dataSourceEditorEntry?.management) {
       const { management } = dataSourceEditorEntry;
       const requiresCredential = management.credentialSchema !== 'none';
@@ -378,9 +366,9 @@ export function useDataSourceLibraryController({
     await saveExternalItems([
       { key: CUSTOM_DATA_SOURCE_LIBRARY_KEY, value: serializeCustomDataSourceLibrary(nextLibrary) },
     ], t('settings.dataSourceSaved'));
-  }, [customDataSourceLibraryDraft, dataSourceEditorDraft, dataSourceEditorEntry, dataSourceEditorId, dataSourceLibrary, managedBuiltinDataSourceDraft, saveExternalItems, t]);
+  };
 
-  const deleteDataSourceEntry = useCallback(async () => {
+  const deleteDataSourceEntry = async () => {
     if (!dataSourceDeleteTargetId) {
       return;
     }
@@ -427,21 +415,9 @@ export function useDataSourceLibraryController({
       { key: CUSTOM_DATA_SOURCE_LIBRARY_KEY, value: serializeCustomDataSourceLibrary(nextLibrary) },
       ...[...cleanupByConfigKey.entries()].map(([key, value]) => ({ key, value })),
     ], t('settings.dataSourceDeleted'));
-  }, [
-    allItemMap,
-    customDataSourceLibraryDraft,
-    dataPriorityKeys.fundamentals,
-    dataPriorityKeys.market,
-    dataPriorityKeys.news,
-    dataPriorityKeys.sentiment,
-    dataSourceDeleteTargetId,
-    dataSourceLibraryMap,
-    onDeleteSourceFromRoutes,
-    saveExternalItems,
-    t,
-  ]);
+  };
 
-  const validateDataSourceEntry = useCallback(async (sourceId: string) => {
+  const validateDataSourceEntry = async (sourceId: string) => {
     const source = dataSourceLibraryMap.get(sourceId);
     if (!source) {
       return;
@@ -598,9 +574,9 @@ export function useDataSourceLibraryController({
 
     const nextStatus: DataSourceValidationState = source.usable ? 'validated' : 'failed';
     setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: nextStatus }));
-  }, [allItemMap, customDataSourceLibraryDraft, dataSourceEditorEntry?.key, dataSourceLibraryMap, managedBuiltinDataSourceDraft.credential, managedBuiltinDataSourceDraft.secret, saveExternalItems, t]);
+  };
 
-  const managedBuiltinSourceState = useMemo(() => {
+  const managedBuiltinSourceState = (() => {
     if (!dataSourceEditorEntry?.management) {
       return null;
     }
@@ -621,7 +597,7 @@ export function useDataSourceLibraryController({
       secret: secretValue,
       extraValue,
     };
-  }, [allItemMap, dataSourceEditorEntry]);
+  })();
 
   const dataSourceEditorMode: DataSourceEditorMode = dataSourceEditorId === 'new'
     ? 'create'

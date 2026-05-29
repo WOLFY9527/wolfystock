@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import { getParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigValidationError } from '../api/systemConfig';
@@ -439,12 +439,9 @@ const SettingsPage: React.FC = () => {
 
   const rawActiveItems = itemsByCategory[activeCategory] || [];
   const rawActiveItemMap = new Map(rawActiveItems.map((item) => [item.key, String(item.value ?? '')]));
-  const allItems = useMemo(() => Object.values(itemsByCategory).flat(), [itemsByCategory]);
-  const allItemMap = useMemo(
-    () => new Map(allItems.map((item) => [item.key, String(item.value ?? '')])),
-    [allItems],
-  );
-  const categoryDomainMap = useMemo(() => {
+  const allItems = Object.values(itemsByCategory).flat();
+  const allItemMap = new Map(allItems.map((item) => [item.key, String(item.value ?? '')]));
+  const categoryDomainMap = (() => {
     const map = new Map<string, SettingsDomain>();
     categories.forEach((category) => {
       map.set(
@@ -453,28 +450,19 @@ const SettingsPage: React.FC = () => {
       );
     });
     return map;
-  }, [categories]);
-  const domainCategories = useMemo(
-    () => categories.filter((category) => (categoryDomainMap.get(category.category) || 'advanced') === activeDomain),
-    [activeDomain, categories, categoryDomainMap],
-  );
-  const domainCategorySet = useMemo(
-    () => new Set(domainCategories.map((category) => category.category)),
-    [domainCategories],
-  );
+  })();
+  const domainCategories = categories.filter((category) => (categoryDomainMap.get(category.category) || 'advanced') === activeDomain);
+  const domainCategorySet = new Set(domainCategories.map((category) => category.category));
   const hasConfiguredChannels = Boolean((rawActiveItemMap.get('LLM_CHANNELS') || '').trim());
   const hasLitellmConfig = Boolean((rawActiveItemMap.get('LITELLM_CONFIG') || '').trim());
-  const rawEditableActiveItems = useMemo(
-    () => (itemsByCategory[activeCategory] || []).filter(isRawEditableConfigItem),
-    [activeCategory, itemsByCategory],
-  );
-  const rawPanelState = useMemo(() => buildRawSettingsPanelState({
+  const rawEditableActiveItems = (itemsByCategory[activeCategory] || []).filter(isRawEditableConfigItem);
+  const rawPanelState = buildRawSettingsPanelState({
     activeCategory,
     rawEditableActiveItems,
     hasConfiguredChannels,
     hasLitellmConfig,
     t,
-  }), [activeCategory, hasConfiguredChannels, hasLitellmConfig, rawEditableActiveItems, t]);
+  });
   const { activeItems, rawFieldsSummaryText } = rawPanelState;
   const activeCategoryDescription = getCategoryDescription(language, activeCategory as SystemConfigCategory, '') || t('settings.currentCategoryDesc');
   const activeCategoryLabel = getCategoryTitle(
@@ -523,7 +511,7 @@ const SettingsPage: React.FC = () => {
     }
   }, [activeCategory, setActiveCategory, shouldFocusDataSources]);
 
-  const panelNavItems = useMemo(() => ([
+  const panelNavItems = ([
     {
       domain: 'overview' as const,
       title: t('settings.controlPlaneTitle'),
@@ -549,9 +537,9 @@ const SettingsPage: React.FC = () => {
       title: t('settings.domainAdvancedTitle'),
       desc: t('settings.domainAdvancedDesc'),
     },
-  ]), [language, t]);
+  ]);
 
-  const aiRoutingKeys = useMemo(() => {
+  const aiRoutingKeys = (() => {
     const keys = [...allItemMap.keys()];
     return {
       primaryGateway: findFirstKey(keys, [/^AI_PRIMARY_GATEWAY$/i], 'AI_PRIMARY_GATEWAY'),
@@ -559,9 +547,9 @@ const SettingsPage: React.FC = () => {
       backupGateway: findFirstKey(keys, [/^AI_BACKUP_GATEWAY$/i], 'AI_BACKUP_GATEWAY'),
       backupModel: findFirstKey(keys, [/^AI_BACKUP_MODEL$/i], 'AI_BACKUP_MODEL'),
     };
-  }, [allItemMap]);
+  })();
 
-  const aiGatewayModelMap = useMemo(() => {
+  const aiGatewayModelMap = (() => {
     const map = new Map<string, string[]>();
     for (const [key, value] of allItemMap.entries()) {
       const matched = key.match(/^LLM_([A-Z0-9]+)_MODELS$/i);
@@ -572,9 +560,9 @@ const SettingsPage: React.FC = () => {
       map.set(gateway, uniqueValues([...(map.get(gateway) || []), ...models]));
     }
     return map;
-  }, [allItemMap]);
+  })();
 
-  const aiCredentialProviders = useMemo(() => {
+  const aiCredentialProviders = (() => {
     const counts = new Map<string, number>();
     const addProviderCount = (gateway: string, count: number) => {
       const normalizedGateway = normalizeGatewayKey(gateway);
@@ -610,9 +598,9 @@ const SettingsPage: React.FC = () => {
       configuredChannels,
       configuredCount: [...counts.values()].reduce((total, count) => total + count, 0),
     };
-  }, [allItems]);
+  })();
 
-  const aiSummary = useMemo(() => {
+  const aiSummary = (() => {
     const primaryModelLegacy = allItemMap.get('LITELLM_MODEL') || '';
     const fallbackModelsLegacy = splitCsv(allItemMap.get('LITELLM_FALLBACK_MODELS'));
     const channelsLegacy = splitCsv(allItemMap.get('LLM_CHANNELS'));
@@ -652,9 +640,9 @@ const SettingsPage: React.FC = () => {
       routeMissingButApiConfigured,
       routeStatus,
     };
-  }, [aiCredentialProviders.configuredCount, aiCredentialProviders.configuredProviders, aiRoutingKeys.backupGateway, aiRoutingKeys.backupModel, aiRoutingKeys.primaryGateway, aiRoutingKeys.primaryModel, allItemMap]);
+  })();
 
-  const dataPriorityKeys = useMemo(() => {
+  const dataPriorityKeys = (() => {
     const keys = [...allItemMap.keys()];
     return {
       market: findFirstKey(keys, [/^REALTIME_SOURCE_PRIORITY$/i, /MARKET.*PRIORITY/i], 'REALTIME_SOURCE_PRIORITY'),
@@ -663,13 +651,13 @@ const SettingsPage: React.FC = () => {
       sentiment: findFirstKey(keys, [/SENTIMENT.*PRIORITY/i], 'SENTIMENT_SOURCE_PRIORITY'),
       notification: findFirstKey(keys, [/NOTIFICATION.*PRIORITY/i, /CHANNEL.*PRIORITY/i], 'NOTIFICATION_CHANNEL_PRIORITY'),
     };
-  }, [allItemMap]);
-  const runtimeSummaryVisibilityKey = useMemo(() => {
+  })();
+  const runtimeSummaryVisibilityKey = (() => {
     const keys = [...allItemMap.keys()];
     return findFirstKey(keys, [/^SHOW_RUNTIME_EXECUTION_SUMMARY$/i], 'SHOW_RUNTIME_EXECUTION_SUMMARY');
-  }, [allItemMap]);
+  })();
 
-  const dataSummary = useMemo(() => {
+  const dataSummary = (() => {
     const market = allItemMap.get(dataPriorityKeys.market) || '';
     const fundamentals = allItemMap.get(dataPriorityKeys.fundamentals) || '';
     const news = allItemMap.get(dataPriorityKeys.news) || '';
@@ -684,9 +672,9 @@ const SettingsPage: React.FC = () => {
       news: splitCsv(news || sharedNewsSentiment),
       sentiment: splitCsv(sentiment || sharedNewsSentiment),
     };
-  }, [allItemMap, dataPriorityKeys]);
+  })();
 
-  const notificationSummary = useMemo(() => {
+  const notificationSummary = (() => {
     const notificationItems = itemsByCategory.notification || [];
     const configuredChannels: string[] = [];
     const enabledChannels: string[] = [];
@@ -716,8 +704,8 @@ const SettingsPage: React.FC = () => {
       enabledChannels: [...new Set(enabledChannels)],
       destinations,
     };
-  }, [itemsByCategory.notification]);
-  const notificationRoute = useMemo(() => {
+  })();
+  const notificationRoute = (() => {
     const explicit = splitCsv(allItemMap.get(dataPriorityKeys.notification));
     if (explicit.length) {
       return explicit;
@@ -725,9 +713,9 @@ const SettingsPage: React.FC = () => {
     return notificationSummary.enabledChannels.length
       ? notificationSummary.enabledChannels
       : notificationSummary.configuredChannels;
-  }, [allItemMap, dataPriorityKeys.notification, notificationSummary.configuredChannels, notificationSummary.enabledChannels]);
+  })();
 
-  const availableProviders = useMemo(() => {
+  const availableProviders = (() => {
     const hasAny = (...keys: string[]): boolean => keys.some((key) => hasConfigValue(allItemMap.get(key) || ''));
     const hasByPattern = (patterns: RegExp[]): boolean => {
       for (const [key, value] of allItemMap.entries()) {
@@ -783,18 +771,15 @@ const SettingsPage: React.FC = () => {
       sentiment,
       notifications: notificationSummary.configuredChannels,
     };
-  }, [aiCredentialProviders.configuredChannels, aiSummary.backupChannel, aiSummary.backupModel, aiSummary.primaryChannel, aiSummary.primaryModel, allItemMap, notificationSummary.configuredChannels]);
+  })();
 
-  const aiSavedModels = useMemo(
-    () => uniqueValues([
+  const aiSavedModels = uniqueValues([
       aiSummary.primaryModel,
       aiSummary.backupModel,
       ...aiSummary.fallbackModels,
       ...splitCsv(allItemMap.get('LITELLM_MODEL')),
       ...splitCsv(allItemMap.get('LITELLM_FALLBACK_MODELS')),
-    ]),
-    [aiSummary.backupModel, aiSummary.fallbackModels, aiSummary.primaryModel, allItemMap],
-  );
+    ]);
 
   const [routingDraft, setRoutingDraft] = useState<RoutingDraftState>({
     ai: { primaryChannel: '', backupChannel: '', primaryModel: '', backupModel: '' },
@@ -917,11 +902,11 @@ const SettingsPage: React.FC = () => {
   const adminLocked = false;
   const adminSaveDisabled = !hasDirty || isSaving || isLoading;
 
-  const handleSave = useCallback(() => {
+  const handleSave = () => {
     void save();
-  }, [save]);
+  };
 
-  const setRouteTier = useCallback((
+  const setRouteTier = (
     section: 'market' | 'fundamentals' | 'news' | 'sentiment' | 'notification',
     tier: RoutingTier,
     value: string,
@@ -958,10 +943,10 @@ const SettingsPage: React.FC = () => {
       }
       return { ...prev, [section]: next };
     });
-  }, []);
+  };
 
-  const effectiveRoute = useCallback((values: Array<string | undefined | null>): string[] => uniqueValues(values), []);
-  const removeDataSourceFromRoutingDraft = useCallback((sourceId: string) => {
+  const effectiveRoute = (values: Array<string | undefined | null>): string[] => uniqueValues(values);
+  const removeDataSourceFromRoutingDraft = (sourceId: string) => {
     setRoutingDraft((prev) => ({
       ...prev,
       market: toRouteState(
@@ -981,7 +966,7 @@ const SettingsPage: React.FC = () => {
         backup: prev.sentiment.backup === sourceId ? '' : prev.sentiment.backup,
       },
     }));
-  }, [effectiveRoute]);
+  };
   const {
     dataSourceDeleteTarget,
     dataSourceEditorDraft,
@@ -1027,31 +1012,25 @@ const SettingsPage: React.FC = () => {
     }
   }, [dataSourceLibraryDrawerOpen]);
 
-  const modelsForGateway = useCallback((gateway: string): string[] => (
+  const modelsForGateway = (gateway: string): string[] => (
     getGatewayModelOptions(
       gateway,
       aiGatewayModelMap,
       availableProviders.aiModels,
       aiSavedModels,
     )
-  ), [aiGatewayModelMap, availableProviders.aiModels, aiSavedModels]);
+  );
 
-  const resolveProviderDefaultModel = useCallback((gateway: string): string => {
+  const resolveProviderDefaultModel = (gateway: string): string => {
     const options = modelsForGateway(gateway);
     return options[0] || '';
-  }, [modelsForGateway]);
+  };
 
-  const primaryGatewayModels = useMemo(
-    () => modelsForGateway(routingDraft.ai.primaryChannel),
-    [modelsForGateway, routingDraft.ai.primaryChannel],
-  );
+  const primaryGatewayModels = modelsForGateway(routingDraft.ai.primaryChannel);
 
-  const backupGatewayModels = useMemo(
-    () => modelsForGateway(routingDraft.ai.backupChannel),
-    [modelsForGateway, routingDraft.ai.backupChannel],
-  );
+  const backupGatewayModels = modelsForGateway(routingDraft.ai.backupChannel);
 
-  const aiGatewayReadiness = useMemo(() => {
+  const aiGatewayReadiness = (() => {
     const configuredProviderMap = new Map(aiSummary.configuredProviders);
     const gateways = uniqueValues([
       ...availableProviders.aiChannels,
@@ -1076,55 +1055,37 @@ const SettingsPage: React.FC = () => {
         noteKey: GATEWAY_READINESS_NOTES[normalized] || 'generic',
       };
     });
-  }, [
-    aiSummary.configuredProviders,
-    aiGatewayModelMap,
-    availableProviders.aiChannels,
-    routingDraft.ai.backupChannel,
-    routingDraft.ai.primaryChannel,
-  ]);
-  const aiCredentialReadyGateways = useMemo(
-    () => [...aiCredentialProviders.configuredProviderMap.keys()],
-    [aiCredentialProviders.configuredProviderMap],
-  );
-  const aiGatewaySelectorOptions = useMemo(
-    () => uniqueValues([
+  })();
+  const aiCredentialReadyGateways = [...aiCredentialProviders.configuredProviderMap.keys()];
+  const aiGatewaySelectorOptions = uniqueValues([
       ...aiCredentialReadyGateways,
       routingDraft.ai.primaryChannel,
       routingDraft.ai.backupChannel,
-    ]).filter(Boolean),
-    [aiCredentialReadyGateways, routingDraft.ai.backupChannel, routingDraft.ai.primaryChannel],
-  );
+    ]).filter(Boolean);
   const aiConfiguredGatewayCount = aiCredentialReadyGateways.length;
   const canSelectPrimaryGateway = aiConfiguredGatewayCount >= 1;
   const canSelectBackupGateway = aiConfiguredGatewayCount >= 2;
-  const aiSelectorReadinessMismatch = useMemo(() => {
+  const aiSelectorReadinessMismatch = (() => {
     const readinessHasConfiguredProvider = aiGatewayReadiness.some((provider) => provider.credentialReady);
     return readinessHasConfiguredProvider && aiGatewaySelectorOptions.length === 0;
-  }, [aiGatewayReadiness, aiGatewaySelectorOptions.length]);
+  })();
 
-  const primaryGatewayDisabledReason = useMemo(() => {
+  const primaryGatewayDisabledReason = (() => {
     if (adminLocked) return t('settings.adminSaveLocked');
     if (isSaving) return t('settings.saving');
     if (!canSelectPrimaryGateway) return t('settings.aiPrimaryGatewayDisabledReason');
     return '';
-  }, [adminLocked, canSelectPrimaryGateway, isSaving, t]);
+  })();
 
-  const backupGatewayDisabledReason = useMemo(() => {
+  const backupGatewayDisabledReason = (() => {
     if (adminLocked) return t('settings.adminSaveLocked');
     if (isSaving) return t('settings.saving');
     if (!canSelectBackupGateway) return t('settings.aiBackupGatewayDisabledReason');
     return '';
-  }, [adminLocked, canSelectBackupGateway, isSaving, t]);
+  })();
 
-  const primaryModelCompatible = useMemo(
-    () => isGatewayModelCompatible(routingDraft.ai.primaryChannel, routingDraft.ai.primaryModel, primaryGatewayModels),
-    [primaryGatewayModels, routingDraft.ai.primaryChannel, routingDraft.ai.primaryModel],
-  );
-  const backupModelCompatible = useMemo(
-    () => isGatewayModelCompatible(routingDraft.ai.backupChannel, routingDraft.ai.backupModel, backupGatewayModels),
-    [backupGatewayModels, routingDraft.ai.backupChannel, routingDraft.ai.backupModel],
-  );
+  const primaryModelCompatible = isGatewayModelCompatible(routingDraft.ai.primaryChannel, routingDraft.ai.primaryModel, primaryGatewayModels);
+  const backupModelCompatible = isGatewayModelCompatible(routingDraft.ai.backupChannel, routingDraft.ai.backupModel, backupGatewayModels);
 
   useEffect(() => {
     setRoutingDraft((prev) => {
@@ -1211,7 +1172,7 @@ const SettingsPage: React.FC = () => {
   const agentDisabled = Boolean(agentMode) && FALSE_VALUES.has(agentMode);
   const agentOverrideModel = String(allItemMap.get('AGENT_LITELLM_MODEL') || '').trim();
   const backtestOverrideModel = String(allItemMap.get('BACKTEST_LITELLM_MODEL') || '').trim();
-  const aiRoutingScope = useMemo<AiRoutingScope>(() => {
+  const aiRoutingScope = (() => {
     if (agentDisabled) {
       return 'analysis';
     }
@@ -1226,17 +1187,17 @@ const SettingsPage: React.FC = () => {
       return 'ask_stock';
     }
     return 'analysis';
-  }, [agentDisabled, agentOverrideModel, aiSummary.primaryChannel, aiSummary.primaryModel]);
+  })() as AiRoutingScope;
 
-  const formatRouteLine = useCallback((gateway: string, model: string): string => {
+  const formatRouteLine = (gateway: string, model: string): string => {
     const normalizedGateway = gateway.trim();
     const normalizedModel = model.trim();
     if (!normalizedGateway || !normalizedModel) {
       return t('settings.notConfigured');
     }
     return `${providerLabel(normalizedGateway)} / ${normalizedModel}`;
-  }, [t]);
-  const askStockRouteSummary = useMemo(() => {
+  };
+  const askStockRouteSummary = (() => {
     if (agentDisabled) {
       return t('settings.aiAskStockRouteDisabled');
     }
@@ -1248,7 +1209,7 @@ const SettingsPage: React.FC = () => {
     return t('settings.aiAskStockRouteShared', {
       route: formatRouteLine(aiSummary.primaryChannel, aiSummary.primaryModel),
     });
-  }, [agentDisabled, agentOverrideModel, aiSummary.primaryChannel, aiSummary.primaryModel, formatRouteLine, t]);
+  })();
   const askStockRouteMode = agentDisabled ? 'disabled' : (agentOverrideModel ? 'dedicated' : 'shared');
   const askStockEffectiveModel = agentDisabled ? '' : (agentOverrideModel || aiSummary.primaryModel);
   const askStockEffectiveGateway = agentDisabled
@@ -1302,15 +1263,15 @@ const SettingsPage: React.FC = () => {
     backtestOverrideModel,
     modelsForGateway,
   ]);
-  const hasDirectProviderCredential = useCallback((provider: string): boolean => {
+  const hasDirectProviderCredential = (provider: string): boolean => {
     const normalized = normalizeGatewayKey(provider);
     if (!(normalized in DIRECT_PROVIDER_KEY_CANDIDATES)) {
       return false;
     }
     const keys = DIRECT_PROVIDER_KEY_CANDIDATES[normalized as QuickProviderKey] || [];
     return keys.some((key) => hasConfigValue(allItemMap.get(key) || ''));
-  }, [allItemMap]);
-  const backupRouteCompatibilityIssue = useMemo(() => {
+  };
+  const backupRouteCompatibilityIssue = (() => {
     const backupGateway = routingDraft.ai.backupChannel.trim();
     const backupModel = routingDraft.ai.backupModel.trim();
     if (!backupGateway || !backupModel) return null;
@@ -1347,24 +1308,17 @@ const SettingsPage: React.FC = () => {
       model: backupModel,
       provider: providerLabel(backupGateway),
     });
-  }, [allItemMap, hasDirectProviderCredential, routingDraft.ai.backupChannel, routingDraft.ai.backupModel, t]);
-  const taskGatewayOptions = useMemo(
-    () => uniqueValues([
+  })();
+  const taskGatewayOptions = uniqueValues([
       ...aiGatewaySelectorOptions,
       taskRoutingDraft.stock_chat.gateway,
       taskRoutingDraft.backtest.gateway,
-    ]),
-    [aiGatewaySelectorOptions, taskRoutingDraft.backtest.gateway, taskRoutingDraft.stock_chat.gateway],
-  );
-  const taskModelOptions = useMemo(
-    () => ({
+    ]);
+  const taskModelOptions = ({
       stock_chat: modelsForGateway(taskRoutingDraft.stock_chat.gateway),
       backtest: modelsForGateway(taskRoutingDraft.backtest.gateway),
-    }),
-    [modelsForGateway, taskRoutingDraft.backtest.gateway, taskRoutingDraft.stock_chat.gateway],
-  );
-  const taskModelCompatible = useMemo(
-    () => ({
+    });
+  const taskModelCompatible = ({
       stock_chat: isGatewayModelCompatible(
         taskRoutingDraft.stock_chat.gateway,
         taskRoutingDraft.stock_chat.model,
@@ -1375,16 +1329,7 @@ const SettingsPage: React.FC = () => {
         taskRoutingDraft.backtest.model,
         taskModelOptions.backtest,
       ),
-    }),
-    [
-      taskModelOptions.backtest,
-      taskModelOptions.stock_chat,
-      taskRoutingDraft.backtest.gateway,
-      taskRoutingDraft.backtest.model,
-      taskRoutingDraft.stock_chat.gateway,
-      taskRoutingDraft.stock_chat.model,
-    ],
-  );
+    });
   useEffect(() => {
     setTaskRoutingDraft((prev) => {
       const next: Record<OverrideTaskKey, TaskOverrideDraft> = {
@@ -1426,7 +1371,7 @@ const SettingsPage: React.FC = () => {
       return changed ? next : prev;
     });
   }, [resolveProviderDefaultModel, taskModelMode, taskModelOptions, taskRouteModelMode]);
-  const setTaskRouteInherit = useCallback((task: OverrideTaskKey, inherit: boolean) => {
+  const setTaskRouteInherit = (task: OverrideTaskKey, inherit: boolean) => {
     setTaskRoutingError((prev) => ({ ...prev, [task]: null }));
     setTaskRoutingDraft((prev) => {
       const current = prev[task];
@@ -1451,8 +1396,8 @@ const SettingsPage: React.FC = () => {
         },
       };
     });
-  }, [aiSummary.primaryChannel, aiSummary.primaryModel]);
-  const setTaskRouteGateway = useCallback((task: OverrideTaskKey, gateway: string) => {
+  };
+  const setTaskRouteGateway = (task: OverrideTaskKey, gateway: string) => {
     setTaskRoutingError((prev) => ({ ...prev, [task]: null }));
     setTaskModelMode((prev) => ({ ...prev, [task]: 'preset' }));
     setTaskRoutingDraft((prev) => ({
@@ -1464,8 +1409,8 @@ const SettingsPage: React.FC = () => {
         model: gateway ? prev[task].model : '',
       },
     }));
-  }, []);
-  const setTaskRouteModel = useCallback((task: OverrideTaskKey, model: string) => {
+  };
+  const setTaskRouteModel = (task: OverrideTaskKey, model: string) => {
     setTaskRoutingError((prev) => ({ ...prev, [task]: null }));
     setTaskRoutingDraft((prev) => ({
       ...prev,
@@ -1475,8 +1420,8 @@ const SettingsPage: React.FC = () => {
         model,
       },
     }));
-  }, []);
-  const saveTaskRoute = useCallback(async (task: OverrideTaskKey) => {
+  };
+  const saveTaskRoute = async (task: OverrideTaskKey) => {
     const draft = taskRoutingDraft[task];
     if (draft.inherit) {
       const key = task === 'stock_chat' ? 'AGENT_LITELLM_MODEL' : 'BACKTEST_LITELLM_MODEL';
@@ -1501,9 +1446,9 @@ const SettingsPage: React.FC = () => {
       route: formatRouteLine(gateway, model),
     }));
     setTaskRoutingError((prev) => ({ ...prev, [task]: null }));
-  }, [formatRouteLine, saveExternalItems, t, taskRoutingDraft]);
+  };
 
-  const saveAiRouting = useCallback(async () => {
+  const saveAiRouting = async () => {
     setAiRoutingError(null);
     const primaryGateway = routingDraft.ai.primaryChannel.trim();
     const backupGateway = routingDraft.ai.backupChannel.trim();
@@ -1551,27 +1496,27 @@ const SettingsPage: React.FC = () => {
       const parsed = getParsedApiError(error);
       setAiRoutingError(parsed.message || t('settings.aiRouteSaveFailed'));
     }
-  }, [aiRoutingScope, aiRoutingKeys.backupGateway, aiRoutingKeys.backupModel, aiRoutingKeys.primaryGateway, aiRoutingKeys.primaryModel, allItemMap, backupRouteCompatibilityIssue, effectiveRoute, formatRouteLine, routingDraft.ai.backupChannel, routingDraft.ai.backupModel, routingDraft.ai.primaryChannel, routingDraft.ai.primaryModel, saveExternalItems, t]);
+  };
 
-  const saveDataRouting = useCallback(async (
+  const saveDataRouting = async (
     key: string,
     values: Array<string | undefined | null>,
   ) => {
     await saveExternalItems([{ key, value: effectiveRoute(values).join(',') }], t('settings.routeSaved'));
-  }, [effectiveRoute, saveExternalItems, t]);
-  const saveRuntimeSummaryVisibility = useCallback(async () => {
+  };
+  const saveRuntimeSummaryVisibility = async () => {
     await saveExternalItems([
       { key: runtimeSummaryVisibilityKey, value: showRuntimeExecutionSummary ? 'true' : 'false' },
     ], t('settings.routeSaved'));
-  }, [runtimeSummaryVisibilityKey, saveExternalItems, showRuntimeExecutionSummary, t]);
-  const directProviderKeyValues = useMemo(() => ({
+  };
+  const directProviderKeyValues = ({
     aihubmix: allItemMap.get('AIHUBMIX_KEY') || '',
     gemini: allItemMap.get('GEMINI_API_KEY') || '',
     openai: allItemMap.get('OPENAI_API_KEY') || '',
     anthropic: allItemMap.get('ANTHROPIC_API_KEY') || '',
     deepseek: allItemMap.get('DEEPSEEK_API_KEY') || '',
     zhipu: allItemMap.get('ZHIPU_API_KEY') || '',
-  }), [allItemMap]);
+  });
   const [directProviderDraft, setDirectProviderDraft] = useState(directProviderKeyValues);
   const [quickProviderTestState, setQuickProviderTestState] = useState<Record<QuickProviderKey, QuickProviderTestState>>({
     aihubmix: { status: 'idle', text: '' },
@@ -1584,14 +1529,14 @@ const SettingsPage: React.FC = () => {
   useEffect(() => {
     setDirectProviderDraft(directProviderKeyValues);
   }, [directProviderKeyValues]);
-  const normalizeProviderCredential = useCallback((value: string): string => {
+  const normalizeProviderCredential = (value: string): string => {
     const normalized = String(value || '').trim();
     if (!normalized || /^\*+$/.test(normalized) || normalized === '已配置' || normalized.includes('...')) {
       return '';
     }
     return normalized;
-  }, []);
-  const resolveQuickProviderCredential = useCallback((provider: QuickProviderKey): string => {
+  };
+  const resolveQuickProviderCredential = (provider: QuickProviderKey): string => {
     const draftValue = normalizeProviderCredential(directProviderDraft[provider] || '');
     if (draftValue) return draftValue;
     const candidateKeys = DIRECT_PROVIDER_KEY_CANDIDATES[provider] || [];
@@ -1601,8 +1546,8 @@ const SettingsPage: React.FC = () => {
       return splitCsv(value)[0] || value;
     }
     return '';
-  }, [allItemMap, directProviderDraft, normalizeProviderCredential]);
-  const resolveQuickProviderAdvancedTemplate = useCallback((provider: QuickProviderKey): {
+  };
+  const resolveQuickProviderAdvancedTemplate = (provider: QuickProviderKey): {
     channelName: string;
     protocol: string;
     baseUrl: string;
@@ -1652,8 +1597,8 @@ const SettingsPage: React.FC = () => {
       };
     }
     return null;
-  }, [allItemMap]);
-  const resolveQuickProviderTestModel = useCallback((provider: QuickProviderKey, preferredModel = ''): string => {
+  };
+  const resolveQuickProviderTestModel = (provider: QuickProviderKey, preferredModel = ''): string => {
     const normalizedPreferred = String(preferredModel || '').trim();
     if (normalizedPreferred) {
       return normalizedPreferred;
@@ -1668,15 +1613,15 @@ const SettingsPage: React.FC = () => {
     }
     const presets = KNOWN_GATEWAY_MODEL_PRESETS[provider] || [];
     return presets[0] || '';
-  }, [modelsForGateway]);
-  const normalizeQuickProviderTestModel = useCallback((provider: QuickProviderKey, model: string): string => {
+  };
+  const normalizeQuickProviderTestModel = (provider: QuickProviderKey, model: string): string => {
     const normalizedModel = String(model || '').trim();
     if (!normalizedModel) return '';
     if (provider === 'aihubmix') return normalizedModel;
     if (!normalizedModel.includes('/')) return normalizedModel;
     return normalizedModel.split('/').slice(1).join('/') || normalizedModel;
-  }, []);
-  const testQuickProviderConnection = useCallback(async (provider: QuickProviderKey) => {
+  };
+  const testQuickProviderConnection = async (provider: QuickProviderKey) => {
     const advancedTemplate = resolveQuickProviderAdvancedTemplate(provider);
     const apiKey = resolveQuickProviderCredential(provider)
       || normalizeProviderCredential(advancedTemplate?.apiKey || '');
@@ -1761,16 +1706,8 @@ const SettingsPage: React.FC = () => {
         },
       }));
     }
-  }, [
-    adminUnlockToken,
-    normalizeQuickProviderTestModel,
-    normalizeProviderCredential,
-    resolveQuickProviderAdvancedTemplate,
-    resolveQuickProviderCredential,
-    resolveQuickProviderTestModel,
-    t,
-  ]);
-  const saveDirectProviderKeys = useCallback(async () => {
+  };
+  const saveDirectProviderKeys = async () => {
     await saveExternalItems([
       { key: 'AIHUBMIX_KEY', value: directProviderDraft.aihubmix.trim() },
       { key: 'GEMINI_API_KEY', value: directProviderDraft.gemini.trim() },
@@ -1779,24 +1716,24 @@ const SettingsPage: React.FC = () => {
       { key: 'DEEPSEEK_API_KEY', value: directProviderDraft.deepseek.trim() },
       { key: 'ZHIPU_API_KEY', value: directProviderDraft.zhipu.trim() },
     ], t('settings.aiDirectProviderSaved'));
-  }, [directProviderDraft.aihubmix, directProviderDraft.anthropic, directProviderDraft.deepseek, directProviderDraft.gemini, directProviderDraft.openai, directProviderDraft.zhipu, saveExternalItems, t]);
-  const jumpToAiChannelConfig = useCallback(() => {
+  };
+  const jumpToAiChannelConfig = () => {
     setActiveDomain('ai_models');
     setActiveCategory('ai_model');
     setAdvancedFocusChannelName('');
     setAdvancedNavigationContext(null);
     setAdvancedCreatePreset(null);
     setAiAdvancedDrawerOpen(true);
-  }, [setActiveCategory]);
-  const openAiRoutingDrawer = useCallback(() => {
+  };
+  const openAiRoutingDrawer = () => {
     setActiveDomain('ai_models');
     setAiRoutingDrawerOpen(true);
-  }, []);
-  const openQuickProviderDrawer = useCallback((provider: QuickProviderKey) => {
+  };
+  const openQuickProviderDrawer = (provider: QuickProviderKey) => {
     setActiveDomain('ai_models');
     setQuickProviderDrawerProvider(provider);
-  }, []);
-  const resolveAdvancedChannelProvider = useCallback((channelName: string): QuickProviderKey | '' => {
+  };
+  const resolveAdvancedChannelProvider = (channelName: string): QuickProviderKey | '' => {
     const normalizedName = normalizeGatewayKey(channelName);
     if (!normalizedName) return '';
     if (PROVIDER_LIBRARY_ITEMS.some((item) => item.key === normalizedName)) {
@@ -1827,8 +1764,8 @@ const SettingsPage: React.FC = () => {
     }
 
     return '';
-  }, [allItemMap]);
-  const advancedChannelsByProvider = useMemo(() => {
+  };
+  const advancedChannelsByProvider = (() => {
     const result: Record<QuickProviderKey, string[]> = {
       aihubmix: [],
       gemini: [],
@@ -1845,8 +1782,8 @@ const SettingsPage: React.FC = () => {
       }
     });
     return result;
-  }, [allItemMap, resolveAdvancedChannelProvider]);
-  const jumpToProviderAdvancedConfig = useCallback((provider: QuickProviderKey) => {
+  })();
+  const jumpToProviderAdvancedConfig = (provider: QuickProviderKey) => {
     const channels = advancedChannelsByProvider[provider] || [];
     const firstChannel = channels[0] || '';
     setActiveDomain('ai_models');
@@ -1858,8 +1795,8 @@ const SettingsPage: React.FC = () => {
       hasChannel: Boolean(firstChannel),
     });
     setAiAdvancedDrawerOpen(true);
-  }, [advancedChannelsByProvider, setActiveCategory]);
-  const handleCreateAdvancedProviderChannel = useCallback((provider: QuickProviderKey) => {
+  };
+  const handleCreateAdvancedProviderChannel = (provider: QuickProviderKey) => {
     setAdvancedCreatePreset(provider);
     setAdvancedFocusChannelName(provider);
     setAdvancedNavigationContext({
@@ -1868,8 +1805,8 @@ const SettingsPage: React.FC = () => {
       hasChannel: true,
     });
     setAiAdvancedDrawerOpen(true);
-  }, []);
-  const runResetRuntimeCaches = useCallback(async () => {
+  };
+  const runResetRuntimeCaches = async () => {
     setIsRunningAdminAction(true);
     setAdminActionMessage(null);
     try {
@@ -1884,8 +1821,8 @@ const SettingsPage: React.FC = () => {
     } finally {
       setIsRunningAdminAction(false);
     }
-  }, [t]);
-  const runFactoryResetSystem = useCallback(async () => {
+  };
+  const runFactoryResetSystem = async () => {
     setIsRunningAdminAction(true);
     setAdminActionMessage(null);
     try {
@@ -1903,15 +1840,9 @@ const SettingsPage: React.FC = () => {
     } finally {
       setIsRunningAdminAction(false);
     }
-  }, [factoryResetConfirmation, t]);
-  const providerReadinessByGateway = useMemo(
-    () => new Map(aiGatewayReadiness.map((provider) => [provider.gateway, provider])),
-    [aiGatewayReadiness],
-  );
-  const quickProviderDrawerItem = useMemo(
-    () => PROVIDER_LIBRARY_ITEMS.find((provider) => provider.key === quickProviderDrawerProvider) || null,
-    [quickProviderDrawerProvider],
-  );
+  };
+  const providerReadinessByGateway = new Map(aiGatewayReadiness.map((provider) => [provider.gateway, provider]));
+  const quickProviderDrawerItem = PROVIDER_LIBRARY_ITEMS.find((provider) => provider.key === quickProviderDrawerProvider) || null;
 
   const primarySummaryModel = aiSummary.primaryChannel ? aiSummary.primaryModel : '';
   const backupSummaryModel = aiSummary.backupChannel ? aiSummary.backupModel : '';
@@ -1921,7 +1852,7 @@ const SettingsPage: React.FC = () => {
     .slice(0, 12);
   const canUsePrimaryCustomModel = Boolean(routingDraft.ai.primaryChannel) && supportsCustomModelId(routingDraft.ai.primaryChannel);
   const canUseBackupCustomModel = Boolean(routingDraft.ai.backupChannel) && supportsCustomModelId(routingDraft.ai.backupChannel);
-  const aiModelModeHint = useCallback((gateway: string, mode: ModelInputMode): string => {
+  const aiModelModeHint = (gateway: string, mode: ModelInputMode): string => {
     if (!gateway) return t('settings.aiModelModeRequiresGateway');
     if (mode === 'preset') {
       return gateway === 'aihubmix'
@@ -1935,26 +1866,26 @@ const SettingsPage: React.FC = () => {
       : gateway === 'zhipu'
         ? t('settings.aiModelModeCustomHintZhipu')
       : t('settings.aiModelModeCustomHint', { gateway: providerLabel(gateway) || t('settings.notConfigured') });
-  }, [t]);
-  const aiCustomModelPlaceholder = useCallback((gateway: string): string => (
+  };
+  const aiCustomModelPlaceholder = (gateway: string): string => (
     gateway === 'aihubmix'
       ? t('settings.aiCustomModelPlaceholderAihubmix')
       : t('settings.aiCustomModelPlaceholder')
-  ), [t]);
-  const aiCustomModelHint = useCallback((gateway: string): string => (
+  );
+  const aiCustomModelHint = (gateway: string): string => (
     gateway === 'aihubmix'
       ? t('settings.aiCustomModelHintAihubmix')
       : t('settings.aiCustomModelHint')
-  ), [t]);
-  const aiProviderDefaultHint = useCallback((gateway: string, model: string): string => {
+  );
+  const aiProviderDefaultHint = (gateway: string, model: string): string => {
     if (!gateway) return t('settings.aiModelModeRequiresGateway');
     if (!model) return t('settings.aiRouteProviderDefaultUnavailable');
     return t('settings.aiRouteProviderDefaultHint', { model });
-  }, [t]);
+  };
   const configuredProvidersText = aiSummary.configuredProviders.length
     ? aiSummary.configuredProviders.map(([name, count]) => `${providerLabel(name)} (${count})`).join(' · ')
     : t('settings.notConfigured');
-  const aiRouteRows = useMemo(() => ([
+  const aiRouteRows = ([
     {
       key: 'analysis',
       title: t('settings.aiTaskName.analysis'),
@@ -1994,26 +1925,8 @@ const SettingsPage: React.FC = () => {
       actionLabel: t('settings.aiTaskEditAction'),
       highlighted: false,
     },
-  ]), [
-    aiRouteModelMode.primary,
-    aiSummary.backupChannel,
-    aiSummary.primaryChannel,
-    aiSummary.primaryModel,
-    aiSummary.routeStatus,
-    askStockEffectiveGateway,
-    askStockEffectiveModel,
-    askStockRouteMode,
-    askStockRouteSummary,
-    backupSummaryModel,
-    backtestEffectiveGateway,
-    backtestEffectiveModel,
-    backtestOverrideModel,
-    backtestRouteMode,
-    formatRouteLine,
-    primarySummaryModel,
-    t,
   ]);
-  const quickProviderCards = useMemo(() => (
+  const quickProviderCards = (
     PROVIDER_LIBRARY_ITEMS.map((provider) => {
       const providerState = providerReadinessByGateway.get(provider.key);
       const quickApiConfigured = hasConfigValue(resolveQuickProviderCredential(provider.key));
@@ -2030,13 +1943,7 @@ const SettingsPage: React.FC = () => {
         quickTestText: quickTestState.text,
       };
     })
-  ), [
-    advancedChannelsByProvider,
-    providerReadinessByGateway,
-    quickProviderTestState,
-    resolveQuickProviderCredential,
-    resolveQuickProviderTestModel,
-  ]);
+  );
   const activeDomainTitle = panelNavItems.find((item) => item.domain === activePanel)?.title
     || panelNavItems.find((item) => item.domain === activeDomain)?.title
     || activeDomain;
@@ -2054,7 +1961,7 @@ const SettingsPage: React.FC = () => {
     systemStatusCards,
     developerDetailGroups,
     duckdbConfigEnabledState,
-  } = useMemo(() => buildSystemControlPlaneState({
+  } = buildSystemControlPlaneState({
     allItems,
     allItemMap,
     aiSummary,
@@ -2068,20 +1975,9 @@ const SettingsPage: React.FC = () => {
     prettySourceLabel,
     formatRouteLine,
     t,
-  }), [
-    activeDomainTitle,
-    aiSummary,
-    allItemMap,
-    allItems,
-    dataSourceLibrary,
-    dataSummary,
-    dirtyCount,
-    formatRouteLine,
-    notificationSummary,
-    t,
-  ]);
+  });
 
-  const handleSelectPanel = useCallback((panel: SettingsWorkspacePanel) => {
+  const handleSelectPanel = (panel: SettingsWorkspacePanel) => {
     setActivePanel(panel);
     if (panel === 'overview') {
       return;
@@ -2093,14 +1989,14 @@ const SettingsPage: React.FC = () => {
     if (firstCategory) {
       setActiveCategory(firstCategory);
     }
-  }, [categories, categoryDomainMap, setActiveCategory]);
+  };
 
-  const handleSelectCategory = useCallback((category: string) => {
+  const handleSelectCategory = (category: string) => {
     setActiveCategory(category);
     const nextDomain = categoryDomainMap.get(category) || 'advanced';
     setActiveDomain(nextDomain);
     setActivePanel(nextDomain);
-  }, [categoryDomainMap, setActiveCategory]);
+  };
   const dataRoutingGroups = [
     {
       key: 'market' as const,

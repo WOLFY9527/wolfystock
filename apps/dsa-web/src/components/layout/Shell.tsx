@@ -3,7 +3,7 @@
  * unchanged while the shared frame owns the Linear OS canvas and rhythm.
  */
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, LockKeyhole, LogOut, Menu, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
@@ -212,20 +212,20 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     { label: accountCopy.preferences, to: buildAccountPath(routeLocale, '/settings#preferences'), icon: SlidersHorizontal },
   ];
 
-  const closeMobileNav = useCallback(() => {
+  const closeMobileNav = () => {
     setMobileNavOpen(false);
-  }, [setMobileNavOpen]);
+  };
 
-  const openMobileNav = useCallback(() => {
+  const openMobileNav = () => {
     setRailOpen(false);
     setMobileNavOpen(true);
-  }, [setMobileNavOpen, setRailOpen]);
+  };
 
-  const closeRail = useCallback(() => {
+  const closeRail = () => {
     setRailOpen(false);
-  }, [setRailOpen]);
+  };
 
-  const closeAccountMenu = useCallback((options?: { returnFocus?: boolean }) => {
+  const closeAccountMenu = (options?: { returnFocus?: boolean }) => {
     setAccountMenuOpen(false);
     setAccountMenuFocusIndex(null);
     if (options?.returnFocus) {
@@ -233,31 +233,28 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         accountTriggerRef.current?.focus();
       }, 0);
     }
-  }, [setAccountMenuFocusIndex, setAccountMenuOpen]);
+  };
 
-  const openAccountMenu = useCallback((focusIndex = 0) => {
+  const openAccountMenu = (focusIndex = 0) => {
     setAccountMenuOpen(true);
     setAccountMenuFocusIndex(focusIndex);
-  }, [setAccountMenuFocusIndex, setAccountMenuOpen]);
+  };
 
-  const openRail = useCallback(() => {
+  const openRail = () => {
     setMobileNavOpen(false);
     setRailOpen(true);
-  }, [setMobileNavOpen, setRailOpen]);
+  };
 
-  const shellMastheadInnerRef = useCallback((node: HTMLDivElement | null) => {
+  const shellMastheadInnerRef = (node: HTMLDivElement | null) => {
     setHeaderUtilityIsland(node?.querySelector<HTMLDivElement>('[data-testid="shell-header-utility-island"]') ?? null);
-  }, [setHeaderUtilityIsland]);
+  };
 
-  const railContextValue = useMemo(
-    () => ({
-      setRailContent,
-      closeMobileRail: closeRail,
-      openRail,
-      isConnected: true,
-    }),
-    [closeRail, openRail, setRailContent],
-  );
+  const railContextValue = {
+    setRailContent,
+    closeMobileRail: closeRail,
+    openRail,
+    isConnected: true,
+  };
 
   useEffect(() => {
     if (pathname === previousPathnameRef.current) {
@@ -329,14 +326,14 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     return () => window.clearTimeout(timer);
   }, [accountMenuFocusIndex, accountMenuOpen]);
 
-  const handleAccountTriggerKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>) => {
+  const handleAccountTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown') {
       event.preventDefault();
       openAccountMenu(0);
     }
-  }, [openAccountMenu]);
+  };
 
-  const handleAccountMenuKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleAccountMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const items = accountMenuItemRefs.current.filter(Boolean) as Array<HTMLAnchorElement | HTMLButtonElement>;
     if (!items.length) {
       return;
@@ -369,7 +366,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
       event.preventDefault();
       closeAccountMenu({ returnFocus: true });
     }
-  }, [closeAccountMenu]);
+  };
 
   useEffect(() => {
     const root = document.documentElement;

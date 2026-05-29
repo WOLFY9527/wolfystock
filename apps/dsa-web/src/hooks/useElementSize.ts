@@ -50,8 +50,9 @@ export const useElementSize = <T extends HTMLElement>() => {
     observer.observe(node);
 
     return () => {
-      if (frameRef.current !== null) {
-        window.cancelAnimationFrame(frameRef.current);
+      const pendingFrame = frameRef.current;
+      if (pendingFrame !== null) {
+        window.cancelAnimationFrame(pendingFrame);
       }
       observer.disconnect();
     };

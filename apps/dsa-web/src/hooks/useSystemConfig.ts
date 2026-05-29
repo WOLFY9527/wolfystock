@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigConflictError, SystemConfigValidationError } from '../api/systemConfig';
 import type {
@@ -120,28 +120,26 @@ export function useSystemConfig() {
   const adminUnlockExpiresAt = null;
   const isAdminUnlocked = true;
 
-  const mergedItems = useMemo(() => {
-    return sortItemsByOrder(
-      serverItems.map((item) => ({
-        ...item,
-        value: draftValues[item.key] ?? item.value,
-      })),
-    );
-  }, [draftValues, serverItems]);
+  const mergedItems = sortItemsByOrder(
+    serverItems.map((item) => ({
+      ...item,
+      value: draftValues[item.key] ?? item.value,
+    })),
+  );
 
-  const serverItemByKey = useMemo(() => {
+  const serverItemByKey = (() => {
     const map: Record<string, SystemConfigItem> = {};
     for (const item of serverItems) {
       map[item.key] = item;
     }
     return map;
-  }, [serverItems]);
+  })();
 
   useEffect(() => {
     serverItemByKeyRef.current = serverItemByKey;
   }, [serverItemByKey]);
 
-  const categories = useMemo<SystemConfigCategorySchema[]>(() => {
+  const categories: SystemConfigCategorySchema[] = (() => {
     // Infer tabs from loaded config item schema metadata.
     const categoryMap = new Map<string, SystemConfigCategorySchema>();
     for (const item of mergedItems) {
@@ -163,9 +161,9 @@ export function useSystemConfig() {
     }
 
     return [...categoryMap.values()].sort((a, b) => a.displayOrder - b.displayOrder);
-  }, [mergedItems]);
+  })();
 
-  const itemsByCategory = useMemo(() => {
+  const itemsByCategory = (() => {
     const map: Record<string, SystemConfigItem[]> = {};
     for (const item of mergedItems) {
       const category = item.schema?.category ?? 'uncategorized';
@@ -175,9 +173,9 @@ export function useSystemConfig() {
       map[category].push(item);
     }
     return map;
-  }, [mergedItems]);
+  })();
 
-  const dirtyKeys = useMemo(() => {
+  const dirtyKeys = (() => {
     const keys: string[] = [];
     for (const item of serverItems) {
       const draftRaw = draftValues[item.key];
@@ -192,11 +190,11 @@ export function useSystemConfig() {
       }
     }
     return keys;
-  }, [draftValues, serverItems]);
+  })();
 
   const hasDirty = dirtyKeys.length > 0;
 
-  const issueByKey = useMemo(() => {
+  const issueByKey = (() => {
     const map: Record<string, ConfigValidationIssue[]> = {};
     for (const issue of validationIssues) {
       if (!map[issue.key]) {
@@ -205,56 +203,53 @@ export function useSystemConfig() {
       map[issue.key].push(issue);
     }
     return map;
-  }, [validationIssues]);
+  })();
 
-  const applyServerPayload = useCallback(
-    (
-      items: SystemConfigItem[],
-      version: string,
-      token: string,
-      options?: { preserveDirty?: boolean; committedKeys?: string[] },
-    ) => {
-      const sorted = sortItemsByOrder(sanitizeConfigItems(items));
-      const previousServerMap = serverItemByKeyRef.current;
-      const committedKeys = new Set(options?.committedKeys ?? []);
-      const preserveDirty = options?.preserveDirty ?? false;
+  const applyServerPayload = (
+    items: SystemConfigItem[],
+    version: string,
+    token: string,
+    options?: { preserveDirty?: boolean; committedKeys?: string[] },
+  ) => {
+    const sorted = sortItemsByOrder(sanitizeConfigItems(items));
+    const previousServerMap = serverItemByKeyRef.current;
+    const committedKeys = new Set(options?.committedKeys ?? []);
+    const preserveDirty = options?.preserveDirty ?? false;
 
-      setServerItems(sorted);
-      setConfigVersion(version);
-      setMaskToken(token || '******');
+    setServerItems(sorted);
+    setConfigVersion(version);
+    setMaskToken(token || '******');
 
-      setDraftValues((prevDraft) => {
-        const nextDraft: Record<string, string> = {};
-        for (const item of sorted) {
-          if (committedKeys.has(item.key)) {
-            nextDraft[item.key] = item.value;
-            continue;
-          }
-
-          if (preserveDirty) {
-            const previousServerValue = previousServerMap[item.key]?.value;
-            const hasDraft = prevDraft[item.key] !== undefined;
-            const wasDirty = hasDraft && prevDraft[item.key] !== previousServerValue;
-            nextDraft[item.key] = wasDirty ? prevDraft[item.key] : item.value;
-            continue;
-          }
-
+    setDraftValues((prevDraft) => {
+      const nextDraft: Record<string, string> = {};
+      for (const item of sorted) {
+        if (committedKeys.has(item.key)) {
           nextDraft[item.key] = item.value;
+          continue;
         }
-        return nextDraft;
-      });
 
-      const defaultCategory = sorted[0]?.schema?.category || 'base';
-      setActiveCategory((current) => {
-        const exists = sorted.some((item) => item.schema?.category === current);
-        return exists ? current : defaultCategory;
-      });
-      setValidationIssues([]);
-    },
-    [],
-  );
+        if (preserveDirty) {
+          const previousServerValue = previousServerMap[item.key]?.value;
+          const hasDraft = prevDraft[item.key] !== undefined;
+          const wasDirty = hasDraft && prevDraft[item.key] !== previousServerValue;
+          nextDraft[item.key] = wasDirty ? prevDraft[item.key] : item.value;
+          continue;
+        }
 
-  const load = useCallback(async () => {
+        nextDraft[item.key] = item.value;
+      }
+      return nextDraft;
+    });
+
+    const defaultCategory = sorted[0]?.schema?.category || 'base';
+    setActiveCategory((current) => {
+      const exists = sorted.some((item) => item.schema?.category === current);
+      return exists ? current : defaultCategory;
+    });
+    setValidationIssues([]);
+  };
+
+  const load = async () => {
     setIsLoading(true);
     setLoadError(null);
     setRetryAction(null);
@@ -269,9 +264,9 @@ export function useSystemConfig() {
     } finally {
       setIsLoading(false);
     }
-  }, [applyServerPayload]);
+  };
 
-  const resetDraft = useCallback(() => {
+  const resetDraft = () => {
     const next: Record<string, string> = {};
     for (const item of serverItems) {
       next[item.key] = item.value;
@@ -279,9 +274,9 @@ export function useSystemConfig() {
     setDraftValues(next);
     setValidationIssues([]);
     setSaveError(null);
-  }, [serverItems]);
+  };
 
-  const applyPartialUpdate = useCallback((updatedItems: Array<{ key: string; value: string }>) => {
+  const applyPartialUpdate = (updatedItems: Array<{ key: string; value: string }>) => {
     setDraftValues((prevDraft) => {
       const nextDraft = { ...prevDraft };
       for (const item of updatedItems) {
@@ -289,16 +284,16 @@ export function useSystemConfig() {
       }
       return nextDraft;
     });
-  }, []);
+  };
 
-  const setDraftValue = useCallback((key: string, value: string) => {
+  const setDraftValue = (key: string, value: string) => {
     setDraftValues((previous) => ({
       ...previous,
       [key]: value,
     }));
-  }, []);
+  };
 
-  const getChangedItems = useCallback((): SystemConfigUpdateItem[] => {
+  const getChangedItems = (): SystemConfigUpdateItem[] => {
     return dirtyKeys.reduce<SystemConfigUpdateItem[]>((acc, key) => {
       const serverItem = serverItemByKey[key];
       const normalizedValue = normalizeFieldValue(draftValues[key] ?? '', serverItem?.schema);
@@ -308,16 +303,16 @@ export function useSystemConfig() {
       }
       return acc;
     }, []);
-  }, [dirtyKeys, draftValues, serverItemByKey]);
+  };
 
-  const setAdminUnlockSession = useCallback((token: string, expiresAt: number) => {
+  const setAdminUnlockSession = (token: string, expiresAt: number) => {
     void token;
     void expiresAt;
-  }, []);
+  };
 
-  const clearAdminUnlockSession = useCallback(() => {}, []);
+  const clearAdminUnlockSession = () => {};
 
-  const persistItems = useCallback(async (
+  const persistItems = async (
     changedItems: SystemConfigUpdateItem[],
     options: PersistSaveOptions,
   ): Promise<void> => {
@@ -356,9 +351,9 @@ export function useSystemConfig() {
       ? `；警告：${updateResult.warnings.join('；')}`
       : '';
     setToast({ type: 'success', message: `${options.successMessage}${warningText}` });
-  }, [applyServerPayload, configVersion, maskToken]);
+  };
 
-  const handleSaveFailure = useCallback((error: unknown, setRetryOnFailure: boolean) => {
+  const handleSaveFailure = (error: unknown, setRetryOnFailure: boolean) => {
     if (error instanceof SystemConfigValidationError) {
       setValidationIssues(error.issues);
       setSaveError(error.parsedError);
@@ -378,9 +373,9 @@ export function useSystemConfig() {
     if (setRetryOnFailure) {
       setRetryAction('save');
     }
-  }, []);
+  };
 
-  const save = useCallback(async (): Promise<SaveResult> => {
+  const save = async (): Promise<SaveResult> => {
     if (!hasDirty) {
       setToast({ type: 'success', message: '当前没有可保存的修改。' });
       return { success: true, message: '当前没有可保存的修改' };
@@ -405,9 +400,9 @@ export function useSystemConfig() {
     } finally {
       setIsSaving(false);
     }
-  }, [getChangedItems, handleSaveFailure, hasDirty, persistItems]);
+  };
 
-  const saveExternalItems = useCallback(async (
+  const saveExternalItems = async (
     changedItems: SystemConfigUpdateItem[],
     successMessage = '配置已更新',
   ) => {
@@ -427,9 +422,9 @@ export function useSystemConfig() {
     finally {
       setIsSaving(false);
     }
-  }, [handleSaveFailure, persistItems]);
+  };
 
-  const retry = useCallback(async () => {
+  const retry = async () => {
     if (retryAction === 'load') {
       await load();
       return;
@@ -437,11 +432,11 @@ export function useSystemConfig() {
     if (retryAction === 'save') {
       await save();
     }
-  }, [load, retryAction, save]);
+  };
 
-  const clearToast = useCallback(() => {
+  const clearToast = () => {
     setToast(null);
-  }, []);
+  };
 
   return {
     // Server state

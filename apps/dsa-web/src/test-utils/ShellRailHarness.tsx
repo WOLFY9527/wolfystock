@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { ShellRailContext } from '../components/layout/ShellRailContext';
 
 type ShellRailHarnessProps = {
@@ -8,15 +8,12 @@ type ShellRailHarnessProps = {
 
 export const ShellRailHarness: React.FC<ShellRailHarnessProps> = ({ children }) => {
   const [railContent, setRailContent] = useState<React.ReactNode | null>(null);
-  const contextValue = useMemo(
-    () => ({
-      setRailContent,
-      closeMobileRail: () => undefined,
-      openRail: () => undefined,
-      isConnected: true,
-    }),
-    [],
-  );
+  const contextValue = {
+    setRailContent,
+    closeMobileRail: () => undefined,
+    openRail: () => undefined,
+    isConnected: true,
+  };
 
   return (
     <ShellRailContext.Provider value={contextValue}>

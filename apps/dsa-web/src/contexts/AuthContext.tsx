@@ -1,5 +1,5 @@
 import type React from 'react';
-import { createContext, useCallback, use, useEffect, useState } from 'react';
+import { createContext, use, useEffect, useState } from 'react';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import type { CurrentUser } from '../api/auth';
 import { authApi } from '../api/auth';
@@ -100,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<ParsedApiError | null>(null);
-  const clearSessionState = useCallback(() => {
+  const clearSessionState = () => {
     setLoggedIn(false);
     setPasswordSet(false);
     setPasswordChangeable(false);
@@ -109,9 +109,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoadError(null);
     useStockPoolStore.getState().resetDashboardState();
     resetAdminSurfaceMode();
-  }, []);
+  };
 
-  const fetchStatus = useCallback(async () => {
+  const fetchStatus = async () => {
     setIsLoading(true);
     setLoadError(null);
     try {
@@ -137,60 +137,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     void fetchStatus();
   }, [fetchStatus]);
 
-  const login = useCallback(
-    async (
-      params: {
-        username?: string;
-        displayName?: string;
-        password: string;
-        passwordConfirm?: string;
-        createUser?: boolean;
-      }
-    ): Promise<{ success: boolean; error?: ParsedApiError }> => {
-      try {
-        if (!authEnabled) {
-          if (setupState === 'no_password') {
-            await authApi.updateSettings(true, params.password, params.passwordConfirm);
-          } else if (setupState === 'password_retained') {
-            await authApi.updateSettings(true, undefined, undefined, params.password);
-          } else {
-            await authApi.login(params);
-          }
+  const login = async (
+    params: {
+      username?: string;
+      displayName?: string;
+      password: string;
+      passwordConfirm?: string;
+      createUser?: boolean;
+    }
+  ): Promise<{ success: boolean; error?: ParsedApiError }> => {
+    try {
+      if (!authEnabled) {
+        if (setupState === 'no_password') {
+          await authApi.updateSettings(true, params.password, params.passwordConfirm);
+        } else if (setupState === 'password_retained') {
+          await authApi.updateSettings(true, undefined, undefined, params.password);
         } else {
           await authApi.login(params);
         }
-        await fetchStatus();
-        return { success: true };
-      } catch (err: unknown) {
-        return { success: false, error: extractLoginError(err) };
+      } else {
+        await authApi.login(params);
       }
-    },
-    [authEnabled, fetchStatus, setupState]
-  );
+      await fetchStatus();
+      return { success: true };
+    } catch (err: unknown) {
+      return { success: false, error: extractLoginError(err) };
+    }
+  };
 
-  const changePassword = useCallback(
-    async (
-      currentPassword: string,
-      newPassword: string,
-      newPasswordConfirm: string
-    ): Promise<{ success: boolean; error?: ParsedApiError }> => {
-      try {
-        await authApi.changePassword(currentPassword, newPassword, newPasswordConfirm);
-        return { success: true };
-      } catch (err: unknown) {
-        return { success: false, error: getParsedApiError(err) };
-      }
-    },
-    []
-  );
+  const changePassword = async (
+    currentPassword: string,
+    newPassword: string,
+    newPasswordConfirm: string
+  ): Promise<{ success: boolean; error?: ParsedApiError }> => {
+    try {
+      await authApi.changePassword(currentPassword, newPassword, newPasswordConfirm);
+      return { success: true };
+    } catch (err: unknown) {
+      return { success: false, error: getParsedApiError(err) };
+    }
+  };
 
-  const logout = useCallback(async () => {
+  const logout = async () => {
     let logoutError: unknown = null;
 
     try {
@@ -207,7 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (logoutError && getParsedApiError(logoutError).status !== 401) {
       throw logoutError;
     }
-  }, [clearSessionState]);
+  };
 
   return (
     <AuthContext.Provider

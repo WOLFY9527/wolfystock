@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type React from 'react';
 import type { ParsedApiError } from '../../api/error';
 import { getParsedApiError } from '../../api/error';
@@ -717,18 +717,15 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
   const normalizedScopeName = normalizeProviderScopeName(providerScopeName);
   const scopedPreset = normalizedScopeName ? CHANNEL_PRESETS[normalizedScopeName] : null;
   const providerScopedMode = Boolean(normalizedScopeName && scopedPreset);
-  const rawItemMap = useMemo(() => new Map(items.map((item) => [item.key, item.value])), [items]);
-  const initialChannels = useMemo(() => parseChannelsFromItems(items), [items]);
-  const initialNames = useMemo(() => initialChannels.map((channel) => channel.name), [initialChannels]);
-  const initialRuntimeConfig = useMemo(() => parseRuntimeConfigFromItems(items), [items]);
-  const hasLitellmConfig = useMemo(
-    () => items.some((item) => item.key === 'LITELLM_CONFIG' && item.value.trim().length > 0),
-    [items],
-  );
+  const rawItemMap = new Map(items.map((item) => [item.key, item.value]));
+  const initialChannels = parseChannelsFromItems(items);
+  const initialNames = initialChannels.map((channel) => channel.name);
+  const initialRuntimeConfig = parseRuntimeConfigFromItems(items);
+  const hasLitellmConfig = items.some((item) => item.key === 'LITELLM_CONFIG' && item.value.trim().length > 0);
   const managesRuntimeConfig = !hasLitellmConfig;
 
-  const channelsFingerprint = useMemo(() => JSON.stringify(initialChannels), [initialChannels]);
-  const runtimeFingerprint = useMemo(() => JSON.stringify(initialRuntimeConfig), [initialRuntimeConfig]);
+  const channelsFingerprint = JSON.stringify(initialChannels);
+  const runtimeFingerprint = JSON.stringify(initialRuntimeConfig);
 
   const [channels, setChannels] = useState<ChannelConfig[]>(initialChannels);
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig>(initialRuntimeConfig);
@@ -744,10 +741,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
   const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [addPreset, setAddPreset] = useState(normalizedScopeName || 'aihubmix');
-  const presetLabels = useMemo(
-    () => Object.fromEntries(Object.keys(CHANNEL_PRESETS).map((key) => [key, t(`settings.llmEditor.channelPreset.${key}`)])),
-    [t],
-  );
+  const presetLabels = Object.fromEntries(Object.keys(CHANNEL_PRESETS).map((key) => [key, t(`settings.llmEditor.channelPreset.${key}`)]));
 
   const prevChannelsRef = useRef(channelsFingerprint);
   const prevRuntimeRef = useRef(runtimeFingerprint);
@@ -775,14 +769,9 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
     setAddPreset(normalizedScopeName);
   }, [normalizedScopeName, providerScopedMode]);
 
-  const availableModels = useMemo(() => {
-    if (!managesRuntimeConfig) {
-      return [];
-    }
-    return collectAvailableModels(channels);
-  }, [channels, managesRuntimeConfig]);
+  const availableModels = managesRuntimeConfig ? collectAvailableModels(channels) : [];
 
-  const hasChanges = useMemo(() => {
+  const hasChanges = (() => {
     const runtimeChanged = (
       runtimeConfig.primaryModel !== initialRuntimeConfig.primaryModel
       || runtimeConfig.agentPrimaryModel !== initialRuntimeConfig.agentPrimaryModel
@@ -795,18 +784,16 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
       return true;
     }
     return channels.some((channel, index) => !channelsAreEqual(channel, initialChannels[index]));
-  }, [channels, initialChannels, initialRuntimeConfig, runtimeConfig]);
+  })();
 
-  const visibleChannelEntries = useMemo(() => {
-    return channels
-      .map((channel, index) => ({ channel, index }))
-      .filter((entry) => {
-        if (!providerScopedMode) {
-          return true;
-        }
-        return resolveChannelScopeName(entry.channel.name) === normalizedScopeName;
-      });
-  }, [channels, normalizedScopeName, providerScopedMode]);
+  const visibleChannelEntries = channels
+    .map((channel, index) => ({ channel, index }))
+    .filter((entry) => {
+      if (!providerScopedMode) {
+        return true;
+      }
+      return resolveChannelScopeName(entry.channel.name) === normalizedScopeName;
+    });
 
   const busy = disabled || isSaving;
 
@@ -867,9 +854,9 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
     setExpandedRows({});
   };
 
-  const addChannel = useCallback((presetKey?: string) => {
+  const addChannel = (presetKey?: string) => {
     const nextPresetKey = presetKey || addPreset;
-      const preset = CHANNEL_PRESETS[nextPresetKey] || CHANNEL_PRESETS.custom;
+    const preset = CHANNEL_PRESETS[nextPresetKey] || CHANNEL_PRESETS.custom;
     const baseName = nextPresetKey === 'custom' ? 'custom' : nextPresetKey;
     let nextIndex = 0;
     setChannels((previous) => {
@@ -901,7 +888,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
     window.setTimeout(() => {
       channelRowRefs.current[nextIndex]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 0);
-  }, [addPreset]);
+  };
   useEffect(() => {
     const requestedPreset = String(externalCreatePreset || '').trim().toLowerCase();
     if (!requestedPreset) return;
