@@ -17,6 +17,28 @@ does not change any release gate, and does not replace manual review.
   approval requirements are both satisfied.
 - Do not describe the current state as GO, launch-approved, or production-ready.
 
+## Draft Evidence Clarification
+
+- Draft evidence may only be used as manual-review-required support for the four
+  foundation-complete blockers below.
+- Draft output must never set `status: accepted`.
+- Draft output must never auto-fill `acceptedBy`.
+- Draft output must never auto-fill accepted `capturedAt` or accepted
+  `evidenceRef`.
+- Draft output must never mark required checks true solely from repo-local
+  foundation evidence.
+- Draft output must never set `releaseApproved=true`, `launchApproved=true`, GO,
+  or production-ready wording.
+- Frontend evidence, operator evidence, live-provider evidence, staging
+  evidence, and other manual evidence must not be fabricated.
+- The draft-support-only boundary applies to:
+  `api_abuse_request_safety`,
+  `admin_log_retention_capacity_rehearsal`,
+  `market_data_freshness_fallback_evidence`, and
+  `user_data_privacy_export_deletion_rehearsal`.
+- Those four blockers remain blocking until accepted sanitized launch evidence
+  and manual review are attached through the existing workflow.
+
 ## Foundation-Complete Internal Validation Blockers
 
 ### `api_abuse_request_safety`
