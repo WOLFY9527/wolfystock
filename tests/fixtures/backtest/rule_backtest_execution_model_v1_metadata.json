@@ -1,0 +1,52 @@
+{
+  "fixture_kind": "rule_backtest_execution_model_metadata",
+  "fixture_version": "v1",
+  "execution_model": {
+    "model_id": "rule_backtest_default_execution_model_v1",
+    "version": "v1",
+    "timeframe": "daily",
+    "signal_evaluation_timing": "bar_close",
+    "entry_timing": "next_bar_open",
+    "exit_timing": "next_bar_open",
+    "entry_fill_price_basis": "open",
+    "exit_fill_price_basis": "open",
+    "position_sizing": "single_position_full_notional",
+    "fee_model": "bps_per_side",
+    "fee_bps_per_side": 0.0,
+    "slippage_model": "bps_per_side",
+    "slippage_bps_per_side": 0.0,
+    "market_rules": {
+      "trading_day_execution": "available_bars_only",
+      "terminal_bar_fill_fallback": "same_bar_close",
+      "window_end_position_handling": "force_flatten"
+    }
+  },
+  "semantics": {
+    "engine_identity": "existing_rule_backtest_behavior",
+    "cost_realism": "baseline_bps_assumptions_only_when_present",
+    "institutional_execution_realism": false,
+    "market_impact_model": "not_modelled",
+    "spread_simulation": "not_modelled",
+    "partial_fills_supported": false,
+    "halt_limit_up_limit_down_model": "not_modelled",
+    "tax_model": "not_modelled",
+    "stamp_duty_model": "not_modelled",
+    "volume_participation_cap": "unavailable",
+    "point_in_time_universe_guarantee": "unavailable",
+    "adjusted_data_guarantee": "unavailable",
+    "provider_calls_required": false,
+    "live_provider_calls_required": false,
+    "diagnostic_only": true,
+    "readiness_only": true,
+    "decision_grade": false
+  },
+  "guardrails": {
+    "winner_promotion": false,
+    "optimizer_executed": false,
+    "parameter_sweep_executed": false,
+    "provider_calls_executed": false,
+    "silent_runtime_semantic_change_allowed": false,
+    "future_semantic_changes_require_new_version": true,
+    "future_versions_must_be_additive": true
+  }
+}
