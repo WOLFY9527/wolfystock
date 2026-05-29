@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { backtestApi } from '../../api/backtest';
 import { getApiErrorMessage } from '../../api/error';
 import { useI18n } from '../../contexts/UiLanguageContext';
@@ -375,7 +375,7 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
   const [downloadingId, setDownloadingId] = useState<SupportExportDefinition['id'] | null>(null);
   const [robustnessPreview, setRobustnessPreview] = useState<RobustnessEvidencePreviewState>({ status: 'idle' });
 
-  const loadIndex = async () => {
+  const loadIndex = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
     try {
@@ -386,7 +386,7 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [runId, t]);
 
   useEffect(() => {
     void loadIndex();
