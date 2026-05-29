@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, BarChart3, ChevronDown, Layers3, LineChart, Search, ShieldCheck } from 'lucide-react';
 import {
   optionsLabApi,
@@ -1412,7 +1412,7 @@ const OptionsLabPageContent: React.FC = () => {
   const [targetDate, setTargetDate] = useState('2026-08-21');
   const [riskBudget, setRiskBudget] = useState('1000');
   const [selectedExpiration, setSelectedExpiration] = useState('2026-06-19');
-  const [reloadKey, setReloadKey] = useState(0);
+  const reloadRef = useRef<() => void>(() => {});
   const [state, setState] = useState<LoadState>({
     loading: true,
     error: null,
@@ -1471,12 +1471,16 @@ const OptionsLabPageContent: React.FC = () => {
       }
     }
 
+    reloadRef.current = () => {
+      void load();
+    };
+
     void load();
 
     return () => {
       ignored = true;
     };
-  }, [activeSymbol, reloadKey, selectedExpiration]);
+  }, [activeSymbol, selectedExpiration]);
 
   useEffect(() => {
     let ignored = false;
@@ -1622,7 +1626,7 @@ const OptionsLabPageContent: React.FC = () => {
     setSymbolInput(normalized);
     setState((current) => ({ ...current, loading: true, error: null }));
     if (normalized === activeSymbol) {
-      setReloadKey((current) => current + 1);
+      reloadRef.current();
       return;
     }
     setActiveSymbol(normalized);
@@ -1637,7 +1641,7 @@ const OptionsLabPageContent: React.FC = () => {
   const calls = asArray(state.chain?.calls).length ? asArray(state.chain?.calls) : EMPTY_CONTRACTS;
   const puts = asArray(state.chain?.puts).length ? asArray(state.chain?.puts) : EMPTY_CONTRACTS;
   const hasChainRows = calls.length > 0 || puts.length > 0;
-  const comparisonEmptyMessage = (() => {
+  const comparisonEmptyMessage = useMemo(() => {
     if (state.loading) return '正在加载基础数据，稍后将自动计算策略对比。';
     if (state.error) return '期权链暂不可用，策略对比已暂停。';
     const targetPriceValue = Number(targetPrice);
@@ -1648,17 +1652,17 @@ const OptionsLabPageContent: React.FC = () => {
     if (!state.summary || !state.expirations || !state.chain) return COMPARISON_EMPTY_MESSAGE;
     if (!hasTargetPrice || !hasTargetDate || !hasExpirations || !hasContracts) return COMPARISON_EMPTY_MESSAGE;
     return null;
-  })();
-  const decisionEmptyMessage = (() => {
+  }, [state.loading, state.error, state.summary, state.expirations, state.chain, targetPrice, targetDate, expirations, hasChainRows]);
+  const decisionEmptyMessage = useMemo(() => {
     if (state.loading) return '正在加载基础数据，稍后将自动计算情景准备度。';
     if (state.error) return '期权链暂不可用，情景准备度已暂停。';
     const targetPriceValue = Number(targetPrice);
     if (!state.summary || !state.expirations || !state.chain || !hasChainRows) return '先加载合约链后，再进入情景准备度。';
     if (!Number.isFinite(targetPriceValue) || targetPriceValue <= 0 || !targetDate.trim()) return '先补齐目标价格与目标日期。';
     return null;
-  })();
+  }, [state.loading, state.error, state.summary, state.expirations, state.chain, hasChainRows, targetPrice, targetDate]);
   const consumerAvailability = consumerAvailabilitySummary(state, comparisonState, decisionState, hasChainRows);
-  const summaryStripItems: SummaryStripItem[] = (() => {
+  const summaryStripItems: SummaryStripItem[] = useMemo(() => {
     const topCandidate = firstObservationStrategy(decisionState.decision, comparisonState.comparison);
     const maxLoss = decisionState.decision?.riskReward?.maxLoss;
     const scenarioMeta = targetDate.trim() ? `目标日 ${targetDate}` : '补齐目标日后可比较策略';
@@ -1684,7 +1688,7 @@ const OptionsLabPageContent: React.FC = () => {
         meta: riskBudget ? `风险预算 ${riskBudget}` : '先定义可承受亏损',
       },
     ];
-  })();
+  }, [decisionState.decision, comparisonState.comparison, direction, targetPrice, targetDate, riskBudget]);
 
   return (
     <main className="w-full overflow-x-hidden text-white">
