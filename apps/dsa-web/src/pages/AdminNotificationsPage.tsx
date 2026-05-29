@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BellRing, CheckCircle2, Power, Send, ShieldCheck, Trash2, Webhook } from 'lucide-react';
 import {
   adminNotificationsApi,
@@ -291,7 +291,7 @@ const AdminNotificationsPage: React.FC = () => {
     };
   })();
 
-  const loadAll = async () => {
+  const loadAll = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -317,7 +317,7 @@ const AdminNotificationsPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     document.title = isEnglish ? 'Admin Notifications - WolfyStock' : '管理通知 - WolfyStock';

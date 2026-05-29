@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   adminLogsApi,
   type AdminDataMissingDrilldownItem,
@@ -1128,16 +1128,16 @@ const AdminLogsPage: React.FC = () => {
   const [detailError, setDetailError] = useState<ParsedApiError | null>(null);
   const skipDebugClickRef = useRef(false);
 
-  const loadStorageSummary = async () => {
+  const loadStorageSummary = useCallback(async () => {
     try {
       const response = await adminLogsApi.getStorageSummary();
       setStorageSummary(response);
     } catch {
       setStorageSummary(null);
     }
-  };
+  }, []);
 
-  const loadDataMissing = async () => {
+  const loadDataMissing = useCallback(async () => {
     if (activeTab === 'raw') {
       setDataMissingItems([]);
       return;
@@ -1154,9 +1154,9 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsLoadingDataMissing(false);
     }
-  };
+  }, [activeTab, sinceFilter]);
 
-  const loadOperatorIssues = async () => {
+  const loadOperatorIssues = useCallback(async () => {
     if (activeTab === 'raw') {
       setOperatorIssueItems([]);
       return;
@@ -1173,9 +1173,9 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsLoadingOperatorIssues(false);
     }
-  };
+  }, [activeTab, sinceFilter]);
 
-  const loadSessions = async () => {
+  const loadSessions = useCallback(async () => {
     setIsLoadingList(true);
     setError(null);
     try {
@@ -1230,7 +1230,7 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsLoadingList(false);
     }
-  };
+  }, [activeTab, categoryFilter, searchQuery, sinceFilter, statusFilter, pageOffset, levelFilter, showDebugLogs]);
 
   const previewCleanup = async () => {
     setIsCleanupBusy(true);
