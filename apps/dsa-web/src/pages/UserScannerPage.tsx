@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowDownUp,
   BookmarkPlus,
@@ -1841,7 +1841,7 @@ const UserScannerPage: React.FC = () => {
     };
   }, []);
 
-  const loadRun = async (runId: number) => {
+  const loadRun = useCallback(async (runId: number) => {
     try {
       const response = await scannerApi.getRun(runId);
       setRunDetail(response);
@@ -1851,9 +1851,9 @@ const UserScannerPage: React.FC = () => {
     } catch (error) {
       setPageError(getParsedApiError(error));
     }
-  };
+  }, []);
 
-  const fetchHistory = async (page = 1, preferredRunId?: number | null) => {
+  const fetchHistory = useCallback(async (page = 1, preferredRunId?: number | null) => {
     setIsLoadingHistory(true);
     try {
       const response = await scannerApi.getRuns({
@@ -1885,7 +1885,7 @@ const UserScannerPage: React.FC = () => {
     } finally {
       setIsLoadingHistory(false);
     }
-  };
+  }, [market, profile, loadRun]);
 
   useEffect(() => {
     setRunDetail(null);
