@@ -9,7 +9,6 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -26,22 +25,13 @@ def _json_round_trip(payload: dict) -> dict:
     return json.loads(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
 
-def _strip_remote_runtime_fields(value: Any) -> Any:
-    if isinstance(value, list):
-        return [_strip_remote_runtime_fields(item) for item in value]
-    if isinstance(value, dict):
-        sanitized: dict[str, Any] = {}
-        for key, item in value.items():
-            if key in {"isRefreshing", "lastError", "refreshError"}:
-                continue
-            sanitized[key] = _strip_remote_runtime_fields(item)
-        return sanitized
-    return value
-
-
 def _project_payload_for_remote_persistence(payload: dict) -> dict:
-    sanitized = _strip_remote_runtime_fields(payload)
-    return json.loads(json.dumps(sanitized, ensure_ascii=False, sort_keys=True))
+    cache = MarketCache(max_workers=1)
+    cache.set("remote-projection", payload, ttl_seconds=30)
+    entry = cache.get("remote-projection")
+    assert entry is not None
+    projected = cache.project_remote_entry(entry, is_stale=bool(payload.get("isStale")))
+    return json.loads(json.dumps(projected["data"], ensure_ascii=False, sort_keys=True))
 
 
 def test_cold_start_timeout_fallback_returns_quickly_and_is_not_live() -> None:

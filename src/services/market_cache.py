@@ -12,7 +12,7 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Protocol
 
 from src.services.llm_instrumentation import emit_market_cache_event
 
@@ -50,6 +50,7 @@ SAFE_MARKET_CACHE_PANEL_KEYS = frozenset(
         "cn_short_sentiment",
     }
 )
+REMOTE_RUNTIME_ONLY_FIELDS = frozenset({"isRefreshing", "lastError", "refreshError"})
 
 
 @dataclass
@@ -65,10 +66,29 @@ class MarketCacheEntry:
     refresh_generation: int = 0
 
 
+class MarketCacheRemoteBackend(Protocol):
+    """Best-effort remote mirror for future persisted MarketCache projections."""
+
+    def persist(self, key: str, document: dict) -> None:
+        """Persist a JSON-safe mirror document for the given cache key."""
+
+
+class NullMarketCacheRemoteBackend:
+    """Default remote backend that preserves current local-only behavior."""
+
+    def persist(self, key: str, document: dict) -> None:
+        return None
+
+
 class MarketCache:
     """Thread-safe market cache shaped so it can be swapped for Redis later."""
 
-    def __init__(self, max_workers: int = 4, refresh_stale_after_seconds: float = 30.0) -> None:
+    def __init__(
+        self,
+        max_workers: int = 4,
+        refresh_stale_after_seconds: float = 30.0,
+        remote_backend: Optional[MarketCacheRemoteBackend] = None,
+    ) -> None:
         self._entries: Dict[str, MarketCacheEntry] = {}
         self._locks: Dict[str, threading.RLock] = {}
         self._global_lock = threading.RLock()
@@ -76,6 +96,7 @@ class MarketCache:
         self._futures: set[Future] = set()
         self._refresh_stale_after_seconds = refresh_stale_after_seconds
         self._refresh_generation_counter = 0
+        self._remote_backend: MarketCacheRemoteBackend = remote_backend or NullMarketCacheRemoteBackend()
 
     def get(self, key: str) -> Optional[MarketCacheEntry]:
         with self._lock_for(key):
@@ -92,6 +113,7 @@ class MarketCache:
         )
         with self._lock_for(key):
             self._entries[key] = entry
+        self._persist_remote_entry_best_effort(entry)
         return entry
 
     def is_fresh(self, key: str) -> bool:
@@ -294,6 +316,18 @@ class MarketCache:
             self._locks.clear()
             self._futures.clear()
 
+    def project_remote_entry(self, entry: MarketCacheEntry, *, is_stale: bool = False) -> dict:
+        sanitized = self._project_remote_value(entry.data)
+        if is_stale or entry.expires_at <= self._now():
+            sanitized.setdefault("isStale", True)
+        return {
+            "key": entry.key,
+            "ttlSeconds": entry.ttl_seconds,
+            "fetchedAt": entry.fetched_at.isoformat(timespec="seconds"),
+            "expiresAt": entry.expires_at.isoformat(timespec="seconds"),
+            "data": sanitized,
+        }
+
     def _start_background_refresh(self, key: str, ttl_seconds: int, fetcher: Callable[[], dict]) -> None:
         entry = self._entries.get(key)
         if entry is None or entry.is_refreshing:
@@ -357,13 +391,22 @@ class MarketCache:
             payload["isRefreshing"] = True
         else:
             payload.setdefault("isRefreshing", False)
-        if is_stale or entry.expires_at <= self._now():
+        should_mark_stale = is_stale or entry.expires_at <= self._now()
+        if should_mark_stale:
             payload.setdefault("isStale", True)
         if entry.last_error:
             payload["lastError"] = entry.last_error
             payload["refreshError"] = entry.last_error
             payload["warning"] = payload.get("warning") or REFRESH_WARNING
+        self._persist_remote_entry_best_effort(entry, is_stale=should_mark_stale)
         return payload
+
+    def _persist_remote_entry_best_effort(self, entry: MarketCacheEntry, *, is_stale: bool = False) -> None:
+        try:
+            document = self.project_remote_entry(entry, is_stale=is_stale)
+            self._remote_backend.persist(entry.key, document)
+        except Exception as exc:
+            logger.debug("[MarketCache] remote mirror skipped key=%s error=%s", entry.key, exc)
 
     def _entry_from_data(self, key: str, data: dict, ttl_seconds: int) -> MarketCacheEntry:
         now = self._now()
@@ -415,6 +458,22 @@ class MarketCache:
     def _discard_future(self, future: Future) -> None:
         with self._global_lock:
             self._futures.discard(future)
+
+    def _project_remote_value(self, value: Any, path: str = "root") -> Any:
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, list):
+            return [self._project_remote_value(item, f"{path}[{index}]") for index, item in enumerate(value)]
+        if isinstance(value, dict):
+            sanitized: dict[str, Any] = {}
+            for key, item in value.items():
+                if not isinstance(key, str):
+                    raise TypeError(f"remote backend projection requires string keys at {path}")
+                if key in REMOTE_RUNTIME_ONLY_FIELDS:
+                    continue
+                sanitized[key] = self._project_remote_value(item, f"{path}.{key}")
+            return sanitized
+        raise TypeError(f"remote backend projection requires JSON-safe values, got {type(value).__name__} at {path}")
 
     def _emit_cache_event(self, key: str, event_name: str, **labels: object) -> None:
         emit_market_cache_event(event_name, **self._metric_labels(key, **labels))

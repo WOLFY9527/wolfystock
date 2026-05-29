@@ -9,10 +9,9 @@ import time
 import unittest
 from concurrent.futures import Future
 from datetime import timedelta
-from typing import Any
 from unittest.mock import Mock
 
-from src.services.market_cache import MarketCache
+from src.services.market_cache import MarketCache, MarketCacheRemoteBackend, NullMarketCacheRemoteBackend
 from src.services.llm_instrumentation import (
     reset_llm_event_counters,
     set_llm_event_sink,
@@ -20,60 +19,11 @@ from src.services.llm_instrumentation import (
 )
 
 
-def _assert_json_safe(value: Any, path: str = "root") -> None:
-    if value is None or isinstance(value, (str, int, float, bool)):
-        return
-    if isinstance(value, list):
-        for index, item in enumerate(value):
-            _assert_json_safe(item, f"{path}[{index}]")
-        return
-    if isinstance(value, dict):
-        for key, item in value.items():
-            if not isinstance(key, str):
-                raise TypeError(f"remote backend projection requires string keys at {path}")
-            _assert_json_safe(item, f"{path}.{key}")
-        return
-    raise TypeError(f"remote backend projection requires JSON-safe values, got {type(value).__name__} at {path}")
-
-
-def _sanitize_remote_value(value: Any, path: str = "root") -> Any:
-    if value is None or isinstance(value, (str, int, float, bool)):
-        return value
-    if isinstance(value, list):
-        return [_sanitize_remote_value(item, f"{path}[{index}]") for index, item in enumerate(value)]
-    if isinstance(value, dict):
-        sanitized: dict[str, Any] = {}
-        for key, item in value.items():
-            if not isinstance(key, str):
-                raise TypeError(f"remote backend projection requires string keys at {path}")
-            sanitized[key] = _sanitize_remote_value(item, f"{path}.{key}")
-        return sanitized
-    raise TypeError(f"remote backend projection requires JSON-safe values, got {type(value).__name__} at {path}")
-
-
-def _project_remote_cache_entry(cache: MarketCache, entry: Any, *, is_stale: bool = False) -> dict:
-    sanitized = _sanitize_remote_value(entry.data)
-    if is_stale or entry.expires_at <= cache._now():
-        sanitized.setdefault("isStale", True)
-    sanitized.pop("isRefreshing", None)
-    sanitized.pop("lastError", None)
-    sanitized.pop("refreshError", None)
-    document = {
-        "key": entry.key,
-        "ttlSeconds": entry.ttl_seconds,
-        "fetchedAt": entry.fetched_at.isoformat(timespec="seconds"),
-        "expiresAt": entry.expires_at.isoformat(timespec="seconds"),
-        "data": sanitized,
-    }
-    _assert_json_safe(document)
-    return document
-
-
 class _RemoteBackendUnavailable(RuntimeError):
     pass
 
 
-class _FakeRemoteMarketCacheBackend:
+class _FakeRemoteMarketCacheBackend(MarketCacheRemoteBackend):
     def __init__(self, *, fail_on_write: bool = False) -> None:
         self.fail_on_write = fail_on_write
         self.documents: dict[str, dict] = {}
@@ -95,24 +45,6 @@ class _FakeRemoteMarketCacheBackend:
         if self.fail_on_write:
             raise _RemoteBackendUnavailable("redis backend unavailable")
         self.documents[key] = json.loads(json.dumps(document, ensure_ascii=False, sort_keys=True))
-
-
-def _get_or_refresh_with_remote_backend_mirror(
-    cache: MarketCache,
-    backend: _FakeRemoteMarketCacheBackend,
-    key: str,
-    ttl_seconds: int,
-    fetcher,
-    **kwargs: Any,
-) -> dict:
-    payload = cache.get_or_refresh(key, ttl_seconds, fetcher, **kwargs)
-    entry = cache.get(key)
-    if entry is not None:
-        try:
-            backend.persist(key, _project_remote_cache_entry(cache, entry, is_stale=bool(payload.get("isStale"))))
-        except _RemoteBackendUnavailable:
-            pass
-    return payload
 
 
 class MarketCacheTestCase(unittest.TestCase):
@@ -538,6 +470,11 @@ class MarketCacheTestCase(unittest.TestCase):
         self.assertEqual(payload["value"], 1)
         self.assertEqual(self._event_counts().get("market_cache_hit"), 1)
 
+    def test_null_remote_backend_is_default_noop_adapter(self) -> None:
+        cache = MarketCache(max_workers=1)
+
+        self.assertIsInstance(cache._remote_backend, NullMarketCacheRemoteBackend)
+
     def test_remote_projection_only_persists_json_safe_cache_contract(self) -> None:
         cache = MarketCache(max_workers=1)
         cache.set(
@@ -604,7 +541,7 @@ class MarketCacheTestCase(unittest.TestCase):
             "executor": cache._executor,
             "fetcher": Mock(return_value={"source": "live"}),
         }
-        projected = _project_remote_cache_entry(cache, entry, is_stale=True)
+        projected = cache.project_remote_entry(entry, is_stale=True)
 
         self.assertEqual(projected["key"], "market_overview:indices")
         self.assertEqual(projected["data"]["freshness"], "partial")
@@ -642,12 +579,12 @@ class MarketCacheTestCase(unittest.TestCase):
                 assert entry is not None
                 entry.data[field_name] = invalid_value
                 with self.assertRaisesRegex(TypeError, "JSON-safe"):
-                    _project_remote_cache_entry(cache, entry)
+                    cache.project_remote_entry(entry)
 
     def test_local_memory_cache_remains_authoritative_over_remote_backend(self) -> None:
-        cache = MarketCache(max_workers=1)
-        cache.set("crypto", {"source": "binance", "value": 1, "freshness": "live"}, ttl_seconds=30)
         backend = _FakeRemoteMarketCacheBackend()
+        cache = MarketCache(max_workers=1, remote_backend=backend)
+        cache.set("crypto", {"source": "binance", "value": 1, "freshness": "live"}, ttl_seconds=30)
         backend.seed(
             "crypto",
             {
@@ -659,9 +596,7 @@ class MarketCacheTestCase(unittest.TestCase):
             },
         )
 
-        payload = _get_or_refresh_with_remote_backend_mirror(
-            cache,
-            backend,
+        payload = cache.get_or_refresh(
             "crypto",
             30,
             Mock(side_effect=AssertionError("fresh local cache should stay authoritative")),
@@ -675,12 +610,10 @@ class MarketCacheTestCase(unittest.TestCase):
         self.assertEqual(backend.documents["crypto"]["data"]["value"], 1)
 
     def test_remote_backend_failure_degrades_to_current_local_fallback_behavior(self) -> None:
-        cache = MarketCache(max_workers=1)
         backend = _FakeRemoteMarketCacheBackend(fail_on_write=True)
+        cache = MarketCache(max_workers=1, remote_backend=backend)
 
-        payload = _get_or_refresh_with_remote_backend_mirror(
-            cache,
-            backend,
+        payload = cache.get_or_refresh(
             "cn_indices",
             30,
             Mock(side_effect=RuntimeError("provider down")),
