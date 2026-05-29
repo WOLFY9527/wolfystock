@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
@@ -269,14 +269,16 @@ function downloadTextFile(filename: string, content: string, mimeType: string): 
 
 type RunStatusSectionProps = {
   run: RuleBacktestRunResponse | null;
-  isLoadingRun: boolean;
   runError: ParsedApiError | null;
   cancelError: ParsedApiError | null;
   statusSummaryItems: Array<{ label: string; value: string; note: string }>;
-  isPollingStatus: boolean;
-  isCancellingRun: boolean;
-  canCancelCurrentRun: boolean;
-  canExportTrace: boolean;
+  uiState: {
+    isLoadingRun: boolean;
+    isPollingStatus: boolean;
+    isCancellingRun: boolean;
+    canCancelCurrentRun: boolean;
+    canExportTrace: boolean;
+  };
   presetNotice: string | null;
   availablePresets: RuleBacktestPreset[];
   resultPage: (key: string, vars?: Record<string, string | number | undefined>) => string;
@@ -287,14 +289,10 @@ type RunStatusSectionProps = {
 
 const RunStatusSection: React.FC<RunStatusSectionProps> = ({
   run,
-  isLoadingRun,
   runError,
   cancelError,
   statusSummaryItems,
-  isPollingStatus,
-  isCancellingRun,
-  canCancelCurrentRun,
-  canExportTrace,
+  uiState,
   presetNotice,
   availablePresets,
   resultPage,
@@ -302,6 +300,14 @@ const RunStatusSection: React.FC<RunStatusSectionProps> = ({
   handleCancelRun,
   handleExportDecisionReport,
 }) => {
+  const {
+    isLoadingRun,
+    isPollingStatus,
+    isCancellingRun,
+    canCancelCurrentRun,
+    canExportTrace,
+  } = uiState;
+
   if (!run && isLoadingRun) {
     return (
       <section className="backtest-display-section" data-testid="deterministic-result-page-status">
@@ -447,13 +453,18 @@ type CompletedTabPanelProps = {
   resultPage: (key: string, vars?: Record<string, string | number | undefined>) => string;
   backtestCopy: (key: string, vars?: Record<string, string | number | undefined>) => string;
   language: UiLanguage;
+  uiState: {
+    hasRobustnessAnalysis: boolean;
+    isLoadingHistory: boolean;
+    isLoadingCompareRuns: boolean;
+    isSubmittingScenarioRuns: boolean;
+  };
   selectedBenchmarkLabel: string;
   buyAndHoldLabel: string;
   benchmarkStatusNote: string;
   walkForwardOverview: BacktestWalkForwardOverview;
   decisionReportMarkdown: string;
   handleExportDecisionReport: (format: 'md' | 'html') => void;
-  hasRobustnessAnalysis: boolean;
   robustnessAnalysis: Record<string, unknown> | null;
   robustnessLensRows: CoverageTrackItem[];
   riskControlRows: RiskControlVisualRow[];
@@ -477,8 +488,6 @@ type CompletedTabPanelProps = {
   historyItems: RuleBacktestHistoryItem[];
   historyError: ParsedApiError | null;
   compareError: ParsedApiError | null;
-  isLoadingHistory: boolean;
-  isLoadingCompareRuns: boolean;
   fetchHistory: (code?: string) => void;
   handleOpenCompareWorkbench: () => void;
   setCompareRunIds: React.Dispatch<React.SetStateAction<number[]>>;
@@ -488,7 +497,6 @@ type CompletedTabPanelProps = {
   selectedScenarioPlanId: string | null;
   setSelectedScenarioPlanId: React.Dispatch<React.SetStateAction<string | null>>;
   handleRunScenarioPlan: () => Promise<void>;
-  isSubmittingScenarioRuns: boolean;
   scenarioRuns: ScenarioRunState[];
   scenarioError: ParsedApiError | null;
   scenarioComparisonItems: RuleComparisonItem[];
@@ -504,13 +512,13 @@ const CompletedTabPanel: React.FC<CompletedTabPanelProps> = ({
   resultPage,
   backtestCopy,
   language,
+  uiState,
   selectedBenchmarkLabel,
   buyAndHoldLabel,
   benchmarkStatusNote,
   walkForwardOverview,
   decisionReportMarkdown,
   handleExportDecisionReport,
-  hasRobustnessAnalysis,
   robustnessAnalysis,
   robustnessLensRows,
   riskControlRows,
@@ -534,8 +542,6 @@ const CompletedTabPanel: React.FC<CompletedTabPanelProps> = ({
   historyItems,
   historyError,
   compareError,
-  isLoadingHistory,
-  isLoadingCompareRuns,
   fetchHistory,
   handleOpenCompareWorkbench,
   setCompareRunIds,
@@ -545,7 +551,6 @@ const CompletedTabPanel: React.FC<CompletedTabPanelProps> = ({
   selectedScenarioPlanId,
   setSelectedScenarioPlanId,
   handleRunScenarioPlan,
-  isSubmittingScenarioRuns,
   scenarioRuns,
   scenarioError,
   scenarioComparisonItems,
@@ -553,6 +558,13 @@ const CompletedTabPanel: React.FC<CompletedTabPanelProps> = ({
   handleSavePreset,
   navigate,
 }) => {
+  const {
+    hasRobustnessAnalysis,
+    isLoadingHistory,
+    isLoadingCompareRuns,
+    isSubmittingScenarioRuns,
+  } = uiState;
+
   if (activeTab === 'overview') {
     return (
       <BacktestOverviewSummary
@@ -690,7 +702,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const [isSubmittingScenarioRuns, setIsSubmittingScenarioRuns] = useState(false);
   const [scenarioError, setScenarioError] = useState<ParsedApiError | null>(null);
   const [presetNotice, setPresetNotice] = useState<string | null>(null);
-  const [availablePresets, setAvailablePresets] = useState<RuleBacktestPreset[]>([]);
+  const [availablePresets, setAvailablePresets] = useState<RuleBacktestPreset[]>(() => loadRuleBacktestPresets());
   const [activeRobustnessKey, setActiveRobustnessKey] = useState<string | null>(null);
   const [activeRiskControlKey, setActiveRiskControlKey] = useState<RiskControlVisualRow['key'] | null>(null);
   const density = useDeterministicResultDensity();
@@ -960,10 +972,6 @@ const DeterministicBacktestResultPage: React.FC = () => {
   }, [backtestCopy, hasValidRunId, parsedRunId]);
 
   useEffect(() => {
-    setAvailablePresets(loadRuleBacktestPresets());
-  }, []);
-
-  useEffect(() => {
     if (!run || run.status !== 'completed') return;
     const next = saveRuleBacktestPreset(createRuleBacktestPresetFromRun(run, { kind: 'recent' }));
     setAvailablePresets(next);
@@ -1042,9 +1050,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
     };
   }, [scenarioRuns]);
 
-  const handleOpenHistoryRun = useCallback((item: RuleBacktestHistoryItem) => {
+  const handleOpenHistoryRun = (item: RuleBacktestHistoryItem) => {
     navigate(`/backtest/results/${item.id}`);
-  }, [navigate]);
+  };
 
   const benchmarkSummary = run?.benchmarkSummary;
   const buyAndHoldSummary = run?.buyAndHoldSummary;
@@ -1076,16 +1084,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
     )
     : resultPage('benchmarkNotes.pending');
   const normalized = run?.status === 'completed' ? normalizeDeterministicBacktestResult(run, language) : null;
-  const scenarioPlans: RuleScenarioPlan[] = useMemo(
-    () => run?.status === 'completed' ? getRuleScenarioPlans(run) : [],
-    [run],
-  );
-  const selectedScenarioPlan = scenarioPlans.find((plan) => plan.id === selectedScenarioPlanId) || scenarioPlans[0] || null;
-  useEffect(() => {
-    if (!selectedScenarioPlanId && scenarioPlans[0]) {
-      setSelectedScenarioPlanId(scenarioPlans[0].id);
-    }
-  }, [scenarioPlans, selectedScenarioPlanId]);
+  const scenarioPlans: RuleScenarioPlan[] = run?.status === 'completed' ? getRuleScenarioPlans(run) : [];
+  const effectiveSelectedScenarioPlanId = selectedScenarioPlanId ?? scenarioPlans[0]?.id ?? null;
+  const selectedScenarioPlan = scenarioPlans.find((plan) => plan.id === effectiveSelectedScenarioPlanId) || scenarioPlans[0] || null;
   const comparisonItems: RuleComparisonItem[] = (() => {
     if (!run || !normalized) return [];
     const items: RuleComparisonItem[] = [{
@@ -1242,22 +1243,22 @@ const DeterministicBacktestResultPage: React.FC = () => {
     },
   ] : [];
 
-  const handleToggleCompareRun = useCallback((item: RuleBacktestHistoryItem) => {
+  const handleToggleCompareRun = (item: RuleBacktestHistoryItem) => {
     setCompareRunIds((current) => {
       if (current.includes(item.id)) return current.filter((id) => id !== item.id);
       return [...current, item.id].slice(0, 3);
     });
-  }, []);
+  };
 
-  const handleOpenCompareWorkbench = useCallback(() => {
+  const handleOpenCompareWorkbench = () => {
     if (!run || compareRunIds.length === 0) return;
     const params = new URLSearchParams({
       runIds: [run.id, ...compareRunIds].join(','),
     });
     navigate(`/backtest/compare?${params.toString()}`);
-  }, [run, compareRunIds, navigate]);
+  };
 
-  const handleSavePreset = useCallback(() => {
+  const handleSavePreset = () => {
     if (!run) return;
     const suggestedName = `${run.code} · ${getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language)}`;
     const name = window.prompt(resultPage('promptSavePreset'), suggestedName);
@@ -1268,7 +1269,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     }));
     setAvailablePresets(next);
     setPresetNotice(resultPage('presetSaved', { name: name.trim() }));
-  }, [run, language, resultPage]);
+  };
 
   const handleExportDecisionReport = useCallback((format: 'md' | 'html') => {
     if (!run || !normalized || !decisionReportMarkdown) return;
@@ -1289,7 +1290,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     downloadTextFile(`backtest-run-${run.id}-summary.html`, html, 'text/html;charset=utf-8');
   }, [run, normalized, decisionReportMarkdown, resultPage]);
 
-  const handleRunScenarioPlan = useCallback(async () => {
+  const handleRunScenarioPlan = async () => {
     if (!run || !selectedScenarioPlan) return;
     setIsSubmittingScenarioRuns(true);
     setScenarioError(null);
@@ -1323,9 +1324,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
     } finally {
       setIsSubmittingScenarioRuns(false);
     }
-  }, [run, selectedScenarioPlan]);
+  };
 
-  const handleCancelRun = useCallback(async () => {
+  const handleCancelRun = async () => {
     if (!run || !canCancelRuleRun(run.status) || isCancellingRun) return;
     const confirmed = window.confirm(resultPage('cancelConfirm'));
     if (!confirmed) return;
@@ -1347,7 +1348,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     } finally {
       setIsCancellingRun(false);
     }
-  }, [run, isCancellingRun, fetchRun, fetchHistory, resultPage]);
+  };
 
   const renderCompletedConsole = () => {
     if (!run || !normalized) return null;
@@ -1664,14 +1665,16 @@ const DeterministicBacktestResultPage: React.FC = () => {
           {run?.status === 'completed' && normalized ? null : (
             <RunStatusSection
               run={run}
-              isLoadingRun={isLoadingRun}
               runError={runError}
               cancelError={cancelError}
               statusSummaryItems={statusSummaryItems}
-              isPollingStatus={isPollingStatus}
-              isCancellingRun={isCancellingRun}
-              canCancelCurrentRun={canCancelCurrentRun}
-              canExportTrace={canExportTrace}
+              uiState={{
+                isLoadingRun,
+                isPollingStatus,
+                isCancellingRun,
+                canCancelCurrentRun,
+                canExportTrace,
+              }}
               presetNotice={presetNotice}
               availablePresets={availablePresets}
               resultPage={resultPage}
@@ -1709,13 +1712,18 @@ const DeterministicBacktestResultPage: React.FC = () => {
                 resultPage={resultPage}
                 backtestCopy={backtestCopy}
                 language={language}
+                uiState={{
+                  hasRobustnessAnalysis,
+                  isLoadingHistory,
+                  isLoadingCompareRuns,
+                  isSubmittingScenarioRuns,
+                }}
                 selectedBenchmarkLabel={selectedBenchmarkLabel}
                 buyAndHoldLabel={buyAndHoldLabel}
                 benchmarkStatusNote={benchmarkStatusNote}
                 walkForwardOverview={walkForwardOverview}
                 decisionReportMarkdown={decisionReportMarkdown}
                 handleExportDecisionReport={handleExportDecisionReport}
-                hasRobustnessAnalysis={hasRobustnessAnalysis}
                 robustnessAnalysis={robustnessAnalysis}
                 robustnessLensRows={robustnessLensRows}
                 riskControlRows={riskControlRows}
@@ -1739,18 +1747,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
                 historyItems={historyItems}
                 historyError={historyError}
                 compareError={compareError}
-                isLoadingHistory={isLoadingHistory}
-                isLoadingCompareRuns={isLoadingCompareRuns}
                 fetchHistory={fetchHistory}
                 handleOpenCompareWorkbench={handleOpenCompareWorkbench}
                 setCompareRunIds={setCompareRunIds}
                 handleOpenHistoryRun={handleOpenHistoryRun}
                 handleToggleCompareRun={handleToggleCompareRun}
                 scenarioPlans={scenarioPlans}
-                selectedScenarioPlanId={selectedScenarioPlanId}
+                selectedScenarioPlanId={effectiveSelectedScenarioPlanId}
                 setSelectedScenarioPlanId={setSelectedScenarioPlanId}
                 handleRunScenarioPlan={handleRunScenarioPlan}
-                isSubmittingScenarioRuns={isSubmittingScenarioRuns}
                 scenarioRuns={scenarioRuns}
                 scenarioError={scenarioError}
                 scenarioComparisonItems={scenarioComparisonItems}
