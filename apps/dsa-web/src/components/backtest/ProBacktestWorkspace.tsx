@@ -569,12 +569,11 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
     </section>
   );
 
-  const renderRulePreview = () => {
-    const entry = parsedStrategy?.summary?.entry || parsedStrategy?.parsedStrategy.summary?.entry || '--';
-    const exit = parsedStrategy?.summary?.exit || parsedStrategy?.parsedStrategy.summary?.exit || '--';
-    const strategy = parsedStrategy?.summary?.strategy || parsedStrategy?.coreIntentSummary || parsedStrategy?.parsedStrategy.coreIntentSummary || getFirstLine(strategyText) || '--';
-    const setupSource = getSetupSourceLabel(parsedStrategy, language);
-    return (
+  const rulePreviewEntry = parsedStrategy?.summary?.entry || parsedStrategy?.parsedStrategy.summary?.entry || '--';
+  const rulePreviewExit = parsedStrategy?.summary?.exit || parsedStrategy?.parsedStrategy.summary?.exit || '--';
+  const rulePreviewStrategy = parsedStrategy?.summary?.strategy || parsedStrategy?.coreIntentSummary || parsedStrategy?.parsedStrategy.coreIntentSummary || getFirstLine(strategyText) || '--';
+  const rulePreviewSetupSource = getSetupSourceLabel(parsedStrategy, language);
+  const rulePreview = (
       <div data-testid="pro-rule-preview" className={`${ghostCardClass} flex min-w-0 flex-col gap-4 p-4 md:p-5`}>
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
@@ -588,8 +587,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         <div data-testid="pro-parsed-summary" className="grid min-w-0 gap-3">
           <div className="rounded-lg border border-white/5 bg-black/20 p-3">
             <p className={labelClass}>{language === 'en' ? 'STRATEGY' : '策略'}</p>
-            <p className="mt-2 truncate text-sm text-white/72">{strategy}</p>
-            <p className="mt-1 text-xs text-white/38">{setupSource}</p>
+            <p className="mt-2 truncate text-sm text-white/72">{rulePreviewStrategy}</p>
+            <p className="mt-1 text-xs text-white/38">{rulePreviewSetupSource}</p>
           </div>
           <div className="rounded-lg border border-white/5 bg-black/20 p-3">
             <p className={labelClass}>{language === 'en' ? 'Executable spec' : '实际执行内容'}</p>
@@ -601,11 +600,11 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-lg border border-white/5 bg-black/20 p-3">
               <p className={labelClass}>{language === 'en' ? 'Buy rules' : '买入规则'}</p>
-              <p className="mt-2 text-sm text-white/72">{entry}</p>
+              <p className="mt-2 text-sm text-white/72">{rulePreviewEntry}</p>
             </div>
             <div className="rounded-lg border border-white/5 bg-black/20 p-3">
               <p className={labelClass}>{language === 'en' ? 'Sell rules' : '卖出规则'}</p>
-              <p className="mt-2 text-sm text-white/72">{exit}</p>
+              <p className="mt-2 text-sm text-white/72">{rulePreviewExit}</p>
             </div>
           </div>
           <div className="rounded-lg border border-white/5 bg-black/20 p-3">
@@ -648,8 +647,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           </div>
         ) : null}
       </div>
-    );
-  };
+  );
 
   const renderStrategyStep = () => (
     <section data-testid="pro-step-strategy" className="flex min-w-0 flex-col gap-4">
@@ -703,7 +701,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           {parseError ? <ApiErrorAlert error={parseError} /> : null}
         </div>
         <div className="flex min-w-0 flex-col gap-4">
-          {renderRulePreview()}
+          {rulePreview}
           <label className="flex items-center gap-2.5 rounded-lg border border-white/5 bg-white/[0.02] p-3 text-sm text-white/70">
             <input
               type="checkbox"
@@ -1047,19 +1045,18 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   );
 
   const activeStepDefinition = stepDefinitions.find((step) => step.id === activeStep) || stepDefinitions[0];
-  const renderActiveStep = () => {
-    if (activeStep === 'strategy') return renderStrategyStep();
-    if (activeStep === 'orders') return renderOrdersStep();
-    if (activeStep === 'costs') return renderCostsStep();
-    if (activeStep === 'advanced') return renderAdvancedStep();
-    return renderAssetsStep();
-  };
+  const activeStepContent = activeStep === 'strategy'
+    ? renderStrategyStep()
+    : activeStep === 'orders'
+      ? renderOrdersStep()
+      : activeStep === 'costs'
+        ? renderCostsStep()
+        : activeStep === 'advanced'
+          ? renderAdvancedStep()
+          : renderAssetsStep();
 
-  const renderExecutionRail = (mobile = false) => (
-    <aside
-      data-testid={mobile ? 'pro-mobile-execution-summary' : 'pro-execution-rail'}
-      className={`${ghostCardClass} ${mobile ? 'p-4' : 'lg:sticky lg:top-6 max-h-[calc(100vh-6rem)] overflow-y-auto no-scrollbar p-4'} flex min-w-0 flex-col gap-4`}
-    >
+  const createExecutionRailContent = (readinessTestId: string) => (
+    <>
       <div>
         <p className={labelClass}>{language === 'en' ? 'EXECUTION SUMMARY' : '执行摘要'}</p>
         <div className="mt-3 grid gap-2 text-xs">
@@ -1109,7 +1106,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           ))}
         </div>
       </div>
-      <div data-testid={mobile ? 'pro-mobile-execution-readiness' : 'pro-execution-readiness'}>
+      <div data-testid={readinessTestId}>
         <p className={labelClass}>{language === 'en' ? 'READINESS' : '就绪度'}</p>
         <div className="mt-3 grid gap-2">
           {readiness.map((item) => (
@@ -1161,10 +1158,65 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           </div>
         </div>
       ) : null}
+    </>
+  );
+  const desktopExecutionRail = (
+    <aside
+      data-testid="pro-execution-rail"
+      className={`${ghostCardClass} lg:sticky lg:top-6 max-h-[calc(100vh-6rem)] overflow-y-auto no-scrollbar p-4 flex min-w-0 flex-col gap-4`}
+    >
+      {createExecutionRailContent('pro-execution-readiness')}
+    </aside>
+  );
+  const mobileExecutionRail = (
+    <aside
+      data-testid="pro-mobile-execution-summary"
+      className={`${ghostCardClass} p-4 flex min-w-0 flex-col gap-4`}
+    >
+      {createExecutionRailContent('pro-mobile-execution-readiness')}
     </aside>
   );
 
-  const renderResultsDrawer = () => (
+  const presetDrawerRawPresets = (() => {
+    try {
+      return JSON.parse(window.localStorage.getItem(RULE_BACKTEST_PRESET_STORAGE_KEY) || '[]') as Array<Record<string, unknown>>;
+    } catch {
+      return [];
+    }
+  })();
+
+  const presetDrawerItems = presetDrawerRawPresets.length === 0 ? null : (
+    <div data-testid="backtest-setup-presets" className="grid gap-2 border-t border-white/5 pt-3">
+      <p className={labelClass}>{language === 'en' ? 'Preset shortcuts' : '快速预设'}</p>
+      {presetDrawerRawPresets.slice(0, 3).map((preset) => (
+        <button
+          key={String(preset.id || preset.name)}
+          type="button"
+          className={secondaryButtonClass}
+          onClick={() => {
+            if (typeof preset.code === 'string') onCodeChange(preset.code);
+            if (typeof preset.strategyText === 'string') onStrategyTextChange(preset.strategyText);
+            if (typeof preset.startDate === 'string') onStartDateChange(preset.startDate);
+            if (typeof preset.endDate === 'string') onEndDateChange(preset.endDate);
+            if (typeof preset.lookbackBars === 'string') onLookbackBarsChange(preset.lookbackBars);
+            if (typeof preset.initialCapital === 'string') onInitialCapitalChange(preset.initialCapital);
+            if (typeof preset.feeBps === 'string') onFeeBpsChange(preset.feeBps);
+            if (typeof preset.slippageBps === 'string') onSlippageBpsChange(preset.slippageBps);
+            if (typeof preset.benchmarkMode === 'string') onBenchmarkModeChange(preset.benchmarkMode as RuleBenchmarkMode);
+            if (typeof preset.benchmarkCode === 'string') onBenchmarkCodeChange(preset.benchmarkCode);
+            onToggleConfirmed(false);
+            setResultsOpen(false);
+            setActiveStep('assets');
+            onStepChange('symbol');
+          }}
+        >
+          {language === 'en' ? 'Apply' : '应用'}
+        </button>
+      ))}
+    </div>
+  );
+
+  const resultsDrawer = (
     <section data-testid="pro-results-history-drawer" className={`${ghostCardClass} p-4`}>
       <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
@@ -1214,51 +1266,10 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             {language === 'en' ? 'No saved deterministic runs yet.' : '当前还没有已保存的确定性回测。'}
           </div>
         )}
-        {renderPresetDrawerItems()}
+        {presetDrawerItems}
       </div>
     </section>
   );
-
-  const renderPresetDrawerItems = () => {
-    const rawPresets = (() => {
-      try {
-        return JSON.parse(window.localStorage.getItem(RULE_BACKTEST_PRESET_STORAGE_KEY) || '[]') as Array<Record<string, unknown>>;
-      } catch {
-        return [];
-      }
-    })();
-    if (rawPresets.length === 0) return null;
-    return (
-      <div data-testid="backtest-setup-presets" className="grid gap-2 border-t border-white/5 pt-3">
-        <p className={labelClass}>{language === 'en' ? 'Preset shortcuts' : '快速预设'}</p>
-        {rawPresets.slice(0, 3).map((preset) => (
-          <button
-            key={String(preset.id || preset.name)}
-            type="button"
-            className={secondaryButtonClass}
-            onClick={() => {
-              if (typeof preset.code === 'string') onCodeChange(preset.code);
-              if (typeof preset.strategyText === 'string') onStrategyTextChange(preset.strategyText);
-              if (typeof preset.startDate === 'string') onStartDateChange(preset.startDate);
-              if (typeof preset.endDate === 'string') onEndDateChange(preset.endDate);
-              if (typeof preset.lookbackBars === 'string') onLookbackBarsChange(preset.lookbackBars);
-              if (typeof preset.initialCapital === 'string') onInitialCapitalChange(preset.initialCapital);
-              if (typeof preset.feeBps === 'string') onFeeBpsChange(preset.feeBps);
-              if (typeof preset.slippageBps === 'string') onSlippageBpsChange(preset.slippageBps);
-              if (typeof preset.benchmarkMode === 'string') onBenchmarkModeChange(preset.benchmarkMode as RuleBenchmarkMode);
-              if (typeof preset.benchmarkCode === 'string') onBenchmarkCodeChange(preset.benchmarkCode);
-              onToggleConfirmed(false);
-              setResultsOpen(false);
-              setActiveStep('assets');
-              onStepChange('symbol');
-            }}
-          >
-            {language === 'en' ? 'Apply' : '应用'}
-          </button>
-        ))}
-      </div>
-    );
-  };
 
   return (
     <>
@@ -1308,20 +1319,20 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
 
           <main data-testid="pro-step-workspace" className={`${ghostCardClass} min-w-0 p-4 md:p-5`}>
             <AnimateStep activeStep={activeStepDefinition.id}>
-              {renderActiveStep()}
+              {activeStepContent}
             </AnimateStep>
           </main>
 
           <div className="hidden lg:block">
-            {renderExecutionRail(false)}
+            {desktopExecutionRail}
           </div>
         </div>
 
         <div className="lg:hidden">
-          {renderExecutionRail(true)}
+          {mobileExecutionRail}
         </div>
 
-        {renderResultsDrawer()}
+        {resultsDrawer}
 
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-black/90 px-4 py-3 backdrop-blur-xl lg:hidden">
           <button

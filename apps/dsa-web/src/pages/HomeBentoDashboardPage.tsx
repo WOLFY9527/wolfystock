@@ -3309,11 +3309,16 @@ function localizeNarrativeText(locale: DashboardLocale, raw: string | undefined,
   return fallback;
 }
 
+function containsNormalizedText(haystack: string, needle: string): boolean {
+  return needle === '' || haystack.split(needle).length > 1;
+}
+
 function findStandardField(fields: StandardReportField[] | undefined, aliases: string[]): StandardReportField | undefined {
   for (const alias of aliases) {
     const aliasKey = normalizeDetailKey(alias);
     for (const field of fields || []) {
-      if ((normalizeDetailKey(field.label).includes(aliasKey) || aliasKey.includes(normalizeDetailKey(field.label))) && field?.label) {
+      const fieldLabelKey = normalizeDetailKey(field.label);
+      if ((containsNormalizedText(fieldLabelKey, aliasKey) || containsNormalizedText(aliasKey, fieldLabelKey)) && field?.label) {
         return field;
       }
     }
