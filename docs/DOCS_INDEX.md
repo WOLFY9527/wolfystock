@@ -123,6 +123,8 @@ operator workflows.
   local DuckDB diagnostics only.
 - [Provider Observability And Metrics Readiness](./operations/provider-observability-metrics-readiness.md):
   current provider/admin observability posture and the gap to a real metrics stack.
+- [Queue / WS2 / Metrics Production Readiness](./operations/queue-ws2-metrics-production-readiness.md):
+  topology crosswalk separating repo-local foundations from deferred production runtime and metrics-stack enablement.
 
 ## Historical Evidence
 

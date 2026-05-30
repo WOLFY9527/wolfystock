@@ -27,6 +27,9 @@ restore, deployment, or runtime cutover work.
   and worker deployment model.
 - `docs/audits/deployment-readiness-checklist.md`: release-candidate
   operational checklist and final go/no-go gate.
+- `docs/operations/queue-ws2-metrics-production-readiness.md`: compact
+  topology crosswalk for process-local queue, WS2 foundations, MarketCache
+  Redis mirror boundary, and deferred metrics/runtime enablement.
 - `docs/audits/archive/release-integration-plan-main-ahead.md`: archived
   point-in-time main/ahead integration plan for the earlier local-ahead train.
 - `docs/audits/release-rollback-runbook.md`: operational rollback runbook.

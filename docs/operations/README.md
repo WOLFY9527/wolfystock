@@ -11,6 +11,7 @@ runtime metadata references.
 - `ARTIFACT_CLEANUP_POLICY.md`
 - `parallel-codex-playbook.md`
 - `provider-capability-metadata.md`
+- `queue-ws2-metrics-production-readiness.md`
 - `duckdb-operator-smoke-guide.md`
 - `duckdb-production-readiness-checklist.md`
 
