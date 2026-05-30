@@ -977,6 +977,20 @@ function JsonBlock({ value }: { value: unknown }) {
   );
 }
 
+function detailRecordKey(item: Record<string, unknown>, fields: string[]): string {
+  const parts: string[] = [];
+  for (const field of fields) {
+    const value = item[field];
+    if (value == null || value === '') continue;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      parts.push(String(value));
+    } else {
+      parts.push(JSON.stringify(sanitizeDisplayValue(value)));
+    }
+  }
+  return parts.length ? parts.join('::') : JSON.stringify(sanitizeDisplayValue(item));
+}
+
 function AdminLogsTerminalSection({
   title,
   summary,
@@ -1528,7 +1542,7 @@ const AdminLogsPage: React.FC = () => {
   const rawActorRole = String(readable.actorRole || '').trim().toLowerCase();
   const incidentHooks = (() => {
     const hooks = incidentTimeline?.hooks || [];
-    return [...hooks].sort((left, right) => {
+    return hooks.slice().sort((left, right) => {
       const leftIndex = INCIDENT_KIND_ORDER.indexOf(left.kind as (typeof INCIDENT_KIND_ORDER)[number]);
       const rightIndex = INCIDENT_KIND_ORDER.indexOf(right.kind as (typeof INCIDENT_KIND_ORDER)[number]);
       return (leftIndex === -1 ? 99 : leftIndex) - (rightIndex === -1 ? 99 : rightIndex);
@@ -2521,7 +2535,7 @@ const AdminLogsPage: React.FC = () => {
             <AdminLogsTerminalSection title={locale === 'zh' ? 'LLM 调用链' : 'LLM call chain'} defaultOpen={false} className="px-5 py-4">
               <div className="mt-4 space-y-3">
                 {aiCalls.length ? aiCalls.map((item, index) => (
-                  <CallCard key={`${text(item.model)}-${index}`} item={item} index={index} type="llm" locale={locale} />
+                  <CallCard key={detailRecordKey(item, ['id', 'requestId', 'traceId', 'queryId', 'model', 'version', 'request', 'params', 'requestParams', 'status', 'reason', 'fallback'])} item={item} index={index} type="llm" locale={locale} />
                 )) : <p className="text-sm text-muted-text">{t('adminLogs.emptyOperationTable')}</p>}
               </div>
             </AdminLogsTerminalSection>
@@ -2529,7 +2543,7 @@ const AdminLogsPage: React.FC = () => {
             <AdminLogsTerminalSection title={locale === 'zh' ? '数据源调用' : 'Data source calls'} defaultOpen={false} className="px-5 py-4">
               <div className="mt-4 space-y-3">
                 {dataSourceCalls.length ? dataSourceCalls.map((item, index) => (
-                  <CallCard key={`${text(item.api || item.source)}-${index}`} item={item} index={index} type="data" locale={locale} />
+                  <CallCard key={detailRecordKey(item, ['id', 'requestId', 'traceId', 'queryId', 'api', 'source', 'endpoint', 'request', 'params', 'requestParams', 'status', 'reason'])} item={item} index={index} type="data" locale={locale} />
                 )) : <p className="text-sm text-muted-text">{t('adminLogs.emptyOperationTable')}</p>}
               </div>
             </AdminLogsTerminalSection>
@@ -2537,8 +2551,8 @@ const AdminLogsPage: React.FC = () => {
             <section className="grid gap-4 xl:grid-cols-2">
               <AdminLogsTerminalSection title={locale === 'zh' ? '系统回退记录' : 'System fallback records'} defaultOpen={false} className="px-5 py-4">
                 <div className="mt-4 space-y-2">
-                  {systemFallbacks.length ? systemFallbacks.map((item, index) => (
-                    <TerminalNotice key={`${text(item.source)}-${index}`} variant="caution">
+                  {systemFallbacks.length ? systemFallbacks.map((item) => (
+                    <TerminalNotice key={detailRecordKey(item, ['source', 'message'])} variant="caution">
                       {text(item.source)} · {text(item.message)}
                     </TerminalNotice>
                   )) : <p className="text-sm text-muted-text">{locale === 'zh' ? '暂无系统回退。' : 'No system fallback recorded.'}</p>}
@@ -2554,10 +2568,10 @@ const AdminLogsPage: React.FC = () => {
 
             <AdminLogsTerminalSection title={t('adminLogs.operationTimelineTitle')} defaultOpen={false} className="px-5 py-4">
               <div className="mt-4 space-y-2">
-                {timeline.length ? timeline.map((item, index) => {
+                {timeline.length ? timeline.map((item) => {
                   const status = normalizeStatus(String(item.status || ''));
                   return (
-                    <TerminalNestedBlock key={`${text(item.label)}-${index}`} className="text-xs">
+                    <TerminalNestedBlock key={detailRecordKey(item, ['id', 'timestamp', 'label', 'category', 'status'])} className="text-xs">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="font-medium text-foreground">{text(item.label)}</p>
                         <StatusChip status={status} locale={locale} />
@@ -2586,8 +2600,8 @@ const AdminLogsPage: React.FC = () => {
 
             <AdminLogsTerminalSection title={t('adminLogs.diagnosticsTitle')} defaultOpen={false} className="border-rose-400/15 bg-rose-500/[0.025] px-5 py-4">
               <div className="mt-4 space-y-2">
-                {diagnostics.length ? diagnostics.map((item, index) => (
-                  <TerminalNotice key={`${text(item.source)}-${index}`} variant="danger">
+                {diagnostics.length ? diagnostics.map((item) => (
+                  <TerminalNotice key={detailRecordKey(item, ['id', 'source', 'severity', 'message'])} variant="danger">
                     <p>{text(item.message)}</p>
                     <p className="mt-1 text-muted-text">{text(item.source)} · {text(item.severity)}</p>
                   </TerminalNotice>
