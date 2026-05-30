@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { backtestApi } from '../../api/backtest';
 import { getApiErrorMessage } from '../../api/error';
 import { useI18n } from '../../contexts/UiLanguageContext';
@@ -375,7 +375,7 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
   const [downloadingId, setDownloadingId] = useState<SupportExportDefinition['id'] | null>(null);
   const [robustnessPreview, setRobustnessPreview] = useState<RobustnessEvidencePreviewState>({ status: 'idle' });
 
-  const loadIndex = useCallback(async () => {
+  const refreshIndex = async () => {
     setIsLoading(true);
     setLoadError(null);
     try {
@@ -386,15 +386,15 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
     } finally {
       setIsLoading(false);
     }
-  }, [runId, t]);
+  };
+
+  const loadIndex = useEffectEvent(async () => {
+    await refreshIndex();
+  });
 
   useEffect(() => {
     void loadIndex();
-  }, [loadIndex]);
-
-  useEffect(() => {
-    setRobustnessPreview({ status: 'idle' });
-  }, [runId]);
+  }, [runId, t]);
 
   const robustnessEvidenceItem = getSupportExportItem(
     SUPPORT_EXPORT_DEFINITIONS.find((definition) => definition.id === 'robustnessEvidenceJson')!,
@@ -484,7 +484,7 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
       <div className="flex flex-col gap-3">
         <TerminalNotice variant="danger">{loadError}</TerminalNotice>
         <div>
-          <TerminalButton variant="compact" onClick={() => void loadIndex()}>
+          <TerminalButton variant="compact" onClick={() => void refreshIndex()}>
             {t('backtest.resultPage.supportExports.retry')}
           </TerminalButton>
         </div>
@@ -582,7 +582,7 @@ const BacktestSupportExportsDisclosure: React.FC<BacktestSupportExportsDisclosur
       className="mt-4"
       data-testid="backtest-support-exports-disclosure"
     >
-      <SupportExportsDisclosureBody runId={runId} code={code} />
+      <SupportExportsDisclosureBody key={runId} runId={runId} code={code} />
     </TerminalDisclosure>
   );
 };
