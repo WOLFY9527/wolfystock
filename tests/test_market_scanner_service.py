@@ -1128,6 +1128,248 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(explainability["source_confidence"]["capReason"], "fallback_source")
         self.assertTrue(explainability["source_confidence"]["isFallback"])
 
+    def test_apply_score_caps_and_explainability_locks_degraded_source_confidence_tokens(self) -> None:
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeScannerDataManager(),
+        )
+
+        def make_candidate(
+            *,
+            quote_source: str = "alpaca",
+            history_source: str = "local_db",
+            history_stale: bool = False,
+            atr20_pct: float | None = 3.7,
+        ) -> dict:
+            return {
+                "symbol": "MSFT",
+                "name": "Microsoft",
+                "score": 83.6,
+                "reason_summary": "锁定 scanner 当前 degraded token contract。",
+                "ret_5d": 4.1,
+                "ret_20d": 12.7,
+                "avg_amount_20": 1.2e10,
+                "amount": 1.1e10,
+                "avg_volume_20": 22_000_000,
+                "volume_expansion_20": 1.2,
+                "atr20_pct": atr20_pct,
+                "_relative_strength_pct": 0.81,
+                "boards": ["软件"],
+                "_component_scores": {
+                    "trend": 18.0,
+                    "momentum": 12.0,
+                    "liquidity": 15.2,
+                    "activity": 9.8,
+                    "volatility_quality": 7.4,
+                    "relative_strength": 8.1,
+                    "benchmark_relative": 6.5,
+                    "gap_context": 5.2,
+                    "penalties": 0.0,
+                },
+                "_diagnostics": {
+                    "history": {
+                        "source": history_source,
+                        "latest_trade_date": "2026-05-16",
+                        "rows": 130,
+                        "stale": history_stale,
+                    },
+                    "quote_context": {
+                        "available": True,
+                        "source": quote_source,
+                    },
+                },
+            }
+
+        cases = [
+            {
+                "token": "synthetic",
+                "candidate": make_candidate(quote_source="synthetic"),
+                "expected_cap_reason": "fallback_source",
+                "expected_degradation_reason": "fallback_source",
+                "expected_score_confidence": 0.2,
+                "expected_score_cap": 20.0,
+                "expected_final_score": 20.0,
+                "expected_source_type": "synthetic_fixture",
+                "expected_freshness": "synthetic",
+                "expected_missing_evidence": [],
+                "expected_score_grade_allowed": False,
+                "expected_observation_only": True,
+                "expected_flags": {
+                    "isSynthetic": True,
+                    "isUnavailable": False,
+                    "isFallback": True,
+                    "isStale": False,
+                    "isPartial": False,
+                },
+            },
+            {
+                "token": "synthetic_fixture",
+                "candidate": make_candidate(quote_source="synthetic_fixture"),
+                "expected_cap_reason": "synthetic_source",
+                "expected_degradation_reason": "synthetic_source",
+                "expected_score_confidence": 0.2,
+                "expected_score_cap": 20.0,
+                "expected_final_score": 20.0,
+                "expected_source_type": "synthetic_fixture",
+                "expected_freshness": "synthetic",
+                "expected_missing_evidence": [],
+                "expected_score_grade_allowed": True,
+                "expected_observation_only": False,
+                "expected_flags": {
+                    "isSynthetic": True,
+                    "isUnavailable": False,
+                    "isFallback": False,
+                    "isStale": False,
+                    "isPartial": False,
+                },
+            },
+            {
+                "token": "unavailable",
+                "candidate": make_candidate(quote_source="unavailable"),
+                "expected_cap_reason": "unavailable_source",
+                "expected_degradation_reason": "unavailable_source",
+                "expected_score_confidence": 0.0,
+                "expected_score_cap": 0.0,
+                "expected_final_score": 0.0,
+                "expected_source_type": "missing",
+                "expected_freshness": "unavailable",
+                "expected_missing_evidence": [],
+                "expected_score_grade_allowed": True,
+                "expected_observation_only": False,
+                "expected_flags": {
+                    "isSynthetic": False,
+                    "isUnavailable": True,
+                    "isFallback": False,
+                    "isStale": False,
+                    "isPartial": False,
+                },
+            },
+            {
+                "token": "missing",
+                "candidate": make_candidate(quote_source="missing"),
+                "expected_cap_reason": "unavailable_source",
+                "expected_degradation_reason": "unavailable_source",
+                "expected_score_confidence": 0.0,
+                "expected_score_cap": 0.0,
+                "expected_final_score": 0.0,
+                "expected_source_type": "missing",
+                "expected_freshness": "unavailable",
+                "expected_missing_evidence": [],
+                "expected_score_grade_allowed": True,
+                "expected_observation_only": False,
+                "expected_flags": {
+                    "isSynthetic": False,
+                    "isUnavailable": True,
+                    "isFallback": False,
+                    "isStale": False,
+                    "isPartial": False,
+                },
+            },
+            {
+                "token": "fallback_source",
+                "candidate": make_candidate(quote_source="fallback"),
+                "expected_cap_reason": "fallback_source",
+                "expected_degradation_reason": "fallback_source",
+                "expected_score_confidence": 0.4,
+                "expected_score_cap": 40.0,
+                "expected_final_score": 40.0,
+                "expected_source_type": "fallback_static",
+                "expected_freshness": "fallback",
+                "expected_missing_evidence": [],
+                "expected_score_grade_allowed": False,
+                "expected_observation_only": True,
+                "expected_flags": {
+                    "isSynthetic": False,
+                    "isUnavailable": False,
+                    "isFallback": True,
+                    "isStale": False,
+                    "isPartial": False,
+                },
+            },
+            {
+                "token": "stale_source",
+                "candidate": make_candidate(history_stale=True),
+                "expected_cap_reason": "stale_source",
+                "expected_degradation_reason": "stale_source",
+                "expected_score_confidence": 0.6,
+                "expected_score_cap": 60.0,
+                "expected_final_score": 60.0,
+                "expected_source_type": "official_public",
+                "expected_freshness": "stale",
+                "expected_missing_evidence": [],
+                "expected_score_grade_allowed": False,
+                "expected_observation_only": True,
+                "expected_flags": {
+                    "isSynthetic": False,
+                    "isUnavailable": False,
+                    "isFallback": False,
+                    "isStale": True,
+                    "isPartial": False,
+                },
+            },
+            {
+                "token": "partial_coverage",
+                "candidate": make_candidate(atr20_pct=None),
+                "expected_cap_reason": "partial_coverage",
+                "expected_degradation_reason": "partial_coverage",
+                "expected_score_confidence": 0.7,
+                "expected_score_cap": 70.0,
+                "expected_final_score": 70.0,
+                "expected_source_type": "official_public",
+                "expected_freshness": "partial",
+                "expected_missing_evidence": ["risk"],
+                "expected_score_grade_allowed": False,
+                "expected_observation_only": True,
+                "expected_flags": {
+                    "isSynthetic": False,
+                    "isUnavailable": False,
+                    "isFallback": False,
+                    "isStale": False,
+                    "isPartial": True,
+                },
+            },
+        ]
+
+        for case in cases:
+            with self.subTest(token=case["token"]):
+                candidate = case["candidate"]
+
+                service._apply_score_caps_and_explainability(candidate)
+
+                explainability = candidate["_diagnostics"]["score_explainability"]
+                source_confidence = explainability["source_confidence"]
+                self.assertEqual(candidate["raw_score"], 83.6)
+                self.assertEqual(candidate["final_score"], case["expected_final_score"])
+                self.assertEqual(candidate["score"], case["expected_final_score"])
+                for key in (
+                    "raw_score",
+                    "final_score",
+                    "score_cap",
+                    "score_confidence",
+                    "cap_reason",
+                    "degradation_reason",
+                    "missing_evidence",
+                    "source_confidence",
+                ):
+                    self.assertIn(key, explainability)
+                self.assertEqual(explainability["score_cap"], case["expected_score_cap"])
+                self.assertEqual(explainability["score_confidence"], case["expected_score_confidence"])
+                self.assertEqual(explainability["cap_reason"], case["expected_cap_reason"])
+                self.assertEqual(explainability["degradation_reason"], case["expected_degradation_reason"])
+                self.assertEqual(explainability["missing_evidence"], case["expected_missing_evidence"])
+                self.assertTrue(explainability["cap_applied"])
+                self.assertEqual(explainability["score_grade_allowed"], case["expected_score_grade_allowed"])
+                self.assertEqual(source_confidence["capReason"], case["expected_cap_reason"])
+                self.assertEqual(source_confidence["degradationReason"], case["expected_degradation_reason"])
+                self.assertEqual(source_confidence["confidenceWeight"], case["expected_score_confidence"])
+                self.assertEqual(source_confidence["freshness"], case["expected_freshness"])
+                self.assertEqual(source_confidence["sourceType"], case["expected_source_type"])
+                self.assertEqual(source_confidence["scoreContributionAllowed"], case["expected_score_grade_allowed"])
+                self.assertEqual(source_confidence["sourceAuthorityAllowed"], case["expected_score_grade_allowed"])
+                self.assertEqual(source_confidence["observationOnly"], case["expected_observation_only"])
+                for flag_name, expected_value in case["expected_flags"].items():
+                    self.assertEqual(source_confidence[flag_name], expected_value)
+
     def test_apply_score_caps_and_explainability_caps_stale_and_partial_candidates(self) -> None:
         service = MarketScannerService(
             self.db,
