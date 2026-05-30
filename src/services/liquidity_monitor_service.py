@@ -1434,6 +1434,12 @@ class LiquidityMonitorService:
             panel=panel,
             label=label,
         )
+        public_freshness = self._normalize_public_indicator_freshness(
+            status=status,
+            freshness=freshness or panel.freshness or "unavailable",
+            panel=panel,
+            evidence=evidence,
+        )
         diagnostics = self._indicator_coverage_diagnostics(
             key,
             label,
@@ -1447,7 +1453,7 @@ class LiquidityMonitorService:
             "key": key,
             "label": label,
             "status": status,
-            "freshness": freshness or panel.freshness or "unavailable",
+            "freshness": public_freshness,
             "includedInScore": diagnostics["contributesToScore"],
             "scoreContribution": diagnostics["scoreContribution"],
             "scoreWeight": weight,
@@ -3670,6 +3676,50 @@ class LiquidityMonitorService:
         if is_stale:
             values.append("stale")
         return self._weakest_freshness(values)
+
+    def _normalize_public_indicator_freshness(
+        self,
+        *,
+        status: str,
+        freshness: str,
+        panel: PanelState,
+        evidence: Dict[str, Any],
+    ) -> str:
+        normalized = str(freshness or "").lower()
+        if normalized in FRESHNESS_ORDER:
+            return normalized
+        if normalized == "fresh":
+            return "live"
+        if normalized == "synthetic":
+            return "mock"
+        if normalized == "error":
+            return "unavailable"
+
+        candidate_values: List[str] = []
+        input_values = [
+            str(item.get("freshness") or "").lower()
+            for item in evidence.get("inputs", [])
+            if isinstance(item, dict) and str(item.get("freshness") or "").lower() in FRESHNESS_ORDER
+        ]
+        candidate_values.extend(input_values)
+        panel_freshness = str(panel.freshness or "").lower()
+        if panel_freshness in FRESHNESS_ORDER:
+            candidate_values.append(panel_freshness)
+        if bool(evidence.get("isFallback")) or panel.is_fallback:
+            candidate_values.append("fallback")
+        if bool(evidence.get("isStale")) or panel.is_stale:
+            candidate_values.append("stale")
+
+        if normalized in {"partial", "partial_coverage"}:
+            if status == "unavailable" or bool(evidence.get("isUnavailable")):
+                return "unavailable"
+            if candidate_values:
+                return self._weakest_freshness(candidate_values)
+            return "fallback"
+
+        if candidate_values:
+            return self._weakest_freshness(candidate_values)
+        return "unavailable"
 
     def _panel_item_freshness_floor(self, payload: Dict[str, Any]) -> Optional[str]:
         items = [item for item in payload.get("items", []) if isinstance(item, dict)]

@@ -27,6 +27,7 @@ FIXTURE_NAMES = (
     "delayed_proxy_fx_commodities_context.json",
     "provider_unavailable_stale_malformed_context.json",
 )
+PUBLIC_FRESHNESS_LABELS = {"live", "cached", "delayed", "stale", "fallback", "mock", "error", "unavailable"}
 
 
 def _load_fixture(name: str) -> dict:
@@ -835,3 +836,120 @@ def test_liquidity_monitor_route_returns_degraded_payload_when_reason_codes_are_
     assert indicator["coverageDiagnostics"]["degradationReason"] == "fallback_source"
     assert indicator["coverageDiagnostics"]["routeRejectedReasonCodes"] == ["proxy_or_placeholder_not_authorized_breadth"]
     assert all(isinstance(code, str) for code in indicator["evidence"]["inputs"][0]["routeRejectedReasonCodes"])
+
+
+def test_liquidity_monitor_route_normalizes_partial_indicator_freshness_from_degraded_bundle() -> None:
+    app = FastAPI()
+    app.include_router(liquidity_monitor.router, prefix="/api/v1/market")
+
+    class _RouteDb:
+        @staticmethod
+        def get_market_overview_snapshot(_: str):
+            return None
+
+    service = LiquidityMonitorService(cache=MarketCache(), db=_RouteDb())
+    base_as_of = "2026-05-20T16:15:00+08:00"
+    service.cache.set(
+        "macro",
+        {
+            "source": "mixed",
+            "freshness": "cached",
+            "updatedAt": base_as_of,
+            "asOf": base_as_of,
+            "items": [
+                {
+                    "symbol": "FED_ASSETS",
+                    "label": "Fed total assets",
+                    "value": 7485000.0,
+                    "changePercent": 0.13,
+                    "source": "fred",
+                    "sourceId": "fred:WALCL",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED Federal Reserve Total Assets",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "officialSeriesId": "WALCL",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "routeRejectedReasonCodes": [],
+                    "freshness": "cached",
+                    "asOf": base_as_of,
+                    "updatedAt": base_as_of,
+                },
+                {
+                    "symbol": "FED_RRP",
+                    "label": "Overnight reverse repo",
+                    "value": 432.2,
+                    "changePercent": -5.01,
+                    "source": "fred",
+                    "sourceId": "fred:RRPONTSYD",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED Overnight Reverse Repurchase Agreements",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "officialSeriesId": "RRPONTSYD",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "routeRejectedReasonCodes": [],
+                    "freshness": "cached",
+                    "asOf": base_as_of,
+                    "updatedAt": base_as_of,
+                },
+                {
+                    "symbol": "TGA",
+                    "label": "Treasury General Account",
+                    "value": 812000.0,
+                    "changePercent": -1.69,
+                    "source": "fred",
+                    "sourceId": "fred:WTREGEN",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED Treasury General Account",
+                    "sourceTier": "official_public",
+                    "trustLevel": "reliable",
+                    "officialSeriesId": "WTREGEN",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "routeRejectedReasonCodes": [],
+                    "freshness": "cached",
+                    "asOf": base_as_of,
+                    "updatedAt": base_as_of,
+                },
+            ],
+        },
+        ttl_seconds=30,
+    )
+
+    def _partial_bundle(components: list[dict]) -> dict:
+        from src.services.official_macro_liquidity_cache_contracts import (
+            build_official_fed_liquidity_cache_bundle as _real_bundle_builder,
+        )
+
+        bundle = _real_bundle_builder(components)
+        bundle["freshness"] = "partial"
+        bundle["degradationReason"] = "partial_coverage"
+        source_freshness = dict(bundle.get("sourceFreshnessEvidence") or {})
+        source_freshness["freshness"] = "partial"
+        bundle["sourceFreshnessEvidence"] = source_freshness
+        return bundle
+
+    with (
+        patch(
+            "src.services.liquidity_monitor_service.build_official_fed_liquidity_cache_bundle",
+            side_effect=_partial_bundle,
+        ),
+        patch("api.v1.endpoints.liquidity_monitor.LiquidityMonitorService", return_value=service),
+    ):
+        response = TestClient(app).get("/api/v1/market/liquidity-monitor")
+
+    assert response.status_code == 200
+    body = response.json()
+    indicator = next(item for item in body["indicators"] if item["key"] == "fed_liquidity")
+    assert all(item["freshness"] in PUBLIC_FRESHNESS_LABELS for item in body["indicators"])
+    assert body["sourceMetadata"]["externalProviderCalls"] is False
+    assert indicator["status"] == "partial"
+    assert indicator["freshness"] == "cached"
+    assert indicator["evidence"]["freshness"] == "partial"
+    assert indicator["evidence"]["isPartial"] is True
+    assert indicator["coverageDiagnostics"]["freshness"] == "partial"
+    assert indicator["coverageDiagnostics"]["missingInputs"] == ["RESERVES"]
+    assert indicator["coverageDiagnostics"]["scoreContributionAllowed"] is False

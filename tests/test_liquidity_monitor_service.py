@@ -6040,6 +6040,60 @@ def test_fed_liquidity_indicator_fails_closed_for_malformed_cache_value(
     assert bundle["externalProviderCalls"] is False
 
 
+def test_fed_liquidity_indicator_normalizes_partial_public_freshness_from_degraded_bundle(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    base_as_of = "2026-05-20T16:15:00+08:00"
+    service.cache.set(
+        "macro",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                _fed_liquidity_macro_item("FED_ASSETS", value=7485000.0, change_percent=0.13),
+                _fed_liquidity_macro_item("FED_RRP", value=432.2, change_percent=-5.01),
+                _fed_liquidity_macro_item("TGA", value=812000.0, change_percent=-1.69),
+            ],
+            updated_at=base_as_of,
+            as_of=base_as_of,
+        ),
+        ttl_seconds=30,
+    )
+
+    def _partial_bundle(components: list[dict[str, Any]]) -> dict[str, Any]:
+        from src.services.official_macro_liquidity_cache_contracts import (
+            build_official_fed_liquidity_cache_bundle as _real_bundle_builder,
+        )
+
+        bundle = _real_bundle_builder(components)
+        bundle["freshness"] = "partial"
+        bundle["degradationReason"] = "partial_coverage"
+        source_freshness = dict(bundle.get("sourceFreshnessEvidence") or {})
+        source_freshness["freshness"] = "partial"
+        bundle["sourceFreshnessEvidence"] = source_freshness
+        return bundle
+
+    with patch(
+        "src.services.liquidity_monitor_service.build_official_fed_liquidity_cache_bundle",
+        side_effect=_partial_bundle,
+    ):
+        payload = LiquidityMonitorResponse(**service.get_liquidity_monitor()).model_dump(exclude_none=True)
+
+    indicator = _indicators_by_key(payload)["fed_liquidity"]
+    diagnostics = indicator["coverageDiagnostics"]
+
+    assert payload["sourceMetadata"]["externalProviderCalls"] is False
+    assert indicator["status"] == "partial"
+    assert indicator["freshness"] == "cached"
+    assert indicator["evidence"]["freshness"] == "partial"
+    assert indicator["evidence"]["isPartial"] is True
+    assert indicator["evidence"]["degradationReason"] == "partial_coverage"
+    assert diagnostics["freshness"] == "partial"
+    assert diagnostics["missingInputs"] == ["RESERVES"]
+    assert diagnostics["scoreContributionAllowed"] is False
+
+
 def test_fed_liquidity_indicator_fails_closed_for_stale_official_bundle(
     isolated_db: DatabaseManager,
 ) -> None:
