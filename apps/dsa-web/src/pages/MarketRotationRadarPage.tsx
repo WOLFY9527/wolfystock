@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer, useState } from 'react';
 import { Gauge, RefreshCcw, Search, SlidersHorizontal } from 'lucide-react';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import {
@@ -1146,54 +1146,122 @@ const LoadingPanel: React.FC = () => (
   </TerminalPanel>
 );
 
+interface RadarPageState {
+  payload: MarketRotationRadarResponse | null;
+  loading: boolean;
+  error: ParsedApiError | null;
+  selectedMarket: string;
+  selectedThemeId: string;
+  searchQuery: string;
+}
+
+type RadarPageAction =
+  | { type: 'loadStarted' }
+  | { type: 'loadSucceeded'; payload: MarketRotationRadarResponse }
+  | { type: 'loadFailed'; error: ParsedApiError }
+  | { type: 'selectMarket'; market: string }
+  | { type: 'selectTheme'; themeId: string }
+  | { type: 'setSearchQuery'; searchQuery: string };
+
+const initialRadarPageState: RadarPageState = {
+  payload: null,
+  loading: true,
+  error: null,
+  selectedMarket: DEFAULT_MARKET,
+  selectedThemeId: '',
+  searchQuery: '',
+};
+
+function radarPageReducer(state: RadarPageState, action: RadarPageAction): RadarPageState {
+  switch (action.type) {
+    case 'loadStarted':
+      return {
+        ...state,
+        loading: true,
+        error: null,
+      };
+    case 'loadSucceeded':
+      return {
+        ...state,
+        payload: action.payload,
+        loading: false,
+        error: null,
+        selectedThemeId: action.payload.themes[0]?.id || '',
+        searchQuery: '',
+      };
+    case 'loadFailed':
+      return {
+        ...state,
+        loading: false,
+        error: action.error,
+      };
+    case 'selectMarket':
+      return {
+        ...state,
+        selectedMarket: action.market,
+      };
+    case 'selectTheme':
+      return {
+        ...state,
+        selectedThemeId: action.themeId,
+      };
+    case 'setSearchQuery':
+      return {
+        ...state,
+        searchQuery: action.searchQuery,
+      };
+    default:
+      return state;
+  }
+}
+
 const MarketRotationRadarPage: React.FC = () => {
-  const [payload, setPayload] = useState<MarketRotationRadarResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<ParsedApiError | null>(null);
-  const [selectedMarket, setSelectedMarket] = useState(DEFAULT_MARKET);
-  const [selectedThemeId, setSelectedThemeId] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [state, dispatch] = useReducer(radarPageReducer, initialRadarPageState);
 
   const loadRadar = async (market: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const nextPayload = await marketRotationApi.getRotationRadar(market);
-      setPayload(nextPayload);
-      setSelectedThemeId(nextPayload.themes[0]?.id || '');
-      setSearchQuery('');
-    } catch (nextError) {
-      setError({ ...getParsedApiError(nextError), title: '读取主题轮动雷达失败' });
-    } finally {
-      setLoading(false);
+    dispatch({ type: 'loadStarted' });
+    const response = await marketRotationApi.getRotationRadar(market)
+      .then((payload) => ({ payload, error: null as ParsedApiError | null }))
+      .catch((nextError) => ({
+        payload: null,
+        error: { ...getParsedApiError(nextError), title: '读取主题轮动雷达失败' },
+      }));
+    if (response.payload) {
+      dispatch({ type: 'loadSucceeded', payload: response.payload });
+      return;
+    }
+    if (response.error) {
+      dispatch({ type: 'loadFailed', error: response.error });
     }
   };
 
   useEffect(() => {
-    void loadRadar(DEFAULT_MARKET);
+    queueMicrotask(() => {
+      void loadRadar(DEFAULT_MARKET);
+    });
   }, []);
 
   const handleMarketChange = (market: string) => {
-    if (market === selectedMarket) {
+    if (market === state.selectedMarket) {
       return;
     }
-    setSelectedMarket(market);
+    dispatch({ type: 'selectMarket', market });
     void loadRadar(market);
   };
 
   const handleRefresh = () => {
-    void loadRadar(selectedMarket);
+    void loadRadar(state.selectedMarket);
   };
 
-  const rotationTiers = payload ? deriveRotationTiers(payload) : null;
-  const headlineThemes = payload && rotationTiers ? derivePrimaryDisplayThemes(payload, rotationTiers) : [];
-  const filteredThemes = (payload?.themes || []).filter((theme) => matchesSearch(theme, searchQuery));
+  const rotationTiers = state.payload ? deriveRotationTiers(state.payload) : null;
+  const headlineThemes = state.payload && rotationTiers ? derivePrimaryDisplayThemes(state.payload, rotationTiers) : [];
+  const filteredThemes = (state.payload?.themes || []).filter((theme) => matchesSearch(theme, state.searchQuery));
 
-  const selectedTheme = payload?.themes.find((theme) => theme.id === selectedThemeId) || payload?.themes[0];
+  const selectedTheme = state.payload?.themes.find((theme) => theme.id === state.selectedThemeId) || state.payload?.themes[0];
   const libraryMode = rotationTiers?.libraryMode || false;
-  const rotationConclusion = payload && rotationTiers ? deriveRotationConclusion(payload, rotationTiers) : null;
+  const rotationConclusion = state.payload && rotationTiers ? deriveRotationConclusion(state.payload, rotationTiers) : null;
   const primaryTierLabel = libraryMode ? '分类浏览' : rotationTiers?.confirmedLeaders.length ? '确认信号' : '观察信号';
-  const marketLabelText = marketLabel(payload?.market || selectedMarket);
+  const marketLabelText = marketLabel(state.payload?.market || state.selectedMarket);
 
   return (
     <div
@@ -1210,28 +1278,28 @@ const MarketRotationRadarPage: React.FC = () => {
           />
         </TerminalPanel>
 
-        {error ? (
+        {state.error ? (
           <TerminalPanel as="section">
-            <ApiErrorAlert error={error} />
+            <ApiErrorAlert error={state.error} />
           </TerminalPanel>
         ) : null}
 
-        {loading && !payload ? <LoadingPanel /> : null}
+        {state.loading && !state.payload ? <LoadingPanel /> : null}
 
-        {payload ? (
+        {state.payload ? (
           <>
             <CommandBar
-              selectedMarket={selectedMarket}
-              supportedMarkets={payload.supportedMarkets || ['US', 'CN', 'HK', 'CRYPTO']}
-              searchQuery={searchQuery}
+              selectedMarket={state.selectedMarket}
+              supportedMarkets={state.payload.supportedMarkets || ['US', 'CN', 'HK', 'CRYPTO']}
+              searchQuery={state.searchQuery}
               onMarketChange={handleMarketChange}
-              onSearchChange={setSearchQuery}
-              loading={loading}
-              freshness={payload.freshness}
+              onSearchChange={(searchQuery) => dispatch({ type: 'setSearchQuery', searchQuery })}
+              loading={state.loading}
+              freshness={state.payload.freshness}
               onRefresh={handleRefresh}
             />
 
-            <RotationGuidancePanel payload={payload} />
+            <RotationGuidancePanel payload={state.payload} />
 
             <TerminalGrid className="gap-4" data-workbench-split="8:4">
               <section className="min-w-0 space-y-4 xl:col-span-8" aria-label={libraryMode ? '分类浏览与观察线索' : primaryTierLabel}>
@@ -1239,7 +1307,7 @@ const MarketRotationRadarPage: React.FC = () => {
                   <div className="border-b border-white/[0.05] p-3">
                     <TerminalSectionHeader
                       eyebrow="主题 / 分类"
-                      title={libraryMode ? `${filteredThemes.length}/${payload.themes.length} 个分类条目` : `${filteredThemes.length}/${payload.themes.length} 个条目，先看主题再看信号。`}
+                      title={libraryMode ? `${filteredThemes.length}/${state.payload.themes.length} 个分类条目` : `${filteredThemes.length}/${state.payload.themes.length} 个条目，先看主题再看信号。`}
                     />
                   </div>
                   <div className="max-h-80 overflow-y-auto no-scrollbar">
@@ -1251,7 +1319,7 @@ const MarketRotationRadarPage: React.FC = () => {
                             theme={theme}
                             marketLabelText={marketLabelText}
                             selected={selectedTheme?.id === theme.id}
-                            onSelect={() => setSelectedThemeId(theme.id)}
+                            onSelect={() => dispatch({ type: 'selectTheme', themeId: theme.id })}
                           />
                         ))}
                       </DenseRows>
@@ -1284,7 +1352,7 @@ const MarketRotationRadarPage: React.FC = () => {
                           theme={theme}
                           marketLabelText={marketLabelText}
                           selected={selectedTheme?.id === theme.id}
-                          onSelect={() => setSelectedThemeId(theme.id)}
+                          onSelect={() => dispatch({ type: 'selectTheme', themeId: theme.id })}
                         />
                       ))}
                     </DenseRows>

@@ -15,7 +15,6 @@ export function useIsDesktopViewport(): boolean {
       setIsDesktop(getIsDesktopViewport());
     };
 
-    handleResize();
     window.addEventListener('resize', handleResize);
     return () => {
       window.removeEventListener('resize', handleResize);

@@ -37,7 +37,6 @@ export function useStockIndex(): UseStockIndexResult {
     let mounted = true;
 
     async function load() {
-      setLoading(true);
       setError(null);
 
       const result: IndexLoadResult = await loadStockIndex();
