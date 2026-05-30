@@ -27,6 +27,7 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     get_rule_backtest_regime_attribution_readiness_json,
     get_rule_backtest_execution_trace_csv,
     get_rule_backtest_execution_trace_json,
+    get_rule_backtest_execution_model_metadata_json,
     get_rule_backtest_support_bundle_reproducibility_manifest,
     parse_rule_strategy,
     get_rule_backtest_run,
@@ -49,6 +50,7 @@ from api.v1.schemas.backtest import (  # noqa: E402
     RuleBacktestHistoryResponse,
     RuleBacktestParseRequest,
     RuleBacktestParseResponse,
+    RuleBacktestExecutionModelMetadataExportResponse,
     RuleBacktestRunRequest,
     RuleBacktestRunResponse,
     RuleBacktestStatusResponse,
@@ -3197,6 +3199,62 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertEqual(ctx.exception.detail["error"], "not_found")
         service.get_regime_attribution_readiness_export.assert_called_once_with(123)
+
+    def test_get_rule_backtest_execution_model_metadata_json_returns_registry_guardrails_contract(self) -> None:
+        service = MagicMock()
+        service.get_run.return_value = self._rule_run_payload(status="completed")
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_execution_model_metadata_json(123, db_manager=MagicMock())
+
+        self.assertIsInstance(response, RuleBacktestExecutionModelMetadataExportResponse)
+        self.assertEqual(response.export_kind, "rule_backtest_execution_model_metadata")
+        self.assertEqual(response.version, "v1")
+        self.assertEqual(response.run_id, 123)
+        self.assertEqual(response.code, "600519")
+        self.assertEqual(response.status, "completed")
+        self.assertEqual(response.timeframe, "daily")
+        self.assertEqual(response.source, "stored_rule_backtest_execution_model_v1_projection")
+        self.assertEqual(response.read_mode, "stored_first_projection")
+
+        self.assertEqual(response.execution_model["model_id"], "rule_backtest_default_execution_model_v1")
+        self.assertEqual(response.execution_model["version"], "v1")
+        self.assertFalse(response.semantics["provider_calls_required"])
+        self.assertFalse(response.semantics["live_provider_calls_required"])
+        self.assertFalse(response.semantics["decision_grade"])
+        self.assertFalse(response.semantics["institutional_execution_realism"])
+        self.assertFalse(response.guardrails["provider_calls_executed"])
+        self.assertFalse(response.guardrails["winner_promotion"])
+        self.assertFalse(response.guardrails["optimizer_executed"])
+        self.assertFalse(response.guardrails["parameter_sweep_executed"])
+        self.assertFalse(response.guardrails["silent_runtime_semantic_change_allowed"])
+
+        self.assertEqual(response.registry["current_version"], "v1")
+        self.assertEqual(response.registry["default_version"], "v1")
+        self.assertEqual(response.registry["supported_versions"], ["v1"])
+        self.assertEqual(response.registry["default_model"]["version"], "v1")
+        self.assertEqual(response.registry["models"]["v1"]["posture"], "current_default")
+        self.assertTrue(response.registry["models"]["v1"]["supported"])
+        self.assertTrue(response.registry["models"]["v1"]["executable"])
+
+        self.assertEqual(response.registry["models"]["v2"]["version"], "v2")
+        self.assertEqual(response.registry["models"]["v2"]["posture"], "future_fail_closed")
+        self.assertFalse(response.registry["models"]["v2"]["supported"])
+        self.assertFalse(response.registry["models"]["v2"]["executable"])
+        self.assertEqual(response.registry["models"]["v2"]["availability"], "unavailable")
+        self.assertEqual(response.registry["models"]["v2"]["failure_policy"], "fail_closed_before_execution")
+        self.assertFalse(response.registry["models"]["v2"]["provider_calls_required"])
+        self.assertFalse(response.registry["models"]["v2"]["live_provider_calls_required"])
+        self.assertFalse(response.registry["models"]["v2"]["decision_grade"])
+
+        self.assertTrue(response.registry["guardrails"]["unsupported_versions_fail_closed"])
+        self.assertFalse(response.registry["guardrails"]["unsupported_versions_silently_downgraded"])
+        self.assertFalse(response.registry["guardrails"]["engine_math_changed"])
+        self.assertFalse(response.registry["guardrails"]["fill_cost_model_changed"])
+        self.assertFalse(response.registry["guardrails"]["stored_result_semantics_changed"])
+        self.assertFalse(response.registry["guardrails"]["provider_calls_executed"])
+        self.assertFalse(response.registry["guardrails"]["decision_grade"])
+        service.get_run.assert_called_once_with(123)
 
     def test_get_rule_backtest_oos_parameter_readiness_json_returns_partial_projection(self) -> None:
         service = MagicMock()
