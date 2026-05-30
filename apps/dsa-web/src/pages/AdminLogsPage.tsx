@@ -1161,17 +1161,18 @@ const AdminLogsPage: React.FC = () => {
       return;
     }
     setIsLoadingDataMissing(true);
-    try {
-      const response = await adminLogsApi.listDataMissingDrilldown({
+    const response = await adminLogsApi.listDataMissingDrilldown({
         since: sinceFilter,
         limit: 4,
-      });
-      setDataMissingItems(response.items || []);
-    } catch {
+      })
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.value) {
+      setDataMissingItems(response.value.items || []);
+    } else {
       setDataMissingItems([]);
-    } finally {
-      setIsLoadingDataMissing(false);
     }
+    setIsLoadingDataMissing(false);
   });
 
   const loadOperatorIssues = useEffectEvent(async () => {
@@ -1180,26 +1181,26 @@ const AdminLogsPage: React.FC = () => {
       return;
     }
     setIsLoadingOperatorIssues(true);
-    try {
-      const response = await adminLogsApi.listOperatorIssueRollup({
+    const response = await adminLogsApi.listOperatorIssueRollup({
         since: sinceFilter,
         limit: 6,
-      });
-      setOperatorIssueItems(response.items || []);
-    } catch {
+      })
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.value) {
+      setOperatorIssueItems(response.value.items || []);
+    } else {
       setOperatorIssueItems([]);
-    } finally {
-      setIsLoadingOperatorIssues(false);
     }
+    setIsLoadingOperatorIssues(false);
   });
 
   const refreshSessions = async () => {
     setIsLoadingList(true);
     setError(null);
-    try {
-      if (activeTab !== 'raw') {
-        const category = activeTab === 'business' ? undefined : activeTab;
-        const response: BusinessEventListResponse = await adminLogsApi.listBusinessEvents({
+    if (activeTab !== 'raw') {
+      const category = activeTab === 'business' ? undefined : activeTab;
+      const response = await adminLogsApi.listBusinessEvents({
           category,
           minLevel: activeTab === 'scanner' ? 'INFO' : undefined,
           symbol: activeTab === 'analysis' ? searchQuery.trim() || undefined : undefined,
@@ -1208,46 +1209,54 @@ const AdminLogsPage: React.FC = () => {
           since: sinceFilter,
           limit: PAGE_SIZE,
           offset: pageOffset,
-        });
-        setBusinessEvents(response.items || []);
-        setBusinessTotal(response.total || 0);
-        setBusinessHasMore(Boolean(response.hasMore));
-        setBusinessHealth(response.healthSummary || null);
+        })
+        .then((value) => ({ value, error: null as unknown }))
+        .catch((error) => ({ value: null, error }));
+      if (response.value) {
+        const businessResponse = response.value as BusinessEventListResponse;
+        setBusinessEvents(businessResponse.items || []);
+        setBusinessTotal(businessResponse.total || 0);
+        setBusinessHasMore(Boolean(businessResponse.hasMore));
+        setBusinessHealth(businessResponse.healthSummary || null);
         setSessions([]);
         setSummary(null);
-        return;
-      }
-      const params: Parameters<typeof adminLogsApi.listSessions>[0] = {
-        category: categoryFilter === 'all' ? undefined : categoryFilter,
-        query: searchQuery.trim() || undefined,
-        since: sinceFilter,
-        limit: 100,
-      };
-      if (levelFilter === 'warning_plus') params.minLevel = 'WARNING';
-      else if (levelFilter === 'error_plus') params.minLevel = 'ERROR';
-      else if (levelFilter === 'all') params.minLevel = showDebugLogs ? 'DEBUG' : 'NOTICE';
-      else params.level = levelFilter;
-      const response = await adminLogsApi.listSessions({
-        ...params,
-      });
-      const items = response.items || [];
-      setSessions(items.length ? items : (import.meta.env.DEV ? MOCK_WOLFY_LOG_DETAILS : []));
-      setSummary(response.summary || null);
-      setBusinessHealth(null);
-    } catch (err) {
-      setError(getParsedApiError(err));
-      if (activeTab === 'raw') {
-        setSessions(import.meta.env.DEV ? MOCK_WOLFY_LOG_DETAILS : []);
       } else {
+        setError(getParsedApiError(response.error));
         setBusinessEvents([]);
         setBusinessTotal(0);
         setBusinessHasMore(false);
         setBusinessHealth(null);
+        setSummary(null);
       }
-      setSummary(null);
-    } finally {
       setIsLoadingList(false);
+      return;
     }
+    const params: Parameters<typeof adminLogsApi.listSessions>[0] = {
+        category: categoryFilter === 'all' ? undefined : categoryFilter,
+        query: searchQuery.trim() || undefined,
+        since: sinceFilter,
+        limit: 100,
+    };
+    if (levelFilter === 'warning_plus') params.minLevel = 'WARNING';
+    else if (levelFilter === 'error_plus') params.minLevel = 'ERROR';
+    else if (levelFilter === 'all') params.minLevel = showDebugLogs ? 'DEBUG' : 'NOTICE';
+    else params.level = levelFilter;
+    const response = await adminLogsApi.listSessions({
+        ...params,
+      })
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.value) {
+      const items = response.value.items || [];
+      setSessions(items.length ? items : (import.meta.env.DEV ? MOCK_WOLFY_LOG_DETAILS : []));
+      setSummary(response.value.summary || null);
+      setBusinessHealth(null);
+    } else {
+      setError(getParsedApiError(response.error));
+      setSessions(import.meta.env.DEV ? MOCK_WOLFY_LOG_DETAILS : []);
+      setSummary(null);
+    }
+    setIsLoadingList(false);
   };
 
   const loadSessions = useEffectEvent(async () => {
@@ -1257,37 +1266,39 @@ const AdminLogsPage: React.FC = () => {
   const previewCleanup = async () => {
     setIsCleanupBusy(true);
     setCleanupMessage(null);
-    try {
-      const response = await adminLogsApi.cleanupLogs({ mode: 'retention', useRetention: true, dryRun: true });
-      setCleanupPreview(response);
+    const response = await adminLogsApi.cleanupLogs({ mode: 'retention', useRetention: true, dryRun: true })
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.value) {
+      setCleanupPreview(response.value);
       setCleanupMessage(locale === 'zh'
-        ? `保留期清理预览：将在 ${formatDateTime(response.cutoff, locale)} 之前删除 ${response.matchedLogCount} 个会话和 ${response.matchedEventCount} 个事件。`
-        : `Retention preview: ${response.matchedLogCount} sessions and ${response.matchedEventCount} events would be deleted before ${formatDateTime(response.cutoff, locale)}.`);
-    } catch (err) {
-      setError(getParsedApiError(err));
-    } finally {
-      setIsCleanupBusy(false);
+        ? `保留期清理预览：将在 ${formatDateTime(response.value.cutoff, locale)} 之前删除 ${response.value.matchedLogCount} 个会话和 ${response.value.matchedEventCount} 个事件。`
+        : `Retention preview: ${response.value.matchedLogCount} sessions and ${response.value.matchedEventCount} events would be deleted before ${formatDateTime(response.value.cutoff, locale)}.`);
+    } else {
+      setError(getParsedApiError(response.error));
     }
+    setIsCleanupBusy(false);
   };
 
   const previewCapacityCleanup = async () => {
     setIsCleanupBusy(true);
     setCleanupMessage(null);
-    try {
-      const response = await adminLogsApi.cleanupLogs({ mode: 'capacity', dryRun: true });
-      setCleanupPreview(response);
+    const response = await adminLogsApi.cleanupLogs({ mode: 'capacity', dryRun: true })
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.value) {
+      setCleanupPreview(response.value);
       setCleanupMessage(
-        response.message
-          ? localizedRecommendedCleanupAction(response.message, locale)
+        response.value.message
+          ? localizedRecommendedCleanupAction(response.value.message, locale)
           : (locale === 'zh'
-            ? `容量清理预览：将删除 ${response.matchedLogCount} 个会话和 ${response.matchedEventCount} 个事件。最小保留截止时间：${formatDateTime(response.cutoff, locale)}。`
-            : `Capacity preview: ${response.matchedLogCount} sessions and ${response.matchedEventCount} events would be deleted. Minimum retention cutoff: ${formatDateTime(response.cutoff, locale)}.`),
+            ? `容量清理预览：将删除 ${response.value.matchedLogCount} 个会话和 ${response.value.matchedEventCount} 个事件。最小保留截止时间：${formatDateTime(response.value.cutoff, locale)}。`
+            : `Capacity preview: ${response.value.matchedLogCount} sessions and ${response.value.matchedEventCount} events would be deleted. Minimum retention cutoff: ${formatDateTime(response.value.cutoff, locale)}.`),
       );
-    } catch (err) {
-      setError(getParsedApiError(err));
-    } finally {
-      setIsCleanupBusy(false);
+    } else {
+      setError(getParsedApiError(response.error));
     }
+    setIsCleanupBusy(false);
   };
 
   const confirmCleanup = async () => {
@@ -1314,22 +1325,23 @@ const AdminLogsPage: React.FC = () => {
     if (!confirmed) return;
     setIsCleanupBusy(true);
     setCleanupMessage(null);
-    try {
-      const response = await adminLogsApi.cleanupLogs(
+    const response = await adminLogsApi.cleanupLogs(
         mode === 'capacity'
           ? { mode: 'capacity', dryRun: false }
           : { mode: 'retention', useRetention: true, dryRun: false },
-      );
-      setCleanupPreview(response);
+      )
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.value) {
+      setCleanupPreview(response.value);
       setCleanupMessage(locale === 'zh'
-        ? `已删除 ${response.deletedLogCount} 个会话和 ${response.deletedEventCount} 个事件。${response.additionalCleanupNeeded ? ' 可能仍需继续清理。' : ''}`
-        : `Deleted ${response.deletedLogCount} sessions and ${response.deletedEventCount} events.${response.additionalCleanupNeeded ? ' Additional cleanup may still be needed.' : ''}`);
+        ? `已删除 ${response.value.deletedLogCount} 个会话和 ${response.value.deletedEventCount} 个事件。${response.value.additionalCleanupNeeded ? ' 可能仍需继续清理。' : ''}`
+        : `Deleted ${response.value.deletedLogCount} sessions and ${response.value.deletedEventCount} events.${response.value.additionalCleanupNeeded ? ' Additional cleanup may still be needed.' : ''}`);
       await Promise.all([refreshStorageSummary(), refreshSessions()]);
-    } catch (err) {
-      setError(getParsedApiError(err));
-    } finally {
-      setIsCleanupBusy(false);
+    } else {
+      setError(getParsedApiError(response.error));
     }
+    setIsCleanupBusy(false);
   };
 
   useEffect(() => {
@@ -1447,14 +1459,15 @@ const AdminLogsPage: React.FC = () => {
     setIsDrawerOpen(true);
     setIsLoadingDetail(true);
     setDetailError(null);
-    try {
-      const detail = await adminLogsApi.getSessionDetail(summary.sessionId);
-      setSelectedDetail(detail);
-    } catch (err) {
-      setDetailError(getParsedApiError(err));
-    } finally {
-      setIsLoadingDetail(false);
+    const detail = await adminLogsApi.getSessionDetail(summary.sessionId)
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (detail.value) {
+      setSelectedDetail(detail.value);
+    } else {
+      setDetailError(getParsedApiError(detail.error));
     }
+    setIsLoadingDetail(false);
   };
 
   const openBusinessDetail = async (event: BusinessEvent) => {
@@ -1466,14 +1479,15 @@ const AdminLogsPage: React.FC = () => {
     setIsDrawerOpen(true);
     setIsLoadingDetail(true);
     setDetailError(null);
-    try {
-      const detail = await adminLogsApi.getBusinessEventDetail(event.id);
-      setSelectedBusinessDetail(detail);
-    } catch (err) {
-      setDetailError(getParsedApiError(err));
-    } finally {
-      setIsLoadingDetail(false);
+    const detail = await adminLogsApi.getBusinessEventDetail(event.id)
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (detail.value) {
+      setSelectedBusinessDetail(detail.value);
+    } else {
+      setDetailError(getParsedApiError(detail.error));
     }
+    setIsLoadingDetail(false);
   };
 
   const openIncidentTimeline = async (lookup: IncidentLookupInput, contextLabel?: string) => {
@@ -1493,14 +1507,15 @@ const AdminLogsPage: React.FC = () => {
     setIncidentDrawerError(null);
     setIsIncidentDrawerOpen(true);
     setIsIncidentLoading(true);
-    try {
-      const response = await adminLogsApi.getIncidentTimeline(request);
-      setIncidentTimeline(response);
-    } catch (err) {
-      setIncidentDrawerError(getParsedApiError(err));
-    } finally {
-      setIsIncidentLoading(false);
+    const response = await adminLogsApi.getIncidentTimeline(request)
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.value) {
+      setIncidentTimeline(response.value);
+    } else {
+      setIncidentDrawerError(getParsedApiError(response.error));
     }
+    setIsIncidentLoading(false);
   };
 
   const openIncidentTimelineFromBusinessEvent = async (event: BusinessEvent) => {
