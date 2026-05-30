@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MoreHorizontal, PenSquare, RefreshCw, Trash2 } from 'lucide-react';
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
@@ -1280,12 +1280,48 @@ function AccountManagementPanel({
   );
 }
 
+function PortfolioIbkrImportHeader({ copy }: { copy: PortfolioCopy }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="space-y-1 text-xs text-secondary-text">
+        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{copy.ibkrReadOnlyTitle}</p>
+        <p>{copy.ibkrReadOnlyBody}</p>
+      </div>
+      <PillBadge variant="info">{copy.readOnlyBadge}</PillBadge>
+    </div>
+  );
+}
+
+function PortfolioIbkrSyncResultCard({
+  copy,
+  result,
+}: {
+  copy: PortfolioCopy;
+  result: PortfolioIbkrSyncResponse;
+}) {
+  return (
+    <div className="theme-panel-subtle rounded-[16px] px-4 py-3 text-xs text-secondary-text space-y-1">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{copy.syncResult}</p>
+      <div>{copy.positionsCountLabel} <span className="text-foreground">{result.positionCount ?? '--'}</span></div>
+      <div>{copy.cashCurrenciesLabel} <span className="text-foreground">{result.cashBalanceCount ?? 0}</span></div>
+      <div>{copy.syncedAt}: <span className="text-foreground">{result.syncedAt ? result.syncedAt.replace('T', ' ') : '--'}</span></div>
+      <div>{copy.totalEquity} <span className="text-foreground">{formatMoney(result.totalEquity, result.baseCurrency)}</span></div>
+    </div>
+  );
+}
+
+function sortExposureRowsByPercent(rows: PortfolioExposureItem[] | undefined): PortfolioExposureItem[] {
+  const sorted = [...(rows || [])];
+  sorted.sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0));
+  return sorted;
+}
+
 const PortfolioPage: React.FC = () => {
   const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const { language, t } = useI18n();
   const copy = getPortfolioCopy(t, language);
-  const riskFallbackMessage = useMemo(() => copy.riskFallback, [copy.riskFallback]);
+  const riskFallbackMessage = copy.riskFallback;
 
   useEffect(() => {
     document.title = copy.documentTitle;
@@ -2303,9 +2339,9 @@ const PortfolioPage: React.FC = () => {
     }
     return row.label || row.key;
   };
-  const symbolExposureRows = [...(analytics?.exposure.bySymbol || [])].sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0));
-  const currencyExposureRows = [...(analytics?.exposure.byCurrency || [])].sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0));
-  const marketExposureRows = [...(analytics?.exposure.byMarket || [])].sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0));
+  const symbolExposureRows = sortExposureRowsByPercent(analytics?.exposure.bySymbol);
+  const currencyExposureRows = sortExposureRowsByPercent(analytics?.exposure.byCurrency);
+  const marketExposureRows = sortExposureRowsByPercent(analytics?.exposure.byMarket);
   const topPosition = symbolExposureRows[0] || analytics?.risk.largestPosition || null;
   const topCurrency = currencyExposureRows[0] || analytics?.risk.largestCurrency || null;
   const topMarket = marketExposureRows[0] || analytics?.risk.largestMarket || null;
@@ -3484,13 +3520,7 @@ const PortfolioPage: React.FC = () => {
                   <Select label={language === 'zh' ? '导入来源' : 'Broker'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={selectedBroker} onChange={setSelectedBroker} options={brokers.map((broker) => ({ value: broker.broker, label: formatBrokerLabel(broker.broker, broker.displayName, language) }))} />
                   {selectedBroker === 'ibkr' ? (
                     <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-4" contentClassName="space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="space-y-1 text-xs text-secondary-text">
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{copy.ibkrReadOnlyTitle}</p>
-                          <p>{copy.ibkrReadOnlyBody}</p>
-                        </div>
-                        <PillBadge variant="info">{copy.readOnlyBadge}</PillBadge>
-                      </div>
+                      <PortfolioIbkrImportHeader copy={copy} />
                       {ibkrConnection ? <p className="text-sm text-foreground">{ibkrConnection.connectionName}</p> : null}
                       <Input label={language === 'zh' ? 'IBKR API 地址' : 'IBKR API base URL'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrApiBasePlaceholder} value={ibkrApiBaseUrl} onChange={(e) => setIbkrApiBaseUrl(e.target.value)} />
                       <Input label={language === 'zh' ? 'IBKR 账户引用' : 'IBKR account ref'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrAccountRefPlaceholder} value={ibkrBrokerAccountRef} onChange={(e) => setIbkrBrokerAccountRef(e.target.value)} />
@@ -3499,15 +3529,7 @@ const PortfolioPage: React.FC = () => {
                       <Button type="button" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} onClick={() => void handleSyncIbkr()} disabled={!writableAccountId || ibkrSyncing}>
                         {ibkrSyncing ? copy.syncing : copy.syncIbkr}
                       </Button>
-                      {ibkrSyncResult ? (
-                        <div className="theme-panel-subtle rounded-[16px] px-4 py-3 text-xs text-secondary-text space-y-1">
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{copy.syncResult}</p>
-                          <div>{copy.positionsCountLabel} <span className="text-foreground">{ibkrSyncResult.positionCount ?? '--'}</span></div>
-                          <div>{copy.cashCurrenciesLabel} <span className="text-foreground">{ibkrSyncResult.cashBalanceCount ?? 0}</span></div>
-                          <div>{copy.syncedAt}: <span className="text-foreground">{ibkrSyncResult.syncedAt ? ibkrSyncResult.syncedAt.replace('T', ' ') : '--'}</span></div>
-                          <div>{copy.totalEquity} <span className="text-foreground">{formatMoney(ibkrSyncResult.totalEquity, ibkrSyncResult.baseCurrency)}</span></div>
-                        </div>
-                      ) : null}
+                      {ibkrSyncResult ? <PortfolioIbkrSyncResultCard copy={copy} result={ibkrSyncResult} /> : null}
                     </SectionShell>
                   ) : (
                     <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 text-xs text-secondary-text">
