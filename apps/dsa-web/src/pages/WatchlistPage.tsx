@@ -861,7 +861,7 @@ const WatchlistPage: React.FC = () => {
   const { language } = useI18n();
   const { isGuest } = useProductSurface();
   const copy = getCopy(language);
-  const [listState, setListState] = useState<WatchlistListState>({ items: [], isLoading: false, error: null });
+  const [listState, setListState] = useState<WatchlistListState>({ items: [], isLoading: true, error: null });
   const { items, isLoading, error } = listState;
   const [notice, setNotice] = useState<Notice>(null);
   const [query, setQuery] = useState('');
@@ -901,7 +901,6 @@ const WatchlistPage: React.FC = () => {
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
-      setListState((current) => ({ ...current, isLoading: true }));
       watchlistApi.listWatchlistItems()
         .then((response) => {
           if (cancelled) return;
