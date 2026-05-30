@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { AnimatePresence, domAnimation, LazyMotion, m } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
@@ -7,6 +7,7 @@ import type { ParsedApiError } from '../api/error';
 import { getApiErrorMessage, getParsedApiError } from '../api/error';
 import type { RuleWizardStep } from '../components/backtest/DeterministicBacktestFlow';
 import type { NormalStrategyTemplate } from '../components/backtest/pointAndShootTemplateOptions';
+import { buildPointAndShootStrategyText } from '../components/backtest/strategyCatalog';
 import {
   getDefaultRuleDateRange,
   getPeriodicNumber,
@@ -193,9 +194,7 @@ const BacktestPage: React.FC = () => {
   const [isLoadingPerf, setIsLoadingPerf] = useState(false);
   const [performanceNotice, setPerformanceNotice] = useState<PerformanceNotice | null>(null);
 
-  const [ruleStrategyText, setRuleStrategyText] = useState(
-    bt(language, 'page.defaultStrategyText'),
-  );
+  const [ruleStrategyText, setRuleStrategyText] = useState(() => bt(language, 'page.defaultStrategyText'));
   const [ruleStartDate, setRuleStartDate] = useState(() => getDefaultRuleDateRange().startDate);
   const [ruleEndDate, setRuleEndDate] = useState(() => getDefaultRuleDateRange().endDate);
   const [ruleLookbackBars, setRuleLookbackBars] = useState('252');
@@ -399,162 +398,177 @@ const BacktestPage: React.FC = () => {
     slippage_bps_per_side: Number.parseFloat(ruleSlippageBps) || 0,
   };
 
-  const applyRuleRunDraft = useCallback((data: RuleBacktestRunResponse) => {
-    const parsedStrategyPayload = data.parsedStrategy as unknown as Record<string, unknown>;
-    const detectedStrategyFamily = data.parsedStrategy.detectedStrategyFamily
-      ?? (typeof parsedStrategyPayload.detected_strategy_family === 'string' ? parsedStrategyPayload.detected_strategy_family : undefined);
-    const unsupportedExtensions = data.parsedStrategy.unsupportedExtensions
-      ?? (Array.isArray(parsedStrategyPayload.unsupported_extensions) ? parsedStrategyPayload.unsupported_extensions as Array<Record<string, unknown>> : undefined);
-    const coreIntentSummary = data.parsedStrategy.coreIntentSummary
-      ?? (typeof parsedStrategyPayload.core_intent_summary === 'string' ? parsedStrategyPayload.core_intent_summary : undefined);
-    const interpretationConfidence = data.parsedStrategy.interpretationConfidence
-      ?? (typeof parsedStrategyPayload.interpretation_confidence === 'number' ? parsedStrategyPayload.interpretation_confidence : undefined);
-    setSelectedRuleRunId(data.id);
-    setActiveModule('rule');
-    setCodeFilter(data.code);
-    setRuleStrategyText(data.strategyText);
-    setRuleStartDate(data.startDate || '');
-    setRuleEndDate(data.endDate || '');
-    setRuleLookbackBars(String(data.lookbackBars || 252));
-    setRuleInitialCapital(String(data.initialCapital || 100000));
-    setRuleFeeBps(String(data.feeBps ?? 0));
-    setRuleSlippageBps(String(data.slippageBps ?? 0));
-    setRuleBenchmarkMode((data.benchmarkMode as RuleBenchmarkMode | undefined) || 'auto');
-    setRuleBenchmarkCode(data.benchmarkCode || '');
-    const parsedStrategySummary = (data.summary.parsedStrategySummary as Record<string, string> | undefined)
-      || data.parsedStrategy.summary;
-    setRuleParsedStrategy({
-      code: data.code,
-      strategyText: data.strategyText,
-      parsedStrategy: {
-        ...data.parsedStrategy,
-        summary: parsedStrategySummary,
-      },
-      normalizedStrategyFamily: String((data.parsedStrategy.strategySpec as Record<string, unknown> | undefined)?.strategyType || data.parsedStrategy.strategyKind || ''),
-      executable: Boolean(data.parsedStrategy.executable),
-      normalizationState: data.parsedStrategy.normalizationState,
-      assumptions: data.parsedStrategy.assumptions,
-      assumptionGroups: data.parsedStrategy.assumptionGroups,
-      detectedStrategyFamily,
-      unsupportedReason: data.parsedStrategy.unsupportedReason,
-      unsupportedDetails: data.parsedStrategy.unsupportedDetails,
-      unsupportedExtensions,
-      coreIntentSummary,
-      interpretationConfidence,
-      supportedPortionSummary: data.parsedStrategy.supportedPortionSummary,
-      rewriteSuggestions: data.parsedStrategy.rewriteSuggestions,
-      parseWarnings: data.parsedStrategy.parseWarnings,
-      confidence: data.parsedConfidence ?? data.parsedStrategy.confidence ?? 0,
-      needsConfirmation: data.needsConfirmation,
-      ambiguities: data.warnings,
-      summary: parsedStrategySummary,
-      maxLookback: data.parsedStrategy.maxLookback,
-    });
-    setRuleParseSignature(buildRuleParseSignature({
-      code: data.code,
-      strategyText: data.strategyText,
-      startDate: data.startDate || '',
-      endDate: data.endDate || '',
-      initialCapital: String(data.initialCapital || 100000),
-      feeBps: String(data.feeBps ?? 0),
-      slippageBps: String(data.slippageBps ?? 0),
-    }));
-    setRuleConfirmed(true);
-    setRuleCurrentStep('strategy');
-    setAppliedRewriteText(null);
-  }, []);
-
-  const fetchResults = useCallback(async (page = 1, code?: string, windowBars?: number, runId?: number | null) => {
+  const fetchResults = (page = 1, code?: string, windowBars?: number, runId?: number | null) => {
     setIsLoadingResults(true);
-    try {
-      const response = await backtestApi.getResults({
-        code: code || undefined,
-        evalWindowDays: windowBars,
-        runId: runId || undefined,
-        page,
-        limit: HISTORICAL_PAGE_SIZE,
+    return backtestApi.getResults({
+      code: code || undefined,
+      evalWindowDays: windowBars,
+      runId: runId || undefined,
+      page,
+      limit: HISTORICAL_PAGE_SIZE,
+    })
+      .then((response) => {
+        setResults(response.items);
+        setTotalResults(response.total);
+        setCurrentPage(response.page);
+        setPageError(null);
+      })
+      .catch((error) => {
+        setPageError(getParsedApiError(error));
+      })
+      .finally(() => {
+        setIsLoadingResults(false);
       });
-      setResults(response.items);
-      setTotalResults(response.total);
-      setCurrentPage(response.page);
-      setPageError(null);
-    } catch (error) {
-      setPageError(getParsedApiError(error));
-    } finally {
-      setIsLoadingResults(false);
-    }
-  }, []);
+  };
 
-  const fetchHistory = useCallback(async (page = 1, code?: string) => {
+  const fetchHistory = (page = 1, code?: string) => {
     setIsLoadingHistory(true);
-    try {
-      const response = await backtestApi.getHistory({ code: code || undefined, page, limit: HISTORY_PAGE_SIZE });
-      setHistoryItems(response.items);
-      setHistoryTotal(response.total);
-      setHistoryPage(response.page);
-      setHistoryError(null);
-    } catch (error) {
-      setHistoryError(getParsedApiError(error));
-    } finally {
-      setIsLoadingHistory(false);
-    }
-  }, []);
+    return backtestApi.getHistory({ code: code || undefined, page, limit: HISTORY_PAGE_SIZE })
+      .then((response) => {
+        setHistoryItems(response.items);
+        setHistoryTotal(response.total);
+        setHistoryPage(response.page);
+        setHistoryError(null);
+      })
+      .catch((error) => {
+        setHistoryError(getParsedApiError(error));
+      })
+      .finally(() => {
+        setIsLoadingHistory(false);
+      });
+  };
 
-  const fetchSampleStatus = async (code?: string) => {
+  const fetchSampleStatus = (code?: string) => {
     if (!code) {
       setSampleStatus(null);
       setSampleStatusError(null);
-      return;
+      return Promise.resolve();
     }
     setIsLoadingSampleStatus(true);
-    try {
-      const response = await backtestApi.getSampleStatus(code);
-      setSampleStatus(response);
-      setSampleStatusError(null);
-    } catch (error) {
-      setSampleStatus(null);
-      setSampleStatusError(getParsedApiError(error));
-    } finally {
-      setIsLoadingSampleStatus(false);
-    }
+    return backtestApi.getSampleStatus(code)
+      .then((response) => {
+        setSampleStatus(response);
+        setSampleStatusError(null);
+      })
+      .catch((error) => {
+        setSampleStatus(null);
+        setSampleStatusError(getParsedApiError(error));
+      })
+      .finally(() => {
+        setIsLoadingSampleStatus(false);
+      });
   };
 
-  const fetchRuleHistory = useCallback(async (page = 1, code?: string) => {
+  const fetchRuleHistory = (page = 1, code?: string) => {
     setIsLoadingRuleHistory(true);
-    try {
-      const response = await backtestApi.getRuleBacktestRuns({ code: code || undefined, page, limit: RULE_HISTORY_PAGE_SIZE });
-      setRuleHistoryItems(response.items);
-      setRuleHistoryTotal(response.total);
-      setRuleHistoryPage(response.page);
-      setRuleHistoryError(null);
-    } catch (error) {
-      setRuleHistoryError(getParsedApiError(error));
-    } finally {
-      setIsLoadingRuleHistory(false);
-    }
-  }, []);
+    return backtestApi.getRuleBacktestRuns({ code: code || undefined, page, limit: RULE_HISTORY_PAGE_SIZE })
+      .then((response) => {
+        setRuleHistoryItems(response.items);
+        setRuleHistoryTotal(response.total);
+        setRuleHistoryPage(response.page);
+        setRuleHistoryError(null);
+      })
+      .catch((error) => {
+        setRuleHistoryError(getParsedApiError(error));
+      })
+      .finally(() => {
+        setIsLoadingRuleHistory(false);
+      });
+  };
 
   useEffect(() => {
     const state = routeState as BacktestPageLocationState | null;
     const draftRun = state?.draftRun;
-    if (draftRun) {
-      applyRuleRunDraft(draftRun);
-      return;
-    }
-
-    if (scannerHandoff?.symbol) {
-      setActiveModule('rule');
-      setControlPanelMode('normal');
-      setCodeFilter(scannerHandoff.symbol);
-      return;
-    }
-
     const prefillCode = state?.prefillCode?.trim().toUpperCase();
-    if (!prefillCode) return;
+    if (!draftRun && !scannerHandoff?.symbol && !prefillCode) return;
 
-    setActiveModule('rule');
-    setCodeFilter(prefillCode);
-  }, [applyRuleRunDraft, routeState, scannerHandoff]);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+
+      if (draftRun) {
+        const parsedStrategyPayload = draftRun.parsedStrategy as unknown as Record<string, unknown>;
+        const detectedStrategyFamily = draftRun.parsedStrategy.detectedStrategyFamily
+          ?? (typeof parsedStrategyPayload.detected_strategy_family === 'string' ? parsedStrategyPayload.detected_strategy_family : undefined);
+        const unsupportedExtensions = draftRun.parsedStrategy.unsupportedExtensions
+          ?? (Array.isArray(parsedStrategyPayload.unsupported_extensions) ? parsedStrategyPayload.unsupported_extensions as Array<Record<string, unknown>> : undefined);
+        const coreIntentSummary = draftRun.parsedStrategy.coreIntentSummary
+          ?? (typeof parsedStrategyPayload.core_intent_summary === 'string' ? parsedStrategyPayload.core_intent_summary : undefined);
+        const interpretationConfidence = draftRun.parsedStrategy.interpretationConfidence
+          ?? (typeof parsedStrategyPayload.interpretation_confidence === 'number' ? parsedStrategyPayload.interpretation_confidence : undefined);
+        const parsedStrategySummary = (draftRun.summary.parsedStrategySummary as Record<string, string> | undefined)
+          || draftRun.parsedStrategy.summary;
+
+        setSelectedRuleRunId(draftRun.id);
+        setActiveModule('rule');
+        setCodeFilter(draftRun.code);
+        setRuleStrategyText(draftRun.strategyText);
+        setRuleStartDate(draftRun.startDate || '');
+        setRuleEndDate(draftRun.endDate || '');
+        setRuleLookbackBars(String(draftRun.lookbackBars || 252));
+        setRuleInitialCapital(String(draftRun.initialCapital || 100000));
+        setRuleFeeBps(String(draftRun.feeBps ?? 0));
+        setRuleSlippageBps(String(draftRun.slippageBps ?? 0));
+        setRuleBenchmarkMode((draftRun.benchmarkMode as RuleBenchmarkMode | undefined) || 'auto');
+        setRuleBenchmarkCode(draftRun.benchmarkCode || '');
+        setRuleParsedStrategy({
+          code: draftRun.code,
+          strategyText: draftRun.strategyText,
+          parsedStrategy: {
+            ...draftRun.parsedStrategy,
+            summary: parsedStrategySummary,
+          },
+          normalizedStrategyFamily: String((draftRun.parsedStrategy.strategySpec as Record<string, unknown> | undefined)?.strategyType || draftRun.parsedStrategy.strategyKind || ''),
+          executable: Boolean(draftRun.parsedStrategy.executable),
+          normalizationState: draftRun.parsedStrategy.normalizationState,
+          assumptions: draftRun.parsedStrategy.assumptions,
+          assumptionGroups: draftRun.parsedStrategy.assumptionGroups,
+          detectedStrategyFamily,
+          unsupportedReason: draftRun.parsedStrategy.unsupportedReason,
+          unsupportedDetails: draftRun.parsedStrategy.unsupportedDetails,
+          unsupportedExtensions,
+          coreIntentSummary,
+          interpretationConfidence,
+          supportedPortionSummary: draftRun.parsedStrategy.supportedPortionSummary,
+          rewriteSuggestions: draftRun.parsedStrategy.rewriteSuggestions,
+          parseWarnings: draftRun.parsedStrategy.parseWarnings,
+          confidence: draftRun.parsedConfidence ?? draftRun.parsedStrategy.confidence ?? 0,
+          needsConfirmation: draftRun.needsConfirmation,
+          ambiguities: draftRun.warnings,
+          summary: parsedStrategySummary,
+          maxLookback: draftRun.parsedStrategy.maxLookback,
+        });
+        setRuleParseSignature(buildRuleParseSignature({
+          code: draftRun.code,
+          strategyText: draftRun.strategyText,
+          startDate: draftRun.startDate || '',
+          endDate: draftRun.endDate || '',
+          initialCapital: String(draftRun.initialCapital || 100000),
+          feeBps: String(draftRun.feeBps ?? 0),
+          slippageBps: String(draftRun.slippageBps ?? 0),
+        }));
+        setRuleConfirmed(true);
+        setRuleCurrentStep('strategy');
+        setAppliedRewriteText(null);
+        return;
+      }
+
+      if (scannerHandoff?.symbol) {
+        setActiveModule('rule');
+        setControlPanelMode('normal');
+        setCodeFilter(scannerHandoff.symbol);
+        return;
+      }
+
+      if (!prefillCode) return;
+      setActiveModule('rule');
+      setCodeFilter(prefillCode);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [routeState, scannerHandoff]);
 
   const fetchPerformance = async (code?: string, windowBars?: number, options: { showNotice?: boolean } = {}) => {
     const { showNotice = true } = options;
@@ -577,11 +591,11 @@ const BacktestPage: React.FC = () => {
         const stock = await backtestApi.getStockPerformance(code, windowBars);
         setStockPerf(stock);
         if (stock == null && showNotice) notices.push(bt(language, 'page.performanceNotice.noInstrumentSummary', { code }));
-    } catch (error) {
-      setStockPerf(null);
-      hasDanger = true;
-      if (showNotice) notices.push(getApiErrorMessage(error));
-    }
+      } catch (error) {
+        setStockPerf(null);
+        hasDanger = true;
+        if (showNotice) notices.push(getApiErrorMessage(error));
+      }
     } else {
       setStockPerf(null);
     }
@@ -596,26 +610,72 @@ const BacktestPage: React.FC = () => {
   };
 
   useEffect(() => {
-    const init = async () => {
-      try {
-        const overall = await backtestApi.getOverallPerformance();
+    void backtestApi.getOverallPerformance()
+      .then((overall) => {
         setOverallPerf(overall);
         const defaultWindow = overall?.evalWindowDays;
         if (defaultWindow) setEvaluationBars(String(defaultWindow));
         setPerformanceNotice(null);
-      } catch (error) {
-      setPerformanceNotice({
-        tone: 'danger',
-        message: getApiErrorMessage(error),
+      })
+      .catch((error) => {
+        setPerformanceNotice({
+          tone: 'danger',
+          message: getApiErrorMessage(error),
+        });
+      })
+      .finally(() => {
+        setIsLoadingResults(true);
+        void backtestApi.getResults({
+          code: undefined,
+          evalWindowDays: undefined,
+          runId: undefined,
+          page: 1,
+          limit: HISTORICAL_PAGE_SIZE,
+        })
+          .then((response) => {
+            setResults(response.items);
+            setTotalResults(response.total);
+            setCurrentPage(response.page);
+            setPageError(null);
+          })
+          .catch((error) => {
+            setPageError(getParsedApiError(error));
+          })
+          .finally(() => {
+            setIsLoadingResults(false);
+          });
+
+        setIsLoadingHistory(true);
+        void backtestApi.getHistory({ code: undefined, page: 1, limit: HISTORY_PAGE_SIZE })
+          .then((response) => {
+            setHistoryItems(response.items);
+            setHistoryTotal(response.total);
+            setHistoryPage(response.page);
+            setHistoryError(null);
+          })
+          .catch((error) => {
+            setHistoryError(getParsedApiError(error));
+          })
+          .finally(() => {
+            setIsLoadingHistory(false);
+          });
+
+        setIsLoadingRuleHistory(true);
+        void backtestApi.getRuleBacktestRuns({ code: undefined, page: 1, limit: RULE_HISTORY_PAGE_SIZE })
+          .then((response) => {
+            setRuleHistoryItems(response.items);
+            setRuleHistoryTotal(response.total);
+            setRuleHistoryPage(response.page);
+            setRuleHistoryError(null);
+          })
+          .catch((error) => {
+            setRuleHistoryError(getParsedApiError(error));
+          })
+          .finally(() => {
+            setIsLoadingRuleHistory(false);
+          });
       });
-      } finally {
-        void fetchResults(1, undefined, undefined, null);
-        void fetchHistory(1, undefined);
-        void fetchRuleHistory(1, undefined);
-      }
-    };
-    void init();
-  }, [fetchHistory, fetchResults, fetchRuleHistory]);
+  }, []);
 
   const handleFilter = () => {
     const code = normalizedCode || undefined;
@@ -633,37 +693,39 @@ const BacktestPage: React.FC = () => {
     void fetchRuleHistory(1, code);
   };
 
-  const handleRunHistoricalEvaluation = async () => {
+  const handleRunHistoricalEvaluation = () => {
     setIsRunningHistoricalEval(true);
     setRunResult(null);
     setRunError(null);
     setPrepareResult(null);
     setPrepareError(null);
-    try {
-      const windowBars = parsePositiveInt(evaluationBars, 10);
-      const maturityCalendarDays = parsePositiveInt(maturityDays, 14, 0);
-      const response = await backtestApi.run({
-        code: normalizedCode || undefined,
-        force: forceReplaceResults,
-        evalWindowDays: windowBars,
-        minAgeDays: maturityCalendarDays,
+    const windowBars = parsePositiveInt(evaluationBars, 10);
+    const maturityCalendarDays = parsePositiveInt(maturityDays, 14, 0);
+    return backtestApi.run({
+      code: normalizedCode || undefined,
+      force: forceReplaceResults,
+      evalWindowDays: windowBars,
+      minAgeDays: maturityCalendarDays,
+    })
+      .then(async (response) => {
+        setRunResult(response);
+        setSelectedRunId(response.runId ?? null);
+        await Promise.all([
+          fetchResults(1, normalizedCode || undefined, windowBars, response.runId ?? null),
+          fetchHistory(1, normalizedCode || undefined),
+          fetchSampleStatus(normalizedCode || undefined),
+        ]);
+        await fetchPerformance(normalizedCode || undefined, windowBars, { showNotice: true });
+      })
+      .catch((error) => {
+        setRunError(getParsedApiError(error));
+      })
+      .finally(() => {
+        setIsRunningHistoricalEval(false);
       });
-      setRunResult(response);
-      setSelectedRunId(response.runId ?? null);
-      await Promise.all([
-        fetchResults(1, normalizedCode || undefined, windowBars, response.runId ?? null),
-        fetchHistory(1, normalizedCode || undefined),
-        fetchSampleStatus(normalizedCode || undefined),
-      ]);
-      await fetchPerformance(normalizedCode || undefined, windowBars, { showNotice: true });
-    } catch (error) {
-      setRunError(getParsedApiError(error));
-    } finally {
-      setIsRunningHistoricalEval(false);
-    }
   };
 
-  const handlePrepareSamples = async (options: { forceRefresh?: boolean } = {}) => {
+  const handlePrepareSamples = (options: { forceRefresh?: boolean } = {}) => {
     if (!normalizedCode) {
       setPrepareError({
         title: bt(language, 'page.errors.missingCodeTitle'),
@@ -671,33 +733,35 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.missingPrepareSamples'),
         category: 'missing_params',
       });
-      return;
+      return Promise.resolve();
     }
 
     setIsPreparingSamples(true);
     setPrepareResult(null);
     setPrepareError(null);
-    try {
-      const response = await backtestApi.prepareSamples({
-        code: normalizedCode,
-        sampleCount: resolvedSampleCount,
-        evalWindowDays: parsePositiveInt(evaluationBars, 10),
-        minAgeDays: parsePositiveInt(maturityDays, 14, 0),
-        forceRefresh: options.forceRefresh || false,
+    return backtestApi.prepareSamples({
+      code: normalizedCode,
+      sampleCount: resolvedSampleCount,
+      evalWindowDays: parsePositiveInt(evaluationBars, 10),
+      minAgeDays: parsePositiveInt(maturityDays, 14, 0),
+      forceRefresh: options.forceRefresh || false,
+    })
+      .then(async (response) => {
+        setPrepareResult(response);
+        await Promise.all([
+          fetchSampleStatus(normalizedCode),
+          fetchHistory(1, normalizedCode),
+        ]);
+      })
+      .catch((error) => {
+        setPrepareError(getParsedApiError(error));
+      })
+      .finally(() => {
+        setIsPreparingSamples(false);
       });
-      setPrepareResult(response);
-      await Promise.all([
-        fetchSampleStatus(normalizedCode),
-        fetchHistory(1, normalizedCode),
-      ]);
-    } catch (error) {
-      setPrepareError(getParsedApiError(error));
-    } finally {
-      setIsPreparingSamples(false);
-    }
   };
 
-  const handleRebuildSamples = async () => {
+  const handleRebuildSamples = () => {
     if (!normalizedCode) {
       setPrepareError({
         title: bt(language, 'page.errors.missingCodeTitle'),
@@ -705,23 +769,22 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.missingRebuildSamples'),
         category: 'missing_params',
       });
-      return;
+      return Promise.resolve();
     }
 
     setIsPreparingSamples(true);
     setPrepareResult(null);
     setPrepareError(null);
-    try {
-      await backtestApi.clearSamples(normalizedCode);
-      await handlePrepareSamples({ forceRefresh: false });
-      await fetchResults(1, normalizedCode, parsePositiveInt(evaluationBars, 10), null);
-    } catch (error) {
-      setPrepareError(getParsedApiError(error));
-      setIsPreparingSamples(false);
-    }
+    return backtestApi.clearSamples(normalizedCode)
+      .then(() => handlePrepareSamples({ forceRefresh: false }))
+      .then(() => fetchResults(1, normalizedCode, parsePositiveInt(evaluationBars, 10), null))
+      .catch((error) => {
+        setPrepareError(getParsedApiError(error));
+        setIsPreparingSamples(false);
+      });
   };
 
-  const handleClearSamples = async () => {
+  const handleClearSamples = () => {
     if (!normalizedCode) {
       setPrepareError({
         title: bt(language, 'page.errors.missingCodeTitle'),
@@ -729,34 +792,36 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.missingClearSamples'),
         category: 'missing_params',
       });
-      return;
+      return Promise.resolve();
     }
 
     setIsPreparingSamples(true);
     setPrepareError(null);
-    try {
-      await backtestApi.clearSamples(normalizedCode);
-      setPrepareResult(null);
-      setRunResult(null);
-      setSelectedRunId(null);
-      setResults([]);
-      setTotalResults(0);
-      setOverallPerf(null);
-      setStockPerf(null);
-      await Promise.all([
-        fetchSampleStatus(normalizedCode),
-        fetchHistory(1, normalizedCode),
-        fetchResults(1, normalizedCode, parsePositiveInt(evaluationBars, 10), null),
-      ]);
-      await fetchPerformance(normalizedCode, parsePositiveInt(evaluationBars, 10), { showNotice: true });
-    } catch (error) {
-      setPrepareError(getParsedApiError(error));
-    } finally {
-      setIsPreparingSamples(false);
-    }
+    return backtestApi.clearSamples(normalizedCode)
+      .then(async () => {
+        setPrepareResult(null);
+        setRunResult(null);
+        setSelectedRunId(null);
+        setResults([]);
+        setTotalResults(0);
+        setOverallPerf(null);
+        setStockPerf(null);
+        await Promise.all([
+          fetchSampleStatus(normalizedCode),
+          fetchHistory(1, normalizedCode),
+          fetchResults(1, normalizedCode, parsePositiveInt(evaluationBars, 10), null),
+        ]);
+        await fetchPerformance(normalizedCode, parsePositiveInt(evaluationBars, 10), { showNotice: true });
+      })
+      .catch((error) => {
+        setPrepareError(getParsedApiError(error));
+      })
+      .finally(() => {
+        setIsPreparingSamples(false);
+      });
   };
 
-  const handleClearResults = async () => {
+  const handleClearResults = () => {
     if (!normalizedCode) {
       setRunError({
         title: bt(language, 'page.errors.missingCodeTitle'),
@@ -764,27 +829,29 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.missingClearResults'),
         category: 'missing_params',
       });
-      return;
+      return Promise.resolve();
     }
 
     setIsRunningHistoricalEval(true);
     setRunError(null);
-    try {
-      await backtestApi.clearResults(normalizedCode);
-      setRunResult(null);
-      setSelectedRunId(null);
-      setResults([]);
-      setTotalResults(0);
-      await Promise.all([
-        fetchHistory(1, normalizedCode),
-        fetchResults(1, normalizedCode, parsePositiveInt(evaluationBars, 10), null),
-      ]);
-      await fetchPerformance(normalizedCode, parsePositiveInt(evaluationBars, 10), { showNotice: true });
-    } catch (error) {
-      setRunError(getParsedApiError(error));
-    } finally {
-      setIsRunningHistoricalEval(false);
-    }
+    return backtestApi.clearResults(normalizedCode)
+      .then(async () => {
+        setRunResult(null);
+        setSelectedRunId(null);
+        setResults([]);
+        setTotalResults(0);
+        await Promise.all([
+          fetchHistory(1, normalizedCode),
+          fetchResults(1, normalizedCode, parsePositiveInt(evaluationBars, 10), null),
+        ]);
+        await fetchPerformance(normalizedCode, parsePositiveInt(evaluationBars, 10), { showNotice: true });
+      })
+      .catch((error) => {
+        setRunError(getParsedApiError(error));
+      })
+      .finally(() => {
+        setIsRunningHistoricalEval(false);
+      });
   };
 
   const handleOpenHistoricalRun = async (run: BacktestRunHistoryItem) => {
@@ -802,7 +869,7 @@ const BacktestPage: React.FC = () => {
     await fetchPerformance(run.code || undefined, run.evalWindowDays, { showNotice: true });
   };
 
-  const handleParseRuleStrategy = async () => {
+  const handleParseRuleStrategy = () => {
     if (!ruleStrategyText.trim()) {
       setRuleParseError({
         title: bt(language, 'page.errors.missingStrategyTitle'),
@@ -810,55 +877,57 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.missingStrategyText'),
         category: 'missing_params',
       });
-      return;
+      return Promise.resolve();
     }
 
     setIsParsingRuleStrategy(true);
     setRuleParseError(null);
     setRuleRunError(null);
     setAppliedRewriteText(null);
-    try {
-      const response = await backtestApi.parseRuleStrategy({
-        code: normalizedCode || undefined,
-        strategyText: ruleStrategyText,
-        startDate: ruleStartDate || undefined,
-        endDate: ruleEndDate || undefined,
-        initialCapital: Number.parseFloat(ruleInitialCapital) || undefined,
-        feeBps: Number.parseFloat(ruleFeeBps) || 0,
-        slippageBps: Number.parseFloat(ruleSlippageBps) || 0,
+    return backtestApi.parseRuleStrategy({
+      code: normalizedCode || undefined,
+      strategyText: ruleStrategyText,
+      startDate: ruleStartDate || undefined,
+      endDate: ruleEndDate || undefined,
+      initialCapital: Number.parseFloat(ruleInitialCapital) || undefined,
+      feeBps: Number.parseFloat(ruleFeeBps) || 0,
+      slippageBps: Number.parseFloat(ruleSlippageBps) || 0,
+    })
+      .then(async (response) => {
+        setRuleParsedStrategy(response);
+        const strategySpec = getStrategyPreviewSpec(response);
+        const parsedSymbol = getPeriodicString(strategySpec, 'symbol');
+        const parsedStartDate = getPeriodicString(strategySpec, 'start_date');
+        const parsedEndDate = getPeriodicString(strategySpec, 'end_date');
+        const parsedInitialCapital = getPeriodicNumber(strategySpec, 'initial_capital');
+        const resolvedCode = parsedSymbol !== '--' ? parsedSymbol.toUpperCase() : normalizedCode;
+        const resolvedStartDate = parsedStartDate !== '--' ? parsedStartDate : ruleStartDate;
+        const resolvedEndDate = parsedEndDate !== '--' ? parsedEndDate : ruleEndDate;
+        const resolvedInitialCapital = parsedInitialCapital != null ? String(parsedInitialCapital) : ruleInitialCapital;
+        if (parsedSymbol !== '--') setCodeFilter(resolvedCode);
+        if (parsedStartDate !== '--') setRuleStartDate(parsedStartDate);
+        if (parsedEndDate !== '--') setRuleEndDate(parsedEndDate);
+        if (parsedInitialCapital != null) setRuleInitialCapital(String(parsedInitialCapital));
+        setRuleConfirmed(false);
+        setSelectedRuleRunId(null);
+        setRuleParseSignature(buildRuleParseSignature({
+          code: resolvedCode,
+          strategyText: ruleStrategyText,
+          startDate: resolvedStartDate,
+          endDate: resolvedEndDate,
+          initialCapital: resolvedInitialCapital,
+          feeBps: ruleFeeBps,
+          slippageBps: ruleSlippageBps,
+        }));
+        setRuleCurrentStep('strategy');
+        await fetchRuleHistory(1, resolvedCode || undefined);
+      })
+      .catch((error) => {
+        setRuleParseError(getParsedApiError(error));
+      })
+      .finally(() => {
+        setIsParsingRuleStrategy(false);
       });
-      setRuleParsedStrategy(response);
-      const strategySpec = getStrategyPreviewSpec(response);
-      const parsedSymbol = getPeriodicString(strategySpec, 'symbol');
-      const parsedStartDate = getPeriodicString(strategySpec, 'start_date');
-      const parsedEndDate = getPeriodicString(strategySpec, 'end_date');
-      const parsedInitialCapital = getPeriodicNumber(strategySpec, 'initial_capital');
-      const resolvedCode = parsedSymbol !== '--' ? parsedSymbol.toUpperCase() : normalizedCode;
-      const resolvedStartDate = parsedStartDate !== '--' ? parsedStartDate : ruleStartDate;
-      const resolvedEndDate = parsedEndDate !== '--' ? parsedEndDate : ruleEndDate;
-      const resolvedInitialCapital = parsedInitialCapital != null ? String(parsedInitialCapital) : ruleInitialCapital;
-      if (parsedSymbol !== '--') setCodeFilter(resolvedCode);
-      if (parsedStartDate !== '--') setRuleStartDate(parsedStartDate);
-      if (parsedEndDate !== '--') setRuleEndDate(parsedEndDate);
-      if (parsedInitialCapital != null) setRuleInitialCapital(String(parsedInitialCapital));
-      setRuleConfirmed(false);
-      setSelectedRuleRunId(null);
-      setRuleParseSignature(buildRuleParseSignature({
-        code: resolvedCode,
-        strategyText: ruleStrategyText,
-        startDate: resolvedStartDate,
-        endDate: resolvedEndDate,
-        initialCapital: resolvedInitialCapital,
-        feeBps: ruleFeeBps,
-        slippageBps: ruleSlippageBps,
-      }));
-      setRuleCurrentStep('strategy');
-      await fetchRuleHistory(1, resolvedCode || undefined);
-    } catch (error) {
-      setRuleParseError(getParsedApiError(error));
-    } finally {
-      setIsParsingRuleStrategy(false);
-    }
   };
 
   const handleApplyRuleRewriteSuggestion = (value: string) => {
@@ -879,7 +948,7 @@ const BacktestPage: React.FC = () => {
     }
   };
 
-  const handleRunRuleBacktest = async () => {
+  const handleRunRuleBacktest = () => {
     const strategySpec = getStrategyPreviewSpec(ruleParsedStrategy);
     const parsedSymbol = getPeriodicString(strategySpec, 'symbol');
     const resolvedCode = normalizedCode || (parsedSymbol !== '--' ? parsedSymbol.toUpperCase() : '');
@@ -890,7 +959,7 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.missingRunCode'),
         category: 'missing_params',
       });
-      return;
+      return Promise.resolve();
     }
     if (!ruleParsedStrategy) {
       setRuleRunError({
@@ -899,7 +968,7 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.needParsedStrategy'),
         category: 'validation_error',
       });
-      return;
+      return Promise.resolve();
     }
     if (isRuleParseStale) {
       setRuleRunError({
@@ -908,7 +977,7 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.staleParse'),
         category: 'validation_error',
       });
-      return;
+      return Promise.resolve();
     }
     if (!ruleConfirmed) {
       setRuleRunError({
@@ -917,7 +986,7 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.needConfirm'),
         category: 'validation_error',
       });
-      return;
+      return Promise.resolve();
     }
     if (!ruleStartDate || !ruleEndDate) {
       setRuleRunError({
@@ -926,7 +995,7 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.missingRange'),
         category: 'validation_error',
       });
-      return;
+      return Promise.resolve();
     }
     if (ruleStartDate > ruleEndDate) {
       setRuleRunError({
@@ -935,7 +1004,7 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.invalidRange'),
         category: 'validation_error',
       });
-      return;
+      return Promise.resolve();
     }
     if (ruleBenchmarkMode === 'custom_code' && !ruleBenchmarkCode.trim()) {
       setRuleRunError({
@@ -944,64 +1013,66 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.missingBenchmark'),
         category: 'validation_error',
       });
-      return;
+      return Promise.resolve();
     }
 
     setIsSubmittingRuleBacktest(true);
     setRuleRunError(null);
-    try {
-      const monteCarloConfig = proMonteCarloEnabled
-        ? {
-          simulationCount: clampInteger(
-            parsePositiveInt(
-              proMonteCarloSimulationCount,
-              Number.parseInt(PRO_MONTE_CARLO_SIMULATION_DEFAULT, 10),
-              PRO_MONTE_CARLO_SIMULATION_MIN,
-            ),
+    const monteCarloConfig = proMonteCarloEnabled
+      ? {
+        simulationCount: clampInteger(
+          parsePositiveInt(
+            proMonteCarloSimulationCount,
+            Number.parseInt(PRO_MONTE_CARLO_SIMULATION_DEFAULT, 10),
             PRO_MONTE_CARLO_SIMULATION_MIN,
-            PRO_MONTE_CARLO_SIMULATION_MAX,
           ),
-        }
-        : undefined;
-      const robustnessConfig = monteCarloConfig || proWalkForwardPresetEnabled
-        ? {
-          ...(monteCarloConfig ? { monteCarlo: monteCarloConfig } : {}),
-          ...(proWalkForwardPresetEnabled ? { walkForward: PRO_WALK_FORWARD_PRESET } : {}),
-        }
-        : undefined;
-      const requestPayload = {
-        code: resolvedCode,
-        strategyText: ruleStrategyText,
-        parsedStrategy: ruleParsedStrategy.parsedStrategy,
-        startDate: ruleStartDate,
-        endDate: ruleEndDate,
-        lookbackBars: parsePositiveInt(ruleLookbackBars, 252, 10),
-        initialCapital: Number.parseFloat(ruleInitialCapital) || 100000,
-        feeBps: Number.parseFloat(ruleFeeBps) || 0,
-        slippageBps: Number.parseFloat(ruleSlippageBps) || 0,
-        benchmarkMode: ruleBenchmarkMode,
-        benchmarkCode: ruleBenchmarkMode === 'custom_code'
-          ? ruleBenchmarkCode.trim().toUpperCase()
-          : undefined,
-        confirmed: true,
-        waitForCompletion: false,
-      };
-      const response = await backtestApi.runRuleBacktest(
-        robustnessConfig
-          ? { ...requestPayload, robustnessConfig }
-          : requestPayload,
-      );
-      setSelectedRuleRunId(response.id);
-      void fetchRuleHistory(1, resolvedCode);
-      navigate(`/backtest/results/${response.id}`, { state: { initialRun: response, resultMode: 'professional' } });
-    } catch (error) {
-      setRuleRunError(getParsedApiError(error));
-    } finally {
-      setIsSubmittingRuleBacktest(false);
-    }
+          PRO_MONTE_CARLO_SIMULATION_MIN,
+          PRO_MONTE_CARLO_SIMULATION_MAX,
+        ),
+      }
+      : undefined;
+    const robustnessConfig = monteCarloConfig || proWalkForwardPresetEnabled
+      ? {
+        ...(monteCarloConfig ? { monteCarlo: monteCarloConfig } : {}),
+        ...(proWalkForwardPresetEnabled ? { walkForward: PRO_WALK_FORWARD_PRESET } : {}),
+      }
+      : undefined;
+    const requestPayload = {
+      code: resolvedCode,
+      strategyText: ruleStrategyText,
+      parsedStrategy: ruleParsedStrategy.parsedStrategy,
+      startDate: ruleStartDate,
+      endDate: ruleEndDate,
+      lookbackBars: parsePositiveInt(ruleLookbackBars, 252, 10),
+      initialCapital: Number.parseFloat(ruleInitialCapital) || 100000,
+      feeBps: Number.parseFloat(ruleFeeBps) || 0,
+      slippageBps: Number.parseFloat(ruleSlippageBps) || 0,
+      benchmarkMode: ruleBenchmarkMode,
+      benchmarkCode: ruleBenchmarkMode === 'custom_code'
+        ? ruleBenchmarkCode.trim().toUpperCase()
+        : undefined,
+      confirmed: true,
+      waitForCompletion: false,
+    };
+    return backtestApi.runRuleBacktest(
+      robustnessConfig
+        ? { ...requestPayload, robustnessConfig }
+        : requestPayload,
+    )
+      .then((response) => {
+        setSelectedRuleRunId(response.id);
+        void fetchRuleHistory(1, resolvedCode);
+        navigate(`/backtest/results/${response.id}`, { state: { initialRun: response, resultMode: 'professional' } });
+      })
+      .catch((error) => {
+        setRuleRunError(getParsedApiError(error));
+      })
+      .finally(() => {
+        setIsSubmittingRuleBacktest(false);
+      });
   };
 
-  const handleLaunchNormalRuleBacktest = async () => {
+  const handleLaunchNormalRuleBacktest = () => {
     if (!normalizedCode) {
       setRuleRunError({
         title: bt(language, 'page.errors.missingCodeTitle'),
@@ -1009,7 +1080,7 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.missingRunCode'),
         category: 'missing_params',
       });
-      return;
+      return Promise.resolve();
     }
     if (!ruleStartDate || !ruleEndDate) {
       setRuleRunError({
@@ -1018,7 +1089,7 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.missingRange'),
         category: 'validation_error',
       });
-      return;
+      return Promise.resolve();
     }
     if (ruleStartDate > ruleEndDate) {
       setRuleRunError({
@@ -1027,7 +1098,7 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.invalidRange'),
         category: 'validation_error',
       });
-      return;
+      return Promise.resolve();
     }
     if (ruleBenchmarkMode === 'custom_code' && !ruleBenchmarkCode.trim()) {
       setRuleRunError({
@@ -1036,10 +1107,9 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.missingBenchmark'),
         category: 'validation_error',
       });
-      return;
+      return Promise.resolve();
     }
 
-    const { buildPointAndShootStrategyText } = await import('../components/backtest/strategyCatalog');
     const strategyText = buildPointAndShootStrategyText(language, normalStrategyTemplate, {
       code: normalizedCode,
       startDate: ruleStartDate,
@@ -1054,7 +1124,7 @@ const BacktestPage: React.FC = () => {
         rawMessage: bt(language, 'page.errors.missingStrategyText'),
         category: 'missing_params',
       });
-      return;
+      return Promise.resolve();
     }
 
     setIsLaunchingNormalRuleBacktest(true);
@@ -1063,49 +1133,47 @@ const BacktestPage: React.FC = () => {
     setAppliedRewriteText(null);
     setRuleStrategyText(strategyText);
 
-    try {
-      const parsed = await backtestApi.parseRuleStrategy({
-        code: normalizedCode,
-        strategyText,
-        startDate: ruleStartDate || undefined,
-        endDate: ruleEndDate || undefined,
-        initialCapital: Number.parseFloat(ruleInitialCapital) || undefined,
-        feeBps: Number.parseFloat(ruleFeeBps) || 0,
-        slippageBps: Number.parseFloat(ruleSlippageBps) || 0,
-      });
+    return backtestApi.parseRuleStrategy({
+      code: normalizedCode,
+      strategyText,
+      startDate: ruleStartDate || undefined,
+      endDate: ruleEndDate || undefined,
+      initialCapital: Number.parseFloat(ruleInitialCapital) || undefined,
+      feeBps: Number.parseFloat(ruleFeeBps) || 0,
+      slippageBps: Number.parseFloat(ruleSlippageBps) || 0,
+    })
+      .then((parsed) => {
+        setRuleParsedStrategy(parsed);
+        setRuleParseSignature(buildRuleParseSignature({
+          code: normalizedCode,
+          strategyText,
+          startDate: ruleStartDate,
+          endDate: ruleEndDate,
+          initialCapital: ruleInitialCapital,
+          feeBps: ruleFeeBps,
+          slippageBps: ruleSlippageBps,
+        }));
 
-      setRuleParsedStrategy(parsed);
-      setRuleParseSignature(buildRuleParseSignature({
-        code: normalizedCode,
-        strategyText,
-        startDate: ruleStartDate,
-        endDate: ruleEndDate,
-        initialCapital: ruleInitialCapital,
-        feeBps: ruleFeeBps,
-        slippageBps: ruleSlippageBps,
-      }));
+        if (!parsed.executable && !parsed.parsedStrategy.executable) {
+          setRuleConfirmed(false);
+          setControlPanelMode('professional');
+          setRuleParseError({
+            title: language === 'en' ? 'Template needs professional review' : '模板需要专业模式复查',
+            message: language === 'en'
+              ? 'The selected template did not compile into a runnable deterministic rule. The page has switched to Professional mode so you can inspect and revise it.'
+              : '当前模板没有成功编译成可执行的确定性规则，已自动切到专业模式以便继续检查和改写。',
+            rawMessage: language === 'en'
+              ? 'The selected template did not compile into a runnable deterministic rule.'
+              : '当前模板没有成功编译成可执行的确定性规则。',
+            category: 'validation_error',
+          });
+          return;
+        }
 
-      if (!parsed.executable && !parsed.parsedStrategy.executable) {
-        setRuleConfirmed(false);
-        setControlPanelMode('professional');
-        setRuleParseError({
-          title: language === 'en' ? 'Template needs professional review' : '模板需要专业模式复查',
-          message: language === 'en'
-            ? 'The selected template did not compile into a runnable deterministic rule. The page has switched to Professional mode so you can inspect and revise it.'
-            : '当前模板没有成功编译成可执行的确定性规则，已自动切到专业模式以便继续检查和改写。',
-          rawMessage: language === 'en'
-            ? 'The selected template did not compile into a runnable deterministic rule.'
-            : '当前模板没有成功编译成可执行的确定性规则。',
-          category: 'validation_error',
-        });
-        return;
-      }
-
-      setRuleConfirmed(true);
-      setRuleCurrentStep('run');
-      setIsSubmittingRuleBacktest(true);
-      try {
-        const response = await backtestApi.runRuleBacktest({
+        setRuleConfirmed(true);
+        setRuleCurrentStep('run');
+        setIsSubmittingRuleBacktest(true);
+        return backtestApi.runRuleBacktest({
           code: normalizedCode,
           strategyText,
           parsedStrategy: parsed.parsedStrategy,
@@ -1121,20 +1189,25 @@ const BacktestPage: React.FC = () => {
             : undefined,
           confirmed: true,
           waitForCompletion: false,
-        });
-        setSelectedRuleRunId(response.id);
-        void fetchRuleHistory(1, normalizedCode);
-        navigate(`/backtest/results/${response.id}`, { state: { initialRun: response, resultMode: 'simple' } });
-      } catch (error) {
-        setRuleRunError(getParsedApiError(error));
-      } finally {
-        setIsSubmittingRuleBacktest(false);
-      }
-    } catch (error) {
-      setRuleParseError(getParsedApiError(error));
-    } finally {
-      setIsLaunchingNormalRuleBacktest(false);
-    }
+        })
+          .then((response) => {
+            setSelectedRuleRunId(response.id);
+            void fetchRuleHistory(1, normalizedCode);
+            navigate(`/backtest/results/${response.id}`, { state: { initialRun: response, resultMode: 'simple' } });
+          })
+          .catch((error) => {
+            setRuleRunError(getParsedApiError(error));
+          })
+          .finally(() => {
+            setIsSubmittingRuleBacktest(false);
+          });
+      })
+      .catch((error) => {
+        setRuleParseError(getParsedApiError(error));
+      })
+      .finally(() => {
+        setIsLaunchingNormalRuleBacktest(false);
+      });
   };
 
   const handleOpenRuleRun = (run: RuleBacktestHistoryItem) => {
