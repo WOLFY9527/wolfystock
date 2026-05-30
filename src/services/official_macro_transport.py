@@ -6,7 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import importlib
 import csv
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 import os
 import json
@@ -17,6 +17,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from urllib.parse import urlencode, urlparse
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
 
 
 FRED_OBSERVATIONS_URL = "https://api.stlouisfed.org/fred/series/observations"
@@ -101,6 +102,28 @@ USD_PRESSURE_LIVE_SMOKE_AGGREGATE_BUDGET_SECONDS = 4.0
 USD_PRESSURE_LIVE_SMOKE_FRED_TIMEOUT_SECONDS = 1.0
 USD_PRESSURE_LIVE_SMOKE_MAX_ATTEMPTS = 3
 USD_PRESSURE_LIVE_SMOKE_RETRY_SLEEP_SECONDS = 0.05
+OFFICIAL_MACRO_CN_TZ = timezone(timedelta(hours=8))
+OFFICIAL_MACRO_US_EASTERN_TZ = ZoneInfo("America/New_York")
+OFFICIAL_DAILY_FRESHNESS_POLICY_ID = "official_daily_us_weekday_t_plus_1"
+OFFICIAL_WEEKLY_FED_LIQUIDITY_FRESHNESS_POLICY_ID = "official_weekly_fed_liquidity_t_plus_7"
+OFFICIAL_USD_PRESSURE_FRESHNESS_POLICY_ID = "official_h10_weekly_batch_t_plus_7"
+OFFICIAL_DAILY_FRESHNESS_SERIES_IDS = (
+    "VIXCLS",
+    "DGS2",
+    "DGS10",
+    "DGS30",
+    "T10Y2Y",
+    "T10Y3M",
+    "SOFR",
+    "DFF",
+    "BAMLH0A0HYM2",
+    "RRPONTSYD",
+)
+OFFICIAL_US_WEEKDAY_CALENDAR_ASSUMPTION = "US/Eastern weekdays; holidays not modeled"
+OFFICIAL_USD_PRESSURE_CALENDAR_ASSUMPTION = (
+    "Federal Reserve H.10 weekly Monday release; daily rows through prior Friday; "
+    "holidays not modeled"
+)
 
 
 class OfficialMacroTransportError(RuntimeError):
@@ -1033,6 +1056,156 @@ def _provider_name(source_id: str | None) -> str:
     return "official_macro"
 
 
+def _official_macro_parse_market_time(value: Any) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except Exception:
+            return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=OFFICIAL_MACRO_CN_TZ)
+    return parsed.astimezone(OFFICIAL_MACRO_CN_TZ)
+
+
+def _official_macro_observation_date(value: Any) -> Any | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = _text(value)
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except Exception:
+            try:
+                return datetime.strptime(text[:10], "%Y-%m-%d").date()
+            except Exception:
+                return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(OFFICIAL_MACRO_US_EASTERN_TZ).date()
+    return parsed.date()
+
+
+def _official_macro_us_weekday_lag_days(observation_date: Any, current_date: Any) -> int:
+    if current_date <= observation_date:
+        return 0
+    cursor = observation_date
+    lag = 0
+    while cursor < current_date:
+        cursor = cursor + timedelta(days=1)
+        if cursor.weekday() < 5:
+            lag += 1
+    return lag
+
+
+def _official_macro_freshness_policy(series_id: str) -> dict[str, Any] | None:
+    normalized_series = _text(series_id).upper()
+    if normalized_series in OFFICIAL_DAILY_FRESHNESS_SERIES_IDS:
+        return {
+            "freshnessPolicy": OFFICIAL_DAILY_FRESHNESS_POLICY_ID,
+            "calendarAssumption": OFFICIAL_US_WEEKDAY_CALENDAR_ASSUMPTION,
+            "maxAcceptedLagDays": 4,
+            "maxAcceptedBusinessLagDays": 2,
+        }
+    if normalized_series in USD_PRESSURE_FRED_SERIES_IDS:
+        return {
+            "freshnessPolicy": OFFICIAL_USD_PRESSURE_FRESHNESS_POLICY_ID,
+            "calendarAssumption": OFFICIAL_USD_PRESSURE_CALENDAR_ASSUMPTION,
+            "maxAcceptedLagDays": 10,
+            "maxAcceptedBusinessLagDays": 7,
+        }
+    if normalized_series in FED_LIQUIDITY_FRED_SERIES_IDS:
+        return {
+            "freshnessPolicy": OFFICIAL_WEEKLY_FED_LIQUIDITY_FRESHNESS_POLICY_ID,
+            "calendarAssumption": OFFICIAL_US_WEEKDAY_CALENDAR_ASSUMPTION,
+            "maxAcceptedLagDays": 10,
+            "maxAcceptedBusinessLagDays": 7,
+        }
+    return None
+
+
+def _official_macro_smoke_freshness_status(
+    series_id: str,
+    point: MacroObservation,
+    *,
+    now: datetime | None = None,
+) -> Mapping[str, Any]:
+    if _text(point.source_type).lower() != OFFICIAL_SOURCE_TYPE:
+        return {}
+    current = now or datetime.now(OFFICIAL_MACRO_CN_TZ)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=OFFICIAL_MACRO_CN_TZ)
+    else:
+        current = current.astimezone(OFFICIAL_MACRO_CN_TZ)
+    parsed_as_of = _official_macro_parse_market_time(point.as_of or point.date) or current
+    delay_minutes = max(0, int((current - parsed_as_of).total_seconds() // 60))
+    policy = _official_macro_freshness_policy(series_id)
+    if not policy:
+        days_old = (current.date() - parsed_as_of.date()).days
+        freshness = "delayed" if days_old <= 3 else "stale"
+        return {
+            "freshness": freshness,
+            "isFallback": False,
+            "isStale": freshness == "stale",
+            "delayMinutes": delay_minutes,
+            "warning": "数据可能已过期，请以交易所/券商行情为准" if freshness == "stale" else None,
+        }
+    observation_date = _official_macro_observation_date(point.date) or _official_macro_observation_date(point.as_of)
+    base_details: dict[str, Any] = {
+        "freshnessPolicy": str(policy["freshnessPolicy"]),
+        "calendarAssumption": str(policy["calendarAssumption"]),
+        "maxAcceptedLagDays": int(policy["maxAcceptedLagDays"]),
+        "maxAcceptedBusinessLagDays": int(policy["maxAcceptedBusinessLagDays"]),
+    }
+    if observation_date is None:
+        details: dict[str, Any] = {
+            "freshness": "stale",
+            "isFallback": False,
+            "isStale": True,
+            "delayMinutes": delay_minutes,
+            "warning": "数据可能已过期，请以交易所/券商行情为准",
+            **base_details,
+            "freshnessDecision": "stale_official_row",
+            "staleReason": "official observation date missing or malformed",
+        }
+        if point.as_of:
+            details["officialAsOf"] = str(point.as_of)
+        return details
+    current_date = current.astimezone(OFFICIAL_MACRO_US_EASTERN_TZ).date()
+    calendar_lag_days = max(0, (current_date - observation_date).days)
+    business_lag_days = _official_macro_us_weekday_lag_days(observation_date, current_date)
+    max_calendar_lag = int(policy["maxAcceptedLagDays"])
+    max_business_lag = int(policy["maxAcceptedBusinessLagDays"])
+    accepted = calendar_lag_days <= max_calendar_lag and business_lag_days <= max_business_lag
+    details: dict[str, Any] = {
+        "freshness": "delayed" if accepted else "stale",
+        "isFallback": False,
+        "isStale": not accepted,
+        "delayMinutes": delay_minutes,
+        "warning": None if accepted else "数据可能已过期，请以交易所/券商行情为准",
+        **base_details,
+        "officialObservationDate": observation_date.isoformat(),
+        "freshnessDecision": "accepted" if accepted else "stale_official_row",
+        "calendarLagDays": calendar_lag_days,
+        "businessLagDays": business_lag_days,
+    }
+    if point.as_of:
+        details["officialAsOf"] = str(point.as_of)
+    if not accepted:
+        details["staleReason"] = (
+            f"official row lag {calendar_lag_days} calendar days and "
+            f"{business_lag_days} US weekdays exceeded "
+            f"{max_calendar_lag} calendar day / {max_business_lag} US weekday policy"
+        )
+    return details
+
+
 def _official_macro_smoke_series_status(
     series_id: str,
     points: Sequence[MacroObservation],
@@ -1070,18 +1243,7 @@ def _official_macro_smoke_is_stale(
     now: datetime | None = None,
 ) -> bool:
     try:
-        from src.services.market_overview_service import get_freshness_status
-
-        freshness = get_freshness_status(
-            point.as_of or point.date,
-            "macro_rate",
-            _provider_name(point.source_id),
-            False,
-            source_type=point.source_type,
-            series_id=series_id,
-            official_observation_date=point.date,
-            now=now,
-        )
+        freshness = _official_macro_smoke_freshness_status(series_id, point, now=now)
     except Exception:
         return True
     return str(freshness.get("freshness") or "").strip().lower() == "stale"
@@ -1098,18 +1260,7 @@ def _official_macro_smoke_freshness_evidence(
     now: datetime | None = None,
 ) -> Mapping[str, Any]:
     try:
-        from src.services.market_overview_service import get_freshness_status
-
-        evidence = get_freshness_status(
-            point.as_of or point.date,
-            "macro_rate",
-            _provider_name(point.source_id),
-            False,
-            source_type=point.source_type,
-            series_id=series_id,
-            official_observation_date=point.date,
-            now=now,
-        )
+        evidence = _official_macro_smoke_freshness_status(series_id, point, now=now)
     except Exception:
         return {}
     return evidence if isinstance(evidence, Mapping) else {}
