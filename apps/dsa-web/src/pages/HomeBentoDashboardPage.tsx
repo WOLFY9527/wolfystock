@@ -4404,9 +4404,26 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const shouldOpenFullReportDrawerOnLoad = Boolean(traceFixtureReport && searchParams.get('report') === 'open');
   const [activeDrawer, setActiveDrawer] = useState<DetailDrawerKey | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTicker, setActiveTicker] = useState<string | null>(null);
-  const [pendingAnalysisTicker, setPendingAnalysisTicker] = useState<string | null>(null);
-  const [isDashboardLoading, setDashboardLoading] = useState(false);
+  const [dashboardTaskState, setDashboardTaskState] = useState<{
+    activeTicker: string | null;
+    pendingAnalysisTicker: string | null;
+    isDashboardLoading: boolean;
+  }>({
+    activeTicker: null,
+    pendingAnalysisTicker: null,
+    isDashboardLoading: false,
+  });
+  const { activeTicker, pendingAnalysisTicker, isDashboardLoading } = dashboardTaskState;
+  const patchDashboardTaskState = (patch: Partial<typeof dashboardTaskState>) => {
+    setDashboardTaskState((current) => {
+      const next = { ...current, ...patch };
+      return next.activeTicker === current.activeTicker
+        && next.pendingAnalysisTicker === current.pendingAnalysisTicker
+        && next.isDashboardLoading === current.isDashboardLoading
+        ? current
+        : next;
+    });
+  };
   const [statusToast, setStatusToast] = useState<{ message: string; tone: 'error' | 'warning' } | null>(null);
   const [guestPreview, setGuestPreview] = useState<PublicAnalysisPreviewResponse | null>(null);
   const [guestError, setGuestError] = useState<ParsedApiError | null>(null);
@@ -4606,9 +4623,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       if (cancelled) {
         return;
       }
-      setActiveTicker(routeSymbol);
-      setPendingAnalysisTicker(routeSymbol);
-      setDashboardLoading(true);
+      patchDashboardTaskState({
+        activeTicker: routeSymbol,
+        pendingAnalysisTicker: routeSymbol,
+        isDashboardLoading: true,
+      });
       syncTaskCreated({
         taskId: routeTaskId,
         stockCode: routeSymbol,
@@ -4683,11 +4702,18 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       if (cancelled) {
         return;
       }
-      if (completedTask) {
-        setActiveTicker(completedTicker);
-      }
-      setPendingAnalysisTicker(null);
-      setDashboardLoading(false);
+      patchDashboardTaskState(
+        completedTask
+          ? {
+            activeTicker: completedTicker,
+            pendingAnalysisTicker: null,
+            isDashboardLoading: false,
+          }
+          : {
+            pendingAnalysisTicker: null,
+            isDashboardLoading: false,
+          },
+      );
       if (completedTask) {
         void refreshHistory(true);
         void focusLatestHistoryForStock(completedTicker);
@@ -4714,9 +4740,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
 
     setStatusToast(null);
-    setDashboardLoading(true);
-    setActiveTicker(normalizedTicker);
-    setPendingAnalysisTicker(normalizedTicker);
+    patchDashboardTaskState({
+      activeTicker: normalizedTicker,
+      pendingAnalysisTicker: normalizedTicker,
+      isDashboardLoading: true,
+    });
     setSearchQuery('');
 
     if (isGuest) {
@@ -4736,7 +4764,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         .catch((error) => ({ response: null, error }));
       if (previewResult.response) {
         setGuestPreview(previewResult.response.data);
-        setPendingAnalysisTicker(null);
+        patchDashboardTaskState({
+          pendingAnalysisTicker: null,
+        });
         if (previewResult.response.fallback) {
           setGuestFallbackNotice(language === 'en'
             ? 'Live preview is temporarily unavailable. Loaded a local snapshot instead.'
@@ -4744,9 +4774,13 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         }
       } else if (previewResult.error) {
         setGuestError(getParsedApiError(previewResult.error));
-        setPendingAnalysisTicker(null);
+        patchDashboardTaskState({
+          pendingAnalysisTicker: null,
+        });
       }
-      setDashboardLoading(false);
+      patchDashboardTaskState({
+        isDashboardLoading: false,
+      });
       return;
     }
 
@@ -4761,18 +4795,24 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       .catch((error) => ({ result: null, error }));
 
     if (submitResult.result?.ok) {
-      setActiveTicker(submitResult.result.stockCode);
-      setDashboardLoading(false);
+      patchDashboardTaskState({
+        activeTicker: submitResult.result.stockCode,
+        isDashboardLoading: false,
+      });
       void refreshHistory(true);
       return;
     }
 
     if (submitResult.result?.duplicate) {
-      setDashboardLoading(false);
+      patchDashboardTaskState({
+        isDashboardLoading: false,
+      });
       return;
     }
 
-    setPendingAnalysisTicker(null);
+    patchDashboardTaskState({
+      pendingAnalysisTicker: null,
+    });
     if (submitResult.result) {
       setStatusToast({
         message: submitResult.result.error?.message || (locale === 'en' ? 'LLM analysis failed. Please try again later.' : 'LLM 分析失败，请稍后重试'),
@@ -4785,7 +4825,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         tone: 'error',
       });
     }
-    setDashboardLoading(false);
+    patchDashboardTaskState({
+      isDashboardLoading: false,
+    });
   };
 
   const handleHistoryClick = async (historyItem: HistoryItem) => {
@@ -4796,20 +4838,28 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
 
     setHistoryDrawerOpen(false);
     setStatusToast(null);
-    setPendingAnalysisTicker(null);
+    patchDashboardTaskState({
+      pendingAnalysisTicker: null,
+    });
     clearError();
-    setActiveTicker(normalizedTicker);
+    patchDashboardTaskState({
+      activeTicker: normalizedTicker,
+    });
 
     // Local snapshots are only a visual bridge; the persisted history detail remains the source of truth.
     const hasCachedSnapshot = selectCachedHistoryForStock(normalizedTicker);
     if (!hasCachedSnapshot) {
-      setDashboardLoading(true);
+      patchDashboardTaskState({
+        isDashboardLoading: true,
+      });
     }
 
     const selectionError = await selectHistoryItem(historyItem.id)
       .then(() => null)
       .catch((error) => error);
-    setDashboardLoading(false);
+    patchDashboardTaskState({
+      isDashboardLoading: false,
+    });
     if (selectionError) {
       throw selectionError;
     }
