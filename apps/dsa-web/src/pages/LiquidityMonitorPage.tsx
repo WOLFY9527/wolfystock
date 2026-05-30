@@ -571,7 +571,7 @@ function buildCoverageReadinessSummary(
     });
   });
 
-  const topBlockingReasons = [...blockingReasons.entries()]
+  const topBlockingReasons = Array.from(blockingReasons.entries())
     .sort((left, right) => right[1] - left[1])
     .slice(0, 3)
     .map(([reason]) => reason);

@@ -62,7 +62,7 @@ const localeColon = (): string => (isEnglishUi() ? ': ' : '：');
 const joinLabelValue = (label: string, value: string): string => {
   return `${label}${localeColon()}${value}`;
 };
-const renderGroupLabelClass = (): string => (
+const getGroupLabelClass = (): string => (
   isEnglishUi()
     ? 'text-[11px] font-normal uppercase tracking-[0.12em] text-muted-text'
     : 'text-[12px] font-normal tracking-[0.08em] text-muted-text'
@@ -425,7 +425,7 @@ const SectionHeader: React.FC<{
 }> = ({ eyebrow, title, description, level = 3 }) => (
   <div className="mb-4 space-y-2">
     {isMeaningfulText(eyebrow) ? (
-      <p className={cn(renderGroupLabelClass(), 'tracking-[0.16em]')}>
+      <p className={cn(getGroupLabelClass(), 'tracking-[0.16em]')}>
         {eyebrow}
       </p>
     ) : null}
@@ -466,7 +466,7 @@ const HeroStat: React.FC<{
   accent = 'default',
 }) => (
   <div className="theme-panel-subtle flex h-full flex-col rounded-[var(--cohere-radius-medium)] border border-[var(--theme-panel-subtle-border)] px-4 py-3.5">
-    <p className={renderGroupLabelClass()}>{label}</p>
+    <p className={getGroupLabelClass()}>{label}</p>
     <p
       className={cn(
         'mt-2 font-normal tracking-[-0.03em]',
@@ -572,24 +572,24 @@ const DenseTable: React.FC<{
                 )}
               >
                 <div className="space-y-1">
-                  <p className={cn(renderGroupLabelClass(), 'md:hidden')}>{ui('report.field')}</p>
+                  <p className={cn(getGroupLabelClass(), 'md:hidden')}>{ui('report.field')}</p>
                   <p className="text-sm font-medium leading-6 text-foreground break-words">{localizeReportTermLabel(field.label, isEnglishUi() ? 'en' : 'zh')}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className={cn(renderGroupLabelClass(), 'md:hidden')}>{ui('report.value')}</p>
+                  <p className={cn(getGroupLabelClass(), 'md:hidden')}>{ui('report.value')}</p>
                   <p className={cn('text-sm leading-6 break-words', isMissingDisplayText(field.value) ? 'text-muted-text' : 'text-secondary-text')}>
                     {softenMissingValue(field.value)}
                   </p>
                 </div>
                 {showSource ? (
                   <div className="space-y-1">
-                    <p className={cn(renderGroupLabelClass(), 'md:hidden')}>{ui('report.source')}</p>
+                    <p className={cn(getGroupLabelClass(), 'md:hidden')}>{ui('report.source')}</p>
                     <p className="text-xs leading-5 text-muted-text break-words">{isMeaningfulMetaText(field.source) ? field.source : '—'}</p>
                   </div>
                 ) : null}
                 {showStatus ? (
                   <div className="space-y-1">
-                    <p className={cn(renderGroupLabelClass(), 'md:hidden')}>{ui('report.status')}</p>
+                    <p className={cn(getGroupLabelClass(), 'md:hidden')}>{ui('report.status')}</p>
                     <p className="text-xs leading-5 text-muted-text break-words">{isMeaningfulMetaText(field.status) ? field.status : '—'}</p>
                   </div>
                 ) : null}
@@ -610,7 +610,7 @@ const DenseTable: React.FC<{
 
 const CompactDecisionMetric: React.FC<{ label: string; value?: string | null }> = ({ label, value }) => (
   <div className="space-y-1">
-    <p className={renderGroupLabelClass()}>{label}</p>
+    <p className={getGroupLabelClass()}>{label}</p>
     <p className="text-sm leading-5 text-secondary-text">{softenMissingValue(value)}</p>
   </div>
 );
@@ -627,7 +627,7 @@ const DecisionExecutionPanel: React.FC<{
           <Badge variant="info">{softenControlledValue(decisionPanel?.setupType)}</Badge>
           <Badge variant="history">{ui('report.confidenceLabel')} {softenControlledValue(decisionPanel?.confidence)}</Badge>
         </div>
-        <p className={cn('mt-3', renderGroupLabelClass())}>{ui('report.executionSummary')}</p>
+        <p className={cn('mt-3', getGroupLabelClass())}>{ui('report.executionSummary')}</p>
         <p className="mt-2 text-base font-semibold leading-7 text-foreground">
           {softenControlledValue(decisionPanel?.keyAction || decisionPanel?.noPositionAdvice)}
         </p>
@@ -640,7 +640,7 @@ const DecisionExecutionPanel: React.FC<{
       </div>
 
       <div className="theme-panel-subtle rounded-[1rem] p-4">
-        <p className={renderGroupLabelClass()}>{ui('report.structureSnapshot')}</p>
+        <p className={getGroupLabelClass()}>{ui('report.structureSnapshot')}</p>
         <p className="mt-2 text-sm leading-6 text-secondary-text">
           {softenControlledValue(decisionPanel?.marketStructure)}
         </p>
@@ -1059,7 +1059,7 @@ const CoverageAuditPanel: React.FC<{
           {buckets.map((bucket) => (
             <div key={bucket.category} className={subtlePanelClass}>
               <div className="flex items-center justify-between gap-2">
-                <p className={renderGroupLabelClass()}>
+                <p className={getGroupLabelClass()}>
                   {missingCategoryLabel(bucket.category)}
                 </p>
                 <Badge variant="warning">{bucket.entries.length}</Badge>
@@ -1121,7 +1121,7 @@ const BattlePlanPanel: React.FC<{
               {topGridItems.map((item, index) => (
                 <div key={`${item.label}-${index}`} className="theme-panel-subtle rounded-[1rem] p-3.5">
                   <div className="flex items-center justify-between gap-3">
-                    <p className={renderGroupLabelClass()}>{localizeReportHeadingLabel(item.label, isEnglishUi() ? 'en' : 'zh')}</p>
+                    <p className={getGroupLabelClass()}>{localizeReportHeadingLabel(item.label, isEnglishUi() ? 'en' : 'zh')}</p>
                     <Badge variant={badgeTone(item.tone)} className="min-w-[3.75rem]">
                       {item.tone === 'buy'
                         ? ui('report.planBuy')
@@ -1143,7 +1143,7 @@ const BattlePlanPanel: React.FC<{
               {lowerNotes.map((item, index) => (
                 <div key={`${item.label}-${index}`} className="theme-panel-subtle rounded-[1rem] px-4 py-3.5">
                   <div className="flex items-center justify-between gap-3">
-                    <p className={renderGroupLabelClass()}>{localizeReportHeadingLabel(item.label, isEnglishUi() ? 'en' : 'zh')}</p>
+                    <p className={getGroupLabelClass()}>{localizeReportHeadingLabel(item.label, isEnglishUi() ? 'en' : 'zh')}</p>
                     <Badge variant={badgeTone(item.tone)} className="min-w-[3.75rem]">
                       {item.tone === 'position'
                         ? ui('report.planPosition')
@@ -1168,7 +1168,7 @@ const BattlePlanPanel: React.FC<{
         <div
           className="mt-4 rounded-[1rem] border border-[hsl(var(--accent-danger-hsl)/0.24)] bg-[hsl(var(--accent-danger-hsl)/0.12)] px-4 py-3"
         >
-          <p className={cn(renderGroupLabelClass(), 'text-[var(--accent-danger)]')}>{ui('report.reminders')}</p>
+          <p className={cn(getGroupLabelClass(), 'text-[var(--accent-danger)]')}>{ui('report.reminders')}</p>
           <ul className="mt-3 space-y-2 text-sm leading-6 text-[hsl(var(--accent-danger-hsl)/0.9)]">
             {battlePlan.warnings.map((warning, index) => (
               <li key={`${warning}-${index}`}>{warning}</li>
@@ -1186,7 +1186,7 @@ const MarketWarnings: React.FC<{ warnings: string[] }> = ({ warnings }) => {
   }
   return (
     <div className="rounded-[1rem] border border-[hsl(var(--accent-warning-hsl)/0.46)] bg-[hsl(var(--accent-warning-hsl)/0.14)] px-4 py-3">
-      <p className={cn(renderGroupLabelClass(), 'text-[var(--accent-warning)]')}>{ui('report.basisNotes')}</p>
+      <p className={cn(getGroupLabelClass(), 'text-[var(--accent-warning)]')}>{ui('report.basisNotes')}</p>
       <ul className="mt-3 space-y-2 text-sm leading-6 text-[hsl(var(--accent-warning-hsl)/0.9)]">
         {warnings.map((warning, index) => (
           <li key={`${warning}-${index}`}>{warning}</li>
