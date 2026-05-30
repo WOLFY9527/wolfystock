@@ -13,6 +13,7 @@ from src.contracts.source_confidence import (
     coerce_source_confidence_contract,
     evaluate_market_intelligence_trust_from_sources,
 )
+from src.services.provider_evidence_snapshot import build_provider_evidence_snapshot
 from src.services.liquidity_impulse_synthesis_adapter import build_liquidity_impulse_synthesis_payload
 from src.services.cn_money_market_rates_contracts import (
     OFFICIAL_CN_MONEY_MARKET_RATES_CONTEXT_METRICS,
@@ -372,13 +373,6 @@ class LiquidityMonitorService:
 
     def _build_observation_evidence_snapshot(self, indicators: List[Dict[str, Any]]) -> Dict[str, Any]:
         indicator_evidence: List[Dict[str, Any]] = []
-        missing_inputs: List[str] = []
-        warnings: List[str] = []
-        proxy_input_count = 0
-        fallback_input_count = 0
-        stale_input_count = 0
-        partial_input_count = 0
-        missing_input_count = 0
 
         for indicator in indicators:
             evidence = copy.deepcopy(indicator.get("evidence") or {})
@@ -429,32 +423,7 @@ class LiquidityMonitorService:
                     "warnings": indicator_warnings,
                 }
             )
-            proxy_input_count += indicator_proxy_input_count
-            fallback_input_count += indicator_fallback_input_count
-            stale_input_count += indicator_stale_input_count
-            partial_input_count += indicator_partial_input_count
-            missing_input_count += indicator_missing_input_count
-            missing_inputs.extend(indicator_missing_inputs)
-            warnings.extend(indicator_warnings)
-
-        return {
-            "diagnosticOnly": True,
-            "observationOnly": True,
-            "authorityGrant": False,
-            "decisionGrade": False,
-            "externalProviderCalls": False,
-            "providerRuntimeChanged": False,
-            "marketCacheMutation": False,
-            "indicatorCount": len(indicator_evidence),
-            "proxyInputCount": proxy_input_count,
-            "fallbackInputCount": fallback_input_count,
-            "staleInputCount": stale_input_count,
-            "partialInputCount": partial_input_count,
-            "missingInputCount": missing_input_count,
-            "indicatorEvidence": indicator_evidence,
-            "missingInputs": list(dict.fromkeys(missing_inputs)),
-            "warnings": list(dict.fromkeys(warnings)),
-        }
+        return build_provider_evidence_snapshot(indicator_evidence)
 
     @staticmethod
     def _observation_snapshot_input_is_proxy(item: Dict[str, Any]) -> bool:

@@ -2132,8 +2132,38 @@ def test_liquidity_monitor_adds_observation_evidence_snapshot_with_read_only_con
     assert snapshot["marketCacheMutation"] is False
     assert snapshot["indicatorCount"] == len(payload["indicators"])
     assert len(snapshot["indicatorEvidence"]) == len(payload["indicators"])
+    assert snapshot["sourceConfidence"]["coverage"] == pytest.approx(0.0)
+    assert snapshot["sourceConfidence"]["trustLevel"] == "unavailable"
     assert isinstance(snapshot["warnings"], list)
     assert isinstance(snapshot["missingInputs"], list)
+
+
+def test_liquidity_monitor_observation_evidence_snapshot_remains_service_local_and_schema_filtered(
+    isolated_db: DatabaseManager,
+) -> None:
+    del isolated_db
+    service = _make_service()
+
+    with (
+        patch.object(LiquidityMonitorService, "_now", return_value=FROZEN_GOLDEN_NOW),
+        patch(
+            "src.services.liquidity_monitor_service.fetch_yfinance_quote_history_frame",
+            side_effect=RuntimeError("unexpected live quote call"),
+            create=True,
+        ),
+        patch(
+            "src.services.liquidity_monitor_service.fetch_binance_funding_row",
+            side_effect=RuntimeError("unexpected live funding call"),
+        ),
+    ):
+        raw_payload = service.get_liquidity_monitor()
+
+    api_payload = LiquidityMonitorResponse(**raw_payload).model_dump(exclude_none=True)
+
+    assert "observationEvidenceSnapshot" in raw_payload
+    assert "observationEvidenceSnapshot" not in api_payload
+    assert raw_payload["score"] == api_payload["score"]
+    assert [item["key"] for item in raw_payload["indicators"]] == [item["key"] for item in api_payload["indicators"]]
 
 
 def test_liquidity_monitor_observation_evidence_snapshot_preserves_proxy_fallback_stale_partial_and_missing_signals(
@@ -2164,9 +2194,13 @@ def test_liquidity_monitor_observation_evidence_snapshot_preserves_proxy_fallbac
     assert snapshot["fallbackInputCount"] >= 1
     assert snapshot["staleInputCount"] >= 1
     assert snapshot["partialInputCount"] >= 1
+    assert "syntheticInputCount" in snapshot
+    assert snapshot["unavailableInputCount"] >= 1
     assert snapshot["missingInputCount"] >= 1
     assert "US2Y" in snapshot["missingInputs"]
     assert "DR007" in snapshot["missingInputs"]
+    assert snapshot["sourceConfidence"]["trustLevel"] == "unavailable"
+    assert "unavailable_source" in snapshot["sourceConfidence"]["degradationReasons"]
 
     vix_snapshot = evidence_by_key["vix_pressure"]
     assert vix_snapshot["diagnosticOnly"] is True
