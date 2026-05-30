@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentProps } from 'react';
+import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import {
   BarChart3,
   CheckSquare,
@@ -876,7 +876,7 @@ const WatchlistPage: React.FC = () => {
   const [batchProgress, setBatchProgress] = useState<BatchProgress>(null);
   const [isBatchBacktesting, setIsBatchBacktesting] = useState(false);
   const [isBatchScanning, setIsBatchScanning] = useState(false);
-  const [backtestSessionKeys, setBacktestSessionKeys] = useState<Set<string>>(() => new Set());
+  const backtestSessionKeysRef = useRef<Set<string>>(new Set());
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [useSelectedScope, setUseSelectedScope] = useState(false);
   const [activeItemId, setActiveItemId] = useState<number | null>(null);
@@ -1211,7 +1211,7 @@ const WatchlistPage: React.FC = () => {
     const { startDate, endDate } = buildDefaultBacktestWindow();
     const pendingItems = uniqueItems.filter((item) => {
       const key = `${normalizeText(item.symbol).toUpperCase()}:${startDate}:${endDate}:watchlist-default`;
-      return !backtestSessionKeys.has(key);
+      return !backtestSessionKeysRef.current.has(key);
     });
     const skippedItems = uniqueItems.filter((item) => !pendingItems.includes(item));
     if (skippedItems.length > 0) {
@@ -1245,7 +1245,7 @@ const WatchlistPage: React.FC = () => {
     const runOne = async (item: WatchlistItem) => {
       const symbol = normalizeText(item.symbol).toUpperCase();
       const key = `${symbol}:${startDate}:${endDate}:watchlist-default`;
-      setBacktestSessionKeys((current) => new Set(current).add(key));
+      backtestSessionKeysRef.current = new Set(backtestSessionKeysRef.current).add(key);
       setBatchStatuses((current) => ({ ...current, [item.symbol]: 'running' }));
       setBatchProgress((current) => current ? { ...current, currentSymbol: item.symbol } : current);
       try {
