@@ -1024,7 +1024,8 @@ function sortDiagnosticsForDecision(
   candidates: ScannerCandidateDiagnostic[],
   threshold: number,
 ): ScannerCandidateDiagnostic[] {
-  return [...candidates].sort((left, right) => {
+  const sortedCandidates = Array.from(candidates);
+  sortedCandidates.sort((left, right) => {
     const leftOfficial = isOfficialSelected(left) ? 1 : 0;
     const rightOfficial = isOfficialSelected(right) ? 1 : 0;
     if (leftOfficial !== rightOfficial) return rightOfficial - leftOfficial;
@@ -1035,6 +1036,7 @@ function sortDiagnosticsForDecision(
     if (scoreCompare !== 0) return scoreCompare;
     return (left.rank ?? Number.MAX_SAFE_INTEGER) - (right.rank ?? Number.MAX_SAFE_INTEGER);
   });
+  return sortedCandidates;
 }
 
 function formatScoreDelta(delta: number | null): string | null {
@@ -2354,8 +2356,9 @@ const UserScannerPage: React.FC = () => {
   const generateThemeDisabled = isGeneratingTheme;
 
   const sortedCandidates = (() => {
+    const candidates = Array.from(runDetail?.shortlist || []);
     const directionMultiplier = sortDirection === 'asc' ? 1 : -1;
-    return [...(runDetail?.shortlist || [])].sort((left: ScannerCandidate, right: ScannerCandidate) => {
+    candidates.sort((left: ScannerCandidate, right: ScannerCandidate) => {
       let compare = 0;
       if (sortKey === 'symbol') {
         compare = left.symbol.localeCompare(right.symbol);
@@ -2373,6 +2376,7 @@ const UserScannerPage: React.FC = () => {
       if (compare === 0) return left.rank - right.rank;
       return compare * directionMultiplier;
     });
+    return candidates;
   })();
   const diagnosticCandidates = getCandidateDiagnostics(runDetail);
   const hasCandidateDiagnostics = diagnosticCandidates.length > 0;

@@ -1008,7 +1008,7 @@ const WatchlistPage: React.FC = () => {
       return matchesSearch && matchesMarket && matchesSource && matchesContext && matchesEvidence;
     });
 
-    return [...rows].sort((left: WatchlistItem, right: WatchlistItem) => {
+    rows.sort((left: WatchlistItem, right: WatchlistItem) => {
       if (sortKey === 'symbol') return left.symbol.localeCompare(right.symbol);
       if (sortKey === 'market') {
         const marketCompare = normalizeText(left.market).localeCompare(normalizeText(right.market));
@@ -1025,6 +1025,7 @@ const WatchlistPage: React.FC = () => {
       if (sortKey === 'recentlyBacktested') return getTime(right.intelligence?.backtest?.testedAt) - getTime(left.intelligence?.backtest?.testedAt);
       return getItemTime(right) - getItemTime(left);
     });
+    return rows;
   })();
 
   const selectedIds = (() => {

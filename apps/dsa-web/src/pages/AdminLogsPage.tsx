@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import {
   adminLogsApi,
   type AdminDataMissingDrilldownItem,
@@ -1142,16 +1142,20 @@ const AdminLogsPage: React.FC = () => {
   const [detailError, setDetailError] = useState<ParsedApiError | null>(null);
   const skipDebugClickRef = useRef(false);
 
-  const loadStorageSummary = useCallback(async () => {
+  const refreshStorageSummary = async () => {
     try {
       const response = await adminLogsApi.getStorageSummary();
       setStorageSummary(response);
     } catch {
       setStorageSummary(null);
     }
-  }, []);
+  };
 
-  const loadDataMissing = useCallback(async () => {
+  const loadStorageSummary = useEffectEvent(async () => {
+    await refreshStorageSummary();
+  });
+
+  const loadDataMissing = useEffectEvent(async () => {
     if (activeTab === 'raw') {
       setDataMissingItems([]);
       return;
@@ -1168,9 +1172,9 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsLoadingDataMissing(false);
     }
-  }, [activeTab, sinceFilter]);
+  });
 
-  const loadOperatorIssues = useCallback(async () => {
+  const loadOperatorIssues = useEffectEvent(async () => {
     if (activeTab === 'raw') {
       setOperatorIssueItems([]);
       return;
@@ -1187,9 +1191,9 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsLoadingOperatorIssues(false);
     }
-  }, [activeTab, sinceFilter]);
+  });
 
-  const loadSessions = useCallback(async () => {
+  const refreshSessions = async () => {
     setIsLoadingList(true);
     setError(null);
     try {
@@ -1244,7 +1248,11 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsLoadingList(false);
     }
-  }, [activeTab, categoryFilter, searchQuery, sinceFilter, statusFilter, pageOffset, levelFilter, showDebugLogs]);
+  };
+
+  const loadSessions = useEffectEvent(async () => {
+    await refreshSessions();
+  });
 
   const previewCleanup = async () => {
     setIsCleanupBusy(true);
@@ -1316,7 +1324,7 @@ const AdminLogsPage: React.FC = () => {
       setCleanupMessage(locale === 'zh'
         ? `已删除 ${response.deletedLogCount} 个会话和 ${response.deletedEventCount} 个事件。${response.additionalCleanupNeeded ? ' 可能仍需继续清理。' : ''}`
         : `Deleted ${response.deletedLogCount} sessions and ${response.deletedEventCount} events.${response.additionalCleanupNeeded ? ' Additional cleanup may still be needed.' : ''}`);
-      await Promise.all([loadStorageSummary(), loadSessions()]);
+      await Promise.all([refreshStorageSummary(), refreshSessions()]);
     } catch (err) {
       setError(getParsedApiError(err));
     } finally {
@@ -1329,24 +1337,41 @@ const AdminLogsPage: React.FC = () => {
   }, [t]);
 
   useEffect(() => {
-    setPageOffset(0);
-  }, [activeTab, searchQuery, sinceFilter, statusFilter]);
-
-  useEffect(() => {
     void loadSessions();
-  }, [loadSessions]);
+  }, [activeTab, categoryFilter, searchQuery, sinceFilter, statusFilter, pageOffset, levelFilter, showDebugLogs]);
 
   useEffect(() => {
     void loadStorageSummary();
-  }, [loadStorageSummary]);
+  }, []);
 
   useEffect(() => {
     void loadDataMissing();
-  }, [loadDataMissing]);
+  }, [activeTab, sinceFilter]);
 
   useEffect(() => {
     void loadOperatorIssues();
-  }, [loadOperatorIssues]);
+  }, [activeTab, sinceFilter]);
+
+  const handleTabChange = (tab: LogsTab) => {
+    if (tab === activeTab) return;
+    setActiveTab(tab);
+    setPageOffset(0);
+  };
+
+  const handleSearchQueryChange = (nextQuery: string) => {
+    setSearchQuery(nextQuery);
+    setPageOffset(0);
+  };
+
+  const handleStatusFilterChange = (nextStatus: (typeof STATUS_FILTER_OPTIONS)[number]) => {
+    setStatusFilter(nextStatus);
+    setPageOffset(0);
+  };
+
+  const handleSinceFilterChange = (nextSince: (typeof SINCE_OPTIONS)[number]) => {
+    setSinceFilter(nextSince);
+    setPageOffset(0);
+  };
 
   const filteredSessions = (() => {
     const query = searchQuery.trim().toLowerCase();
@@ -1697,7 +1722,7 @@ const AdminLogsPage: React.FC = () => {
                     aria-selected={isActive}
                     variant={isActive ? 'compact' : 'secondary'}
                     className={`shrink-0 px-3 py-1.5 text-xs font-semibold ${isActive ? 'border-emerald-300/45 bg-emerald-400/14 text-emerald-50 hover:bg-emerald-400/18 hover:text-emerald-50' : 'text-secondary-text'}`}
-                    onClick={() => setActiveTab(tab)}
+                    onClick={() => handleTabChange(tab)}
                   >
                     {tabLabel(tab, locale)}
                   </TerminalButton>
@@ -1745,14 +1770,14 @@ const AdminLogsPage: React.FC = () => {
                 className="input-surface h-9 w-full min-w-0 rounded-lg px-3 text-sm"
                 placeholder={activeTab === 'analysis' ? 'TSLA / AAPL / NVDA' : (locale === 'zh' ? '事件 / 请求 ID / 标的 / 来源 / 用户' : 'Event / request id / symbol / source / user')}
                 value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
+                onChange={(event) => handleSearchQueryChange(event.target.value)}
               />
               {activeTab !== 'raw' ? (
                 <select
                   aria-label={locale === 'zh' ? '状态筛选' : 'Status filter'}
                   className="input-surface h-9 w-full min-w-0 appearance-none truncate rounded-lg px-3 pr-10 text-sm"
                   value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value as (typeof STATUS_FILTER_OPTIONS)[number])}
+                  onChange={(event) => handleStatusFilterChange(event.target.value as (typeof STATUS_FILTER_OPTIONS)[number])}
                 >
                   {STATUS_FILTER_OPTIONS.map((option) => (
                     <option key={option} value={option}>{statusFilterLabel(option, locale)}</option>
@@ -1765,7 +1790,7 @@ const AdminLogsPage: React.FC = () => {
                 aria-label={locale === 'zh' ? '时间范围' : 'Time range'}
                 className="input-surface h-9 w-full min-w-0 appearance-none truncate rounded-lg px-3 pr-10 text-sm"
                 value={sinceFilter}
-                onChange={(event) => setSinceFilter(event.target.value as (typeof SINCE_OPTIONS)[number])}
+                onChange={(event) => handleSinceFilterChange(event.target.value as (typeof SINCE_OPTIONS)[number])}
               >
                 {SINCE_OPTIONS.map((option) => (
                   <option key={option} value={option}>{sinceLabel(option, locale)}</option>
@@ -1804,7 +1829,7 @@ const AdminLogsPage: React.FC = () => {
                 type="button"
                 variant="secondary"
                 className="h-9 px-4 text-sm sm:col-span-2 xl:col-span-1"
-                onClick={() => void loadSessions()}
+                onClick={() => void refreshSessions()}
                 disabled={isLoadingList}
               >
                 {isLoadingList ? t('adminLogs.loading') : t('adminLogs.refreshButton')}

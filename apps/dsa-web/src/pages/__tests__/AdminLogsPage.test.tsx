@@ -981,6 +981,34 @@ describe('AdminLogsPage', () => {
     await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 20 })));
   });
 
+  it('resets business pagination when tab and business filters change', async () => {
+    render(<AdminLogsPage />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: '股票分析' }));
+    await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'analysis', offset: 0 })));
+
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }));
+    await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'analysis', offset: 20 })));
+
+    fireEvent.change(screen.getByLabelText('搜索日志'), { target: { value: 'TSLA' } });
+    await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'analysis', symbol: 'TSLA', offset: 0 })));
+
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }));
+    await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'analysis', symbol: 'TSLA', offset: 20 })));
+
+    fireEvent.change(screen.getByLabelText('状态筛选'), { target: { value: 'partial' } });
+    await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'analysis', symbol: 'TSLA', status: 'partial', offset: 0 })));
+
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }));
+    await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'analysis', symbol: 'TSLA', status: 'partial', offset: 20 })));
+
+    fireEvent.change(screen.getByLabelText('时间范围'), { target: { value: '1h' } });
+    await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'analysis', symbol: 'TSLA', status: 'partial', since: '1h', offset: 0 })));
+
+    fireEvent.click(screen.getByRole('tab', { name: '数据源' }));
+    await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'data_source', since: '1h', offset: 0 })));
+  });
+
   it('opens business-event detail with call-chain steps and failed error message', async () => {
     render(<AdminLogsPage />);
 
