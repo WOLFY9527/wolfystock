@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Activity, ExternalLink } from 'lucide-react';
 import { marketApi, type MarketDataReadinessCheck, type MarketDataReadinessResponse } from '../api/market';
 import {
@@ -1876,13 +1876,13 @@ const MarketProviderOperationsPage: React.FC = () => {
   const [readiness, setReadiness] = useState<MarketDataReadinessResponse | null>(null);
   const [selectedProviderKey, setSelectedProviderKey] = useState<string | null>(null);
   const [readinessSymbolsInput, setReadinessSymbolsInput] = useState('');
-  const [submittedReadinessSymbols, setSubmittedReadinessSymbols] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isMatrixLoading, setIsMatrixLoading] = useState(true);
   const [isReadinessLoading, setIsReadinessLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [matrixError, setMatrixError] = useState<ParsedApiError | null>(null);
   const [readinessError, setReadinessError] = useState<ParsedApiError | null>(null);
+  const submittedReadinessSymbolsRef = useRef('');
 
   useEffect(() => {
     let cancelled = false;
@@ -1924,30 +1924,43 @@ const MarketProviderOperationsPage: React.FC = () => {
     };
   }, []);
 
+  const loadReadiness = async (symbols?: string, cancelledRef?: { current: boolean }) => {
+    const response = await marketApi.getDataReadiness(symbols ? { symbols } : undefined)
+      .then((payload) => ({ payload, error: null as ParsedApiError | null }))
+      .catch((apiError) => ({
+        payload: null,
+        error: { ...getParsedApiError(apiError), title: '读取本地行情就绪诊断失败' },
+      }));
+    if (cancelledRef?.current) {
+      return;
+    }
+    if (response.payload) {
+      setReadiness(response.payload);
+    } else if (response.error) {
+      setReadinessError(response.error);
+    }
+    setIsReadinessLoading(false);
+  };
+
   useEffect(() => {
-    let cancelled = false;
-    marketApi.getDataReadiness(submittedReadinessSymbols ? { symbols: submittedReadinessSymbols } : undefined)
-      .then((payload) => {
-        if (!cancelled) setReadiness(payload);
-      })
-      .catch((apiError) => {
-        if (!cancelled) {
-          const parsed = getParsedApiError(apiError);
-          setReadinessError({ ...parsed, title: '读取本地行情就绪诊断失败' });
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setIsReadinessLoading(false);
-      });
+    const cancelledRef = { current: false };
+    queueMicrotask(() => {
+      void loadReadiness(undefined, cancelledRef);
+    });
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
     };
-  }, [submittedReadinessSymbols]);
+  }, []);
 
   const submitReadinessSymbols = () => {
+    const nextSymbols = readinessSymbolsInput.trim();
+    if (nextSymbols === submittedReadinessSymbolsRef.current && !readinessError) {
+      return;
+    }
+    submittedReadinessSymbolsRef.current = nextSymbols;
     setReadinessError(null);
     setIsReadinessLoading(true);
-    setSubmittedReadinessSymbols(readinessSymbolsInput.trim());
+    void loadReadiness(nextSymbols);
   };
 
   const items = response?.items ?? EMPTY_PROVIDER_ITEMS;
