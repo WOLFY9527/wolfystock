@@ -801,6 +801,7 @@ def test_all_backtest_golden_fixtures_are_sanitized_and_explicitly_enumerated() 
 
     assert {path.name for path in fixture_paths} == {
         "rule_backtest_compute_basic_long_cash.json",
+        "rule_backtest_pit_adjusted_data_readiness_v1.json",
         "rule_backtest_compute_shadow_cli_v1.json",
         "rule_backtest_compute_shadow_cli_v2.json",
         "rule_backtest_compute_shadow_cli_v3_terminal_forced_close.json",

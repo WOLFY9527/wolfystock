@@ -1,0 +1,102 @@
+{
+  "fixture_kind": "backtest_pit_adjusted_data_readiness_contract",
+  "fixture_version": "v1",
+  "fixture_scope": {
+    "scope": "local_static_fixture",
+    "diagnostic_only": true,
+    "provider_calls_executed": false,
+    "data_ingestion_executed": false,
+    "engine_math_changed": false,
+    "strategy_execution_implied": false,
+    "decision_grade": false
+  },
+  "readiness_posture": {
+    "overall_state": "research_diagnostic_only",
+    "pit_adjusted_institutional_ready": false,
+    "survivorship_bias_safe": false,
+    "historical_snapshot_reproducible": false,
+    "notes": "Static fixture only; no PIT universe, adjusted-data lineage, or decision-grade claim is available."
+  },
+  "claims": {
+    "point_in_time_universe_membership": {
+      "state": "unavailable",
+      "ready": false,
+      "reason_code": "pit_universe_membership_missing",
+      "summary": "Point-in-time universe membership evidence is not available in the current local backtest fixture contract."
+    },
+    "survivorship_bias_safe_universe_evidence": {
+      "state": "unavailable",
+      "ready": false,
+      "reason_code": "survivorship_bias_evidence_missing",
+      "summary": "Survivorship-bias-safe universe evidence is not available in the current local backtest fixture contract."
+    },
+    "delisting_inactive_symbol_handling": {
+      "state": "unavailable",
+      "ready": false,
+      "reason_code": "delisting_inactive_symbol_contract_missing",
+      "summary": "Delisting and inactive-symbol handling evidence is not available in the current local backtest fixture contract."
+    },
+    "adjusted_ohlc_lineage": {
+      "state": "unavailable",
+      "ready": false,
+      "reason_code": "adjusted_ohlc_lineage_missing",
+      "summary": "Adjusted OHLC lineage evidence is not available in the current local backtest fixture contract."
+    },
+    "adjustment_methodology_version": {
+      "state": "unavailable",
+      "ready": false,
+      "reason_code": "adjustment_methodology_missing",
+      "summary": "Adjustment methodology and version evidence is not available in the current local backtest fixture contract."
+    },
+    "exchange_calendar_session_alignment": {
+      "state": "unavailable",
+      "ready": false,
+      "reason_code": "exchange_calendar_session_contract_missing",
+      "summary": "Exchange calendar and session alignment evidence is not available in the current local backtest fixture contract."
+    },
+    "symbol_identifier_lineage": {
+      "state": "unavailable",
+      "ready": false,
+      "reason_code": "symbol_identifier_lineage_missing",
+      "summary": "Symbol and identifier lineage evidence is not available in the current local backtest fixture contract."
+    },
+    "vendor_source_provenance": {
+      "state": "unavailable",
+      "ready": false,
+      "reason_code": "vendor_source_provenance_missing",
+      "summary": "Vendor and source provenance evidence is not available in the current local backtest fixture contract."
+    },
+    "as_of_timestamp_policy": {
+      "state": "unavailable",
+      "ready": false,
+      "reason_code": "as_of_timestamp_policy_missing",
+      "summary": "As-of timestamp policy evidence is not available in the current local backtest fixture contract."
+    },
+    "missing_stale_bar_policy": {
+      "state": "unavailable",
+      "ready": false,
+      "reason_code": "missing_stale_bar_policy_missing",
+      "summary": "Missing and stale-bar policy evidence is not available in the current local backtest fixture contract."
+    },
+    "historical_snapshot_reproducibility": {
+      "state": "unavailable",
+      "ready": false,
+      "reason_code": "historical_snapshot_reproducibility_missing",
+      "summary": "Historical snapshot reproducibility evidence is not available in the current local backtest fixture contract."
+    },
+    "decision_grade_institutional_readiness": {
+      "state": "not_ready",
+      "ready": false,
+      "reason_code": "decision_grade_institutional_contract_missing",
+      "summary": "Decision-grade institutional readiness is not available in the current local backtest fixture contract."
+    }
+  },
+  "determinism": {
+    "json_safe": true,
+    "deterministic_fixture": true,
+    "offline_static_fixture": true,
+    "generated_artifacts_required": false,
+    "database_writes": false,
+    "live_provider_calls": false
+  }
+}
