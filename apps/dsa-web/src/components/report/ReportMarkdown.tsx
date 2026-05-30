@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useReducer } from 'react';
 import { historyApi } from '../../api/history';
 import { Drawer } from '../common/Drawer';
 import { SupportPanel } from '../common/SupportSurface';
@@ -21,6 +21,73 @@ interface ReportMarkdownProps {
   reportLanguage?: ReportLanguage;
   standardReport?: StandardReport;
   initialContent?: string;
+}
+
+interface ReportMarkdownState {
+  fetchedContent: string;
+  loadedRecordId: number | null;
+  isLoading: boolean;
+  error: string | null;
+  isOpen: boolean;
+  hasOpenedTechnicalDetails: boolean;
+}
+
+type ReportMarkdownAction =
+  | { type: 'loadStarted' }
+  | { type: 'loadSucceeded'; content: string; recordId: number }
+  | { type: 'loadFailed'; error: string; recordId: number }
+  | { type: 'close' }
+  | { type: 'openTechnicalDetails' };
+
+const createInitialReportMarkdownState = (initialContent: string | undefined): ReportMarkdownState => ({
+  fetchedContent: '',
+  loadedRecordId: null,
+  isLoading: initialContent === undefined,
+  error: null,
+  isOpen: true,
+  hasOpenedTechnicalDetails: false,
+});
+
+function reportMarkdownReducer(state: ReportMarkdownState, action: ReportMarkdownAction): ReportMarkdownState {
+  switch (action.type) {
+    case 'loadStarted':
+      return {
+        ...state,
+        isLoading: true,
+        error: null,
+      };
+    case 'loadSucceeded':
+      return {
+        ...state,
+        fetchedContent: action.content,
+        loadedRecordId: action.recordId,
+        isLoading: false,
+        error: null,
+      };
+    case 'loadFailed':
+      return {
+        ...state,
+        fetchedContent: '',
+        loadedRecordId: action.recordId,
+        isLoading: false,
+        error: action.error,
+      };
+    case 'close':
+      return {
+        ...state,
+        isOpen: false,
+      };
+    case 'openTechnicalDetails':
+      if (state.hasOpenedTechnicalDetails) {
+        return state;
+      }
+      return {
+        ...state,
+        hasOpenedTechnicalDetails: true,
+      };
+    default:
+      return state;
+  }
 }
 
 const LazyReportMarkdownTechnicalDetailsRenderer = lazy(async () => {
@@ -51,11 +118,10 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
     : 'text-xs font-semibold tracking-[0.08em] text-muted-text';
   const colon = normalizedLanguage === 'en' ? ': ' : '：';
   const loadReportFailedText = text.loadReportFailed;
-  const [content, setContent] = useState<string>(initialContent ?? '');
-  const [isLoading, setIsLoading] = useState(initialContent === undefined);
-  const [error, setError] = useState<string | null>(null);
-  const [isOpen, setIsOpen] = useState(true);
-  const [hasOpenedTechnicalDetails, setHasOpenedTechnicalDetails] = useState(false);
+  const [state, dispatch] = useReducer(reportMarkdownReducer, initialContent, createInitialReportMarkdownState);
+  const content = initialContent ?? (state.loadedRecordId === recordId ? state.fetchedContent : '');
+  const isLoading = initialContent === undefined && (state.isLoading || state.loadedRecordId !== recordId);
+  const error = initialContent === undefined && state.loadedRecordId === recordId ? state.error : null;
 
   const coverageAudit = (() => {
     const mergedEntries = [
@@ -160,49 +226,51 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
 
   // Handle close with animation
   const handleClose = () => {
-    setIsOpen(false);
+    dispatch({ type: 'close' });
     // Delay actual close to allow animation to complete
     setTimeout(onClose, 300);
   };
 
   useEffect(() => {
     if (initialContent !== undefined) {
-      setContent(initialContent);
-      setIsLoading(false);
-      setError(null);
       return;
     }
 
-    let isMounted = true;
+    let isCancelled = false;
 
-    const fetchMarkdown = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const markdownContent = await historyApi.getMarkdown(recordId);
-        if (isMounted) {
-          setContent(markdownContent);
-        }
-      } catch (err) {
-        if (isMounted) {
-          setError(err instanceof Error ? err.message : loadReportFailedText);
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+    queueMicrotask(() => {
+      if (isCancelled) {
+        return;
       }
-    };
 
-    fetchMarkdown();
+      dispatch({ type: 'loadStarted' });
+      void historyApi.getMarkdown(recordId)
+        .then((markdownContent) => ({ content: markdownContent, error: null as string | null }))
+        .catch((err) => ({
+          content: '',
+          error: err instanceof Error ? err.message : loadReportFailedText,
+        }))
+        .then((result) => {
+          if (isCancelled) {
+            return;
+          }
+
+          if (result.error) {
+            dispatch({ type: 'loadFailed', error: result.error, recordId });
+            return;
+          }
+
+          dispatch({ type: 'loadSucceeded', content: result.content, recordId });
+        });
+    });
 
     return () => {
-      isMounted = false;
+      isCancelled = true;
     };
   }, [initialContent, recordId, loadReportFailedText]);
 
   return (
-    <Drawer isOpen={isOpen} onClose={handleClose} width="max-w-[min(96vw,112rem)]" zIndex={100}>
+    <Drawer isOpen={state.isOpen} onClose={handleClose} width="max-w-[min(96vw,112rem)]" zIndex={100}>
       <div className="mx-auto w-full max-w-[72rem] space-y-5 pb-1" data-testid="full-report-document-shell">
         <SupportPanel
           className="mb-1 px-5 py-4 md:px-6"
@@ -317,7 +385,7 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
               className="theme-panel-subtle rounded-[var(--cohere-radius-medium)] px-5 py-4 md:px-6"
               onToggle={(event) => {
                 if (event.currentTarget.open) {
-                  setHasOpenedTechnicalDetails(true);
+                  dispatch({ type: 'openTechnicalDetails' });
                 }
               }}
             >
@@ -325,7 +393,7 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
                 {normalizedLanguage === 'en' ? 'Technical details' : '技术细节'}
               </summary>
               <div className="mt-4 mx-auto w-full max-w-[86ch]">
-                {hasOpenedTechnicalDetails ? (
+                {state.hasOpenedTechnicalDetails ? (
                   <Suspense
                     fallback={(
                       <output
