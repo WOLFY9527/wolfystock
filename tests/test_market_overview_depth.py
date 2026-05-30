@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import threading
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
+from zoneinfo import ZoneInfo
 
 from api.v1.endpoints import market
 from src.services.market_cache import market_cache
@@ -98,6 +99,16 @@ def _configured_unavailable_us_breadth_activation(reason: str) -> dict[str, obje
     return payload
 
 
+def _fresh_official_macro_dates() -> tuple[str, str]:
+    latest = datetime.now(ZoneInfo("America/New_York")).date()
+    while latest.weekday() >= 5:
+        latest -= timedelta(days=1)
+    previous = latest - timedelta(days=1)
+    while previous.weekday() >= 5:
+        previous -= timedelta(days=1)
+    return latest.isoformat(), previous.isoformat()
+
+
 def test_us_breadth_sector_proxy_returns_stable_shape_with_metadata() -> None:
     service = MarketOverviewService()
     quotes = {
@@ -134,8 +145,7 @@ def test_us_breadth_sector_proxy_returns_stable_shape_with_metadata() -> None:
 
 def test_rates_panel_keeps_static_cn_fallback_rows_non_authoritative_when_us_official_rows_are_mixed() -> None:
     service = MarketOverviewService()
-    latest = "2026-05-20"
-    previous = "2026-05-19"
+    latest, previous = _fresh_official_macro_dates()
     official_points = {
         "DGS2": [
             MacroObservation("DGS2", 4.82, latest, latest, "treasury:daily_treasury_yield_curve", "official_public", "daily_rate"),
@@ -277,16 +287,22 @@ def test_market_refresh_failure_serves_stale_snapshot_with_provider_health() -> 
         "IWM": {"value": 210.0, "change_pct": -0.3, "trend": [211.0, 210.0], "volume": 22_000_000},
     }
 
-    with patch.object(service, "_latest_quote", side_effect=lambda ticker: quotes[ticker]):
+    with (
+        patch("src.services.market_overview_service.run_polygon_us_breadth_activation", return_value=_missing_us_breadth_activation()),
+        patch.object(service, "_latest_quote", side_effect=lambda ticker: quotes[ticker]),
+    ):
         warm_payload = service.get_us_breadth()
 
     entry = market_cache.get("us_breadth")
     assert entry is not None
     entry.expires_at = entry.fetched_at - timedelta(seconds=1)
 
-    with patch.object(service, "_latest_quote", side_effect=RuntimeError("provider_down raw stack trace")):
+    with (
+        patch("src.services.market_overview_service.run_polygon_us_breadth_activation", return_value=_missing_us_breadth_activation()),
+        patch.object(service, "_latest_quote", side_effect=RuntimeError("provider_down raw stack trace")),
+    ):
         stale_payload = service.get_us_breadth()
-        market_cache.wait_for_refreshes(timeout=2)
+        assert market_cache.wait_for_refreshes(timeout=2) is True
         served_payload = service.get_us_breadth()
 
     assert stale_payload["items"][0]["symbol"] == warm_payload["items"][0]["symbol"]
