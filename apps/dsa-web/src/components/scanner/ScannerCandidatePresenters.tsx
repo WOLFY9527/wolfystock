@@ -34,6 +34,46 @@ type CandidateDetailOutcomeItem = {
   value: string;
 };
 
+type ScannerWatchlistState = {
+  tracked: boolean;
+  pending: boolean;
+  authBlocked: boolean;
+  label: string;
+  title?: string;
+  onTrack: () => void;
+};
+
+type ScannerAnalyzeAction = {
+  label: string;
+  disabled: boolean;
+  onAnalyze: () => void;
+};
+
+type ScannerCopyAction = {
+  label: string;
+  copied: boolean;
+  onCopy: () => void;
+};
+
+type ScannerExportAction = {
+  label?: string;
+  onExport: () => void;
+};
+
+type ScannerBacktestAction = {
+  item?: ScannerBacktestItem;
+  label: string;
+  title?: string;
+  disabled?: boolean;
+  onBacktest: () => void;
+};
+
+type ScannerRowState = {
+  selected: boolean;
+  expanded: boolean;
+  moreOpen: boolean;
+};
+
 function BoardDetailSection({
   title,
   children,
@@ -67,21 +107,11 @@ export function ScannerCandidateDetailPanel({
   aiUnavailableText,
   outcomeItems,
   providerNotes,
-  onAnalyze,
-  onCopy,
-  onExport,
-  onTrack,
-  onBacktest,
-  isAnalyzing,
-  isCopied,
-  isTracked,
-  isTrackPending,
-  isWatchlistAuthBlocked,
-  watchlistActionLabel,
-  watchlistActionTitle,
-  backtestLabel,
-  backtestTitle,
-  backtestItem,
+  watchlistState,
+  analyzeAction,
+  copyAction,
+  exportAction,
+  backtestAction,
 }: {
   candidate: ScannerCandidate;
   candidateIdentity: string;
@@ -98,21 +128,11 @@ export function ScannerCandidateDetailPanel({
   aiUnavailableText: string;
   outcomeItems: CandidateDetailOutcomeItem[];
   providerNotes: string | null;
-  onAnalyze: () => void;
-  onCopy: () => void;
-  onExport: () => void;
-  onTrack: () => void;
-  onBacktest: () => void;
-  isAnalyzing: boolean;
-  isCopied: boolean;
-  isTracked: boolean;
-  isTrackPending: boolean;
-  isWatchlistAuthBlocked: boolean;
-  watchlistActionLabel: string;
-  watchlistActionTitle?: string;
-  backtestLabel: string;
-  backtestTitle?: string;
-  backtestItem?: ScannerBacktestItem;
+  watchlistState: ScannerWatchlistState;
+  analyzeAction: ScannerAnalyzeAction;
+  copyAction: ScannerCopyAction;
+  exportAction: ScannerExportAction;
+  backtestAction: ScannerBacktestAction;
 }) {
   const aiAvailable = Boolean(candidate.aiInterpretation?.available);
 
@@ -154,36 +174,36 @@ export function ScannerCandidateDetailPanel({
       ) : null}
       <div className="md:col-span-4 flex flex-wrap items-center gap-1.5 border-t border-white/8 py-2">
         <ActionButton
-          label={isAnalyzing ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
+          label={analyzeAction.label}
           icon={<Play className="size-3.5" />}
-          onClick={() => onAnalyze()}
-          disabled={isAnalyzing}
+          onClick={analyzeAction.onAnalyze}
+          disabled={analyzeAction.disabled}
           variant="compact"
         />
         <ActionButton
-          label={watchlistActionLabel}
-          icon={isTracked ? <BookmarkCheck className="size-3.5" /> : <BookmarkPlus className="size-3.5" />}
-          onClick={() => onTrack()}
-          disabled={isTrackPending || isTracked || isWatchlistAuthBlocked}
+          label={watchlistState.label}
+          icon={watchlistState.tracked ? <BookmarkCheck className="size-3.5" /> : <BookmarkPlus className="size-3.5" />}
+          onClick={watchlistState.onTrack}
+          disabled={watchlistState.pending || watchlistState.tracked || watchlistState.authBlocked}
           variant="compact"
-          title={watchlistActionTitle}
+          title={watchlistState.title}
         />
         <ActionButton
-          label={backtestLabel}
+          label={backtestAction.label}
           icon={<TestTubeDiagonal className="size-3.5" />}
-          onClick={() => onBacktest()}
-          disabled={!candidate.symbol || backtestItem?.status === 'running' || backtestItem?.status === 'queued'}
-          title={backtestTitle}
+          onClick={backtestAction.onBacktest}
+          disabled={backtestAction.disabled ?? (!candidate.symbol || backtestAction.item?.status === 'running' || backtestAction.item?.status === 'queued')}
+          title={backtestAction.title}
         />
         <ActionButton
-          label={isCopied ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy symbol' : '复制代码')}
+          label={copyAction.label}
           icon={<Copy className="size-3.5" />}
-          onClick={() => onCopy()}
+          onClick={copyAction.onCopy}
         />
         <ActionButton
-          label={language === 'en' ? 'Export candidate' : '导出该候选'}
+          label={exportAction.label || (language === 'en' ? 'Export candidate' : '导出该候选')}
           icon={<Download className="size-3.5" />}
-          onClick={() => onExport()}
+          onClick={exportAction.onExport}
         />
       </div>
       {evidenceSummary || featureSignalItems.length || aiAvailable || providerNotes ? (
@@ -220,7 +240,7 @@ export function ScannerCandidateDetailPanel({
         </AdvancedDisclosure>
       ) : null}
       <div className="md:col-span-4">
-        <ScannerBacktestResultStrip item={backtestItem} language={language} />
+        <ScannerBacktestResultStrip item={backtestAction.item} language={language} />
       </div>
     </div>
   );
@@ -242,16 +262,10 @@ export function ScannerCandidateInspector({
   failedRuleNotes,
   missingFieldNotes,
   missingCount,
-  onCopy,
-  onExport,
-  onTrack,
-  isCopied,
-  isTracked,
-  isTrackPending,
-  isWatchlistAuthBlocked,
-  watchlistActionLabel,
-  watchlistActionTitle,
-  backtestItem,
+  watchlistState,
+  copyAction,
+  exportAction,
+  backtestAction,
   testId = 'scanner-candidate-inspector',
 }: {
   candidate: ScannerCandidateDiagnostic;
@@ -269,16 +283,10 @@ export function ScannerCandidateInspector({
   failedRuleNotes: string[];
   missingFieldNotes: string[];
   missingCount: number;
-  onCopy: () => void;
-  onExport: () => void;
-  onTrack: () => void;
-  isCopied: boolean;
-  isTracked: boolean;
-  isTrackPending: boolean;
-  isWatchlistAuthBlocked: boolean;
-  watchlistActionLabel: string;
-  watchlistActionTitle?: string;
-  backtestItem?: ScannerBacktestItem;
+  watchlistState: ScannerWatchlistState;
+  copyAction: ScannerCopyAction;
+  exportAction: ScannerExportAction;
+  backtestAction?: Pick<ScannerBacktestAction, 'item'>;
   testId?: string;
 }) {
   return (
@@ -334,24 +342,24 @@ export function ScannerCandidateInspector({
         <DetailSection title={language === 'en' ? 'Next step' : '下一步'}>
           <div className="grid grid-cols-2 gap-1.5">
             <ActionButton
-              label={isCopied ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy symbol' : '复制代码')}
+              label={copyAction.label}
               icon={<Copy className="size-3.5" />}
-              onClick={() => onCopy()}
+              onClick={copyAction.onCopy}
             />
             <ActionButton
-              label={language === 'en' ? 'Export' : '导出'}
+              label={exportAction.label || (language === 'en' ? 'Export' : '导出')}
               icon={<Download className="size-3.5" />}
-              onClick={() => onExport()}
+              onClick={exportAction.onExport}
             />
             <ActionButton
-              label={watchlistActionLabel}
-              icon={isTracked ? <BookmarkCheck className="size-3.5" /> : <BookmarkPlus className="size-3.5" />}
-              onClick={() => onTrack()}
-              disabled={isTracked || isTrackPending || isWatchlistAuthBlocked}
-              title={watchlistActionTitle}
+              label={watchlistState.label}
+              icon={watchlistState.tracked ? <BookmarkCheck className="size-3.5" /> : <BookmarkPlus className="size-3.5" />}
+              onClick={watchlistState.onTrack}
+              disabled={watchlistState.tracked || watchlistState.pending || watchlistState.authBlocked}
+              title={watchlistState.title}
             />
           </div>
-          <ScannerBacktestResultStrip item={backtestItem} language={language} />
+          <ScannerBacktestResultStrip item={backtestAction?.item} language={language} />
         </DetailSection>
 
         <AdvancedDisclosure
@@ -387,9 +395,7 @@ export function ScannerCandidateDiagnosticRow({
   candidate,
   trustSources,
   language,
-  isSelectedCandidate,
-  isExpanded,
-  isMoreOpen,
+  rowState,
   displayName,
   keyReason,
   previewLabel,
@@ -402,32 +408,19 @@ export function ScannerCandidateDiagnosticRow({
   scoreDelta,
   comparisonLabel,
   statusLabel,
-  watchlistActionLabel,
-  watchlistActionTitle,
-  copyLabel,
-  exportLabel,
-  isTracked,
-  isTrackPending,
-  isWatchlistAuthBlocked,
-  isAnalyzing,
-  backtestLabel,
-  backtestTitle,
-  backtestItem,
+  watchlistState,
+  analyzeAction,
+  backtestAction,
+  copyAction,
+  exportAction,
   detailPanel,
   onSelect,
-  onAnalyze,
-  onBacktest,
-  onTrack,
-  onCopy,
-  onExport,
   onToggleMore,
 }: {
   candidate: ScannerCandidateDiagnostic;
   trustSources?: Array<ScannerCandidate | ScannerCandidateDiagnostic | null | undefined>;
   language: 'zh' | 'en';
-  isSelectedCandidate: boolean;
-  isExpanded: boolean;
-  isMoreOpen: boolean;
+  rowState: ScannerRowState;
   displayName: string;
   keyReason: string;
   previewLabel: string;
@@ -440,24 +433,13 @@ export function ScannerCandidateDiagnosticRow({
   scoreDelta?: string | null;
   comparisonLabel?: string | null;
   statusLabel: string;
-  watchlistActionLabel: string;
-  watchlistActionTitle?: string;
-  copyLabel: string;
-  exportLabel: string;
-  isTracked: boolean;
-  isTrackPending: boolean;
-  isWatchlistAuthBlocked: boolean;
-  isAnalyzing: boolean;
-  backtestLabel: string;
-  backtestTitle?: string;
-  backtestItem?: ScannerBacktestItem;
+  watchlistState: ScannerWatchlistState;
+  analyzeAction: ScannerAnalyzeAction;
+  backtestAction: ScannerBacktestAction;
+  copyAction: ScannerCopyAction;
+  exportAction: ScannerExportAction;
   detailPanel?: ReactNode;
   onSelect: () => void;
-  onAnalyze: () => void;
-  onBacktest: () => void;
-  onTrack: () => void;
-  onCopy: () => void;
-  onExport: () => void;
   onToggleMore: () => void;
 }) {
   const resolvedTrustSources = trustSources?.length ? trustSources : [candidate];
@@ -465,7 +447,7 @@ export function ScannerCandidateDiagnosticRow({
     <button
       type="button"
       data-testid={`scanner-ranked-row-${candidate.symbol}`}
-      data-selected={isSelectedCandidate ? 'true' : undefined}
+      data-selected={rowState.selected ? 'true' : undefined}
       onClick={onSelect}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -474,7 +456,7 @@ export function ScannerCandidateDiagnosticRow({
         }
       }}
       className={`cursor-pointer appearance-none border-b border-white/7 px-3 py-2.5 text-left text-sm transition-colors ${
-        isSelectedCandidate
+        rowState.selected
           ? 'bg-emerald-400/[0.045] shadow-[inset_2px_0_0_rgba(52,211,153,0.32)]'
           : 'bg-transparent hover:bg-white/[0.028]'
       }`}
@@ -485,12 +467,12 @@ export function ScannerCandidateDiagnosticRow({
           <div className="hidden min-w-0 items-center gap-3 md:grid md:grid-cols-[64px_minmax(180px,1fr)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)_auto]">
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Rank' : '排名'}</p>
-              <p className={`mt-1 font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-50' : 'text-white/72'}`}>
+              <p className={`mt-1 font-mono text-sm font-semibold ${rowState.selected ? 'text-emerald-50' : 'text-white/72'}`}>
                 {candidate.rank ? `#${candidate.rank}` : '--'}
               </p>
             </div>
             <div className="min-w-0">
-              <p className={`truncate font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-50' : 'text-white'}`}>
+              <p className={`truncate font-mono text-sm font-semibold ${rowState.selected ? 'text-emerald-50' : 'text-white'}`}>
                 {candidate.symbol || '--'}
               </p>
               <p className="truncate text-[11px] text-white/38">{displayName}</p>
@@ -498,7 +480,7 @@ export function ScannerCandidateDiagnosticRow({
             </div>
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Score' : '评分'}</p>
-              <p className={`mt-1 font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-100' : 'text-white/78'}`}>{scoreLabel}</p>
+              <p className={`mt-1 font-mono text-sm font-semibold ${rowState.selected ? 'text-emerald-100' : 'text-white/78'}`}>{scoreLabel}</p>
               {scoreDelta ? <p className="text-[10px] text-white/36">{scoreDelta}</p> : null}
               <ScannerScoreTrustStrip sources={resolvedTrustSources} language={language} className="mt-1.5" testId={`scanner-score-trust-${candidate.symbol}`} />
             </div>
@@ -545,7 +527,7 @@ export function ScannerCandidateDiagnosticRow({
             <div className="flex min-w-0 items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className={`font-mono text-sm font-semibold ${isSelectedCandidate ? 'text-emerald-50' : 'text-white'}`}>
+                  <span className={`font-mono text-sm font-semibold ${rowState.selected ? 'text-emerald-50' : 'text-white'}`}>
                     {candidate.symbol || '--'}
                   </span>
                   <span className={`inline-flex max-w-full rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] ${previewBadgeClassName}`}>
@@ -583,36 +565,36 @@ export function ScannerCandidateDiagnosticRow({
           </div>
         </div>
       </div>
-      {isMoreOpen ? (
+      {rowState.moreOpen ? (
         <div data-testid={`scanner-candidate-row-more-${candidate.symbol}`} className="mt-1.5 flex flex-wrap gap-1.5 border-t border-white/8 pt-1.5">
           <ActionButton
-            label={isAnalyzing ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
-            onClick={onAnalyze}
-            disabled={isAnalyzing}
+            label={analyzeAction.label}
+            onClick={analyzeAction.onAnalyze}
+            disabled={analyzeAction.disabled}
           />
           <ActionButton
-            label={backtestLabel}
-            onClick={onBacktest}
-            disabled={!candidate.symbol || backtestItem?.status === 'running' || backtestItem?.status === 'queued'}
-            title={backtestTitle}
+            label={backtestAction.label}
+            onClick={backtestAction.onBacktest}
+            disabled={backtestAction.disabled ?? (!candidate.symbol || backtestAction.item?.status === 'running' || backtestAction.item?.status === 'queued')}
+            title={backtestAction.title}
           />
           <ActionButton
-            label={watchlistActionLabel}
-            onClick={onTrack}
-            disabled={isTracked || isTrackPending || isWatchlistAuthBlocked}
-            title={watchlistActionTitle}
+            label={watchlistState.label}
+            onClick={watchlistState.onTrack}
+            disabled={watchlistState.tracked || watchlistState.pending || watchlistState.authBlocked}
+            title={watchlistState.title}
           />
           <ActionButton
-            label={copyLabel}
-            onClick={onCopy}
+            label={copyAction.label}
+            onClick={copyAction.onCopy}
           />
           <ActionButton
-            label={exportLabel}
-            onClick={onExport}
+            label={exportAction.label || (language === 'en' ? 'Export' : '导出')}
+            onClick={exportAction.onExport}
           />
         </div>
       ) : null}
-      {isExpanded && detailPanel ? (
+      {rowState.expanded && detailPanel ? (
         <div data-testid={`scanner-candidate-detail-${candidate.symbol}`} className="mt-3 border-t border-white/8 pt-3">
           {detailPanel}
         </div>
@@ -791,56 +773,36 @@ export function ScannerCandidateTableRow({
   candidate,
   candidateIdentity,
   language,
-  isExpanded,
+  rowState,
   keyReason,
   riskSummary,
   sourceBadge,
   scoreBadgeClassName,
-  watchlistActionLabel,
-  watchlistActionTitle,
-  copyLabel,
-  backtestLabel,
-  backtestTitle,
-  isTracked,
-  isTrackPending,
-  isAnalyzing,
-  isBacktestDisabled,
-  isMoreOpen,
+  watchlistState,
+  analyzeAction,
+  copyAction,
+  backtestAction,
   detailPanel,
   onSelect,
-  onAnalyze,
-  onTrack,
-  onCopy,
   onToggleDetail,
   onToggleMore,
-  onBacktest,
 }: {
   candidate: ScannerCandidate;
   candidateIdentity: string;
   language: 'zh' | 'en';
-  isExpanded: boolean;
+  rowState: Pick<ScannerRowState, 'expanded' | 'moreOpen'>;
   keyReason: string;
   riskSummary: string;
   sourceBadge: string;
   scoreBadgeClassName: string;
-  watchlistActionLabel: string;
-  watchlistActionTitle?: string;
-  copyLabel: string;
-  backtestLabel: string;
-  backtestTitle?: string;
-  isTracked: boolean;
-  isTrackPending: boolean;
-  isAnalyzing: boolean;
-  isBacktestDisabled: boolean;
-  isMoreOpen: boolean;
+  watchlistState: Pick<ScannerWatchlistState, 'tracked' | 'pending' | 'label' | 'title' | 'onTrack'>;
+  analyzeAction: ScannerAnalyzeAction;
+  copyAction: Pick<ScannerCopyAction, 'label' | 'onCopy'>;
+  backtestAction: Pick<ScannerBacktestAction, 'label' | 'title' | 'onBacktest'> & { disabled: boolean };
   detailPanel?: ReactNode;
   onSelect: () => void;
-  onAnalyze: () => void;
-  onTrack: () => void;
-  onCopy: () => void;
   onToggleDetail: () => void;
   onToggleMore: () => void;
-  onBacktest: () => void;
 }) {
   return (
     <>
@@ -873,35 +835,35 @@ export function ScannerCandidateTableRow({
           <div className="flex flex-nowrap justify-end gap-1">
             <ActionButton
               label={language === 'en' ? 'Analyze' : '分析'}
-              onClick={() => onAnalyze()}
-              disabled={isAnalyzing}
+              onClick={analyzeAction.onAnalyze}
+              disabled={analyzeAction.disabled}
               variant="compact"
             />
             <ActionButton label={language === 'en' ? 'Detail' : '详情'} onClick={() => onToggleDetail()} />
             <ActionButton label={language === 'en' ? 'More' : '更多'} onClick={() => onToggleMore()} />
           </div>
-          {isMoreOpen ? (
+          {rowState.moreOpen ? (
             <div data-testid={`scanner-result-row-more-${candidateIdentity}`} className="mt-1.5 flex flex-wrap justify-end gap-1.5 border-t border-white/8 pt-1.5">
               <ActionButton
-                label={watchlistActionLabel}
-                icon={isTracked ? <BookmarkCheck className="size-3.5" /> : <BookmarkPlus className="size-3.5" />}
-                onClick={() => onTrack()}
-                disabled={isTracked || isTrackPending}
+                label={watchlistState.label}
+                icon={watchlistState.tracked ? <BookmarkCheck className="size-3.5" /> : <BookmarkPlus className="size-3.5" />}
+                onClick={watchlistState.onTrack}
+                disabled={watchlistState.tracked || watchlistState.pending}
                 variant="compact"
-                title={watchlistActionTitle}
+                title={watchlistState.title}
               />
-              <ActionButton label={copyLabel} onClick={() => onCopy()} />
+              <ActionButton label={copyAction.label} onClick={copyAction.onCopy} />
               <ActionButton
-                label={backtestLabel}
-                onClick={() => onBacktest()}
-                disabled={isBacktestDisabled}
-                title={backtestTitle}
+                label={backtestAction.label}
+                onClick={backtestAction.onBacktest}
+                disabled={backtestAction.disabled}
+                title={backtestAction.title}
               />
             </div>
           ) : null}
         </td>
       </tr>
-      {isExpanded ? (
+      {rowState.expanded ? (
         <tr>
           <td colSpan={7} className="border-b border-white/7 px-2.5 pb-2">
             {detailPanel}

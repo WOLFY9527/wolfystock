@@ -1898,21 +1898,11 @@ function ScannerCandidateDetailSurface({
             aiUnavailableText={sanitizeScannerUserText(ai?.status, language, language === 'en' ? 'AI interpretation not available' : 'AI 解读不可用')}
             outcomeItems={outcomeItems}
             providerNotes={null}
-            onAnalyze={analyzeAction.onAnalyze}
-            onCopy={copyAction.onCopy}
-            onExport={exportAction.onExport}
-            onTrack={watchlistState.onTrack}
-            onBacktest={backtestAction.onBacktest}
-            isAnalyzing={analyzeAction.disabled}
-            isCopied={copyAction.copied}
-            isTracked={watchlistState.tracked}
-            isTrackPending={watchlistState.pending}
-            isWatchlistAuthBlocked={watchlistState.authBlocked}
-            watchlistActionLabel={watchlistState.label}
-            watchlistActionTitle={watchlistState.title}
-            backtestLabel={backtestAction.label}
-            backtestTitle={backtestAction.title}
-            backtestItem={backtestAction.item}
+            watchlistState={watchlistState}
+            analyzeAction={analyzeAction}
+            copyAction={copyAction}
+            exportAction={{ label: language === 'en' ? 'Export candidate' : '导出该候选', onExport: exportAction.onExport }}
+            backtestAction={backtestAction}
           />
         </div>
       </AdvancedDisclosure>
@@ -3251,9 +3241,11 @@ const UserScannerPage: React.FC = () => {
                                       key={`ranked-${candidate.symbol}`}
                                       candidate={candidate}
                                       language={language}
-                                      isSelectedCandidate={normalizeCandidateSymbol(activeDetailDiagnostic?.symbol) === normalizeCandidateSymbol(candidate.symbol)}
-                                      isExpanded={false}
-                                      isMoreOpen={rowMoreSymbol === candidate.symbol}
+                                      rowState={{
+                                        selected: normalizeCandidateSymbol(activeDetailDiagnostic?.symbol) === normalizeCandidateSymbol(candidate.symbol),
+                                        expanded: false,
+                                        moreOpen: rowMoreSymbol === candidate.symbol,
+                                      }}
                                       displayName={sourceCandidate.companyName || sourceCandidate.name || candidate.name || candidate.symbol || '--'}
                                       keyReason={isOfficialSelected(candidate) ? getKeyReason(sourceCandidate, runDetail, language) : formatFriendlyDiagnosticReason(candidate, language)}
                                       previewLabel={previewDecisionLabel(candidate, previewThreshold, language)}
@@ -3267,26 +3259,38 @@ const UserScannerPage: React.FC = () => {
                                       scoreDelta={formatScoreDelta(comparison?.scoreDelta ?? null)}
                                       comparisonLabel={comparison?.label || null}
                                       statusLabel={diagnosticStatusLabel(candidate.status, language)}
-                                      watchlistActionLabel={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
-                                      watchlistActionTitle={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
-                                      copyLabel={copiedKey === `candidate:${candidate.symbol}` ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制')}
-                                      exportLabel={language === 'en' ? 'Export' : '导出'}
-                                      isTracked={isTracked}
-                                      isTrackPending={isTrackPending}
-                                      isWatchlistAuthBlocked={watchlistAuthBlocked}
-                                      isAnalyzing={pendingAnalyzeSymbol === sourceCandidate.symbol}
-                                      backtestLabel={getBacktestActionLabel(backtestItem)}
-                                      backtestTitle={!normalizeCandidateSymbol(sourceCandidate.symbol) ? backtestUnavailableLabel : undefined}
-                                      backtestItem={backtestItem}
+                                      watchlistState={{
+                                        tracked: isTracked,
+                                        pending: isTrackPending,
+                                        authBlocked: watchlistAuthBlocked,
+                                        label: getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language),
+                                        title: getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language),
+                                        onTrack: () => void handleTrackCandidate(sourceCandidate),
+                                      }}
+                                      analyzeAction={{
+                                        label: pendingAnalyzeSymbol === sourceCandidate.symbol ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析'),
+                                        disabled: pendingAnalyzeSymbol === sourceCandidate.symbol,
+                                        onAnalyze: () => void handleAnalyzeCandidate(sourceCandidate),
+                                      }}
+                                      backtestAction={{
+                                        item: backtestItem,
+                                        label: getBacktestActionLabel(backtestItem),
+                                        title: !normalizeCandidateSymbol(sourceCandidate.symbol) ? backtestUnavailableLabel : undefined,
+                                        onBacktest: () => void handleBacktestCandidate(sourceCandidate),
+                                      }}
+                                      copyAction={{
+                                        label: copiedKey === `candidate:${candidate.symbol}` ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制'),
+                                        copied: copiedKey === `candidate:${candidate.symbol}`,
+                                        onCopy: () => void handleCopyText(sourceCandidate.symbol, `candidate:${candidate.symbol}`),
+                                      }}
+                                      exportAction={{
+                                        label: language === 'en' ? 'Export' : '导出',
+                                        onExport: () => handleExportRows(
+                                          [buildScannerExportRow(sourceCandidate, activeRunDetail, language)],
+                                          buildScannerExportFilename(activeRunDetail, `candidate-${candidate.symbol}`),
+                                        ),
+                                      }}
                                       onSelect={() => setRequestedInspectorSymbol(sourceCandidate.symbol)}
-                                      onAnalyze={() => void handleAnalyzeCandidate(sourceCandidate)}
-                                      onBacktest={() => void handleBacktestCandidate(sourceCandidate)}
-                                      onTrack={() => void handleTrackCandidate(sourceCandidate)}
-                                      onCopy={() => void handleCopyText(sourceCandidate.symbol, `candidate:${candidate.symbol}`)}
-                                      onExport={() => handleExportRows(
-                                        [buildScannerExportRow(sourceCandidate, activeRunDetail, language)],
-                                        buildScannerExportFilename(activeRunDetail, `candidate-${candidate.symbol}`),
-                                      )}
                                       onToggleMore={() => setRowMoreSymbol((current) => current === candidate.symbol ? null : candidate.symbol)}
                                     />
                                   );
