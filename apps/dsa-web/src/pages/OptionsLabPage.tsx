@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useReducer, useRef, useState } from 'react';
 import { AlertTriangle, BarChart3, ChevronDown, Layers3, LineChart, Search, ShieldCheck } from 'lucide-react';
 import {
   optionsLabApi,
@@ -55,6 +55,26 @@ type DecisionState = {
   decision: OptionsDecisionResponse | null;
 };
 
+type AssumptionsState = {
+  symbolInput: string;
+  direction: OptionsDirection;
+  riskProfile: OptionsRiskProfile;
+  targetPrice: string;
+  targetDate: string;
+  riskBudget: string;
+  selectedExpiration: string;
+};
+
+type AssumptionsAction =
+  | { type: 'setSymbolInput'; value: string }
+  | { type: 'setDirection'; value: OptionsDirection }
+  | { type: 'setRiskProfile'; value: OptionsRiskProfile }
+  | { type: 'setTargetPrice'; value: string }
+  | { type: 'setTargetDate'; value: string }
+  | { type: 'setRiskBudget'; value: string }
+  | { type: 'setSelectedExpiration'; value: string }
+  | { type: 'submitSymbol'; value: string };
+
 const DIRECTION_OPTIONS: Array<{ value: OptionsDirection; label: string }> = [
   { value: 'bullish', label: '上涨情景' },
   { value: 'bearish', label: '下跌情景' },
@@ -78,12 +98,44 @@ const OPTIONS_INSUFFICIENT_COPY = '当前期权信号数据不足，仅供观察
 const OPTIONS_UPDATING_COPY = '数据更新中，稍后将自动刷新。';
 const OPTIONS_UNAVAILABLE_COPY = '本模块暂不可用，请稍后重试。';
 const OPTIONS_DEMO_BOUNDARY_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不可用于真实交易判断。';
+const INITIAL_ASSUMPTIONS_STATE: AssumptionsState = {
+  symbolInput: 'TEM',
+  direction: 'bullish',
+  riskProfile: 'balanced',
+  targetPrice: '65',
+  targetDate: '2026-08-21',
+  riskBudget: '1000',
+  selectedExpiration: '2026-06-19',
+};
 
 const fieldShellClass = 'group flex min-h-[4rem] min-w-0 flex-col justify-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_92%,transparent)] px-3 py-2 transition-colors focus-within:border-[color:var(--wolfy-accent)]';
 const fieldClass = 'h-6 w-full border-0 bg-transparent p-0 font-mono text-sm text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)]';
 const labelClass = 'text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]';
 const panelClass = 'min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-4 md:p-5';
 const innerBlockClass = 'rounded-md border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)]';
+
+function assumptionsReducer(state: AssumptionsState, action: AssumptionsAction): AssumptionsState {
+  switch (action.type) {
+    case 'setSymbolInput':
+      return { ...state, symbolInput: action.value.toUpperCase() };
+    case 'setDirection':
+      return { ...state, direction: action.value };
+    case 'setRiskProfile':
+      return { ...state, riskProfile: action.value };
+    case 'setTargetPrice':
+      return { ...state, targetPrice: action.value };
+    case 'setTargetDate':
+      return { ...state, targetDate: action.value };
+    case 'setRiskBudget':
+      return { ...state, riskBudget: action.value };
+    case 'setSelectedExpiration':
+      return { ...state, selectedExpiration: action.value };
+    case 'submitSymbol':
+      return { ...state, symbolInput: action.value };
+    default:
+      return state;
+  }
+}
 
 function money(value?: number | null): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
@@ -1403,15 +1455,10 @@ export class OptionsLabErrorBoundary extends React.Component<{ children: React.R
   }
 }
 
-const OptionsLabPageContent: React.FC = () => {
-  const [symbolInput, setSymbolInput] = useState('TEM');
-  const activeSymbolRef = useRef('TEM');
-  const [direction, setDirection] = useState<OptionsDirection>('bullish');
-  const [riskProfile, setRiskProfile] = useState<OptionsRiskProfile>('balanced');
-  const [targetPrice, setTargetPrice] = useState('65');
-  const [targetDate, setTargetDate] = useState('2026-08-21');
-  const [riskBudget, setRiskBudget] = useState('1000');
-  const [selectedExpiration, setSelectedExpiration] = useState('2026-06-19');
+function useOptionsLabPageModel() {
+  const [assumptions, dispatchAssumptions] = useReducer(assumptionsReducer, INITIAL_ASSUMPTIONS_STATE);
+  const { direction, riskBudget, riskProfile, selectedExpiration, symbolInput, targetDate, targetPrice } = assumptions;
+  const activeSymbolRef = useRef(INITIAL_ASSUMPTIONS_STATE.symbolInput);
   const reloadRef = useRef<() => void>(() => {});
   const [state, setState] = useState<LoadState>({
     loading: true,
@@ -1456,7 +1503,7 @@ const OptionsLabPageContent: React.FC = () => {
             : expirationItems[0]?.date || selectedExpiration;
           const chain = await optionsLabApi.getOptionChain(activeSymbol, nextExpiration);
           if (!ignored) {
-            setSelectedExpiration(nextExpiration);
+            dispatchAssumptions({ type: 'setSelectedExpiration', value: nextExpiration });
             setState((current) => ({
               ...current,
               loading: false,
@@ -1630,9 +1677,13 @@ const OptionsLabPageContent: React.FC = () => {
     targetPrice,
   ]);
 
+  const handleSymbolChange = (value: string) => {
+    dispatchAssumptions({ type: 'setSymbolInput', value });
+  };
+
   const handleSubmit = () => {
-    const normalized = symbolInput.trim().toUpperCase() || 'TEM';
-    setSymbolInput(normalized);
+    const normalized = symbolInput.trim().toUpperCase() || INITIAL_ASSUMPTIONS_STATE.symbolInput;
+    dispatchAssumptions({ type: 'submitSymbol', value: normalized });
     setState((current) => ({ ...current, loading: true, error: null }));
     if (normalized === activeSymbolRef.current) {
       reloadRef.current();
@@ -1641,9 +1692,29 @@ const OptionsLabPageContent: React.FC = () => {
     activeSymbolRef.current = normalized;
   };
 
+  const handleDirectionChange = (value: OptionsDirection) => {
+    dispatchAssumptions({ type: 'setDirection', value });
+  };
+
+  const handleRiskProfileChange = (value: OptionsRiskProfile) => {
+    dispatchAssumptions({ type: 'setRiskProfile', value });
+  };
+
+  const handleTargetPriceChange = (value: string) => {
+    dispatchAssumptions({ type: 'setTargetPrice', value });
+  };
+
+  const handleTargetDateChange = (value: string) => {
+    dispatchAssumptions({ type: 'setTargetDate', value });
+  };
+
+  const handleRiskBudgetChange = (value: string) => {
+    dispatchAssumptions({ type: 'setRiskBudget', value });
+  };
+
   const handleExpirationSelect = (expiration: string) => {
     setState((current) => ({ ...current, loading: true, error: null }));
-    setSelectedExpiration(expiration);
+    dispatchAssumptions({ type: 'setSelectedExpiration', value: expiration });
   };
 
   const expirations = asArray(state.expirations?.expirations).length ? asArray(state.expirations?.expirations) : EMPTY_EXPIRATIONS;
@@ -1696,9 +1767,56 @@ const OptionsLabPageContent: React.FC = () => {
     },
   ];
 
-  return (
-    <main className="w-full overflow-x-hidden text-white">
-      <ConsumerWorkspaceScope className="min-h-0 flex-1">
+  return {
+    assumptions,
+    calls,
+    comparisonEmptyMessage,
+    comparisonState,
+    consumerAvailability,
+    decisionEmptyMessage,
+    decisionState,
+    expirations,
+    handleDirectionChange,
+    handleExpirationSelect,
+    handleRiskBudgetChange,
+    handleRiskProfileChange,
+    handleSubmit,
+    handleSymbolChange,
+    handleTargetDateChange,
+    handleTargetPriceChange,
+    hasChainRows,
+    puts,
+    state,
+    summaryStripItems,
+  };
+}
+
+type OptionsLabPageModel = ReturnType<typeof useOptionsLabPageModel>;
+
+const OptionsLabWorkspace: React.FC<OptionsLabPageModel> = ({
+  assumptions,
+  calls,
+  comparisonEmptyMessage,
+  comparisonState,
+  consumerAvailability,
+  decisionEmptyMessage,
+  decisionState,
+  expirations,
+  handleDirectionChange,
+  handleExpirationSelect,
+  handleRiskBudgetChange,
+  handleRiskProfileChange,
+  handleSubmit,
+  handleSymbolChange,
+  handleTargetDateChange,
+  handleTargetPriceChange,
+  hasChainRows,
+  puts,
+  state,
+  summaryStripItems,
+}) => (
+  <main className="w-full overflow-x-hidden text-white">
+    <ConsumerWorkspaceScope className="min-h-0 flex-1">
       <ConsumerWorkspacePageShell data-testid="options-lab-page-root">
         <TerminalPageHeading
           data-testid="options-lab-page-heading"
@@ -1725,21 +1843,21 @@ const OptionsLabPageContent: React.FC = () => {
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,0.85fr)]">
             <div className="grid min-w-0 gap-6">
               <AssumptionPanel
-                symbol={symbolInput}
-                direction={direction}
-                riskProfile={riskProfile}
-                targetPrice={targetPrice}
-                targetDate={targetDate}
-                riskBudget={riskBudget}
+                symbol={assumptions.symbolInput}
+                direction={assumptions.direction}
+                riskProfile={assumptions.riskProfile}
+                targetPrice={assumptions.targetPrice}
+                targetDate={assumptions.targetDate}
+                riskBudget={assumptions.riskBudget}
                 expirations={expirations}
-                selectedExpiration={selectedExpiration}
-                onSymbolChange={setSymbolInput}
+                selectedExpiration={assumptions.selectedExpiration}
+                onSymbolChange={handleSymbolChange}
                 onSubmit={handleSubmit}
-                onDirectionChange={setDirection}
-                onRiskProfileChange={setRiskProfile}
-                onTargetPriceChange={setTargetPrice}
-                onTargetDateChange={setTargetDate}
-                onRiskBudgetChange={setRiskBudget}
+                onDirectionChange={handleDirectionChange}
+                onRiskProfileChange={handleRiskProfileChange}
+                onTargetPriceChange={handleTargetPriceChange}
+                onTargetDateChange={handleTargetDateChange}
+                onRiskBudgetChange={handleRiskBudgetChange}
                 onExpirationSelect={handleExpirationSelect}
               />
 
@@ -1775,7 +1893,12 @@ const OptionsLabPageContent: React.FC = () => {
                 ) : null}
               </WolfyShellSurface>
 
-              <MethodologyDisclosure state={state} targetPrice={targetPrice} targetDate={targetDate} riskBudget={riskBudget} />
+              <MethodologyDisclosure
+                state={state}
+                targetPrice={assumptions.targetPrice}
+                targetDate={assumptions.targetDate}
+                riskBudget={assumptions.riskBudget}
+              />
             </div>
 
             <div className="grid min-w-0 gap-6 self-start">
@@ -1795,9 +1918,13 @@ const OptionsLabPageContent: React.FC = () => {
           </div>
         </div>
       </ConsumerWorkspacePageShell>
-      </ConsumerWorkspaceScope>
-    </main>
-  );
+    </ConsumerWorkspaceScope>
+  </main>
+);
+
+const OptionsLabPageContent: React.FC = () => {
+  const model = useOptionsLabPageModel();
+  return <OptionsLabWorkspace {...model} />;
 };
 
 const OptionsLabPage: React.FC = () => (

@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OptionsLabPage, { OptionsLabErrorBoundary } from '../OptionsLabPage';
@@ -1064,6 +1064,139 @@ describe('OptionsLabPage', () => {
     expect(within(riskPanel).getAllByText('买卖价差过宽').length).toBeGreaterThan(0);
     expect(within(riskPanel).getAllByText('敏感度缺失').length).toBeGreaterThan(0);
     expect(section).toHaveTextContent('情景判断');
+  });
+
+  it('recomputes comparison and decision requests from the latest assumptions panel values', async () => {
+    vi.mocked(optionsLabApi.getExpirations).mockResolvedValue({
+      symbol: 'TEM',
+      expirations: [
+        {
+          date: '2026-06-19',
+          dte: 44,
+          type: 'monthly',
+          chainAvailable: true,
+          asOf: '2026-05-06T09:45:00-04:00',
+          source: 'fixture',
+          warnings: ['mocked_chain'],
+        },
+        {
+          date: '2026-07-17',
+          dte: 72,
+          type: 'monthly',
+          chainAvailable: true,
+          asOf: '2026-05-06T09:45:00-04:00',
+          source: 'fixture',
+          warnings: ['mocked_chain'],
+        },
+      ],
+      metadata: {
+        readOnly: true,
+        noExternalCallsInTests: true,
+        limitations: ['mocked_frontend_shell'],
+      },
+    });
+    vi.mocked(optionsLabApi.getOptionChain).mockImplementation(async (symbol, expiration) => ({
+      symbol,
+      expiration,
+      underlying: {
+        price: 52.34,
+        changePct: 1.2,
+        source: 'fixture',
+        asOf: '2026-05-06T09:45:00-04:00',
+        freshness: 'mock',
+      },
+      calls: [
+        {
+          contractSymbol: 'TEM260619C00055000',
+          side: 'call',
+          strike: 55,
+          bid: 4.1,
+          ask: 4.35,
+          mid: 4.23,
+          volume: 830,
+          openInterest: 6120,
+          impliedVolatility: 0.54,
+          delta: 0.42,
+          theta: -0.05,
+          spreadPct: 5.9,
+          moneyness: 'otm',
+          liquidityScore: 82,
+        },
+      ],
+      puts: [
+        {
+          contractSymbol: 'TEM260619P00050000',
+          side: 'put',
+          strike: 50,
+          bid: 3.2,
+          ask: 3.5,
+          mid: 3.35,
+          volume: 410,
+          openInterest: 2900,
+          impliedVolatility: 0.57,
+          delta: -0.36,
+          theta: -0.04,
+          spreadPct: 9,
+          moneyness: 'otm',
+          liquidityScore: 74,
+        },
+      ],
+      filtersApplied: {
+        minOpenInterest: 100,
+        maxSpreadPct: 20,
+      },
+      chainAsOf: '2026-05-06T09:45:00-04:00',
+      source: 'fixture',
+      limitations: ['provider_validation_required'],
+      metadata: {
+        readOnly: true,
+        noExternalCallsInTests: true,
+        limitations: ['mocked_frontend_shell'],
+      },
+    }));
+
+    renderPage();
+
+    await screen.findByText('TEM260619C00055000');
+
+    vi.mocked(optionsLabApi.compareStrategies).mockClear();
+    vi.mocked(optionsLabApi.evaluateDecision).mockClear();
+    vi.mocked(optionsLabApi.getOptionChain).mockClear();
+
+    const commandArea = screen.getByTestId('options-lab-assumptions-panel');
+    fireEvent.change(within(commandArea).getByLabelText('目标价格'), { target: { value: '70' } });
+    fireEvent.change(within(commandArea).getByLabelText('目标日期'), { target: { value: '2026-09-18' } });
+    fireEvent.change(within(commandArea).getByLabelText('风险预算'), { target: { value: '1250' } });
+    fireEvent.change(within(commandArea).getByLabelText('到期日'), { target: { value: '2026-07-17' } });
+    fireEvent.click(within(commandArea).getByText('下跌情景'));
+    fireEvent.click(within(commandArea).getByText('进取'));
+
+    await waitFor(() => {
+      expect(vi.mocked(optionsLabApi.getOptionChain)).toHaveBeenCalledWith('TEM', '2026-07-17');
+    });
+    await waitFor(() => {
+      expect(vi.mocked(optionsLabApi.compareStrategies)).toHaveBeenLastCalledWith(expect.objectContaining({
+        symbol: 'TEM',
+        direction: 'bearish',
+        targetPrice: 70,
+        targetDate: '2026-09-18',
+        maxPremium: 1250,
+        riskProfile: 'aggressive',
+      }));
+    });
+    await waitFor(() => {
+      expect(vi.mocked(optionsLabApi.evaluateDecision)).toHaveBeenLastCalledWith(expect.objectContaining({
+        symbol: 'TEM',
+        expiration: '2026-07-17',
+        targetPrice: 70,
+        targetDate: '2026-09-18',
+        riskBudget: 1250,
+      }));
+    });
+
+    const summaryStrip = screen.getByTestId('options-lab-summary-strip');
+    expect(summaryStrip).toHaveTextContent('下跌情景 · 目标价 70');
+    expect(summaryStrip).toHaveTextContent('风险预算 1250');
   });
 
   it('does not fire compare before required assumptions are ready and shows a compact empty state', async () => {
