@@ -4600,23 +4600,32 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     if (hydratedRouteTaskIdRef.current === routeTaskId) {
       return;
     }
+    let cancelled = false;
     hydratedRouteTaskIdRef.current = routeTaskId;
-    setActiveTicker(routeSymbol);
-    setPendingAnalysisTicker(routeSymbol);
-    setDashboardLoading(true);
-    syncTaskCreated({
-      taskId: routeTaskId,
-      stockCode: routeSymbol,
-      status: 'pending',
-      progress: 0,
-      message: locale === 'en' ? `WOLFY AI analyzing ${routeSymbol}...` : `WOLFY AI 正在分析 ${routeSymbol}...`,
-      reportType: 'detailed',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      originalQuery: routeSymbol,
-      selectionSource: 'manual',
+    queueMicrotask(() => {
+      if (cancelled) {
+        return;
+      }
+      setActiveTicker(routeSymbol);
+      setPendingAnalysisTicker(routeSymbol);
+      setDashboardLoading(true);
+      syncTaskCreated({
+        taskId: routeTaskId,
+        stockCode: routeSymbol,
+        status: 'pending',
+        progress: 0,
+        message: locale === 'en' ? `WOLFY AI analyzing ${routeSymbol}...` : `WOLFY AI 正在分析 ${routeSymbol}...`,
+        reportType: 'detailed',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        originalQuery: routeSymbol,
+        selectionSource: 'manual',
+      });
+      void refreshTaskProgress(routeTaskId);
     });
-    void refreshTaskProgress(routeTaskId);
+    return () => {
+      cancelled = true;
+    };
   }, [isGuest, locale, refreshTaskProgress, routeSource, routeSymbol, routeTaskId, syncTaskCreated]);
 
   const focusedTaskId = focusedTask?.taskId;
@@ -4669,15 +4678,24 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       return;
     }
 
-    if (completedTask) {
-      setActiveTicker(completedTicker);
-    }
-    setPendingAnalysisTicker(null);
-    setDashboardLoading(false);
-    if (completedTask) {
-      void refreshHistory(true);
-      void focusLatestHistoryForStock(completedTicker);
-    }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) {
+        return;
+      }
+      if (completedTask) {
+        setActiveTicker(completedTicker);
+      }
+      setPendingAnalysisTicker(null);
+      setDashboardLoading(false);
+      if (completedTask) {
+        void refreshHistory(true);
+        void focusLatestHistoryForStock(completedTicker);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [activeTasks, focusLatestHistoryForStock, pendingAnalysisTicker, refreshHistory, routeSymbol, routeTaskId, selectedTicker]);
 
   const handleAnalyze = async (tickerOverride?: string) => {
@@ -4704,8 +4722,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     if (isGuest) {
       setGuestError(null);
       setGuestFallbackNotice(null);
-      try {
-        const response = await withFallback(
+      const previewResult = await withFallback(
           () => publicAnalysisApi.preview({
             stockCode: normalizedTicker,
             stockName: undefined,
@@ -4714,57 +4731,61 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           {
             fallback: () => createPublicAnalysisFallbackPreview(normalizedTicker, language),
           },
-        );
-        setGuestPreview(response.data);
+        )
+        .then((response) => ({ response, error: null as unknown }))
+        .catch((error) => ({ response: null, error }));
+      if (previewResult.response) {
+        setGuestPreview(previewResult.response.data);
         setPendingAnalysisTicker(null);
-        if (response.fallback) {
+        if (previewResult.response.fallback) {
           setGuestFallbackNotice(language === 'en'
             ? 'Live preview is temporarily unavailable. Loaded a local snapshot instead.'
             : '实时预览暂时不可用，已切换到本地快照。');
         }
-      } catch (err) {
-        setGuestError(getParsedApiError(err));
+      } else if (previewResult.error) {
+        setGuestError(getParsedApiError(previewResult.error));
         setPendingAnalysisTicker(null);
-      } finally {
-        setDashboardLoading(false);
       }
+      setDashboardLoading(false);
       return;
     }
 
     clearError();
 
-    try {
-      const result = await submitAnalysis({
+    const submitResult = await submitAnalysis({
         stockCode: normalizedTicker,
         originalQuery: normalizedTicker,
         selectionSource: 'manual',
-      });
+      })
+      .then((result) => ({ result, error: null as unknown }))
+      .catch((error) => ({ result: null, error }));
 
-      if (result.ok) {
-        setActiveTicker(result.stockCode);
-        void refreshHistory(true);
-        return;
-      }
+    if (submitResult.result?.ok) {
+      setActiveTicker(submitResult.result.stockCode);
+      setDashboardLoading(false);
+      void refreshHistory(true);
+      return;
+    }
 
-      if (result.duplicate) {
-        return;
-      }
+    if (submitResult.result?.duplicate) {
+      setDashboardLoading(false);
+      return;
+    }
 
-      setPendingAnalysisTicker(null);
+    setPendingAnalysisTicker(null);
+    if (submitResult.result) {
       setStatusToast({
-        message: result.error?.message || (locale === 'en' ? 'LLM analysis failed. Please try again later.' : 'LLM 分析失败，请稍后重试'),
+        message: submitResult.result.error?.message || (locale === 'en' ? 'LLM analysis failed. Please try again later.' : 'LLM 分析失败，请稍后重试'),
         tone: 'error',
       });
-    } catch (error) {
-      const parsedError = getParsedApiError(error);
-      setPendingAnalysisTicker(null);
+    } else if (submitResult.error) {
+      const parsedError = getParsedApiError(submitResult.error);
       setStatusToast({
         message: parsedError.message || (locale === 'en' ? 'LLM analysis failed. Please try again later.' : 'LLM 分析失败，请稍后重试'),
         tone: 'error',
       });
-    } finally {
-      setDashboardLoading(false);
     }
+    setDashboardLoading(false);
   };
 
   const handleHistoryClick = async (historyItem: HistoryItem) => {
@@ -4785,10 +4806,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       setDashboardLoading(true);
     }
 
-    try {
-      await selectHistoryItem(historyItem.id);
-    } finally {
-      setDashboardLoading(false);
+    const selectionError = await selectHistoryItem(historyItem.id)
+      .then(() => null)
+      .catch((error) => error);
+    setDashboardLoading(false);
+    if (selectionError) {
+      throw selectionError;
     }
   };
 
@@ -4797,27 +4820,33 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       return;
     }
 
-    try {
-      await deleteHistoryRecords(
-        pendingHistoryDelete.recordIds,
-        pendingHistoryDelete.mode === 'visible' ? { deleteAll: true } : undefined,
-      );
+    const deleteError = await deleteHistoryRecords(
+      pendingHistoryDelete.recordIds,
+      pendingHistoryDelete.mode === 'visible' ? { deleteAll: true } : undefined,
+    )
+      .then(() => null)
+      .catch((error) => error);
+    setPendingHistoryDelete(null);
+    if (!deleteError) {
       setHistoryDrawerOpen(false);
-    } finally {
-      setPendingHistoryDelete(null);
+      return;
     }
+    throw deleteError;
   };
 
   const handleCopyActiveReport = async () => {
-    try {
-      if (!navigator.clipboard?.writeText) {
-        throw new Error('clipboard_unavailable');
-      }
-      await navigator.clipboard.writeText(buildInstitutionalReportMarkdown(activeTraceReport));
-      setMainCopyState('copied');
-    } catch {
+    if (!navigator.clipboard?.writeText) {
       setMainCopyState('failed');
+      return;
     }
+    const copyError = await navigator.clipboard.writeText(buildInstitutionalReportMarkdown(activeTraceReport))
+      .then(() => null)
+      .catch((error) => error);
+    if (!copyError) {
+      setMainCopyState('copied');
+      return;
+    }
+    setMainCopyState('failed');
   };
 
   const reportActionButtons = !isGuest ? (
