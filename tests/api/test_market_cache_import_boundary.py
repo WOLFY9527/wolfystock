@@ -10,7 +10,7 @@ import sys
 import textwrap
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -61,6 +61,24 @@ def _run_market_cache_subprocess(script: str, *, env_overrides: dict[str, str | 
             f"stderr={completed.stderr}\n"
             f"error={exc}"
         )
+
+
+@pytest.fixture
+def local_market_cache_module(monkeypatch: pytest.MonkeyPatch) -> Any:
+    import src.services.market_cache as market_cache_module
+
+    builds = {"count": 0}
+    market_cache_module.reset_market_cache_for_tests()
+
+    def build_local_cache() -> Any:
+        builds["count"] += 1
+        return market_cache_module.MarketCache(max_workers=1)
+
+    monkeypatch.setattr(market_cache_module, "build_market_cache_from_config", build_local_cache)
+    try:
+        yield market_cache_module, builds
+    finally:
+        market_cache_module.reset_market_cache_for_tests()
 
 
 def test_module_import_is_config_free_and_does_not_construct_singleton() -> None:
@@ -153,6 +171,79 @@ def test_disabled_default_module_import_does_not_import_redis_or_valkey() -> Non
     assert result["redis_loaded"] is False
     assert result["valkey_loaded"] is False
     assert result["singleton_is_none"] is True
+
+
+def test_proxy_get_or_refresh_patch_enter_exit_cleans_underlying_override(local_market_cache_module: Any) -> None:
+    market_cache_module, builds = local_market_cache_module
+
+    assert market_cache_module._market_cache_singleton is None
+    assert builds["count"] == 0
+    assert repr(market_cache_module.market_cache) == "<MarketCacheProxy lazy>"
+    assert market_cache_module._market_cache_singleton is None
+
+    with patch.object(market_cache_module.market_cache, "get_or_refresh", return_value={"patched": True}) as mocked:
+        cache = market_cache_module.get_market_cache()
+        assert builds["count"] == 1
+        assert "get_or_refresh" in cache.__dict__
+        assert market_cache_module.market_cache.get_or_refresh("crypto", 30, lambda: {"value": 1}) == {
+            "patched": True
+        }
+        mocked.assert_called_once()
+
+    cache = market_cache_module.get_market_cache()
+    assert builds["count"] == 1
+    assert "get_or_refresh" not in cache.__dict__
+    assert not isinstance(market_cache_module.market_cache.get_or_refresh, Mock)
+    assert market_cache_module.market_cache.get_or_refresh("crypto", 30, lambda: {"value": 1})["value"] == 1
+
+
+def test_proxy_set_patch_enter_exit_cleans_underlying_override(local_market_cache_module: Any) -> None:
+    market_cache_module, builds = local_market_cache_module
+
+    with patch.object(market_cache_module.market_cache, "set", return_value="patched") as mocked_set:
+        cache = market_cache_module.get_market_cache()
+        assert builds["count"] == 1
+        assert "set" in cache.__dict__
+        assert market_cache_module.market_cache.set("indices", {"value": 2}, ttl_seconds=30) == "patched"
+        mocked_set.assert_called_once()
+
+    cache = market_cache_module.get_market_cache()
+    assert "set" not in cache.__dict__
+    assert not isinstance(market_cache_module.market_cache.set, Mock)
+    entry = market_cache_module.market_cache.set("indices", {"value": 2}, ttl_seconds=30)
+    assert entry.data == {"value": 2}
+
+
+def test_proxy_patch_then_reset_restores_clean_lazy_singleton(local_market_cache_module: Any) -> None:
+    market_cache_module, builds = local_market_cache_module
+
+    with patch.object(market_cache_module.market_cache, "get_or_refresh", return_value={"patched": True}):
+        first_cache = market_cache_module.get_market_cache()
+        assert "get_or_refresh" in first_cache.__dict__
+
+    market_cache_module.reset_market_cache_for_tests()
+
+    assert market_cache_module._market_cache_singleton is None
+    second_cache = market_cache_module.get_market_cache()
+    assert first_cache is not second_cache
+    assert builds["count"] == 2
+    assert "get_or_refresh" not in second_cache.__dict__
+    assert market_cache_module.market_cache.get("missing") is None
+
+
+def test_proxy_default_method_forwarding_still_uses_singleton(local_market_cache_module: Any) -> None:
+    market_cache_module, builds = local_market_cache_module
+
+    entry = market_cache_module.market_cache.set("flows", {"value": 3}, ttl_seconds=30)
+    same_entry = market_cache_module.market_cache.get("flows")
+    payload = market_cache_module.market_cache.get_or_refresh("flows", 30, lambda: {"value": 4})
+
+    assert builds["count"] == 1
+    assert same_entry is entry
+    assert payload["value"] == 3
+
+    market_cache_module.market_cache.clear()
+    assert market_cache_module.market_cache.get("flows") is None
 
 
 def test_env_set_before_first_access_deterministically_builds_lazy_singleton() -> None:

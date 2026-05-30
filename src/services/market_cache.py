@@ -664,6 +664,9 @@ class _MarketCacheProxy:
     def __setattr__(self, name: str, value: Any) -> None:
         setattr(get_market_cache(), name, value)
 
+    def __delattr__(self, name: str) -> None:
+        delattr(get_market_cache(), name)
+
     def __repr__(self) -> str:
         if _market_cache_singleton is None:
             return "<MarketCacheProxy lazy>"
