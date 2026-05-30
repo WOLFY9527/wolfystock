@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ComponentProps } from 'react';
+import { useEffect, useRef, useState, type ComponentProps, type SetStateAction } from 'react';
 import {
   BarChart3,
   CheckSquare,
@@ -72,6 +72,11 @@ type BatchProgress = {
   currentSymbol: string | null;
   failures: Record<string, BatchFailure>;
 } | null;
+type WatchlistListState = {
+  items: WatchlistItem[];
+  isLoading: boolean;
+  error: ParsedApiError | null;
+};
 
 type WatchlistMonitoringTone = 'success' | 'caution' | 'neutral';
 
@@ -856,9 +861,8 @@ const WatchlistPage: React.FC = () => {
   const { language } = useI18n();
   const { isGuest } = useProductSurface();
   const copy = getCopy(language);
-  const [items, setItems] = useState<WatchlistItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<ParsedApiError | null>(null);
+  const [listState, setListState] = useState<WatchlistListState>({ items: [], isLoading: false, error: null });
+  const { items, isLoading, error } = listState;
   const [notice, setNotice] = useState<Notice>(null);
   const [query, setQuery] = useState('');
   const [marketFilter, setMarketFilter] = useState('all');
@@ -881,6 +885,12 @@ const WatchlistPage: React.FC = () => {
   const [useSelectedScope, setUseSelectedScope] = useState(false);
   const [requestedActiveItemId, setRequestedActiveItemId] = useState<number | null>(null);
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const setWatchlistItems = (value: SetStateAction<WatchlistItem[]>) => {
+    setListState((current) => ({
+      ...current,
+      items: typeof value === 'function' ? value(current.items) : value,
+    }));
+  };
 
   useEffect(() => {
     document.title = language === 'en' ? 'Watchlist - WolfyStock' : '观察列表 - WolfyStock';
@@ -891,18 +901,23 @@ const WatchlistPage: React.FC = () => {
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
-      setIsLoading(true);
+      setListState((current) => ({ ...current, isLoading: true }));
       watchlistApi.listWatchlistItems()
         .then((response) => {
           if (cancelled) return;
-          setItems(response.items || []);
-          setError(null);
-          setIsLoading(false);
+          setListState({
+            items: response.items || [],
+            error: null,
+            isLoading: false,
+          });
         })
         .catch((err) => {
           if (cancelled) return;
-          setError(getParsedApiError(err));
-          setIsLoading(false);
+          setListState((current) => ({
+            ...current,
+            error: getParsedApiError(err),
+            isLoading: false,
+          }));
         });
     });
     return () => {
@@ -1098,7 +1113,7 @@ const WatchlistPage: React.FC = () => {
       .then(() => null)
       .catch((err) => err);
     if (!error) {
-      setItems((current) => current.filter((row) => row.id !== item.id));
+      setWatchlistItems((current) => current.filter((row) => row.id !== item.id));
       setNotice({ tone: 'success', message: copy.removed });
     } else {
       setNotice({ tone: 'danger', message: getParsedApiError(error).message });
@@ -1129,7 +1144,10 @@ const WatchlistPage: React.FC = () => {
         watchlistApi.listWatchlistItems(),
         watchlistApi.getRefreshStatus().catch(() => null),
       ]);
-      setItems(listResponse.items || []);
+      setListState((current) => ({
+        ...current,
+        items: listResponse.items || [],
+      }));
       setRefreshStatus(statusResponse);
     } catch (err) {
       setNotice({ tone: 'danger', message: getParsedApiError(err).message });
@@ -1168,7 +1186,10 @@ const WatchlistPage: React.FC = () => {
           return acc;
         }, []),
       );
-      setItems(listResponse.items || []);
+      setListState((current) => ({
+        ...current,
+        items: listResponse.items || [],
+      }));
       setBatchFailures(failures);
       setBatchProgress({
         kind: 'scan',
@@ -1263,7 +1284,7 @@ const WatchlistPage: React.FC = () => {
           waitForCompletion: true,
         });
         completed += 1;
-        setItems((current) => current.map((row) => (
+        setWatchlistItems((current) => current.map((row) => (
           normalizeText(row.symbol).toUpperCase() === symbol
             ? {
                 ...row,
@@ -1296,12 +1317,14 @@ const WatchlistPage: React.FC = () => {
       }
     };
 
-    const worker = async () => {
-      while (cursor < pendingItems.length) {
-        const next = pendingItems[cursor];
-        cursor += 1;
-        await runOne(next);
+    const worker = async (): Promise<void> => {
+      const next = pendingItems[cursor];
+      if (!next) {
+        return;
       }
+      cursor += 1;
+      await runOne(next);
+      await worker();
     };
 
     await Promise.all(Array.from({ length: Math.min(2, pendingItems.length) }, () => worker()));
