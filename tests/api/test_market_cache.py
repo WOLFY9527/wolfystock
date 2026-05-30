@@ -126,6 +126,16 @@ def _fake_redis_module() -> types.SimpleNamespace:
     return types.SimpleNamespace(Redis=_FakeRedisFactory)
 
 
+class _FailingRedisFactory:
+    @classmethod
+    def from_url(cls, url: str, **kwargs) -> _FakeRedisClient:
+        raise RuntimeError("redis://:secret@example.invalid:6379/0 token=SECRET raw-cache-key")
+
+
+def _failing_redis_module() -> types.SimpleNamespace:
+    return types.SimpleNamespace(Redis=_FailingRedisFactory)
+
+
 class MarketCacheTestCase(unittest.TestCase):
     def setUp(self) -> None:
         reset_llm_event_counters()
@@ -904,8 +914,106 @@ class MarketCacheTestCase(unittest.TestCase):
             tuple(parameters.keys()),
             ("self", "max_workers", "refresh_stale_after_seconds", "remote_backend"),
         )
+        self.assertIn("market_cache = build_market_cache_from_config()", source)
         self.assertNotIn("redis_url", source.lower())
         self.assertNotIn("valkey_url", source.lower())
+
+    def test_market_cache_singleton_builder_defaults_to_null_without_redis_import(self) -> None:
+        import src.services.market_cache as market_cache_module
+
+        with patch("src.config.get_config", return_value=Config()), patch(
+            "src.services.market_cache_redis_backend.importlib.import_module",
+            side_effect=AssertionError("disabled MarketCache config must not import redis"),
+        ):
+            cache = market_cache_module.build_market_cache_from_config()
+
+        self.assertIsInstance(cache._remote_backend, NullMarketCacheRemoteBackend)
+
+    def test_market_cache_singleton_builder_redis_mode_wraps_redis_backend(self) -> None:
+        import src.services.market_cache as market_cache_module
+        from src.services.market_cache_redis_backend import RedisMarketCacheRemoteBackend
+
+        config = Config(
+            market_cache_remote_backend="redis",
+            market_cache_remote_url="redis://:secret@example.invalid:6379/0",
+            market_cache_remote_timeout_seconds=0.125,
+            market_cache_remote_queue_size=3,
+        )
+        with patch("src.config.get_config", return_value=config), patch.dict(
+            sys.modules,
+            {"redis": _fake_redis_module()},
+        ):
+            cache = market_cache_module.build_market_cache_from_config()
+
+        dispatcher = cache._remote_backend
+        try:
+            self.assertIsInstance(dispatcher, MarketCacheRemoteMirrorDispatcher)
+            self.assertIsInstance(dispatcher._backend, RedisMarketCacheRemoteBackend)
+            self.assertEqual(dispatcher._queue.maxsize, 3)
+
+            cache.set("crypto", {"source": "binance", "value": 7, "freshness": "live"}, ttl_seconds=30)
+            payload = cache.get_or_refresh(
+                "crypto",
+                30,
+                Mock(side_effect=AssertionError("fresh local cache should stay authoritative")),
+            )
+            self.assertTrue(dispatcher.drain(timeout=2))
+
+            url, kwargs, client = _FakeRedisFactory.calls[-1]
+            self.assertEqual(url, "redis://:secret@example.invalid:6379/0")
+            self.assertEqual(kwargs["socket_connect_timeout"], 0.125)
+            self.assertEqual(kwargs["socket_timeout"], 0.125)
+            self.assertFalse(kwargs["retry_on_timeout"])
+            self.assertEqual(client.read_calls, 0)
+            self.assertEqual(payload["source"], "binance")
+            self.assertEqual(payload["value"], 7)
+            self.assertEqual(payload["freshness"], "live")
+        finally:
+            if isinstance(dispatcher, MarketCacheRemoteMirrorDispatcher):
+                dispatcher.shutdown(timeout=2)
+
+    def test_market_cache_singleton_builder_redis_failures_fall_back_to_null(self) -> None:
+        import src.services.market_cache as market_cache_module
+
+        cases = [
+            (
+                "missing_url",
+                "missing_url",
+                Config(market_cache_remote_backend="redis", market_cache_remote_url=None),
+                {"redis": _fake_redis_module()},
+            ),
+            (
+                "missing_dependency",
+                "redis_client_unavailable",
+                Config(
+                    market_cache_remote_backend="redis",
+                    market_cache_remote_url="redis://:secret@example.invalid:6379/0",
+                ),
+                {"redis": None},
+            ),
+            (
+                "client_init_failed",
+                "client_init_failed",
+                Config(
+                    market_cache_remote_backend="redis",
+                    market_cache_remote_url="redis://:secret@example.invalid:6379/0",
+                ),
+                {"redis": _failing_redis_module()},
+            ),
+        ]
+        for case_name, expected_reason, config, redis_modules in cases:
+            with self.subTest(case_name=case_name), patch("src.config.get_config", return_value=config), patch.dict(
+                sys.modules,
+                redis_modules,
+            ), self.assertLogs("src.services.market_cache_redis_backend", level="DEBUG") as captured:
+                cache = market_cache_module.build_market_cache_from_config()
+
+            logs = "\n".join(captured.output)
+            self.assertIsInstance(cache._remote_backend, NullMarketCacheRemoteBackend)
+            self.assertIn(expected_reason, logs)
+            self.assertNotIn("redis://", logs)
+            self.assertNotIn("secret", logs)
+            self.assertNotIn("raw-cache-key", logs)
 
     def test_remote_backend_factory_defaults_to_null_without_redis_import(self) -> None:
         from src.services.market_cache_redis_backend import build_market_cache_remote_backend_from_config

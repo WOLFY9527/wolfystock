@@ -615,4 +615,15 @@ class MarketCache:
         return datetime.now(CN_TZ)
 
 
-market_cache = MarketCache()
+def build_market_cache_from_config() -> MarketCache:
+    """Build the module singleton from config while keeping direct MarketCache() local-only."""
+
+    from src.config import get_config
+    from src.services.market_cache_redis_backend import build_market_cache_remote_backend_from_config
+
+    config = get_config()
+    remote_backend = build_market_cache_remote_backend_from_config(config)
+    return MarketCache(remote_backend=remote_backend)
+
+
+market_cache = build_market_cache_from_config()
