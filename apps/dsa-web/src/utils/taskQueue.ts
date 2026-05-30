@@ -24,7 +24,8 @@ export function getCompletedTaskTimestamp(task: TaskInfo): number {
 }
 
 export function sortTasksByPriority(tasks: TaskInfo[]): TaskInfo[] {
-  return [...tasks]
+  return tasks
+    .slice()
     .sort((left, right) => {
       const statusDiff = getTaskStatusWeight(right) - getTaskStatusWeight(left);
       if (statusDiff !== 0) {
@@ -43,5 +44,7 @@ export function selectPrimaryTask(tasks: TaskInfo[]): TaskInfo | null {
 export function selectCompletedTasksByRecency(tasks: TaskInfo[]): TaskInfo[] {
   return tasks
     .filter((task) => task.status === 'completed')
-    .sort((left, right) => getCompletedTaskTimestamp(right) - getCompletedTaskTimestamp(left));
+    .sort((left, right) => {
+      return getCompletedTaskTimestamp(right) - getCompletedTaskTimestamp(left);
+    });
 }

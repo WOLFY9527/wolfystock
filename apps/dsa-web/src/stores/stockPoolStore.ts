@@ -357,50 +357,49 @@ async function fetchHistory(
 
   try {
     const response = await historyApi.getList(buildHistoryParams(page));
-    if (requestId !== historyRequestSeq) {
-      return null;
-    }
-
-    if (silent && reset) {
-      const existingIds = new Set(get().historyItems.map((item) => item.id));
-      const newItems = response.items.filter((item) => !existingIds.has(item.id));
-      if (newItems.length > 0) {
-        set({ historyItems: [...newItems, ...get().historyItems] });
+    const isLatestRequest = requestId === historyRequestSeq;
+    if (isLatestRequest) {
+      if (silent && reset) {
+        const existingIds = new Set(get().historyItems.map((item) => item.id));
+        const newItems = response.items.filter((item) => !existingIds.has(item.id));
+        if (newItems.length > 0) {
+          set({ historyItems: [...newItems, ...get().historyItems] });
+        }
+      } else if (reset) {
+        set({
+          historyItems: response.items,
+          currentPage: 1,
+        });
+      } else {
+        set({
+          historyItems: [...get().historyItems, ...response.items],
+          currentPage: page,
+        });
       }
-    } else if (reset) {
+
+      if (!silent) {
+        const totalLoaded = reset ? response.items.length : get().historyItems.length;
+        set({ hasMore: totalLoaded < response.total });
+      }
+
+      const visibleIds = new Set(get().historyItems.map((item) => item.id));
       set({
-        historyItems: response.items,
-        currentPage: 1,
+        selectedHistoryIds: get().selectedHistoryIds.filter((id) => visibleIds.has(id)),
       });
-    } else {
-      set({
-        historyItems: [...get().historyItems, ...response.items],
-        currentPage: page,
-      });
+
+      const currentSelectedId = get().selectedReport?.meta.id;
+      const persistedSelectedId = readPersistedSelectedHistoryId();
+      const preferredId = response.items.find((item) => item.id === currentSelectedId)?.id
+        ?? response.items.find((item) => item.id === persistedSelectedId)?.id;
+
+      if (preferredId && preferredId !== currentSelectedId) {
+        await get().selectHistoryItem(preferredId);
+      } else if (autoSelectFirst && response.items.length > 0 && !get().selectedReport) {
+        await get().selectHistoryItem(response.items[0].id);
+      }
     }
 
-    if (!silent) {
-      const totalLoaded = reset ? response.items.length : get().historyItems.length;
-      set({ hasMore: totalLoaded < response.total });
-    }
-
-    const visibleIds = new Set(get().historyItems.map((item) => item.id));
-    set({
-      selectedHistoryIds: get().selectedHistoryIds.filter((id) => visibleIds.has(id)),
-    });
-
-    const currentSelectedId = get().selectedReport?.meta.id;
-    const persistedSelectedId = readPersistedSelectedHistoryId();
-    const preferredId = response.items.find((item) => item.id === currentSelectedId)?.id
-      ?? response.items.find((item) => item.id === persistedSelectedId)?.id;
-
-    if (preferredId && preferredId !== currentSelectedId) {
-      await get().selectHistoryItem(preferredId);
-    } else if (autoSelectFirst && response.items.length > 0 && !get().selectedReport) {
-      await get().selectHistoryItem(response.items[0].id);
-    }
-
-    return response;
+    return isLatestRequest ? response : null;
   } catch (error) {
     if (requestId !== historyRequestSeq) {
       return null;
@@ -503,18 +502,17 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
 
     try {
       const report = await historyApi.getDetail(recordId);
-      if (requestId !== reportRequestSeq) {
-        return null;
+      const isLatestRequest = requestId === reportRequestSeq;
+      if (isLatestRequest) {
+        set({
+          selectedReport: report,
+          error: null,
+          isLoadingReport: false,
+        });
+        cacheReportSnapshot(get, set, report);
+        persistSelectedHistoryId(report.meta.id ?? recordId);
       }
-
-      set({
-        selectedReport: report,
-        error: null,
-        isLoadingReport: false,
-      });
-      cacheReportSnapshot(get, set, report);
-      persistSelectedHistoryId(report.meta.id ?? recordId);
-      return report;
+      return isLatestRequest ? report : null;
     } catch (error) {
       if (requestId !== reportRequestSeq) {
         return null;
@@ -679,31 +677,30 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
         selectionSource,
       });
 
-      if (requestId !== analyzeRequestSeq) {
-        return { ok: false };
-      }
+      const isLatestRequest = requestId === analyzeRequestSeq;
+      if (isLatestRequest) {
+        if ('taskId' in response) {
+          get().syncTaskCreated({
+            taskId: response.taskId,
+            stockCode: normalizedStockCode,
+            stockName,
+            status: response.status,
+            progress: 0,
+            message: response.message || translateForCurrentLanguage('tasks.submitted'),
+            reportType: 'detailed',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            originalQuery: originalQuery || stockCodeInput,
+            selectionSource,
+          });
+        }
 
-      if ('taskId' in response) {
-        get().syncTaskCreated({
-          taskId: response.taskId,
-          stockCode: normalizedStockCode,
-          stockName,
-          status: response.status,
-          progress: 0,
-          message: response.message || translateForCurrentLanguage('tasks.submitted'),
-          reportType: 'detailed',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          originalQuery: originalQuery || stockCodeInput,
-          selectionSource,
+        set({
+          query: '',
+          selectionSource: 'manual',
         });
       }
-
-      set({
-        query: '',
-        selectionSource: 'manual',
-      });
-      return { ok: true, stockCode: normalizedStockCode };
+      return isLatestRequest ? { ok: true, stockCode: normalizedStockCode } : { ok: false };
     } catch (error) {
       if (requestId !== analyzeRequestSeq) {
         return { ok: false };
