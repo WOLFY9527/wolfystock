@@ -1337,19 +1337,51 @@ const AdminLogsPage: React.FC = () => {
   }, [t]);
 
   useEffect(() => {
-    void loadSessions();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        void loadSessions();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [activeTab, categoryFilter, searchQuery, sinceFilter, statusFilter, pageOffset, levelFilter, showDebugLogs]);
 
   useEffect(() => {
-    void loadStorageSummary();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        void loadStorageSummary();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    void loadDataMissing();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        void loadDataMissing();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [activeTab, sinceFilter]);
 
   useEffect(() => {
-    void loadOperatorIssues();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        void loadOperatorIssues();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [activeTab, sinceFilter]);
 
   const handleTabChange = (tab: LogsTab) => {
