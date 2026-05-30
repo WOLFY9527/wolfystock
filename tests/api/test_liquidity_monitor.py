@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,9 +13,12 @@ from fastapi.testclient import TestClient
 
 import api.v1.endpoints.liquidity_monitor as liquidity_monitor
 from api.v1.schemas.liquidity_monitor import LiquidityMonitorResponse
+from src.services.liquidity_monitor_service import LiquidityMonitorService
+from src.services.market_cache import MarketCache
 
 
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "liquidity_monitor"
+CN_TZ = timezone(timedelta(hours=8))
 FIXTURE_NAMES = (
     "official_cached_macro_rates_context.json",
     "mixed_official_proxy_context.json",
@@ -738,3 +742,96 @@ def test_liquidity_monitor_route_accepts_authorized_licensed_source_tier() -> No
 
     assert response.status_code == 200
     assert response.json()["indicators"][0]["coverageDiagnostics"]["sourceTier"] == "authorized_licensed_feed"
+
+
+def test_liquidity_monitor_route_returns_degraded_payload_when_reason_codes_are_malformed() -> None:
+    app = FastAPI()
+    app.include_router(liquidity_monitor.router, prefix="/api/v1/market")
+
+    class _RouteDb:
+        @staticmethod
+        def get_market_overview_snapshot(_: str):
+            return None
+
+    service = LiquidityMonitorService(cache=MarketCache(), db=_RouteDb())
+    now = datetime(2026, 5, 30, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "us_breadth",
+        {
+            "source": "authorized_feed",
+            "freshness": "fallback",
+            "updatedAt": now,
+            "asOf": now,
+            "items": [
+                {
+                    "symbol": "ADVANCERS",
+                    "label": "Advancers",
+                    "value": 100,
+                    "source": "authorized_feed",
+                    "sourceType": "authorized_licensed_feed",
+                    "routeRejectedReasonCodes": 123,
+                },
+                {
+                    "symbol": "DECLINERS",
+                    "label": "Decliners",
+                    "value": 200,
+                    "source": "authorized_feed",
+                    "sourceType": "authorized_licensed_feed",
+                },
+                {
+                    "symbol": "UNCHANGED",
+                    "label": "Unchanged",
+                    "value": 10,
+                    "source": "authorized_feed",
+                    "sourceType": "authorized_licensed_feed",
+                },
+                {
+                    "symbol": "ADVANCE_DECLINE_RATIO",
+                    "label": "Advance / Decline Ratio",
+                    "value": 0.5,
+                    "source": "authorized_feed",
+                    "sourceType": "authorized_licensed_feed",
+                },
+                {
+                    "symbol": "NEW_HIGHS",
+                    "label": "New Highs",
+                    "value": 5,
+                    "source": "authorized_feed",
+                    "sourceType": "authorized_licensed_feed",
+                },
+                {
+                    "symbol": "NEW_LOWS",
+                    "label": "New Lows",
+                    "value": 10,
+                    "source": "authorized_feed",
+                    "sourceType": "authorized_licensed_feed",
+                },
+                {
+                    "symbol": "HIGH_LOW_RATIO",
+                    "label": "High / Low Ratio",
+                    "value": 0.5,
+                    "source": "authorized_feed",
+                    "sourceType": "authorized_licensed_feed",
+                },
+            ],
+            "cacheBundleDiagnostics": {
+                "scoreContributionAllowed": False,
+                "realSourceAvailable": False,
+                "reasonCodes": 456,
+                "degradationReason": "provider_unavailable",
+            },
+        },
+        ttl_seconds=30,
+    )
+
+    with patch("api.v1.endpoints.liquidity_monitor.LiquidityMonitorService", return_value=service):
+        response = TestClient(app).get("/api/v1/market/liquidity-monitor")
+
+    assert response.status_code == 200
+    body = response.json()
+    indicator = next(item for item in body["indicators"] if item["key"] == "us_breadth_proxy")
+    assert body["score"]["regime"] == "unavailable"
+    assert body["sourceMetadata"]["externalProviderCalls"] is False
+    assert indicator["coverageDiagnostics"]["degradationReason"] == "fallback_source"
+    assert indicator["coverageDiagnostics"]["routeRejectedReasonCodes"] == ["proxy_or_placeholder_not_authorized_breadth"]
+    assert all(isinstance(code, str) for code in indicator["evidence"]["inputs"][0]["routeRejectedReasonCodes"])

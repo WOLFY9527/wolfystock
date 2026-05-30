@@ -447,10 +447,10 @@ class LiquidityMonitorService:
             evidence.get("degradationReason"),
             evidence.get("capReason"),
         ):
-            text = str(value or "").strip()
-            if text:
-                warnings.append(text)
-        for code in diagnostics.get("routeRejectedReasonCodes") or []:
+                text = str(value or "").strip()
+                if text:
+                    warnings.append(text)
+        for code in LiquidityMonitorService._normalized_reason_code_list(diagnostics.get("routeRejectedReasonCodes")):
             text = str(code or "").strip()
             if text:
                 warnings.append(text)
@@ -463,7 +463,7 @@ class LiquidityMonitorService:
                 text = str(value or "").strip()
                 if text:
                     warnings.append(text)
-            for code in item.get("routeRejectedReasonCodes") or []:
+            for code in LiquidityMonitorService._normalized_reason_code_list(item.get("routeRejectedReasonCodes")):
                 text = str(code or "").strip()
                 if text:
                     warnings.append(text)
@@ -1590,8 +1590,9 @@ class LiquidityMonitorService:
             if raw.get("sourceAuthorityReason"):
                 component["sourceAuthorityReason"] = raw.get("sourceAuthorityReason")
                 component["degradationReason"] = raw.get("sourceAuthorityReason")
-            if raw.get("routeRejectedReasonCodes"):
-                component["routeRejectedReasonCodes"] = list(raw.get("routeRejectedReasonCodes") or [])
+            route_rejected_reason_codes = self._normalized_reason_code_list(raw.get("routeRejectedReasonCodes"))
+            if route_rejected_reason_codes:
+                component["routeRejectedReasonCodes"] = route_rejected_reason_codes
             components.append(component)
         return components
 
@@ -1731,8 +1732,9 @@ class LiquidityMonitorService:
             if raw.get("sourceAuthorityReason"):
                 component["sourceAuthorityReason"] = raw.get("sourceAuthorityReason")
                 component["degradationReason"] = raw.get("sourceAuthorityReason")
-            if raw.get("routeRejectedReasonCodes"):
-                component["routeRejectedReasonCodes"] = list(raw.get("routeRejectedReasonCodes") or [])
+            route_rejected_reason_codes = self._normalized_reason_code_list(raw.get("routeRejectedReasonCodes"))
+            if route_rejected_reason_codes:
+                component["routeRejectedReasonCodes"] = route_rejected_reason_codes
             components.append(component)
         return components
 
@@ -1859,7 +1861,7 @@ class LiquidityMonitorService:
             return None
 
         degradation_reason = self._text(cache_bundle.get("degradationReason"))
-        route_rejected_reason_codes = list(cache_bundle.get("reasonCodes") or [])
+        route_rejected_reason_codes = self._normalized_reason_code_list(cache_bundle.get("reasonCodes"))
         score_ready = bool(cache_bundle.get("scoreContributionAllowed"))
         components: list[Dict[str, Any]] = []
 
@@ -1882,8 +1884,9 @@ class LiquidityMonitorService:
             if raw.get("sourceAuthorityReason"):
                 component["sourceAuthorityReason"] = raw.get("sourceAuthorityReason")
                 component["degradationReason"] = raw.get("sourceAuthorityReason")
-            if raw.get("routeRejectedReasonCodes"):
-                component["routeRejectedReasonCodes"] = list(raw.get("routeRejectedReasonCodes") or [])
+            component_route_rejected_reason_codes = self._normalized_reason_code_list(raw.get("routeRejectedReasonCodes"))
+            if component_route_rejected_reason_codes:
+                component["routeRejectedReasonCodes"] = component_route_rejected_reason_codes
             if not score_ready:
                 component["sourceAuthorityAllowed"] = False
                 component["scoreContributionAllowed"] = False
@@ -2958,7 +2961,7 @@ class LiquidityMonitorService:
             )
             source_authority_route_rejected = bool(source_authority_route["rejected"])
             source_authority_reason = self._text(source_authority_route.get("reason")) or None
-            route_rejected_reason_codes = list(source_authority_route.get("reasonCodes") or [])
+            route_rejected_reason_codes = self._normalized_reason_code_list(source_authority_route.get("reasonCodes"))
             if source_authority_route_rejected:
                 score_contribution_allowed = False
                 score_exclusion_reason = score_exclusion_reason or LIQUIDITY_SCORE_ROUTE_REJECTED_REASON
@@ -3029,9 +3032,9 @@ class LiquidityMonitorService:
                 continue
             if item.get("sourceAuthorityAllowed") is not False and item.get("scoreContributionAllowed") is not False:
                 continue
-            codes = item.get("routeRejectedReasonCodes")
-            if isinstance(codes, list):
-                return [str(code) for code in codes if str(code or "").strip()]
+            codes = LiquidityMonitorService._normalized_reason_code_list(item.get("routeRejectedReasonCodes"))
+            if codes:
+                return codes
         return []
 
     @staticmethod
@@ -3055,9 +3058,9 @@ class LiquidityMonitorService:
         for item in inputs:
             if not isinstance(item, dict):
                 continue
-            codes = item.get("routeRejectedReasonCodes")
-            if isinstance(codes, list):
-                return [str(code) for code in codes if str(code or "").strip()]
+            codes = LiquidityMonitorService._normalized_reason_code_list(item.get("routeRejectedReasonCodes"))
+            if codes:
+                return codes
         return []
 
     @staticmethod
@@ -3198,6 +3201,18 @@ class LiquidityMonitorService:
     def _liquidity_score_route_provider_id(source: str) -> str:
         normalized = str(source or "").strip().lower()
         return LIQUIDITY_SCORE_ROUTE_PROVIDER_ALIASES.get(normalized, normalized)
+
+    @staticmethod
+    def _normalized_reason_code_list(value: Any) -> list[str]:
+        if value is None or isinstance(value, bool):
+            return []
+        if isinstance(value, str):
+            text = value.strip()
+            return [text] if text else []
+        if isinstance(value, (list, tuple, set)):
+            return [text for item in value if (text := str(item or "").strip())]
+        text = str(value).strip()
+        return [text] if text else []
 
     @staticmethod
     def _indicator_configured_provider_available(panel: PanelState, evidence: Dict[str, Any]) -> bool:

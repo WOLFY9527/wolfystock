@@ -6463,3 +6463,90 @@ def test_coverage_diagnostics_projects_authorized_licensed_source_tier_from_shar
     )
 
     assert diagnostics["sourceTier"] == "authorized_licensed_feed"
+
+
+def test_degraded_authorized_breadth_snapshot_with_malformed_reason_codes_returns_payload_not_exception(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = LiquidityMonitorService(cache=MarketCache(), db=isolated_db)
+    now = datetime(2026, 5, 30, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "us_breadth",
+        {
+            "source": "authorized_feed",
+            "freshness": "fallback",
+            "updatedAt": now,
+            "asOf": now,
+            "items": [
+                {
+                    "symbol": "ADVANCERS",
+                    "label": "Advancers",
+                    "value": 100,
+                    "source": "authorized_feed",
+                    "sourceType": "authorized_licensed_feed",
+                    "routeRejectedReasonCodes": 123,
+                },
+                {
+                    "symbol": "DECLINERS",
+                    "label": "Decliners",
+                    "value": 200,
+                    "source": "authorized_feed",
+                    "sourceType": "authorized_licensed_feed",
+                },
+                {
+                    "symbol": "UNCHANGED",
+                    "label": "Unchanged",
+                    "value": 10,
+                    "source": "authorized_feed",
+                    "sourceType": "authorized_licensed_feed",
+                },
+                {
+                    "symbol": "ADVANCE_DECLINE_RATIO",
+                    "label": "Advance / Decline Ratio",
+                    "value": 0.5,
+                    "source": "authorized_feed",
+                    "sourceType": "authorized_licensed_feed",
+                },
+                {
+                    "symbol": "NEW_HIGHS",
+                    "label": "New Highs",
+                    "value": 5,
+                    "source": "authorized_feed",
+                    "sourceType": "authorized_licensed_feed",
+                },
+                {
+                    "symbol": "NEW_LOWS",
+                    "label": "New Lows",
+                    "value": 10,
+                    "source": "authorized_feed",
+                    "sourceType": "authorized_licensed_feed",
+                },
+                {
+                    "symbol": "HIGH_LOW_RATIO",
+                    "label": "High / Low Ratio",
+                    "value": 0.5,
+                    "source": "authorized_feed",
+                    "sourceType": "authorized_licensed_feed",
+                },
+            ],
+            "cacheBundleDiagnostics": {
+                "scoreContributionAllowed": False,
+                "realSourceAvailable": False,
+                "reasonCodes": 456,
+                "degradationReason": "provider_unavailable",
+            },
+        },
+        ttl_seconds=30,
+    )
+
+    payload = LiquidityMonitorResponse(**service.get_liquidity_monitor()).model_dump(exclude_none=True)
+    indicator = _indicators_by_key(payload)["us_breadth_proxy"]
+
+    assert payload["score"]["regime"] == "unavailable"
+    assert payload["sourceMetadata"]["externalProviderCalls"] is False
+    assert indicator["status"] == "partial"
+    assert indicator["includedInScore"] is False
+    assert indicator["coverageDiagnostics"]["scoreContributionAllowed"] is False
+    assert indicator["coverageDiagnostics"]["degradationReason"] == "fallback_source"
+    assert indicator["coverageDiagnostics"]["routeRejectedReasonCodes"] == ["proxy_or_placeholder_not_authorized_breadth"]
+    assert indicator["evidence"]["inputs"][0]["routeRejectedReasonCodes"] == ["proxy_or_placeholder_not_authorized_breadth"]
