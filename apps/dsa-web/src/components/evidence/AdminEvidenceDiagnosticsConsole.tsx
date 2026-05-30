@@ -360,7 +360,7 @@ function metricTone(section: EngineSection): string {
   return 'text-white';
 }
 
-function renderSectionBody(section: EngineSection) {
+function SectionBody({ section }: { section: EngineSection }) {
   if (section.state === 'loading') {
     return <TerminalEmptyState title="正在汇总">{`读取 ${section.title}…`}</TerminalEmptyState>;
   }
@@ -543,7 +543,7 @@ export function AdminEvidenceDiagnosticsConsole() {
                   </TerminalChip>
                 ) : null}
               />
-              {renderSectionBody(section)}
+              <SectionBody section={section} />
             </TerminalPanel>
           );
         })}
