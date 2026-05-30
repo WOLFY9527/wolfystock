@@ -275,7 +275,7 @@ const numberFormatCache = new Map<number, Intl.NumberFormat>();
 function getCachedNumberFormat(maximumFractionDigits: number): Intl.NumberFormat {
   let fmt = numberFormatCache.get(maximumFractionDigits);
   if (!fmt) {
-    fmt = new Intl.NumberFormat('en-US', { maximumFractionDigits });
+    fmt = Intl.NumberFormat('en-US', { maximumFractionDigits });
     numberFormatCache.set(maximumFractionDigits, fmt);
   }
   return fmt;

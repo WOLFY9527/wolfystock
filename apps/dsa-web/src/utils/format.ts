@@ -39,7 +39,7 @@ function getDateTimeFormat(locale: string, timeZone: string, opts: Intl.DateTime
   const key = dateTimeFormatCacheKey(locale, timeZone, opts);
   let fmt = dateTimeFormatCache.get(key);
   if (!fmt) {
-    fmt = new Intl.DateTimeFormat(locale, { ...opts, timeZone });
+    fmt = Intl.DateTimeFormat(locale, { ...opts, timeZone });
     dateTimeFormatCache.set(key, fmt);
   }
   return fmt;
@@ -49,7 +49,7 @@ function getNumberFormat(locale: string, opts: Intl.NumberFormatOptions): Intl.N
   const key = numberFormatCacheKey(locale, opts);
   let fmt = numberFormatCache.get(key);
   if (!fmt) {
-    fmt = new Intl.NumberFormat(locale, opts);
+    fmt = Intl.NumberFormat(locale, opts);
     numberFormatCache.set(key, fmt);
   }
   return fmt;
