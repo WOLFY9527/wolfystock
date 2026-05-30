@@ -1405,7 +1405,7 @@ export class OptionsLabErrorBoundary extends React.Component<{ children: React.R
 
 const OptionsLabPageContent: React.FC = () => {
   const [symbolInput, setSymbolInput] = useState('TEM');
-  const [activeSymbol, setActiveSymbol] = useState('TEM');
+  const activeSymbolRef = useRef('TEM');
   const [direction, setDirection] = useState<OptionsDirection>('bullish');
   const [riskProfile, setRiskProfile] = useState<OptionsRiskProfile>('balanced');
   const [targetPrice, setTargetPrice] = useState('65');
@@ -1432,9 +1432,13 @@ const OptionsLabPageContent: React.FC = () => {
   });
 
   useEffect(() => {
+    if (!state.loading) {
+      return;
+    }
     let ignored = false;
 
     async function load() {
+      const activeSymbol = activeSymbolRef.current;
       try {
         setState((current) => ({
           ...current,
@@ -1483,13 +1487,14 @@ const OptionsLabPageContent: React.FC = () => {
     return () => {
       ignored = true;
     };
-  }, [activeSymbol, selectedExpiration]);
+  }, [selectedExpiration, state.loading]);
 
   useEffect(() => {
     let ignored = false;
     let timeoutId: number | undefined;
 
     async function loadComparison() {
+      const activeSymbol = activeSymbolRef.current;
       const targetPriceValue = Number(targetPrice);
       const hasTargetPrice = Number.isFinite(targetPriceValue) && targetPriceValue > 0;
       const hasTargetDate = targetDate.trim().length > 0;
@@ -1556,7 +1561,6 @@ const OptionsLabPageContent: React.FC = () => {
       }
     };
   }, [
-    activeSymbol,
     direction,
     riskBudget,
     riskProfile,
@@ -1573,6 +1577,7 @@ const OptionsLabPageContent: React.FC = () => {
     let ignored = false;
 
     async function loadDecision() {
+      const activeSymbol = activeSymbolRef.current;
       const targetPriceValue = Number(targetPrice);
       const riskBudgetValue = Number(riskBudget);
       const hasTargetPrice = Number.isFinite(targetPriceValue) && targetPriceValue > 0;
@@ -1614,7 +1619,6 @@ const OptionsLabPageContent: React.FC = () => {
       ignored = true;
     };
   }, [
-    activeSymbol,
     riskBudget,
     selectedExpiration,
     state.chain,
@@ -1630,11 +1634,11 @@ const OptionsLabPageContent: React.FC = () => {
     const normalized = symbolInput.trim().toUpperCase() || 'TEM';
     setSymbolInput(normalized);
     setState((current) => ({ ...current, loading: true, error: null }));
-    if (normalized === activeSymbol) {
+    if (normalized === activeSymbolRef.current) {
       reloadRef.current();
       return;
     }
-    setActiveSymbol(normalized);
+    activeSymbolRef.current = normalized;
   };
 
   const handleExpirationSelect = (expiration: string) => {

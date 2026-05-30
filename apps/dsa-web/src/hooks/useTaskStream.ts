@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { analysisApi } from '../api/analysis';
 import { toCamelCase } from '../api/utils';
 import type { TaskInfo } from '../types/analysis';
@@ -80,10 +80,28 @@ export function useTaskStream(options: UseTaskStreamOptions = {}): UseTaskStream
   } = options;
 
   const eventSourceRef = useRef<EventSource | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const isConnectedRef = useRef(false);
+  const listenersRef = useRef(new Set<() => void>());
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectRef = useRef<() => void>(() => {});
   const disconnectRef = useRef<() => void>(() => {});
+  const notifyConnectionChange = (nextValue: boolean) => {
+    if (isConnectedRef.current === nextValue) {
+      return;
+    }
+    isConnectedRef.current = nextValue;
+    listenersRef.current.forEach((listener) => listener());
+  };
+  const isConnected = useSyncExternalStore(
+    (listener) => {
+      listenersRef.current.add(listener);
+      return () => {
+        listenersRef.current.delete(listener);
+      };
+    },
+    () => (enabled ? isConnectedRef.current : false),
+    () => false,
+  );
 
   // Store callbacks in a ref to avoid reconnecting on every render.
   const callbacksRef = useRef({
@@ -133,7 +151,7 @@ export function useTaskStream(options: UseTaskStreamOptions = {}): UseTaskStream
 
       // Connected event
       eventSource.addEventListener('connected', () => {
-        setIsConnected(true);
+        notifyConnectionChange(true);
         callbacksRef.current.onConnected?.();
       });
 
@@ -174,7 +192,7 @@ export function useTaskStream(options: UseTaskStreamOptions = {}): UseTaskStream
 
       // Connection error handling
       eventSource.onerror = (error) => {
-        setIsConnected(false);
+        notifyConnectionChange(false);
         callbacksRef.current.onError?.(error);
 
         // Auto-reconnect via ref to avoid stale closure issues.
@@ -196,7 +214,7 @@ export function useTaskStream(options: UseTaskStreamOptions = {}): UseTaskStream
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
-      queueMicrotask(() => setIsConnected(false));
+      notifyConnectionChange(false);
     };
 
     connectRef.current = doConnect;
