@@ -56,6 +56,49 @@ def _sanitized_proxy_environment(session: requests.Session) -> Dict[str, bool]:
     }
 
 
+def _status_class(status_code: Any) -> Optional[str]:
+    try:
+        code = int(status_code)
+    except Exception:
+        return None
+    if code <= 0:
+        return None
+    return f"{code // 100}xx"
+
+
+def _sanitize_endpoint_failure(raw_error: Any) -> str:
+    if isinstance(raw_error, requests.exceptions.ProxyError):
+        return "proxy_unreachable"
+    if isinstance(raw_error, requests.exceptions.ConnectTimeout):
+        return "connect_timeout"
+    if isinstance(raw_error, requests.exceptions.ReadTimeout):
+        return "read_timeout"
+    if isinstance(raw_error, requests.exceptions.Timeout):
+        return "provider_timeout"
+    if isinstance(raw_error, requests.exceptions.ConnectionError):
+        return "network_unreachable"
+    normalized = str(raw_error or "").strip().lower()
+    if "proxy" in normalized:
+        return "proxy_unreachable"
+    if "connect" in normalized and "timeout" in normalized:
+        return "connect_timeout"
+    if "read" in normalized and "timeout" in normalized:
+        return "read_timeout"
+    if "timeout" in normalized or "timed out" in normalized:
+        return "provider_timeout"
+    if "network" in normalized or "name resolution" in normalized or "connection" in normalized:
+        return "network_unreachable"
+    return "provider_error"
+
+
+def _endpoint_status_from_failure(failure_class: str) -> str:
+    if failure_class in {"connect_timeout", "read_timeout", "provider_timeout"}:
+        return "timeout"
+    if failure_class in {"proxy_unreachable", "network_unreachable"}:
+        return "unreachable"
+    return "provider_error"
+
+
 class AlpacaFetcher(BaseFetcher):
     """Minimal Alpaca market-data adapter."""
 
@@ -69,7 +112,7 @@ class AlpacaFetcher(BaseFetcher):
         secret_key: str,
         base_url: str = "https://data.alpaca.markets",
         data_feed: str = "iex",
-        timeout: int = 15,
+        timeout: float = 15,
         session: Optional[requests.Session] = None,
     ) -> None:
         self.api_key_id = str(api_key_id or "").strip()
@@ -92,6 +135,35 @@ class AlpacaFetcher(BaseFetcher):
         """Return sanitized proxy-env diagnostics for operator smoke output."""
 
         return _sanitized_proxy_environment(self.session)
+
+    def endpoint_reachability(self, *, timeout: Optional[float] = None) -> Dict[str, Any]:
+        """Run a payload-free HEAD probe and return only sanitized reachability data."""
+
+        request_timeout = self.timeout
+        if timeout is not None:
+            request_timeout = max(0.001, float(timeout))
+        try:
+            response = self.session.head(
+                self.base_url,
+                headers={"Accept": "application/json"},
+                timeout=request_timeout,
+                allow_redirects=False,
+            )
+        except Exception as exc:
+            failure_class = _sanitize_endpoint_failure(exc)
+            return {
+                "attempted": True,
+                "status": _endpoint_status_from_failure(failure_class),
+                "failureClass": failure_class,
+                "httpStatusClass": None,
+            }
+
+        return {
+            "attempted": True,
+            "status": "reachable",
+            "failureClass": None,
+            "httpStatusClass": _status_class(getattr(response, "status_code", None)),
+        }
 
     def _request_json(self, path: str, *, params: Optional[Dict[str, Any]] = None) -> Any:
         response = self.session.get(

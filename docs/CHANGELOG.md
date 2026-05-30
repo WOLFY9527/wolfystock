@@ -1,3 +1,11 @@
+## 2026-05-31
+- Rotation Radar Alpaca activation smoke now supports operator-only timeout
+  budget overrides for per-window, total-provider, and bar-fetch timeouts, plus
+  an optional payload-free endpoint reachability check. The sanitized output
+  reports the effective budgets and a timeout diagnosis while keeping Alpaca
+  activation fail-closed and without changing provider routing, production
+  budgets, fallback, scoring, API/frontend contracts, or source authority.
+
 ## 2026-05-30
 - Rotation Radar Alpaca activation smoke now reports sanitized credential
   source/feed, proxy-env eligibility, configured timeout budgets, and finer

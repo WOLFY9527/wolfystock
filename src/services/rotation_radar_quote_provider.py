@@ -175,11 +175,30 @@ def get_rotation_radar_provider_diagnostics() -> Dict[str, Any]:
     return _configured_provider_base_metadata(get_provider_credentials(_CONFIGURED_PROVIDER_ID))
 
 
-def run_rotation_radar_alpaca_live_smoke() -> Dict[str, Any]:
+def run_rotation_radar_alpaca_live_smoke(
+    *,
+    per_window_timeout: Optional[float] = None,
+    total_provider_budget: Optional[float] = None,
+    bar_fetch_timeout: Optional[float] = None,
+    connectivity_check: bool = False,
+) -> Dict[str, Any]:
     """Run a bounded Alpaca-only activation smoke for rotation radar diagnostics."""
 
     smoke_symbols = tuple(_ALPACA_STABLE_ACTIVATION_PROBE_SYMBOLS)
-    configured_attempt = _load_configured_provider_quotes(smoke_symbols)
+    effective_bar_fetch_timeout = bar_fetch_timeout
+    if effective_bar_fetch_timeout is None and per_window_timeout is not None:
+        effective_bar_fetch_timeout = per_window_timeout
+    override_applied = any(
+        value is not None
+        for value in (per_window_timeout, total_provider_budget, bar_fetch_timeout)
+    )
+    configured_attempt = _load_configured_provider_quotes(
+        smoke_symbols,
+        per_window_timeout=per_window_timeout,
+        total_provider_budget=total_provider_budget,
+        bar_fetch_timeout=effective_bar_fetch_timeout,
+        connectivity_check=connectivity_check,
+    )
     provider_diagnostics = _provider_activation_diagnostics(
         requested_symbols=smoke_symbols,
         quotes=configured_attempt.quotes,
@@ -191,6 +210,21 @@ def run_rotation_radar_alpaca_live_smoke() -> Dict[str, Any]:
     )
     diagnostics = provider_diagnostics["alpacaActivationDiagnostics"]
     raw_reason = diagnostics.get("reason")
+    endpoint_reachability = _safe_endpoint_reachability(
+        configured_attempt.metadata.get("endpointReachability")
+    )
+    bar_timeout = _non_negative_float(
+        configured_attempt.metadata.get("barFetchTimeout"),
+        _default_bar_fetch_timeout(),
+    )
+    per_window = _non_negative_float(
+        provider_diagnostics.get("perWindowTimeout"),
+        float(_ALPACA_PER_WINDOW_TIMEOUT_SECONDS),
+    )
+    total_budget = _non_negative_float(
+        provider_diagnostics.get("totalProviderBudget"),
+        float(_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS),
+    )
     return {
         "credentialsPresent": bool(diagnostics.get("credentialsPresent", False)),
         "credentialSource": _safe_credential_source(provider_diagnostics.get("credentialSource")),
@@ -212,14 +246,20 @@ def run_rotation_radar_alpaca_live_smoke() -> Dict[str, Any]:
         "reason": str(raw_reason).strip() if raw_reason is not None else None,
         "activationBlocker": str(provider_diagnostics.get("activationBlocker") or raw_reason or "").strip() or None,
         "providerFailureReasons": _as_string_sequence(provider_diagnostics.get("providerFailureReasons")),
-        "perWindowTimeout": _non_negative_float(
-            provider_diagnostics.get("perWindowTimeout"),
-            float(_ALPACA_PER_WINDOW_TIMEOUT_SECONDS),
+        "perWindowTimeout": per_window,
+        "totalProviderBudget": total_budget,
+        "barFetchTimeout": bar_timeout,
+        "effectiveTimeoutBudgets": {
+            "perWindowTimeout": per_window,
+            "totalProviderBudget": total_budget,
+            "barFetchTimeout": bar_timeout,
+            "overrideApplied": bool(override_applied),
+        },
+        "timeoutDiagnosis": _smoke_timeout_diagnosis(
+            provider_diagnostics=provider_diagnostics,
+            endpoint_reachability=endpoint_reachability,
         ),
-        "totalProviderBudget": _non_negative_float(
-            provider_diagnostics.get("totalProviderBudget"),
-            float(_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS),
-        ),
+        "endpointReachability": endpoint_reachability,
         "proxyEnvironment": _safe_proxy_environment(provider_diagnostics.get("proxyEnvironment")),
     }
 
@@ -344,10 +384,30 @@ def load_rotation_radar_quotes(symbols: Iterable[str]) -> Dict[str, Any]:
     }
 
 
-def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt:
+def _load_configured_provider_quotes(
+    symbols: Sequence[str],
+    *,
+    per_window_timeout: Optional[float] = None,
+    total_provider_budget: Optional[float] = None,
+    bar_fetch_timeout: Optional[float] = None,
+    connectivity_check: bool = False,
+) -> _ProviderAttempt:
     now_utc = _utc_now()
     credentials = get_provider_credentials(_CONFIGURED_PROVIDER_ID)
+    limits = _configured_activation_limits(
+        per_window_timeout=per_window_timeout,
+        total_provider_budget=total_provider_budget,
+        bar_fetch_timeout=bar_fetch_timeout,
+    )
     metadata = _configured_provider_base_metadata(credentials)
+    metadata.update({
+        "maxSymbolsPerWindow": limits["maxSymbolsPerWindow"],
+        "maxProbeSymbols": limits["maxProbeSymbols"],
+        "perWindowTimeout": limits["perWindowTimeout"],
+        "totalProviderBudget": limits["totalProviderBudget"],
+        "barFetchTimeout": limits["barFetchTimeout"],
+        "endpointReachability": _endpoint_reachability_not_checked(),
+    })
     metadata["shortIntradayWindowPlans"] = _short_intraday_window_plan_metadata(now_utc=now_utc)
     if credentials.is_partial:
         return _ProviderAttempt(
@@ -380,7 +440,7 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
             api_key_id=str(credentials.key_id or ""),
             secret_key=str(credentials.secret_key or ""),
             data_feed=data_feed,
-            timeout=max(1, int(float(_QUOTE_PROVIDER_REQUEST_TIMEOUT_SECONDS))),
+            timeout=limits["barFetchTimeout"],
         )
     except Exception as exc:
         failure_reason = _sanitize_provider_failure_reason(str(exc))
@@ -402,8 +462,12 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
             metadata["proxyEnvironment"] = _safe_proxy_environment(proxy_diagnostics())
         except Exception:
             metadata["proxyEnvironment"] = {}
+    if connectivity_check:
+        metadata["endpointReachability"] = _run_endpoint_reachability_check(
+            fetcher,
+            timeout=limits["barFetchTimeout"],
+        )
 
-    limits = _configured_activation_limits()
     max_workers = max(1, int(_QUOTE_PROVIDER_MAX_WORKERS))
     activation_probe_symbols = _configured_provider_stable_probe_symbols(
         symbols,
@@ -636,13 +700,42 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
     )
 
 
-def _configured_activation_limits() -> Dict[str, Any]:
+def _configured_activation_limits(
+    *,
+    per_window_timeout: Optional[float] = None,
+    total_provider_budget: Optional[float] = None,
+    bar_fetch_timeout: Optional[float] = None,
+) -> Dict[str, Any]:
     return {
         "maxSymbolsPerWindow": max(1, int(_ALPACA_MAX_SYMBOLS_PER_WINDOW)),
         "maxProbeSymbols": max(1, int(_ALPACA_MAX_PROBE_SYMBOLS)),
-        "perWindowTimeout": max(0.001, float(_ALPACA_PER_WINDOW_TIMEOUT_SECONDS)),
-        "totalProviderBudget": max(0.001, float(_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS)),
+        "perWindowTimeout": _positive_timeout_value(
+            per_window_timeout,
+            float(_ALPACA_PER_WINDOW_TIMEOUT_SECONDS),
+        ),
+        "totalProviderBudget": _positive_timeout_value(
+            total_provider_budget,
+            float(_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS),
+        ),
+        "barFetchTimeout": _positive_timeout_value(
+            bar_fetch_timeout,
+            _default_bar_fetch_timeout(),
+        ),
     }
+
+
+def _default_bar_fetch_timeout() -> float:
+    return float(max(1, int(float(_QUOTE_PROVIDER_REQUEST_TIMEOUT_SECONDS))))
+
+
+def _positive_timeout_value(value: Any, default: float) -> float:
+    try:
+        parsed = float(value)
+    except Exception:
+        parsed = float(default)
+    if parsed <= 0:
+        parsed = float(default)
+    return max(0.001, parsed)
 
 
 def _configured_provider_probe_symbols(
@@ -2136,6 +2229,155 @@ def _safe_proxy_environment(value: Any) -> Dict[str, bool]:
         "alpacaHttpsProxyEligible",
     )
     return {key: bool(value.get(key, False)) for key in keys if key in value}
+
+
+def _endpoint_reachability_not_checked() -> Dict[str, Any]:
+    return {
+        "attempted": False,
+        "status": "not_checked",
+        "failureClass": None,
+        "httpStatusClass": None,
+    }
+
+
+def _run_endpoint_reachability_check(fetcher: AlpacaFetcher, *, timeout: float) -> Dict[str, Any]:
+    reachability = getattr(fetcher, "endpoint_reachability", None)
+    if not callable(reachability):
+        return _endpoint_reachability_not_checked()
+    try:
+        return _safe_endpoint_reachability(reachability(timeout=timeout))
+    except Exception as exc:
+        failure_class = _classify_configured_failure(exc)
+        status = "timeout" if _is_timeout_failure_class(failure_class) else "unreachable"
+        if failure_class not in _TIMEOUT_FAILURE_CLASSES and failure_class not in _NETWORK_FAILURE_CLASSES:
+            status = "provider_error"
+        return {
+            "attempted": True,
+            "status": status,
+            "failureClass": failure_class,
+            "httpStatusClass": None,
+        }
+
+
+def _safe_endpoint_reachability(value: Any) -> Dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return _endpoint_reachability_not_checked()
+    status = str(value.get("status") or "").strip()
+    if status not in {"not_checked", "reachable", "unreachable", "timeout", "provider_error", "unknown"}:
+        status = "unknown"
+    failure_class = value.get("failureClass")
+    if failure_class is not None:
+        failure_class = _normalize_configured_failure_class(failure_class)
+    http_status_class = value.get("httpStatusClass")
+    http_status_class = str(http_status_class).strip() if http_status_class is not None else None
+    if http_status_class not in {None, "1xx", "2xx", "3xx", "4xx", "5xx"}:
+        http_status_class = None
+    return {
+        "attempted": bool(value.get("attempted", False)),
+        "status": status,
+        "failureClass": failure_class,
+        "httpStatusClass": http_status_class,
+    }
+
+
+def _smoke_timeout_diagnosis(
+    *,
+    provider_diagnostics: Mapping[str, Any],
+    endpoint_reachability: Mapping[str, Any],
+) -> Dict[str, Any]:
+    request_window_results = _diagnostic_request_window_results(
+        provider_diagnostics.get("requestWindowResults"),
+        requested_symbol_count=_non_negative_int(provider_diagnostics.get("activationProbeSymbolCount"), 0),
+    )
+    window_failure_classes = _count_window_failure_classes(request_window_results)
+    dominant_window_failure = _dominant_failure_class(window_failure_classes)
+    activation_blocker = str(provider_diagnostics.get("activationBlocker") or "").strip()
+    provider_failure_reasons = _as_string_sequence(provider_diagnostics.get("providerFailureReasons"))
+    timeout_reasons = [
+        reason
+        for reason in [activation_blocker, dominant_window_failure, *provider_failure_reasons]
+        if _is_timeout_failure_class(reason)
+    ]
+    timeout_observed = bool(timeout_reasons)
+    skipped_due_to_budget_count = _non_negative_int(provider_diagnostics.get("skippedDueToBudgetCount"), 0)
+    timeout_symbol_count = _non_negative_int(provider_diagnostics.get("timeoutSymbolCount"), 0)
+    probe_budget_exhausted = bool(skipped_due_to_budget_count > 0)
+    per_window_bar_fetch_timed_out = bool(
+        timeout_symbol_count > 0
+        or any(_is_timeout_failure_class(reason) for reason in window_failure_classes)
+    )
+    endpoint_status = str(endpoint_reachability.get("status") or "not_checked")
+    empty_response_observed = bool(
+        window_failure_classes.get("empty_response")
+        or activation_blocker in {"empty_response", "feed_intraday_empty", "market_closed_window_empty"}
+    )
+    feed_window_choice = _smoke_feed_window_choice(
+        provider_diagnostics.get("shortIntradayWindowPlans"),
+        activation_blocker=activation_blocker,
+    )
+
+    if not timeout_observed and not empty_response_observed:
+        category = "not_timeout"
+    elif endpoint_status in {"unreachable", "timeout"} or _is_network_failure_class(activation_blocker):
+        category = "endpoint_reachability"
+    elif probe_budget_exhausted:
+        category = "probe_budget_exhausted"
+    elif per_window_bar_fetch_timed_out:
+        category = "per_window_bar_fetch_timeout"
+    elif activation_blocker in {"feed_intraday_empty", "market_closed_window_empty"}:
+        category = "feed_window_choice"
+    elif empty_response_observed:
+        category = "no_recent_bars"
+    else:
+        category = "unknown"
+
+    return {
+        "category": category,
+        "timeoutObserved": timeout_observed,
+        "probeBudgetExhausted": probe_budget_exhausted,
+        "perWindowBarFetchTimedOut": per_window_bar_fetch_timed_out,
+        "endpointReachabilityStatus": endpoint_status,
+        "feedWindowChoice": feed_window_choice,
+        "noRecentBarsObserved": empty_response_observed,
+        "dominantWindowFailureClass": dominant_window_failure,
+    }
+
+
+def _count_window_failure_classes(
+    request_window_results: Mapping[str, Mapping[str, Any]]
+) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for result in request_window_results.values():
+        failure_classes = result.get("failureClasses") if isinstance(result, Mapping) else {}
+        if not isinstance(failure_classes, Mapping):
+            continue
+        for failure_class, count in failure_classes.items():
+            normalized = _normalize_configured_failure_class(failure_class)
+            counts[normalized] = counts.get(normalized, 0) + max(0, int(count or 0))
+    return counts
+
+
+def _smoke_feed_window_choice(raw_plans: Any, *, activation_blocker: str) -> str:
+    if activation_blocker not in {
+        "feed_intraday_empty",
+        "market_closed_window_empty",
+        "intraday_short_window_empty",
+        "short_window_coverage",
+    }:
+        return "not_evaluated"
+    if not isinstance(raw_plans, Mapping):
+        return "unknown"
+    modes = {
+        str(plan.get("selectionMode") or "").strip()
+        for window, plan in raw_plans.items()
+        if window in _SHORT_INTRADAY_WINDOWS and isinstance(plan, Mapping)
+    }
+    modes.discard("")
+    if not modes:
+        return "unknown"
+    if len(modes) == 1:
+        return next(iter(modes))
+    return "mixed"
 
 
 def _activation_scope(value: Any) -> str:

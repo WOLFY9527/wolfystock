@@ -2241,6 +2241,29 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
                 "providerFailureReasons": ["credentials_missing"],
                 "perWindowTimeout": 2.5,
                 "totalProviderBudget": 8.0,
+                "barFetchTimeout": 2.0,
+                "effectiveTimeoutBudgets": {
+                    "perWindowTimeout": 2.5,
+                    "totalProviderBudget": 8.0,
+                    "barFetchTimeout": 2.0,
+                    "overrideApplied": False,
+                },
+                "timeoutDiagnosis": {
+                    "category": "not_timeout",
+                    "timeoutObserved": False,
+                    "probeBudgetExhausted": False,
+                    "perWindowBarFetchTimedOut": False,
+                    "endpointReachabilityStatus": "not_checked",
+                    "feedWindowChoice": "not_evaluated",
+                    "noRecentBarsObserved": False,
+                    "dominantWindowFailureClass": "missing_credentials",
+                },
+                "endpointReachability": {
+                    "attempted": False,
+                    "status": "not_checked",
+                    "failureClass": None,
+                    "httpStatusClass": None,
+                },
                 "proxyEnvironment": {},
             },
         )
@@ -2308,10 +2331,124 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
                     "providerFailureReasons",
                     "perWindowTimeout",
                     "totalProviderBudget",
+                    "barFetchTimeout",
+                    "effectiveTimeoutBudgets",
+                    "timeoutDiagnosis",
+                    "endpointReachability",
                     "proxyEnvironment",
                 ]
             ),
         )
+
+    def test_alpaca_live_smoke_uses_operator_timeout_budget_overrides_and_reports_diagnosis(self) -> None:
+        constructed_timeouts: list[float] = []
+
+        class TimeoutAlpacaFetcher:
+            def __init__(self, *, timeout: float = 15, **kwargs) -> None:
+                constructed_timeouts.append(float(timeout))
+
+            def endpoint_reachability(self, *, timeout: float | None = None) -> dict:
+                return {
+                    "attempted": True,
+                    "status": "reachable",
+                    "failureClass": None,
+                    "httpStatusClass": "4xx",
+                }
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                raise requests.exceptions.ReadTimeout("alpaca-secret SHOULD_NOT_LEAK")
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="iex"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            TimeoutAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            side_effect=AssertionError("live smoke must stay on the bounded Alpaca configured path"),
+        ):
+            summary = run_rotation_radar_alpaca_live_smoke(
+                per_window_timeout=6.5,
+                total_provider_budget=19.0,
+                connectivity_check=True,
+            )
+
+        self.assertEqual(constructed_timeouts, [6.5])
+        self.assertEqual(summary["perWindowTimeout"], 6.5)
+        self.assertEqual(summary["totalProviderBudget"], 19.0)
+        self.assertEqual(summary["barFetchTimeout"], 6.5)
+        self.assertEqual(
+            summary["effectiveTimeoutBudgets"],
+            {
+                "perWindowTimeout": 6.5,
+                "totalProviderBudget": 19.0,
+                "barFetchTimeout": 6.5,
+                "overrideApplied": True,
+            },
+        )
+        self.assertEqual(summary["endpointReachability"]["status"], "reachable")
+        self.assertEqual(summary["timeoutDiagnosis"]["category"], "per_window_bar_fetch_timeout")
+        self.assertTrue(summary["timeoutDiagnosis"]["timeoutObserved"])
+        self.assertFalse(summary["timeoutDiagnosis"]["probeBudgetExhausted"])
+        self.assertTrue(summary["timeoutDiagnosis"]["perWindowBarFetchTimedOut"])
+        self.assertEqual(summary["timeoutDiagnosis"]["endpointReachabilityStatus"], "reachable")
+        self.assertFalse(summary["sourceAuthorityAllowed"])
+        self.assertFalse(summary["scoreContributionAllowed"])
+        dumped = json.dumps(summary, ensure_ascii=False)
+        self.assertNotIn("alpaca-secret", dumped)
+        self.assertNotIn("SHOULD_NOT_LEAK", dumped)
+
+    def test_alpaca_live_smoke_script_resolves_env_timeout_overrides_offline(self) -> None:
+        import scripts.diagnose_rotation_alpaca_activation as smoke_script
+
+        captured_kwargs: dict[str, object] = {}
+
+        def fake_smoke(**kwargs):
+            captured_kwargs.update(kwargs)
+            return {
+                "effectiveTimeoutBudgets": {
+                    "perWindowTimeout": kwargs["per_window_timeout"],
+                    "totalProviderBudget": kwargs["total_provider_budget"],
+                    "barFetchTimeout": kwargs["bar_fetch_timeout"],
+                    "overrideApplied": True,
+                },
+                "timeoutDiagnosis": {"category": "not_timeout"},
+                "endpointReachability": {"status": "not_checked"},
+            }
+
+        with patch.dict(
+            os.environ,
+            {
+                "ALPACA_ACTIVATION_SMOKE_PER_WINDOW_TIMEOUT": "9.5",
+                "ALPACA_ACTIVATION_SMOKE_TOTAL_PROVIDER_BUDGET": "26",
+                "ALPACA_ACTIVATION_SMOKE_BAR_FETCH_TIMEOUT": "7",
+                "ALPACA_ACTIVATION_SMOKE_CONNECTIVITY_CHECK": "1",
+            },
+            clear=False,
+        ), patch.object(
+            smoke_script,
+            "run_rotation_radar_alpaca_live_smoke",
+            side_effect=fake_smoke,
+        ), patch("builtins.print") as mock_print:
+            exit_code = smoke_script.main([])
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            captured_kwargs,
+            {
+                "per_window_timeout": 9.5,
+                "total_provider_budget": 26.0,
+                "bar_fetch_timeout": 7.0,
+                "connectivity_check": True,
+            },
+        )
+        dumped = mock_print.call_args.args[0]
+        self.assertIn('"overrideApplied": true', dumped)
+        self.assertNotIn("ALPACA_API_SECRET_KEY", dumped)
+        self.assertNotIn("alpaca-secret", dumped)
 
     def test_alpaca_live_smoke_reports_sanitized_proxy_and_timeout_reason(self) -> None:
         class ProxyFailingAlpacaFetcher:

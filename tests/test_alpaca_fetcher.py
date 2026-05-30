@@ -8,6 +8,8 @@ import os
 import unittest
 from unittest.mock import Mock, patch
 
+import requests
+
 from data_provider.alpaca_fetcher import AlpacaFetcher
 from data_provider.realtime_types import RealtimeSource
 
@@ -113,6 +115,56 @@ class AlpacaFetcherTestCase(unittest.TestCase):
         dumped = json.dumps(diagnostics, ensure_ascii=False)
         self.assertNotIn("proxy-secret", dumped)
         self.assertNotIn("127.0.0.1:7890", dumped)
+
+    def test_endpoint_reachability_is_sanitized_and_payload_free(self) -> None:
+        session = Mock()
+        session.head.return_value = _MockResponse({}, status_code=404)
+        fetcher = AlpacaFetcher(
+            api_key_id="alpaca-id",
+            secret_key="alpaca-secret",
+            session=session,
+        )
+
+        diagnostics = fetcher.endpoint_reachability(timeout=3.5)
+
+        self.assertEqual(
+            diagnostics,
+            {
+                "attempted": True,
+                "status": "reachable",
+                "failureClass": None,
+                "httpStatusClass": "4xx",
+            },
+        )
+        session.head.assert_called_once_with(
+            "https://data.alpaca.markets",
+            headers={"Accept": "application/json"},
+            timeout=3.5,
+            allow_redirects=False,
+        )
+        dumped = json.dumps(diagnostics, ensure_ascii=False)
+        self.assertNotIn("alpaca-secret", dumped)
+        self.assertNotIn("alpaca-id", dumped)
+
+    def test_endpoint_reachability_classifies_proxy_timeout_without_message_leak(self) -> None:
+        session = Mock()
+        session.head.side_effect = requests.exceptions.ProxyError("proxy-secret SHOULD_NOT_LEAK")
+        fetcher = AlpacaFetcher(
+            api_key_id="alpaca-id",
+            secret_key="alpaca-secret",
+            session=session,
+        )
+
+        diagnostics = fetcher.endpoint_reachability(timeout=4.0)
+
+        self.assertEqual(diagnostics["attempted"], True)
+        self.assertEqual(diagnostics["status"], "unreachable")
+        self.assertEqual(diagnostics["failureClass"], "proxy_unreachable")
+        self.assertEqual(diagnostics["httpStatusClass"], None)
+        dumped = json.dumps(diagnostics, ensure_ascii=False)
+        self.assertNotIn("proxy-secret", dumped)
+        self.assertNotIn("SHOULD_NOT_LEAK", dumped)
+        self.assertNotIn("alpaca-secret", dumped)
 
 
 if __name__ == "__main__":
