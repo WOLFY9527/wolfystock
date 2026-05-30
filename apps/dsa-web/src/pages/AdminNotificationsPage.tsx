@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BellRing, CheckCircle2, Power, Send, ShieldCheck, Trash2, Webhook } from 'lucide-react';
 import {
   adminNotificationsApi,
@@ -251,6 +251,14 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
     : (language === 'en' ? 'Unacknowledged' : '未确认');
 }
 
+async function fetchAdminNotificationsData() {
+  const [channelPayload, eventPayload] = await Promise.all([
+    adminNotificationsApi.listChannels(),
+    adminNotificationsApi.listNotifications(),
+  ]);
+  return { channelPayload, eventPayload };
+}
+
 const AdminNotificationsPage: React.FC = () => {
   const { language } = useI18n();
   const isEnglish = language === 'en';
@@ -259,7 +267,7 @@ const AdminNotificationsPage: React.FC = () => {
   const [availableSystemChannels, setAvailableSystemChannels] = useState<string[]>([]);
   const [events, setEvents] = useState<NotificationEvent[]>([]);
   const [draft, setDraft] = useState<ChannelDraft>(INITIAL_DRAFT);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -291,14 +299,11 @@ const AdminNotificationsPage: React.FC = () => {
     };
   })();
 
-  const loadAll = useCallback(async () => {
+  const loadAll = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [channelPayload, eventPayload] = await Promise.all([
-        adminNotificationsApi.listChannels(),
-        adminNotificationsApi.listNotifications(),
-      ]);
+      const { channelPayload, eventPayload } = await fetchAdminNotificationsData();
       setChannels(channelPayload.items);
       setAvailableSystemChannels(channelPayload.availableSystemChannels);
       if (channelPayload.availableSystemChannels.length) {
@@ -314,18 +319,53 @@ const AdminNotificationsPage: React.FC = () => {
       setChannels([]);
       setAvailableSystemChannels([]);
       setEvents([]);
-    } finally {
-      setIsLoading(false);
     }
-  }, []);
+    setIsLoading(false);
+  };
 
   useEffect(() => {
     document.title = isEnglish ? 'Admin Notifications - WolfyStock' : '管理通知 - WolfyStock';
   }, [isEnglish]);
 
   useEffect(() => {
-    void loadAll();
-  }, [loadAll]);
+    let active = true;
+
+    async function loadInitial() {
+      try {
+        const { channelPayload, eventPayload } = await fetchAdminNotificationsData();
+        if (!active) {
+          return;
+        }
+        setChannels(channelPayload.items);
+        setAvailableSystemChannels(channelPayload.availableSystemChannels);
+        if (channelPayload.availableSystemChannels.length) {
+          setDraft((current) => (
+            channelPayload.availableSystemChannels.includes(current.systemChannel)
+              ? current
+              : { ...current, systemChannel: channelPayload.availableSystemChannels[0] }
+          ));
+        }
+        setEvents(eventPayload.items || []);
+      } catch (err) {
+        if (!active) {
+          return;
+        }
+        setError(getParsedApiError(err));
+        setChannels([]);
+        setAvailableSystemChannels([]);
+        setEvents([]);
+      }
+      if (active) {
+        setIsLoading(false);
+      }
+    }
+
+    void loadInitial();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const payload: NotificationChannelPayload = (() => {
     const config: Record<string, unknown> = {};
@@ -376,9 +416,8 @@ const AdminNotificationsPage: React.FC = () => {
       await loadAll();
     } catch (err) {
       setError(getParsedApiError(err));
-    } finally {
-      setIsSaving(false);
     }
+    setIsSaving(false);
   };
 
   const toggleChannel = async (channel: NotificationChannel) => {
@@ -389,9 +428,8 @@ const AdminNotificationsPage: React.FC = () => {
       await loadAll();
     } catch (err) {
       setError(getParsedApiError(err));
-    } finally {
-      setBusyId(null);
     }
+    setBusyId(null);
   };
 
   const testChannel = async (channelId: number, dryRun: boolean) => {
@@ -417,9 +455,8 @@ const AdminNotificationsPage: React.FC = () => {
       await loadAll();
     } catch (err) {
       setError(getParsedApiError(err));
-    } finally {
-      setBusyId(null);
     }
+    setBusyId(null);
   };
 
   const deleteChannel = async (channelId: number) => {
@@ -441,9 +478,8 @@ const AdminNotificationsPage: React.FC = () => {
       await loadAll();
     } catch (err) {
       setError(getParsedApiError(err));
-    } finally {
-      setBusyId(null);
     }
+    setBusyId(null);
   };
 
   const acknowledge = async (eventId: number) => {
@@ -454,9 +490,8 @@ const AdminNotificationsPage: React.FC = () => {
       await loadAll();
     } catch (err) {
       setError(getParsedApiError(err));
-    } finally {
-      setBusyId(null);
     }
+    setBusyId(null);
   };
 
   return (
