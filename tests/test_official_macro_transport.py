@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import json
 import socket
 import ssl
@@ -44,6 +45,7 @@ from src.services.official_macro_transport import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "official_macro"
 MODULE_PATH = REPO_ROOT / "src" / "services" / "official_macro_transport.py"
+OFFICIAL_MACRO_ACTIVATION_SCRIPT_PATH = REPO_ROOT / "scripts" / "diagnose_official_macro_activation.py"
 FORBIDDEN_IMPORT_PREFIXES = ("requests", "httpx", "aiohttp", "urllib3", "yfinance")
 OFFICIAL_MACRO_SMOKE_CORE_FIELDS = {
     "credentialsPresent",
@@ -103,6 +105,18 @@ def _module_imports() -> set[str]:
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported_modules.add(node.module)
     return imported_modules
+
+
+def _load_official_macro_activation_script():
+    spec = importlib.util.spec_from_file_location(
+        "diagnose_official_macro_activation_for_test",
+        OFFICIAL_MACRO_ACTIVATION_SCRIPT_PATH,
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 @pytest.fixture(autouse=True)
@@ -687,6 +701,112 @@ def test_usd_pressure_live_smoke_fails_closed_on_invalid_source_metadata() -> No
     assert summary["latestObservationDate"] == "2026-05-15"
     assert summary["latestAsOf"] == "2026-05-15"
     assert "freshnessPolicy" not in summary
+
+
+def test_official_macro_activation_cache_readiness_smoke_outputs_sanitized_required_series_status(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = _load_official_macro_activation_script()
+
+    monkeypatch.setattr(
+        script,
+        "run_usd_pressure_live_smoke",
+        lambda: {
+            "credentialsPresent": True,
+            "providerConstructed": True,
+            "probePassed": True,
+            "freshnessValid": True,
+            "sourceMetadataValid": True,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "fulfilledSeries": ["DTWEXBGS"],
+            "missingSeries": [],
+            "staleSeries": [],
+            "reason": None,
+            "rawProviderPayload": {"token": "SECRET"},
+        },
+    )
+    monkeypatch.setattr(
+        script,
+        "run_fed_liquidity_live_smoke",
+        lambda: {
+            "credentialsPresent": True,
+            "providerConstructed": True,
+            "probePassed": False,
+            "freshnessValid": False,
+            "sourceMetadataValid": True,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "fulfilledSeries": ["WALCL", "WRESBAL"],
+            "missingSeries": ["RRPONTSYD"],
+            "staleSeries": ["WTREGEN"],
+            "reason": "stale_series",
+            "rawProviderPayload": {"token": "SECRET"},
+        },
+    )
+    monkeypatch.setattr(
+        script,
+        "run_official_macro_live_smoke",
+        lambda: (_ for _ in ()).throw(AssertionError("cache readiness mode must not run generic macro smoke")),
+    )
+
+    exit_code = script.main(["--cache-readiness"])
+
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    payload = json.loads(output)
+    assert payload["credentialsPresent"] is True
+    assert payload["keyPresent"] is True
+    assert payload["providerConstructed"] is True
+    assert payload["probePassed"] is False
+    assert payload["readiness"] == "blocked"
+    assert payload["freshnessValid"] is False
+    assert payload["sourceAuthorityAllowed"] is False
+    assert payload["scoreContributionAllowed"] is False
+    assert payload["reason"] == "stale_series"
+    assert payload["requiredSeriesStatus"] == {
+        "DTWEXBGS": "fulfilled",
+        "WALCL": "fulfilled",
+        "RRPONTSYD": "missing",
+        "WTREGEN": "stale",
+        "WRESBAL": "fulfilled",
+    }
+    assert payload["missingSeries"] == ["RRPONTSYD"]
+    assert payload["staleSeries"] == ["WTREGEN"]
+    assert payload["groups"]["usdPressure"]["requiredSeriesStatus"] == {"DTWEXBGS": "fulfilled"}
+    assert payload["groups"]["fedLiquidity"]["requiredSeriesStatus"]["RRPONTSYD"] == "missing"
+    assert "rawProviderPayload" not in output
+    assert "SECRET" not in output
+
+
+def test_official_macro_activation_cache_readiness_unexpected_error_is_sanitized(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = _load_official_macro_activation_script()
+
+    monkeypatch.setattr(script, "run_usd_pressure_live_smoke", lambda: (_ for _ in ()).throw(RuntimeError("SECRET")))
+
+    exit_code = script.main(["--cache-readiness"])
+
+    assert exit_code == 1
+    output = capsys.readouterr().out
+    payload = json.loads(output)
+    assert payload["credentialsPresent"] is False
+    assert payload["keyPresent"] is False
+    assert payload["providerConstructed"] is False
+    assert payload["sourceAuthorityAllowed"] is False
+    assert payload["scoreContributionAllowed"] is False
+    assert payload["reason"] == "unexpected_error"
+    assert payload["requiredSeriesStatus"] == {
+        "DTWEXBGS": "missing",
+        "WALCL": "missing",
+        "RRPONTSYD": "missing",
+        "WTREGEN": "missing",
+        "WRESBAL": "missing",
+    }
+    assert "SECRET" not in output
 
 
 @pytest.mark.parametrize(

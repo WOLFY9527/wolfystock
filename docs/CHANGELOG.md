@@ -7,6 +7,11 @@
   budgets, fallback, scoring, API/frontend contracts, or source authority.
 
 ## 2026-05-30
+- Official macro activation diagnostics now support a cache-readiness smoke that
+  summarizes FRED `DTWEXBGS` plus the WALCL/RRPONTSYD/WTREGEN/WRESBAL Fed
+  liquidity bundle with sanitized key-present, per-series readiness, freshness,
+  authority, and reason fields. The smoke does not write MarketCache or change
+  provider routing, budgets, fallback, scoring, API, or frontend behavior.
 - Rotation Radar Alpaca activation smoke now reports sanitized credential
   source/feed, proxy-env eligibility, configured timeout budgets, and finer
   proxy/connect/read/provider timeout reason codes. The smoke remains
