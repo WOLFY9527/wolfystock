@@ -1445,21 +1445,24 @@ const OptionsLabPageContent: React.FC = () => {
           optionsLabApi.getUnderlyingSummary(activeSymbol),
           optionsLabApi.getExpirations(activeSymbol),
         ]);
-        const expirationItems = asArray(expirations.expirations);
-        const nextExpiration = expirationItems.some((item) => item.date === selectedExpiration)
-          ? selectedExpiration
-          : expirationItems[0]?.date || selectedExpiration;
-        const chain = await optionsLabApi.getOptionChain(activeSymbol, nextExpiration);
-        if (ignored) return;
-        setSelectedExpiration(nextExpiration);
-        setState((current) => ({
-          ...current,
-          loading: false,
-          error: null,
-          summary,
-          expirations,
-          chain,
-        }));
+        if (!ignored) {
+          const expirationItems = asArray(expirations.expirations);
+          const nextExpiration = expirationItems.some((item) => item.date === selectedExpiration)
+            ? selectedExpiration
+            : expirationItems[0]?.date || selectedExpiration;
+          const chain = await optionsLabApi.getOptionChain(activeSymbol, nextExpiration);
+          if (!ignored) {
+            setSelectedExpiration(nextExpiration);
+            setState((current) => ({
+              ...current,
+              loading: false,
+              error: null,
+              summary,
+              expirations,
+              chain,
+            }));
+          }
+        }
       } catch {
         if (ignored) return;
         setState((current) => ({
@@ -1525,13 +1528,14 @@ const OptionsLabPageContent: React.FC = () => {
           strategies: ['long_call', 'long_put', 'bull_call_spread', 'bear_put_spread'],
           forceRefresh: true,
         });
-        if (ignored) return;
-        window.clearTimeout(timeoutId);
-        setComparisonState({
-          loading: false,
-          error: null,
-          comparison,
-        });
+        if (!ignored) {
+          window.clearTimeout(timeoutId);
+          setComparisonState({
+            loading: false,
+            error: null,
+            comparison,
+          });
+        }
       } catch {
         if (ignored) return;
         window.clearTimeout(timeoutId);
@@ -1591,8 +1595,9 @@ const OptionsLabPageContent: React.FC = () => {
           riskBudget: Number.isFinite(riskBudgetValue) && riskBudgetValue > 0 ? riskBudgetValue : undefined,
           forceRefresh: true,
         });
-        if (ignored) return;
-        setDecisionState({ loading: false, error: null, decision });
+        if (!ignored) {
+          setDecisionState({ loading: false, error: null, decision });
+        }
       } catch {
         if (ignored) return;
         setDecisionState({
