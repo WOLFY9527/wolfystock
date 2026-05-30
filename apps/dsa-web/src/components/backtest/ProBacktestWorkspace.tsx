@@ -42,6 +42,22 @@ type StepDefinition = {
   wizardStep: RuleWizardStep;
 };
 
+function getVisibleWorkspaceStep(currentStep: RuleWizardStep, activeStep: WorkspaceStep): WorkspaceStep {
+  if (currentStep === 'symbol') {
+    return 'assets';
+  }
+  if (currentStep === 'strategy') {
+    return 'strategy';
+  }
+  if (currentStep === 'run') {
+    return 'advanced';
+  }
+  if (currentStep === 'confirm') {
+    return activeStep === 'costs' ? 'costs' : 'orders';
+  }
+  return activeStep;
+}
+
 type ProBacktestWorkspaceProps = Omit<FlowProps, 'panelMode'> & {
   language: BacktestLanguage;
   monteCarloEnabled: boolean;
@@ -287,21 +303,13 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   const strategyCatalogGroups = getStrategyCatalogGroups();
   const activeCatalogGroup = strategyCatalogGroups.find((group) => group.id === catalogGroupId) || strategyCatalogGroups[0];
   const latestHistory = historyItems[0] as RuleBacktestHistoryItem | undefined;
+  const visibleActiveStep = getVisibleWorkspaceStep(currentStep, activeStep);
 
   useEffect(() => {
     if (!catalogToast) return undefined;
     const timer = window.setTimeout(() => setCatalogToast(null), 3200);
     return () => window.clearTimeout(timer);
   }, [catalogToast]);
-
-  useEffect(() => {
-    if (currentStep === 'symbol') setActiveStep('assets');
-    if (currentStep === 'strategy') setActiveStep('strategy');
-    if (currentStep === 'confirm' && activeStep !== 'orders' && activeStep !== 'costs') setActiveStep('orders');
-    if (currentStep === 'run' && activeStep !== 'advanced') setActiveStep('advanced');
-  // Keep the current visible workspace stable when confirm/run is reached from a local step.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep]);
 
   const stepDefinitions: StepDefinition[] = [
     {
@@ -436,7 +444,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   };
 
   const renderStepButton = (step: StepDefinition, mobile = false) => {
-    const active = activeStep === step.id;
+    const active = visibleActiveStep === step.id;
     const status = stepStatuses[step.id];
     return (
       <button
@@ -1044,14 +1052,14 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
     </section>
   );
 
-  const activeStepDefinition = stepDefinitions.find((step) => step.id === activeStep) || stepDefinitions[0];
-  const activeStepContent = activeStep === 'strategy'
+  const activeStepDefinition = stepDefinitions.find((step) => step.id === visibleActiveStep) || stepDefinitions[0];
+  const activeStepContent = visibleActiveStep === 'strategy'
     ? renderStrategyStep()
-    : activeStep === 'orders'
+    : visibleActiveStep === 'orders'
       ? renderOrdersStep()
-      : activeStep === 'costs'
+      : visibleActiveStep === 'costs'
         ? renderCostsStep()
-        : activeStep === 'advanced'
+        : visibleActiveStep === 'advanced'
           ? renderAdvancedStep()
           : renderAssetsStep();
 
