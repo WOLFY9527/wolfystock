@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import inspect
 import json
 import re
@@ -128,6 +129,32 @@ FRONTEND_ADMIN_READ_CAPABILITY_LABELS = {
     "ops:providers:read",
     "ops:system_config:read",
 }
+AUTH_ROUTE_REQUEST_GUARD_MARKERS = (
+    "resolve_current_user(request)",
+    "_serialize_current_user(request)",
+    "_require_admin_current_user(request)",
+)
+EXPECTED_AUTH_ROUTE_SOURCE_INVENTORY = {
+    ("GET", "/status"): "public",
+    ("GET", "/me"): "request_guarded",
+    ("GET", "/preferences/notifications"): "request_guarded",
+    ("PUT", "/preferences/notifications"): "request_guarded",
+    ("POST", "/reauth"): "request_guarded",
+    ("POST", "/mfa/enroll/start"): "request_guarded",
+    ("POST", "/mfa/enroll/verify"): "request_guarded",
+    ("POST", "/mfa/verify"): "request_guarded",
+    ("POST", "/mfa/disable"): "request_guarded",
+    ("POST", "/mfa/recovery-codes/generate"): "request_guarded",
+    ("POST", "/mfa/recovery-codes/verify"): "request_guarded",
+    ("POST", "/mfa/recovery-codes/rotate"): "request_guarded",
+    ("POST", "/verify-password"): "request_guarded",
+    ("POST", "/settings"): "request_guarded",
+    ("POST", "/login"): "public",
+    ("POST", "/reset-password/request"): "public",
+    ("POST", "/change-password"): "request_guarded",
+    ("POST", "/logout"): "request_guarded",
+}
+EXPECTED_AUTH_ROUTE_SOURCE_SPECIAL_CASES: set[str] = set()
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -255,15 +282,83 @@ def _collect_wrapped_route_paths(source: str, wrapper_name: str) -> set[str]:
     return set(pattern.findall(source))
 
 
-def _auth_route_source_guards(source: str) -> dict[str, str]:
-    function_pattern = re.compile(
-        r'@router\.(get|post|put|delete|patch)\(\s*\n\s*"(?P<path>[^"]+)"[\s\S]*?\)\nasync def [^(]+\([^)]*\):\n(?P<body>[\s\S]*?)(?=\n@router\.|\Z)',
-        re.MULTILINE,
-    )
-    return {
-        match.group("path"): match.group("body")
-        for match in function_pattern.finditer(source)
-    }
+def _format_auth_route_special_case(
+    *,
+    function_name: str,
+    decorator_name: str,
+    methods: list[str] | None,
+    path: str | None,
+) -> str:
+    methods_label = ",".join(methods or ["<dynamic-methods>"])
+    path_label = path or "<dynamic-path>"
+    return f"{decorator_name}:{methods_label} {path_label} [{function_name}]"
+
+
+def _literal_string(node: ast.AST | None) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
+def _collect_auth_route_source_inventory(
+    source: str,
+) -> tuple[dict[tuple[str, str], dict[str, str]], set[str]]:
+    tree = ast.parse(source)
+    lines = source.splitlines()
+    inventory: dict[tuple[str, str], dict[str, str]] = {}
+    special_cases: set[str] = set()
+
+    for node in tree.body:
+        if not isinstance(node, ast.AsyncFunctionDef):
+            continue
+
+        body_start = node.body[0].lineno - 1 if node.body else node.lineno - 1
+        body = "\n".join(lines[body_start : node.end_lineno or body_start])
+        classification = (
+            "request_guarded"
+            if any(marker in body for marker in AUTH_ROUTE_REQUEST_GUARD_MARKERS)
+            else "public"
+        )
+
+        for decorator in node.decorator_list:
+            if not (
+                isinstance(decorator, ast.Call)
+                and isinstance(decorator.func, ast.Attribute)
+                and isinstance(decorator.func.value, ast.Name)
+                and decorator.func.value.id == "router"
+            ):
+                continue
+
+            decorator_name = decorator.func.attr
+            path = _literal_string(decorator.args[0] if decorator.args else None)
+            if decorator_name in {"get", "post", "put", "delete", "patch"}:
+                methods = [decorator_name.upper()]
+            else:
+                methods = None
+
+            if methods is None or path is None:
+                special_cases.add(
+                    _format_auth_route_special_case(
+                        function_name=node.name,
+                        decorator_name=decorator_name,
+                        methods=methods,
+                        path=path,
+                    )
+                )
+                continue
+
+            for method in methods:
+                signature = (method, path)
+                assert signature not in inventory, f"duplicate auth route decorator for {signature}"
+                inventory[signature] = {
+                    "method": method,
+                    "path": path,
+                    "classification": classification,
+                    "function_name": node.name,
+                    "body": body,
+                }
+
+    return inventory, special_cases
 
 
 def _guest_restriction_markers(path: str) -> set[str]:
@@ -471,36 +566,52 @@ def test_backend_write_only_capabilities_do_not_leak_into_frontend_read_route_fl
 def test_request_guarded_auth_routes_remain_explicit_in_auth_endpoint_source() -> None:
     fixture = _load_json(BACKEND_FIXTURE)
     auth_source = AUTH_ENDPOINT_TS.read_text(encoding="utf-8")
-    route_bodies = _auth_route_source_guards(auth_source)
+    route_inventory, _ = _collect_auth_route_source_inventory(auth_source)
 
     for entry in fixture["request_guarded_auth_routes"]:
         guard_kind = entry["guard_kind"]
         methods = entry.get("methods") or [entry["method"]]
         if "path_pattern" in entry:
             pattern = re.compile(entry["path_pattern"])
-            matched_paths = [path for path in route_bodies if pattern.match(f"/api/v1/auth{path}")]
-            assert matched_paths, f"missing auth route pattern {entry['route_id']}"
-            for path in matched_paths:
-                body = route_bodies[path]
+            matched_routes = [
+                route
+                for route in route_inventory.values()
+                if route["method"] in methods and pattern.match(f"/api/v1/auth{route['path']}")
+            ]
+            assert matched_routes, f"missing auth route pattern {entry['route_id']}"
+            for route in matched_routes:
+                body = route["body"]
                 if guard_kind == "request_current_user":
                     assert (
                         "resolve_current_user(request)" in body
                         or "_serialize_current_user(request)" in body
                         or "_require_admin_current_user(request)" in body
-                    ), f"missing request guard in {path}"
+                    ), f"missing request guard in {route['method']} {route['path']}"
         else:
             api_path = entry["path"].replace("/api/v1/auth", "")
-            assert api_path in route_bodies, f"missing auth route {entry['route_id']}"
-            body = route_bodies[api_path]
-            if guard_kind == "request_current_user":
-                assert (
-                    "resolve_current_user(request)" in body
-                    or "_serialize_current_user(request)" in body
-                    or "_require_admin_current_user(request)" in body
-                ), f"missing request guard in {entry['path']}"
-            else:
-                assert "resolve_current_user(request)" not in body and "_serialize_current_user(request)" not in body
+            for method in methods:
+                route = route_inventory[(method, api_path)]
+                body = route["body"]
+                if guard_kind == "request_current_user":
+                    assert (
+                        "resolve_current_user(request)" in body
+                        or "_serialize_current_user(request)" in body
+                        or "_require_admin_current_user(request)" in body
+                    ), f"missing request guard in {entry['path']}"
+                else:
+                    assert "resolve_current_user(request)" not in body and "_serialize_current_user(request)" not in body
         assert methods
+
+
+def test_auth_route_source_inventory_is_method_aware_and_fails_closed() -> None:
+    auth_source = AUTH_ENDPOINT_TS.read_text(encoding="utf-8")
+    route_inventory, special_cases = _collect_auth_route_source_inventory(auth_source)
+
+    assert special_cases == EXPECTED_AUTH_ROUTE_SOURCE_SPECIAL_CASES
+    assert {
+        route_signature: route["classification"]
+        for route_signature, route in route_inventory.items()
+    } == EXPECTED_AUTH_ROUTE_SOURCE_INVENTORY
 
 
 def test_frontend_route_inventory_matches_admin_capability_map_and_wrapper_boundaries() -> None:
