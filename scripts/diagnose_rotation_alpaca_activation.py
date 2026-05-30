@@ -21,7 +21,10 @@ EXIT_FAILED = 1
 def _unexpected_error_summary() -> dict[str, object]:
     return {
         "credentialsPresent": False,
+        "credentialSource": "unknown",
         "providerConstructed": False,
+        "configuredProviderFeed": None,
+        "feedEntitlementStatus": "unknown",
         "probePassed": False,
         "freshnessValid": False,
         "sourceMetadataValid": False,
@@ -31,6 +34,11 @@ def _unexpected_error_summary() -> dict[str, object]:
         "missingWindows": ["5m", "15m", "60m", "1d"],
         "staleWindows": [],
         "reason": "unexpected_error",
+        "activationBlocker": "unexpected_error",
+        "providerFailureReasons": ["unexpected_error"],
+        "perWindowTimeout": None,
+        "totalProviderBudget": None,
+        "proxyEnvironment": {},
     }
 
 

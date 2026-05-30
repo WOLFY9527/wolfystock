@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pandas as pd
+import requests
 
 from data_provider.provider_credentials import ProviderCredentialBundle
 from src.config import Config
@@ -2223,7 +2224,10 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             summary,
             {
                 "credentialsPresent": False,
+                "credentialSource": "unknown",
                 "providerConstructed": False,
+                "configuredProviderFeed": "iex",
+                "feedEntitlementStatus": "not_checked",
                 "probePassed": False,
                 "freshnessValid": True,
                 "sourceMetadataValid": True,
@@ -2233,6 +2237,11 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
                 "missingWindows": ["5m", "15m", "60m", "1d"],
                 "staleWindows": [],
                 "reason": "credentials",
+                "activationBlocker": "credentials",
+                "providerFailureReasons": ["credentials_missing"],
+                "perWindowTimeout": 2.5,
+                "totalProviderBudget": 8.0,
+                "proxyEnvironment": {},
             },
         )
         dumped = json.dumps(summary, ensure_ascii=False)
@@ -2292,9 +2301,62 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
                     "missingWindows",
                     "staleWindows",
                     "reason",
+                    "credentialSource",
+                    "configuredProviderFeed",
+                    "feedEntitlementStatus",
+                    "activationBlocker",
+                    "providerFailureReasons",
+                    "perWindowTimeout",
+                    "totalProviderBudget",
+                    "proxyEnvironment",
                 ]
             ),
         )
+
+    def test_alpaca_live_smoke_reports_sanitized_proxy_and_timeout_reason(self) -> None:
+        class ProxyFailingAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def proxy_diagnostics(self) -> dict:
+                return {
+                    "sessionTrustEnv": True,
+                    "httpProxyConfigured": True,
+                    "httpsProxyConfigured": True,
+                    "allProxyConfigured": True,
+                    "alpacaHttpsProxyEligible": True,
+                }
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                raise requests.exceptions.ProxyError("proxy-secret SHOULD_NOT_LEAK")
+
+        with patch(
+            "src.services.rotation_radar_quote_provider.get_provider_credentials",
+            return_value=_alpaca_credentials(feed="iex"),
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+            ProxyFailingAlpacaFetcher,
+            create=True,
+        ), patch(
+            "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+            side_effect=AssertionError("live smoke must stay on the bounded Alpaca configured path"),
+        ):
+            summary = run_rotation_radar_alpaca_live_smoke()
+
+        self.assertTrue(summary["credentialsPresent"])
+        self.assertTrue(summary["providerConstructed"])
+        self.assertFalse(summary["probePassed"])
+        self.assertEqual(summary["reason"], "proxy_unreachable")
+        self.assertEqual(summary["activationBlocker"], "proxy_unreachable")
+        self.assertEqual(summary["providerFailureReasons"][0], "proxy_unreachable")
+        self.assertEqual(summary["proxyEnvironment"]["sessionTrustEnv"], True)
+        self.assertEqual(summary["proxyEnvironment"]["alpacaHttpsProxyEligible"], True)
+        self.assertFalse(summary["sourceAuthorityAllowed"])
+        self.assertFalse(summary["scoreContributionAllowed"])
+        dumped = json.dumps(summary, ensure_ascii=False)
+        self.assertNotIn("proxy-secret", dumped)
+        self.assertNotIn("SHOULD_NOT_LEAK", dumped)
 
     def test_configured_provider_calendar_and_market_session_empty_bars_are_activation_blockers(self) -> None:
         cases = (

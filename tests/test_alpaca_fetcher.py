@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import json
+import os
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from data_provider.alpaca_fetcher import AlpacaFetcher
 from data_provider.realtime_types import RealtimeSource
@@ -88,6 +90,29 @@ class AlpacaFetcherTestCase(unittest.TestCase):
         self.assertEqual(kwargs["params"]["timeframe"], "1Day")
         self.assertEqual(kwargs["params"]["adjustment"], "all")
         self.assertEqual(kwargs["params"]["feed"], "iex")
+
+    def test_proxy_diagnostics_report_env_presence_without_values(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "HTTP_PROXY": "http://proxy-secret@127.0.0.1:7890",
+                "HTTPS_PROXY": "http://proxy-secret@127.0.0.1:7890",
+                "ALL_PROXY": "socks5://proxy-secret@127.0.0.1:7890",
+            },
+            clear=False,
+        ):
+            fetcher = AlpacaFetcher(api_key_id="alpaca-id", secret_key="alpaca-secret")
+
+            diagnostics = fetcher.proxy_diagnostics()
+
+        self.assertTrue(diagnostics["sessionTrustEnv"])
+        self.assertTrue(diagnostics["httpProxyConfigured"])
+        self.assertTrue(diagnostics["httpsProxyConfigured"])
+        self.assertTrue(diagnostics["allProxyConfigured"])
+        self.assertTrue(diagnostics["alpacaHttpsProxyEligible"])
+        dumped = json.dumps(diagnostics, ensure_ascii=False)
+        self.assertNotIn("proxy-secret", dumped)
+        self.assertNotIn("127.0.0.1:7890", dumped)
 
 
 if __name__ == "__main__":

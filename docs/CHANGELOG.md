@@ -1,4 +1,9 @@
 ## 2026-05-30
+- Rotation Radar Alpaca activation smoke now reports sanitized credential
+  source/feed, proxy-env eligibility, configured timeout budgets, and finer
+  proxy/connect/read/provider timeout reason codes. The smoke remains
+  Alpaca-only and fail-closed, without changing provider routing, budgets,
+  fallback, scoring, API/frontend contracts, or source-authority promotion.
 - Backtest rule-run requests now have an explicit execution-model registry gate: omitted metadata and explicit `{"version":"v1"}` preserve the current/default deterministic v1 behavior, while `v2` or unknown models fail closed before service execution or async run writes. The execution-model metadata export also reports v1 as the only supported/current/default model and marks v2 as unavailable/fail-closed, without changing backtest math, fill/cost semantics, provider behavior, frontend behavior, or stored result semantics.
 
 ## 2026-05-29

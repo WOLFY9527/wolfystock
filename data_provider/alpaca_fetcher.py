@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
@@ -30,6 +31,29 @@ def _isoformat_utc(value: Any) -> Optional[str]:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc).isoformat()
+
+
+def _proxy_env_configured(*names: str) -> bool:
+    return any(str(os.getenv(name) or "").strip() for name in names)
+
+
+def _sanitized_proxy_environment(session: requests.Session) -> Dict[str, bool]:
+    http_proxy_configured = _proxy_env_configured("HTTP_PROXY", "http_proxy")
+    https_proxy_configured = _proxy_env_configured("HTTPS_PROXY", "https_proxy")
+    all_proxy_configured = _proxy_env_configured("ALL_PROXY", "all_proxy")
+    session_trust_env = bool(getattr(session, "trust_env", True))
+    return {
+        "sessionTrustEnv": session_trust_env,
+        "httpProxyConfigured": http_proxy_configured,
+        "httpsProxyConfigured": https_proxy_configured,
+        "allProxyConfigured": all_proxy_configured,
+        "proxyEnvConfigured": bool(
+            http_proxy_configured or https_proxy_configured or all_proxy_configured
+        ),
+        "alpacaHttpsProxyEligible": bool(
+            session_trust_env and (https_proxy_configured or all_proxy_configured)
+        ),
+    }
 
 
 class AlpacaFetcher(BaseFetcher):
@@ -63,6 +87,11 @@ class AlpacaFetcher(BaseFetcher):
             "APCA-API-SECRET-KEY": self.secret_key,
             "Accept": "application/json",
         }
+
+    def proxy_diagnostics(self) -> Dict[str, bool]:
+        """Return sanitized proxy-env diagnostics for operator smoke output."""
+
+        return _sanitized_proxy_environment(self.session)
 
     def _request_json(self, path: str, *, params: Optional[Dict[str, Any]] = None) -> Any:
         response = self.session.get(

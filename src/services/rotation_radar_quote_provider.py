@@ -69,6 +69,11 @@ _CONFIGURED_FAILURE_CLASSES = {
     "market_session",
     "calendar",
     "rate_limited",
+    "proxy_unreachable",
+    "connect_timeout",
+    "read_timeout",
+    "provider_timeout",
+    "network_unreachable",
     "timeout",
     "empty_response",
     "symbol_not_found",
@@ -82,6 +87,11 @@ _CONFIGURED_FAILURE_PRIORITY = (
     "market_session",
     "calendar",
     "rate_limited",
+    "proxy_unreachable",
+    "connect_timeout",
+    "read_timeout",
+    "provider_timeout",
+    "network_unreachable",
     "timeout",
     "empty_response",
     "symbol_not_found",
@@ -97,6 +107,11 @@ _ACTIVATION_BLOCKERS = {
     "market_session",
     "market_closed_window_empty",
     "calendar",
+    "proxy_unreachable",
+    "connect_timeout",
+    "read_timeout",
+    "provider_timeout",
+    "network_unreachable",
     "timeout",
     "empty_response",
     "feed_intraday_empty",
@@ -106,6 +121,8 @@ _ACTIVATION_BLOCKERS = {
     "provider_error",
     "unknown",
 }
+_TIMEOUT_FAILURE_CLASSES = {"connect_timeout", "read_timeout", "provider_timeout", "timeout"}
+_NETWORK_FAILURE_CLASSES = {"proxy_unreachable", "network_unreachable"}
 _ALPACA_CREDENTIAL_ENV_NAMES = {
     "key_id": "ALPACA_API_KEY_ID",
     "secret_key": "ALPACA_API_SECRET_KEY",
@@ -163,7 +180,7 @@ def run_rotation_radar_alpaca_live_smoke() -> Dict[str, Any]:
 
     smoke_symbols = tuple(_ALPACA_STABLE_ACTIVATION_PROBE_SYMBOLS)
     configured_attempt = _load_configured_provider_quotes(smoke_symbols)
-    diagnostics = _provider_activation_diagnostics(
+    provider_diagnostics = _provider_activation_diagnostics(
         requested_symbols=smoke_symbols,
         quotes=configured_attempt.quotes,
         failed_symbol_reasons=configured_attempt.failed_symbol_reasons,
@@ -171,11 +188,19 @@ def run_rotation_radar_alpaca_live_smoke() -> Dict[str, Any]:
         yfinance_attempt=_ProviderAttempt(status="not_requested"),
         window_coverage={},
         source_summary={"sourceTier": _CONFIGURED_SOURCE_TIER if configured_attempt.quotes else "unknown"},
-    )["alpacaActivationDiagnostics"]
+    )
+    diagnostics = provider_diagnostics["alpacaActivationDiagnostics"]
     raw_reason = diagnostics.get("reason")
     return {
         "credentialsPresent": bool(diagnostics.get("credentialsPresent", False)),
+        "credentialSource": _safe_credential_source(provider_diagnostics.get("credentialSource")),
         "providerConstructed": bool(diagnostics.get("providerConstructed", False)),
+        "configuredProviderFeed": str(
+            provider_diagnostics.get("configuredProviderFeed")
+            or provider_diagnostics.get("feed")
+            or "iex"
+        ),
+        "feedEntitlementStatus": str(provider_diagnostics.get("feedEntitlementStatus") or "unknown"),
         "probePassed": bool(diagnostics.get("probePassed", False)),
         "freshnessValid": bool(diagnostics.get("freshnessValid", False)),
         "sourceMetadataValid": bool(diagnostics.get("sourceMetadataValid", False)),
@@ -185,6 +210,17 @@ def run_rotation_radar_alpaca_live_smoke() -> Dict[str, Any]:
         "missingWindows": _as_string_sequence(diagnostics.get("missingWindows")),
         "staleWindows": _as_string_sequence(diagnostics.get("staleWindows")),
         "reason": str(raw_reason).strip() if raw_reason is not None else None,
+        "activationBlocker": str(provider_diagnostics.get("activationBlocker") or raw_reason or "").strip() or None,
+        "providerFailureReasons": _as_string_sequence(provider_diagnostics.get("providerFailureReasons")),
+        "perWindowTimeout": _non_negative_float(
+            provider_diagnostics.get("perWindowTimeout"),
+            float(_ALPACA_PER_WINDOW_TIMEOUT_SECONDS),
+        ),
+        "totalProviderBudget": _non_negative_float(
+            provider_diagnostics.get("totalProviderBudget"),
+            float(_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS),
+        ),
+        "proxyEnvironment": _safe_proxy_environment(provider_diagnostics.get("proxyEnvironment")),
     }
 
 
@@ -360,6 +396,12 @@ def _load_configured_provider_quotes(symbols: Sequence[str]) -> _ProviderAttempt
             },
         )
     metadata["providerConstructed"] = True
+    proxy_diagnostics = getattr(fetcher, "proxy_diagnostics", None)
+    if callable(proxy_diagnostics):
+        try:
+            metadata["proxyEnvironment"] = _safe_proxy_environment(proxy_diagnostics())
+        except Exception:
+            metadata["proxyEnvironment"] = {}
 
     limits = _configured_activation_limits()
     max_workers = max(1, int(_QUOTE_PROVIDER_MAX_WORKERS))
@@ -712,7 +754,7 @@ def _record_configured_future_result(
     try:
         quote_result = future.result()
     except Exception as exc:
-        failure_class = _classify_configured_failure(str(exc))
+        failure_class = _classify_configured_failure(exc)
         _record_symbol_window_failures(
             result.request_window_results,
             result.symbol_failure_samples,
@@ -980,7 +1022,7 @@ def _record_window_failure(
     failure_classes[normalized] = int(failure_classes.get(normalized) or 0) + 1
     failure_symbols_by_class = window_result.setdefault("failureSymbolsByClass", {})
     _append_bounded_symbol(failure_symbols_by_class.setdefault(normalized, []), symbol)
-    if normalized == "timeout":
+    if _is_timeout_failure_class(normalized):
         _append_bounded_symbol(window_result.setdefault("timedOutSymbols", []), symbol)
     if normalized == "empty_response":
         _append_bounded_symbol(window_result.setdefault("emptyResponseSymbols", []), symbol)
@@ -1177,6 +1219,14 @@ def _failure_class_rank(failure_class: str) -> int:
 def _normalize_configured_failure_class(failure_class: Any) -> str:
     normalized = str(failure_class or "").strip().lower()
     return normalized if normalized in _CONFIGURED_FAILURE_CLASSES else "unknown"
+
+
+def _is_timeout_failure_class(failure_class: Any) -> bool:
+    return _normalize_configured_failure_class(failure_class) in _TIMEOUT_FAILURE_CLASSES
+
+
+def _is_network_failure_class(failure_class: Any) -> bool:
+    return _normalize_configured_failure_class(failure_class) in _NETWORK_FAILURE_CLASSES
 
 
 def _sanitize_symbol(symbol: Any) -> str:
@@ -1708,6 +1758,7 @@ def _provider_activation_diagnostics(
             or configured_attempt.metadata.get("configuredProviderFeed")
             or "iex"
         ),
+        "proxyEnvironment": _safe_proxy_environment(configured_attempt.metadata.get("proxyEnvironment")),
         "feedEntitlementStatus": feed_entitlement_status,
         "requestedWindows": requested_windows,
         "fulfilledWindows": fulfilled_windows,
@@ -2073,6 +2124,20 @@ def _safe_credential_source(value: Any) -> str:
     return source if source in _CREDENTIAL_SOURCE_VALUES else "unknown"
 
 
+def _safe_proxy_environment(value: Any) -> Dict[str, bool]:
+    if not isinstance(value, Mapping):
+        return {}
+    keys = (
+        "sessionTrustEnv",
+        "httpProxyConfigured",
+        "httpsProxyConfigured",
+        "allProxyConfigured",
+        "proxyEnvConfigured",
+        "alpacaHttpsProxyEligible",
+    )
+    return {key: bool(value.get(key, False)) for key in keys if key in value}
+
+
 def _activation_scope(value: Any) -> str:
     scope = str(value or "").strip()
     return scope if scope in {"probe_only", "partial_universe", "full_universe"} else "probe_only"
@@ -2132,7 +2197,9 @@ def _live_activation_status(
 ) -> str:
     if static_basket_fallback_used:
         return "unavailable"
-    if activation_blocker == "timeout":
+    if _is_network_failure_class(activation_blocker):
+        return "unavailable"
+    if _is_timeout_failure_class(activation_blocker):
         if minimum_activation_coverage_met and fulfilled_windows:
             return "partial"
         return "unavailable"
@@ -2191,6 +2258,15 @@ def _activation_blocker(
         return "market_session"
     if "calendar" in normalized_reasons:
         return "calendar"
+    for failure_class in (
+        "proxy_unreachable",
+        "connect_timeout",
+        "read_timeout",
+        "provider_timeout",
+        "network_unreachable",
+    ):
+        if failure_class in normalized_reasons:
+            return failure_class
     if "timeout" in normalized_reasons or "quote_fetch_failed" in raw_reasons:
         return "timeout"
     if "empty_response" in normalized_reasons:
@@ -2242,6 +2318,11 @@ def _short_window_activation_blocker(
         return "calendar"
     if dominant_short_failure == "market_session":
         return "market_closed_window_empty"
+    if (
+        dominant_short_failure in _NETWORK_FAILURE_CLASSES
+        or dominant_short_failure in {"connect_timeout", "read_timeout", "provider_timeout"}
+    ):
+        return dominant_short_failure
     if dominant_short_failure in {"rate_limited", "timeout"}:
         return "timeout"
     if dominant_short_failure == "symbol_not_found":
@@ -2345,7 +2426,9 @@ def _feed_entitlement_status(
         return "entitlement_denied"
     if "rate_limited" in reason_set:
         return "rate_limited"
-    if "timeout" in reason_set:
+    if reason_set.intersection(_NETWORK_FAILURE_CLASSES):
+        return "not_inferable"
+    if any(_is_timeout_failure_class(reason) for reason in reason_set):
         return "timeout"
     if reason_set.intersection({"interval_mapping", "market_session", "calendar"}):
         return "not_inferable"
@@ -2376,6 +2459,12 @@ def _recommended_action(
         return "retry_during_regular_market_session"
     if activation_blocker == "feed_intraday_empty":
         return "verify_intraday_feed_or_recent_session_window"
+    if activation_blocker == "proxy_unreachable":
+        return "verify_proxy_configuration"
+    if activation_blocker in {"connect_timeout", "network_unreachable"}:
+        return "verify_alpaca_endpoint_reachability"
+    if activation_blocker in {"read_timeout", "provider_timeout"}:
+        return "retry_or_increase_alpaca_timeout"
     if primary == "auth_failed":
         return "verify_alpaca_credentials"
     if primary == "entitlement_denied":
@@ -2422,6 +2511,21 @@ def _activation_hint(
         return "Configure Alpaca credentials before Alpaca windows can activate."
     if not provider_constructed:
         return f"Alpaca credentials are present, but the provider could not be constructed: {primary}."
+    if activation_blocker == "proxy_unreachable":
+        return (
+            "Alpaca credentials are present and the provider was constructed, "
+            "but the configured proxy could not reach the Alpaca endpoint."
+        )
+    if activation_blocker in {"connect_timeout", "network_unreachable"}:
+        return (
+            "Alpaca credentials are present and the provider was constructed, "
+            "but the Alpaca endpoint or network path was unreachable."
+        )
+    if activation_blocker in {"read_timeout", "provider_timeout"}:
+        return (
+            "Alpaca credentials are present and the provider was constructed, "
+            f"but the provider did not return within the configured timeout: {primary}."
+        )
     if activation_blocker in {"intraday_short_window_empty", "short_window_coverage"}:
         return (
             "Alpaca long-window coverage is available, but 5m/15m activation is blocked. "
@@ -2596,7 +2700,7 @@ def _quote_from_alpaca_fetcher(
                 limit=limit,
             )
         except Exception as exc:
-            window_failure_reasons[window] = _classify_configured_failure(str(exc))
+            window_failure_reasons[window] = _classify_configured_failure(exc)
             continue
         materialized_bars = _materialize_bars(bars)
         if not materialized_bars:
@@ -3139,15 +3243,54 @@ def _sanitize_provider_failure_reason(raw_reason: str) -> str:
     normalized = str(raw_reason or "").strip().lower()
     if not normalized:
         return "provider_unavailable"
+    if "proxyerror" in normalized or "proxy error" in normalized or "unable to connect to proxy" in normalized:
+        return "proxy_unreachable"
     if "timeout" in normalized or "request" in normalized or "fetch" in normalized:
         return "quote_fetch_failed"
     return "provider_unavailable"
 
 
 def _classify_configured_failure(raw_reason: Any) -> str:
+    reason_type = ""
+    if raw_reason is not None and not isinstance(raw_reason, (str, bytes)):
+        reason_type = (
+            f"{raw_reason.__class__.__module__}.{raw_reason.__class__.__name__}"
+        ).lower()
     normalized = str(raw_reason or "").strip().lower()
-    if not normalized:
+    if not normalized and not reason_type:
         return "unknown"
+    if (
+        "proxyerror" in reason_type
+        or "proxyerror" in normalized
+        or "proxy error" in normalized
+        or "unable to connect to proxy" in normalized
+        or "cannot connect to proxy" in normalized
+        or "proxy connection" in normalized
+    ):
+        return "proxy_unreachable"
+    if (
+        "connecttimeout" in reason_type
+        or "connect timeout" in normalized
+        or "connect timed out" in normalized
+    ):
+        return "connect_timeout"
+    if (
+        "readtimeout" in reason_type
+        or "read timeout" in normalized
+        or "read timed out" in normalized
+    ):
+        return "read_timeout"
+    if (
+        "connectionerror" in reason_type
+        or "newconnectionerror" in reason_type
+        or "maxretryerror" in reason_type
+        or "name resolution" in normalized
+        or "temporary failure in name resolution" in normalized
+        or "nodename nor servname provided" in normalized
+        or "network is unreachable" in normalized
+        or "failed to establish a new connection" in normalized
+    ):
+        return "network_unreachable"
     if (
         "401" in normalized
         or "unauthorized" in normalized
@@ -3198,6 +3341,10 @@ def _classify_configured_failure(raw_reason: Any) -> str:
         return "market_session"
     if "429" in normalized or "rate limit" in normalized or "too many requests" in normalized:
         return "rate_limited"
+    if "timeout" in reason_type:
+        return "provider_timeout"
+    if "request timeout" in normalized:
+        return "timeout"
     if "timeout" in normalized or "timed out" in normalized:
         return "timeout"
     if (
@@ -3221,7 +3368,7 @@ def _legacy_symbol_failure_reason(failure_classes: Iterable[Any]) -> str:
     ])
     if primary == "symbol_not_found":
         return "symbol_unavailable"
-    if primary == "timeout":
+    if _is_timeout_failure_class(primary):
         return "quote_fetch_failed"
     if primary in {
         "auth_failed",
@@ -3230,6 +3377,8 @@ def _legacy_symbol_failure_reason(failure_classes: Iterable[Any]) -> str:
         "market_session",
         "calendar",
         "rate_limited",
+        "proxy_unreachable",
+        "network_unreachable",
         "empty_response",
         "provider_error",
     }:
