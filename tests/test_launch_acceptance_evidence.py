@@ -513,7 +513,11 @@ def test_launch_acceptance_evidence_market_data_freshness_fallback_is_backed_by_
         "confidenceCapBehaviorVerified": [
             (
                 market_cache_source,
-                "def test_entry_metadata_can_be_projected_to_json_safe_shape(self) -> None:",
+                "def test_remote_mirror_dispatcher_persists_json_safe_projection_without_transient_fields(self) -> None:",
+            ),
+            (
+                market_cache_source,
+                "def test_remote_projection_only_persists_json_safe_cache_contract(self) -> None:",
             ),
             (
                 stock_freshness_source,
