@@ -888,23 +888,25 @@ const WatchlistPage: React.FC = () => {
 
   useEffect(() => {
     if (isGuest) return;
-    let isMounted = true;
-    setIsLoading(true);
-    watchlistApi.listWatchlistItems()
-      .then((response) => {
-        if (!isMounted) return;
-        setItems(response.items || []);
-        setError(null);
-      })
-      .catch((err) => {
-        if (!isMounted) return;
-        setError(getParsedApiError(err));
-      })
-      .finally(() => {
-        if (isMounted) setIsLoading(false);
-      });
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setIsLoading(true);
+      watchlistApi.listWatchlistItems()
+        .then((response) => {
+          if (cancelled) return;
+          setItems(response.items || []);
+          setError(null);
+          setIsLoading(false);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setError(getParsedApiError(err));
+          setIsLoading(false);
+        });
+    });
     return () => {
-      isMounted = false;
+      cancelled = true;
     };
   }, [isGuest]);
 
@@ -1064,53 +1066,60 @@ const WatchlistPage: React.FC = () => {
   const handleAnalyze = async (item: WatchlistItem) => {
     setPendingAnalyzeId(item.id);
     setNotice(null);
-    try {
-      const response = await analysisApi.analyzeAsync({
-        stockCode: item.symbol,
-        reportType: 'detailed',
-        stockName: item.name || undefined,
-        originalQuery: item.symbol,
-        selectionSource: 'manual',
-      });
-      const taskId = extractAcceptedTaskId(response);
+    let nextPath: string | null = null;
+    const response = await analysisApi.analyzeAsync({
+      stockCode: item.symbol,
+      reportType: 'detailed',
+      stockName: item.name || undefined,
+      originalQuery: item.symbol,
+      selectionSource: 'manual',
+    })
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.error instanceof DuplicateTaskError) {
+      nextPath = buildWatchlistAnalysisPath(item, response.error.existingTaskId, language);
+    } else if (response.error) {
+      setNotice({ tone: 'danger', message: getParsedApiError(response.error).message });
+    } else if (response.value) {
+      const taskId = extractAcceptedTaskId(response.value);
       setNotice({ tone: 'success', message: copy.analyzeStarted });
-      navigate(taskId ? buildWatchlistAnalysisPath(item, taskId, language) : buildLocalizedPath('/', language));
-    } catch (err) {
-      if (err instanceof DuplicateTaskError) {
-        navigate(buildWatchlistAnalysisPath(item, err.existingTaskId, language));
-        return;
-      }
-      setNotice({ tone: 'danger', message: getParsedApiError(err).message });
-    } finally {
-      setPendingAnalyzeId((current) => (current === item.id ? null : current));
+      nextPath = taskId ? buildWatchlistAnalysisPath(item, taskId, language) : buildLocalizedPath('/', language);
+    }
+    setPendingAnalyzeId((current) => (current === item.id ? null : current));
+    if (nextPath) {
+      navigate(nextPath);
     }
   };
 
   const handleRemove = async (item: WatchlistItem) => {
     setPendingRemoveId(item.id);
     setNotice(null);
-    try {
-      await watchlistApi.removeWatchlistItem(item.id);
+    const error = await watchlistApi.removeWatchlistItem(item.id)
+      .then(() => null)
+      .catch((err) => err);
+    if (!error) {
       setItems((current) => current.filter((row) => row.id !== item.id));
       setNotice({ tone: 'success', message: copy.removed });
-    } catch (err) {
-      setNotice({ tone: 'danger', message: getParsedApiError(err).message });
-    } finally {
-      setPendingRemoveId((current) => (current === item.id ? null : current));
+    } else {
+      setNotice({ tone: 'danger', message: getParsedApiError(error).message });
     }
+    setPendingRemoveId((current) => (current === item.id ? null : current));
   };
 
   const handleCopy = async (item: WatchlistItem) => {
-    try {
-      if (!navigator.clipboard?.writeText) {
-        throw new Error(copy.clipboardUnavailable);
-      }
-      await navigator.clipboard.writeText(item.symbol);
+    if (!navigator.clipboard?.writeText) {
+      setNotice({ tone: 'danger', message: copy.clipboardUnavailable });
+      return;
+    }
+    const failure = await navigator.clipboard.writeText(item.symbol)
+      .then(() => null)
+      .catch((err) => err);
+    if (!failure) {
       setCopiedId(item.id);
       setNotice({ tone: 'success', message: `${item.symbol} ${copy.copied}` });
-    } catch (err) {
-      setNotice({ tone: 'danger', message: err instanceof Error ? err.message : copy.copyFailed });
+      return;
     }
+    setNotice({ tone: 'danger', message: failure instanceof Error ? failure.message : copy.copyFailed });
   };
 
   const handleRefreshIntelligence = async () => {
@@ -1143,14 +1152,16 @@ const WatchlistPage: React.FC = () => {
       failures: {},
     });
     setNotice(null);
-    try {
-      const response = await watchlistApi.refreshScores(targetItems ? {
+    const response = await watchlistApi.refreshScores(targetItems ? {
         force: true,
         symbols: targets.flatMap((item) => item.symbol ? [item.symbol] : []),
-      } : { force: true });
+      } : { force: true })
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.value) {
       const listResponse = await watchlistApi.listWatchlistItems();
       const failures = Object.fromEntries(
-        (response.results || []).reduce<Array<[string, BatchFailure]>>((acc, result) => {
+        (response.value.results || []).reduce<Array<[string, BatchFailure]>>((acc, result) => {
           if (normalizeText(result.status).toLowerCase() === 'failed') {
             acc.push([result.symbol, sanitizeFailureReason(result.message || '', '扫描失败')]);
           }
@@ -1169,11 +1180,11 @@ const WatchlistPage: React.FC = () => {
         failures,
       });
       setNotice({
-        tone: response.failedCount > 0 ? 'warning' : 'success',
-        message: `${targetItems ? copy.scanComplete : copy.scoreRefreshComplete} ${response.updatedCount}/${response.updatedCount + response.skippedCount + response.failedCount}`,
+        tone: response.value.failedCount > 0 ? 'warning' : 'success',
+        message: `${targetItems ? copy.scanComplete : copy.scoreRefreshComplete} ${response.value.updatedCount}/${response.value.updatedCount + response.value.skippedCount + response.value.failedCount}`,
       });
-    } catch (err) {
-      const failure = sanitizeFailureReason(err, '扫描失败');
+    } else {
+      const failure = sanitizeFailureReason(response.error, '扫描失败');
       const failures = Object.fromEntries(targets.map((item) => [item.symbol, failure]));
       setBatchFailures(failures);
       setBatchProgress({
@@ -1186,10 +1197,9 @@ const WatchlistPage: React.FC = () => {
         failures,
       });
       setNotice({ tone: 'danger', message: failure.label });
-    } finally {
-      setRefreshingScores(false);
-      setIsBatchScanning(false);
     }
+    setRefreshingScores(false);
+    setIsBatchScanning(false);
   };
 
   const handleBatchBacktestCurrentFilter = async () => {
@@ -1294,15 +1304,12 @@ const WatchlistPage: React.FC = () => {
       }
     };
 
-    try {
-      await Promise.all(Array.from({ length: Math.min(2, pendingItems.length) }, () => worker()));
-      setNotice({
-        tone: failed > 0 ? 'warning' : 'success',
-        message: `${copy.batchBacktestComplete} ${completed}/${pendingItems.length}`,
-      });
-    } finally {
-      setIsBatchBacktesting(false);
-    }
+    await Promise.all(Array.from({ length: Math.min(2, pendingItems.length) }, () => worker()));
+    setNotice({
+      tone: failed > 0 ? 'warning' : 'success',
+      message: `${copy.batchBacktestComplete} ${completed}/${pendingItems.length}`,
+    });
+    setIsBatchBacktesting(false);
   };
 
   if (isGuest) {
