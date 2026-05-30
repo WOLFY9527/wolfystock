@@ -143,13 +143,15 @@ The scanner still computes the existing deterministic `raw score` first. A conse
 - `fallback_source`: quote context is missing, fallback-only, or history-only, so the score is capped at `40`
 - `stale_source`: history evidence is explicitly stale, so the score is capped at `60`
 - `partial_coverage`: key scoring evidence is missing, sample depth is weak, or partial history fallback was used, so the score is capped at `70`
+- `synthetic` / `synthetic_fixture`: these are degraded synthetic-style paths with a `0.2` `score_confidence / score_cap` posture and should not be read as live or fully authorized evidence
+- `unavailable` / `missing`: these are unavailable-source paths with a `0.0` `score_confidence / score_cap` posture and explicitly mark candidates that lack usable source support
 
-This change does not alter provider order, runtime fallback behavior, or the underlying score factors. It only prevents weak-evidence candidates from presenting an overconfident final scanner score.
+This docs sync does not alter provider order, runtime fallback behavior, the underlying score factors, the score-cap thresholds, or ranking logic. It only aligns the scanner docs with the current tested degraded-source vocabulary so weak-evidence candidates are not misread as high-confidence results.
 
 Shortlisted candidates now expose additive explainability metadata:
 
 - top-level `score` remains the final ranking score, with additive `raw_score` and `final_score`
-- `diagnostics.score_explainability` includes `cap_reason`, `degradation_reason`, `score_confidence`, `evidence_coverage`, and `missing_evidence`
+- `diagnostics.score_explainability` includes `raw_score`, `final_score`, `score_cap`, `score_confidence`, `cap_reason`, `degradation_reason`, `missing_evidence`, and `source_confidence` (alongside existing helper fields such as `evidence_coverage`)
 - `diagnostics.evidence_packet` mirrors `rawScore`, `finalScore`, `capReason`, `degradationReason`, and `scoreConfidence`
 
 If no cap is triggered, then `raw_score == final_score == score` and ranking behavior stays unchanged.

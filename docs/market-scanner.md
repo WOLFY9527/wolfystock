@@ -149,13 +149,15 @@ Scanner 不会对“全市场所有标的”做无边界盲扫，而是先构建
 - `fallback_source`：实时/盘前 quote 缺失、fallback 或 history-only 上下文时，最高只保留到 `40`
 - `stale_source`：历史证据明确 stale 时，最高只保留到 `60`
 - `partial_coverage`：关键评分证据缺失、样本不足或 partial history fallback 时，最高只保留到 `70`
+- `synthetic` / `synthetic_fixture`：属于 degraded synthetic-style 路径，保持 `0.2` 的 `score_confidence / score_cap` posture，不应被解读为 live 或完整授权证据
+- `unavailable` / `missing`：属于 unavailable-source 路径，保持 `0.0` 的 `score_confidence / score_cap` posture，用于明确标记该候选缺少可用来源支撑
 
-这次改动不会改 provider 顺序、runtime fallback 路径或基础打分因子；它只防止弱证据候选带着高 raw score 被误读成高确信度结果。
+本次文档同步不会改 provider 顺序、runtime fallback 路径、基础打分因子、score cap 阈值或排序逻辑；它只把当前已测试的 degraded source vocabulary 对齐到 scanner 文档，避免弱证据候选带着高 raw score 被误读成高确信度结果。
 
 短名单候选现在会附带 additive explainability 元数据：
 
 - 顶层保留 `score` 作为最终排序分数，并补充 `raw_score`、`final_score`
-- `diagnostics.score_explainability` 会给出 `cap_reason`、`degradation_reason`、`score_confidence`、`evidence_coverage`、`missing_evidence`
+- `diagnostics.score_explainability` 会给出 `raw_score`、`final_score`、`score_cap`、`score_confidence`、`cap_reason`、`degradation_reason`、`missing_evidence`、`source_confidence`（以及已有的 `evidence_coverage` 等辅助字段）
 - `diagnostics.evidence_packet` 会同步暴露 `rawScore`、`finalScore`、`capReason`、`degradationReason` 与 `scoreConfidence`
 
 如果没有命中 cap，`raw_score == final_score == score`，排序与既有行为保持一致。
