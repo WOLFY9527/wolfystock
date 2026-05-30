@@ -36,6 +36,7 @@ import { cn } from '../utils/cn';
 import { decisionReadinessVariant, sanitizeMarketGuidanceCopy, type DecisionReadinessState, type DecisionReadinessSummary } from '../utils/marketIntelligenceGuidance';
 
 const TOP_THEME_LIMIT = 10;
+const DEFAULT_MARKET = 'US';
 const MARKET_OPTIONS = [
   { id: 'US', label: '美股' },
   { id: 'CN', label: 'A股' },
@@ -1149,11 +1150,11 @@ const MarketRotationRadarPage: React.FC = () => {
   const [payload, setPayload] = useState<MarketRotationRadarResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
-  const [selectedMarket, setSelectedMarket] = useState('US');
+  const [selectedMarket, setSelectedMarket] = useState(DEFAULT_MARKET);
   const [selectedThemeId, setSelectedThemeId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const loadRadar = async (market = selectedMarket) => {
+  const loadRadar = async (market: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -1169,21 +1170,20 @@ const MarketRotationRadarPage: React.FC = () => {
   };
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    void marketRotationApi.getRotationRadar(selectedMarket).then(
-      (nextPayload) => {
-        setPayload(nextPayload);
-        setSelectedThemeId(nextPayload.themes[0]?.id || '');
-        setSearchQuery('');
-      },
-      (nextError) => {
-        setError({ ...getParsedApiError(nextError), title: '读取主题轮动雷达失败' });
-      },
-    ).finally(() => {
-      setLoading(false);
-    });
-  }, [selectedMarket]);
+    void loadRadar(DEFAULT_MARKET);
+  }, []);
+
+  const handleMarketChange = (market: string) => {
+    if (market === selectedMarket) {
+      return;
+    }
+    setSelectedMarket(market);
+    void loadRadar(market);
+  };
+
+  const handleRefresh = () => {
+    void loadRadar(selectedMarket);
+  };
 
   const rotationTiers = payload ? deriveRotationTiers(payload) : null;
   const headlineThemes = payload && rotationTiers ? derivePrimaryDisplayThemes(payload, rotationTiers) : [];
@@ -1224,11 +1224,11 @@ const MarketRotationRadarPage: React.FC = () => {
               selectedMarket={selectedMarket}
               supportedMarkets={payload.supportedMarkets || ['US', 'CN', 'HK', 'CRYPTO']}
               searchQuery={searchQuery}
-              onMarketChange={setSelectedMarket}
+              onMarketChange={handleMarketChange}
               onSearchChange={setSearchQuery}
               loading={loading}
               freshness={payload.freshness}
-              onRefresh={() => void loadRadar()}
+              onRefresh={handleRefresh}
             />
 
             <RotationGuidancePanel payload={payload} />
