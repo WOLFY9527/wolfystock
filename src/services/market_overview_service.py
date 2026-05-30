@@ -84,6 +84,7 @@ from src.services.polygon_us_breadth_provider import (
     diagnostic_summary as polygon_us_breadth_diagnostic_summary,
     run_polygon_us_breadth_activation,
 )
+from src.services.provider_evidence_snapshot import build_provider_evidence_snapshot
 from src.services.market_overview_yfinance_transport import (
     fetch_yfinance_quote_history_frame,
     fetch_yfinance_spy_atr_history_frame,
@@ -3118,12 +3119,28 @@ class MarketOverviewService:
             }
         )
         evidence = contract.to_dict()
+        normalized_provider_snapshot = self._market_overview_provider_evidence_snapshot(payload, category, evidence)
+        normalized_source_label = normalized_provider_snapshot.get("sourceLabel")
+        if (
+            str(normalized_provider_snapshot.get("source") or "").strip().lower() == "mixed"
+            and str(normalized_source_label or "").strip().lower() == "mixed"
+        ):
+            normalized_source_label = self._source_label("mixed")
         evidence.update(
             {
                 "contractVersion": MARKET_OVERVIEW_EVIDENCE_CONTRACT_VERSION,
                 "diagnosticOnly": True,
                 "cardKey": self._evidence_snapshot_card_key(payload, category),
                 "endpoint": self._evidence_snapshot_endpoint(payload, category),
+                "source": normalized_provider_snapshot.get("source") or evidence.get("source"),
+                "sourceLabel": normalized_source_label or evidence.get("sourceLabel"),
+                "asOf": normalized_provider_snapshot.get("asOf") or evidence.get("asOf"),
+                "freshness": normalized_provider_snapshot.get("freshness") or evidence.get("freshness"),
+                "isFallback": bool(normalized_provider_snapshot.get("isFallback")),
+                "isStale": bool(normalized_provider_snapshot.get("isStale")),
+                "isPartial": bool(normalized_provider_snapshot.get("isPartial")),
+                "isSynthetic": bool(normalized_provider_snapshot.get("isSynthetic")),
+                "isUnavailable": bool(normalized_provider_snapshot.get("isUnavailable")),
                 "updatedAt": updated_at,
                 "isFromSnapshot": bool(payload.get("isFromSnapshot")),
                 "isRefreshing": bool(payload.get("isRefreshing")),
@@ -3140,9 +3157,145 @@ class MarketOverviewService:
         if score_gate_meta.get("capReason") is None:
             score_gate_meta["capReason"] = evidence.get("capReason")
         evidence.update(score_gate_meta)
+        if evidence.get("observationOnly") is None:
+            evidence["observationOnly"] = bool(normalized_provider_snapshot.get("observationOnly"))
         evidence["scoreReliabilityAllowed"] = self._evidence_snapshot_score_reliability_allowed(payload, evidence)
         evidence["reasonFamilies"] = self._evidence_snapshot_reason_families(evidence, payload)
         return evidence
+
+    def _market_overview_provider_evidence_snapshot(
+        self,
+        payload: Mapping[str, Any],
+        category: str,
+        evidence: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        inputs = self._market_overview_provider_evidence_inputs(payload, evidence)
+        indicator = {
+            "key": self._evidence_snapshot_card_key(payload, category),
+            "label": self._evidence_snapshot_card_key(payload, category),
+            "status": self._market_overview_provider_evidence_status(evidence),
+            "freshness": evidence.get("freshness"),
+            "asOf": evidence.get("asOf"),
+            "source": evidence.get("source"),
+            "sourceLabel": evidence.get("sourceLabel"),
+            "fallbackInputCount": 1 if bool(evidence.get("isFallback")) else 0,
+            "staleInputCount": 1 if bool(evidence.get("isStale")) else 0,
+            "partialInputCount": 1 if bool(evidence.get("isPartial")) else 0,
+            "syntheticInputCount": 1 if bool(evidence.get("isSynthetic")) else 0,
+            "unavailableInputCount": 1 if bool(evidence.get("isUnavailable")) else 0,
+            "inputs": inputs,
+        }
+        return build_provider_evidence_snapshot([indicator])
+
+    def _market_overview_provider_evidence_inputs(
+        self,
+        payload: Mapping[str, Any],
+        evidence: Mapping[str, Any],
+    ) -> List[Dict[str, Any]]:
+        items = payload.get("items") if isinstance(payload.get("items"), list) else []
+        normalized_inputs = [
+            self._market_overview_provider_evidence_input(item, evidence)
+            for item in items
+            if isinstance(item, Mapping)
+        ]
+        normalized_inputs = [
+            item
+            for item in normalized_inputs
+            if any(
+                item.get(key) not in (None, "", False)
+                for key in ("source", "sourceLabel", "asOf", "freshness", "isFallback", "isStale", "isUnavailable")
+            )
+        ]
+        if normalized_inputs:
+            return normalized_inputs
+        return [
+            self._market_overview_provider_evidence_input(
+                payload,
+                evidence,
+                default_confidence=evidence.get("confidenceWeight"),
+                default_coverage=evidence.get("coverage"),
+            )
+        ]
+
+    def _market_overview_provider_evidence_input(
+        self,
+        value: Mapping[str, Any],
+        evidence: Mapping[str, Any],
+        *,
+        default_confidence: Any = None,
+        default_coverage: Any = None,
+    ) -> Dict[str, Any]:
+        source = str(value.get("source") or evidence.get("source") or "").strip()
+        source_label = value.get("sourceLabel") or evidence.get("sourceLabel") or self._source_label(source)
+        freshness = str(value.get("freshness") or evidence.get("freshness") or "").strip().lower() or "unavailable"
+        source_type = (
+            str(value.get("sourceType") or "").strip()
+            or str(evidence.get("sourceType") or "").strip()
+            or _infer_source_type(source)
+        )
+        is_fallback = bool(
+            value.get("isFallback")
+            or value.get("fallbackUsed")
+            or source.lower() in {"fallback", "mock"}
+            or freshness in {"fallback", "mock"}
+        )
+        is_stale = bool(value.get("isStale") or freshness == "stale")
+        is_partial = bool(value.get("isPartial") or freshness == "partial")
+        is_unavailable = bool(
+            value.get("isUnavailable")
+            or source.lower() == "unavailable"
+            or freshness in {"unavailable", "error"}
+        )
+        is_synthetic = bool(
+            value.get("isSynthetic")
+            or freshness in {"synthetic", "mock"}
+            or source_type == "synthetic_fixture"
+        )
+
+        normalized_item = {
+            **dict(value),
+            "source": source,
+            "freshness": freshness,
+            "sourceType": source_type,
+            "isFallback": is_fallback,
+        }
+        confidence_weight = self._clean_number(value.get("confidenceWeight"))
+        if confidence_weight is None and default_confidence is not None:
+            confidence_weight = self._clean_number(default_confidence)
+        if confidence_weight is None:
+            confidence_weight = self._base_evidence_item_confidence(normalized_item)
+
+        coverage = self._clean_number(value.get("coverage"))
+        if coverage is None and default_coverage is not None:
+            coverage = self._clean_number(default_coverage)
+        if coverage is None:
+            coverage = 0.0 if (is_fallback or is_unavailable or not _has_valid_market_value(normalized_item)) else 1.0
+
+        return {
+            "source": source,
+            "sourceLabel": source_label,
+            "sourceType": source_type,
+            "freshness": freshness,
+            "asOf": value.get("asOf") or evidence.get("asOf"),
+            "confidenceWeight": max(0.0, min(1.0, float(confidence_weight or 0.0))),
+            "coverage": max(0.0, min(1.0, float(coverage or 0.0))),
+            "isFallback": is_fallback,
+            "isStale": is_stale,
+            "isPartial": is_partial,
+            "isSynthetic": is_synthetic,
+            "isUnavailable": is_unavailable,
+        }
+
+    @staticmethod
+    def _market_overview_provider_evidence_status(evidence: Mapping[str, Any]) -> str:
+        if bool(evidence.get("isUnavailable")):
+            return "unavailable"
+        if bool(evidence.get("isPartial")):
+            return "partial"
+        freshness = str(evidence.get("freshness") or "").strip().lower()
+        if freshness:
+            return freshness
+        return "live"
 
     def _evidence_snapshot_card_key(self, payload: Mapping[str, Any], category: str) -> str:
         provider_health = payload.get("providerHealth") if isinstance(payload.get("providerHealth"), Mapping) else {}
@@ -3419,7 +3572,11 @@ class MarketOverviewService:
                     "sourceField": "sourceAuthorityAllowed",
                 }
             )
-        if bool(evidence.get("observationOnly")) and not bool(evidence.get("isUnavailable")):
+        if (
+            bool(evidence.get("observationOnly"))
+            and evidence.get("scoreContributionAllowed") is False
+            and not bool(evidence.get("isUnavailable"))
+        ):
             derived_entries.append(
                 {
                     "rawCode": "observation_only_source",
