@@ -1,5 +1,5 @@
 import type React from 'react';
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { History, Lock, MoreHorizontal, Search, Star, Upload } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
@@ -84,6 +84,8 @@ const HOME_CHART_FALLBACK_TIMEFRAMES = ['1D', '1W', '1M'];
 const HOME_CHART_FALLBACK_INDICATORS = ['MA5', 'MA10', 'MA20', 'MA60', 'VWAP'];
 const HOME_CHART_FALLBACK_GRID_ROWS = ['price-top', 'price-upper', 'price-mid', 'volume'];
 const HOME_CHART_IDLE_TIMEOUT_MS = 240;
+const LINEAR_EVENT_PLACEHOLDER_ROW_IDS = ['0', '1', '2'] as const;
+const EMPTY_PROGRESS_MODULES: TaskProgressModule[] = [];
 
 const HISTORY_TIMESTAMP_FMT_EN = new Intl.DateTimeFormat('en-US', {
   timeZone: 'Asia/Shanghai',
@@ -1962,7 +1964,6 @@ function LinearEventsStrip({
 }) {
   const isEnglish = locale === 'en';
   const events = buildHomeCatalystEvents(report, locale);
-  const placeholderRows = Array.from({ length: 3 }, (_, index) => index);
   const pendingText = pendingDataText(locale);
 
   return (
@@ -2015,11 +2016,11 @@ function LinearEventsStrip({
           </div>
         )) : (
           <div data-testid="home-linear-events-empty">
-            {placeholderRows.map((index) => (
+            {LINEAR_EVENT_PLACEHOLDER_ROW_IDS.map((placeholderRowId) => (
               <div
-                key={`home-event-placeholder-${index}`}
+                key={`home-event-placeholder-${placeholderRowId}`}
                 className="home-research-event-row flex min-w-0 items-start justify-between gap-3 border-b border-[color:var(--wolfy-divider)] py-3 text-[color:var(--wolfy-text-muted)] last:border-b-0"
-                data-testid={`home-linear-event-placeholder-row-${index}`}
+                data-testid={`home-linear-event-placeholder-row-${placeholderRowId}`}
               >
                 <div className="min-w-0 flex-1">
                   <span className="block min-w-0 truncate">{pendingText}</span>
@@ -3311,7 +3312,7 @@ function localizeNarrativeText(locale: DashboardLocale, raw: string | undefined,
 function findStandardField(fields: StandardReportField[] | undefined, aliases: string[]): StandardReportField | undefined {
   for (const alias of aliases) {
     const aliasKey = normalizeDetailKey(alias);
-    for (const field of (fields || [])) {
+    for (const field of fields || []) {
       if ((normalizeDetailKey(field.label).includes(aliasKey) || aliasKey.includes(normalizeDetailKey(field.label))) && field?.label) {
         return field;
       }
@@ -4182,7 +4183,7 @@ function buildTimelineLeadCopy(locale: DashboardLocale, activeDetail?: string, m
 function InPlaceDecisionSkeleton({
   locale,
   ticker,
-  progressModules = [],
+  progressModules = EMPTY_PROGRESS_MODULES,
   message,
   progress,
 }: {
@@ -4392,14 +4393,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTicker, setActiveTicker] = useState<string | null>(null);
   const [pendingAnalysisTicker, setPendingAnalysisTicker] = useState<string | null>(null);
-  const [hasHydratedInitialTicker, setHasHydratedInitialTicker] = useState(false);
+  const hasHydratedInitialTickerRef = useRef(false);
   const [isDashboardLoading, setDashboardLoading] = useState(false);
   const [statusToast, setStatusToast] = useState<{ message: string; tone: 'error' | 'warning' } | null>(null);
   const [guestPreview, setGuestPreview] = useState<PublicAnalysisPreviewResponse | null>(null);
   const [guestError, setGuestError] = useState<ParsedApiError | null>(null);
   const [guestFallbackNotice, setGuestFallbackNotice] = useState<string | null>(null);
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<PendingHistoryDelete | null>(null);
-  const [hydratedRouteTaskId, setHydratedRouteTaskId] = useState<string | null>(null);
+  const hydratedRouteTaskIdRef = useRef<string | null>(null);
   const [isTraceDrawerOpen, setTraceDrawerOpen] = useState(false);
   const [isFullReportDrawerOpen, setFullReportDrawerOpen] = useState(false);
   const [mainCopyState, setMainCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -4602,14 +4603,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     if (isGuest || !routeTaskId || !routeSymbol || routeSource !== 'watchlist') {
       return;
     }
-    if (hydratedRouteTaskId === routeTaskId) {
+    if (hydratedRouteTaskIdRef.current === routeTaskId) {
       return;
     }
+    hasHydratedInitialTickerRef.current = true;
+    hydratedRouteTaskIdRef.current = routeTaskId;
     setActiveTicker(routeSymbol);
     setPendingAnalysisTicker(routeSymbol);
     setDashboardLoading(true);
-    setHasHydratedInitialTicker(true);
-    setHydratedRouteTaskId(routeTaskId);
     syncTaskCreated({
       taskId: routeTaskId,
       stockCode: routeSymbol,
@@ -4623,7 +4624,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       selectionSource: 'manual',
     });
     void refreshTaskProgress(routeTaskId);
-  }, [hydratedRouteTaskId, isGuest, locale, refreshTaskProgress, routeSource, routeSymbol, routeTaskId, syncTaskCreated]);
+  }, [isGuest, locale, refreshTaskProgress, routeSource, routeSymbol, routeTaskId, syncTaskCreated]);
 
   const focusedTaskId = focusedTask?.taskId;
   const focusedTaskStatus = focusedTask?.status;
@@ -4647,7 +4648,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   }, [focusedTaskId, focusedTaskStatus, refreshTaskProgress]);
 
   useEffect(() => {
-    if (hasHydratedInitialTicker) {
+    if (hasHydratedInitialTickerRef.current) {
       return;
     }
     if (pendingAnalysisTicker) {
@@ -4662,11 +4663,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
 
     const frame = window.requestAnimationFrame(() => {
       setActiveTicker(nextTicker);
-      setHasHydratedInitialTicker(true);
+      hasHydratedInitialTickerRef.current = true;
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [hasHydratedInitialTicker, isGuest, pendingAnalysisTicker, recentHistoryItems, selectedReport?.meta.stockCode]);
+  }, [isGuest, pendingAnalysisTicker, recentHistoryItems, selectedReport?.meta.stockCode]);
 
   useEffect(() => {
     if (isGuest || pendingAnalysisTicker) {
@@ -4742,7 +4743,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     setDashboardLoading(true);
     setActiveTicker(normalizedTicker);
     setPendingAnalysisTicker(normalizedTicker);
-    setHasHydratedInitialTicker(true);
+    hasHydratedInitialTickerRef.current = true;
     setSearchQuery('');
 
     if (isGuest) {
