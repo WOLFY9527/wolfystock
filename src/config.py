@@ -1016,6 +1016,11 @@ class Config:
     realtime_source_priority: str = "tencent,akshare_sina,efinance,akshare_em"
     # 实时行情缓存时间（秒）
     realtime_cache_ttl: int = 600
+    # MarketCache remote mirror backend: disabled by default, redis is persist-only.
+    market_cache_remote_backend: str = "disabled"
+    market_cache_remote_url: Optional[str] = None
+    market_cache_remote_timeout_seconds: float = 0.2
+    market_cache_remote_queue_size: int = 256
     # 熔断器冷却时间（秒）
     circuit_breaker_cooldown: int = 300
 
@@ -1097,6 +1102,7 @@ class Config:
     _VALID_AGENT_ARCH = {"single", "multi"}
     _VALID_ORCHESTRATOR_MODES = {"quick", "standard", "full", "specialist"}
     _VALID_SKILL_ROUTING = {"auto", "manual"}
+    _VALID_MARKET_CACHE_REMOTE_BACKENDS = {"disabled", "redis"}
 
     def __post_init__(self) -> None:
         _log = logging.getLogger(__name__)
@@ -1124,6 +1130,15 @@ class Config:
                 self.agent_skill_routing, self._VALID_SKILL_ROUTING,
             )
             object.__setattr__(self, "agent_skill_routing", "auto")
+        market_cache_remote_backend = str(self.market_cache_remote_backend or "disabled").strip().lower()
+        if market_cache_remote_backend not in self._VALID_MARKET_CACHE_REMOTE_BACKENDS:
+            _log.warning(
+                "Invalid MARKET_CACHE_REMOTE_BACKEND=%r, falling back to 'disabled'. Valid: %s",
+                self.market_cache_remote_backend,
+                self._VALID_MARKET_CACHE_REMOTE_BACKENDS,
+            )
+            market_cache_remote_backend = "disabled"
+        object.__setattr__(self, "market_cache_remote_backend", market_cache_remote_backend)
 
     # 单例实例存储
     _instance: Optional['Config'] = None
@@ -1849,6 +1864,21 @@ class Config:
             # - tushare: Tushare Pro，需要2000积分，数据全面
             realtime_source_priority=cls._resolve_realtime_source_priority(),
             realtime_cache_ttl=parse_env_int(os.getenv('REALTIME_CACHE_TTL'), 600, field_name='REALTIME_CACHE_TTL', minimum=0),
+            market_cache_remote_backend=(os.getenv('MARKET_CACHE_REMOTE_BACKEND') or 'disabled').strip().lower(),
+            market_cache_remote_url=(os.getenv('MARKET_CACHE_REMOTE_URL') or '').strip() or None,
+            market_cache_remote_timeout_seconds=parse_env_float(
+                os.getenv('MARKET_CACHE_REMOTE_TIMEOUT_SECONDS'),
+                0.2,
+                field_name='MARKET_CACHE_REMOTE_TIMEOUT_SECONDS',
+                minimum=0.001,
+                maximum=5.0,
+            ),
+            market_cache_remote_queue_size=parse_env_int(
+                os.getenv('MARKET_CACHE_REMOTE_QUEUE_SIZE'),
+                256,
+                field_name='MARKET_CACHE_REMOTE_QUEUE_SIZE',
+                minimum=1,
+            ),
             circuit_breaker_cooldown=parse_env_int(os.getenv('CIRCUIT_BREAKER_COOLDOWN'), 300, field_name='CIRCUIT_BREAKER_COOLDOWN', minimum=0),
             enable_fundamental_pipeline=os.getenv('ENABLE_FUNDAMENTAL_PIPELINE', 'true').lower() == 'true',
             fundamental_stage_timeout_seconds=parse_env_float(

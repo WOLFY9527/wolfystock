@@ -6,13 +6,17 @@ from __future__ import annotations
 import copy
 import inspect
 import json
+import sys
 import threading
 import time
+import types
 import unittest
 from concurrent.futures import Future
 from datetime import timedelta
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
+from src.config import Config
+from src.core.config_registry import get_field_definition
 from src.services.market_cache import (
     MarketCache,
     MarketCacheRemoteBackend,
@@ -89,6 +93,37 @@ class _MutatingRemoteMarketCacheBackend(MarketCacheRemoteBackend):
     def persist(self, key: str, document: dict) -> None:
         self.write_calls += 1
         document["data"]["source"] = "mutated-by-backend"
+
+
+class _FakeRedisClient:
+    def __init__(self, *, fail_on_set: bool = False) -> None:
+        self.fail_on_set = fail_on_set
+        self.set_calls: list[tuple[str, str]] = []
+        self.read_calls = 0
+
+    def set(self, name: str, value: str) -> None:
+        if self.fail_on_set:
+            raise RuntimeError("redis://:secret@127.0.0.1:6379 raw-cache-key binance payload")
+        self.set_calls.append((name, value))
+
+    def get(self, name: str) -> None:
+        self.read_calls += 1
+        raise AssertionError("redis mirror adapter must not read remote data")
+
+
+class _FakeRedisFactory:
+    calls: list[tuple[str, dict, _FakeRedisClient]] = []
+
+    @classmethod
+    def from_url(cls, url: str, **kwargs) -> _FakeRedisClient:
+        client = _FakeRedisClient()
+        cls.calls.append((url, kwargs, client))
+        return client
+
+
+def _fake_redis_module() -> types.SimpleNamespace:
+    _FakeRedisFactory.calls = []
+    return types.SimpleNamespace(Redis=_FakeRedisFactory)
 
 
 class MarketCacheTestCase(unittest.TestCase):
@@ -871,6 +906,96 @@ class MarketCacheTestCase(unittest.TestCase):
         )
         self.assertNotIn("redis_url", source.lower())
         self.assertNotIn("valkey_url", source.lower())
+
+    def test_remote_backend_factory_defaults_to_null_without_redis_import(self) -> None:
+        from src.services.market_cache_redis_backend import build_market_cache_remote_backend_from_config
+
+        with patch.dict(sys.modules, {"redis": None}):
+            backend = build_market_cache_remote_backend_from_config(Config())
+
+        self.assertIsInstance(backend, NullMarketCacheRemoteBackend)
+
+    def test_market_cache_remote_url_is_registered_sensitive(self) -> None:
+        field = get_field_definition("MARKET_CACHE_REMOTE_URL")
+
+        self.assertTrue(field["is_sensitive"])
+        self.assertEqual(field["ui_control"], "password")
+        self.assertEqual(field["ui_visibility"], "hidden")
+
+    def test_redis_mode_factory_returns_dispatcher_wrapped_backend(self) -> None:
+        from src.services.market_cache_redis_backend import (
+            RedisMarketCacheRemoteBackend,
+            build_market_cache_remote_backend_from_config,
+        )
+
+        with patch.dict(sys.modules, {"redis": _fake_redis_module()}):
+            backend = build_market_cache_remote_backend_from_config(
+                Config(
+                    market_cache_remote_backend="redis",
+                    market_cache_remote_url="redis://:secret@example.invalid:6379/0",
+                    market_cache_remote_timeout_seconds=0.125,
+                    market_cache_remote_queue_size=3,
+                )
+            )
+
+        try:
+            self.assertIsInstance(backend, MarketCacheRemoteMirrorDispatcher)
+            self.assertIsInstance(backend._backend, RedisMarketCacheRemoteBackend)
+            self.assertEqual(backend._queue.maxsize, 3)
+            url, kwargs, _client = _FakeRedisFactory.calls[-1]
+            self.assertEqual(url, "redis://:secret@example.invalid:6379/0")
+            self.assertEqual(kwargs["socket_connect_timeout"], 0.125)
+            self.assertEqual(kwargs["socket_timeout"], 0.125)
+            self.assertFalse(kwargs["retry_on_timeout"])
+        finally:
+            if isinstance(backend, MarketCacheRemoteMirrorDispatcher):
+                backend.shutdown(timeout=2)
+
+    def test_redis_backend_persists_json_projection_without_remote_reads(self) -> None:
+        from src.services.market_cache_redis_backend import RedisMarketCacheRemoteBackend
+
+        client = _FakeRedisClient()
+        backend = RedisMarketCacheRemoteBackend(client)
+        document = {
+            "key": "crypto",
+            "ttlSeconds": 30,
+            "fetchedAt": "2026-05-29T09:30:00+08:00",
+            "expiresAt": "2026-05-29T09:31:00+08:00",
+            "data": {"source": "binance", "value": 7, "freshness": "live"},
+        }
+
+        backend.persist("raw-cache-key", document)
+
+        self.assertEqual(client.read_calls, 0)
+        self.assertEqual(len(client.set_calls), 1)
+        redis_key, encoded = client.set_calls[0]
+        self.assertTrue(redis_key.startswith("marketcache:mirror:"))
+        self.assertNotIn("raw-cache-key", redis_key)
+        self.assertEqual(json.loads(encoded), document)
+
+    def test_redis_backend_failure_logging_is_sanitized(self) -> None:
+        from src.services.market_cache_redis_backend import RedisMarketCacheRemoteBackend
+
+        backend = RedisMarketCacheRemoteBackend(_FakeRedisClient(fail_on_set=True))
+
+        with self.assertLogs("src.services.market_cache_redis_backend", level="DEBUG") as captured:
+            backend.persist(
+                "raw-cache-key",
+                {
+                    "key": "raw-cache-key",
+                    "ttlSeconds": 30,
+                    "data": {"source": "binance", "value": 7},
+                },
+            )
+
+        logs = "\n".join(captured.output)
+        self.assertIn("persist skipped", logs)
+        self.assertIn("key_hash=", logs)
+        self.assertNotIn("secret", logs)
+        self.assertNotIn("redis://", logs)
+        self.assertNotIn("raw-cache-key", logs)
+        self.assertNotIn("binance", logs)
+        self.assertNotIn("payload", logs)
 
     def test_remote_projection_only_persists_json_safe_cache_contract(self) -> None:
         cache = MarketCache(max_workers=1)

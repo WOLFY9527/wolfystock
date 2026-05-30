@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -555,7 +556,15 @@ class DurableTaskStateTestCase(unittest.TestCase):
 
         for forbidden in ("celery", "rq", "dramatiq", "kafka"):
             self.assertNotIn(forbidden, combined)
-        self.assertNotRegex(combined, r"(?m)^\s*redis([<=>\s].*)?$")
+        redis_lines = [
+            line.strip()
+            for line in combined.splitlines()
+            if re.match(r"^\s*redis([<=>\s].*)?$", line)
+        ]
+        self.assertEqual(len(redis_lines), 1)
+        for line in redis_lines:
+            self.assertIn("marketcache remote mirror", line)
+            self.assertIn("disabled by default", line)
 
 
 if __name__ == "__main__":

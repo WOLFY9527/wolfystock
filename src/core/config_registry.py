@@ -35,6 +35,7 @@ _RAW_HIDDEN_EXACT_KEYS = {
     "LITELLM_CONFIG",
     "AGENT_SKILL_DIR",
     "AGENT_STRATEGY_DIR",
+    "MARKET_CACHE_REMOTE_URL",
 }
 
 _RAW_CURATED_EXACT_KEYS = {
@@ -1890,6 +1891,65 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "validation": {"enum": ["cn", "us", "both"]},
         "display_order": 47,
     },
+    "MARKET_CACHE_REMOTE_BACKEND": {
+        "title": "MarketCache Remote Backend",
+        "description": "Disabled-by-default MarketCache remote mirror backend. Redis mode is persist-only and must be wrapped by the mirror dispatcher.",
+        "category": "system",
+        "data_type": "string",
+        "ui_control": "select",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "disabled",
+        "options": [
+            {"label": "Disabled", "value": "disabled"},
+            {"label": "Redis/Valkey Mirror", "value": "redis"},
+        ],
+        "validation": {"enum": ["disabled", "redis"]},
+        "display_order": 48,
+    },
+    "MARKET_CACHE_REMOTE_URL": {
+        "title": "MarketCache Remote URL",
+        "description": "Redis/Valkey URL for the MarketCache remote mirror. Sensitive because URLs can embed credentials.",
+        "category": "system",
+        "data_type": "string",
+        "ui_control": "password",
+        "is_sensitive": True,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": None,
+        "options": [],
+        "validation": {},
+        "display_order": 49,
+    },
+    "MARKET_CACHE_REMOTE_TIMEOUT_SECONDS": {
+        "title": "MarketCache Remote Timeout",
+        "description": "Short socket timeout in seconds for the disabled-by-default Redis/Valkey MarketCache mirror.",
+        "category": "system",
+        "data_type": "number",
+        "ui_control": "number",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "0.2",
+        "options": [],
+        "validation": {"min": 0.001, "max": 5.0},
+        "display_order": 50,
+    },
+    "MARKET_CACHE_REMOTE_QUEUE_SIZE": {
+        "title": "MarketCache Remote Queue Size",
+        "description": "Bounded in-process mirror queue size for explicit Redis/Valkey MarketCache mirror mode.",
+        "category": "system",
+        "data_type": "integer",
+        "ui_control": "number",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "256",
+        "options": [],
+        "validation": {"min": 1},
+        "display_order": 51,
+    },
     "MAX_WORKERS": {
         "title": "Max Workers",
         "description": "Maximum concurrent analysis threads. Keep low to avoid API rate limits.",
@@ -1902,7 +1962,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "default_value": "3",
         "options": [],
         "validation": {"min": 1, "max": 20},
-        "display_order": 50,
+        "display_order": 52,
     },
     "ANALYSIS_DELAY": {
         "title": "Analysis Delay",
@@ -2477,6 +2537,8 @@ def build_schema_response() -> Dict[str, Any]:
 
 
 def _is_sensitive_key(key: str) -> bool:
+    if key == "MARKET_CACHE_REMOTE_URL":
+        return True
     markers = ("KEY", "TOKEN", "SECRET", "PASSWORD")
     return any(marker in key for marker in markers)
 
@@ -2523,7 +2585,20 @@ def _infer_category(key: str) -> str:
         "ASTRBOT",
     )) or "WEBHOOK" in key:
         return "notification"
-    if key.startswith(("LOG_", "SCHEDULE_", "SCANNER_", "WEBUI_", "HTTP_", "HTTPS_", "MAX_", "DEBUG", "MARKET_REVIEW_", "TRADING_DAY_", "ANALYSIS_DELAY")):
+    if key.startswith((
+        "LOG_",
+        "SCHEDULE_",
+        "SCANNER_",
+        "WEBUI_",
+        "HTTP_",
+        "HTTPS_",
+        "MAX_",
+        "DEBUG",
+        "MARKET_REVIEW_",
+        "MARKET_CACHE_",
+        "TRADING_DAY_",
+        "ANALYSIS_DELAY",
+    )):
         return "system"
     return "uncategorized"
 
