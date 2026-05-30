@@ -34,26 +34,27 @@ export function SuggestionsList({
   }
 
   return (
-    <div
+    <ul
       id="suggestions-list"
       className="theme-dropdown-panel z-[100] max-h-60 overflow-y-auto no-scrollbar rounded-b-lg rounded-t-none border-x border-b"
       style={style}
-      role="listbox"
     >
       {suggestions.map((suggestion, index) => (
-        <div
+        <li
           key={suggestion.canonicalCode}
+          id={`suggestions-list-option-${index}`}
           className="list-none"
         >
           <button
             type="button"
-            role="option"
-            aria-selected={index === highlightedIndex}
+            aria-pressed={index === highlightedIndex}
             data-active={index === highlightedIndex ? 'true' : 'false'}
             className={cn(
               "theme-dropdown-item flex w-full appearance-none items-center justify-between border-0 bg-transparent px-4 py-1 text-left"
             )}
+            tabIndex={-1}
             onClick={() => onSelect(suggestion)}
+            onMouseDown={(event) => event.preventDefault()}
             onMouseEnter={() => onMouseEnter(index)}
           >
             <div className="flex items-center gap-3">
@@ -74,9 +75,9 @@ export function SuggestionsList({
             {/* Match type badge */}
             <MatchTypeBadge matchType={suggestion.matchType} />
           </button>
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }
 

@@ -167,7 +167,7 @@ describe('StockAutocomplete', () => {
       />
     );
 
-    const input = screen.getByRole('combobox');
+    const input = screen.getByRole('textbox', { name: /输入股票代码或名称/ });
     expect(input).toBeDisabled();
   });
 
@@ -180,7 +180,7 @@ describe('StockAutocomplete', () => {
       />
     );
 
-    const input = screen.getByRole('combobox');
+    const input = screen.getByRole('textbox', { name: /输入股票代码或名称/ });
     fireEvent.change(input, { target: { value: '600519' } });
 
     expect(mockOnChange).toHaveBeenCalledWith('600519');
@@ -209,9 +209,8 @@ describe('StockAutocomplete', () => {
       />
     );
 
-    const input = screen.getByRole('combobox');
-    expect(input).toHaveAttribute('aria-autocomplete', 'none');
-    expect(input).toHaveAttribute('role', 'combobox');
+    const input = screen.getByRole('textbox', { name: /输入股票代码或名称/ });
+    expect(input).toHaveAttribute('aria-autocomplete', 'list');
     expect(input).toHaveClass('min-w-0', 'max-w-full');
     expect(input).toHaveClass('pr-10');
     expect(input).toHaveClass('truncate');
@@ -326,7 +325,7 @@ describe('StockAutocomplete', () => {
         />
       );
 
-      const input = screen.getByRole('combobox');
+      const input = screen.getByRole('textbox', { name: /输入股票代码或名称/ });
 
       fireEvent.compositionStart(input);
       fireEvent.compositionEnd(input);
@@ -403,6 +402,40 @@ describe('StockAutocomplete', () => {
       expect(mockOnChange).toHaveBeenCalledWith('600519');
       expect(mockOnSubmit).toHaveBeenCalledWith('600519.SH', '贵州茅台', 'autocomplete');
     });
+  });
+
+  it('renders the suggestion popup as a semantic list of interactive buttons when suggestions are open', () => {
+    autocompleteHookImpl = () => ({
+      query: '',
+      setQuery: vi.fn(),
+      suggestions: mockSuggestions,
+      isOpen: true,
+      highlightedIndex: 0,
+      setHighlightedIndex: vi.fn(),
+      highlightPrevious: vi.fn(),
+      highlightNext: vi.fn(),
+      handleSelect: vi.fn(),
+      close: vi.fn(),
+      reset: vi.fn(),
+      isComposing: false,
+      setIsComposing: vi.fn(),
+      runtimeFallback: false,
+      error: null,
+    });
+
+    render(
+      <StockAutocomplete
+        value="6005"
+        onChange={mockOnChange}
+        onSubmit={mockOnSubmit}
+      />
+    );
+
+    const input = screen.getByRole('textbox', { name: /输入股票代码或名称/ });
+    fireEvent.focus(input);
+    const suggestionList = screen.getByRole('list');
+    expect(suggestionList.tagName).toBe('UL');
+    expect(screen.getByRole('button', { name: /贵州茅台/i })).toHaveAttribute('aria-pressed', 'true');
   });
 
   describe('runtime boundary', () => {

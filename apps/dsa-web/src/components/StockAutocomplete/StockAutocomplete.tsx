@@ -263,10 +263,11 @@ function StockAutocompleteInner({
         placeholder={placeholder}
         aria-label={placeholder}
         disabled={disabled}
-        aria-autocomplete="none"
+        aria-autocomplete="list"
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         aria-controls="suggestions-list"
+        aria-activedescendant={highlightedIndex >= 0 ? `suggestions-list-option-${highlightedIndex}` : undefined}
       />
 
       {/* Loading indicator */}
