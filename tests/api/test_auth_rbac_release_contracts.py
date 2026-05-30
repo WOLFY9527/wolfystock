@@ -28,6 +28,15 @@ from src.storage import AdminUserRole, DatabaseManager
 
 AUDIT_SCRIPT = REPO_ROOT / "scripts" / "auth_rbac_release_audit.py"
 AUDIT_DOC = REPO_ROOT / "docs" / "audits" / "auth-rbac-release-security-guide.md"
+AUDIT_EXPECTED_CAPABILITY_MARKERS = {
+    "admin_users": (
+        'require_admin_capability("users:read")',
+        'require_admin_capability("users:activity:read")',
+    ),
+    "market_provider_operations": (
+        'require_admin_capability("ops:providers:read")',
+    ),
+}
 
 RAW_BODY_MARKER = "raw-auth-rbac-body-token"
 RAW_COOKIE_MARKER = "raw-auth-rbac-cookie-token"
@@ -285,7 +294,8 @@ def test_offline_auth_rbac_release_audit_cli_outputs_bounded_json() -> None:
     assert payload["auditStatus"] == "manual_review_required"
     assert isinstance(payload["surfacesChecked"], list)
     assert 6 <= len(payload["surfacesChecked"]) <= 12
-    labels = {surface["label"] for surface in payload["surfacesChecked"]}
+    surfaces = {surface["label"]: surface for surface in payload["surfacesChecked"]}
+    labels = set(surfaces)
     assert {
         "private_api_auth_middleware",
         "admin_users",
@@ -296,6 +306,19 @@ def test_offline_auth_rbac_release_audit_cli_outputs_bounded_json() -> None:
         "public_error_limiter",
         "operator_evidence_workflow",
     } <= labels
+    findings_by_surface: dict[str, set[str]] = {}
+    for finding in payload["riskyFindings"]:
+        findings_by_surface.setdefault(str(finding["surface"]), set()).add(str(finding["reasonCode"]))
+
+    for label in ("admin_users", "market_provider_operations"):
+        assert surfaces[label]["status"] == "pass"
+        assert "expected_release_guard_marker_missing" not in findings_by_surface.get(label, set())
+
+    audit_script_source = AUDIT_SCRIPT.read_text(encoding="utf-8")
+    for markers in AUDIT_EXPECTED_CAPABILITY_MARKERS.values():
+        for marker in markers:
+            assert marker in audit_script_source
+
     _assert_public_error_safe(payload, result.stderr)
 
 

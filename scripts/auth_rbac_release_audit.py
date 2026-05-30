@@ -36,8 +36,12 @@ SURFACES: tuple[SurfaceSpec, ...] = (
     SurfaceSpec(
         label="admin_users",
         source_path="api/v1/endpoints/admin_users.py",
-        markers=("require_admin_user", "/users"),
-        review_note="admin user directory remains admin-only",
+        markers=(
+            'require_admin_capability("users:read")',
+            'require_admin_capability("users:activity:read")',
+            "/users",
+        ),
+        review_note="admin user directory and activity routes remain capability-gated",
     ),
     SurfaceSpec(
         label="admin_logs",
@@ -60,8 +64,8 @@ SURFACES: tuple[SurfaceSpec, ...] = (
     SurfaceSpec(
         label="market_provider_operations",
         source_path="api/v1/endpoints/market_provider_operations.py",
-        markers=("require_admin_user", "/market-providers/operations"),
-        review_note="market provider operations remain admin-only",
+        markers=('require_admin_capability("ops:providers:read")', "/market-providers/operations"),
+        review_note="market provider operations remain capability-gated",
     ),
     SurfaceSpec(
         label="public_error_limiter",
