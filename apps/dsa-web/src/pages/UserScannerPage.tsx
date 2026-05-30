@@ -629,10 +629,6 @@ function getCandidateDiagnostics(runDetail: ScannerRunDetail | null): ScannerCan
   return Array.isArray(runDetail?.candidates) ? runDetail.candidates : [];
 }
 
-function hasWorkbenchCandidates(runDetail: ScannerRunDetail | null): boolean {
-  return getCandidateDiagnostics(runDetail).length > 0 || Boolean(runDetail?.shortlist?.length);
-}
-
 function getDiagnosticReason(candidate: ScannerCandidateDiagnostic, language: 'zh' | 'en'): string {
   return candidate.reason
     || candidate.failedRules?.[0]?.replace(/_/g, ' ')
@@ -2045,10 +2041,10 @@ const UserScannerPage: React.FC = () => {
   const [rowMoreSymbol, setRowMoreSymbol] = useState<string | null>(null);
   const [isRejectionSummaryOpen, setIsRejectionSummaryOpen] = useState(false);
   const [previousRunDetail, setPreviousRunDetail] = useState<ScannerRunDetail | null>(null);
-  const [previewThreshold, setPreviewThreshold] = useState(50);
+  const [previewThresholdOverride, setPreviewThresholdOverride] = useState<number | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [inspectorSymbol, setInspectorSymbol] = useState<string | null>(null);
+  const [requestedInspectorSymbol, setRequestedInspectorSymbol] = useState<string | null>(null);
   const [pendingAnalyzeSymbol, setPendingAnalyzeSymbol] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [candidateFilter, setCandidateFilter] = useState<CandidateFilter>('selected');
@@ -2096,7 +2092,8 @@ const UserScannerPage: React.FC = () => {
     setStrategySimulationError(null);
     setPreviousRunDetail(null);
     setCandidateFilter('selected');
-    setInspectorSymbol(null);
+    setPreviewThresholdOverride(null);
+    setRequestedInspectorSymbol(null);
   };
 
   const handleMarketChange = (nextMarket: string) => {
@@ -2161,11 +2158,10 @@ const UserScannerPage: React.FC = () => {
       setRunDetail(response);
       selectedRunIdRef.current = response.id;
       setSelectedRunId(response.id);
+      setPreviewThresholdOverride(null);
+      setRequestedInspectorSymbol(null);
       if (!getCandidateDiagnostics(response).length) {
         setCandidateFilter('selected');
-      }
-      if (!hasWorkbenchCandidates(response)) {
-        setInspectorSymbol(null);
       }
       setPageError(null);
     } catch (error) {
@@ -2254,11 +2250,10 @@ const UserScannerPage: React.FC = () => {
       setRunDetail(response);
       selectedRunIdRef.current = response.id;
       setSelectedRunId(response.id);
+      setPreviewThresholdOverride(null);
+      setRequestedInspectorSymbol(null);
       if (!getCandidateDiagnostics(response).length) {
         setCandidateFilter('selected');
-      }
-      if (!hasWorkbenchCandidates(response)) {
-        setInspectorSymbol(null);
       }
       setValidationErrors({});
       setPageError(null);
@@ -2359,9 +2354,8 @@ const UserScannerPage: React.FC = () => {
   const generateThemeDisabled = isGeneratingTheme;
 
   const sortedCandidates = (() => {
-    const candidates = [...(runDetail?.shortlist || [])];
     const directionMultiplier = sortDirection === 'asc' ? 1 : -1;
-    return candidates.sort((left, right) => {
+    return [...(runDetail?.shortlist || [])].sort((left: ScannerCandidate, right: ScannerCandidate) => {
       let compare = 0;
       if (sortKey === 'symbol') {
         compare = left.symbol.localeCompare(right.symbol);
@@ -2383,10 +2377,7 @@ const UserScannerPage: React.FC = () => {
   const diagnosticCandidates = getCandidateDiagnostics(runDetail);
   const hasCandidateDiagnostics = diagnosticCandidates.length > 0;
   const inferredPreviewThreshold = inferPreviewThreshold(runDetail, diagnosticCandidates);
-  useEffect(() => {
-    if (!runDetail) return;
-    setPreviewThreshold(inferredPreviewThreshold);
-  }, [inferredPreviewThreshold, runDetail]);
+  const previewThreshold = previewThresholdOverride ?? inferredPreviewThreshold;
   const previewSelectedDiagnostics = diagnosticCandidates.filter((candidate) => isPreviewSelected(candidate, previewThreshold));
   const officialSelectedDiagnostics = diagnosticCandidates.filter(isOfficialSelected);
   const rejectionBuckets = buildRejectionBuckets(diagnosticCandidates, language);
@@ -2415,7 +2406,7 @@ const UserScannerPage: React.FC = () => {
   const workbenchDiagnostics = hasCandidateDiagnostics ? decisionSortedDiagnosticCandidates : sortedCandidates.map(fallbackDiagnosticFromCandidate);
   const activeDetailDiagnostic = (() => {
     if (!workbenchDiagnostics.length) return null;
-    const normalizedInspector = normalizeCandidateSymbol(inspectorSymbol);
+    const normalizedInspector = normalizeCandidateSymbol(requestedInspectorSymbol);
     if (normalizedInspector) {
       const matched = workbenchDiagnostics.find((candidate) => normalizeCandidateSymbol(candidate.symbol) === normalizedInspector);
       if (matched) return matched;
@@ -2475,17 +2466,6 @@ const UserScannerPage: React.FC = () => {
       setIsStrategySimulationLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (!workbenchDiagnostics.length) {
-      setInspectorSymbol(null);
-      return;
-    }
-    const current = activeDetailDiagnostic;
-    if (current && (!inspectorSymbol || normalizeCandidateSymbol(current.symbol) !== normalizeCandidateSymbol(inspectorSymbol))) {
-      setInspectorSymbol(current.symbol);
-    }
-  }, [activeDetailDiagnostic, inspectorSymbol, workbenchDiagnostics]);
 
   useEffect(() => {
     let isMounted = true;
@@ -2688,9 +2668,7 @@ const UserScannerPage: React.FC = () => {
     setPendingBatchWatchlistAction(batchKey);
     setActionNotice(null);
     try {
-      const savedItems: WatchlistItem[] = [];
-      for (const candidate of toAdd) {
-        const savedItem = await watchlistApi.addWatchlistItem({
+      const savedItems = await Promise.all(toAdd.map(async (candidate) => watchlistApi.addWatchlistItem({
           symbol: candidate.symbol,
           market: candidateMarket.toLowerCase(),
           name: candidate.companyName || candidate.name,
@@ -2701,10 +2679,8 @@ const UserScannerPage: React.FC = () => {
           themeId: runDetail?.themeId || undefined,
           universeType: runDetail?.universeType || undefined,
           notes: buildWatchlistNotes(candidate, runDetail, language) || undefined,
-        });
-        savedItems.push(savedItem);
-        added += 1;
-      }
+        })));
+      added = savedItems.length;
       if (savedItems.length) {
         setWatchlistItems((current) => {
           const savedIdentities = new Set(savedItems.map((item) => getWatchlistIdentity(item.market, item.symbol)));
@@ -3268,7 +3244,7 @@ const UserScannerPage: React.FC = () => {
                                       backtestLabel={getBacktestActionLabel(backtestItem)}
                                       backtestTitle={!normalizeCandidateSymbol(sourceCandidate.symbol) ? backtestUnavailableLabel : undefined}
                                       backtestItem={backtestItem}
-                                      onSelect={() => setInspectorSymbol(sourceCandidate.symbol)}
+                                      onSelect={() => setRequestedInspectorSymbol(sourceCandidate.symbol)}
                                       onAnalyze={() => void handleAnalyzeCandidate(sourceCandidate)}
                                       onBacktest={() => void handleBacktestCandidate(sourceCandidate)}
                                       onTrack={() => void handleTrackCandidate(sourceCandidate)}
@@ -3525,7 +3501,7 @@ const UserScannerPage: React.FC = () => {
                                       type="button"
                                       aria-pressed={previewThreshold === threshold}
                                       className={`rounded-md border px-2 py-0.5 font-mono text-[11px] ${previewThreshold === threshold ? 'border-blue-400/30 bg-blue-400/12 text-blue-100' : 'border-white/10 bg-white/5 text-white/58 hover:bg-white/10'}`}
-                                      onClick={() => setPreviewThreshold(threshold)}
+                                      onClick={() => setPreviewThresholdOverride(threshold)}
                                     >
                                       {threshold}
                                     </button>

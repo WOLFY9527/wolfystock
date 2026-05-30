@@ -921,6 +921,20 @@ describe('WatchlistPage', () => {
     expect(screen.queryByTestId('watchlist-row-MARA')).not.toBeInTheDocument();
   });
 
+  it('falls back to the first filtered symbol when the focused detail row is filtered out', async () => {
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-NVDA');
+    fireEvent.click(screen.getByRole('button', { name: '查看详情 TSM' }));
+    expect(screen.getByTestId('watchlist-detail-rail')).toHaveTextContent('TSM');
+
+    fireEvent.change(screen.getByLabelText('市场'), { target: { value: 'us' } });
+
+    await waitFor(() => expect(screen.queryByTestId('watchlist-row-TSM')).not.toBeInTheDocument());
+    expect(screen.getByTestId('watchlist-detail-rail')).toHaveTextContent('NVDA');
+    expect(screen.getByTestId('watchlist-action-scope')).toHaveTextContent('当前筛选 1 个标的');
+  });
+
   it('runs batch backtest for the current filter, de-dupes duplicate clicks, and updates visible metrics', async () => {
     runRuleBacktest.mockImplementation(async ({ code }: { code: string }) => makeRuleBacktestRun({
       id: code === 'NVDA' ? 701 : 702,

@@ -877,9 +877,9 @@ const WatchlistPage: React.FC = () => {
   const [isBatchBacktesting, setIsBatchBacktesting] = useState(false);
   const [isBatchScanning, setIsBatchScanning] = useState(false);
   const backtestSessionKeysRef = useRef<Set<string>>(new Set());
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
+  const [selectedIdsState, setSelectedIdsState] = useState<Set<number>>(() => new Set());
   const [useSelectedScope, setUseSelectedScope] = useState(false);
-  const [activeItemId, setActiveItemId] = useState<number | null>(null);
+  const [requestedActiveItemId, setRequestedActiveItemId] = useState<number | null>(null);
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
 
   useEffect(() => {
@@ -1008,7 +1008,7 @@ const WatchlistPage: React.FC = () => {
       return matchesSearch && matchesMarket && matchesSource && matchesContext && matchesEvidence;
     });
 
-    return rows.sort((left, right) => {
+    return [...rows].sort((left: WatchlistItem, right: WatchlistItem) => {
       if (sortKey === 'symbol') return left.symbol.localeCompare(right.symbol);
       if (sortKey === 'market') {
         const marketCompare = normalizeText(left.market).localeCompare(normalizeText(right.market));
@@ -1027,47 +1027,37 @@ const WatchlistPage: React.FC = () => {
     });
   })();
 
-  useEffect(() => {
-    setSelectedIds((current) => {
-      const validIds = new Set(items.map((item) => item.id));
-      const next = new Set(Array.from(current).filter((id) => validIds.has(id)));
-      return next.size === current.size ? current : next;
-    });
-  }, [items]);
-
-  useEffect(() => {
-    if (selectedIds.size === 0 && useSelectedScope) {
-      setUseSelectedScope(false);
-    }
-  }, [selectedIds.size, useSelectedScope]);
-
-  useEffect(() => {
-    if (filteredItems.length === 0) {
-      if (activeItemId !== null) setActiveItemId(null);
-      return;
-    }
-    if (!filteredItems.some((item) => item.id === activeItemId)) {
-      setActiveItemId(filteredItems[0].id);
-    }
-  }, [activeItemId, filteredItems]);
-
+  const selectedIds = (() => {
+    const validIds = new Set(items.map((item) => item.id));
+    return new Set(Array.from(selectedIdsState).filter((id) => validIds.has(id)));
+  })();
+  const isSelectedScopeActive = useSelectedScope && selectedIds.size > 0;
   const selectedItems = filteredItems.filter((item) => selectedIds.has(item.id));
-  const activeItem = filteredItems.find((item) => item.id === activeItemId) ?? filteredItems[0] ?? null;
-  const actionItems = useSelectedScope && selectedItems.length > 0 ? selectedItems : filteredItems;
+  const activeItem = (() => {
+    if (filteredItems.length === 0) {
+      return null;
+    }
+    if (requestedActiveItemId !== null) {
+      const matched = filteredItems.find((item) => item.id === requestedActiveItemId);
+      if (matched) {
+        return matched;
+      }
+    }
+    return filteredItems[0];
+  })();
+  const actionItems = isSelectedScopeActive ? selectedItems : filteredItems;
   const actionScopeLabel = actionItems.length === 0
     ? copy.emptyFilteredSet
-    : `${useSelectedScope && selectedItems.length > 0 ? copy.scopeSelected : copy.scopeFiltered} ${actionItems.length} ${language === 'zh' ? '个标的' : 'symbols'}`;
+    : `${isSelectedScopeActive ? copy.scopeSelected : copy.scopeFiltered} ${actionItems.length} ${language === 'zh' ? '个标的' : 'symbols'}`;
   const isActionDisabled = actionItems.length === 0 || isBatchBacktesting || isBatchScanning;
   const watchlistConclusion = buildWatchlistConclusion(filteredItems, language);
 
   const toggleSelected = (item: WatchlistItem) => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (next.has(item.id)) next.delete(item.id);
-      else next.add(item.id);
-      setUseSelectedScope(next.size > 0);
-      return next;
-    });
+    const next = new Set(selectedIds);
+    if (next.has(item.id)) next.delete(item.id);
+    else next.add(item.id);
+    setSelectedIdsState(next);
+    setUseSelectedScope(next.size > 0);
   };
 
   const handleAnalyze = async (item: WatchlistItem) => {
@@ -1633,7 +1623,7 @@ const WatchlistPage: React.FC = () => {
                                   ? 'border-[color:var(--wolfy-accent)] bg-[var(--wolfy-surface-input)]'
                                   : 'border-transparent bg-transparent hover:border-[color:var(--wolfy-border-subtle)] hover:bg-white/[0.02]'
                               }`}
-                              onClick={() => setActiveItemId(item.id)}
+                              onClick={() => setRequestedActiveItemId(item.id)}
                             >
                               <div className="flex min-w-0 flex-wrap items-center gap-2">
                                 <span className="font-semibold text-white">{item.symbol}</span>
@@ -1956,7 +1946,7 @@ const WatchlistPage: React.FC = () => {
               <TerminalButton
                 type="button"
                 variant="compact"
-                aria-pressed={useSelectedScope && selectedItems.length > 0}
+                aria-pressed={isSelectedScopeActive}
                 onClick={() => setUseSelectedScope((current) => selectedItems.length > 0 ? !current : current)}
                 disabled={selectedItems.length === 0}
               >
@@ -1967,7 +1957,7 @@ const WatchlistPage: React.FC = () => {
                 type="button"
                 variant="compact"
                 onClick={() => {
-                  setSelectedIds(new Set());
+                  setSelectedIdsState(new Set());
                   setUseSelectedScope(false);
                 }}
                 disabled={selectedIds.size === 0}
