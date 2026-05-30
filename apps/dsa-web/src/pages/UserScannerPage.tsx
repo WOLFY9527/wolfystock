@@ -2172,22 +2172,25 @@ const UserScannerPage: React.FC = () => {
 
   const fetchHistory = async (page = 1, preferredRunId?: number | null) => {
     setIsLoadingHistory(true);
-    try {
-      const response = await scannerApi.getRuns({
+    const response = await scannerApi.getRuns({
         market,
         profile,
         page,
         limit: HISTORY_PAGE_SIZE,
-      });
-      setHistoryItems(response.items);
-      setHistoryTotal(response.total);
-      setHistoryPage(response.page);
+      })
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.value) {
+      const historyResponse = response.value;
+      setHistoryItems(historyResponse.items);
+      setHistoryTotal(historyResponse.total);
+      setHistoryPage(historyResponse.page);
       setHistoryError(null);
 
       const currentSelectedRunId = selectedRunIdRef.current;
       const targetRunId = preferredRunId
-        || (currentSelectedRunId && response.items.some((item) => item.id === currentSelectedRunId) ? currentSelectedRunId : null)
-        || response.items[0]?.id
+        || (currentSelectedRunId && historyResponse.items.some((item) => item.id === currentSelectedRunId) ? currentSelectedRunId : null)
+        || historyResponse.items[0]?.id
         || null;
       if (targetRunId && targetRunId !== currentSelectedRunId) {
         void loadRun(targetRunId);
@@ -2195,11 +2198,10 @@ const UserScannerPage: React.FC = () => {
       if (!targetRunId) {
         resetRunSurface();
       }
-    } catch (error) {
-      setHistoryError(getParsedApiError(error));
-    } finally {
-      setIsLoadingHistory(false);
+    } else {
+      setHistoryError(getParsedApiError(response.error));
     }
+    setIsLoadingHistory(false);
   };
 
   const loadInitialHistory = useEffectEvent(async () => {
@@ -2207,7 +2209,15 @@ const UserScannerPage: React.FC = () => {
   });
 
   useEffect(() => {
-    void loadInitialHistory();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        void loadInitialHistory();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [market, profile]);
 
   const handleRun = async () => {
@@ -2241,8 +2251,7 @@ const UserScannerPage: React.FC = () => {
       return;
     }
     setIsRunning(true);
-    try {
-      const response = await scannerApi.run({
+    const response = await scannerApi.run({
         market,
         profile,
         shortlistSize: parsedShortlistSize,
@@ -2251,23 +2260,26 @@ const UserScannerPage: React.FC = () => {
         ...(scanScope !== 'default' ? { universeType: scanScope } : {}),
         ...(scanScope === 'theme' ? { themeId: activeThemeId } : {}),
         ...(scanScope === 'symbols' ? { symbols: parsedCustomSymbols } : {}),
-      });
-      setRunDetail(response);
-      selectedRunIdRef.current = response.id;
-      setSelectedRunId(response.id);
+      })
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.value) {
+      const runResponse = response.value;
+      setRunDetail(runResponse);
+      selectedRunIdRef.current = runResponse.id;
+      setSelectedRunId(runResponse.id);
       setPreviewThresholdOverride(null);
       setRequestedInspectorSymbol(null);
-      if (!getCandidateDiagnostics(response).length) {
+      if (!getCandidateDiagnostics(runResponse).length) {
         setCandidateFilter('selected');
       }
       setValidationErrors({});
       setPageError(null);
-      await fetchHistory(1, response.id);
-    } catch (error) {
-      setPageError(getParsedApiError(error));
-    } finally {
-      setIsRunning(false);
+      await fetchHistory(1, runResponse.id);
+    } else {
+      setPageError(getParsedApiError(response.error));
     }
+    setIsRunning(false);
   };
 
   const handleGenerateTheme = async () => {
@@ -2294,33 +2306,35 @@ const UserScannerPage: React.FC = () => {
       return;
     }
     setIsGeneratingTheme(true);
-    try {
-      const response = await scannerApi.createTheme({
+    const response = await scannerApi.createTheme({
         id: buildCustomThemeId(label),
         label,
         market,
         prompt,
         manualSymbols: parsedThemeManualSymbols,
-      });
+      })
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.value) {
+      const themeResponse = response.value;
       setThemes((current) => [
-        ...current.filter((theme) => theme.id !== response.theme.id),
-        response.theme,
+        ...current.filter((theme) => theme.id !== themeResponse.theme.id),
+        themeResponse.theme,
       ]);
-      setThemeId(response.theme.id);
-      setThemeSuggestions(response.suggestions || []);
+      setThemeId(themeResponse.theme.id);
+      setThemeSuggestions(themeResponse.suggestions || []);
       setValidationErrors({});
       setActionNotice({
         tone: 'success',
         message: language === 'en'
-          ? `Generated ${response.theme.symbols.length} symbols for ${getThemeLabel(response.theme, language)}.`
-          : `已为 ${getThemeLabel(response.theme, language)} 生成 ${response.theme.symbols.length} 个标的。`,
+          ? `Generated ${themeResponse.theme.symbols.length} symbols for ${getThemeLabel(themeResponse.theme, language)}.`
+          : `已为 ${getThemeLabel(themeResponse.theme, language)} 生成 ${themeResponse.theme.symbols.length} 个标的。`,
       });
       setPageError(null);
-    } catch (error) {
-      setPageError(getParsedApiError(error));
-    } finally {
-      setIsGeneratingTheme(false);
+    } else {
+      setPageError(getParsedApiError(response.error));
     }
+    setIsGeneratingTheme(false);
   };
 
   const handleSortChange = (nextSortKey: SortKey) => {
@@ -2455,45 +2469,49 @@ const UserScannerPage: React.FC = () => {
   const handleStrategySimulation = async () => {
     if (!runDetail) return;
     setIsStrategySimulationLoading(true);
-    try {
-      const response = await scannerApi.getStrategySimulation({
+    const response = await scannerApi.getStrategySimulation({
         theme: activeSimulationTheme || undefined,
         profile: runDetail.profile || profile,
         market: runDetail.market || market,
         lookbackDays: simulationLookbackDays,
         forwardDays: simulationForwardDays,
         limit: 50,
-      });
-      setStrategySimulation(response);
+      })
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.value) {
+      setStrategySimulation(response.value);
       setStrategySimulationError(null);
-    } catch (error) {
-      const parsed = getParsedApiError(error);
+    } else {
+      const parsed = getParsedApiError(response.error);
       setStrategySimulationError(parsed.message || (language === 'en' ? 'Simulation failed.' : '历史模拟失败。'));
-    } finally {
-      setIsStrategySimulationLoading(false);
     }
+    setIsStrategySimulationLoading(false);
   };
 
   useEffect(() => {
-    let isMounted = true;
     const previousRunId = findPreviousComparableRunId(runDetail, historyItems);
-    if (!runDetail || !previousRunId) {
-      setPreviousRunDetail(null);
-      return () => {
-        isMounted = false;
-      };
-    }
-    scannerApi.getRun(previousRunId)
-      .then((response) => {
-        if (!isMounted) return;
-        setPreviousRunDetail(response);
-      })
-      .catch(() => {
-        if (!isMounted) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (!runDetail || !previousRunId) {
         setPreviousRunDetail(null);
-      });
+        return;
+      }
+      scannerApi.getRun(previousRunId)
+        .then((response) => {
+          if (!cancelled) {
+            setPreviousRunDetail(response);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setPreviousRunDetail(null);
+          }
+        });
+    });
     return () => {
-      isMounted = false;
+      cancelled = true;
     };
   }, [historyItems, runDetail]);
 
@@ -2548,44 +2566,53 @@ const UserScannerPage: React.FC = () => {
   const handleAnalyzeCandidate = async (candidate: ScannerCandidate) => {
     setPendingAnalyzeSymbol(candidate.symbol);
     setActionNotice(null);
-    try {
-      await analysisApi.analyzeAsync({
+    let nextPath: string | null = null;
+    const response = await analysisApi.analyzeAsync({
         stockCode: candidate.symbol,
         reportType: 'detailed',
         stockName: candidate.name,
         originalQuery: candidate.symbol,
         selectionSource: 'manual',
-      });
-      navigate(buildLocalizedPath('/', language));
-    } catch (error) {
-      if (error instanceof DuplicateTaskError) {
-        navigate(buildLocalizedPath('/', language));
-        return;
-      }
-      const parsedError = getParsedApiError(error);
+      })
+      .then(() => ({ error: null as unknown }))
+      .catch((error) => ({ error }));
+    if (response.error instanceof DuplicateTaskError) {
+      nextPath = buildLocalizedPath('/', language);
+    } else if (response.error) {
+      const parsedError = getParsedApiError(response.error);
       setActionNotice({
         tone: 'danger',
         message: parsedError.message,
       });
-    } finally {
-      setPendingAnalyzeSymbol((current) => (current === candidate.symbol ? null : current));
+    } else {
+      nextPath = buildLocalizedPath('/', language);
+    }
+    setPendingAnalyzeSymbol((current) => (current === candidate.symbol ? null : current));
+    if (nextPath) {
+      navigate(nextPath);
     }
   };
 
   const handleCopyText = async (text: string, nextCopiedKey: string) => {
-    try {
-      if (!navigator.clipboard?.writeText) {
-        throw new Error(language === 'en' ? 'Clipboard is not available in this browser.' : '当前浏览器不支持剪贴板。');
-      }
-      await navigator.clipboard.writeText(text);
-      setCopiedKey(nextCopiedKey);
-      setActionNotice(null);
-    } catch (error) {
+    if (!navigator.clipboard?.writeText) {
       setActionNotice({
         tone: 'danger',
-        message: error instanceof Error ? error.message : (language === 'en' ? 'Copy failed.' : '复制失败。'),
+        message: language === 'en' ? 'Clipboard is not available in this browser.' : '当前浏览器不支持剪贴板。',
       });
+      return;
     }
+    const error = await Promise.resolve(navigator.clipboard.writeText(text))
+      .then(() => null)
+      .catch((value) => value);
+    if (!error) {
+      setCopiedKey(nextCopiedKey);
+      setActionNotice(null);
+      return;
+    }
+    setActionNotice({
+      tone: 'danger',
+      message: error instanceof Error ? error.message : (language === 'en' ? 'Copy failed.' : '复制失败。'),
+    });
   };
 
   const handleExportRows = (rows: ScannerExportRow[], filename: string) => {
@@ -2610,8 +2637,7 @@ const UserScannerPage: React.FC = () => {
 
     setPendingWatchlistIdentity(candidateIdentity);
     setActionNotice(null);
-    try {
-      const savedItem = await watchlistApi.addWatchlistItem({
+    const response = await watchlistApi.addWatchlistItem({
         symbol: candidate.symbol,
         market: candidateMarket.toLowerCase(),
         name: candidate.companyName || candidate.name,
@@ -2622,7 +2648,11 @@ const UserScannerPage: React.FC = () => {
         themeId: runDetail?.themeId || undefined,
         universeType: runDetail?.universeType || undefined,
         notes: buildWatchlistNotes(candidate, runDetail, language) || undefined,
-      });
+      })
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.value) {
+      const savedItem = response.value;
       setWatchlistItems((current) => {
         const nextIdentity = getWatchlistIdentity(savedItem.market, savedItem.symbol);
         const remaining = current.filter((item) => getWatchlistIdentity(item.market, item.symbol) !== nextIdentity);
@@ -2633,8 +2663,8 @@ const UserScannerPage: React.FC = () => {
         tone: 'success',
         message: language === 'en' ? 'Saved to your watchlist.' : '已加入观察名单。',
       });
-    } catch (error) {
-      const parsedError = getParsedApiError(error);
+    } else {
+      const parsedError = getParsedApiError(response.error);
       if (parsedError.isAuthError || parsedError.status === 401 || parsedError.status === 403 || parsedError.status === 405) {
         setWatchlistAuthBlocked(true);
         setActionNotice({
@@ -2649,9 +2679,8 @@ const UserScannerPage: React.FC = () => {
           message: parsedError.message,
         });
       }
-    } finally {
-      setPendingWatchlistIdentity((current) => (current === candidateIdentity ? null : current));
     }
+    setPendingWatchlistIdentity((current) => (current === candidateIdentity ? null : current));
   };
 
   const handleBatchTrackCandidates = async (batchKey: string, candidates: ScannerCandidate[]) => {
@@ -2674,8 +2703,7 @@ const UserScannerPage: React.FC = () => {
     });
     setPendingBatchWatchlistAction(batchKey);
     setActionNotice(null);
-    try {
-      const savedItems = await Promise.all(toAdd.map(async (candidate) => watchlistApi.addWatchlistItem({
+    const response = await Promise.all(toAdd.map(async (candidate) => watchlistApi.addWatchlistItem({
           symbol: candidate.symbol,
           market: candidateMarket.toLowerCase(),
           name: candidate.companyName || candidate.name,
@@ -2686,7 +2714,11 @@ const UserScannerPage: React.FC = () => {
           themeId: runDetail?.themeId || undefined,
           universeType: runDetail?.universeType || undefined,
           notes: buildWatchlistNotes(candidate, runDetail, language) || undefined,
-        })));
+        })))
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.value) {
+      const savedItems = response.value;
       added = savedItems.length;
       if (savedItems.length) {
         setWatchlistItems((current) => {
@@ -2701,8 +2733,8 @@ const UserScannerPage: React.FC = () => {
           ? `Added ${added} · already existed ${alreadyExists}`
           : `已加入 ${added} 个 · 已存在 ${alreadyExists} 个`,
       });
-    } catch (error) {
-      const parsedError = getParsedApiError(error);
+    } else {
+      const parsedError = getParsedApiError(response.error);
       if (parsedError.isAuthError || parsedError.status === 401 || parsedError.status === 403 || parsedError.status === 405) {
         setWatchlistAuthBlocked(true);
         setActionNotice({
@@ -2714,9 +2746,8 @@ const UserScannerPage: React.FC = () => {
       } else {
         setActionNotice({ tone: 'danger', message: parsedError.message });
       }
-    } finally {
-      setPendingBatchWatchlistAction((current) => (current === batchKey ? null : current));
     }
+    setPendingBatchWatchlistAction((current) => (current === batchKey ? null : current));
   };
 
   const getBacktestActionLabel = (item?: ScannerBacktestItem) => (
