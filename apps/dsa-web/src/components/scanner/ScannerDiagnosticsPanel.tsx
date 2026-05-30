@@ -1,4 +1,4 @@
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactElement } from 'react';
 import { TerminalChip } from '../terminal/TerminalPrimitives';
 import type {
   ScannerCandidate,
@@ -23,36 +23,6 @@ function hasComparison(comparison?: ScannerRunDetail['comparisonToPrevious'] | n
 function formatPercent(value?: number | null): string {
   if (value == null || !Number.isFinite(value)) return '--';
   return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
-}
-
-function DiagnosticsFieldChip({ label, value }: { label: string; value: string }) {
-  return (
-    <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-      <span className="shrink-0 text-white/36">{label}</span>
-      <span className="min-w-0 truncate">{value}</span>
-    </TerminalChip>
-  );
-}
-
-function DiagnosticsSection({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="min-w-0 border-t border-white/8 py-2">
-      <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">{title}</h5>
-      {children}
-    </section>
-  );
-}
-
-function DiagnosticsNotes({ notes }: { notes: string[] }) {
-  return (
-    <ul className="space-y-1">
-      {notes.map((note) => (
-        <li key={note} className="text-xs leading-relaxed text-white/64">
-          {note}
-        </li>
-      ))}
-    </ul>
-  );
 }
 
 function toDisplayText(value: unknown): string | null {
@@ -128,7 +98,10 @@ type ScannerDiagnosticsPanelComponent = ((props: ScannerDiagnosticsPanelProps) =
   hasRunDiagnosticsContent: typeof hasRunDiagnosticsContent;
 };
 
-function ScannerDiagnosticsPanelComponentImpl({ runDetail, language }: ScannerDiagnosticsPanelProps) {
+export const ScannerDiagnosticsPanel = Object.assign(function ScannerDiagnosticsPanel({
+  runDetail,
+  language,
+}: ScannerDiagnosticsPanelProps) {
   const coverage = getRunCoverageSummary(runDetail);
   const provider = getRunProviderDiagnostics(runDetail);
   const aiDiagnostics = getAiDiagnostics(runDetail);
@@ -143,88 +116,156 @@ function ScannerDiagnosticsPanelComponentImpl({ runDetail, language }: ScannerDi
       </h3>
       <div className="mt-1 grid gap-x-4 gap-y-0 lg:grid-cols-2">
         {coverage ? (
-          <DiagnosticsSection title={language === 'en' ? 'Coverage summary' : '覆盖摘要'}>
+          <section className="min-w-0 border-t border-white/8 py-2">
+            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+              {language === 'en' ? 'Coverage summary' : '覆盖摘要'}
+            </h5>
             <div className="flex flex-wrap gap-2">
-              <DiagnosticsFieldChip label={language === 'en' ? 'Input' : '输入'} value={String(coverage.inputUniverseSize)} />
-              <DiagnosticsFieldChip label={language === 'en' ? 'Liquidity' : '流动性后'} value={String(coverage.eligibleAfterLiquidityFilter)} />
-              <DiagnosticsFieldChip label={language === 'en' ? 'Data OK' : '数据可用'} value={String(coverage.eligibleAfterDataAvailabilityFilter)} />
-              <DiagnosticsFieldChip label={language === 'en' ? 'Ranked' : '已排名'} value={String(coverage.rankedCandidateCount)} />
-              <DiagnosticsFieldChip label={language === 'en' ? 'Selected' : '入选'} value={String(coverage.shortlistedCount)} />
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                <span className="shrink-0 text-white/36">{language === 'en' ? 'Input' : '输入'}</span>
+                <span className="min-w-0 truncate">{String(coverage.inputUniverseSize)}</span>
+              </TerminalChip>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                <span className="shrink-0 text-white/36">{language === 'en' ? 'Liquidity' : '流动性后'}</span>
+                <span className="min-w-0 truncate">{String(coverage.eligibleAfterLiquidityFilter)}</span>
+              </TerminalChip>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                <span className="shrink-0 text-white/36">{language === 'en' ? 'Data OK' : '数据可用'}</span>
+                <span className="min-w-0 truncate">{String(coverage.eligibleAfterDataAvailabilityFilter)}</span>
+              </TerminalChip>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                <span className="shrink-0 text-white/36">{language === 'en' ? 'Ranked' : '已排名'}</span>
+                <span className="min-w-0 truncate">{String(coverage.rankedCandidateCount)}</span>
+              </TerminalChip>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                <span className="shrink-0 text-white/36">{language === 'en' ? 'Selected' : '入选'}</span>
+                <span className="min-w-0 truncate">{String(coverage.shortlistedCount)}</span>
+              </TerminalChip>
               {coverage.likelyBottleneckLabel || coverage.likelyBottleneck ? (
-                <DiagnosticsFieldChip
-                  label={language === 'en' ? 'Bottleneck' : '瓶颈'}
-                  value={coverage.likelyBottleneckLabel || coverage.likelyBottleneck || ''}
-                />
+                <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                  <span className="shrink-0 text-white/36">{language === 'en' ? 'Bottleneck' : '瓶颈'}</span>
+                  <span className="min-w-0 truncate">{coverage.likelyBottleneckLabel || coverage.likelyBottleneck || ''}</span>
+                </TerminalChip>
               ) : null}
             </div>
-          </DiagnosticsSection>
+          </section>
         ) : null}
         {provider ? (
-          <DiagnosticsSection title={language === 'en' ? 'Source' : '来源'}>
+          <section className="min-w-0 border-t border-white/8 py-2">
+            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+              {language === 'en' ? 'Source' : '来源'}
+            </h5>
             <p className="text-xs leading-relaxed text-white/64">{formatProviderDiagnostics(provider, language)}</p>
-          </DiagnosticsSection>
+          </section>
         ) : null}
         {runDetail.universeNotes.length ? (
-          <DiagnosticsSection title={language === 'en' ? 'Universe' : '范围'}>
-            <DiagnosticsNotes notes={runDetail.universeNotes} />
-          </DiagnosticsSection>
+          <section className="min-w-0 border-t border-white/8 py-2">
+            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+              {language === 'en' ? 'Universe' : '范围'}
+            </h5>
+            <ul className="space-y-1">
+              {runDetail.universeNotes.map((note) => (
+                <li key={note} className="text-xs leading-relaxed text-white/64">
+                  {note}
+                </li>
+              ))}
+            </ul>
+          </section>
         ) : null}
         {runDetail.scoringNotes.length ? (
-          <DiagnosticsSection title={language === 'en' ? 'Scoring' : '评分'}>
-            <DiagnosticsNotes notes={runDetail.scoringNotes} />
-          </DiagnosticsSection>
+          <section className="min-w-0 border-t border-white/8 py-2">
+            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+              {language === 'en' ? 'Scoring' : '评分'}
+            </h5>
+            <ul className="space-y-1">
+              {runDetail.scoringNotes.map((note) => (
+                <li key={note} className="text-xs leading-relaxed text-white/64">
+                  {note}
+                </li>
+              ))}
+            </ul>
+          </section>
         ) : null}
         {hasReviewSummary(runDetail.reviewSummary) ? (
-          <DiagnosticsSection title={language === 'en' ? 'Review' : '复盘'}>
+          <section className="min-w-0 border-t border-white/8 py-2">
+            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+              {language === 'en' ? 'Review' : '复盘'}
+            </h5>
             <div className="flex flex-wrap gap-2">
-              <DiagnosticsFieldChip label={language === 'en' ? 'Status' : '状态'} value={runDetail.reviewSummary.reviewStatus} />
-              <DiagnosticsFieldChip
-                label={language === 'en' ? 'Reviewed' : '已复盘'}
-                value={`${runDetail.reviewSummary.reviewedCount}/${runDetail.reviewSummary.candidateCount}`}
-              />
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                <span className="shrink-0 text-white/36">{language === 'en' ? 'Status' : '状态'}</span>
+                <span className="min-w-0 truncate">{runDetail.reviewSummary.reviewStatus}</span>
+              </TerminalChip>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                <span className="shrink-0 text-white/36">{language === 'en' ? 'Reviewed' : '已复盘'}</span>
+                <span className="min-w-0 truncate">
+                  {`${runDetail.reviewSummary.reviewedCount}/${runDetail.reviewSummary.candidateCount}`}
+                </span>
+              </TerminalChip>
               {runDetail.reviewSummary.hitRatePct != null ? (
-                <DiagnosticsFieldChip label={language === 'en' ? 'Hit rate' : '命中率'} value={formatPercent(runDetail.reviewSummary.hitRatePct)} />
+                <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                  <span className="shrink-0 text-white/36">{language === 'en' ? 'Hit rate' : '命中率'}</span>
+                  <span className="min-w-0 truncate">{formatPercent(runDetail.reviewSummary.hitRatePct)}</span>
+                </TerminalChip>
               ) : null}
               {runDetail.reviewSummary.avgReviewWindowReturnPct != null ? (
-                <DiagnosticsFieldChip
-                  label={language === 'en' ? 'Avg return' : '平均收益'}
-                  value={formatPercent(runDetail.reviewSummary.avgReviewWindowReturnPct)}
-                />
+                <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                  <span className="shrink-0 text-white/36">{language === 'en' ? 'Avg return' : '平均收益'}</span>
+                  <span className="min-w-0 truncate">{formatPercent(runDetail.reviewSummary.avgReviewWindowReturnPct)}</span>
+                </TerminalChip>
               ) : null}
             </div>
-          </DiagnosticsSection>
+          </section>
         ) : null}
         {hasComparison(runDetail.comparisonToPrevious) ? (
-          <DiagnosticsSection title={language === 'en' ? 'Previous run' : '相对上次'}>
+          <section className="min-w-0 border-t border-white/8 py-2">
+            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+              {language === 'en' ? 'Previous run' : '相对上次'}
+            </h5>
             <div className="flex flex-wrap gap-2">
-              <DiagnosticsFieldChip label={language === 'en' ? 'New' : '新增'} value={String(runDetail.comparisonToPrevious.newCount)} />
-              <DiagnosticsFieldChip label={language === 'en' ? 'Retained' : '保留'} value={String(runDetail.comparisonToPrevious.retainedCount)} />
-              <DiagnosticsFieldChip label={language === 'en' ? 'Dropped' : '移出'} value={String(runDetail.comparisonToPrevious.droppedCount)} />
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                <span className="shrink-0 text-white/36">{language === 'en' ? 'New' : '新增'}</span>
+                <span className="min-w-0 truncate">{String(runDetail.comparisonToPrevious.newCount)}</span>
+              </TerminalChip>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                <span className="shrink-0 text-white/36">{language === 'en' ? 'Retained' : '保留'}</span>
+                <span className="min-w-0 truncate">{String(runDetail.comparisonToPrevious.retainedCount)}</span>
+              </TerminalChip>
+              <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                <span className="shrink-0 text-white/36">{language === 'en' ? 'Dropped' : '移出'}</span>
+                <span className="min-w-0 truncate">{String(runDetail.comparisonToPrevious.droppedCount)}</span>
+              </TerminalChip>
             </div>
-          </DiagnosticsSection>
+          </section>
         ) : null}
         {aiDiagnostics ? (
-          <DiagnosticsSection title={language === 'en' ? 'AI' : 'AI'}>
+          <section className="min-w-0 border-t border-white/8 py-2">
+            <h5 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
+              {language === 'en' ? 'AI' : 'AI'}
+            </h5>
             <div className="flex flex-wrap gap-2">
               {Object.entries(aiDiagnostics)
                 .map(([key, value]) => [key, toDisplayText(value)] as const)
                 .filter((entry): entry is readonly [string, string] => Boolean(entry[1]))
                 .slice(0, 6)
-                .map(([key, value]) => <DiagnosticsFieldChip key={key} label={key} value={value} />)}
+                .map(([key, value]) => (
+                  <TerminalChip key={key} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                    <span className="shrink-0 text-white/36">{key}</span>
+                    <span className="min-w-0 truncate">{value}</span>
+                  </TerminalChip>
+                ))}
             </div>
-          </DiagnosticsSection>
+          </section>
         ) : null}
       </div>
     </section>
   );
-}
-
-export const ScannerDiagnosticsPanel = ScannerDiagnosticsPanelComponentImpl as ScannerDiagnosticsPanelComponent;
-
-ScannerDiagnosticsPanel.toDisplayText = toDisplayText;
-ScannerDiagnosticsPanel.getRunCoverageSummary = getRunCoverageSummary;
-ScannerDiagnosticsPanel.getProviderDiagnostics = getProviderDiagnostics;
-ScannerDiagnosticsPanel.getRunProviderDiagnostics = getRunProviderDiagnostics;
-ScannerDiagnosticsPanel.getAiDiagnostics = getAiDiagnostics;
-ScannerDiagnosticsPanel.formatProviderDiagnostics = formatProviderDiagnostics;
-ScannerDiagnosticsPanel.hasRunDiagnosticsContent = hasRunDiagnosticsContent;
+}, {
+  toDisplayText,
+  getRunCoverageSummary,
+  getProviderDiagnostics,
+  getRunProviderDiagnostics,
+  getAiDiagnostics,
+  formatProviderDiagnostics,
+  hasRunDiagnosticsContent,
+}) as ScannerDiagnosticsPanelComponent;

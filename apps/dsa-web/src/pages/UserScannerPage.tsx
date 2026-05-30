@@ -2494,19 +2494,15 @@ const UserScannerPage: React.FC = () => {
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
-      if (!runDetail || !previousRunId) {
-        setPreviousRunDetail(null);
-        return;
-      }
-      scannerApi.getRun(previousRunId)
+      const previousRunRequest = !runDetail || !previousRunId
+        ? Promise.resolve<ScannerRunDetail | null>(null)
+        : scannerApi.getRun(previousRunId)
+          .then((response) => response)
+          .catch(() => null);
+      previousRunRequest
         .then((response) => {
           if (!cancelled) {
             setPreviousRunDetail(response);
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setPreviousRunDetail(null);
           }
         });
     });
