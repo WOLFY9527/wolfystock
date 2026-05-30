@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, BarChart3, ChevronDown, Layers3, LineChart, Search, ShieldCheck } from 'lucide-react';
 import {
   optionsLabApi,
@@ -989,7 +989,7 @@ const StrategyComparisonPanel: React.FC<{
     : asArray(decision?.optimizer?.alternatives);
   const gateBlocked = isNonDecisionGrade(decision);
   const rankMap = new Map(rankedAlternatives.map((alternative, index) => [alternative.strategyKey, { alternative, index }]));
-  const rankedStrategies = [...strategies].sort((left, right) => {
+  const rankedStrategies = strategies.slice().sort((left, right) => {
     const leftRank = rankMap.get(left.strategyType)?.index ?? Number.MAX_SAFE_INTEGER;
     const rightRank = rankMap.get(right.strategyType)?.index ?? Number.MAX_SAFE_INTEGER;
     if (leftRank !== rightRank) return leftRank - rightRank;
@@ -1641,7 +1641,7 @@ const OptionsLabPageContent: React.FC = () => {
   const calls = asArray(state.chain?.calls).length ? asArray(state.chain?.calls) : EMPTY_CONTRACTS;
   const puts = asArray(state.chain?.puts).length ? asArray(state.chain?.puts) : EMPTY_CONTRACTS;
   const hasChainRows = calls.length > 0 || puts.length > 0;
-  const comparisonEmptyMessage = useMemo(() => {
+  const comparisonEmptyMessage = (() => {
     if (state.loading) return '正在加载基础数据，稍后将自动计算策略对比。';
     if (state.error) return '期权链暂不可用，策略对比已暂停。';
     const targetPriceValue = Number(targetPrice);
@@ -1652,43 +1652,40 @@ const OptionsLabPageContent: React.FC = () => {
     if (!state.summary || !state.expirations || !state.chain) return COMPARISON_EMPTY_MESSAGE;
     if (!hasTargetPrice || !hasTargetDate || !hasExpirations || !hasContracts) return COMPARISON_EMPTY_MESSAGE;
     return null;
-  }, [state.loading, state.error, state.summary, state.expirations, state.chain, targetPrice, targetDate, expirations, hasChainRows]);
-  const decisionEmptyMessage = useMemo(() => {
+  })();
+  const decisionEmptyMessage = (() => {
     if (state.loading) return '正在加载基础数据，稍后将自动计算情景准备度。';
     if (state.error) return '期权链暂不可用，情景准备度已暂停。';
     const targetPriceValue = Number(targetPrice);
     if (!state.summary || !state.expirations || !state.chain || !hasChainRows) return '先加载合约链后，再进入情景准备度。';
     if (!Number.isFinite(targetPriceValue) || targetPriceValue <= 0 || !targetDate.trim()) return '先补齐目标价格与目标日期。';
     return null;
-  }, [state.loading, state.error, state.summary, state.expirations, state.chain, hasChainRows, targetPrice, targetDate]);
+  })();
   const consumerAvailability = consumerAvailabilitySummary(state, comparisonState, decisionState, hasChainRows);
-  const summaryStripItems: SummaryStripItem[] = useMemo(() => {
-    const topCandidate = firstObservationStrategy(decisionState.decision, comparisonState.comparison);
-    const maxLoss = decisionState.decision?.riskReward?.maxLoss;
-    const scenarioMeta = targetDate.trim() ? `目标日 ${targetDate}` : '补齐目标日后可比较策略';
-    const candidateMeta = topCandidate ? '优先复核最大亏损与盈亏平衡' : '当前未形成可判断结构';
-    const riskValue = typeof maxLoss === 'number' && Number.isFinite(maxLoss)
-      ? `最大亏损 ${money(maxLoss)}`
-      : noTradeReasonLabel(decisionState.decision?.optimizer?.noTradeReason);
-
-    return [
-      {
-        label: '输入情景',
-        value: `${directionSummaryLabel(direction)} · 目标价 ${targetPrice || '--'}`,
-        meta: scenarioMeta,
-      },
-      {
-        label: '首个候选',
-        value: topCandidate ? strategyChineseLabel(topCandidate) : '暂无可判断结构',
-        meta: candidateMeta,
-      },
-      {
-        label: '风险边界',
-        value: riskValue,
-        meta: riskBudget ? `风险预算 ${riskBudget}` : '先定义可承受亏损',
-      },
-    ];
-  }, [decisionState.decision, comparisonState.comparison, direction, targetPrice, targetDate, riskBudget]);
+  const topCandidate = firstObservationStrategy(decisionState.decision, comparisonState.comparison);
+  const maxLoss = decisionState.decision?.riskReward?.maxLoss;
+  const scenarioMeta = targetDate.trim() ? `目标日 ${targetDate}` : '补齐目标日后可比较策略';
+  const candidateMeta = topCandidate ? '优先复核最大亏损与盈亏平衡' : '当前未形成可判断结构';
+  const riskValue = typeof maxLoss === 'number' && Number.isFinite(maxLoss)
+    ? `最大亏损 ${money(maxLoss)}`
+    : noTradeReasonLabel(decisionState.decision?.optimizer?.noTradeReason);
+  const summaryStripItems: SummaryStripItem[] = [
+    {
+      label: '输入情景',
+      value: `${directionSummaryLabel(direction)} · 目标价 ${targetPrice || '--'}`,
+      meta: scenarioMeta,
+    },
+    {
+      label: '首个候选',
+      value: topCandidate ? strategyChineseLabel(topCandidate) : '暂无可判断结构',
+      meta: candidateMeta,
+    },
+    {
+      label: '风险边界',
+      value: riskValue,
+      meta: riskBudget ? `风险预算 ${riskBudget}` : '先定义可承受亏损',
+    },
+  ];
 
   return (
     <main className="w-full overflow-x-hidden text-white">

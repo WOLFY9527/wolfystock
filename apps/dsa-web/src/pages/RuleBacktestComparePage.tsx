@@ -77,7 +77,7 @@ function parseRunIdsParam(value: string | null): number[] {
   return orderedIds;
 }
 
-function renderBooleanLabel(value: boolean | undefined): string {
+function formatBooleanLabel(value: boolean | undefined): string {
   return value ? '是' : '否';
 }
 
@@ -231,7 +231,7 @@ function formatSensitivityLabel(key: string): string {
 
 function formatSensitivityValue(value: unknown): string {
   if (value == null) return '缺失';
-  if (typeof value === 'boolean') return renderBooleanLabel(value);
+  if (typeof value === 'boolean') return formatBooleanLabel(value);
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) return '--';
     return Number.isInteger(value) ? String(value) : formatNumber(value);
@@ -619,7 +619,7 @@ function RobustnessDimensionCards({ dimensions }: { dimensions: Record<string, R
           <p className="metric-card__label">{formatCompareStateLabel(dimensionKey)}</p>
           <p className="preview-card__text">{formatCompareStateWithRaw(dimension.state)}</p>
           <p className="product-footnote">关系：{formatCompareStateWithRaw(dimension.relationship)}</p>
-          <p className="product-footnote">可直接比较：{dimension.directlyComparable == null ? '--' : renderBooleanLabel(dimension.directlyComparable)}</p>
+          <p className="product-footnote">可直接比较：{dimension.directlyComparable == null ? '--' : formatBooleanLabel(dimension.directlyComparable)}</p>
         </div>
       ))}
     </div>
@@ -712,7 +712,7 @@ function getMetricDeltaTone(value?: number | null, isBaseline?: boolean): string
 
 function orderCompareItems(items: RuleBacktestCompareRunItem[], runIds: number[]): RuleBacktestCompareRunItem[] {
   const orderMap = new Map(runIds.map((runId, index) => [runId, index]));
-  return [...items].sort((left, right) => {
+  return items.slice().sort((left, right) => {
     const leftOrder = orderMap.get(left.metadata.id) ?? Number.MAX_SAFE_INTEGER;
     const rightOrder = orderMap.get(right.metadata.id) ?? Number.MAX_SAFE_INTEGER;
     return leftOrder - rightOrder;
@@ -1497,7 +1497,7 @@ const RuleBacktestComparePage: React.FC = () => {
                       {
                         label: '稳健性',
                         value: formatCompareStateWithRaw(robustnessSummary?.overallState),
-                        note: `可直接比较 ${robustnessSummary?.directlyComparable == null ? '--' : renderBooleanLabel(robustnessSummary.directlyComparable)}`,
+                        note: `可直接比较 ${robustnessSummary?.directlyComparable == null ? '--' : formatBooleanLabel(robustnessSummary.directlyComparable)}`,
                       },
                       {
                         label: '一致维度',
@@ -1519,19 +1519,19 @@ const RuleBacktestComparePage: React.FC = () => {
                   <div className="preview-grid mt-4">
                     <div className="preview-card">
                       <p className="metric-card__label">同一标的</p>
-                      <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.sameCode)}</p>
+                      <p className="preview-card__text">{formatBooleanLabel(comparisonProfile?.dimensionFlags.sameCode)}</p>
                     </div>
                     <div className="preview-card">
                       <p className="metric-card__label">同一市场</p>
-                      <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.sameMarket)}</p>
+                      <p className="preview-card__text">{formatBooleanLabel(comparisonProfile?.dimensionFlags.sameMarket)}</p>
                     </div>
                     <div className="preview-card">
                       <p className="metric-card__label">存在参数差异</p>
-                      <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.parameterDifferencesPresent)}</p>
+                      <p className="preview-card__text">{formatBooleanLabel(comparisonProfile?.dimensionFlags.parameterDifferencesPresent)}</p>
                     </div>
                     <div className="preview-card">
                       <p className="metric-card__label">存在区间差异</p>
-                      <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.periodDifferencesPresent)}</p>
+                      <p className="preview-card__text">{formatBooleanLabel(comparisonProfile?.dimensionFlags.periodDifferencesPresent)}</p>
                     </div>
                   </div>
                   <div className="mt-4">
@@ -1544,13 +1544,13 @@ const RuleBacktestComparePage: React.FC = () => {
                       <p className="metric-card__label">市场 / 代码比较</p>
                       <p className="preview-card__text">{formatCompareStateWithRaw(marketCodeComparison?.state)}</p>
                       <p className="product-footnote">关系：{formatCompareStateWithRaw(marketCodeComparison?.relationship)}</p>
-                      <p className="product-footnote">可直接比较：{marketCodeComparison?.directlyComparable == null ? '--' : renderBooleanLabel(marketCodeComparison.directlyComparable)}</p>
+                      <p className="product-footnote">可直接比较：{marketCodeComparison?.directlyComparable == null ? '--' : formatBooleanLabel(marketCodeComparison.directlyComparable)}</p>
                     </div>
                     <div className="preview-card">
                       <p className="metric-card__label">区间比较</p>
                       <p className="preview-card__text">{formatCompareStateWithRaw(periodComparison?.state)}</p>
                       <p className="product-footnote">关系：{formatCompareStateWithRaw(periodComparison?.relationship)}</p>
-                      <p className="product-footnote">有意义可比：{periodComparison?.meaningfullyComparable == null ? '--' : renderBooleanLabel(periodComparison.meaningfullyComparable)}</p>
+                      <p className="product-footnote">有意义可比：{periodComparison?.meaningfullyComparable == null ? '--' : formatBooleanLabel(periodComparison.meaningfullyComparable)}</p>
                     </div>
                   </div>
                 </ConsoleDisclosure>
@@ -1569,9 +1569,9 @@ const RuleBacktestComparePage: React.FC = () => {
                       </div>
                       <div className="preview-card">
                         <p className="metric-card__label">摘要上下文</p>
-                        <p className="preview-card__text">全部同标的：{renderBooleanLabel(comparisonSummary?.context.allSameCode)}</p>
-                        <p className="product-footnote">全部同周期：{renderBooleanLabel(comparisonSummary?.context.allSameTimeframe)}</p>
-                        <p className="product-footnote">全部同日期区间：{renderBooleanLabel(comparisonSummary?.context.allSameDateRange)}</p>
+                        <p className="preview-card__text">全部同标的：{formatBooleanLabel(comparisonSummary?.context.allSameCode)}</p>
+                        <p className="product-footnote">全部同周期：{formatBooleanLabel(comparisonSummary?.context.allSameTimeframe)}</p>
+                        <p className="product-footnote">全部同日期区间：{formatBooleanLabel(comparisonSummary?.context.allSameDateRange)}</p>
                       </div>
                     </div>
                     <MetricDeltaTable metricDeltas={comparisonSummary?.metricDeltas || {}} />
