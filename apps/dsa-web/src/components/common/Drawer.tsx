@@ -4,7 +4,7 @@
  * with restrained header typography and lighter close controls.
  */
 import type React from 'react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useId, useReducer, useRef } from 'react';
 import { cn } from '../../utils/cn';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { shouldApplySafariA11yGuard } from '../../hooks/useSafariInteractionReady';
@@ -28,6 +28,93 @@ interface DrawerProps {
   bodyClassName?: string;
 }
 
+interface DrawerState {
+  isMounted: boolean;
+  uiState: 'open' | 'closed';
+  isInteractionReady: boolean;
+}
+
+type DrawerAction =
+  | { type: 'prepareToOpen' }
+  | { type: 'openVisible' }
+  | { type: 'enableInteraction' }
+  | { type: 'prepareToClose' }
+  | { type: 'finishClose' };
+
+const createInitialDrawerState = (isOpen: boolean): DrawerState => ({
+  isMounted: isOpen,
+  uiState: isOpen ? 'open' : 'closed',
+  isInteractionReady: isOpen,
+});
+
+function drawerReducer(state: DrawerState, action: DrawerAction): DrawerState {
+  switch (action.type) {
+    case 'prepareToOpen':
+      return {
+        isMounted: true,
+        uiState: state.isMounted ? state.uiState : 'closed',
+        isInteractionReady: false,
+      };
+    case 'openVisible':
+      return {
+        ...state,
+        uiState: 'open',
+      };
+    case 'enableInteraction':
+      return {
+        ...state,
+        isInteractionReady: true,
+      };
+    case 'prepareToClose':
+      return {
+        ...state,
+        uiState: 'closed',
+        isInteractionReady: false,
+      };
+    case 'finishClose':
+      return {
+        ...state,
+        isMounted: false,
+      };
+    default:
+      return state;
+  }
+}
+
+function clearTimeoutRef(timerRef: { current: number | null }) {
+  if (timerRef.current != null) {
+    window.clearTimeout(timerRef.current);
+    timerRef.current = null;
+  }
+}
+
+function clearAnimationFrameRef(frameRef: { current: number | null }) {
+  if (frameRef.current != null) {
+    window.cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
+  }
+}
+
+function forceDrawerReflow(
+  panel: HTMLDialogElement | null,
+  closeButton: HTMLButtonElement | null,
+) {
+  panel?.getBoundingClientRect();
+  void panel?.offsetHeight;
+  closeButton?.getBoundingClientRect();
+  void closeButton?.offsetHeight;
+}
+
+function incrementActiveDrawerCount() {
+  activeDrawerCount += 1;
+  return activeDrawerCount;
+}
+
+function decrementActiveDrawerCount() {
+  activeDrawerCount = Math.max(0, activeDrawerCount - 1);
+  return activeDrawerCount;
+}
+
 export const Drawer: React.FC<DrawerProps> = ({
   isOpen,
   onClose,
@@ -41,9 +128,7 @@ export const Drawer: React.FC<DrawerProps> = ({
 }) => {
   const { t } = useI18n();
   const generatedId = useId();
-  const [isMounted, setIsMounted] = useState(isOpen);
-  const [uiState, setUiState] = useState<'open' | 'closed'>(isOpen ? 'open' : 'closed');
-  const [isInteractionReady, setIsInteractionReady] = useState(isOpen);
+  const [state, dispatch] = useReducer(drawerReducer, isOpen, createInitialDrawerState);
   const shouldGuardA11y = shouldApplySafariA11yGuard();
   const backdropGuardRef = useRef(isOpen);
   const backdropGuardTimerRef = useRef<number | null>(null);
@@ -51,56 +136,41 @@ export const Drawer: React.FC<DrawerProps> = ({
   const openReadyFrameRef = useRef<number | null>(null);
   const interactionReadyTimerRef = useRef<number | null>(null);
   const closeTimerRef = useRef<number | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDialogElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
-
+  const handleEscapeKey = useEffectEvent((event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      onClose();
+    }
+  });
 
   useEffect(() => {
-    if (closeTimerRef.current != null) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
+    let isCancelled = false;
+
+    clearTimeoutRef(closeTimerRef);
 
     if (!isOpen) {
       backdropGuardRef.current = false;
-      setIsInteractionReady(false);
-      if (backdropGuardTimerRef.current != null) {
-        window.clearTimeout(backdropGuardTimerRef.current);
-        backdropGuardTimerRef.current = null;
-      }
-      if (openMountFrameRef.current != null) {
-        window.cancelAnimationFrame(openMountFrameRef.current);
-        openMountFrameRef.current = null;
-      }
-      if (openReadyFrameRef.current != null) {
-        window.cancelAnimationFrame(openReadyFrameRef.current);
-        openReadyFrameRef.current = null;
-      }
-      if (interactionReadyTimerRef.current != null) {
-        window.clearTimeout(interactionReadyTimerRef.current);
-        interactionReadyTimerRef.current = null;
-      }
+      clearTimeoutRef(backdropGuardTimerRef);
+      clearAnimationFrameRef(openMountFrameRef);
+      clearAnimationFrameRef(openReadyFrameRef);
+      clearTimeoutRef(interactionReadyTimerRef);
       return;
     }
 
     backdropGuardRef.current = true;
-    setIsInteractionReady(false);
-    if (backdropGuardTimerRef.current != null) {
-      window.clearTimeout(backdropGuardTimerRef.current);
-      backdropGuardTimerRef.current = null;
-    }
-    if (openMountFrameRef.current != null) {
-      window.cancelAnimationFrame(openMountFrameRef.current);
-      openMountFrameRef.current = null;
-    }
-    if (openReadyFrameRef.current != null) {
-      window.cancelAnimationFrame(openReadyFrameRef.current);
-      openReadyFrameRef.current = null;
-    }
-    if (interactionReadyTimerRef.current != null) {
-      window.clearTimeout(interactionReadyTimerRef.current);
-      interactionReadyTimerRef.current = null;
-    }
+    clearTimeoutRef(backdropGuardTimerRef);
+    clearAnimationFrameRef(openMountFrameRef);
+    clearAnimationFrameRef(openReadyFrameRef);
+    clearTimeoutRef(interactionReadyTimerRef);
+
+    queueMicrotask(() => {
+      if (isCancelled) {
+        return;
+      }
+
+      dispatch({ type: 'prepareToOpen' });
+    });
 
     backdropGuardTimerRef.current = window.setTimeout(() => {
       backdropGuardRef.current = false;
@@ -109,110 +179,81 @@ export const Drawer: React.FC<DrawerProps> = ({
 
     openMountFrameRef.current = window.requestAnimationFrame(() => {
       openMountFrameRef.current = null;
-      setIsMounted(true);
       openReadyFrameRef.current = window.requestAnimationFrame(() => {
         openReadyFrameRef.current = null;
-        panelRef.current?.getBoundingClientRect();
-        void panelRef.current?.offsetHeight;
-        closeButtonRef.current?.getBoundingClientRect();
-        void closeButtonRef.current?.offsetHeight;
-        setUiState('open');
+        forceDrawerReflow(panelRef.current, closeButtonRef.current);
+        dispatch({ type: 'openVisible' });
         interactionReadyTimerRef.current = window.setTimeout(() => {
           interactionReadyTimerRef.current = null;
-          panelRef.current?.getBoundingClientRect();
-          void panelRef.current?.offsetHeight;
-          closeButtonRef.current?.getBoundingClientRect();
-          void closeButtonRef.current?.offsetHeight;
-          setIsInteractionReady(true);
+          forceDrawerReflow(panelRef.current, closeButtonRef.current);
+          dispatch({ type: 'enableInteraction' });
         }, DRAWER_READY_DELAY_MS);
       });
     });
 
     return () => {
-      if (backdropGuardTimerRef.current != null) {
-        window.clearTimeout(backdropGuardTimerRef.current);
-        backdropGuardTimerRef.current = null;
-      }
-      if (openMountFrameRef.current != null) {
-        window.cancelAnimationFrame(openMountFrameRef.current);
-        openMountFrameRef.current = null;
-      }
-      if (openReadyFrameRef.current != null) {
-        window.cancelAnimationFrame(openReadyFrameRef.current);
-        openReadyFrameRef.current = null;
-      }
-      if (interactionReadyTimerRef.current != null) {
-        window.clearTimeout(interactionReadyTimerRef.current);
-        interactionReadyTimerRef.current = null;
-      }
+      isCancelled = true;
+      clearTimeoutRef(backdropGuardTimerRef);
+      clearAnimationFrameRef(openMountFrameRef);
+      clearAnimationFrameRef(openReadyFrameRef);
+      clearTimeoutRef(interactionReadyTimerRef);
     };
   }, [isOpen]);
 
   useEffect(() => {
-    if (isOpen || !isMounted) {
+    let isCancelled = false;
+
+    if (isOpen || !state.isMounted) {
       return;
     }
 
-    queueMicrotask(() => setUiState('closed'));
+    queueMicrotask(() => {
+      if (isCancelled) {
+        return;
+      }
+
+      dispatch({ type: 'prepareToClose' });
+    });
     closeTimerRef.current = window.setTimeout(() => {
       closeTimerRef.current = null;
-      setIsMounted(false);
+      dispatch({ type: 'finishClose' });
     }, DRAWER_CLOSE_DELAY_MS);
 
     return () => {
-      if (closeTimerRef.current != null) {
-        window.clearTimeout(closeTimerRef.current);
-        closeTimerRef.current = null;
-      }
+      isCancelled = true;
+      clearTimeoutRef(closeTimerRef);
     };
-  }, [isMounted, isOpen]);
+  }, [state.isMounted, isOpen]);
 
   useEffect(() => () => {
-    if (backdropGuardTimerRef.current != null) {
-      window.clearTimeout(backdropGuardTimerRef.current);
-      backdropGuardTimerRef.current = null;
-    }
-    if (openMountFrameRef.current != null) {
-      window.cancelAnimationFrame(openMountFrameRef.current);
-      openMountFrameRef.current = null;
-    }
-    if (openReadyFrameRef.current != null) {
-      window.cancelAnimationFrame(openReadyFrameRef.current);
-      openReadyFrameRef.current = null;
-    }
-    if (interactionReadyTimerRef.current != null) {
-      window.clearTimeout(interactionReadyTimerRef.current);
-      interactionReadyTimerRef.current = null;
-    }
-    if (closeTimerRef.current != null) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
+    clearTimeoutRef(backdropGuardTimerRef);
+    clearAnimationFrameRef(openMountFrameRef);
+    clearAnimationFrameRef(openReadyFrameRef);
+    clearTimeoutRef(interactionReadyTimerRef);
+    clearTimeoutRef(closeTimerRef);
   }, []);
 
   useEffect(() => {
-    if (!isMounted) {
+    if (!state.isMounted) {
       return;
     }
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      handleEscapeKey(event);
     };
+
     document.addEventListener('keydown', onKeyDown);
-    activeDrawerCount++;
-    if (activeDrawerCount === 1) {
+    if (incrementActiveDrawerCount() === 1) {
       document.body.style.overflow = 'hidden';
     }
 
     return () => {
       document.removeEventListener('keydown', onKeyDown);
-      activeDrawerCount--;
-      if (activeDrawerCount === 0) {
+      if (decrementActiveDrawerCount() === 0) {
         document.body.style.overflow = '';
       }
     };
-  }, [isMounted, onClose]);
+  }, [state.isMounted]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -221,10 +262,7 @@ export const Drawer: React.FC<DrawerProps> = ({
 
     let elapsedMs = 0;
     const forceReflow = () => {
-      panelRef.current?.getBoundingClientRect();
-      void panelRef.current?.offsetHeight;
-      closeButtonRef.current?.getBoundingClientRect();
-      void closeButtonRef.current?.offsetHeight;
+      forceDrawerReflow(panelRef.current, closeButtonRef.current);
     };
 
     forceReflow();
@@ -251,16 +289,16 @@ export const Drawer: React.FC<DrawerProps> = ({
     onClose();
   };
 
-  if (!isMounted) return null;
+  if (!state.isMounted) return null;
 
   const titleId = title ? `drawer-title-${generatedId}` : undefined;
   const sidePositionClass = side === 'left' ? 'left-0 justify-start' : 'right-0 justify-end';
   const borderClass = side === 'left' ? 'border-r' : 'border-l';
   const panelStateClass = side === 'left'
-    ? uiState === 'open'
+    ? state.uiState === 'open'
       ? 'translate-x-0 opacity-100'
       : '-translate-x-full opacity-0'
-    : uiState === 'open'
+    : state.uiState === 'open'
       ? 'translate-x-0 opacity-100'
       : 'translate-x-full opacity-0';
 
@@ -271,30 +309,29 @@ export const Drawer: React.FC<DrawerProps> = ({
         type="button"
         aria-label={t('common.closeDrawer')}
         data-testid="drawer-backdrop"
-        data-state={uiState}
+        data-state={state.uiState}
         className={cn(
           'absolute inset-0 border-0 bg-black/60 p-0 transition-opacity duration-200 ease-out',
-          uiState === 'open' && isInteractionReady ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
+          state.uiState === 'open' && state.isInteractionReady ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
         )}
         onClick={handleBackdropClick}
       />
 
       <div className={cn('drawer__frame absolute inset-y-0 flex w-full', sidePositionClass, width)}>
-        <div
+        <dialog
           ref={panelRef}
-          role="dialog"
-          aria-modal="true"
+          open
           aria-labelledby={titleId}
-          aria-hidden={shouldGuardA11y && !isInteractionReady ? true : undefined}
-          aria-live={shouldGuardA11y ? (isInteractionReady ? 'polite' : 'off') : undefined}
+          aria-hidden={shouldGuardA11y && !state.isInteractionReady ? true : undefined}
+          aria-live={shouldGuardA11y ? (state.isInteractionReady ? 'polite' : 'off') : undefined}
           className={cn(
-            'drawer__panel relative flex h-full w-full flex-col bg-white/[0.02] backdrop-blur-sm transition-all duration-200 ease-out',
+            'drawer__panel relative m-0 flex h-full max-h-none w-full max-w-none flex-col border-0 bg-white/[0.02] p-0 backdrop-blur-sm transition-all duration-200 ease-out',
             borderClass,
             'border-white/5',
-            isInteractionReady ? 'pointer-events-auto' : 'pointer-events-none',
+            state.isInteractionReady ? 'pointer-events-auto' : 'pointer-events-none',
             panelStateClass,
           )}
-          data-state={uiState}
+          data-state={state.uiState}
         >
           <div className="drawer__header flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-5 [padding-top:max(0.9rem,env(safe-area-inset-top))]">
             {title ? (
@@ -322,7 +359,7 @@ export const Drawer: React.FC<DrawerProps> = ({
           >
             {children}
           </div>
-        </div>
+        </dialog>
       </div>
     </div>
   );
