@@ -16,6 +16,7 @@ OFFICIAL_MACRO_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "official_macro
 MARKET_OVERVIEW_BINANCE_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_binance_transport.py"
 MARKET_OVERVIEW_SENTIMENT_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_sentiment_transport.py"
 MARKET_OVERVIEW_SINA_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_sina_transport.py"
+CN_HK_CONNECT_FLOW_PROVIDER_FILE = REPO_ROOT / "src" / "services" / "cn_hk_connect_flow_provider.py"
 MARKET_OVERVIEW_TICKFLOW_BREADTH_PROVIDER_FILE = REPO_ROOT / "src" / "services" / "market_overview_tickflow_breadth_provider.py"
 MARKET_OVERVIEW_YFINANCE_TRANSPORT_FILE = REPO_ROOT / "src" / "services" / "market_overview_yfinance_transport.py"
 MARKET_OVERVIEW_TRANSPORT_FILES = (
@@ -40,6 +41,20 @@ FORBIDDEN_TICKFLOW_PROVIDER_IMPORT_PREFIXES = (
     "api",
     "fastapi",
     "apps",
+    "src.services.market_cache",
+    "src.services.market_overview_service",
+    "src.services.market_provider_operations_service",
+)
+FORBIDDEN_CN_HK_FLOW_PROVIDER_IMPORT_PREFIXES = (
+    "api",
+    "fastapi",
+    "apps",
+    "data_provider",
+    "requests",
+    "httpx",
+    "aiohttp",
+    "urllib3",
+    "src.config",
     "src.services.market_cache",
     "src.services.market_overview_service",
     "src.services.market_provider_operations_service",
@@ -266,6 +281,16 @@ def test_market_overview_tickflow_breadth_provider_keeps_runtime_boundary_narrow
     }
 
 
+def test_cn_hk_connect_flow_provider_stays_cache_only_without_live_clients() -> None:
+    provider_imports = _module_imports_for_file(CN_HK_CONNECT_FLOW_PROVIDER_FILE)
+
+    assert "src.services.cn_hk_flow_contracts" in provider_imports
+    assert not _module_imports_matching_prefixes(
+        CN_HK_CONNECT_FLOW_PROVIDER_FILE,
+        FORBIDDEN_CN_HK_FLOW_PROVIDER_IMPORT_PREFIXES,
+    )
+
+
 def test_market_overview_service_keeps_cn_flows_and_tickflow_breadth_separate() -> None:
     cn_breadth_calls = _method_call_names(
         MARKET_OVERVIEW_SERVICE_FILE,
@@ -280,10 +305,11 @@ def test_market_overview_service_keeps_cn_flows_and_tickflow_breadth_separate() 
 
     assert "fetch_tickflow_cn_breadth_snapshot" in cn_breadth_calls
     assert "fetch_tickflow_cn_breadth_snapshot" not in cn_flows_calls
-    assert "_fallback_cn_flows_snapshot" in cn_flows_calls
+    assert "_cn_hk_connect_flow_provider" in cn_flows_calls
+    assert "build_authorized_cn_hk_connect_flow_snapshot" in cn_flows_calls
 
 
-def test_market_overview_service_keeps_cn_flows_fallback_only_and_projects_sector_rotation_from_radar() -> None:
+def test_market_overview_service_keeps_cn_flows_cache_only_and_projects_sector_rotation_from_radar() -> None:
     cn_flows_calls = _method_call_names(
         MARKET_OVERVIEW_SERVICE_FILE,
         "MarketOverviewService",
@@ -295,7 +321,11 @@ def test_market_overview_service_keeps_cn_flows_fallback_only_and_projects_secto
         "_fetch_sector_rotation_snapshot",
     )
 
-    assert cn_flows_calls == {"_fallback_cn_flows_snapshot"}
+    assert cn_flows_calls == {
+        "CnHkFlowProviderUnavailable",
+        "_cn_hk_connect_flow_provider",
+        "build_authorized_cn_hk_connect_flow_snapshot",
+    }
     assert "MarketRotationRadarService" in sector_rotation_calls
     assert "get_rotation_radar_quote_provider" in sector_rotation_calls
     assert "get_rotation_radar" in sector_rotation_calls
