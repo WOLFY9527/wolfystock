@@ -4406,7 +4406,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTicker, setActiveTicker] = useState<string | null>(null);
   const [pendingAnalysisTicker, setPendingAnalysisTicker] = useState<string | null>(null);
-  const hasHydratedInitialTickerRef = useRef(false);
   const [isDashboardLoading, setDashboardLoading] = useState(false);
   const [statusToast, setStatusToast] = useState<{ message: string; tone: 'error' | 'warning' } | null>(null);
   const [guestPreview, setGuestPreview] = useState<PublicAnalysisPreviewResponse | null>(null);
@@ -4601,7 +4600,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     if (hydratedRouteTaskIdRef.current === routeTaskId) {
       return;
     }
-    hasHydratedInitialTickerRef.current = true;
     hydratedRouteTaskIdRef.current = routeTaskId;
     setActiveTicker(routeSymbol);
     setPendingAnalysisTicker(routeSymbol);
@@ -4643,47 +4641,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   }, [focusedTaskId, focusedTaskStatus, refreshTaskProgress]);
 
   useEffect(() => {
-    if (hasHydratedInitialTickerRef.current) {
-      return;
-    }
-    if (pendingAnalysisTicker) {
-      return;
-    }
-
-    if (isGuest) {
-      return;
-    }
-
-    const nextTicker = normalizeTickerQuery(selectedReport?.meta.stockCode) || normalizeTickerQuery(recentHistoryItems[0]?.stockCode) || DEFAULT_HOME_TICKER;
-
-    const frame = window.requestAnimationFrame(() => {
-      setActiveTicker(nextTicker);
-      hasHydratedInitialTickerRef.current = true;
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [isGuest, pendingAnalysisTicker, recentHistoryItems, selectedReport?.meta.stockCode]);
-
-  useEffect(() => {
-    if (isGuest || pendingAnalysisTicker) {
-      return;
-    }
-
-    if (selectedTicker && !activeTicker) {
-      setActiveTicker(selectedTicker);
-      return;
-    }
-
-  }, [activeTicker, isGuest, pendingAnalysisTicker, selectedTicker]);
-
-  useEffect(() => {
-    if (!routeTaskId && pendingAnalysisTicker && selectedTicker === pendingAnalysisTicker) {
-      setPendingAnalysisTicker(null);
-      setDashboardLoading(false);
-    }
-  }, [pendingAnalysisTicker, routeTaskId, selectedTicker]);
-
-  useEffect(() => {
     if (!statusToast) {
       return undefined;
     }
@@ -4705,19 +4662,23 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       : activeTasks.find(
         (task) => normalizeTickerQuery(task.stockCode) === pendingAnalysisTicker && task.status === 'completed' && task.result?.report,
       );
-    if (!completedTask) {
+    const completedTicker = completedTask
+      ? (normalizeTickerQuery(completedTask.stockCode) || pendingAnalysisTicker || routeSymbol)
+      : (!routeTaskId && pendingAnalysisTicker && selectedTicker === pendingAnalysisTicker ? pendingAnalysisTicker : null);
+    if (!completedTicker) {
       return;
     }
 
-    const completedTicker = normalizeTickerQuery(completedTask.stockCode) || pendingAnalysisTicker || routeSymbol;
-    setActiveTicker(completedTicker);
+    if (completedTask) {
+      setActiveTicker(completedTicker);
+    }
     setPendingAnalysisTicker(null);
     setDashboardLoading(false);
-    void refreshHistory(true);
-    if (completedTicker) {
+    if (completedTask) {
+      void refreshHistory(true);
       void focusLatestHistoryForStock(completedTicker);
     }
-  }, [activeTasks, focusLatestHistoryForStock, pendingAnalysisTicker, refreshHistory, routeSymbol, routeTaskId]);
+  }, [activeTasks, focusLatestHistoryForStock, pendingAnalysisTicker, refreshHistory, routeSymbol, routeTaskId, selectedTicker]);
 
   const handleAnalyze = async (tickerOverride?: string) => {
     const rawQuery = (tickerOverride ?? searchQuery).trim();
@@ -4738,7 +4699,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     setDashboardLoading(true);
     setActiveTicker(normalizedTicker);
     setPendingAnalysisTicker(normalizedTicker);
-    hasHydratedInitialTickerRef.current = true;
     setSearchQuery('');
 
     if (isGuest) {
