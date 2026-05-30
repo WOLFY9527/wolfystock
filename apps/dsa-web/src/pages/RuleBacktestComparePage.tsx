@@ -1222,15 +1222,16 @@ const RuleBacktestComparePage: React.FC = () => {
     }
 
     setIsLoading(true);
-    try {
-      const payload = await backtestApi.compareRuleBacktestRuns({ runIds });
+    const payload = await backtestApi.compareRuleBacktestRuns({ runIds })
+      .catch((nextError) => {
+        setError(getParsedApiError(nextError));
+        return null;
+      });
+    if (payload) {
       setResponse(payload);
       setError(null);
-    } catch (nextError) {
-      setError(getParsedApiError(nextError));
-    } finally {
-      setIsLoading(false);
     }
+    setIsLoading(false);
   };
 
   const loadCompareOnParamChange = useEffectEvent(() => {
@@ -1242,7 +1243,15 @@ const RuleBacktestComparePage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    void loadCompareOnParamChange();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        void loadCompareOnParamChange();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [runIdsParam]);
 
   useEffect(() => () => {
@@ -1293,12 +1302,17 @@ const RuleBacktestComparePage: React.FC = () => {
   };
 
   const handleCopyText = async (content: string, successMessage: string) => {
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard_unavailable');
-      await navigator.clipboard.writeText(content);
-      setCopyFeedback(successMessage);
-    } catch {
+    if (!navigator.clipboard?.writeText) {
       setCopyFeedback('复制失败，请手动复制');
+    } else {
+      const didCopy = await navigator.clipboard.writeText(content)
+        .then(() => true)
+        .catch(() => false);
+      if (didCopy) {
+        setCopyFeedback(successMessage);
+      } else {
+        setCopyFeedback('复制失败，请手动复制');
+      }
     }
     if (copyResetTimerRef.current != null) {
       window.clearTimeout(copyResetTimerRef.current);

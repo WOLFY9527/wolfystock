@@ -378,14 +378,15 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
   const refreshIndex = async () => {
     setIsLoading(true);
     setLoadError(null);
-    try {
-      const payload = await backtestApi.getRuleBacktestSupportExportIndex(runId);
+    const payload = await backtestApi.getRuleBacktestSupportExportIndex(runId)
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, t('backtest.resultPage.supportExports.loadFailed')));
+        return null;
+      });
+    if (payload) {
       setItems(payload.exports || []);
-    } catch (error) {
-      setLoadError(getApiErrorMessage(error, t('backtest.resultPage.supportExports.loadFailed')));
-    } finally {
-      setIsLoading(false);
     }
+    setIsLoading(false);
   };
 
   const loadIndex = useEffectEvent(async () => {
@@ -393,7 +394,15 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
   });
 
   useEffect(() => {
-    void loadIndex();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        void loadIndex();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [runId, t]);
 
   const robustnessEvidenceItem = getSupportExportItem(
@@ -401,44 +410,52 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
     items,
   );
 
-  useEffect(() => {
-    if (robustnessEvidenceItem?.available !== true || robustnessPreview.status !== 'idle') {
-      return;
-    }
-    let active = true;
+  const loadRobustnessPreview = async () => {
     setRobustnessPreview({ status: 'loading' });
-    void backtestApi.getRuleBacktestRobustnessEvidenceJson(runId)
-      .then((payload) => {
-        if (!active) {
-          return;
-        }
-        setRobustnessPreview({ status: 'ready', payload });
-      })
+    const payload = await backtestApi.getRuleBacktestRobustnessEvidenceJson(runId)
       .catch((error) => {
-        if (!active) {
-          return;
-        }
         setRobustnessPreview({
           status: 'error',
           message: getApiErrorMessage(error, t('backtest.resultPage.supportExports.downloadFailed')),
         });
+        return null;
       });
+    if (payload) {
+      setRobustnessPreview({ status: 'ready', payload });
+    }
+  };
+
+  const loadRobustnessPreviewForEffect = useEffectEvent(() => {
+    void loadRobustnessPreview();
+  });
+
+  useEffect(() => {
+    if (robustnessEvidenceItem?.available !== true || robustnessPreview.status !== 'idle') {
+      return;
+    }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        void loadRobustnessPreviewForEffect();
+      }
+    });
     return () => {
-      active = false;
+      cancelled = true;
     };
   }, [robustnessEvidenceItem?.available, robustnessPreview.status, runId, t]);
 
   const handleDownload = async (definition: SupportExportDefinition) => {
     setDownloadError(null);
     setDownloadingId(definition.id);
-    try {
-      const content = await definition.loadContent(runId);
+    const content = await definition.loadContent(runId)
+      .catch((error) => {
+        setDownloadError(getApiErrorMessage(error, t('backtest.resultPage.supportExports.downloadFailed')));
+        return null;
+      });
+    if (content !== null) {
       downloadTextFile(definition.fileName(code, runId), content, definition.mimeType);
-    } catch (error) {
-      setDownloadError(getApiErrorMessage(error, t('backtest.resultPage.supportExports.downloadFailed')));
-    } finally {
-      setDownloadingId(null);
     }
+    setDownloadingId(null);
   };
 
   const getAvailabilityText = (item: RuleBacktestSupportExportIndexItem | null): string => {
