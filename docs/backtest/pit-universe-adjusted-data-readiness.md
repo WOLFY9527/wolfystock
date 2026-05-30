@@ -46,17 +46,51 @@ Any future PIT-universe or adjusted-data work should preserve these boundaries:
 - do not make decision-grade institutional claims until PIT and
   adjusted-data evidence exists.
 
+## Local Provenance Projection V1
+
+`src/services/backtest_data_provenance_projection.py` now provides a pure local
+`backtest_data_provenance_projection_v1` helper for diagnostic readiness
+communication. The projection is JSON-safe, deterministic, and explicitly
+marks itself as diagnostic-only with no authority grant, no decision-grade
+status, no institutional/professional readiness approval, no provider calls, no
+data ingestion, and no backtest engine math change.
+
+The v1 projection keeps the following capabilities unavailable or not ready by
+default:
+
+- point-in-time universe membership;
+- survivorship-bias-safe universe evidence;
+- delisting and inactive-symbol handling;
+- split, dividend, and corporate-action adjusted OHLC lineage;
+- adjustment methodology and version;
+- exchange calendar and session alignment;
+- symbol and identifier lineage;
+- vendor/source provenance;
+- `as_of` timestamp policy;
+- missing-bar and stale-bar policy;
+- historical snapshot reproducibility;
+- decision-grade institutional readiness.
+
+Caller-supplied local metadata may be observed for bounded labels, but labels
+such as `local`, `fixture`, `cached`, `yfinance`, or `polygon` are not accepted
+as readiness evidence and cannot grant authority.
+
+This helper is not runtime ingestion, provider evidence, API/readback/export
+wiring, storage, a data contract approval, or institutional readiness approval.
+Any future PIT/adjusted-data implementation still requires the staged contracts
+below before runtime use.
+
 ## Recommended Staged Tasks
 
 1. Define a fixture contract for PIT universe and adjusted OHLC metadata.
-2. Add a versioned data-provenance projection.
-3. Extend golden or readback fixtures for the approved contract.
-4. Implement bounded local-only runtime behavior only after contract approval.
+2. Extend golden or readback fixtures for the approved PIT/adjusted-data
+   contract.
+3. Implement bounded local-only runtime behavior only after contract approval.
 
 ## Boundary Reminder
 
 - This task implements none of the future data contracts listed above.
-- This note does not authorize runtime, service, test, API, schema, export,
-  frontend, provider, config, or generated-file changes.
+- This note and the v1 projection do not authorize runtime, API, schema,
+  export, readback, frontend, provider, config, or generated-file changes.
 - This note does not change current backtest calculations, exports,
   stored-result semantics, local-only guards, or provider fallback behavior.
