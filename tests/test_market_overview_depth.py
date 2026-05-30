@@ -86,6 +86,18 @@ def _missing_us_breadth_activation() -> dict[str, object]:
     }
 
 
+def _configured_unavailable_us_breadth_activation(reason: str) -> dict[str, object]:
+    payload = _missing_us_breadth_activation()
+    payload.update(
+        {
+            "credentialsPresent": True,
+            "providerConstructed": True,
+            "reasonCodes": [reason],
+        }
+    )
+    return payload
+
+
 def test_us_breadth_sector_proxy_returns_stable_shape_with_metadata() -> None:
     service = MarketOverviewService()
     quotes = {
@@ -202,6 +214,29 @@ def test_us_breadth_unavailable_returns_compact_unavailable_shape() -> None:
     assert all(item["broadMarketClaimAllowed"] is False for item in payload["items"])
     assert payload["items"][0]["label"] == "US breadth missing/unavailable"
     assert payload["items"][0]["sourceLabel"] == "未接入"
+
+
+def test_us_breadth_configured_polygon_unavailable_preserves_provider_reason() -> None:
+    service = MarketOverviewService()
+
+    with (
+        patch(
+            "src.services.market_overview_service.run_polygon_us_breadth_activation",
+            return_value=_configured_unavailable_us_breadth_activation("polygon_unauthorized"),
+        ),
+        patch.object(service, "_latest_quote", side_effect=RuntimeError("yfinance unavailable")),
+        patch.object(service, "_load_persistent_snapshot", return_value=None),
+    ):
+        payload = service.get_us_breadth()
+
+    assert payload["source"] == "unavailable"
+    assert payload["freshness"] == "unavailable"
+    assert payload["sourceAuthorityAllowed"] is False
+    assert payload["scoreContributionAllowed"] is False
+    assert payload["authorityDiagnostics"]["reason"] == "polygon_unauthorized"
+    assert payload["sourceAuthorityReason"] == "polygon_unauthorized"
+    assert payload["degradationReason"] == "polygon_unauthorized"
+    assert payload["routeRejectedReasonCodes"] == ["polygon_unauthorized"]
 
 
 def test_us_funds_flow_quote_proxy_is_labeled_as_proxy_and_non_authoritative() -> None:

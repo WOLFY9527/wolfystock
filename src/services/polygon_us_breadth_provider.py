@@ -14,12 +14,14 @@ import math
 import os
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
+from src.utils.dotenv_loader import read_dotenv_values
 from src.services.us_breadth_contracts import (
     US_BREADTH_MISSING_PROVIDER_REASON,
     US_BREADTH_SYMBOLS,
@@ -112,7 +114,7 @@ def run_polygon_us_breadth_activation(
 ) -> dict[str, Any]:
     """Fetch recent grouped daily rows and return a sanitized activation summary."""
 
-    credential = _text(api_key) if api_key is not None else _text(os.getenv("POLYGON_API_KEY"))
+    credential = _text(api_key) if api_key is not None else _polygon_api_key()
     if not credential:
         return _fail_closed_summary(
             reason_codes=(US_BREADTH_MISSING_PROVIDER_REASON,),
@@ -800,6 +802,22 @@ def _first_present(mapping: Mapping[str, Any], *keys: str) -> Any:
 
 def _text(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _polygon_api_key() -> str:
+    configured = _text(os.getenv("POLYGON_API_KEY"))
+    if configured:
+        return configured
+
+    env_file = _text(os.getenv("ENV_FILE"))
+    if not env_file:
+        return ""
+    env_path = Path(env_file)
+    try:
+        values = read_dotenv_values(env_path)
+    except (OSError, ValueError):
+        return ""
+    return _text(values.get("POLYGON_API_KEY"))
 
 
 __all__ = [

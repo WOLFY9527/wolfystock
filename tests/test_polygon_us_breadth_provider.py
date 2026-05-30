@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -82,6 +83,45 @@ def test_missing_polygon_key_keeps_us_breadth_fail_closed_with_existing_reason()
     assert result["reasonCodes"] == [US_BREADTH_MISSING_PROVIDER_REASON]
 
 
+def test_polygon_activation_uses_env_file_key_when_process_env_is_missing(tmp_path, monkeypatch) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text("POLYGON_API_KEY=polygon-test-key\n", encoding="utf-8")
+    monkeypatch.delenv("POLYGON_API_KEY", raising=False)
+    monkeypatch.setenv("ENV_FILE", str(env_path))
+    seen_key_present = False
+    payloads = {
+        "2026-05-21": _grouped_payload([
+            {"T": "AAA", "o": 10.0, "c": 11.0},
+            {"T": "BBB", "o": 20.0, "c": 18.0},
+            {"T": "CCC", "o": 30.0, "c": 30.0},
+        ]),
+        "2026-05-20": _grouped_payload([
+            {"T": "AAA", "o": 9.0, "c": 10.0},
+            {"T": "BBB", "o": 22.0, "c": 20.0},
+            {"T": "CCC", "o": 29.0, "c": 30.0},
+        ]),
+    }
+
+    def transport(date: str, api_key: str, timeout: float) -> tuple[int, dict[str, object]]:
+        nonlocal seen_key_present
+        seen_key_present = api_key == "polygon-test-key"
+        return 200, payloads[date]
+
+    result = run_polygon_us_breadth_activation(
+        transport=transport,
+        now=datetime(2026, 5, 22, 12, tzinfo=POLYGON_US_EASTERN_TZ),
+        min_coverage_count=3,
+        high_low_lookback_sessions=1,
+    )
+
+    assert seen_key_present is True
+    assert "POLYGON_API_KEY" not in os.environ
+    assert result["credentialsPresent"] is True
+    assert result["providerConstructed"] is True
+    assert result["sourceAuthorityAllowed"] is True
+    assert result["scoreContributionAllowed"] is True
+
+
 def test_polygon_unauthorized_response_keeps_us_breadth_fail_closed() -> None:
     def transport(date: str, api_key: str, timeout: float) -> tuple[int, dict[str, object]]:
         return 403, {"status": "ERROR", "error": "forbidden"}
@@ -98,6 +138,25 @@ def test_polygon_unauthorized_response_keeps_us_breadth_fail_closed() -> None:
     assert result["sourceAuthorityAllowed"] is False
     assert result["scoreContributionAllowed"] is False
     assert result["reasonCodes"] == [POLYGON_US_BREADTH_REASON_UNAUTHORIZED]
+
+
+def test_empty_polygon_grouped_daily_with_key_reports_unavailable_not_live() -> None:
+    def transport(date: str, api_key: str, timeout: float) -> tuple[int, dict[str, object]]:
+        return 200, _grouped_payload([])
+
+    result = run_polygon_us_breadth_activation(
+        api_key="test-key",
+        transport=transport,
+        now=datetime(2026, 5, 22, 12, tzinfo=POLYGON_US_EASTERN_TZ),
+        min_coverage_count=3,
+    )
+
+    assert result["credentialsPresent"] is True
+    assert result["providerConstructed"] is True
+    assert result["probePassed"] is False
+    assert result["sourceAuthorityAllowed"] is False
+    assert result["scoreContributionAllowed"] is False
+    assert result["reasonCodes"] == [POLYGON_US_BREADTH_REASON_COVERAGE_BELOW_THRESHOLD]
 
 
 def test_malformed_polygon_grouped_response_keeps_us_breadth_fail_closed() -> None:

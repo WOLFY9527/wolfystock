@@ -978,13 +978,27 @@ class MarketOverviewService:
         )
 
     def get_us_breadth(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        authority_state: Dict[str, Mapping[str, Any]] = {}
+
+        def fetcher() -> Dict[str, Any]:
+            payload = self._fetch_us_breadth_snapshot()
+            diagnostic = payload.get("authorityDiagnostics")
+            if isinstance(diagnostic, Mapping):
+                authority_state["diagnostic"] = dict(diagnostic)
+            return payload
+
+        def fallback_factory() -> Dict[str, Any]:
+            return self._fallback_us_breadth_snapshot(
+                authority_diagnostic=authority_state.get("diagnostic")
+            )
+
         return self._with_request_quote_memo(
             lambda: self._classified_snapshot(
                 cache_key="us_breadth",
                 panel_name="UsBreadthCard",
                 endpoint_url="/api/v1/market/us-breadth",
-                fetcher=self._fetch_us_breadth_snapshot,
-                fallback_factory=self._fallback_us_breadth_snapshot,
+                fetcher=fetcher,
+                fallback_factory=fallback_factory,
                 actor=actor,
             )
         )
@@ -6891,6 +6905,31 @@ class MarketOverviewService:
         authority_diagnostic: Optional[Mapping[str, Any]] = None,
     ) -> Dict[str, Any]:
         updated_at = _now_iso()
+        diagnostic = dict(authority_diagnostic or build_us_breadth_missing_authority_diagnostic())
+        diagnostic_reason_codes = [
+            str(code)
+            for code in diagnostic.get("reasonCodes") or []
+            if str(code or "").strip()
+        ]
+        unavailable_reason = str(
+            diagnostic.get("reason")
+            or (diagnostic_reason_codes[0] if diagnostic_reason_codes else None)
+            or US_BREADTH_MISSING_PROVIDER_REASON
+        )
+        route_rejected_reason_codes = list(dict.fromkeys(diagnostic_reason_codes or [unavailable_reason]))
+        configured_provider_unavailable = bool(
+            diagnostic.get("credentialsPresent") or diagnostic.get("providerConstructed")
+        )
+        warning = (
+            "US breadth missing/unavailable: configured authorized breadth provider is unavailable."
+            if configured_provider_unavailable
+            else "US breadth missing/unavailable: official or authorized breadth provider is not configured."
+        )
+        unavailable_detail = (
+            "Configured authorized US market breadth provider is unavailable"
+            if configured_provider_unavailable
+            else "Official or authorized US market breadth provider is not configured"
+        )
         missing_meta = {
             "breadthClaimType": "missing_unavailable_breadth",
             "representativeSample": False,
@@ -6898,22 +6937,22 @@ class MarketOverviewService:
             "observationOnly": True,
             "sourceAuthorityAllowed": False,
             "scoreContributionAllowed": False,
-            "sourceAuthorityReason": US_BREADTH_MISSING_PROVIDER_REASON,
+            "sourceAuthorityReason": unavailable_reason,
             "sourceAuthorityRouteRejected": False,
-            "routeRejectedReasonCodes": [US_BREADTH_MISSING_PROVIDER_REASON],
+            "routeRejectedReasonCodes": route_rejected_reason_codes,
             "sourceType": "missing",
             "sourceTier": "official_or_authorized_licensed_feed",
             "trustLevel": "unavailable",
-            "degradationReason": US_BREADTH_MISSING_PROVIDER_REASON,
+            "degradationReason": unavailable_reason,
             "sourceFreshnessEvidence": {
                 "freshness": "unavailable",
                 "isUnavailable": True,
                 "isFallback": True,
-                "warning": "US breadth missing/unavailable",
+                "warning": warning,
             },
         }
         items = [
-            self._unavailable_item("US breadth missing/unavailable", "US_BREADTH_UNAVAILABLE", "未接入", updated_at, detail="Official or authorized US market breadth provider is not configured"),
+            self._unavailable_item("US breadth missing/unavailable", "US_BREADTH_UNAVAILABLE", "未接入", updated_at, detail=unavailable_detail),
             self._unavailable_item("Advance / decline", "ADVANCE_DECLINE_UNAVAILABLE", "未接入", updated_at),
             self._unavailable_item("52W high / low", "HIGH_LOW_UNAVAILABLE", "未接入", updated_at),
         ]
@@ -6926,8 +6965,8 @@ class MarketOverviewService:
             "freshness": "unavailable",
             "fallbackUsed": True,
             "isFallback": True,
-            "warning": "US breadth missing/unavailable: official or authorized breadth provider is not configured.",
-            "authorityDiagnostics": dict(authority_diagnostic or build_us_breadth_missing_authority_diagnostic()),
+            "warning": warning,
+            "authorityDiagnostics": diagnostic,
             **missing_meta,
             "items": [{**item, **missing_meta} for item in items],
         }
