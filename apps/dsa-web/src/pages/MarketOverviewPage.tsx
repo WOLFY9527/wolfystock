@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import type { MarketDataMeta, MarketOverviewPanel } from '../api/marketOverview';
 import { marketOverviewApi } from '../api/marketOverview';
 import type {
@@ -330,6 +330,21 @@ function writeLocalMarketOverviewSnapshot(panels: PanelState): void {
   }
 }
 
+function deriveLocalSnapshotSavedAt(panels: PanelState, fallbackSavedAt?: string): string | undefined {
+  let latestSavedAt = fallbackSavedAt;
+  (Object.keys(panels) as PanelKey[]).forEach((panelKey) => {
+    const value = panels[panelKey];
+    if (!value || !hasUsablePanelValue(value)) {
+      return;
+    }
+    const updatedAt = typeof value.updatedAt === 'string' && value.updatedAt ? value.updatedAt : undefined;
+    if (updatedAt && (!latestSavedAt || updatedAt > latestSavedAt)) {
+      latestSavedAt = updatedAt;
+    }
+  });
+  return latestSavedAt;
+}
+
 function assignPanelValue(nextPanels: PanelState, panelKey: PanelKey, value: PanelState[PanelKey]): void {
   switch (panelKey) {
     case 'indices':
@@ -652,21 +667,22 @@ function subscribeToCryptoStream(subscriber: CryptoStreamSubscriber): () => void
 const MarketOverviewPage = () => {
   const { language } = useI18n();
   const { isAdminMode, canReadProviders } = useProductSurface();
-  const initialLocalSnapshot = buildInitialPanelsFromLocalSnapshot();
+  const initialLocalSnapshotRef = useRef(buildInitialPanelsFromLocalSnapshot());
+  const initialLocalSnapshot = initialLocalSnapshotRef.current;
   const [panels, setPanels] = useState<PanelState>(initialLocalSnapshot.panels);
   const [loading, setLoading] = useState(initialLocalSnapshot.source !== 'local');
-  const [localSnapshotSavedAt, setLocalSnapshotSavedAt] = useState<string | undefined>(initialLocalSnapshot.savedAt);
   const [refreshErrors, setRefreshErrors] = useState<Record<string, string>>({});
   const [refreshingPanel, setRefreshingPanel] = useState<PanelKey | null>(null);
   const [cryptoRealtimeStatus, setCryptoRealtimeStatus] = useState<CryptoRealtimeStatus>('snapshot');
-  const [autoRevalidateTick, setAutoRevalidateTick] = useState(0);
   const autoRevalidateTimersRef = useRef<Partial<Record<PanelKey, number>>>({});
   const autoRevalidateAttemptsRef = useRef<Partial<Record<PanelKey, number>>>({});
   const autoRevalidateInFlightRef = useRef<Partial<Record<PanelKey, true>>>({});
   const latestPanelsRef = useRef(panels);
   const latestRefreshingPanelRef = useRef<PanelKey | null>(null);
 
-  const resetAutoRevalidatePanel = useCallback((panelKey: PanelKey) => {
+  const localSnapshotSavedAt = deriveLocalSnapshotSavedAt(panels, initialLocalSnapshot.savedAt);
+
+  const resetAutoRevalidatePanel = (panelKey: PanelKey) => {
     const timer = autoRevalidateTimersRef.current[panelKey];
     if (timer != null) {
       window.clearTimeout(timer);
@@ -674,7 +690,7 @@ const MarketOverviewPage = () => {
     }
     delete autoRevalidateAttemptsRef.current[panelKey];
     delete autoRevalidateInFlightRef.current[panelKey];
-  }, []);
+  };
 
   const loadPanels = async (cancelledRef?: { current: boolean }) => {
     setLoading(true);
@@ -741,7 +757,7 @@ const MarketOverviewPage = () => {
     await Promise.allSettled([...primaryPromises, ...stagedPromises]);
   };
 
-  const refreshPanel = useCallback(async (
+  const refreshPanel = async (
     panelKey: PanelKey,
     loadPanel: () => Promise<PanelState[PanelKey]>,
     options?: { silent?: boolean },
@@ -783,7 +799,19 @@ const MarketOverviewPage = () => {
         setRefreshingPanel((currentPanel) => (currentPanel === panelKey ? null : currentPanel));
       }
     }
-  }, []);
+  };
+
+  const resetAutoRevalidatePanelEffect = useEffectEvent((panelKey: PanelKey) => {
+    resetAutoRevalidatePanel(panelKey);
+  });
+
+  const refreshPanelEffect = useEffectEvent(async (
+    panelKey: PanelKey,
+    loadPanel: () => Promise<PanelState[PanelKey]>,
+    options?: { silent?: boolean },
+  ) => {
+    await refreshPanel(panelKey, loadPanel, options);
+  });
 
   useEffect(() => {
     const cancelledRef = { current: false };
@@ -801,7 +829,6 @@ const MarketOverviewPage = () => {
 
   useEffect(() => {
     writeLocalMarketOverviewSnapshot(panels);
-    setLocalSnapshotSavedAt(new Date().toISOString());
   }, [panels]);
 
   useEffect(() => {
@@ -816,7 +843,7 @@ const MarketOverviewPage = () => {
     const schedulePanel = (panelKey: PanelKey) => {
       const panelValue = latestPanelsRef.current[panelKey];
       if (!shouldAutoRevalidatePanelValue(panelValue)) {
-        resetAutoRevalidatePanel(panelKey);
+        resetAutoRevalidatePanelEffect(panelKey);
         return;
       }
       if (latestRefreshingPanelRef.current === panelKey || autoRevalidateInFlightRef.current[panelKey]) {
@@ -845,14 +872,13 @@ const MarketOverviewPage = () => {
         }
         autoRevalidateAttemptsRef.current[panelKey] = attempts + 1;
         autoRevalidateInFlightRef.current[panelKey] = true;
-        void refreshPanel(panelKey, loadPanel, { silent: true }).finally(() => {
+        void refreshPanelEffect(panelKey, loadPanel, { silent: true }).finally(() => {
           delete autoRevalidateInFlightRef.current[panelKey];
-          setAutoRevalidateTick((currentTick) => currentTick + 1);
         });
       }, delayMs);
     };
     AUTO_REVALIDATE_PANEL_KEYS.forEach(schedulePanel);
-  }, [panels, refreshingPanel, autoRevalidateTick, refreshPanel, resetAutoRevalidatePanel]);
+  }, [panels, refreshingPanel, refreshErrors]);
 
   useEffect(() => () => {
     AUTO_REVALIDATE_PANEL_KEYS.forEach((panelKey) => {
@@ -868,7 +894,7 @@ const MarketOverviewPage = () => {
     const timers = MARKET_OVERVIEW_POLLING_GROUPS.map((group) => (
       window.setInterval(() => {
         group.requests.forEach(([panelKey, loadPanel]) => {
-          void refreshPanel(panelKey, loadPanel, { silent: true });
+          void refreshPanelEffect(panelKey, loadPanel, { silent: true });
         });
       }, group.intervalMs)
     ));
@@ -877,12 +903,12 @@ const MarketOverviewPage = () => {
         window.clearInterval(timer);
       });
     };
-  }, [refreshPanel]);
+  }, []);
 
   useEffect(() => {
     return subscribeToCryptoStream(({ panel, status }) => {
       if (panel) {
-        resetAutoRevalidatePanel('crypto');
+        resetAutoRevalidatePanelEffect('crypto');
         setPanels((currentPanels) => ({
           ...currentPanels,
           crypto: panel,
@@ -890,7 +916,7 @@ const MarketOverviewPage = () => {
       }
       setCryptoRealtimeStatus(status);
     });
-  }, [resetAutoRevalidatePanel]);
+  }, []);
 
   const handleWorkbenchRefresh = (panelKey: PanelKey) => {
     const loadPanel = getPanelLoader(panelKey);
