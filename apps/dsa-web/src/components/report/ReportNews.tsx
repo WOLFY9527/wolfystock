@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { ParsedApiError } from '../../api/error';
 import { getParsedApiError } from '../../api/error';
 import { ApiErrorAlert } from '../common/ApiErrorAlert';
@@ -19,54 +19,81 @@ interface ReportNewsProps {
  * 资讯区组件 - 产品工作台风格
  */
 export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, language = 'zh' }) => {
-  const reportLanguage = normalizeReportLanguage(language);
-  const text = getReportText(reportLanguage);
-  const loadingCopy = text.loadingNewsBody;
-  const [isLoading, setIsLoading] = useState(false);
-  const [items, setItems] = useState<NewsIntelItem[]>([]);
-  const [error, setError] = useState<ParsedApiError | null>(null);
-
-  const fetchNews = async () => {
-    if (!recordId) return;
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await historyApi.getNews(recordId, limit);
-      setItems(response.items || []);
-    } catch (err) {
-      setError(getParsedApiError(err));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    setItems([]);
-    setError(null);
-
-    if (!recordId) {
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    void (async () => {
-      try {
-        const response = await historyApi.getNews(recordId, limit);
-        setItems(response.items || []);
-      } catch (err) {
-        setError(getParsedApiError(err));
-      } finally {
-        setIsLoading(false);
-      }
-    })();
-  }, [recordId, limit]);
-
   if (!recordId) {
     return null;
   }
+
+  return (
+    <ReportNewsBody
+      key={`${recordId}:${limit}`}
+      recordId={recordId}
+      limit={limit}
+      language={language}
+    />
+  );
+};
+
+interface ReportNewsBodyProps {
+  recordId: number;
+  limit: number;
+  language: ReportLanguage;
+}
+
+interface ReportNewsState {
+  isLoading: boolean;
+  items: NewsIntelItem[];
+  error: ParsedApiError | null;
+}
+
+const initialReportNewsState: ReportNewsState = {
+  isLoading: true,
+  items: [],
+  error: null,
+};
+
+const ReportNewsBody: React.FC<ReportNewsBodyProps> = ({ recordId, limit, language }) => {
+  const reportLanguage = normalizeReportLanguage(language);
+  const text = getReportText(reportLanguage);
+  const loadingCopy = text.loadingNewsBody;
+  const [newsState, setNewsState] = useState<ReportNewsState>(initialReportNewsState);
+  const { isLoading, items, error } = newsState;
+
+  const fetchNews = () => {
+    setNewsState((currentState) => ({ ...currentState, isLoading: true, error: null }));
+
+    void historyApi.getNews(recordId, limit)
+      .then((response) => {
+        setNewsState({ isLoading: false, items: response.items || [], error: null });
+      })
+      .catch((err) => {
+        setNewsState((currentState) => ({
+          ...currentState,
+          isLoading: false,
+          error: getParsedApiError(err),
+        }));
+      });
+  };
+
+  useEffect(() => {
+    let active = true;
+    void historyApi.getNews(recordId, limit)
+      .then((response) => {
+        if (!active) {
+          return;
+        }
+        setNewsState({ isLoading: false, items: response.items || [], error: null });
+      })
+      .catch((err) => {
+        if (!active) {
+          return;
+        }
+        setNewsState({ isLoading: false, items: [], error: getParsedApiError(err) });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [recordId, limit]);
 
   return (
     <Card variant="bordered" padding="md" className="home-panel-card">
@@ -93,7 +120,7 @@ export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, lan
         <ApiErrorAlert
           error={error}
           actionLabel={text.retry}
-          onAction={() => void fetchNews()}
+          onAction={fetchNews}
           dismissLabel={text.dismiss}
         />
       )}
