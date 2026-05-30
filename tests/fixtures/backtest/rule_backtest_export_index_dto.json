@@ -51,6 +51,36 @@
       "delivery_mode": "api",
       "endpoint_path": "/api/v1/backtest/rule/runs/7001/robustness-evidence.json",
       "payload_class": "heavy"
+    },
+    {
+      "key": "regime_attribution_readiness_json",
+      "available": true,
+      "availability_reason": "run_exists_readiness_projection_available",
+      "format": "json",
+      "media_type": "application/json",
+      "delivery_mode": "api",
+      "endpoint_path": "/api/v1/backtest/rule/runs/7001/regime-attribution-readiness.json",
+      "payload_class": "compact"
+    },
+    {
+      "key": "execution_model_metadata_json",
+      "available": true,
+      "availability_reason": "run_exists_execution_model_metadata_projection_available",
+      "format": "json",
+      "media_type": "application/json",
+      "delivery_mode": "api",
+      "endpoint_path": "/api/v1/backtest/rule/runs/7001/execution-model-metadata.json",
+      "payload_class": "compact"
+    },
+    {
+      "key": "oos_parameter_readiness_json",
+      "available": true,
+      "availability_reason": "run_exists_oos_parameter_readiness_projection_available",
+      "format": "json",
+      "media_type": "application/json",
+      "delivery_mode": "api",
+      "endpoint_path": "/api/v1/backtest/rule/runs/7001/oos-parameter-readiness.json",
+      "payload_class": "compact"
     }
   ]
 }

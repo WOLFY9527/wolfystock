@@ -64,6 +64,9 @@ EXPORT_KEYS = [
     "execution_trace_json",
     "execution_trace_csv",
     "robustness_evidence_json",
+    "regime_attribution_readiness_json",
+    "execution_model_metadata_json",
+    "oos_parameter_readiness_json",
 ]
 FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS = (
     "optimizer",
@@ -578,7 +581,16 @@ def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_bou
     assert export_index["run_id"] == 7001
     assert export_index["status"] == "completed"
     assert [item["key"] for item in export_index["exports"]] == EXPORT_KEYS
-    assert [item["payload_class"] for item in export_index["exports"]] == ["compact", "compact", "heavy", "heavy", "heavy"]
+    assert [item["payload_class"] for item in export_index["exports"]] == [
+        "compact",
+        "compact",
+        "heavy",
+        "heavy",
+        "heavy",
+        "compact",
+        "compact",
+        "compact",
+    ]
     for item in export_index["exports"]:
         assert item["delivery_mode"] == "api"
         assert item["endpoint_path"].startswith("/api/v1/backtest/rule/runs/7001/")
@@ -591,6 +603,21 @@ def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_bou
     assert export_index["exports"][4]["available"] is True
     assert export_index["exports"][4]["availability_reason"] == "stored_robustness_analysis_present"
     assert export_index["exports"][4]["endpoint_path"] == "/api/v1/backtest/rule/runs/7001/robustness-evidence.json"
+    assert export_index["exports"][5]["available"] is True
+    assert export_index["exports"][5]["availability_reason"] == "run_exists_readiness_projection_available"
+    assert export_index["exports"][5]["endpoint_path"] == "/api/v1/backtest/rule/runs/7001/regime-attribution-readiness.json"
+    assert export_index["exports"][6]["available"] is True
+    assert (
+        export_index["exports"][6]["availability_reason"]
+        == "run_exists_execution_model_metadata_projection_available"
+    )
+    assert export_index["exports"][6]["endpoint_path"] == "/api/v1/backtest/rule/runs/7001/execution-model-metadata.json"
+    assert export_index["exports"][7]["available"] is True
+    assert (
+        export_index["exports"][7]["availability_reason"]
+        == "run_exists_oos_parameter_readiness_projection_available"
+    )
+    assert export_index["exports"][7]["endpoint_path"] == "/api/v1/backtest/rule/runs/7001/oos-parameter-readiness.json"
 
     assert manifest["manifest_kind"] == "rule_backtest_support_bundle"
     assert manifest["run"]["id"] == export_index["run_id"]
