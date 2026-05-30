@@ -69,14 +69,15 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
   const copyResetTimerRef = useRef<Partial<Record<JsonPanel, number>>>({});
 
   useEffect(() => {
+    const timerRef = copyResetTimerRef;
     return () => {
-      const timers = copyResetTimerRef.current;
+      const timers = timerRef.current;
       Object.values(timers).forEach((timerId) => {
         if (timerId !== undefined) {
           window.clearTimeout(timerId);
         }
       });
-      copyResetTimerRef.current = {};
+      timerRef.current = {};
     };
   }, []);
 

@@ -167,8 +167,9 @@ export function useAutocomplete(
 
   // Cleanup timer (on component unmount)
   useEffect(() => {
+    const timerRef = debounceTimerRef;
     return () => {
-      const pendingTimer = debounceTimerRef.current;
+      const pendingTimer = timerRef.current;
       if (pendingTimer) {
         clearTimeout(pendingTimer);
       }
