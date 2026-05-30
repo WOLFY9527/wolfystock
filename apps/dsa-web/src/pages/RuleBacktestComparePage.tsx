@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
@@ -1205,14 +1205,15 @@ function CompareCostSlippagePanel({
 const RuleBacktestComparePage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const runIds = parseRunIdsParam(searchParams.get('runIds'));
+  const runIdsParam = searchParams.get('runIds') || '';
+  const runIds = parseRunIdsParam(runIdsParam);
   const [response, setResponse] = useState<RuleBacktestCompareResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const copyResetTimerRef = useRef<number | null>(null);
 
-  const fetchCompare = useCallback(async () => {
+  const fetchCompare = async () => {
     if (runIds.length < 2) {
       setResponse(null);
       setError(null);
@@ -1230,15 +1231,19 @@ const RuleBacktestComparePage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [runIds]);
+  };
+
+  const loadCompareOnParamChange = useEffectEvent(() => {
+    void fetchCompare();
+  });
 
   useEffect(() => {
     document.title = '规则回测比较工作台 - WolfyStock';
   }, []);
 
   useEffect(() => {
-    void fetchCompare();
-  }, [fetchCompare]);
+    void loadCompareOnParamChange();
+  }, [runIdsParam]);
 
   useEffect(() => () => {
     if (copyResetTimerRef.current != null) {
