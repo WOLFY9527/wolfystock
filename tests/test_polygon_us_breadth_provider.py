@@ -3,10 +3,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from scripts.diagnose_polygon_market_overview_activation import (
+    build_market_overview_activation_smoke_output,
+)
 from src.services.polygon_us_breadth_provider import (
     POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON,
     POLYGON_HIGH_LOW_HISTORY_DATE_GAP_REASON,
@@ -81,6 +85,59 @@ def test_missing_polygon_key_keeps_us_breadth_fail_closed_with_existing_reason()
     assert result["fulfilledMetrics"] == []
     assert result["missingMetrics"] == list(US_BREADTH_SYMBOLS)
     assert result["reasonCodes"] == [US_BREADTH_MISSING_PROVIDER_REASON]
+
+
+def test_market_overview_polygon_smoke_output_is_sanitized_reason_only() -> None:
+    output = build_market_overview_activation_smoke_output(
+        {
+            "credentialsPresent": True,
+            "providerConstructed": True,
+            "probePassed": False,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "missingMetrics": list(US_BREADTH_SYMBOLS),
+            "reasonCodes": [POLYGON_US_BREADTH_REASON_UNAUTHORIZED],
+            "metrics": {"advancers": 1, "decliners": 2},
+            "rawPayload": {"providerPayload": "raw-provider-value"},
+        }
+    )
+
+    assert output == {
+        "credentialsPresent": True,
+        "providerConstructed": True,
+        "probePassed": False,
+        "reason": POLYGON_US_BREADTH_REASON_UNAUTHORIZED,
+        "status": "unauthorized_or_entitlement_denied",
+        "entitlement": "denied_or_unavailable",
+        "sourceAuthorityAllowed": False,
+        "scoreContributionAllowed": False,
+        "missingRequiredSymbols": list(US_BREADTH_SYMBOLS),
+        "missingRequiredWindows": [],
+    }
+    serialized = json.dumps(output, ensure_ascii=False)
+    assert "raw-provider-value" not in serialized
+    assert "rawPayload" not in serialized
+    assert "advancers" not in serialized
+
+
+def test_market_overview_polygon_smoke_reports_unprobed_high_low_window() -> None:
+    output = build_market_overview_activation_smoke_output(
+        {
+            "credentialsPresent": True,
+            "providerConstructed": True,
+            "probePassed": True,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "fulfilledMetrics": list(US_BREADTH_SYMBOLS),
+            "missingMetrics": [],
+            "reasonCodes": [],
+            "highLowLookbackSessions": 1,
+        }
+    )
+
+    assert output["status"] == "score_ready"
+    assert output["missingRequiredSymbols"] == ["NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"]
+    assert output["missingRequiredWindows"] == ["high_low_lookback"]
 
 
 def test_polygon_activation_uses_env_file_key_when_process_env_is_missing(tmp_path, monkeypatch) -> None:
