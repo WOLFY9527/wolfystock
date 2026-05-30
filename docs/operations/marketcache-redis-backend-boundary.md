@@ -1,14 +1,14 @@
 # MarketCache Redis Backend Boundary
 
-Status: disabled-by-default mirror client only. The module-level `market_cache` singleton now uses a config-driven builder, but default config still builds a local cache with `NullMarketCacheRemoteBackend`.
+Status: disabled-by-default mirror client only. Module import no longer constructs the config-driven singleton; `get_market_cache()` and the module-level `market_cache` compatibility proxy lazily build it on first use. Default config still builds a local cache with `NullMarketCacheRemoteBackend`.
 
 ## Current remote seam
 
 - `MarketCache` currently exposes only a best-effort remote mirror seam behind `MarketCacheRemoteBackend`.
 - Direct `MarketCache()` construction remains local-only with `NullMarketCacheRemoteBackend`, so test-local/default constructor behavior is unchanged.
-- `MarketCacheRemoteMirrorDispatcher` exists as in-process mirror infrastructure. It wraps a supplied backend with a bounded single-worker queue and is used by the singleton builder only when Redis/Valkey is explicitly configured.
+- `MarketCacheRemoteMirrorDispatcher` exists as in-process mirror infrastructure. It wraps a supplied backend with a bounded single-worker queue and is used by the lazy singleton builder only when Redis/Valkey is explicitly configured.
 - The seam is mirror-only: current runtime may project a JSON-safe document for persistence, but it does not read, hydrate, or re-authorize payloads from any remote store.
-- `RedisMarketCacheRemoteBackend` exists behind this seam as a lazily imported persist-only client. Default MarketCache import/use does not require Redis/Valkey availability.
+- `RedisMarketCacheRemoteBackend` exists behind this seam as a lazily imported persist-only client. Default MarketCache module import does not load config, construct the singleton, or require Redis/Valkey availability.
 - `MARKET_CACHE_REMOTE_BACKEND=disabled` is the default. Redis mode activates only with explicit config and remains a mirror-only client behind `MarketCacheRemoteMirrorDispatcher`.
 
 ## Request-path persist policy
@@ -55,7 +55,7 @@ Status: disabled-by-default mirror client only. The module-level `market_cache` 
 
 ## Safest future implementation boundary
 
-- Redis/Valkey work stays behind the existing `MarketCache` API as a disabled-by-default singleton-builder adapter.
+- Redis/Valkey work stays behind the existing `MarketCache` API as a disabled-by-default lazy singleton-builder adapter.
 - Default behavior must not change; the local in-memory backend and default null remote backend remain authoritative.
 - A first remote backend may store only JSON-safe payload projections.
 - Remote reads, hydration, cache-warming authority, and fallback/live authority are out of scope for the first real adapter.

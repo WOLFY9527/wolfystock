@@ -626,4 +626,48 @@ def build_market_cache_from_config() -> MarketCache:
     return MarketCache(remote_backend=remote_backend)
 
 
-market_cache = build_market_cache_from_config()
+_market_cache_singleton: Optional[MarketCache] = None
+_market_cache_singleton_lock = threading.RLock()
+
+
+def get_market_cache() -> MarketCache:
+    """Return the lazily built module singleton."""
+
+    global _market_cache_singleton
+    with _market_cache_singleton_lock:
+        if _market_cache_singleton is None:
+            _market_cache_singleton = build_market_cache_from_config()
+        return _market_cache_singleton
+
+
+def reset_market_cache_for_tests() -> None:
+    """Reset the lazy singleton for deterministic tests."""
+
+    global _market_cache_singleton
+    with _market_cache_singleton_lock:
+        cache = _market_cache_singleton
+        _market_cache_singleton = None
+    if cache is None:
+        return
+    remote_backend = getattr(cache, "_remote_backend", None)
+    shutdown = getattr(remote_backend, "shutdown", None)
+    if callable(shutdown):
+        shutdown(timeout=2)
+
+
+class _MarketCacheProxy:
+    """Compatibility proxy for consumers that import market_cache directly."""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_market_cache(), name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(get_market_cache(), name, value)
+
+    def __repr__(self) -> str:
+        if _market_cache_singleton is None:
+            return "<MarketCacheProxy lazy>"
+        return repr(_market_cache_singleton)
+
+
+market_cache = _MarketCacheProxy()

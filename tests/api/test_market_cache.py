@@ -914,7 +914,11 @@ class MarketCacheTestCase(unittest.TestCase):
             tuple(parameters.keys()),
             ("self", "max_workers", "refresh_stale_after_seconds", "remote_backend"),
         )
-        self.assertIn("market_cache = build_market_cache_from_config()", source)
+        self.assertIn("def get_market_cache()", source)
+        self.assertIn("def reset_market_cache_for_tests()", source)
+        self.assertIn("class _MarketCacheProxy", source)
+        self.assertIn("market_cache = _MarketCacheProxy()", source)
+        self.assertNotIn("market_cache = build_market_cache_from_config()", source)
         self.assertNotIn("redis_url", source.lower())
         self.assertNotIn("valkey_url", source.lower())
 
