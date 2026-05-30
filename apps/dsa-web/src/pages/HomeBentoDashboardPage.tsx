@@ -4394,6 +4394,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const { language, t } = useI18n();
   const shouldRenderHomeChart = useDeferredHomeChartMount();
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
+  const routeTaskId = searchParams.get('task_id') || searchParams.get('taskId') || null;
+  const routeSymbol = normalizeTickerQuery(searchParams.get('symbol') || undefined);
+  const routeSource = searchParams.get('source') || null;
+  const traceFixtureReport = (!isGuest && (import.meta.env.DEV || import.meta.env.MODE === 'test') && searchParams.get('fixture') === 'analysis-trace')
+    ? buildDecisionTraceFixtureReport()
+    : null;
+  const shouldOpenTraceDrawerOnLoad = Boolean(traceFixtureReport && searchParams.get('trace') === 'open');
+  const shouldOpenFullReportDrawerOnLoad = Boolean(traceFixtureReport && searchParams.get('report') === 'open');
   const [activeDrawer, setActiveDrawer] = useState<DetailDrawerKey | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTicker, setActiveTicker] = useState<string | null>(null);
@@ -4406,16 +4414,10 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [guestFallbackNotice, setGuestFallbackNotice] = useState<string | null>(null);
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<PendingHistoryDelete | null>(null);
   const hydratedRouteTaskIdRef = useRef<string | null>(null);
-  const [isTraceDrawerOpen, setTraceDrawerOpen] = useState(false);
-  const [isFullReportDrawerOpen, setFullReportDrawerOpen] = useState(false);
+  const [isTraceDrawerOpen, setTraceDrawerOpen] = useState(shouldOpenTraceDrawerOnLoad);
+  const [isFullReportDrawerOpen, setFullReportDrawerOpen] = useState(shouldOpenFullReportDrawerOnLoad);
   const [mainCopyState, setMainCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [homeChartContext, setHomeChartContext] = useState<HomeCandlestickChartContext | null>(null);
-  const routeTaskId = searchParams.get('task_id') || searchParams.get('taskId') || null;
-  const routeSymbol = normalizeTickerQuery(searchParams.get('symbol') || undefined);
-  const routeSource = searchParams.get('source') || null;
-  const traceFixtureReport = (!isGuest && (import.meta.env.DEV || import.meta.env.MODE === 'test') && searchParams.get('fixture') === 'analysis-trace')
-    ? buildDecisionTraceFixtureReport()
-    : null;
   const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
   const historyItems = useStockPoolStore((state) => state.historyItems);
   const selectedReport = useStockPoolStore((state) => state.selectedReport);
@@ -4568,18 +4570,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   useEffect(() => {
     document.title = copy.documentTitle;
   }, [copy.documentTitle]);
-
-  useEffect(() => {
-    if (traceFixtureReport && searchParams.get('trace') === 'open' && !isTraceDrawerOpen) {
-      setTraceDrawerOpen(true);
-    }
-  }, [isTraceDrawerOpen, searchParams, traceFixtureReport]);
-
-  useEffect(() => {
-    if (traceFixtureReport && searchParams.get('report') === 'open' && !isFullReportDrawerOpen) {
-      setFullReportDrawerOpen(true);
-    }
-  }, [isFullReportDrawerOpen, searchParams, traceFixtureReport]);
 
   useEffect(() => {
     if (mainCopyState === 'idle') {
