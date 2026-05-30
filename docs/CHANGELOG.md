@@ -1,3 +1,6 @@
+## 2026-05-30
+- Backtest rule-run requests now have an explicit execution-model registry gate: omitted metadata and explicit `{"version":"v1"}` preserve the current/default deterministic v1 behavior, while `v2` or unknown models fail closed before service execution or async run writes. The execution-model metadata export also reports v1 as the only supported/current/default model and marks v2 as unavailable/fail-closed, without changing backtest math, fill/cost semantics, provider behavior, frontend behavior, or stored result semantics.
+
 ## 2026-05-29
 - Backtest support bundle now exposes `oos_parameter_readiness_json` as an eighth stored-first diagnostic export at `GET /api/v1/backtest/rule/runs/{run_id}/oos-parameter-readiness.json`, projecting stored walk-forward OOS evidence plus caller-supplied compare/parameter evidence when available and keeping missing sides explicitly partial/unavailable without changing backtest math or provider/runtime semantics.
 

@@ -47,6 +47,10 @@ from api.v1.schemas.backtest import (
 )
 from api.v1.schemas.common import ErrorResponse
 from src.services.backtest_service import BacktestService
+from src.services.rule_backtest_execution_model_registry import (
+    RuleBacktestExecutionModelUnsupportedError,
+    resolve_rule_backtest_execution_model_request,
+)
 from src.services.rule_backtest_service import RuleBacktestService
 from src.services.rule_backtest_support_exports import build_execution_model_metadata_export
 from src.storage import DatabaseManager
@@ -79,6 +83,8 @@ def _build_models(model_cls: Type[ResponseT], items: list[dict]) -> list[Respons
 
 
 def _validation_error(exc: ValueError) -> HTTPException:
+    if isinstance(exc, RuleBacktestExecutionModelUnsupportedError):
+        return HTTPException(status_code=400, detail=exc.to_error_detail())
     return HTTPException(
         status_code=400,
         detail={"error": "validation_error", "message": str(exc)},
@@ -580,6 +586,7 @@ def run_rule_backtest(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> RuleBacktestRunResponse:
     def _operation() -> RuleBacktestRunResponse:
+        resolve_rule_backtest_execution_model_request(request.execution_model)
         service = _build_rule_backtest_service(db_manager, current_user)
         robustness_config = request.robustness_config.model_dump(exclude_none=True) if request.robustness_config is not None else None
         if request.wait_for_completion:
@@ -595,6 +602,7 @@ def run_rule_backtest(
                 slippage_bps=request.slippage_bps,
                 benchmark_mode=request.benchmark_mode,
                 benchmark_code=request.benchmark_code,
+                execution_model=request.execution_model,
                 robustness_config=robustness_config,
                 confirmed=request.confirmed,
             )
@@ -612,6 +620,7 @@ def run_rule_backtest(
             slippage_bps=request.slippage_bps,
             benchmark_mode=request.benchmark_mode,
             benchmark_code=request.benchmark_code,
+            execution_model=request.execution_model,
             robustness_config=robustness_config,
             confirmed=request.confirmed,
         )

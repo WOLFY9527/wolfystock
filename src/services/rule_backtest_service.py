@@ -20,6 +20,10 @@ from src.repositories.rule_backtest_repo import RuleBacktestRepository
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
 from src.services.backtest_parameter_stability import build_parameter_stability_evidence_from_compare_summary
 from src.services.backtest_professional_readiness import build_backtest_professional_readiness
+from src.services.rule_backtest_execution_model_registry import (
+    RuleBacktestExecutionModelUnsupportedError,
+    resolve_rule_backtest_execution_model_request,
+)
 from src.repositories.stock_repo import StockRepository
 from src.services.local_data_preflight_service import LocalDataPreflightService
 from src.services.rule_backtest_support_exports import (
@@ -596,12 +600,14 @@ class RuleBacktestService:
         slippage_bps: float = 0.0,
         benchmark_mode: str = BENCHMARK_MODE_AUTO,
         benchmark_code: Optional[str] = None,
+        execution_model: Optional[Any] = None,
         robustness_config: Optional[Dict[str, Any]] = None,
         confirmed: bool = False,
     ) -> Dict[str, Any]:
         """Run a deterministic rule backtest synchronously and persist the completed result."""
 
         normalized_code, raw_text = self._validate_submission_inputs(code=code, strategy_text=strategy_text)
+        self._resolve_execution_model_request(execution_model)
         normalized_robustness_config = self._sanitize_robustness_config(robustness_config)
         parsed = self._ensure_parsed_strategy(
             raw_text,
@@ -661,12 +667,14 @@ class RuleBacktestService:
         slippage_bps: float = 0.0,
         benchmark_mode: str = BENCHMARK_MODE_AUTO,
         benchmark_code: Optional[str] = None,
+        execution_model: Optional[Any] = None,
         robustness_config: Optional[Dict[str, Any]] = None,
         confirmed: bool = False,
     ) -> Dict[str, Any]:
         """Create a non-blocking rule backtest run and return immediately."""
 
         normalized_code, raw_text = self._validate_submission_inputs(code=code, strategy_text=strategy_text)
+        self._resolve_execution_model_request(execution_model)
         normalized_robustness_config = self._sanitize_robustness_config(robustness_config)
         parsed: Optional[ParsedStrategy] = None
         if parsed_strategy:
@@ -766,6 +774,17 @@ class RuleBacktestService:
         request_payload = self._extract_request_payload(row.summary_json)
         normalized_robustness_config = self._sanitize_robustness_config(request_payload.get("robustness_config"))
         try:
+            try:
+                self._resolve_execution_model_request(request_payload.get("execution_model"))
+            except RuleBacktestExecutionModelUnsupportedError as exc:
+                detail = exc.to_error_detail()
+                self._mark_run_failed(
+                    run_id,
+                    no_result_reason=str(detail["error"]),
+                    no_result_message=str(detail["message"]),
+                )
+                return
+
             raw_text = str(row.strategy_text or "").strip()
             parsed_strategy = self._load_parsed_strategy(row.parsed_strategy_json, raw_text)
             if parsed_strategy is None:
@@ -2018,6 +2037,10 @@ class RuleBacktestService:
         if not raw_text:
             raise ValueError("strategy_text is required")
         return normalized_code, raw_text
+
+    @staticmethod
+    def _resolve_execution_model_request(execution_model: Optional[Any]) -> Dict[str, Any]:
+        return resolve_rule_backtest_execution_model_request(execution_model)
 
     def _execute_rule_backtest(
         self,

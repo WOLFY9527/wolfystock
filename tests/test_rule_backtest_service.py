@@ -28,6 +28,7 @@ from src.services.rule_backtest_support_exports import (
     build_support_export_index,
     resolve_stored_robustness_evidence_payload,
 )
+from src.services.rule_backtest_execution_model_registry import RuleBacktestExecutionModelUnsupportedError
 from src.services.rule_backtest_text_completion import create_rule_backtest_text_completion
 from src.services.rule_backtest_service import RuleBacktestService, run_backtest_automated
 from src.storage import DatabaseManager, RuleBacktestRun, RuleBacktestTrade, StockDaily
@@ -333,6 +334,98 @@ class RuleBacktestTestCase(unittest.TestCase):
             "execution_model": {},
             "result_authority": {},
         }
+
+    def test_run_backtest_accepts_omitted_and_explicit_v1_execution_model_without_contract_change(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            default_response = service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                benchmark_mode="none",
+                confirmed=True,
+            )
+            explicit_response = service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                benchmark_mode="none",
+                execution_model={"version": "v1"},
+                confirmed=True,
+            )
+
+        self.assertEqual(default_response["execution_model"]["version"], "v1")
+        self.assertEqual(explicit_response["execution_model"]["version"], "v1")
+        self.assertEqual(
+            {
+                key: default_response["execution_model"][key]
+                for key in (
+                    "signal_evaluation_timing",
+                    "entry_timing",
+                    "exit_timing",
+                    "entry_fill_price_basis",
+                    "exit_fill_price_basis",
+                    "position_sizing",
+                    "fee_model",
+                    "slippage_model",
+                    "market_rules",
+                )
+            },
+            {
+                key: explicit_response["execution_model"][key]
+                for key in (
+                    "signal_evaluation_timing",
+                    "entry_timing",
+                    "exit_timing",
+                    "entry_fill_price_basis",
+                    "exit_fill_price_basis",
+                    "position_sizing",
+                    "fee_model",
+                    "slippage_model",
+                    "market_rules",
+                )
+            },
+        )
+        self.assertEqual(default_response["trade_count"], explicit_response["trade_count"])
+        self.assertEqual(default_response["summary"]["request"]["execution_model"]["version"], "v1")
+        self.assertEqual(explicit_response["summary"]["request"]["execution_model"]["version"], "v1")
+
+    def test_run_backtest_rejects_v2_execution_model_before_engine_or_persistence(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_ensure_parsed_strategy", side_effect=AssertionError("parsed")) as ensure_mock, patch.object(
+            service,
+            "_execute_rule_backtest",
+            side_effect=AssertionError("engine"),
+        ) as execute_mock, patch.object(service.repo, "save_run", side_effect=AssertionError("save")) as save_mock:
+            with self.assertRaises(RuleBacktestExecutionModelUnsupportedError) as ctx:
+                service.run_backtest(
+                    code="600519",
+                    strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                    execution_model={"version": "v2"},
+                    confirmed=True,
+                )
+
+        self.assertEqual(ctx.exception.to_error_detail()["requested_version"], "v2")
+        ensure_mock.assert_not_called()
+        execute_mock.assert_not_called()
+        save_mock.assert_not_called()
+
+    def test_submit_backtest_rejects_unknown_execution_model_before_job_write(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service.repo, "save_run", side_effect=AssertionError("save")) as save_mock:
+            with self.assertRaises(RuleBacktestExecutionModelUnsupportedError) as ctx:
+                service.submit_backtest(
+                    code="600519",
+                    strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                    execution_model={"version": "quant-v9"},
+                    confirmed=True,
+                )
+
+        self.assertEqual(ctx.exception.to_error_detail()["requested_version"], "quant-v9")
+        save_mock.assert_not_called()
 
     def test_parse_simple_ma_rsi_strategy(self) -> None:
         parser = RuleBacktestParser()

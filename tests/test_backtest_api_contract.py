@@ -1419,6 +1419,91 @@ class BacktestApiContractTestCase(unittest.TestCase):
         service.submit_backtest.assert_not_called()
         self.assertEqual(len(background_tasks.tasks), 0)
 
+    def test_run_rule_backtest_accepts_explicit_v1_execution_model_request(self) -> None:
+        request = RuleBacktestRunRequest(
+            code="600519",
+            strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            execution_model={"version": "v1"},
+            wait_for_completion=False,
+            confirmed=True,
+        )
+        background_tasks = BackgroundTasks()
+        service = MagicMock()
+        service.submit_backtest.return_value = self._rule_run_payload(status="queued")
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = run_rule_backtest(request, background_tasks, db_manager=MagicMock())
+
+        self.assertEqual(response.id, 123)
+        service.submit_backtest.assert_called_once()
+        self.assertEqual(service.submit_backtest.call_args.kwargs["execution_model"], {"version": "v1"})
+        service.run_backtest.assert_not_called()
+        self.assertEqual(len(background_tasks.tasks), 1)
+
+    def test_run_rule_backtest_rejects_v2_before_service_or_background_task(self) -> None:
+        request = RuleBacktestRunRequest(
+            code="600519",
+            strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            execution_model={"version": "v2"},
+            wait_for_completion=False,
+            confirmed=True,
+        )
+        background_tasks = BackgroundTasks()
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService") as service_cls:
+            with self.assertRaises(HTTPException) as ctx:
+                run_rule_backtest(request, background_tasks, db_manager=MagicMock())
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(
+            ctx.exception.detail,
+            {
+                "error": "unsupported_execution_model",
+                "message": "Unsupported rule backtest execution model. Current supported execution model is v1.",
+                "requested_version": "v2",
+                "supported_versions": ["v1"],
+            },
+        )
+        service_cls.assert_not_called()
+        self.assertEqual(len(background_tasks.tasks), 0)
+
+    def test_run_rule_backtest_rejects_unknown_execution_model_with_stable_error(self) -> None:
+        request = RuleBacktestRunRequest(
+            code="600519",
+            strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            execution_model={"version": "quant-v9"},
+            wait_for_completion=True,
+            confirmed=True,
+        )
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService") as service_cls:
+            with self.assertRaises(HTTPException) as ctx:
+                run_rule_backtest(request, BackgroundTasks(), db_manager=MagicMock())
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(ctx.exception.detail["error"], "unsupported_execution_model")
+        self.assertEqual(ctx.exception.detail["requested_version"], "quant-v9")
+        self.assertEqual(ctx.exception.detail["supported_versions"], ["v1"])
+        service_cls.assert_not_called()
+
+    def test_run_rule_backtest_rejects_string_v2_execution_model_with_stable_error(self) -> None:
+        request = RuleBacktestRunRequest(
+            code="600519",
+            strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            execution_model="v2",
+            wait_for_completion=False,
+            confirmed=True,
+        )
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService") as service_cls:
+            with self.assertRaises(HTTPException) as ctx:
+                run_rule_backtest(request, BackgroundTasks(), db_manager=MagicMock())
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(ctx.exception.detail["error"], "unsupported_execution_model")
+        self.assertEqual(ctx.exception.detail["requested_version"], "v2")
+        service_cls.assert_not_called()
+
     def test_run_rule_backtest_request_keeps_legacy_setup_backed_parsed_strategy_payload(self) -> None:
         request = RuleBacktestRunRequest(
             code="AAPL",

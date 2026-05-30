@@ -448,6 +448,7 @@ class RuleBacktestRunRequest(BaseModel):
     slippage_bps: float = Field(0.0, ge=0, le=500, description="单边滑点（bp）")
     benchmark_mode: str = Field("auto", description="基准模式")
     benchmark_code: Optional[str] = Field(None, description="自定义基准代码")
+    execution_model: Optional[Dict[str, Any] | str] = Field(None, description="可选执行模型请求元数据；当前仅支持 version=v1")
     robustness_config: Optional[RuleBacktestRobustnessConfig] = Field(None, description="可选的稳健性分析配置")
     confirmed: bool = Field(False, description="是否已确认解析结果")
     wait_for_completion: bool = Field(False, description="是否阻塞等待回测完成；默认异步提交并轮询状态")
@@ -1355,6 +1356,7 @@ class RuleBacktestExecutionModelMetadataExportResponse(BaseModel):
     execution_model: Dict[str, Any] = Field(default_factory=dict)
     semantics: Dict[str, Any] = Field(default_factory=dict)
     guardrails: Dict[str, Any] = Field(default_factory=dict)
+    registry: Dict[str, Any] = Field(default_factory=dict)
 
 
 class RuleBacktestOOSParameterReadinessExportResponse(BaseModel):

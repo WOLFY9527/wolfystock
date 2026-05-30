@@ -11,60 +11,22 @@ from typing import Any, Callable, Mapping, Sequence
 
 from src.services.backtest_parameter_stability import build_parameter_stability_evidence_from_compare_summary
 from src.services.backtest_walkforward_oos import build_walk_forward_oos_evidence_from_stored_robustness
+from src.services.rule_backtest_execution_model_registry import (
+    CURRENT_RULE_BACKTEST_EXECUTION_MODEL_VERSION,
+    build_current_rule_backtest_execution_model_guardrails,
+    build_current_rule_backtest_execution_model_metadata,
+    build_current_rule_backtest_execution_model_semantics,
+    build_rule_backtest_execution_model_registry_metadata,
+)
 from src.services.reason_code_vocabulary import classify_reason_codes
 
-RULE_BACKTEST_EXECUTION_MODEL_METADATA_VERSION = "v1"
+RULE_BACKTEST_EXECUTION_MODEL_METADATA_VERSION = CURRENT_RULE_BACKTEST_EXECUTION_MODEL_VERSION
 RULE_BACKTEST_EXECUTION_MODEL_EXPORT_KIND = "rule_backtest_execution_model_metadata"
 RULE_BACKTEST_OOS_PARAMETER_READINESS_VERSION = "v1"
 RULE_BACKTEST_OOS_PARAMETER_READINESS_EXPORT_KIND = "rule_backtest_oos_parameter_readiness"
-_RULE_BACKTEST_EXECUTION_MODEL_V1 = {
-    "model_id": "rule_backtest_default_execution_model_v1",
-    "version": RULE_BACKTEST_EXECUTION_MODEL_METADATA_VERSION,
-    "timeframe": "daily",
-    "signal_evaluation_timing": "bar_close",
-    "entry_timing": "next_bar_open",
-    "exit_timing": "next_bar_open",
-    "entry_fill_price_basis": "open",
-    "exit_fill_price_basis": "open",
-    "position_sizing": "single_position_full_notional",
-    "fee_model": "bps_per_side",
-    "fee_bps_per_side": 0.0,
-    "slippage_model": "bps_per_side",
-    "slippage_bps_per_side": 0.0,
-    "market_rules": {
-        "trading_day_execution": "available_bars_only",
-        "terminal_bar_fill_fallback": "same_bar_close",
-        "window_end_position_handling": "force_flatten",
-    },
-}
-_RULE_BACKTEST_EXECUTION_MODEL_V1_SEMANTICS = {
-    "engine_identity": "existing_rule_backtest_behavior",
-    "cost_realism": "baseline_bps_assumptions_only_when_present",
-    "institutional_execution_realism": False,
-    "market_impact_model": "not_modelled",
-    "spread_simulation": "not_modelled",
-    "partial_fills_supported": False,
-    "halt_limit_up_limit_down_model": "not_modelled",
-    "tax_model": "not_modelled",
-    "stamp_duty_model": "not_modelled",
-    "volume_participation_cap": "unavailable",
-    "point_in_time_universe_guarantee": "unavailable",
-    "adjusted_data_guarantee": "unavailable",
-    "provider_calls_required": False,
-    "live_provider_calls_required": False,
-    "diagnostic_only": True,
-    "readiness_only": True,
-    "decision_grade": False,
-}
-_RULE_BACKTEST_EXECUTION_MODEL_V1_GUARDRAILS = {
-    "winner_promotion": False,
-    "optimizer_executed": False,
-    "parameter_sweep_executed": False,
-    "provider_calls_executed": False,
-    "silent_runtime_semantic_change_allowed": False,
-    "future_semantic_changes_require_new_version": True,
-    "future_versions_must_be_additive": True,
-}
+_RULE_BACKTEST_EXECUTION_MODEL_V1 = build_current_rule_backtest_execution_model_metadata()
+_RULE_BACKTEST_EXECUTION_MODEL_V1_SEMANTICS = build_current_rule_backtest_execution_model_semantics()
+_RULE_BACKTEST_EXECUTION_MODEL_V1_GUARDRAILS = build_current_rule_backtest_execution_model_guardrails()
 _RULE_BACKTEST_OOS_PARAMETER_READINESS_GUARDRAILS = {
     "engine_reexecuted": False,
     "strategy_execution_count": 0,
@@ -715,6 +677,7 @@ def build_execution_model_metadata_export(run: Mapping[str, Any]) -> dict[str, A
         "execution_model": dict(_RULE_BACKTEST_EXECUTION_MODEL_V1),
         "semantics": dict(_RULE_BACKTEST_EXECUTION_MODEL_V1_SEMANTICS),
         "guardrails": dict(_RULE_BACKTEST_EXECUTION_MODEL_V1_GUARDRAILS),
+        "registry": build_rule_backtest_execution_model_registry_metadata(),
     }
 
 
