@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useState, type SetStateAction } from 'react';
 import { authApi } from '../../api/auth';
 import { getParsedApiError, isParsedApiError, type ParsedApiError } from '../../api/error';
 import { useI18n } from '../../contexts/UiLanguageContext';
@@ -28,7 +28,28 @@ function createNextModeLabel(
 export const AuthSettingsCard: React.FC = () => {
   const { t } = useI18n();
   const { authEnabled, setupState, refreshStatus } = useAuth();
-  const [desiredEnabled, setDesiredEnabled] = useState(authEnabled);
+  const desiredEnabledSource = authEnabled ? 'enabled' : 'disabled';
+  const [desiredEnabledState, setDesiredEnabledState] = useState(() => ({
+    source: desiredEnabledSource,
+    value: authEnabled,
+  }));
+  const desiredEnabled = desiredEnabledState.source === desiredEnabledSource
+    ? desiredEnabledState.value
+    : authEnabled;
+  const setDesiredEnabled = (updater: SetStateAction<boolean>) => {
+    setDesiredEnabledState((previousState) => {
+      const baseValue = previousState.source === desiredEnabledSource
+        ? previousState.value
+        : authEnabled;
+      const nextValue = typeof updater === 'function'
+        ? (updater as (previousValue: boolean) => boolean)(baseValue)
+        : updater;
+      return {
+        source: desiredEnabledSource,
+        value: nextValue,
+      };
+    });
+  };
   const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
@@ -38,10 +59,6 @@ export const AuthSettingsCard: React.FC = () => {
 
   const isDirty = desiredEnabled !== authEnabled || currentPassword || password || passwordConfirm;
   const targetActionLabel = createNextModeLabel(authEnabled, desiredEnabled, t);
-
-  useEffect(() => {
-    setDesiredEnabled(authEnabled);
-  }, [authEnabled]);
 
   const resetForm = () => {
     setCurrentPassword('');
