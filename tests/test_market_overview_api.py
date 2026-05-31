@@ -10,6 +10,54 @@ from api.v1.endpoints import market_overview
 
 
 class MarketOverviewApiTestCase(unittest.TestCase):
+    @staticmethod
+    def _fed_liquidity_points(series_id: str, latest: float, previous: float):
+        from src.services.official_macro_transport import MacroObservation
+
+        return [
+            MacroObservation(
+                symbol=series_id,
+                value=latest,
+                date="2026-05-22",
+                as_of="2026-05-22T16:15:00+00:00",
+                source_id=f"fred:{series_id}",
+                source_type="official_public",
+                freshness_hint="delayed",
+            ),
+            MacroObservation(
+                symbol=series_id,
+                value=previous,
+                date="2026-05-15",
+                as_of="2026-05-15T16:15:00+00:00",
+                source_id=f"fred:{series_id}",
+                source_type="official_public",
+                freshness_hint="delayed",
+            ),
+        ]
+
+    @staticmethod
+    def _fresh_fed_liquidity_status(*_args, **kwargs) -> dict:
+        from src.services.official_macro_liquidity_cache_contracts import (
+            OFFICIAL_FED_LIQUIDITY_FRESHNESS_POLICIES,
+        )
+
+        series_id = str(kwargs.get("series_id") or "")
+        official_observation_date = kwargs.get("official_observation_date")
+        return {
+            "freshness": "delayed",
+            "isFallback": False,
+            "isStale": False,
+            "isUnavailable": False,
+            "source": "fred",
+            "sourceType": "official_public",
+            "seriesId": series_id,
+            "officialObservationDate": official_observation_date,
+            "officialAsOf": official_observation_date,
+            "freshnessPolicy": OFFICIAL_FED_LIQUIDITY_FRESHNESS_POLICIES.get(series_id),
+            "externalProviderCalls": False,
+            "cacheOnly": True,
+        }
+
     def _service(self) -> MagicMock:
         service = MagicMock()
         service.get_indices.return_value = {
@@ -102,40 +150,21 @@ class MarketOverviewApiTestCase(unittest.TestCase):
 
     def test_macro_fed_liquidity_cache_bundle_diagnostics_are_cache_only_without_source_calls(self) -> None:
         from src.services.market_overview_service import MarketOverviewService
-        from src.services.official_macro_transport import MacroObservation
 
         service = MarketOverviewService(cn_hk_connect_flow_provider=lambda: None)
 
-        def points(series_id: str, latest: float, previous: float) -> list[MacroObservation]:
-            return [
-                MacroObservation(
-                    symbol=series_id,
-                    value=latest,
-                    date="2026-05-22",
-                    as_of="2026-05-22T16:15:00+00:00",
-                    source_id=f"fred:{series_id}",
-                    source_type="official_public",
-                    freshness_hint="delayed",
-                ),
-                MacroObservation(
-                    symbol=series_id,
-                    value=previous,
-                    date="2026-05-15",
-                    as_of="2026-05-15T16:15:00+00:00",
-                    source_id=f"fred:{series_id}",
-                    source_type="official_public",
-                    freshness_hint="delayed",
-                ),
-            ]
-
         official_points = {
-            "WALCL": points("WALCL", 7485000.0, 7475000.0),
-            "RRPONTSYD": points("RRPONTSYD", 432.2, 455.0),
-            "WTREGEN": points("WTREGEN", 812000.0, 826000.0),
-            "WRESBAL": points("WRESBAL", 3260000.0, 3240000.0),
+            "WALCL": self._fed_liquidity_points("WALCL", 7485000.0, 7475000.0),
+            "RRPONTSYD": self._fed_liquidity_points("RRPONTSYD", 432.2, 455.0),
+            "WTREGEN": self._fed_liquidity_points("WTREGEN", 812000.0, 826000.0),
+            "WRESBAL": self._fed_liquidity_points("WRESBAL", 3260000.0, 3240000.0),
         }
 
         with (
+            patch(
+                "src.services.market_overview_service.get_freshness_status",
+                side_effect=self._fresh_fed_liquidity_status,
+            ) as freshness_status,
             patch(
                 "src.services.market_overview_service.fetch_fred_observation_points",
                 side_effect=AssertionError("cache bundle projection must not fetch FRED"),
@@ -152,57 +181,50 @@ class MarketOverviewApiTestCase(unittest.TestCase):
         self.assertEqual(bundle["requiredSeries"], ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"])
         self.assertEqual(bundle["fulfilledSeries"], ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"])
         self.assertEqual(bundle["missingSeries"], [])
+        self.assertEqual(bundle["staleSeries"], [])
         self.assertEqual(bundle["coverageRatio"], 1.0)
         self.assertEqual(bundle["sourceType"], "official_public")
         self.assertFalse(bundle["externalProviderCalls"])
         self.assertTrue(bundle["scoreContributionAllowed"])
         self.assertFalse(bundle["observationOnly"])
+        freshness_series = {
+            str(call.kwargs.get("series_id") or "")
+            for call in freshness_status.call_args_list
+        }
+        self.assertEqual(freshness_series, {"WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"})
         fred_fetch.assert_not_called()
         treasury_fetch.assert_not_called()
 
     def test_macro_fed_liquidity_missing_series_stays_missing_not_malformed(self) -> None:
         from src.services.market_overview_service import MarketOverviewService
-        from src.services.official_macro_transport import MacroObservation
 
         service = MarketOverviewService(cn_hk_connect_flow_provider=lambda: None)
 
-        def points(series_id: str, latest: float, previous: float) -> list[MacroObservation]:
-            return [
-                MacroObservation(
-                    symbol=series_id,
-                    value=latest,
-                    date="2026-05-22",
-                    as_of="2026-05-22T16:15:00+00:00",
-                    source_id=f"fred:{series_id}",
-                    source_type="official_public",
-                    freshness_hint="delayed",
-                ),
-                MacroObservation(
-                    symbol=series_id,
-                    value=previous,
-                    date="2026-05-15",
-                    as_of="2026-05-15T16:15:00+00:00",
-                    source_id=f"fred:{series_id}",
-                    source_type="official_public",
-                    freshness_hint="delayed",
-                ),
-            ]
-
-        items = service._official_fed_liquidity_items(
-            {
-                "WALCL": points("WALCL", 7485000.0, 7475000.0),
-                "RRPONTSYD": points("RRPONTSYD", 432.2, 455.0),
-                "WTREGEN": points("WTREGEN", 812000.0, 826000.0),
-            }
-        )
+        with patch(
+            "src.services.market_overview_service.get_freshness_status",
+            side_effect=self._fresh_fed_liquidity_status,
+        ) as freshness_status:
+            items = service._official_fed_liquidity_items(
+                {
+                    "WALCL": self._fed_liquidity_points("WALCL", 7485000.0, 7475000.0),
+                    "RRPONTSYD": self._fed_liquidity_points("RRPONTSYD", 432.2, 455.0),
+                    "WTREGEN": self._fed_liquidity_points("WTREGEN", 812000.0, 826000.0),
+                }
+            )
 
         bundle = items["FED_ASSETS"]["cacheBundleDiagnostics"]
         self.assertFalse(bundle["scoreContributionAllowed"])
         self.assertTrue(bundle["observationOnly"])
         self.assertEqual(bundle["fulfilledSeries"], ["WALCL", "RRPONTSYD", "WTREGEN"])
         self.assertEqual(bundle["missingSeries"], ["WRESBAL"])
+        self.assertEqual(bundle["staleSeries"], [])
         self.assertEqual(bundle["malformedSeries"], [])
         self.assertEqual(bundle["unavailableSeries"], ["WRESBAL"])
+        freshness_series = {
+            str(call.kwargs.get("series_id") or "")
+            for call in freshness_status.call_args_list
+        }
+        self.assertEqual(freshness_series, {"WALCL", "RRPONTSYD", "WTREGEN"})
         self.assertFalse(items["FED_ASSETS"]["scoreContributionAllowed"])
         self.assertFalse(items["RESERVES"]["scoreContributionAllowed"])
 
