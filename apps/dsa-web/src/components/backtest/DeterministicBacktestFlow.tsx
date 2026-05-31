@@ -1326,7 +1326,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                       if (!text) return null;
                       return (
                         <button
-                          key={`${label}-${index}`}
+                          key={`${label}-${text}`}
                           type="button"
                           className="product-chip product-chip--button"
                           onClick={() => onApplyRewriteSuggestion(text)}

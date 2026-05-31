@@ -37,6 +37,21 @@ function isHighlightTraceRow(row: RuleBacktestExecutionTraceRowItem): boolean {
     || getTraceExplanation(row) !== '--';
 }
 
+function getExecutionTracePreviewKey(row: RuleBacktestExecutionTraceRowItem): string {
+  return [
+    row.date,
+    row.action,
+    row.eventType,
+    row.signalSummary,
+    row.fillPrice,
+    row.totalPortfolioValue,
+    row.cumulativeReturn,
+    row.notes,
+    row.unavailableReason,
+    row.fallback,
+  ].map((value) => String(value ?? '')).join('|') || 'trace-row';
+}
+
 const ExecutionTracePanel: React.FC<{ run: RuleBacktestRunResponse }> = ({ run }) => {
   const { language } = useI18n();
   const [viewMode, setViewMode] = useState<TraceViewMode>('highlights');
@@ -133,8 +148,8 @@ const ExecutionTracePanel: React.FC<{ run: RuleBacktestRunResponse }> = ({ run }
                   </tr>
                 </thead>
                 <tbody>
-                  {previewRows.map((row, index) => (
-                    <tr key={`${row.date || 'trace'}-${row.action || row.eventType || 'hold'}-${index}`}>
+                  {previewRows.map((row) => (
+                    <tr key={getExecutionTracePreviewKey(row)}>
                       <td>{row.date || '--'}</td>
                       <td>
                         <div className="product-table__stack">
