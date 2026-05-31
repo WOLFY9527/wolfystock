@@ -231,6 +231,35 @@ MARKET_TEMPERATURE_REQUIRED_RELIABLE_INPUT_COUNT = 5
 MARKET_TEMPERATURE_REQUIRED_RELIABLE_PANEL_COUNT = 3
 MARKET_TEMPERATURE_MIN_COVERAGE = 0.25
 MARKET_OVERVIEW_EVIDENCE_CONTRACT_VERSION = "market_overview_evidence.v1"
+MARKET_OVERVIEW_CONSUMER_EVIDENCE_KEYS = (
+    "contractVersion",
+    "diagnosticOnly",
+    "scoreReliabilityAllowed",
+    "cardKey",
+    "endpoint",
+    "source",
+    "sourceLabel",
+    "sourceType",
+    "asOf",
+    "updatedAt",
+    "freshness",
+    "isFallback",
+    "isStale",
+    "isPartial",
+    "isSynthetic",
+    "isUnavailable",
+    "isFromSnapshot",
+    "isRefreshing",
+    "providerHealth",
+    "confidenceWeight",
+    "coverage",
+    "degradationReason",
+    "capReason",
+    "sourceAuthorityAllowed",
+    "scoreContributionAllowed",
+    "observationOnly",
+    "reasonFamilies",
+)
 MARKET_OVERVIEW_ENDPOINTS = {
     "indices": "/api/v1/market-overview/indices",
     "sentiment": "/api/v1/market-overview/sentiment",
@@ -250,6 +279,25 @@ MARKET_OVERVIEW_ENDPOINTS = {
     "futures": "/api/v1/market/futures",
     "cn_short_sentiment": "/api/v1/market/cn-short-sentiment",
 }
+
+
+def project_market_overview_consumer_evidence_snapshot(raw_snapshot: Any) -> Dict[str, Any]:
+    if not isinstance(raw_snapshot, Mapping):
+        return {}
+
+    projection: Dict[str, Any] = {}
+    for key in MARKET_OVERVIEW_CONSUMER_EVIDENCE_KEYS:
+        if key == "providerHealth":
+            continue
+        if key in raw_snapshot:
+            projection[key] = copy.deepcopy(raw_snapshot.get(key))
+
+    provider_health = raw_snapshot.get("providerHealth")
+    if isinstance(provider_health, Mapping) and "status" in provider_health:
+        projection["providerHealth"] = {"status": copy.deepcopy(provider_health.get("status"))}
+    elif "providerHealth" in raw_snapshot and raw_snapshot.get("providerHealth") is None:
+        projection["providerHealth"] = None
+    return projection
 
 CONFIDENCE_BY_FRESHNESS = {
     "live": 1.0,
@@ -1345,6 +1393,9 @@ class MarketOverviewService:
         snapshot["items"] = [self._with_item_meta(item, self._category_for_cache_key(cache_key), snapshot) for item in snapshot.get("items", [])]
         snapshot["providerHealth"] = self._provider_health(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message)
         snapshot = self._with_evidence_snapshot(snapshot, self._category_for_cache_key(cache_key))
+        snapshot["consumerEvidenceSnapshot"] = project_market_overview_consumer_evidence_snapshot(
+            snapshot.get("evidenceSnapshot")
+        )
         raw_response.update(self._provider_log_meta(snapshot, cache_key, duration_ms=duration_ms, error_summary=error_message))
         log_session_id = ExecutionLogService().record_market_overview_fetch(
             panel_name=panel_name,

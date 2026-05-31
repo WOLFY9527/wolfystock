@@ -3,12 +3,16 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-from src.services.market_overview_service import MarketOverviewService
+from src.services.market_overview_service import (
+    MarketOverviewService,
+    project_market_overview_consumer_evidence_snapshot,
+)
 
 
 CN_TZ = timezone(timedelta(hours=8))
@@ -46,6 +50,33 @@ EVIDENCE_SNAPSHOT_PUBLIC_KEYS = {
     "scoreContributionAllowed",
     "observationOnly",
     "reasonFamilies",
+}
+
+EVIDENCE_SNAPSHOT_ADMIN_KEYS = {
+    "authorityGrant",
+    "decisionGrade",
+    "sourceConfidence",
+    "indicatorEvidence",
+    "inputs",
+    "warnings",
+    "missingInputs",
+    "fallbackInputCount",
+    "staleInputCount",
+    "partialInputCount",
+    "syntheticInputCount",
+    "unavailableInputCount",
+    "requiredRealSourceForScore",
+    "proxyOnly",
+    "coverageObservationOnly",
+    "externalProviderCalls",
+    "providerRuntimeChanged",
+    "marketCacheMutation",
+    "sourceAuthorityReason",
+    "routeRejectedReasonCodes",
+    "sourceAuthorityRouter",
+    "cacheBundleDiagnostics",
+    "rawErrorText",
+    "rawErrorBody",
 }
 
 
@@ -112,6 +143,179 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
             "observationOnly": True,
             "reasonFamilies": [],
         }
+
+    def test_consumer_evidence_projection_is_whitelist_only_and_status_only(self) -> None:
+        raw_snapshot = {
+            "contractVersion": "market_overview_evidence.v1",
+            "diagnosticOnly": True,
+            "scoreReliabilityAllowed": True,
+            "cardKey": "indices",
+            "endpoint": "/api/v1/market-overview/indices",
+            "source": "yfinance",
+            "sourceLabel": "Yahoo Finance",
+            "sourceType": "unofficial_public_api",
+            "asOf": "2026-01-01T10:00:00+08:00",
+            "updatedAt": "2026-01-01T10:00:00+08:00",
+            "freshness": "live",
+            "isFallback": False,
+            "isStale": False,
+            "isPartial": False,
+            "isSynthetic": False,
+            "isUnavailable": False,
+            "isFromSnapshot": False,
+            "isRefreshing": False,
+            "providerHealth": {
+                "status": "live",
+                "provider": "yfinance",
+                "latencyMs": 123,
+                "rawErrorBody": "internal provider response",
+            },
+            "confidenceWeight": 0.7,
+            "coverage": 1.0,
+            "degradationReason": None,
+            "capReason": None,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "observationOnly": True,
+            "reasonFamilies": [{"rawCode": "manual_gate", "family": "score_gate"}],
+            "authorityGrant": True,
+            "decisionGrade": "internal",
+            "sourceConfidence": {"raw": "internal"},
+            "indicatorEvidence": [{"raw": "indicator"}],
+            "inputs": [{"raw": "input"}],
+            "warnings": ["internal warning"],
+            "missingInputs": ["internal input"],
+            "fallbackInputCount": 1,
+            "staleInputCount": 1,
+            "partialInputCount": 1,
+            "syntheticInputCount": 1,
+            "unavailableInputCount": 1,
+            "requiredRealSourceForScore": True,
+            "proxyOnly": True,
+            "coverageObservationOnly": True,
+            "externalProviderCalls": [{"provider": "internal"}],
+            "providerRuntimeChanged": True,
+            "marketCacheMutation": {"raw": "cache"},
+            "sourceAuthorityReason": "internal_reason",
+            "routeRejectedReasonCodes": ["internal_route"],
+            "sourceAuthorityRouter": {"raw": "router"},
+            "cacheBundleDiagnostics": {"raw": "bundle"},
+            "rawErrorText": "stack trace",
+            "rawErrorBody": "response body",
+        }
+        original_raw_snapshot = copy.deepcopy(raw_snapshot)
+
+        projection = project_market_overview_consumer_evidence_snapshot(raw_snapshot)
+
+        assert raw_snapshot == original_raw_snapshot
+        assert set(projection.keys()) == EVIDENCE_SNAPSHOT_PUBLIC_KEYS
+        assert projection["providerHealth"] == {"status": "live"}
+        assert projection["scoreReliabilityAllowed"] is True
+        assert projection["sourceAuthorityAllowed"] is False
+        assert projection["scoreContributionAllowed"] is False
+        assert projection["observationOnly"] is True
+        assert projection["reasonFamilies"] == [{"rawCode": "manual_gate", "family": "score_gate"}]
+        assert all(key not in projection for key in EVIDENCE_SNAPSHOT_ADMIN_KEYS)
+        assert all(not key.endswith("InputCount") for key in projection)
+
+    def test_consumer_evidence_projection_preserves_degraded_states(self) -> None:
+        degraded_cases = [
+            {
+                "freshness": "fallback",
+                "isFallback": True,
+                "providerHealth": {"status": "fallback", "provider": "fallback"},
+            },
+            {
+                "freshness": "stale",
+                "isStale": True,
+                "providerHealth": {"status": "stale", "provider": "yfinance"},
+            },
+            {
+                "freshness": "partial",
+                "isPartial": True,
+                "providerHealth": {"status": "partial", "provider": "mixed"},
+            },
+            {
+                "freshness": "unavailable",
+                "isUnavailable": True,
+                "providerHealth": {"status": "unavailable", "provider": "missing"},
+            },
+        ]
+
+        for raw_snapshot in degraded_cases:
+            with self.subTest(freshness=raw_snapshot["freshness"]):
+                projection = project_market_overview_consumer_evidence_snapshot(raw_snapshot)
+
+                assert projection["freshness"] == raw_snapshot["freshness"]
+                assert projection["providerHealth"] == {"status": raw_snapshot["providerHealth"]["status"]}
+                assert projection.get("freshness") != "live"
+                assert projection.get("providerHealth", {}).get("status") != "live"
+
+    def test_legacy_panel_responses_attach_consumer_evidence_snapshot(self) -> None:
+        service = MarketOverviewService()
+        as_of = _iso_now()
+
+        def panel_payload(source: str = "yfinance") -> dict:
+            return {
+                "source": source,
+                "sourceLabel": "Yahoo Finance" if source == "yfinance" else "FRED",
+                "updatedAt": as_of,
+                "asOf": as_of,
+                "sourceAuthorityAllowed": False,
+                "scoreContributionAllowed": False,
+                "observationOnly": True,
+                "items": [
+                    {
+                        "symbol": "SPX",
+                        "label": "S&P 500",
+                        "value": 5200.12,
+                        "changePercent": 0.42,
+                        "trend": [5180.0, 5200.12],
+                        "source": source,
+                        "sourceLabel": "Yahoo Finance" if source == "yfinance" else "FRED",
+                        "updatedAt": as_of,
+                        "asOf": as_of,
+                        "sourceAuthorityAllowed": False,
+                        "scoreContributionAllowed": False,
+                        "observationOnly": True,
+                    }
+                ],
+            }
+
+        panel_calls = [
+            ("indices", "_fetch_indices", service.get_indices, panel_payload()),
+            ("volatility", "_fetch_volatility", service.get_volatility, panel_payload()),
+            ("sentiment", "_fetch_sentiment", service.get_sentiment, panel_payload()),
+            ("funds_flow", "_fetch_funds_flow", service.get_funds_flow, panel_payload()),
+            ("macro", "_fetch_macro", service.get_macro, panel_payload("fred")),
+        ]
+
+        for card_key, fetcher_name, getter, payload in panel_calls:
+            MarketOverviewService._market_cache.clear()
+            with self.subTest(card_key=card_key), patch.object(
+                service,
+                fetcher_name,
+                return_value=copy.deepcopy(payload),
+            ):
+                response = getter()
+
+                assert "evidenceSnapshot" in response
+                assert "consumerEvidenceSnapshot" in response
+                assert response["consumerEvidenceSnapshot"] == project_market_overview_consumer_evidence_snapshot(
+                    response["evidenceSnapshot"]
+                )
+                assert response["consumerEvidenceSnapshot"] is not response["evidenceSnapshot"]
+                assert set(response["consumerEvidenceSnapshot"].keys()) == EVIDENCE_SNAPSHOT_PUBLIC_KEYS
+                assert response["consumerEvidenceSnapshot"]["cardKey"] == response["evidenceSnapshot"]["cardKey"]
+                assert response["consumerEvidenceSnapshot"]["providerHealth"] == {
+                    "status": response["evidenceSnapshot"]["providerHealth"]["status"]
+                }
+                assert response["consumerEvidenceSnapshot"]["sourceAuthorityAllowed"] is False
+                assert response["consumerEvidenceSnapshot"]["scoreContributionAllowed"] is False
+                assert response["consumerEvidenceSnapshot"]["scoreReliabilityAllowed"] == response["evidenceSnapshot"][
+                    "scoreReliabilityAllowed"
+                ]
+                assert all(key not in response["consumerEvidenceSnapshot"] for key in EVIDENCE_SNAPSHOT_ADMIN_KEYS)
 
     def test_fallback_panel_projects_evidence_snapshot(self) -> None:
         service = MarketOverviewService()
