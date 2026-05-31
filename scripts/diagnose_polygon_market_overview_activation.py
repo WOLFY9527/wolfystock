@@ -125,6 +125,13 @@ def build_high_low_lookback_certification_output(result: Mapping[str, Any]) -> d
     diagnostic_session_cap = _optional_positive_int(result.get("diagnosticSessionCap"))
     missing_symbols = _missing_high_low_symbols(result)
     reason = _high_low_reason(reason_codes) or (reason_codes[0] if reason_codes else None)
+    failure_window = _text(result.get("highLowFailureWindow"))
+    failed_date = _text(result.get("highLowFailedDate"))
+    failed_session_index = _optional_positive_int(result.get("highLowFailedSessionIndex"))
+    attempted_sessions = _positive_int(
+        result.get("highLowAttemptedSessions"),
+        default=fulfilled_sessions,
+    )
     if reason is None and missing_symbols:
         reason = HIGH_LOW_METRICS_MISSING_REASON
     lookback_fulfilled = bool(
@@ -143,6 +150,16 @@ def build_high_low_lookback_certification_output(result: Mapping[str, Any]) -> d
         "timeoutBudgetSeconds": timeout_budget_seconds,
         "perRequestTimeoutSeconds": per_request_timeout_seconds,
         "diagnosticSessionCap": diagnostic_session_cap,
+        "failureWindow": failure_window or None,
+        "failedDate": failed_date or None,
+        "failedSessionIndex": failed_session_index,
+        "attemptedSessions": attempted_sessions,
+        "fulfilledSessionsMeaning": _fulfilled_sessions_meaning(
+            reason=reason,
+            failure_window=failure_window or None,
+            fulfilled_sessions=fulfilled_sessions,
+            missing_symbols=missing_symbols,
+        ),
     }
 
 
@@ -328,6 +345,26 @@ def _high_low_reason(reason_codes: list[str]) -> str | None:
     return None
 
 
+def _fulfilled_sessions_meaning(
+    *,
+    reason: str | None,
+    failure_window: str | None,
+    fulfilled_sessions: int,
+    missing_symbols: Sequence[str],
+) -> str:
+    if fulfilled_sessions <= 0:
+        return "no_history_sessions_collected"
+    if reason == "diagnostic_session_cap":
+        return "successful_history_sessions_collected_before_diagnostic_cap"
+    if failure_window == "high_low_lookback_session" and (reason is not None or missing_symbols):
+        return "successful_history_sessions_collected_before_failure"
+    return "successful_history_sessions_collected"
+
+
+def _text(value: Any) -> str:
+    return "" if value is None else str(value).strip()
+
+
 def _positive_int(value: Any, *, default: int) -> int:
     try:
         parsed = int(value)
@@ -410,6 +447,11 @@ def _high_low_failure_output(
         "timeoutBudgetSeconds": timeout_budget_seconds,
         "perRequestTimeoutSeconds": per_request_timeout_seconds,
         "diagnosticSessionCap": diagnostic_session_cap,
+        "failureWindow": None,
+        "failedDate": None,
+        "failedSessionIndex": None,
+        "attemptedSessions": 0,
+        "fulfilledSessionsMeaning": "no_history_sessions_collected",
     }
 
 

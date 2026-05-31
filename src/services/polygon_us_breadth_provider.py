@@ -63,6 +63,9 @@ POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON = "polygon_high_low_history_belo
 POLYGON_HIGH_LOW_HISTORY_DIAGNOSTIC_SESSION_CAP_REASON = "polygon_high_low_history_diagnostic_session_cap"
 POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON = "polygon_high_low_history_timeout"
 POLYGON_HIGH_LOW_RATIO_UNAVAILABLE_REASON = "polygon_high_low_ratio_unavailable"
+POLYGON_HIGH_LOW_FAILURE_WINDOW_RECENT_GROUPED_DAILY = "recent_grouped_daily_candidate_window"
+POLYGON_HIGH_LOW_FAILURE_WINDOW_PREVIOUS_CLOSE = "previous_close_comparison"
+POLYGON_HIGH_LOW_FAILURE_WINDOW_LOOKBACK_SESSION = "high_low_lookback_session"
 _POLYGON_TRANSPORT_REASON_KEY = "_polygonTransportReason"
 
 _AD_FULFILLED_METRICS = (
@@ -72,6 +75,17 @@ _AD_FULFILLED_METRICS = (
     "ADVANCE_DECLINE_RATIO",
 )
 _HIGH_LOW_METRICS = ("NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO")
+_HIGH_LOW_REASON_CODES = {
+    POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
+    POLYGON_HIGH_LOW_HISTORY_MALFORMED_REASON,
+    POLYGON_HIGH_LOW_HISTORY_MIXED_SOURCE_REASON,
+    POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON,
+    POLYGON_HIGH_LOW_HISTORY_DATE_GAP_REASON,
+    POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON,
+    POLYGON_HIGH_LOW_HISTORY_DIAGNOSTIC_SESSION_CAP_REASON,
+    POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON,
+    POLYGON_HIGH_LOW_RATIO_UNAVAILABLE_REASON,
+}
 _EPSILON = 1e-12
 
 PolygonTransport = Callable[[str, str, float], tuple[int, Mapping[str, Any] | None]]
@@ -174,12 +188,16 @@ def run_polygon_us_breadth_activation(
     latest_date: str | None = None
     latest_reason = POLYGON_US_BREADTH_REASON_RESPONSE_INVALID
     latest_index = -1
+    latest_failed_date: str | None = None
 
     for index, candidate in enumerate(candidates):
         if diagnostic_controls_enabled and high_low_budget_expired():
             latest_reason = POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON
+            latest_failed_date = latest_failed_date or candidate
             break
         status_code, payload = fetch_grouped_daily(candidate)
+        if diagnostic_controls_enabled and latest_failed_date is None:
+            latest_failed_date = candidate
         if status_code in {401, 403}:
             return _fail_closed_summary(
                 reason_codes=(POLYGON_US_BREADTH_REASON_UNAUTHORIZED,),
@@ -200,30 +218,69 @@ def run_polygon_us_breadth_activation(
         latest_reason = parsed.reason or POLYGON_US_BREADTH_REASON_RESPONSE_INVALID
 
     if latest_payload is None or latest_date is None:
-        return _fail_closed_summary(
+        result = _fail_closed_summary(
             reason_codes=(latest_reason,),
             credentials_present=True,
             provider_constructed=True,
         )
+        if not diagnostic_controls_enabled:
+            return result
+        return _apply_high_low_diagnostics(
+            result,
+            diagnostic_reason=None,
+            fulfilled_sessions=0,
+            session_cap=diagnostic_session_cap,
+            timeout_budget_seconds=timeout_budget_seconds,
+            per_request_timeout_seconds=request_timeout_seconds,
+            failure_window=POLYGON_HIGH_LOW_FAILURE_WINDOW_RECENT_GROUPED_DAILY,
+            failed_date=latest_failed_date,
+            failed_session_index=None,
+            attempted_sessions=0,
+        )
 
     previous_payload: Mapping[str, Any] | None = None
     previous_date: str | None = None
+    previous_failed_date: str | None = None
     for candidate in candidates[latest_index + 1 :]:
         if diagnostic_controls_enabled and high_low_budget_expired():
-            return _fail_closed_summary(
-                reason_codes=(POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON,),
-                credentials_present=True,
-                provider_constructed=True,
-                observation_date=latest_date,
+            return _apply_high_low_diagnostics(
+                _fail_closed_summary(
+                    reason_codes=(POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON,),
+                    credentials_present=True,
+                    provider_constructed=True,
+                    observation_date=latest_date,
+                ),
+                diagnostic_reason=None,
+                fulfilled_sessions=0,
+                session_cap=diagnostic_session_cap,
+                timeout_budget_seconds=timeout_budget_seconds,
+                per_request_timeout_seconds=request_timeout_seconds,
+                failure_window=POLYGON_HIGH_LOW_FAILURE_WINDOW_PREVIOUS_CLOSE,
+                failed_date=previous_failed_date or candidate,
+                failed_session_index=None,
+                attempted_sessions=0,
             )
         status_code, payload = fetch_grouped_daily(candidate)
+        if diagnostic_controls_enabled and previous_failed_date is None:
+            previous_failed_date = candidate
         transport_reason = _transport_failure_reason(payload)
         if status_code == 0 and diagnostic_controls_enabled and transport_reason:
-            return _fail_closed_summary(
-                reason_codes=(transport_reason,),
-                credentials_present=True,
-                provider_constructed=True,
-                observation_date=latest_date,
+            return _apply_high_low_diagnostics(
+                _fail_closed_summary(
+                    reason_codes=(transport_reason,),
+                    credentials_present=True,
+                    provider_constructed=True,
+                    observation_date=latest_date,
+                ),
+                diagnostic_reason=None,
+                fulfilled_sessions=0,
+                session_cap=diagnostic_session_cap,
+                timeout_budget_seconds=timeout_budget_seconds,
+                per_request_timeout_seconds=request_timeout_seconds,
+                failure_window=POLYGON_HIGH_LOW_FAILURE_WINDOW_PREVIOUS_CLOSE,
+                failed_date=previous_failed_date or candidate,
+                failed_session_index=None,
+                attempted_sessions=0,
             )
         if status_code != 200:
             continue
@@ -236,20 +293,33 @@ def run_polygon_us_breadth_activation(
     historical_payloads: tuple[tuple[str, Mapping[str, Any] | None], ...] | None = None
     high_low_diagnostic_reason: str | None = None
     high_low_diagnostic_fulfilled_sessions: int | None = None
+    high_low_attempted_sessions = 0
+    high_low_failed_date: str | None = None
+    high_low_failed_session_index: int | None = None
+    expected_history_dates: tuple[str, ...] = ()
     if previous_payload is not None and previous_date:
+        expected_history_dates = prior_completed_us_trading_dates(
+            latest_date,
+            limit=required_lookback_sessions,
+        )
         history_items: list[tuple[str, Mapping[str, Any] | None]] = []
         successful_history_sessions = 0
-        for history_date in prior_completed_us_trading_dates(
-            latest_date,
-            limit=history_session_limit,
+        for session_index, history_date in enumerate(
+            expected_history_dates[:history_session_limit],
+            start=1,
         ):
             if diagnostic_controls_enabled and high_low_budget_expired():
                 high_low_diagnostic_reason = POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON
+                high_low_failed_date = high_low_failed_date or history_date
+                high_low_failed_session_index = high_low_failed_session_index or session_index
                 break
+            high_low_attempted_sessions = session_index
             status_code, payload = fetch_grouped_daily(history_date)
             transport_reason = _transport_failure_reason(payload)
             if status_code == 0 and diagnostic_controls_enabled and transport_reason:
                 high_low_diagnostic_reason = transport_reason
+                high_low_failed_date = high_low_failed_date or history_date
+                high_low_failed_session_index = high_low_failed_session_index or session_index
                 break
             if status_code == 200:
                 successful_history_sessions += 1
@@ -262,6 +332,10 @@ def run_polygon_us_breadth_activation(
             and history_session_limit < required_lookback_sessions
         ):
             high_low_diagnostic_reason = POLYGON_HIGH_LOW_HISTORY_DIAGNOSTIC_SESSION_CAP_REASON
+            next_session_index = high_low_attempted_sessions + 1
+            high_low_failed_session_index = next_session_index
+            if next_session_index - 1 < len(expected_history_dates):
+                high_low_failed_date = expected_history_dates[next_session_index - 1]
 
     result = compute_polygon_us_breadth(
         latest_payload,
@@ -278,6 +352,33 @@ def run_polygon_us_breadth_activation(
     )
     if not diagnostic_controls_enabled:
         return result
+    reason_codes = {str(code) for code in result.get("reasonCodes") or [] if str(code)}
+    failure_window: str | None = None
+    failed_date: str | None = None
+    failed_session_index: int | None = None
+    attempted_sessions = high_low_attempted_sessions
+    if POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE in reason_codes:
+        failure_window = POLYGON_HIGH_LOW_FAILURE_WINDOW_PREVIOUS_CLOSE
+        failed_date = previous_date or previous_failed_date
+        attempted_sessions = 0
+    elif high_low_diagnostic_reason is not None or reason_codes & _HIGH_LOW_REASON_CODES:
+        failure_window = POLYGON_HIGH_LOW_FAILURE_WINDOW_LOOKBACK_SESSION
+        failed_date = high_low_failed_date
+        failed_session_index = high_low_failed_session_index
+        if failed_date is None or failed_session_index is None:
+            derived_failed_date, derived_failed_session_index = _derive_high_low_failed_session_context(
+                reason_codes=reason_codes,
+                observation_date=latest_date,
+                history_items=historical_payloads or (),
+                required_lookback_sessions=required_lookback_sessions,
+                fulfilled_sessions=int(result.get("highLowFulfilledSessions") or 0),
+            )
+            failed_date = failed_date or derived_failed_date
+            failed_session_index = failed_session_index or derived_failed_session_index
+    elif POLYGON_US_BREADTH_REASON_RESPONSE_INVALID in reason_codes:
+        failure_window = POLYGON_HIGH_LOW_FAILURE_WINDOW_RECENT_GROUPED_DAILY
+        failed_date = latest_failed_date or latest_date
+        attempted_sessions = 0
     return _apply_high_low_diagnostics(
         result,
         diagnostic_reason=high_low_diagnostic_reason,
@@ -285,6 +386,10 @@ def run_polygon_us_breadth_activation(
         session_cap=diagnostic_session_cap,
         timeout_budget_seconds=timeout_budget_seconds,
         per_request_timeout_seconds=request_timeout_seconds,
+        failure_window=failure_window,
+        failed_date=failed_date,
+        failed_session_index=failed_session_index,
+        attempted_sessions=attempted_sessions,
     )
 
 
@@ -773,10 +878,47 @@ def diagnostic_summary(result: Mapping[str, Any]) -> dict[str, Any]:
         "perRequestTimeoutSeconds",
         "timeoutBudgetSeconds",
         "diagnosticSessionCap",
+        "highLowFailureWindow",
+        "highLowFailedDate",
+        "highLowFailedSessionIndex",
+        "highLowAttemptedSessions",
     ):
         if key in result:
             summary[key] = result.get(key)
     return summary
+
+
+def _derive_high_low_failed_session_context(
+    *,
+    reason_codes: set[str],
+    observation_date: str,
+    history_items: Sequence[tuple[str, Mapping[str, Any] | None]],
+    required_lookback_sessions: int,
+    fulfilled_sessions: int,
+) -> tuple[str | None, int | None]:
+    expected_dates = prior_completed_us_trading_dates(
+        observation_date,
+        limit=required_lookback_sessions,
+    )
+    if not expected_dates:
+        return None, None
+    actual_dates = tuple(str(history_date) for history_date, _ in history_items[:required_lookback_sessions])
+    if POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON in reason_codes:
+        session_index = len(history_items) + 1
+        failed_date = expected_dates[session_index - 1] if session_index - 1 < len(expected_dates) else None
+        return failed_date, session_index
+    if POLYGON_HIGH_LOW_HISTORY_DATE_GAP_REASON in reason_codes:
+        fulfilled_prefix = _count_matching_prefix(expected_dates, actual_dates)
+        session_index = fulfilled_prefix + 1
+        failed_date = expected_dates[fulfilled_prefix] if fulfilled_prefix < len(expected_dates) else None
+        return failed_date, session_index
+    if POLYGON_HIGH_LOW_RATIO_UNAVAILABLE_REASON in reason_codes:
+        return None, None
+    session_index = fulfilled_sessions + 1
+    failed_date = actual_dates[fulfilled_sessions] if fulfilled_sessions < len(actual_dates) else None
+    if failed_date is None and fulfilled_sessions < len(expected_dates):
+        failed_date = expected_dates[fulfilled_sessions]
+    return failed_date, session_index if failed_date is not None else None
 
 
 def _apply_high_low_diagnostics(
@@ -787,11 +929,23 @@ def _apply_high_low_diagnostics(
     session_cap: int | None,
     timeout_budget_seconds: float | None,
     per_request_timeout_seconds: float,
+    failure_window: str | None,
+    failed_date: str | None,
+    failed_session_index: int | None,
+    attempted_sessions: int,
 ) -> dict[str, Any]:
     updated = dict(result)
     updated["perRequestTimeoutSeconds"] = per_request_timeout_seconds
     updated["timeoutBudgetSeconds"] = timeout_budget_seconds
     updated["diagnosticSessionCap"] = session_cap
+    updated["highLowFailureWindow"] = failure_window
+    updated["highLowFailedDate"] = failed_date
+    updated["highLowFailedSessionIndex"] = (
+        max(1, int(failed_session_index))
+        if failed_session_index is not None
+        else None
+    )
+    updated["highLowAttemptedSessions"] = max(0, int(attempted_sessions or 0))
     if diagnostic_reason:
         updated["highLowFulfilledSessions"] = max(0, int(fulfilled_sessions or 0))
         updated["reasonCodes"] = _replace_high_low_reason_codes(
@@ -811,17 +965,7 @@ def _replace_high_low_reason_codes(reason_codes: Sequence[Any], replacement: str
     inserted = False
     for raw_reason in reason_codes:
         reason = str(raw_reason)
-        if reason in {
-            POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
-            POLYGON_HIGH_LOW_HISTORY_MALFORMED_REASON,
-            POLYGON_HIGH_LOW_HISTORY_MIXED_SOURCE_REASON,
-            POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON,
-            POLYGON_HIGH_LOW_HISTORY_DATE_GAP_REASON,
-            POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON,
-            POLYGON_HIGH_LOW_HISTORY_DIAGNOSTIC_SESSION_CAP_REASON,
-            POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON,
-            POLYGON_HIGH_LOW_RATIO_UNAVAILABLE_REASON,
-        }:
+        if reason in _HIGH_LOW_REASON_CODES:
             if not inserted:
                 replaced.append(replacement)
                 inserted = True

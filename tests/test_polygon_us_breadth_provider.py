@@ -150,6 +150,7 @@ def test_market_overview_polygon_high_low_certification_output_is_sanitized() ->
         {
             "highLowLookbackSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
             "highLowFulfilledSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+            "highLowAttemptedSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
             "fulfilledMetrics": list(US_BREADTH_SYMBOLS),
             "missingMetrics": [],
             "reasonCodes": [],
@@ -173,6 +174,11 @@ def test_market_overview_polygon_high_low_certification_output_is_sanitized() ->
         "timeoutBudgetSeconds": 12.0,
         "perRequestTimeoutSeconds": 1.5,
         "diagnosticSessionCap": None,
+        "failureWindow": None,
+        "failedDate": None,
+        "failedSessionIndex": None,
+        "attemptedSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+        "fulfilledSessionsMeaning": "successful_history_sessions_collected",
     }
     serialized = json.dumps(output, ensure_ascii=False)
     assert "raw-provider-value" not in serialized
@@ -187,6 +193,10 @@ def test_market_overview_polygon_high_low_certification_reports_gap_only() -> No
         {
             "highLowLookbackSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
             "highLowFulfilledSessions": 120,
+            "highLowAttemptedSessions": 120,
+            "highLowFailureWindow": "high_low_lookback_session",
+            "highLowFailedDate": "2025-11-27",
+            "highLowFailedSessionIndex": 121,
             "fulfilledMetrics": [
                 "ADVANCERS",
                 "DECLINERS",
@@ -212,6 +222,11 @@ def test_market_overview_polygon_high_low_certification_reports_gap_only() -> No
         "timeoutBudgetSeconds": 30.0,
         "perRequestTimeoutSeconds": 2.0,
         "diagnosticSessionCap": None,
+        "failureWindow": "high_low_lookback_session",
+        "failedDate": "2025-11-27",
+        "failedSessionIndex": 121,
+        "attemptedSessions": 120,
+        "fulfilledSessionsMeaning": "successful_history_sessions_collected_before_failure",
     }
     serialized = json.dumps(output, ensure_ascii=False)
     assert "raw-provider-value" not in serialized
@@ -223,6 +238,10 @@ def test_market_overview_polygon_high_low_timeout_output_is_sanitized() -> None:
         {
             "highLowLookbackSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
             "highLowFulfilledSessions": 2,
+            "highLowAttemptedSessions": 3,
+            "highLowFailureWindow": "high_low_lookback_session",
+            "highLowFailedDate": "2026-05-19",
+            "highLowFailedSessionIndex": 3,
             "fulfilledMetrics": [
                 "ADVANCERS",
                 "DECLINERS",
@@ -250,6 +269,11 @@ def test_market_overview_polygon_high_low_timeout_output_is_sanitized() -> None:
         "timeoutBudgetSeconds": 3.0,
         "perRequestTimeoutSeconds": 0.5,
         "diagnosticSessionCap": 5,
+        "failureWindow": "high_low_lookback_session",
+        "failedDate": "2026-05-19",
+        "failedSessionIndex": 3,
+        "attemptedSessions": 3,
+        "fulfilledSessionsMeaning": "successful_history_sessions_collected_before_failure",
     }
     serialized = json.dumps(output, ensure_ascii=False)
     assert "raw-provider-value" not in serialized
@@ -296,6 +320,11 @@ def test_high_low_operator_smoke_timeout_returns_json_not_exception(monkeypatch,
         "timeoutBudgetSeconds": 3.0,
         "perRequestTimeoutSeconds": 0.5,
         "diagnosticSessionCap": 5,
+        "failureWindow": None,
+        "failedDate": None,
+        "failedSessionIndex": None,
+        "attemptedSessions": 0,
+        "fulfilledSessionsMeaning": "no_history_sessions_collected",
     }
     assert "polygon-secret-key" not in captured.out
     assert "provider payload" not in captured.out
@@ -398,6 +427,11 @@ def test_high_low_no_key_output_remains_fail_closed() -> None:
     assert output["fulfilledSessions"] == 0
     assert output["missingSymbols"] == ["NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"]
     assert output["reason"] == US_BREADTH_MISSING_PROVIDER_REASON
+    assert output["failureWindow"] is None
+    assert output["failedDate"] is None
+    assert output["failedSessionIndex"] is None
+    assert output["attemptedSessions"] == 0
+    assert output["fulfilledSessionsMeaning"] == "no_history_sessions_collected"
 
 
 def test_polygon_activation_uses_env_file_key_when_process_env_is_missing(tmp_path, monkeypatch) -> None:
@@ -909,6 +943,103 @@ def test_polygon_activation_high_low_diagnostic_session_cap_preserves_required_l
     assert calls == [latest_date, previous_date, history_dates[1]]
     assert result["highLowLookbackSessions"] == POLYGON_HIGH_LOW_LOOKBACK_SESSIONS
     assert result["highLowFulfilledSessions"] == 2
+    assert result["highLowAttemptedSessions"] == 2
+    assert result["highLowFailureWindow"] == "high_low_lookback_session"
+    assert result["highLowFailedDate"] == "2026-05-18"
+    assert result["highLowFailedSessionIndex"] == 3
     assert result["reasonCodes"] == [POLYGON_HIGH_LOW_HISTORY_DIAGNOSTIC_SESSION_CAP_REASON]
     assert result["sourceAuthorityAllowed"] is True
     assert result["scoreContributionAllowed"] is True
+
+
+def test_polygon_activation_invalid_grouped_daily_diagnostic_context_is_sanitized() -> None:
+    def transport(date: str, api_key: str, timeout: float) -> tuple[int, dict[str, object]]:
+        return 200, {"status": "ERROR", "resultsCount": 0, "results": []}
+
+    result = run_polygon_us_breadth_activation(
+        api_key="test-key",
+        transport=transport,
+        now=datetime(2026, 5, 22, 12, tzinfo=POLYGON_US_EASTERN_TZ),
+        min_coverage_count=3,
+        high_low_max_history_sessions=3,
+    )
+    output = build_high_low_lookback_certification_output(diagnostic_summary(result))
+
+    assert output["reason"] == POLYGON_US_BREADTH_REASON_RESPONSE_INVALID
+    assert output["failureWindow"] == "recent_grouped_daily_candidate_window"
+    assert output["failedDate"] == "2026-05-21"
+    assert output["failedSessionIndex"] is None
+    assert output["attemptedSessions"] == 0
+    assert output["fulfilledSessionsMeaning"] == "no_history_sessions_collected"
+    serialized = json.dumps(output, ensure_ascii=False)
+    assert "api.polygon.io" not in serialized
+    assert "apiKey" not in serialized
+
+
+def test_polygon_activation_unavailable_high_low_history_reports_failed_session_context() -> None:
+    latest_date = "2026-05-21"
+    previous_date = "2026-05-20"
+    history_dates = _prior_weekdays(latest_date, 3)
+    payloads = {
+        latest_date: _grouped_payload(_high_low_rows()),
+        previous_date: _grouped_payload(_high_low_rows()),
+        history_dates[1]: None,
+        history_dates[2]: _grouped_payload(_high_low_rows()),
+    }
+
+    def transport(date: str, api_key: str, timeout: float) -> tuple[int, dict[str, object] | None]:
+        payload = payloads.get(date)
+        return (200, payload) if payload is not None else (503, None)
+
+    result = run_polygon_us_breadth_activation(
+        api_key="test-key",
+        transport=transport,
+        now=datetime(2026, 5, 22, 12, tzinfo=POLYGON_US_EASTERN_TZ),
+        min_coverage_count=3,
+        high_low_lookback_sessions=3,
+        min_high_low_eligible_count=3,
+        high_low_max_history_sessions=3,
+    )
+    output = build_high_low_lookback_certification_output(diagnostic_summary(result))
+
+    assert output["reason"] == POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON
+    assert output["failureWindow"] == "high_low_lookback_session"
+    assert output["failedDate"] == "2026-05-19"
+    assert output["failedSessionIndex"] == 2
+    assert output["attemptedSessions"] == 3
+    assert output["fulfilledSessions"] == 1
+    assert output["fulfilledSessionsMeaning"] == "successful_history_sessions_collected_before_failure"
+
+
+def test_polygon_activation_timeout_preserves_bounded_attempt_counts() -> None:
+    latest_date = "2026-05-21"
+    previous_date = "2026-05-20"
+    timed_out_date = "2026-05-19"
+    payloads = {
+        latest_date: _grouped_payload(_high_low_rows()),
+        previous_date: _grouped_payload(_high_low_rows()),
+    }
+
+    def transport(date: str, api_key: str, timeout: float) -> tuple[int, dict[str, object]]:
+        if date == timed_out_date:
+            raise TimeoutError("polygon timeout with secret url")
+        return 200, payloads[date]
+
+    result = run_polygon_us_breadth_activation(
+        api_key="test-key",
+        transport=transport,
+        now=datetime(2026, 5, 22, 12, tzinfo=POLYGON_US_EASTERN_TZ),
+        min_coverage_count=3,
+        high_low_lookback_sessions=3,
+        min_high_low_eligible_count=3,
+        high_low_max_history_sessions=3,
+    )
+    output = build_high_low_lookback_certification_output(diagnostic_summary(result))
+
+    assert output["reason"] == "timeout"
+    assert output["failureWindow"] == "high_low_lookback_session"
+    assert output["failedDate"] == timed_out_date
+    assert output["failedSessionIndex"] == 2
+    assert output["attemptedSessions"] == 2
+    assert output["fulfilledSessions"] == 1
+    assert output["fulfilledSessionsMeaning"] == "successful_history_sessions_collected_before_failure"
