@@ -145,9 +145,8 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
       setMessage('健康与覆盖已刷新');
     } catch (error) {
       setMessage(`刷新失败：${getApiErrorMessage(error)}`);
-    } finally {
-      setBusyAction(null);
     }
+    setBusyAction(null);
   };
 
   useEffect(() => {
@@ -164,9 +163,8 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
         setMessage('健康与覆盖已刷新');
       } catch (error) {
         setMessage(`刷新失败：${getApiErrorMessage(error)}`);
-      } finally {
-        setBusyAction(null);
       }
+      setBusyAction(null);
     })();
   }, []);
 
@@ -177,26 +175,17 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
       if (action === 'init') {
         if (disabled) {
           setMessage('DuckDB 未启用，初始化已阻止');
-          return;
+        } else {
+          setInitResult(await quantApi.initDuckDB());
+          setMessage('初始化请求完成');
+          await refreshReadOnly();
         }
-        setInitResult(await quantApi.initDuckDB());
-        setMessage('初始化请求完成');
-        await refreshReadOnly();
-        return;
-      }
-
-      if (action === 'benchmark') {
+      } else if (action === 'benchmark') {
         setBenchmark(await quantApi.runDuckDBBenchmark({ symbolLimit: DEFAULT_BENCHMARK_SYMBOL_LIMIT }));
         setMessage('基准诊断完成');
-        return;
-      }
-
-      if (!explicitSymbols.length) {
+      } else if (!explicitSymbols.length) {
         setMessage('请输入 1-5 个明确标的');
-        return;
-      }
-
-      if (action === 'snapshot') {
+      } else if (action === 'snapshot') {
         setSnapshot(await quantApi.getDuckDBFactorSnapshot({
           symbols: explicitSymbols,
           lookbackDays: DEFAULT_LOOKBACK_DAYS,
@@ -226,9 +215,8 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
       }
     } catch (error) {
       setMessage(`动作失败：${getApiErrorMessage(error)}`);
-    } finally {
-      setBusyAction(null);
     }
+    setBusyAction(null);
   };
 
   return (

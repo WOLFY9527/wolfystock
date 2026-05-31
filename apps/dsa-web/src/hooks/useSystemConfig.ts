@@ -261,9 +261,8 @@ export function useSystemConfig() {
     } catch (error: unknown) {
       setLoadError(getParsedApiError(error));
       setRetryAction('load');
-    } finally {
-      setIsLoading(false);
     }
+    setIsLoading(false);
   };
 
   const resetDraft = () => {
@@ -387,19 +386,20 @@ export function useSystemConfig() {
 
     const changedItems = getChangedItems();
 
+    let result: SaveResult;
     try {
       await persistItems(changedItems, {
         validateBeforeSave: true,
         preserveDirty: false,
         successMessage: '配置已更新',
       });
-      return { success: true };
+      result = { success: true };
     } catch (error: unknown) {
       handleSaveFailure(error, true);
-      return { success: false, message: '保存失败' };
-    } finally {
-      setIsSaving(false);
+      result = { success: false, message: '保存失败' };
     }
+    setIsSaving(false);
+    return result;
   };
 
   const saveExternalItems = async (
@@ -417,11 +417,10 @@ export function useSystemConfig() {
       });
     } catch (error: unknown) {
       handleSaveFailure(error, false);
+      setIsSaving(false);
       throw error;
     }
-    finally {
-      setIsSaving(false);
-    }
+    setIsSaving(false);
   };
 
   const retry = async () => {

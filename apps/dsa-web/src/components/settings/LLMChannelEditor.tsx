@@ -1064,9 +1064,8 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
       setSaveMessage({ type: 'success', text: successMessage });
     } catch (error: unknown) {
       setSaveMessage({ type: 'error', error: getParsedApiError(error) });
-    } finally {
-      setIsSaving(false);
     }
+    setIsSaving(false);
   };
 
   const handleTest = async (channel: ChannelConfig, index: number) => {
