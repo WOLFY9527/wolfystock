@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useState, type SetStateAction } from 'react';
 import { Button } from '../common/Button';
 import { GlassCard } from '../common/GlassCard';
 import { Input } from '../common/Input';
@@ -171,6 +171,17 @@ const ZH_FIELD_HINTS: Record<string, string> = {
   'Comma-separated URLs.': '多个地址用逗号分隔。',
 };
 
+const buildNotificationChannelDraft = (items: SystemConfigItem[]): Record<string, string> => {
+  const itemByKey = new Map(items.map((item) => [item.key, item]));
+  const next: Record<string, string> = {};
+  CHANNELS.forEach((channel) => {
+    channel.fields.forEach((field) => {
+      next[field.key] = String(itemByKey.get(field.key)?.value ?? '');
+    });
+  });
+  return next;
+};
+
 export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProps> = ({
   items,
   disabled,
@@ -179,28 +190,26 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
   onSaveItems,
 }) => {
   const itemByKey = new Map(items.map((item) => [item.key, item]));
-
-  const [draft, setDraft] = useState<Record<string, string>>(() => {
-    const next: Record<string, string> = {};
-    CHANNELS.forEach((channel) => {
-      channel.fields.forEach((field) => {
-        next[field.key] = String(itemByKey.get(field.key)?.value ?? '');
-      });
+  const draftSource = JSON.stringify([...NOTIFICATION_CHANNEL_KEYS].map((key) => [key, String(itemByKey.get(key)?.value ?? '')]));
+  const initialDraft = buildNotificationChannelDraft(items);
+  const [draftState, setDraftState] = useState(() => ({
+    source: draftSource,
+    value: initialDraft,
+  }));
+  const draft = draftState.source === draftSource ? draftState.value : initialDraft;
+  const setDraft = (updater: SetStateAction<Record<string, string>>) => {
+    setDraftState((previousState) => {
+      const baseValue = previousState.source === draftSource ? previousState.value : initialDraft;
+      const nextValue = typeof updater === 'function'
+        ? (updater as (previousValue: Record<string, string>) => Record<string, string>)(baseValue)
+        : updater;
+      return {
+        source: draftSource,
+        value: nextValue,
+      };
     });
-    return next;
-  });
+  };
   const [savingChannelId, setSavingChannelId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const currentByKey = new Map(items.map((item) => [item.key, item]));
-    const next: Record<string, string> = {};
-    CHANNELS.forEach((channel) => {
-      channel.fields.forEach((field) => {
-        next[field.key] = String(currentByKey.get(field.key)?.value ?? '');
-      });
-    });
-    setDraft(next);
-  }, [items]);
 
   const setFieldValue = (key: string, value: string) => {
     setDraft((previous) => ({
