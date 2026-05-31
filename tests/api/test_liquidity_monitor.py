@@ -143,6 +143,18 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
             "providerRuntimeChanged": False,
             "marketCacheMutation": False,
         },
+        "observationEvidenceSnapshot": {
+            "sentinel": "top-level-service-only-evidence",
+        },
+    }
+    payload["indicators"][0]["evidence"]["cacheBundleDiagnostics"] = {
+        "sentinel": "nested-service-only-evidence",
+    }
+    payload["indicators"][0]["coverageDiagnostics"]["cacheBundleDiagnostics"] = {
+        "sentinel": "nested-service-only-diagnostics",
+    }
+    payload["indicators"][0]["evidence"]["inputs"][0]["cacheBundleDiagnostics"] = {
+        "sentinel": "nested-service-only-input-diagnostics",
     }
 
     with patch("api.v1.endpoints.liquidity_monitor.LiquidityMonitorService") as mock_service:
@@ -165,10 +177,18 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
     assert body["score"]["regime"] == "supportive"
     assert set(body["sourceMetadata"]) == {"externalProviderCalls", "providerRuntimeChanged", "marketCacheMutation"}
     assert body["sourceMetadata"]["externalProviderCalls"] is False
+    assert "observationEvidenceSnapshot" not in body
     assert body["liquidityImpulseSynthesis"]["liquidityImpulse"] == "contracting_liquidity"
-    assert body["indicators"][0]["evidence"]["source"] == "fred"
-    assert body["indicators"][0]["evidence"]["inputs"][0]["sourceType"] == "official_public"
-    diagnostics = body["indicators"][0]["coverageDiagnostics"]
+    indicator = body["indicators"][0]
+    assert "observationEvidenceSnapshot" not in indicator
+    evidence = indicator["evidence"]
+    assert evidence["source"] == "fred"
+    assert "cacheBundleDiagnostics" not in evidence
+    evidence_input = evidence["inputs"][0]
+    assert evidence_input["sourceType"] == "official_public"
+    assert "cacheBundleDiagnostics" not in evidence_input
+    diagnostics = indicator["coverageDiagnostics"]
+    assert "cacheBundleDiagnostics" not in diagnostics
     assert diagnostics["requiredProviderClass"] == "official_public.vix_or_volatility"
     assert diagnostics["realSourceAvailable"] is True
     assert diagnostics["scoreContributionAllowed"] is True
