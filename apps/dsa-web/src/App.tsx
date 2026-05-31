@@ -182,7 +182,7 @@ function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: bo
     };
 }
 
-export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const { language } = useI18n();
   const { isGuest } = useProductSurface();
@@ -208,7 +208,7 @@ export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = (
   return <ConsumerProtectedFrame moduleName={moduleName} />;
 };
 
-export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const { language } = useI18n();
   const { adminCapabilities, isAdminAccount, isGuest } = useProductSurface();

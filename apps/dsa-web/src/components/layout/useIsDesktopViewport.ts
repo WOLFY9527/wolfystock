@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-export function getIsDesktopViewport(): boolean {
+function getIsDesktopViewport(): boolean {
   if (typeof window === 'undefined') {
     return true;
   }

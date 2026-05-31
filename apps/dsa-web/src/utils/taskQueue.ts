@@ -15,11 +15,11 @@ function getTaskStatusWeight(task: TaskInfo): number {
   return 0;
 }
 
-export function getTaskActivityTimestamp(task: TaskInfo): number {
+function getTaskActivityTimestamp(task: TaskInfo): number {
   return Date.parse(task.updatedAt || task.completedAt || task.startedAt || task.createdAt || '');
 }
 
-export function getCompletedTaskTimestamp(task: TaskInfo): number {
+function getCompletedTaskTimestamp(task: TaskInfo): number {
   return Date.parse(task.completedAt || task.updatedAt || task.createdAt || '');
 }
 

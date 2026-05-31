@@ -13,7 +13,7 @@ export type CanonicalTrustDisclosureBucket = Exclude<TrustDisclosureBucket, 'ins
 
 export type TrustDisclosureChipVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info';
 
-export const TRUST_DISCLOSURE_BUCKET_ORDER: CanonicalTrustDisclosureBucket[] = [
+const TRUST_DISCLOSURE_BUCKET_ORDER: CanonicalTrustDisclosureBucket[] = [
   'confidence',
   'fallback',
   'stale',

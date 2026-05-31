@@ -11,9 +11,9 @@ export type ProductSetupSurface = {
   label: string;
 };
 
-export const PRODUCT_SETUP_SURFACE_PARAM = 'surface';
+const PRODUCT_SETUP_SURFACE_PARAM = 'surface';
 
-export const PRODUCT_SETUP_SURFACES: Record<ProductSetupSurfaceKey, ProductSetupSurface> = {
+const PRODUCT_SETUP_SURFACES: Record<ProductSetupSurfaceKey, ProductSetupSurface> = {
   market_overview: {
     key: 'market_overview',
     label: 'Market Overview',

@@ -9,7 +9,7 @@ export function isDeveloperDiagnosticAllowed(audience: DiagnosticAudience = 'use
   return audience === 'admin';
 }
 
-export function mapInternalReasonToUserMessage(
+function mapInternalReasonToUserMessage(
   value?: string | null,
   locale: UserFacingIssueLocale = 'zh',
 ): string {
