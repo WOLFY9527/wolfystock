@@ -46,6 +46,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "official_macro"
 MODULE_PATH = REPO_ROOT / "src" / "services" / "official_macro_transport.py"
 OFFICIAL_MACRO_ACTIVATION_SCRIPT_PATH = REPO_ROOT / "scripts" / "diagnose_official_macro_activation.py"
+OFFICIAL_MACRO_PREWARM_SCRIPT_PATH = REPO_ROOT / "scripts" / "official_macro_cache_prewarm.py"
 FORBIDDEN_IMPORT_PREFIXES = ("requests", "httpx", "aiohttp", "urllib3", "yfinance")
 OFFICIAL_MACRO_SMOKE_CORE_FIELDS = {
     "credentialsPresent",
@@ -111,6 +112,18 @@ def _load_official_macro_activation_script():
     spec = importlib.util.spec_from_file_location(
         "diagnose_official_macro_activation_for_test",
         OFFICIAL_MACRO_ACTIVATION_SCRIPT_PATH,
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_official_macro_prewarm_script():
+    spec = importlib.util.spec_from_file_location(
+        "official_macro_cache_prewarm_for_test",
+        OFFICIAL_MACRO_PREWARM_SCRIPT_PATH,
     )
     assert spec is not None
     assert spec.loader is not None
@@ -807,6 +820,99 @@ def test_official_macro_activation_cache_readiness_unexpected_error_is_sanitized
         "WRESBAL": "missing",
     }
     assert "SECRET" not in output
+
+
+def test_official_macro_cache_prewarm_dry_run_reports_sanitized_write_plan() -> None:
+    script = _load_official_macro_prewarm_script()
+
+    def fail_factory() -> object:
+        raise AssertionError("dry-run must not construct MarketOverviewService")
+
+    result = script.run_prewarm(write=False, service_factory=fail_factory)
+
+    assert result["dryRun"] is True
+    assert result["writeEnabled"] is False
+    assert result["writeAttempted"] is False
+    assert result["requiredSeries"] == [
+        "DGS2",
+        "DGS10",
+        "DGS30",
+        "DTWEXBGS",
+        "WALCL",
+        "RRPONTSYD",
+        "WTREGEN",
+        "WRESBAL",
+    ]
+    assert result["fulfilledSeries"] == []
+    assert result["missingSeries"] == []
+    assert result["cacheRowsWouldWrite"] == 2
+    assert result["cacheRowsWritten"] == 0
+    assert result["reason"] == "dry_run_no_write"
+    assert "targetPanels" in result
+    assert "rawProviderPayload" not in json.dumps(result)
+
+
+def test_official_macro_cache_prewarm_write_reports_sanitized_coverage_summary() -> None:
+    script = _load_official_macro_prewarm_script()
+
+    class FakeService:
+        def prewarm_official_macro_cache(self) -> dict[str, dict[str, object]]:
+            return {
+                "rates": {
+                    "source": "mixed",
+                    "freshness": "cached",
+                    "items": [
+                        {
+                            "symbol": "US2Y",
+                            "officialSeriesId": "DGS2",
+                            "source": "fred",
+                            "sourceType": "official_public",
+                            "freshness": "cached",
+                            "sourceAuthorityAllowed": True,
+                            "scoreContributionAllowed": True,
+                        },
+                    ],
+                    "rawProviderPayload": {"token": "SECRET"},
+                },
+                "macro": {
+                    "source": "mixed",
+                    "freshness": "cached",
+                    "items": [
+                        {
+                            "symbol": "USD_TWI",
+                            "officialSeriesId": "DTWEXBGS",
+                            "source": "fred",
+                            "sourceType": "official_public",
+                            "freshness": "cached",
+                            "sourceAuthorityAllowed": True,
+                            "scoreContributionAllowed": True,
+                        },
+                        {
+                            "symbol": "FED_ASSETS",
+                            "officialSeriesId": "WALCL",
+                            "source": "fred",
+                            "sourceType": "official_public",
+                            "freshness": "cached",
+                            "sourceAuthorityAllowed": True,
+                            "scoreContributionAllowed": True,
+                        },
+                    ],
+                    "rawProviderPayload": {"token": "SECRET"},
+                },
+            }
+
+    result = script.run_prewarm(write=True, service_factory=FakeService)
+
+    assert result["dryRun"] is False
+    assert result["writeEnabled"] is True
+    assert result["writeAttempted"] is True
+    assert result["cacheRowsWouldWrite"] == 0
+    assert result["cacheRowsWritten"] == 2
+    assert result["fulfilledSeries"] == ["DGS2", "DTWEXBGS", "WALCL"]
+    assert result["missingSeries"] == ["DGS10", "DGS30", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    assert result["reason"] == "required_series_missing"
+    assert "rawProviderPayload" not in json.dumps(result)
+    assert "SECRET" not in json.dumps(result)
 
 
 @pytest.mark.parametrize(
