@@ -358,20 +358,35 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
                     "stage": "snapshot",
                     "capability": "cn_realtime_quote",
                     "providerName": "akshare",
+                    "sourceType": "public_proxy",
                     "sourceTier": "unofficial_public_api",
                     "trustLevel": "weak",
                     "freshnessExpectation": "best_effort_realtime_quote_and_daily_history",
                     "observationOnly": True,
                     "scoreContributionAllowed": False,
-                    "degradationReason": None,
+                    "degradationReason": "fallback_source",
                     "asOf": "2026-05-19T08:40:00+08:00",
                     "updatedAt": "2026-05-19T08:40:00+08:00",
                 }
             ],
         }
+        payload["shortlist"][0]["diagnostics"]["score_explainability"]["cap_reason"] = "fallback_source"
+        payload["shortlist"][0]["diagnostics"]["score_explainability"]["degradation_reason"] = "fallback_source"
+        payload["shortlist"][0]["diagnostics"]["score_explainability"]["score_confidence"] = 0.4
+        payload["shortlist"][0]["diagnostics"]["score_explainability"]["source_confidence"] = {
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "observationOnly": True,
+            "sourceType": "fallback_static",
+            "capReason": "fallback_source",
+            "degradationReason": "fallback_source",
+        }
         payload["shortlist"][0]["diagnostics"]["cn_provider_observation"] = provider_observation
         payload["shortlist"][0]["diagnostics"]["evidence_packet"] = {
             "symbol": "600001",
+            "capReason": "fallback_source",
+            "degradationReason": "fallback_source",
+            "userFacingLabels": ["仅供观察", "需人工复核"],
             "providerObservation": provider_observation,
         }
         payload["candidates"] = [
@@ -404,15 +419,34 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
 
         serialized = response.model_dump()
         self.assertTrue(response.shortlist[0].diagnostics["cn_provider_observation"]["observationOnly"])
+        self.assertFalse(response.shortlist[0].diagnostics["score_explainability"]["source_confidence"]["sourceAuthorityAllowed"])
+        self.assertFalse(response.shortlist[0].diagnostics["score_explainability"]["source_confidence"]["scoreContributionAllowed"])
+        self.assertTrue(response.shortlist[0].diagnostics["score_explainability"]["source_confidence"]["observationOnly"])
+        self.assertEqual(response.shortlist[0].diagnostics["score_explainability"]["cap_reason"], "fallback_source")
         self.assertEqual(
             response.shortlist[0].diagnostics["evidence_packet"]["providerObservation"]["entries"][0]["providerName"],
             "akshare",
         )
+        self.assertEqual(
+            response.shortlist[0].diagnostics["evidence_packet"]["providerObservation"]["entries"][0]["sourceType"],
+            "public_proxy",
+        )
+        self.assertEqual(response.shortlist[0].diagnostics["evidence_packet"]["capReason"], "fallback_source")
         self.assertEqual(response.candidates[0].cn_provider_observation["entries"][0]["providerName"], "akshare")
         self.assertTrue(serialized["shortlist"][0]["diagnostics"]["cn_provider_observation"]["observationOnly"])
+        self.assertFalse(
+            serialized["shortlist"][0]["diagnostics"]["score_explainability"]["source_confidence"]["sourceAuthorityAllowed"]
+        )
+        self.assertFalse(
+            serialized["shortlist"][0]["diagnostics"]["score_explainability"]["source_confidence"]["scoreContributionAllowed"]
+        )
         self.assertEqual(
             serialized["shortlist"][0]["diagnostics"]["evidence_packet"]["providerObservation"]["entries"][0]["providerName"],
             "akshare",
+        )
+        self.assertEqual(
+            serialized["shortlist"][0]["diagnostics"]["evidence_packet"]["providerObservation"]["entries"][0]["sourceType"],
+            "public_proxy",
         )
         self.assertEqual(
             serialized["candidates"][0]["cn_provider_observation"]["entries"][0]["providerName"],

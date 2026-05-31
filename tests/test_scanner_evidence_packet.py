@@ -279,6 +279,85 @@ def test_build_scanner_evidence_packet_keeps_cn_public_proxy_observation_visible
     assert packet["providerObservation"]["scoreContributionAllowed"] is False
     assert packet["providerObservation"]["entries"][0]["providerName"] == "akshare"
     assert packet["providerObservation"]["entries"][0]["sourceType"] == "public_proxy"
+    assert "sourceAuthorityAllowed" not in packet["providerObservation"]
+
+
+def test_build_scanner_evidence_packet_keeps_public_proxy_fallback_observation_non_authoritative() -> None:
+    candidate = _candidate_fixture()
+    candidate["market"] = "cn"
+    candidate["symbol"] = "600001"
+    candidate["name"] = "算力龙头"
+    candidate["_diagnostics"]["history"] = {
+        "source": "local_partial_fallback",
+        "latest_trade_date": "2026-05-08",
+        "rows": 42,
+        "partial_local_fallback": True,
+        "network_failed": True,
+        "stale": True,
+    }
+    candidate["_diagnostics"]["quote_context"] = {
+        "available": True,
+        "source": "akshare",
+        "sourceType": "public_proxy",
+    }
+    candidate["_diagnostics"]["cn_provider_observation"] = {
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "entries": [
+            {
+                "stage": "snapshot",
+                "capability": "cn_realtime_snapshot",
+                "providerName": "akshare",
+                "sourceType": "public_proxy",
+                "sourceTier": "unofficial_public_api",
+                "trustLevel": "weak",
+                "observationOnly": True,
+                "scoreContributionAllowed": False,
+                "degradationReason": "fallback_source",
+                "asOf": "2026-05-08",
+                "updatedAt": "2026-05-08T09:30:00+08:00",
+            }
+        ],
+    }
+
+    packet = build_scanner_evidence_packet(
+        candidate,
+        {
+            "market": "cn",
+            "run_id": 10,
+            "evidence_version": "scanner_evidence_v1",
+            "score_explainability": {
+                "raw_score": 81.6,
+                "final_score": 40.0,
+                "cap_reason": "fallback_source",
+                "degradation_reason": "fallback_source",
+                "score_confidence": 0.4,
+                "evidence_coverage": 1.0,
+                "source_confidence": {
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "observationOnly": True,
+                    "sourceType": "fallback_static",
+                },
+            },
+        },
+    )
+
+    assert packet["score"] == 40.0
+    assert packet["rawScore"] == 81.6
+    assert packet["finalScore"] == 40.0
+    assert packet["capReason"] == "fallback_source"
+    assert packet["degradationReason"] == "fallback_source"
+    assert packet["userFacingLabels"] == ["历史数据不足", "依据需复核"]
+    assert packet["warningFlags"] == ["依据需复核"]
+    assert packet["providerObservation"]["observationOnly"] is True
+    assert packet["providerObservation"]["scoreContributionAllowed"] is False
+    assert packet["providerObservation"]["entries"][0]["providerName"] == "akshare"
+    assert packet["providerObservation"]["entries"][0]["sourceType"] == "public_proxy"
+    assert packet["providerObservation"]["entries"][0]["sourceTier"] == "unofficial_public_api"
+    assert packet["providerObservation"]["entries"][0]["trustLevel"] == "weak"
+    assert packet["providerObservation"]["entries"][0]["degradationReason"] == "fallback_source"
+    assert "sourceAuthorityAllowed" not in packet["providerObservation"]
 
 
 def test_build_scanner_evidence_packet_preserves_baostock_scanner_diagnostics_sidecar_fields() -> None:
