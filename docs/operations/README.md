@@ -8,6 +8,7 @@ runtime metadata references.
 ## Current Operations Docs
 
 - `WOLFYSTOCK_RUNBOOK.md`
+- `backend-local-runbook.md`
 - `ARTIFACT_CLEANUP_POLICY.md`
 - `parallel-codex-playbook.md`
 - `provider-capability-metadata.md`

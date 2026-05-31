@@ -99,6 +99,8 @@ operator workflows.
 
 - [WolfyStock Operations Runbook](./operations/WOLFYSTOCK_RUNBOOK.md):
   high-level operator flow and triage skeleton.
+- [Backend Local Runbook](./operations/backend-local-runbook.md):
+  canonical `.venv` backend startup, local proxy block, and health checks.
 - [Artifact Cleanup Policy](./operations/ARTIFACT_CLEANUP_POLICY.md):
   tracked-vs-generated artifact ownership and cleanup timing rules.
 - [Parallel Codex Operator Playbook](./operations/parallel-codex-playbook.md):

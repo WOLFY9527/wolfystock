@@ -25,9 +25,13 @@ paths, DuckDB productionization, or protected-domain semantic changes.
 Backend:
 
 ```bash
-python main.py --serve-only
-uvicorn server:app --reload --host 0.0.0.0 --port 8000
+source .venv/bin/activate
+python3 -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 ```
+
+Detailed local backend steps:
+
+- [Backend Local Runbook](./backend-local-runbook.md)
 
 Frontend:
 
