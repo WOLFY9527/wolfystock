@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState, type SetStateAction } from 'react';
 import { getApiErrorMessage, getParsedApiError } from '../../api/error';
 import { systemConfigApi } from '../../api/systemConfig';
 import {
@@ -23,6 +23,15 @@ import {
 type AllItemMap = Map<string, string>;
 type DataSummary = Record<DataRouteKey, string[]>;
 type SaveExternalItems = (items: Array<{ key: string; value: string }>, successMessage: string) => Promise<void>;
+type ManagedBuiltinDraft = {
+  credential: string;
+  secret: string;
+  extraValue: string;
+};
+type DraftState<T> = {
+  source: string;
+  value: T;
+};
 
 type UseDataSourceLibraryControllerArgs = {
   allItemMap: AllItemMap;
@@ -37,8 +46,10 @@ type UseDataSourceLibraryControllerArgs = {
 const hasConfigValue = (value: string): boolean => String(value || '').trim().length > 0;
 const splitCsv = (value?: string): string[] => (value || '')
   .split(',')
-  .map((item) => item.trim())
-  .filter(Boolean);
+  .flatMap((item) => {
+    const normalized = item.trim();
+    return normalized ? [normalized] : [];
+  });
 const builtinValidationSymbol = (sourceId: string): string => (sourceId === 'twelve_data' ? 'HK00700' : 'MSFT');
 const uniqueValues = (values: Array<string | null | undefined>): string[] => {
   const next: string[] = [];
@@ -52,6 +63,233 @@ const uniqueValues = (values: Array<string | null | undefined>): string[] => {
   return next;
 };
 
+const EMPTY_MANAGED_BUILTIN_DRAFT: ManagedBuiltinDraft = {
+  credential: '',
+  secret: '',
+  extraValue: '',
+};
+
+const resolveDraftStateValue = <T,>(
+  draftState: DraftState<T>,
+  source: string,
+  fallback: T,
+): T => (draftState.source === source ? draftState.value : fallback);
+
+const buildNextDraftState = <T,>(
+  draftState: DraftState<T>,
+  source: string,
+  fallback: T,
+  updater: SetStateAction<T>,
+): DraftState<T> => {
+  const baseValue = resolveDraftStateValue(draftState, source, fallback);
+  const nextValue = typeof updater === 'function'
+    ? (updater as (previousState: T) => T)(baseValue)
+    : updater;
+  return {
+    source,
+    value: nextValue,
+  };
+};
+
+const buildBuiltinValidationMessage = (
+  validationState: DataSourceValidationState,
+  remoteValidation: BuiltinDataSourceValidationResult | undefined,
+  t: TranslateFn,
+): string => (
+  validationState === 'builtin'
+    ? t('settings.dataSourceValidationBuiltin')
+    : validationState === 'loading'
+      ? t('settings.dataSourceValidationChecking')
+      : validationState === 'partial'
+        ? (remoteValidation?.summary || t('settings.dataSourceValidationPartial'))
+        : validationState === 'missing_key'
+          ? (remoteValidation?.summary || t('settings.dataSourceValidationMissing'))
+          : validationState === 'unsupported'
+            ? (remoteValidation?.summary || t('settings.dataSourceValidationUnsupported'))
+            : validationState === 'validated'
+              ? (remoteValidation?.summary || t('settings.dataSourceValidationRemoteSuccess'))
+              : validationState === 'failed'
+                ? (remoteValidation?.summary || t('settings.dataSourceValidationRemoteFailed'))
+                : validationState === 'configured_pending'
+                  ? t('settings.dataSourceValidationConfiguredOnly')
+                  : t('settings.dataSourceValidationMissing')
+);
+
+const createManagedBuiltinDraft = (
+  management: NonNullable<DataSourceLibraryEntry['management']>,
+  allItemMap: AllItemMap,
+): ManagedBuiltinDraft => {
+  const credential = management.pluralCredentialEnvKey && hasConfigValue(allItemMap.get(management.pluralCredentialEnvKey) || '')
+    ? String(allItemMap.get(management.pluralCredentialEnvKey) || '')
+    : management.credentialEnvKey
+      ? String(allItemMap.get(management.credentialEnvKey) || '')
+      : '';
+  const secret = management.secretEnvKey
+    ? String(allItemMap.get(management.secretEnvKey) || '')
+    : '';
+  const extraValue = management.extraField
+    ? String(allItemMap.get(management.extraField.envKey) || management.extraField.defaultValue || '')
+    : '';
+  return {
+    credential,
+    secret,
+    extraValue,
+  };
+};
+
+const buildDataSourceLibrary = ({
+  allItemMap,
+  builtinDataSourceValidationResults,
+  customDataSourceLibraryDraft,
+  dataSourceValidationStatus,
+  dataSummary,
+  prettySourceLabel,
+  t,
+}: {
+  allItemMap: AllItemMap;
+  builtinDataSourceValidationResults: Record<string, BuiltinDataSourceValidationResult>;
+  customDataSourceLibraryDraft: CustomDataSourceRecord[];
+  dataSourceValidationStatus: Record<string, DataSourceValidationState>;
+  dataSummary: DataSummary;
+  prettySourceLabel: (value: string) => string;
+  t: TranslateFn;
+}): DataSourceLibraryEntry[] => {
+  const hasCredential = (patterns: RegExp[]): boolean => {
+    if (!patterns.length) {
+      return false;
+    }
+    for (const [key, value] of allItemMap.entries()) {
+      if (!hasConfigValue(value)) {
+        continue;
+      }
+      if (patterns.some((pattern) => pattern.test(key))) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const builtInEntries = DATA_SOURCE_LIBRARY_ITEMS.map((source) => {
+    const credentialValue = hasCredential(source.credentialPatterns) ? 'configured' : '';
+    const configured = source.requireCredential ? Boolean(credentialValue) : true;
+    const runtimeValidation = dataSourceValidationStatus[source.key];
+    const remoteValidation = builtinDataSourceValidationResults[source.key];
+    const validationState = runtimeValidation || (
+      source.builtin && !source.requireCredential
+        ? 'builtin'
+        : configured
+          ? 'configured_pending'
+          : 'not_configured'
+    );
+    const capabilityLabels = source.capabilityKeys.map((capability) => t(DATA_SOURCE_CAPABILITY_LABEL_KEYS[capability]));
+    const routeUsage = source.routeKeys.filter((routeKey) => dataSummary[routeKey].includes(source.key));
+    const usable = source.builtin && !source.requireCredential
+      ? true
+      : configured && validationState !== 'failed';
+    return {
+      key: source.key,
+      label: prettySourceLabel(source.key),
+      kind: 'builtin' as const,
+      builtin: true,
+      baseUrl: '',
+      configured,
+      usable,
+      validationState,
+      validationMessage: buildBuiltinValidationMessage(validationState, remoteValidation, t),
+      routeUsage,
+      capabilityKeys: source.capabilityKeys,
+      capabilityLabels,
+      description: source.management
+        ? t('settings.dataSourceCredentialDesc')
+        : t('settings.dataSourceBuiltinDesc'),
+      credentialRequired: Boolean(source.requireCredential),
+      credentialValue,
+      credentialSchema: source.credentialSchema || 'none',
+      management: source.management,
+    } satisfies DataSourceLibraryEntry;
+  });
+
+  const customEntries = customDataSourceLibraryDraft.map((record) => {
+    const normalizedValidation = record.validation?.status || 'pending';
+    const localValidation = dataSourceValidationStatus[record.id];
+    const validationState = localValidation || normalizedValidation;
+    const configured = Boolean(
+      record.name.trim()
+      && record.credential.trim()
+      && (record.credentialSchema !== 'key_secret' || record.secret.trim())
+      && record.capabilities.length,
+    );
+    const capabilityLabels = record.capabilities.map((capability) => t(DATA_SOURCE_CAPABILITY_LABEL_KEYS[capability]));
+    const routeUsage = record.capabilities.reduce<DataRouteKey[]>((acc, capability) => {
+      const routeKey = DATA_SOURCE_ROUTING_CAPABILITY_MAP[capability];
+      if (routeKey && dataSummary[routeKey].includes(record.id)) {
+        acc.push(routeKey);
+      }
+      return acc;
+    }, []);
+    const usable = configured && validationState !== 'failed';
+    return {
+      key: record.id,
+      label: record.name,
+      kind: 'custom' as const,
+      builtin: false,
+      baseUrl: record.baseUrl,
+      configured,
+      usable,
+      validationState: validationState === 'validated' && configured
+        ? 'validated'
+        : validationState === 'failed'
+          ? 'failed'
+          : configured
+            ? 'configured_pending'
+            : 'not_configured',
+      validationMessage: validationState === 'validated'
+        ? t('settings.dataSourceValidationLocalSuccess')
+        : validationState === 'failed'
+          ? (record.validation?.message || t('settings.dataSourceValidationLocalFailed'))
+          : configured
+            ? t('settings.dataSourceValidationConfiguredOnly')
+            : t('settings.dataSourceValidationMissing'),
+      routeUsage,
+      capabilityKeys: record.capabilities,
+      capabilityLabels,
+      description: record.description || t('settings.dataSourceCustomDesc'),
+      credentialRequired: true,
+      credentialValue: record.credential,
+      credentialSchema: record.credentialSchema,
+      customRecord: record,
+    } satisfies DataSourceLibraryEntry;
+  });
+
+  return [...builtInEntries, ...customEntries];
+};
+
+const buildDataSourceRouteOptions = (dataSourceLibrary: DataSourceLibraryEntry[]) => {
+  const grouped: Record<DataRouteKey, string[]> = {
+    market: [],
+    fundamentals: [],
+    news: [],
+    sentiment: [],
+  };
+
+  dataSourceLibrary.forEach((source) => {
+    if (!source.usable) {
+      return;
+    }
+    source.capabilityKeys.forEach((capability) => {
+      const routeKey = DATA_SOURCE_ROUTING_CAPABILITY_MAP[capability];
+      if (!routeKey) {
+        return;
+      }
+      if (!grouped[routeKey].includes(source.key)) {
+        grouped[routeKey].push(source.key);
+      }
+    });
+  });
+
+  return grouped;
+};
+
 export function useDataSourceLibraryController({
   allItemMap,
   dataSummary,
@@ -63,175 +301,43 @@ export function useDataSourceLibraryController({
 }: UseDataSourceLibraryControllerArgs) {
   const [dataSourceValidationStatus, setDataSourceValidationStatus] = useState<Record<string, DataSourceValidationState>>({});
   const [builtinDataSourceValidationResults, setBuiltinDataSourceValidationResults] = useState<Record<string, BuiltinDataSourceValidationResult>>({});
-  const customDataSourceLibrary = parseCustomDataSourceLibrary(allItemMap.get(CUSTOM_DATA_SOURCE_LIBRARY_KEY) || '');
-  const [customDataSourceLibraryDraft, setCustomDataSourceLibraryDraft] = useState<CustomDataSourceRecord[]>(customDataSourceLibrary);
-  useEffect(() => {
-    setCustomDataSourceLibraryDraft(customDataSourceLibrary);
-  }, [customDataSourceLibrary]);
+  const customDataSourceLibrarySource = allItemMap.get(CUSTOM_DATA_SOURCE_LIBRARY_KEY) || '';
+  const customDataSourceLibrary = parseCustomDataSourceLibrary(customDataSourceLibrarySource);
+  const [customDataSourceLibraryDraftState, setCustomDataSourceLibraryDraftState] = useState<DraftState<CustomDataSourceRecord[]>>(() => ({
+    source: customDataSourceLibrarySource,
+    value: customDataSourceLibrary,
+  }));
+  const customDataSourceLibraryDraft = resolveDraftStateValue(
+    customDataSourceLibraryDraftState,
+    customDataSourceLibrarySource,
+    customDataSourceLibrary,
+  );
+  const setCustomDataSourceLibraryDraft = (updater: SetStateAction<CustomDataSourceRecord[]>) => {
+    setCustomDataSourceLibraryDraftState((previousState) => buildNextDraftState(
+      previousState,
+      customDataSourceLibrarySource,
+      customDataSourceLibrary,
+      updater,
+    ));
+  };
 
-  const dataSourceLibrary: DataSourceLibraryEntry[] = (() => {
-    const hasCredential = (patterns: RegExp[]): boolean => {
-      if (!patterns.length) {
-        return false;
-      }
-      for (const [key, value] of allItemMap.entries()) {
-        if (!hasConfigValue(value)) {
-          continue;
-        }
-        if (patterns.some((pattern) => pattern.test(key))) {
-          return true;
-        }
-      }
-      return false;
-    };
-
-    const builtInEntries = DATA_SOURCE_LIBRARY_ITEMS.map((source) => {
-      const credentialValue = hasCredential(source.credentialPatterns) ? 'configured' : '';
-      const configured = source.requireCredential ? Boolean(credentialValue) : true;
-      const runtimeValidation = dataSourceValidationStatus[source.key];
-      const remoteValidation = builtinDataSourceValidationResults[source.key];
-      const validationState = runtimeValidation || (
-        source.builtin && !source.requireCredential
-          ? 'builtin'
-          : configured
-            ? 'configured_pending'
-            : 'not_configured'
-      );
-      const capabilityLabels = source.capabilityKeys.map((capability) => t(DATA_SOURCE_CAPABILITY_LABEL_KEYS[capability]));
-      const routeUsage = source.routeKeys.filter((routeKey) => dataSummary[routeKey].includes(source.key));
-      const usable = source.builtin && !source.requireCredential
-        ? true
-        : configured && validationState !== 'failed';
-      return {
-        key: source.key,
-        label: prettySourceLabel(source.key),
-        kind: 'builtin' as const,
-        builtin: true,
-        baseUrl: '',
-        configured,
-        usable,
-        validationState,
-        validationMessage: validationState === 'builtin'
-          ? t('settings.dataSourceValidationBuiltin')
-          : validationState === 'loading'
-            ? t('settings.dataSourceValidationChecking')
-            : validationState === 'partial'
-              ? (remoteValidation?.summary || t('settings.dataSourceValidationPartial'))
-              : validationState === 'missing_key'
-                ? (remoteValidation?.summary || t('settings.dataSourceValidationMissing'))
-                : validationState === 'unsupported'
-                  ? (remoteValidation?.summary || t('settings.dataSourceValidationUnsupported'))
-                  : validationState === 'validated'
-                    ? (remoteValidation?.summary || t('settings.dataSourceValidationRemoteSuccess'))
-                    : validationState === 'failed'
-                      ? (remoteValidation?.summary || t('settings.dataSourceValidationRemoteFailed'))
-                      : validationState === 'configured_pending'
-                        ? t('settings.dataSourceValidationConfiguredOnly')
-                        : t('settings.dataSourceValidationMissing'),
-        routeUsage,
-        capabilityKeys: source.capabilityKeys,
-        capabilityLabels,
-        description: source.management
-          ? t('settings.dataSourceCredentialDesc')
-          : t('settings.dataSourceBuiltinDesc'),
-        credentialRequired: Boolean(source.requireCredential),
-        credentialValue,
-        credentialSchema: source.credentialSchema || 'none',
-        management: source.management,
-      } satisfies DataSourceLibraryEntry;
-    });
-
-    const customEntries = customDataSourceLibraryDraft.map((record) => {
-      const normalizedValidation = record.validation?.status || 'pending';
-      const localValidation = dataSourceValidationStatus[record.id];
-      const validationState = localValidation || normalizedValidation;
-      const configured = Boolean(
-        record.name.trim()
-        && record.credential.trim()
-        && (record.credentialSchema !== 'key_secret' || record.secret.trim())
-        && record.capabilities.length,
-      );
-      const capabilityLabels = record.capabilities.map((capability) => t(DATA_SOURCE_CAPABILITY_LABEL_KEYS[capability]));
-      const routeUsage = record.capabilities.reduce<DataRouteKey[]>((acc, capability) => {
-        const routeKey = DATA_SOURCE_ROUTING_CAPABILITY_MAP[capability];
-        if (routeKey && dataSummary[routeKey].includes(record.id)) {
-          acc.push(routeKey);
-        }
-        return acc;
-      }, []);
-      const usable = configured && validationState !== 'failed';
-      return {
-        key: record.id,
-        label: record.name,
-        kind: 'custom' as const,
-        builtin: false,
-        baseUrl: record.baseUrl,
-        configured,
-        usable,
-        validationState: validationState === 'validated' && configured
-          ? 'validated'
-          : validationState === 'failed'
-            ? 'failed'
-            : configured
-              ? 'configured_pending'
-              : 'not_configured',
-        validationMessage: validationState === 'validated'
-          ? t('settings.dataSourceValidationLocalSuccess')
-          : validationState === 'failed'
-            ? (record.validation?.message || t('settings.dataSourceValidationLocalFailed'))
-            : configured
-              ? t('settings.dataSourceValidationConfiguredOnly')
-              : t('settings.dataSourceValidationMissing'),
-        routeUsage,
-        capabilityKeys: record.capabilities,
-        capabilityLabels,
-        description: record.description || t('settings.dataSourceCustomDesc'),
-        credentialRequired: true,
-        credentialValue: record.credential,
-        credentialSchema: record.credentialSchema,
-        customRecord: record,
-      } satisfies DataSourceLibraryEntry;
-    });
-
-    return [...builtInEntries, ...customEntries];
-  })();
-
-  const dataSourceRouteOptions = (() => {
-    const grouped: Record<DataRouteKey, string[]> = {
-      market: [],
-      fundamentals: [],
-      news: [],
-      sentiment: [],
-    };
-
-    dataSourceLibrary.forEach((source) => {
-      if (!source.usable) {
-        return;
-      }
-      source.capabilityKeys.forEach((capability) => {
-        const routeKey = DATA_SOURCE_ROUTING_CAPABILITY_MAP[capability];
-        if (!routeKey) {
-          return;
-        }
-        if (!grouped[routeKey].includes(source.key)) {
-          grouped[routeKey].push(source.key);
-        }
-      });
-    });
-
-    return grouped;
-  })();
+  const dataSourceLibrary = buildDataSourceLibrary({
+    allItemMap,
+    builtinDataSourceValidationResults,
+    customDataSourceLibraryDraft,
+    dataSourceValidationStatus,
+    dataSummary,
+    prettySourceLabel,
+    t,
+  });
+  const dataSourceRouteOptions = buildDataSourceRouteOptions(dataSourceLibrary);
 
   const dataSourceLibraryMap = new Map<string, DataSourceLibraryEntry>(dataSourceLibrary.map((entry) => [entry.key, entry]));
 
   const [dataSourceLibraryDrawerOpen, setDataSourceLibraryDrawerOpen] = useState(false);
   const [dataSourceEditorId, setDataSourceEditorId] = useState<string | null>(null);
-  const [dataSourceEditorDraft, setDataSourceEditorDraft] = useState<CustomDataSourceRecord>(createEmptyCustomDataSource());
-  const [managedBuiltinDataSourceDraft, setManagedBuiltinDataSourceDraft] = useState({
-    credential: '',
-    secret: '',
-    extraValue: '',
-  });
+  const [dataSourceEditorDraft, setDataSourceEditorDraft] = useState<CustomDataSourceRecord>(() => createEmptyCustomDataSource());
+  const [managedBuiltinDataSourceDraft, setManagedBuiltinDataSourceDraft] = useState<ManagedBuiltinDraft>(() => EMPTY_MANAGED_BUILTIN_DRAFT);
   const [dataSourceDeleteTargetId, setDataSourceDeleteTargetId] = useState<string | null>(null);
 
   const dataSourceEditorEntry = dataSourceEditorId && dataSourceEditorId !== 'new'
@@ -242,11 +348,17 @@ export function useDataSourceLibraryController({
   const openCreateDataSourceDrawer = () => {
     setDataSourceEditorId('new');
     setDataSourceEditorDraft(createEmptyCustomDataSource());
+    setManagedBuiltinDataSourceDraft(EMPTY_MANAGED_BUILTIN_DRAFT);
     setDataSourceLibraryDrawerOpen(true);
   };
 
   const openEditDataSourceDrawer = (sourceId: string) => {
+    const entry = dataSourceLibraryMap.get(sourceId) || null;
     setDataSourceEditorId(sourceId);
+    setDataSourceEditorDraft(entry?.customRecord || createEmptyCustomDataSource());
+    setManagedBuiltinDataSourceDraft(
+      entry?.management ? createManagedBuiltinDraft(entry.management, allItemMap) : EMPTY_MANAGED_BUILTIN_DRAFT,
+    );
     setDataSourceLibraryDrawerOpen(true);
   };
 
@@ -576,29 +688,6 @@ export function useDataSourceLibraryController({
     setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: nextStatus }));
   };
 
-  const managedBuiltinSourceState = (() => {
-    if (!dataSourceEditorEntry?.management) {
-      return null;
-    }
-    const { management } = dataSourceEditorEntry;
-    const credentialValue = management.pluralCredentialEnvKey && hasConfigValue(allItemMap.get(management.pluralCredentialEnvKey) || '')
-      ? String(allItemMap.get(management.pluralCredentialEnvKey) || '')
-      : management.credentialEnvKey
-        ? String(allItemMap.get(management.credentialEnvKey) || '')
-        : '';
-    const secretValue = management.secretEnvKey
-      ? String(allItemMap.get(management.secretEnvKey) || '')
-      : '';
-    const extraValue = management.extraField
-      ? String(allItemMap.get(management.extraField.envKey) || management.extraField.defaultValue || '')
-      : '';
-    return {
-      credential: credentialValue,
-      secret: secretValue,
-      extraValue,
-    };
-  })();
-
   const dataSourceEditorMode: DataSourceEditorMode = dataSourceEditorId === 'new'
     ? 'create'
     : dataSourceEditorEntry?.builtin && !dataSourceEditorEntry.management
@@ -609,27 +698,6 @@ export function useDataSourceLibraryController({
   const dataSourceEditorValidationResult = dataSourceEditorEntry
     ? builtinDataSourceValidationResults[dataSourceEditorEntry.key]
     : undefined;
-
-  useEffect(() => {
-    if (!dataSourceLibraryDrawerOpen) {
-      return;
-    }
-    if (dataSourceEditorId === 'new') {
-      setDataSourceEditorDraft(createEmptyCustomDataSource());
-      return;
-    }
-    if (dataSourceEditorEntry?.customRecord) {
-      setDataSourceEditorDraft(dataSourceEditorEntry.customRecord);
-      return;
-    }
-    if (managedBuiltinSourceState) {
-      setManagedBuiltinDataSourceDraft(managedBuiltinSourceState);
-      return;
-    }
-    if (dataSourceEditorEntry?.builtin) {
-      setDataSourceEditorDraft(createEmptyCustomDataSource());
-    }
-  }, [dataSourceEditorEntry, dataSourceEditorId, dataSourceLibraryDrawerOpen, managedBuiltinSourceState]);
 
   return {
     dataSourceDeleteTarget,
