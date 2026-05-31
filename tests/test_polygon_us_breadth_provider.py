@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from scripts.diagnose_polygon_market_overview_activation import (
+    build_high_low_lookback_certification_output,
     build_market_overview_activation_smoke_output,
 )
 from src.services.polygon_us_breadth_provider import (
@@ -18,6 +19,7 @@ from src.services.polygon_us_breadth_provider import (
     POLYGON_HIGH_LOW_HISTORY_MALFORMED_REASON,
     POLYGON_HIGH_LOW_HISTORY_MIXED_SOURCE_REASON,
     POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
+    POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
     POLYGON_US_BREADTH_REASON_COVERAGE_BELOW_THRESHOLD,
     POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE,
     POLYGON_US_BREADTH_REASON_RESPONSE_INVALID,
@@ -138,6 +140,63 @@ def test_market_overview_polygon_smoke_reports_unprobed_high_low_window() -> Non
     assert output["status"] == "score_ready"
     assert output["missingRequiredSymbols"] == ["NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"]
     assert output["missingRequiredWindows"] == ["high_low_lookback"]
+
+
+def test_market_overview_polygon_high_low_certification_output_is_sanitized() -> None:
+    output = build_high_low_lookback_certification_output(
+        {
+            "highLowLookbackSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+            "highLowFulfilledSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+            "fulfilledMetrics": list(US_BREADTH_SYMBOLS),
+            "missingMetrics": [],
+            "reasonCodes": [],
+            "metrics": {"newHighs": 318, "newLows": 42, "highLowRatio": 7.571},
+            "rawPayload": {"providerPayload": "raw-provider-value"},
+        }
+    )
+
+    assert output == {
+        "lookbackRequested": True,
+        "lookbackFulfilled": True,
+        "requiredSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+        "fulfilledSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+        "missingSymbols": [],
+        "reason": None,
+    }
+    serialized = json.dumps(output, ensure_ascii=False)
+    assert "raw-provider-value" not in serialized
+    assert "rawPayload" not in serialized
+    assert "newHighs" not in serialized
+
+
+def test_market_overview_polygon_high_low_certification_reports_gap_only() -> None:
+    output = build_high_low_lookback_certification_output(
+        {
+            "highLowLookbackSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+            "highLowFulfilledSessions": 120,
+            "fulfilledMetrics": [
+                "ADVANCERS",
+                "DECLINERS",
+                "UNCHANGED",
+                "ADVANCE_DECLINE_RATIO",
+            ],
+            "missingMetrics": ["NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"],
+            "reasonCodes": [POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON],
+            "rawPayload": {"providerPayload": "raw-provider-value"},
+        }
+    )
+
+    assert output == {
+        "lookbackRequested": True,
+        "lookbackFulfilled": False,
+        "requiredSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+        "fulfilledSessions": 120,
+        "missingSymbols": ["NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"],
+        "reason": POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON,
+    }
+    serialized = json.dumps(output, ensure_ascii=False)
+    assert "raw-provider-value" not in serialized
+    assert "rawPayload" not in serialized
 
 
 def test_polygon_activation_uses_env_file_key_when_process_env_is_missing(tmp_path, monkeypatch) -> None:
@@ -410,9 +469,12 @@ def test_valid_polygon_history_computes_high_low_breadth_without_official_overcl
     assert result["metrics"]["newLows"] == 1
     assert result["metrics"]["highLowRatio"] == 1.0
     assert result["highLowLookbackSessions"] == 3
+    assert result["highLowFulfilledSessions"] == 3
     assert result["highLowEligibleCount"] == 3
     assert result["highLowEligibleThreshold"] == 3
-    assert diagnostic_summary(result)["fulfilledMetrics"] == list(US_BREADTH_SYMBOLS)
+    summary = diagnostic_summary(result)
+    assert summary["fulfilledMetrics"] == list(US_BREADTH_SYMBOLS)
+    assert summary["highLowFulfilledSessions"] == 3
 
 
 def test_insufficient_polygon_history_keeps_ad_fulfilled_and_high_low_fail_closed() -> None:
@@ -448,6 +510,7 @@ def test_insufficient_polygon_history_keeps_ad_fulfilled_and_high_low_fail_close
     assert result["metrics"]["newHighs"] is None
     assert result["metrics"]["newLows"] is None
     assert result["metrics"]["highLowRatio"] is None
+    assert result["highLowFulfilledSessions"] == 0
     assert result["reasonCodes"] == [POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON]
 
 

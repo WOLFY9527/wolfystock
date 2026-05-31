@@ -96,6 +96,7 @@ class _HighLowComputation:
     new_highs: int | None = None
     new_lows: int | None = None
     high_low_ratio: float | None = None
+    fulfilled_sessions: int = 0
     eligible_count: int = 0
     eligible_threshold: int = 0
     lookback_sessions: int = POLYGON_HIGH_LOW_LOOKBACK_SESSIONS
@@ -357,6 +358,7 @@ def compute_polygon_us_breadth(
         "rawResultsCount": parsed.results_count,
         "coverageThreshold": coverage_threshold,
         "highLowLookbackSessions": high_low.lookback_sessions,
+        "highLowFulfilledSessions": high_low.fulfilled_sessions,
         "highLowEligibleCount": high_low.eligible_count,
         "highLowEligibleThreshold": high_low.eligible_threshold,
         "sourceMetadataValid": source_metadata_valid,
@@ -523,23 +525,28 @@ def _compute_polygon_high_low_breadth(
     expected_dates = prior_completed_us_trading_dates(observation_date, limit=lookback)
     actual_dates = tuple(history_date for history_date, _ in lookback_items)
     if not expected_dates or actual_dates != expected_dates:
+        fulfilled_sessions = _count_matching_prefix(expected_dates, actual_dates)
         return _HighLowComputation(
             ok=False,
+            fulfilled_sessions=fulfilled_sessions,
             reason=POLYGON_HIGH_LOW_HISTORY_DATE_GAP_REASON,
             **base,
         )
 
     history_by_date: list[dict[str, _GroupedDailyRow]] = []
+    fulfilled_sessions = 0
     for _, history_payload in lookback_items:
         if history_payload is None:
             return _HighLowComputation(
                 ok=False,
+                fulfilled_sessions=fulfilled_sessions,
                 reason=POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
                 **base,
             )
         if not _history_source_valid(history_payload):
             return _HighLowComputation(
                 ok=False,
+                fulfilled_sessions=fulfilled_sessions,
                 reason=POLYGON_HIGH_LOW_HISTORY_MIXED_SOURCE_REASON,
                 **base,
             )
@@ -547,12 +554,14 @@ def _compute_polygon_high_low_breadth(
         if not parsed_history.ok:
             return _HighLowComputation(
                 ok=False,
+                fulfilled_sessions=fulfilled_sessions,
                 reason=POLYGON_HIGH_LOW_HISTORY_MALFORMED_REASON,
                 **base,
             )
         if len(parsed_history.rows) < coverage_threshold:
             return _HighLowComputation(
                 ok=False,
+                fulfilled_sessions=fulfilled_sessions,
                 reason=POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON,
                 **base,
             )
@@ -563,6 +572,7 @@ def _compute_polygon_high_low_breadth(
                 if row.high_price is not None and row.low_price is not None
             }
         )
+        fulfilled_sessions += 1
 
     latest_by_ticker = {
         row.ticker: row
@@ -589,6 +599,7 @@ def _compute_polygon_high_low_breadth(
     if eligible_count < eligible_threshold:
         return _HighLowComputation(
             ok=False,
+            fulfilled_sessions=fulfilled_sessions,
             eligible_count=eligible_count,
             reason=POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON,
             **base,
@@ -600,6 +611,7 @@ def _compute_polygon_high_low_breadth(
         new_highs=new_highs,
         new_lows=new_lows,
         high_low_ratio=high_low_ratio,
+        fulfilled_sessions=fulfilled_sessions,
         eligible_count=eligible_count,
         reason=None if high_low_ratio is not None else POLYGON_HIGH_LOW_RATIO_UNAVAILABLE_REASON,
         **base,
@@ -630,6 +642,15 @@ def _history_source_valid(payload: Mapping[str, Any] | None) -> bool:
     return not source or source == POLYGON_US_BREADTH_SOURCE
 
 
+def _count_matching_prefix(expected_dates: Sequence[str], actual_dates: Sequence[str]) -> int:
+    count = 0
+    for expected, actual in zip(expected_dates, actual_dates):
+        if expected != actual:
+            break
+        count += 1
+    return count
+
+
 def diagnostic_summary(result: Mapping[str, Any]) -> dict[str, Any]:
     """Return the bounded JSON shape used by the operator diagnostic script."""
 
@@ -646,6 +667,7 @@ def diagnostic_summary(result: Mapping[str, Any]) -> dict[str, Any]:
         "comparisonCoverageCount": int(result.get("comparisonCoverageCount") or 0),
         "coverageThreshold": int(result.get("coverageThreshold") or 0),
         "highLowLookbackSessions": int(result.get("highLowLookbackSessions") or 0),
+        "highLowFulfilledSessions": int(result.get("highLowFulfilledSessions") or 0),
         "highLowEligibleCount": int(result.get("highLowEligibleCount") or 0),
         "highLowEligibleThreshold": int(result.get("highLowEligibleThreshold") or 0),
         "sourceMetadataValid": bool(result.get("sourceMetadataValid")),
@@ -710,6 +732,7 @@ def _fail_closed_summary(
         "comparisonCoverageCount": 0,
         "coverageThreshold": coverage_threshold,
         "highLowLookbackSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+        "highLowFulfilledSessions": 0,
         "highLowEligibleCount": 0,
         "highLowEligibleThreshold": POLYGON_HIGH_LOW_MIN_ELIGIBLE_COUNT,
         "sourceMetadataValid": _source_metadata_valid(),

@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import json
 import sys
+from argparse import ArgumentParser
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -39,6 +40,7 @@ from src.services.us_breadth_contracts import (
 EXIT_OK = 0
 EXIT_FAILED = 1
 SMOKE_HIGH_LOW_LOOKBACK_SESSIONS = 1
+HIGH_LOW_METRICS_MISSING_REASON = "high_low_metrics_missing"
 
 _HIGH_LOW_SYMBOLS = ("NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO")
 _HIGH_LOW_REASONS = {
@@ -87,21 +89,65 @@ def build_market_overview_activation_smoke_output(result: Mapping[str, Any]) -> 
     }
 
 
-def main() -> int:
+def build_high_low_lookback_certification_output(result: Mapping[str, Any]) -> dict[str, object]:
+    """Return the sanitized full-lookback certification shape."""
+
+    reason_codes = [str(code) for code in result.get("reasonCodes") or [] if str(code)]
+    required_sessions = _positive_int(
+        result.get("highLowLookbackSessions"),
+        default=POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+    )
+    fulfilled_sessions = _positive_int(result.get("highLowFulfilledSessions"), default=0)
+    missing_symbols = _missing_high_low_symbols(result)
+    reason = _high_low_reason(reason_codes) or (reason_codes[0] if reason_codes else None)
+    if reason is None and missing_symbols:
+        reason = HIGH_LOW_METRICS_MISSING_REASON
+    lookback_fulfilled = bool(
+        required_sessions >= POLYGON_HIGH_LOW_LOOKBACK_SESSIONS
+        and fulfilled_sessions >= required_sessions
+        and not missing_symbols
+        and reason is None
+    )
+    return {
+        "lookbackRequested": True,
+        "lookbackFulfilled": lookback_fulfilled,
+        "requiredSessions": required_sessions,
+        "fulfilledSessions": fulfilled_sessions,
+        "missingSymbols": missing_symbols,
+        "reason": reason,
+    }
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parse_args(argv)
     try:
         setup_env()
-        summary = diagnostic_summary(
-            run_polygon_us_breadth_activation(
-                high_low_lookback_sessions=SMOKE_HIGH_LOW_LOOKBACK_SESSIONS,
+        if args.high_low_lookback:
+            summary = diagnostic_summary(run_polygon_us_breadth_activation())
+            output = build_high_low_lookback_certification_output(summary)
+        else:
+            summary = diagnostic_summary(
+                run_polygon_us_breadth_activation(
+                    high_low_lookback_sessions=SMOKE_HIGH_LOW_LOOKBACK_SESSIONS,
+                )
             )
-        )
-        output = build_market_overview_activation_smoke_output(summary)
+            output = build_market_overview_activation_smoke_output(summary)
     except Exception:
-        output = _unexpected_error_output()
+        output = _unexpected_high_low_error_output() if args.high_low_lookback else _unexpected_error_output()
         print(json.dumps(output, ensure_ascii=False, sort_keys=True))
         return EXIT_FAILED
     print(json.dumps(output, ensure_ascii=False, sort_keys=True))
     return EXIT_OK
+
+
+def _parse_args(argv: Sequence[str] | None) -> Any:
+    parser = ArgumentParser(description="Run sanitized Polygon Market Overview activation diagnostics.")
+    parser.add_argument(
+        "--high-low-lookback",
+        action="store_true",
+        help="Probe full 252-session high/low lookback readiness with sanitized counts only.",
+    )
+    return parser.parse_args(argv)
 
 
 def _activation_status(
@@ -148,6 +194,11 @@ def _missing_required_symbols(result: Mapping[str, Any]) -> list[str]:
     return [symbol for symbol in US_BREADTH_SYMBOLS if symbol in missing]
 
 
+def _missing_high_low_symbols(result: Mapping[str, Any]) -> list[str]:
+    missing = {str(symbol) for symbol in result.get("missingMetrics") or [] if str(symbol)}
+    return [symbol for symbol in _HIGH_LOW_SYMBOLS if symbol in missing]
+
+
 def _missing_required_windows(result: Mapping[str, Any], reason_codes: list[str]) -> list[str]:
     windows = [_MISSING_WINDOW_BY_REASON[reason] for reason in reason_codes if reason in _MISSING_WINDOW_BY_REASON]
     if _uses_bounded_high_low_window(result):
@@ -163,6 +214,21 @@ def _uses_bounded_high_low_window(result: Mapping[str, Any]) -> bool:
     return 0 < probed_sessions < POLYGON_HIGH_LOW_LOOKBACK_SESSIONS
 
 
+def _high_low_reason(reason_codes: list[str]) -> str | None:
+    for reason in reason_codes:
+        if reason in _HIGH_LOW_REASONS:
+            return reason
+    return None
+
+
+def _positive_int(value: Any, *, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed >= 0 else default
+
+
 def _unexpected_error_output() -> dict[str, object]:
     return {
         "credentialsPresent": False,
@@ -175,6 +241,17 @@ def _unexpected_error_output() -> dict[str, object]:
         "scoreContributionAllowed": False,
         "missingRequiredSymbols": list(US_BREADTH_SYMBOLS),
         "missingRequiredWindows": [],
+    }
+
+
+def _unexpected_high_low_error_output() -> dict[str, object]:
+    return {
+        "lookbackRequested": True,
+        "lookbackFulfilled": False,
+        "requiredSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+        "fulfilledSessions": 0,
+        "missingSymbols": list(_HIGH_LOW_SYMBOLS),
+        "reason": "unexpected_error",
     }
 
 
