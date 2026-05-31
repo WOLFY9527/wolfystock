@@ -147,15 +147,25 @@ def test_dry_run_reports_blocked_readiness_missing_walcl_without_constructing_se
     assert result["scoreContributionAllowed"] is False
     assert result["cacheRowsWouldWrite"] == 2
     assert result["cacheRowsWritten"] == 0
+    assert result["writeEfficacy"] == "not_written"
+    assert result["scoreGradeUsable"] is False
+    assert result["degradedTargetCount"] == 0
+    assert result["degradedTargetSymbols"] == []
+    assert result["degradedTargetReasons"] == []
+    assert result["writtenButNotScoreGradeReason"] == "write_not_attempted"
     assert result["result"] == "dry_run_no_write"
     assert {panel["cacheKey"] for panel in result["targetPanels"]} == {"rates", "macro"}
     rates_panel = next(panel for panel in result["targetPanels"] if panel["cacheKey"] == "rates")
     assert rates_panel["writeAttempted"] is False
     assert rates_panel["writeWouldBeAttemptedWithWrite"] is True
+    assert rates_panel["writeEfficacy"] == "not_written"
+    assert rates_panel["scoreGradeUsable"] is False
     assert rates_panel["targetGroups"][0]["symbols"] == ["US2Y", "US10Y", "US30Y", "SOFR", "US10Y2Y", "US10Y3M"]
     assert rates_panel["targetGroups"][0]["series"] == ["DGS2", "DGS10", "DGS30", "SOFR", "T10Y2Y", "T10Y3M"]
     macro_panel = next(panel for panel in result["targetPanels"] if panel["cacheKey"] == "macro")
     macro_us_rates_group = next(group for group in macro_panel["targetGroups"] if group["name"] == "us_rates")
+    assert macro_panel["writeEfficacy"] == "not_written"
+    assert macro_panel["scoreGradeUsable"] is False
     assert macro_us_rates_group["symbols"] == ["US2Y", "US10Y", "US30Y", "SOFR", "US10Y2Y", "US10Y3M"]
     assert macro_us_rates_group["series"] == ["DGS2", "DGS10", "DGS30", "SOFR", "T10Y2Y", "T10Y3M"]
     assert "rawProviderPayload" not in result
@@ -179,6 +189,12 @@ def test_dry_run_reports_ready_when_activation_readiness_is_fulfilled() -> None:
     assert result["scoreContributionAllowed"] is True
     assert result["cacheRowsWouldWrite"] == 2
     assert result["cacheRowsWritten"] == 0
+    assert result["writeEfficacy"] == "not_written"
+    assert result["scoreGradeUsable"] is False
+    assert result["degradedTargetCount"] == 0
+    assert result["degradedTargetSymbols"] == []
+    assert result["degradedTargetReasons"] == []
+    assert result["writtenButNotScoreGradeReason"] == "write_not_attempted"
 
 
 def test_service_prewarm_uses_existing_cached_payload_and_snapshot_writer(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -237,11 +253,24 @@ def test_write_mode_invokes_market_overview_prewarm_callable() -> None:
     assert result["dryRun"] is False
     assert result["writeAttempted"] is True
     assert result["result"] == "write_attempted"
+    assert result["cacheRowsWritten"] == 2
+    assert result["writeEfficacy"] == "written_score_grade_usable"
+    assert result["scoreGradeUsable"] is True
+    assert result["degradedTargetCount"] == 0
+    assert result["degradedTargetSymbols"] == []
+    assert result["degradedTargetReasons"] == []
+    assert result["writtenButNotScoreGradeReason"] is None
     assert created[0].calls == 1
     assert created[0]._market_cache.wait_calls == [prewarm.REFRESH_WAIT_TIMEOUT_SECONDS]
     assert {panel["cacheKey"] for panel in result["panels"]} == {"rates", "macro"}
     rates_panel = next(panel for panel in result["panels"] if panel["cacheKey"] == "rates")
     macro_panel = next(panel for panel in result["panels"] if panel["cacheKey"] == "macro")
+    assert rates_panel["writeEfficacy"] == "written_score_grade_usable"
+    assert rates_panel["scoreGradeUsable"] is True
+    assert rates_panel["degradedTargetCount"] == 0
+    assert macro_panel["writeEfficacy"] == "written_score_grade_usable"
+    assert macro_panel["scoreGradeUsable"] is True
+    assert macro_panel["degradedTargetCount"] == 0
     assert rates_panel["targetSymbolsFound"] == ["US2Y", "US10Y", "US30Y", "SOFR", "US10Y2Y", "US10Y3M"]
     assert "T10Y2Y" in {item["series"] for item in rates_panel["targetDiagnostics"]}
     assert "T10Y3M" in {item["series"] for item in rates_panel["targetDiagnostics"]}
@@ -264,6 +293,12 @@ def test_write_mode_refuses_to_write_when_readiness_is_blocked() -> None:
     assert result["missingSeries"] == ["WALCL"]
     assert result["cacheRowsWouldWrite"] == 0
     assert result["cacheRowsWritten"] == 0
+    assert result["writeEfficacy"] == "not_written"
+    assert result["scoreGradeUsable"] is False
+    assert result["degradedTargetCount"] == 0
+    assert result["degradedTargetSymbols"] == []
+    assert result["degradedTargetReasons"] == []
+    assert result["writtenButNotScoreGradeReason"] == "write_not_attempted"
     assert result["result"] == "readiness_blocked"
     assert "panels" not in result
     assert "SECRET" not in str(result)
@@ -285,10 +320,13 @@ def test_write_cli_returns_nonzero_when_readiness_is_blocked(
     assert payload["readiness"] == "blocked"
     assert payload["missingSeries"] == ["WALCL"]
     assert payload["cacheRowsWritten"] == 0
+    assert payload["writeEfficacy"] == "not_written"
+    assert payload["scoreGradeUsable"] is False
+    assert payload["writtenButNotScoreGradeReason"] == "write_not_attempted"
     assert "SECRET" not in json.dumps(payload)
 
 
-def test_budget_blocked_and_missing_key_diagnostics_remain_non_scoring() -> None:
+def test_write_mode_reports_degraded_targets_as_not_score_grade_usable() -> None:
     budget_blocked = {
         "symbol": "US10Y",
         "label": "US 10Y",
@@ -333,6 +371,28 @@ def test_budget_blocked_and_missing_key_diagnostics_remain_non_scoring() -> None
         service_factory=FakeService,
         readiness_probe=_ready_readiness_summary,
     )
+
+    assert result["cacheRowsWritten"] == 2
+    assert result["writeEfficacy"] == "written_not_score_grade_usable"
+    assert result["scoreGradeUsable"] is False
+    assert result["degradedTargetCount"] == 2
+    assert result["degradedTargetSymbols"] == ["US10Y", "USD_TWI"]
+    assert result["degradedTargetReasons"] == ["budget_exhausted", "missing_api_key"]
+    assert result["writtenButNotScoreGradeReason"] == "degraded_target_diagnostics"
+
+    panels = {panel["cacheKey"]: panel for panel in result["panels"]}
+    assert panels["rates"]["writeEfficacy"] == "written_not_score_grade_usable"
+    assert panels["rates"]["scoreGradeUsable"] is False
+    assert panels["rates"]["degradedTargetCount"] == 1
+    assert panels["rates"]["degradedTargetSymbols"] == ["US10Y"]
+    assert panels["rates"]["degradedTargetReasons"] == ["budget_exhausted"]
+    assert panels["rates"]["writtenButNotScoreGradeReason"] == "degraded_target_diagnostics"
+    assert panels["macro"]["writeEfficacy"] == "written_not_score_grade_usable"
+    assert panels["macro"]["scoreGradeUsable"] is False
+    assert panels["macro"]["degradedTargetCount"] == 1
+    assert panels["macro"]["degradedTargetSymbols"] == ["USD_TWI"]
+    assert panels["macro"]["degradedTargetReasons"] == ["missing_api_key"]
+    assert panels["macro"]["writtenButNotScoreGradeReason"] == "degraded_target_diagnostics"
 
     diagnostics = {
         diagnostic["symbol"]: diagnostic

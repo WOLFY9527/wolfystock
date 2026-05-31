@@ -85,6 +85,7 @@ def _target_panel_reports(*, write_attempted: bool) -> list[dict[str, object]]:
             "panel": str(panel["panel"]),
             "writeAttempted": write_attempted,
             "writeWouldBeAttemptedWithWrite": not write_attempted,
+            **_efficacy_fields(diagnostics=[], write_attempted=write_attempted),
             "targetGroups": [
                 {
                     "name": str(group["name"]),
@@ -172,6 +173,8 @@ def _target_diagnostics(panel: Mapping[str, object], payload: Mapping[str, objec
                 "freshness": item.get("freshness"),
                 "source": item.get("source"),
                 "sourceType": item.get("sourceType"),
+                "isFallback": item.get("isFallback") is True,
+                "isUnavailable": item.get("isUnavailable") is True,
                 "sourceAuthorityAllowed": _optional_bool(item.get("sourceAuthorityAllowed")),
                 "scoreContributionAllowed": _optional_bool(item.get("scoreContributionAllowed")),
                 "sourceAuthorityReason": item.get("sourceAuthorityReason"),
@@ -182,6 +185,97 @@ def _target_diagnostics(panel: Mapping[str, object], payload: Mapping[str, objec
             }
         )
     return diagnostics
+
+
+def _normalized_reason(reason: object) -> str | None:
+    text = str(reason or "").strip().lower()
+    if not text:
+        return None
+    if "budget" in text:
+        return "budget_exhausted"
+    if "timeout" in text:
+        return "timeout"
+    return text
+
+
+def _degraded_target_reasons(diagnostic: Mapping[str, object]) -> list[str]:
+    reasons: list[str] = []
+    normalized_reason = _normalized_reason(diagnostic.get("reason"))
+    freshness = str(diagnostic.get("freshness") or "").strip().lower()
+
+    if diagnostic.get("isFallback") is True or freshness == "fallback":
+        reasons.append("fallback")
+    if normalized_reason:
+        reasons.append(normalized_reason)
+    elif diagnostic.get("isUnavailable") is True or freshness == "unavailable":
+        reasons.append("unavailable")
+    elif freshness == "stale":
+        reasons.append("stale")
+
+    if diagnostic.get("sourceAuthorityAllowed") is False and not normalized_reason:
+        reasons.append("source_authority_blocked")
+    if (
+        diagnostic.get("scoreContributionAllowed") is False
+        and not normalized_reason
+        and diagnostic.get("sourceAuthorityAllowed") is not False
+    ):
+        reasons.append("score_contribution_blocked")
+    return _unique(reasons)
+
+
+def _degraded_target_symbol(diagnostic: Mapping[str, object]) -> str | None:
+    symbol = str(diagnostic.get("symbol") or "").strip()
+    if symbol:
+        return symbol
+    series = str(diagnostic.get("series") or "").strip()
+    return series or None
+
+
+def _efficacy_fields(
+    *,
+    diagnostics: Sequence[Mapping[str, object]],
+    write_attempted: bool,
+) -> dict[str, object]:
+    if not write_attempted:
+        return {
+            "writeEfficacy": "not_written",
+            "scoreGradeUsable": False,
+            "degradedTargetCount": 0,
+            "degradedTargetSymbols": [],
+            "degradedTargetReasons": [],
+            "writtenButNotScoreGradeReason": "write_not_attempted",
+        }
+
+    degraded_symbols: list[str] = []
+    degraded_reasons: list[str] = []
+    seen_symbols: set[str] = set()
+    degraded_count = 0
+
+    for diagnostic in diagnostics:
+        reasons = _degraded_target_reasons(diagnostic)
+        if not reasons:
+            continue
+        degraded_count += 1
+        symbol = _degraded_target_symbol(diagnostic)
+        if symbol and symbol not in seen_symbols:
+            seen_symbols.add(symbol)
+            degraded_symbols.append(symbol)
+        degraded_reasons.extend(reasons)
+
+    degraded_reasons = _unique(degraded_reasons)
+    score_grade_usable = degraded_count == 0
+    return {
+        "writeEfficacy": (
+            "written_score_grade_usable"
+            if score_grade_usable
+            else "written_not_score_grade_usable"
+        ),
+        "scoreGradeUsable": score_grade_usable,
+        "degradedTargetCount": degraded_count,
+        "degradedTargetSymbols": degraded_symbols,
+        "degradedTargetReasons": degraded_reasons,
+        "writtenButNotScoreGradeReason": None if score_grade_usable else "degraded_target_diagnostics",
+    }
 
 
 def _safe_cache_readiness_summary(readiness_probe: Callable[[], Mapping[str, object]]) -> Mapping[str, object]:
@@ -285,6 +379,7 @@ def _panel_result(panel: Mapping[str, object], payload: Mapping[str, object]) ->
         "itemCount": len(payload.get("items") or []) if isinstance(payload.get("items"), list) else 0,
         "targetSymbolsFound": [item["symbol"] for item in diagnostics if item.get("symbol")],
         "targetDiagnostics": diagnostics,
+        **_efficacy_fields(diagnostics=diagnostics, write_attempted=True),
     }
 
 
@@ -321,6 +416,7 @@ def run_prewarm(
                 write_attempted=False,
                 readiness_summary=readiness_summary,
             ),
+            **_efficacy_fields(diagnostics=[], write_attempted=False),
             "result": "dry_run_no_write",
             "targetPanels": target_panels,
         }
@@ -334,6 +430,7 @@ def run_prewarm(
         return {
             "mode": "write",
             **blocked_summary,
+            **_efficacy_fields(diagnostics=[], write_attempted=False),
             "result": "readiness_blocked",
             "targetPanels": target_panels,
         }
@@ -354,6 +451,15 @@ def run_prewarm(
     return {
         "mode": "write",
         **summary,
+        **_efficacy_fields(
+            diagnostics=[
+                diagnostic
+                for panel in panels
+                for diagnostic in panel.get("targetDiagnostics", ())
+                if isinstance(diagnostic, Mapping)
+            ],
+            write_attempted=True,
+        ),
         "result": "write_attempted",
         "targetPanels": target_panels,
         "panels": panels,
@@ -397,6 +503,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         write_attempted=False,
                         readiness_summary=_cache_readiness_unexpected_error_summary(),
                     ),
+                    **_efficacy_fields(diagnostics=[], write_attempted=False),
                     "result": "error",
                     "errorClass": type(exc).__name__,
                 },

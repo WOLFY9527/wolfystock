@@ -861,6 +861,12 @@ def test_official_macro_cache_prewarm_dry_run_reports_sanitized_write_plan() -> 
     assert result["scoreContributionAllowed"] is False
     assert result["cacheRowsWouldWrite"] == 2
     assert result["cacheRowsWritten"] == 0
+    assert result["writeEfficacy"] == "not_written"
+    assert result["scoreGradeUsable"] is False
+    assert result["degradedTargetCount"] == 0
+    assert result["degradedTargetSymbols"] == []
+    assert result["degradedTargetReasons"] == []
+    assert result["writtenButNotScoreGradeReason"] == "write_not_attempted"
     assert result["reason"] == "series_coverage"
     assert "targetPanels" in result
     assert "rawProviderPayload" not in json.dumps(result)
@@ -942,6 +948,12 @@ def test_official_macro_cache_prewarm_write_reports_sanitized_coverage_summary()
     assert result["readiness"] == "ready"
     assert result["cacheRowsWouldWrite"] == 0
     assert result["cacheRowsWritten"] == 2
+    assert result["writeEfficacy"] == "written_score_grade_usable"
+    assert result["scoreGradeUsable"] is True
+    assert result["degradedTargetCount"] == 0
+    assert result["degradedTargetSymbols"] == []
+    assert result["degradedTargetReasons"] == []
+    assert result["writtenButNotScoreGradeReason"] is None
     assert result["fulfilledSeries"] == ["DTWEXBGS", "WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
     assert result["missingSeries"] == []
     assert result["reason"] is None
