@@ -3,7 +3,7 @@
  * unchanged while the shared frame owns the Linear OS canvas and rhythm.
  */
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useReducer, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, LockKeyhole, LogOut, Menu, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
@@ -126,6 +126,44 @@ type AccountMenuItem = {
   icon: React.ComponentType<{ className?: string }>;
 };
 
+type OverlayState = {
+  mobileNavOpen: boolean;
+  railOpen: boolean;
+  accountMenuOpen: boolean;
+};
+
+type OverlayAction =
+  | { type: 'close_all' }
+  | { type: 'open_mobile_nav' }
+  | { type: 'close_mobile_nav' }
+  | { type: 'open_rail' }
+  | { type: 'close_rail' }
+  | { type: 'open_account_menu' }
+  | { type: 'close_account_menu' };
+
+function overlayReducer(state: OverlayState, action: OverlayAction): OverlayState {
+  switch (action.type) {
+    case 'close_all':
+      return state.mobileNavOpen || state.railOpen || state.accountMenuOpen
+        ? { mobileNavOpen: false, railOpen: false, accountMenuOpen: false }
+        : state;
+    case 'open_mobile_nav':
+      return { mobileNavOpen: true, railOpen: false, accountMenuOpen: false };
+    case 'close_mobile_nav':
+      return state.mobileNavOpen ? { ...state, mobileNavOpen: false } : state;
+    case 'open_rail':
+      return { mobileNavOpen: false, railOpen: true, accountMenuOpen: false };
+    case 'close_rail':
+      return state.railOpen ? { ...state, railOpen: false } : state;
+    case 'open_account_menu':
+      return state.accountMenuOpen ? state : { ...state, accountMenuOpen: true };
+    case 'close_account_menu':
+      return state.accountMenuOpen ? { ...state, accountMenuOpen: false } : state;
+    default:
+      return state;
+  }
+}
+
 function buildAccountPath(routeLocale: UiLanguage | null, target: string): string {
   return routeLocale ? buildLocalizedPath(target, routeLocale) : target;
 }
@@ -169,13 +207,16 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const accountTriggerRef = useRef<HTMLButtonElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const accountMenuItemRefs = useRef<Array<HTMLAnchorElement | HTMLButtonElement | null>>([]);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [railOpen, setRailOpen] = useState(false);
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [accountMenuFocusIndex, setAccountMenuFocusIndex] = useState<number | null>(null);
+  const accountMenuFocusIndexRef = useRef<number | null>(null);
+  const [overlayState, dispatchOverlay] = useReducer(overlayReducer, {
+    mobileNavOpen: false,
+    railOpen: false,
+    accountMenuOpen: false,
+  });
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [railContent, setRailContent] = useState<React.ReactNode | null>(null);
   const [headerUtilityIsland, setHeaderUtilityIsland] = useState<HTMLDivElement | null>(null);
+  const { mobileNavOpen, railOpen, accountMenuOpen } = overlayState;
   const hasRailContent = Boolean(railContent);
   const isMobileNavVisible = mobileNavOpen;
   const isRailVisible = hasRailContent && railOpen;
@@ -213,37 +254,39 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   ];
 
   const closeMobileNav = () => {
-    setMobileNavOpen(false);
+    dispatchOverlay({ type: 'close_mobile_nav' });
   };
 
   const openMobileNav = () => {
-    setRailOpen(false);
-    setMobileNavOpen(true);
+    dispatchOverlay({ type: 'open_mobile_nav' });
   };
 
   const closeRail = () => {
-    setRailOpen(false);
+    dispatchOverlay({ type: 'close_rail' });
   };
 
-  const closeAccountMenu = useCallback((options?: { returnFocus?: boolean }) => {
-    setAccountMenuOpen(false);
-    setAccountMenuFocusIndex(null);
+  const closeAccountMenu = (options?: { returnFocus?: boolean }) => {
+    accountMenuFocusIndexRef.current = null;
+    dispatchOverlay({ type: 'close_account_menu' });
     if (options?.returnFocus) {
       window.setTimeout(() => {
         accountTriggerRef.current?.focus();
       }, 0);
     }
-  }, [setAccountMenuOpen, setAccountMenuFocusIndex]);
+  };
 
   const openAccountMenu = (focusIndex = 0) => {
-    setAccountMenuOpen(true);
-    setAccountMenuFocusIndex(focusIndex);
+    accountMenuFocusIndexRef.current = focusIndex;
+    dispatchOverlay({ type: 'open_account_menu' });
   };
 
   const openRail = () => {
-    setMobileNavOpen(false);
-    setRailOpen(true);
+    dispatchOverlay({ type: 'open_rail' });
   };
+
+  const closeAccountMenuForEffect = useEffectEvent((options?: { returnFocus?: boolean }) => {
+    closeAccountMenu(options);
+  });
 
   const shellMastheadInnerRef = (node: HTMLDivElement | null) => {
     setHeaderUtilityIsland(node?.querySelector<HTMLDivElement>('[data-testid="shell-header-utility-island"]') ?? null);
@@ -263,10 +306,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
 
     previousPathnameRef.current = pathname;
     const timer = window.setTimeout(() => {
-      setMobileNavOpen(false);
-      setRailOpen(false);
-      setAccountMenuOpen(false);
-      setAccountMenuFocusIndex(null);
+      accountMenuFocusIndexRef.current = null;
+      dispatchOverlay({ type: 'close_all' });
     }, 0);
 
     return () => window.clearTimeout(timer);
@@ -279,10 +320,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     }
 
     const timer = window.setTimeout(() => {
-      setMobileNavOpen(false);
-      setRailOpen(false);
-      setAccountMenuOpen(false);
-      setAccountMenuFocusIndex(null);
+      accountMenuFocusIndexRef.current = null;
+      dispatchOverlay({ type: 'close_all' });
     }, 0);
 
     return () => window.clearTimeout(timer);
@@ -297,12 +336,12 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
       if (accountMenuRef.current?.contains(event.target as Node)) {
         return;
       }
-      closeAccountMenu({ returnFocus: true });
+      closeAccountMenuForEffect({ returnFocus: true });
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        closeAccountMenu({ returnFocus: true });
+        closeAccountMenuForEffect({ returnFocus: true });
       }
     };
 
@@ -312,19 +351,23 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [accountMenuOpen, closeAccountMenu]);
+  }, [accountMenuOpen]);
 
   useEffect(() => {
-    if (!accountMenuOpen || accountMenuFocusIndex === null) {
+    if (!accountMenuOpen || accountMenuFocusIndexRef.current === null) {
       return undefined;
     }
 
     const timer = window.setTimeout(() => {
-      accountMenuItemRefs.current[accountMenuFocusIndex]?.focus();
+      const focusIndex = accountMenuFocusIndexRef.current;
+      if (focusIndex === null) {
+        return;
+      }
+      accountMenuItemRefs.current[focusIndex]?.focus();
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [accountMenuFocusIndex, accountMenuOpen]);
+  }, [accountMenuOpen]);
 
   const handleAccountTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown') {
