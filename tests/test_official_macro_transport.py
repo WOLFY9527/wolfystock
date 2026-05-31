@@ -828,28 +828,43 @@ def test_official_macro_cache_prewarm_dry_run_reports_sanitized_write_plan() -> 
     def fail_factory() -> object:
         raise AssertionError("dry-run must not construct MarketOverviewService")
 
-    result = script.run_prewarm(write=False, service_factory=fail_factory)
+    result = script.run_prewarm(
+        write=False,
+        service_factory=fail_factory,
+        readiness_probe=lambda: {
+            "readiness": "blocked",
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "requiredSeriesStatus": {
+                "DTWEXBGS": "fulfilled",
+                "WALCL": "missing",
+                "RRPONTSYD": "fulfilled",
+                "WTREGEN": "fulfilled",
+                "WRESBAL": "fulfilled",
+            },
+            "missingSeries": ["WALCL"],
+            "staleSeries": [],
+            "reason": "series_coverage",
+            "rawProviderPayload": {"token": "SECRET"},
+        },
+    )
 
     assert result["dryRun"] is True
     assert result["writeEnabled"] is False
     assert result["writeAttempted"] is False
-    assert result["requiredSeries"] == [
-        "DGS2",
-        "DGS10",
-        "DGS30",
-        "DTWEXBGS",
-        "WALCL",
-        "RRPONTSYD",
-        "WTREGEN",
-        "WRESBAL",
-    ]
-    assert result["fulfilledSeries"] == []
-    assert result["missingSeries"] == []
+    assert result["readiness"] == "blocked"
+    assert result["requiredSeries"] == ["DTWEXBGS", "WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    assert result["fulfilledSeries"] == ["DTWEXBGS", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    assert result["missingSeries"] == ["WALCL"]
+    assert result["staleSeries"] == []
+    assert result["sourceAuthorityAllowed"] is False
+    assert result["scoreContributionAllowed"] is False
     assert result["cacheRowsWouldWrite"] == 2
     assert result["cacheRowsWritten"] == 0
-    assert result["reason"] == "dry_run_no_write"
+    assert result["reason"] == "series_coverage"
     assert "targetPanels" in result
     assert "rawProviderPayload" not in json.dumps(result)
+    assert "SECRET" not in json.dumps(result)
 
 
 def test_official_macro_cache_prewarm_write_reports_sanitized_coverage_summary() -> None:
@@ -901,16 +916,35 @@ def test_official_macro_cache_prewarm_write_reports_sanitized_coverage_summary()
                 },
             }
 
-    result = script.run_prewarm(write=True, service_factory=FakeService)
+    result = script.run_prewarm(
+        write=True,
+        service_factory=FakeService,
+        readiness_probe=lambda: {
+            "readiness": "ready",
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "requiredSeriesStatus": {
+                "DTWEXBGS": "fulfilled",
+                "WALCL": "fulfilled",
+                "RRPONTSYD": "fulfilled",
+                "WTREGEN": "fulfilled",
+                "WRESBAL": "fulfilled",
+            },
+            "missingSeries": [],
+            "staleSeries": [],
+            "reason": None,
+        },
+    )
 
     assert result["dryRun"] is False
     assert result["writeEnabled"] is True
     assert result["writeAttempted"] is True
+    assert result["readiness"] == "ready"
     assert result["cacheRowsWouldWrite"] == 0
     assert result["cacheRowsWritten"] == 2
-    assert result["fulfilledSeries"] == ["DGS2", "DTWEXBGS", "WALCL"]
-    assert result["missingSeries"] == ["DGS10", "DGS30", "RRPONTSYD", "WTREGEN", "WRESBAL"]
-    assert result["reason"] == "required_series_missing"
+    assert result["fulfilledSeries"] == ["DTWEXBGS", "WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    assert result["missingSeries"] == []
+    assert result["reason"] is None
     assert "rawProviderPayload" not in json.dumps(result)
     assert "SECRET" not in json.dumps(result)
 

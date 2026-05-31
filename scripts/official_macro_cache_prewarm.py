@@ -20,11 +20,14 @@ from src.services.official_macro_liquidity_cache_contracts import (
     OFFICIAL_USD_PRESSURE_REQUIRED_SERIES,
     OFFICIAL_US_RATES_REQUIRED_SERIES,
 )
+from scripts.diagnose_official_macro_activation import (
+    _cache_readiness_unexpected_error_summary,
+    _run_cache_readiness_smoke,
+)
 
 
 REFRESH_WAIT_TIMEOUT_SECONDS = 5.0
-REQUIRED_SERIES: tuple[str, ...] = (
-    *OFFICIAL_US_RATES_REQUIRED_SERIES,
+CACHE_READINESS_REQUIRED_SERIES: tuple[str, ...] = (
     *OFFICIAL_USD_PRESSURE_REQUIRED_SERIES,
     *OFFICIAL_FED_LIQUIDITY_REQUIRED_SERIES,
 )
@@ -73,10 +76,6 @@ def _as_list(values: object) -> list[str]:
 
 def _unique(values: Sequence[str]) -> list[str]:
     return list(dict.fromkeys(str(value) for value in values if str(value or "").strip()))
-
-
-def _required_series() -> list[str]:
-    return _unique(REQUIRED_SERIES)
 
 
 def _target_panel_reports(*, write_attempted: bool) -> list[dict[str, object]]:
@@ -151,25 +150,6 @@ def _diagnostic_reason(item: Mapping[str, object]) -> str | None:
     return None
 
 
-def _diagnostic_fulfills_required_series(item: Mapping[str, object], *, required: set[str]) -> bool:
-    series_id = _series_id(item)
-    if series_id not in required:
-        return False
-    freshness = str(item.get("freshness") or "").strip().lower()
-    if freshness not in {"live", "fresh", "cached", "delayed"}:
-        return False
-    if item.get("sourceAuthorityAllowed") is not True:
-        return False
-    if item.get("scoreContributionAllowed") is not True:
-        return False
-    if item.get("isFallback") or item.get("fallbackUsed") or item.get("isUnavailable") or item.get("isPartial"):
-        return False
-    source_type = str(item.get("sourceType") or "").strip().lower()
-    if source_type != "official_public":
-        return False
-    return True
-
-
 def _target_diagnostics(panel: Mapping[str, object], payload: Mapping[str, object]) -> list[dict[str, object]]:
     symbols = _target_symbols(panel)
     series_ids = _target_series(panel)
@@ -204,45 +184,94 @@ def _target_diagnostics(panel: Mapping[str, object], payload: Mapping[str, objec
     return diagnostics
 
 
-def _fulfilled_required_series(panels: Sequence[dict[str, object]]) -> list[str]:
-    required = set(_required_series())
-    fulfilled: list[str] = []
-    for panel in panels:
-        diagnostics = panel.get("targetDiagnostics")
-        if not isinstance(diagnostics, Sequence) or isinstance(diagnostics, (str, bytes, bytearray)):
-            continue
-        for item in diagnostics:
-            if not isinstance(item, Mapping):
-                continue
-            series_id = _series_id(item)
-            if series_id in fulfilled:
-                continue
-            if _diagnostic_fulfills_required_series(item, required=required):
-                fulfilled.append(series_id)
-    required_order = _required_series()
-    return [series_id for series_id in required_order if series_id in set(fulfilled)]
+def _safe_cache_readiness_summary(readiness_probe: Callable[[], Mapping[str, object]]) -> Mapping[str, object]:
+    try:
+        summary = readiness_probe()
+    except Exception:
+        return _cache_readiness_unexpected_error_summary()
+    return summary if isinstance(summary, Mapping) else _cache_readiness_unexpected_error_summary()
+
+
+def _readiness_required_series(summary: Mapping[str, object]) -> list[str]:
+    status_by_series = summary.get("requiredSeriesStatus")
+    if isinstance(status_by_series, Mapping):
+        return _unique([str(series_id) for series_id in status_by_series.keys()])
+    explicit = _as_list(summary.get("requiredSeries"))
+    if explicit:
+        return _unique(explicit)
+    return _unique(CACHE_READINESS_REQUIRED_SERIES)
+
+
+def _series_status(summary: Mapping[str, object], series_id: str) -> str:
+    status_by_series = summary.get("requiredSeriesStatus")
+    if isinstance(status_by_series, Mapping):
+        return str(status_by_series.get(series_id) or "missing").strip().lower()
+    if series_id in set(_as_list(summary.get("staleSeries"))):
+        return "stale"
+    if series_id in set(_as_list(summary.get("fulfilledSeries"))):
+        return "fulfilled"
+    if series_id in set(_as_list(summary.get("missingSeries"))):
+        return "missing"
+    return "missing"
+
+
+def _readiness_summary_fields(summary: Mapping[str, object]) -> dict[str, object]:
+    required = _readiness_required_series(summary)
+    fulfilled = [series_id for series_id in required if _series_status(summary, series_id) == "fulfilled"]
+    stale = [series_id for series_id in required if _series_status(summary, series_id) == "stale"]
+    missing = [
+        series_id
+        for series_id in required
+        if _series_status(summary, series_id) not in {"fulfilled", "stale"}
+    ]
+    source_authority_allowed = summary.get("sourceAuthorityAllowed") is True
+    score_contribution_allowed = summary.get("scoreContributionAllowed") is True
+    readiness = str(summary.get("readiness") or "").strip().lower()
+    if readiness not in {"ready", "blocked"}:
+        readiness = (
+            "ready"
+            if required and not missing and not stale and source_authority_allowed and score_contribution_allowed
+            else "blocked"
+        )
+    reason = str(summary.get("reason") or "").strip() or None
+    if readiness == "blocked" and reason is None:
+        if stale:
+            reason = "stale_series"
+        elif missing:
+            reason = "series_coverage"
+        elif not source_authority_allowed:
+            reason = "source_authority_blocked"
+        elif not score_contribution_allowed:
+            reason = "score_contribution_blocked"
+        else:
+            reason = "readiness_blocked"
+    return {
+        "readiness": readiness,
+        "reason": reason,
+        "requiredSeries": required,
+        "fulfilledSeries": fulfilled,
+        "missingSeries": missing,
+        "staleSeries": stale,
+        "sourceAuthorityAllowed": source_authority_allowed,
+        "scoreContributionAllowed": score_contribution_allowed,
+    }
 
 
 def _summary_fields(
     *,
-    write: bool,
-    panels: Sequence[dict[str, object]] | None = None,
+    write_enabled: bool,
+    write_attempted: bool,
+    readiness_summary: Mapping[str, object],
     cache_rows_written: int = 0,
-    reason: str | None = None,
 ) -> dict[str, object]:
-    required = _required_series()
-    fulfilled = _fulfilled_required_series(panels or []) if write else []
-    missing = [series_id for series_id in required if series_id not in set(fulfilled)] if write else []
+    readiness_fields = _readiness_summary_fields(readiness_summary)
     return {
-        "dryRun": not write,
-        "writeEnabled": write,
-        "writeAttempted": write,
-        "requiredSeries": required,
-        "fulfilledSeries": fulfilled,
-        "missingSeries": missing,
-        "cacheRowsWouldWrite": 0 if write else len(TARGET_PANELS),
-        "cacheRowsWritten": cache_rows_written if write else 0,
-        "reason": reason or ("required_series_missing" if missing else ("write_attempted" if write else "dry_run_no_write")),
+        "dryRun": not write_enabled,
+        "writeEnabled": write_enabled,
+        "writeAttempted": write_attempted,
+        **readiness_fields,
+        "cacheRowsWouldWrite": 0 if write_enabled else len(TARGET_PANELS),
+        "cacheRowsWritten": cache_rows_written if write_attempted else 0,
     }
 
 
@@ -280,13 +309,32 @@ def run_prewarm(
     *,
     write: bool,
     service_factory: Callable[[], MarketOverviewService] = MarketOverviewService,
+    readiness_probe: Callable[[], Mapping[str, object]] | None = None,
 ) -> dict[str, object]:
     target_panels = _target_panel_reports(write_attempted=write)
+    readiness_summary = _safe_cache_readiness_summary(readiness_probe or _run_cache_readiness_smoke)
     if not write:
         return {
             "mode": "dry-run",
-            **_summary_fields(write=False),
+            **_summary_fields(
+                write_enabled=False,
+                write_attempted=False,
+                readiness_summary=readiness_summary,
+            ),
             "result": "dry_run_no_write",
+            "targetPanels": target_panels,
+        }
+
+    blocked_summary = _summary_fields(
+        write_enabled=True,
+        write_attempted=False,
+        readiness_summary=readiness_summary,
+    )
+    if blocked_summary["readiness"] != "ready":
+        return {
+            "mode": "write",
+            **blocked_summary,
+            "result": "readiness_blocked",
             "targetPanels": target_panels,
         }
 
@@ -298,8 +346,9 @@ def run_prewarm(
         for panel in TARGET_PANELS
     ]
     summary = _summary_fields(
-        write=True,
-        panels=panels,
+        write_enabled=True,
+        write_attempted=True,
+        readiness_summary=readiness_summary,
         cache_rows_written=_count_returned_cache_rows(payloads),
     )
     return {
@@ -344,8 +393,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 {
                     "mode": "write" if args.write else "dry-run",
                     **_summary_fields(
-                        write=bool(args.write),
-                        reason="error",
+                        write_enabled=bool(args.write),
+                        write_attempted=False,
+                        readiness_summary=_cache_readiness_unexpected_error_summary(),
                     ),
                     "result": "error",
                     "errorClass": type(exc).__name__,
@@ -356,6 +406,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 1
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+    if bool(args.write) and result.get("result") == "readiness_blocked":
+        return 1
     return 0
 
 

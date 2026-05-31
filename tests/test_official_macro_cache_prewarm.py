@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import Mock
 
 import pytest
@@ -81,19 +82,71 @@ def _official_macro_payload() -> dict[str, object]:
     }
 
 
+def _ready_readiness_summary() -> dict[str, object]:
+    return {
+        "readiness": "ready",
+        "sourceAuthorityAllowed": True,
+        "scoreContributionAllowed": True,
+        "requiredSeriesStatus": {
+            "DTWEXBGS": "fulfilled",
+            "WALCL": "fulfilled",
+            "RRPONTSYD": "fulfilled",
+            "WTREGEN": "fulfilled",
+            "WRESBAL": "fulfilled",
+        },
+        "missingSeries": [],
+        "staleSeries": [],
+        "reason": None,
+    }
+
+
+def _blocked_readiness_summary() -> dict[str, object]:
+    return {
+        "readiness": "blocked",
+        "sourceAuthorityAllowed": False,
+        "scoreContributionAllowed": False,
+        "requiredSeriesStatus": {
+            "DTWEXBGS": "fulfilled",
+            "WALCL": "missing",
+            "RRPONTSYD": "fulfilled",
+            "WTREGEN": "fulfilled",
+            "WRESBAL": "fulfilled",
+        },
+        "missingSeries": ["WALCL"],
+        "staleSeries": [],
+        "reason": "series_coverage",
+        "rawProviderPayload": {"token": "SECRET"},
+    }
+
+
 def test_transport_supports_curve_spread_fred_series_requests() -> None:
     assert build_fred_observations_request("T10Y2Y").params["series_id"] == "T10Y2Y"
     assert build_fred_observations_request("T10Y3M").params["series_id"] == "T10Y3M"
 
 
-def test_dry_run_reports_targets_without_constructing_service() -> None:
+def test_dry_run_reports_blocked_readiness_missing_walcl_without_constructing_service() -> None:
     def fail_factory() -> object:
         raise AssertionError("dry-run must not construct MarketOverviewService")
 
-    result = prewarm.run_prewarm(write=False, service_factory=fail_factory)
+    result = prewarm.run_prewarm(
+        write=False,
+        service_factory=fail_factory,
+        readiness_probe=_blocked_readiness_summary,
+    )
 
     assert result["dryRun"] is True
+    assert result["writeEnabled"] is False
     assert result["writeAttempted"] is False
+    assert result["readiness"] == "blocked"
+    assert result["reason"] == "series_coverage"
+    assert result["requiredSeries"] == ["DTWEXBGS", "WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    assert result["fulfilledSeries"] == ["DTWEXBGS", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    assert result["missingSeries"] == ["WALCL"]
+    assert result["staleSeries"] == []
+    assert result["sourceAuthorityAllowed"] is False
+    assert result["scoreContributionAllowed"] is False
+    assert result["cacheRowsWouldWrite"] == 2
+    assert result["cacheRowsWritten"] == 0
     assert result["result"] == "dry_run_no_write"
     assert {panel["cacheKey"] for panel in result["targetPanels"]} == {"rates", "macro"}
     rates_panel = next(panel for panel in result["targetPanels"] if panel["cacheKey"] == "rates")
@@ -105,6 +158,27 @@ def test_dry_run_reports_targets_without_constructing_service() -> None:
     macro_us_rates_group = next(group for group in macro_panel["targetGroups"] if group["name"] == "us_rates")
     assert macro_us_rates_group["symbols"] == ["US2Y", "US10Y", "US30Y", "SOFR", "US10Y2Y", "US10Y3M"]
     assert macro_us_rates_group["series"] == ["DGS2", "DGS10", "DGS30", "SOFR", "T10Y2Y", "T10Y3M"]
+    assert "rawProviderPayload" not in result
+    assert "SECRET" not in str(result)
+
+
+def test_dry_run_reports_ready_when_activation_readiness_is_fulfilled() -> None:
+    result = prewarm.run_prewarm(
+        write=False,
+        service_factory=lambda: (_ for _ in ()).throw(AssertionError("dry-run must not construct service")),
+        readiness_probe=_ready_readiness_summary,
+    )
+
+    assert result["dryRun"] is True
+    assert result["readiness"] == "ready"
+    assert result["reason"] is None
+    assert result["fulfilledSeries"] == ["DTWEXBGS", "WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
+    assert result["missingSeries"] == []
+    assert result["staleSeries"] == []
+    assert result["sourceAuthorityAllowed"] is True
+    assert result["scoreContributionAllowed"] is True
+    assert result["cacheRowsWouldWrite"] == 2
+    assert result["cacheRowsWritten"] == 0
 
 
 def test_service_prewarm_uses_existing_cached_payload_and_snapshot_writer(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -154,7 +228,11 @@ def test_write_mode_invokes_market_overview_prewarm_callable() -> None:
         created.append(service)
         return service
 
-    result = prewarm.run_prewarm(write=True, service_factory=factory)
+    result = prewarm.run_prewarm(
+        write=True,
+        service_factory=factory,
+        readiness_probe=_ready_readiness_summary,
+    )
 
     assert result["dryRun"] is False
     assert result["writeAttempted"] is True
@@ -169,6 +247,45 @@ def test_write_mode_invokes_market_overview_prewarm_callable() -> None:
     assert "T10Y3M" in {item["series"] for item in rates_panel["targetDiagnostics"]}
     assert "US10Y2Y" in macro_panel["targetSymbolsFound"]
     assert "US10Y3M" in macro_panel["targetSymbolsFound"]
+
+
+def test_write_mode_refuses_to_write_when_readiness_is_blocked() -> None:
+    result = prewarm.run_prewarm(
+        write=True,
+        service_factory=lambda: (_ for _ in ()).throw(AssertionError("blocked readiness must not construct service")),
+        readiness_probe=_blocked_readiness_summary,
+    )
+
+    assert result["dryRun"] is False
+    assert result["writeEnabled"] is True
+    assert result["writeAttempted"] is False
+    assert result["readiness"] == "blocked"
+    assert result["reason"] == "series_coverage"
+    assert result["missingSeries"] == ["WALCL"]
+    assert result["cacheRowsWouldWrite"] == 0
+    assert result["cacheRowsWritten"] == 0
+    assert result["result"] == "readiness_blocked"
+    assert "panels" not in result
+    assert "SECRET" not in str(result)
+
+
+def test_write_cli_returns_nonzero_when_readiness_is_blocked(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(prewarm, "_run_cache_readiness_smoke", _blocked_readiness_summary)
+
+    exit_code = prewarm.main(["--write"])
+
+    assert exit_code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["result"] == "readiness_blocked"
+    assert payload["writeEnabled"] is True
+    assert payload["writeAttempted"] is False
+    assert payload["readiness"] == "blocked"
+    assert payload["missingSeries"] == ["WALCL"]
+    assert payload["cacheRowsWritten"] == 0
+    assert "SECRET" not in json.dumps(payload)
 
 
 def test_budget_blocked_and_missing_key_diagnostics_remain_non_scoring() -> None:
@@ -211,7 +328,11 @@ def test_budget_blocked_and_missing_key_diagnostics_remain_non_scoring() -> None
                 "macro": {"source": "mixed", "items": [missing_key]},
             }
 
-    result = prewarm.run_prewarm(write=True, service_factory=FakeService)
+    result = prewarm.run_prewarm(
+        write=True,
+        service_factory=FakeService,
+        readiness_probe=_ready_readiness_summary,
+    )
 
     diagnostics = {
         diagnostic["symbol"]: diagnostic

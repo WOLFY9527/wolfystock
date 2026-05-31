@@ -1,9 +1,11 @@
 ## 2026-05-31
 - Official macro cache prewarm now reports a sanitized dry-run/write summary
   with write enablement, required/fulfilled/missing series, cache-row counts,
-  and reason codes so operators can run dry-run first and then opt into the
-  existing write path without exposing provider payloads or changing provider
-  routing, MarketCache TTL/SWR, scoring, API, or frontend behavior.
+  readiness, reason codes, and stale-series fields. The write path now refuses
+  to prewarm when activation cache readiness is blocked, so operators see
+  missing WALCL/Fed-liquidity coverage before any cache rows are written,
+  without exposing provider payloads or changing provider routing, MarketCache
+  TTL/SWR, scoring, API, or frontend behavior.
 - Rotation Radar Alpaca activation smoke now supports operator-only timeout
   budget overrides for per-window, total-provider, and bar-fetch timeouts, plus
   an optional payload-free endpoint reachability check. The sanitized output
