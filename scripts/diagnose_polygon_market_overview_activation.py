@@ -5,10 +5,14 @@
 from __future__ import annotations
 
 import json
+import math
+import signal
 import sys
 from argparse import ArgumentParser
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from types import FrameType
+from typing import Any, Iterator, Mapping, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -18,9 +22,11 @@ from src.config import setup_env
 from src.services.polygon_us_breadth_provider import (
     POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON,
     POLYGON_HIGH_LOW_HISTORY_DATE_GAP_REASON,
+    POLYGON_HIGH_LOW_HISTORY_DIAGNOSTIC_SESSION_CAP_REASON,
     POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON,
     POLYGON_HIGH_LOW_HISTORY_MALFORMED_REASON,
     POLYGON_HIGH_LOW_HISTORY_MIXED_SOURCE_REASON,
+    POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON,
     POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
     POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
     POLYGON_HIGH_LOW_RATIO_UNAVAILABLE_REASON,
@@ -29,6 +35,7 @@ from src.services.polygon_us_breadth_provider import (
     POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE,
     POLYGON_US_BREADTH_REASON_RESPONSE_INVALID,
     POLYGON_US_BREADTH_REASON_UNAUTHORIZED,
+    POLYGON_US_BREADTH_TIMEOUT_SECONDS,
     diagnostic_summary,
     run_polygon_us_breadth_activation,
 )
@@ -41,8 +48,13 @@ EXIT_OK = 0
 EXIT_FAILED = 1
 SMOKE_HIGH_LOW_LOOKBACK_SESSIONS = 1
 HIGH_LOW_METRICS_MISSING_REASON = "high_low_metrics_missing"
+HIGH_LOW_DEFAULT_TIMEOUT_BUDGET_SECONDS = 30.0
+HIGH_LOW_DEFAULT_PER_REQUEST_TIMEOUT_SECONDS = min(2.0, POLYGON_US_BREADTH_TIMEOUT_SECONDS)
+HIGH_LOW_MIN_PER_REQUEST_TIMEOUT_SECONDS = 0.1
 
 _HIGH_LOW_SYMBOLS = ("NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO")
+_HIGH_LOW_TIMEOUT_REASONS = {POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON}
+_HIGH_LOW_DIAGNOSTIC_CAP_REASONS = {POLYGON_HIGH_LOW_HISTORY_DIAGNOSTIC_SESSION_CAP_REASON}
 _HIGH_LOW_REASONS = {
     POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
     POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON,
@@ -51,6 +63,8 @@ _HIGH_LOW_REASONS = {
     POLYGON_HIGH_LOW_HISTORY_MIXED_SOURCE_REASON,
     POLYGON_HIGH_LOW_HISTORY_MALFORMED_REASON,
     POLYGON_HIGH_LOW_RATIO_UNAVAILABLE_REASON,
+    *_HIGH_LOW_TIMEOUT_REASONS,
+    *_HIGH_LOW_DIAGNOSTIC_CAP_REASONS,
 }
 _MISSING_WINDOW_BY_REASON = {
     POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE: "previous_close_comparison",
@@ -98,6 +112,17 @@ def build_high_low_lookback_certification_output(result: Mapping[str, Any]) -> d
         default=POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
     )
     fulfilled_sessions = _positive_int(result.get("highLowFulfilledSessions"), default=0)
+    timeout_budget_seconds = _positive_float(
+        result.get("timeoutBudgetSeconds"),
+        default=HIGH_LOW_DEFAULT_TIMEOUT_BUDGET_SECONDS,
+        minimum=HIGH_LOW_MIN_PER_REQUEST_TIMEOUT_SECONDS,
+    )
+    per_request_timeout_seconds = _positive_float(
+        result.get("perRequestTimeoutSeconds"),
+        default=HIGH_LOW_DEFAULT_PER_REQUEST_TIMEOUT_SECONDS,
+        minimum=HIGH_LOW_MIN_PER_REQUEST_TIMEOUT_SECONDS,
+    )
+    diagnostic_session_cap = _optional_positive_int(result.get("diagnosticSessionCap"))
     missing_symbols = _missing_high_low_symbols(result)
     reason = _high_low_reason(reason_codes) or (reason_codes[0] if reason_codes else None)
     if reason is None and missing_symbols:
@@ -115,15 +140,43 @@ def build_high_low_lookback_certification_output(result: Mapping[str, Any]) -> d
         "fulfilledSessions": fulfilled_sessions,
         "missingSymbols": missing_symbols,
         "reason": reason,
+        "timeoutBudgetSeconds": timeout_budget_seconds,
+        "perRequestTimeoutSeconds": per_request_timeout_seconds,
+        "diagnosticSessionCap": diagnostic_session_cap,
     }
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
+    per_request_timeout_seconds = _positive_float(
+        args.per_request_timeout_seconds,
+        default=HIGH_LOW_DEFAULT_PER_REQUEST_TIMEOUT_SECONDS,
+        minimum=HIGH_LOW_MIN_PER_REQUEST_TIMEOUT_SECONDS,
+    )
+    timeout_budget_seconds = _positive_float(
+        args.timeout_budget_seconds,
+        default=HIGH_LOW_DEFAULT_TIMEOUT_BUDGET_SECONDS,
+        minimum=HIGH_LOW_MIN_PER_REQUEST_TIMEOUT_SECONDS,
+    )
+    diagnostic_session_cap = _optional_positive_int(args.high_low_max_sessions)
     try:
         setup_env()
         if args.high_low_lookback:
-            summary = diagnostic_summary(run_polygon_us_breadth_activation())
+            with _operator_smoke_deadline(timeout_budget_seconds):
+                summary = diagnostic_summary(
+                    run_polygon_us_breadth_activation(
+                        timeout_seconds=per_request_timeout_seconds,
+                        high_low_max_history_sessions=diagnostic_session_cap,
+                        high_low_timeout_budget_seconds=timeout_budget_seconds,
+                    )
+                )
+            summary.update(
+                {
+                    "perRequestTimeoutSeconds": per_request_timeout_seconds,
+                    "timeoutBudgetSeconds": timeout_budget_seconds,
+                    "diagnosticSessionCap": diagnostic_session_cap,
+                }
+            )
             output = build_high_low_lookback_certification_output(summary)
         else:
             summary = diagnostic_summary(
@@ -132,8 +185,43 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             )
             output = build_market_overview_activation_smoke_output(summary)
+    except (_OperatorSmokeTimeout, TimeoutError):
+        output = (
+            _high_low_failure_output(
+                reason="timeout",
+                per_request_timeout_seconds=per_request_timeout_seconds,
+                timeout_budget_seconds=timeout_budget_seconds,
+                diagnostic_session_cap=diagnostic_session_cap,
+            )
+            if args.high_low_lookback
+            else _unexpected_error_output()
+        )
+        print(json.dumps(output, ensure_ascii=False, sort_keys=True))
+        return EXIT_FAILED
+    except KeyboardInterrupt:
+        output = (
+            _high_low_failure_output(
+                reason="interrupted",
+                per_request_timeout_seconds=per_request_timeout_seconds,
+                timeout_budget_seconds=timeout_budget_seconds,
+                diagnostic_session_cap=diagnostic_session_cap,
+            )
+            if args.high_low_lookback
+            else _unexpected_error_output()
+        )
+        print(json.dumps(output, ensure_ascii=False, sort_keys=True))
+        return EXIT_FAILED
     except Exception:
-        output = _unexpected_high_low_error_output() if args.high_low_lookback else _unexpected_error_output()
+        output = (
+            _high_low_failure_output(
+                reason="unexpected_error",
+                per_request_timeout_seconds=per_request_timeout_seconds,
+                timeout_budget_seconds=timeout_budget_seconds,
+                diagnostic_session_cap=diagnostic_session_cap,
+            )
+            if args.high_low_lookback
+            else _unexpected_error_output()
+        )
         print(json.dumps(output, ensure_ascii=False, sort_keys=True))
         return EXIT_FAILED
     print(json.dumps(output, ensure_ascii=False, sort_keys=True))
@@ -146,6 +234,21 @@ def _parse_args(argv: Sequence[str] | None) -> Any:
         "--high-low-lookback",
         action="store_true",
         help="Probe full 252-session high/low lookback readiness with sanitized counts only.",
+    )
+    parser.add_argument(
+        "--per-request-timeout-seconds",
+        default=None,
+        help="High/low lookback diagnostic per-request timeout; invalid values use a safe default.",
+    )
+    parser.add_argument(
+        "--timeout-budget-seconds",
+        default=None,
+        help="High/low lookback diagnostic total timeout budget; invalid values use a safe default.",
+    )
+    parser.add_argument(
+        "--high-low-max-sessions",
+        default=None,
+        help="Optional diagnostic cap for high/low historical sessions; invalid values leave it uncapped.",
     )
     return parser.parse_args(argv)
 
@@ -216,6 +319,10 @@ def _uses_bounded_high_low_window(result: Mapping[str, Any]) -> bool:
 
 def _high_low_reason(reason_codes: list[str]) -> str | None:
     for reason in reason_codes:
+        if reason in _HIGH_LOW_TIMEOUT_REASONS:
+            return "timeout"
+        if reason in _HIGH_LOW_DIAGNOSTIC_CAP_REASONS:
+            return "diagnostic_session_cap"
         if reason in _HIGH_LOW_REASONS:
             return reason
     return None
@@ -227,6 +334,48 @@ def _positive_int(value: Any, *, default: int) -> int:
     except (TypeError, ValueError):
         return default
     return parsed if parsed >= 0 else default
+
+
+def _positive_float(value: Any, *, default: float, minimum: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    if not math.isfinite(parsed) or parsed <= 0:
+        return float(default)
+    return max(float(minimum), parsed)
+
+
+def _optional_positive_int(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+class _OperatorSmokeTimeout(Exception):
+    pass
+
+
+@contextmanager
+def _operator_smoke_deadline(timeout_budget_seconds: float) -> Iterator[None]:
+    if not hasattr(signal, "setitimer") or not hasattr(signal, "SIGALRM"):
+        yield
+        return
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+
+    def _raise_timeout(signum: int, frame: FrameType | None) -> None:
+        raise _OperatorSmokeTimeout("polygon high/low smoke timeout budget exceeded")
+
+    signal.signal(signal.SIGALRM, _raise_timeout)
+    signal.setitimer(signal.ITIMER_REAL, timeout_budget_seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
 
 
 def _unexpected_error_output() -> dict[str, object]:
@@ -244,14 +393,23 @@ def _unexpected_error_output() -> dict[str, object]:
     }
 
 
-def _unexpected_high_low_error_output() -> dict[str, object]:
+def _high_low_failure_output(
+    *,
+    reason: str,
+    per_request_timeout_seconds: float,
+    timeout_budget_seconds: float,
+    diagnostic_session_cap: int | None,
+) -> dict[str, object]:
     return {
         "lookbackRequested": True,
         "lookbackFulfilled": False,
         "requiredSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
         "fulfilledSessions": 0,
         "missingSymbols": list(_HIGH_LOW_SYMBOLS),
-        "reason": "unexpected_error",
+        "reason": reason,
+        "timeoutBudgetSeconds": timeout_budget_seconds,
+        "perRequestTimeoutSeconds": per_request_timeout_seconds,
+        "diagnosticSessionCap": diagnostic_session_cap,
     }
 
 

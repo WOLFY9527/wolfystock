@@ -11,13 +11,16 @@ from zoneinfo import ZoneInfo
 from scripts.diagnose_polygon_market_overview_activation import (
     build_high_low_lookback_certification_output,
     build_market_overview_activation_smoke_output,
+    main as polygon_activation_smoke_main,
 )
 from src.services.polygon_us_breadth_provider import (
     POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON,
     POLYGON_HIGH_LOW_HISTORY_DATE_GAP_REASON,
+    POLYGON_HIGH_LOW_HISTORY_DIAGNOSTIC_SESSION_CAP_REASON,
     POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON,
     POLYGON_HIGH_LOW_HISTORY_MALFORMED_REASON,
     POLYGON_HIGH_LOW_HISTORY_MIXED_SOURCE_REASON,
+    POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON,
     POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
     POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
     POLYGON_US_BREADTH_REASON_COVERAGE_BELOW_THRESHOLD,
@@ -152,6 +155,11 @@ def test_market_overview_polygon_high_low_certification_output_is_sanitized() ->
             "reasonCodes": [],
             "metrics": {"newHighs": 318, "newLows": 42, "highLowRatio": 7.571},
             "rawPayload": {"providerPayload": "raw-provider-value"},
+            "apiKey": "polygon-secret-key",
+            "requestUrl": "https://api.polygon.io/v2/aggs/grouped?apiKey=polygon-secret-key",
+            "perRequestTimeoutSeconds": 1.5,
+            "timeoutBudgetSeconds": 12.0,
+            "diagnosticSessionCap": None,
         }
     )
 
@@ -162,11 +170,16 @@ def test_market_overview_polygon_high_low_certification_output_is_sanitized() ->
         "fulfilledSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
         "missingSymbols": [],
         "reason": None,
+        "timeoutBudgetSeconds": 12.0,
+        "perRequestTimeoutSeconds": 1.5,
+        "diagnosticSessionCap": None,
     }
     serialized = json.dumps(output, ensure_ascii=False)
     assert "raw-provider-value" not in serialized
     assert "rawPayload" not in serialized
     assert "newHighs" not in serialized
+    assert "polygon-secret-key" not in serialized
+    assert "apiKey" not in serialized
 
 
 def test_market_overview_polygon_high_low_certification_reports_gap_only() -> None:
@@ -183,6 +196,9 @@ def test_market_overview_polygon_high_low_certification_reports_gap_only() -> No
             "missingMetrics": ["NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"],
             "reasonCodes": [POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON],
             "rawPayload": {"providerPayload": "raw-provider-value"},
+            "perRequestTimeoutSeconds": 2.0,
+            "timeoutBudgetSeconds": 30.0,
+            "diagnosticSessionCap": None,
         }
     )
 
@@ -193,10 +209,195 @@ def test_market_overview_polygon_high_low_certification_reports_gap_only() -> No
         "fulfilledSessions": 120,
         "missingSymbols": ["NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"],
         "reason": POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON,
+        "timeoutBudgetSeconds": 30.0,
+        "perRequestTimeoutSeconds": 2.0,
+        "diagnosticSessionCap": None,
     }
     serialized = json.dumps(output, ensure_ascii=False)
     assert "raw-provider-value" not in serialized
     assert "rawPayload" not in serialized
+
+
+def test_market_overview_polygon_high_low_timeout_output_is_sanitized() -> None:
+    output = build_high_low_lookback_certification_output(
+        {
+            "highLowLookbackSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+            "highLowFulfilledSessions": 2,
+            "fulfilledMetrics": [
+                "ADVANCERS",
+                "DECLINERS",
+                "UNCHANGED",
+                "ADVANCE_DECLINE_RATIO",
+            ],
+            "missingMetrics": ["NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"],
+            "reasonCodes": [POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON],
+            "rawPayload": {"providerPayload": "raw-provider-value"},
+            "apiKey": "polygon-secret-key",
+            "requestUrl": "https://api.polygon.io/v2/aggs/grouped?apiKey=polygon-secret-key",
+            "perRequestTimeoutSeconds": 0.5,
+            "timeoutBudgetSeconds": 3.0,
+            "diagnosticSessionCap": 5,
+        }
+    )
+
+    assert output == {
+        "lookbackRequested": True,
+        "lookbackFulfilled": False,
+        "requiredSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+        "fulfilledSessions": 2,
+        "missingSymbols": ["NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"],
+        "reason": "timeout",
+        "timeoutBudgetSeconds": 3.0,
+        "perRequestTimeoutSeconds": 0.5,
+        "diagnosticSessionCap": 5,
+    }
+    serialized = json.dumps(output, ensure_ascii=False)
+    assert "raw-provider-value" not in serialized
+    assert "polygon-secret-key" not in serialized
+    assert "apiKey" not in serialized
+
+
+def test_high_low_operator_smoke_timeout_returns_json_not_exception(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        "scripts.diagnose_polygon_market_overview_activation.setup_env",
+        lambda: None,
+    )
+
+    def raise_timeout(**kwargs: object) -> dict[str, object]:
+        raise TimeoutError("raw timeout with polygon-secret-key and provider payload")
+
+    monkeypatch.setattr(
+        "scripts.diagnose_polygon_market_overview_activation.run_polygon_us_breadth_activation",
+        raise_timeout,
+    )
+
+    exit_code = polygon_activation_smoke_main(
+        [
+            "--high-low-lookback",
+            "--per-request-timeout-seconds",
+            "0.5",
+            "--timeout-budget-seconds",
+            "3",
+            "--high-low-max-sessions",
+            "5",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    output = json.loads(captured.out)
+    assert output == {
+        "lookbackRequested": True,
+        "lookbackFulfilled": False,
+        "requiredSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+        "fulfilledSessions": 0,
+        "missingSymbols": ["NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"],
+        "reason": "timeout",
+        "timeoutBudgetSeconds": 3.0,
+        "perRequestTimeoutSeconds": 0.5,
+        "diagnosticSessionCap": 5,
+    }
+    assert "polygon-secret-key" not in captured.out
+    assert "provider payload" not in captured.out
+
+
+def test_default_operator_smoke_preserves_grouped_daily_ad_probe(monkeypatch, capsys) -> None:
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "scripts.diagnose_polygon_market_overview_activation.setup_env",
+        lambda: None,
+    )
+
+    def fake_run(**kwargs: object) -> dict[str, object]:
+        calls.append(dict(kwargs))
+        return {
+            "credentialsPresent": True,
+            "providerConstructed": True,
+            "probePassed": True,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "fulfilledMetrics": list(US_BREADTH_SYMBOLS),
+            "missingMetrics": [],
+            "reasonCodes": [],
+            "highLowLookbackSessions": 1,
+        }
+
+    monkeypatch.setattr(
+        "scripts.diagnose_polygon_market_overview_activation.run_polygon_us_breadth_activation",
+        fake_run,
+    )
+
+    exit_code = polygon_activation_smoke_main([])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert calls == [{"high_low_lookback_sessions": 1}]
+    output = json.loads(captured.out)
+    assert output["status"] == "score_ready"
+    assert output["missingRequiredWindows"] == ["high_low_lookback"]
+    assert "timeoutBudgetSeconds" not in output
+
+
+def test_high_low_operator_smoke_invalid_budget_args_use_safe_defaults(monkeypatch, capsys) -> None:
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "scripts.diagnose_polygon_market_overview_activation.setup_env",
+        lambda: None,
+    )
+
+    def fake_run(**kwargs: object) -> dict[str, object]:
+        calls.append(dict(kwargs))
+        return {
+            "highLowLookbackSessions": POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+            "highLowFulfilledSessions": 0,
+            "fulfilledMetrics": [],
+            "missingMetrics": ["NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"],
+            "reasonCodes": [POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON],
+        }
+
+    monkeypatch.setattr(
+        "scripts.diagnose_polygon_market_overview_activation.run_polygon_us_breadth_activation",
+        fake_run,
+    )
+
+    exit_code = polygon_activation_smoke_main(
+        [
+            "--high-low-lookback",
+            "--per-request-timeout-seconds",
+            "bad",
+            "--timeout-budget-seconds",
+            "-1",
+            "--high-low-max-sessions",
+            "",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert calls == [
+        {
+            "timeout_seconds": 2.0,
+            "high_low_max_history_sessions": None,
+            "high_low_timeout_budget_seconds": 30.0,
+        }
+    ]
+    output = json.loads(captured.out)
+    assert output["timeoutBudgetSeconds"] == 30.0
+    assert output["perRequestTimeoutSeconds"] == 2.0
+    assert output["diagnosticSessionCap"] is None
+
+
+def test_high_low_no_key_output_remains_fail_closed() -> None:
+    output = build_high_low_lookback_certification_output(
+        diagnostic_summary(run_polygon_us_breadth_activation(api_key=""))
+    )
+
+    assert output["lookbackRequested"] is True
+    assert output["lookbackFulfilled"] is False
+    assert output["requiredSessions"] == POLYGON_HIGH_LOW_LOOKBACK_SESSIONS
+    assert output["fulfilledSessions"] == 0
+    assert output["missingSymbols"] == ["NEW_HIGHS", "NEW_LOWS", "HIGH_LOW_RATIO"]
+    assert output["reason"] == US_BREADTH_MISSING_PROVIDER_REASON
 
 
 def test_polygon_activation_uses_env_file_key_when_process_env_is_missing(tmp_path, monkeypatch) -> None:
@@ -671,3 +872,43 @@ def test_polygon_activation_fetches_recent_completed_date_and_previous_compariso
     assert result["previousObservationDate"] == "2026-05-20"
     assert result["comparisonBasis"] == "previous_close"
     assert result["sourceAuthorityAllowed"] is True
+
+
+def test_polygon_activation_high_low_diagnostic_session_cap_preserves_required_lookback() -> None:
+    calls: list[str] = []
+    latest_date = "2026-05-21"
+    previous_date = "2026-05-20"
+    history_dates = _prior_weekdays(latest_date, 2)
+    payloads = {
+        latest_date: _grouped_payload([
+            {"T": "AAA", "o": 10.0, "c": 11.0, "h": 15.0, "l": 9.0},
+            {"T": "BBB", "o": 20.0, "c": 18.0, "h": 21.0, "l": 17.0},
+            {"T": "CCC", "o": 30.0, "c": 30.0, "h": 32.0, "l": 29.0},
+        ]),
+        previous_date: _grouped_payload(_high_low_rows()),
+        **{
+            history_date: _grouped_payload(_high_low_rows())
+            for history_date in history_dates
+        },
+    }
+
+    def transport(date: str, api_key: str, timeout: float) -> tuple[int, dict[str, object]]:
+        calls.append(date)
+        return 200, payloads[date]
+
+    result = run_polygon_us_breadth_activation(
+        api_key="test-key",
+        transport=transport,
+        now=datetime(2026, 5, 22, 12, tzinfo=POLYGON_US_EASTERN_TZ),
+        min_coverage_count=3,
+        high_low_lookback_sessions=POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+        min_high_low_eligible_count=3,
+        high_low_max_history_sessions=2,
+    )
+
+    assert calls == [latest_date, previous_date, history_dates[1]]
+    assert result["highLowLookbackSessions"] == POLYGON_HIGH_LOW_LOOKBACK_SESSIONS
+    assert result["highLowFulfilledSessions"] == 2
+    assert result["reasonCodes"] == [POLYGON_HIGH_LOW_HISTORY_DIAGNOSTIC_SESSION_CAP_REASON]
+    assert result["sourceAuthorityAllowed"] is True
+    assert result["scoreContributionAllowed"] is True

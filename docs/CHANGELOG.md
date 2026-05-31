@@ -1,4 +1,11 @@
 ## 2026-05-31
+- Polygon Market Overview high/low activation smoke now has operator-only
+  per-request timeout, total timeout budget, and optional diagnostic session
+  cap controls. Timeout and cap failures return sanitized lookback readiness
+  JSON with effective budget values, required/fulfilled session counts, and
+  missing high/low symbols without exposing API keys, request URLs, provider
+  payloads, or changing provider routing, Market Overview scoring, API, or
+  frontend behavior.
 - Official macro cache prewarm now reports a sanitized dry-run/write summary
   with write enablement, required/fulfilled/missing series, cache-row counts,
   readiness, reason codes, and stale-series fields. The write path now refuses

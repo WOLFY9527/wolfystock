@@ -15,6 +15,7 @@ import os
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from time import monotonic
 from typing import Any, Callable, Mapping, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -59,7 +60,10 @@ POLYGON_HIGH_LOW_HISTORY_MIXED_SOURCE_REASON = "polygon_high_low_history_mixed_s
 POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON = "polygon_high_low_history_insufficient_lookback"
 POLYGON_HIGH_LOW_HISTORY_DATE_GAP_REASON = "polygon_high_low_history_date_gap"
 POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON = "polygon_high_low_history_below_threshold"
+POLYGON_HIGH_LOW_HISTORY_DIAGNOSTIC_SESSION_CAP_REASON = "polygon_high_low_history_diagnostic_session_cap"
+POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON = "polygon_high_low_history_timeout"
 POLYGON_HIGH_LOW_RATIO_UNAVAILABLE_REASON = "polygon_high_low_ratio_unavailable"
+_POLYGON_TRANSPORT_REASON_KEY = "_polygonTransportReason"
 
 _AD_FULFILLED_METRICS = (
     "ADVANCERS",
@@ -112,6 +116,8 @@ def run_polygon_us_breadth_activation(
     high_low_lookback_sessions: int = POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
     min_high_low_eligible_count: int = POLYGON_HIGH_LOW_MIN_ELIGIBLE_COUNT,
     timeout_seconds: float = POLYGON_US_BREADTH_TIMEOUT_SECONDS,
+    high_low_max_history_sessions: int | None = None,
+    high_low_timeout_budget_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Fetch recent grouped daily rows and return a sanitized activation summary."""
 
@@ -123,13 +129,45 @@ def run_polygon_us_breadth_activation(
             provider_constructed=False,
         )
 
+    required_lookback_sessions = _positive_int_or_default(
+        high_low_lookback_sessions,
+        default=POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
+    )
+    request_timeout_seconds = _positive_float_or_default(
+        timeout_seconds,
+        default=POLYGON_US_BREADTH_TIMEOUT_SECONDS,
+        minimum=0.1,
+    )
+    diagnostic_session_cap = _optional_positive_int(high_low_max_history_sessions)
+    history_session_limit = (
+        min(required_lookback_sessions, diagnostic_session_cap)
+        if diagnostic_session_cap is not None
+        else required_lookback_sessions
+    )
+    timeout_budget_seconds = _optional_positive_float(high_low_timeout_budget_seconds)
+    started_at = monotonic() if timeout_budget_seconds is not None else None
+    diagnostic_controls_enabled = diagnostic_session_cap is not None or timeout_budget_seconds is not None
+
     fetch = transport or _default_polygon_transport
     fetched_payloads: dict[str, tuple[int, Mapping[str, Any] | None]] = {}
 
     def fetch_grouped_daily(candidate_date: str) -> tuple[int, Mapping[str, Any] | None]:
         if candidate_date not in fetched_payloads:
-            fetched_payloads[candidate_date] = fetch(candidate_date, credential, timeout_seconds)
+            try:
+                fetched_payloads[candidate_date] = fetch(candidate_date, credential, request_timeout_seconds)
+            except (TimeoutError, URLError, OSError):
+                fetched_payloads[candidate_date] = (
+                    0,
+                    {_POLYGON_TRANSPORT_REASON_KEY: POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON},
+                )
         return fetched_payloads[candidate_date]
+
+    def high_low_budget_expired() -> bool:
+        return bool(
+            started_at is not None
+            and timeout_budget_seconds is not None
+            and monotonic() - started_at >= timeout_budget_seconds
+        )
 
     candidates = recent_completed_us_trading_dates(now=now)
     latest_payload: Mapping[str, Any] | None = None
@@ -138,6 +176,9 @@ def run_polygon_us_breadth_activation(
     latest_index = -1
 
     for index, candidate in enumerate(candidates):
+        if diagnostic_controls_enabled and high_low_budget_expired():
+            latest_reason = POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON
+            break
         status_code, payload = fetch_grouped_daily(candidate)
         if status_code in {401, 403}:
             return _fail_closed_summary(
@@ -146,6 +187,10 @@ def run_polygon_us_breadth_activation(
                 provider_constructed=True,
                 observation_date=candidate,
             )
+        transport_reason = _transport_failure_reason(payload)
+        if status_code == 0 and diagnostic_controls_enabled and transport_reason:
+            latest_reason = transport_reason
+            break
         parsed = parse_polygon_grouped_daily_payload(payload)
         if status_code == 200 and parsed.ok:
             latest_payload = payload
@@ -164,7 +209,22 @@ def run_polygon_us_breadth_activation(
     previous_payload: Mapping[str, Any] | None = None
     previous_date: str | None = None
     for candidate in candidates[latest_index + 1 :]:
+        if diagnostic_controls_enabled and high_low_budget_expired():
+            return _fail_closed_summary(
+                reason_codes=(POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON,),
+                credentials_present=True,
+                provider_constructed=True,
+                observation_date=latest_date,
+            )
         status_code, payload = fetch_grouped_daily(candidate)
+        transport_reason = _transport_failure_reason(payload)
+        if status_code == 0 and diagnostic_controls_enabled and transport_reason:
+            return _fail_closed_summary(
+                reason_codes=(transport_reason,),
+                credentials_present=True,
+                provider_constructed=True,
+                observation_date=latest_date,
+            )
         if status_code != 200:
             continue
         parsed = parse_polygon_grouped_daily_payload(payload)
@@ -174,17 +234,36 @@ def run_polygon_us_breadth_activation(
             break
 
     historical_payloads: tuple[tuple[str, Mapping[str, Any] | None], ...] | None = None
+    high_low_diagnostic_reason: str | None = None
+    high_low_diagnostic_fulfilled_sessions: int | None = None
     if previous_payload is not None and previous_date:
         history_items: list[tuple[str, Mapping[str, Any] | None]] = []
+        successful_history_sessions = 0
         for history_date in prior_completed_us_trading_dates(
             latest_date,
-            limit=high_low_lookback_sessions,
+            limit=history_session_limit,
         ):
+            if diagnostic_controls_enabled and high_low_budget_expired():
+                high_low_diagnostic_reason = POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON
+                break
             status_code, payload = fetch_grouped_daily(history_date)
+            transport_reason = _transport_failure_reason(payload)
+            if status_code == 0 and diagnostic_controls_enabled and transport_reason:
+                high_low_diagnostic_reason = transport_reason
+                break
+            if status_code == 200:
+                successful_history_sessions += 1
             history_items.append((history_date, payload if status_code == 200 else None))
         historical_payloads = tuple(history_items)
+        high_low_diagnostic_fulfilled_sessions = successful_history_sessions
+        if (
+            high_low_diagnostic_reason is None
+            and diagnostic_session_cap is not None
+            and history_session_limit < required_lookback_sessions
+        ):
+            high_low_diagnostic_reason = POLYGON_HIGH_LOW_HISTORY_DIAGNOSTIC_SESSION_CAP_REASON
 
-    return compute_polygon_us_breadth(
+    result = compute_polygon_us_breadth(
         latest_payload,
         previous_payload=previous_payload,
         historical_payloads=historical_payloads,
@@ -192,10 +271,20 @@ def run_polygon_us_breadth_activation(
         previous_observation_date=previous_date,
         now=now,
         min_coverage_count=min_coverage_count,
-        high_low_lookback_sessions=high_low_lookback_sessions,
+        high_low_lookback_sessions=required_lookback_sessions,
         min_high_low_eligible_count=min_high_low_eligible_count,
         credentials_present=True,
         provider_constructed=True,
+    )
+    if not diagnostic_controls_enabled:
+        return result
+    return _apply_high_low_diagnostics(
+        result,
+        diagnostic_reason=high_low_diagnostic_reason,
+        fulfilled_sessions=high_low_diagnostic_fulfilled_sessions,
+        session_cap=diagnostic_session_cap,
+        timeout_budget_seconds=timeout_budget_seconds,
+        per_request_timeout_seconds=request_timeout_seconds,
     )
 
 
@@ -654,7 +743,7 @@ def _count_matching_prefix(expected_dates: Sequence[str], actual_dates: Sequence
 def diagnostic_summary(result: Mapping[str, Any]) -> dict[str, Any]:
     """Return the bounded JSON shape used by the operator diagnostic script."""
 
-    return {
+    summary = {
         "credentialsPresent": bool(result.get("credentialsPresent")),
         "providerConstructed": bool(result.get("providerConstructed")),
         "probePassed": bool(result.get("probePassed")),
@@ -680,6 +769,74 @@ def diagnostic_summary(result: Mapping[str, Any]) -> dict[str, Any]:
         "missingMetrics": list(result.get("missingMetrics") or []),
         "reasonCodes": list(result.get("reasonCodes") or []),
     }
+    for key in (
+        "perRequestTimeoutSeconds",
+        "timeoutBudgetSeconds",
+        "diagnosticSessionCap",
+    ):
+        if key in result:
+            summary[key] = result.get(key)
+    return summary
+
+
+def _apply_high_low_diagnostics(
+    result: Mapping[str, Any],
+    *,
+    diagnostic_reason: str | None,
+    fulfilled_sessions: int | None,
+    session_cap: int | None,
+    timeout_budget_seconds: float | None,
+    per_request_timeout_seconds: float,
+) -> dict[str, Any]:
+    updated = dict(result)
+    updated["perRequestTimeoutSeconds"] = per_request_timeout_seconds
+    updated["timeoutBudgetSeconds"] = timeout_budget_seconds
+    updated["diagnosticSessionCap"] = session_cap
+    if diagnostic_reason:
+        updated["highLowFulfilledSessions"] = max(0, int(fulfilled_sessions or 0))
+        updated["reasonCodes"] = _replace_high_low_reason_codes(
+            result.get("reasonCodes") or [],
+            diagnostic_reason,
+        )
+        missing_metrics = list(result.get("missingMetrics") or [])
+        for metric in _HIGH_LOW_METRICS:
+            if metric not in missing_metrics:
+                missing_metrics.append(metric)
+        updated["missingMetrics"] = missing_metrics
+    return updated
+
+
+def _replace_high_low_reason_codes(reason_codes: Sequence[Any], replacement: str) -> list[str]:
+    replaced: list[str] = []
+    inserted = False
+    for raw_reason in reason_codes:
+        reason = str(raw_reason)
+        if reason in {
+            POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
+            POLYGON_HIGH_LOW_HISTORY_MALFORMED_REASON,
+            POLYGON_HIGH_LOW_HISTORY_MIXED_SOURCE_REASON,
+            POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON,
+            POLYGON_HIGH_LOW_HISTORY_DATE_GAP_REASON,
+            POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON,
+            POLYGON_HIGH_LOW_HISTORY_DIAGNOSTIC_SESSION_CAP_REASON,
+            POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON,
+            POLYGON_HIGH_LOW_RATIO_UNAVAILABLE_REASON,
+        }:
+            if not inserted:
+                replaced.append(replacement)
+                inserted = True
+            continue
+        replaced.append(reason)
+    if not inserted:
+        replaced.append(replacement)
+    return replaced
+
+
+def _transport_failure_reason(payload: Mapping[str, Any] | None) -> str | None:
+    if not isinstance(payload, Mapping):
+        return None
+    reason = _text(payload.get(_POLYGON_TRANSPORT_REASON_KEY))
+    return reason or None
 
 
 def _default_polygon_transport(
@@ -704,7 +861,13 @@ def _default_polygon_transport(
         raw = exc.read(POLYGON_US_BREADTH_MAX_RESPONSE_BYTES + 1)
         payload = _parse_json_bytes(raw) if raw else None
         return int(exc.code), payload
-    except (TimeoutError, URLError, OSError, ValueError, json.JSONDecodeError):
+    except TimeoutError:
+        return 0, {_POLYGON_TRANSPORT_REASON_KEY: POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON}
+    except URLError as exc:
+        if isinstance(getattr(exc, "reason", None), TimeoutError):
+            return 0, {_POLYGON_TRANSPORT_REASON_KEY: POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON}
+        return 0, None
+    except (OSError, ValueError, json.JSONDecodeError):
         return 0, None
 
 
@@ -808,12 +971,34 @@ def _parse_int(value: Any) -> int | None:
     return parsed if parsed >= 0 else None
 
 
+def _positive_int_or_default(value: Any, *, default: int) -> int:
+    parsed = _parse_int(value)
+    return parsed if parsed and parsed > 0 else max(1, int(default))
+
+
+def _optional_positive_int(value: Any) -> int | None:
+    parsed = _parse_int(value)
+    return parsed if parsed and parsed > 0 else None
+
+
 def _parse_finite_float(value: Any) -> float | None:
     try:
         parsed = float(value)
     except (TypeError, ValueError):
         return None
     return parsed if math.isfinite(parsed) else None
+
+
+def _positive_float_or_default(value: Any, *, default: float, minimum: float) -> float:
+    parsed = _parse_finite_float(value)
+    if parsed is None or parsed <= 0:
+        parsed = float(default)
+    return max(float(minimum), parsed)
+
+
+def _optional_positive_float(value: Any) -> float | None:
+    parsed = _parse_finite_float(value)
+    return parsed if parsed is not None and parsed > 0 else None
 
 
 def _first_present(mapping: Mapping[str, Any], *keys: str) -> Any:
@@ -847,9 +1032,11 @@ __all__ = [
     "POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON",
     "POLYGON_HIGH_LOW_HISTORY_BELOW_THRESHOLD_REASON",
     "POLYGON_HIGH_LOW_HISTORY_DATE_GAP_REASON",
+    "POLYGON_HIGH_LOW_HISTORY_DIAGNOSTIC_SESSION_CAP_REASON",
     "POLYGON_HIGH_LOW_HISTORY_INSUFFICIENT_LOOKBACK_REASON",
     "POLYGON_HIGH_LOW_HISTORY_MALFORMED_REASON",
     "POLYGON_HIGH_LOW_HISTORY_MIXED_SOURCE_REASON",
+    "POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON",
     "POLYGON_HIGH_LOW_LOOKBACK_SESSIONS",
     "POLYGON_HIGH_LOW_MIN_ELIGIBLE_COUNT",
     "POLYGON_HIGH_LOW_RATIO_UNAVAILABLE_REASON",
