@@ -40,10 +40,10 @@ const PANEL_CLASS = 'rounded-xl border border-white/5 bg-black/20 p-3';
 
 function parseSymbolInput(value: string): string[] {
   return Array.from(new Set(
-    value
-      .split(/[,\s]+/)
-      .map((item) => item.trim().toUpperCase())
-      .filter(Boolean),
+    value.split(/[,\s]+/).flatMap((item) => {
+      const symbol = item.trim().toUpperCase();
+      return symbol ? [symbol] : [];
+    }),
   )).slice(0, 5);
 }
 

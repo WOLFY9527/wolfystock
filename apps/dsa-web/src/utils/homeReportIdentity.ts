@@ -34,7 +34,7 @@ function isPlaceholderName(value: string): boolean {
     || normalized === '待确认股票';
 }
 
-export function dedupeTickerFromName(value: unknown, ticker: string): string {
+function dedupeTickerFromName(value: unknown, ticker: string): string {
   const text = String(value || '').trim();
   const normalizedTicker = normalizeTickerQuery(ticker);
   if (!text || !normalizedTicker) {
@@ -79,7 +79,7 @@ export function getSymbolDisplay(result: unknown): string {
   return normalizeTickerQuery(String(direct || '')) || EMPTY_FIELD_VALUE;
 }
 
-export function getCompanyName(result: unknown): string | null {
+function getCompanyName(result: unknown): string | null {
   const ticker = getSymbolDisplay(result);
   const candidates = [
     readObjectField(result, ['meta', 'companyName']),

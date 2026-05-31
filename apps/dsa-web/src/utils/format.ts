@@ -103,7 +103,7 @@ function formatNumberLike(value: unknown, options: NumberFormatOptions, extra: I
   return getNumberFormat(locale, opts).format(numeric);
 }
 
-export const SHANGHAI_DATE_FMT = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' });
+const SHANGHAI_DATE_FMT = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' });
 
 export function formatMissing(value?: unknown): string {
   void value;

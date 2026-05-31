@@ -155,7 +155,7 @@ function isEnabledValue(value: string | undefined): boolean {
   return !FALSE_VALUES.has(normalized);
 }
 
-export function statusFromBooleanConfig(value: string | undefined): SettingsEnabledState {
+function statusFromBooleanConfig(value: string | undefined): SettingsEnabledState {
   if (typeof value === 'undefined') return 'unknown';
   return isEnabledValue(value) ? 'enabled' : 'disabled';
 }
