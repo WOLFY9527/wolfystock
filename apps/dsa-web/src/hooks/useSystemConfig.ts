@@ -67,7 +67,8 @@ function sanitizeConfigItems(items: SystemConfigItem[]): SystemConfigItem[] {
 }
 
 function sortItemsByOrder(items: SystemConfigItem[]): SystemConfigItem[] {
-  return [...items].sort((a, b) => {
+  const sortedItems = [...items];
+  sortedItems.sort((a, b) => {
     const left = a.schema?.displayOrder ?? 9999;
     const right = b.schema?.displayOrder ?? 9999;
     if (left !== right) {
@@ -75,6 +76,7 @@ function sortItemsByOrder(items: SystemConfigItem[]): SystemConfigItem[] {
     }
     return a.key.localeCompare(b.key);
   });
+  return sortedItems;
 }
 
 function isMultiValueSchema(schema: SystemConfigItem['schema'] | undefined): boolean {
@@ -93,6 +95,13 @@ function normalizeFieldValue(value: string, schema: SystemConfigItem['schema'] |
     .filter((entry) => entry.length > 0)
     .join(',');
 }
+
+function setAdminUnlockSession(token: string, expiresAt: number) {
+  void token;
+  void expiresAt;
+}
+
+function clearAdminUnlockSession() {}
 
 export function useSystemConfig() {
   // Server state
@@ -160,7 +169,9 @@ export function useSystemConfig() {
       categoryMap.get(category)?.fields.push(item.schema);
     }
 
-    return [...categoryMap.values()].sort((a, b) => a.displayOrder - b.displayOrder);
+    const sortedCategories = [...categoryMap.values()];
+    sortedCategories.sort((a, b) => a.displayOrder - b.displayOrder);
+    return sortedCategories;
   })();
 
   const itemsByCategory = (() => {
@@ -303,13 +314,6 @@ export function useSystemConfig() {
       return acc;
     }, []);
   };
-
-  const setAdminUnlockSession = (token: string, expiresAt: number) => {
-    void token;
-    void expiresAt;
-  };
-
-  const clearAdminUnlockSession = () => {};
 
   const persistItems = async (
     changedItems: SystemConfigUpdateItem[],
