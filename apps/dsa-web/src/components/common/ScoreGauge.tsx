@@ -12,6 +12,33 @@ interface ScoreGaugeProps {
   language?: ReportLanguage;
 }
 
+const SCORE_GAUGE_SIZE_CONFIG = {
+  sm: { width: 104, stroke: 8, fontSize: 'text-[1.9rem]', labelSize: 'text-xs' },
+  md: { width: 136, stroke: 9, fontSize: 'text-[2.4rem]', labelSize: 'text-sm' },
+  lg: { width: 168, stroke: 10, fontSize: 'text-[2.9rem]', labelSize: 'text-[0.95rem]' },
+} as const;
+
+const SCORE_GAUGE_SENTIMENT_CONFIG = {
+  greed: {
+    color: 'var(--theme-chart-bull)',
+    ring: 'rgba(29, 129, 76, 0.12)',
+  },
+  neutral: {
+    color: 'var(--cohere-blue)',
+    ring: 'rgba(24, 99, 220, 0.12)',
+  },
+  fear: {
+    color: 'var(--theme-chart-bear)',
+    ring: 'rgba(164, 54, 54, 0.12)',
+  },
+} as const;
+
+function getScoreGaugeSentimentKey(score: number): 'greed' | 'neutral' | 'fear' {
+  if (score >= 60) return 'greed';
+  if (score >= 40) return 'neutral';
+  return 'fear';
+}
+
 /**
  * Sentiment score gauge aligned to the shared product design system.
  */
@@ -66,14 +93,7 @@ export const ScoreGauge: React.FC<ScoreGaugeProps> = ({
   const text = getReportText(reportLanguage);
   const label = getSentimentLabel(score, reportLanguage);
 
-  // Size configuration for each gauge variant.
-  const sizeConfig = {
-    sm: { width: 104, stroke: 8, fontSize: 'text-[1.9rem]', labelSize: 'text-xs' },
-    md: { width: 136, stroke: 9, fontSize: 'text-[2.4rem]', labelSize: 'text-sm' },
-    lg: { width: 168, stroke: 10, fontSize: 'text-[2.9rem]', labelSize: 'text-[0.95rem]' },
-  };
-
-  const { width, stroke, fontSize, labelSize } = sizeConfig[size];
+  const { width, stroke, fontSize, labelSize } = SCORE_GAUGE_SIZE_CONFIG[size];
   const radius = (width - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
 
@@ -81,30 +101,8 @@ export const ScoreGauge: React.FC<ScoreGaugeProps> = ({
   const arcLength = circumference * 0.75;
   const progress = (animatedScore / 100) * arcLength;
 
-  const sentimentConfig = {
-    greed: {
-      color: 'var(--theme-chart-bull)',
-      ring: 'rgba(29, 129, 76, 0.12)',
-    },
-    neutral: {
-      color: 'var(--cohere-blue)',
-      ring: 'rgba(24, 99, 220, 0.12)',
-    },
-    fear: {
-      color: 'var(--theme-chart-bear)',
-      ring: 'rgba(164, 54, 54, 0.12)',
-    },
-  };
-
-  // Map score to sentiment key
-  const getSentimentKey = (s: number): 'greed' | 'neutral' | 'fear' => {
-    if (s >= 60) return 'greed';
-    if (s >= 40) return 'neutral';
-    return 'fear';
-  };
-
-  const sentimentKey = getSentimentKey(animatedScore);
-  const colors = sentimentConfig[sentimentKey];
+  const sentimentKey = getScoreGaugeSentimentKey(animatedScore);
+  const colors = SCORE_GAUGE_SENTIMENT_CONFIG[sentimentKey];
   const trackColor = 'var(--theme-table-border)';
 
   return (

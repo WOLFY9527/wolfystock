@@ -229,6 +229,19 @@ const DENSE_QUOTE_MODULES = new Set<MarketOverviewModuleId>([
   'cryptoRiskContext',
 ]);
 
+const MODULE_CARD_TEST_ID: Partial<Record<MarketOverviewModuleId, string>> = {
+  globalIndices: 'indices',
+  usIndices: 'indices',
+  cnHkIndices: 'cnIndices',
+  cryptoSnapshot: 'crypto',
+  cnSnapshot: 'cnIndices',
+  shortSentiment: 'cnShortSentiment',
+  macroRates: 'rates',
+  macroFxCommodities: 'fxCommodities',
+  usSentiment: 'sentiment',
+  cryptoSentiment: 'sentiment',
+};
+
 const US_BREADTH_AD_SYMBOLS = ['ADVANCERS', 'DECLINERS', 'UNCHANGED', 'ADVANCE_DECLINE_RATIO'];
 const US_BREADTH_HIGH_LOW_SYMBOLS = ['NEW_HIGHS', 'NEW_LOWS', 'HIGH_LOW_RATIO'];
 const US_BREADTH_ALL_SYMBOLS = [...US_BREADTH_AD_SYMBOLS, ...US_BREADTH_HIGH_LOW_SYMBOLS];
@@ -2037,8 +2050,7 @@ export type MarketOverviewWorkbenchProps = {
   onRefreshPanel: (panelKey: PanelKey) => void;
 };
 
-export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = ({
-  heading,
+function useMarketOverviewWorkbenchModel({
   panels,
   loading,
   localSnapshotSavedAt,
@@ -2046,9 +2058,8 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
   refreshingPanel,
   cryptoRealtimeStatus,
   isCnShortSentimentBootstrapping,
-  showAdminDiagnostics = false,
   onRefreshPanel,
-}) => {
+}: Omit<MarketOverviewWorkbenchProps, 'heading' | 'showAdminDiagnostics'>) {
   const { language, t } = useI18n();
   const [activeCategory, setActiveCategory] = useState<MarketOverviewTab>('all');
   const [exportSummaryFeedback, setExportSummaryFeedback] = useState<string | null>(null);
@@ -2483,22 +2494,9 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     return Boolean(panel?.errorMessage || (panel?.items?.length || 0) > 0);
   };
 
-  const moduleCardTestId: Partial<Record<MarketOverviewModuleId, string>> = {
-    globalIndices: 'indices',
-    usIndices: 'indices',
-    cnHkIndices: 'cnIndices',
-    cryptoSnapshot: 'crypto',
-    cnSnapshot: 'cnIndices',
-    shortSentiment: 'cnShortSentiment',
-    macroRates: 'rates',
-    macroFxCommodities: 'fxCommodities',
-    usSentiment: 'sentiment',
-    cryptoSentiment: 'sentiment',
-  };
-
   const renderModule = (moduleId: MarketOverviewModuleId, rank: number, rail: WorkbenchRail = 'hero') => {
     const layoutMeta = MODULE_LAYOUT_META[moduleId];
-    const cardTestId = moduleCardTestId[moduleId] || moduleId;
+    const cardTestId = MODULE_CARD_TEST_ID[moduleId] || moduleId;
     return (
       <div
         key={moduleId}
@@ -2536,9 +2534,10 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     );
   };
 
-  const handleExportSummary = async () => {
-    await navigator.clipboard.writeText(exportSummaryText);
-    setExportSummaryFeedback(language === 'en' ? 'Summary copied' : '已复制摘要');
+  const handleExportSummary = () => {
+    void navigator.clipboard.writeText(exportSummaryText).then(() => {
+      setExportSummaryFeedback(language === 'en' ? 'Summary copied' : '已复制摘要');
+    });
   };
 
   const topLevelDataStatus = summarizeTopLevelDataStatus({
@@ -2689,6 +2688,66 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
   const secondaryRows = activeRows.reduce<React.ReactNode[]>((acc, row, index) => { if (row.tier === 'secondary') { const node = renderPlannedRow(row, index); if (node) acc.push(node); } return acc; }, []);
   const deepRows = activeRows.reduce<React.ReactNode[]>((acc, row, index) => { if (row.tier === 'deep') { const node = renderPlannedRow(row, index); if (node) acc.push(node); } return acc; }, []);
 
+  return {
+    language,
+    activeCategory,
+    categoryTabs,
+    setActiveCategory,
+    handleExportSummary,
+    exportLabel: exportSummaryFeedback || (language === 'en' ? 'Export' : '复制摘要'),
+    directionalSummaryView,
+    regimeSynthesisView,
+    marketDecision,
+    decisionReliable,
+    decisionSemanticsView,
+    dataStateView,
+    temperatureSummary,
+    briefingSummary,
+    officialMacroRecords,
+    heroAnchorViews,
+    showContextRail: activeTabConfig.rail.length > 0,
+    contextHighlights,
+    executiveGroups,
+    showExecutiveGroups: activeCategory === 'all',
+    heroRows,
+    secondaryRows,
+    deepRows,
+    showDeepSection: activeRows.some((row) => row.tier === 'deep') || activeCategory === 'all',
+  };
+}
+
+export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = ({
+  heading,
+  showAdminDiagnostics = false,
+  ...modelProps
+}) => {
+  const {
+    language,
+    activeCategory,
+    categoryTabs,
+    setActiveCategory,
+    handleExportSummary,
+    exportLabel,
+    directionalSummaryView,
+    regimeSynthesisView,
+    marketDecision,
+    decisionReliable,
+    decisionSemanticsView,
+    dataStateView,
+    temperatureSummary,
+    briefingSummary,
+    officialMacroRecords,
+    heroAnchorViews,
+    showContextRail,
+    contextHighlights,
+    executiveGroups,
+    showExecutiveGroups,
+    heroRows,
+    secondaryRows,
+    deepRows,
+    showDeepSection,
+  } = useMarketOverviewWorkbenchModel(modelProps);
+
   return (
     <div
       data-testid="market-overview-shell"
@@ -2711,10 +2770,8 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
           categoryTabs={categoryTabs}
           activeCategory={activeCategory}
           onCategoryChange={setActiveCategory}
-          exportLabel={exportSummaryFeedback || (language === 'en' ? 'Export' : '复制摘要')}
-          onExportSummary={() => {
-            void handleExportSummary();
-          }}
+          exportLabel={exportLabel}
+          onExportSummary={handleExportSummary}
           heroAnchors={heroAnchorViews}
           showAdminDiagnostics={showAdminDiagnostics}
         />
@@ -2723,11 +2780,11 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
             heroRows={heroRows}
             secondaryRows={secondaryRows}
             deepRows={deepRows}
-            showDeepSection={activeRows.some((row) => row.tier === 'deep') || activeCategory === 'all'}
-            showContextRail={activeTabConfig.rail.length > 0}
+            showDeepSection={showDeepSection}
+            showContextRail={showContextRail}
             contextHighlights={contextHighlights}
             executiveGroups={executiveGroups}
-            showExecutiveGroups={activeCategory === 'all'}
+            showExecutiveGroups={showExecutiveGroups}
           />
         </Suspense>
       </ConsumerWorkspacePageShell>

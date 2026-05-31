@@ -715,10 +715,13 @@ function subscribeToCryptoStream(subscriber: CryptoStreamSubscriber): () => void
   };
 }
 
-const MarketOverviewPage = () => {
+function useMarketOverviewPageModel() {
   const { language } = useI18n();
   const { isAdminMode, canReadProviders } = useProductSurface();
-  const initialLocalSnapshotRef = useRef(buildInitialPanelsFromLocalSnapshot());
+  const initialLocalSnapshotRef = useRef<ReturnType<typeof buildInitialPanelsFromLocalSnapshot> | null>(null);
+  if (initialLocalSnapshotRef.current === null) {
+    initialLocalSnapshotRef.current = buildInitialPanelsFromLocalSnapshot();
+  }
   const initialLocalSnapshot = initialLocalSnapshotRef.current;
   const [panels, setPanels] = useState<PanelState>(initialLocalSnapshot.panels);
   const [uiState, dispatchUiState] = useReducer(reduceMarketOverviewUiState, {
@@ -997,6 +1000,34 @@ const MarketOverviewPage = () => {
     void refreshPanel(panelKey, loadPanel);
   };
 
+  return {
+    cryptoRealtimeStatus,
+    handleWorkbenchRefresh,
+    isCnShortSentimentBootstrapping: loading && panels.cnShortSentiment === FALLBACK_CN_SHORT_SENTIMENT,
+    language,
+    loading,
+    localSnapshotSavedAt,
+    panels,
+    refreshErrorCount: Object.keys(refreshErrors).length,
+    refreshingPanel,
+    showAdminDiagnostics: isAdminMode && canReadProviders,
+  };
+}
+
+const MarketOverviewPage = () => {
+  const {
+    cryptoRealtimeStatus,
+    handleWorkbenchRefresh,
+    isCnShortSentimentBootstrapping,
+    language,
+    loading,
+    localSnapshotSavedAt,
+    panels,
+    refreshErrorCount,
+    refreshingPanel,
+    showAdminDiagnostics,
+  } = useMarketOverviewPageModel();
+
   return (
     <ConsumerWorkspaceScope className="min-h-0 flex-1">
       <MarketOverviewWorkbench
@@ -1004,11 +1035,11 @@ const MarketOverviewPage = () => {
         panels={panels}
         loading={loading}
         localSnapshotSavedAt={localSnapshotSavedAt}
-        refreshErrorCount={Object.keys(refreshErrors).length}
+        refreshErrorCount={refreshErrorCount}
         refreshingPanel={refreshingPanel}
         cryptoRealtimeStatus={cryptoRealtimeStatus}
-        isCnShortSentimentBootstrapping={loading && panels.cnShortSentiment === FALLBACK_CN_SHORT_SENTIMENT}
-        showAdminDiagnostics={isAdminMode && canReadProviders}
+        isCnShortSentimentBootstrapping={isCnShortSentimentBootstrapping}
+        showAdminDiagnostics={showAdminDiagnostics}
         onRefreshPanel={handleWorkbenchRefresh}
       />
     </ConsumerWorkspaceScope>

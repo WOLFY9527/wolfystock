@@ -65,9 +65,17 @@ export function useScannerBacktestLab({
 }) {
   const [backtestItemsBySymbol, setBacktestItemsBySymbol] = useState<Record<string, ScannerBacktestItem>>({});
   const [isBacktestBatchRunning, setIsBacktestBatchRunning] = useState(false);
-  const inFlightBacktestKeysRef = useRef<Set<string>>(new Set());
-  const completedBacktestKeysRef = useRef<Map<string, ScannerBacktestItem>>(new Map());
+  const inFlightBacktestKeysRef = useRef<Set<string> | null>(null);
+  const completedBacktestKeysRef = useRef<Map<string, ScannerBacktestItem> | null>(null);
   const runtimeRef = useRef<Promise<ScannerBacktestRuntime> | null>(null);
+  if (inFlightBacktestKeysRef.current === null) {
+    inFlightBacktestKeysRef.current = new Set();
+  }
+  if (completedBacktestKeysRef.current === null) {
+    completedBacktestKeysRef.current = new Map();
+  }
+  const inFlightBacktestKeys = inFlightBacktestKeysRef.current;
+  const completedBacktestKeys = completedBacktestKeysRef.current;
 
   const backtestItems = Object.values(backtestItemsBySymbol).sort((left, right) => left.symbol.localeCompare(right.symbol));
 
@@ -95,7 +103,7 @@ export function useScannerBacktestLab({
       const symbol = normalizeCandidateSymbol(candidate.symbol);
       if (!symbol) return;
       const key = getScannerBacktestKey(symbol);
-      const existing = completedBacktestKeysRef.current.get(key);
+      const existing = completedBacktestKeys.get(key);
       if (existing) {
         setBacktestItemsBySymbol((current) => ({
           ...current,
@@ -103,8 +111,8 @@ export function useScannerBacktestLab({
         }));
         return;
       }
-      if (inFlightBacktestKeysRef.current.has(key)) return;
-      inFlightBacktestKeysRef.current.add(key);
+      if (inFlightBacktestKeys.has(key)) return;
+      inFlightBacktestKeys.add(key);
       queue.push({ ...candidate, symbol });
       setBacktestItemsBySymbol((current) => ({
         ...current,
@@ -144,7 +152,7 @@ export function useScannerBacktestLab({
           waitForCompletion: true,
         });
         const item = mapRuleRunToScannerBacktestItem(response, response.status === 'failed' ? 'failed' : 'completed');
-        completedBacktestKeysRef.current.set(key, item);
+        completedBacktestKeys.set(key, item);
         setBacktestItemsBySymbol((current) => ({
           ...current,
           [symbol]: item,
@@ -159,15 +167,19 @@ export function useScannerBacktestLab({
           },
         }));
       } finally {
-        inFlightBacktestKeysRef.current.delete(key);
+        inFlightBacktestKeys.delete(key);
       }
     };
 
     if (source !== 'manual') setIsBacktestBatchRunning(true);
     try {
-      for (let index = 0; index < queue.length; index += SCANNER_BACKTEST_CONCURRENCY) {
-        await Promise.all(queue.slice(index, index + SCANNER_BACKTEST_CONCURRENCY).map(runOne));
-      }
+      const runBatch = async (startIndex: number): Promise<void> => {
+        if (startIndex >= queue.length) return;
+        await Promise.all(queue.slice(startIndex, startIndex + SCANNER_BACKTEST_CONCURRENCY).map(runOne));
+        await runBatch(startIndex + SCANNER_BACKTEST_CONCURRENCY);
+      };
+
+      await runBatch(0);
     } finally {
       if (source !== 'manual') setIsBacktestBatchRunning(false);
     }

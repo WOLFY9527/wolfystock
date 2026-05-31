@@ -11,6 +11,19 @@ interface CardProps {
   padding?: 'none' | 'sm' | 'md' | 'lg';
 }
 
+const CARD_PADDING_STYLES = {
+  none: '',
+  sm: 'p-4 md:p-5',
+  md: 'p-5 md:p-6',
+  lg: 'p-6 md:p-7',
+} as const;
+
+const CARD_VARIANT_STYLES = {
+  default: 'theme-panel-solid',
+  bordered: 'theme-panel-subtle',
+  gradient: 'theme-panel-band',
+} as const;
+
 /**
  * Card component aligned to the shared product design system.
  */
@@ -23,28 +36,15 @@ export const Card: React.FC<CardProps> = ({
   hoverable = false,
   padding = 'md',
 }) => {
-  const paddingStyles = {
-    none: '',
-    sm: 'p-4 md:p-5',
-    md: 'p-5 md:p-6',
-    lg: 'p-6 md:p-7',
-  };
-
-  const variantStyles = {
-    default: 'theme-panel-solid',
-    bordered: 'theme-panel-subtle',
-    gradient: 'theme-panel-band',
-  };
-
   const hoverStyles = hoverable ? 'theme-card-hover cursor-pointer' : '';
 
   return (
     <div
       className={cn(
         'theme-card-surface rounded-[var(--theme-panel-radius-lg)]',
-        variantStyles[variant],
+        CARD_VARIANT_STYLES[variant],
         hoverStyles,
-        paddingStyles[padding],
+        CARD_PADDING_STYLES[padding],
         className,
       )}
     >

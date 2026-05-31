@@ -62,6 +62,16 @@ export interface UseTaskStreamResult {
   disconnect: () => void;
 }
 
+function parseTaskStreamEventData(eventData: string): TaskInfo | null {
+  try {
+    const data = JSON.parse(eventData);
+    return toCamelCase<TaskInfo>(data);
+  } catch (error) {
+    console.error('Failed to parse SSE event data:', error);
+    return null;
+  }
+}
+
 /**
  * Task-stream SSE hook for realtime task status updates.
  */
@@ -81,22 +91,16 @@ export function useTaskStream(options: UseTaskStreamOptions = {}): UseTaskStream
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const isConnectedRef = useRef(false);
-  const listenersRef = useRef(new Set<() => void>());
+  const listenersRef = useRef<Set<() => void> | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectRef = useRef<() => void>(() => {});
   const disconnectRef = useRef<() => void>(() => {});
-  const notifyConnectionChange = (nextValue: boolean) => {
-    if (isConnectedRef.current === nextValue) {
-      return;
-    }
-    isConnectedRef.current = nextValue;
-    listenersRef.current.forEach((listener) => listener());
-  };
   const isConnected = useSyncExternalStore(
     (listener) => {
-      listenersRef.current.add(listener);
+      const listeners = listenersRef.current ?? (listenersRef.current = new Set());
+      listeners.add(listener);
       return () => {
-        listenersRef.current.delete(listener);
+        listeners.delete(listener);
       };
     },
     () => (enabled ? isConnectedRef.current : false),
@@ -127,19 +131,20 @@ export function useTaskStream(options: UseTaskStreamOptions = {}): UseTaskStream
     };
   });
 
-  // Parse an SSE payload.
-  const parseEventData = (eventData: string): TaskInfo | null => {
-    try {
-      const data = JSON.parse(eventData);
-      return toCamelCase<TaskInfo>(data);
-    } catch (e) {
-      console.error('Failed to parse SSE event data:', e);
-      return null;
-    }
-  };
-
   // Connect or disconnect when the hook is enabled or disabled.
   useEffect(() => {
+    const notifyConnectionChange = (nextValue: boolean) => {
+      if (isConnectedRef.current === nextValue) {
+        return;
+      }
+      isConnectedRef.current = nextValue;
+      const listeners = listenersRef.current;
+      if (!listeners) {
+        return;
+      }
+      listeners.forEach((listener) => listener());
+    };
+
     const doConnect = () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
@@ -157,31 +162,31 @@ export function useTaskStream(options: UseTaskStreamOptions = {}): UseTaskStream
 
       // Task created event
       eventSource.addEventListener('task_created', (e) => {
-        const task = parseEventData(e.data);
+        const task = parseTaskStreamEventData(e.data);
         if (task) callbacksRef.current.onTaskCreated?.(task);
       });
 
       // Task started event
       eventSource.addEventListener('task_started', (e) => {
-        const task = parseEventData(e.data);
+        const task = parseTaskStreamEventData(e.data);
         if (task) callbacksRef.current.onTaskStarted?.(task);
       });
 
       // Task updated event
       eventSource.addEventListener('task_updated', (e) => {
-        const task = parseEventData(e.data);
+        const task = parseTaskStreamEventData(e.data);
         if (task) callbacksRef.current.onTaskUpdated?.(task);
       });
 
       // Task completed event
       eventSource.addEventListener('task_completed', (e) => {
-        const task = parseEventData(e.data);
+        const task = parseTaskStreamEventData(e.data);
         if (task) callbacksRef.current.onTaskCompleted?.(task);
       });
 
       // Task failed event
       eventSource.addEventListener('task_failed', (e) => {
-        const task = parseEventData(e.data);
+        const task = parseTaskStreamEventData(e.data);
         if (task) callbacksRef.current.onTaskFailed?.(task);
       });
 

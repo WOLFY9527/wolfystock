@@ -22,6 +22,7 @@ type ThemeProviderProps = {
 
 const THEME_STYLE_STORAGE_KEY = 'dsa-theme-style';
 const DEFAULT_THEME_STYLE: ThemeStylePreset = 'spacex';
+const noopSetThemeStyle = () => undefined;
 
 const ThemeStyleContext = createContext<ThemeStyleContextValue | null>(null);
 
@@ -50,11 +51,9 @@ const ThemeStyleController: React.FC<{ children: React.ReactNode }> = ({ childre
     void setTheme(colorMode);
   }, [setTheme, themeStyle]);
 
-  const setThemeStyle = () => undefined;
-
   const contextValue = {
     themeStyle,
-    setThemeStyle,
+    setThemeStyle: noopSetThemeStyle,
   };
 
   return (

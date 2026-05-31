@@ -28,6 +28,14 @@ function isMutedValue(value: string): boolean {
   return normalized === '' || normalized === '-' || normalized === 'N/A';
 }
 
+function getTechSignalDescription(signal: TechSignal): string | null {
+  const description = String(signal.description || signal.details || signal.rawValue || '').trim();
+  if (!description || description === signal.value || isMutedValue(description)) {
+    return null;
+  }
+  return description;
+}
+
 export const TechCard: React.FC<TechCardProps> = ({
   title,
   signals,
@@ -41,17 +49,9 @@ export const TechCard: React.FC<TechCardProps> = ({
     onClick: handleOpenDetailsClick,
     onPointerUp: handleOpenDetailsPointerUp,
   } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
-
-  const getSignalDescription = (signal: TechSignal): string | null => {
-    const description = String(signal.description || signal.details || signal.rawValue || '').trim();
-    if (!description || description === signal.value || isMutedValue(description)) {
-      return null;
-    }
-    return description;
-  };
   const normalizedSignals = signals.map((signal) => ({
     ...signal,
-    description: getSignalDescription(signal),
+    description: getTechSignalDescription(signal),
   }));
 
   return (

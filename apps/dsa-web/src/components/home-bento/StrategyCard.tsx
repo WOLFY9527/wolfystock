@@ -23,6 +23,20 @@ type StrategyCardProps = {
   researchCard?: string;
 };
 
+function isStrategyEntryMetric(label: string): boolean {
+  return label === '观察区间' || label === '建仓区间' || label === 'Watch Zone' || label === 'Entry Zone';
+}
+
+function getStrategyMetricLabel(label: string): string {
+  if (label === '观察区间' || label === '建仓区间') {
+    return '观察条件区';
+  }
+  if (label === 'Watch Zone' || label === 'Entry Zone') {
+    return 'Watch Zone';
+  }
+  return label;
+}
+
 export const StrategyCard: React.FC<StrategyCardProps> = ({
   title,
   subtitle,
@@ -39,16 +53,6 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
     onClick: handleOpenDetailsClick,
     onPointerUp: handleOpenDetailsPointerUp,
   } = useSafariWarmActivation<HTMLButtonElement>(onOpenDetails);
-  const isEntryMetric = (label: string) => label === '观察区间' || label === '建仓区间' || label === 'Watch Zone' || label === 'Entry Zone';
-  const getMetricLabel = (label: string) => {
-    if (label === '观察区间' || label === '建仓区间') {
-      return '观察条件区';
-    }
-    if (label === 'Watch Zone' || label === 'Entry Zone') {
-      return 'Watch Zone';
-    }
-    return label;
-  };
   const getMetricTone = (tone: StrategyMetric['tone']) => getToneColor(tone || 'neutral', marketColorConvention);
   const getMetricValueClass = (tone: StrategyMetric['tone']) => {
     return getMetricTone(tone).textClass;
@@ -56,8 +60,8 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
   const positionParagraphs = positionBody
     .split(/\n+/)
     .flatMap((paragraph) => { const t = paragraph.trim(); return t ? [t] : []; });
-  const entryMetric = metrics.find((metric) => isEntryMetric(metric.label));
-  const targetMetrics = metrics.filter((metric) => !isEntryMetric(metric.label));
+  const entryMetric = metrics.find((metric) => isStrategyEntryMetric(metric.label));
+  const targetMetrics = metrics.filter((metric) => !isStrategyEntryMetric(metric.label));
 
   return (
     <BentoCard
@@ -87,7 +91,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
             className="flex min-w-0 flex-col gap-1.5"
             data-testid={`home-bento-strategy-metric-${entryMetric.label}`}
           >
-            <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{getMetricLabel(entryMetric.label)}</p>
+            <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{getStrategyMetricLabel(entryMetric.label)}</p>
             <p
               className={`break-words whitespace-normal text-sm font-medium leading-relaxed ${getMetricValueClass(entryMetric.tone || 'neutral')}`}
               style={{ textShadow: getMetricTone(entryMetric.tone).glowShadow }}
@@ -103,7 +107,7 @@ export const StrategyCard: React.FC<StrategyCardProps> = ({
               className="flex min-w-0 flex-col gap-1.5"
               data-testid={`home-bento-strategy-metric-${metric.label}`}
             >
-              <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{getMetricLabel(metric.label)}</p>
+              <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/40">{getStrategyMetricLabel(metric.label)}</p>
               <p
                 className={`break-words whitespace-normal text-sm font-medium leading-relaxed ${getMetricValueClass(metric.tone || 'neutral')}`}
                 style={{ textShadow: getMetricTone(metric.tone).glowShadow }}

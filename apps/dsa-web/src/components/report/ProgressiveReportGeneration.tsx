@@ -45,6 +45,14 @@ const PHASE_THRESHOLDS: Array<{ phase: GenerationPhase; progress: number }> = [
   { phase: 'fetching_market_data', progress: 18 },
 ];
 
+const PROGRESSIVE_REPORT_STATE_FLOW = [
+  'initializing',
+  'fetching_market_data',
+  'analyzing_signals',
+  'assembling_report',
+  'finalizing',
+] as const;
+
 function getProgressPhase(task: TaskInfo): GenerationPhase {
   if (task.status === 'completed') {
     return 'completed';
@@ -276,18 +284,11 @@ export const ProgressiveReportGeneration: React.FC<ProgressiveReportGenerationPr
   const phase = getProgressPhase(task);
   const sections = buildDraftSections(task, runtime, t, openingFinalReport);
   const progress = Math.min(task.progress || 0, 100);
-  const stateFlow = [
-    'initializing',
-    'fetching_market_data',
-    'analyzing_signals',
-    'assembling_report',
-    'finalizing',
-  ] as const;
   const currentPhaseIndex = phase === 'completed'
-    ? stateFlow.length - 1
+    ? PROGRESSIVE_REPORT_STATE_FLOW.length - 1
     : phase === 'failed'
       ? Math.max(0, getReachedMilestone(task))
-      : Math.max(0, stateFlow.indexOf(phase as typeof stateFlow[number]));
+      : Math.max(0, PROGRESSIVE_REPORT_STATE_FLOW.indexOf(phase as typeof PROGRESSIVE_REPORT_STATE_FLOW[number]));
 
   return (
     <section
@@ -338,7 +339,7 @@ export const ProgressiveReportGeneration: React.FC<ProgressiveReportGenerationPr
 
       <div className="report-generation-preview__mission">
         <ol className="report-generation-preview__steps" aria-label={t('report.generation.aria')}>
-          {stateFlow.map((item, index) => {
+          {PROGRESSIVE_REPORT_STATE_FLOW.map((item, index) => {
             const state: RailState = task.status === 'failed'
               ? index < currentPhaseIndex
                 ? 'complete'

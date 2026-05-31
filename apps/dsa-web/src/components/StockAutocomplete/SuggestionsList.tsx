@@ -91,6 +91,25 @@ const MARKET_BADGE_CONFIG = {
   BSE: { label: '北交所', className: 'theme-market-badge--bse' },
 } as const;
 
+const MATCH_TYPE_BADGE_CONFIG = {
+  exact: {
+    label: '精确',
+    className: 'theme-match-badge theme-match-badge--exact',
+  },
+  prefix: {
+    label: '前缀',
+    className: 'theme-match-badge theme-match-badge--prefix',
+  },
+  contains: {
+    label: '包含',
+    className: 'theme-match-badge theme-match-badge--contains',
+  },
+  fuzzy: {
+    label: '模糊',
+    className: 'theme-match-badge',
+  },
+} as const;
+
 function MarketBadge({ market }: { market: string }) {
   const config = MARKET_BADGE_CONFIG[market as keyof typeof MARKET_BADGE_CONFIG];
 
@@ -107,26 +126,7 @@ function MarketBadge({ market }: { market: string }) {
 
 // Helper component: Match type badge
 function MatchTypeBadge({ matchType }: { matchType: string }) {
-  const configMap = {
-    exact: {
-      label: '精确',
-      className: 'theme-match-badge theme-match-badge--exact',
-    },
-    prefix: {
-      label: '前缀',
-      className: 'theme-match-badge theme-match-badge--prefix',
-    },
-    contains: {
-      label: '包含',
-      className: 'theme-match-badge theme-match-badge--contains',
-    },
-    fuzzy: {
-      label: '模糊',
-      className: 'theme-match-badge',
-    },
-  };
-
-  const config = configMap[matchType as keyof typeof configMap] || configMap.fuzzy;
+  const config = MATCH_TYPE_BADGE_CONFIG[matchType as keyof typeof MATCH_TYPE_BADGE_CONFIG] || MATCH_TYPE_BADGE_CONFIG.fuzzy;
 
   return (
     <span className={cn(config.className)}>

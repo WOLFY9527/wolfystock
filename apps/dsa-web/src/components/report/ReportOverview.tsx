@@ -12,6 +12,28 @@ interface ReportOverviewProps {
   summary: ReportSummaryType;
 }
 
+function getReportOverviewPriceChangeStyle(changePct: number | undefined): React.CSSProperties | undefined {
+  if (changePct === undefined || changePct === null) {
+    return undefined;
+  }
+
+  if (changePct > 0) {
+    return { color: 'var(--home-price-up)' };
+  }
+
+  if (changePct < 0) {
+    return { color: 'var(--home-price-down)' };
+  }
+
+  return undefined;
+}
+
+function formatReportOverviewChangePct(changePct: number | undefined): string {
+  if (changePct === undefined || changePct === null) return '--';
+  const sign = changePct > 0 ? '+' : '';
+  return `${sign}${changePct.toFixed(2)}%`;
+}
+
 /**
  * 报告概览区组件 - 产品工作台风格
  */
@@ -24,27 +46,6 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
   const text = getReportText(reportLanguage);
   const actionProfile = getReportControlledValueProfile(summary.operationAdvice, reportLanguage);
   const trendProfile = getReportControlledValueProfile(summary.trendPrediction, reportLanguage);
-  const getPriceChangeStyle = (changePct: number | undefined): React.CSSProperties | undefined => {
-    if (changePct === undefined || changePct === null) {
-      return undefined;
-    }
-
-    if (changePct > 0) {
-      return { color: 'var(--home-price-up)' };
-    }
-
-    if (changePct < 0) {
-      return { color: 'var(--home-price-down)' };
-    }
-
-    return undefined;
-  };
-
-  const formatChangePct = (changePct: number | undefined): string => {
-    if (changePct === undefined || changePct === null) return '--';
-    const sign = changePct > 0 ? '+' : '';
-    return `${sign}${changePct.toFixed(2)}%`;
-  };
 
   return (
     <div className="space-y-5">
@@ -63,11 +64,11 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
                   {/* 价格和涨跌幅 */}
                   {meta.currentPrice != null && (
                     <div className="flex items-baseline gap-2">
-                      <span className="text-[1.85rem] font-normal tracking-[-0.04em]" style={{ ...getPriceChangeStyle(meta.changePct), fontFamily: 'var(--theme-heading-font)' }}>
+                      <span className="text-[1.85rem] font-normal tracking-[-0.04em]" style={{ ...getReportOverviewPriceChangeStyle(meta.changePct), fontFamily: 'var(--theme-heading-font)' }}>
                         {meta.currentPrice.toFixed(2)}
                       </span>
-                      <span className="text-sm font-normal" style={getPriceChangeStyle(meta.changePct)}>
-                        {formatChangePct(meta.changePct)}
+                      <span className="text-sm font-normal" style={getReportOverviewPriceChangeStyle(meta.changePct)}>
+                        {formatReportOverviewChangePct(meta.changePct)}
                       </span>
                     </div>
                   )}
