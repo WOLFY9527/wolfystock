@@ -48,8 +48,9 @@ interface SettingsFieldProps {
   issues?: ConfigValidationIssue[];
 }
 
-function renderFieldControl(
-  t: (key: string, vars?: Record<string, string | number | undefined>) => string,
+const EMPTY_ISSUES: ConfigValidationIssue[] = [];
+
+type SettingsFieldControlProps = {
   item: SystemConfigItem,
   value: string,
   disabled: boolean,
@@ -57,7 +58,19 @@ function renderFieldControl(
   isPasswordEditable: boolean,
   onPasswordFocus: () => void,
   controlId: string,
-) {
+  t: (key: string, vars?: Record<string, string | number | undefined>) => string,
+};
+
+const SettingsFieldControl: React.FC<SettingsFieldControlProps> = ({
+  item,
+  value,
+  disabled,
+  onChange,
+  isPasswordEditable,
+  onPasswordFocus,
+  controlId,
+  t,
+}) => {
   const schema = item.schema;
   const commonClass = 'input-terminal border-border/55 bg-card/94 hover:border-border/75';
   const controlType = schema?.uiControl ?? 'text';
@@ -113,11 +126,21 @@ function renderFieldControl(
 
     if (isMultiValue) {
       const values = parseMultiValues(value);
+      const rowKeyCounts = new Map<string, number>();
+      const rows = values.map((entry) => {
+        const keyBase = entry || 'empty';
+        const count = rowKeyCounts.get(keyBase) ?? 0;
+        rowKeyCounts.set(keyBase, count + 1);
+        return {
+          entry,
+          key: `${item.key}-${keyBase}-${count}`,
+        };
+      });
 
       return (
         <div className="space-y-2">
-          {values.map((entry, index) => (
-            <div className="flex items-center gap-2" key={`${item.key}-${index}`}>
+          {rows.map(({ entry, key }, index) => (
+            <div className="flex items-center gap-2" key={key}>
               <div className="flex-1">
                 <Input
                   type="password"
@@ -191,14 +214,14 @@ function renderFieldControl(
       onChange={(event) => onChange(event.target.value)}
     />
   );
-}
+};
 
 export const SettingsField: React.FC<SettingsFieldProps> = ({
   item,
   value,
   disabled = false,
   onChange,
-  issues = [],
+  issues = EMPTY_ISSUES,
 }) => {
   const { language, t } = useI18n();
   const schema = item.schema;
@@ -220,7 +243,7 @@ export const SettingsField: React.FC<SettingsFieldProps> = ({
         <label className="theme-field-label" htmlFor={controlId}>
           {title}
         </label>
-          {schema?.isSensitive ? (
+        {schema?.isSensitive ? (
           <Badge variant="history" size="sm">
             {t('settings.sensitive')}
           </Badge>
@@ -239,16 +262,16 @@ export const SettingsField: React.FC<SettingsFieldProps> = ({
       ) : null}
 
       <div>
-        {renderFieldControl(
-          t,
-          item,
-          value,
-          disabled,
-          (nextValue) => onChange(item.key, nextValue),
-          isPasswordEditable,
-          () => setIsPasswordEditable(true),
-          controlId,
-        )}
+        <SettingsFieldControl
+          t={t}
+          item={item}
+          value={value}
+          disabled={disabled}
+          onChange={(nextValue) => onChange(item.key, nextValue)}
+          isPasswordEditable={isPasswordEditable}
+          onPasswordFocus={() => setIsPasswordEditable(true)}
+          controlId={controlId}
+        />
       </div>
 
       {schema?.isSensitive ? (
@@ -260,9 +283,9 @@ export const SettingsField: React.FC<SettingsFieldProps> = ({
 
       {issues.length ? (
         <div className="mt-2 space-y-1">
-          {issues.map((issue, index) => (
+          {issues.map((issue) => (
             <p
-              key={`${issue.code}-${issue.key}-${index}`}
+              key={`${issue.code}-${issue.key}-${issue.severity}`}
               className={issue.severity === 'error' ? 'text-xs text-danger' : 'text-xs text-warning'}
             >
               {issue.message}

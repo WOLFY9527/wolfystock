@@ -59,7 +59,11 @@ type SystemControlPlaneProps = {
   onSetAdminActionDialog: (value: Exclude<AdminActionDialogKey, null>) => void;
 };
 
-const renderStatusRows = (cards: SystemHealthStatusCard[]) => (
+type StatusRowsProps = {
+  cards: SystemHealthStatusCard[];
+};
+
+const StatusRows: React.FC<StatusRowsProps> = ({ cards }) => (
   <div className="mt-3 grid gap-2">
     {cards.map((card) => {
       const status = describeSettingsSystemHealthStatus(card.status);
@@ -150,7 +154,7 @@ const SystemPrioritySettings: React.FC<SystemPrioritySettingsProps> = ({
           </div>
           <span className={GHOST_TAG_CLASS}>敏感</span>
         </div>
-        {renderStatusRows(safetyCards)}
+        <StatusRows cards={safetyCards} />
       </section>
 
       <section data-testid="system-data-probe-boundary" className={INTENT_PANEL_CLASS}>
@@ -161,7 +165,7 @@ const SystemPrioritySettings: React.FC<SystemPrioritySettingsProps> = ({
           </div>
           <span className={GHOST_TAG_CLASS}>探测二级</span>
         </div>
-        {renderStatusRows(dataAccessCards)}
+        <StatusRows cards={dataAccessCards} />
       </section>
 
       <section data-testid="system-admin-entry-boundary" className={INTENT_PANEL_CLASS}>
@@ -172,7 +176,7 @@ const SystemPrioritySettings: React.FC<SystemPrioritySettingsProps> = ({
           </div>
           <span className={GHOST_TAG_CLASS}>入口</span>
         </div>
-        {renderStatusRows(adminEntryCards)}
+        <StatusRows cards={adminEntryCards} />
         <div className="mt-3 flex justify-end">
           <Button
             type="button"
@@ -254,7 +258,7 @@ const DeveloperCompatibilityDisclosure: React.FC<DeveloperCompatibilityDisclosur
             </div>
             <span className={GHOST_TAG_CLASS}>可选</span>
           </div>
-          {renderStatusRows(compatibilityCards)}
+          <StatusRows cards={compatibilityCards} />
         </section>
       ) : null}
       <DuckDBQuantPanel configEnabledState={duckdbConfigEnabledState} />

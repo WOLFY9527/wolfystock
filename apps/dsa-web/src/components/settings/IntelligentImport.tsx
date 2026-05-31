@@ -107,10 +107,10 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
   const [pasteText, setPasteText] = useState('');
 
   const parseCurrentList = () => {
-    return stockListValue
-      .split(',')
-      .map((c) => c.trim())
-      .filter(Boolean);
+    return stockListValue.split(',').flatMap((c) => {
+      const trimmed = c.trim();
+      return trimmed ? [trimmed] : [];
+    });
   };
 
   const addItems = (newItems: ExtractItem[]) => {
@@ -219,7 +219,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
   };
 
   const mergeToWatchlist = async () => {
-    const toMerge = items.filter((i) => i.checked && i.code).map((i) => i.code!);
+    const toMerge = items.flatMap((i) => (i.checked && i.code ? [i.code] : []));
     if (toMerge.length === 0) return;
     const current = parseCurrentList();
     const merged = [...new Set([...current, ...toMerge])];
@@ -238,9 +238,8 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
       } else {
         setError(getApiErrorMessage(e, '合并保存失败'));
       }
-    } finally {
-      setIsMerging(false);
     }
+    setIsMerging(false);
   };
 
   const { validCount, checkedCount } = items.reduce<{ validCount: number; checkedCount: number }>(
