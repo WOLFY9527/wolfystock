@@ -39,6 +39,9 @@ from src.services.provider_capability_matrix import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_CONFIG_TEXT = (REPO_ROOT / "src/config.py").read_text(encoding="utf-8")
+PROVIDER_CAPABILITY_METADATA_DOC = (
+    REPO_ROOT / "docs" / "operations" / "provider-capability-metadata.md"
+)
 
 EXPECTED_PROVIDER_IDS = {
     "local_cache",
@@ -93,6 +96,21 @@ KNOWN_DIAGNOSTIC_FRESHNESS_EXPECTATIONS = {
     "stored_snapshot_with_sector_industry_lineage_and_non_fallback_mappings",
     "synthetic_fixture_and_dry_run_chain_only",
     "watchlist_missing_or_stale_score_gap_projection",
+}
+
+PROVENANCE_VOCABULARY_GUARD_TERMS = {
+    "diagnosticOnly",
+    "observationOnly",
+    "authorityGrant",
+    "sourceAuthorityAllowed",
+    "scoreContributionAllowed",
+    "scoreReliabilityAllowed",
+    "score_grade_allowed",
+    "scoreGradeEvidenceAllowed",
+    "freshness",
+    "stale",
+    "partial",
+    "fallback",
 }
 
 FUTURE_AUTHORIZED_SUPPORT_CONTRACTS = {
@@ -431,6 +449,15 @@ def test_provider_capability_support_contracts_use_known_onboarding_vocabulary()
     assert {item.freshness_expectation for item in contracts} == KNOWN_SUPPORT_FRESHNESS_EXPECTATIONS
     assert {item.observation_only for item in contracts} == {True}
     assert {item.score_contribution_allowed for item in contracts} == {False}
+
+
+def test_provider_capability_metadata_documents_provenance_vocabulary_parity_guard() -> None:
+    text = PROVIDER_CAPABILITY_METADATA_DOC.read_text(encoding="utf-8")
+
+    assert "## Provenance vocabulary parity guard" in text
+    assert "not interchangeable" in text
+    assert "must not be used as aliases" in text
+    assert all(term in text for term in PROVENANCE_VOCABULARY_GUARD_TERMS)
 
 
 def test_provider_fit_metadata_helpers_are_deterministic_and_do_not_modify_runtime_capability_ids() -> None:

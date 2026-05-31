@@ -93,6 +93,49 @@ matrix, such as persisted watchlist freshness audits, stored portfolio
 lineage/snapshot evidence, synthetic fixture chains, disabled live stubs, and
 authorized-or-cached options gap chains.
 
+## Provenance vocabulary parity guard
+
+These terms are not interchangeable. A field that is true or false in one family
+must not be used as proof for another family without an explicitly scoped
+contract or test.
+
+- `diagnosticOnly`: the payload or row exists to explain, audit, or troubleshoot
+  state. It does not grant runtime authority, score authority, provider routing,
+  MarketCache authority, or API shape changes.
+- `observationOnly`: the evidence may be shown or retained as context, but it
+  is not eligible to drive decisions, rankings, portfolio accounting, backtest
+  calculations, or provider activation by itself.
+- `authorityGrant`: an explicit positive grant for a named authority surface.
+  `authorityGrant=false` is the default for candidate evidence, diagnostics,
+  and observation-only sidecars.
+- `sourceAuthorityAllowed`: the source is allowed for a specific source
+  authority check. This is narrower than `authorityGrant` and does not imply
+  scoring, ranking, routing, or cache/live authority.
+- `scoreContributionAllowed`: the source may contribute to a specific scoring
+  path only when the surrounding contract also permits that path. It is not the
+  same as source authority, observation eligibility, or runtime provider
+  enablement.
+- `scoreReliabilityAllowed`: a reliability/readiness flag for score-facing
+  payload quality. It must not be treated as source authority, score
+  contribution approval, or a provider live-call grant.
+- `score_grade_allowed`, `scoreGradeEvidenceAllowed`, and similarly named
+  score-grade booleans are surface-specific score-grade eligibility results.
+  They must not be used as aliases for `authorityGrant`,
+  `sourceAuthorityAllowed`, or `scoreContributionAllowed`.
+- `freshness` describes temporal or quality state, such as `fresh`, `live`,
+  `delayed`, `cached`, `stale`, `partial`, `fallback`, `synthetic`,
+  `unavailable`, or `unknown`. It is descriptive metadata until paired with an
+  authority contract.
+- `stale` means evidence is older than the relevant freshness expectation.
+  Stale evidence may remain visible as diagnostics, but it must not be silently
+  relabeled as fresh/live or promoted into score-grade authority.
+- `partial` means coverage is incomplete. Partial evidence may explain gaps, but
+  it is not equivalent to fallback, stale, or unavailable evidence.
+- `fallback` means the payload came from a fallback path or replacement source.
+  Fallback evidence must stay visibly labeled and must not be upgraded to live
+  provider status, source authority, or score contribution authority by name
+  alone.
+
 ## Source-confidence cap behavior
 
 The shared source-confidence contract is fail-closed for degraded evidence:
