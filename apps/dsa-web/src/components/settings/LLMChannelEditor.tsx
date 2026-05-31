@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, type SetStateAction } from 'react';
 import type React from 'react';
 import type { ParsedApiError } from '../../api/error';
 import { getParsedApiError } from '../../api/error';
@@ -18,6 +18,28 @@ const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] borde
 const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
 const DRAWER_LABEL_CLASS = 'text-[10px] uppercase tracking-widest text-white/40 mb-1.5 font-bold block';
 const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-4 flex cursor-pointer list-none items-center gap-1.5 border-t border-white/5 pt-4 text-xs text-white/30 transition-colors hover:text-white [&::-webkit-details-marker]:hidden';
+
+const resolveDraftStateValue = <T,>(
+  draftState: DraftState<T>,
+  source: string,
+  fallback: T,
+): T => (draftState.source === source ? draftState.value : fallback);
+
+const buildNextDraftState = <T,>(
+  draftState: DraftState<T>,
+  source: string,
+  fallback: T,
+  updater: SetStateAction<T>,
+): DraftState<T> => {
+  const baseValue = resolveDraftStateValue(draftState, source, fallback);
+  const nextValue = typeof updater === 'function'
+    ? (updater as (previousState: T) => T)(baseValue)
+    : updater;
+  return {
+    source,
+    value: nextValue,
+  };
+};
 
 interface ChannelPreset {
   label: string;
@@ -166,6 +188,11 @@ interface RuntimeConfig {
   visionModel: string;
   temperature: string;
 }
+
+type DraftState<T> = {
+  source: string;
+  value: T;
+};
 
 interface LLMChannelEditorProps {
   items: Array<{ key: string; value: string }>;
@@ -451,8 +478,10 @@ function parseEnabled(value: string | undefined): boolean {
 function splitModels(models: string): string[] {
   return models
     .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean);
+    .flatMap((entry) => {
+      const normalized = entry.trim();
+      return normalized ? [normalized] : [];
+    });
 }
 
 const PROTOCOL_ALIASES: Record<string, string> = {
@@ -608,8 +637,10 @@ function parseChannelsFromItems(items: Array<{ key: string; value: string }>): C
   const itemMap = new Map(items.map((item) => [item.key, item.value]));
   const channelNames = (itemMap.get('LLM_CHANNELS') || '')
     .split(',')
-    .map((segment) => segment.trim())
-    .filter(Boolean);
+    .flatMap((segment) => {
+      const normalized = segment.trim();
+      return normalized ? [normalized] : [];
+    });
 
   return channelNames.map((name) => {
     const upperName = name.toUpperCase();
@@ -726,48 +757,116 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
 
   const channelsFingerprint = JSON.stringify(initialChannels);
   const runtimeFingerprint = JSON.stringify(initialRuntimeConfig);
+  const editorSource = `${channelsFingerprint}::${runtimeFingerprint}`;
 
-  const [channels, setChannels] = useState<ChannelConfig[]>(initialChannels);
-  const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig>(initialRuntimeConfig);
+  const [channelState, setChannelState] = useState<DraftState<ChannelConfig[]>>(() => ({
+    source: editorSource,
+    value: initialChannels,
+  }));
+  const channels = resolveDraftStateValue(channelState, editorSource, initialChannels);
+  const setChannels = (updater: SetStateAction<ChannelConfig[]>) => {
+    setChannelState((previousState) => buildNextDraftState(
+      previousState,
+      editorSource,
+      initialChannels,
+      updater,
+    ));
+  };
+  const [runtimeConfigState, setRuntimeConfigState] = useState<DraftState<RuntimeConfig>>(() => ({
+    source: editorSource,
+    value: initialRuntimeConfig,
+  }));
+  const runtimeConfig = resolveDraftStateValue(runtimeConfigState, editorSource, initialRuntimeConfig);
+  const setRuntimeConfig = (updater: SetStateAction<RuntimeConfig>) => {
+    setRuntimeConfigState((previousState) => buildNextDraftState(
+      previousState,
+      editorSource,
+      initialRuntimeConfig,
+      updater,
+    ));
+  };
   const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<
+  const [saveMessageState, setSaveMessageState] = useState<DraftState<
     | { type: 'success'; text: string }
     | { type: 'error'; error: ParsedApiError }
     | { type: 'local-error'; text: string }
     | null
-  >(null);
-  const [visibleKeys, setVisibleKeys] = useState<Record<number, boolean>>({});
-  const [testStates, setTestStates] = useState<Record<number, ChannelTestState>>({});
-  const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  >>(() => ({
+    source: editorSource,
+    value: null,
+  }));
+  const saveMessage = resolveDraftStateValue(saveMessageState, editorSource, null);
+  const setSaveMessage = (
+    updater: SetStateAction<
+    | { type: 'success'; text: string }
+    | { type: 'error'; error: ParsedApiError }
+    | { type: 'local-error'; text: string }
+    | null
+    >,
+  ) => {
+    setSaveMessageState((previousState) => buildNextDraftState(
+      previousState,
+      editorSource,
+      null,
+      updater,
+    ));
+  };
+  const [visibleKeysState, setVisibleKeysState] = useState<DraftState<Record<number, boolean>>>(() => ({
+    source: editorSource,
+    value: {},
+  }));
+  const visibleKeys = resolveDraftStateValue(visibleKeysState, editorSource, {});
+  const setVisibleKeys = (updater: SetStateAction<Record<number, boolean>>) => {
+    setVisibleKeysState((previousState) => buildNextDraftState(
+      previousState,
+      editorSource,
+      {},
+      updater,
+    ));
+  };
+  const [testStatesState, setTestStatesState] = useState<DraftState<Record<number, ChannelTestState>>>(() => ({
+    source: editorSource,
+    value: {},
+  }));
+  const testStates = resolveDraftStateValue(testStatesState, editorSource, {});
+  const setTestStates = (updater: SetStateAction<Record<number, ChannelTestState>>) => {
+    setTestStatesState((previousState) => buildNextDraftState(
+      previousState,
+      editorSource,
+      {},
+      updater,
+    ));
+  };
+  const [expandedRowsState, setExpandedRowsState] = useState<DraftState<Record<number, boolean>>>(() => ({
+    source: editorSource,
+    value: {},
+  }));
+  const expandedRows = resolveDraftStateValue(expandedRowsState, editorSource, {});
+  const setExpandedRows = (updater: SetStateAction<Record<number, boolean>>) => {
+    setExpandedRowsState((previousState) => buildNextDraftState(
+      previousState,
+      editorSource,
+      {},
+      updater,
+    ));
+  };
+  const [isCollapsedState, setIsCollapsedState] = useState<DraftState<boolean>>(() => ({
+    source: editorSource,
+    value: false,
+  }));
+  const isCollapsed = resolveDraftStateValue(isCollapsedState, editorSource, false);
+  const setIsCollapsed = (updater: SetStateAction<boolean>) => {
+    setIsCollapsedState((previousState) => buildNextDraftState(
+      previousState,
+      editorSource,
+      false,
+      updater,
+    ));
+  };
   const [addPreset, setAddPreset] = useState(normalizedScopeName || 'aihubmix');
+  const selectedAddPreset = providerScopedMode ? normalizedScopeName : addPreset;
   const presetLabels = Object.fromEntries(Object.keys(CHANNEL_PRESETS).map((key) => [key, t(`settings.llmEditor.channelPreset.${key}`)]));
-
-  const prevChannelsRef = useRef(channelsFingerprint);
-  const prevRuntimeRef = useRef(runtimeFingerprint);
   const channelRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
-
-  useEffect(() => {
-    if (prevChannelsRef.current === channelsFingerprint && prevRuntimeRef.current === runtimeFingerprint) {
-      return;
-    }
-    prevChannelsRef.current = channelsFingerprint;
-    prevRuntimeRef.current = runtimeFingerprint;
-    setChannels(initialChannels);
-    setRuntimeConfig(initialRuntimeConfig);
-    setVisibleKeys({});
-    setTestStates({});
-    setExpandedRows({});
-    setSaveMessage(null);
-    setIsCollapsed(false);
-  }, [channelsFingerprint, runtimeFingerprint, initialChannels, initialRuntimeConfig]);
-
-  useEffect(() => {
-    if (!providerScopedMode) {
-      return;
-    }
-    setAddPreset(normalizedScopeName);
-  }, [normalizedScopeName, providerScopedMode]);
 
   const availableModels = managesRuntimeConfig ? collectAvailableModels(channels) : [];
 
@@ -786,16 +885,19 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
     return channels.some((channel, index) => !channelsAreEqual(channel, initialChannels[index]));
   })();
 
-  const visibleChannelEntries = channels
-    .map((channel, index) => ({ channel, index }))
-    .filter((entry) => {
-      if (!providerScopedMode) {
-        return true;
-      }
-      return resolveChannelScopeName(entry.channel.name) === normalizedScopeName;
-    });
+  const visibleChannelEntries = channels.reduce<Array<{ channel: ChannelConfig; index: number }>>((entries, channel, index) => {
+    if (!providerScopedMode || resolveChannelScopeName(channel.name) === normalizedScopeName) {
+      entries.push({ channel, index });
+    }
+    return entries;
+  }, []);
 
   const busy = disabled || isSaving;
+  const scrollToChannelRow = (index: number) => {
+    window.setTimeout(() => {
+      channelRowRefs.current[index]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
+  };
 
   const updateChannel = (index: number, field: keyof ChannelConfig, value: string | boolean) => {
     setChannels((previous) => previous.map((channel, rowIndex) => {
@@ -854,8 +956,8 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
     setExpandedRows({});
   };
 
-  const addChannel = useCallback((presetKey?: string) => {
-    const nextPresetKey = presetKey || addPreset;
+  const addChannel = (presetKey?: string) => {
+    const nextPresetKey = presetKey || selectedAddPreset;
     const preset = CHANNEL_PRESETS[nextPresetKey] || CHANNEL_PRESETS.custom;
     const baseName = nextPresetKey === 'custom' ? 'custom' : nextPresetKey;
     let nextIndex = 0;
@@ -885,27 +987,28 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
     setTestStates({});
     setExpandedRows((prev) => ({ ...prev, [nextIndex]: true }));
     setIsCollapsed(false);
-    window.setTimeout(() => {
-      channelRowRefs.current[nextIndex]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 0);
-  }, [addPreset]);
+    scrollToChannelRow(nextIndex);
+  };
+  const handleExternalCreatePreset = useEffectEvent((requestedPreset: string) => {
+    addChannel(requestedPreset);
+    onExternalCreateHandled?.();
+  });
   useEffect(() => {
     const requestedPreset = String(externalCreatePreset || '').trim().toLowerCase();
     if (!requestedPreset) return;
-    setAddPreset(requestedPreset);
-    addChannel(requestedPreset);
-    onExternalCreateHandled?.();
-  }, [addChannel, externalCreatePreset, onExternalCreateHandled]);
+    handleExternalCreatePreset(requestedPreset);
+  }, [externalCreatePreset]);
+  const handleFocusedChannel = useEffectEvent((targetIndex: number) => {
+    setIsCollapsed(false);
+    setExpandedRows((prev) => ({ ...prev, [targetIndex]: true }));
+    scrollToChannelRow(targetIndex);
+  });
   useEffect(() => {
     const targetName = String(focusChannelName || '').trim().toLowerCase();
     if (!targetName) return;
     const targetIndex = channels.findIndex((channel) => channel.name.trim().toLowerCase() === targetName);
     if (targetIndex < 0) return;
-    setIsCollapsed(false);
-    setExpandedRows((prev) => ({ ...prev, [targetIndex]: true }));
-    window.setTimeout(() => {
-      channelRowRefs.current[targetIndex]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 0);
+    handleFocusedChannel(targetIndex);
   }, [channels, focusChannelName]);
 
   const handleSave = async () => {
