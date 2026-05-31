@@ -1106,7 +1106,7 @@ const ActivityTimeline: React.FC<{
   );
 };
 
-const AdminUsersPage: React.FC = () => {
+function useAdminUsersPageModel() {
   const { userId } = useParams<{ userId?: string }>();
   const location = useLocation();
   const navigate = useNavigate();
@@ -1330,6 +1330,30 @@ const AdminUsersPage: React.FC = () => {
       </div>
     );
   })();
+
+  return {
+    userId,
+    navigate,
+    directoryPath,
+    mode,
+    activeUser,
+    headerCurrentState,
+    headerNextAction,
+    content,
+  };
+}
+
+const AdminUsersPage: React.FC = () => {
+  const {
+    userId,
+    navigate,
+    directoryPath,
+    mode,
+    activeUser,
+    headerCurrentState,
+    headerNextAction,
+    content,
+  } = useAdminUsersPageModel();
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto no-scrollbar">

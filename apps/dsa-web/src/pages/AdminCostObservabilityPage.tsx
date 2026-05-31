@@ -748,7 +748,7 @@ const PricingPolicyPanel: React.FC = () => {
   );
 };
 
-const QuotaDryRunPanel: React.FC = () => {
+function useQuotaDryRunPanelModel() {
   const { canReadCostObservability } = useProductSurface();
   const [routeFamily, setRouteFamily] = useState('analysis');
   const [tokenEstimateInput, setTokenEstimateInput] = useState('4000');
@@ -779,10 +779,6 @@ const QuotaDryRunPanel: React.FC = () => {
     };
   }, [canReadCostObservability, enforcementMode, routeFamily, tokenEstimateInput]);
 
-  if (!canReadCostObservability) {
-    return null;
-  }
-
   const tokenEstimate = clampTokenEstimate(tokenEstimateInput);
   const canSubmit = operation === 'estimate' || operation === 'reserve' || reservationId.trim().length > 0;
   const data = state.data;
@@ -800,6 +796,48 @@ const QuotaDryRunPanel: React.FC = () => {
       .then((next) => setState({ loading: false, error: null, data: next }))
       .catch((error) => setState({ loading: false, error: sanitizedQuotaError(error), data: null }));
   };
+
+  return {
+    canReadCostObservability,
+    routeFamily,
+    setRouteFamily,
+    tokenEstimateInput,
+    setTokenEstimateInput,
+    operation,
+    setOperation,
+    enforcementMode,
+    setEnforcementMode,
+    reservationId,
+    setReservationId,
+    state,
+    canSubmit,
+    data,
+    runDiagnostic,
+  };
+}
+
+const QuotaDryRunPanel: React.FC = () => {
+  const {
+    canReadCostObservability,
+    routeFamily,
+    setRouteFamily,
+    tokenEstimateInput,
+    setTokenEstimateInput,
+    operation,
+    setOperation,
+    enforcementMode,
+    setEnforcementMode,
+    reservationId,
+    setReservationId,
+    state,
+    data,
+    canSubmit,
+    runDiagnostic,
+  } = useQuotaDryRunPanelModel();
+
+  if (!canReadCostObservability) {
+    return null;
+  }
 
   return (
     <TerminalPanel as="section" data-testid="quota-dry-run-panel">

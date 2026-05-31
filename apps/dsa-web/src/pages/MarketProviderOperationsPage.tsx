@@ -1868,7 +1868,7 @@ const EmptyErrorState: React.FC = () => (
   </TerminalPanel>
 );
 
-const MarketProviderOperationsPage: React.FC = () => {
+function useMarketProviderOperationsPageModel() {
   const { language } = useI18n();
   const surfaceFocus = productSetupSurfaceFromCurrentQuery();
   const [response, setResponse] = useState<MarketProviderOperationsResponse | null>(null);
@@ -1925,21 +1925,23 @@ const MarketProviderOperationsPage: React.FC = () => {
   }, []);
 
   const loadReadiness = async (symbols?: string, cancelledRef?: { current: boolean }) => {
+    if (cancelledRef?.current) {
+      return;
+    }
     const response = await marketApi.getDataReadiness(symbols ? { symbols } : undefined)
       .then((payload) => ({ payload, error: null as ParsedApiError | null }))
       .catch((apiError) => ({
         payload: null,
         error: { ...getParsedApiError(apiError), title: '读取本地行情就绪诊断失败' },
       }));
-    if (cancelledRef?.current) {
-      return;
+    if (!cancelledRef?.current) {
+      if (response.payload) {
+        setReadiness(response.payload);
+      } else if (response.error) {
+        setReadinessError(response.error);
+      }
+      setIsReadinessLoading(false);
     }
-    if (response.payload) {
-      setReadiness(response.payload);
-    } else if (response.error) {
-      setReadinessError(response.error);
-    }
-    setIsReadinessLoading(false);
   };
 
   useEffect(() => {
@@ -2011,6 +2013,58 @@ const MarketProviderOperationsPage: React.FC = () => {
   ];
 
   const topSummary = buildProviderOpsTopSummary(items, matrixRows, readinessChecks);
+
+  return {
+    language,
+    surfaceFocus,
+    response,
+    matrixResponse,
+    readiness,
+    items,
+    effectiveSelectedProviderKey,
+    selectedItem,
+    eventRollups,
+    cacheStates,
+    isLoading,
+    isMatrixLoading,
+    isReadinessLoading,
+    error,
+    matrixError,
+    readinessError,
+    readinessSymbolsInput,
+    operatorMetrics,
+    topSummary,
+    setSelectedProviderKey,
+    setReadinessSymbolsInput,
+    submitReadinessSymbols,
+  };
+}
+
+const MarketProviderOperationsPage: React.FC = () => {
+  const {
+    language,
+    surfaceFocus,
+    response,
+    matrixResponse,
+    readiness,
+    items,
+    effectiveSelectedProviderKey,
+    selectedItem,
+    eventRollups,
+    cacheStates,
+    isLoading,
+    isMatrixLoading,
+    isReadinessLoading,
+    error,
+    matrixError,
+    readinessError,
+    readinessSymbolsInput,
+    operatorMetrics,
+    topSummary,
+    setSelectedProviderKey,
+    setReadinessSymbolsInput,
+    submitReadinessSymbols,
+  } = useMarketProviderOperationsPageModel();
 
   return (
     <div data-testid="market-provider-operations-page" className="market-provider-operations-page flex min-h-0 w-full flex-1 flex-col overflow-y-auto no-scrollbar text-white">

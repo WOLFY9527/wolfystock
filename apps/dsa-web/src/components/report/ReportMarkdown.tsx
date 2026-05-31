@@ -95,6 +95,202 @@ const LazyReportMarkdownTechnicalDetailsRenderer = lazy(async () => {
   return { default: module.ReportMarkdownTechnicalDetailsRenderer };
 });
 
+const ReportMarkdownHeaderPanel: React.FC<{
+  body: string;
+  stockCode: string;
+  stockName: string;
+}> = ({ body, stockCode, stockName }) => (
+  <SupportPanel
+    className="mb-1 px-5 py-4 md:px-6"
+    title={stockName || stockCode}
+    body={body}
+    icon={(
+      <div className="flex size-8 items-center justify-center rounded-lg bg-[var(--home-action-report-bg)] text-[var(--home-action-report-text)]">
+        <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      </div>
+    )}
+    titleClassName="mt-0 text-base font-semibold"
+    bodyClassName="text-sm"
+  />
+);
+
+const ReportMarkdownStatusPanel: React.FC<{
+  error: string | null;
+  handleClose: () => void;
+  isLoading: boolean;
+  text: ReturnType<typeof getReportText>;
+}> = ({ error, handleClose, isLoading, text }) => {
+  if (isLoading) {
+    return (
+      <SupportPanel
+        centered
+        className="flex h-64 flex-col items-center justify-center p-6"
+        icon={<div className="home-spinner size-10 animate-spin border-[3px]" />}
+        title={text.loadingReport}
+        body={text.markdownLoadingBody}
+      />
+    );
+  }
+
+  if (!error) {
+    return null;
+  }
+
+  return (
+    <SupportPanel
+      centered
+      className="flex h-64 flex-col items-center justify-center p-6"
+      icon={(
+        <div className="flex size-12 items-center justify-center rounded-xl bg-danger/10">
+          <svg className="size-6 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+      )}
+      title={error}
+      body={text.markdownErrorBody}
+      titleClassName="text-danger"
+      actions={(
+        <button
+          type="button"
+          onClick={handleClose}
+          className="home-surface-button rounded-lg px-4 py-2 text-sm text-secondary-text"
+        >
+          {text.dismiss}
+        </button>
+      )}
+    />
+  );
+};
+
+const ReportMarkdownLoadedContent: React.FC<{
+  captionClassName: string;
+  colon: string;
+  content: string;
+  coverageAudit: ReturnType<typeof buildMissingFieldAudit>;
+  coverageBuckets: Array<ReturnType<typeof buildMissingFieldAudit>['buckets'][number]>;
+  coverageCategoryLabel: (category: MissingFieldCategory) => string;
+  dispatch: React.Dispatch<ReportMarkdownAction>;
+  executiveSummary: {
+    confidence: string;
+    firstLine: string;
+    keyRisk: string;
+    observation: string;
+  };
+  headingClassName: string;
+  localizedMarkdownContent: string;
+  normalizedLanguage: ReportLanguage;
+  state: ReportMarkdownState;
+  text: ReturnType<typeof getReportText>;
+}> = ({
+  captionClassName,
+  colon,
+  coverageAudit,
+  coverageBuckets,
+  coverageCategoryLabel,
+  dispatch,
+  executiveSummary,
+  headingClassName,
+  localizedMarkdownContent,
+  normalizedLanguage,
+  state,
+  text,
+}) => (
+  <div className="space-y-5" data-testid="full-report-reading-surface">
+    <div data-testid="report-executive-summary">
+      <SupportPanel
+        className="px-5 py-4 md:px-6"
+        title={normalizedLanguage === 'en' ? 'Executive Summary' : '执行摘要'}
+        body={executiveSummary.firstLine}
+        titleClassName={headingClassName}
+        bodyClassName="text-sm leading-6 text-secondary-text"
+      >
+        <div className="grid gap-2 text-xs text-secondary-text sm:grid-cols-3">
+          {[
+            { label: normalizedLanguage === 'en' ? 'Decision' : '结论', value: executiveSummary.observation },
+            { label: normalizedLanguage === 'en' ? 'Confidence' : '置信度', value: executiveSummary.confidence },
+            { label: normalizedLanguage === 'en' ? 'Key risk' : '关键风险', value: executiveSummary.keyRisk },
+          ].map((item) => (
+            <div key={item.label} className="rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/35 px-3 py-2.5">
+              <p className={captionClassName}>{item.label}</p>
+              <p className="mt-1.5 break-words leading-5 text-foreground/80">{item.value}</p>
+            </div>
+          ))}
+        </div>
+      </SupportPanel>
+    </div>
+
+    <SupportPanel
+      className="px-5 py-4 md:px-6"
+      title={text.coverageAuditTitle}
+      body={text.coverageAuditBody}
+      titleClassName={headingClassName}
+      bodyClassName="text-sm leading-6"
+    >
+      {coverageAudit.totalMissingFields > 0 ? (
+        <div className="space-y-3 text-xs text-secondary-text">
+          <p className={captionClassName}>
+            {text.missingFieldsTotal}{colon}{coverageAudit.totalMissingFields}
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {coverageBuckets.map((bucket) => (
+              <div key={bucket.category} className="rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/40 px-3 py-2.5">
+                <p className={captionClassName}>
+                  {coverageCategoryLabel(bucket.category)} ({bucket.entries.length})
+                </p>
+                <ul className="mt-2.5 space-y-1.5">
+                  {bucket.entries.slice(0, 5).map((entry, index) => (
+                    <li key={`${entry.field}-${entry.reason}-${index}`}>
+                      <span className="font-medium text-foreground">{localizeReportTermLabel(entry.field, normalizedLanguage)}</span>
+                      <span className="text-muted-text">{colon}{localizeReportHeadingLabel(entry.reason, normalizedLanguage)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-text">{text.noMissingFields}</p>
+      )}
+    </SupportPanel>
+
+    <details
+      data-testid="report-technical-evidence-details"
+      className="theme-panel-subtle rounded-[var(--cohere-radius-medium)] px-5 py-4 md:px-6"
+      onToggle={(event) => {
+        if (event.currentTarget.open) {
+          dispatch({ type: 'openTechnicalDetails' });
+        }
+      }}
+    >
+      <summary className="cursor-pointer list-none text-sm font-semibold tracking-[0.06em] text-foreground">
+        {normalizedLanguage === 'en' ? 'Technical details' : '技术细节'}
+      </summary>
+      <div className="mt-4 mx-auto w-full max-w-[86ch]">
+        {state.hasOpenedTechnicalDetails ? (
+          <Suspense
+            fallback={(
+              <output
+                aria-live="polite"
+                aria-busy="true"
+                data-testid="report-technical-details-loading"
+                className="block rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/35 p-3 text-sm text-secondary-text"
+              >
+                {normalizedLanguage === 'en' ? 'Loading technical details…' : '正在加载技术细节…'}
+              </output>
+            )}
+          >
+            <LazyReportMarkdownTechnicalDetailsRenderer markdown={localizedMarkdownContent} />
+          </Suspense>
+        ) : null}
+      </div>
+    </details>
+  </div>
+);
+
 /**
  * Markdown 报告抽屉组件
  * 使用通用 Drawer 组件，展示完整的 Markdown 格式分析报告
@@ -272,147 +468,25 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
   return (
     <Drawer isOpen={state.isOpen} onClose={handleClose} width="max-w-[min(96vw,112rem)]" zIndex={100}>
       <div className="mx-auto w-full max-w-[72rem] space-y-5 pb-1" data-testid="full-report-document-shell">
-        <SupportPanel
-          className="mb-1 px-5 py-4 md:px-6"
-          title={stockName || stockCode}
-          body={text.fullReport}
-          icon={(
-            <div className="flex size-8 items-center justify-center rounded-lg bg-[var(--home-action-report-bg)] text-[var(--home-action-report-text)]">
-              <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-          )}
-          titleClassName="mt-0 text-base font-semibold"
-          bodyClassName="text-sm"
-        >
-        </SupportPanel>
-
-        {isLoading ? (
-          <SupportPanel
-            centered
-            className="flex h-64 flex-col items-center justify-center p-6"
-            icon={<div className="home-spinner size-10 animate-spin border-[3px]" />}
-            title={text.loadingReport}
-            body={text.markdownLoadingBody}
+        <ReportMarkdownHeaderPanel body={text.fullReport} stockCode={stockCode} stockName={stockName} />
+        <ReportMarkdownStatusPanel error={error} handleClose={handleClose} isLoading={isLoading} text={text} />
+        {!isLoading && !error ? (
+          <ReportMarkdownLoadedContent
+            captionClassName={captionClassName}
+            colon={colon}
+            content={content}
+            coverageAudit={coverageAudit}
+            coverageBuckets={coverageBuckets}
+            coverageCategoryLabel={coverageCategoryLabel}
+            dispatch={dispatch}
+            executiveSummary={executiveSummary}
+            headingClassName={headingClassName}
+            localizedMarkdownContent={localizedMarkdownContent}
+            normalizedLanguage={normalizedLanguage}
+            state={state}
+            text={text}
           />
-        ) : error ? (
-          <SupportPanel
-            centered
-            className="flex h-64 flex-col items-center justify-center p-6"
-            icon={(
-              <div className="flex size-12 items-center justify-center rounded-xl bg-danger/10">
-                <svg className="size-6 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-            )}
-            title={error}
-            body={text.markdownErrorBody}
-            titleClassName="text-danger"
-            actions={(
-              <button
-                type="button"
-                onClick={handleClose}
-                className="home-surface-button rounded-lg px-4 py-2 text-sm text-secondary-text"
-              >
-                {text.dismiss}
-              </button>
-            )}
-          />
-        ) : (
-          <div className="space-y-5" data-testid="full-report-reading-surface">
-            <div data-testid="report-executive-summary">
-              <SupportPanel
-                className="px-5 py-4 md:px-6"
-                title={normalizedLanguage === 'en' ? 'Executive Summary' : '执行摘要'}
-                body={executiveSummary.firstLine}
-                titleClassName={headingClassName}
-                bodyClassName="text-sm leading-6 text-secondary-text"
-              >
-                <div className="grid gap-2 text-xs text-secondary-text sm:grid-cols-3">
-                  {[
-                    { label: normalizedLanguage === 'en' ? 'Decision' : '结论', value: executiveSummary.observation },
-                    { label: normalizedLanguage === 'en' ? 'Confidence' : '置信度', value: executiveSummary.confidence },
-                    { label: normalizedLanguage === 'en' ? 'Key risk' : '关键风险', value: executiveSummary.keyRisk },
-                  ].map((item) => (
-                    <div key={item.label} className="rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/35 px-3 py-2.5">
-                      <p className={captionClassName}>{item.label}</p>
-                      <p className="mt-1.5 break-words leading-5 text-foreground/80">{item.value}</p>
-                    </div>
-                  ))}
-                </div>
-              </SupportPanel>
-            </div>
-
-            <SupportPanel
-              className="px-5 py-4 md:px-6"
-              title={text.coverageAuditTitle}
-              body={text.coverageAuditBody}
-              titleClassName={headingClassName}
-              bodyClassName="text-sm leading-6"
-            >
-              {coverageAudit.totalMissingFields > 0 ? (
-                <div className="space-y-3 text-xs text-secondary-text">
-                  <p className={captionClassName}>
-                    {text.missingFieldsTotal}{colon}{coverageAudit.totalMissingFields}
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                    {coverageBuckets.map((bucket) => (
-                      <div key={bucket.category} className="rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/40 px-3 py-2.5">
-                        <p className={captionClassName}>
-                          {coverageCategoryLabel(bucket.category)} ({bucket.entries.length})
-                        </p>
-                        <ul className="mt-2.5 space-y-1.5">
-                          {bucket.entries.slice(0, 5).map((entry, index) => (
-                            <li key={`${entry.field}-${entry.reason}-${index}`}>
-                              <span className="font-medium text-foreground">{localizeReportTermLabel(entry.field, normalizedLanguage)}</span>
-                              <span className="text-muted-text">{colon}{localizeReportHeadingLabel(entry.reason, normalizedLanguage)}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-muted-text">{text.noMissingFields}</p>
-              )}
-            </SupportPanel>
-
-            <details
-              data-testid="report-technical-evidence-details"
-              className="theme-panel-subtle rounded-[var(--cohere-radius-medium)] px-5 py-4 md:px-6"
-              onToggle={(event) => {
-                if (event.currentTarget.open) {
-                  dispatch({ type: 'openTechnicalDetails' });
-                }
-              }}
-            >
-              <summary className="cursor-pointer list-none text-sm font-semibold tracking-[0.06em] text-foreground">
-                {normalizedLanguage === 'en' ? 'Technical details' : '技术细节'}
-              </summary>
-              <div className="mt-4 mx-auto w-full max-w-[86ch]">
-                {state.hasOpenedTechnicalDetails ? (
-                  <Suspense
-                    fallback={(
-                      <output
-                        aria-live="polite"
-                        aria-busy="true"
-                        data-testid="report-technical-details-loading"
-                        className="block rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/35 p-3 text-sm text-secondary-text"
-                      >
-                        {normalizedLanguage === 'en' ? 'Loading technical details…' : '正在加载技术细节…'}
-                      </output>
-                    )}
-                  >
-                    <LazyReportMarkdownTechnicalDetailsRenderer markdown={localizedMarkdownContent} />
-                  </Suspense>
-                ) : null}
-              </div>
-            </details>
-          </div>
-        )}
+        ) : null}
 
         {/* Footer */}
         <div className="home-divider mt-6 flex justify-end border-t pt-4">

@@ -386,15 +386,18 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
     || '--';
 
   const handleCopyReport = async () => {
-    try {
-      if (!navigator.clipboard?.writeText) {
-        throw new Error('clipboard_unavailable');
-      }
-      await navigator.clipboard.writeText(markdown);
-      setCopyState('copied');
-    } catch {
+    if (!navigator.clipboard?.writeText) {
       setCopyState('failed');
+      return;
     }
+    const copyError = await navigator.clipboard.writeText(markdown)
+      .then(() => null)
+      .catch((error) => error);
+    if (copyError) {
+      setCopyState('failed');
+      return;
+    }
+    setCopyState('copied');
   };
 
   const buildExportFileName = (extension: 'md'): string => {

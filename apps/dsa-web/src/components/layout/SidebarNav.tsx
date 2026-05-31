@@ -115,12 +115,12 @@ function DrawerUtilityLabel({
   );
 }
 
-export const SidebarNav: React.FC<SidebarNavProps> = ({
+function useSidebarNavView({
   layout = 'header',
   onNavigate,
   onOpenArchive,
   hasArchive = false,
-}) => {
+}: SidebarNavProps) {
   const location = useLocation();
   const { authEnabled, logout } = useAuth();
   const {
@@ -440,76 +440,87 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </button>
   ) : null;
 
+  const navBody = isDrawer ? (
+    <div className="shell-drawer-nav">
+      <div className="shell-drawer-brand">
+        <BrandWordmark onNavigate={onNavigate} />
+        <span className="shell-drawer-note">{t('nav.terminal')}</span>
+      </div>
+      <nav className="shell-drawer-links" aria-label={t('shell.drawerTitle')}>
+        {navLinks}
+      </nav>
+      <div className="shell-drawer-footer">
+        {archiveAction}
+        {languageAction}
+        {settingsAction}
+        {adminMenuAction}
+        {signInAction}
+        {logoutAction}
+      </div>
+    </div>
+  ) : (
+    <div className="shell-header-nav">
+      <div className="shell-header-brand">
+        <BrandWordmark />
+      </div>
+      <nav className="shell-header-links" aria-label={t('shell.drawerTitle')}>
+        {navLinks}
+      </nav>
+      <div className="shell-header-utilities">
+        {archiveAction}
+        <div
+          data-testid="shell-header-utility-island"
+          className="flex items-center gap-0.5 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-1.5 py-1"
+        >
+          {languageAction}
+          {(settingsAction || adminMenuAction || signInAction || logoutAction) ? (
+            <div className="h-3 w-px bg-[var(--wolfy-divider)]" data-testid="shell-header-utility-divider" />
+          ) : null}
+          {settingsAction}
+          {adminMenuAction}
+          {signInAction}
+          {logoutAction && (settingsAction || adminMenuAction || signInAction) ? (
+            <div className="h-3 w-px bg-[var(--wolfy-divider)]" data-testid="shell-header-utility-divider" />
+          ) : null}
+          {logoutAction}
+        </div>
+      </div>
+    </div>
+  );
+
+  const confirmDialog = (
+    <ConfirmDialog
+      isOpen={showLogoutConfirm}
+      title={t('nav.logoutTitle')}
+      message={t('nav.logoutMessage')}
+      confirmText={t('nav.logoutConfirm')}
+      cancelText={t('nav.logoutCancel')}
+      isDanger
+      onConfirm={() => {
+        setShowLogoutConfirm(false);
+        onNavigate?.();
+        void (async () => {
+          try {
+            await logout();
+          } catch {
+            return;
+          }
+        })();
+      }}
+      onCancel={() => setShowLogoutConfirm(false)}
+    />
+  );
+
+  return { navBody, confirmDialog };
+}
+
+export const SidebarNav: React.FC<SidebarNavProps> = (props) => {
+  const { navBody, confirmDialog } = useSidebarNavView(props);
+
   return (
     <>
-      {isDrawer ? (
-        <div className="shell-drawer-nav">
-          <div className="shell-drawer-brand">
-            <BrandWordmark onNavigate={onNavigate} />
-            <span className="shell-drawer-note">{t('nav.terminal')}</span>
-          </div>
-          <nav className="shell-drawer-links" aria-label={t('shell.drawerTitle')}>
-            {navLinks}
-          </nav>
-          <div className="shell-drawer-footer">
-            {archiveAction}
-            {languageAction}
-            {settingsAction}
-            {adminMenuAction}
-            {signInAction}
-            {logoutAction}
-          </div>
-        </div>
-      ) : (
-        <div className="shell-header-nav">
-          <div className="shell-header-brand">
-            <BrandWordmark />
-          </div>
-          <nav className="shell-header-links" aria-label={t('shell.drawerTitle')}>
-            {navLinks}
-          </nav>
-          <div className="shell-header-utilities">
-            {archiveAction}
-            <div
-              data-testid="shell-header-utility-island"
-              className="flex items-center gap-0.5 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-1.5 py-1"
-            >
-              {languageAction}
-              {(settingsAction || adminMenuAction || signInAction || logoutAction) ? (
-                <div className="h-3 w-px bg-[var(--wolfy-divider)]" data-testid="shell-header-utility-divider" />
-              ) : null}
-              {settingsAction}
-              {adminMenuAction}
-              {signInAction}
-              {logoutAction && (settingsAction || adminMenuAction || signInAction) ? (
-                <div className="h-3 w-px bg-[var(--wolfy-divider)]" data-testid="shell-header-utility-divider" />
-              ) : null}
-              {logoutAction}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <ConfirmDialog
-        isOpen={showLogoutConfirm}
-        title={t('nav.logoutTitle')}
-        message={t('nav.logoutMessage')}
-        confirmText={t('nav.logoutConfirm')}
-        cancelText={t('nav.logoutCancel')}
-        isDanger
-        onConfirm={() => {
-          setShowLogoutConfirm(false);
-          onNavigate?.();
-          void (async () => {
-            try {
-              await logout();
-            } catch {
-              return;
-            }
-          })();
-        }}
-        onCancel={() => setShowLogoutConfirm(false)}
-      />
+      {navBody}
+      {confirmDialog}
     </>
   );
 };

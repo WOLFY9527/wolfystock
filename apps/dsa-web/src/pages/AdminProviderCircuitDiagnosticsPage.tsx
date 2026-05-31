@@ -933,9 +933,15 @@ const LoadingState: React.FC = () => (
 
 const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
   const { canReadProviders } = useProductSurface();
-  const [data, setData] = useState<ProviderCircuitDiagnosticsBundle | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<ParsedApiError | null>(null);
+  const [{ data, isLoading, error }, setState] = useState<{
+    data: ProviderCircuitDiagnosticsBundle | null;
+    isLoading: boolean;
+    error: ParsedApiError | null;
+  }>({
+    data: null,
+    isLoading: true,
+    error: null,
+  });
 
   useEffect(() => {
     if (!canReadProviders) {
@@ -944,16 +950,23 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
     let cancelled = false;
     adminProviderCircuitsApi.getDiagnostics({ limit: 50 })
       .then((payload) => {
-        if (!cancelled) setData(payload);
+        if (!cancelled) {
+          setState({
+            data: payload,
+            isLoading: false,
+            error: null,
+          });
+        }
       })
       .catch((apiError) => {
         if (!cancelled) {
           const parsed = getParsedApiError(apiError);
-          setError({ ...parsed, title: '读取 provider 熔断诊断失败' });
+          setState({
+            data: null,
+            isLoading: false,
+            error: { ...parsed, title: '读取 provider 熔断诊断失败' },
+          });
         }
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
       });
     return () => {
       cancelled = true;
