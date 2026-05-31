@@ -428,6 +428,7 @@ class MarketRotationRadarService:
             },
         }
         payload["metadata"]["rotationEvidenceSnapshot"] = self._rotation_evidence_snapshot(payload)
+        payload["consumerEvidenceSnapshot"] = self._consumer_evidence_snapshot(payload)
         if shared_cache_key and not payload_fallback:
             _store_shared_rotation_radar_snapshot(shared_cache_key, payload)
         return payload
@@ -517,6 +518,7 @@ class MarketRotationRadarService:
             },
         }
         payload["metadata"]["rotationEvidenceSnapshot"] = self._rotation_evidence_snapshot(payload)
+        payload["consumerEvidenceSnapshot"] = self._consumer_evidence_snapshot(payload)
         return payload
 
     def _taxonomy_only_theme(self, entry: RotationTaxonomyEntry, generated_at: str, index: int) -> Dict[str, Any]:
@@ -1476,6 +1478,189 @@ class MarketRotationRadarService:
             "forbiddenReliableClaims": self._rotation_forbidden_reliable_claims(),
             "reasonCodes": reason_codes,
         }
+
+    def _consumer_evidence_snapshot(self, payload: Mapping[str, Any]) -> Dict[str, Any]:
+        metadata = payload.get("metadata")
+        metadata = dict(metadata) if isinstance(metadata, Mapping) else {}
+        summary = payload.get("summary")
+        summary = dict(summary) if isinstance(summary, Mapping) else {}
+        raw_snapshot = metadata.get("rotationEvidenceSnapshot")
+        raw_snapshot = dict(raw_snapshot) if isinstance(raw_snapshot, Mapping) else {}
+        themes = payload.get("themes")
+        theme_rows = [
+            dict(theme)
+            for theme in themes
+            if isinstance(theme, Mapping)
+        ] if isinstance(themes, Sequence) and not isinstance(themes, (str, bytes)) else []
+        source_meta = self._rotation_snapshot_source_metadata(metadata)
+        source_type = str(
+            raw_snapshot.get("sourceType")
+            or self._rotation_snapshot_source_type(payload, source_meta)
+            or "missing"
+        )
+        source_tier = str(
+            raw_snapshot.get("sourceTier")
+            or self._rotation_snapshot_source_tier(source_meta, {}, source_type)
+            or "unknown"
+        )
+        provider_tier = str(
+            raw_snapshot.get("providerTier")
+            or self._rotation_snapshot_provider_tier(source_meta, source_type)
+            or "unknown"
+        )
+        provider_status = str(source_meta.get("status") or "absent")
+        is_partial = bool(
+            provider_status == "partial"
+            or self._safe_int(raw_snapshot.get("partialCount")) > 0
+            or any(bool(theme.get("isPartial")) for theme in theme_rows)
+        )
+        freshness = self._consumer_projection_freshness(
+            payload=payload,
+            source_meta=source_meta,
+            raw_snapshot=raw_snapshot,
+            is_partial=is_partial,
+        )
+        as_of = source_meta.get("asOf") or payload.get("generatedAt")
+        authority_grant = raw_snapshot.get("authorityGrant")
+        score_contribution_allowed = any(
+            self._is_headline_ranked_theme(theme)
+            and theme.get("scoreContributionAllowed") is True
+            for theme in theme_rows
+        )
+        provider_state = self._consumer_provider_state(
+            source_meta=source_meta,
+            raw_snapshot=raw_snapshot,
+            source_type=source_type,
+            source_tier=source_tier,
+            provider_tier=provider_tier,
+            freshness=freshness,
+            metadata=metadata,
+            score_contribution_allowed=bool(score_contribution_allowed),
+        )
+        snapshot = {
+            "market": str(payload.get("market") or "US"),
+            "generatedAt": payload.get("generatedAt"),
+            "asOf": str(as_of) if as_of else None,
+            "freshness": freshness,
+            "isFallback": bool(payload.get("isFallback")),
+            "isStale": bool(payload.get("isStale")),
+            "isPartial": is_partial,
+            "headlineEligibleThemeCount": self._safe_int(summary.get("headlineEligibleThemeCount")),
+            "observationThemeCount": self._safe_int(
+                summary.get("observationThemeCount"),
+                sum(1 for theme in theme_rows if bool(theme.get("observationOnly")) and not bool(theme.get("taxonomyOnly"))),
+            ),
+            "taxonomyThemeCount": sum(1 for theme in theme_rows if bool(theme.get("taxonomyOnly"))),
+            "scoreContributionAllowed": bool(score_contribution_allowed),
+            "reasonCodes": self._consumer_reason_codes(raw_snapshot.get("reasonCodes")),
+            "providerState": provider_state,
+            "etfProxySummary": self._consumer_etf_proxy_summary(payload.get("etfLeadershipDiagnostics")),
+            "themes": [self._consumer_theme_quality(theme) for theme in theme_rows],
+        }
+        if isinstance(authority_grant, bool):
+            snapshot["authorityGrant"] = authority_grant
+        return snapshot
+
+    def _consumer_projection_freshness(
+        self,
+        *,
+        payload: Mapping[str, Any],
+        source_meta: Mapping[str, Any],
+        raw_snapshot: Mapping[str, Any],
+        is_partial: bool,
+    ) -> str:
+        if bool(payload.get("isFallback")):
+            return "fallback"
+        if bool(payload.get("isStale")) or self._safe_int(raw_snapshot.get("staleCount")) > 0:
+            return "stale"
+        if is_partial:
+            return "partial"
+        return str(source_meta.get("freshness") or raw_snapshot.get("freshness") or payload.get("freshness") or "fallback")
+
+    def _consumer_provider_state(
+        self,
+        *,
+        source_meta: Mapping[str, Any],
+        raw_snapshot: Mapping[str, Any],
+        source_type: str,
+        source_tier: str,
+        provider_tier: str,
+        freshness: str,
+        metadata: Mapping[str, Any],
+        score_contribution_allowed: bool,
+    ) -> Dict[str, Any]:
+        coverage = raw_snapshot.get("coverage")
+        coverage = dict(coverage) if isinstance(coverage, Mapping) else {}
+        return {
+            "present": bool(source_meta.get("present")),
+            "status": str(source_meta.get("status") or "absent"),
+            "quoteMode": str(source_meta.get("quoteMode") or raw_snapshot.get("quoteMode") or "proxy"),
+            "sourceType": source_type,
+            "sourceTier": source_tier,
+            "providerTier": provider_tier,
+            "freshness": freshness,
+            "asOf": source_meta.get("asOf"),
+            "coverage": {
+                "requestedSymbolCount": self._safe_int(
+                    source_meta.get("requestedSymbolCount"),
+                    self._safe_int(coverage.get("requestedSymbolCount")),
+                ),
+                "usableSymbolCount": self._safe_int(
+                    source_meta.get("usableSymbolCount"),
+                    self._safe_int(coverage.get("usableSymbolCount")),
+                ),
+                "coveragePercent": float(source_meta.get("coveragePercent") or coverage.get("coveragePercent") or 0.0),
+            },
+            "sourceAuthorityAllowed": source_meta.get("sourceAuthorityAllowed") is True,
+            "scoreContributionAllowed": source_meta.get("scoreContributionAllowed") is True and score_contribution_allowed,
+            "noExternalCalls": bool(source_meta.get("noExternalCalls", metadata.get("noExternalCalls", True))),
+        }
+
+    def _consumer_etf_proxy_summary(self, diagnostics_value: Any) -> Dict[str, Any]:
+        diagnostics = dict(diagnostics_value) if isinstance(diagnostics_value, Mapping) else {}
+        return {
+            "present": bool(diagnostics),
+            "proxyOnly": True,
+            "label": "ETF proxy-only leadership evidence; not real fund-flow authority.",
+            "fundFlowAuthorityAllowed": False,
+            "enabled": bool(diagnostics.get("enabled")),
+            "source": diagnostics.get("source"),
+            "asOf": diagnostics.get("asOf"),
+            "eligibleSymbolCount": len(self._string_list(diagnostics.get("eligibleSymbols"))),
+            "leadingSymbols": self._string_list(diagnostics.get("leadingSymbols")),
+            "laggingSymbols": self._string_list(diagnostics.get("laggingSymbols")),
+            "reasonCodes": self._consumer_reason_codes(diagnostics.get("reasonCodes")),
+        }
+
+    @staticmethod
+    def _consumer_theme_quality(theme: Mapping[str, Any]) -> Dict[str, Any]:
+        return {
+            "id": str(theme.get("id") or ""),
+            "name": str(theme.get("name") or ""),
+            "rankEligible": bool(theme.get("rankEligible")),
+            "headlineEligible": bool(theme.get("headlineEligible")),
+            "rankingLane": str(theme.get("rankingLane") or "observation"),
+            "observationOnly": bool(theme.get("observationOnly")),
+            "taxonomyOnly": bool(theme.get("taxonomyOnly")),
+            "scoreContributionAllowed": theme.get("scoreContributionAllowed") is True,
+            "freshness": str(theme.get("freshness") or "fallback"),
+            "isFallback": bool(theme.get("isFallback")),
+            "isStale": bool(theme.get("isStale")),
+            "isPartial": bool(theme.get("isPartial")),
+            "evidenceQuality": str(theme.get("evidenceQuality") or "insufficient"),
+            "dataGaps": [str(item) for item in (theme.get("dataGaps") or []) if str(item or "").strip()],
+        }
+
+    def _consumer_reason_codes(self, raw_codes: Any) -> List[str]:
+        codes: List[str] = []
+        for item in self._string_list(raw_codes):
+            normalized = "".join(
+                char.lower() if char.isalnum() or char in {"_", "-"} else "_"
+                for char in str(item).strip()
+            ).strip("_")
+            if normalized and normalized not in codes:
+                codes.append(normalized)
+        return codes[:24]
 
     @staticmethod
     def _rotation_forbidden_reliable_claims() -> List[Dict[str, Any]]:

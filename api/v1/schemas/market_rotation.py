@@ -242,6 +242,83 @@ class RotationRadarEtfLeadershipDiagnosticsModel(BaseModel):
     evidence: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+class RotationRadarConsumerProviderStateModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    present: bool = False
+    status: str = "absent"
+    quoteMode: str = "proxy"
+    sourceType: str = "missing"
+    sourceTier: str = "unknown"
+    providerTier: str = "unknown"
+    freshness: str = "fallback"
+    asOf: Optional[str] = None
+    coverage: Dict[str, Any] = Field(default_factory=dict)
+    sourceAuthorityAllowed: bool = False
+    scoreContributionAllowed: bool = False
+    noExternalCalls: bool = True
+
+
+class RotationRadarConsumerEtfProxySummaryModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    present: bool = False
+    proxyOnly: bool = True
+    label: str = "ETF proxy-only leadership evidence; not real fund-flow authority."
+    fundFlowAuthorityAllowed: bool = False
+    enabled: bool = False
+    source: Optional[str] = None
+    asOf: Optional[str] = None
+    eligibleSymbolCount: int = 0
+    leadingSymbols: List[str] = Field(default_factory=list)
+    laggingSymbols: List[str] = Field(default_factory=list)
+    reasonCodes: List[str] = Field(default_factory=list)
+
+
+class RotationRadarConsumerThemeQualityModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+    rankEligible: bool = False
+    headlineEligible: bool = False
+    rankingLane: RankingLane = "observation"
+    observationOnly: bool = False
+    taxonomyOnly: bool = False
+    scoreContributionAllowed: bool = False
+    freshness: str = "fallback"
+    isFallback: bool = False
+    isStale: bool = False
+    isPartial: bool = False
+    evidenceQuality: str = "insufficient"
+    dataGaps: List[str] = Field(default_factory=list)
+
+
+class RotationRadarConsumerEvidenceSnapshotModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    market: str
+    generatedAt: Optional[str] = None
+    asOf: Optional[str] = None
+    freshness: str = "fallback"
+    isFallback: bool = False
+    isStale: bool = False
+    isPartial: bool = False
+    headlineEligibleThemeCount: int = 0
+    observationThemeCount: int = 0
+    taxonomyThemeCount: int = 0
+    scoreContributionAllowed: bool = False
+    authorityGrant: Optional[bool] = None
+    reasonCodes: List[str] = Field(default_factory=list)
+    providerState: RotationRadarConsumerProviderStateModel = Field(
+        default_factory=RotationRadarConsumerProviderStateModel
+    )
+    etfProxySummary: RotationRadarConsumerEtfProxySummaryModel = Field(
+        default_factory=RotationRadarConsumerEtfProxySummaryModel
+    )
+    themes: List[RotationRadarConsumerThemeQualityModel] = Field(default_factory=list)
+
+
 class MarketRotationRadarResponse(BaseModel):
     endpoint: str
     market: str = "US"
@@ -260,4 +337,5 @@ class MarketRotationRadarResponse(BaseModel):
     )
     summary: RotationRadarSummaryModel
     themes: List[RotationRadarThemeModel] = Field(default_factory=list)
+    consumerEvidenceSnapshot: RotationRadarConsumerEvidenceSnapshotModel
     metadata: Dict[str, Any] = Field(default_factory=dict)

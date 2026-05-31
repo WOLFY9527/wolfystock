@@ -177,6 +177,33 @@ def _bounded_etf_authority_fixture() -> tuple[tuple[str, ...], dict[str, dict], 
     return stable_etfs, quotes, spine
 
 
+def _assert_consumer_snapshot_excludes_admin_fields(snapshot: dict) -> None:
+    dumped = json.dumps(snapshot, ensure_ascii=False)
+    for marker in (
+        "credentialFieldsMissing",
+        "ALPACA_API_KEY",
+        "requestWindowResults",
+        "symbolFailureSamples",
+        "rawFailureSamples",
+        "providerPayload",
+        "rawProviderPayload",
+        "perWindowTimeout",
+        "totalProviderBudget",
+        "providerDeadlineSeconds",
+        "sourceAuthorityRouter",
+        "activationHint",
+        "recommendedAction",
+        "proxyEnvironment",
+        "adminDiagnostics",
+        "signals",
+        "scoreBreakdown",
+        "weightBreakdown",
+        "rankingTrust",
+        "etfAuthoritySpine",
+    ):
+        assert marker not in dumped
+
+
 def _install_counting_default_provider(
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -242,6 +269,44 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
         assert payload["metadata"]["proxyQualityRequired"] is True
         assert payload["metadata"]["alertsAreReadOnlyEvidence"] is True
         assert payload["metadata"]["notificationDeliveryEnabled"] is False
+        consumer_snapshot = payload["consumerEvidenceSnapshot"]
+        assert consumer_snapshot["market"] == "US"
+        assert consumer_snapshot["generatedAt"] == payload["generatedAt"]
+        assert consumer_snapshot["asOf"] == payload["generatedAt"]
+        assert consumer_snapshot["freshness"] == "fallback"
+        assert consumer_snapshot["isFallback"] is True
+        assert consumer_snapshot["isStale"] is False
+        assert consumer_snapshot["isPartial"] is False
+        assert consumer_snapshot["headlineEligibleThemeCount"] == 0
+        assert consumer_snapshot["observationThemeCount"] == len(payload["themes"])
+        assert consumer_snapshot["taxonomyThemeCount"] == 0
+        assert consumer_snapshot["scoreContributionAllowed"] is False
+        assert consumer_snapshot["authorityGrant"] is False
+        assert consumer_snapshot["providerState"]["present"] is False
+        assert consumer_snapshot["providerState"]["status"] == "absent"
+        assert consumer_snapshot["providerState"]["sourceType"] == "fallback_static"
+        assert consumer_snapshot["providerState"]["sourceAuthorityAllowed"] is False
+        assert consumer_snapshot["providerState"]["scoreContributionAllowed"] is False
+        assert consumer_snapshot["providerState"]["noExternalCalls"] is True
+        assert len(consumer_snapshot["themes"]) == len(payload["themes"])
+        assert set(consumer_snapshot["themes"][0]) == {
+            "id",
+            "name",
+            "rankEligible",
+            "headlineEligible",
+            "rankingLane",
+            "observationOnly",
+            "taxonomyOnly",
+            "scoreContributionAllowed",
+            "freshness",
+            "isFallback",
+            "isStale",
+            "isPartial",
+            "evidenceQuality",
+            "dataGaps",
+        }
+        assert all(theme["scoreContributionAllowed"] is False for theme in consumer_snapshot["themes"])
+        _assert_consumer_snapshot_excludes_admin_fields(consumer_snapshot)
         assert payload["isFallback"] is True
         assert payload["freshness"] == "fallback"
         assert payload["themes"]
@@ -714,6 +779,22 @@ def test_market_rotation_radar_api_preserves_enabled_etf_leadership_contract_wit
         assert all(row["symbol"] in stable_etfs for row in diagnostics["evidence"])
         assert all(row["sourceAuthorityAllowed"] is True for row in diagnostics["evidence"])
         assert all(row["scoreContributionAllowed"] is True for row in diagnostics["evidence"])
+        consumer_snapshot = payload["consumerEvidenceSnapshot"]
+        assert consumer_snapshot["scoreContributionAllowed"] is False
+        assert consumer_snapshot["authorityGrant"] is False
+        assert consumer_snapshot["providerState"]["sourceType"] == "official_public"
+        assert consumer_snapshot["providerState"]["scoreContributionAllowed"] is False
+        assert consumer_snapshot["etfProxySummary"]["present"] is True
+        assert consumer_snapshot["etfProxySummary"]["proxyOnly"] is True
+        assert consumer_snapshot["etfProxySummary"]["fundFlowAuthorityAllowed"] is False
+        assert consumer_snapshot["etfProxySummary"]["enabled"] is True
+        assert consumer_snapshot["etfProxySummary"]["source"] == "alpaca_etf_authority_spine"
+        assert consumer_snapshot["etfProxySummary"]["eligibleSymbolCount"] == len(stable_etfs)
+        assert consumer_snapshot["etfProxySummary"]["leadingSymbols"] == ["SMH", "SOXX", "QQQ"]
+        assert "proxy-only" in consumer_snapshot["etfProxySummary"]["label"]
+        assert "evidence" not in consumer_snapshot["etfProxySummary"]
+        assert "quotes" not in consumer_snapshot["etfProxySummary"]
+        _assert_consumer_snapshot_excludes_admin_fields(consumer_snapshot)
         assert payload["metadata"]["quoteProvider"]["etfAuthoritySpine"]["sourceAuthorityAllowed"] is True
         assert payload["metadata"]["quoteProvider"]["etfAuthoritySpine"]["scoreContributionAllowed"] is True
         ai_theme = next(theme for theme in payload["themes"] if theme["id"] == "ai_applications")
@@ -1062,6 +1143,21 @@ def test_market_rotation_radar_partial_quote_failures_are_sanitized_in_api_paylo
                     "failedSymbolCount": 5,
                     "unavailableReason": "possibly delisted / no price data",
                     "noExternalCalls": False,
+                    "providerDiagnostics": {
+                        "configuredProviderAttempted": True,
+                        "providerAttempted": True,
+                        "credentialsPresent": False,
+                        "credentialFieldsMissing": ["ALPACA_API_KEY"],
+                        "requestWindowResults": {"5m": {"failureClasses": {"timeout": 1}}},
+                        "symbolFailureSamples": [{"symbol": "SQ", "error": "timeout"}],
+                        "perWindowTimeout": 2.5,
+                        "totalProviderBudget": 8.0,
+                        "sourceAuthorityRouter": {"route": "operator_only"},
+                        "activationHint": "set secrets",
+                        "recommendedAction": "operator action",
+                        "proxyEnvironment": {"httpsProxyConfigured": True},
+                        "adminDiagnostics": {"raw": True},
+                    },
                 },
             }
 
@@ -1078,7 +1174,19 @@ def test_market_rotation_radar_partial_quote_failures_are_sanitized_in_api_paylo
         assert payload["metadata"]["quoteProvider"]["failedSymbols"] == ["SQ", "IRBT", "X"]
         assert payload["metadata"]["quoteProvider"]["failedSymbolCount"] == 5
         assert payload["metadata"]["quoteProvider"]["unavailableReason"] == "symbol_unavailable"
+        assert payload["metadata"]["quoteProvider"]["providerDiagnostics"]["credentialFieldsMissing"] == ["ALPACA_API_KEY"]
+        assert "requestWindowResults" in payload["metadata"]["quoteProvider"]["providerDiagnostics"]
         assert "部分主题行情暂不可用" in payload["warning"]
+        consumer_snapshot = payload["consumerEvidenceSnapshot"]
+        assert consumer_snapshot["isPartial"] is True
+        assert consumer_snapshot["freshness"] == "partial"
+        assert consumer_snapshot["providerState"]["status"] == "partial"
+        assert consumer_snapshot["providerState"]["sourceType"] in {"synthetic_fixture", "unofficial_proxy"}
+        assert consumer_snapshot["providerState"]["coverage"]["usableSymbolCount"] > 0
+        assert consumer_snapshot["scoreContributionAllowed"] is False
+        assert "partial_coverage" in consumer_snapshot["reasonCodes"]
+        assert "live" not in {consumer_snapshot["freshness"], consumer_snapshot["providerState"]["freshness"]}
+        _assert_consumer_snapshot_excludes_admin_fields(consumer_snapshot)
         ai_apps = next(theme for theme in payload["themes"] if theme["id"] == "ai_applications")
         assert ai_apps["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["freshness"] == "partial"
         assert ai_apps["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["isPartial"] is True

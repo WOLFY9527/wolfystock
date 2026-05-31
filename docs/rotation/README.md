@@ -72,5 +72,17 @@ fund-flow interpretation, or rotation evidence disclosure.
   `liveActivationStatus`, `activationBlocker`, recommended activation
   action/hint, and final trust/source-tier classification without exposing raw
   credential values.
+- `consumerEvidenceSnapshot` is the consumer-facing projection for Rotation
+  Radar evidence. It is additive and whitelist-only: market/as-of/freshness,
+  fallback/stale/partial flags, headline/observation/taxonomy counts, sanitized
+  reason codes, provider state summary, ETF proxy-only leadership summary, and
+  per-theme public quality flags. It deliberately excludes credentials/env
+  visibility, missing env names, provider budgets/deadlines, request-window
+  results, raw failure samples, source-authority router internals, activation
+  hints/recommended actions, proxy environment, admin diagnostics, raw evidence
+  signals, score/weight breakdowns, ranking trust, ETF authority evidence rows,
+  and raw provider payloads/errors. It must not recompute source authority,
+  score authority, ranking, headline eligibility, provider routing, or cache
+  behavior.
 - Rotation UI changes must not alter score, ranking, provider, or evidence
   semantics unless explicitly scoped.

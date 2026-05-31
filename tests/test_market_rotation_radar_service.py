@@ -218,6 +218,34 @@ def _forbidden_claims_by_name(snapshot: dict) -> dict[str, dict]:
     }
 
 
+def _assert_consumer_snapshot_excludes_admin_fields(testcase: unittest.TestCase, snapshot: dict) -> None:
+    dumped = json.dumps(snapshot, ensure_ascii=False)
+    for marker in (
+        "credentialFieldsMissing",
+        "ALPACA_API_KEY",
+        "missing env",
+        "requestWindowResults",
+        "symbolFailureSamples",
+        "rawFailureSamples",
+        "providerPayload",
+        "rawProviderPayload",
+        "perWindowTimeout",
+        "totalProviderBudget",
+        "providerDeadlineSeconds",
+        "sourceAuthorityRouter",
+        "activationHint",
+        "recommendedAction",
+        "proxyEnvironment",
+        "adminDiagnostics",
+        "signals",
+        "scoreBreakdown",
+        "weightBreakdown",
+        "rankingTrust",
+        "etfAuthoritySpine",
+    ):
+        testcase.assertNotIn(marker, dumped)
+
+
 def _utc_dt(year: int, month: int, day: int, hour: int, minute: int = 0) -> datetime:
     return datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
 
@@ -343,6 +371,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
 
         payload = service.get_rotation_radar()
         snapshot = payload["metadata"]["rotationEvidenceSnapshot"]
+        consumer_snapshot = payload["consumerEvidenceSnapshot"]
 
         self.assertTrue(payload["isFallback"])
         self.assertEqual(payload["freshness"], "fallback")
@@ -380,6 +409,63 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertIn("provider_absent", snapshot["reasonCodes"])
         self.assertIn("fallback_source", snapshot["reasonCodes"])
         self.assertIn("static_source", snapshot["reasonCodes"])
+        self.assertEqual(consumer_snapshot["market"], "US")
+        self.assertEqual(consumer_snapshot["generatedAt"], payload["generatedAt"])
+        self.assertEqual(consumer_snapshot["asOf"], payload["generatedAt"])
+        self.assertEqual(consumer_snapshot["freshness"], "fallback")
+        self.assertTrue(consumer_snapshot["isFallback"])
+        self.assertFalse(consumer_snapshot["isStale"])
+        self.assertFalse(consumer_snapshot["isPartial"])
+        self.assertEqual(consumer_snapshot["headlineEligibleThemeCount"], 0)
+        self.assertEqual(consumer_snapshot["observationThemeCount"], len(payload["themes"]))
+        self.assertEqual(consumer_snapshot["taxonomyThemeCount"], 0)
+        self.assertFalse(consumer_snapshot["scoreContributionAllowed"])
+        self.assertFalse(consumer_snapshot["authorityGrant"])
+        self.assertIn("fallback_source", consumer_snapshot["reasonCodes"])
+        self.assertEqual(
+            consumer_snapshot["providerState"],
+            {
+                "present": False,
+                "status": "absent",
+                "quoteMode": "proxy",
+                "sourceType": "fallback_static",
+                "sourceTier": "static_fallback",
+                "providerTier": "fallback",
+                "freshness": "fallback",
+                "asOf": None,
+                "coverage": {
+                    "requestedSymbolCount": payload["metadata"]["quoteProvider"]["requestedSymbolCount"],
+                    "usableSymbolCount": 0,
+                    "coveragePercent": 0.0,
+                },
+                "sourceAuthorityAllowed": False,
+                "scoreContributionAllowed": False,
+                "noExternalCalls": True,
+            },
+        )
+        self.assertEqual(len(consumer_snapshot["themes"]), len(payload["themes"]))
+        self.assertEqual(
+            set(consumer_snapshot["themes"][0]),
+            {
+                "id",
+                "name",
+                "rankEligible",
+                "headlineEligible",
+                "rankingLane",
+                "observationOnly",
+                "taxonomyOnly",
+                "scoreContributionAllowed",
+                "freshness",
+                "isFallback",
+                "isStale",
+                "isPartial",
+                "evidenceQuality",
+                "dataGaps",
+            },
+        )
+        self.assertTrue(all(theme["rankingLane"] == "observation" for theme in consumer_snapshot["themes"]))
+        self.assertTrue(all(theme["scoreContributionAllowed"] is False for theme in consumer_snapshot["themes"]))
+        _assert_consumer_snapshot_excludes_admin_fields(self, consumer_snapshot)
         claims = _forbidden_claims_by_name(snapshot)
         for claim in (
             "proxy",
@@ -441,6 +527,63 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             self.assertTrue(theme["themeDetail"]["watchlistSafe"])
             self.assertEqual(theme["proxyQuality"]["coveragePercent"], 0)
             self.assertTrue(all(proxy["quality"]["missingReason"] for proxy in theme["benchmarkProxies"].values()))
+
+    def test_consumer_evidence_snapshot_whitelists_provider_state_without_admin_fields(self) -> None:
+        def provider(symbols):
+            return {
+                "quotes": {},
+                "metadata": {
+                    "quoteMode": "configured",
+                    "source": "alpaca",
+                    "sourceType": "official_public",
+                    "sourceTier": "broker_authorized",
+                    "providerTier": "tier_1_configured",
+                    "freshness": "live",
+                    "asOf": "2026-05-07T09:45:00+00:00",
+                    "failedSymbols": ["APP"],
+                    "failedSymbolCount": 1,
+                    "unavailableReason": "quote_fetch_failed",
+                    "noExternalCalls": False,
+                    "providerDiagnostics": {
+                        "configuredProviderAttempted": True,
+                        "providerAttempted": True,
+                        "credentialsPresent": False,
+                        "credentialFieldsMissing": ["ALPACA_API_KEY"],
+                        "credentialSource": "env",
+                        "providerConstructed": False,
+                        "requestWindowResults": {"5m": {"failureClasses": {"timeout": 1}}},
+                        "symbolFailureSamples": [{"symbol": "APP", "error": "timeout"}],
+                        "perWindowTimeout": 2.5,
+                        "totalProviderBudget": 8.0,
+                        "providerDeadlineSeconds": 3.0,
+                        "sourceAuthorityRouter": {"route": "operator_only"},
+                        "activationHint": "set secrets",
+                        "recommendedAction": "operator action",
+                        "proxyEnvironment": {"httpsProxyConfigured": True},
+                        "adminDiagnostics": {"raw": True},
+                    },
+                },
+            }
+
+        service = MarketRotationRadarService(
+            quote_provider=provider,
+            now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+        )
+
+        payload = service.get_rotation_radar()
+        provider_diagnostics = payload["metadata"]["quoteProvider"]["providerDiagnostics"]
+        consumer_snapshot = payload["consumerEvidenceSnapshot"]
+
+        self.assertEqual(provider_diagnostics["credentialFieldsMissing"], ["ALPACA_API_KEY"])
+        self.assertIn("requestWindowResults", provider_diagnostics)
+        self.assertIn("perWindowTimeout", provider_diagnostics)
+        self.assertEqual(consumer_snapshot["providerState"]["status"], "fallback")
+        self.assertEqual(consumer_snapshot["providerState"]["quoteMode"], "configured")
+        self.assertEqual(consumer_snapshot["providerState"]["asOf"], "2026-05-07T09:45:00+00:00")
+        self.assertTrue(consumer_snapshot["isFallback"])
+        self.assertFalse(consumer_snapshot["scoreContributionAllowed"])
+        self.assertNotIn("live", {consumer_snapshot["freshness"], consumer_snapshot["providerState"]["freshness"]})
+        _assert_consumer_snapshot_excludes_admin_fields(self, consumer_snapshot)
 
     def test_provider_backed_usable_themes_can_rank_while_fallback_static_stays_observation_only(self) -> None:
         ai_members = ("APP", "PLTR", "CRM", "SNOW", "ADBE", "NOW", "DUOL", "MDB", "TEAM", "WDAY")
@@ -2848,6 +2991,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
 
         payload = service.get_rotation_radar(market="CN")
         snapshot = payload["metadata"]["rotationEvidenceSnapshot"]
+        consumer_snapshot = payload["consumerEvidenceSnapshot"]
 
         self.assertEqual(provider_calls, [])
         self.assertEqual(payload["market"], "CN")
@@ -2882,6 +3026,22 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(snapshot["sourceTier"], "static_fallback")
         self.assertIn("taxonomy_only", snapshot["reasonCodes"])
         self.assertFalse(_forbidden_claims_by_name(snapshot)["taxonomy_only"]["reliableProvenanceAllowed"])
+        self.assertEqual(consumer_snapshot["market"], "CN")
+        self.assertEqual(consumer_snapshot["freshness"], "fallback")
+        self.assertTrue(consumer_snapshot["isFallback"])
+        self.assertFalse(consumer_snapshot["scoreContributionAllowed"])
+        self.assertFalse(consumer_snapshot["authorityGrant"])
+        self.assertEqual(consumer_snapshot["headlineEligibleThemeCount"], 0)
+        self.assertEqual(consumer_snapshot["observationThemeCount"], 0)
+        self.assertEqual(consumer_snapshot["taxonomyThemeCount"], len(payload["themes"]))
+        self.assertEqual(consumer_snapshot["providerState"]["status"], "absent")
+        self.assertEqual(consumer_snapshot["providerState"]["sourceType"], "taxonomy_only")
+        self.assertEqual(consumer_snapshot["providerState"]["sourceTier"], "static_fallback")
+        self.assertIn("taxonomy_only", consumer_snapshot["reasonCodes"])
+        self.assertTrue(all(theme["rankingLane"] == "taxonomy" for theme in consumer_snapshot["themes"]))
+        self.assertTrue(all(theme["taxonomyOnly"] is True for theme in consumer_snapshot["themes"]))
+        self.assertTrue(all(theme["evidenceQuality"] == "taxonomy_only" for theme in consumer_snapshot["themes"]))
+        _assert_consumer_snapshot_excludes_admin_fields(self, consumer_snapshot)
 
     def test_stale_and_missing_data_penalizes_confidence_and_blocks_clean_rotation_claims(self) -> None:
         quotes = {
