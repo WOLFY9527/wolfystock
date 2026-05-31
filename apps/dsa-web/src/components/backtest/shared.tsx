@@ -62,7 +62,7 @@ export function formatDateTime(value?: string | null): string {
   return formatDateTimeValue(value);
 }
 
-export function toDateInputValue(value: Date): string {
+function toDateInputValue(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
@@ -325,7 +325,7 @@ export function getRuleRunStatusDescription(status?: string, language: BacktestL
   return description === `backtest.${key}` ? bt(language, 'ruleRunStatusDescription.default') : description;
 }
 
-export function getRuleRunStatusTone(status?: string): 'default' | 'success' | 'warning' | 'danger' | 'info' {
+function getRuleRunStatusTone(status?: string): 'default' | 'success' | 'warning' | 'danger' | 'info' {
   const normalized = String(status || '').trim().toLowerCase();
   if (normalized === 'completed') return 'success';
   if (normalized === 'failed') return 'danger';

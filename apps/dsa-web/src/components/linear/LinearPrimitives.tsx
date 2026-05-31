@@ -311,7 +311,7 @@ export function ResearchConsoleShell({
   );
 }
 
-export function RailPanel({
+function RailPanel({
   railWidth = 'md',
   className,
   children,

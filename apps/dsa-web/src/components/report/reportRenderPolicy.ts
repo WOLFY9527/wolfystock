@@ -21,7 +21,7 @@ export function resolveLegacyFallbackMode(value: unknown): LegacyFallbackMode {
   return DEFAULT_MODE;
 }
 
-export function getLegacyFallbackModeFromEnv(): LegacyFallbackMode {
+function getLegacyFallbackModeFromEnv(): LegacyFallbackMode {
   return resolveLegacyFallbackMode(import.meta.env.VITE_REPORT_LEGACY_FALLBACK);
 }
 

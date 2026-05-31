@@ -297,7 +297,7 @@ export const collectMissingFieldEntriesFromMarkdown = (markdown: string): Missin
   return dedupeMissingFieldEntries(entries);
 };
 
-export const dedupeMissingFieldEntries = (entries: MissingFieldEntry[]): MissingFieldEntry[] => {
+const dedupeMissingFieldEntries = (entries: MissingFieldEntry[]): MissingFieldEntry[] => {
   const deduped: MissingFieldEntry[] = [];
   const seen = new Set<string>();
 

@@ -205,7 +205,7 @@ function shouldShowInlineWarning(meta?: Partial<MarketDataMeta>): boolean {
   return false;
 }
 
-export const MarketOverviewSparkline: React.FC<{ values?: number[]; tone?: string; className?: string }> = ({
+const MarketOverviewSparkline: React.FC<{ values?: number[]; tone?: string; className?: string }> = ({
   values,
   tone = 'text-white/35',
   className,
