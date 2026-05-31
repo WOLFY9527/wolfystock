@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -20,6 +21,8 @@ from api.v1.endpoints.scanner import (
     run_market_scan,
 )
 from api.v1.schemas.scanner import ScannerRunRequest, ScannerThemeGenerateRequest
+from src.services.market_scanner_service import MarketScannerService
+from src.services.scanner_evidence_packet import build_scanner_evidence_packet
 
 
 def _make_candidate(symbol: str, rank: int, *, benchmark_code: str = "000300") -> dict:
@@ -389,6 +392,21 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             "userFacingLabels": ["仅供观察", "需人工复核"],
             "providerObservation": provider_observation,
         }
+        payload["shortlist"][0]["consumerDiagnostics"] = {
+            "status": "limited",
+            "confidenceCategory": "low",
+            "freshnessCategory": "fallback",
+            "scoreGradeAllowed": False,
+            "scoreConfidence": 0.4,
+            "capReason": "fallback_source",
+            "degradationReason": "fallback_source",
+            "dataQualityState": "partial",
+            "freshnessState": "fallback",
+            "userFacingLabels": ["仅供观察", "需人工复核"],
+            "warningFlags": ["仅供观察", "需人工复核"],
+            "missingEvidence": [],
+            "sourceClass": "fallback",
+        }
         payload["candidates"] = [
             {
                 "symbol": "600001",
@@ -432,6 +450,10 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             "public_proxy",
         )
         self.assertEqual(response.shortlist[0].diagnostics["evidence_packet"]["capReason"], "fallback_source")
+        self.assertEqual(response.shortlist[0].consumerDiagnostics["status"], "limited")
+        self.assertFalse(response.shortlist[0].consumerDiagnostics["scoreGradeAllowed"])
+        self.assertEqual(response.shortlist[0].consumerDiagnostics["capReason"], "fallback_source")
+        self.assertEqual(response.shortlist[0].consumerDiagnostics["sourceClass"], "fallback")
         self.assertEqual(response.candidates[0].cn_provider_observation["entries"][0]["providerName"], "akshare")
         self.assertTrue(serialized["shortlist"][0]["diagnostics"]["cn_provider_observation"]["observationOnly"])
         self.assertFalse(
@@ -452,6 +474,115 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             serialized["candidates"][0]["cn_provider_observation"]["entries"][0]["providerName"],
             "akshare",
         )
+        consumer_projection = serialized["shortlist"][0]["consumerDiagnostics"]
+        self.assertEqual(consumer_projection["status"], "limited")
+        self.assertFalse(consumer_projection["scoreGradeAllowed"])
+        projection_json = json.dumps(consumer_projection, ensure_ascii=False)
+        for forbidden in [
+            "providerObservation",
+            "cn_provider_observation",
+            "providerName",
+            "akshare",
+            "public_proxy",
+            "source_confidence",
+            "sourceAuthorityAllowed",
+            "scoreContributionAllowed",
+            "adminReasonCodes",
+        ]:
+            self.assertNotIn(forbidden, projection_json)
+
+    def test_public_candidate_dict_adds_consumer_diagnostics_projection(self) -> None:
+        service = object.__new__(MarketScannerService)
+        service.ai_service = MagicMock()
+        service.ai_service.public_payload_from_diagnostics.return_value = {"available": False, "status": "skipped"}
+        candidate = _make_candidate("600001", 1)
+        diagnostics = dict(candidate.pop("diagnostics"))
+        diagnostics["history"] = {
+            "source": "local_partial_fallback",
+            "latest_trade_date": "2026-05-08",
+            "rows": 42,
+            "partial_local_fallback": True,
+            "stale": True,
+        }
+        diagnostics["quote_context"] = {
+            "available": True,
+            "source": "akshare",
+            "sourceType": "public_proxy",
+        }
+        provider_observation = {
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "entries": [
+                {
+                    "stage": "snapshot",
+                    "capability": "cn_realtime_quote",
+                    "providerName": "akshare",
+                    "providerId": "akshare",
+                    "sourceType": "public_proxy",
+                    "sourceTier": "unofficial_public_api",
+                    "trustLevel": "weak",
+                    "observationOnly": True,
+                    "scoreContributionAllowed": False,
+                }
+            ],
+        }
+        diagnostics["cn_provider_observation"] = provider_observation
+        diagnostics["score_explainability"] = {
+            "raw_score": 87.0,
+            "final_score": 40.0,
+            "cap_reason": "fallback_source",
+            "degradation_reason": "fallback_source",
+            "score_confidence": 0.4,
+            "evidence_coverage": 1.0,
+            "source_confidence": {
+                "sourceAuthorityAllowed": False,
+                "scoreContributionAllowed": False,
+                "observationOnly": True,
+                "sourceType": "fallback_static",
+            },
+        }
+        candidate["_diagnostics"] = diagnostics
+        candidate["_component_scores"] = {"trend": 18.0}
+        diagnostics["evidence_packet"] = build_scanner_evidence_packet(
+            candidate,
+            {
+                "market": "cn",
+                "run_id": 99,
+                "evidence_version": "scanner_evidence_v1",
+                "score_explainability": diagnostics["score_explainability"],
+            },
+        )
+
+        public_payload = service._public_candidate_dict(candidate)
+
+        self.assertIn("diagnostics", public_payload)
+        self.assertIn("consumerDiagnostics", public_payload)
+        self.assertEqual(public_payload["diagnostics"]["cn_provider_observation"], provider_observation)
+        self.assertEqual(public_payload["consumerDiagnostics"]["status"], "limited")
+        self.assertFalse(public_payload["consumerDiagnostics"]["scoreGradeAllowed"])
+        self.assertEqual(public_payload["consumerDiagnostics"]["scoreConfidence"], 0.4)
+        self.assertEqual(public_payload["consumerDiagnostics"]["capReason"], "fallback_source")
+        self.assertEqual(public_payload["consumerDiagnostics"]["sourceClass"], "fallback")
+
+        projection_json = json.dumps(public_payload["consumerDiagnostics"], ensure_ascii=False)
+        for forbidden in [
+            "providerObservation",
+            "cn_provider_observation",
+            "providerName",
+            "providerId",
+            "akshare",
+            "public_proxy",
+            "cn_realtime_quote",
+            "source_confidence",
+            "sourceAuthorityAllowed",
+            "scoreContributionAllowed",
+            "observationOnly",
+            "sourceType",
+            "sourceTier",
+            "trustLevel",
+            "adminReasonCodes",
+        ]:
+            self.assertNotIn(forbidden, projection_json)
 
     def test_get_scanner_themes_returns_registry_items(self) -> None:
         response = get_scanner_themes()

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 
-from src.services.scanner_evidence_packet import build_scanner_evidence_packet
+from src.services.scanner_evidence_packet import build_scanner_consumer_diagnostics, build_scanner_evidence_packet
 
 
 def _candidate_fixture() -> dict:
@@ -358,6 +358,117 @@ def test_build_scanner_evidence_packet_keeps_public_proxy_fallback_observation_n
     assert packet["providerObservation"]["entries"][0]["trustLevel"] == "weak"
     assert packet["providerObservation"]["entries"][0]["degradationReason"] == "fallback_source"
     assert "sourceAuthorityAllowed" not in packet["providerObservation"]
+
+
+def test_build_scanner_consumer_diagnostics_excludes_provider_observation_fields() -> None:
+    candidate = _candidate_fixture()
+    candidate["market"] = "cn"
+    candidate["symbol"] = "600001"
+    candidate["_diagnostics"]["cn_provider_observation"] = {
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "entries": [
+            {
+                "stage": "snapshot",
+                "capability": "cn_realtime_snapshot",
+                "providerName": "akshare",
+                "providerId": "akshare",
+                "sourceType": "public_proxy",
+                "sourceTier": "unofficial_public_api",
+                "trustLevel": "weak",
+                "observationOnly": True,
+                "scoreContributionAllowed": False,
+                "rawError": "network timeout",
+            }
+        ],
+    }
+    score_explainability = {
+        "raw_score": 81.6,
+        "final_score": 40.0,
+        "cap_reason": "fallback_source",
+        "degradation_reason": "fallback_source",
+        "score_confidence": 0.4,
+        "evidence_coverage": 1.0,
+        "source_confidence": {
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "observationOnly": True,
+            "sourceType": "fallback_static",
+            "capReason": "fallback_source",
+            "degradationReason": "fallback_source",
+        },
+    }
+    packet = build_scanner_evidence_packet(
+        candidate,
+        {
+            "market": "cn",
+            "run_id": 10,
+            "evidence_version": "scanner_evidence_v1",
+            "score_explainability": score_explainability,
+        },
+    )
+
+    projection = build_scanner_consumer_diagnostics(
+        {
+            "score_explainability": score_explainability,
+            "evidence_packet": packet,
+            "cn_provider_observation": candidate["_diagnostics"]["cn_provider_observation"],
+        }
+    )
+
+    assert projection["status"] == "limited"
+    assert projection["confidenceCategory"] == "low"
+    assert projection["freshnessCategory"] == "fallback"
+    assert projection["scoreGradeAllowed"] is False
+    assert projection["scoreConfidence"] == 0.4
+    assert projection["capReason"] == "fallback_source"
+    assert projection["degradationReason"] == "fallback_source"
+    assert projection["dataQualityState"] == "partial"
+    assert projection["freshnessState"] == "fallback"
+    assert projection["sourceClass"] == "fallback"
+    assert "历史数据不足" in projection["userFacingLabels"]
+    assert "依据需复核" in projection["warningFlags"]
+
+    serialized = json.dumps(projection, ensure_ascii=False)
+    for forbidden in [
+        "providerObservation",
+        "cn_provider_observation",
+        "providerName",
+        "providerId",
+        "akshare",
+        "cn_realtime_snapshot",
+        "source_confidence",
+        "sourceAuthorityAllowed",
+        "scoreContributionAllowed",
+        "observationOnly",
+        "sourceType",
+        "sourceTier",
+        "trustLevel",
+        "rawError",
+        "network timeout",
+        "adminReasonCodes",
+    ]:
+        assert forbidden not in serialized
+
+
+def test_build_scanner_consumer_diagnostics_does_not_default_score_grade_open() -> None:
+    projection = build_scanner_consumer_diagnostics(
+        {
+            "score_explainability": {
+                "score_confidence": 1.0,
+            },
+            "evidence_packet": {
+                "dataQualityState": "complete",
+                "freshnessState": "complete",
+                "userFacingLabels": ["依据完整"],
+                "warningFlags": [],
+                "missingEvidence": [],
+            },
+        }
+    )
+
+    assert projection["scoreGradeAllowed"] is False
+    assert projection["status"] == "limited"
 
 
 def test_build_scanner_evidence_packet_preserves_baostock_scanner_diagnostics_sidecar_fields() -> None:

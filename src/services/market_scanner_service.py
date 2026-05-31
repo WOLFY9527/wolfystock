@@ -27,7 +27,11 @@ from src.contracts.source_confidence import coerce_source_confidence_contract
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
 from src.services.data_source_router import CapabilityResolver, DataSourceRouteRequest, DataSourceRouter
 from src.services.scanner_ai_service import ScannerAiInterpretationService
-from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION, build_scanner_evidence_packet
+from src.services.scanner_evidence_packet import (
+    SCANNER_EVIDENCE_VERSION,
+    build_scanner_consumer_diagnostics,
+    build_scanner_evidence_packet,
+)
 from src.services.scanner_factor_observations import attach_scanner_factor_observations
 from src.services.provider_capability_matrix import get_provider_capability_support_contract
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback, get_us_stock_parquet_dir
@@ -6457,6 +6461,7 @@ class MarketScannerService:
             "last_trade_date": diagnostics.get("history", {}).get("latest_trade_date") or diagnostics.get("last_trade_date"),
             "ai_interpretation": self.ai_service.public_payload_from_diagnostics(diagnostics.get("ai_interpretation")),
             "diagnostics": diagnostics if isinstance(diagnostics, dict) else {},
+            "consumerDiagnostics": build_scanner_consumer_diagnostics(diagnostics if isinstance(diagnostics, dict) else {}),
         }
 
     def _public_candidate_dict(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
@@ -6488,6 +6493,7 @@ class MarketScannerService:
             "scan_timestamp": candidate.get("scan_timestamp"),
             "ai_interpretation": self.ai_service.public_payload_from_diagnostics(diagnostics.get("ai_interpretation")),
             "diagnostics": diagnostics,
+            "consumerDiagnostics": build_scanner_consumer_diagnostics(diagnostics),
         }
 
     def _attach_shortlist_evidence_packets(

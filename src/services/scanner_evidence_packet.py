@@ -146,6 +146,129 @@ def _bucket(state: str, facts: Sequence[Dict[str, Any]], issues: Sequence[Dict[s
     return ScannerEvidenceBucket(state=state, facts=list(facts), issues=list(issues or [])).to_dict()
 
 
+def _confidence_category(value: Any) -> str:
+    score_confidence = _safe_float(value)
+    if score_confidence is None:
+        return "unknown"
+    if score_confidence >= 0.8:
+        return "high"
+    if score_confidence >= 0.5:
+        return "medium"
+    return "low"
+
+
+def _freshness_category(value: Any) -> str:
+    state = str(value or "").strip().lower()
+    if state == "complete":
+        return "fresh"
+    if state in {"fallback", "stale", "partial", "missing"}:
+        return state
+    return "unknown"
+
+
+def _coarse_source_class(*values: Any) -> Optional[str]:
+    text = " ".join(str(value or "").strip().lower() for value in values if value not in (None, "", [], ()))
+    if "proxy" in text:
+        return "proxy"
+    if "fallback" in text or "mock" in text or "synthetic" in text:
+        return "fallback"
+    if "stale" in text:
+        return "stale"
+    if "partial" in text:
+        return "partial"
+    return None
+
+
+def _score_grade_allowed(score_explainability: Dict[str, Any]) -> bool:
+    source_confidence = score_explainability.get("source_confidence")
+    if not isinstance(source_confidence, dict):
+        return False
+    return (
+        source_confidence.get("sourceAuthorityAllowed") is True
+        and source_confidence.get("scoreContributionAllowed") is True
+        and source_confidence.get("observationOnly") is not True
+    )
+
+
+def _consumer_status(
+    *,
+    data_quality_state: str,
+    freshness_state: str,
+    score_grade_allowed: bool,
+    cap_reason: Optional[str],
+    degradation_reason: Optional[str],
+    missing_evidence: Sequence[Any],
+    warning_flags: Sequence[Any],
+) -> str:
+    if data_quality_state in {"missing", "insufficient"} or freshness_state == "missing":
+        return "insufficient"
+    if (
+        not score_grade_allowed
+        or cap_reason
+        or degradation_reason
+        or data_quality_state in {"partial", "stale"}
+        or freshness_state in {"fallback", "stale", "partial"}
+        or missing_evidence
+        or warning_flags
+    ):
+        return "limited"
+    return "complete"
+
+
+def build_scanner_consumer_diagnostics(diagnostics: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Build a consumer-safe scanner diagnostics projection from existing evidence."""
+    payload = dict(diagnostics or {})
+    evidence_packet = payload.get("evidence_packet")
+    if not isinstance(evidence_packet, dict):
+        evidence_packet = {}
+    score_explainability = payload.get("score_explainability")
+    if not isinstance(score_explainability, dict):
+        score_explainability = {}
+
+    score_confidence = evidence_packet.get("scoreConfidence", score_explainability.get("score_confidence"))
+    cap_reason = evidence_packet.get("capReason", score_explainability.get("cap_reason"))
+    degradation_reason = evidence_packet.get("degradationReason", score_explainability.get("degradation_reason"))
+    data_quality_state = str(evidence_packet.get("dataQualityState") or "unknown")
+    freshness_state = str(evidence_packet.get("freshnessState") or "unknown")
+    missing_evidence = list(evidence_packet.get("missingEvidence") or [])
+    user_facing_labels = list(evidence_packet.get("userFacingLabels") or [])
+    warning_flags = list(evidence_packet.get("warningFlags") or [])
+    score_grade_allowed = _score_grade_allowed(score_explainability)
+    source_class = _coarse_source_class(
+        cap_reason,
+        degradation_reason,
+        data_quality_state,
+        freshness_state,
+        " ".join(str(item) for item in warning_flags),
+    )
+
+    projection = {
+        "status": _consumer_status(
+            data_quality_state=data_quality_state,
+            freshness_state=freshness_state,
+            score_grade_allowed=score_grade_allowed,
+            cap_reason=str(cap_reason) if cap_reason else None,
+            degradation_reason=str(degradation_reason) if degradation_reason else None,
+            missing_evidence=missing_evidence,
+            warning_flags=warning_flags,
+        ),
+        "confidenceCategory": _confidence_category(score_confidence),
+        "freshnessCategory": _freshness_category(freshness_state),
+        "scoreGradeAllowed": score_grade_allowed,
+        "scoreConfidence": _safe_float(score_confidence),
+        "capReason": str(cap_reason) if cap_reason is not None else None,
+        "degradationReason": str(degradation_reason) if degradation_reason is not None else None,
+        "dataQualityState": data_quality_state,
+        "freshnessState": freshness_state,
+        "userFacingLabels": user_facing_labels,
+        "warningFlags": warning_flags,
+        "missingEvidence": missing_evidence,
+    }
+    if source_class:
+        projection["sourceClass"] = source_class
+    return projection
+
+
 def build_scanner_evidence_packet(candidate: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     payload = dict(candidate or {})
     context_payload = dict(context or {})

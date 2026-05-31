@@ -222,6 +222,7 @@ class ScannerCandidateResponse(BaseModel):
     ai_interpretation: ScannerAiInterpretationResponse = Field(default_factory=ScannerAiInterpretationResponse)
     realized_outcome: ScannerCandidateOutcomeResponse = Field(default_factory=ScannerCandidateOutcomeResponse)
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
+    consumerDiagnostics: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ScannerThemeDiagnosticsResponse(BaseModel):
