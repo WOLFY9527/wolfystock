@@ -1224,7 +1224,7 @@ class MarketOverviewService:
             return None
         allowed = [item for item in candidates if self._market_decision_rotation_item_allowed(item)]
         selected = allowed[0] if allowed else candidates[0]
-        is_allowed = bool(allowed)
+        selected_allowed = self._market_decision_rotation_item_allowed(selected)
         score = self._clean_number(selected.get("rotationScore"))
         if score is None:
             score = self._clean_number(selected.get("value"))
@@ -1241,7 +1241,7 @@ class MarketOverviewService:
             for reason in (degradation_reasons if isinstance(degradation_reasons, Sequence) and not isinstance(degradation_reasons, (str, bytes, bytearray)) else [])
             if reason
         ]
-        if not is_allowed and not data_gaps:
+        if not selected_allowed and not data_gaps:
             reason = selected.get("sourceAuthorityReason") or selected.get("rankExclusionReason") or selected.get("degradationReason") or "rotation_non_scoring"
             data_gaps.append({
                 "key": f"rotation:{selected.get('symbol') or selected.get('label') or selected.get('name')}",
@@ -1259,17 +1259,17 @@ class MarketOverviewService:
             "sourceTier": source_tier,
             "trustLevel": selected.get("trustLevel") or panel.get("trustLevel"),
             "freshness": selected.get("freshness") or panel.get("freshness"),
-            "sourceAuthorityAllowed": selected.get("sourceAuthorityAllowed") is not False,
-            "scoreContributionAllowed": selected.get("scoreContributionAllowed") is not False,
-            "evidenceQuality": "score_grade" if is_allowed else "taxonomy_only" if selected.get("taxonomyOnly") else "degraded_proxy",
+            "sourceAuthorityAllowed": bool(selected_allowed),
+            "scoreContributionAllowed": bool(selected_allowed),
+            "evidenceQuality": "score_grade" if selected_allowed else "taxonomy_only" if selected.get("taxonomyOnly") else "degraded_proxy",
             "dataGaps": data_gaps,
         }
 
     @staticmethod
     def _market_decision_rotation_item_allowed(item: Mapping[str, Any]) -> bool:
-        if item.get("sourceAuthorityAllowed") is False:
+        if item.get("sourceAuthorityAllowed") is not True:
             return False
-        if item.get("scoreContributionAllowed") is False:
+        if item.get("scoreContributionAllowed") is not True:
             return False
         if item.get("rankEligible") is False or item.get("headlineEligible") is False:
             return False

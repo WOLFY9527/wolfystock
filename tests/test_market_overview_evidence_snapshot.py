@@ -651,3 +651,159 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
                 "sourceField": "degradationReason",
             }
         ]
+
+    def test_rotation_summary_missing_source_authority_does_not_project_allowed(self) -> None:
+        service = MarketOverviewService()
+
+        summary = service._build_market_decision_rotation_summary(
+            {
+                "sectors": {
+                    "items": [
+                        {
+                            "symbol": "XLK",
+                            "label": "Technology",
+                            "rotationScore": 0.91,
+                            "scoreContributionAllowed": True,
+                        }
+                    ]
+                }
+            }
+        )
+
+        assert summary is not None
+        assert summary["sourceAuthorityAllowed"] is False
+        assert summary["scoreContributionAllowed"] is False
+        assert summary["evidenceQuality"] == "degraded_proxy"
+
+    def test_rotation_summary_missing_score_contribution_does_not_project_allowed(self) -> None:
+        service = MarketOverviewService()
+
+        summary = service._build_market_decision_rotation_summary(
+            {
+                "sectors": {
+                    "items": [
+                        {
+                            "symbol": "XLF",
+                            "label": "Financials",
+                            "rotationScore": 0.74,
+                            "sourceAuthorityAllowed": True,
+                        }
+                    ]
+                }
+            }
+        )
+
+        assert summary is not None
+        assert summary["sourceAuthorityAllowed"] is False
+        assert summary["scoreContributionAllowed"] is False
+        assert summary["evidenceQuality"] == "degraded_proxy"
+
+    def test_rotation_summary_explicit_false_stays_blocked(self) -> None:
+        service = MarketOverviewService()
+
+        summary = service._build_market_decision_rotation_summary(
+            {
+                "sectors": {
+                    "items": [
+                        {
+                            "symbol": "XLE",
+                            "label": "Energy",
+                            "rotationScore": 0.63,
+                            "sourceAuthorityAllowed": False,
+                            "scoreContributionAllowed": True,
+                            "sourceAuthorityReason": "provider_not_authoritative",
+                        }
+                    ]
+                }
+            }
+        )
+
+        assert summary is not None
+        assert summary["sourceAuthorityAllowed"] is False
+        assert summary["scoreContributionAllowed"] is False
+        assert summary["dataGaps"] == [
+            {
+                "key": "rotation:XLE",
+                "label": "Energy",
+                "reason": "provider_not_authoritative",
+            }
+        ]
+
+    def test_rotation_summary_explicit_true_passes_when_selected_item_is_eligible(self) -> None:
+        service = MarketOverviewService()
+
+        summary = service._build_market_decision_rotation_summary(
+            {
+                "sectors": {
+                    "items": [
+                        {
+                            "symbol": "XLV",
+                            "label": "Health Care",
+                            "rotationScore": 0.88,
+                            "sourceAuthorityAllowed": True,
+                            "scoreContributionAllowed": True,
+                            "headlineEligible": True,
+                            "rankEligible": True,
+                            "observationOnly": False,
+                            "taxonomyOnly": False,
+                        }
+                    ]
+                }
+            }
+        )
+
+        assert summary is not None
+        assert summary["sourceAuthorityAllowed"] is True
+        assert summary["scoreContributionAllowed"] is True
+        assert summary["evidenceQuality"] == "score_grade"
+
+    def test_rotation_summary_never_promotes_degraded_or_observation_only_items(self) -> None:
+        service = MarketOverviewService()
+
+        cases = [
+            {
+                "symbol": "XLY",
+                "label": "Consumer Discretionary",
+                "rotationScore": 0.52,
+                "freshness": "fallback",
+            },
+            {
+                "symbol": "XLI",
+                "label": "Industrials",
+                "rotationScore": 0.57,
+                "freshness": "stale",
+                "sourceAuthorityAllowed": None,
+                "scoreContributionAllowed": True,
+            },
+            {
+                "symbol": "XLB",
+                "label": "Materials",
+                "rotationScore": 0.49,
+                "freshness": "partial",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": "yes",
+            },
+            {
+                "symbol": "XLU",
+                "label": "Utilities",
+                "rotationScore": 0.41,
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "observationOnly": True,
+            },
+        ]
+
+        for item in cases:
+            with self.subTest(symbol=item["symbol"]):
+                summary = service._build_market_decision_rotation_summary(
+                    {
+                        "sectors": {
+                            "items": [item],
+                        }
+                    }
+                )
+
+                assert summary is not None
+                assert summary["sourceAuthorityAllowed"] is False
+                assert summary["scoreContributionAllowed"] is False
+                assert summary["evidenceQuality"] == "degraded_proxy"
