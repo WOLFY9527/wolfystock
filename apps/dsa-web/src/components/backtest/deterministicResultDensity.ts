@@ -323,7 +323,6 @@ export function useDeterministicResultDensity(): DeterministicResultDensityConfi
 
   useEffect(() => {
     const handleResize = () => setViewportWidth(resolveViewportWidth());
-    handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);

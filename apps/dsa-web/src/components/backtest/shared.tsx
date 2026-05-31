@@ -424,11 +424,15 @@ export function describeHistoricalDataSource(meta: {
   };
 }
 
-function renderDirectionBadge(correct?: boolean | null, expected?: string | null, language: BacktestLanguage = 'zh') {
+const DirectionBadge: React.FC<{
+  correct?: boolean | null;
+  expected?: string | null;
+  language?: BacktestLanguage;
+}> = ({ correct, expected, language = 'zh' }) => {
   if (correct === true) return <span className="product-direction product-direction--positive">✓ {expected || bt(language, 'direction.matched')}</span>;
   if (correct === false) return <span className="product-direction product-direction--negative">✕ {expected || bt(language, 'direction.missed')}</span>;
   return <span className="product-direction">--</span>;
-}
+};
 
 export const SectionEyebrow: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span className="product-kicker">{children}</span>
@@ -600,7 +604,7 @@ export const HistoricalResultsTable: React.FC<{ rows: BacktestResultItem[] }> = 
               <td>{row.analysisDate || '--'}</td>
               <td className="product-table__mono">{row.code}</td>
               <td>{row.operationAdvice || '--'}</td>
-              <td>{renderDirectionBadge(row.directionCorrect, row.directionExpected, language)}</td>
+              <td><DirectionBadge correct={row.directionCorrect} expected={row.directionExpected} language={language} /></td>
               <td className="product-table__align-right">{pct(row.simulatedReturnPct)}</td>
               <td className="product-table__align-right">{pct(row.stockReturnPct)}</td>
               <td>{row.marketDataSources.length > 0 ? row.marketDataSources.join(', ') : '--'}</td>
