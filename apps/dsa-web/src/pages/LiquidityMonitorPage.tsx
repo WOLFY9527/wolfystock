@@ -1763,10 +1763,9 @@ const LiquidityMonitorPage: React.FC = () => {
       } catch (loadError) {
         if (cancelled) return;
         setError(getParsedApiError(loadError));
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+      }
+      if (!cancelled) {
+        setLoading(false);
       }
     }
 
