@@ -891,6 +891,14 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
     }
     return entries;
   }, []);
+  const focusedChannelNameNormalized = String(focusChannelName || '').trim().toLowerCase();
+  const focusedChannelIndex = focusedChannelNameNormalized
+    ? channels.findIndex((channel) => channel.name.trim().toLowerCase() === focusedChannelNameNormalized)
+    : -1;
+  const effectiveExpandedRows = focusedChannelIndex >= 0
+    ? { ...expandedRows, [focusedChannelIndex]: true }
+    : expandedRows;
+  const effectiveIsCollapsed = focusedChannelIndex >= 0 ? false : isCollapsed;
 
   const busy = disabled || isSaving;
   const scrollToChannelRow = (index: number) => {
@@ -998,18 +1006,10 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
     if (!requestedPreset) return;
     handleExternalCreatePreset(requestedPreset);
   }, [externalCreatePreset]);
-  const handleFocusedChannel = useEffectEvent((targetIndex: number) => {
-    setIsCollapsed(false);
-    setExpandedRows((prev) => ({ ...prev, [targetIndex]: true }));
-    scrollToChannelRow(targetIndex);
-  });
   useEffect(() => {
-    const targetName = String(focusChannelName || '').trim().toLowerCase();
-    if (!targetName) return;
-    const targetIndex = channels.findIndex((channel) => channel.name.trim().toLowerCase() === targetName);
-    if (targetIndex < 0) return;
-    handleFocusedChannel(targetIndex);
-  }, [channels, focusChannelName]);
+    if (focusedChannelIndex < 0) return;
+    scrollToChannelRow(focusedChannelIndex);
+  }, [focusedChannelIndex]);
 
   const handleSave = async () => {
     const hasEmptyName = channels.some((channel) => !channel.name.trim());
@@ -1157,10 +1157,10 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
               : t('settings.llmEditor.summary')}
           </p>
         </div>
-        <span className="text-xs text-muted-text">{isCollapsed ? t('settings.llmEditor.collapseClosed') : t('settings.llmEditor.collapseOpen')}</span>
+        <span className="text-xs text-muted-text">{effectiveIsCollapsed ? t('settings.llmEditor.collapseClosed') : t('settings.llmEditor.collapseOpen')}</span>
       </button>
 
-      {!isCollapsed ? (
+      {!effectiveIsCollapsed ? (
         <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
           <div className="settings-surface rounded-[1.35rem] border settings-border p-4 shadow-soft-card">
             <div className="mb-3 flex items-center justify-between">
@@ -1244,7 +1244,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
               </div>
             ) : visibleChannelEntries.map(({ channel, index }) => (
               <div
-                key={index}
+                key={channel.name}
                 ref={(node) => {
                   channelRowRefs.current[index] = node;
                 }}
@@ -1254,7 +1254,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                   index={index}
                   busy={busy}
                   visibleKey={Boolean(visibleKeys[index])}
-                  expanded={Boolean(expandedRows[index])}
+                  expanded={Boolean(effectiveExpandedRows[index])}
                   testState={testStates[index]}
                   t={t}
                   presetLabels={presetLabels}
