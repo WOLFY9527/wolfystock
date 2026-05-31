@@ -117,6 +117,15 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         self.assertEqual(item["score_profile"], "us_preopen_v1")
         self.assertEqual(item["score_reason"], "Latest scanner score.")
         self.assertEqual(item["score_status"], "fresh")
+        self.assertEqual(
+            item["score_status_context"],
+            {
+                "scope": "score_refresh_recency",
+                "fresh_means": "persisted_scanner_score_refreshed",
+                "source_freshness_implied": False,
+                "source_authority_implied": False,
+            },
+        )
         self.assertEqual(item["score_source"], "scanner_run")
         self.assertEqual(item["theme_id"], "crypto_miners")
         self.assertEqual(item["universe_type"], "theme")
@@ -233,6 +242,10 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
 
         self.assertEqual(result["updated_count"], 1)
         item = self.service.list_items(owner_id="user-1")[0]
+        self.assertEqual(item["score_status"], "fresh")
+        self.assertEqual(item["score_status_context"]["scope"], "score_refresh_recency")
+        self.assertFalse(item["score_status_context"]["source_freshness_implied"])
+        self.assertFalse(item["score_status_context"]["source_authority_implied"])
         disclosure = item["intelligence"]["scanner"]
         self.assertEqual(disclosure["score_confidence"], 0.4)
         self.assertEqual(disclosure["cap_reason"], "public_proxy_not_score_grade")
@@ -431,6 +444,9 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         self.assertEqual(item["scanner_score"], 61.0)
         self.assertEqual(item["scanner_rank"], 7)
         self.assertEqual(item["score_status"], "stale")
+        self.assertEqual(item["score_status_context"]["scope"], "score_refresh_recency")
+        self.assertFalse(item["score_status_context"]["source_freshness_implied"])
+        self.assertFalse(item["score_status_context"]["source_authority_implied"])
         self.assertIn("No scanner candidate", item["score_error"])
 
     def test_refresh_groups_candidates_by_market(self) -> None:

@@ -18,6 +18,12 @@ from src.utils.symbol_normalization import canonical_stock_code
 
 
 _LOCAL_OHLCV_HISTORY_SOURCES = {"local_us_parquet", "local_us_parquet_dir"}
+_SCORE_STATUS_CONTEXT = {
+    "scope": "score_refresh_recency",
+    "fresh_means": "persisted_scanner_score_refreshed",
+    "source_freshness_implied": False,
+    "source_authority_implied": False,
+}
 
 
 class WatchlistService:
@@ -69,6 +75,7 @@ class WatchlistService:
             "score_profile": str(row.score_profile) if row.score_profile else None,
             "score_reason": str(row.score_reason) if row.score_reason else None,
             "score_status": str(row.score_status) if row.score_status else None,
+            "score_status_context": dict(_SCORE_STATUS_CONTEXT),
             "score_error": str(row.score_error) if row.score_error else None,
             "theme_id": str(row.theme_id) if row.theme_id else None,
             "universe_type": str(row.universe_type) if row.universe_type else None,

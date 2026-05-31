@@ -10,6 +10,13 @@ from pydantic import BaseModel, Field, field_validator
 from src.utils.symbol_normalization import canonical_stock_code
 
 
+class WatchlistScoreStatusContextResponse(BaseModel):
+    scope: str
+    fresh_means: str
+    source_freshness_implied: bool
+    source_authority_implied: bool
+
+
 class WatchlistItemCreateRequest(BaseModel):
     symbol: str = Field(..., min_length=1, max_length=16)
     market: Literal["cn", "hk", "us"] = "cn"
@@ -63,6 +70,7 @@ class WatchlistItemResponse(BaseModel):
     score_profile: Optional[str] = None
     score_reason: Optional[str] = None
     score_status: Optional[str] = None
+    score_status_context: Optional[WatchlistScoreStatusContextResponse] = None
     score_error: Optional[str] = None
     theme_id: Optional[str] = None
     universe_type: Optional[str] = None

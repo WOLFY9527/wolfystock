@@ -276,6 +276,15 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(item["score_profile"], "us_preopen_v1")
         self.assertEqual(item["score_reason"], "Scanner score refreshed.")
         self.assertEqual(item["score_status"], "fresh")
+        self.assertEqual(
+            item["score_status_context"],
+            {
+                "scope": "score_refresh_recency",
+                "fresh_means": "persisted_scanner_score_refreshed",
+                "source_freshness_implied": False,
+                "source_authority_implied": False,
+            },
+        )
         self.assertEqual(item["theme_id"], "crypto_miners")
         self.assertEqual(item["universe_type"], "theme")
         self.assertTrue(item["last_scored_at"])
@@ -455,6 +464,7 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(scanner["source_confidence"]["source"], "local_us_parquet_dir")
         self.assertEqual(scanner["source_confidence"]["source_type"], "cache_snapshot")
         self.assertFalse(scanner["source_confidence"]["score_contribution_allowed"])
+        self.assertFalse(scanner["source_confidence"]["source_authority_allowed"])
         self.assertTrue(scanner["source_confidence"]["observation_only"])
 
     def test_watchlist_items_include_read_only_intelligence_from_saved_records(self) -> None:
