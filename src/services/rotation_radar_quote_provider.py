@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone, time as clock_time
 from math import ceil
+import os
 from time import monotonic
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
@@ -42,6 +43,13 @@ _ALPACA_STABLE_ACTIVATION_PROBE_SYMBOLS = ("SPY", "QQQ", "IWM", "SMH", "SOXX", "
 _ROTATION_RADAR_AUTHORITY_ETF_UNIVERSE = _ALPACA_STABLE_ACTIVATION_PROBE_SYMBOLS
 _ALPACA_PER_WINDOW_TIMEOUT_SECONDS = 2.5
 _ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS = 8.0
+_ALPACA_PROVIDER_DEADLINE_SECONDS = 3.0
+_ALPACA_PER_WINDOW_TIMEOUT_ENV = "ROTATION_RADAR_ALPACA_PER_WINDOW_TIMEOUT_SECONDS"
+_ALPACA_TOTAL_PROVIDER_BUDGET_ENV = "ROTATION_RADAR_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS"
+_ALPACA_PROVIDER_DEADLINE_ENV = "ROTATION_RADAR_ALPACA_PROVIDER_DEADLINE_SECONDS"
+_ALPACA_MAX_PER_WINDOW_TIMEOUT_SECONDS = 30.0
+_ALPACA_MAX_TOTAL_PROVIDER_BUDGET_SECONDS = 120.0
+_ALPACA_MAX_PROVIDER_DEADLINE_SECONDS = 120.0
 _ALPACA_MINIMUM_ACTIVATION_SUCCESS_RATIO = 0.75
 _US_EASTERN_TZ = ZoneInfo("America/New_York")
 _US_REGULAR_SESSION_OPEN = clock_time(9, 30)
@@ -166,13 +174,24 @@ class _IntradayWindowRequestPlan:
 
 
 def get_rotation_radar_quote_provider() -> QuoteProvider:
+    _apply_rotation_radar_provider_deadline_override()
     return load_rotation_radar_quotes
 
 
 def get_rotation_radar_provider_diagnostics() -> Dict[str, Any]:
     """Return sanitized configured-provider credential diagnostics without network calls."""
 
-    return _configured_provider_base_metadata(get_provider_credentials(_CONFIGURED_PROVIDER_ID))
+    credentials = get_provider_credentials(_CONFIGURED_PROVIDER_ID)
+    limits = _configured_activation_limits()
+    return {
+        **_configured_provider_base_metadata(credentials),
+        "maxSymbolsPerWindow": limits["maxSymbolsPerWindow"],
+        "maxProbeSymbols": limits["maxProbeSymbols"],
+        "perWindowTimeout": limits["perWindowTimeout"],
+        "totalProviderBudget": limits["totalProviderBudget"],
+        "barFetchTimeout": limits["barFetchTimeout"],
+        "providerDeadlineSeconds": _runtime_provider_deadline_seconds(),
+    }
 
 
 def run_rotation_radar_alpaca_live_smoke(
@@ -406,6 +425,7 @@ def _load_configured_provider_quotes(
         "perWindowTimeout": limits["perWindowTimeout"],
         "totalProviderBudget": limits["totalProviderBudget"],
         "barFetchTimeout": limits["barFetchTimeout"],
+        "providerDeadlineSeconds": _runtime_provider_deadline_seconds(),
         "endpointReachability": _endpoint_reachability_not_checked(),
     })
     metadata["shortIntradayWindowPlans"] = _short_intraday_window_plan_metadata(now_utc=now_utc)
@@ -639,6 +659,7 @@ def _load_configured_provider_quotes(
         "maxProbeSymbols": limits["maxProbeSymbols"],
         "perWindowTimeout": limits["perWindowTimeout"],
         "totalProviderBudget": limits["totalProviderBudget"],
+        "providerDeadlineSeconds": _runtime_provider_deadline_seconds(),
         "probeSymbolCount": len(diagnostic_probe_symbols),
         "activationProbeSymbolCount": len(activation_probe_symbols),
         "diagnosticProbeSymbolCount": len(diagnostic_probe_symbols),
@@ -706,20 +727,42 @@ def _configured_activation_limits(
     total_provider_budget: Optional[float] = None,
     bar_fetch_timeout: Optional[float] = None,
 ) -> Dict[str, Any]:
+    env_per_window_timeout = _runtime_env_timeout_override(
+        _ALPACA_PER_WINDOW_TIMEOUT_ENV,
+        max_value=_ALPACA_MAX_PER_WINDOW_TIMEOUT_SECONDS,
+    )
+    default_per_window_timeout = (
+        env_per_window_timeout
+        if env_per_window_timeout is not None
+        else float(_ALPACA_PER_WINDOW_TIMEOUT_SECONDS)
+    )
+    default_total_provider_budget = _runtime_env_timeout_default(
+        _ALPACA_TOTAL_PROVIDER_BUDGET_ENV,
+        default=float(_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS),
+        max_value=_ALPACA_MAX_TOTAL_PROVIDER_BUDGET_SECONDS,
+    )
+    default_bar_fetch_timeout = (
+        env_per_window_timeout
+        if env_per_window_timeout is not None and per_window_timeout is None and bar_fetch_timeout is None
+        else _default_bar_fetch_timeout()
+    )
     return {
         "maxSymbolsPerWindow": max(1, int(_ALPACA_MAX_SYMBOLS_PER_WINDOW)),
         "maxProbeSymbols": max(1, int(_ALPACA_MAX_PROBE_SYMBOLS)),
         "perWindowTimeout": _positive_timeout_value(
             per_window_timeout,
-            float(_ALPACA_PER_WINDOW_TIMEOUT_SECONDS),
+            default_per_window_timeout,
+            max_value=_ALPACA_MAX_PER_WINDOW_TIMEOUT_SECONDS,
         ),
         "totalProviderBudget": _positive_timeout_value(
             total_provider_budget,
-            float(_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS),
+            default_total_provider_budget,
+            max_value=_ALPACA_MAX_TOTAL_PROVIDER_BUDGET_SECONDS,
         ),
         "barFetchTimeout": _positive_timeout_value(
             bar_fetch_timeout,
-            _default_bar_fetch_timeout(),
+            default_bar_fetch_timeout,
+            max_value=_ALPACA_MAX_PER_WINDOW_TIMEOUT_SECONDS,
         ),
     }
 
@@ -728,13 +771,55 @@ def _default_bar_fetch_timeout() -> float:
     return float(max(1, int(float(_QUOTE_PROVIDER_REQUEST_TIMEOUT_SECONDS))))
 
 
-def _positive_timeout_value(value: Any, default: float) -> float:
+def _runtime_provider_deadline_seconds() -> float:
+    return _runtime_env_timeout_default(
+        _ALPACA_PROVIDER_DEADLINE_ENV,
+        default=float(_ALPACA_PROVIDER_DEADLINE_SECONDS),
+        max_value=_ALPACA_MAX_PROVIDER_DEADLINE_SECONDS,
+    )
+
+
+def _apply_rotation_radar_provider_deadline_override() -> float:
+    deadline = _runtime_provider_deadline_seconds()
+    try:
+        from src.services import market_rotation_radar_service
+
+        market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS = deadline
+    except Exception:
+        pass
+    return deadline
+
+
+def _runtime_env_timeout_default(env_name: str, *, default: float, max_value: float) -> float:
+    parsed = _runtime_env_timeout_override(env_name, max_value=max_value)
+    return float(default) if parsed is None else parsed
+
+
+def _runtime_env_timeout_override(env_name: str, *, max_value: float) -> Optional[float]:
+    raw_value = os.environ.get(env_name)
+    if raw_value is None:
+        return None
+    raw_text = str(raw_value).strip()
+    if not raw_text:
+        return None
+    try:
+        parsed = float(raw_text)
+    except Exception:
+        return None
+    if parsed <= 0:
+        return None
+    return min(parsed, float(max_value))
+
+
+def _positive_timeout_value(value: Any, default: float, *, max_value: Optional[float] = None) -> float:
     try:
         parsed = float(value)
     except Exception:
         parsed = float(default)
     if parsed <= 0:
         parsed = float(default)
+    if max_value is not None:
+        parsed = min(parsed, float(max_value))
     return max(0.001, parsed)
 
 
@@ -1895,6 +1980,10 @@ def _provider_activation_diagnostics(
         "totalProviderBudget": _non_negative_float(
             configured_attempt.metadata.get("totalProviderBudget"),
             float(_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS),
+        ),
+        "providerDeadlineSeconds": _non_negative_float(
+            configured_attempt.metadata.get("providerDeadlineSeconds"),
+            float(_ALPACA_PROVIDER_DEADLINE_SECONDS),
         ),
         "probeSymbolCount": probe_symbol_count,
         "activationProbeSymbolCount": activation_probe_symbol_count,

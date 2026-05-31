@@ -15,6 +15,7 @@ import requests
 
 from data_provider.provider_credentials import ProviderCredentialBundle
 from src.config import Config
+from src.services import market_rotation_radar_service, rotation_radar_quote_provider
 from src.services.market_data_source_registry import project_source_provenance
 from src.services.market_rotation_radar_service import MarketRotationRadarService
 from src.services.rotation_radar_quote_provider import (
@@ -1144,6 +1145,158 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(all(window["available"] for window in quote["timeWindows"].values()))
         self.assertTrue(all(not window["isFallback"] for window in quote["timeWindows"].values()))
         self.assertTrue(all(window["source"] == "alpaca" for window in quote["timeWindows"].values()))
+
+    def test_runtime_alpaca_timeout_budget_defaults_are_reported_without_env(self) -> None:
+        original_deadline = market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS
+        try:
+            with patch.dict(os.environ, {}, clear=True), patch(
+                "src.services.rotation_radar_quote_provider.get_provider_credentials",
+                return_value=_missing_alpaca_credentials(),
+                create=True,
+            ):
+                diagnostics = rotation_radar_quote_provider.get_rotation_radar_provider_diagnostics()
+                provider = rotation_radar_quote_provider.get_rotation_radar_quote_provider()
+
+            self.assertIs(provider, load_rotation_radar_quotes)
+            self.assertEqual(diagnostics["perWindowTimeout"], 2.5)
+            self.assertEqual(diagnostics["totalProviderBudget"], 8.0)
+            self.assertEqual(diagnostics["providerDeadlineSeconds"], 3.0)
+            self.assertEqual(market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS, 3.0)
+        finally:
+            market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS = original_deadline
+
+    def test_runtime_alpaca_timeout_budget_env_overrides_apply_to_fetcher_and_deadline(self) -> None:
+        constructed_timeouts: list[float] = []
+        original_deadline = market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS
+
+        class FakeAlpacaFetcher:
+            def __init__(self, *, timeout: float = 15, **kwargs) -> None:
+                constructed_timeouts.append(float(timeout))
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                return _alpaca_bars(end_close=102.0)
+
+        try:
+            with patch.dict(
+                os.environ,
+                {
+                    "ROTATION_RADAR_ALPACA_PER_WINDOW_TIMEOUT_SECONDS": "6.5",
+                    "ROTATION_RADAR_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS": "19",
+                    "ROTATION_RADAR_ALPACA_PROVIDER_DEADLINE_SECONDS": "9",
+                },
+                clear=False,
+            ), patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
+                "src.services.rotation_radar_quote_provider.get_provider_credentials",
+                return_value=_alpaca_credentials(feed="sip"),
+                create=True,
+            ), patch(
+                "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+                FakeAlpacaFetcher,
+                create=True,
+            ), patch(
+                "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+                side_effect=AssertionError("yfinance fallback should not be called when Alpaca covers all symbols"),
+            ):
+                provider = rotation_radar_quote_provider.get_rotation_radar_quote_provider()
+                payload = provider(["SPY"])
+
+            diagnostics = payload["metadata"]["providerDiagnostics"]
+            self.assertEqual(constructed_timeouts, [6.5])
+            self.assertEqual(diagnostics["perWindowTimeout"], 6.5)
+            self.assertEqual(diagnostics["totalProviderBudget"], 19.0)
+            self.assertEqual(diagnostics["providerDeadlineSeconds"], 9.0)
+            self.assertEqual(market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS, 9.0)
+            self.assertEqual(payload["metadata"]["providerOrder"], ["alpaca", "yfinance"])
+            self.assertTrue(diagnostics["alpacaActivationDiagnostics"]["sourceAuthorityAllowed"])
+            self.assertTrue(diagnostics["alpacaActivationDiagnostics"]["scoreContributionAllowed"])
+        finally:
+            market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS = original_deadline
+
+    def test_runtime_alpaca_timeout_budget_bad_env_falls_back_fail_closed(self) -> None:
+        original_deadline = market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS
+        try:
+            with patch.dict(
+                os.environ,
+                {
+                    "ROTATION_RADAR_ALPACA_PER_WINDOW_TIMEOUT_SECONDS": "not-a-number",
+                    "ROTATION_RADAR_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS": "-4",
+                    "ROTATION_RADAR_ALPACA_PROVIDER_DEADLINE_SECONDS": "0",
+                },
+                clear=False,
+            ), patch("src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE", {}), patch(
+                "src.services.rotation_radar_quote_provider.get_provider_credentials",
+                return_value=_missing_alpaca_credentials(),
+                create=True,
+            ), patch(
+                "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+                side_effect=AssertionError("Alpaca should not be constructed without credentials"),
+                create=True,
+            ), patch(
+                "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+                return_value=_yfinance_frame(),
+            ):
+                provider = rotation_radar_quote_provider.get_rotation_radar_quote_provider()
+                payload = provider(["APP"])
+
+            diagnostics = payload["metadata"]["providerDiagnostics"]
+            self.assertEqual(diagnostics["perWindowTimeout"], 2.5)
+            self.assertEqual(diagnostics["totalProviderBudget"], 8.0)
+            self.assertEqual(diagnostics["providerDeadlineSeconds"], 3.0)
+            self.assertEqual(market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS, 3.0)
+            self.assertEqual(payload["metadata"]["providerOrder"], ["alpaca", "yfinance"])
+            self.assertEqual(payload["metadata"]["source"], "yfinance_proxy")
+            self.assertFalse(diagnostics["alpacaActivationDiagnostics"]["sourceAuthorityAllowed"])
+            self.assertFalse(diagnostics["alpacaActivationDiagnostics"]["scoreContributionAllowed"])
+            self.assertFalse(payload["metadata"]["sourceAuthorityAllowed"])
+            self.assertFalse(payload["metadata"]["scoreContributionAllowed"])
+        finally:
+            market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS = original_deadline
+
+    def test_runtime_timeout_env_does_not_change_default_taxonomy_or_scoring(self) -> None:
+        now_provider = lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc)
+
+        with patch.dict(os.environ, {}, clear=True):
+            baseline = MarketRotationRadarService(now_provider=now_provider).get_rotation_radar()
+        with patch.dict(
+            os.environ,
+            {
+                "ROTATION_RADAR_ALPACA_PER_WINDOW_TIMEOUT_SECONDS": "6.5",
+                "ROTATION_RADAR_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS": "19",
+                "ROTATION_RADAR_ALPACA_PROVIDER_DEADLINE_SECONDS": "9",
+            },
+            clear=False,
+        ):
+            overridden = MarketRotationRadarService(now_provider=now_provider).get_rotation_radar()
+
+        baseline_signature = [
+            (
+                theme["id"],
+                theme["themeDefinition"]["category"],
+                theme["rotationScore"],
+                theme["stage"],
+                theme["rankingLane"],
+                theme["rankEligible"],
+                theme["scoreContributionAllowed"],
+            )
+            for theme in baseline["themes"]
+        ]
+        overridden_signature = [
+            (
+                theme["id"],
+                theme["themeDefinition"]["category"],
+                theme["rotationScore"],
+                theme["stage"],
+                theme["rankingLane"],
+                theme["rankEligible"],
+                theme["scoreContributionAllowed"],
+            )
+            for theme in overridden["themes"]
+        ]
+
+        self.assertEqual(overridden_signature, baseline_signature)
+        self.assertTrue(overridden["metadata"]["quoteProvider"]["noExternalCalls"])
+        self.assertFalse(overridden["metadata"]["quoteProvider"]["sourceAuthorityAllowed"])
+        self.assertFalse(overridden["metadata"]["quoteProvider"]["scoreContributionAllowed"])
 
     def test_configured_alpaca_activation_probes_large_universe_before_budgeted_expansion(self) -> None:
         symbols = tuple(

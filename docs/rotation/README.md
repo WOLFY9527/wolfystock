@@ -43,6 +43,16 @@ fund-flow interpretation, or rotation evidence disclosure.
   budget are unavailable, the provider falls back to degraded yfinance
   daily/proxy evidence only and must not synthesize intraday windows or mark
   fallback/static data live.
+- Operator-approved environments may raise only the bounded Alpaca runtime
+  waits with
+  `ROTATION_RADAR_ALPACA_PER_WINDOW_TIMEOUT_SECONDS`,
+  `ROTATION_RADAR_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS`, and
+  `ROTATION_RADAR_ALPACA_PROVIDER_DEADLINE_SECONDS`. Absent, blank, malformed,
+  zero, or negative values preserve defaults (2.5s per window, 8.0s total
+  provider budget, 3.0s outer quote-provider deadline), and positive values are
+  capped locally. These knobs are not provider activation, routing/order,
+  fallback, scoring/ranking/category, source-authority, or entitlement
+  controls.
 - Provider activation diagnostics live under
   `metadata.quoteProvider.providerDiagnostics` / quote-provider metadata. They
   expose credential presence, safely inferable credential source, missing env
@@ -53,8 +63,8 @@ fund-flow interpretation, or rotation evidence disclosure.
   `empty_response`, `symbol_not_found`, `provider_error`, `unknown`), capped
   `symbolFailureSamples`, configured-provider fulfilled/missing window aliases,
   staged activation limits (`maxSymbolsPerWindow`, `maxProbeSymbols`,
-  `perWindowTimeout`, `totalProviderBudget`), staged activation fields
-  (`probeSymbolCount`, `fullUniverseSymbolCount`,
+  `perWindowTimeout`, `totalProviderBudget`, `providerDeadlineSeconds`),
+  staged activation fields (`probeSymbolCount`, `fullUniverseSymbolCount`,
   `providerBudgetExceeded`, `timeoutSymbolCount`,
   `skippedDueToBudgetCount`, `activationScope`,
   `minimumActivationCoverageMet`), yfinance fallback usage kept separate from
