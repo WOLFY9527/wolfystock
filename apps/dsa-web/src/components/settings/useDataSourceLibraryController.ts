@@ -335,6 +335,7 @@ export function useDataSourceLibraryController({
   const dataSourceLibraryMap = new Map<string, DataSourceLibraryEntry>(dataSourceLibrary.map((entry) => [entry.key, entry]));
 
   const [dataSourceLibraryDrawerOpen, setDataSourceLibraryDrawerOpen] = useState(false);
+  const [shouldRenderDataSourceLibraryDrawer, setShouldRenderDataSourceLibraryDrawer] = useState(false);
   const [dataSourceEditorId, setDataSourceEditorId] = useState<string | null>(null);
   const [dataSourceEditorDraft, setDataSourceEditorDraft] = useState<CustomDataSourceRecord>(() => createEmptyCustomDataSource());
   const [managedBuiltinDataSourceDraft, setManagedBuiltinDataSourceDraft] = useState<ManagedBuiltinDraft>(() => EMPTY_MANAGED_BUILTIN_DRAFT);
@@ -349,6 +350,7 @@ export function useDataSourceLibraryController({
     setDataSourceEditorId('new');
     setDataSourceEditorDraft(createEmptyCustomDataSource());
     setManagedBuiltinDataSourceDraft(EMPTY_MANAGED_BUILTIN_DRAFT);
+    setShouldRenderDataSourceLibraryDrawer(true);
     setDataSourceLibraryDrawerOpen(true);
   };
 
@@ -359,6 +361,7 @@ export function useDataSourceLibraryController({
     setManagedBuiltinDataSourceDraft(
       entry?.management ? createManagedBuiltinDraft(entry.management, allItemMap) : EMPTY_MANAGED_BUILTIN_DRAFT,
     );
+    setShouldRenderDataSourceLibraryDrawer(true);
     setDataSourceLibraryDrawerOpen(true);
   };
 
@@ -707,6 +710,7 @@ export function useDataSourceLibraryController({
     dataSourceEditorValidationResult,
     dataSourceLibrary,
     dataSourceLibraryDrawerOpen,
+    shouldRenderDataSourceLibraryDrawer,
     dataSourceRouteOptions,
     managedBuiltinDataSourceDraft,
     closeDataSourceDrawer,

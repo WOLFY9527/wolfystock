@@ -131,8 +131,8 @@ const DataSourceLibraryDrawerFallback: React.FC<{
     bodyClassName={bodyClassName}
   >
     <div
-      role="status"
       aria-live="polite"
+      aria-busy="true"
       data-testid="data-source-library-drawer-loading"
       className="space-y-4"
     >
@@ -1033,7 +1033,6 @@ const SettingsPage: React.FC = () => {
   const [quickProviderDrawerProvider, setQuickProviderDrawerProvider] = useState<QuickProviderKey | null>(null);
   const [aiAdvancedDrawerOpen, setAiAdvancedDrawerOpen] = useState(false);
   const [dataRoutingDrawerKey, setDataRoutingDrawerKey] = useState<DataRouteKey | null>(null);
-  const [shouldRenderDataSourceLibraryDrawer, setShouldRenderDataSourceLibraryDrawer] = useState(false);
   const [runtimeVisibilityDrawerOpen, setRuntimeVisibilityDrawerOpen] = useState(false);
   const [rawFieldsDrawerOpen, setRawFieldsDrawerOpen] = useState(false);
   const [adminActionDialog, setAdminActionDialog] = useState<'runtime_cache' | 'factory_reset' | null>(null);
@@ -1117,6 +1116,7 @@ const SettingsPage: React.FC = () => {
     dataSourceEditorValidationResult,
     dataSourceLibrary,
     dataSourceLibraryDrawerOpen,
+    shouldRenderDataSourceLibraryDrawer,
     dataSourceRouteOptions,
     managedBuiltinDataSourceDraft,
     closeDataSourceDrawer,
@@ -1147,12 +1147,6 @@ const SettingsPage: React.FC = () => {
     : dataSourceEditorEntry
       ? t('settings.dataSourceDrawerTitleEdit', { source: dataSourceEditorEntry.label })
       : t('settings.dataSourceDrawerTitleFallback');
-
-  useEffect(() => {
-    if (dataSourceLibraryDrawerOpen) {
-      setShouldRenderDataSourceLibraryDrawer(true);
-    }
-  }, [dataSourceLibraryDrawerOpen]);
 
   const modelsForGateway = (gateway: string): string[] => (
     getGatewayModelOptions(
@@ -3387,8 +3381,8 @@ const SettingsPage: React.FC = () => {
           <Suspense
             fallback={(
               <div
-                role="status"
                 aria-live="polite"
+                aria-busy="true"
                 className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3"
               >
                 <div className="flex items-center gap-3">
