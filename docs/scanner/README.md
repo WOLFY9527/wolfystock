@@ -26,6 +26,8 @@ export labels, or scanner frontend route hierarchy.
 - Consumer-safe scanner/watchlist projections may add shared
   `investorSignal`/`investor_signal` vocabulary sidecars, but they must stay
   observation-only, fail closed on missing authority, and never expose provider
-  observations or alter scoring/ranking semantics.
+  observations or alter scoring/ranking semantics. When source authority or
+  score rights are missing, blocked, fallback, stale, or partial, the
+  projection must not serialize `freshness=live`/`fresh`.
 - Scoring and ranking semantics are protected runtime behavior; UI/docs changes
   must not imply score changes unless the task explicitly scopes them.

@@ -1,4 +1,11 @@
 ## 2026-06-01
+- Shared investor-signal consumer-safe projection now fail-closes missing or
+  blocked authority/score-rights freshness: when the source is not explicitly
+  authoritative for consumer-safe output, `build_consumer_safe_investor_signal`
+  downgrades `freshness` from `live`/`fresh` to the existing non-live
+  `fallback` label while preserving observation-only, blocked/capped
+  confidence, provider/admin field redaction, and existing provider/runtime
+  semantics.
 - Scanner and Watchlist now add a shared consumer-safe investor-signal
   projection for persisted scanner intelligence: Scanner
   `consumerDiagnostics.investorSignal` and Watchlist

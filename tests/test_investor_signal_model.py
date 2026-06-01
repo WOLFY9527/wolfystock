@@ -125,8 +125,27 @@ def test_missing_or_ambiguous_authority_fails_closed() -> None:
         assert signal["sourceAuthorityAllowed"] is False
         assert signal["scoreContributionAllowed"] is False
         assert signal["confidenceLabel"] == "blocked"
+        assert signal["freshness"] == "fallback"
     assert "source_authority_missing" in missing_authority["reasonCodes"]
     assert "source_identity_ambiguous" in ambiguous_source["reasonCodes"]
+
+
+def test_explicit_blocked_authority_and_score_rights_do_not_serialize_live_freshness() -> None:
+    blocked_authority = build_consumer_safe_investor_signal(
+        _authoritative_signal(sourceAuthorityAllowed=False)
+    )
+    blocked_score = build_consumer_safe_investor_signal(
+        _authoritative_signal(scoreContributionAllowed=False)
+    )
+
+    for signal in (blocked_authority, blocked_score):
+        assert signal["sourceAuthorityAllowed"] is False
+        assert signal["scoreContributionAllowed"] is False
+        assert signal["confidenceLabel"] == "blocked"
+        assert signal["freshness"] == "fallback"
+        assert signal["freshness"] != "live"
+    assert "source_authority_missing" in blocked_authority["reasonCodes"]
+    assert "score_rights_missing" in blocked_score["reasonCodes"]
 
 
 def test_mixed_signals_cap_confidence_and_preserve_contradictions_in_consumer_safe_form() -> None:
@@ -161,6 +180,16 @@ def test_consumer_safe_output_excludes_raw_provider_and_admin_fields() -> None:
 
     for field in FORBIDDEN_CONSUMER_SAFE_FIELDS:
         assert field not in signal
+
+
+def test_authoritative_live_signal_preserves_live_freshness() -> None:
+    signal = build_consumer_safe_investor_signal(_authoritative_signal())
+
+    assert signal["sourceAuthorityAllowed"] is True
+    assert signal["freshness"] == "live"
+    assert signal["confidenceLabel"] == "high"
+    assert "source_authority_missing" not in signal["reasonCodes"]
+    assert "score_rights_missing" not in signal["reasonCodes"]
 
 
 def test_unknown_labels_fail_closed_into_controlled_vocabulary_only() -> None:

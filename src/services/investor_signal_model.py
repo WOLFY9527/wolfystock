@@ -231,6 +231,14 @@ def build_consumer_safe_investor_signal(value: Mapping[str, Any] | None) -> dict
         or theme_invalid
         or confidence_invalid
     )
+    consumer_freshness = freshness
+    if freshness in {"live", "fresh"} and (
+        source_missing
+        or source_ambiguous
+        or authority_explicit is not True
+        or score_explicit is not True
+    ):
+        consumer_freshness = "fallback"
     degraded = bool(
         freshness in _DEGRADED_FRESHNESS_VALUES
         or contradiction_codes
@@ -265,7 +273,7 @@ def build_consumer_safe_investor_signal(value: Mapping[str, Any] | None) -> dict
         capital_flow_regime=capital_flow_regime,
         theme_flow_state=theme_flow_state,
         confidence_label=confidence_label,
-        freshness=freshness,
+        freshness=consumer_freshness,
         source_authority_allowed=source_authority_allowed,
         reason_codes=tuple(reason_codes),
         contradiction_codes=tuple(contradiction_codes),
