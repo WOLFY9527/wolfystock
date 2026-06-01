@@ -6538,6 +6538,236 @@ def test_capital_flow_signal_flags_growth_absorption_when_btc_and_gold_fail_to_c
     assert "growth" in signal["explanation"].lower()
 
 
+def test_capital_flow_signal_adds_cached_funds_flow_proxy_detail_without_runtime_side_effects(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 29, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "crypto",
+        _cache_entry(
+            source="binance",
+            freshness="live",
+            items=[
+                {"symbol": "BTC", "label": "BTC", "changePercent": -1.4, "value": 67000.0, "source": "binance", "sourceType": "exchange_public"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "volatility",
+        _cache_entry(
+            source="fred",
+            freshness="cached",
+            items=[
+                {"symbol": "VIX", "label": "VIX", "changePercent": -2.4, "value": 15.1, "source": "fred", "sourceType": "official_public", "sourceLabel": "FRED VIXCLS"}
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {"symbol": "US2Y", "label": "US 2Y", "value": 4.38, "changePercent": -0.16, "source": "treasury", "sourceType": "official_public", "sourceLabel": "US Treasury", "unit": "%"},
+                {"symbol": "US10Y", "label": "US 10Y", "value": 4.09, "changePercent": -0.19, "source": "treasury", "sourceType": "official_public", "sourceLabel": "US Treasury", "unit": "%"},
+                {"symbol": "US30Y", "label": "US 30Y", "value": 4.29, "changePercent": -0.14, "source": "treasury", "sourceType": "official_public", "sourceLabel": "US Treasury", "unit": "%"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "fx_commodities",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {"symbol": "DXY", "label": "DXY", "changePercent": -0.5, "value": 103.4, "source": "yfinance_proxy", "sourceType": "proxy_public", "sourceLabel": "Yahoo Finance", "freshness": "delayed"},
+                {"symbol": "GLD", "label": "Gold", "changePercent": -0.7, "value": 238.2, "source": "yfinance_proxy", "sourceType": "proxy_public", "sourceLabel": "Yahoo Finance", "freshness": "delayed"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "us_breadth",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {"symbol": "SECTORS_UP", "label": "Sectors Up", "value": 8, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "SECTORS_DOWN", "label": "Sectors Down", "value": 3, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "RSP_SPY", "label": "RSP vs SPY", "value": 0.1, "changePercent": 0.1, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "IWM_SPY", "label": "IWM vs SPY", "value": 0.3, "changePercent": 0.3, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "QQQ_SPY", "label": "QQQ vs SPY", "value": 1.1, "changePercent": 1.1, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "funds_flow",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {"symbol": "ETF", "label": "ETF flow proxy", "value": 1.7, "change_pct": 0.8, "source": "yfinance_proxy", "sourceType": "unofficial_public_api", "sourceLabel": "Yahoo Finance", "observationOnly": True, "sourceAuthorityAllowed": False, "scoreContributionAllowed": False},
+                {"symbol": "INSTITUTIONAL", "label": "Institutional pressure proxy", "value": 2.4, "change_pct": 1.2, "source": "yfinance_proxy", "sourceType": "unofficial_public_api", "sourceLabel": "Yahoo Finance", "observationOnly": True, "sourceAuthorityAllowed": False, "scoreContributionAllowed": False},
+                {"symbol": "INDUSTRY", "label": "Industry breadth proxy", "value": -0.6, "change_pct": -0.6, "source": "yfinance_proxy", "sourceType": "unofficial_public_api", "sourceLabel": "Yahoo Finance", "observationOnly": True, "sourceAuthorityAllowed": False, "scoreContributionAllowed": False},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    signal = _capital_flow_signal(payload)
+    pressure = {item["asset"]: item for item in signal["sourceAssetPressure"]}
+
+    assert payload["sourceMetadata"]["externalProviderCalls"] is False
+    assert payload["sourceMetadata"]["providerRuntimeChanged"] is False
+    assert payload["sourceMetadata"]["marketCacheMutation"] is False
+    assert signal["likelyDestination"] == "growth_ai_software_semis"
+    assert signal["confidence"] == "medium"
+    assert signal["observationOnly"] is True
+    assert signal["sourceAuthorityAllowed"] is False
+    assert signal["scoreContributionAllowed"] is False
+    assert pressure["qqq_institutional_proxy"]["pressure"] == "absorbing"
+    assert pressure["qqq_institutional_proxy"]["changePercent"] == 1.2
+    assert pressure["qqq_institutional_proxy"]["observationOnly"] is True
+    assert pressure["qqq_institutional_proxy"]["isPartial"] is True
+    assert pressure["iwm_industry_proxy"]["pressure"] == "lagging"
+    assert pressure["iwm_industry_proxy"]["changePercent"] == -0.6
+    assert pressure["iwm_industry_proxy"]["observationOnly"] is True
+    assert pressure["iwm_industry_proxy"]["isPartial"] is True
+    assert "proxy" in pressure["qqq_institutional_proxy"]["asset"]
+    assert "proxy" in pressure["iwm_industry_proxy"]["asset"]
+    assert "fund flow" not in pressure["qqq_institutional_proxy"]["asset"]
+    assert "fund flow" not in pressure["iwm_industry_proxy"]["asset"]
+
+
+def test_capital_flow_signal_skips_missing_funds_flow_proxy_rows_without_behavior_change(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 29, 11, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "crypto",
+        _cache_entry(
+            source="binance",
+            freshness="live",
+            items=[
+                {"symbol": "BTC", "label": "BTC", "changePercent": -1.4, "value": 67000.0, "source": "binance", "sourceType": "exchange_public"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "volatility",
+        _cache_entry(
+            source="fred",
+            freshness="cached",
+            items=[
+                {"symbol": "VIX", "label": "VIX", "changePercent": -2.4, "value": 15.1, "source": "fred", "sourceType": "official_public", "sourceLabel": "FRED VIXCLS"}
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {"symbol": "US2Y", "label": "US 2Y", "value": 4.38, "changePercent": -0.16, "source": "treasury", "sourceType": "official_public", "sourceLabel": "US Treasury", "unit": "%"},
+                {"symbol": "US10Y", "label": "US 10Y", "value": 4.09, "changePercent": -0.19, "source": "treasury", "sourceType": "official_public", "sourceLabel": "US Treasury", "unit": "%"},
+                {"symbol": "US30Y", "label": "US 30Y", "value": 4.29, "changePercent": -0.14, "source": "treasury", "sourceType": "official_public", "sourceLabel": "US Treasury", "unit": "%"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "fx_commodities",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {"symbol": "DXY", "label": "DXY", "changePercent": -0.5, "value": 103.4, "source": "yfinance_proxy", "sourceType": "proxy_public", "sourceLabel": "Yahoo Finance", "freshness": "delayed"},
+                {"symbol": "GLD", "label": "Gold", "changePercent": -0.7, "value": 238.2, "source": "yfinance_proxy", "sourceType": "proxy_public", "sourceLabel": "Yahoo Finance", "freshness": "delayed"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "us_breadth",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {"symbol": "SECTORS_UP", "label": "Sectors Up", "value": 8, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "SECTORS_DOWN", "label": "Sectors Down", "value": 3, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "RSP_SPY", "label": "RSP vs SPY", "value": 0.1, "changePercent": 0.1, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "IWM_SPY", "label": "IWM vs SPY", "value": 0.3, "changePercent": 0.3, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "QQQ_SPY", "label": "QQQ vs SPY", "value": 1.1, "changePercent": 1.1, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "funds_flow",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {"symbol": "ETF", "label": "ETF flow proxy", "value": 1.7, "change_pct": 0.8, "source": "yfinance_proxy", "sourceType": "unofficial_public_api", "sourceLabel": "Yahoo Finance", "observationOnly": True, "sourceAuthorityAllowed": False, "scoreContributionAllowed": False},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    signal = _capital_flow_signal(payload)
+    pressure = {item["asset"]: item for item in signal["sourceAssetPressure"]}
+
+    assert payload["sourceMetadata"]["externalProviderCalls"] is False
+    assert payload["sourceMetadata"]["providerRuntimeChanged"] is False
+    assert payload["sourceMetadata"]["marketCacheMutation"] is False
+    assert signal["likelyDestination"] == "growth_ai_software_semis"
+    assert signal["confidence"] == "medium"
+    assert signal["observationOnly"] is True
+    assert signal["sourceAuthorityAllowed"] is False
+    assert signal["scoreContributionAllowed"] is False
+    assert "qqq_institutional_proxy" not in pressure
+    assert "iwm_industry_proxy" not in pressure
+    assert pressure["growth_ai_software_semis"]["pressure"] == "absorbing"
+    assert pressure["btc"]["pressure"] == "lagging"
+    assert pressure["gold"]["pressure"] == "lagging"
+    assert pressure["usd"]["pressure"] == "easing"
+
+
 def test_capital_flow_signal_flags_oil_when_backdrop_is_rate_cut_supportive(
     isolated_db: DatabaseManager,
 ) -> None:

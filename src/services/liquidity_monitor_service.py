@@ -62,6 +62,10 @@ POSSIBLE_WEIGHT = 49
 CRYPTO_FUNDING_BACKFILL_MAX_AGE = timedelta(hours=12)
 GOLD_SYMBOL_CANDIDATES = frozenset({"GLD", "GOLD", "GC=F", "XAUUSD", "XAU/USD"})
 OIL_SYMBOL_CANDIDATES = frozenset({"WTI", "CL=F", "BRENT", "USO", "OIL"})
+CAPITAL_FLOW_FUNDS_FLOW_PROXY_ASSETS = (
+    ("INSTITUTIONAL", "qqq_institutional_proxy"),
+    ("INDUSTRY", "iwm_industry_proxy"),
+)
 SOURCE_CONFIDENCE_BY_TYPE = {
     "official_public": 1.0,
     "exchange_public": 1.0,
@@ -453,8 +457,9 @@ class LiquidityMonitorService:
             self._capital_flow_rates_pressure(panels.get("rates"), panels.get("macro")),
             self._capital_flow_volatility_pressure(panels.get("volatility"), panels.get("macro")),
         ]
-        source_asset_pressure = [item for item in signal_rows if item]
-        asset_map = {str(item["asset"]): item for item in source_asset_pressure}
+        core_source_asset_pressure = [item for item in signal_rows if item]
+        source_asset_pressure = core_source_asset_pressure + self._capital_flow_funds_flow_proxy_detail(panels.get("funds_flow"))
+        asset_map = {str(item["asset"]): item for item in core_source_asset_pressure}
         contradiction_signals: list[str] = []
         contradiction_codes: list[str] = []
 
@@ -509,11 +514,11 @@ class LiquidityMonitorService:
             contradiction_codes.append(InvestorSignalContradictionCode.MIXED_SIGNAL_INPUTS.value)
 
         freshness = self._weakest_evidence_freshness(
-            str(item.get("freshness") or "unavailable") for item in source_asset_pressure
+            str(item.get("freshness") or "unavailable") for item in core_source_asset_pressure
         )
-        is_fallback = any(bool(item.get("isFallback")) for item in source_asset_pressure)
-        is_stale = any(bool(item.get("isStale")) for item in source_asset_pressure)
-        is_partial = any(bool(item.get("isPartial")) for item in source_asset_pressure) or len(source_asset_pressure) < 4
+        is_fallback = any(bool(item.get("isFallback")) for item in core_source_asset_pressure)
+        is_stale = any(bool(item.get("isStale")) for item in core_source_asset_pressure)
+        is_partial = any(bool(item.get("isPartial")) for item in core_source_asset_pressure) or len(core_source_asset_pressure) < 4
 
         reason_codes = [
             InvestorSignalReasonCode.SOURCE_AUTHORITY_MISSING.value,
@@ -527,7 +532,7 @@ class LiquidityMonitorService:
             reason_codes.append(InvestorSignalReasonCode.PARTIAL_SOURCE.value)
         if contradiction_signals:
             reason_codes.append(InvestorSignalReasonCode.CONFLICTING_SIGNAL_INPUTS.value)
-        if not source_asset_pressure:
+        if not core_source_asset_pressure:
             reason_codes.append(InvestorSignalReasonCode.UNAVAILABLE_SOURCE.value)
 
         supportive_backdrop = sum(1 for flag in (usd_easing, rates_easing, vol_benign) if flag)
@@ -765,6 +770,37 @@ class LiquidityMonitorService:
             "isPartial": bool(source_input.get("isPartial")) or freshness not in {"live", "fresh"} or source_type in CAPITAL_FLOW_PARTIAL_SOURCE_TYPES,
             "observationOnly": True,
         }
+
+    def _capital_flow_funds_flow_proxy_detail(self, panel: Optional[PanelState]) -> List[Dict[str, Any]]:
+        if panel is None:
+            return []
+        symbol_map = self._reliable_symbol_map(panel, {symbol for symbol, _ in CAPITAL_FLOW_FUNDS_FLOW_PROXY_ASSETS})
+        details: List[Dict[str, Any]] = []
+        for symbol, asset in CAPITAL_FLOW_FUNDS_FLOW_PROXY_ASSETS:
+            item = symbol_map.get(symbol)
+            if item is None:
+                continue
+            change = self._change_value(item)
+            if change is None:
+                change = self._numeric(item.get("value"))
+            if change is None:
+                continue
+            source_input = self._source_confidence_input_from_item(
+                item,
+                panel,
+                key=str(item.get("symbol") or symbol),
+                label=str(item.get("label") or asset),
+            )
+            details.append(
+                self._capital_flow_asset_entry(
+                    asset=asset,
+                    change=change,
+                    source_input=source_input,
+                    positive_pressure="absorbing",
+                    negative_pressure="lagging",
+                )
+            )
+        return details
 
     @staticmethod
     def _capital_flow_explanation(

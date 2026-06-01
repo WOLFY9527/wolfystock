@@ -170,6 +170,8 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
             "sourceAssetPressure": [
                 {"asset": "growth_ai_software_semis", "pressure": "absorbing", "freshness": "delayed"},
                 {"asset": "btc", "pressure": "lagging", "freshness": "live"},
+                {"asset": "qqq_institutional_proxy", "pressure": "absorbing", "freshness": "delayed", "observationOnly": True},
+                {"asset": "iwm_industry_proxy", "pressure": "lagging", "freshness": "delayed", "observationOnly": True},
             ],
             "contradictionSignals": ["btc_not_confirming_growth_absorption"],
             "explanation": "Growth is absorbing more attention while BTC is not confirming the move.",
@@ -209,10 +211,15 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
     assert body["score"]["regime"] == "supportive"
     assert set(body["sourceMetadata"]) == {"externalProviderCalls", "providerRuntimeChanged", "marketCacheMutation"}
     assert body["sourceMetadata"]["externalProviderCalls"] is False
+    assert body["sourceMetadata"]["providerRuntimeChanged"] is False
+    assert body["sourceMetadata"]["marketCacheMutation"] is False
     assert "observationEvidenceSnapshot" not in body
     assert body["capitalFlowSignal"]["likelyDestination"] == "growth_ai_software_semis"
     assert body["capitalFlowSignal"]["confidence"] == "medium"
     assert body["capitalFlowSignal"]["observationOnly"] is True
+    pressure_assets = {item["asset"] for item in body["capitalFlowSignal"]["sourceAssetPressure"]}
+    assert {"qqq_institutional_proxy", "iwm_industry_proxy"} <= pressure_assets
+    assert all("fund flow" not in asset for asset in pressure_assets if asset.endswith("_proxy"))
     assert body["liquidityImpulseSynthesis"]["liquidityImpulse"] == "contracting_liquidity"
     indicator = body["indicators"][0]
     assert "observationEvidenceSnapshot" not in indicator

@@ -34,6 +34,10 @@ signal tables, source/risk rails, or liquidity-related freshness disclosure.
 - Cached/proxy/partial rows may shape `capitalFlowSignal.likelyDestination`,
   `sourceAssetPressure`, `contradictionSignals`, and `explanation`, but they
   must not promote liquidity score authority or change existing indicator gates.
+- Existing cached `funds_flow` rows such as `INSTITUTIONAL` (QQQ-derived) and
+  `INDUSTRY` (IWM-derived) may appear as additive `sourceAssetPressure` proxy
+  detail, but they must stay explicitly observation-only and must not be
+  described as real fund flow.
 - Diagnostics must explain required, fulfilled, and missing inputs; source
   tier; freshness; trust level; score contribution; cap/degradation reason; and
   activation hints.
