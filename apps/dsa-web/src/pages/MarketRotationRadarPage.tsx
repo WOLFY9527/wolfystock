@@ -25,6 +25,7 @@ import { getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   marketRotationApi,
   type MarketRotationEvidenceQuality,
+  type MarketRotationFamilyRollupItem,
   type MarketRotationRadarResponse,
   type MarketRotationSignalType,
   type MarketRotationStage,
@@ -62,6 +63,22 @@ const DATA_GAP_LABELS: Record<string, string> = {
   taxonomy_only: '仅可分类浏览',
   missing_required_windows: '观察时窗不足',
   no_headline_theme: '可比较样本不足',
+};
+const THEME_FLOW_STATE_LABELS: Record<string, string> = {
+  leading: '领涨观察',
+  broadening: '扩散跟涨',
+  rotating: '轮动切换',
+  crowded: '拥挤观察',
+  fading: '热度回落',
+  mixed: '信号分化',
+  insufficient_evidence: '证据不足',
+};
+const THEME_FLOW_REASON_LABELS: Record<string, string> = {
+  fallback_source: '最近一次可用数据',
+  stale_source: '数据略有延迟',
+  partial_source: '覆盖仍待补齐',
+  source_authority_missing: '确认信号仍待补齐',
+  conflicting_signal_inputs: '强弱与扩散信号分化',
 };
 
 type CapitalRotationSummaryCard = {
@@ -101,6 +118,8 @@ type RotationTierView = {
   coolingThemes: MarketRotationTheme[];
   taxonomyThemes: MarketRotationTheme[];
 };
+
+type ThemeFlowSignalView = NonNullable<MarketRotationTheme['themeFlowSignal']>;
 
 function hasMomentumProxyInputs(theme: MarketRotationTheme): boolean {
   return [
@@ -278,6 +297,80 @@ function consumerStatusLabel(state: DecisionReadinessState, payload: MarketRotat
 
 function formatThemeStage(stage?: MarketRotationStage): string {
   return stage ? STAGE_LABELS[stage] || stage : '待识别';
+}
+
+function formatThemeFlowState(state?: string | null): string {
+  const normalized = String(state || '').trim();
+  if (!normalized) {
+    return '待确认';
+  }
+  return THEME_FLOW_STATE_LABELS[normalized] || sanitizeRotationText(normalized, '待确认');
+}
+
+function themeFlowChipVariant(state?: string | null): 'success' | 'info' | 'caution' | 'neutral' {
+  switch (state) {
+    case 'leading':
+      return 'success';
+    case 'broadening':
+    case 'rotating':
+      return 'info';
+    case 'crowded':
+    case 'fading':
+    case 'mixed':
+      return 'caution';
+    default:
+      return 'neutral';
+  }
+}
+
+function formatThemeFlowConfidence(signal?: MarketRotationTheme['themeFlowSignal'] | null): string {
+  const raw = signal?.confidence;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return `${Math.round(raw <= 1 ? raw * 100 : raw)}%`;
+  }
+  if (typeof raw === 'string') {
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric)) {
+      return `${Math.round(numeric <= 1 ? numeric * 100 : numeric)}%`;
+    }
+  }
+  const label = String(signal?.confidenceLabel || signal?.confidenceText || '').trim();
+  return label || '待确认';
+}
+
+function extractThemeFlowLeadershipEvidence(signal?: MarketRotationTheme['themeFlowSignal'] | null): string | null {
+  const candidate = signal && typeof signal === 'object'
+    ? (signal as ThemeFlowSignalView & { leadershipEvidence?: unknown }).leadershipEvidence
+    : null;
+  return typeof candidate === 'string' && candidate.trim()
+    ? sanitizeRotationText(candidate, '龙头线索待补齐。')
+    : null;
+}
+
+function themeFlowReasonLabels(signal?: MarketRotationTheme['themeFlowSignal'] | null): string[] {
+  const codes = Array.isArray(signal?.reasonCodes) ? signal.reasonCodes : [];
+  return codes
+    .map((code) => THEME_FLOW_REASON_LABELS[String(code || '').trim()] || '')
+    .filter((label, index, array) => Boolean(label) && array.indexOf(label) === index)
+    .slice(0, 3);
+}
+
+function themeFlowEvidenceLines(signal?: MarketRotationTheme['themeFlowSignal'] | null): string[] {
+  return [
+    extractThemeFlowLeadershipEvidence(signal) || '龙头线索待补齐。',
+    sanitizeRotationText(signal?.breadthEvidence, '广度证据待补齐。'),
+    sanitizeRotationText(signal?.relativeStrengthEvidence, '相对强弱证据待补齐。'),
+  ];
+}
+
+function resolveRotationFamilyRollup(payload: MarketRotationRadarResponse): MarketRotationFamilyRollupItem[] {
+  const summaryRollup = Array.isArray(payload.summary.rotationFamilyRollup) ? payload.summary.rotationFamilyRollup : [];
+  if (summaryRollup.length) {
+    return summaryRollup;
+  }
+  return Array.isArray(payload.consumerEvidenceSnapshot?.rotationFamilyRollup)
+    ? payload.consumerEvidenceSnapshot.rotationFamilyRollup
+    : [];
 }
 
 function mapDataStateLabel(theme: DataStateFields): string {
@@ -786,6 +879,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
         : consumerFreshnessLabel(payload.freshness, payload.isFallback, payload.isStale),
     },
   ];
+  const familyRollup = resolveRotationFamilyRollup(payload);
 
   return (
     <TerminalPanel
@@ -825,6 +919,53 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
         <p className="text-[11px] font-medium text-white/48">下一步</p>
         <p className="mt-2 text-[11px] leading-5 text-white/60">{conclusion.nextStep}</p>
       </div>
+
+      {familyRollup.length ? (
+        <div
+          data-testid="rotation-family-flow-rollup"
+          className="mt-4 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3"
+        >
+          <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium text-white/48">家族流向观察</p>
+              <p className="mt-2 text-[11px] leading-5 text-white/60">优先看家族级轮动方向，不改写头部排序。</p>
+            </div>
+            <TerminalChip variant="neutral">摘要优先</TerminalChip>
+          </div>
+          <div className="mt-3 max-h-72 overflow-y-auto no-scrollbar">
+            <DenseRows>
+              {familyRollup.map((item, index) => {
+                const signal = item.themeFlowSignal;
+                const familyName = String(item.familyName || item.familyId || `家族 ${index + 1}`).trim();
+                const reasonLabels = themeFlowReasonLabels(signal);
+                return (
+                  <div key={`${item.familyId || familyName}-${index}`} className="px-3 py-3">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <p className="min-w-0 text-sm font-semibold text-white/84">{familyName}</p>
+                      <TerminalChip variant={themeFlowChipVariant(signal?.themeFlowState)}>
+                        {formatThemeFlowState(signal?.themeFlowState)}
+                      </TerminalChip>
+                      <span className="text-[11px] font-medium text-white/58">置信 {formatThemeFlowConfidence(signal)}</span>
+                    </div>
+                    <p className="mt-2 text-[11px] leading-5 text-white/58">
+                      {sanitizeRotationText(signal?.explanation, `${familyName} 当前仅保留家族级观察。`)}
+                    </p>
+                    <div className="mt-2 grid gap-1 text-[10px] leading-5 text-white/48">
+                      {themeFlowEvidenceLines(signal).map((line) => <p key={`${familyName}-${line}`}>{line}</p>)}
+                    </div>
+                    {reasonLabels.length ? (
+                      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                        <span className="text-[10px] font-medium text-white/40">观察项</span>
+                        {reasonLabels.map((label) => <TerminalChip key={`${familyName}-${label}`}>{label}</TerminalChip>)}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </DenseRows>
+          </div>
+        </div>
+      ) : null}
 
       <ConsumerDisclosure
         testId="rotation-radar-mechanics-details"
@@ -1092,6 +1233,48 @@ const ThemeDetailPanel: React.FC<{
             : <TerminalChip>待补齐</TerminalChip>}
         </div>
       </div>
+
+      {theme.themeFlowSignal ? (
+        <div className="min-w-0 px-1 py-3">
+          <ConsumerDisclosure
+            testId="rotation-theme-flow-signal"
+            title="查看主题流向观察"
+            summary="家族摘要优先，主题级说明默认折叠"
+          >
+            <div className="grid gap-3 text-[11px] leading-5 text-white/56">
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <TerminalChip variant={themeFlowChipVariant(theme.themeFlowSignal.themeFlowState)}>
+                  {formatThemeFlowState(theme.themeFlowSignal.themeFlowState)}
+                </TerminalChip>
+                <TerminalChip variant="neutral">置信 {formatThemeFlowConfidence(theme.themeFlowSignal)}</TerminalChip>
+              </div>
+              <div>
+                <p className="font-semibold text-white/74">解释</p>
+                <p className="mt-1">
+                  {sanitizeRotationText(
+                    theme.themeFlowSignal.explanation,
+                    `${theme.name} 当前仅保留主题级观察说明。`,
+                  )}
+                </p>
+              </div>
+              <div>
+                <p className="font-semibold text-white/74">支持证据</p>
+                <div className="mt-1 grid gap-1">
+                  {themeFlowEvidenceLines(theme.themeFlowSignal).map((line) => <p key={`${theme.id}-${line}`}>· {line}</p>)}
+                </div>
+              </div>
+              {themeFlowReasonLabels(theme.themeFlowSignal).length ? (
+                <div>
+                  <p className="font-semibold text-white/74">观察项</p>
+                  <div className="mt-1 flex min-w-0 flex-wrap gap-1.5">
+                    {themeFlowReasonLabels(theme.themeFlowSignal).map((label) => <TerminalChip key={`${theme.id}-${label}`}>{label}</TerminalChip>)}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </ConsumerDisclosure>
+        </div>
+      ) : null}
 
       <div className="min-w-0 px-1 py-3">
         <ConsumerDisclosure

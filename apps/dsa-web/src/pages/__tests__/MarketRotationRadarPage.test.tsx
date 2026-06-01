@@ -17,6 +17,26 @@ const rawI18nKeyPattern = /\b(?:rotationRadar|marketRotationRadar|marketIntellig
 const consumerDiagnosticLeakPattern =
   /alpaca|alpaca_etf_authority_spine|Alpaca SIP|bounded_etf_authority_active|missing_required_windows|ineligible_bounded_etf|entitlement|reasonCodes?|reasonFamilies|sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|local_taxonomy|taxonomy-only|fallback_static|synthetic_fixture|official_public|authorized_licensed_feed|public_proxy|unofficial_proxy|provider|quote provider|提供方运维|数据源设置|原始来源|原因代码|ETF 权威|ETF 代理|权威来源|权威检查|权威可计分|可计分证据|代理缺口|代理过期|代理完整|proxy_quote_missing|proxy_stale|backend|raw_payload|provider_payload|debug|trace/i;
 
+type ThemeFlowSignalFixture = NonNullable<NonNullable<MarketRotationRadarResponse['themes'][number]['themeFlowSignal']>> & {
+  leadershipEvidence?: string | null;
+};
+
+function buildThemeFlowSignalFixture(
+  overrides: Partial<ThemeFlowSignalFixture> = {},
+): ThemeFlowSignalFixture {
+  return {
+    themeFlowState: 'leading',
+    confidence: 0.72,
+    confidenceLabel: '高',
+    reasonCodes: ['source_authority_missing'],
+    explanation: 'AI 应用当前由相对强弱与量能扩张支持，属于领涨观察。',
+    leadershipEvidence: '龙头成员 APP、PLTR，集中度 36.0%。',
+    breadthEvidence: '上涨广度 100.0% / 跑赢广度 100.0% ，3/3 成员有可用观察。',
+    relativeStrengthEvidence: '相对 QQQ 强弱 +2.80% 。',
+    ...overrides,
+  };
+}
+
 const radarFixture = (): MarketRotationRadarResponse => ({
   endpoint: '/api/v1/market/rotation-radar',
   market: 'US',
@@ -121,6 +141,7 @@ const radarFixture = (): MarketRotationRadarResponse => ({
         sourceAuthorityAllowed: true,
         evidenceQuality: 'degraded_proxy',
         dataGaps: ['true_flow_data_missing', 'flow_methodology_missing'],
+        themeFlowSignal: buildThemeFlowSignalFixture(),
       },
     ],
     acceleratingThemes: [
@@ -139,6 +160,7 @@ const radarFixture = (): MarketRotationRadarResponse => ({
         sourceAuthorityAllowed: true,
         evidenceQuality: 'degraded_proxy',
         dataGaps: ['true_flow_data_missing'],
+        themeFlowSignal: buildThemeFlowSignalFixture(),
       },
     ],
     fadingThemes: [
@@ -157,6 +179,47 @@ const radarFixture = (): MarketRotationRadarResponse => ({
         sourceAuthorityAllowed: false,
         evidenceQuality: 'insufficient',
         dataGaps: ['true_flow_data_missing', 'source_authority_rejected'],
+      },
+    ],
+    rotationFamilyRollup: [
+      {
+        familyId: 'ai',
+        familyName: 'AI / 软件',
+        themeIds: ['ai_applications'],
+        themeNames: ['AI 应用'],
+        leaderThemeIds: ['ai_applications'],
+        themeCount: 1,
+        signalThemeCount: 1,
+        averageRotationScore: 78,
+        averageConfidence: 0.68,
+        themeFlowSignal: buildThemeFlowSignalFixture({
+          confidence: 0.68,
+          explanation: 'AI / 软件家族当前由 AI 应用领涨，属于领涨观察。',
+          leadershipEvidence: '领涨主题 AI 应用。',
+          breadthEvidence: '1 个主题纳入观察，平均上涨广度 100.0% ，平均跑赢广度 100.0% 。',
+          relativeStrengthEvidence: '平均相对强弱 +2.80% ，当前最强主题为 AI 应用',
+        }),
+      },
+      {
+        familyId: 'defensive',
+        familyName: '防御',
+        themeIds: ['robotics'],
+        themeNames: ['机器人'],
+        leaderThemeIds: ['robotics'],
+        themeCount: 1,
+        signalThemeCount: 1,
+        averageRotationScore: 38,
+        averageConfidence: 0.31,
+        themeFlowSignal: buildThemeFlowSignalFixture({
+          themeFlowState: 'fading',
+          confidence: 0.31,
+          confidenceLabel: '低',
+          reasonCodes: ['fallback_source'],
+          explanation: '防御家族相对强势回落，属于热度降温观察。',
+          leadershipEvidence: '领涨主题 机器人。',
+          breadthEvidence: '1 个主题纳入观察，平均上涨广度 42.0% ，平均跑赢广度 38.0% 。',
+          relativeStrengthEvidence: '平均相对强弱 -0.30% ，当前最强主题为 机器人',
+        }),
       },
     ],
     watchlistSignals: [
@@ -181,6 +244,7 @@ const radarFixture = (): MarketRotationRadarResponse => ({
       flowLanguageAllowed: false,
       sourceAuthorityAllowed: true,
       evidenceQuality: 'degraded_proxy',
+      themeFlowSignal: buildThemeFlowSignalFixture(),
       dataGaps: ['true_flow_data_missing', 'flow_methodology_missing', 'benchmark_proxy_missing'],
       stage: 'confirmed_rotation',
       stageExplanation: '价格、量能、广度和同步性同时满足阈值。置信度 72%，3 个分钟级时窗可用。',
@@ -294,6 +358,43 @@ const radarFixture = (): MarketRotationRadarResponse => ({
       },
     },
   ],
+  consumerEvidenceSnapshot: {
+    market: 'US',
+    generatedAt: '2026-05-07T09:50:00Z',
+    asOf: '2026-05-07T09:45:00Z',
+    freshness: 'partial',
+    isFallback: false,
+    isStale: false,
+    isPartial: true,
+    authorityGrant: false,
+    headlineEligibleThemeCount: 1,
+    observationThemeCount: 1,
+    taxonomyThemeCount: 0,
+    scoreContributionAllowed: false,
+    reasonCodes: ['partial_source'],
+    themes: [],
+    rotationFamilyRollup: [
+      {
+        familyId: 'ai',
+        familyName: 'AI / 软件',
+        themeIds: ['ai_applications'],
+        themeNames: ['AI 应用'],
+        leaderThemeIds: ['ai_applications'],
+        themeCount: 1,
+        signalThemeCount: 1,
+        averageRotationScore: 78,
+        averageConfidence: 0.68,
+        themeFlowSignal: buildThemeFlowSignalFixture({
+          confidence: 0.68,
+          reasonCodes: ['partial_source'],
+          explanation: 'AI / 软件家族当前由 AI 应用领涨，属于领涨观察。',
+          leadershipEvidence: '领涨主题 AI 应用。',
+          breadthEvidence: '1 个主题纳入观察，平均上涨广度 100.0% ，平均跑赢广度 100.0% 。',
+          relativeStrengthEvidence: '平均相对强弱 +2.80% ，当前最强主题为 AI 应用',
+        }),
+      },
+    ],
+  },
 });
 
 const themeNames = [
@@ -656,7 +757,7 @@ describe('MarketRotationRadarPage', () => {
     expect(guidance).toHaveTextContent('AI 应用');
     expect(guidance).toHaveTextContent('当前以相对强弱、成交额扩张、广度和同步性作为观察依据。');
     expect(within(guidance).getAllByText('观察中').length).toBeGreaterThanOrEqual(2);
-    expect(guidance.querySelectorAll('[data-terminal-primitive="chip"]')).toHaveLength(3);
+    expect(guidance.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThanOrEqual(3);
 
     const summaryBand = screen.getByTestId('rotation-radar-summary-band');
     expect(summaryBand).toHaveAttribute('data-terminal-primitive', 'panel');
@@ -664,6 +765,15 @@ describe('MarketRotationRadarPage', () => {
     expect(summaryBand).toHaveTextContent('当前市场');
     expect(summaryBand).toHaveTextContent('当前信号');
     expect(summaryBand).toHaveTextContent('置信 / 更新');
+
+    const familyRollup = screen.getByTestId('rotation-family-flow-rollup');
+    expect(familyRollup).toHaveTextContent('家族流向观察');
+    expect(familyRollup).toHaveTextContent('AI / 软件');
+    expect(familyRollup).toHaveTextContent('领涨观察');
+    expect(familyRollup).toHaveTextContent('68%');
+    expect(familyRollup).toHaveTextContent('领涨主题 AI 应用。');
+    expect(familyRollup).toHaveTextContent('平均相对强弱 +2.80%');
+    expect(familyRollup).toHaveTextContent('观察项');
 
     const mechanics = screen.getByTestId('rotation-radar-mechanics-details');
     expect(mechanics).toHaveAttribute('data-terminal-primitive', 'disclosure');
@@ -690,6 +800,10 @@ describe('MarketRotationRadarPage', () => {
     const dataNotes = screen.getByTestId('rotation-theme-data-notes');
     expect(dataNotes).toHaveAttribute('data-terminal-primitive', 'disclosure');
     expect(within(dataNotes).getByRole('button', { name: '展开 查看数据说明' })).toHaveAttribute('aria-expanded', 'false');
+    const themeFlow = screen.getByTestId('rotation-theme-flow-signal');
+    expect(themeFlow).toHaveAttribute('data-terminal-primitive', 'disclosure');
+    expect(themeFlow).not.toHaveAttribute('open');
+    expect(within(themeFlow).getByRole('button', { name: '展开 查看主题流向观察' })).toHaveAttribute('aria-expanded', 'false');
 
     expect(screen.queryByTestId('rotation-capital-summary')).not.toBeInTheDocument();
     expect(screen.queryByTestId('rotation-decision-readiness')).not.toBeInTheDocument();
@@ -701,6 +815,45 @@ describe('MarketRotationRadarPage', () => {
     expect(bodyText).not.toMatch(consumerDiagnosticLeakPattern);
     expect(bodyText).not.toMatch(forbiddenTradingActionPattern);
     expect(bodyText).not.toMatch(/\bDetails\b/i);
+  });
+
+  it('falls back to consumer evidence family rollup when summary family data is absent', async () => {
+    const fixture = radarFixture();
+    fixture.summary.rotationFamilyRollup = [];
+    fixture.consumerEvidenceSnapshot = {
+      ...fixture.consumerEvidenceSnapshot,
+      rotationFamilyRollup: [
+        {
+          familyId: 'defensive',
+          familyName: '防御',
+          themeIds: ['robotics'],
+          themeNames: ['机器人'],
+          leaderThemeIds: ['robotics'],
+          themeCount: 1,
+          signalThemeCount: 1,
+          averageRotationScore: 48,
+          averageConfidence: 0.42,
+          themeFlowSignal: buildThemeFlowSignalFixture({
+            themeFlowState: 'rotating',
+            confidence: 0.42,
+            confidenceLabel: '中',
+            reasonCodes: ['partial_source'],
+            explanation: '防御家族仍在轮动切换阶段，强弱优势尚在形成。',
+            leadershipEvidence: '领涨主题 机器人。',
+            breadthEvidence: '1 个主题纳入观察，平均上涨广度 56.0% ，平均跑赢广度 52.0% 。',
+            relativeStrengthEvidence: '平均相对强弱 +0.35% ，当前最强主题为 机器人',
+          }),
+        },
+      ],
+    };
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(fixture);
+
+    render(<MarketRotationRadarPage />);
+
+    const familyRollup = await screen.findByTestId('rotation-family-flow-rollup');
+    expect(familyRollup).toHaveTextContent('防御');
+    expect(familyRollup).toHaveTextContent('轮动切换');
+    expect(familyRollup.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
   });
 
   it('switches market tabs to populated taxonomy universes with compact library framing', async () => {
