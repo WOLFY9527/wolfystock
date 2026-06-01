@@ -34,6 +34,7 @@ import {
   TerminalNotice,
   TerminalPanel,
 } from '../components/terminal';
+import LeveragedEtfMapper from '../components/watchlist/LeveragedEtfMapper';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import type { InvestorSignalContract } from '../types/scanner';
@@ -2003,6 +2004,12 @@ const WatchlistPage: React.FC = () => {
                     </div>
                   </DenseSecondaryDisclosure>
                 ) : null}
+
+                <LeveragedEtfMapper
+                  defaultUnderlyingSymbol={activeItem.symbol}
+                  language={language}
+                  className="pt-4"
+                />
 
                 <DenseSecondaryDisclosure
                   data-testid="watchlist-data-notes"

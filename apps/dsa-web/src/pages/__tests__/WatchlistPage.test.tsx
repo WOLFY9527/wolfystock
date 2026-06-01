@@ -895,6 +895,27 @@ describe('WatchlistPage', () => {
     expect(within(detailRail).getByText('TSMC')).toBeInTheDocument();
   });
 
+  it('mounts the leveraged ETF mapper only inside the detail rail without changing existing rail blocks or routing', async () => {
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-NVDA');
+    const detailRail = screen.getByTestId('watchlist-detail-rail');
+    const primaryWorkRegion = screen.getByTestId('watchlist-primary-work-region');
+    const secondaryDeck = screen.getByTestId('watchlist-secondary-deck');
+    const mapper = screen.getByTestId('leveraged-etf-mapper');
+
+    expect(screen.getAllByTestId('leveraged-etf-mapper')).toHaveLength(1);
+    expect(detailRail).toContainElement(mapper);
+    expect(primaryWorkRegion).not.toContainElement(mapper);
+    expect(secondaryDeck).not.toContainElement(mapper);
+    expect(within(mapper).getByRole('button', { name: '展开 杠杆 ETF 映射' })).toHaveAttribute('aria-expanded', 'false');
+    expect(within(mapper).queryByLabelText('ETF 参考价')).not.toBeInTheDocument();
+    expect(within(detailRail).getByText('信号最新')).toBeInTheDocument();
+    expect(within(detailRail).getByText('观察摘要')).toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-nav')).not.toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/watchlist');
+  });
+
   it('renders investor signal as a collapsed persisted scanner observation with consumer-safe fields only', async () => {
     listWatchlistItems.mockResolvedValue({
       items: [
