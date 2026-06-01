@@ -36,6 +36,7 @@ import {
 } from '../components/terminal';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
+import type { InvestorSignalContract } from '../types/scanner';
 import type { WatchlistItem } from '../types/watchlist';
 import type { RuleBacktestRunResponse } from '../types/backtest';
 import { describeBooleanEnabled, describeDisplayStatus, type DisplayStatusTone } from '../utils/displayStatus';
@@ -50,6 +51,14 @@ type FailureReason = '数据不足' | '行情缺失' | '服务暂不可用' | '�
 type BatchFailure = { label: FailureReason; detail?: string };
 type WatchlistTrustState = 'fresh' | 'stale' | 'unknown';
 type WatchlistScoreDisclosureState = 'fresh' | 'stale' | 'limitedConfidence' | 'unknown' | 'failed';
+type WatchlistInvestorSignalView = {
+  confidenceLabel: string | null;
+  freshnessLabel: string | null;
+  stateLabel: string | null;
+  explanation: string | null;
+  reasonCodes: string[];
+  contradictionCodes: string[];
+};
 type WatchlistConclusionModel = {
   title: string;
   detail: string;
@@ -116,6 +125,15 @@ function formatDateTime(value?: string | null, language: 'zh' | 'en' = 'zh'): st
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+}
+
+function titleCaseFromSnake(value?: string | null): string {
+  if (!value) return '';
+  return value
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 function getItemTime(item: WatchlistItem): number {
@@ -339,6 +357,96 @@ function formatScannerReason(reason?: string | null, language: 'zh' | 'en' = 'zh
 
 function normalizeToken(value?: string | null): string {
   return normalizeText(value).toLowerCase();
+}
+
+const INVESTOR_SIGNAL_REASON_LABELS: Record<string, string> = {
+  fallback_source: '仅备用来源',
+  source_authority_missing: '来源权限未确认',
+  source_authority_router_rejected: '来源权限路由未通过',
+  score_rights_missing: '当前不允许计分',
+  score_contribution_not_allowed: '当前不允许计分',
+  observation_only: '仅观察态',
+  observation_only_discount: '仅观察，不升格结论',
+  freshness_discount: '时效折价',
+  source_tier_discount: '来源层级折价',
+  provider_unavailable: '数据源暂不可用',
+  partial_coverage: '覆盖不完整',
+};
+
+const INVESTOR_SIGNAL_FRESHNESS_LABELS: Record<string, { zh: string; en: string }> = {
+  live: { zh: '已更新', en: 'Updated' },
+  delayed: { zh: '更新中', en: 'Refreshing' },
+  cached: { zh: '已缓存', en: 'Cached' },
+  stale: { zh: '较旧', en: 'Stale' },
+  fallback: { zh: '备用来源', en: 'Fallback' },
+  mock: { zh: '模拟来源', en: 'Mock' },
+  error: { zh: '暂不可用', en: 'Unavailable' },
+};
+
+function formatInvestorSignalCode(code: string, language: 'zh' | 'en'): string {
+  const normalized = normalizeToken(code);
+  if (!normalized) return '';
+  if (language === 'zh') {
+    return INVESTOR_SIGNAL_REASON_LABELS[normalized] || titleCaseFromSnake(normalized);
+  }
+  return titleCaseFromSnake(normalized);
+}
+
+function formatInvestorSignalFreshness(freshness?: string | null, language: 'zh' | 'en' = 'zh'): string | null {
+  const normalized = normalizeToken(freshness);
+  if (!normalized) return null;
+  const labels = INVESTOR_SIGNAL_FRESHNESS_LABELS[normalized];
+  if (labels) return labels[language];
+  return language === 'zh' ? titleCaseFromSnake(normalized) : titleCaseFromSnake(normalized);
+}
+
+function formatInvestorSignalConfidence(signal?: InvestorSignalContract | null, language: 'zh' | 'en' = 'zh'): string | null {
+  if (!signal) return null;
+  if (signal.confidenceText) return signal.confidenceText;
+  if (signal.confidenceLabel) return formatInvestorSignalCode(signal.confidenceLabel, language);
+  if (typeof signal.confidence === 'string') return formatInvestorSignalCode(signal.confidence, language);
+  if (typeof signal.confidence === 'number' && Number.isFinite(signal.confidence)) {
+    return `${Math.round(signal.confidence * 100)}%`;
+  }
+  return null;
+}
+
+function formatInvestorSignalState(signal?: InvestorSignalContract | null, language: 'zh' | 'en' = 'zh'): string | null {
+  if (!signal) return null;
+  return signal.marketRegimeLabel
+    || signal.capitalFlowLabel
+    || signal.themeFlowLabel
+    || (signal.marketRegime ? formatInvestorSignalCode(signal.marketRegime, language) : null)
+    || (signal.capitalFlowRegime ? formatInvestorSignalCode(signal.capitalFlowRegime, language) : null)
+    || (signal.themeFlowState ? formatInvestorSignalCode(signal.themeFlowState, language) : null);
+}
+
+function buildWatchlistInvestorSignalView(
+  signal?: InvestorSignalContract | null,
+  language: 'zh' | 'en' = 'zh',
+): WatchlistInvestorSignalView | null {
+  if (!signal) return null;
+  const confidenceLabel = formatInvestorSignalConfidence(signal, language);
+  const freshnessLabel = formatInvestorSignalFreshness(signal.freshness, language);
+  const stateLabel = formatInvestorSignalState(signal, language);
+  const explanation = normalizeText(signal.explanation);
+  const reasonCodes = (signal.reasonCodes || [])
+    .map((code) => formatInvestorSignalCode(code, language))
+    .filter(Boolean);
+  const contradictionCodes = (signal.contradictionCodes || [])
+    .map((code) => formatInvestorSignalCode(code, language))
+    .filter(Boolean);
+  if (!confidenceLabel && !freshnessLabel && !stateLabel && !explanation && reasonCodes.length === 0 && contradictionCodes.length === 0) {
+    return null;
+  }
+  return {
+    confidenceLabel,
+    freshnessLabel,
+    stateLabel,
+    explanation: explanation || null,
+    reasonCodes,
+    contradictionCodes,
+  };
 }
 
 function getTrustState(item: WatchlistItem): WatchlistTrustState {
@@ -616,6 +724,13 @@ function getCopy(language: 'zh' | 'en') {
       scannerSelected: 'Selected by scanner',
       staleIntelligence: 'Recent available data',
       intelligence: 'Intelligence',
+      investorSignal: 'Investor signal observation',
+      investorSignalSummary: 'Persisted scanner observation · collapsed by default',
+      investorSignalState: 'State',
+      investorSignalConfidence: 'Confidence',
+      investorSignalFreshness: 'Freshness',
+      investorSignalReasons: 'Reason codes',
+      investorSignalContradictions: 'Contradictions',
       noEvidence: 'Evidence updating',
       batchBacktestFilter: 'Backtest current filter',
       batchScanFilter: 'Scan current filter',
@@ -710,6 +825,13 @@ function getCopy(language: 'zh' | 'en') {
     scannerSelected: '扫描入选',
     staleIntelligence: '最近可用数据',
     intelligence: '观察依据',
+    investorSignal: '资金面观察信号',
+    investorSignalSummary: '来自已保存的 Scanner 观察 · 默认收起',
+    investorSignalState: '观察状态',
+    investorSignalConfidence: '置信度',
+    investorSignalFreshness: '时效',
+    investorSignalReasons: '原因码',
+    investorSignalContradictions: '矛盾信号',
     noEvidence: '依据更新中',
     batchBacktestFilter: '回测当前筛选',
     batchScanFilter: '扫描当前筛选',
@@ -1300,6 +1422,7 @@ const WatchlistPage: React.FC = () => {
   const activeScannerStatusLabel = activeItem ? formatScannerStatus(activeItem) : '--';
   const activeBacktestStatusLabel = activeItem ? formatBacktestStatus(activeItem) : '--';
   const activeScannerReason = activeItem ? formatScannerReason(activeScanner?.reason, language) : null;
+  const activeInvestorSignal = activeItem ? buildWatchlistInvestorSignalView(activeScanner?.investorSignal, language) : null;
   const activeScannerFailure = activeItem && (activeItem.scoreError || activeScanner?.reason)
     ? sanitizeFailureReason(activeItem.scoreError || activeScanner?.reason || '', '扫描失败')
     : null;
@@ -1794,6 +1917,61 @@ const WatchlistPage: React.FC = () => {
                     {activeBacktestSummary}
                   </div>
                 </section>
+
+                {activeInvestorSignal ? (
+                  <DenseSecondaryDisclosure
+                    data-testid="watchlist-investor-signal"
+                    variant="row"
+                    title={copy.investorSignal}
+                    summary={copy.investorSignalSummary}
+                  >
+                    <div className="space-y-3 text-xs leading-5 text-white/68">
+                      <div className="grid min-w-0 gap-2 sm:grid-cols-3">
+                        {activeInvestorSignal.stateLabel ? (
+                          <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
+                            <p className="text-[11px] text-white/40">{copy.investorSignalState}</p>
+                            <p className="mt-1 text-sm text-white/78">{activeInvestorSignal.stateLabel}</p>
+                          </div>
+                        ) : null}
+                        {activeInvestorSignal.confidenceLabel ? (
+                          <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
+                            <p className="text-[11px] text-white/40">{copy.investorSignalConfidence}</p>
+                            <p className="mt-1 text-sm text-white/78">{activeInvestorSignal.confidenceLabel}</p>
+                          </div>
+                        ) : null}
+                        {activeInvestorSignal.freshnessLabel ? (
+                          <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
+                            <p className="text-[11px] text-white/40">{copy.investorSignalFreshness}</p>
+                            <p className="mt-1 text-sm text-white/78">{activeInvestorSignal.freshnessLabel}</p>
+                          </div>
+                        ) : null}
+                      </div>
+                      {activeInvestorSignal.explanation ? (
+                        <p data-testid="watchlist-investor-signal-explanation">{activeInvestorSignal.explanation}</p>
+                      ) : null}
+                      {activeInvestorSignal.reasonCodes.length ? (
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-white/38">{copy.investorSignalReasons}</p>
+                          <div className="flex min-w-0 flex-wrap gap-1.5">
+                            {activeInvestorSignal.reasonCodes.map((reason) => (
+                              <TerminalChip key={reason} variant="neutral">{reason}</TerminalChip>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      {activeInvestorSignal.contradictionCodes.length ? (
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-white/38">{copy.investorSignalContradictions}</p>
+                          <div className="flex min-w-0 flex-wrap gap-1.5">
+                            {activeInvestorSignal.contradictionCodes.map((reason) => (
+                              <TerminalChip key={reason} variant="caution">{reason}</TerminalChip>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </DenseSecondaryDisclosure>
+                ) : null}
 
                 <DenseSecondaryDisclosure
                   data-testid="watchlist-data-notes"

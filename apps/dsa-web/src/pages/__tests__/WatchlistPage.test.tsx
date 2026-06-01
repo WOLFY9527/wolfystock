@@ -895,6 +895,91 @@ describe('WatchlistPage', () => {
     expect(within(detailRail).getByText('TSMC')).toBeInTheDocument();
   });
 
+  it('renders investor signal as a collapsed persisted scanner observation with consumer-safe fields only', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          symbol: 'NVDA',
+          intelligence: {
+            scanner: {
+              lastScore: 94,
+              lastRank: 1,
+              status: 'selected',
+              reason: 'Latest scanner score.',
+              lastScannedAt: '2026-05-01T12:30:00',
+              investorSignal: {
+                contractVersion: 'investor_signal_contract_v1',
+                diagnosticOnly: true,
+                observationOnly: true,
+                authorityGrant: false,
+                decisionGrade: false,
+                sourceAuthorityAllowed: false,
+                scoreContributionAllowed: false,
+                marketRegime: 'mixed',
+                marketRegimeLabel: '信号分化',
+                confidenceLabel: 'blocked',
+                confidenceText: '禁止判断',
+                freshness: 'cached',
+                reasonCodes: ['source_authority_missing', 'score_rights_missing'],
+                contradictionCodes: ['theme_rotation_mismatch'],
+                explanation: '主题强弱仍然分化，当前只保留观察意义。',
+              },
+            },
+            strategySimulation: {
+              lookbackDays: 90,
+              forwardDays: 5,
+              avgForwardReturnPct: 3.2,
+              hitRate: 0.56,
+              avgExcessReturnPct: 2.1,
+              selectionCount: 5,
+              dataCoverage: 0.83,
+              status: 'ready',
+            },
+            backtest: {
+              lastResultId: 33,
+              totalReturnPct: 24.6,
+              maxDrawdownPct: -8.2,
+              sharpe: 1.34,
+              tradeCount: 6,
+              testedAt: '2026-05-01T13:30:00',
+            },
+          },
+        }),
+      ],
+    });
+
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-NVDA');
+    const disclosure = screen.getByTestId('watchlist-investor-signal');
+    const toggle = within(disclosure).getByRole('button', { name: '展开 资金面观察信号' });
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(disclosure).toHaveTextContent('来自已保存的 Scanner 观察');
+    expect(within(disclosure).queryByText('禁止判断')).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
+    expect(within(disclosure).getByRole('button', { name: '收起 资金面观察信号' })).toHaveAttribute('aria-expanded', 'true');
+    expect(within(disclosure).getByText('信号分化')).toBeInTheDocument();
+    expect(within(disclosure).getByText('禁止判断')).toBeInTheDocument();
+    expect(within(disclosure).getByText('已缓存')).toBeInTheDocument();
+    expect(within(disclosure).getByText('来源权限未确认')).toBeInTheDocument();
+    expect(within(disclosure).getByText('当前不允许计分')).toBeInTheDocument();
+    expect(within(disclosure).getByText('Theme Rotation Mismatch')).toBeInTheDocument();
+    expect(within(disclosure).getByTestId('watchlist-investor-signal-explanation')).toHaveTextContent('主题强弱仍然分化，当前只保留观察意义。');
+    expect(disclosure).not.toHaveTextContent(/contractVersion|diagnosticOnly|authorityGrant|decisionGrade|sourceAuthorityAllowed|scoreContributionAllowed|theme_rotation_mismatch/i);
+    expect(disclosure).not.toHaveTextContent(/buy|sell|recommend|provider|admin/i);
+  });
+
+  it('omits the investor signal disclosure when scanner observation is absent', async () => {
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-NVDA');
+
+    expect(screen.queryByTestId('watchlist-investor-signal')).not.toBeInTheDocument();
+  });
+
   it('filters rows with backtest evidence', async () => {
     listWatchlistItems.mockResolvedValue({
       items: [
