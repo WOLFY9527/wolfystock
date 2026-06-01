@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -3199,8 +3200,14 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertEqual(payload["metadata"]["unavailableReason"], "quote_fetch_failed")
 
     def test_slow_quote_provider_is_bounded_and_degrades_to_fallback_payload(self) -> None:
+        provider_started = threading.Event()
+        release_provider = threading.Event()
+        provider_completed = threading.Event()
+
         def provider(symbols):
-            time.sleep(0.05)
+            provider_started.set()
+            release_provider.wait(timeout=0.2)
+            provider_completed.set()
             return {}
 
         service = MarketRotationRadarService(
@@ -3208,18 +3215,25 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
         )
 
-        with patch(
-            "src.services.market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS",
-            0.01,
-            create=True,
-        ):
-            started = time.monotonic()
-            payload = service.get_rotation_radar()
-            elapsed = time.monotonic() - started
+        try:
+            with patch(
+                "src.services.market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS",
+                0.01,
+                create=True,
+            ):
+                started = time.monotonic()
+                payload = service.get_rotation_radar()
+                elapsed = time.monotonic() - started
+            provider_completed_before_return = provider_completed.is_set()
+        finally:
+            release_provider.set()
+            provider_completed.wait(timeout=0.2)
 
         provider_meta = payload["metadata"]["quoteProvider"]
 
-        self.assertLess(elapsed, 0.04)
+        self.assertTrue(provider_started.is_set())
+        self.assertFalse(provider_completed_before_return)
+        self.assertLess(elapsed, 0.2)
         self.assertTrue(payload["isFallback"])
         self.assertEqual(payload["source"], "fallback")
         self.assertTrue(provider_meta["present"])
