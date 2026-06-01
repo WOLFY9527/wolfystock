@@ -233,6 +233,14 @@ MARKET_TEMPERATURE_REQUIRED_RELIABLE_INPUT_COUNT = 5
 MARKET_TEMPERATURE_REQUIRED_RELIABLE_PANEL_COUNT = 3
 MARKET_TEMPERATURE_MIN_COVERAGE = 0.25
 MARKET_OVERVIEW_EVIDENCE_CONTRACT_VERSION = "market_overview_evidence.v1"
+MARKET_OVERVIEW_OFFICIAL_MACRO_READINESS_CONTRACT_VERSION = "market_overview_official_macro_readiness.v1"
+MARKET_OVERVIEW_OFFICIAL_MACRO_READINESS_LABELS = {
+    "vix_pressure": "VIX / 波动率官方上下文",
+    "usd_pressure": "美元官方上下文",
+    "us_rates_pressure": "美债利率官方上下文",
+    "fed_liquidity": "美联储流动性官方上下文",
+    "cn_money_market_rates": "中国货币市场官方上下文",
+}
 MARKET_OVERVIEW_CONSUMER_EVIDENCE_KEYS = (
     "contractVersion",
     "diagnosticOnly",
@@ -1257,6 +1265,9 @@ class MarketOverviewService:
             if isinstance(liquidity_signal_raw, Mapping)
             else None
         )
+        official_macro_readiness = self._consumer_safe_official_macro_readiness(
+            self._extract_regime_summary_official_macro_readiness(inputs)
+        )
         rotation_rollup = self._normalize_regime_summary_rotation_rollup(
             self._extract_regime_summary_rotation_rollup(inputs)
         )
@@ -1382,6 +1393,25 @@ class MarketOverviewService:
                         f"liquidity_contradiction:{raw_code}",
                         "流动性信号存在冲突",
                         str(raw_code),
+                    )
+                )
+
+        if official_macro_readiness:
+            readiness_status = str(official_macro_readiness.get("status") or "missing")
+            if readiness_status == "ready":
+                drivers.append(
+                    self._regime_summary_entry(
+                        "official_macro_readiness:ready",
+                        "官方宏观缓存上下文已就绪",
+                        str(official_macro_readiness.get("detail") or "官方宏观缓存证据可作为观察上下文，但不授予 source authority 或 score 权限。"),
+                    )
+                )
+            else:
+                next_watch_items.append(
+                    self._regime_summary_entry(
+                        "watch:official_macro_readiness",
+                        "等待官方宏观上下文补齐",
+                        str(official_macro_readiness.get("detail") or "官方宏观 readiness 仍不完整，只能作为下一步观察项。"),
                     )
                 )
 
@@ -1544,17 +1574,29 @@ class MarketOverviewService:
             "confidenceCaps": self._dedupe_regime_summary_entries(confidence_caps),
             "nextWatchItems": self._dedupe_regime_summary_entries(next_watch_items),
             "explanation": explanation,
+            **({"officialMacroReadiness": official_macro_readiness} if official_macro_readiness else {}),
         }
 
-    def _market_temperature_capital_flow_signal(self) -> Optional[Dict[str, Any]]:
+    def _market_temperature_liquidity_context(self) -> Dict[str, Any]:
         try:
             payload = LiquidityMonitorService().get_liquidity_monitor()
         except Exception:
-            return None
+            return {}
+        if not isinstance(payload, Mapping):
+            return {}
+
+        context: Dict[str, Any] = {}
         signal = payload.get("capitalFlowSignal")
-        if not isinstance(signal, Mapping):
-            return None
-        return self._consumer_safe_capital_flow_signal(signal)
+        if isinstance(signal, Mapping):
+            context["capitalFlowSignal"] = self._consumer_safe_capital_flow_signal(signal)
+        readiness = self._project_official_macro_readiness_from_liquidity_payload(payload)
+        if readiness:
+            context["officialMacroReadiness"] = readiness
+        return context
+
+    def _market_temperature_capital_flow_signal(self) -> Optional[Dict[str, Any]]:
+        signal = self._market_temperature_liquidity_context().get("capitalFlowSignal")
+        return dict(signal) if isinstance(signal, Mapping) else None
 
     def _market_temperature_rotation_family_rollup(self) -> List[Dict[str, Any]]:
         try:
@@ -1642,6 +1684,245 @@ class MarketOverviewService:
         )
         return safe_signal
 
+    def _project_official_macro_readiness_from_liquidity_payload(
+        self,
+        payload: Mapping[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        raw_items: List[Dict[str, Any]] = []
+        indicators = payload.get("indicators")
+        if isinstance(indicators, Sequence) and not isinstance(indicators, (str, bytes, bytearray)):
+            for indicator in indicators:
+                if not isinstance(indicator, Mapping):
+                    continue
+                item = self._official_macro_readiness_item_from_indicator(indicator)
+                if item:
+                    raw_items.append(item)
+
+        if not raw_items:
+            synthesis = payload.get("liquidityImpulseSynthesis")
+            if isinstance(synthesis, Mapping):
+                raw_items.extend(self._official_macro_readiness_items_from_synthesis(synthesis))
+
+        if not raw_items:
+            return None
+        return self._consumer_safe_official_macro_readiness({"items": raw_items})
+
+    def _official_macro_readiness_item_from_indicator(
+        self,
+        indicator: Mapping[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        key = self._official_macro_readiness_item_key(indicator.get("key"))
+        if key not in MARKET_OVERVIEW_OFFICIAL_MACRO_READINESS_LABELS:
+            return None
+
+        diagnostics = indicator.get("coverageDiagnostics") if isinstance(indicator.get("coverageDiagnostics"), Mapping) else {}
+        evidence = indicator.get("evidence") if isinstance(indicator.get("evidence"), Mapping) else {}
+        cache_bundle = diagnostics.get("cacheBundleDiagnostics") if isinstance(diagnostics.get("cacheBundleDiagnostics"), Mapping) else {}
+        if not cache_bundle and isinstance(evidence.get("cacheBundleDiagnostics"), Mapping):
+            cache_bundle = evidence.get("cacheBundleDiagnostics") or {}
+
+        missing_inputs = [
+            str(item)
+            for item in diagnostics.get("missingInputs") or []
+            if str(item or "").strip()
+        ]
+        real_source_available = bool(
+            diagnostics.get("realSourceAvailable")
+            or cache_bundle.get("realSourceAvailable")
+            or cache_bundle.get("readinessEligible")
+        )
+        score_allowed = bool(
+            diagnostics.get("scoreContributionAllowed")
+            or cache_bundle.get("scoreContributionAllowed")
+            or indicator.get("includedInScore")
+        )
+        freshness = self._official_macro_readiness_freshness(
+            diagnostics.get("freshness")
+            or indicator.get("freshness")
+            or evidence.get("freshness")
+            or cache_bundle.get("freshness")
+        )
+        degraded = bool(
+            indicator.get("isFallback")
+            or indicator.get("isStale")
+            or indicator.get("isUnavailable")
+            or evidence.get("isFallback")
+            or evidence.get("isStale")
+            or evidence.get("isUnavailable")
+            or str(indicator.get("status") or "").lower() in {"unavailable", "error"}
+            or freshness in {"fallback", "stale", "unavailable", "error"}
+        )
+
+        if real_source_available and score_allowed and not missing_inputs and not degraded:
+            status = "ready"
+        elif real_source_available or score_allowed:
+            status = "partial"
+        else:
+            status = "missing"
+
+        return {
+            "key": key,
+            "status": status,
+            "freshness": freshness,
+        }
+
+    def _official_macro_readiness_items_from_synthesis(
+        self,
+        synthesis: Mapping[str, Any],
+    ) -> List[Dict[str, Any]]:
+        result: List[Dict[str, Any]] = []
+        for list_name, default_status in (
+            ("dominantDrivers", "ready"),
+            ("dataGaps", "missing"),
+            ("counterEvidence", "partial"),
+        ):
+            rows = synthesis.get(list_name)
+            if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes, bytearray)):
+                continue
+            for row in rows:
+                if not isinstance(row, Mapping):
+                    continue
+                key = self._official_macro_readiness_item_key(row.get("key"))
+                if key not in MARKET_OVERVIEW_OFFICIAL_MACRO_READINESS_LABELS:
+                    continue
+                status = default_status
+                if default_status == "ready" and row.get("scoreContributionAllowed") is False:
+                    status = "partial"
+                result.append(
+                    {
+                        "key": key,
+                        "status": status,
+                        "freshness": self._official_macro_readiness_freshness(row.get("freshness")),
+                    }
+                )
+        return result
+
+    def _consumer_safe_official_macro_readiness(
+        self,
+        readiness: Mapping[str, Any] | None,
+    ) -> Optional[Dict[str, Any]]:
+        if not isinstance(readiness, Mapping):
+            return None
+
+        safe_items: List[Dict[str, Any]] = []
+        raw_items = readiness.get("items")
+        if isinstance(raw_items, Sequence) and not isinstance(raw_items, (str, bytes, bytearray)):
+            for raw_item in raw_items:
+                if not isinstance(raw_item, Mapping):
+                    continue
+                safe_items.append(self._consumer_safe_official_macro_readiness_item(raw_item))
+
+        if safe_items:
+            ready_count = sum(1 for item in safe_items if item["status"] == "ready")
+            partial_count = sum(1 for item in safe_items if item["status"] == "partial")
+            missing_count = sum(1 for item in safe_items if item["status"] == "missing")
+            if ready_count and not partial_count and not missing_count:
+                status = "ready"
+            elif ready_count or partial_count:
+                status = "partial"
+            else:
+                status = "missing"
+        else:
+            ready_count = max(0, int(self._clean_number(readiness.get("readyCount")) or 0))
+            partial_count = max(0, int(self._clean_number(readiness.get("partialCount")) or 0))
+            missing_count = max(0, int(self._clean_number(readiness.get("missingCount")) or 0))
+            status = self._official_macro_readiness_status(readiness.get("status"))
+            if status == "unknown":
+                if ready_count and not partial_count and not missing_count:
+                    status = "ready"
+                elif ready_count or partial_count:
+                    status = "partial"
+                else:
+                    status = "missing"
+
+        return {
+            "contractVersion": MARKET_OVERVIEW_OFFICIAL_MACRO_READINESS_CONTRACT_VERSION,
+            "diagnosticOnly": True,
+            "observationOnly": True,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "status": status,
+            "readyCount": ready_count,
+            "partialCount": partial_count,
+            "missingCount": missing_count,
+            "items": safe_items,
+            "detail": self._official_macro_readiness_detail(
+                status=status,
+                ready_count=ready_count,
+                partial_count=partial_count,
+                missing_count=missing_count,
+            ),
+        }
+
+    def _consumer_safe_official_macro_readiness_item(
+        self,
+        item: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        key = self._official_macro_readiness_item_key(item.get("key"))
+        status = self._official_macro_readiness_status(item.get("status"))
+        if status == "unknown":
+            status = "missing"
+        return {
+            "key": key,
+            "label": MARKET_OVERVIEW_OFFICIAL_MACRO_READINESS_LABELS.get(key, "官方宏观上下文"),
+            "status": status,
+            "freshness": self._official_macro_readiness_freshness(item.get("freshness")),
+            "diagnosticOnly": True,
+            "observationOnly": True,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "reason": self._official_macro_readiness_reason(status),
+        }
+
+    @staticmethod
+    def _official_macro_readiness_item_key(value: Any) -> str:
+        raw = str(value or "").strip()
+        if ":" in raw:
+            raw = raw.rsplit(":", 1)[-1]
+        return raw if raw in MARKET_OVERVIEW_OFFICIAL_MACRO_READINESS_LABELS else "official_macro_context"
+
+    @staticmethod
+    def _official_macro_readiness_status(value: Any) -> str:
+        status = str(value or "").strip().lower()
+        if status in {"ready", "partial", "missing"}:
+            return status
+        if status in {"unavailable", "error", "fallback", "stale"}:
+            return "missing"
+        return "unknown"
+
+    @staticmethod
+    def _official_macro_readiness_freshness(value: Any) -> str:
+        freshness = str(value or "").strip().lower()
+        if freshness in {"live", "fresh", "cached", "delayed", "partial", "stale", "fallback", "unavailable", "error"}:
+            return freshness
+        return "unknown"
+
+    @staticmethod
+    def _official_macro_readiness_reason(status: str) -> str:
+        if status == "ready":
+            return "official_macro_context_ready"
+        if status == "partial":
+            return "official_macro_partial_coverage"
+        return "official_macro_missing_or_ambiguous"
+
+    @staticmethod
+    def _official_macro_readiness_detail(
+        *,
+        status: str,
+        ready_count: int,
+        partial_count: int,
+        missing_count: int,
+    ) -> str:
+        if status == "ready":
+            return f"官方宏观上下文已有 {ready_count} 个就绪观察项；该投影仅解释 readiness，不授予 authority 或 score 权限。"
+        if status == "partial":
+            return (
+                "官方宏观上下文仍有缺口："
+                f"ready={ready_count}, partial={partial_count}, missing={missing_count}；"
+                "仅作为下一步观察项。"
+            )
+        return "官方宏观上下文缺失或不可判定；仅保留解释性观察，不参与结论升级。"
+
     def _consumer_safe_rotation_signal(self, signal: Mapping[str, Any]) -> Dict[str, Any]:
         safe_signal = build_consumer_safe_investor_signal(signal)
         safe_signal.update(
@@ -1663,6 +1944,16 @@ class MarketOverviewService:
         flows = inputs.get("flows")
         if isinstance(flows, Mapping) and isinstance(flows.get("capitalFlowSignal"), Mapping):
             return dict(flows.get("capitalFlowSignal"))
+        return None
+
+    @staticmethod
+    def _extract_regime_summary_official_macro_readiness(inputs: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+        direct = inputs.get("officialMacroReadiness")
+        if isinstance(direct, Mapping):
+            return dict(direct)
+        flows = inputs.get("flows")
+        if isinstance(flows, Mapping) and isinstance(flows.get("officialMacroReadiness"), Mapping):
+            return dict(flows.get("officialMacroReadiness"))
         return None
 
     @staticmethod
@@ -7868,9 +8159,13 @@ class MarketOverviewService:
             self._fallback_crypto_market_snapshot,
             deadline=deadline,
         )
-        capital_flow_signal = self._market_temperature_capital_flow_signal()
+        liquidity_context = self._market_temperature_liquidity_context()
+        capital_flow_signal = liquidity_context.get("capitalFlowSignal")
         if capital_flow_signal:
             flows["capitalFlowSignal"] = copy.deepcopy(capital_flow_signal)
+        official_macro_readiness = liquidity_context.get("officialMacroReadiness")
+        if official_macro_readiness:
+            flows["officialMacroReadiness"] = copy.deepcopy(official_macro_readiness)
         rotation_family_rollup = self._market_temperature_rotation_family_rollup()
         if rotation_family_rollup:
             sectors["rotationFamilyRollup"] = copy.deepcopy(rotation_family_rollup)
@@ -7885,6 +8180,7 @@ class MarketOverviewService:
             "sentiment": sentiment,
             "crypto": crypto,
             **({"capitalFlowSignal": capital_flow_signal} if capital_flow_signal else {}),
+            **({"officialMacroReadiness": official_macro_readiness} if official_macro_readiness else {}),
             **({"rotationFamilyRollup": rotation_family_rollup} if rotation_family_rollup else {}),
             "fallback_notice": True,
         }

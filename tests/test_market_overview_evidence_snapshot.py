@@ -7,7 +7,7 @@ import copy
 import json
 import unittest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from src.services.market_overview_service import (
     MarketOverviewService,
@@ -44,6 +44,70 @@ def _decision_semantics_stub() -> dict:
         "invalidationTriggers": [],
         "counterEvidence": [],
         "dataGaps": [],
+        "notInvestmentAdvice": True,
+    }
+
+
+def _regime_summary_growth_inputs() -> dict:
+    return {
+        "capitalFlowSignal": {
+            "marketRegime": "risk_on",
+            "capitalFlowRegime": "inflow",
+            "themeFlowState": "leading",
+            "confidenceLabel": "medium",
+            "source": "mixed",
+            "sourceType": "public_proxy",
+            "freshness": "partial",
+            "isPartial": True,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "likelyDestination": "growth_ai_software_semis",
+            "explanation": "Growth is absorbing more attention.",
+        },
+        "rotationFamilyRollup": [
+            {
+                "familyId": "ai",
+                "familyName": "AI",
+                "leaderThemeIds": ["ai_applications"],
+                "themeNames": ["AI 应用"],
+                "themeFlowSignal": {
+                    "marketRegime": "risk_on",
+                    "capitalFlowRegime": "inflow",
+                    "themeFlowState": "leading",
+                    "confidenceLabel": "high",
+                    "source": "rotation_radar_projection",
+                    "sourceType": "authorized_licensed_feed",
+                    "freshness": "cached",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": False,
+                    "explanation": "AI family is leading the tape.",
+                },
+            }
+        ],
+    }
+
+
+def _risk_on_regime_synthesis() -> dict:
+    return {
+        "primaryRegime": "risk_on_liquidity_expansion",
+        "secondaryRegimes": ["goldilocks_soft_landing"],
+        "regimeScores": {"risk_on_liquidity_expansion": 0.76},
+        "confidence": 0.71,
+        "confidenceLabel": "medium",
+        "topDrivers": [{"key": "futures:ES", "label": "ES"}],
+        "counterEvidence": [],
+        "dataGaps": [],
+        "narrativeBullets": ["Risk appetite is improving."],
+        "evidenceQuality": {"discountedEvidenceCount": 0},
+        "riskAppetite": 0.63,
+        "ratesPressure": -0.22,
+        "dollarPressure": -0.17,
+        "volatilityStress": -0.31,
+        "liquidityImpulse": 0.38,
+        "cryptoRiskBeta": 0.27,
+        "breadthHealth": 0.24,
+        "chinaRiskAppetite": 0.11,
+        "rotationQuality": 0.35,
         "notInvestmentAdvice": True,
     }
 
@@ -150,7 +214,7 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
         }
 
         with (
-            patch.object(service, "_build_market_temperature_inputs", return_value=copy.deepcopy(inputs)),
+            patch.object(service, "_get_market_temperature_input_snapshot", return_value=copy.deepcopy(inputs)),
             patch.object(service, "_market_temperature_trust", return_value=trust_payload),
             patch.object(service, "_compute_market_temperature_scores", return_value=_temperature_scores()),
             patch.object(service, "_build_market_regime_synthesis_payload", return_value=copy.deepcopy(market_regime_synthesis)),
@@ -1164,6 +1228,203 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
         assert any(item["key"] == "liquidity:growth_ai_software_semis" for item in summary["drivers"])
         assert any(item["key"] == "rotation:ai" for item in summary["drivers"])
         assert "AI" in summary["explanation"]
+
+    def test_market_temperature_regime_summary_official_macro_ready_adds_observation_only_context_without_score_change(self) -> None:
+        synthesis = _risk_on_regime_synthesis()
+        baseline_payload = self._temperature_payload_with_regime_summary(
+            inputs=_regime_summary_growth_inputs(),
+            market_regime_synthesis=synthesis,
+        )
+        inputs = _regime_summary_growth_inputs()
+        inputs["officialMacroReadiness"] = {
+            "status": "ready",
+            "readyCount": 3,
+            "partialCount": 0,
+            "missingCount": 0,
+            "items": [
+                {
+                    "key": "us_rates_pressure",
+                    "label": "US Rates / 利率压力",
+                    "status": "ready",
+                    "freshness": "cached",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "providerId": "treasury",
+                    "cacheBundleDiagnostics": {"providerId": "internal-cache", "readinessEligible": True},
+                },
+                {
+                    "key": "vix_pressure",
+                    "label": "VIX / 波动率压力",
+                    "status": "ready",
+                    "freshness": "cached",
+                },
+            ],
+        }
+
+        payload = self._temperature_payload_with_regime_summary(
+            inputs=inputs,
+            market_regime_synthesis=synthesis,
+        )
+
+        summary = payload["regimeSummary"]
+        baseline_summary = baseline_payload["regimeSummary"]
+        projection = summary["officialMacroReadiness"]
+        assert summary["label"] == baseline_summary["label"] == "risk_on_growth_led"
+        assert summary["confidence"] == baseline_summary["confidence"]
+        assert projection["diagnosticOnly"] is True
+        assert projection["observationOnly"] is True
+        assert projection["sourceAuthorityAllowed"] is False
+        assert projection["scoreContributionAllowed"] is False
+        assert projection["status"] == "ready"
+        assert all(item["sourceAuthorityAllowed"] is False for item in projection["items"])
+        assert all(item["scoreContributionAllowed"] is False for item in projection["items"])
+        assert any(item["key"] == "official_macro_readiness:ready" for item in summary["drivers"])
+
+    def test_market_temperature_regime_summary_official_macro_partial_adds_next_watch_only(self) -> None:
+        synthesis = _risk_on_regime_synthesis()
+        inputs = _regime_summary_growth_inputs()
+        inputs["officialMacroReadiness"] = {
+            "status": "partial",
+            "readyCount": 1,
+            "partialCount": 1,
+            "missingCount": 2,
+            "items": [
+                {
+                    "key": "us_rates_pressure",
+                    "label": "US Rates / 利率压力",
+                    "status": "ready",
+                    "freshness": "cached",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                },
+                {
+                    "key": "usd_pressure",
+                    "label": "USD Pressure / 美元压力",
+                    "status": "missing",
+                    "freshness": "unavailable",
+                    "missingInputs": ["USD_TWI"],
+                    "routeRejectedReasonCodes": ["missing_api_key"],
+                    "sourceAuthorityReason": "missing_api_key",
+                },
+            ],
+        }
+
+        payload = self._temperature_payload_with_regime_summary(
+            inputs=inputs,
+            market_regime_synthesis=synthesis,
+        )
+
+        summary = payload["regimeSummary"]
+        projection = summary["officialMacroReadiness"]
+        assert projection["status"] == "partial"
+        assert projection["sourceAuthorityAllowed"] is False
+        assert projection["scoreContributionAllowed"] is False
+        assert not any(item["key"].startswith("official_macro_readiness:") for item in summary["drivers"])
+        assert any(item["key"] == "watch:official_macro_readiness" for item in summary["nextWatchItems"])
+        assert any(item["status"] == "missing" for item in projection["items"])
+
+    def test_market_temperature_regime_summary_official_macro_readiness_sanitizes_raw_provider_cache_admin_fields(self) -> None:
+        synthesis = _risk_on_regime_synthesis()
+        inputs = _regime_summary_growth_inputs()
+        inputs["officialMacroReadiness"] = {
+            "status": "missing",
+            "providerId": "raw-provider",
+            "providerBudget": {"remaining": 0},
+            "adminDiagnostics": {"route": "debug-only"},
+            "cacheBundleDiagnostics": {"providerId": "internal-cache", "httpStatus": 403},
+            "items": [
+                {
+                    "key": "usd_pressure",
+                    "label": "USD Pressure / 美元压力",
+                    "status": "missing",
+                    "freshness": "unavailable",
+                    "providerId": "fred",
+                    "providerBudget": {"remaining": 0},
+                    "adminDiagnostics": {"payload": "secret"},
+                    "cacheBundleDiagnostics": {"providerId": "official_public.usd_pressure"},
+                    "routeRejectedReasonCodes": ["missing_api_key"],
+                    "sourceAuthorityReason": "missing_api_key",
+                    "rawErrorBody": "internal provider response",
+                    "httpStatus": 403,
+                    "envName": "FRED_API_KEY",
+                    "credentialName": "official_macro_token",
+                    "stackTrace": "Traceback(secret)",
+                    "liveCallDetails": {"url": "https://internal.invalid"},
+                }
+            ],
+        }
+
+        payload = self._temperature_payload_with_regime_summary(
+            inputs=inputs,
+            market_regime_synthesis=synthesis,
+        )
+
+        serialized = json.dumps(payload["regimeSummary"], ensure_ascii=False, sort_keys=True)
+        for forbidden in (
+            "raw-provider",
+            "providerBudget",
+            "adminDiagnostics",
+            "cacheBundleDiagnostics",
+            "routeRejectedReasonCodes",
+            "sourceAuthorityReason",
+            "missing_api_key",
+            "rawErrorBody",
+            "internal provider response",
+            "httpStatus",
+            "FRED_API_KEY",
+            "official_macro_token",
+            "Traceback",
+            "liveCallDetails",
+        ):
+            assert forbidden not in serialized
+
+    def test_market_temperature_official_macro_readiness_reuses_existing_liquidity_payload_without_extra_calls(self) -> None:
+        service = MarketOverviewService()
+        stub_payload = {
+            "capitalFlowSignal": {
+                "marketRegime": "risk_on",
+                "capitalFlowRegime": "inflow",
+                "themeFlowState": "leading",
+                "confidenceLabel": "medium",
+                "source": "mixed",
+                "sourceType": "public_proxy",
+                "freshness": "partial",
+                "sourceAuthorityAllowed": False,
+                "scoreContributionAllowed": False,
+                "likelyDestination": "growth_ai_software_semis",
+            },
+            "indicators": [
+                {
+                    "key": "us_rates_pressure",
+                    "label": "US Rates / 利率压力",
+                    "status": "partial",
+                    "freshness": "cached",
+                    "coverageDiagnostics": {
+                        "requiredProviderClass": "official_public.us_treasury_curve",
+                        "realSourceAvailable": True,
+                        "scoreContributionAllowed": True,
+                        "missingInputs": [],
+                    },
+                }
+            ],
+            "sourceMetadata": {
+                "externalProviderCalls": False,
+                "providerRuntimeChanged": False,
+                "marketCacheMutation": False,
+            },
+        }
+        stub_liquidity = Mock()
+        stub_liquidity.get_liquidity_monitor.return_value = copy.deepcopy(stub_payload)
+
+        with patch("src.services.market_overview_service.LiquidityMonitorService", return_value=stub_liquidity):
+            context = service._market_temperature_liquidity_context()
+
+        stub_liquidity.get_liquidity_monitor.assert_called_once_with()
+        assert context["capitalFlowSignal"]["sourceAuthorityAllowed"] is False
+        assert context["officialMacroReadiness"]["status"] == "ready"
+        serialized = json.dumps(context, ensure_ascii=False, sort_keys=True)
+        assert "sourceMetadata" not in serialized
+        assert "externalProviderCalls" not in serialized
 
     def test_market_temperature_regime_summary_marks_oil_backdrop_as_inflation_pressure_with_capped_confidence(self) -> None:
         inputs = {
