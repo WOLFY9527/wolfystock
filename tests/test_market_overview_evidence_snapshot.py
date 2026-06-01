@@ -22,6 +22,32 @@ def _iso_now() -> str:
     return datetime.now(CN_TZ).isoformat(timespec="seconds")
 
 
+def _temperature_scores() -> dict:
+    return {
+        "overall": {"value": 61, "label": "偏暖", "trend": "improving", "description": "风险偏好改善。"},
+        "usRiskAppetite": {"value": 66, "label": "偏暖", "trend": "improving", "description": "美股改善。"},
+        "cnMoneyEffect": {"value": 57, "label": "中性", "trend": "stable", "description": "市场宽度一般。"},
+        "macroPressure": {"value": 48, "label": "中性", "trend": "stable", "description": "宏观压力可控。"},
+        "liquidity": {"value": 58, "label": "中性", "trend": "stable", "description": "流动性边际改善。"},
+    }
+
+
+def _decision_semantics_stub() -> dict:
+    return {
+        "version": "market_decision_semantics_v1",
+        "posture": "neutral",
+        "postureConfidence": {"label": "insufficient", "capReasons": ["observation_only_context"]},
+        "directionReadiness": {"status": "data_insufficient", "notInvestmentAdvice": True},
+        "claimBoundaries": [{"claim": "direct_trade_action", "allowed": False}],
+        "styleTilts": [],
+        "confirmationSignals": [],
+        "invalidationTriggers": [],
+        "counterEvidence": [],
+        "dataGaps": [],
+        "notInvestmentAdvice": True,
+    }
+
+
 EVIDENCE_SNAPSHOT_PUBLIC_KEYS = {
     "contractVersion",
     "diagnosticOnly",
@@ -84,6 +110,55 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
     def setUp(self) -> None:
         MarketOverviewService._market_cache.clear()
         MarketOverviewService._market_data_cache.clear()
+
+    def _temperature_payload_with_regime_summary(
+        self,
+        *,
+        inputs: dict,
+        market_regime_synthesis: dict,
+        trust: dict | None = None,
+        liquidity_impulse_synthesis: dict | None = None,
+    ) -> dict:
+        service = MarketOverviewService()
+        trust_payload = {
+            "confidence": 0.68,
+            "reliableInputCount": 6,
+            "fallbackInputCount": 0,
+            "excludedInputCount": 0,
+            "isReliable": True,
+            "temperatureAvailable": True,
+            "insufficientReliableInputs": False,
+            "reliablePanelCount": 5,
+            "requiredReliablePanelCount": 3,
+            "requiredReliableInputCount": 5,
+            "disabledReason": None,
+            "unavailableReason": None,
+            "trustLevel": "reliable",
+            "conclusionAllowed": True,
+        }
+        if trust:
+            trust_payload.update(trust)
+        liquidity_payload = liquidity_impulse_synthesis or {
+            "liquidityImpulse": "mixed_or_transition",
+            "confidence": 0.41,
+            "confidenceLabel": "low",
+            "dominantDrivers": [],
+            "counterEvidence": [],
+            "dataGaps": [],
+            "evidenceQuality": {"scoringPillarCount": 0},
+            "notInvestmentAdvice": True,
+        }
+
+        with (
+            patch.object(service, "_build_market_temperature_inputs", return_value=copy.deepcopy(inputs)),
+            patch.object(service, "_market_temperature_trust", return_value=trust_payload),
+            patch.object(service, "_compute_market_temperature_scores", return_value=_temperature_scores()),
+            patch.object(service, "_build_market_regime_synthesis_payload", return_value=copy.deepcopy(market_regime_synthesis)),
+            patch.object(service, "_build_liquidity_impulse_synthesis_payload", return_value=copy.deepcopy(liquidity_payload)),
+            patch.object(service, "_build_market_decision_semantics_payload", return_value=_decision_semantics_stub()),
+            patch.object(service, "_cached_payload", side_effect=lambda _cache_key, fetcher, _fallback_factory: fetcher()),
+        ):
+            return service.get_market_temperature()
 
     def test_live_panel_projects_evidence_snapshot(self) -> None:
         service = MarketOverviewService()
@@ -1011,3 +1086,391 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
                 assert summary["sourceAuthorityAllowed"] is False
                 assert summary["scoreContributionAllowed"] is False
                 assert summary["evidenceQuality"] == "degraded_proxy"
+
+    def test_market_temperature_regime_summary_surfaces_growth_led_risk_on_from_liquidity_and_rotation_signals(self) -> None:
+        inputs = {
+            "capitalFlowSignal": {
+                "marketRegime": "risk_on",
+                "capitalFlowRegime": "inflow",
+                "themeFlowState": "leading",
+                "confidenceLabel": "medium",
+                "source": "mixed",
+                "sourceType": "public_proxy",
+                "freshness": "partial",
+                "isPartial": True,
+                "sourceAuthorityAllowed": False,
+                "scoreContributionAllowed": False,
+                "likelyDestination": "growth_ai_software_semis",
+                "explanation": "Growth is absorbing more attention.",
+            },
+            "rotationFamilyRollup": [
+                {
+                    "familyId": "ai",
+                    "familyName": "AI",
+                    "leaderThemeIds": ["ai_applications"],
+                    "themeNames": ["AI 应用"],
+                    "themeFlowSignal": {
+                        "marketRegime": "risk_on",
+                        "capitalFlowRegime": "inflow",
+                        "themeFlowState": "leading",
+                        "confidenceLabel": "high",
+                        "source": "rotation_radar_projection",
+                        "sourceType": "authorized_licensed_feed",
+                        "freshness": "cached",
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": False,
+                        "explanation": "AI family is leading the tape.",
+                    },
+                }
+            ],
+        }
+        synthesis = {
+            "primaryRegime": "risk_on_liquidity_expansion",
+            "secondaryRegimes": ["goldilocks_soft_landing"],
+            "regimeScores": {"risk_on_liquidity_expansion": 0.76},
+            "confidence": 0.71,
+            "confidenceLabel": "medium",
+            "topDrivers": [{"key": "futures:ES", "label": "ES"}],
+            "counterEvidence": [],
+            "dataGaps": [],
+            "narrativeBullets": ["Risk appetite is improving."],
+            "evidenceQuality": {"discountedEvidenceCount": 0},
+            "riskAppetite": 0.63,
+            "ratesPressure": -0.22,
+            "dollarPressure": -0.17,
+            "volatilityStress": -0.31,
+            "liquidityImpulse": 0.38,
+            "cryptoRiskBeta": 0.27,
+            "breadthHealth": 0.24,
+            "chinaRiskAppetite": 0.11,
+            "rotationQuality": 0.35,
+            "notInvestmentAdvice": True,
+        }
+
+        payload = self._temperature_payload_with_regime_summary(
+            inputs=inputs,
+            market_regime_synthesis=synthesis,
+        )
+
+        summary = payload["regimeSummary"]
+        assert summary["label"] == "risk_on_growth_led"
+        assert summary["observationOnly"] is True
+        assert summary["sourceAuthorityAllowed"] is False
+        assert summary["scoreContributionAllowed"] is False
+        assert summary["confidence"]["label"] == "medium"
+        assert summary["confidence"]["value"] < synthesis["confidence"]
+        assert any(item["key"] == "liquidity_signal_observation_only" for item in summary["confidenceCaps"])
+        assert any(item["key"] == "market_regime:risk_on_liquidity_expansion" for item in summary["drivers"])
+        assert any(item["key"] == "liquidity:growth_ai_software_semis" for item in summary["drivers"])
+        assert any(item["key"] == "rotation:ai" for item in summary["drivers"])
+        assert "AI" in summary["explanation"]
+
+    def test_market_temperature_regime_summary_marks_oil_backdrop_as_inflation_pressure_with_capped_confidence(self) -> None:
+        inputs = {
+            "capitalFlowSignal": {
+                "marketRegime": "risk_on",
+                "capitalFlowRegime": "inflow",
+                "themeFlowState": "rotating",
+                "confidenceLabel": "medium",
+                "source": "mixed",
+                "sourceType": "public_proxy",
+                "freshness": "partial",
+                "isPartial": True,
+                "sourceAuthorityAllowed": False,
+                "scoreContributionAllowed": False,
+                "likelyDestination": "oil",
+                "explanation": "Oil is absorbing more attention while rates are easing.",
+            },
+            "rotationFamilyRollup": [
+                {
+                    "familyId": "energy",
+                    "familyName": "Energy",
+                    "leaderThemeIds": ["oil_services"],
+                    "themeNames": ["能源"],
+                    "themeFlowSignal": {
+                        "marketRegime": "risk_on",
+                        "capitalFlowRegime": "inflow",
+                        "themeFlowState": "rotating",
+                        "confidenceLabel": "medium",
+                        "source": "rotation_radar_projection",
+                        "sourceType": "authorized_licensed_feed",
+                        "freshness": "cached",
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": False,
+                        "explanation": "Energy is leading on commodity momentum.",
+                    },
+                }
+            ],
+        }
+        synthesis = {
+            "primaryRegime": "term_premium_or_inflation_scare",
+            "secondaryRegimes": ["risk_on_liquidity_expansion"],
+            "regimeScores": {"term_premium_or_inflation_scare": 0.69},
+            "confidence": 0.64,
+            "confidenceLabel": "medium",
+            "topDrivers": [{"key": "rates:US10Y", "label": "US10Y"}],
+            "counterEvidence": [],
+            "dataGaps": [],
+            "narrativeBullets": ["Rates are easing but commodity pressure remains important."],
+            "evidenceQuality": {"discountedEvidenceCount": 1},
+            "riskAppetite": 0.28,
+            "ratesPressure": 0.44,
+            "dollarPressure": -0.16,
+            "volatilityStress": 0.12,
+            "liquidityImpulse": 0.14,
+            "cryptoRiskBeta": 0.02,
+            "breadthHealth": 0.06,
+            "chinaRiskAppetite": 0.0,
+            "rotationQuality": 0.18,
+            "notInvestmentAdvice": True,
+        }
+
+        payload = self._temperature_payload_with_regime_summary(
+            inputs=inputs,
+            market_regime_synthesis=synthesis,
+        )
+
+        summary = payload["regimeSummary"]
+        assert summary["label"] == "inflation_oil_pressure"
+        assert summary["confidence"]["label"] == "low"
+        assert any(item["key"] == "oil_leadership_needs_inflation_confirmation" for item in summary["confidenceCaps"])
+        assert any(item["key"] == "macro:term_premium_or_inflation_scare" for item in summary["drivers"])
+        assert any(item["key"] == "watch:oil_vs_rates" for item in summary["nextWatchItems"])
+        assert "通胀" in summary["explanation"]
+
+    def test_market_temperature_regime_summary_surfaces_semis_distribution_vs_saas_recovery_contradiction(self) -> None:
+        inputs = {
+            "capitalFlowSignal": {
+                "marketRegime": "risk_on",
+                "capitalFlowRegime": "inflow",
+                "themeFlowState": "leading",
+                "confidenceLabel": "medium",
+                "source": "mixed",
+                "sourceType": "public_proxy",
+                "freshness": "partial",
+                "isPartial": True,
+                "sourceAuthorityAllowed": False,
+                "scoreContributionAllowed": False,
+                "likelyDestination": "growth_ai_software_semis",
+                "explanation": "Growth is still attracting attention.",
+            },
+            "rotationFamilyRollup": [
+                {
+                    "familyId": "semiconductors",
+                    "familyName": "Semiconductors",
+                    "leaderThemeIds": ["semiconductors"],
+                    "themeNames": ["半导体"],
+                    "themeFlowSignal": {
+                        "marketRegime": "mixed",
+                        "capitalFlowRegime": "mixed",
+                        "themeFlowState": "mixed",
+                        "confidenceLabel": "low",
+                        "source": "rotation_radar_projection",
+                        "sourceType": "authorized_licensed_feed",
+                        "freshness": "cached",
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": False,
+                        "contradictionCodes": ["theme_flow_state_signal_mismatch"],
+                        "explanation": "Semis are showing internal distribution.",
+                    },
+                },
+                {
+                    "familyId": "software",
+                    "familyName": "Software",
+                    "leaderThemeIds": ["cloud_software"],
+                    "themeNames": ["云软件"],
+                    "themeFlowSignal": {
+                        "marketRegime": "risk_on",
+                        "capitalFlowRegime": "inflow",
+                        "themeFlowState": "broadening",
+                        "confidenceLabel": "medium",
+                        "source": "rotation_radar_projection",
+                        "sourceType": "authorized_licensed_feed",
+                        "freshness": "cached",
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": False,
+                        "explanation": "Software breadth is recovering.",
+                    },
+                },
+            ],
+        }
+        synthesis = {
+            "primaryRegime": "risk_on_liquidity_expansion",
+            "secondaryRegimes": [],
+            "regimeScores": {"risk_on_liquidity_expansion": 0.73},
+            "confidence": 0.69,
+            "confidenceLabel": "medium",
+            "topDrivers": [],
+            "counterEvidence": [{"key": "rates:US10Y", "label": "US10Y", "detail": "Rates are not fully confirming."}],
+            "dataGaps": [],
+            "narrativeBullets": ["Risk appetite is constructive but uneven."],
+            "evidenceQuality": {"discountedEvidenceCount": 1},
+            "riskAppetite": 0.55,
+            "ratesPressure": 0.12,
+            "dollarPressure": -0.08,
+            "volatilityStress": -0.2,
+            "liquidityImpulse": 0.32,
+            "cryptoRiskBeta": 0.2,
+            "breadthHealth": 0.17,
+            "chinaRiskAppetite": 0.02,
+            "rotationQuality": 0.14,
+            "notInvestmentAdvice": True,
+        }
+
+        payload = self._temperature_payload_with_regime_summary(
+            inputs=inputs,
+            market_regime_synthesis=synthesis,
+        )
+
+        summary = payload["regimeSummary"]
+        assert summary["label"] == "mixed_no_clear_edge"
+        assert any(item["key"] == "rotation_conflict:semiconductors_vs_software" for item in summary["contradictions"])
+        assert any(item["key"] == "rotation_conflict:semiconductors_vs_software" for item in summary["confidenceCaps"])
+        assert any(item["key"] == "watch:semis_breadth_confirmation" for item in summary["nextWatchItems"])
+        assert "分化" in summary["explanation"]
+
+    def test_market_temperature_regime_summary_fails_closed_for_missing_or_degraded_signals(self) -> None:
+        synthesis = {
+            "primaryRegime": "risk_on_liquidity_expansion",
+            "secondaryRegimes": [],
+            "regimeScores": {"risk_on_liquidity_expansion": 0.71},
+            "confidence": 0.67,
+            "confidenceLabel": "medium",
+            "topDrivers": [],
+            "counterEvidence": [],
+            "dataGaps": [{"key": "breadth:ADV_RATIO", "label": "Breadth", "reason": "partial_coverage"}],
+            "narrativeBullets": ["Risk appetite is constructive but evidence is incomplete."],
+            "evidenceQuality": {"discountedEvidenceCount": 2},
+            "riskAppetite": 0.61,
+            "ratesPressure": -0.18,
+            "dollarPressure": -0.12,
+            "volatilityStress": -0.25,
+            "liquidityImpulse": 0.29,
+            "cryptoRiskBeta": 0.15,
+            "breadthHealth": 0.11,
+            "chinaRiskAppetite": 0.01,
+            "rotationQuality": 0.07,
+            "notInvestmentAdvice": True,
+        }
+
+        missing_payload = self._temperature_payload_with_regime_summary(
+            inputs={},
+            market_regime_synthesis=synthesis,
+        )
+        stale_payload = self._temperature_payload_with_regime_summary(
+            inputs={
+                "capitalFlowSignal": {
+                    "marketRegime": "risk_on",
+                    "capitalFlowRegime": "inflow",
+                    "themeFlowState": "leading",
+                    "confidenceLabel": "high",
+                    "source": "yfinance_proxy",
+                    "sourceType": "public_proxy",
+                    "freshness": "stale",
+                    "isStale": True,
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "likelyDestination": "growth_ai_software_semis",
+                },
+                "rotationFamilyRollup": [
+                    {
+                        "familyId": "ai",
+                        "familyName": "AI",
+                        "themeFlowSignal": {
+                            "marketRegime": "risk_on",
+                            "capitalFlowRegime": "inflow",
+                            "themeFlowState": "leading",
+                            "confidenceLabel": "high",
+                            "source": "rotation_radar_projection",
+                            "sourceType": "authorized_licensed_feed",
+                            "freshness": "fallback",
+                            "isFallback": True,
+                            "sourceAuthorityAllowed": True,
+                            "scoreContributionAllowed": False,
+                        },
+                    }
+                ],
+            },
+            market_regime_synthesis=synthesis,
+        )
+
+        for payload in (missing_payload, stale_payload):
+            summary = payload["regimeSummary"]
+            assert summary["label"] == "mixed_no_clear_edge"
+            assert summary["observationOnly"] is True
+            assert summary["sourceAuthorityAllowed"] is False
+            assert summary["scoreContributionAllowed"] is False
+            assert summary["confidence"]["label"] in {"low", "blocked"}
+            assert summary["confidence"]["value"] < 0.5
+            assert all(item["key"] != "direct_trade_action" for item in summary["drivers"])
+            assert any(item["key"].startswith("watch:") for item in summary["nextWatchItems"])
+
+    def test_market_temperature_regime_summary_excludes_raw_provider_and_admin_fields(self) -> None:
+        inputs = {
+            "capitalFlowSignal": {
+                "marketRegime": "risk_on",
+                "capitalFlowRegime": "inflow",
+                "themeFlowState": "leading",
+                "confidenceLabel": "medium",
+                "source": "mixed",
+                "sourceType": "public_proxy",
+                "freshness": "partial",
+                "sourceAuthorityAllowed": False,
+                "scoreContributionAllowed": False,
+                "likelyDestination": "growth_ai_software_semis",
+                "providerId": "private-provider",
+                "providerBudget": {"remaining": 1},
+                "adminDiagnostics": {"route": "debug-only"},
+            },
+            "rotationFamilyRollup": [
+                {
+                    "familyId": "ai",
+                    "familyName": "AI",
+                    "themeFlowSignal": {
+                        "marketRegime": "risk_on",
+                        "capitalFlowRegime": "inflow",
+                        "themeFlowState": "leading",
+                        "confidenceLabel": "high",
+                        "source": "rotation_radar_projection",
+                        "sourceType": "authorized_licensed_feed",
+                        "freshness": "cached",
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": False,
+                        "providerRouting": {"winner": "internal"},
+                        "adminDiagnostics": {"payload": "secret"},
+                    },
+                }
+            ],
+        }
+        synthesis = {
+            "primaryRegime": "risk_on_liquidity_expansion",
+            "secondaryRegimes": [],
+            "regimeScores": {"risk_on_liquidity_expansion": 0.72},
+            "confidence": 0.7,
+            "confidenceLabel": "medium",
+            "topDrivers": [],
+            "counterEvidence": [],
+            "dataGaps": [],
+            "narrativeBullets": ["Risk appetite is improving."],
+            "evidenceQuality": {"discountedEvidenceCount": 0},
+            "riskAppetite": 0.62,
+            "ratesPressure": -0.21,
+            "dollarPressure": -0.18,
+            "volatilityStress": -0.26,
+            "liquidityImpulse": 0.33,
+            "cryptoRiskBeta": 0.18,
+            "breadthHealth": 0.22,
+            "chinaRiskAppetite": 0.04,
+            "rotationQuality": 0.29,
+            "notInvestmentAdvice": True,
+        }
+
+        payload = self._temperature_payload_with_regime_summary(
+            inputs=inputs,
+            market_regime_synthesis=synthesis,
+        )
+
+        summary = payload["regimeSummary"]
+        serialized = json.dumps(summary, ensure_ascii=False, sort_keys=True)
+        for forbidden in ("providerId", "providerBudget", "adminDiagnostics", "providerRouting", "routeDecision"):
+            assert forbidden not in serialized

@@ -31,6 +31,8 @@ from src.services.data_source_router_diagnostics import build_data_source_route_
 from src.services.execution_log_service import ExecutionLogService
 from src.services.fx_commodities_contracts import FX_COMMODITY_DELAYED_PROXY_SYMBOLS
 from src.services.futures_contracts import list_futures_contracts
+from src.services.investor_signal_model import build_consumer_safe_investor_signal
+from src.services.liquidity_monitor_service import LiquidityMonitorService
 from src.services.market_data_source_registry import resolve_source_label
 from src.services.market_rotation_radar_service import MarketRotationRadarService
 from src.services.official_macro_source_registry import get_official_macro_source_for_transport_source
@@ -1117,6 +1119,10 @@ class MarketOverviewService:
                     liquidity_impulse_synthesis,
                     inputs,
                 ),
+                "regimeSummary": self._build_regime_summary_payload(
+                    market_regime_synthesis,
+                    inputs,
+                ),
                 **trust,
             }
             if not trust["isReliable"]:
@@ -1146,6 +1152,10 @@ class MarketOverviewService:
                 "marketDecisionSemantics": self._build_market_decision_semantics_payload(
                     market_regime_synthesis,
                     liquidity_impulse_synthesis,
+                    inputs,
+                ),
+                "regimeSummary": self._build_regime_summary_payload(
+                    market_regime_synthesis,
                     inputs,
                 ),
                 "warning": INSUFFICIENT_MARKET_DATA_WARNING,
@@ -1233,6 +1243,572 @@ class MarketOverviewService:
 
     def _build_liquidity_impulse_synthesis_payload(self, inputs: Mapping[str, Any]) -> Dict[str, Any]:
         return build_liquidity_impulse_synthesis_payload(inputs)
+
+    def _build_regime_summary_payload(
+        self,
+        market_regime_synthesis: Mapping[str, Any],
+        inputs: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        primary_regime = str(market_regime_synthesis.get("primaryRegime") or "data_insufficient")
+        synthesis_confidence = self._clean_number(market_regime_synthesis.get("confidence")) or 0.0
+        liquidity_signal_raw = self._extract_regime_summary_liquidity_signal(inputs)
+        liquidity_signal = (
+            self._consumer_safe_capital_flow_signal(liquidity_signal_raw)
+            if isinstance(liquidity_signal_raw, Mapping)
+            else None
+        )
+        rotation_rollup = self._normalize_regime_summary_rotation_rollup(
+            self._extract_regime_summary_rotation_rollup(inputs)
+        )
+
+        drivers: List[Dict[str, Any]] = []
+        blockers: List[Dict[str, Any]] = []
+        contradictions: List[Dict[str, Any]] = []
+        confidence_caps: List[Dict[str, Any]] = []
+        next_watch_items: List[Dict[str, Any]] = []
+
+        if primary_regime and primary_regime != "data_insufficient":
+            drivers.append(
+                self._regime_summary_entry(
+                    f"market_regime:{primary_regime}",
+                    self._regime_summary_market_regime_label(primary_regime),
+                    self._regime_summary_synthesis_detail(market_regime_synthesis),
+                )
+            )
+            if primary_regime == "term_premium_or_inflation_scare":
+                drivers.append(
+                    self._regime_summary_entry(
+                        "macro:term_premium_or_inflation_scare",
+                        "宏观框架偏通胀/期限溢价压力",
+                        "温度合成提示油价、利率与通胀再定价仍可能回头压制风险资产。",
+                    )
+                )
+
+        for gap in market_regime_synthesis.get("dataGaps") or []:
+            if not isinstance(gap, Mapping):
+                continue
+            gap_key = str(gap.get("key") or "market_gap")
+            gap_label = str(gap.get("label") or gap_key)
+            gap_reason = str(gap.get("reason") or "需要更多确认")
+            next_watch_items.append(
+                self._regime_summary_entry(
+                    f"watch:{gap_key}",
+                    gap_label,
+                    gap_reason,
+                )
+            )
+
+        if not liquidity_signal:
+            blockers.append(
+                self._regime_summary_entry(
+                    "liquidity_signal_missing",
+                    "Liquidity capitalFlowSignal 缺失",
+                    "缺少现成的流动性观察信号，暂不把温度合成提升为更强的资金主线判断。",
+                )
+            )
+            confidence_caps.append(
+                self._regime_summary_entry(
+                    "liquidity_signal_missing",
+                    "流动性信号缺失",
+                    "缺少 capitalFlowSignal 时只能保持 mixed / no-clear-edge。",
+                )
+            )
+            next_watch_items.append(
+                self._regime_summary_entry(
+                    "watch:capital_flow_signal",
+                    "等待 Liquidity capitalFlowSignal",
+                    "确认资金更偏向成长、油气还是防御资产。",
+                )
+            )
+        if not rotation_rollup:
+            blockers.append(
+                self._regime_summary_entry(
+                    "rotation_rollup_missing",
+                    "Rotation rotationFamilyRollup 缺失",
+                    "缺少主题家族轮动观察，无法确认风险偏好是否已经扩散或转向防御。",
+                )
+            )
+            confidence_caps.append(
+                self._regime_summary_entry(
+                    "rotation_rollup_missing",
+                    "轮动家族信号缺失",
+                    "缺少 rotationFamilyRollup 时不能下更强的风格结论。",
+                )
+            )
+            next_watch_items.append(
+                self._regime_summary_entry(
+                    "watch:rotation_family_rollup",
+                    "等待 Rotation family rollup",
+                    "确认 AI / 软件 / 半导体 / 防御家族谁在真实领涨。",
+                )
+            )
+
+        if liquidity_signal:
+            likely_destination = str(liquidity_signal.get("likelyDestination") or "no_clear_edge")
+            if likely_destination and likely_destination != "no_clear_edge":
+                drivers.append(
+                    self._regime_summary_entry(
+                        f"liquidity:{likely_destination}",
+                        self._regime_summary_destination_label(likely_destination),
+                        str(liquidity_signal.get("explanation") or "流动性观察信号支持当前主线。"),
+                    )
+                )
+            if str(liquidity_signal.get("freshness") or "") in {"stale", "fallback", "unavailable", "error"}:
+                blockers.append(
+                    self._regime_summary_entry(
+                        "liquidity_signal_degraded",
+                        "Liquidity 信号已降级",
+                        f"当前流动性信号 freshness={liquidity_signal.get('freshness')}，只能保持观察态。",
+                    )
+                )
+                confidence_caps.append(
+                    self._regime_summary_entry(
+                        "liquidity_signal_degraded",
+                        "流动性信号 freshness 降级",
+                        "stale / fallback / unavailable 信号不会被提升为 score-grade 结论。",
+                    )
+                )
+            if liquidity_signal.get("observationOnly") is True:
+                confidence_caps.append(
+                    self._regime_summary_entry(
+                        "liquidity_signal_observation_only",
+                        "Liquidity 信号仅观察态",
+                        "capitalFlowSignal 本身不授予 authority 或 score 权限，因此 summary 只能给出 capped confidence。",
+                    )
+                )
+            for raw_code in liquidity_signal.get("contradictionCodes") or []:
+                contradictions.append(
+                    self._regime_summary_entry(
+                        f"liquidity_contradiction:{raw_code}",
+                        "流动性信号存在冲突",
+                        str(raw_code),
+                    )
+                )
+
+        rotation_state_map = self._regime_summary_rotation_state_map(rotation_rollup)
+        for family_id, row in rotation_state_map.items():
+            signal = row.get("themeFlowSignal") if isinstance(row.get("themeFlowSignal"), Mapping) else {}
+            state = str(signal.get("themeFlowState") or "")
+            if state in {"leading", "broadening", "rotating"}:
+                drivers.append(
+                    self._regime_summary_entry(
+                        f"rotation:{family_id}",
+                        self._regime_summary_family_label(row, family_id),
+                        str(signal.get("explanation") or f"{family_id} family shows {state}."),
+                    )
+                )
+            if str(signal.get("freshness") or "") in {"stale", "fallback", "unavailable", "error"}:
+                confidence_caps.append(
+                    self._regime_summary_entry(
+                        f"rotation_degraded:{family_id}",
+                        f"{self._regime_summary_family_label(row, family_id)} freshness 降级",
+                        f"rotation family freshness={signal.get('freshness')}，只能保持观察态。",
+                    )
+                )
+
+        for entry in market_regime_synthesis.get("counterEvidence") or []:
+            if not isinstance(entry, Mapping):
+                continue
+            contradictions.append(
+                self._regime_summary_entry(
+                    f"counter:{entry.get('key') or 'market_regime'}",
+                    str(entry.get("label") or "Counter evidence"),
+                    str(entry.get("detail") or "现有主判断仍有反向证据。"),
+                )
+            )
+
+        growth_destination = bool(liquidity_signal and str(liquidity_signal.get("likelyDestination") or "") == "growth_ai_software_semis")
+        oil_destination = bool(liquidity_signal and str(liquidity_signal.get("likelyDestination") or "") == "oil")
+        ai_positive = self._regime_summary_family_state(rotation_state_map, "ai") in {"leading", "broadening"}
+        software_positive = self._regime_summary_family_state(rotation_state_map, "software") in {"leading", "broadening"}
+        semis_mixed = self._regime_summary_family_state(rotation_state_map, "semiconductors") == "mixed"
+        energy_positive = self._regime_summary_family_state(rotation_state_map, "energy") in {"leading", "rotating", "broadening"}
+        defensive_positive = self._regime_summary_family_state(rotation_state_map, "defensive") in {"leading", "broadening"}
+        broad_positive_count = sum(
+            1
+            for row in rotation_rollup
+            if isinstance(row, Mapping)
+            and str(((row.get("themeFlowSignal") or {}) if isinstance(row.get("themeFlowSignal"), Mapping) else {}).get("themeFlowState") or "") in {"leading", "broadening"}
+        )
+        semis_software_conflict = growth_destination and semis_mixed and software_positive
+        if semis_software_conflict:
+            contradictions.append(
+                self._regime_summary_entry(
+                    "rotation_conflict:semiconductors_vs_software",
+                    "半导体分化与软件修复并存",
+                    "成长链内部没有形成一致共振，半导体分化与 SaaS 修复同时出现。",
+                )
+            )
+            confidence_caps.append(
+                self._regime_summary_entry(
+                    "rotation_conflict:semiconductors_vs_software",
+                    "成长内部轮动分化",
+                    "半导体与软件没有形成一致强化，confidence 需要继续下调。",
+                )
+            )
+            next_watch_items.append(
+                self._regime_summary_entry(
+                    "watch:semis_breadth_confirmation",
+                    "观察半导体广度能否修复",
+                    "确认半导体是否由分化转回 broadening / leading。",
+                )
+            )
+
+        risk_on_like = primary_regime in {"risk_on_liquidity_expansion", "goldilocks_soft_landing", "china_policy_divergence"}
+        risk_off_like = primary_regime in {"risk_off_deleveraging", "credit_or_funding_stress", "dollar_squeeze", "rates_shock_duration_pressure"}
+        missing_or_blocked_signals = not liquidity_signal or not rotation_rollup
+        degraded_signal_present = any(
+            item.get("key") in {
+                "liquidity_signal_degraded",
+                "rotation_rollup_missing",
+                "liquidity_signal_missing",
+            }
+            or str(item.get("key") or "").startswith("rotation_degraded:")
+            for item in [*blockers, *confidence_caps]
+        )
+
+        summary_label = "mixed_no_clear_edge"
+        if missing_or_blocked_signals or degraded_signal_present or semis_software_conflict:
+            summary_label = "mixed_no_clear_edge"
+        elif oil_destination or primary_regime == "term_premium_or_inflation_scare" or energy_positive:
+            summary_label = "inflation_oil_pressure"
+        elif risk_off_like and defensive_positive:
+            summary_label = "risk_off_defensive"
+        elif risk_on_like and growth_destination and ai_positive and not semis_software_conflict:
+            summary_label = "risk_on_growth_led"
+        elif risk_on_like and broad_positive_count >= 2:
+            summary_label = "risk_on_broad"
+        elif market_regime_synthesis.get("liquidityImpulse", 0) and float(market_regime_synthesis.get("liquidityImpulse") or 0.0) > 0.2:
+            summary_label = "liquidity_positive"
+        elif risk_off_like or float(market_regime_synthesis.get("liquidityImpulse") or 0.0) < -0.2:
+            summary_label = "liquidity_negative"
+
+        confidence_value = min(0.62, max(0.0, synthesis_confidence))
+        if summary_label == "risk_on_growth_led":
+            confidence_value = min(confidence_value, 0.58)
+        elif summary_label == "risk_on_broad":
+            confidence_value = min(confidence_value, 0.54)
+        elif summary_label == "risk_off_defensive":
+            confidence_value = min(confidence_value, 0.5)
+        elif summary_label in {"liquidity_positive", "liquidity_negative"}:
+            confidence_value = min(confidence_value, 0.48)
+        elif summary_label == "inflation_oil_pressure":
+            confidence_value = min(confidence_value, 0.44)
+            confidence_caps.append(
+                self._regime_summary_entry(
+                    "oil_leadership_needs_inflation_confirmation",
+                    "油价主线仍需通胀确认",
+                    "油气领涨不等于全面 risk-on，仍需确认利率与通胀是否重新施压。",
+                )
+            )
+            next_watch_items.append(
+                self._regime_summary_entry(
+                    "watch:oil_vs_rates",
+                    "观察油价与利率是否再度同步上行",
+                    "若油价继续走强且利率反弹，需重新评估 inflation scare。",
+                )
+            )
+        else:
+            confidence_value = min(confidence_value, 0.34)
+        if missing_or_blocked_signals:
+            confidence_value = min(confidence_value, 0.28)
+        if contradictions:
+            confidence_value = min(confidence_value, 0.42)
+        if degraded_signal_present:
+            confidence_value = min(confidence_value, 0.32)
+        confidence_value = round(max(0.0, confidence_value), 2)
+
+        explanation = self._regime_summary_explanation(
+            summary_label=summary_label,
+            primary_regime=primary_regime,
+            liquidity_signal=liquidity_signal,
+            contradictions=contradictions,
+            blockers=blockers,
+        )
+
+        return {
+            "label": summary_label,
+            "title": self._regime_summary_title(summary_label),
+            "diagnosticOnly": True,
+            "observationOnly": True,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "notInvestmentAdvice": True,
+            "drivers": self._dedupe_regime_summary_entries(drivers),
+            "blockers": self._dedupe_regime_summary_entries(blockers),
+            "contradictions": self._dedupe_regime_summary_entries(contradictions),
+            "confidence": {
+                "value": confidence_value,
+                "label": self._regime_summary_confidence_label(confidence_value),
+            },
+            "confidenceCaps": self._dedupe_regime_summary_entries(confidence_caps),
+            "nextWatchItems": self._dedupe_regime_summary_entries(next_watch_items),
+            "explanation": explanation,
+        }
+
+    def _market_temperature_capital_flow_signal(self) -> Optional[Dict[str, Any]]:
+        try:
+            payload = LiquidityMonitorService().get_liquidity_monitor()
+        except Exception:
+            return None
+        signal = payload.get("capitalFlowSignal")
+        if not isinstance(signal, Mapping):
+            return None
+        return self._consumer_safe_capital_flow_signal(signal)
+
+    def _market_temperature_rotation_family_rollup(self) -> List[Dict[str, Any]]:
+        try:
+            payload = MarketRotationRadarService(
+                quote_provider=get_rotation_radar_quote_provider(),
+                use_shared_cache=True,
+            ).get_rotation_radar()
+        except Exception:
+            return []
+        summary = payload.get("summary") if isinstance(payload.get("summary"), Mapping) else {}
+        rows = summary.get("rotationFamilyRollup")
+        if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes, bytearray)):
+            return []
+        result: List[Dict[str, Any]] = []
+        for row in rows:
+            if not isinstance(row, Mapping):
+                continue
+            signal = row.get("themeFlowSignal")
+            consumer_signal = self._consumer_safe_rotation_signal(signal) if isinstance(signal, Mapping) else {}
+            result.append(
+                {
+                    "familyId": str(row.get("familyId") or ""),
+                    "familyName": str(row.get("familyName") or ""),
+                    "themeIds": [str(item) for item in row.get("themeIds") or [] if str(item or "").strip()],
+                    "themeNames": [str(item) for item in row.get("themeNames") or [] if str(item or "").strip()],
+                    "leaderThemeIds": [str(item) for item in row.get("leaderThemeIds") or [] if str(item or "").strip()],
+                    "themeCount": int(row.get("themeCount") or 0),
+                    "signalThemeCount": int(row.get("signalThemeCount") or 0),
+                    "averageRotationScore": round(float(row.get("averageRotationScore") or 0.0), 2),
+                    "averageConfidence": round(float(row.get("averageConfidence") or 0.0), 2),
+                    "themeFlowSignal": consumer_signal,
+                }
+            )
+        return result
+
+    def _normalize_regime_summary_rotation_rollup(
+        self,
+        rotation_rollup: Sequence[Mapping[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        result: List[Dict[str, Any]] = []
+        for row in rotation_rollup:
+            if not isinstance(row, Mapping):
+                continue
+            signal = row.get("themeFlowSignal")
+            result.append(
+                {
+                    "familyId": str(row.get("familyId") or ""),
+                    "familyName": str(row.get("familyName") or ""),
+                    "themeIds": [str(item) for item in row.get("themeIds") or [] if str(item or "").strip()],
+                    "themeNames": [str(item) for item in row.get("themeNames") or [] if str(item or "").strip()],
+                    "leaderThemeIds": [str(item) for item in row.get("leaderThemeIds") or [] if str(item or "").strip()],
+                    "themeCount": int(row.get("themeCount") or 0),
+                    "signalThemeCount": int(row.get("signalThemeCount") or 0),
+                    "averageRotationScore": round(float(row.get("averageRotationScore") or 0.0), 2),
+                    "averageConfidence": round(float(row.get("averageConfidence") or 0.0), 2),
+                    "themeFlowSignal": self._consumer_safe_rotation_signal(signal) if isinstance(signal, Mapping) else {},
+                }
+            )
+        return result
+
+    def _consumer_safe_capital_flow_signal(self, signal: Mapping[str, Any]) -> Dict[str, Any]:
+        safe_signal = build_consumer_safe_investor_signal(signal)
+        safe_signal.update(
+            {
+                "confidence": str(signal.get("confidence") or safe_signal.get("confidenceLabel") or "low"),
+                "isFallback": bool(signal.get("isFallback")),
+                "isStale": bool(signal.get("isStale")),
+                "isPartial": bool(signal.get("isPartial")),
+                "likelyDestination": str(signal.get("likelyDestination") or "no_clear_edge"),
+                "sourceAssetPressure": [
+                    {
+                        "asset": str(item.get("asset") or ""),
+                        "pressure": str(item.get("pressure") or ""),
+                        "freshness": str(item.get("freshness") or ""),
+                        "isFallback": bool(item.get("isFallback")),
+                        "isStale": bool(item.get("isStale")),
+                        "isPartial": bool(item.get("isPartial")),
+                    }
+                    for item in signal.get("sourceAssetPressure") or []
+                    if isinstance(item, Mapping)
+                ],
+                "contradictionSignals": [str(item) for item in signal.get("contradictionSignals") or [] if str(item or "").strip()],
+                "explanation": str(signal.get("explanation") or ""),
+            }
+        )
+        return safe_signal
+
+    def _consumer_safe_rotation_signal(self, signal: Mapping[str, Any]) -> Dict[str, Any]:
+        safe_signal = build_consumer_safe_investor_signal(signal)
+        safe_signal.update(
+            {
+                "confidence": round(float(signal.get("confidence") or 0.0), 2) if self._clean_number(signal.get("confidence")) is not None else 0.0,
+                "isFallback": bool(signal.get("isFallback")),
+                "isStale": bool(signal.get("isStale")),
+                "isPartial": bool(signal.get("isPartial")),
+                "explanation": str(signal.get("explanation") or ""),
+            }
+        )
+        return safe_signal
+
+    @staticmethod
+    def _extract_regime_summary_liquidity_signal(inputs: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+        direct = inputs.get("capitalFlowSignal")
+        if isinstance(direct, Mapping):
+            return dict(direct)
+        flows = inputs.get("flows")
+        if isinstance(flows, Mapping) and isinstance(flows.get("capitalFlowSignal"), Mapping):
+            return dict(flows.get("capitalFlowSignal"))
+        return None
+
+    @staticmethod
+    def _extract_regime_summary_rotation_rollup(inputs: Mapping[str, Any]) -> List[Dict[str, Any]]:
+        direct = inputs.get("rotationFamilyRollup")
+        if isinstance(direct, Sequence) and not isinstance(direct, (str, bytes, bytearray)):
+            return [dict(item) for item in direct if isinstance(item, Mapping)]
+        sectors = inputs.get("sectors")
+        if isinstance(sectors, Mapping):
+            nested = sectors.get("rotationFamilyRollup")
+            if isinstance(nested, Sequence) and not isinstance(nested, (str, bytes, bytearray)):
+                return [dict(item) for item in nested if isinstance(item, Mapping)]
+        return []
+
+    @staticmethod
+    def _regime_summary_rotation_state_map(rotation_rollup: Sequence[Mapping[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        return {
+            str(row.get("familyId") or "").lower(): dict(row)
+            for row in rotation_rollup
+            if isinstance(row, Mapping) and str(row.get("familyId") or "").strip()
+        }
+
+    @staticmethod
+    def _regime_summary_family_state(rotation_state_map: Mapping[str, Mapping[str, Any]], family_id: str) -> str:
+        row = rotation_state_map.get(family_id)
+        if not isinstance(row, Mapping):
+            return ""
+        signal = row.get("themeFlowSignal")
+        if not isinstance(signal, Mapping):
+            return ""
+        return str(signal.get("themeFlowState") or "")
+
+    @staticmethod
+    def _regime_summary_entry(key: str, label: str, detail: str) -> Dict[str, str]:
+        return {"key": str(key), "label": str(label), "detail": str(detail)}
+
+    @staticmethod
+    def _dedupe_regime_summary_entries(entries: Sequence[Mapping[str, Any]]) -> List[Dict[str, str]]:
+        result: List[Dict[str, str]] = []
+        seen: set[str] = set()
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                continue
+            key = str(entry.get("key") or "").strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            result.append(
+                {
+                    "key": key,
+                    "label": str(entry.get("label") or key),
+                    "detail": str(entry.get("detail") or ""),
+                }
+            )
+        return result
+
+    @staticmethod
+    def _regime_summary_confidence_label(value: float) -> str:
+        if value <= 0:
+            return "blocked"
+        if value < 0.5:
+            return "low"
+        if value < 0.75:
+            return "medium"
+        return "high"
+
+    @staticmethod
+    def _regime_summary_title(label: str) -> str:
+        mapping = {
+            "risk_on_growth_led": "风险偏好回升，成长主线领跑",
+            "risk_on_broad": "风险偏好扩散，广度在改善",
+            "risk_off_defensive": "防御偏好占优",
+            "liquidity_positive": "流动性环境偏正面",
+            "liquidity_negative": "流动性环境偏负面",
+            "inflation_oil_pressure": "油价与通胀压力需要警惕",
+            "mixed_no_clear_edge": "信号分化，暂无明确优势",
+        }
+        return mapping.get(label, "信号分化，暂无明确优势")
+
+    @staticmethod
+    def _regime_summary_market_regime_label(primary_regime: str) -> str:
+        mapping = {
+            "risk_on_liquidity_expansion": "市场主合成偏 risk-on / 流动性扩张",
+            "goldilocks_soft_landing": "市场主合成偏 soft landing",
+            "risk_off_deleveraging": "市场主合成偏 risk-off / 去杠杆",
+            "rates_shock_duration_pressure": "市场主合成偏利率久期压力",
+            "dollar_squeeze": "市场主合成偏美元挤压",
+            "credit_or_funding_stress": "市场主合成偏信用/融资压力",
+            "term_premium_or_inflation_scare": "市场主合成偏通胀/期限溢价压力",
+            "china_policy_divergence": "市场主合成偏中美政策分化",
+            "data_insufficient": "市场主合成数据不足",
+        }
+        return mapping.get(primary_regime, primary_regime)
+
+    @staticmethod
+    def _regime_summary_destination_label(destination: str) -> str:
+        mapping = {
+            "growth_ai_software_semis": "资金更偏向 AI / 软件 / 半导体成长链",
+            "oil": "资金转向油气 / 通胀敏感资产",
+            "defensives": "资金更偏向防御资产",
+            "no_clear_edge": "资金暂未形成明确主线",
+        }
+        return mapping.get(destination, destination)
+
+    @staticmethod
+    def _regime_summary_family_label(row: Mapping[str, Any], family_id: str) -> str:
+        return str(row.get("familyName") or family_id)
+
+    @staticmethod
+    def _regime_summary_synthesis_detail(market_regime_synthesis: Mapping[str, Any]) -> str:
+        bullets = market_regime_synthesis.get("narrativeBullets")
+        if isinstance(bullets, Sequence) and not isinstance(bullets, (str, bytes, bytearray)):
+            for bullet in bullets:
+                text = str(bullet or "").strip()
+                if text:
+                    return text
+        return "沿用现有 Market Regime synthesis 作为主方向框架。"
+
+    @staticmethod
+    def _regime_summary_explanation(
+        *,
+        summary_label: str,
+        primary_regime: str,
+        liquidity_signal: Optional[Mapping[str, Any]],
+        contradictions: Sequence[Mapping[str, Any]],
+        blockers: Sequence[Mapping[str, Any]],
+    ) -> str:
+        if summary_label == "risk_on_growth_led":
+            return "现有温度合成偏向 risk-on，且资金与轮动观察都指向 AI / 成长主线，但由于这些信号仍是 observation-only，结论保持 capped confidence。"
+        if summary_label == "risk_on_broad":
+            return "现有温度合成偏向 risk-on，轮动家族出现 broadening，说明风险偏好不只集中在单一主线，但仍需更多真实信号确认。"
+        if summary_label == "risk_off_defensive":
+            return "现有温度合成与轮动观察都偏向防御资产，说明市场更像在降低风险暴露；不过 summary 仍不授予任何交易级 authority。"
+        if summary_label == "liquidity_positive":
+            return "现有温度合成显示流动性背景偏正面，但还没有足够明确的家族轮动共振，因此只保留温和正向判断。"
+        if summary_label == "liquidity_negative":
+            return "现有温度合成更像流动性收缩或防御回摆，风险资产扩张缺少足够确认，因此保持负向但非交易级结论。"
+        if summary_label == "inflation_oil_pressure":
+            return "油气与通胀敏感资产正在吸引注意力，说明 rate-cut 友好背景仍可能被油价和通胀重新约束，因此 confidence 必须继续下调。"
+        if contradictions:
+            return "成长、流动性与轮动家族之间存在分化信号，当前更适合维持 mixed / no-clear-edge，而不是强行给出单一路径。"
+        if blockers:
+            return "现有温度合成提供了方向线索，但关键的流动性或轮动观察信号缺失/降级，因此 fail closed 到 mixed / no-clear-edge。"
+        if primary_regime == "data_insufficient":
+            return "主合成本身已经是数据不足，regimeSummary 继续保持混合观察态。"
+        return "现有温度合成没有得到足够一致的流动性与轮动确认，因此保持 mixed / no-clear-edge。"
 
     def _build_market_decision_semantics_payload(
         self,
@@ -7292,6 +7868,12 @@ class MarketOverviewService:
             self._fallback_crypto_market_snapshot,
             deadline=deadline,
         )
+        capital_flow_signal = self._market_temperature_capital_flow_signal()
+        if capital_flow_signal:
+            flows["capitalFlowSignal"] = copy.deepcopy(capital_flow_signal)
+        rotation_family_rollup = self._market_temperature_rotation_family_rollup()
+        if rotation_family_rollup:
+            sectors["rotationFamilyRollup"] = copy.deepcopy(rotation_family_rollup)
         return {
             "indices": indices,
             "breadth": breadth,
@@ -7302,6 +7884,8 @@ class MarketOverviewService:
             "futures": futures,
             "sentiment": sentiment,
             "crypto": crypto,
+            **({"capitalFlowSignal": capital_flow_signal} if capital_flow_signal else {}),
+            **({"rotationFamilyRollup": rotation_family_rollup} if rotation_family_rollup else {}),
             "fallback_notice": True,
         }
 

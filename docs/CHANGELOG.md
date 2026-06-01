@@ -2332,6 +2332,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   growth/AI/software/semis, BTC, gold, or oil without claiming real fund flow
   or changing liquidity score gates.
 
+- Market Overview `temperature` payload now includes additive
+  `regimeSummary`, a consumer-safe observation-only summary that combines
+  existing market regime synthesis with Liquidity `capitalFlowSignal` and
+  Rotation `rotationFamilyRollup` when available.
+- `regimeSummary` fails closed to `mixed_no_clear_edge` when observation
+  signals are missing, stale, fallback, partial, unavailable, or contradictory,
+  and it now surfaces bounded drivers, blockers, contradictions, confidence
+  caps, next watch items, and an investor-readable explanation without exposing
+  raw provider/admin details.
+
 ## [1.0.0] - 2026-01-10
 
 ### 新增

@@ -500,6 +500,90 @@ class MarketOverviewApiTestCase(unittest.TestCase):
         self.assertTrue(usd["sourceAuthorityAllowed"])
         self.assertTrue(usd["scoreContributionAllowed"])
 
+    def test_market_temperature_inputs_attach_existing_observation_signals_without_leaking_admin_fields(self) -> None:
+        from src.services.market_overview_service import MarketOverviewService
+
+        service = MarketOverviewService(cn_hk_connect_flow_provider=lambda: None)
+
+        def panel(key: str, *_args, **_kwargs) -> dict:
+            return {
+                "source": "cached",
+                "sourceLabel": "缓存",
+                "freshness": "cached",
+                "updatedAt": "2026-05-20T10:00:00+08:00",
+                "asOf": "2026-05-20T10:00:00+08:00",
+                "items": [],
+                "panelKey": key,
+            }
+
+        liquidity_payload = {
+            "capitalFlowSignal": {
+                "marketRegime": "risk_on",
+                "capitalFlowRegime": "inflow",
+                "themeFlowState": "leading",
+                "confidenceLabel": "medium",
+                "source": "mixed",
+                "sourceType": "public_proxy",
+                "freshness": "partial",
+                "isPartial": True,
+                "sourceAuthorityAllowed": False,
+                "scoreContributionAllowed": False,
+                "likelyDestination": "growth_ai_software_semis",
+                "providerId": "private-provider",
+                "adminDiagnostics": {"debug": "secret"},
+            }
+        }
+        rotation_payload = {
+            "summary": {
+                "rotationFamilyRollup": [
+                    {
+                        "familyId": "ai",
+                        "familyName": "AI",
+                        "leaderThemeIds": ["ai_apps"],
+                        "themeNames": ["AI 应用"],
+                        "themeFlowSignal": {
+                            "marketRegime": "risk_on",
+                            "capitalFlowRegime": "inflow",
+                            "themeFlowState": "leading",
+                            "confidenceLabel": "high",
+                            "source": "rotation_radar_projection",
+                            "sourceType": "authorized_licensed_feed",
+                            "freshness": "cached",
+                            "sourceAuthorityAllowed": True,
+                            "scoreContributionAllowed": False,
+                            "providerRouting": {"winner": "internal"},
+                            "adminDiagnostics": {"payload": "secret"},
+                        },
+                    }
+                ]
+            }
+        }
+
+        with (
+            patch.object(service, "_temperature_panel", side_effect=panel),
+            patch("src.services.market_overview_service.LiquidityMonitorService") as liquidity_service_cls,
+            patch("src.services.market_overview_service.MarketRotationRadarService") as rotation_service_cls,
+        ):
+            liquidity_service_cls.return_value.get_liquidity_monitor.return_value = liquidity_payload
+            rotation_service_cls.return_value.get_rotation_radar.return_value = rotation_payload
+            inputs = service._build_market_temperature_inputs_from_internal_snapshots()
+
+        signal = inputs["capitalFlowSignal"]
+        assert signal["observationOnly"] is True
+        assert signal["sourceAuthorityAllowed"] is False
+        assert signal["scoreContributionAllowed"] is False
+        assert signal["confidenceLabel"] == "blocked"
+        assert "providerId" not in signal
+        assert "adminDiagnostics" not in signal
+
+        family = inputs["rotationFamilyRollup"][0]
+        assert family["familyId"] == "ai"
+        assert family["themeFlowSignal"]["observationOnly"] is True
+        assert family["themeFlowSignal"]["scoreContributionAllowed"] is False
+        assert family["themeFlowSignal"]["sourceAuthorityAllowed"] is False
+        assert "providerRouting" not in family["themeFlowSignal"]
+        assert "adminDiagnostics" not in family["themeFlowSignal"]
+
 
 if __name__ == "__main__":
     unittest.main()

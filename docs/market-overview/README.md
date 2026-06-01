@@ -20,6 +20,18 @@ evidence.
 - The first viewport should answer whether the market state is usable for
   observation, what is partial/stale/unavailable, and which broad risk or
   rotation clue matters.
+- `regimeSummary` on `/api/v1/market/temperature` is additive and
+  observation-only. It may summarize current market synthesis plus existing
+  Liquidity `capitalFlowSignal` and Rotation `rotationFamilyRollup`, but it
+  must never promote source authority, score-grade rights, or live provider
+  status.
+- Allowed `regimeSummary.label` values are:
+  `risk_on_growth_led`, `risk_on_broad`, `risk_off_defensive`,
+  `liquidity_positive`, `liquidity_negative`, `inflation_oil_pressure`,
+  `mixed_no_clear_edge`.
+- If Liquidity or Rotation observation signals are missing, stale, fallback,
+  unavailable, or internally contradictory, `regimeSummary` must fail closed to
+  `mixed_no_clear_edge` with blockers, confidence caps, and next watch items.
 - Freshness/source detail belongs in a rail or disclosure, not as the primary
   story.
 - Partial data should render a degraded but readable state, never a blank page
