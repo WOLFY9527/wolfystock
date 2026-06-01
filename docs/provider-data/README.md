@@ -13,6 +13,7 @@ boundaries.
 - [Provider Data Incident Runbook](../audits/provider-data-incident-runbook.md)
 - [Market Data Provider Upgrade Matrix](../audits/market-data-provider-upgrade-decision-matrix.md)
 - [Provider Capability Metadata](../operations/provider-capability-metadata.md)
+- [Official Macro Cache Prewarm Runbook](../operations/official-macro-cache-prewarm-runbook.md)
 - [Provider Budget And Routing Rules](../codex/WOLFYSTOCK_PROVIDER_BUDGET_AND_ROUTING_RULES.md)
 - [Data Quality User Disclosure Policy](../audits/data-quality-user-disclosure-policy.md)
 - [Provider/Data/Options Index](../audits/index-provider-data-options.md)
@@ -53,6 +54,12 @@ boundaries.
   partially covered, date-ambiguous, or uses unsupported units/value formats,
   the contract fails closed and existing Market Overview `/rates` fallback
   behavior remains unchanged.
+- Official macro cache prewarm uses `scripts/official_macro_cache_prewarm.py`
+  as an operator-facing dry-run/write entrypoint for Market Overview `rates`
+  and `macro` cache rows. The dry-run/readiness surface is diagnostics only:
+  it helps operators verify USD TWI plus Fed liquidity cache readiness for
+  Market Overview and Liquidity Monitor, but it does not change provider
+  routing, promote source authority, or alter score gates.
 
 ## Related Domains
 

@@ -161,6 +161,28 @@ Provider onboarding rows in this phase remain read-only diagnostics:
 - `missingProviderReason` explains deferred wiring status, not a temporary
   runtime override
 
+## Official macro cache readiness operator surface
+
+The official macro cache prewarm workflow is an operator-facing diagnostics
+surface layered on top of existing Market Overview cache refresh logic:
+
+- default mode is dry-run
+- output now groups write-plan evidence under `writeEvidence`
+- per-series readiness evidence is emitted under `seriesReadiness`
+- required official readiness series remain bounded to USD TWI plus Fed
+  liquidity (`DTWEXBGS`, `WALCL`, `RRPONTSYD`, `WTREGEN`, `WRESBAL`)
+- the write path still refreshes existing Market Overview `rates` and `macro`
+  cache rows only after readiness passes
+
+This surface is metadata/evidence only. It must not be treated as:
+
+- provider runtime enablement
+- provider routing authority
+- MarketCache semantic authority
+- source-confidence promotion
+- score-gate promotion
+- permission to relabel fallback/stale data as live
+
 ## Deferred runtime onboarding requirements
 
 Runtime onboarding remains deferred until a separately authorized task adds:

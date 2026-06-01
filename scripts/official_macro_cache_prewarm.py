@@ -16,8 +16,12 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.services.market_overview_service import MarketOverviewService
 from src.services.official_macro_liquidity_cache_contracts import (
+    OFFICIAL_FED_LIQUIDITY_FRESHNESS_POLICIES,
     OFFICIAL_FED_LIQUIDITY_REQUIRED_SERIES,
+    OFFICIAL_FED_LIQUIDITY_SERIES_TO_SYMBOL,
+    OFFICIAL_USD_PRESSURE_FRESHNESS_POLICIES,
     OFFICIAL_USD_PRESSURE_REQUIRED_SERIES,
+    OFFICIAL_USD_PRESSURE_SYMBOL_TO_SERIES_ID,
     OFFICIAL_US_RATES_REQUIRED_SERIES,
 )
 from scripts.diagnose_official_macro_activation import (
@@ -65,6 +69,31 @@ TARGET_PANELS: tuple[dict[str, object], ...] = (
             },
         ),
     },
+)
+SERIES_READINESS_GROUPS: tuple[dict[str, object], ...] = (
+    {
+        "group": "usd_pressure",
+        "series": OFFICIAL_USD_PRESSURE_REQUIRED_SERIES,
+        "seriesToSymbol": {
+            series_id: symbol for symbol, series_id in OFFICIAL_USD_PRESSURE_SYMBOL_TO_SERIES_ID.items()
+        },
+        "freshnessPolicies": OFFICIAL_USD_PRESSURE_FRESHNESS_POLICIES,
+    },
+    {
+        "group": "fed_liquidity",
+        "series": OFFICIAL_FED_LIQUIDITY_REQUIRED_SERIES,
+        "seriesToSymbol": OFFICIAL_FED_LIQUIDITY_SERIES_TO_SYMBOL,
+        "freshnessPolicies": OFFICIAL_FED_LIQUIDITY_FRESHNESS_POLICIES,
+    },
+)
+WRITE_EVIDENCE_FIELDS: tuple[str, ...] = (
+    "writeEnabled",
+    "writeAttempted",
+    "cacheRowsWouldWrite",
+    "cacheRowsWritten",
+    "writeEfficacy",
+    "scoreGradeUsable",
+    "writtenButNotScoreGradeReason",
 )
 
 
@@ -351,6 +380,64 @@ def _readiness_summary_fields(summary: Mapping[str, object]) -> dict[str, object
     }
 
 
+def _series_blocked_reason(summary: Mapping[str, object], series_id: str, status: str) -> str | None:
+    if status == "fulfilled":
+        return None
+    if status == "stale":
+        return "stale_series"
+    top_level_reason = str(summary.get("reason") or "").strip()
+    if top_level_reason:
+        return top_level_reason
+    if summary.get("sourceAuthorityAllowed") is False:
+        return "source_authority_blocked"
+    if summary.get("scoreContributionAllowed") is False:
+        return "score_contribution_blocked"
+    return "series_coverage" if series_id in set(_as_list(summary.get("missingSeries"))) else "readiness_blocked"
+
+
+def _series_readiness(summary: Mapping[str, object]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for group in SERIES_READINESS_GROUPS:
+        group_name = str(group["group"])
+        series_to_symbol = group.get("seriesToSymbol")
+        freshness_policies = group.get("freshnessPolicies")
+        for series_id in _as_list(group.get("series")):
+            status = _series_status(summary, series_id)
+            symbol = (
+                str(series_to_symbol.get(series_id) or "").strip()
+                if isinstance(series_to_symbol, Mapping)
+                else ""
+            )
+            freshness_policy = (
+                str(freshness_policies.get(series_id) or "").strip()
+                if isinstance(freshness_policies, Mapping)
+                else ""
+            )
+            blocked_reason = _series_blocked_reason(summary, series_id, status)
+            rows.append(
+                {
+                    "group": group_name,
+                    "series": series_id,
+                    "symbol": symbol or None,
+                    "freshnessPolicy": freshness_policy or None,
+                    "status": status,
+                    "blocked": blocked_reason is not None,
+                    "blockedReason": blocked_reason,
+                }
+            )
+    return rows
+
+
+def _operator_evidence(summary: Mapping[str, object]) -> dict[str, object]:
+    return {
+        "writeEvidence": {
+            field: summary.get(field)
+            for field in WRITE_EVIDENCE_FIELDS
+        },
+        "seriesReadiness": _series_readiness(summary),
+    }
+
+
 def _summary_fields(
     *,
     write_enabled: bool,
@@ -409,7 +496,7 @@ def run_prewarm(
     target_panels = _target_panel_reports(write_attempted=write)
     readiness_summary = _safe_cache_readiness_summary(readiness_probe or _run_cache_readiness_smoke)
     if not write:
-        return {
+        result = {
             "mode": "dry-run",
             **_summary_fields(
                 write_enabled=False,
@@ -420,6 +507,8 @@ def run_prewarm(
             "result": "dry_run_no_write",
             "targetPanels": target_panels,
         }
+        result.update(_operator_evidence(result))
+        return result
 
     blocked_summary = _summary_fields(
         write_enabled=True,
@@ -427,13 +516,15 @@ def run_prewarm(
         readiness_summary=readiness_summary,
     )
     if blocked_summary["readiness"] != "ready":
-        return {
+        result = {
             "mode": "write",
             **blocked_summary,
             **_efficacy_fields(diagnostics=[], write_attempted=False),
             "result": "readiness_blocked",
             "targetPanels": target_panels,
         }
+        result.update(_operator_evidence(result))
+        return result
 
     service = service_factory()
     payloads = service.prewarm_official_macro_cache()
@@ -448,7 +539,7 @@ def run_prewarm(
         readiness_summary=readiness_summary,
         cache_rows_written=_count_returned_cache_rows(payloads),
     )
-    return {
+    result = {
         "mode": "write",
         **summary,
         **_efficacy_fields(
@@ -465,11 +556,16 @@ def run_prewarm(
         "panels": panels,
         "marketCacheRefreshesCompleted": refreshes_completed,
     }
+    result.update(_operator_evidence(result))
+    return result
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Prewarm official macro Market Overview cache rows. Defaults to dry-run.",
+        description=(
+            "Report official macro cache readiness and optionally prewarm existing "
+            "Market Overview rates/macro cache rows. Defaults to dry-run."
+        ),
     )
     parser.set_defaults(write=False)
     mode = parser.add_mutually_exclusive_group()
@@ -477,13 +573,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         dest="write",
         action="store_false",
-        help="Report targets without mutating Market Overview cache or snapshots.",
+        help="Report required series readiness and write evidence without mutating cache or snapshots.",
     )
     mode.add_argument(
         "--write",
         dest="write",
         action="store_true",
-        help="Invoke the existing Market Overview macro/rates cache refresh path.",
+        help="Attempt the existing Market Overview macro/rates cache refresh path after readiness passes.",
     )
     return parser
 
@@ -494,23 +590,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         result = run_prewarm(write=bool(args.write))
     except Exception as exc:
-        print(
-            json.dumps(
-                {
-                    "mode": "write" if args.write else "dry-run",
-                    **_summary_fields(
-                        write_enabled=bool(args.write),
-                        write_attempted=False,
-                        readiness_summary=_cache_readiness_unexpected_error_summary(),
-                    ),
-                    **_efficacy_fields(diagnostics=[], write_attempted=False),
-                    "result": "error",
-                    "errorClass": type(exc).__name__,
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-            )
-        )
+        error_payload = {
+            "mode": "write" if args.write else "dry-run",
+            **_summary_fields(
+                write_enabled=bool(args.write),
+                write_attempted=False,
+                readiness_summary=_cache_readiness_unexpected_error_summary(),
+            ),
+            **_efficacy_fields(diagnostics=[], write_attempted=False),
+            "result": "error",
+            "errorClass": type(exc).__name__,
+        }
+        error_payload.update(_operator_evidence(error_payload))
+        print(json.dumps(error_payload, ensure_ascii=False, sort_keys=True))
         return 1
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     if bool(args.write) and result.get("result") == "readiness_blocked":

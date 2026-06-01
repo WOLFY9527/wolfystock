@@ -153,6 +153,62 @@ def test_dry_run_reports_blocked_readiness_missing_walcl_without_constructing_se
     assert result["degradedTargetSymbols"] == []
     assert result["degradedTargetReasons"] == []
     assert result["writtenButNotScoreGradeReason"] == "write_not_attempted"
+    assert result["writeEvidence"] == {
+        "cacheRowsWouldWrite": 2,
+        "cacheRowsWritten": 0,
+        "scoreGradeUsable": False,
+        "writeAttempted": False,
+        "writeEnabled": False,
+        "writeEfficacy": "not_written",
+        "writtenButNotScoreGradeReason": "write_not_attempted",
+    }
+    assert result["seriesReadiness"] == [
+        {
+            "blocked": False,
+            "blockedReason": None,
+            "freshnessPolicy": "official_h10_weekly_batch_t_plus_7",
+            "group": "usd_pressure",
+            "series": "DTWEXBGS",
+            "status": "fulfilled",
+            "symbol": "USD_TWI",
+        },
+        {
+            "blocked": True,
+            "blockedReason": "series_coverage",
+            "freshnessPolicy": "official_weekly_fed_liquidity_t_plus_7",
+            "group": "fed_liquidity",
+            "series": "WALCL",
+            "status": "missing",
+            "symbol": "FED_ASSETS",
+        },
+        {
+            "blocked": False,
+            "blockedReason": None,
+            "freshnessPolicy": "official_daily_us_weekday_t_plus_1",
+            "group": "fed_liquidity",
+            "series": "RRPONTSYD",
+            "status": "fulfilled",
+            "symbol": "FED_RRP",
+        },
+        {
+            "blocked": False,
+            "blockedReason": None,
+            "freshnessPolicy": "official_weekly_fed_liquidity_t_plus_7",
+            "group": "fed_liquidity",
+            "series": "WTREGEN",
+            "status": "fulfilled",
+            "symbol": "TGA",
+        },
+        {
+            "blocked": False,
+            "blockedReason": None,
+            "freshnessPolicy": "official_weekly_fed_liquidity_t_plus_7",
+            "group": "fed_liquidity",
+            "series": "WRESBAL",
+            "status": "fulfilled",
+            "symbol": "RESERVES",
+        },
+    ]
     assert result["result"] == "dry_run_no_write"
     assert {panel["cacheKey"] for panel in result["targetPanels"]} == {"rates", "macro"}
     rates_panel = next(panel for panel in result["targetPanels"] if panel["cacheKey"] == "rates")
@@ -195,6 +251,9 @@ def test_dry_run_reports_ready_when_activation_readiness_is_fulfilled() -> None:
     assert result["degradedTargetSymbols"] == []
     assert result["degradedTargetReasons"] == []
     assert result["writtenButNotScoreGradeReason"] == "write_not_attempted"
+    assert all(item["status"] == "fulfilled" for item in result["seriesReadiness"])
+    assert result["writeEvidence"]["writeEfficacy"] == "not_written"
+    assert result["writeEvidence"]["cacheRowsWouldWrite"] == 2
 
 
 def test_service_prewarm_uses_existing_cached_payload_and_snapshot_writer(monkeypatch: pytest.MonkeyPatch) -> None:
