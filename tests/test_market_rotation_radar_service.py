@@ -250,6 +250,94 @@ def _utc_dt(year: int, month: int, day: int, hour: int, minute: int = 0) -> date
     return datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
 
 
+def _rotation_theme(theme_id: str):
+    return next(theme for theme in market_rotation_radar_service.THEME_BASKETS if theme.id == theme_id)
+
+
+def _official_rotation_quote(
+    symbol: str,
+    change: float,
+    *,
+    volume_ratio: float = 1.25,
+    as_of: str = "2026-05-07T09:45:00+00:00",
+) -> dict:
+    intraday_5m = round(change * 0.25, 3)
+    intraday_15m = round(change * 0.45, 3)
+    intraday_60m = round(change * 0.7, 3)
+    quote = _quote(
+        symbol,
+        change,
+        volume_ratio=volume_ratio,
+        freshness="live",
+        time_windows=_alpaca_time_windows(
+            {
+                "5m": intraday_5m,
+                "15m": intraday_15m,
+                "60m": intraday_60m,
+                "1d": change,
+            },
+            as_of=as_of,
+        ),
+        source="alpaca",
+        source_type="official_public",
+        source_tier="broker_authorized",
+    )
+    quote["sourceLabel"] = "Alpaca SIP"
+    quote["providerTier"] = "tier_1_configured"
+    quote["confidenceWeight"] = 0.9
+    return quote
+
+
+def _rotation_family_payload(theme_configs: dict[str, dict[str, object]]) -> dict:
+    _, quotes, spine = _bounded_etf_authority_fixture()
+    for theme_id, config in theme_configs.items():
+        theme = _rotation_theme(theme_id)
+        member_changes = list(config["member_changes"])
+        volume_ratio = float(config.get("volume_ratio", 1.25))
+        for index, symbol in enumerate(theme.members):
+            change = float(member_changes[min(index, len(member_changes) - 1)])
+            quotes[symbol] = _official_rotation_quote(
+                symbol,
+                change,
+                volume_ratio=volume_ratio,
+            )
+        proxy_changes = config.get("proxy_changes") or {}
+        if isinstance(proxy_changes, dict):
+            for symbol, change in proxy_changes.items():
+                quotes[str(symbol)] = _official_rotation_quote(
+                    str(symbol),
+                    float(change),
+                    volume_ratio=max(1.05, volume_ratio - 0.1),
+                )
+    metadata = {
+        "source": "alpaca",
+        "sourceLabel": "Alpaca SIP",
+        "sourceType": "official_public",
+        "sourceTier": "broker_authorized",
+        "providerTier": "tier_1_configured",
+        "freshness": "live",
+        "asOf": "2026-05-07T09:45:00+00:00",
+        "sourceAuthorityAllowed": True,
+        "scoreContributionAllowed": True,
+        "providerDiagnostics": {
+            "etfAuthoritySpine": spine,
+        },
+    }
+    service = MarketRotationRadarService(
+        quote_provider=lambda symbols: {
+            "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+            "metadata": metadata,
+        },
+        now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+    )
+    return service.get_rotation_radar()
+
+
+def _family_rollup(payload: dict, family_id: str) -> dict:
+    rows = payload["summary"]["rotationFamilyRollup"]
+    return next(row for row in rows if row["familyId"] == family_id)
+
+
 class MarketRotationRadarServiceTestCase(unittest.TestCase):
     def test_live_quotes_score_confirmed_rotation_with_breadth_and_newsless_evidence(self) -> None:
         quotes = {
@@ -365,6 +453,115 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         dumped = json.dumps(theme, ensure_ascii=False).lower()
         self.assertNotIn("raw_payload", dumped)
         self.assertNotIn("建议买入", dumped)
+
+    def test_rotation_family_rollup_surfaces_ai_leadership_from_existing_theme_outputs(self) -> None:
+        payload = _rotation_family_payload(
+            {
+                "ai_applications": {
+                    "member_changes": [4.6, 4.1, 3.6, 3.3, 3.1, 2.8, 2.5, 2.2],
+                    "volume_ratio": 1.8,
+                    "proxy_changes": {"IGV": 2.1},
+                },
+                "ai_infrastructure": {
+                    "member_changes": [3.9, 3.4, 3.1, 2.8, 2.6, 2.4, 2.2, 2.0],
+                    "volume_ratio": 1.65,
+                    "proxy_changes": {"SMH": 2.4, "SOXX": 2.1},
+                },
+                "ai_neocloud": {
+                    "member_changes": [2.8, 2.5, 2.3, 2.1, 1.9, 1.8, 1.7, 1.6],
+                    "volume_ratio": 1.45,
+                    "proxy_changes": {"CLOU": 1.7, "IGV": 2.0},
+                },
+            }
+        )
+
+        ai_family = _family_rollup(payload, "ai")
+        ai_theme = next(theme for theme in payload["themes"] if theme["id"] == "ai_applications")
+
+        self.assertIn("themeFlowSignal", ai_theme)
+        self.assertEqual(ai_theme["themeFlowSignal"]["themeFlowState"], "leading")
+        self.assertEqual(ai_family["themeFlowSignal"]["themeFlowState"], "leading")
+        self.assertTrue(ai_family["themeFlowSignal"]["observationOnly"])
+        self.assertFalse(ai_family["themeFlowSignal"]["decisionGrade"])
+        self.assertFalse(ai_family["themeFlowSignal"]["scoreContributionAllowed"])
+        self.assertTrue(ai_family["themeFlowSignal"]["sourceAuthorityAllowed"])
+        self.assertGreaterEqual(ai_family["themeFlowSignal"]["confidence"], 0.6)
+        self.assertEqual(ai_family["themeFlowSignal"]["confidenceLabel"], "high")
+        self.assertIn("ai_applications", ai_family["leaderThemeIds"])
+        self.assertIn("领涨", ai_family["themeFlowSignal"]["explanation"])
+        self.assertIn("相对强弱", ai_family["themeFlowSignal"]["relativeStrengthEvidence"])
+
+    def test_rotation_family_rollup_marks_saas_recovery_as_broadening(self) -> None:
+        payload = _rotation_family_payload(
+            {
+                "cloud_software": {
+                    "member_changes": [2.3, 2.1, 2.0, 1.9, 1.8, 1.6, 1.5, 1.4],
+                    "volume_ratio": 1.5,
+                    "proxy_changes": {"IGV": 1.7, "CLOU": 1.5},
+                },
+                "cybersecurity": {
+                    "member_changes": [2.8, 2.6, 2.4, 2.2, 2.0, 1.8, 1.7, 1.5],
+                    "volume_ratio": 1.45,
+                    "proxy_changes": {"CIBR": 1.7, "HACK": 1.5},
+                },
+            }
+        )
+
+        software_family = _family_rollup(payload, "software")
+
+        self.assertEqual(software_family["themeFlowSignal"]["themeFlowState"], "broadening")
+        self.assertGreaterEqual(software_family["averageRotationScore"], 60)
+        self.assertEqual(software_family["themeFlowSignal"]["confidenceLabel"], "medium")
+        self.assertIn("云软件", software_family["themeNames"])
+        self.assertIn("网络安全", software_family["themeNames"])
+        self.assertIn("广度", software_family["themeFlowSignal"]["breadthEvidence"])
+
+    def test_rotation_family_rollup_marks_semis_distribution_as_mixed(self) -> None:
+        payload = _rotation_family_payload(
+            {
+                "semiconductors": {
+                    "member_changes": [2.8, 2.6, 2.4, 2.1, 1.9, 1.7, 1.5, 1.2],
+                    "volume_ratio": 1.55,
+                    "proxy_changes": {"SMH": 2.2, "SOXX": 1.9},
+                },
+                "semiconductor_equipment": {
+                    "member_changes": [1.4, 0.8, 0.2, -0.2, -0.4, -0.7, -0.9, -1.1],
+                    "volume_ratio": 1.05,
+                    "proxy_changes": {"SMH": 1.0, "SOXX": 0.8},
+                },
+            }
+        )
+
+        semis_family = _family_rollup(payload, "semiconductors")
+
+        self.assertEqual(semis_family["themeFlowSignal"]["themeFlowState"], "mixed")
+        self.assertIn("conflicting_signal_inputs", semis_family["themeFlowSignal"]["reasonCodes"])
+        self.assertIn("分化", semis_family["themeFlowSignal"]["explanation"])
+        self.assertIn("semiconductors", semis_family["leaderThemeIds"])
+
+    def test_rotation_family_rollup_marks_no_clear_edge_as_mixed(self) -> None:
+        payload = _rotation_family_payload(
+            {
+                "utilities": {
+                    "member_changes": [2.4, 2.2, 2.0, 1.8, 1.5, 1.2, 1.0, 0.8],
+                    "volume_ratio": 1.25,
+                    "proxy_changes": {"XLU": 1.2},
+                },
+                "healthcare_biotech": {
+                    "member_changes": [0.7, 0.5, 0.2, -0.1, -0.3, -0.5, -0.6, -0.9],
+                    "volume_ratio": 1.0,
+                    "proxy_changes": {"XLV": 0.1, "IBB": -0.2},
+                },
+            }
+        )
+
+        defensive_family = _family_rollup(payload, "defensive")
+
+        self.assertEqual(defensive_family["themeFlowSignal"]["themeFlowState"], "mixed")
+        self.assertEqual(defensive_family["themeFlowSignal"]["confidenceLabel"], "low")
+        self.assertIn("公用事业", defensive_family["themeNames"])
+        self.assertIn("医疗 / 生物科技", defensive_family["themeNames"])
+        self.assertIn("no clear edge", defensive_family["themeFlowSignal"]["explanation"].lower())
 
     def test_fallback_when_no_provider_never_marks_live_and_caps_confidence(self) -> None:
         service = MarketRotationRadarService(now_provider=lambda: datetime(2026, 5, 7, tzinfo=timezone.utc))

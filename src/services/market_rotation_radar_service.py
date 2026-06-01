@@ -24,6 +24,7 @@ from src.services.market_data_source_registry import (
 )
 from src.services.data_source_router import DataSourceRouteRequest
 from src.services.data_source_router_diagnostics import build_data_source_route_diagnostic_snapshot
+from src.services.investor_signal_model import build_consumer_safe_investor_signal
 from src.services.market_intelligence_trust_gate import (
     evaluate_market_intelligence_trust,
     evaluate_market_intelligence_trust_from_sources,
@@ -147,6 +148,49 @@ _ROTATION_EVIDENCE_FORBIDDEN_RELIABLE_CLAIMS = (
         "etf_price_proxy_fund_flow_forbidden",
         "ETF price proxy evidence is not real fund-flow evidence.",
     ),
+)
+ROTATION_FAMILY_DEFINITIONS: Sequence[Mapping[str, Any]] = (
+    {
+        "familyId": "ai",
+        "familyName": "AI",
+        "themeIds": (
+            "ai_applications",
+            "ai_infrastructure",
+            "ai_neocloud",
+        ),
+    },
+    {
+        "familyId": "software",
+        "familyName": "SaaS / Software",
+        "themeIds": (
+            "cloud_software",
+            "cybersecurity",
+        ),
+    },
+    {
+        "familyId": "semiconductors",
+        "familyName": "Semiconductors",
+        "themeIds": (
+            "semiconductors",
+            "semiconductor_equipment",
+        ),
+    },
+    {
+        "familyId": "energy",
+        "familyName": "Energy",
+        "themeIds": (
+            "energy",
+            "nuclear_power_grid",
+        ),
+    },
+    {
+        "familyId": "defensive",
+        "familyName": "Defensive",
+        "themeIds": (
+            "utilities",
+            "healthcare_biotech",
+        ),
+    },
 )
 
 
@@ -367,6 +411,7 @@ class MarketRotationRadarService:
             )
             for theme in themes
         ]
+        themes = [self._attach_theme_flow_signal(theme) for theme in themes]
         themes.sort(key=lambda item: (item["rotationScore"], item["confidence"]), reverse=True)
         live_theme_count = sum(1 for theme in themes if not theme["isFallback"] and not theme["isStale"])
         fallback_theme_count = sum(1 for theme in themes if theme["isFallback"])
@@ -384,6 +429,8 @@ class MarketRotationRadarService:
             warnings = [warning for warning in warnings if "Fallback/静态篮子" not in warning]
         if not any(theme.get("headlineEligible") for theme in themes):
             warnings.append(_HEADLINE_RANKING_WARNING)
+        summary = self._build_summary(themes)
+        summary["rotationFamilyRollup"] = self._rotation_family_rollup(themes)
         payload = {
             "endpoint": RADAR_ENDPOINT,
             "market": "US",
@@ -398,7 +445,7 @@ class MarketRotationRadarService:
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
             "benchmarks": benchmarks,
             "etfLeadershipDiagnostics": etf_leadership_diagnostics,
-            "summary": self._build_summary(themes),
+            "summary": summary,
             "themes": themes,
             "metadata": {
                 "schemaVersion": "market_rotation_radar_phase4_v1",
@@ -461,6 +508,27 @@ class MarketRotationRadarService:
             self._annotate_signal_taxonomy(theme, quote_source_authority_allowed=False)
             for theme in themes
         ]
+        themes = [self._attach_theme_flow_signal(theme) for theme in themes]
+        summary = {
+            "strongestThemes": [],
+            "acceleratingThemes": [],
+            "fadingThemes": [self._summary_item(theme) for theme in themes[:3]],
+            "observationThemes": [],
+            "taxonomyThemes": [self._summary_item(theme) for theme in themes[:5]],
+            "eligibleThemeCount": 0,
+            "headlineEligibleThemeCount": 0,
+            "observationThemeCount": 0,
+            "headlineWarning": _HEADLINE_RANKING_WARNING,
+            "noHeadlineReason": _HEADLINE_RANKING_WARNING,
+            "rankingPolicy": (
+                "fallback/static/taxonomy-only/synthetic/unavailable evidence remains visible "
+                "but is excluded from headline ranking and strong conclusion lists."
+            ),
+            "watchlistSignals": [],
+            "watchlistSortingExplanation": "静态主题库仅作分类观察；待本地行情覆盖后才计算轮动强度，非买卖建议。",
+            "safeWording": ["主题库已载入", "行情评分待本地数据覆盖", "仅作分类观察", "非买卖建议"],
+        }
+        summary["rotationFamilyRollup"] = self._rotation_family_rollup(themes)
         payload = {
             "endpoint": RADAR_ENDPOINT,
             "market": market,
@@ -477,25 +545,7 @@ class MarketRotationRadarService:
             ),
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
             "benchmarks": {},
-            "summary": {
-                "strongestThemes": [],
-                "acceleratingThemes": [],
-                "fadingThemes": [self._summary_item(theme) for theme in themes[:3]],
-                "observationThemes": [],
-                "taxonomyThemes": [self._summary_item(theme) for theme in themes[:5]],
-                "eligibleThemeCount": 0,
-                "headlineEligibleThemeCount": 0,
-                "observationThemeCount": 0,
-                "headlineWarning": _HEADLINE_RANKING_WARNING,
-                "noHeadlineReason": _HEADLINE_RANKING_WARNING,
-                "rankingPolicy": (
-                    "fallback/static/taxonomy-only/synthetic/unavailable evidence remains visible "
-                    "but is excluded from headline ranking and strong conclusion lists."
-                ),
-                "watchlistSignals": [],
-                "watchlistSortingExplanation": "静态主题库仅作分类观察；待本地行情覆盖后才计算轮动强度，非买卖建议。",
-                "safeWording": ["主题库已载入", "行情评分待本地数据覆盖", "仅作分类观察", "非买卖建议"],
-            },
+            "summary": summary,
             "themes": themes,
             "metadata": {
                 "schemaVersion": "market_rotation_radar_phase4_v1",
@@ -1556,6 +1606,7 @@ class MarketRotationRadarService:
             "providerState": provider_state,
             "etfProxySummary": self._consumer_etf_proxy_summary(payload.get("etfLeadershipDiagnostics")),
             "themes": [self._consumer_theme_quality(theme) for theme in theme_rows],
+            "rotationFamilyRollup": self._consumer_rotation_family_rollup(summary.get("rotationFamilyRollup")),
         }
         if isinstance(authority_grant, bool):
             snapshot["authorityGrant"] = authority_grant
@@ -1632,6 +1683,29 @@ class MarketRotationRadarService:
             "reasonCodes": self._consumer_reason_codes(diagnostics.get("reasonCodes")),
         }
 
+    def _consumer_rotation_family_rollup(self, value: Any) -> List[Dict[str, Any]]:
+        rows = value if isinstance(value, Sequence) and not isinstance(value, (str, bytes)) else []
+        result: List[Dict[str, Any]] = []
+        for row in rows:
+            if not isinstance(row, Mapping):
+                continue
+            signal = dict(row.get("themeFlowSignal")) if isinstance(row.get("themeFlowSignal"), Mapping) else {}
+            result.append(
+                {
+                    "familyId": str(row.get("familyId") or ""),
+                    "familyName": str(row.get("familyName") or ""),
+                    "themeIds": self._string_list(row.get("themeIds")),
+                    "themeNames": self._string_list(row.get("themeNames")),
+                    "leaderThemeIds": self._string_list(row.get("leaderThemeIds")),
+                    "themeCount": self._safe_int(row.get("themeCount")),
+                    "signalThemeCount": self._safe_int(row.get("signalThemeCount")),
+                    "averageRotationScore": round(float(row.get("averageRotationScore") or 0.0), 2),
+                    "averageConfidence": round(float(row.get("averageConfidence") or 0.0), 2),
+                    "themeFlowSignal": signal,
+                }
+            )
+        return result
+
     @staticmethod
     def _consumer_theme_quality(theme: Mapping[str, Any]) -> Dict[str, Any]:
         return {
@@ -1650,6 +1724,607 @@ class MarketRotationRadarService:
             "evidenceQuality": str(theme.get("evidenceQuality") or "insufficient"),
             "dataGaps": [str(item) for item in (theme.get("dataGaps") or []) if str(item or "").strip()],
         }
+
+    def _attach_theme_flow_signal(self, theme: Dict[str, Any]) -> Dict[str, Any]:
+        theme["themeFlowSignal"] = self._theme_flow_signal(theme)
+        return theme
+
+    def _theme_flow_signal(self, theme: Mapping[str, Any]) -> Dict[str, Any]:
+        relative_strength = self._number(
+            (theme.get("relativeStrength") or {}).get("averageRelativeStrengthPercent")
+            if isinstance(theme.get("relativeStrength"), Mapping)
+            else None
+        )
+        breadth = self._number(
+            (theme.get("breadth") or {}).get("percentOutperformingBenchmark")
+            if isinstance(theme.get("breadth"), Mapping)
+            else None
+        )
+        percent_up = self._number(
+            (theme.get("breadth") or {}).get("percentUp")
+            if isinstance(theme.get("breadth"), Mapping)
+            else None
+        )
+        volume = self._number(
+            (theme.get("volume") or {}).get("averageRelativeVolume")
+            if isinstance(theme.get("volume"), Mapping)
+            else None
+        )
+        concentration = self._number(
+            (theme.get("leadership") or {}).get("leadershipConcentrationPercent")
+            if isinstance(theme.get("leadership"), Mapping)
+            else None
+        )
+        state = self._theme_flow_state(
+            stage=str(theme.get("stage") or ""),
+            risk_labels=self._string_list(theme.get("riskLabels")),
+            static_theme_only=bool(theme.get("staticThemeOnly")),
+            taxonomy_only=bool(theme.get("taxonomyOnly")),
+            relative_strength=relative_strength,
+            breadth=breadth,
+            percent_up=percent_up,
+            concentration=concentration,
+        )
+        confidence = self._theme_flow_confidence(
+            confidence=float(theme.get("confidence") or 0.0),
+            state=state,
+            is_partial=bool(theme.get("isPartial")),
+            is_stale=bool(theme.get("isStale")),
+            is_fallback=bool(theme.get("isFallback")),
+        )
+        contradiction_codes = self._theme_flow_contradiction_codes(
+            state=state,
+            breadth=breadth,
+            percent_up=percent_up,
+            relative_strength=relative_strength,
+        )
+        signal = build_consumer_safe_investor_signal(
+            {
+                "marketRegime": self._theme_flow_market_regime(relative_strength, breadth, state),
+                "capitalFlowRegime": self._theme_flow_capital_regime(volume, breadth, state),
+                "themeFlowState": state,
+                "confidenceLabel": self._theme_flow_confidence_label(confidence),
+                "freshness": self._signal_freshness(
+                    freshness=theme.get("freshness"),
+                    source_authority_allowed=bool(theme.get("sourceAuthorityAllowed")),
+                    is_fallback=bool(theme.get("isFallback")),
+                    is_stale=bool(theme.get("isStale")),
+                    is_partial=bool(theme.get("isPartial")),
+                ),
+                "source": theme.get("source") or "rotation_radar_theme",
+                "sourceType": theme.get("sourceTier") or theme.get("signalType") or "unknown",
+                "isFallback": bool(theme.get("isFallback")),
+                "isStale": bool(theme.get("isStale")),
+                "isPartial": bool(theme.get("isPartial")),
+                "sourceAuthorityAllowed": bool(theme.get("sourceAuthorityAllowed")),
+                "scoreContributionAllowed": bool(theme.get("sourceAuthorityAllowed")),
+                "reasonCodes": self._theme_flow_reason_codes(theme, state=state),
+                "contradictionCodes": contradiction_codes,
+            }
+        )
+        signal.update(
+            {
+                "confidence": round(confidence, 2),
+                "leadershipEvidence": self._theme_leadership_evidence(theme, concentration=concentration),
+                "breadthEvidence": self._theme_breadth_evidence(theme, breadth=breadth, percent_up=percent_up),
+                "relativeStrengthEvidence": self._theme_relative_strength_evidence(theme, relative_strength=relative_strength),
+                "explanation": self._theme_flow_explanation(theme, state=state),
+            }
+        )
+        return signal
+
+    def _rotation_family_rollup(self, themes: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+        theme_index = {
+            str(theme.get("id") or ""): theme
+            for theme in themes
+            if isinstance(theme, Mapping) and theme.get("id")
+        }
+        rows: List[Dict[str, Any]] = []
+        for definition in ROTATION_FAMILY_DEFINITIONS:
+            family_themes = [
+                theme_index[theme_id]
+                for theme_id in self._string_list(definition.get("themeIds"))
+                if theme_id in theme_index
+            ]
+            signal_themes = [
+                theme for theme in family_themes if not bool(theme.get("staticThemeOnly")) and not bool(theme.get("taxonomyOnly"))
+            ]
+            average_score = round(self._avg([float(theme.get("rotationScore") or 0.0) for theme in signal_themes]), 2) if signal_themes else 0.0
+            average_confidence = round(
+                self._avg([float(theme.get("confidence") or 0.0) for theme in signal_themes]),
+                2,
+            ) if signal_themes else 0.0
+            leader_theme_ids = [
+                str(theme.get("id") or "")
+                for theme in sorted(
+                    signal_themes,
+                    key=lambda item: (float(item.get("rotationScore") or 0.0), float(item.get("confidence") or 0.0)),
+                    reverse=True,
+                )[:3]
+                if str(theme.get("id") or "")
+            ]
+            rows.append(
+                {
+                    "familyId": str(definition.get("familyId") or ""),
+                    "familyName": str(definition.get("familyName") or ""),
+                    "themeIds": [str(theme.get("id") or "") for theme in family_themes if str(theme.get("id") or "")],
+                    "themeNames": [str(theme.get("name") or "") for theme in family_themes if str(theme.get("name") or "")],
+                    "leaderThemeIds": leader_theme_ids,
+                    "themeCount": len(family_themes),
+                    "signalThemeCount": len(signal_themes),
+                    "averageRotationScore": average_score,
+                    "averageConfidence": average_confidence,
+                    "themeFlowSignal": self._rotation_family_flow_signal(
+                        family_id=str(definition.get("familyId") or ""),
+                        family_name=str(definition.get("familyName") or ""),
+                        family_themes=family_themes,
+                        signal_themes=signal_themes,
+                        leader_theme_ids=leader_theme_ids,
+                    ),
+                }
+            )
+        return rows
+
+    def _rotation_family_flow_signal(
+        self,
+        *,
+        family_id: str,
+        family_name: str,
+        family_themes: Sequence[Mapping[str, Any]],
+        signal_themes: Sequence[Mapping[str, Any]],
+        leader_theme_ids: Sequence[str],
+    ) -> Dict[str, Any]:
+        relative_strengths = [
+            float((theme.get("relativeStrength") or {}).get("averageRelativeStrengthPercent") or 0.0)
+            for theme in signal_themes
+            if isinstance(theme.get("relativeStrength"), Mapping)
+            and self._number((theme.get("relativeStrength") or {}).get("averageRelativeStrengthPercent")) is not None
+        ]
+        breadth_values = [
+            float((theme.get("breadth") or {}).get("percentOutperformingBenchmark") or 0.0)
+            for theme in signal_themes
+            if isinstance(theme.get("breadth"), Mapping)
+            and self._number((theme.get("breadth") or {}).get("percentOutperformingBenchmark")) is not None
+        ]
+        percent_up_values = [
+            float((theme.get("breadth") or {}).get("percentUp") or 0.0)
+            for theme in signal_themes
+            if isinstance(theme.get("breadth"), Mapping)
+            and self._number((theme.get("breadth") or {}).get("percentUp")) is not None
+        ]
+        volume_values = [
+            float((theme.get("volume") or {}).get("averageRelativeVolume") or 0.0)
+            for theme in signal_themes
+            if isinstance(theme.get("volume"), Mapping)
+            and self._number((theme.get("volume") or {}).get("averageRelativeVolume")) is not None
+        ]
+        top_scores = sorted((float(theme.get("rotationScore") or 0.0) for theme in signal_themes), reverse=True)
+        average_relative_strength = self._avg(relative_strengths) if relative_strengths else None
+        average_breadth = self._avg(breadth_values) if breadth_values else None
+        average_percent_up = self._avg(percent_up_values) if percent_up_values else None
+        average_volume = self._avg(volume_values) if volume_values else None
+        state = self._family_flow_state(
+            signal_themes=signal_themes,
+            top_scores=top_scores,
+            average_relative_strength=average_relative_strength,
+            average_breadth=average_breadth,
+        )
+        confidence = self._family_flow_confidence(
+            signal_themes=signal_themes,
+            state=state,
+        )
+        contradiction_codes = self._family_flow_contradiction_codes(
+            signal_themes=signal_themes,
+            state=state,
+        )
+        source_authority_allowed = bool(signal_themes) and all(
+            bool(theme.get("sourceAuthorityAllowed")) and not bool(theme.get("isPartial")) and not bool(theme.get("isStale"))
+            and not bool(theme.get("isFallback"))
+            for theme in signal_themes
+        )
+        freshness = self._signal_freshness(
+            freshness="fresh" if source_authority_allowed else "partial" if any(bool(theme.get("isPartial")) for theme in signal_themes) else "fallback",
+            source_authority_allowed=source_authority_allowed,
+            is_fallback=not bool(signal_themes) or any(bool(theme.get("isFallback")) for theme in signal_themes),
+            is_stale=any(bool(theme.get("isStale")) for theme in signal_themes),
+            is_partial=any(bool(theme.get("isPartial")) for theme in signal_themes),
+        )
+        signal = build_consumer_safe_investor_signal(
+            {
+                "marketRegime": self._theme_flow_market_regime(average_relative_strength, average_breadth, state),
+                "capitalFlowRegime": self._theme_flow_capital_regime(average_volume, average_breadth, state),
+                "themeFlowState": state,
+                "confidenceLabel": self._theme_flow_confidence_label(confidence),
+                "freshness": freshness,
+                "source": f"alpaca_family_summary_{family_id}",
+                "sourceType": "official_public",
+                "isFallback": not bool(signal_themes) or any(bool(theme.get("isFallback")) for theme in signal_themes),
+                "isStale": any(bool(theme.get("isStale")) for theme in signal_themes),
+                "isPartial": any(bool(theme.get("isPartial")) for theme in signal_themes),
+                "sourceAuthorityAllowed": source_authority_allowed,
+                "scoreContributionAllowed": source_authority_allowed,
+                "reasonCodes": self._family_flow_reason_codes(
+                    signal_themes=signal_themes,
+                    state=state,
+                ),
+                "contradictionCodes": contradiction_codes,
+            }
+        )
+        signal.update(
+            {
+                "confidence": round(confidence, 2),
+                "leadershipEvidence": self._family_leadership_evidence(
+                    family_name=family_name,
+                    signal_themes=signal_themes,
+                    leader_theme_ids=leader_theme_ids,
+                ),
+                "breadthEvidence": self._family_breadth_evidence(
+                    signal_themes=signal_themes,
+                    average_breadth=average_breadth,
+                    average_percent_up=average_percent_up,
+                ),
+                "relativeStrengthEvidence": self._family_relative_strength_evidence(
+                    signal_themes=signal_themes,
+                    average_relative_strength=average_relative_strength,
+                ),
+                "explanation": self._family_flow_explanation(
+                    family_name=family_name,
+                    state=state,
+                    signal_themes=signal_themes,
+                    leader_theme_ids=leader_theme_ids,
+                ),
+            }
+        )
+        return signal
+
+    @staticmethod
+    def _theme_flow_state(
+        *,
+        stage: str,
+        risk_labels: Sequence[str],
+        static_theme_only: bool,
+        taxonomy_only: bool,
+        relative_strength: Optional[float],
+        breadth: Optional[float],
+        percent_up: Optional[float],
+        concentration: Optional[float],
+    ) -> str:
+        if static_theme_only or taxonomy_only or relative_strength is None or breadth is None:
+            return "insufficient_evidence"
+        if stage in {"weak_or_no_signal", "cooling_watch"} or relative_strength < -0.1 or breadth < 45:
+            return "fading"
+        if concentration is not None and concentration >= 65 and relative_strength >= 1.0:
+            return "crowded"
+        if relative_strength >= 1.0 and breadth >= 60 and stage in {"confirmed_rotation", "early_watch", "extended_watch"}:
+            return "leading"
+        if breadth >= 70 and (percent_up or 0.0) >= 70:
+            return "broadening"
+        if relative_strength >= 0.3 and breadth >= 50:
+            return "rotating"
+        if "thin_breadth" in set(risk_labels):
+            return "mixed"
+        return "mixed"
+
+    @staticmethod
+    def _theme_flow_confidence(
+        *,
+        confidence: float,
+        state: str,
+        is_partial: bool,
+        is_stale: bool,
+        is_fallback: bool,
+    ) -> float:
+        capped = float(confidence)
+        if state == "mixed":
+            capped = min(capped, 0.45)
+        if state == "insufficient_evidence":
+            capped = min(capped, 0.25)
+        if is_partial:
+            capped = min(capped, 0.45)
+        if is_stale:
+            capped = min(capped, 0.4)
+        if is_fallback:
+            capped = min(capped, 0.25)
+        return round(max(0.0, min(1.0, capped)), 2)
+
+    @staticmethod
+    def _theme_flow_confidence_label(confidence: float) -> str:
+        if confidence >= 0.75:
+            return "high"
+        if confidence >= 0.5:
+            return "medium"
+        if confidence > 0:
+            return "low"
+        return "blocked"
+
+    @staticmethod
+    def _theme_flow_market_regime(
+        relative_strength: Optional[float],
+        breadth: Optional[float],
+        state: str,
+    ) -> str:
+        if state == "insufficient_evidence":
+            return "insufficient_evidence"
+        if state == "mixed":
+            return "mixed"
+        if relative_strength is not None and breadth is not None and relative_strength >= 0.8 and breadth >= 60:
+            return "risk_on"
+        if relative_strength is not None and breadth is not None and (relative_strength < 0 or breadth < 45):
+            return "risk_off"
+        return "balanced"
+
+    @staticmethod
+    def _theme_flow_capital_regime(
+        volume: Optional[float],
+        breadth: Optional[float],
+        state: str,
+    ) -> str:
+        if state == "insufficient_evidence":
+            return "insufficient_evidence"
+        if state == "mixed":
+            return "mixed"
+        if volume is not None and breadth is not None and volume >= 1.15 and breadth >= 60:
+            return "inflow"
+        if volume is not None and volume < 0.95:
+            return "outflow"
+        return "balanced"
+
+    def _theme_flow_reason_codes(self, theme: Mapping[str, Any], *, state: str) -> List[str]:
+        codes: List[str] = []
+        if bool(theme.get("isFallback")):
+            codes.append("fallback_source")
+        if bool(theme.get("isStale")):
+            codes.append("stale_source")
+        if bool(theme.get("isPartial")):
+            codes.append("partial_source")
+        if not bool(theme.get("sourceAuthorityAllowed")):
+            codes.append("source_authority_missing")
+        if state == "mixed":
+            codes.append("conflicting_signal_inputs")
+        return list(dict.fromkeys(codes))
+
+    @staticmethod
+    def _theme_flow_contradiction_codes(
+        *,
+        state: str,
+        breadth: Optional[float],
+        percent_up: Optional[float],
+        relative_strength: Optional[float],
+    ) -> List[str]:
+        if state != "mixed":
+            return []
+        if relative_strength is not None and relative_strength > 0 and (
+            (breadth is not None and breadth < 55) or (percent_up is not None and percent_up < 55)
+        ):
+            return ["theme_flow_state_signal_mismatch", "mixed_signal_inputs"]
+        return ["mixed_signal_inputs"]
+
+    def _family_flow_state(
+        self,
+        *,
+        signal_themes: Sequence[Mapping[str, Any]],
+        top_scores: Sequence[float],
+        average_relative_strength: Optional[float],
+        average_breadth: Optional[float],
+    ) -> str:
+        if not signal_themes:
+            return "insufficient_evidence"
+        theme_states = [str((theme.get("themeFlowSignal") or {}).get("themeFlowState") or "") for theme in signal_themes]
+        if any(state == "fading" for state in theme_states) and any(
+            state in {"leading", "broadening", "rotating", "crowded"} for state in theme_states
+        ):
+            return "mixed"
+        if "mixed" in theme_states and "fading" in theme_states:
+            return "mixed"
+        if any(state == "mixed" for state in theme_states) and any(
+            state in {"broadening", "leading", "rotating"} for state in theme_states
+        ) and (average_breadth or 0.0) >= 58 and len(signal_themes) >= 2:
+            return "broadening"
+        if average_relative_strength is not None and average_relative_strength < -0.1:
+            return "fading"
+        if average_breadth is not None and average_breadth < 45:
+            return "fading"
+        if (
+            len(signal_themes) >= 2
+            and len(top_scores) >= 2
+            and top_scores[1] >= 70
+            and (average_breadth or 0.0) >= 58
+        ):
+            if top_scores[0] >= 80 and (average_relative_strength or 0.0) >= 0.6:
+                return "leading"
+            return "broadening"
+        if top_scores and top_scores[0] >= 68 and (average_relative_strength or 0.0) >= 0.5:
+            return "leading"
+        if (average_relative_strength or 0.0) >= 0.3 and (average_breadth or 0.0) >= 50:
+            return "rotating"
+        return "mixed"
+
+    def _family_flow_confidence(self, *, signal_themes: Sequence[Mapping[str, Any]], state: str) -> float:
+        if not signal_themes:
+            return 0.0
+        average = self._avg([float(theme.get("confidence") or 0.0) for theme in signal_themes])
+        if state == "broadening":
+            average = min(average, 0.68)
+        if state == "mixed":
+            average = min(average, 0.45)
+        if state == "insufficient_evidence":
+            average = min(average, 0.25)
+        if any(bool(theme.get("isPartial")) for theme in signal_themes):
+            average = min(average, 0.45)
+        return round(max(0.0, min(1.0, average)), 2)
+
+    @staticmethod
+    def _family_flow_contradiction_codes(
+        *,
+        signal_themes: Sequence[Mapping[str, Any]],
+        state: str,
+    ) -> List[str]:
+        if state != "mixed" or not signal_themes:
+            return []
+        return ["theme_flow_state_signal_mismatch", "mixed_signal_inputs"]
+
+    def _family_flow_reason_codes(
+        self,
+        *,
+        signal_themes: Sequence[Mapping[str, Any]],
+        state: str,
+    ) -> List[str]:
+        codes: List[str] = []
+        if not signal_themes:
+            codes.extend(["fallback_source", "source_authority_missing"])
+        if any(bool(theme.get("isFallback")) for theme in signal_themes):
+            codes.append("fallback_source")
+        if any(bool(theme.get("isStale")) for theme in signal_themes):
+            codes.append("stale_source")
+        if any(bool(theme.get("isPartial")) for theme in signal_themes):
+            codes.append("partial_source")
+        if not signal_themes or not all(bool(theme.get("sourceAuthorityAllowed")) for theme in signal_themes):
+            codes.append("source_authority_missing")
+        if state == "mixed":
+            codes.append("conflicting_signal_inputs")
+        return list(dict.fromkeys(codes))
+
+    @staticmethod
+    def _signal_freshness(
+        *,
+        freshness: Any,
+        source_authority_allowed: bool,
+        is_fallback: bool,
+        is_stale: bool,
+        is_partial: bool,
+    ) -> str:
+        if is_fallback:
+            return "fallback"
+        if is_stale:
+            return "stale"
+        if is_partial:
+            return "partial"
+        if source_authority_allowed:
+            return "fresh"
+        normalized = str(freshness or "").strip().lower()
+        return normalized or "fallback"
+
+    def _theme_leadership_evidence(self, theme: Mapping[str, Any], *, concentration: Optional[float]) -> str:
+        leaders = [
+            str(item.get("symbol") or "")
+            for item in (theme.get("leadership") or {}).get("topMembers", [])
+            if isinstance(item, Mapping) and str(item.get("symbol") or "")
+        ]
+        concentration_text = "未知"
+        if concentration is not None:
+            concentration_text = f"{concentration:.1f}%"
+        leader_text = "、".join(leaders[:3]) if leaders else "龙头待确认"
+        return f"龙头成员 {leader_text}，集中度 {concentration_text}。"
+
+    @staticmethod
+    def _theme_breadth_evidence(
+        theme: Mapping[str, Any],
+        *,
+        breadth: Optional[float],
+        percent_up: Optional[float],
+    ) -> str:
+        observed = (theme.get("breadth") or {}).get("observedMembers") if isinstance(theme.get("breadth"), Mapping) else None
+        configured = (theme.get("breadth") or {}).get("configuredMembers") if isinstance(theme.get("breadth"), Mapping) else None
+        return (
+            f"上涨广度 {percent_up:.1f}% / 跑赢广度 {breadth:.1f}% ，"
+            f"{int(observed or 0)}/{int(configured or 0)} 成员有可用观察。"
+            if breadth is not None and percent_up is not None
+            else "广度证据不足。"
+        )
+
+    @staticmethod
+    def _theme_relative_strength_evidence(theme: Mapping[str, Any], *, relative_strength: Optional[float]) -> str:
+        benchmark = (theme.get("relativeStrength") or {}).get("benchmark") if isinstance(theme.get("relativeStrength"), Mapping) else None
+        if relative_strength is None:
+            return "相对强弱证据不足。"
+        return f"相对 {benchmark or '基准'} 强弱 {relative_strength:+.2f}% 。"
+
+    @staticmethod
+    def _theme_flow_explanation(theme: Mapping[str, Any], *, state: str) -> str:
+        name = str(theme.get("name") or "")
+        stage = str(theme.get("stage") or "")
+        if state == "leading":
+            return f"{name} 处于 {stage}，当前由相对强弱与量能扩张支持，属于领涨观察。"
+        if state == "broadening":
+            return f"{name} 的强势从龙头扩散到更多成员，属于扩散跟涨观察。"
+        if state == "rotating":
+            return f"{name} 仍在轮动切换阶段，已有正向迹象但尚未形成单边主线。"
+        if state == "crowded":
+            return f"{name} 强势集中在少数龙头，拥挤度抬升。"
+        if state == "fading":
+            return f"{name} 的相对强势或广度降温，属于热度回落观察。"
+        if state == "mixed":
+            return f"{name} 的相对强弱与扩散信号分化，属于 mixed / no clear edge 观察。"
+        return f"{name} 证据不足，仅保留观察。"
+
+    @staticmethod
+    def _family_leadership_evidence(
+        *,
+        family_name: str,
+        signal_themes: Sequence[Mapping[str, Any]],
+        leader_theme_ids: Sequence[str],
+    ) -> str:
+        if not signal_themes:
+            return f"{family_name} 家族暂无可用主题证据。"
+        leader_names = [
+            str(theme.get("name") or "")
+            for theme in signal_themes
+            if str(theme.get("id") or "") in set(leader_theme_ids)
+        ]
+        return f"领涨主题 {'、'.join(leader_names) if leader_names else '待确认'}。"
+
+    @staticmethod
+    def _family_breadth_evidence(
+        *,
+        signal_themes: Sequence[Mapping[str, Any]],
+        average_breadth: Optional[float],
+        average_percent_up: Optional[float],
+    ) -> str:
+        if not signal_themes or average_breadth is None or average_percent_up is None:
+            return "家族广度证据不足。"
+        return (
+            f"{len(signal_themes)} 个主题纳入观察，平均上涨广度 {average_percent_up:.1f}% ，"
+            f"平均跑赢广度 {average_breadth:.1f}% 。"
+        )
+
+    @staticmethod
+    def _family_relative_strength_evidence(
+        *,
+        signal_themes: Sequence[Mapping[str, Any]],
+        average_relative_strength: Optional[float],
+    ) -> str:
+        if not signal_themes or average_relative_strength is None:
+            return "家族相对强弱证据不足。"
+        strongest = max(
+            signal_themes,
+            key=lambda theme: float((theme.get("rotationScore") or 0.0)),
+        )
+        return (
+            f"平均相对强弱 {average_relative_strength:+.2f}% ，"
+            f"当前最强主题为 {strongest.get('name') or strongest.get('id')}"
+        )
+
+    @staticmethod
+    def _family_flow_explanation(
+        *,
+        family_name: str,
+        state: str,
+        signal_themes: Sequence[Mapping[str, Any]],
+        leader_theme_ids: Sequence[str],
+    ) -> str:
+        if state == "leading":
+            return f"{family_name} family 由 {'、'.join(leader_theme_ids) if leader_theme_ids else '主线主题'} 领涨，当前处于领涨观察。"
+        if state == "broadening":
+            return f"{family_name} 家族内有多条主题同步修复，属于扩散跟涨观察。"
+        if state == "rotating":
+            return f"{family_name} 家族内资金仍在轮动切换，强弱优势尚在形成。"
+        if state == "crowded":
+            return f"{family_name} 家族强势过于集中，拥挤度上升。"
+        if state == "fading":
+            return f"{family_name} 家族相对强势回落，属于热度降温观察。"
+        if state == "mixed":
+            return f"{family_name} family mixed / no clear edge：成员主题强弱分化，暂不形成统一主线。"
+        return f"{family_name} 家族证据不足，仅保留观察。"
 
     def _consumer_reason_codes(self, raw_codes: Any) -> List[str]:
         codes: List[str] = []

@@ -179,6 +179,7 @@ class RotationRadarThemeModel(BaseModel):
     evidence: List[str] = Field(default_factory=list)
     members: List[RotationRadarMemberModel] = Field(default_factory=list)
     rotationStateEvidence: Dict[str, Any] = Field(default_factory=dict)
+    themeFlowSignal: Dict[str, Any] = Field(default_factory=dict)
     noAdviceDisclosure: str
 
 
@@ -216,6 +217,7 @@ class RotationRadarSummaryModel(BaseModel):
     fadingThemes: List[RotationRadarSummaryItemModel] = Field(default_factory=list)
     observationThemes: List[RotationRadarSummaryItemModel] = Field(default_factory=list)
     taxonomyThemes: List[RotationRadarSummaryItemModel] = Field(default_factory=list)
+    rotationFamilyRollup: List[Dict[str, Any]] = Field(default_factory=list)
     eligibleThemeCount: int = 0
     headlineEligibleThemeCount: int = 0
     observationThemeCount: int = 0
@@ -316,6 +318,7 @@ class RotationRadarConsumerEvidenceSnapshotModel(BaseModel):
     etfProxySummary: RotationRadarConsumerEtfProxySummaryModel = Field(
         default_factory=RotationRadarConsumerEtfProxySummaryModel
     )
+    rotationFamilyRollup: List[Dict[str, Any]] = Field(default_factory=list)
     themes: List[RotationRadarConsumerThemeQualityModel] = Field(default_factory=list)
 
 

@@ -84,5 +84,17 @@ fund-flow interpretation, or rotation evidence disclosure.
   and raw provider payloads/errors. It must not recompute source authority,
   score authority, ranking, headline eligibility, provider routing, or cache
   behavior.
+- Rotation Radar now also exposes additive `themeFlowSignal` on each US theme
+  row plus `summary.rotationFamilyRollup` /
+  `consumerEvidenceSnapshot.rotationFamilyRollup` for investor-readable AI,
+  SaaS/software, semiconductors, energy, and defensive family rollups. These
+  signals are built only from existing theme outputs and the shared
+  `investor_signal_model` contract: `themeFlowState`, capped confidence,
+  leadership/breadth/relative-strength evidence, sanitized reason codes, and
+  explanatory text are observation-only disclosures. They must not change or be
+  used to infer `rankEligible`, `headlineEligible`, `rankingLane`,
+  `sourceAuthorityAllowed`, `scoreContributionAllowed`, provider routing, cache
+  authority, or category promotion semantics. Fallback/static/taxonomy-only and
+  partial evidence remains non-headline and non-score-grade.
 - Rotation UI changes must not alter score, ranking, provider, or evidence
   semantics unless explicitly scoped.

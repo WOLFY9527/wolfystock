@@ -236,6 +236,39 @@ def _install_counting_default_provider(
     return provider_calls
 
 
+def _rotation_theme(theme_id: str):
+    return next(theme for theme in radar_service_module.THEME_BASKETS if theme.id == theme_id)
+
+
+def _official_rotation_quote(
+    symbol: str,
+    change: float,
+    *,
+    volume_ratio: float = 1.25,
+    as_of: str = "2026-05-07T09:45:00+00:00",
+) -> dict:
+    quote = _shared_cache_quote(symbol, abs(hash(symbol)) % 97, freshness="live")
+    quote["changePercent"] = change
+    quote["volumeRatio"] = volume_ratio
+    quote["volume"] = 1_000_000 * volume_ratio
+    quote["source"] = "alpaca"
+    quote["sourceLabel"] = "Alpaca SIP"
+    quote["sourceType"] = "official_public"
+    quote["sourceTier"] = "broker_authorized"
+    quote["providerTier"] = "tier_1_configured"
+    quote["timeWindows"] = _etf_authority_time_windows(
+        {
+            "5m": round(change * 0.25, 3),
+            "15m": round(change * 0.45, 3),
+            "60m": round(change * 0.7, 3),
+            "1d": change,
+        },
+        as_of=as_of,
+        freshness="live",
+    )
+    return quote
+
+
 def test_market_rotation_radar_route_is_exposed(monkeypatch: pytest.MonkeyPatch) -> None:
     app = FastAPI()
     app.include_router(market.router, prefix="/api/v1/market")
@@ -392,6 +425,57 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
             "下单",
         ):
             assert marker not in text
+    finally:
+        client.close()
+
+
+def test_market_rotation_radar_response_exposes_family_flow_signal_rollup(monkeypatch: pytest.MonkeyPatch) -> None:
+    _, quotes, spine = _bounded_etf_authority_fixture()
+    for theme_id, changes, volume_ratio, proxy_changes in (
+        ("ai_applications", [4.2, 3.8, 3.5, 3.2, 3.0, 2.8, 2.4, 2.1], 1.75, {"IGV": 2.0}),
+        ("ai_infrastructure", [3.7, 3.4, 3.1, 2.8, 2.5, 2.2, 2.0, 1.8], 1.55, {"SMH": 2.3, "SOXX": 2.0}),
+        ("cloud_software", [2.0, 1.9, 1.8, 1.6, 1.5, 1.4, 1.3, 1.2], 1.4, {"IGV": 1.6, "CLOU": 1.4}),
+        ("cybersecurity", [2.8, 2.6, 2.4, 2.2, 2.0, 1.8, 1.7, 1.5], 1.45, {"CIBR": 1.7, "HACK": 1.5}),
+    ):
+        theme = _rotation_theme(theme_id)
+        for index, symbol in enumerate(theme.members):
+            change = changes[min(index, len(changes) - 1)]
+            quotes[symbol] = _official_rotation_quote(symbol, change, volume_ratio=volume_ratio)
+        for symbol, change in proxy_changes.items():
+            quotes[symbol] = _official_rotation_quote(symbol, change, volume_ratio=max(1.05, volume_ratio - 0.1))
+
+    def provider(symbols):
+        return {
+            "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+            "metadata": {
+                "source": "alpaca",
+                "sourceLabel": "Alpaca SIP",
+                "sourceType": "official_public",
+                "sourceTier": "broker_authorized",
+                "providerTier": "tier_1_configured",
+                "freshness": "live",
+                "asOf": "2026-05-07T09:45:00+00:00",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "providerDiagnostics": {"etfAuthoritySpine": spine},
+            },
+        }
+
+    client = _client(monkeypatch, provider_factory=lambda: provider)
+    try:
+        response = client.get("/api/v1/market/rotation-radar")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert "rotationFamilyRollup" in payload["summary"]
+        assert "rotationFamilyRollup" in payload["consumerEvidenceSnapshot"]
+        assert "themeFlowSignal" in payload["themes"][0]
+        ai_family = next(row for row in payload["summary"]["rotationFamilyRollup"] if row["familyId"] == "ai")
+        assert ai_family["themeFlowSignal"]["themeFlowState"] == "leading"
+        assert ai_family["themeFlowSignal"]["observationOnly"] is True
+        assert ai_family["themeFlowSignal"]["decisionGrade"] is False
+        assert ai_family["themeFlowSignal"]["scoreContributionAllowed"] is False
+        assert "adminDiagnostics" not in json.dumps(payload["consumerEvidenceSnapshot"], ensure_ascii=False)
     finally:
         client.close()
 

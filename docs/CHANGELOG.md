@@ -1,3 +1,17 @@
+## 2026-06-01
+- Rotation Radar now exposes additive investor-readable flow signals built only
+  from existing theme outputs: each theme includes a `themeFlowSignal`, while
+  `summary.rotationFamilyRollup` and
+  `consumerEvidenceSnapshot.rotationFamilyRollup` add AI,
+  SaaS/software, semiconductors, energy, and defensive family summaries with
+  `themeFlowState`, leadership/breadth/relative-strength evidence, capped
+  confidence, reason codes, and explanations. This is observation-only and
+  compatibility-safe: existing `rankEligible`, `headlineEligible`,
+  `rankingLane`, `sourceAuthorityAllowed`, `scoreContributionAllowed`,
+  scoring/ranking/headline semantics, provider routing/budgets/order,
+  MarketCache behavior, and fallback/static/taxonomy-only/partial fail-closed
+  boundaries remain unchanged.
+
 ## 2026-05-31
 - Polygon Market Overview high/low activation smoke now has operator-only
   per-request timeout, total timeout budget, and optional diagnostic session
