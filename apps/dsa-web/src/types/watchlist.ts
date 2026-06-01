@@ -12,6 +12,26 @@ export interface WatchlistScannerIntelligence {
   investorSignal?: InvestorSignalContract | null;
 }
 
+export interface WatchlistCatalystExposure {
+  id: string;
+  symbol: string;
+  market: string;
+  category: string;
+  title: string;
+  summary: string;
+  evidenceStatus: string;
+  evidenceLabels?: string[] | null;
+  asOf?: string | null;
+  publishedAt?: string | null;
+  timeframe?: string | null;
+  reasonCodes?: string[] | null;
+  observationOnly?: boolean | null;
+  sourceAuthorityAllowed?: boolean | null;
+  scoreContributionAllowed?: boolean | null;
+  decisionGrade?: boolean | null;
+  calendarClaimAllowed?: boolean | null;
+}
+
 export interface WatchlistStrategySimulationIntelligence {
   lookbackDays?: number | null;
   forwardDays?: number | null;
@@ -36,6 +56,7 @@ export interface WatchlistIntelligence {
   scanner?: WatchlistScannerIntelligence | null;
   strategySimulation?: WatchlistStrategySimulationIntelligence | null;
   backtest?: WatchlistBacktestIntelligence | null;
+  catalystExposures?: WatchlistCatalystExposure[] | null;
 }
 
 export interface WatchlistItem {

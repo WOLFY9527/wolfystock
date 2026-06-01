@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, desc, select
 
+from src.services.catalyst_event_exposure import build_catalyst_event_exposures
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
 from src.services.reason_code_vocabulary import classify_reason_code
 from src.services.scanner_evidence_packet import build_scanner_investor_signal
@@ -161,6 +162,144 @@ class WatchlistService:
         normalized = str(value).strip()
         return normalized or None
 
+    @staticmethod
+    def _optional_object(payload: Dict[str, Any], *keys: str) -> Any:
+        for key in keys:
+            if key not in payload:
+                continue
+            value = payload.get(key)
+            if value is None:
+                continue
+            if isinstance(value, str) and not value.strip():
+                continue
+            if isinstance(value, (list, tuple, dict)) and not value:
+                continue
+            return value
+        return None
+
+    @classmethod
+    def _payload_has_any_value(cls, payload: Any, *keys: str) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        return any(cls._optional_object(payload, key) is not None for key in keys)
+
+    @classmethod
+    def _payload_has_any_text(cls, payload: Any, *keys: str) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        return any(cls._optional_str(payload.get(key)) is not None for key in keys)
+
+    @classmethod
+    def _eligible_catalyst_fundamental_snapshot(cls, diagnostics: Dict[str, Any]) -> Any:
+        payload = cls._optional_object(
+            diagnostics,
+            "fundamentalSnapshot",
+            "fundamental_snapshot",
+            "earningsSnapshot",
+            "earnings_snapshot",
+            "earningsOutlook",
+            "earnings_outlook",
+        )
+        if not isinstance(payload, dict):
+            return None
+        if cls._payload_has_any_value(
+            payload,
+            "reportedPeriod",
+            "reported_period",
+            "fiscalPeriod",
+            "fiscal_period",
+            "period",
+            "quarter",
+            "asOf",
+            "as_of",
+            "updatedAt",
+            "updated_at",
+            "freshness",
+            "freshnessStatus",
+            "freshness_status",
+            "status",
+            "stale",
+            "isStale",
+            "expired",
+            "isExpired",
+        ):
+            return payload
+        if cls._payload_has_any_text(payload, "summary", "earningsSummary", "fundamentalSummary", "outlook"):
+            return payload
+        return None
+
+    @classmethod
+    def _eligible_catalyst_news_items(cls, diagnostics: Dict[str, Any]) -> Any:
+        payload = cls._optional_object(
+            diagnostics,
+            "storedNewsItems",
+            "stored_news_items",
+            "storedNews",
+            "stored_news",
+            "newsItems",
+            "news_items",
+        )
+        if payload is None:
+            return None
+        if isinstance(payload, dict):
+            items = cls._optional_object(payload, "items", "news", "articles", "headlines")
+            if isinstance(items, (list, tuple)):
+                for item in items:
+                    if cls._payload_has_any_text(item, "headline", "title", "name", "summary", "description", "snippet", "abstract"):
+                        return payload
+                return None
+            return payload if cls._payload_has_any_text(payload, "headline", "title", "name", "summary", "description", "snippet", "abstract") else None
+        if isinstance(payload, (list, tuple)):
+            for item in payload:
+                if cls._payload_has_any_text(item, "headline", "title", "name", "summary", "description", "snippet", "abstract"):
+                    return payload
+        return None
+
+    @classmethod
+    def _eligible_catalyst_macro_status(cls, diagnostics: Dict[str, Any]) -> Any:
+        payload = cls._optional_object(
+            diagnostics,
+            "officialMacroStatus",
+            "official_macro_status",
+            "macroStatus",
+            "macro_status",
+        )
+        if not isinstance(payload, dict):
+            return None
+        if cls._payload_has_any_value(
+            payload,
+            "status",
+            "freshness",
+            "freshnessStatus",
+            "freshness_status",
+            "asOf",
+            "as_of",
+            "updatedAt",
+            "updated_at",
+            "series",
+            "items",
+            "observations",
+            "stale",
+            "isStale",
+            "expired",
+            "isExpired",
+        ):
+            return payload
+        return None
+
+    @classmethod
+    def _project_catalyst_exposures(cls, item: Dict[str, Any], diagnostics: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+        exposures = build_catalyst_event_exposures(
+            symbol=str(item.get("symbol") or ""),
+            market=str(item.get("market") or ""),
+            as_of=item.get("last_scored_at") or item.get("updated_at") or item.get("created_at"),
+            fundamental_snapshot=cls._eligible_catalyst_fundamental_snapshot(diagnostics),
+            stored_news_items=cls._eligible_catalyst_news_items(diagnostics),
+            official_macro_status=cls._eligible_catalyst_macro_status(diagnostics),
+        )
+        projected = [exposure.to_dict() for exposure in exposures]
+        return projected or None
+
     @classmethod
     def _project_reason_family(cls, raw_code: Any) -> Optional[Dict[str, Any]]:
         normalized = cls._optional_str(raw_code)
@@ -242,10 +381,15 @@ class WatchlistService:
         projected["reason_families"] = cls._project_scanner_reason_families(projected)
         return projected if any(value is not None for value in projected.values()) else None
 
-    def _scanner_intelligence_context_by_item(self, items: List[Dict[str, Any]]) -> Dict[tuple[int, str], Dict[str, Dict[str, Any]]]:
+    def _scanner_intelligence_context_by_item(self, items: List[Dict[str, Any]]) -> Dict[tuple[int, str], Dict[str, Any]]:
         keys = {key for item in items if (key := self._scanner_candidate_key(item)) is not None}
         if not keys:
             return {}
+        item_by_key = {
+            key: item
+            for item in items
+            if (key := self._scanner_candidate_key(item)) is not None
+        }
         run_ids = sorted({run_id for run_id, _symbol in keys})
         symbols = sorted({symbol for _run_id, symbol in keys})
         with self.db.get_session() as session:
@@ -259,22 +403,25 @@ class WatchlistService:
                 )
             ).scalars().all()
 
-        context_by_key: Dict[tuple[int, str], Dict[str, Dict[str, Any]]] = {}
+        context_by_key: Dict[tuple[int, str], Dict[str, Any]] = {}
         for candidate in candidates:
             key = (int(candidate.run_id), str(candidate.symbol or "").upper())
             if key not in keys or key in context_by_key:
                 continue
             diagnostics = self._load_json_object(getattr(candidate, "diagnostics_json", None))
-            context: Dict[str, Dict[str, Any]] = {}
+            context: Dict[str, Any] = {}
             provenance = self._project_local_ohlcv_provenance(diagnostics)
             disclosure = self._project_scanner_score_disclosure(diagnostics)
             investor_signal = build_scanner_investor_signal(diagnostics)
+            catalyst_exposures = self._project_catalyst_exposures(item_by_key.get(key, {}), diagnostics)
             if provenance is not None:
                 context["ohlcv_provenance"] = provenance
             if disclosure is not None:
                 context["score_disclosure"] = disclosure
             if investor_signal is not None:
                 context["investor_signal"] = investor_signal
+            if catalyst_exposures is not None:
+                context["catalyst_exposures"] = catalyst_exposures
             if context:
                 context_by_key[key] = context
         return context_by_key
@@ -287,6 +434,7 @@ class WatchlistService:
         scanner_ohlcv_provenance: Optional[Dict[str, str]] = None,
         scanner_score_disclosure: Optional[Dict[str, Any]] = None,
         scanner_investor_signal: Optional[Dict[str, Any]] = None,
+        catalyst_exposures: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         scanner_score = WatchlistService._safe_float(item.get("scanner_score"))
         scanner_status = "selected" if scanner_score is not None or item.get("scanner_run_id") else "unknown"
@@ -351,11 +499,14 @@ class WatchlistService:
         if scanner_investor_signal is not None:
             scanner_payload["investor_signal"] = scanner_investor_signal
 
-        return {
+        intelligence = {
             "scanner": scanner_payload,
             "strategy_simulation": strategy_simulation,
             "backtest": backtest_payload,
         }
+        if catalyst_exposures:
+            intelligence["catalyst_exposures"] = catalyst_exposures
+        return intelligence
 
     def _latest_backtests_by_symbol(
         self,
@@ -410,6 +561,7 @@ class WatchlistService:
                 scanner_ohlcv_provenance=intelligence_context.get("ohlcv_provenance"),
                 scanner_score_disclosure=intelligence_context.get("score_disclosure"),
                 scanner_investor_signal=intelligence_context.get("investor_signal"),
+                catalyst_exposures=intelligence_context.get("catalyst_exposures"),
             )
         return items
 

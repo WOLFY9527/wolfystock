@@ -165,6 +165,7 @@ class WatchlistIntelligenceResponse(BaseModel):
     scanner: WatchlistScannerIntelligenceResponse = Field(default_factory=WatchlistScannerIntelligenceResponse)
     strategy_simulation: WatchlistStrategySimulationIntelligenceResponse = Field(default_factory=WatchlistStrategySimulationIntelligenceResponse)
     backtest: WatchlistBacktestIntelligenceResponse = Field(default_factory=WatchlistBacktestIntelligenceResponse)
+    catalyst_exposures: Optional[List[Dict[str, Any]]] = None
 
 
 class WatchlistItemListResponse(BaseModel):

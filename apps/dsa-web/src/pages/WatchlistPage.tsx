@@ -38,7 +38,7 @@ import LeveragedEtfMapper from '../components/watchlist/LeveragedEtfMapper';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import type { InvestorSignalContract } from '../types/scanner';
-import type { WatchlistItem } from '../types/watchlist';
+import type { WatchlistCatalystExposure, WatchlistItem } from '../types/watchlist';
 import type { RuleBacktestRunResponse } from '../types/backtest';
 import { describeBooleanEnabled, describeDisplayStatus, type DisplayStatusTone } from '../utils/displayStatus';
 import { buildLocalizedPath } from '../utils/localeRouting';
@@ -59,6 +59,18 @@ type WatchlistInvestorSignalView = {
   explanation: string | null;
   reasonCodes: string[];
   contradictionCodes: string[];
+};
+type WatchlistCatalystExposureViewItem = {
+  id: string;
+  title: string;
+  summary: string;
+  statusLabels: string[];
+  reasonLabels: string[];
+  metadata: string[];
+};
+type WatchlistCatalystExposureView = {
+  items: WatchlistCatalystExposureViewItem[];
+  hiddenCount: number;
 };
 type WatchlistConclusionModel = {
   title: string;
@@ -398,6 +410,30 @@ const INVESTOR_SIGNAL_FRESHNESS_LABELS: Record<string, { zh: string; en: string 
   error: { zh: '暂不可用', en: 'Unavailable' },
 };
 
+const CATALYST_EXPOSURE_CATEGORY_LABELS: Record<string, { zh: string; en: string }> = {
+  earnings_fundamental_snapshot: { zh: '基本面快照', en: 'Fundamental snapshot exposure' },
+  stored_news_catalyst_proxy: { zh: '已保存新闻线索', en: 'Stored news catalyst proxy' },
+  official_macro_cache_status: { zh: '宏观缓存背景', en: 'Official macro cache/status exposure' },
+};
+
+const CATALYST_EXPOSURE_STATUS_LABELS: Record<string, { zh: string; en: string }> = {
+  delayed: { zh: '延迟快照', en: 'Delayed evidence' },
+  proxy: { zh: '代理线索', en: 'Proxy evidence' },
+  stale: { zh: '陈旧证据', en: 'Stale evidence' },
+  unverified: { zh: '待核实', en: 'Unverified' },
+};
+
+const CATALYST_EXPOSURE_REASON_LABELS: Record<string, { zh: string; en: string }> = {
+  observation_only: { zh: '仅观察', en: 'Observation only' },
+  delayed_evidence: { zh: '延迟快照', en: 'Delayed evidence' },
+  stale_evidence: { zh: '陈旧证据', en: 'Stale evidence' },
+  proxy_evidence_not_authoritative: { zh: '已保存新闻，仅作线索', en: 'Stored news is context only' },
+  not_earnings_calendar: { zh: '非财报日历主张', en: 'Not an earnings-calendar claim' },
+  fundamental_snapshot_present: { zh: '已保存基本面快照', en: 'Saved fundamental snapshot' },
+  official_macro_cache_status_present: { zh: '已保存宏观缓存背景', en: 'Saved macro cache context' },
+  stored_news_catalyst_proxy: { zh: '已保存新闻线索', en: 'Stored news catalyst proxy' },
+};
+
 function formatInvestorSignalCode(code: string, language: 'zh' | 'en'): string {
   const normalized = normalizeToken(code);
   if (!normalized) return '';
@@ -478,6 +514,64 @@ function buildWatchlistInvestorSignalView(
     explanation: explanation || null,
     reasonCodes,
     contradictionCodes,
+  };
+}
+
+function formatCatalystExposureLabel(value: string, language: 'zh' | 'en'): string {
+  const normalized = normalizeToken(value);
+  if (!normalized) return '';
+  const statusLabels = CATALYST_EXPOSURE_STATUS_LABELS[normalized];
+  if (statusLabels) return statusLabels[language];
+  const reasonLabels = CATALYST_EXPOSURE_REASON_LABELS[normalized];
+  if (reasonLabels) return reasonLabels[language];
+  return language === 'zh' ? titleCaseFromSnake(normalized) : titleCaseFromSnake(normalized);
+}
+
+function formatCatalystExposureTitle(item: WatchlistCatalystExposure, language: 'zh' | 'en'): string {
+  const title = normalizeText(item.title);
+  if (title) return title;
+  const categoryLabels = CATALYST_EXPOSURE_CATEGORY_LABELS[normalizeToken(item.category)];
+  if (categoryLabels) return categoryLabels[language];
+  return language === 'zh' ? '催化剂观察' : 'Catalyst exposure';
+}
+
+function buildCatalystExposureMetadata(
+  item: WatchlistCatalystExposure,
+  language: 'zh' | 'en',
+): string[] {
+  return [
+    item.timeframe ? `${language === 'zh' ? '时间范围' : 'Timeframe'} ${item.timeframe}` : null,
+    item.asOf ? `${language === 'zh' ? '观察时间' : 'As of'} ${formatDateTime(item.asOf, language)}` : null,
+    item.publishedAt ? `${language === 'zh' ? '发布时间' : 'Published'} ${formatDateTime(item.publishedAt, language)}` : null,
+  ].filter(Boolean) as string[];
+}
+
+function buildWatchlistCatalystExposureView(
+  exposures?: WatchlistCatalystExposure[] | null,
+  language: 'zh' | 'en' = 'zh',
+): WatchlistCatalystExposureView | null {
+  const projected = (exposures || [])
+    .filter((item) => normalizeText(item.title) || normalizeText(item.summary) || normalizeText(item.category))
+    .slice(0, 3)
+    .map((item) => ({
+      id: item.id,
+      title: formatCatalystExposureTitle(item, language),
+      summary: normalizeText(item.summary),
+      statusLabels: Array.from(new Set([
+        formatCatalystExposureLabel(item.evidenceStatus || '', language),
+        ...((item.evidenceLabels || []).map((label) => formatCatalystExposureLabel(label, language))),
+      ].filter(Boolean))),
+      reasonLabels: Array.from(new Set(
+        (item.reasonCodes || [])
+          .map((code) => formatCatalystExposureLabel(code, language))
+          .filter(Boolean),
+      )),
+      metadata: buildCatalystExposureMetadata(item, language),
+    }));
+  if (!projected.length) return null;
+  return {
+    items: projected,
+    hiddenCount: Math.max((exposures || []).length - projected.length, 0),
   };
 }
 
@@ -758,6 +852,10 @@ function getCopy(language: 'zh' | 'en') {
       intelligence: 'Intelligence',
       investorSignal: 'Investor signal observation',
       investorSignalSummary: 'Persisted scanner observation · collapsed by default',
+      catalystExposures: 'Catalyst exposure watch',
+      catalystExposuresSummary: 'Saved evidence context · collapsed by default',
+      catalystExposuresReasons: 'Current limits',
+      catalystExposuresBounded: 'Showing the most recent saved items only',
       investorSignalState: 'State',
       investorSignalConfidence: 'Confidence',
       investorSignalFreshness: 'Observation freshness',
@@ -859,6 +957,10 @@ function getCopy(language: 'zh' | 'en') {
     intelligence: '观察依据',
     investorSignal: '资金面观察信号',
     investorSignalSummary: '来自已保存的 Scanner 观察 · 默认收起',
+    catalystExposures: '催化剂观察',
+    catalystExposuresSummary: '来自已保存的证据线索 · 默认收起',
+    catalystExposuresReasons: '当前限制',
+    catalystExposuresBounded: '仅展示最近保存的线索',
     investorSignalState: '观察状态',
     investorSignalConfidence: '置信度',
     investorSignalFreshness: '观察时效',
@@ -1455,6 +1557,7 @@ const WatchlistPage: React.FC = () => {
   const activeBacktestStatusLabel = activeItem ? formatBacktestStatus(activeItem) : '--';
   const activeScannerReason = activeItem ? formatScannerReason(activeScanner?.reason, language) : null;
   const activeInvestorSignal = activeItem ? buildWatchlistInvestorSignalView(activeScanner?.investorSignal, language) : null;
+  const activeCatalystExposures = activeItem ? buildWatchlistCatalystExposureView(activeItem.intelligence?.catalystExposures, language) : null;
   const activeScannerFailure = activeItem && (activeItem.scoreError || activeScanner?.reason)
     ? sanitizeFailureReason(activeItem.scoreError || activeScanner?.reason || '', '扫描失败')
     : null;
@@ -1950,6 +2053,56 @@ const WatchlistPage: React.FC = () => {
                     {activeBacktestSummary}
                   </div>
                 </section>
+
+                {activeCatalystExposures ? (
+                  <DenseSecondaryDisclosure
+                    data-testid="watchlist-catalyst-exposures"
+                    variant="row"
+                    title={copy.catalystExposures}
+                    summary={copy.catalystExposuresSummary}
+                  >
+                    <div className="space-y-3 text-xs leading-5 text-white/68">
+                      {activeCatalystExposures.items.map((exposure) => (
+                        <div
+                          key={exposure.id}
+                          className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3"
+                        >
+                          <p className="truncate text-sm text-white/82">{exposure.title}</p>
+                          {exposure.summary ? (
+                            <p className="mt-1 text-xs leading-5 text-white/65">{exposure.summary}</p>
+                          ) : null}
+                          {exposure.statusLabels.length ? (
+                            <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+                              {exposure.statusLabels.map((label) => (
+                                <TerminalChip key={`${exposure.id}:${label}`} variant="neutral">{label}</TerminalChip>
+                              ))}
+                            </div>
+                          ) : null}
+                          {exposure.metadata.length ? (
+                            <div className="mt-2 flex min-w-0 flex-wrap gap-2 text-[11px] text-white/45">
+                              {exposure.metadata.map((label) => (
+                                <span key={`${exposure.id}:${label}`}>{label}</span>
+                              ))}
+                            </div>
+                          ) : null}
+                          {exposure.reasonLabels.length ? (
+                            <div className="mt-2 space-y-1.5">
+                              <p className="text-[11px] uppercase tracking-[0.18em] text-white/38">{copy.catalystExposuresReasons}</p>
+                              <div className="flex min-w-0 flex-wrap gap-1.5">
+                                {exposure.reasonLabels.map((label) => (
+                                  <TerminalChip key={`${exposure.id}:reason:${label}`} variant="caution">{label}</TerminalChip>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                      {activeCatalystExposures.hiddenCount > 0 ? (
+                        <p className="text-[11px] text-white/45">{copy.catalystExposuresBounded}</p>
+                      ) : null}
+                    </div>
+                  </DenseSecondaryDisclosure>
+                ) : null}
 
                 {activeInvestorSignal ? (
                   <DenseSecondaryDisclosure

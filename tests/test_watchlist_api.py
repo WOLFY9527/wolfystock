@@ -474,6 +474,252 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertIn("source_authority_missing", investor_signal["reasonCodes"])
         self.assertIn("score_rights_missing", investor_signal["reasonCodes"])
 
+    def test_watchlist_items_attach_catalyst_exposures_from_explicit_saved_evidence(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        now = datetime.now()
+        run = MarketScannerRun(
+            market="us",
+            profile="us_preopen_v1",
+            universe_name="us_preopen_watchlist_v1",
+            status="completed",
+            run_at=now,
+            completed_at=now,
+            shortlist_size=1,
+        )
+        candidate = MarketScannerCandidate(
+            symbol="NVDA",
+            name="NVIDIA",
+            rank=1,
+            score=94.0,
+            reason_summary="Scanner score refreshed.",
+            diagnostics_json=json.dumps(
+                {
+                    "fundamentalSnapshot": {
+                        "reportedPeriod": "2026Q2",
+                        "summary": "Quarterly revenue and margin snapshot is available.",
+                        "asOf": "2026-05-17T20:00:00+00:00",
+                        "freshness": "delayed",
+                        "providerPayload": {"raw": "must-not-leak"},
+                    },
+                    "storedNewsItems": [
+                        {
+                            "headline": "Supplier commentary mentions demand stabilization",
+                            "summary": "Stored article summary references a potential demand catalyst.",
+                            "publishedAt": "2026-05-17T13:00:00+00:00",
+                            "sourceProvider": "must-not-leak",
+                            "rawPayload": {"body": "must-not-leak"},
+                        }
+                    ],
+                    "officialMacroStatus": {
+                        "status": "cache_hit",
+                        "asOf": "2026-05-17",
+                        "series": [{"symbol": "CPIAUCSL", "name": "CPI"}],
+                        "admin": {"trace": "must-not-leak"},
+                        "debug": "must-not-leak",
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            created_at=now,
+        )
+        with self.db.get_session() as session:
+            session.add(run)
+            session.flush()
+            run_id = run.id
+            candidate.run_id = run.id
+            session.add(candidate)
+            session.commit()
+
+        add_resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={
+                "symbol": "NVDA",
+                "market": "us",
+                "source": "scanner",
+                "scanner_run_id": run_id,
+                "scanner_rank": 1,
+                "scanner_score": 94.0,
+            },
+        )
+        self.assertEqual(add_resp.status_code, 200)
+
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        exposures = list_resp.json()["items"][0]["intelligence"]["catalyst_exposures"]
+
+        self.assertEqual([item["category"] for item in exposures], [
+            "earnings_fundamental_snapshot",
+            "stored_news_catalyst_proxy",
+            "official_macro_cache_status",
+        ])
+        self.assertEqual(exposures[0]["timeframe"], "2026Q2")
+        self.assertEqual(exposures[1]["publishedAt"], "2026-05-17T13:00:00+00:00")
+        self.assertEqual(exposures[2]["evidenceLabels"], ["delayed"])
+        for item in exposures:
+            self.assertTrue(item["observationOnly"])
+            self.assertFalse(item["sourceAuthorityAllowed"])
+            self.assertFalse(item["scoreContributionAllowed"])
+            self.assertFalse(item["decisionGrade"])
+            self.assertFalse(item["calendarClaimAllowed"])
+            self.assertIn("observation_only", item["reasonCodes"])
+
+        serialized = json.dumps(exposures, ensure_ascii=False, sort_keys=True)
+        for forbidden in (
+            "must-not-leak",
+            "providerPayload",
+            "rawPayload",
+            "sourceProvider",
+            "admin",
+            "debug",
+        ):
+            self.assertNotIn(forbidden, serialized)
+
+    def test_watchlist_catalyst_exposures_keep_stale_and_proxy_inputs_fail_closed(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        now = datetime.now()
+        run = MarketScannerRun(
+            market="us",
+            profile="us_preopen_v1",
+            universe_name="us_preopen_watchlist_v1",
+            status="completed",
+            run_at=now,
+            completed_at=now,
+            shortlist_size=1,
+        )
+        candidate = MarketScannerCandidate(
+            symbol="AAPL",
+            name="Apple",
+            rank=2,
+            score=88.0,
+            reason_summary="Scanner score refreshed.",
+            diagnostics_json=json.dumps(
+                {
+                    "fundamentalSnapshot": {
+                        "summary": "Delayed snapshot only.",
+                        "stale": True,
+                        "asOf": "2026-04-30T20:00:00+00:00",
+                    },
+                    "storedNewsItems": [
+                        {
+                            "headline": "Cached headline",
+                            "summary": "Cached summary.",
+                            "stale": True,
+                            "publishedAt": "2026-04-29T12:00:00+00:00",
+                        }
+                    ],
+                    "officialMacroStatus": {
+                        "status": "stale",
+                        "asOf": "2026-04-29",
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            created_at=now,
+        )
+        with self.db.get_session() as session:
+            session.add(run)
+            session.flush()
+            run_id = run.id
+            candidate.run_id = run.id
+            session.add(candidate)
+            session.commit()
+
+        add_resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={
+                "symbol": "AAPL",
+                "market": "us",
+                "source": "scanner",
+                "scanner_run_id": run_id,
+                "scanner_rank": 2,
+                "scanner_score": 88.0,
+            },
+        )
+        self.assertEqual(add_resp.status_code, 200)
+
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        exposures = list_resp.json()["items"][0]["intelligence"]["catalyst_exposures"]
+
+        self.assertEqual(len(exposures), 3)
+        self.assertEqual(exposures[0]["evidenceStatus"], "stale")
+        self.assertEqual(exposures[1]["evidenceStatus"], "stale")
+        self.assertIn("proxy", exposures[1]["evidenceLabels"])
+        self.assertEqual(exposures[2]["evidenceStatus"], "stale")
+        for item in exposures:
+            self.assertFalse(item["sourceAuthorityAllowed"])
+            self.assertFalse(item["scoreContributionAllowed"])
+            self.assertFalse(item["decisionGrade"])
+            self.assertFalse(item["calendarClaimAllowed"])
+            self.assertIn("stale_evidence", item["reasonCodes"])
+
+    def test_watchlist_catalyst_exposures_omit_missing_and_non_eligible_inputs(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        now = datetime.now()
+        run = MarketScannerRun(
+            market="us",
+            profile="us_preopen_v1",
+            universe_name="us_preopen_watchlist_v1",
+            status="completed",
+            run_at=now,
+            completed_at=now,
+            shortlist_size=1,
+        )
+        candidate = MarketScannerCandidate(
+            symbol="TSM",
+            name="TSMC",
+            rank=3,
+            score=86.0,
+            reason_summary="Scanner score refreshed.",
+            diagnostics_json=json.dumps(
+                {
+                    "fundamentalSnapshot": {
+                        "providerPayload": {"raw": "provider-only"},
+                    },
+                    "storedNewsItems": [
+                        {
+                            "publishedAt": "2026-05-17T13:00:00+00:00",
+                            "rawPayload": {"body": "provider-only"},
+                        }
+                    ],
+                    "officialMacroStatus": {
+                        "admin": {"trace": "provider-only"},
+                        "debug": "provider-only",
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            created_at=now,
+        )
+        with self.db.get_session() as session:
+            session.add(run)
+            session.flush()
+            run_id = run.id
+            candidate.run_id = run.id
+            session.add(candidate)
+            session.commit()
+
+        add_resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={
+                "symbol": "TSM",
+                "market": "us",
+                "source": "scanner",
+                "scanner_run_id": run_id,
+                "scanner_rank": 3,
+                "scanner_score": 86.0,
+            },
+        )
+        self.assertEqual(add_resp.status_code, 200)
+
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        intelligence = list_resp.json()["items"][0]["intelligence"]
+        self.assertTrue("catalyst_exposures" not in intelligence or intelligence["catalyst_exposures"] in (None, []))
+
     def test_watchlist_items_include_read_only_intelligence_from_saved_records(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
         add_resp = self.client.post(

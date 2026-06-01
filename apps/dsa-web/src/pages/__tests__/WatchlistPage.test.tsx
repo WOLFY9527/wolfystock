@@ -1079,6 +1079,172 @@ describe('WatchlistPage', () => {
     expect(screen.queryByTestId('watchlist-investor-signal')).not.toBeInTheDocument();
   });
 
+  it('renders catalyst exposures as a collapsed bounded detail-rail disclosure using safe labels only', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          notes: 'Scanner observation: watch follow-through after the next catalyst.',
+          intelligence: {
+            scanner: {
+              lastScore: 94,
+              lastRank: 1,
+              status: 'selected',
+              reason: 'Latest scanner score.',
+              lastScannedAt: '2026-05-01T12:30:00',
+              investorSignal: {
+                contractVersion: 'investor_signal_contract_v1',
+                diagnosticOnly: true,
+                observationOnly: true,
+                authorityGrant: false,
+                decisionGrade: false,
+                sourceAuthorityAllowed: false,
+                scoreContributionAllowed: false,
+                marketRegime: 'mixed',
+                marketRegimeLabel: '信号分化',
+                confidenceLabel: 'blocked',
+                confidenceText: '禁止判断',
+                freshness: 'cached',
+                reasonCodes: ['source_authority_missing', 'score_rights_missing'],
+                contradictionCodes: ['theme_rotation_mismatch'],
+                explanation: '主题强弱仍然分化，当前只保留观察意义。',
+              },
+            },
+            strategySimulation: {
+              lookbackDays: 90,
+              forwardDays: 5,
+              avgForwardReturnPct: 3.2,
+              hitRate: 0.56,
+              avgExcessReturnPct: 2.1,
+              selectionCount: 5,
+              dataCoverage: 0.83,
+              status: 'ready',
+            },
+            backtest: {
+              lastResultId: 33,
+              totalReturnPct: 24.6,
+              maxDrawdownPct: -8.2,
+              sharpe: 1.34,
+              tradeCount: 6,
+              testedAt: '2026-05-01T13:30:00',
+            },
+            catalystExposures: [
+              {
+                id: 'catalyst:NVDA:us:fundamental',
+                symbol: 'NVDA',
+                market: 'us',
+                category: 'earnings_fundamental_snapshot',
+                title: 'Fundamental snapshot exposure',
+                summary: 'Quarterly revenue and margin snapshot is available.',
+                evidenceStatus: 'delayed',
+                evidenceLabels: ['delayed'],
+                asOf: '2026-05-17T20:00:00+00:00',
+                timeframe: '2026Q2',
+                reasonCodes: ['observation_only', 'delayed_evidence', 'not_earnings_calendar'],
+                observationOnly: true,
+                sourceAuthorityAllowed: false,
+                scoreContributionAllowed: false,
+                decisionGrade: false,
+                calendarClaimAllowed: false,
+              },
+              {
+                id: 'catalyst:NVDA:us:news:1',
+                symbol: 'NVDA',
+                market: 'us',
+                category: 'stored_news_catalyst_proxy',
+                title: 'Stored news catalyst proxy',
+                summary: 'Stored article summary references a potential demand catalyst.',
+                evidenceStatus: 'proxy',
+                evidenceLabels: ['proxy', 'unverified'],
+                asOf: '2026-05-17T20:00:00+00:00',
+                publishedAt: '2026-05-17T13:00:00+00:00',
+                reasonCodes: ['observation_only', 'proxy_evidence_not_authoritative'],
+                observationOnly: true,
+                sourceAuthorityAllowed: false,
+                scoreContributionAllowed: false,
+                decisionGrade: false,
+                calendarClaimAllowed: false,
+              },
+              {
+                id: 'catalyst:NVDA:us:macro',
+                symbol: 'NVDA',
+                market: 'us',
+                category: 'official_macro_cache_status',
+                title: 'Official macro cache/status exposure',
+                summary: 'Official macro cache/status is stale as diagnostic context only; no scheduled macro calendar authority is inferred.',
+                evidenceStatus: 'stale',
+                evidenceLabels: ['stale'],
+                asOf: '2026-05-17',
+                reasonCodes: ['observation_only', 'stale_evidence'],
+                observationOnly: true,
+                sourceAuthorityAllowed: false,
+                scoreContributionAllowed: false,
+                decisionGrade: false,
+                calendarClaimAllowed: false,
+              },
+              {
+                id: 'catalyst:NVDA:us:news:2',
+                symbol: 'NVDA',
+                market: 'us',
+                category: 'stored_news_catalyst_proxy',
+                title: 'Extra hidden exposure',
+                summary: 'This item should stay outside the bounded disclosure.',
+                evidenceStatus: 'proxy',
+                evidenceLabels: ['proxy'],
+                asOf: '2026-05-17T21:00:00+00:00',
+                reasonCodes: ['observation_only'],
+                observationOnly: true,
+                sourceAuthorityAllowed: false,
+                scoreContributionAllowed: false,
+                decisionGrade: false,
+                calendarClaimAllowed: false,
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-NVDA');
+    const detailRail = screen.getByTestId('watchlist-detail-rail');
+    const disclosure = screen.getByTestId('watchlist-catalyst-exposures');
+    const toggle = within(disclosure).getByRole('button', { name: '展开 催化剂观察' });
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(disclosure).toHaveTextContent('来自已保存的证据线索');
+    expect(within(detailRail).getByTestId('watchlist-investor-signal')).toBeInTheDocument();
+    expect(within(detailRail).getByTestId('leveraged-etf-mapper')).toBeInTheDocument();
+    expect(within(detailRail).getByTestId('watchlist-data-notes')).toBeInTheDocument();
+    expect(within(disclosure).queryByText('Fundamental snapshot exposure')).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
+    expect(within(disclosure).getByRole('button', { name: '收起 催化剂观察' })).toHaveAttribute('aria-expanded', 'true');
+    expect(within(disclosure).getByText('Fundamental snapshot exposure')).toBeInTheDocument();
+    expect(within(disclosure).getByText('Stored news catalyst proxy')).toBeInTheDocument();
+    expect(within(disclosure).getByText('Official macro cache/status exposure')).toBeInTheDocument();
+    expect(within(disclosure).queryByText('Extra hidden exposure')).not.toBeInTheDocument();
+    expect(within(disclosure).getAllByText('延迟快照').length).toBeGreaterThan(0);
+    expect(within(disclosure).getAllByText('代理线索').length).toBeGreaterThan(0);
+    expect(within(disclosure).getAllByText('陈旧证据').length).toBeGreaterThan(0);
+    expect(within(disclosure).getAllByText('仅观察').length).toBeGreaterThan(0);
+    expect(within(disclosure).queryByText('earnings_fundamental_snapshot')).not.toBeInTheDocument();
+    expect(within(disclosure).queryByText('stored_news_catalyst_proxy')).not.toBeInTheDocument();
+    expect(within(disclosure).queryByText(/observation_only|proxy_evidence_not_authoritative|stale_evidence|not_earnings_calendar/i)).not.toBeInTheDocument();
+    expect(disclosure).not.toHaveTextContent(/sourceAuthorityAllowed|scoreContributionAllowed|decisionGrade|calendarClaimAllowed|provider|admin|debug/i);
+  });
+
+  it('omits the catalyst exposure disclosure when saved catalyst evidence is absent', async () => {
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-NVDA');
+
+    expect(screen.queryByTestId('watchlist-catalyst-exposures')).not.toBeInTheDocument();
+    expect(screen.getByTestId('leveraged-etf-mapper')).toBeInTheDocument();
+    expect(screen.getByTestId('watchlist-data-notes')).toBeInTheDocument();
+  });
+
   it('filters rows with backtest evidence', async () => {
     listWatchlistItems.mockResolvedValue({
       items: [
