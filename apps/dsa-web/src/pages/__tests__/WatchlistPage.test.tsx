@@ -16,6 +16,12 @@ const { listWatchlistItems, removeWatchlistItem, refreshScores, getRefreshStatus
   useProductSurfaceMock: vi.fn(),
 }));
 
+const { listRules, createRule, updateRule } = vi.hoisted(() => ({
+  listRules: vi.fn(),
+  createRule: vi.fn(),
+  updateRule: vi.fn(),
+}));
+
 vi.mock('../../api/watchlist', () => ({
   watchlistApi: {
     listWatchlistItems,
@@ -36,6 +42,16 @@ vi.mock('../../api/analysis', () => ({
 vi.mock('../../api/backtest', () => ({
   backtestApi: {
     runRuleBacktest,
+  },
+}));
+
+vi.mock('../../api/userAlerts', () => ({
+  userAlertsApi: {
+    listRules,
+    createRule,
+    updateRule,
+    deleteRule: vi.fn(),
+    listEvents: vi.fn(),
   },
 }));
 
@@ -238,6 +254,25 @@ function renderWatchlist(path = '/watchlist') {
   );
 }
 
+function makeUserAlertRule(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 1,
+    contractVersion: 'user_alert_contract_v1',
+    ruleType: 'watchlist_price_threshold',
+    symbol: 'NVDA',
+    direction: 'above',
+    thresholdPrice: 1000,
+    enabled: true,
+    note: null,
+    deliveryMode: 'in_app',
+    inAppOnly: true,
+    ownerScoped: true,
+    createdAt: '2026-06-01T08:00:00Z',
+    updatedAt: '2026-06-01T08:00:00Z',
+    ...overrides,
+  };
+}
+
 describe('WatchlistPage', () => {
   beforeEach(() => {
     vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-05-01T12:00:00Z').getTime());
@@ -265,6 +300,15 @@ describe('WatchlistPage', () => {
     });
     runRuleBacktest.mockResolvedValue(makeRuleBacktestRun());
     analyzeAsync.mockResolvedValue({ taskId: 'task-1' });
+    listRules.mockResolvedValue({
+      contractVersion: 'user_alert_contract_v1',
+      deliveryMode: 'in_app',
+      inAppOnly: true,
+      ownerScoped: true,
+      items: [],
+    });
+    createRule.mockResolvedValue(makeUserAlertRule());
+    updateRule.mockResolvedValue(makeUserAlertRule());
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
@@ -895,6 +939,33 @@ describe('WatchlistPage', () => {
     expect(within(detailRail).getByText('TSMC')).toBeInTheDocument();
   });
 
+  it('renders the user alerts panel inside the detail rail for the selected symbol without route or nav changes', async () => {
+    listRules.mockResolvedValue({
+      contractVersion: 'user_alert_contract_v1',
+      deliveryMode: 'in_app',
+      inAppOnly: true,
+      ownerScoped: true,
+      items: [
+        makeUserAlertRule({ symbol: 'NVDA', thresholdPrice: 1000.5, note: '突破后观察' }),
+        makeUserAlertRule({ id: 2, symbol: 'TSM', thresholdPrice: 900.1, note: '不应显示' }),
+      ],
+    });
+
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-NVDA');
+    const detailRail = screen.getByTestId('watchlist-detail-rail');
+    const panel = await within(detailRail).findByTestId('user-alerts-rail-panel');
+
+    expect(panel).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole('button', { name: '展开 站内提醒' }));
+    expect(within(panel).getByText('突破后观察')).toBeInTheDocument();
+    expect(within(panel).queryByText('不应显示')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-nav')).not.toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/watchlist');
+    expect(listRules).toHaveBeenCalledTimes(1);
+  });
+
   it('renders saved watchlist notes inside the collapsed data notes rail without replacing existing evidence', async () => {
     listWatchlistItems.mockResolvedValue({
       items: [
@@ -1243,6 +1314,100 @@ describe('WatchlistPage', () => {
     expect(screen.queryByTestId('watchlist-catalyst-exposures')).not.toBeInTheDocument();
     expect(screen.getByTestId('leveraged-etf-mapper')).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-data-notes')).toBeInTheDocument();
+  });
+
+  it('keeps saved notes, catalyst exposure, investor signal, and leveraged ETF mapper present alongside the user alerts panel', async () => {
+    listRules.mockResolvedValue({
+      contractVersion: 'user_alert_contract_v1',
+      deliveryMode: 'in_app',
+      inAppOnly: true,
+      ownerScoped: true,
+      items: [
+        makeUserAlertRule({ symbol: 'NVDA', thresholdPrice: 1000.5, note: '突破后观察' }),
+      ],
+    });
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          notes: 'Scanner observation: watch follow-through after the next catalyst.',
+          intelligence: {
+            scanner: {
+              lastScore: 94,
+              lastRank: 1,
+              status: 'selected',
+              reason: 'Latest scanner score.',
+              lastScannedAt: '2026-05-01T12:30:00',
+              investorSignal: {
+                contractVersion: 'investor_signal_contract_v1',
+                diagnosticOnly: true,
+                observationOnly: true,
+                authorityGrant: false,
+                decisionGrade: false,
+                sourceAuthorityAllowed: false,
+                scoreContributionAllowed: false,
+                marketRegime: 'mixed',
+                marketRegimeLabel: '信号分化',
+                confidenceLabel: 'blocked',
+                confidenceText: '禁止判断',
+                freshness: 'cached',
+                reasonCodes: ['source_authority_missing', 'score_rights_missing'],
+                contradictionCodes: ['theme_rotation_mismatch'],
+                explanation: '主题强弱仍然分化，当前只保留观察意义。',
+              },
+            },
+            strategySimulation: {
+              lookbackDays: 90,
+              forwardDays: 5,
+              avgForwardReturnPct: 3.2,
+              hitRate: 0.56,
+              avgExcessReturnPct: 2.1,
+              selectionCount: 5,
+              dataCoverage: 0.83,
+              status: 'ready',
+            },
+            backtest: {
+              lastResultId: 33,
+              totalReturnPct: 24.6,
+              maxDrawdownPct: -8.2,
+              sharpe: 1.34,
+              tradeCount: 6,
+              testedAt: '2026-05-01T13:30:00',
+            },
+            catalystExposures: [
+              {
+                id: 'catalyst:NVDA:us:fundamental',
+                symbol: 'NVDA',
+                market: 'us',
+                category: 'earnings_fundamental_snapshot',
+                title: 'Fundamental snapshot exposure',
+                summary: 'Quarterly revenue and margin snapshot is available.',
+                evidenceStatus: 'delayed',
+                evidenceLabels: ['delayed'],
+                asOf: '2026-05-17T20:00:00+00:00',
+                timeframe: '2026Q2',
+                reasonCodes: ['observation_only', 'delayed_evidence', 'not_earnings_calendar'],
+                observationOnly: true,
+                sourceAuthorityAllowed: false,
+                scoreContributionAllowed: false,
+                decisionGrade: false,
+                calendarClaimAllowed: false,
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-NVDA');
+    const detailRail = screen.getByTestId('watchlist-detail-rail');
+
+    expect(within(detailRail).getByTestId('user-alerts-rail-panel')).toBeInTheDocument();
+    expect(within(detailRail).getByTestId('watchlist-data-notes')).toBeInTheDocument();
+    expect(within(detailRail).getByTestId('watchlist-investor-signal')).toBeInTheDocument();
+    expect(within(detailRail).getByTestId('watchlist-catalyst-exposures')).toBeInTheDocument();
+    expect(within(detailRail).getByTestId('leveraged-etf-mapper')).toBeInTheDocument();
   });
 
   it('filters rows with backtest evidence', async () => {

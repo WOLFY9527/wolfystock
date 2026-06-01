@@ -34,6 +34,7 @@ import {
   TerminalNotice,
   TerminalPanel,
 } from '../components/terminal';
+import UserAlertsRailPanel from '../components/user-alerts/UserAlertsRailPanel';
 import LeveragedEtfMapper from '../components/watchlist/LeveragedEtfMapper';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
@@ -2053,6 +2054,11 @@ const WatchlistPage: React.FC = () => {
                     {activeBacktestSummary}
                   </div>
                 </section>
+
+                <UserAlertsRailPanel
+                  symbol={activeItem.symbol}
+                  language={language}
+                />
 
                 {activeCatalystExposures ? (
                   <DenseSecondaryDisclosure
