@@ -178,6 +178,13 @@ const CONFIDENCE_LABELS: Record<string, string> = {
   insufficient: '不足',
 };
 
+const CAPITAL_FLOW_CONTRADICTION_LABELS: Record<string, string> = {
+  btc_not_confirming_growth_absorption: 'BTC 未确认当前吸纳',
+  rates_not_easing_broadly: '利率线索尚未同步转松',
+  gold_not_confirming_growth_absorption: '黄金未确认当前吸纳',
+  cross_asset_rotation_split: '跨资产轮动暂未同向',
+};
+
 const PILLAR_LABELS: Record<string, string> = {
   rates_pressure: '利率压力',
   dollar_pressure: '美元压力',
@@ -357,7 +364,7 @@ function capitalFlowAssetLabel(value?: string | null): string {
 
 function capitalFlowContradictionLabel(value?: string | null): string {
   if (!value) return '待确认';
-  return value.replaceAll('_', ' ');
+  return CAPITAL_FLOW_CONTRADICTION_LABELS[value] || '线索暂未同向';
 }
 
 function capitalFlowFlagLabels(signal?: LiquidityCapitalFlowSignal | null): string[] {

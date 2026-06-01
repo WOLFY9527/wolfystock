@@ -870,8 +870,10 @@ describe('LiquidityMonitorPage', () => {
     fireEvent.click(within(disclosure).getByRole('button', { name: '展开 观察细节' }));
     expect(disclosure).toHaveTextContent('BTC');
     expect(disclosure).toHaveTextContent('滞后');
-    expect(disclosure).toHaveTextContent('btc not confirming growth absorption');
-    expect(disclosure).toHaveTextContent('rates not easing broadly');
+    expect(disclosure).toHaveTextContent('BTC 未确认当前吸纳');
+    expect(disclosure).toHaveTextContent('利率线索尚未同步转松');
+    expect(disclosure).not.toHaveTextContent('btc not confirming growth absorption');
+    expect(disclosure).not.toHaveTextContent('rates not easing broadly');
     expect(disclosure).toHaveTextContent('Growth is absorbing more attention while BTC is not confirming the move.');
     expect(signal.textContent || '').not.toMatch(
       /authorityGrant|decisionGrade|sourceAuthorityAllowed|scoreContributionAllowed|reasonCodes|contradictionCodes|provider|admin|raw/i,

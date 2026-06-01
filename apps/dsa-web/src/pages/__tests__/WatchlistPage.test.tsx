@@ -971,7 +971,8 @@ describe('WatchlistPage', () => {
     expect(within(disclosure).queryByText('信号最新')).not.toBeInTheDocument();
     expect(within(disclosure).getByText('来源权限未确认')).toBeInTheDocument();
     expect(within(disclosure).getByText('当前不允许计分')).toBeInTheDocument();
-    expect(within(disclosure).getByText('Theme Rotation Mismatch')).toBeInTheDocument();
+    expect(within(disclosure).getByText('主题轮动暂未同向')).toBeInTheDocument();
+    expect(within(disclosure).queryByText('Theme Rotation Mismatch')).not.toBeInTheDocument();
     expect(within(disclosure).getByTestId('watchlist-investor-signal-explanation')).toHaveTextContent('主题强弱仍然分化，当前只保留观察意义。');
     expect(disclosure).not.toHaveTextContent(/contractVersion|diagnosticOnly|authorityGrant|decisionGrade|sourceAuthorityAllowed|scoreContributionAllowed|theme_rotation_mismatch/i);
     expect(disclosure).not.toHaveTextContent(/buy|sell|recommend|provider|admin/i);

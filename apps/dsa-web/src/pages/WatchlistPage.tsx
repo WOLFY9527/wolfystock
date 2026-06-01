@@ -371,6 +371,20 @@ const INVESTOR_SIGNAL_REASON_LABELS: Record<string, string> = {
   source_tier_discount: '来源层级折价',
   provider_unavailable: '数据源暂不可用',
   partial_coverage: '覆盖不完整',
+  blocked: '暂不判断',
+  mixed: '信号分化',
+};
+
+const INVESTOR_SIGNAL_CONTRADICTION_LABELS: Record<string, { zh: string; en: string }> = {
+  theme_rotation_mismatch: { zh: '主题轮动暂未同向', en: 'Theme rotation is still uneven' },
+  capital_flow_signal_mismatch: { zh: '资金流向暂未同向', en: 'Capital-flow signals are still mixed' },
+  market_regime_signal_mismatch: { zh: '市场环境暂未同向', en: 'Market-regime signals are still mixed' },
+  theme_flow_state_signal_mismatch: { zh: '主题强弱暂未同向', en: 'Theme-flow signals are still mixed' },
+  btc_not_confirming_growth_absorption: { zh: 'BTC 未确认当前吸纳', en: 'BTC is not confirming current absorption' },
+  rates_not_easing_broadly: { zh: '利率线索尚未同步转松', en: 'Rates are not easing broadly yet' },
+  gold_not_confirming_growth_absorption: { zh: '黄金未确认当前吸纳', en: 'Gold is not confirming current absorption' },
+  cross_asset_rotation_split: { zh: '跨资产轮动暂未同向', en: 'Cross-asset rotation is still split' },
+  mixed_signal_inputs: { zh: '多组线索暂未同向', en: 'Signals are still mixed' },
 };
 
 const INVESTOR_SIGNAL_FRESHNESS_LABELS: Record<string, { zh: string; en: string }> = {
@@ -390,6 +404,23 @@ function formatInvestorSignalCode(code: string, language: 'zh' | 'en'): string {
     return INVESTOR_SIGNAL_REASON_LABELS[normalized] || titleCaseFromSnake(normalized);
   }
   return titleCaseFromSnake(normalized);
+}
+
+function formatInvestorSignalReason(code: string, language: 'zh' | 'en'): string {
+  const normalized = normalizeToken(code);
+  if (!normalized) return '';
+  if (language === 'zh') {
+    return INVESTOR_SIGNAL_REASON_LABELS[normalized] || '观察条件待确认';
+  }
+  return titleCaseFromSnake(normalized);
+}
+
+function formatInvestorSignalContradiction(code: string, language: 'zh' | 'en'): string {
+  const normalized = normalizeToken(code);
+  if (!normalized) return '';
+  const labels = INVESTOR_SIGNAL_CONTRADICTION_LABELS[normalized];
+  if (labels) return labels[language];
+  return language === 'zh' ? '信号仍有分歧' : 'Signals remain mixed';
 }
 
 function formatInvestorSignalFreshness(freshness?: string | null, language: 'zh' | 'en' = 'zh'): string | null {
@@ -431,10 +462,10 @@ function buildWatchlistInvestorSignalView(
   const stateLabel = formatInvestorSignalState(signal, language);
   const explanation = normalizeText(signal.explanation);
   const reasonCodes = (signal.reasonCodes || [])
-    .map((code) => formatInvestorSignalCode(code, language))
+    .map((code) => formatInvestorSignalReason(code, language))
     .filter(Boolean);
   const contradictionCodes = (signal.contradictionCodes || [])
-    .map((code) => formatInvestorSignalCode(code, language))
+    .map((code) => formatInvestorSignalContradiction(code, language))
     .filter(Boolean);
   if (!confidenceLabel && !freshnessLabel && !stateLabel && !explanation && reasonCodes.length === 0 && contradictionCodes.length === 0) {
     return null;
@@ -728,9 +759,9 @@ function getCopy(language: 'zh' | 'en') {
       investorSignalSummary: 'Persisted scanner observation · collapsed by default',
       investorSignalState: 'State',
       investorSignalConfidence: 'Confidence',
-      investorSignalFreshness: 'Freshness',
-      investorSignalReasons: 'Reason codes',
-      investorSignalContradictions: 'Contradictions',
+      investorSignalFreshness: 'Observation freshness',
+      investorSignalReasons: 'Current limits',
+      investorSignalContradictions: 'Mixed signals',
       noEvidence: 'Evidence updating',
       batchBacktestFilter: 'Backtest current filter',
       batchScanFilter: 'Scan current filter',
@@ -829,9 +860,9 @@ function getCopy(language: 'zh' | 'en') {
     investorSignalSummary: '来自已保存的 Scanner 观察 · 默认收起',
     investorSignalState: '观察状态',
     investorSignalConfidence: '置信度',
-    investorSignalFreshness: '时效',
-    investorSignalReasons: '原因码',
-    investorSignalContradictions: '矛盾信号',
+    investorSignalFreshness: '观察时效',
+    investorSignalReasons: '当前限制',
+    investorSignalContradictions: '分歧线索',
     noEvidence: '依据更新中',
     batchBacktestFilter: '回测当前筛选',
     batchScanFilter: '扫描当前筛选',
