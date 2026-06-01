@@ -13,6 +13,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from api.deps import get_optional_current_user
 from api.v1.endpoints import market
 from api.v1.endpoints import market_overview
 from src.services.market_overview_service import (
@@ -249,6 +250,34 @@ def _decision_semantics_ready_temperature_inputs() -> dict:
     return inputs
 
 
+def _market_temperature_api_payload(service: MarketOverviewService, inputs: dict) -> dict:
+    app = FastAPI()
+    app.include_router(market.router, prefix="/api/v1/market")
+    app.dependency_overrides[get_optional_current_user] = lambda: None
+
+    with (
+        patch.object(service, "_build_market_temperature_inputs", return_value=inputs),
+        patch.object(service, "_cached_payload", side_effect=lambda _cache_key, fetcher, _fallback_factory: fetcher()),
+        patch("api.v1.endpoints.market.MarketOverviewService", return_value=service),
+    ):
+        response = TestClient(app).get("/api/v1/market/temperature")
+
+    assert response.status_code == 200
+    return response.json()
+
+
+def _collect_nested_mapping_keys(value: object) -> set[str]:
+    keys: set[str] = set()
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            keys.add(str(key))
+            keys.update(_collect_nested_mapping_keys(nested))
+    elif isinstance(value, list):
+        for item in value:
+            keys.update(_collect_nested_mapping_keys(item))
+    return keys
+
+
 class MarketTemperatureApiTestCase(unittest.TestCase):
     def setUp(self) -> None:
         MarketOverviewService._market_cache.clear()
@@ -419,6 +448,218 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertIsInstance(semantics["dataGaps"], list)
         self.assertTrue(semantics["claimBoundaries"])
         self.assertTrue(semantics["notInvestmentAdvice"])
+
+    def test_market_temperature_api_serializes_additive_regime_summary_contract(self) -> None:
+        service = MarketOverviewService()
+        inputs = _decision_semantics_ready_temperature_inputs()
+        inputs["capitalFlowSignal"] = {
+            "likelyDestination": "growth_ai_software_semis",
+            "explanation": "Liquidity still leans into growth leadership.",
+            "freshness": "cached",
+            "observationOnly": True,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "contradictionCodes": [],
+        }
+        inputs["rotationFamilyRollup"] = [
+            {
+                "familyId": "ai",
+                "familyLabel": "AI",
+                "themeFlowSignal": {
+                    "themeFlowState": "leading",
+                    "explanation": "AI themes still lead the tape.",
+                    "freshness": "cached",
+                    "observationOnly": True,
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                },
+            },
+            {
+                "familyId": "software",
+                "familyLabel": "Software",
+                "themeFlowSignal": {
+                    "themeFlowState": "broadening",
+                    "explanation": "Software participation is broadening.",
+                    "freshness": "cached",
+                    "observationOnly": True,
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                },
+            },
+            {
+                "familyId": "semiconductors",
+                "familyLabel": "Semiconductors",
+                "themeFlowSignal": {
+                    "themeFlowState": "leading",
+                    "explanation": "Semiconductors confirm the move.",
+                    "freshness": "cached",
+                    "observationOnly": True,
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                },
+            },
+        ]
+
+        payload = _market_temperature_api_payload(service, inputs)
+        self.assertTrue(
+            {
+                "source",
+                "updatedAt",
+                "scores",
+                "marketRegimeSynthesis",
+                "marketDecisionSemantics",
+                "regimeSummary",
+                "providerHealth",
+                "evidenceSnapshot",
+                "temperatureAvailable",
+                "conclusionAllowed",
+            }.issubset(payload.keys())
+        )
+        self.assertIn("overall", payload["scores"])
+        self.assertTrue(payload["scores"]["overall"]["label"])
+
+        summary = payload["regimeSummary"]
+        self.assertEqual(
+            set(summary),
+            {
+                "label",
+                "title",
+                "diagnosticOnly",
+                "observationOnly",
+                "sourceAuthorityAllowed",
+                "scoreContributionAllowed",
+                "notInvestmentAdvice",
+                "drivers",
+                "blockers",
+                "contradictions",
+                "confidence",
+                "confidenceCaps",
+                "nextWatchItems",
+                "explanation",
+            },
+        )
+        self.assertNotIn("status", summary)
+        self.assertTrue(summary["label"])
+        self.assertTrue(summary["title"])
+        self.assertTrue(summary["diagnosticOnly"])
+        self.assertTrue(summary["observationOnly"])
+        self.assertFalse(summary["sourceAuthorityAllowed"])
+        self.assertFalse(summary["scoreContributionAllowed"])
+        self.assertTrue(summary["notInvestmentAdvice"])
+        self.assertIsInstance(summary["drivers"], list)
+        self.assertIsInstance(summary["blockers"], list)
+        self.assertIsInstance(summary["contradictions"], list)
+        self.assertIsInstance(summary["confidenceCaps"], list)
+        self.assertIsInstance(summary["nextWatchItems"], list)
+        self.assertEqual(set(summary["confidence"]), {"value", "label"})
+        self.assertIsInstance(summary["confidence"]["value"], float)
+        self.assertTrue(summary["confidence"]["label"])
+        self.assertTrue(summary["explanation"])
+
+        forbidden_summary_keys = {
+            "status",
+            "source",
+            "sourceType",
+            "sourceTier",
+            "freshness",
+            "providerHealth",
+            "rawPayload",
+            "providerPayload",
+            "raw_payload",
+            "provider_payload",
+            "routeRejectedReasonCodes",
+            "httpStatus",
+        }
+        self.assertFalse(_collect_nested_mapping_keys(summary) & forbidden_summary_keys)
+
+    def test_market_temperature_api_regime_summary_fail_closes_missing_and_degraded_observation_inputs(self) -> None:
+        service = MarketOverviewService()
+
+        fallback_payload = _market_temperature_api_payload(
+            service,
+            service._fallback_market_temperature_inputs(),
+        )
+        fallback_summary = fallback_payload["regimeSummary"]
+        self.assertEqual(fallback_payload["source"], "fallback")
+        self.assertEqual(fallback_payload["freshness"], "fallback")
+        self.assertFalse(fallback_payload["temperatureAvailable"])
+        self.assertFalse(fallback_payload["conclusionAllowed"])
+        self.assertTrue(fallback_summary["diagnosticOnly"])
+        self.assertTrue(fallback_summary["observationOnly"])
+        self.assertFalse(fallback_summary["sourceAuthorityAllowed"])
+        self.assertFalse(fallback_summary["scoreContributionAllowed"])
+        self.assertFalse(fallback_summary["drivers"])
+        self.assertTrue(any(entry["key"] == "liquidity_signal_missing" for entry in fallback_summary["blockers"]))
+        self.assertTrue(any(entry["key"] == "rotation_rollup_missing" for entry in fallback_summary["blockers"]))
+        self.assertTrue(any(entry["key"] == "liquidity_signal_missing" for entry in fallback_summary["confidenceCaps"]))
+        self.assertTrue(any(entry["key"] == "rotation_rollup_missing" for entry in fallback_summary["confidenceCaps"]))
+
+        MarketOverviewService._market_cache.clear()
+        MarketOverviewService._market_data_cache.clear()
+
+        degraded_service = MarketOverviewService()
+        degraded_inputs = copy.deepcopy(_regime_ready_temperature_inputs(proxy_dxy=True, observation_only_btc=True))
+        degraded_inputs["capitalFlowSignal"] = {
+            "likelyDestination": "growth_ai_software_semis",
+            "explanation": "Degraded liquidity context only.",
+            "freshness": "stale",
+            "observationOnly": True,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "contradictionCodes": ["partial_context_only"],
+        }
+        degraded_inputs["rotationFamilyRollup"] = [
+            {
+                "familyId": "ai",
+                "familyLabel": "AI",
+                "themeFlowSignal": {
+                    "themeFlowState": "leading",
+                    "explanation": "AI leadership is stale and observation-only.",
+                    "freshness": "fallback",
+                    "observationOnly": True,
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                },
+            }
+        ]
+        for panel in degraded_inputs.values():
+            if not isinstance(panel, dict):
+                continue
+            for item in panel.get("items", []):
+                if isinstance(item, dict):
+                    item["sourceAuthorityAllowed"] = False
+                    item["scoreContributionAllowed"] = False
+                    item["sourceAuthorityReason"] = item.get("sourceAuthorityReason") or "proxy_context_only"
+
+        degraded_payload = _market_temperature_api_payload(degraded_service, degraded_inputs)
+        degraded_summary = degraded_payload["regimeSummary"]
+        self.assertTrue(degraded_summary["diagnosticOnly"])
+        self.assertTrue(degraded_summary["observationOnly"])
+        self.assertFalse(degraded_summary["sourceAuthorityAllowed"])
+        self.assertFalse(degraded_summary["scoreContributionAllowed"])
+        self.assertTrue(any(entry["key"] == "liquidity_signal_degraded" for entry in degraded_summary["blockers"]))
+        self.assertTrue(any(entry["key"] == "liquidity_signal_observation_only" for entry in degraded_summary["confidenceCaps"]))
+        self.assertTrue(
+            any(str(entry["key"]).startswith("rotation_degraded:") for entry in degraded_summary["confidenceCaps"])
+        )
+        self.assertTrue(degraded_summary["explanation"])
+
+        forbidden_summary_keys = {
+            "status",
+            "source",
+            "sourceType",
+            "sourceTier",
+            "freshness",
+            "providerHealth",
+            "rawPayload",
+            "providerPayload",
+            "raw_payload",
+            "provider_payload",
+            "routeRejectedReasonCodes",
+            "httpStatus",
+        }
+        self.assertFalse(_collect_nested_mapping_keys(fallback_summary) & forbidden_summary_keys)
+        self.assertFalse(_collect_nested_mapping_keys(degraded_summary) & forbidden_summary_keys)
 
     def test_market_temperature_decision_semantics_fail_closed_for_proxy_only_inputs(self) -> None:
         service = MarketOverviewService()
