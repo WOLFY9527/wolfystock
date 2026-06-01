@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useReducer, useRef, useState } from 'react';
 import { stocksApi, type StockHistoryPoint, type StockIntradayPoint } from '../../api/stocks';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import type {
@@ -354,6 +354,26 @@ type ViewWindow = {
   end: number;
 };
 
+const createEmptyChartData = (): Record<ChartViewKey, ChartDatum[]> => ({
+  minute1: [],
+  minute5: [],
+  daily: [],
+  weekly: [],
+  monthly: [],
+  yearly: [],
+});
+
+const createEmptyViewWindows = (): Record<ChartViewKey, ViewWindow | null> => ({
+  minute1: null,
+  minute5: null,
+  daily: null,
+  weekly: null,
+  monthly: null,
+  yearly: null,
+});
+
+const updateStockCode = (_current: string, next: string): string => next;
+
 interface ReportPriceChartProps {
   stockCode: string;
   stockName?: string;
@@ -378,14 +398,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
   const [activeView, setActiveView] = useState<ChartViewKey>('minute1');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [chartData, setChartData] = useState<Record<ChartViewKey, ChartDatum[]>>({
-    minute1: [],
-    minute5: [],
-    daily: [],
-    weekly: [],
-    monthly: [],
-    yearly: [],
-  });
+  const [chartData, setChartData] = useState(createEmptyChartData);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [indicatorVisibility, setIndicatorVisibility] = useState<Record<IndicatorKey, boolean>>({
     candles: true,
@@ -398,41 +411,22 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     entry: false,
     targets: false,
   });
-  const [viewWindowByView, setViewWindowByView] = useState<Record<ChartViewKey, ViewWindow | null>>({
-    minute1: null,
-    minute5: null,
-    daily: null,
-    weekly: null,
-    monthly: null,
-    yearly: null,
-  });
+  const [viewWindowByView, setViewWindowByView] = useState(createEmptyViewWindows);
+  const [previousStockCode, setPreviousStockCode] = useReducer(updateStockCode, stockCode);
   const dragStateRef = useRef<{ pointerX: number; window: ViewWindow } | null>(null);
   const chartStageRef = useRef<HTMLDivElement | null>(null);
   const activeTouchPointerIdRef = useRef<number | null>(null);
   const pageScrollLockStateRef = useRef<PageScrollLockState | null>(null);
   const { ref: chartRef, size } = useElementSize<HTMLDivElement>();
 
-  useEffect(() => {
+  if (stockCode !== previousStockCode) {
+    setPreviousStockCode(stockCode);
     setActiveView('minute1');
     setHoveredIndex(null);
     setError(null);
-    setChartData({
-      minute1: [],
-      minute5: [],
-      daily: [],
-      weekly: [],
-      monthly: [],
-      yearly: [],
-    });
-    setViewWindowByView({
-      minute1: null,
-      minute5: null,
-      daily: null,
-      weekly: null,
-      monthly: null,
-      yearly: null,
-    });
-  }, [stockCode]);
+    setChartData(createEmptyChartData());
+    setViewWindowByView(createEmptyViewWindows());
+  }
 
   useEffect(() => () => {
     unlockPageScroll(pageScrollLockStateRef);
@@ -444,12 +438,16 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     const load = async () => {
       setLoading(true);
       setError(null);
-      try {
-        const viewConfig = VIEW_CONFIGS.find((item) => item.key === activeView);
-        if (!viewConfig) {
-          throw new Error(t('chart.noData'));
+      const viewConfig = VIEW_CONFIGS.find((item) => item.key === activeView);
+      if (!viewConfig) {
+        if (!cancelled) {
+          setError(t('chart.noData'));
+          setLoading(false);
         }
+        return;
+      }
 
+      try {
         const fixture = fixtures?.[activeView];
         if (fixture) {
           if (cancelled) {
