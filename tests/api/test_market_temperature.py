@@ -250,6 +250,58 @@ def _decision_semantics_ready_temperature_inputs() -> dict:
     return inputs
 
 
+def _official_macro_regime_summary_base_inputs() -> dict:
+    inputs = _decision_semantics_ready_temperature_inputs()
+    inputs["capitalFlowSignal"] = {
+        "likelyDestination": "growth_ai_software_semis",
+        "explanation": "Liquidity still leans into growth leadership.",
+        "freshness": "cached",
+        "observationOnly": True,
+        "sourceAuthorityAllowed": False,
+        "scoreContributionAllowed": False,
+        "contradictionCodes": [],
+    }
+    inputs["rotationFamilyRollup"] = [
+        {
+            "familyId": "ai",
+            "familyLabel": "AI",
+            "themeFlowSignal": {
+                "themeFlowState": "leading",
+                "explanation": "AI themes still lead the tape.",
+                "freshness": "cached",
+                "observationOnly": True,
+                "sourceAuthorityAllowed": False,
+                "scoreContributionAllowed": False,
+            },
+        },
+        {
+            "familyId": "software",
+            "familyLabel": "Software",
+            "themeFlowSignal": {
+                "themeFlowState": "broadening",
+                "explanation": "Software participation is broadening.",
+                "freshness": "cached",
+                "observationOnly": True,
+                "sourceAuthorityAllowed": False,
+                "scoreContributionAllowed": False,
+            },
+        },
+        {
+            "familyId": "semiconductors",
+            "familyLabel": "Semiconductors",
+            "themeFlowSignal": {
+                "themeFlowState": "leading",
+                "explanation": "Semiconductors confirm the move.",
+                "freshness": "cached",
+                "observationOnly": True,
+                "sourceAuthorityAllowed": False,
+                "scoreContributionAllowed": False,
+            },
+        },
+    ]
+    return inputs
+
+
 def _market_temperature_api_payload(service: MarketOverviewService, inputs: dict) -> dict:
     app = FastAPI()
     app.include_router(market.router, prefix="/api/v1/market")
@@ -660,6 +712,176 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         }
         self.assertFalse(_collect_nested_mapping_keys(fallback_summary) & forbidden_summary_keys)
         self.assertFalse(_collect_nested_mapping_keys(degraded_summary) & forbidden_summary_keys)
+
+    def test_market_temperature_api_regime_summary_serializes_official_macro_readiness_as_observation_only_context(self) -> None:
+        baseline_inputs = _official_macro_regime_summary_base_inputs()
+        ready_inputs = copy.deepcopy(baseline_inputs)
+        ready_inputs["officialMacroReadiness"] = {
+            "status": "ready",
+            "items": [
+                {
+                    "key": "us_rates_pressure",
+                    "status": "ready",
+                    "freshness": "cached",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "providerId": "treasury",
+                    "cacheBundleDiagnostics": {"providerId": "internal-cache", "readinessEligible": True},
+                },
+                {
+                    "key": "vix_pressure",
+                    "status": "ready",
+                    "freshness": "cached",
+                    "providerId": "fred",
+                },
+            ],
+        }
+
+        baseline_payload = _market_temperature_api_payload(MarketOverviewService(), baseline_inputs)
+        baseline_summary = baseline_payload["regimeSummary"]
+        MarketOverviewService._market_cache.clear()
+        MarketOverviewService._market_data_cache.clear()
+
+        payload = _market_temperature_api_payload(MarketOverviewService(), ready_inputs)
+        summary = payload["regimeSummary"]
+        projection = summary["officialMacroReadiness"]
+
+        self.assertEqual(summary["label"], baseline_summary["label"])
+        self.assertEqual(summary["confidence"], baseline_summary["confidence"])
+        self.assertEqual(projection["contractVersion"], "market_overview_official_macro_readiness.v1")
+        self.assertEqual(projection["status"], "ready")
+        self.assertEqual(projection["readyCount"], 2)
+        self.assertEqual(projection["partialCount"], 0)
+        self.assertEqual(projection["missingCount"], 0)
+        self.assertTrue(projection["diagnosticOnly"])
+        self.assertTrue(projection["observationOnly"])
+        self.assertFalse(projection["sourceAuthorityAllowed"])
+        self.assertFalse(projection["scoreContributionAllowed"])
+        self.assertTrue(projection["detail"])
+        self.assertEqual([item["key"] for item in projection["items"]], ["us_rates_pressure", "vix_pressure"])
+        self.assertTrue(all(item["diagnosticOnly"] for item in projection["items"]))
+        self.assertTrue(all(item["observationOnly"] for item in projection["items"]))
+        self.assertTrue(all(item["sourceAuthorityAllowed"] is False for item in projection["items"]))
+        self.assertTrue(all(item["scoreContributionAllowed"] is False for item in projection["items"]))
+        self.assertTrue(all(item["reason"] == "official_macro_context_ready" for item in projection["items"]))
+        self.assertTrue(any(item["key"] == "official_macro_readiness:ready" for item in summary["drivers"]))
+        self.assertFalse(any(item["key"] == "watch:official_macro_readiness" for item in summary["nextWatchItems"]))
+
+    def test_market_temperature_api_regime_summary_fail_closes_partial_and_missing_official_macro_readiness(self) -> None:
+        baseline_inputs = _official_macro_regime_summary_base_inputs()
+        baseline_payload = _market_temperature_api_payload(MarketOverviewService(), baseline_inputs)
+        baseline_summary = baseline_payload["regimeSummary"]
+
+        scenarios = [
+            (
+                "partial",
+                {
+                    "status": "partial",
+                    "providerId": "raw-provider",
+                    "providerBudget": {"remaining": 0},
+                    "adminDiagnostics": {"route": "debug-only"},
+                    "cacheBundleDiagnostics": {"providerId": "internal-cache", "httpStatus": 403},
+                    "items": [
+                        {
+                            "key": "us_rates_pressure",
+                            "status": "ready",
+                            "freshness": "cached",
+                            "sourceAuthorityAllowed": True,
+                            "scoreContributionAllowed": True,
+                        },
+                        {
+                            "key": "usd_pressure",
+                            "status": "missing",
+                            "freshness": "unavailable",
+                            "missingInputs": ["USD_TWI"],
+                            "routeRejectedReasonCodes": ["missing_api_key"],
+                            "sourceAuthorityReason": "missing_api_key",
+                            "providerId": "fred",
+                            "providerBudget": {"remaining": 0},
+                            "adminDiagnostics": {"payload": "secret"},
+                            "cacheBundleDiagnostics": {"providerId": "official_public.usd_pressure"},
+                            "rawErrorBody": "internal provider response",
+                            "httpStatus": 403,
+                            "envName": "FRED_API_KEY",
+                            "credentialName": "official_macro_token",
+                            "stackTrace": "Traceback(secret)",
+                            "liveCallDetails": {"url": "https://internal.invalid"},
+                        },
+                    ],
+                },
+                "partial",
+                1,
+                1,
+            ),
+            (
+                "missing",
+                {
+                    "status": "missing",
+                    "providerId": "raw-provider",
+                    "items": [
+                        {
+                            "key": "usd_pressure",
+                            "status": "missing",
+                            "freshness": "unavailable",
+                            "routeRejectedReasonCodes": ["missing_api_key"],
+                            "envName": "FRED_API_KEY",
+                            "liveCallDetails": {"url": "https://internal.invalid"},
+                        }
+                    ],
+                },
+                "missing",
+                0,
+                1,
+            ),
+        ]
+
+        forbidden_summary_fragments = (
+            "raw-provider",
+            "providerBudget",
+            "adminDiagnostics",
+            "cacheBundleDiagnostics",
+            "routeRejectedReasonCodes",
+            "sourceAuthorityReason",
+            "missing_api_key",
+            "rawErrorBody",
+            "internal provider response",
+            "httpStatus",
+            "FRED_API_KEY",
+            "official_macro_token",
+            "Traceback",
+            "liveCallDetails",
+            "internal.invalid",
+        )
+
+        for _name, readiness, expected_status, expected_ready_count, expected_missing_count in scenarios:
+            MarketOverviewService._market_cache.clear()
+            MarketOverviewService._market_data_cache.clear()
+            inputs = copy.deepcopy(baseline_inputs)
+            inputs["officialMacroReadiness"] = readiness
+
+            payload = _market_temperature_api_payload(MarketOverviewService(), inputs)
+            summary = payload["regimeSummary"]
+            projection = summary["officialMacroReadiness"]
+
+            self.assertEqual(summary["label"], baseline_summary["label"])
+            self.assertEqual(summary["confidence"], baseline_summary["confidence"])
+            self.assertEqual(projection["status"], expected_status)
+            self.assertEqual(projection["readyCount"], expected_ready_count)
+            self.assertEqual(projection["missingCount"], expected_missing_count)
+            self.assertTrue(projection["diagnosticOnly"])
+            self.assertTrue(projection["observationOnly"])
+            self.assertFalse(projection["sourceAuthorityAllowed"])
+            self.assertFalse(projection["scoreContributionAllowed"])
+            self.assertTrue(all(item["diagnosticOnly"] for item in projection["items"]))
+            self.assertTrue(all(item["observationOnly"] for item in projection["items"]))
+            self.assertTrue(all(item["sourceAuthorityAllowed"] is False for item in projection["items"]))
+            self.assertTrue(all(item["scoreContributionAllowed"] is False for item in projection["items"]))
+            self.assertFalse(any(item["key"].startswith("official_macro_readiness:") for item in summary["drivers"]))
+            self.assertTrue(any(item["key"] == "watch:official_macro_readiness" for item in summary["nextWatchItems"]))
+
+            serialized = json.dumps(summary, ensure_ascii=False, sort_keys=True)
+            for forbidden in forbidden_summary_fragments:
+                self.assertNotIn(forbidden, serialized)
 
     def test_market_temperature_decision_semantics_fail_closed_for_proxy_only_inputs(self) -> None:
         service = MarketOverviewService()
