@@ -59,7 +59,7 @@ Additional focused inspections:
 
 - `apps/dsa-web/src/components/common/ScrollArea.tsx`
 - `apps/dsa-web/src/components/common/__tests__/ScrollArea.test.tsx`
-- `apps/dsa-web/src/components/common/index.ts`
+- Historical note: the common component barrel named here was later removed after direct-import proof; inspect direct component paths instead.
 - `apps/dsa-web/src/index.css`
 - package scripts in `apps/dsa-web/package.json`
 - direct source searches for `ScrollArea`, `<ScrollArea>`, direct `custom-scrollbar`, and common barrel imports
@@ -121,7 +121,7 @@ Theme/visual behavior:
 | `apps/dsa-web/src/index.css` | definition | global CSS utilities | High | Defines `custom-scrollbar` selectors and broad scrollbar behavior. Shared CSS cascade must not be changed from static search alone. |
 | `apps/dsa-web/src/index.css` | definition | global CSS utilities | High | Defines `no-scrollbar`, which is actively used across routes/components and paired with `custom-scrollbar` in `ScrollArea`. |
 | `apps/dsa-web/src/components/common/ScrollArea.tsx` | direct class / shared component owner | common component | High | The viewport class includes `overflow-y-auto overscroll-contain custom-scrollbar no-scrollbar [-webkit-overflow-scrolling:touch]`. This is the direct source owner. |
-| `apps/dsa-web/src/components/common/index.ts` | export | common component barrel | Medium | Re-exports `ScrollArea`, so future searches must include direct imports from `../components/common`, `../common`, and the barrel. |
+| Common component barrel | removed after this inventory | common component barrel | Low | Future searches should inspect direct component imports instead of the removed barrel path. |
 | `apps/dsa-web/src/components/common/__tests__/ScrollArea.test.tsx` | test | common component | Medium | Renders `<ScrollArea>` and verifies custom outer/viewport classes, but does not currently assert `custom-scrollbar` or `no-scrollbar`. |
 | `apps/dsa-web/src/pages/*` | no direct usage found | routes | Medium | Required source search found no production route `custom-scrollbar` usage and no route `ScrollArea` consumer. |
 | `apps/dsa-web/src/components/*` | no direct usage found outside `ScrollArea` | shared/domain components | Medium | Required source search found no production component `ScrollArea` consumer outside the owner component itself. |
@@ -134,7 +134,7 @@ Direct `custom-scrollbar` source files:
 Direct `ScrollArea` source files:
 
 - `apps/dsa-web/src/components/common/ScrollArea.tsx`
-- `apps/dsa-web/src/components/common/index.ts`
+- Common component barrel references are historical; use direct component-path searches.
 - `apps/dsa-web/src/components/common/__tests__/ScrollArea.test.tsx`
 
 No direct production route/component `<ScrollArea>` consumers were found in `apps/dsa-web/src/pages`, `apps/dsa-web/src/components`, `apps/dsa-web/src/hooks`, or `apps/dsa-web/src/utils`.

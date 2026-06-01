@@ -38,18 +38,14 @@ vi.mock('../../contexts/UiLanguageContext', () => ({
   }),
 }));
 
-vi.mock('../../components/common', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../components/common')>();
-  return {
-    ...actual,
-    ApiErrorAlert: ({ error }: { error: { title: string; message: string } }) => (
-      <div role="alert" data-testid="api-error-alert">
-        <strong>{error.title}</strong>
-        <span>{error.message}</span>
-      </div>
-    ),
-  };
-});
+vi.mock('../../components/common/ApiErrorAlert', () => ({
+  ApiErrorAlert: ({ error }: { error: { title: string; message: string } }) => (
+    <div role="alert" data-testid="api-error-alert">
+      <strong>{error.title}</strong>
+      <span>{error.message}</span>
+    </div>
+  ),
+}));
 
 const businessEvents = [
   {

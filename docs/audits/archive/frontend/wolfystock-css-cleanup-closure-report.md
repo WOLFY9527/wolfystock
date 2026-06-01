@@ -56,7 +56,7 @@ Remaining risk is governance risk, not a known active defect: future cleanup pro
 | `summary-block` | Backtest deterministic flow/result/report sections | Active summary primitive. | Do not delete as a product-command-card follow-up; migrate with component-level replacements. |
 | `preview-card` | Backtest deterministic flow/result/report sections | Active preview/info primitive. | Require report and Backtest route proof before any migration. |
 | `metric-card` | Backtest, result bento, report/product metrics | Active metric primitive and density owner. | Require density and route proof before replacement. |
-| `home-panel-card` | Report/Home components such as `ReportOverview` and `ReportStrategy` | Active report/Home card primitive, not legacy `glass-card`. | Migrate only with report preview/Home visual proof. |
+| `home-panel-card` | Historical Report/Home component owners | Re-verify current owners before treating this as active. | Migrate only with report preview/Home visual proof. |
 | `home-subpanel` | Report/Home nested panels | Active nested report/Home primitive. | Migrate only with report details/news and Home proof. |
 | `chart-card` | Backtest compare/result/chart components | Active chart primitive. | Any migration must prove charts, legends, density, and mobile behavior. |
 | `comparison-card` | Backtest comparison components | Active comparison panel primitive. | Require comparison route/component proof before changes. |
