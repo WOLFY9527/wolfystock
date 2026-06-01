@@ -348,6 +348,98 @@ describe('BacktestResultReport', () => {
     expect(chips).not.toHaveTextContent(/research_prototype|unknown_or_mixed|available_bars_only|baseline_bps_only|partial_without_dataset_lineage|professional_quant_ready/i);
   });
 
+  it('renders a research-quality review checklist from complete diagnostic evidence', () => {
+    render(<BacktestResultReport run={makeRun({
+      executionTrace: {
+        source: 'stored_execution_trace',
+        rows: [
+          {
+            date: '2026-03-04',
+            eventType: 'entry',
+            actionDisplay: '模拟入场',
+            totalPortfolioValue: 100800,
+          },
+        ],
+        fallback: { runFallback: false, traceRebuilt: false },
+      },
+      robustnessAnalysis: {
+        state: 'available',
+        walkForward: {
+          state: 'available',
+          windowCount: 4,
+          aggregateMetrics: {
+            meanTotalReturnPct: 6.2,
+            maxDrawdownPct: -3.1,
+          },
+        },
+        monteCarlo: {
+          state: 'available',
+          simulationCount: 200,
+        },
+        stressTests: {
+          state: 'available',
+          scenarioCount: 3,
+        },
+        parameterStability: {
+          state: 'available',
+          availabilityReason: 'caller_supplied_compare_summary_present',
+          evidence: {
+            contractKind: 'backtest_parameter_stability_diagnostic_evidence',
+          },
+        },
+      },
+    })} mode="professional" />);
+
+    const checklist = screen.getByTestId('backtest-report-research-quality-review');
+    expect(checklist).toHaveTextContent('研究复核清单');
+    expect(checklist).toHaveTextContent('反过拟合门禁');
+    expect(within(checklist).getByTestId('backtest-research-review-row-readiness')).toHaveTextContent('仅供观察');
+    expect(within(checklist).getByTestId('backtest-research-review-row-data-quality')).toHaveTextContent('数据质量');
+    expect(within(checklist).getByTestId('backtest-research-review-row-assumptions')).toHaveTextContent('2bp / 1bp');
+    expect(within(checklist).getByTestId('backtest-research-review-row-trace')).toHaveTextContent('1 行');
+    expect(within(checklist).getByTestId('backtest-research-review-row-benchmark')).toHaveTextContent('QQQ');
+    expect(within(checklist).getByTestId('backtest-research-review-row-oos')).toHaveTextContent('Walk-forward 4 窗口');
+    expect(within(checklist).getByTestId('backtest-research-review-row-parameter')).toHaveTextContent('参数稳定性');
+    expect(within(checklist).getByTestId('backtest-research-review-row-robustness')).toHaveTextContent('Monte Carlo 200 次');
+    expect(within(checklist).getAllByText('可复查').length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('fails closed when OOS, parameter, or benchmark evidence is missing', () => {
+    render(<BacktestResultReport run={makeRun({
+      benchmarkReturnPct: null,
+      excessReturnVsBenchmarkPct: null,
+      benchmarkSummary: { resolvedMode: 'none', unavailableReason: 'missing benchmark' },
+      robustnessAnalysis: undefined,
+      executionTrace: null,
+    })} mode="simple" />);
+
+    const checklist = screen.getByTestId('backtest-report-research-quality-review');
+    expect(within(checklist).getByTestId('backtest-research-review-overall')).toHaveTextContent('需补充复核');
+    expect(within(checklist).getByTestId('backtest-research-review-row-benchmark')).toHaveTextContent('不可用 / 需验证');
+    expect(within(checklist).getByTestId('backtest-research-review-row-oos')).toHaveTextContent('不可用 / 需验证');
+    expect(within(checklist).getByTestId('backtest-research-review-row-parameter')).toHaveTextContent('不可用 / 需验证');
+    expect(within(checklist).getByTestId('backtest-research-review-row-trace')).toHaveTextContent('不可用 / 需验证');
+    expect(within(checklist).queryByText('复核材料较完整')).not.toBeInTheDocument();
+  });
+
+  it('does not hide existing report sections or introduce live trading advice wording', () => {
+    render(<BacktestResultReport run={makeRun({
+      robustnessAnalysis: {
+        state: 'available',
+        walkForward: { state: 'available', windowCount: 2 },
+      },
+    })} mode="professional" />);
+
+    const report = screen.getByTestId('backtest-result-report');
+    expect(screen.getByTestId('backtest-report-research-quality-review')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-report-key-metrics')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-report-risk-diagnostics')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-report-evidence-details')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-report-advanced-details')).toBeInTheDocument();
+    expect(report).toHaveTextContent('稳健性');
+    expect(report).not.toHaveTextContent(/safe to trade|deploy live|live trading|best parameter|strategy recommendation|投资建议|交易建议|实盘|上线|最佳参数|安全交易/i);
+  });
+
   it('keeps the default consumer reliability view product-safe when support evidence is incomplete', () => {
     const run = makeRun();
 

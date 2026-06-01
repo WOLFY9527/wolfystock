@@ -74,6 +74,18 @@ type ConsumerReliabilityItem = {
   tone: MetricItem['tone'];
 };
 
+type ResearchReviewState = 'ready' | 'review' | 'missing';
+
+type ResearchReviewItem = {
+  key: string;
+  label: string;
+  state: ResearchReviewState;
+  statusLabel: string;
+  summary: string;
+  details: string[];
+  tone: MetricItem['tone'];
+};
+
 const GHOST_SECTION_CLASS = 'rounded-xl border border-white/5 bg-white/[0.02] p-4 backdrop-blur-md transition-all hover:border-white/10 sm:p-5';
 const LABEL_CLASS = 'text-[10px] font-bold uppercase tracking-widest text-white/40';
 const VALUE_CLASS = 'font-mono text-sm text-white';
@@ -246,6 +258,284 @@ function formatBps(value: unknown): string {
 
 function warningText(warning: BacktestDiagnosticWarning | Record<string, unknown>): string {
   return safeText(warning.code) ? humanToken(warning.code) : safeText(warning.message) || '元数据提示';
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function nestedRecord(source: unknown, ...keys: string[]): Record<string, unknown> | null {
+  const record = asRecord(source);
+  if (!record) return null;
+  const value = recordValue(record, ...keys);
+  return asRecord(value);
+}
+
+function hasRecordContent(value: unknown): boolean {
+  const record = asRecord(value);
+  if (!record) return false;
+  return Object.values(record).some((item) => {
+    if (item == null || item === '') return false;
+    if (Array.isArray(item)) return item.length > 0;
+    if (asRecord(item)) return hasRecordContent(item);
+    return true;
+  });
+}
+
+function normalizedState(value: unknown): string {
+  const text = safeText(typeof value === 'string' ? value : value == null ? null : String(value));
+  return text ? text.toLowerCase().replaceAll('-', '_').replace(/\s+/g, '_') : '';
+}
+
+function isAvailableState(value: unknown): boolean {
+  return ['available', 'ready', 'completed', 'full', 'present'].includes(normalizedState(value));
+}
+
+function isMissingState(value: unknown): boolean {
+  const state = normalizedState(value);
+  return state.includes('missing')
+    || state.includes('unavailable')
+    || state.includes('insufficient')
+    || state === 'none'
+    || state === 'not_available';
+}
+
+function reviewStateFromEvidence(record: Record<string, unknown> | null, defaultState: ResearchReviewState = 'ready'): ResearchReviewState {
+  if (!record || !hasRecordContent(record)) return 'missing';
+  const state = recordValue(record, 'state', 'overallState', 'overall_state', 'availabilityState', 'availability_state');
+  if (isMissingState(state)) return 'missing';
+  if (isAvailableState(state)) return 'ready';
+  if (normalizedState(state) === 'partial') return 'review';
+  return defaultState;
+}
+
+function reviewStatusLabel(state: ResearchReviewState): string {
+  if (state === 'ready') return '可复查';
+  if (state === 'review') return '需复核';
+  return '不可用 / 需验证';
+}
+
+function reviewTone(state: ResearchReviewState): MetricItem['tone'] {
+  if (state === 'ready') return 'positive';
+  if (state === 'missing') return 'negative';
+  return 'neutral';
+}
+
+function researchReviewItem(
+  key: string,
+  label: string,
+  state: ResearchReviewState,
+  summary: string,
+  details: string[] = [],
+): ResearchReviewItem {
+  return {
+    key,
+    label,
+    state,
+    statusLabel: reviewStatusLabel(state),
+    summary,
+    details: details.filter((detail) => detail.trim()),
+    tone: reviewTone(state),
+  };
+}
+
+function evidenceStateLabel(value: unknown): string {
+  const state = normalizedState(value);
+  if (!state) return '状态未提供';
+  const labels: Record<string, string> = {
+    available: '可用',
+    ready: '可用',
+    completed: '已完成',
+    full: '完整',
+    partial: '部分可用',
+    insufficient_history: '历史样本不足',
+    unavailable: '不可用',
+    missing: '缺失',
+    none: '未提供',
+  };
+  return labels[state] || humanToken(state);
+}
+
+function getAssumptionCostLabel(run: RuleBacktestRunResponse): string {
+  const source = asRecord(run.executionAssumptions) || {};
+  const feeModel = nestedRecord(source, 'feeModel', 'fee_model') || {};
+  const slippageModel = nestedRecord(source, 'slippageModel', 'slippage_model') || {};
+  const fee = recordValue(feeModel, 'commissionBps', 'commission_bps', 'feeBps', 'fee_bps', 'feeBpsPerSide', 'fee_bps_per_side') ?? run.feeBps;
+  const slippage = recordValue(slippageModel, 'slippageBps', 'slippage_bps', 'slippageBpsPerSide', 'slippage_bps_per_side') ?? run.slippageBps;
+  return `${formatBps(fee)}bp / ${formatBps(slippage)}bp`;
+}
+
+function getWalkForwardRecord(run: RuleBacktestRunResponse): Record<string, unknown> | null {
+  const robustness = asRecord(run.robustnessAnalysis);
+  return nestedRecord(robustness, 'walkForward', 'walk_forward');
+}
+
+function getParameterStabilityRecord(run: RuleBacktestRunResponse): Record<string, unknown> | null {
+  const root = asRecord(run);
+  const robustness = asRecord(run.robustnessAnalysis);
+  const summary = asRecord(run.summary);
+  const readinessExport = nestedRecord(root, 'oosParameterReadiness', 'oos_parameter_readiness')
+    || nestedRecord(summary, 'oosParameterReadiness', 'oos_parameter_readiness')
+    || nestedRecord(robustness, 'oosParameterReadiness', 'oos_parameter_readiness');
+  return nestedRecord(root, 'parameterStability', 'parameter_stability', 'parameterStabilityEvidence', 'parameter_stability_evidence')
+    || nestedRecord(robustness, 'parameterStability', 'parameter_stability', 'parameterStabilityEvidence', 'parameter_stability_evidence')
+    || nestedRecord(summary, 'parameterStability', 'parameter_stability', 'parameterStabilityEvidence', 'parameter_stability_evidence')
+    || nestedRecord(readinessExport, 'parameterReadiness', 'parameter_readiness');
+}
+
+function getWindowCount(record: Record<string, unknown> | null): number | null {
+  if (!record) return null;
+  const coverage = nestedRecord(record, 'coverage');
+  return safeNumber(recordValue(record, 'windowCount', 'window_count', 'windows', 'foldCount', 'fold_count'))
+    ?? safeNumber(recordValue(coverage || {}, 'availableFoldCount', 'available_fold_count'));
+}
+
+function getResearchQualityReviewItems({
+  run,
+  normalized,
+  readinessSummary,
+  hasExplicitTraceRows,
+  hasExplicitAssumptions,
+  hasDataQualityEntries,
+  dataQualityWarnings,
+  executionWarnings,
+}: {
+  run: RuleBacktestRunResponse;
+  normalized: DeterministicBacktestNormalizedResult;
+  readinessSummary: ReturnType<typeof normalizeBacktestReadiness>;
+  hasExplicitTraceRows: boolean;
+  hasExplicitAssumptions: boolean;
+  hasDataQualityEntries: boolean;
+  dataQualityWarnings: string[];
+  executionWarnings: string[];
+}): ResearchReviewItem[] {
+  const dataQuality = run.dataQuality;
+  const benchmarkSummary = run.benchmarkSummary || {};
+  const benchmarkMode = normalizedState(benchmarkSummary.resolvedMode ?? run.benchmarkMode);
+  const benchmarkReturn = normalized.metrics.benchmarkReturnPct ?? safeNumber(benchmarkSummary.returnPct);
+  const benchmarkAvailable = benchmarkMode !== 'none'
+    && !benchmarkSummary.unavailableReason
+    && (benchmarkReturn != null || safeText(benchmarkSummary.label) || safeText(benchmarkSummary.method));
+  const benchmarkLabel = safeText(benchmarkSummary.label) || safeText(run.benchmarkCode) || '基准';
+  const traceRows = Array.isArray(run.executionTrace?.rows) ? run.executionTrace.rows.length : 0;
+  const walkForward = getWalkForwardRecord(run);
+  const walkForwardCount = getWindowCount(walkForward);
+  const parameterStability = getParameterStabilityRecord(run);
+  const robustness = asRecord(run.robustnessAnalysis);
+  const monteCarlo = nestedRecord(robustness, 'monteCarlo', 'monte_carlo');
+  const stressTests = nestedRecord(robustness, 'stressTests', 'stress_tests');
+  const monteCarloCount = safeNumber(recordValue(monteCarlo || {}, 'simulationCount', 'simulation_count'));
+  const stressScenarioCount = safeNumber(recordValue(stressTests || {}, 'scenarioCount', 'scenario_count'));
+  const robustnessHasEvidence = hasRecordContent(walkForward) || hasRecordContent(monteCarlo) || hasRecordContent(stressTests);
+  const readinessKnown = readinessSummary.posture !== 'unknown'
+    || readinessSummary.limitationLabels.length > 0
+    || readinessSummary.confidenceCap != null
+    || readinessSummary.freshnessLabel != null;
+  const readinessDetails = [
+    readinessSummary.limitationLabels.length ? `限制标签：${readinessSummary.limitationLabels.join(' · ')}` : '',
+    readinessSummary.confidenceCap != null ? `置信上限：${formatNumber(readinessSummary.confidenceCap, 2)}` : '',
+    readinessSummary.freshnessLabel ? `新鲜度：${readinessSummary.freshnessLabel}` : '',
+  ];
+  const dataQualityState: ResearchReviewState = !hasDataQualityEntries
+    ? 'missing'
+    : dataQualityWarnings.length || dataQuality?.isComplete === false
+      ? 'review'
+      : 'ready';
+  const dataCoverage = dataQuality
+    ? `${safeNumber(dataQuality.barCount) ?? '--'} / ${safeNumber(dataQuality.expectedBarCount) ?? '--'}`
+    : '--';
+  const assumptionState: ResearchReviewState = !hasExplicitAssumptions ? 'missing' : executionWarnings.length ? 'review' : 'ready';
+  const traceState: ResearchReviewState = hasExplicitTraceRows ? 'ready' : run.executionTrace ? 'review' : 'missing';
+  const benchmarkState: ResearchReviewState = benchmarkAvailable ? 'ready' : 'missing';
+  const walkForwardState = reviewStateFromEvidence(walkForward);
+  const parameterState = reviewStateFromEvidence(parameterStability);
+  const robustnessState: ResearchReviewState = !robustness || !robustnessHasEvidence
+    ? 'missing'
+    : reviewStateFromEvidence(robustness, 'review');
+
+  return [
+    researchReviewItem(
+      'readiness',
+      '综合准备度',
+      readinessKnown && readinessSummary.posture !== 'unknown' ? 'review' : 'missing',
+      readinessKnown ? readinessSummary.displayLabel : '准备度证据缺失',
+      readinessDetails,
+    ),
+    researchReviewItem(
+      'data-quality',
+      '数据质量',
+      dataQualityState,
+      hasDataQualityEntries ? `样本覆盖 ${dataCoverage} · ${dataQualityWarnings.length} 条提示` : '未返回数据质量证据',
+      [
+        dataQuality?.actualStart || dataQuality?.actualEnd ? `实际区间：${dataQuality.actualStart || '--'} -> ${dataQuality.actualEnd || '--'}` : '',
+        dataQuality?.adjustmentMode ? `复权口径：${humanToken(dataQuality.adjustmentMode)}` : '',
+      ],
+    ),
+    researchReviewItem(
+      'assumptions',
+      '执行与成本',
+      assumptionState,
+      hasExplicitAssumptions ? `手续费 / 滑点 ${getAssumptionCostLabel(run)}` : '未返回执行假设',
+      executionWarnings.length ? [`执行提示：${executionWarnings.length} 条`] : ['仅披露模拟撮合与成本口径'],
+    ),
+    researchReviewItem(
+      'trace',
+      '执行轨迹',
+      traceState,
+      hasExplicitTraceRows ? `执行轨迹 ${traceRows} 行` : run.executionTrace ? '轨迹元数据存在，明细待补' : '未返回执行轨迹',
+      ['仅用于复盘模拟执行路径'],
+    ),
+    researchReviewItem(
+      'benchmark',
+      '基准可用性',
+      benchmarkState,
+      benchmarkAvailable ? `${benchmarkLabel} · ${signedPct(benchmarkReturn)}` : '未提供可复查基准',
+      [benchmarkSummary.method ? `基准口径：${humanToken(benchmarkSummary.method)}` : ''],
+    ),
+    researchReviewItem(
+      'oos',
+      '样本外 / Walk-forward',
+      walkForwardState,
+      walkForwardState === 'ready'
+        ? `Walk-forward ${walkForwardCount != null ? `${formatNumber(walkForwardCount, 0)} 窗口` : '证据可用'}`
+        : walkForward ? `Walk-forward ${evidenceStateLabel(recordValue(walkForward, 'state'))}` : '未返回样本外证据',
+      ['诊断性窗口复查，不代表样本外验证已完成'],
+    ),
+    researchReviewItem(
+      'parameter',
+      '参数稳定性',
+      parameterState,
+      parameterState === 'ready'
+        ? '参数稳定性证据可用'
+        : parameterStability ? `参数稳定性 ${evidenceStateLabel(recordValue(parameterStability, 'state'))}` : '未返回参数稳定性证据',
+      ['仅展示已有诊断证据，不做参数优选'],
+    ),
+    researchReviewItem(
+      'robustness',
+      '稳健性',
+      robustnessState,
+      robustnessState !== 'missing'
+        ? [
+            walkForwardCount != null ? `Walk-forward ${formatNumber(walkForwardCount, 0)} 窗口` : '',
+            monteCarloCount != null ? `Monte Carlo ${formatNumber(monteCarloCount, 0)} 次` : '',
+            stressScenarioCount != null ? `压力 ${formatNumber(stressScenarioCount, 0)} 场景` : '',
+          ].filter(Boolean).join(' · ') || `稳健性 ${evidenceStateLabel(recordValue(robustness || {}, 'state'))}`
+        : '未返回稳健性诊断',
+      ['用于识别过拟合风险线索，不改变回测结果'],
+    ),
+  ];
+}
+
+function getResearchReviewOverall(items: ResearchReviewItem[]): { label: string; tone: MetricItem['tone']; note: string } {
+  const missingCount = items.filter((item) => item.state === 'missing').length;
+  const reviewCount = items.filter((item) => item.state === 'review').length;
+  if (missingCount) {
+    return { label: '需补充复核', tone: 'negative', note: `${missingCount} 项证据不可用，默认降低研究准备度。` };
+  }
+  if (reviewCount) {
+    return { label: '需人工复核', tone: 'neutral', note: `${reviewCount} 项证据需复核后再解释结果。` };
+  }
+  return { label: '复核材料较完整', tone: 'positive', note: '关键诊断证据已返回，仍仅用于研究复盘。' };
 }
 
 function assumptionEntries(run: RuleBacktestRunResponse): Array<[string, string]> {
@@ -749,6 +1039,65 @@ function ConsumerReliabilityCard({ item }: { item: ConsumerReliabilityItem }) {
   );
 }
 
+function ResearchReviewRow({ item }: { item: ResearchReviewItem }) {
+  return (
+    <div
+      data-testid={`backtest-research-review-row-${item.key}`}
+      className="grid min-w-0 gap-2 border-t border-white/5 py-3 first:border-t-0 sm:grid-cols-[minmax(0,150px)_auto_minmax(0,1fr)] sm:items-start sm:gap-3"
+    >
+      <p className="min-w-0 text-xs font-semibold text-white/72">{item.label}</p>
+      <span className={`w-fit rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold ${valueToneClass(item.tone)}`}>
+        {item.statusLabel}
+      </span>
+      <div className="min-w-0">
+        <p className="text-xs leading-5 text-white/62">{item.summary}</p>
+        {item.details.length ? (
+          <details className="mt-1 text-xs text-white/42">
+            <summary className="cursor-pointer list-none text-white/45">复核依据</summary>
+            <ul className="mt-1 space-y-1">
+              {item.details.map((detail) => (
+                <li key={detail} className="leading-5">{detail}</li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ResearchQualityReviewBlock({
+  items,
+  overall,
+}: {
+  items: ResearchReviewItem[];
+  overall: ReturnType<typeof getResearchReviewOverall>;
+}) {
+  return (
+    <div data-testid="backtest-report-research-quality-review" className={GHOST_SECTION_CLASS}>
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className={LABEL_CLASS}>研究复核清单</p>
+          <h3 className="mt-1 text-sm font-semibold text-white">反过拟合门禁</h3>
+          <p className="mt-1 text-xs leading-5 text-white/48">仅汇总已返回证据；缺失项默认进入需验证状态。</p>
+        </div>
+        <div className="min-w-0 sm:text-right">
+          <span
+            data-testid="backtest-research-review-overall"
+            className={`inline-flex rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-semibold ${valueToneClass(overall.tone)}`}
+          >
+            {overall.label}
+          </span>
+          <p className="mt-1 text-xs leading-5 text-white/42">{overall.note}</p>
+        </div>
+      </div>
+      <div className="mt-3 divide-y divide-white/5">
+        {items.map((item) => <ResearchReviewRow key={item.key} item={item} />)}
+      </div>
+    </div>
+  );
+}
+
 const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
   run,
   mode,
@@ -850,6 +1199,20 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
     }),
     [dataQuality.length, dataQualityWarnings, executionWarnings, hasExplicitAssumptions, hasExplicitTraceRows, readinessSummary, run],
   );
+  const researchReviewItems = useMemo(
+    () => getResearchQualityReviewItems({
+      run,
+      normalized,
+      readinessSummary,
+      hasExplicitTraceRows,
+      hasExplicitAssumptions,
+      hasDataQualityEntries: dataQuality.length > 0,
+      dataQualityWarnings,
+      executionWarnings,
+    }),
+    [dataQuality.length, dataQualityWarnings, executionWarnings, hasExplicitAssumptions, hasExplicitTraceRows, normalized, readinessSummary, run],
+  );
+  const researchReviewOverall = useMemo(() => getResearchReviewOverall(researchReviewItems), [researchReviewItems]);
 
   const exportTrades = () => {
     downloadCsv(
@@ -978,6 +1341,8 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             </div>
           </div>
         </div>
+
+        <ResearchQualityReviewBlock items={researchReviewItems} overall={researchReviewOverall} />
 
         <div data-testid="backtest-report-primary-grid" className="grid grid-cols-1 gap-4 xl:grid-cols-12">
           <div id="backtest-report-曲线" data-testid="backtest-report-chart" className={`${GHOST_SECTION_CLASS} xl:col-span-8`}>
