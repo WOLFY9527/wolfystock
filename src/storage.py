@@ -2012,6 +2012,53 @@ class UserWatchlistItem(Base):
     )
 
 
+class UserAlertRule(Base):
+    """Owner-scoped in-app alert rule contract."""
+
+    __tablename__ = 'user_alert_rules'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), nullable=False, index=True)
+    rule_type = Column(String(48), nullable=False, default='watchlist_price_threshold', index=True)
+    symbol = Column(String(16), nullable=False, index=True)
+    direction = Column(String(8), nullable=False, index=True)
+    threshold_price = Column(Numeric(18, 6), nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True, index=True)
+    note = Column(Text)
+    delivery_mode = Column(String(16), nullable=False, default='in_app', index=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, index=True)
+
+    __table_args__ = (
+        Index('ix_user_alert_rule_owner_enabled_symbol', 'owner_id', 'enabled', 'symbol'),
+        Index('ix_user_alert_rule_owner_updated', 'owner_id', 'updated_at'),
+    )
+
+
+class UserAlertEvent(Base):
+    """Sanitized owner-scoped in-app alert event contract."""
+
+    __tablename__ = 'user_alert_events'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), nullable=False, index=True)
+    rule_id = Column(Integer, ForeignKey('user_alert_rules.id'), index=True)
+    event_type = Column(String(64), nullable=False, default='watchlist_price_threshold', index=True)
+    symbol = Column(String(16), index=True)
+    direction = Column(String(8), index=True)
+    threshold_price = Column(Numeric(18, 6))
+    title = Column(String(160), nullable=False)
+    message = Column(Text)
+    delivery_mode = Column(String(16), nullable=False, default='in_app', index=True)
+    read_at = Column(DateTime, index=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+
+    __table_args__ = (
+        Index('ix_user_alert_event_owner_time', 'owner_id', 'created_at'),
+        Index('ix_user_alert_event_owner_rule_time', 'owner_id', 'rule_id', 'created_at'),
+    )
+
+
 class ConversationMessage(Base):
     """
     Agent 对话历史记录表
@@ -5739,6 +5786,12 @@ class DatabaseManager:
                 counts["portfolio_broker_connections"] = 0
             counts["user_watchlist_items"] = session.execute(
                 delete(UserWatchlistItem).where(UserWatchlistItem.owner_id.in_(user_ids))
+            ).rowcount or 0
+            counts["user_alert_events"] = session.execute(
+                delete(UserAlertEvent).where(UserAlertEvent.owner_id.in_(user_ids))
+            ).rowcount or 0
+            counts["user_alert_rules"] = session.execute(
+                delete(UserAlertRule).where(UserAlertRule.owner_id.in_(user_ids))
             ).rowcount or 0
             counts["portfolio_accounts"] = session.execute(
                 delete(PortfolioAccount).where(PortfolioAccount.owner_id.in_(user_ids))

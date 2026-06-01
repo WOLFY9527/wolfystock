@@ -1,4 +1,12 @@
 ## 2026-06-01
+- User alert APIs now expose an owner-scoped, in-app-only backend contract for
+  Watchlist price threshold rules at `/api/v1/user-alerts`. V1 supports
+  create/list/update/delete for `watchlist_price_threshold` rules with
+  `symbol`, `direction`, `thresholdPrice`, `enabled`, and optional `note`, plus
+  an empty/future-ready in-app event list. The contract is separate from admin
+  notification events and does not add evaluator loops, provider quote calls,
+  schedulers, outbound delivery, frontend UI, portfolio/broker/order behavior,
+  or trading advice wording.
 - Market Overview `regimeSummary` now adds a bounded
   `watch:qqq_iwm_proxy_confirmation` next-watch item when existing Liquidity
   `capitalFlowSignal.sourceAssetPressure` rows show QQQ institutional proxy

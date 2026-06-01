@@ -37,6 +37,7 @@ from api.v1.endpoints import (
     stocks,
     system_config,
     usage,
+    user_alerts,
     watchlist,
 )
 import api.v1.endpoints.liquidity_monitor as liquidity_monitor
@@ -174,6 +175,12 @@ router.include_router(
     watchlist.router,
     prefix="/watchlist",
     tags=["Watchlist"]
+)
+
+router.include_router(
+    user_alerts.router,
+    prefix="/user-alerts",
+    tags=["UserAlerts"]
 )
 
 router.include_router(
