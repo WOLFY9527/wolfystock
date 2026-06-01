@@ -4,6 +4,7 @@ import { Activity, Gauge, Waves } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   liquidityMonitorApi,
+  type LiquidityCapitalFlowSignal,
   type LiquidityMonitorFreshness,
   type LiquidityMonitorIndicator,
   type LiquidityImpulseSynthesis,
@@ -282,6 +283,32 @@ const BREADTH_LIMITATION_LABELS: Record<string, string> = {
   'requires_official_or_authorized.us_market_breadth': '缺少官方/授权宽度提供方',
 };
 
+const CAPITAL_FLOW_REGIME_LABELS: Record<string, string> = {
+  inflow: '资金净流入观察',
+  outflow: '资金净流出观察',
+  balanced: '资金均衡观察',
+  mixed: '资金分化观察',
+  unavailable: '资金方向待确认',
+};
+
+const CAPITAL_FLOW_CONFIDENCE_LABELS: Record<string, string> = {
+  high: '高',
+  medium: '中',
+  low: '低',
+  insufficient: '不足',
+};
+
+const CAPITAL_FLOW_PRESSURE_LABELS: Record<string, string> = {
+  absorbing: '吸纳',
+  lagging: '滞后',
+  outflow: '流出',
+  inflow: '流入',
+  defensive: '防御',
+  rotating_out: '轮动流出',
+  rotating_in: '轮动流入',
+  neutral: '中性',
+};
+
 function titleCaseFromSnake(value?: string | null): string {
   if (!value) return '待确认';
   return value
@@ -289,6 +316,57 @@ function titleCaseFromSnake(value?: string | null): string {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+function capitalFlowRegimeLabel(signal?: LiquidityCapitalFlowSignal | null): string {
+  if (!signal) return '待确认';
+  return signal.capitalFlowLabel
+    || (signal.capitalFlowRegime ? CAPITAL_FLOW_REGIME_LABELS[signal.capitalFlowRegime] || titleCaseFromSnake(signal.capitalFlowRegime) : '待确认');
+}
+
+function capitalFlowConfidenceLabel(signal?: LiquidityCapitalFlowSignal | null): string {
+  if (!signal) return '待确认';
+  if (signal.confidenceText) return signal.confidenceText;
+  if (signal.confidenceLabel && CAPITAL_FLOW_CONFIDENCE_LABELS[signal.confidenceLabel]) {
+    return CAPITAL_FLOW_CONFIDENCE_LABELS[signal.confidenceLabel];
+  }
+  if (typeof signal.confidence === 'string' && CAPITAL_FLOW_CONFIDENCE_LABELS[signal.confidence]) {
+    return CAPITAL_FLOW_CONFIDENCE_LABELS[signal.confidence];
+  }
+  if (typeof signal.confidence === 'number') {
+    if (signal.confidence >= 0.75) return '高';
+    if (signal.confidence >= 0.45) return '中';
+    if (signal.confidence > 0) return '低';
+    return '不足';
+  }
+  return '待确认';
+}
+
+function capitalFlowPressureLabel(value?: string | null): string {
+  if (!value) return '待确认';
+  return CAPITAL_FLOW_PRESSURE_LABELS[value] || titleCaseFromSnake(value);
+}
+
+function capitalFlowAssetLabel(value?: string | null): string {
+  if (!value) return '待确认';
+  if (!value.includes('_') && /^[a-z]{2,5}$/.test(value)) {
+    return value.toUpperCase();
+  }
+  return titleCaseFromSnake(value);
+}
+
+function capitalFlowContradictionLabel(value?: string | null): string {
+  if (!value) return '待确认';
+  return value.replaceAll('_', ' ');
+}
+
+function capitalFlowFlagLabels(signal?: LiquidityCapitalFlowSignal | null): string[] {
+  if (!signal) return [];
+  return [
+    signal.isPartial ? '部分' : null,
+    signal.isStale ? '过期' : null,
+    signal.isFallback ? '备用' : null,
+  ].filter((value): value is string => Boolean(value));
 }
 
 function impulseCodeLabel(value?: string | null): string {
@@ -1312,6 +1390,136 @@ const ConsumerDisclosure: React.FC<{
   );
 };
 
+const CapitalFlowSignalPanel: React.FC<{
+  signal?: LiquidityCapitalFlowSignal;
+}> = ({ signal }) => {
+  if (!signal) {
+    return null;
+  }
+
+  const pressureRows = (signal.sourceAssetPressure || []).filter((item) => item.asset || item.pressure);
+  const visiblePressureRows = pressureRows.slice(0, 2);
+  const flagLabels = capitalFlowFlagLabels(signal);
+  const hasExpandableDetails = pressureRows.length > 2 || (signal.contradictionSignals?.length || 0) > 0 || Boolean(signal.explanation);
+
+  return (
+    <div
+      data-testid="liquidity-capital-flow-signal"
+      className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3"
+    >
+      <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-white/48">资金流向观察</p>
+          <p className="mt-1 text-sm font-semibold text-white/84">{capitalFlowRegimeLabel(signal)}</p>
+          <p className="mt-1 text-[11px] leading-5 text-white/56">
+            仅观察代理信号，不代表真实资金流，也不会升级为交易或评分结论。
+          </p>
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-1.5 lg:justify-end">
+          <TerminalChip variant="info">仅观察</TerminalChip>
+          <TerminalChip variant="neutral">代理信号</TerminalChip>
+          {flagLabels.map((label) => (
+            <TerminalChip key={label} variant="caution">{label}</TerminalChip>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+          <p className="text-[11px] font-medium text-white/48">资金方向</p>
+          <p className="mt-2 text-sm font-semibold text-white/82">{capitalFlowRegimeLabel(signal)}</p>
+        </div>
+        <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+          <p className="text-[11px] font-medium text-white/48">可能去向</p>
+          <p className="mt-2 text-sm font-semibold text-white/82">{capitalFlowAssetLabel(signal.likelyDestination)}</p>
+        </div>
+        <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+          <p className="text-[11px] font-medium text-white/48">置信度</p>
+          <p className="mt-2 text-sm font-semibold text-white/82">{capitalFlowConfidenceLabel(signal)}</p>
+        </div>
+      </div>
+
+      {pressureRows.length || signal.contradictionSignals?.length ? (
+        <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
+          {pressureRows.length ? <TerminalChip variant="neutral">资产压力 {pressureRows.length} 项</TerminalChip> : null}
+          {signal.contradictionSignals?.length ? <TerminalChip variant="caution">矛盾信号 {signal.contradictionSignals.length} 项</TerminalChip> : null}
+        </div>
+      ) : null}
+
+      {visiblePressureRows.length ? (
+        <div className="mt-3 grid gap-2">
+          {visiblePressureRows.map((item, index) => (
+            <div
+              key={`${item.asset || 'asset'}-${index}`}
+              className="flex min-w-0 flex-col gap-2 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-white/82">{capitalFlowAssetLabel(item.asset)}</p>
+                <p className="mt-1 text-[11px] leading-5 text-white/56">来源资产压力观察</p>
+              </div>
+              <div className="flex min-w-0 flex-wrap gap-1.5 lg:justify-end">
+                <TerminalChip variant="info">{capitalFlowPressureLabel(item.pressure)}</TerminalChip>
+                {item.isPartial ? <TerminalChip variant="caution">部分</TerminalChip> : null}
+                {item.isStale ? <TerminalChip variant="caution">过期</TerminalChip> : null}
+                {item.isFallback ? <TerminalChip variant="caution">备用</TerminalChip> : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {hasExpandableDetails ? (
+        <ConsumerDisclosure
+          testId="liquidity-capital-flow-details"
+          title="观察细节"
+          summary="资产压力、矛盾信号与说明默认折叠"
+          className="mt-3 bg-black/10"
+        >
+          <div className="grid gap-3 text-[11px] leading-5 text-white/58">
+            {pressureRows.length ? (
+              <div className="grid gap-2">
+                <p className="text-[11px] font-medium text-white/48">来源资产压力</p>
+                {pressureRows.map((item, index) => (
+                  <div
+                    key={`${item.asset || 'detail-asset'}-${index}`}
+                    className="flex min-w-0 flex-col gap-2 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2 lg:flex-row lg:items-center lg:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-white/82">{capitalFlowAssetLabel(item.asset)}</p>
+                      <p className="mt-1 text-[11px] leading-5 text-white/56">{capitalFlowPressureLabel(item.pressure)}</p>
+                    </div>
+                    <div className="flex min-w-0 flex-wrap gap-1.5 lg:justify-end">
+                      {item.isPartial ? <TerminalChip variant="caution">部分</TerminalChip> : null}
+                      {item.isStale ? <TerminalChip variant="caution">过期</TerminalChip> : null}
+                      {item.isFallback ? <TerminalChip variant="caution">备用</TerminalChip> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {signal.contradictionSignals?.length ? (
+              <div className="grid gap-2">
+                <p className="text-[11px] font-medium text-white/48">矛盾信号</p>
+                <div className="flex min-w-0 flex-wrap gap-1.5">
+                  {signal.contradictionSignals.map((item) => (
+                    <TerminalChip key={item} variant="neutral">{capitalFlowContradictionLabel(item)}</TerminalChip>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {signal.explanation ? (
+              <div className="grid gap-1">
+                <p className="text-[11px] font-medium text-white/48">说明</p>
+                <p>{signal.explanation}</p>
+              </div>
+            ) : null}
+          </div>
+        </ConsumerDisclosure>
+      ) : null}
+    </div>
+  );
+};
+
 const DecisionReadinessBand: React.FC<{
   summary: DecisionReadinessSummary;
   coverageSummary: LiquidityCoverageReadinessSummary;
@@ -1406,6 +1614,8 @@ const DecisionReadinessBand: React.FC<{
                 </div>
               </div>
             ) : null}
+
+            <CapitalFlowSignalPanel signal={data.capitalFlowSignal} />
 
             <ConsumerDisclosure
               testId="liquidity-monitor-consumer-details"

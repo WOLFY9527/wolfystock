@@ -1,5 +1,7 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import React from 'react';
+import '@testing-library/jest-dom/vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LiquidityMonitorPage from '../LiquidityMonitorPage';
 
 const { getLiquidityMonitor, useProductSurfaceMock } = vi.hoisted(() => ({
@@ -596,6 +598,10 @@ function withBreadthIndicator(indicator: Record<string, unknown>) {
 }
 
 describe('LiquidityMonitorPage', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     useProductSurfaceMock.mockReturnValue({
@@ -807,6 +813,65 @@ describe('LiquidityMonitorPage', () => {
     expect(unavailableBand).not.toHaveTextContent('数据源不可用');
     expect(unavailableBand).not.toHaveTextContent('Provider unavailable');
     expect(unavailableBand).not.toHaveTextContent('前往数据源设置');
+  });
+
+  it('renders capital flow signal as compact observation-only context without raw diagnostic fields', async () => {
+    getLiquidityMonitor.mockResolvedValueOnce({
+      ...payload,
+      capitalFlowSignal: {
+        contractVersion: 'investor_signal_contract_v1',
+        diagnosticOnly: true,
+        observationOnly: true,
+        authorityGrant: false,
+        decisionGrade: false,
+        sourceAuthorityAllowed: false,
+        scoreContributionAllowed: false,
+        capitalFlowRegime: 'inflow',
+        capitalFlowLabel: '资金净流入观察',
+        likelyDestination: 'growth_ai_software_semis',
+        confidence: 'medium',
+        confidenceText: '中',
+        freshness: 'partial',
+        isFallback: false,
+        isStale: true,
+        isPartial: true,
+        sourceAssetPressure: [
+          { asset: 'growth_ai_software_semis', pressure: 'absorbing', freshness: 'delayed', isPartial: true },
+          { asset: 'btc', pressure: 'lagging', freshness: 'live' },
+        ],
+        contradictionSignals: ['btc_not_confirming_growth_absorption', 'rates_not_easing_broadly'],
+        explanation: 'Growth is absorbing more attention while BTC is not confirming the move.',
+      },
+    });
+
+    render(<LiquidityMonitorPage />);
+
+    const signal = await screen.findByTestId('liquidity-capital-flow-signal');
+    expect(signal).toHaveTextContent('资金流向观察');
+    expect(signal).toHaveTextContent('仅观察');
+    expect(signal).toHaveTextContent('代理信号');
+    expect(signal).toHaveTextContent('资金净流入观察');
+    expect(signal).toHaveTextContent('可能去向');
+    expect(signal).toHaveTextContent('Growth Ai Software Semis');
+    expect(signal).toHaveTextContent('置信度');
+    expect(signal).toHaveTextContent('中');
+    expect(signal).toHaveTextContent('部分');
+    expect(signal).toHaveTextContent('过期');
+    expect(signal).toHaveTextContent('Growth Ai Software Semis');
+    expect(signal).toHaveTextContent('吸纳');
+    const disclosure = within(signal).getByTestId('liquidity-capital-flow-details');
+    expect(disclosure).not.toHaveAttribute('open');
+    expect(within(disclosure).getByRole('button', { name: '展开 观察细节' })).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(within(disclosure).getByRole('button', { name: '展开 观察细节' }));
+    expect(disclosure).toHaveTextContent('BTC');
+    expect(disclosure).toHaveTextContent('滞后');
+    expect(disclosure).toHaveTextContent('btc not confirming growth absorption');
+    expect(disclosure).toHaveTextContent('rates not easing broadly');
+    expect(disclosure).toHaveTextContent('Growth is absorbing more attention while BTC is not confirming the move.');
+    expect(signal.textContent || '').not.toMatch(
+      /authorityGrant|decisionGrade|sourceAuthorityAllowed|scoreContributionAllowed|reasonCodes|contradictionCodes|provider|admin|raw/i,
+    );
   });
 
   it('renders admin-only technical diagnostics when provider readers open the disclosure', async () => {
