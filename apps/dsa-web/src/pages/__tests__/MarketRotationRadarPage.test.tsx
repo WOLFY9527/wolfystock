@@ -1,5 +1,7 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import React from 'react';
+import '@testing-library/jest-dom/vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketRotationRadarPage from '../MarketRotationRadarPage';
 import { marketRotationApi } from '../../api/marketRotation';
 import type { MarketRotationRadarResponse } from '../../api/marketRotation';
@@ -9,6 +11,10 @@ vi.mock('../../api/marketRotation', () => ({
     getRotationRadar: vi.fn(),
   },
 }));
+
+afterEach(() => {
+  cleanup();
+});
 
 const forbiddenTradingActionPattern =
   /买入按钮|建议买入|建议卖出|买卖|卖出指令|立即交易|下单|提交订单|订单载荷|开仓|平仓|加仓|减仓|持仓建议|仓位建议|决策级|decision[-\s]?grade|buy now|sell now|place order|submit order|best contract|guaranteed|recommend(?:ation|ations|ed|s)?/i;
