@@ -129,8 +129,6 @@ export function getCompanyWithTicker(result: unknown): string {
   return `${company} (${ticker})`;
 }
 
-export const getSymbol = getSymbolDisplay;
-
 function uniqueText(values: Array<unknown>): string[] {
   const seen = new Set<string>();
   const result: string[] = [];

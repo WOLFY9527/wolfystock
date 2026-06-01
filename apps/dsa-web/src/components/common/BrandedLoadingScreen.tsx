@@ -17,7 +17,7 @@ const BOOT_LINES = [
 
 const SEGMENT_COUNT = 10;
 
-export const GlobalLoader: React.FC<GlobalLoaderProps> = ({ fading = false }) => {
+const GlobalLoader: React.FC<GlobalLoaderProps> = ({ fading = false }) => {
   const [visibleLineCount, setVisibleLineCount] = useState(1);
   const [activeSegmentCount, setActiveSegmentCount] = useState(0);
 

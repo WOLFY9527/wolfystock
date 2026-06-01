@@ -1,6 +1,5 @@
 import type React from 'react';
 import { Button } from '../common/Button';
-import type { BentoHeroItem } from '../home-bento';
 import { DensityRail } from '../guidance/DensityRail';
 import { GuidedDisclosure } from '../guidance/GuidedDisclosure';
 import { InsightStack } from '../guidance/InsightStack';
@@ -12,6 +11,7 @@ import {
 import { SettingsAlert } from './SettingsAlert';
 import DuckDBQuantPanel from './DuckDBQuantPanel';
 import type {
+  BentoHeroItem,
   DeveloperDetailGroup,
   SystemHealthStatusCard,
   SystemHealthSummaryCard,

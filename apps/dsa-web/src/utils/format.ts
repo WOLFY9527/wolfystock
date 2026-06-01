@@ -103,29 +103,10 @@ function formatNumberLike(value: unknown, options: NumberFormatOptions, extra: I
   return getNumberFormat(locale, opts).format(numeric);
 }
 
-const SHANGHAI_DATE_FMT = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' });
-
-export function formatMissing(value?: unknown): string {
-  void value;
-  return MISSING_VALUE;
-}
-
 export const formatDateTime = (value?: unknown, options: DateFormatOptions = {}): string => formatDateLike(value, options, {
   year: 'numeric',
   month: '2-digit',
   day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
-
-export const formatDate = (value?: unknown, options: DateFormatOptions = {}): string => formatDateLike(value, options, {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
-
-export const formatTime = (value?: unknown, options: DateFormatOptions = {}): string => formatDateLike(value, options, {
   hour: '2-digit',
   minute: '2-digit',
   hour12: false,
@@ -203,30 +184,4 @@ export const toDateInputValue = (date: Date): string => {
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
   const day = `${date.getDate()}`.padStart(2, '0');
   return `${year}-${month}-${day}`;
-};
-
-/**
- * Returns the date N days ago as YYYY-MM-DD in Asia/Shanghai timezone.
- * Consistent with getTodayInShanghai() so both ends of the date range
- * are expressed in the same timezone as the backend.
- */
-export const getRecentStartDate = (days: number): string => {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return SHANGHAI_DATE_FMT.format(date);
-};
-
-/**
- * Returns today's date as YYYY-MM-DD in Asia/Shanghai timezone.
- * Use this instead of browser-local date to stay consistent with the backend,
- * which stores and filters timestamps in server local time (Asia/Shanghai).
- */
-export const getTodayInShanghai = (): string =>
-  SHANGHAI_DATE_FMT.format(new Date());
-
-export const formatReportType = (value?: string): string => {
-  if (!value) return MISSING_VALUE;
-  if (value === 'simple') return '普通';
-  if (value === 'detailed') return '标准';
-  return value;
 };

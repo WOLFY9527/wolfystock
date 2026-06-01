@@ -30,13 +30,6 @@ export function getMarketColorPalette(convention: MarketColorConvention): {
   };
 }
 
-export function getMarketDirectionColor(value?: number | null): string | undefined {
-  if (value == null || !Number.isFinite(value) || value === 0) {
-    return undefined;
-  }
-  return value > 0 ? 'var(--market-up)' : 'var(--market-down)';
-}
-
 export function getToneColor(
   tone: SemanticSignalTone,
   convention: MarketColorConvention,

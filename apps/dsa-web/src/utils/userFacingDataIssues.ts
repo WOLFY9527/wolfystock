@@ -1,12 +1,7 @@
-export type DiagnosticAudience = 'user' | 'admin';
 export type UserFacingIssueLocale = 'zh' | 'en';
 
 function normalizeIssue(value?: string | null): string {
   return String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-}
-
-export function isDeveloperDiagnosticAllowed(audience: DiagnosticAudience = 'user'): boolean {
-  return audience === 'admin';
 }
 
 function mapInternalReasonToUserMessage(

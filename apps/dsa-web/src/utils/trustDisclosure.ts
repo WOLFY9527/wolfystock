@@ -133,7 +133,3 @@ export function resolveTrustDisclosureBuckets({
 
   return TRUST_DISCLOSURE_BUCKET_ORDER.filter((bucket) => resolved.has(bucket));
 }
-
-export function trustDisclosureLabel(bucket: TrustDisclosureBucket): string {
-  return TRUST_DISCLOSURE_LABELS[canonicalBucket(bucket)];
-}

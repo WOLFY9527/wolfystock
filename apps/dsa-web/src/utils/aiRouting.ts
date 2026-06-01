@@ -42,7 +42,7 @@ export const GATEWAY_READINESS_NOTES: Record<string, string> = {
   zhipu: 'openai_compatible_dynamic',
 };
 
-export function normalizeGatewayKey(value: string): string {
+function normalizeGatewayKey(value: string): string {
   return String(value || '').trim().toLowerCase();
 }
 

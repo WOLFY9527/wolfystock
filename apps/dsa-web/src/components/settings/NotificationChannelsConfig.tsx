@@ -136,7 +136,7 @@ const CHANNELS: NotificationChannelDefinition[] = [
 
 const isConfiguredValue = (value: string | undefined): boolean => Boolean(String(value || '').trim());
 
-export const NOTIFICATION_CHANNEL_KEYS = new Set(CHANNELS.flatMap((channel) => channel.fields.map((field) => field.key)));
+const NOTIFICATION_CHANNEL_KEYS = new Set(CHANNELS.flatMap((channel) => channel.fields.map((field) => field.key)));
 
 const ZH_CHANNEL_DESCRIPTIONS: Record<string, string> = {
   feishu: '飞书 Webhook 或应用机器人凭据。',

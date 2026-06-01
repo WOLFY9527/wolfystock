@@ -1,10 +1,19 @@
-import type { BentoHeroItem } from '../home-bento';
 import type { SystemConfigItem } from '../../types/systemConfig';
 import {
   describeSettingsEnabledState,
   type SettingsEnabledState,
   type SettingsSystemHealthStatus,
 } from '../../utils/displayStatus';
+
+export type BentoHeroItem = {
+  label: string;
+  value: string | number;
+  detail?: string;
+  tone?: 'bullish' | 'bearish' | 'neutral';
+  testId?: string;
+  valueTestId?: string;
+  valueClassName?: string;
+};
 
 export type SystemHealthStatusCard = {
   key: string;

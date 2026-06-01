@@ -1,20 +1,11 @@
-/* eslint-disable react-refresh/only-export-components */
 import type React from 'react';
 import {
-  createContext,
-  use,
   useEffect,
-  useState,
 } from 'react';
 import { ThemeProvider as NextThemesProvider, useTheme } from 'next-themes';
 
-export type ThemeStylePreset = 'spacex';
+type ThemeStylePreset = 'spacex';
 type RootThemeName = 'spacex';
-
-type ThemeStyleContextValue = {
-  themeStyle: ThemeStylePreset;
-  setThemeStyle: (value: ThemeStylePreset) => void;
-};
 
 type ThemeProviderProps = {
   children: React.ReactNode;
@@ -22,9 +13,6 @@ type ThemeProviderProps = {
 
 const THEME_STYLE_STORAGE_KEY = 'dsa-theme-style';
 const DEFAULT_THEME_STYLE: ThemeStylePreset = 'spacex';
-const noopSetThemeStyle = () => undefined;
-
-const ThemeStyleContext = createContext<ThemeStyleContextValue | null>(null);
 
 function toRootThemeName(style: ThemeStylePreset): RootThemeName {
   return style;
@@ -32,7 +20,7 @@ function toRootThemeName(style: ThemeStylePreset): RootThemeName {
 
 const ThemeStyleController: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { setTheme } = useTheme();
-  const [themeStyle] = useState<ThemeStylePreset>(DEFAULT_THEME_STYLE);
+  const themeStyle = DEFAULT_THEME_STYLE;
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -51,25 +39,8 @@ const ThemeStyleController: React.FC<{ children: React.ReactNode }> = ({ childre
     void setTheme(colorMode);
   }, [setTheme, themeStyle]);
 
-  const contextValue = {
-    themeStyle,
-    setThemeStyle: noopSetThemeStyle,
-  };
-
-  return (
-    <ThemeStyleContext.Provider value={contextValue}>
-      {children}
-    </ThemeStyleContext.Provider>
-  );
+  return <>{children}</>;
 };
-
-export function useThemeStyle(): ThemeStyleContextValue {
-  const context = use(ThemeStyleContext);
-  if (!context) {
-    throw new Error('useThemeStyle must be used within ThemeProvider');
-  }
-  return context;
-}
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   return (
