@@ -1,4 +1,11 @@
 ## 2026-06-01
+- Market Overview `regimeSummary` now adds a bounded
+  `watch:qqq_iwm_proxy_confirmation` next-watch item when existing Liquidity
+  `capitalFlowSignal.sourceAssetPressure` rows show QQQ institutional proxy
+  absorbing while IWM industry proxy is lagging or balanced. The note is
+  quote-derived proxy observation only, not real fund flow, and does not add
+  drivers or change label, confidence, source authority, score contribution,
+  provider routing/order/budgets, MarketCache behavior, or API schema.
 - Market Overview `regimeSummary` now consumes existing Rotation
   `rotationFamilyRollup[].themeFlowSignal.breadthEvidence` as explanatory
   quote-breadth proxy context only. Confirming breadth can add a driver, while

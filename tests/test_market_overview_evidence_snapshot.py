@@ -1324,6 +1324,106 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
             assert "quote-breadth proxy" in watch_item["detail"]
             assert "observation-only" in watch_item["detail"]
 
+    def test_market_temperature_regime_summary_qqq_iwm_proxy_pressure_adds_next_watch_only(self) -> None:
+        synthesis = _risk_on_regime_synthesis()
+        baseline_payload = self._temperature_payload_with_regime_summary(
+            inputs=_regime_summary_growth_inputs(),
+            market_regime_synthesis=synthesis,
+        )
+
+        for iwm_pressure in ("lagging", "balanced"):
+            with self.subTest(iwm_pressure=iwm_pressure):
+                inputs = _regime_summary_growth_inputs()
+                inputs["capitalFlowSignal"]["sourceAssetPressure"] = [
+                    {
+                        "asset": "qqq_institutional_proxy",
+                        "pressure": "absorbing",
+                        "freshness": "cached",
+                        "providerRouting": {"winner": "internal-provider"},
+                        "adminDiagnostics": {"rawProviderPayload": "secret"},
+                    },
+                    {
+                        "asset": "iwm_industry_proxy",
+                        "pressure": iwm_pressure,
+                        "freshness": "cached",
+                        "cacheBundleDiagnostics": {"cacheKey": "liquidity:iwm"},
+                        "routeDecision": "internal",
+                    },
+                ]
+
+                payload = self._temperature_payload_with_regime_summary(
+                    inputs=inputs,
+                    market_regime_synthesis=synthesis,
+                )
+
+                summary = payload["regimeSummary"]
+                baseline_summary = baseline_payload["regimeSummary"]
+                assert summary["label"] == baseline_summary["label"] == "risk_on_growth_led"
+                assert summary["confidence"] == baseline_summary["confidence"]
+                assert summary["sourceAuthorityAllowed"] is False
+                assert summary["scoreContributionAllowed"] is False
+                assert not any(item["key"] == "watch:qqq_iwm_proxy_confirmation" for item in summary["drivers"])
+                assert not any(item["key"].startswith("liquidity_pressure:") for item in summary["drivers"])
+                watch_items = [
+                    item for item in summary["nextWatchItems"] if item["key"] == "watch:qqq_iwm_proxy_confirmation"
+                ]
+                assert len(watch_items) == 1
+                assert "quote-derived proxy observation" in watch_items[0]["detail"]
+                assert "not real fund flow" in watch_items[0]["detail"]
+                serialized = json.dumps(summary, ensure_ascii=False, sort_keys=True)
+                for forbidden in (
+                    "providerRouting",
+                    "internal-provider",
+                    "adminDiagnostics",
+                    "rawProviderPayload",
+                    "secret",
+                    "cacheBundleDiagnostics",
+                    "cacheKey",
+                    "routeDecision",
+                    "liquidity:iwm",
+                ):
+                    assert forbidden not in serialized
+
+    def test_market_temperature_regime_summary_qqq_iwm_proxy_pressure_fails_closed_for_missing_or_malformed_rows(
+        self,
+    ) -> None:
+        synthesis = _risk_on_regime_synthesis()
+        malformed_cases = [
+            None,
+            "not-a-list",
+            [{"asset": "qqq_institutional_proxy", "pressure": "absorbing"}],
+            [
+                {"asset": "qqq_institutional_proxy", "pressure": "leading"},
+                {"asset": "iwm_industry_proxy", "pressure": "lagging"},
+            ],
+            [
+                {"asset": "qqq_institutional_proxy"},
+                {"asset": "iwm_industry_proxy", "pressure": "lagging"},
+            ],
+            [
+                {"asset": "qqq_institutional_proxy", "pressure": "absorbing"},
+                {"asset": "iwm_industry_proxy", "pressure": ["lagging"]},
+            ],
+        ]
+
+        for source_asset_pressure in malformed_cases:
+            with self.subTest(source_asset_pressure=source_asset_pressure):
+                inputs = _regime_summary_growth_inputs()
+                if source_asset_pressure is not None:
+                    inputs["capitalFlowSignal"]["sourceAssetPressure"] = source_asset_pressure
+
+                payload = self._temperature_payload_with_regime_summary(
+                    inputs=inputs,
+                    market_regime_synthesis=synthesis,
+                )
+
+                summary = payload["regimeSummary"]
+                assert not any(
+                    item["key"] == "watch:qqq_iwm_proxy_confirmation" for item in summary["nextWatchItems"]
+                )
+                assert summary["sourceAuthorityAllowed"] is False
+                assert summary["scoreContributionAllowed"] is False
+
     def test_market_temperature_regime_summary_official_macro_ready_adds_observation_only_context_without_score_change(self) -> None:
         synthesis = _risk_on_regime_synthesis()
         baseline_payload = self._temperature_payload_with_regime_summary(

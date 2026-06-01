@@ -1395,6 +1395,9 @@ class MarketOverviewService:
                         str(raw_code),
                     )
                 )
+            qqq_iwm_watch_item = self._regime_summary_qqq_iwm_proxy_watch_item(liquidity_signal)
+            if qqq_iwm_watch_item:
+                next_watch_items.append(qqq_iwm_watch_item)
 
         if official_macro_readiness:
             readiness_status = str(official_macro_readiness.get("status") or "missing")
@@ -2210,6 +2213,36 @@ class MarketOverviewService:
         if not isinstance(signal, Mapping):
             return ""
         return str(signal.get("themeFlowState") or "")
+
+    @staticmethod
+    def _regime_summary_qqq_iwm_proxy_watch_item(liquidity_signal: Mapping[str, Any]) -> Optional[Dict[str, str]]:
+        if str(liquidity_signal.get("likelyDestination") or "") != "growth_ai_software_semis":
+            return None
+
+        rows = liquidity_signal.get("sourceAssetPressure")
+        if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes, bytearray)):
+            return None
+
+        pressure_by_asset: Dict[str, str] = {}
+        for row in rows:
+            if not isinstance(row, Mapping):
+                continue
+            asset = str(row.get("asset") or "").strip().lower()
+            pressure_value = row.get("pressure")
+            if not asset or not isinstance(pressure_value, str):
+                continue
+            pressure_by_asset[asset] = pressure_value.strip().lower()
+
+        qqq_pressure = pressure_by_asset.get("qqq_institutional_proxy")
+        iwm_pressure = pressure_by_asset.get("iwm_industry_proxy")
+        if qqq_pressure != "absorbing" or iwm_pressure not in {"lagging", "balanced"}:
+            return None
+
+        return MarketOverviewService._regime_summary_entry(
+            "watch:qqq_iwm_proxy_confirmation",
+            "观察 QQQ / IWM proxy 能否确认成长吸收",
+            "QQQ institutional proxy is absorbing while IWM industry proxy is lagging/balanced; this is a quote-derived proxy observation, not real fund flow, and stays next-watch only.",
+        )
 
     @staticmethod
     def _regime_summary_entry(key: str, label: str, detail: str) -> Dict[str, str]:

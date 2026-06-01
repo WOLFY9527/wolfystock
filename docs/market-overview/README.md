@@ -29,6 +29,11 @@ evidence.
   `regimeSummary.drivers` or `regimeSummary.nextWatchItems` context. It remains
   a quote-breadth proxy, not real fund-flow evidence, and must not change
   `regimeSummary.label`, confidence, source authority, or score contribution.
+- Liquidity `capitalFlowSignal.sourceAssetPressure` may only add bounded
+  `regimeSummary.nextWatchItems` context when existing QQQ / IWM proxy rows show
+  narrow growth absorption. It remains quote-derived proxy observation, not real
+  fund-flow evidence, and must not add drivers or change `regimeSummary.label`,
+  confidence, source authority, or score contribution.
 - Allowed `regimeSummary.label` values are:
   `risk_on_growth_led`, `risk_on_broad`, `risk_off_defensive`,
   `liquidity_positive`, `liquidity_negative`, `inflation_oil_pressure`,
