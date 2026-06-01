@@ -13,6 +13,15 @@ from src.contracts.source_confidence import (
     coerce_source_confidence_contract,
     evaluate_market_intelligence_trust_from_sources,
 )
+from src.services.investor_signal_model import (
+    CapitalFlowRegimeLabel,
+    ConfidenceLabel,
+    InvestorSignalContract,
+    InvestorSignalContradictionCode,
+    InvestorSignalReasonCode,
+    MarketRegimeLabel,
+    ThemeFlowStateLabel,
+)
 from src.services.provider_evidence_snapshot import build_provider_evidence_snapshot
 from src.services.liquidity_impulse_synthesis_adapter import build_liquidity_impulse_synthesis_payload
 from src.services.cn_money_market_rates_contracts import (
@@ -48,8 +57,11 @@ FRESHNESS_ORDER = {"live": 0, "cached": 1, "delayed": 2, "stale": 3, "fallback":
 EVIDENCE_FRESHNESS_ORDER = {**FRESHNESS_ORDER, "fresh": 0, "partial": 2.5, "synthetic": 5}
 RELIABLE_FRESHNESS = {"live", "cached", "delayed"}
 PROXY_SOURCE_TYPES = {"public_proxy", "proxy_public", "unofficial_proxy"}
+CAPITAL_FLOW_PARTIAL_SOURCE_TYPES = PROXY_SOURCE_TYPES | {"cache_snapshot", "unofficial_public_api", "authorized_licensed_feed"}
 POSSIBLE_WEIGHT = 49
 CRYPTO_FUNDING_BACKFILL_MAX_AGE = timedelta(hours=12)
+GOLD_SYMBOL_CANDIDATES = frozenset({"GLD", "GOLD", "GC=F", "XAUUSD", "XAU/USD"})
+OIL_SYMBOL_CANDIDATES = frozenset({"WTI", "CL=F", "BRENT", "USO", "OIL"})
 SOURCE_CONFIDENCE_BY_TYPE = {
     "official_public": 1.0,
     "exchange_public": 1.0,
@@ -358,6 +370,7 @@ class LiquidityMonitorService:
             },
             "indicators": indicators,
             "observationEvidenceSnapshot": self._build_observation_evidence_snapshot(indicators),
+            "capitalFlowSignal": self._build_capital_flow_signal(indicators, panels),
             "liquidityImpulseSynthesis": self._build_liquidity_impulse_synthesis_payload(indicators),
             "advisoryDisclosure": ADVISORY_DISCLOSURE,
             "sourceMetadata": {
@@ -424,6 +437,353 @@ class LiquidityMonitorService:
                 }
             )
         return build_provider_evidence_snapshot(indicator_evidence)
+
+    def _build_capital_flow_signal(
+        self,
+        indicators: List[Dict[str, Any]],
+        panels: Dict[str, PanelState],
+    ) -> Dict[str, Any]:
+        indicator_map = {str(item.get("key") or ""): item for item in indicators}
+        signal_rows = [
+            self._capital_flow_growth_pressure(panels.get("us_breadth"), indicator_map.get("us_etf_flow_proxy")),
+            self._capital_flow_asset_pressure_from_panel("btc", panels.get("crypto"), {"BTC"}),
+            self._capital_flow_asset_pressure_from_panel("gold", panels.get("fx_commodities"), GOLD_SYMBOL_CANDIDATES),
+            self._capital_flow_asset_pressure_from_panel("oil", panels.get("fx_commodities"), OIL_SYMBOL_CANDIDATES),
+            self._capital_flow_usd_pressure(panels.get("fx_commodities"), panels.get("macro")),
+            self._capital_flow_rates_pressure(panels.get("rates"), panels.get("macro")),
+            self._capital_flow_volatility_pressure(panels.get("volatility"), panels.get("macro")),
+        ]
+        source_asset_pressure = [item for item in signal_rows if item]
+        asset_map = {str(item["asset"]): item for item in source_asset_pressure}
+        contradiction_signals: list[str] = []
+        contradiction_codes: list[str] = []
+
+        growth_absorbing = asset_map.get("growth_ai_software_semis", {}).get("pressure") == "absorbing"
+        growth_lagging = asset_map.get("growth_ai_software_semis", {}).get("pressure") == "lagging"
+        btc_absorbing = asset_map.get("btc", {}).get("pressure") == "absorbing"
+        gold_absorbing = asset_map.get("gold", {}).get("pressure") == "absorbing"
+        oil_absorbing = asset_map.get("oil", {}).get("pressure") == "absorbing"
+        usd_easing = asset_map.get("usd", {}).get("pressure") == "easing"
+        usd_tightening = asset_map.get("usd", {}).get("pressure") == "tightening"
+        rates_easing = asset_map.get("rates", {}).get("pressure") == "easing"
+        rates_tightening = asset_map.get("rates", {}).get("pressure") == "tightening"
+        vol_benign = asset_map.get("volatility", {}).get("pressure") == "benign"
+        vol_stress = asset_map.get("volatility", {}).get("pressure") == "stress"
+        likely_destination = "no_clear_edge"
+        market_regime = MarketRegimeLabel.MIXED
+        capital_flow_regime = CapitalFlowRegimeLabel.MIXED
+        theme_flow_state = ThemeFlowStateLabel.MIXED
+
+        if growth_absorbing and (usd_easing or rates_easing or vol_benign):
+            likely_destination = "growth_ai_software_semis"
+            market_regime = MarketRegimeLabel.RISK_ON
+            capital_flow_regime = CapitalFlowRegimeLabel.INFLOW
+            theme_flow_state = ThemeFlowStateLabel.LEADING
+            if not btc_absorbing:
+                contradiction_signals.append("btc_not_confirming_growth_absorption")
+            if asset_map.get("gold") and not gold_absorbing:
+                contradiction_signals.append("gold_not_confirming_growth_absorption")
+        elif oil_absorbing and usd_easing and rates_easing:
+            likely_destination = "oil"
+            market_regime = MarketRegimeLabel.RISK_ON
+            capital_flow_regime = CapitalFlowRegimeLabel.INFLOW
+            theme_flow_state = ThemeFlowStateLabel.ROTATING
+        elif growth_lagging and (btc_absorbing or gold_absorbing) and (usd_tightening or rates_tightening):
+            likely_destination = "no_clear_edge"
+            contradiction_signals.append("cross_asset_rotation_split")
+        elif len(source_asset_pressure) < 2:
+            market_regime = MarketRegimeLabel.INSUFFICIENT_EVIDENCE
+            capital_flow_regime = CapitalFlowRegimeLabel.INSUFFICIENT_EVIDENCE
+            theme_flow_state = ThemeFlowStateLabel.INSUFFICIENT_EVIDENCE
+        elif usd_tightening and rates_tightening and vol_stress and not any((growth_absorbing, btc_absorbing, oil_absorbing)):
+            likely_destination = "defensives"
+            market_regime = MarketRegimeLabel.RISK_OFF
+            capital_flow_regime = CapitalFlowRegimeLabel.OUTFLOW
+            theme_flow_state = ThemeFlowStateLabel.ROTATING
+
+        if contradiction_signals:
+            contradiction_codes.append(InvestorSignalContradictionCode.CAPITAL_FLOW_SIGNAL_MISMATCH.value)
+            contradiction_codes.append(InvestorSignalContradictionCode.MIXED_SIGNAL_INPUTS.value)
+        elif likely_destination == "no_clear_edge" and len(source_asset_pressure) >= 3:
+            contradiction_signals.append("cross_asset_rotation_split")
+            contradiction_codes.append(InvestorSignalContradictionCode.MIXED_SIGNAL_INPUTS.value)
+
+        freshness = self._weakest_evidence_freshness(
+            str(item.get("freshness") or "unavailable") for item in source_asset_pressure
+        )
+        is_fallback = any(bool(item.get("isFallback")) for item in source_asset_pressure)
+        is_stale = any(bool(item.get("isStale")) for item in source_asset_pressure)
+        is_partial = any(bool(item.get("isPartial")) for item in source_asset_pressure) or len(source_asset_pressure) < 4
+
+        reason_codes = [
+            InvestorSignalReasonCode.SOURCE_AUTHORITY_MISSING.value,
+            InvestorSignalReasonCode.SCORE_RIGHTS_MISSING.value,
+        ]
+        if is_fallback:
+            reason_codes.append(InvestorSignalReasonCode.FALLBACK_SOURCE.value)
+        if is_stale:
+            reason_codes.append(InvestorSignalReasonCode.STALE_SOURCE.value)
+        if is_partial:
+            reason_codes.append(InvestorSignalReasonCode.PARTIAL_SOURCE.value)
+        if contradiction_signals:
+            reason_codes.append(InvestorSignalReasonCode.CONFLICTING_SIGNAL_INPUTS.value)
+        if not source_asset_pressure:
+            reason_codes.append(InvestorSignalReasonCode.UNAVAILABLE_SOURCE.value)
+
+        supportive_backdrop = sum(1 for flag in (usd_easing, rates_easing, vol_benign) if flag)
+        if capital_flow_regime is CapitalFlowRegimeLabel.INSUFFICIENT_EVIDENCE:
+            confidence_label = ConfidenceLabel.BLOCKED
+        elif likely_destination == "oil":
+            confidence_label = ConfidenceLabel.LOW
+        elif likely_destination != "no_clear_edge" and supportive_backdrop >= 2 and not is_fallback and not is_stale:
+            confidence_label = ConfidenceLabel.MEDIUM
+        else:
+            confidence_label = ConfidenceLabel.LOW
+
+        contract = InvestorSignalContract(
+            market_regime=market_regime,
+            capital_flow_regime=capital_flow_regime,
+            theme_flow_state=theme_flow_state,
+            confidence_label=confidence_label,
+            freshness=freshness,
+            source_authority_allowed=False,
+            reason_codes=tuple(dict.fromkeys(reason_codes)),
+            contradiction_codes=tuple(dict.fromkeys(contradiction_codes)),
+        ).to_dict()
+
+        contract.update(
+            {
+                "confidence": contract["confidenceLabel"],
+                "isFallback": is_fallback,
+                "isStale": is_stale,
+                "isPartial": is_partial,
+                "likelyDestination": likely_destination,
+                "sourceAssetPressure": source_asset_pressure,
+                "contradictionSignals": list(dict.fromkeys(contradiction_signals)),
+                "explanation": self._capital_flow_explanation(
+                    likely_destination=likely_destination,
+                    source_asset_pressure=source_asset_pressure,
+                    contradiction_signals=contradiction_signals,
+                ),
+            }
+        )
+        return contract
+
+    def _capital_flow_growth_pressure(
+        self,
+        panel: Optional[PanelState],
+        etf_indicator: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if panel is None:
+            return None
+        breadth = self._extract_us_breadth_components(panel)
+        if breadth is None:
+            return None
+        qqq_proxy = next((item for item in breadth.get("proxies", []) if str(item.get("symbol") or "") == "QQQ_SPY"), None)
+        if not isinstance(qqq_proxy, dict):
+            return None
+        value = self._numeric(qqq_proxy.get("value"))
+        if value is None:
+            return None
+        pressure = "absorbing" if value > 0 else "lagging" if value < 0 else "balanced"
+        source_type = str(qqq_proxy.get("sourceType") or "").lower()
+        freshness = str(qqq_proxy.get("freshness") or breadth.get("freshness") or "unavailable")
+        etf_score = int(etf_indicator.get("scoreContribution") or 0) if isinstance(etf_indicator, dict) else 0
+        return {
+            "asset": "growth_ai_software_semis",
+            "pressure": pressure,
+            "changePercent": round(value, 2),
+            "freshness": freshness,
+            "isFallback": bool(qqq_proxy.get("isFallback")),
+            "isStale": bool(qqq_proxy.get("isStale")),
+            "isPartial": freshness not in {"live", "fresh"} or source_type in CAPITAL_FLOW_PARTIAL_SOURCE_TYPES,
+            "observationOnly": True,
+            "supportiveBackdropVotes": max(0, etf_score),
+        }
+
+    def _capital_flow_asset_pressure_from_panel(
+        self,
+        asset: str,
+        panel: Optional[PanelState],
+        symbols: set[str] | frozenset[str],
+    ) -> Optional[Dict[str, Any]]:
+        if panel is None:
+            return None
+        item = self._first_reliable_item(panel, set(symbols))
+        if item is None:
+            return None
+        change = self._change_value(item)
+        if change is None:
+            return None
+        source_input = self._source_confidence_input_from_item(
+            item,
+            panel,
+            key=str(item.get("symbol") or asset.upper()),
+            label=str(item.get("label") or asset.upper()),
+        )
+        return self._capital_flow_asset_entry(
+            asset=asset,
+            change=change,
+            source_input=source_input,
+            positive_pressure="absorbing",
+            negative_pressure="lagging",
+        )
+
+    def _capital_flow_usd_pressure(
+        self,
+        fx_panel: Optional[PanelState],
+        macro_panel: Optional[PanelState],
+    ) -> Optional[Dict[str, Any]]:
+        if macro_panel is not None:
+            components = self._extract_official_usd_pressure_components(macro_panel)
+            if components:
+                component = components[0]
+                change = self._numeric(component.get("change"))
+                if change is not None:
+                    source_input = self._source_confidence_input_from_component(component)
+                    return self._capital_flow_asset_entry(
+                        asset="usd",
+                        change=change,
+                        source_input=source_input,
+                        positive_pressure="tightening",
+                        negative_pressure="easing",
+                    )
+        if fx_panel is None:
+            return None
+        item = self._first_reliable_item(fx_panel, {"DXY"})
+        if item is None:
+            return None
+        change = self._change_value(item)
+        if change is None:
+            return None
+        source_input = self._source_confidence_input_from_item(
+            item,
+            fx_panel,
+            key=str(item.get("symbol") or "DXY"),
+            label=str(item.get("label") or "DXY"),
+        )
+        return self._capital_flow_asset_entry(
+            asset="usd",
+            change=change,
+            source_input=source_input,
+            positive_pressure="tightening",
+            negative_pressure="easing",
+        )
+
+    def _capital_flow_rates_pressure(
+        self,
+        rates_panel: Optional[PanelState],
+        macro_panel: Optional[PanelState],
+    ) -> Optional[Dict[str, Any]]:
+        panels: list[PanelState] = []
+        if rates_panel is not None:
+            panels.append(rates_panel)
+        if macro_panel is not None:
+            panels.append(macro_panel)
+        components = [item for item in self._extract_us_rates_components(panels) if item.get("kind") == "yield"]
+        if not components:
+            return None
+        changes = [float(item["change"]) for item in components if self._numeric(item.get("change")) is not None]
+        if not changes:
+            return None
+        avg_change = sum(changes) / len(changes)
+        freshness = self._weakest_evidence_freshness(str(item.get("freshness") or "unavailable") for item in components)
+        return {
+            "asset": "rates",
+            "pressure": "easing" if avg_change < 0 else "tightening" if avg_change > 0 else "balanced",
+            "changePercent": round(avg_change, 2),
+            "freshness": freshness,
+            "isFallback": any(bool(item.get("isFallback")) for item in components),
+            "isStale": any(bool(item.get("isStale")) for item in components),
+            "isPartial": freshness not in {"live", "fresh"} or any(
+                str(item.get("sourceType") or "").lower() in CAPITAL_FLOW_PARTIAL_SOURCE_TYPES
+                for item in components
+            ),
+            "observationOnly": True,
+        }
+
+    def _capital_flow_volatility_pressure(
+        self,
+        volatility_panel: Optional[PanelState],
+        macro_panel: Optional[PanelState],
+    ) -> Optional[Dict[str, Any]]:
+        panels: list[PanelState] = []
+        if volatility_panel is not None:
+            panels.append(volatility_panel)
+        if macro_panel is not None:
+            panels.append(macro_panel)
+        selected = self._preferred_symbol_item(panels, {"VIX", "VIXCLS"}, validator=self._is_vix_item_usable)
+        if selected is None:
+            return None
+        panel, item = selected
+        change = self._change_value(item)
+        value = self._numeric(item.get("value") or item.get("price"))
+        pressure = "balanced"
+        if change is not None and change < 0:
+            pressure = "benign"
+        elif change is not None and change > 0:
+            pressure = "stress"
+        elif value is not None and value <= 16:
+            pressure = "benign"
+        elif value is not None and value >= 25:
+            pressure = "stress"
+        source_input = self._source_confidence_input_from_item(
+            item,
+            panel,
+            key=str(item.get("symbol") or "VIX"),
+            label=str(item.get("label") or "VIX"),
+        )
+        return {
+            "asset": "volatility",
+            "pressure": pressure,
+            "changePercent": round(float(change or 0.0), 2),
+            "freshness": str(source_input.get("freshness") or "unavailable"),
+            "isFallback": bool(source_input.get("isFallback")),
+            "isStale": bool(source_input.get("isStale")),
+            "isPartial": bool(source_input.get("isPartial")) or str(source_input.get("sourceType") or "").lower() in CAPITAL_FLOW_PARTIAL_SOURCE_TYPES,
+            "observationOnly": True,
+        }
+
+    @staticmethod
+    def _capital_flow_asset_entry(
+        *,
+        asset: str,
+        change: float,
+        source_input: Dict[str, Any],
+        positive_pressure: str,
+        negative_pressure: str,
+    ) -> Dict[str, Any]:
+        source_type = str(source_input.get("sourceType") or "").lower()
+        freshness = str(source_input.get("freshness") or "unavailable")
+        return {
+            "asset": asset,
+            "pressure": positive_pressure if change > 0 else negative_pressure if change < 0 else "balanced",
+            "changePercent": round(change, 2),
+            "freshness": freshness,
+            "isFallback": bool(source_input.get("isFallback")),
+            "isStale": bool(source_input.get("isStale")),
+            "isPartial": bool(source_input.get("isPartial")) or freshness not in {"live", "fresh"} or source_type in CAPITAL_FLOW_PARTIAL_SOURCE_TYPES,
+            "observationOnly": True,
+        }
+
+    @staticmethod
+    def _capital_flow_explanation(
+        *,
+        likely_destination: str,
+        source_asset_pressure: List[Dict[str, Any]],
+        contradiction_signals: List[str],
+    ) -> str:
+        if likely_destination == "growth_ai_software_semis":
+            return "Growth / AI / software / semis proxies are absorbing more attention, but the read remains observation-only and not confirmed by every cross-asset input."
+        if likely_destination == "oil":
+            return "Oil appears to be attracting attention while the USD and rates backdrop looks rate-cut supportive, but the read remains a proxy observation rather than real fund-flow evidence."
+        if likely_destination == "defensives":
+            return "Defensive rotation appears stronger than cyclical risk-taking, based on tighter USD/rates/volatility conditions."
+        if contradiction_signals:
+            return "Cross-asset inputs are mixed, so there is no clear edge on where capital is rotating."
+        if not source_asset_pressure:
+            return "Existing liquidity payloads do not provide enough cross-asset evidence to infer a clear destination."
+        return "Cross-asset pressure is visible, but the current mix does not support a clear destination call."
 
     @staticmethod
     def _observation_snapshot_input_is_proxy(item: Dict[str, Any]) -> bool:

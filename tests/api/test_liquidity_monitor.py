@@ -143,6 +143,37 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
             "providerRuntimeChanged": False,
             "marketCacheMutation": False,
         },
+        "capitalFlowSignal": {
+            "contractVersion": "investor_signal_contract_v1",
+            "diagnosticOnly": True,
+            "observationOnly": True,
+            "authorityGrant": False,
+            "decisionGrade": False,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "marketRegime": "risk_on",
+            "marketRegimeLabel": "风险偏好回升",
+            "capitalFlowRegime": "inflow",
+            "capitalFlowLabel": "资金净流入观察",
+            "themeFlowState": "leading",
+            "themeFlowLabel": "主线领涨观察",
+            "confidenceLabel": "medium",
+            "confidenceText": "中",
+            "confidence": "medium",
+            "freshness": "partial",
+            "isFallback": False,
+            "isStale": False,
+            "isPartial": True,
+            "reasonCodes": ["source_authority_missing", "score_rights_missing", "partial_source"],
+            "contradictionCodes": ["capital_flow_signal_mismatch"],
+            "likelyDestination": "growth_ai_software_semis",
+            "sourceAssetPressure": [
+                {"asset": "growth_ai_software_semis", "pressure": "absorbing", "freshness": "delayed"},
+                {"asset": "btc", "pressure": "lagging", "freshness": "live"},
+            ],
+            "contradictionSignals": ["btc_not_confirming_growth_absorption"],
+            "explanation": "Growth is absorbing more attention while BTC is not confirming the move.",
+        },
         "observationEvidenceSnapshot": {
             "sentinel": "top-level-service-only-evidence",
         },
@@ -172,12 +203,16 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
         "liquidityImpulseSynthesis",
         "advisoryDisclosure",
         "sourceMetadata",
+        "capitalFlowSignal",
     }
     assert body["endpoint"] == "/api/v1/market/liquidity-monitor"
     assert body["score"]["regime"] == "supportive"
     assert set(body["sourceMetadata"]) == {"externalProviderCalls", "providerRuntimeChanged", "marketCacheMutation"}
     assert body["sourceMetadata"]["externalProviderCalls"] is False
     assert "observationEvidenceSnapshot" not in body
+    assert body["capitalFlowSignal"]["likelyDestination"] == "growth_ai_software_semis"
+    assert body["capitalFlowSignal"]["confidence"] == "medium"
+    assert body["capitalFlowSignal"]["observationOnly"] is True
     assert body["liquidityImpulseSynthesis"]["liquidityImpulse"] == "contracting_liquidity"
     indicator = body["indicators"][0]
     assert "observationEvidenceSnapshot" not in indicator

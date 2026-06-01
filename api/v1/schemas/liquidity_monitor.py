@@ -16,6 +16,52 @@ IndicatorStatus = Literal["live", "partial", "unavailable"]
 EvidenceFreshnessLabel = Literal["live", "fresh", "cached", "delayed", "stale", "partial", "fallback", "synthetic", "unavailable", "unknown"]
 SourceTierLabel = MarketIntelligenceSourceTier
 TrustLevelLabel = Literal["reliable", "usable_with_caution", "weak", "unavailable"]
+CapitalFlowRegimeLabel = Literal["inflow", "balanced", "outflow", "mixed", "insufficient_evidence"]
+MarketRegimeLabel = Literal["risk_on", "balanced", "risk_off", "mixed", "insufficient_evidence"]
+ThemeFlowStateLabel = Literal["leading", "broadening", "rotating", "crowded", "fading", "mixed", "insufficient_evidence"]
+ConfidenceLabel = Literal["high", "medium", "low", "blocked"]
+CapitalFlowDestinationLabel = Literal["growth_ai_software_semis", "oil", "gold", "btc", "defensives", "no_clear_edge"]
+CapitalFlowPressureLabel = Literal["absorbing", "lagging", "easing", "tightening", "benign", "stress", "balanced"]
+
+
+class CapitalFlowSourceAssetPressure(BaseModel):
+    asset: str
+    pressure: CapitalFlowPressureLabel
+    changePercent: float | None = None
+    freshness: EvidenceFreshnessLabel
+    isFallback: bool = False
+    isStale: bool = False
+    isPartial: bool = False
+    observationOnly: bool = True
+
+
+class LiquidityMonitorCapitalFlowSignal(BaseModel):
+    contractVersion: str
+    diagnosticOnly: bool = True
+    observationOnly: bool = True
+    authorityGrant: bool = False
+    decisionGrade: bool = False
+    sourceAuthorityAllowed: bool = False
+    scoreContributionAllowed: bool = False
+    marketRegime: MarketRegimeLabel
+    marketRegimeLabel: str
+    capitalFlowRegime: CapitalFlowRegimeLabel
+    capitalFlowLabel: str
+    themeFlowState: ThemeFlowStateLabel
+    themeFlowLabel: str
+    confidenceLabel: ConfidenceLabel
+    confidenceText: str
+    confidence: ConfidenceLabel
+    freshness: EvidenceFreshnessLabel
+    isFallback: bool = False
+    isStale: bool = False
+    isPartial: bool = False
+    reasonCodes: list[str] = Field(default_factory=list)
+    contradictionCodes: list[str] = Field(default_factory=list)
+    likelyDestination: CapitalFlowDestinationLabel
+    sourceAssetPressure: list[CapitalFlowSourceAssetPressure] = Field(default_factory=list)
+    contradictionSignals: list[str] = Field(default_factory=list)
+    explanation: str
 
 
 class LiquidityMonitorScore(BaseModel):
@@ -151,6 +197,7 @@ class LiquidityMonitorResponse(BaseModel):
     score: LiquidityMonitorScore
     freshness: LiquidityMonitorFreshnessSummary
     indicators: list[LiquidityMonitorIndicator] = Field(default_factory=list)
+    capitalFlowSignal: LiquidityMonitorCapitalFlowSignal | None = None
     liquidityImpulseSynthesis: LiquidityImpulseSynthesisPayload
     advisoryDisclosure: str
     sourceMetadata: LiquidityMonitorSourceMetadata

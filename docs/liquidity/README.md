@@ -24,6 +24,16 @@ signal tables, source/risk rails, or liquidity-related freshness disclosure.
 
 - Liquidity Monitor indicator payloads may include additive
   `coverageDiagnostics` metadata.
+- Liquidity Monitor may also expose additive `capitalFlowSignal` metadata to
+  summarize where capital appears to be rotating across growth/AI/software/semis
+  vs BTC/gold/oil/USD/rates/volatility.
+- `capitalFlowSignal` is observation-only by design. It is a cross-asset proxy
+  assembled from existing cached payloads, not a real fund-flow feed.
+- `capitalFlowSignal` must keep `observationOnly=true`,
+  `sourceAuthorityAllowed=false`, and `scoreContributionAllowed=false`.
+- Cached/proxy/partial rows may shape `capitalFlowSignal.likelyDestination`,
+  `sourceAssetPressure`, `contradictionSignals`, and `explanation`, but they
+  must not promote liquidity score authority or change existing indicator gates.
 - Diagnostics must explain required, fulfilled, and missing inputs; source
   tier; freshness; trust level; score contribution; cap/degradation reason; and
   activation hints.

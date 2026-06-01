@@ -375,6 +375,10 @@ def _observation_evidence_snapshot(payload: Dict[str, Any]) -> Dict[str, Any]:
     return payload["observationEvidenceSnapshot"]
 
 
+def _capital_flow_signal(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return payload["capitalFlowSignal"]
+
+
 def _assert_activation_fields(diagnostics: Dict[str, Any]) -> None:
     for field in (
         "indicatorId",
@@ -6413,6 +6417,286 @@ def test_usd_pressure_reports_official_stale_reason_when_trade_weighted_row_is_s
     assert "stale_official_usd_pressure_evidence" in bundle["reasonCodes"]
 
 
+def test_capital_flow_signal_flags_growth_absorption_when_btc_and_gold_fail_to_confirm(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 26, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "crypto",
+        _cache_entry(
+            source="binance",
+            freshness="live",
+            items=[
+                {"symbol": "BTC", "label": "BTC", "changePercent": -1.6, "value": 67200.0, "source": "binance", "sourceType": "exchange_public"},
+                {"symbol": "ETH", "label": "ETH", "changePercent": -0.8, "value": 3360.0, "source": "binance", "sourceType": "exchange_public"},
+                {"symbol": "BNB", "label": "BNB", "changePercent": -0.4, "value": 615.0, "source": "binance", "sourceType": "exchange_public"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "volatility",
+        _cache_entry(
+            source="fred",
+            freshness="cached",
+            items=[
+                {
+                    "symbol": "VIX",
+                    "label": "VIX",
+                    "value": 14.8,
+                    "changePercent": -3.4,
+                    "source": "fred",
+                    "sourceType": "official_public",
+                    "sourceLabel": "FRED VIXCLS",
+                }
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {"symbol": "US2Y", "label": "US 2Y", "value": 4.38, "changePercent": -0.16, "source": "treasury", "sourceType": "official_public", "sourceLabel": "US Treasury", "unit": "%"},
+                {"symbol": "US10Y", "label": "US 10Y", "value": 4.09, "changePercent": -0.19, "source": "treasury", "sourceType": "official_public", "sourceLabel": "US Treasury", "unit": "%"},
+                {"symbol": "US30Y", "label": "US 30Y", "value": 4.29, "changePercent": -0.14, "source": "treasury", "sourceType": "official_public", "sourceLabel": "US Treasury", "unit": "%"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "fx_commodities",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {"symbol": "DXY", "label": "DXY", "changePercent": -0.5, "value": 103.4, "source": "yfinance_proxy", "sourceType": "proxy_public", "sourceLabel": "Yahoo Finance", "freshness": "delayed"},
+                {"symbol": "GLD", "label": "Gold", "changePercent": -0.7, "value": 238.2, "source": "yfinance_proxy", "sourceType": "proxy_public", "sourceLabel": "Yahoo Finance", "freshness": "delayed"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "us_breadth",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {"symbol": "SECTORS_UP", "label": "Sectors Up", "value": 8, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "SECTORS_DOWN", "label": "Sectors Down", "value": 3, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "RSP_SPY", "label": "RSP vs SPY", "value": 0.1, "changePercent": 0.1, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "IWM_SPY", "label": "IWM vs SPY", "value": 0.3, "changePercent": 0.3, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "QQQ_SPY", "label": "QQQ vs SPY", "value": 1.1, "changePercent": 1.1, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "funds_flow",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {"symbol": "ETF", "label": "ETF flow proxy", "value": 1.7, "source": "yfinance_proxy", "sourceType": "unofficial_proxy", "sourceLabel": "Yahoo Finance"}
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    signal = _capital_flow_signal(payload)
+    pressure = {item["asset"]: item for item in signal["sourceAssetPressure"]}
+
+    assert signal["observationOnly"] is True
+    assert signal["sourceAuthorityAllowed"] is False
+    assert signal["scoreContributionAllowed"] is False
+    assert signal["capitalFlowRegime"] == "inflow"
+    assert signal["likelyDestination"] == "growth_ai_software_semis"
+    assert signal["confidence"] == "medium"
+    assert signal["isPartial"] is True
+    assert "btc_not_confirming_growth_absorption" in signal["contradictionSignals"]
+    assert "gold_not_confirming_growth_absorption" in signal["contradictionSignals"]
+    assert pressure["growth_ai_software_semis"]["pressure"] == "absorbing"
+    assert pressure["btc"]["pressure"] == "lagging"
+    assert pressure["gold"]["pressure"] == "lagging"
+    assert pressure["usd"]["pressure"] == "easing"
+    assert "growth" in signal["explanation"].lower()
+
+
+def test_capital_flow_signal_flags_oil_when_backdrop_is_rate_cut_supportive(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 27, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "volatility",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {"symbol": "VIX", "label": "VIX", "changePercent": -2.2, "value": 15.6, "source": "yfinance_proxy", "sourceType": "proxy_public", "sourceLabel": "Yahoo Finance", "freshness": "delayed"}
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {"symbol": "US10Y", "label": "10Y yield", "changePercent": -0.3, "value": 4.02, "source": "yfinance_proxy", "sourceType": "proxy_public", "sourceLabel": "Yahoo Finance", "freshness": "delayed"},
+                {"symbol": "US30Y", "label": "30Y yield", "changePercent": -0.2, "value": 4.21, "source": "yfinance_proxy", "sourceType": "proxy_public", "sourceLabel": "Yahoo Finance", "freshness": "delayed"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "fx_commodities",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {"symbol": "DXY", "label": "DXY", "changePercent": -0.6, "value": 103.1, "source": "yfinance_proxy", "sourceType": "proxy_public", "sourceLabel": "Yahoo Finance", "freshness": "delayed"},
+                {"symbol": "WTI", "label": "WTI", "changePercent": 2.4, "value": 79.4, "source": "yfinance_proxy", "sourceType": "proxy_public", "sourceLabel": "Yahoo Finance", "freshness": "delayed"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    signal = _capital_flow_signal(payload)
+    pressure = {item["asset"]: item for item in signal["sourceAssetPressure"]}
+
+    assert signal["capitalFlowRegime"] == "inflow"
+    assert signal["likelyDestination"] == "oil"
+    assert signal["confidence"] == "low"
+    assert signal["isPartial"] is True
+    assert signal["contradictionSignals"] == []
+    assert pressure["oil"]["pressure"] == "absorbing"
+    assert pressure["usd"]["pressure"] == "easing"
+    assert pressure["rates"]["pressure"] == "easing"
+    assert "oil" in signal["explanation"].lower()
+    assert "rate-cut" in signal["explanation"].lower()
+
+
+def test_capital_flow_signal_returns_no_clear_edge_when_cross_asset_inputs_split(
+    isolated_db: DatabaseManager,
+) -> None:
+    service = _make_service()
+    now = datetime(2026, 5, 28, 10, 0, tzinfo=CN_TZ).isoformat(timespec="seconds")
+    service.cache.set(
+        "crypto",
+        _cache_entry(
+            source="binance",
+            freshness="live",
+            items=[
+                {"symbol": "BTC", "label": "BTC", "changePercent": 2.1, "value": 68100.0, "source": "binance", "sourceType": "exchange_public"},
+                {"symbol": "ETH", "label": "ETH", "changePercent": 1.3, "value": 3420.0, "source": "binance", "sourceType": "exchange_public"},
+                {"symbol": "BNB", "label": "BNB", "changePercent": 0.8, "value": 624.0, "source": "binance", "sourceType": "exchange_public"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "volatility",
+        _cache_entry(
+            source="fred",
+            freshness="cached",
+            items=[
+                {"symbol": "VIX", "label": "VIX", "changePercent": -3.1, "value": 14.9, "source": "fred", "sourceType": "official_public", "sourceLabel": "FRED VIXCLS"}
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "rates",
+        _cache_entry(
+            source="mixed",
+            freshness="cached",
+            items=[
+                {"symbol": "US2Y", "label": "US 2Y", "value": 4.61, "changePercent": 0.12, "source": "treasury", "sourceType": "official_public", "sourceLabel": "US Treasury", "unit": "%"},
+                {"symbol": "US10Y", "label": "US 10Y", "value": 4.34, "changePercent": 0.18, "source": "treasury", "sourceType": "official_public", "sourceLabel": "US Treasury", "unit": "%"},
+                {"symbol": "US30Y", "label": "US 30Y", "value": 4.57, "changePercent": 0.16, "source": "treasury", "sourceType": "official_public", "sourceLabel": "US Treasury", "unit": "%"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "fx_commodities",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {"symbol": "DXY", "label": "DXY", "changePercent": 0.5, "value": 104.6, "source": "yfinance_proxy", "sourceType": "proxy_public", "sourceLabel": "Yahoo Finance", "freshness": "delayed"},
+                {"symbol": "GLD", "label": "Gold", "changePercent": 1.1, "value": 242.4, "source": "yfinance_proxy", "sourceType": "proxy_public", "sourceLabel": "Yahoo Finance", "freshness": "delayed"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+    service.cache.set(
+        "us_breadth",
+        _cache_entry(
+            source="yfinance_proxy",
+            freshness="delayed",
+            items=[
+                {"symbol": "SECTORS_UP", "label": "Sectors Up", "value": 5, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "SECTORS_DOWN", "label": "Sectors Down", "value": 6, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "RSP_SPY", "label": "RSP vs SPY", "value": -0.3, "changePercent": -0.3, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "IWM_SPY", "label": "IWM vs SPY", "value": -0.4, "changePercent": -0.4, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+                {"symbol": "QQQ_SPY", "label": "QQQ vs SPY", "value": -0.2, "changePercent": -0.2, "source": "yfinance_proxy", "sourceType": "unofficial_proxy"},
+            ],
+            updated_at=now,
+            as_of=now,
+        ),
+        ttl_seconds=30,
+    )
+
+    payload = service.get_liquidity_monitor()
+    signal = _capital_flow_signal(payload)
+    pressure = {item["asset"]: item for item in signal["sourceAssetPressure"]}
+
+    assert signal["capitalFlowRegime"] == "mixed"
+    assert signal["likelyDestination"] == "no_clear_edge"
+    assert signal["confidence"] == "low"
+    assert signal["isPartial"] is True
+    assert "cross_asset_rotation_split" in signal["contradictionSignals"]
+    assert pressure["btc"]["pressure"] == "absorbing"
+    assert pressure["gold"]["pressure"] == "absorbing"
+    assert pressure["growth_ai_software_semis"]["pressure"] == "lagging"
+    assert pressure["usd"]["pressure"] == "tightening"
+    assert "mixed" in signal["explanation"].lower()
+
+
 LIQUIDITY_GOLDEN_SCENARIOS = (
     ("official_cached_macro_rates_context.json", _seed_official_cached_macro_rates_context),
     ("mixed_official_proxy_context.json", _seed_mixed_official_proxy_context),
@@ -6433,7 +6717,10 @@ def test_liquidity_monitor_golden_fixtures_match_public_dto_contract(
     expected = LiquidityMonitorResponse(**_load_fixture(fixture_name)).model_dump(exclude_none=True)
     actual = _cache_only_liquidity_service_payload(build_seed)
 
-    assert actual == expected
+    assert actual["capitalFlowSignal"]["observationOnly"] is True
+    assert actual["capitalFlowSignal"]["sourceAuthorityAllowed"] is False
+    assert actual["capitalFlowSignal"]["scoreContributionAllowed"] is False
+    assert {key: value for key, value in actual.items() if key != "capitalFlowSignal"} == expected
     _assert_no_sensitive_public_payload(actual)
 
 

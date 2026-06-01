@@ -2310,6 +2310,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 调整游客页预览图为更真实的波动曲线，补充 AI 归因文案，并放宽容器宽度以改善缩放和窄屏可读性。
 - 释放首页与游客页桌面端宽度上限，首页改为 5 列 Bento 底层网格，让 AI 决断卡在超宽屏占 2/5，右侧三张指标卡各占 1/5，并同步拉宽顶部标题与搜索区。
 
+## Unreleased
+
+### Changed
+- Liquidity Monitor adds additive `capitalFlowSignal` observation-only output
+  so cached cross-asset payloads can summarize likely rotation toward
+  growth/AI/software/semis, BTC, gold, or oil without claiming real fund flow
+  or changing liquidity score gates.
+
 ## [1.0.0] - 2026-01-10
 
 ### 新增
