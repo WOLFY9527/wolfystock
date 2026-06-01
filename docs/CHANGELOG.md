@@ -1,3 +1,12 @@
+## 2026-06-02
+- Portfolio now exposes `POST /api/v1/portfolio/scenario-risk`, an
+  advisory-only API contract that projects caller-supplied positions,
+  exposures, and scenario shocks through the pure
+  `PortfolioScenarioRiskService` read model. The endpoint does not accept
+  account, broker, sync, provider refresh, order, trade, or mutation fields and
+  preserves explicit no-broker-sync, no-accounting-mutation, no-order-placement,
+  no-provider-runtime, and not-investment-advice metadata.
+
 ## 2026-06-01
 - User alert APIs now expose an owner-scoped, in-app-only backend contract for
   Watchlist price threshold rules at `/api/v1/user-alerts`. V1 supports

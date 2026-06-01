@@ -36,6 +36,8 @@ from api.v1.schemas.portfolio import (
     PortfolioIbkrSyncRequest,
     PortfolioIbkrSyncResponse,
     PortfolioRiskResponse,
+    PortfolioScenarioRiskRequest,
+    PortfolioScenarioRiskResponse,
     PortfolioSnapshotResponse,
     PortfolioTradeCreateRequest,
     PortfolioTradeListItem,
@@ -46,6 +48,7 @@ from src.services.fx_rate_service import default_fx_rate_service
 from src.services.portfolio_import_service import PortfolioImportService
 from src.services.portfolio_ibkr_sync_service import PortfolioIbkrSyncError, PortfolioIbkrSyncService
 from src.services.portfolio_risk_service import PortfolioRiskService
+from src.services.portfolio_scenario_risk import PortfolioScenarioRiskService
 from src.services.portfolio_service import (
     PortfolioBusyError,
     PortfolioConflictError,
@@ -1035,6 +1038,31 @@ def refresh_fx_rates(
         raise _bad_request(exc)
     except Exception as exc:
         raise _internal_error("Refresh FX rates failed", exc)
+
+
+@router.post(
+    "/scenario-risk",
+    response_model=PortfolioScenarioRiskResponse,
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Project caller-supplied portfolio scenario risk",
+)
+def project_scenario_risk(
+    request: PortfolioScenarioRiskRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioScenarioRiskResponse:
+    del current_user  # Auth convention only; the projection is caller-supplied and account-free.
+    try:
+        projection = PortfolioScenarioRiskService().build_projection(
+            as_of=request.asOf,
+            positions=request.positions,
+            exposures=request.exposures,
+            scenario_shocks=request.scenarioShocks,
+        )
+        return PortfolioScenarioRiskResponse.model_validate(projection.model_dump())
+    except ValueError as exc:
+        raise _bad_request(exc)
+    except Exception as exc:
+        raise _internal_error("Project scenario risk failed", exc)
 
 
 @router.get(

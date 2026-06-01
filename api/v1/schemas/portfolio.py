@@ -533,3 +533,25 @@ class PortfolioRiskResponse(BaseModel):
     benchmarkMappingState: Optional[str] = None
     factorMappingState: Optional[str] = None
     confidenceCap: Optional[Dict[str, Any]] = None
+
+
+class PortfolioScenarioRiskRequest(BaseModel):
+    asOf: str = Field(..., min_length=1)
+    positions: List[Dict[str, Any]] | Dict[str, Any]
+    exposures: List[Dict[str, Any]] | Dict[str, Any]
+    scenarioShocks: List[Dict[str, Any]] | Dict[str, Any]
+
+
+class PortfolioScenarioRiskResponse(BaseModel):
+    readModelType: str
+    advisoryOnly: bool
+    accountingMutation: bool = False
+    brokerIntegration: bool = False
+    tradeExecution: bool = False
+    executionReadiness: str
+    asOf: Optional[str] = None
+    coverage: Dict[str, Any] = Field(default_factory=dict)
+    scenarios: List[Dict[str, Any]] = Field(default_factory=list)
+    insufficientDataReasons: List[str] = Field(default_factory=list)
+    missingDataWarnings: List[str] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
