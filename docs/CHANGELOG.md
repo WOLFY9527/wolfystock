@@ -1,4 +1,12 @@
 ## 2026-06-02
+- Stocks API now exposes a narrow read-only single-stock evidence contract at
+  `GET /api/v1/stocks/{stock_code}/evidence`. The endpoint reuses the existing
+  `StockEvidenceService` projection, preserves `items[].stockEvidencePacket`,
+  and keeps `stockEvidencePacket.fundamentalsSummary` JSON-stable with
+  observation-only flags (`notInvestmentAdvice`, `observationOnly`,
+  `scoreContributionAllowed: false`, `sourceAuthorityAllowed: false`) while
+  filtering raw/admin/provider/advice fields and avoiding live quote/provider
+  fetches from the HTTP layer.
 - Portfolio now exposes `POST /api/v1/portfolio/scenario-risk`, an
   advisory-only API contract that projects caller-supplied positions,
   exposures, and scenario shocks through the pure

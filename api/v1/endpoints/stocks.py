@@ -21,6 +21,7 @@ from api.v1.schemas.stocks import (
     ExtractItem,
     IntradayBar,
     KLineData,
+    StockEvidenceResponse,
     StockHistoryResponse,
     StockIntradayResponse,
     StockQuote,
@@ -37,6 +38,7 @@ from src.services.import_parser import (
     parse_import_from_bytes,
     parse_import_from_text,
 )
+from src.services.agent_stock_evidence_service import StockEvidenceService
 from src.services.stock_service import StockService
 
 logger = logging.getLogger(__name__)
@@ -45,6 +47,13 @@ router = APIRouter()
 
 # 须在 /{stock_code} 路由之前定义
 ALLOWED_MIME_STR = ", ".join(ALLOWED_MIME)
+
+
+class _ReadOnlyEvidenceFetcherManager:
+    """Fail-closed quote seam for the API contract endpoint."""
+
+    def get_realtime_quote(self, symbol: str):
+        return None
 
 
 @router.post(
@@ -269,6 +278,51 @@ def validate_stock_ticker(stock_code: str) -> StockValidationResponse:
                 "error": "internal_error",
                 "message": f"校验股票代码失败: {str(e)}"
             }
+        )
+
+
+@router.get(
+    "/{stock_code}/evidence",
+    response_model=StockEvidenceResponse,
+    response_model_exclude_none=True,
+    responses={
+        200: {"description": "单股票只读证据数据"},
+        404: {"description": "股票不存在或代码无效", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取单股票只读证据",
+    description="返回现有 StockEvidenceService 的单股票只读证据投影，并保留 stockEvidencePacket。",
+)
+def get_stock_evidence(stock_code: str) -> StockEvidenceResponse:
+    try:
+        service = StockEvidenceService()
+        if hasattr(service, "quote_adapter") and hasattr(service.quote_adapter, "fetcher_manager"):
+            service.quote_adapter.fetcher_manager = _ReadOnlyEvidenceFetcherManager()
+        if hasattr(service, "fetcher_manager"):
+            service.fetcher_manager = _ReadOnlyEvidenceFetcherManager()
+        payload = service.get_stock_evidence([stock_code])
+
+        items = payload.get("items")
+        if not isinstance(items, list) or not items:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "not_found",
+                    "message": f"未找到股票 {stock_code} 的证据数据",
+                },
+            )
+
+        return StockEvidenceResponse.model_validate(payload)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取股票证据失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"获取股票证据失败: {str(e)}",
+            },
         )
 
 

@@ -216,3 +216,84 @@ class StockValidationResponse(BaseModel):
     stock_code: str = Field(..., description="股票代码")
     exists: bool = Field(..., description="股票代码是否存在")
     stock_name: Optional[str] = Field(None, description="解析出的股票名称")
+
+
+class StockEvidenceFundamentalsSummary(BaseModel):
+    """单股票证据包中的 fundamentalsSummary 白名单投影。"""
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    status: Optional[str] = Field(None, description="基本面摘要状态")
+    market_cap: Optional[float] = Field(None, alias="marketCap", description="市值")
+    pe_ttm: Optional[float] = Field(None, alias="peTtm", description="滚动市盈率")
+    pb: Optional[float] = Field(None, description="市净率")
+    beta: Optional[float] = Field(None, description="Beta")
+    revenue_ttm: Optional[float] = Field(None, alias="revenueTtm", description="滚动营收")
+    net_income_ttm: Optional[float] = Field(None, alias="netIncomeTtm", description="滚动净利润")
+    fcf_ttm: Optional[float] = Field(None, alias="fcfTtm", description="滚动自由现金流")
+    gross_margin: Optional[float] = Field(None, alias="grossMargin", description="毛利率")
+    operating_margin: Optional[float] = Field(None, alias="operatingMargin", description="营业利润率")
+    roe: Optional[float] = Field(None, description="净资产收益率")
+    roa: Optional[float] = Field(None, description="总资产收益率")
+    period: Optional[str] = Field(None, description="字段周期标签")
+    source: Optional[str] = Field(None, description="来源标签")
+    freshness: Optional[str] = Field(None, description="新鲜度标签")
+    missing_fields: List[str] = Field(default_factory=list, alias="missingFields", description="缺失字段列表")
+    not_investment_advice: Optional[bool] = Field(None, alias="notInvestmentAdvice", description="非投资建议")
+    observation_only: Optional[bool] = Field(None, alias="observationOnly", description="仅观察")
+    score_contribution_allowed: Optional[bool] = Field(None, alias="scoreContributionAllowed", description="是否允许参与打分")
+    source_authority_allowed: Optional[bool] = Field(None, alias="sourceAuthorityAllowed", description="是否允许作为权威来源")
+
+
+class StockEvidencePacketResponse(BaseModel):
+    """单股票证据包响应。除 fundamentalsSummary 外保持兼容透传。"""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    fundamentals_summary: Optional[StockEvidenceFundamentalsSummary] = Field(
+        None,
+        alias="fundamentalsSummary",
+        description="白名单过滤后的基本面摘要",
+    )
+
+
+class StockEvidenceItemResponse(BaseModel):
+    """单股票证据响应项。"""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    symbol: str = Field(..., description="股票代码")
+    market: Optional[str] = Field(None, description="市场代码")
+    quote: Optional[Dict[str, Any]] = Field(None, description="行情侧证据")
+    technical: Optional[Dict[str, Any]] = Field(None, description="技术面证据")
+    fundamental: Optional[Dict[str, Any]] = Field(None, description="基本面证据")
+    news: Optional[Dict[str, Any]] = Field(None, description="新闻证据")
+    sec_filing_evidence: Optional[Dict[str, Any]] = Field(
+        None,
+        alias="secFilingEvidence",
+        description="SEC filing 侧证据",
+    )
+    stock_evidence_packet: Optional[StockEvidencePacketResponse] = Field(
+        None,
+        alias="stockEvidencePacket",
+        description="现有 stock evidence packet 投影",
+    )
+
+
+class StockEvidenceMetaResponse(BaseModel):
+    """单股票证据响应元信息。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    generated_at: Optional[str] = Field(None, alias="generatedAt", description="生成时间")
+    source: Optional[str] = Field(None, description="来源标签")
+
+
+class StockEvidenceResponse(BaseModel):
+    """单股票证据接口响应。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    symbols: List[str] = Field(default_factory=list, description="归一化后的股票代码列表")
+    items: List[StockEvidenceItemResponse] = Field(default_factory=list, description="单股票证据项列表")
+    meta: Optional[StockEvidenceMetaResponse] = Field(None, description="响应元信息")
