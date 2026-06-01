@@ -847,6 +847,7 @@ describe('LiquidityMonitorPage', () => {
     render(<LiquidityMonitorPage />);
 
     const signal = await screen.findByTestId('liquidity-capital-flow-signal');
+    expect(signal).toHaveTextContent('不会升级为交易或评分结论');
     expect(signal).toHaveTextContent('资金流向观察');
     expect(signal).toHaveTextContent('仅观察');
     expect(signal).toHaveTextContent('代理信号');
@@ -859,6 +860,9 @@ describe('LiquidityMonitorPage', () => {
     expect(signal).toHaveTextContent('过期');
     expect(signal).toHaveTextContent('Growth Ai Software Semis');
     expect(signal).toHaveTextContent('吸纳');
+    expect(signal).not.toHaveTextContent('btc not confirming growth absorption');
+    expect(signal).not.toHaveTextContent('rates not easing broadly');
+    expect(signal).not.toHaveTextContent('Growth is absorbing more attention while BTC is not confirming the move.');
     const disclosure = within(signal).getByTestId('liquidity-capital-flow-details');
     expect(disclosure).not.toHaveAttribute('open');
     expect(within(disclosure).getByRole('button', { name: '展开 观察细节' })).toHaveAttribute('aria-expanded', 'false');

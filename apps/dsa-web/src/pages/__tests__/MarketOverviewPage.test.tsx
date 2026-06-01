@@ -2573,8 +2573,10 @@ describe('MarketOverviewPage', () => {
     expect(evidence).toHaveTextContent('Fed liquidity');
   });
 
-  it('surfaces regimeSummary inside the existing evidence disclosure without leaking internal field names', async () => {
+  it('keeps regimeSummary inside the existing evidence disclosure with consumer-safe observation wording', async () => {
     render(createElement(MarketOverviewPage));
+
+    expect(screen.queryByTestId('market-overview-regime-summary')).not.toBeInTheDocument();
 
     const evidence = expandMarketEvidenceDetails();
     const regimeSummary = await within(evidence).findByTestId('market-overview-regime-summary');
@@ -2594,6 +2596,7 @@ describe('MarketOverviewPage', () => {
     expect(regimeSummaryText).not.toContain('scoreContributionAllowed');
     expect(regimeSummaryText).not.toContain('partial_context_only');
     expect(regimeSummaryText).not.toContain('watch:liquidity_impulse');
+    expect(regimeSummaryText).not.toMatch(/买入|卖出|交易指令|评分级别|score[-\s]?grade|investment advice/i);
   });
 
   it('reveals technical diagnostics only in admin mode', async () => {
@@ -2784,7 +2787,7 @@ describe('MarketOverviewPage', () => {
     render(createElement(MarketOverviewPage));
 
     expect(await screen.findByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/暂不形成方向结论|等待数据完成后再判断/);
-    expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent('当前信号置信度较低，仅供观察。');
+    expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/当前信号置信度较低，仅供观察。|当前只适合作为观察，不应用作方向判断/);
     const railActionHint = screen.queryByTestId('market-overview-rail-action-hint');
     if (railActionHint) {
       expect(railActionHint).not.toHaveTextContent(/等待实时源补齐后再生成强判断/);

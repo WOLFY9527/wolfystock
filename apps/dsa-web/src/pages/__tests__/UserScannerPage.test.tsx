@@ -1360,7 +1360,10 @@ describe('UserScannerPage', () => {
     }));
     renderUserScannerPage();
 
+    const row = await screen.findByTestId('scanner-result-row-WULF');
+    expect(row).toHaveTextContent('60/100');
     const detail = await screen.findByTestId('scanner-result-detail-WULF');
+    expect(within(detail).queryByTestId('scanner-investor-signal-WULF')).not.toBeInTheDocument();
     fireEvent.click(within(detail).getByRole('button', { name: /候选说明|Candidate notes/i }));
     const secondary = await within(detail).findByTestId('scanner-result-detail-secondary-WULF');
     fireEvent.click(within(secondary).getByRole('button', { name: /展开.*次要说明|Expand.*Secondary notes|展开/i }));
@@ -1376,6 +1379,8 @@ describe('UserScannerPage', () => {
     expect(signal).toHaveTextContent(/暂不进入评分|Score stays observational/i);
     expect(signal).toHaveTextContent(/BTC 未确认当前吸纳|BTC not confirming current absorption/i);
     expect(signal).toHaveTextContent('Growth is absorbing more attention while BTC is not confirming the move.');
+    expect(signal).not.toHaveTextContent('60/100');
+    expect(signal).not.toHaveTextContent(/已验证|Signal fresh/i);
     expect(signal).not.toHaveTextContent(
       /authorityGrant|decisionGrade|sourceAuthorityAllowed|scoreContributionAllowed|contractVersion|sourceAssetPressure|likelyDestination|raw/i,
     );

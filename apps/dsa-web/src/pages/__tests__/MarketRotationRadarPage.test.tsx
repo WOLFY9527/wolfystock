@@ -862,6 +862,48 @@ describe('MarketRotationRadarPage', () => {
     expect(familyRollup.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
   });
 
+  it('keeps theme flow observation collapsed by default and consumer-safe when expanded', async () => {
+    render(<MarketRotationRadarPage />);
+
+    const detail = await screen.findByTestId('rotation-theme-detail-panel');
+    const themeFlow = within(detail).getByTestId('rotation-theme-flow-signal');
+
+    expect(themeFlow).not.toHaveAttribute('open');
+    expect(themeFlow).not.toHaveTextContent('AI 应用当前由相对强弱与量能扩张支持，属于领涨观察。');
+    expect(themeFlow).not.toHaveTextContent('Source Authority Missing');
+
+    fireEvent.click(within(themeFlow).getByRole('button', { name: '展开 查看主题流向观察' }));
+
+    expect(themeFlow).toHaveTextContent('领涨观察');
+    expect(themeFlow).toHaveTextContent('置信 72%');
+    expect(themeFlow).toHaveTextContent('AI 应用当前由相对强弱与量能扩张支持，属于领涨观察。');
+    expect(themeFlow).toHaveTextContent('龙头成员 APP、PLTR，集中度 36.0%。');
+    expect(themeFlow).toHaveTextContent('上涨广度 100.0% / 跑赢广度 100.0% ，3/3 成员有可用观察。');
+    expect(themeFlow).toHaveTextContent('确认信号仍待补齐');
+    expect(themeFlow.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
+    expect(themeFlow.textContent || '').not.toMatch(forbiddenTradingActionPattern);
+  });
+
+  it('omits the theme flow disclosure cleanly when the selected theme has no investor signal', async () => {
+    const fixture = radarFixture();
+    fixture.themes = fixture.themes.map((theme, index) => (
+      index === 0
+        ? {
+            ...theme,
+            themeFlowSignal: undefined,
+          }
+        : theme
+    ));
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(fixture);
+
+    render(<MarketRotationRadarPage />);
+
+    const detail = await screen.findByTestId('rotation-theme-detail-panel');
+    expect(detail).toHaveTextContent('当前主题');
+    expect(detail).toHaveTextContent('AI 应用');
+    expect(within(detail).queryByTestId('rotation-theme-flow-signal')).not.toBeInTheDocument();
+  });
+
   it('switches market tabs to populated taxonomy universes with compact library framing', async () => {
     render(<MarketRotationRadarPage />);
 

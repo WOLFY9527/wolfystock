@@ -951,19 +951,24 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     await screen.findByTestId('watchlist-row-NVDA');
+    const detailRail = screen.getByTestId('watchlist-detail-rail');
     const disclosure = screen.getByTestId('watchlist-investor-signal');
     const toggle = within(disclosure).getByRole('button', { name: '展开 资金面观察信号' });
 
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(disclosure).toHaveTextContent('来自已保存的 Scanner 观察');
+    expect(within(detailRail).getByText('信号最新')).toBeInTheDocument();
     expect(within(disclosure).queryByText('禁止判断')).not.toBeInTheDocument();
+    expect(within(disclosure).queryByText('已缓存')).not.toBeInTheDocument();
 
     fireEvent.click(toggle);
 
     expect(within(disclosure).getByRole('button', { name: '收起 资金面观察信号' })).toHaveAttribute('aria-expanded', 'true');
+    expect(within(detailRail).getByText('信号最新')).toBeInTheDocument();
     expect(within(disclosure).getByText('信号分化')).toBeInTheDocument();
     expect(within(disclosure).getByText('禁止判断')).toBeInTheDocument();
     expect(within(disclosure).getByText('已缓存')).toBeInTheDocument();
+    expect(within(disclosure).queryByText('信号最新')).not.toBeInTheDocument();
     expect(within(disclosure).getByText('来源权限未确认')).toBeInTheDocument();
     expect(within(disclosure).getByText('当前不允许计分')).toBeInTheDocument();
     expect(within(disclosure).getByText('Theme Rotation Mismatch')).toBeInTheDocument();
