@@ -1,4 +1,14 @@
 ## 2026-06-01
+- Rotation Radar `consumerEvidenceSnapshot.themes[]` now exposes additive
+  sanitized `breadthEvidence` projected only from existing theme breadth
+  payload fields (`observedMembers`, `configuredMembers`, `coveragePercent`,
+  `percentUp`, `percentOutperformingBenchmark`) with fixed observation-only
+  metadata (`source: rotation_theme_quote_breadth`, `observationOnly: true`,
+  `authorityGrant: false`, `scoreContributionAllowed: false`). The projection
+  is whitelist-only and compatibility-safe: it does not change
+  `themeFlowSignal`, ranking/headline eligibility, score authority, provider
+  routing/order/budgets, MarketCache behavior, or expose provider/admin/raw
+  diagnostics.
 - Shared investor-signal consumer-safe projection now fail-closes missing or
   blocked authority/score-rights freshness: when the source is not explicitly
   authoritative for consumer-safe output, `build_consumer_safe_investor_signal`

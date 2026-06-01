@@ -337,7 +337,23 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
             "isPartial",
             "evidenceQuality",
             "dataGaps",
+            "breadthEvidence",
         }
+        assert set(consumer_snapshot["themes"][0]["breadthEvidence"]) == {
+            "source",
+            "observationOnly",
+            "authorityGrant",
+            "scoreContributionAllowed",
+            "observedMembers",
+            "configuredMembers",
+            "coveragePercent",
+            "percentUp",
+            "percentOutperformingBenchmark",
+        }
+        assert consumer_snapshot["themes"][0]["breadthEvidence"]["source"] == "rotation_theme_quote_breadth"
+        assert consumer_snapshot["themes"][0]["breadthEvidence"]["observationOnly"] is True
+        assert consumer_snapshot["themes"][0]["breadthEvidence"]["authorityGrant"] is False
+        assert consumer_snapshot["themes"][0]["breadthEvidence"]["scoreContributionAllowed"] is False
         assert all(theme["scoreContributionAllowed"] is False for theme in consumer_snapshot["themes"])
         _assert_consumer_snapshot_excludes_admin_fields(consumer_snapshot)
         assert payload["isFallback"] is True
@@ -476,6 +492,60 @@ def test_market_rotation_radar_response_exposes_family_flow_signal_rollup(monkey
         assert ai_family["themeFlowSignal"]["decisionGrade"] is False
         assert ai_family["themeFlowSignal"]["scoreContributionAllowed"] is False
         assert "adminDiagnostics" not in json.dumps(payload["consumerEvidenceSnapshot"], ensure_ascii=False)
+    finally:
+        client.close()
+
+
+def test_market_rotation_radar_api_serializes_consumer_theme_breadth_evidence_safely(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, quotes, spine = _bounded_etf_authority_fixture()
+    theme = _rotation_theme("ai_applications")
+    for index, symbol in enumerate(theme.members):
+        quotes[symbol] = _official_rotation_quote(symbol, 3.8 - index * 0.2, volume_ratio=1.6)
+    quotes["IGV"] = _official_rotation_quote("IGV", 2.0, volume_ratio=1.4)
+
+    def provider(symbols):
+        return {
+            "quotes": {symbol: quotes[symbol] for symbol in symbols if symbol in quotes},
+            "metadata": {
+                "source": "alpaca",
+                "sourceLabel": "Alpaca SIP",
+                "sourceType": "official_public",
+                "sourceTier": "broker_authorized",
+                "providerTier": "tier_1_configured",
+                "freshness": "live",
+                "asOf": "2026-05-07T09:45:00+00:00",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "providerDiagnostics": {"etfAuthoritySpine": spine},
+            },
+        }
+
+    client = _client(monkeypatch, provider_factory=lambda: provider)
+    try:
+        response = client.get("/api/v1/market/rotation-radar")
+
+        assert response.status_code == 200
+        payload = response.json()
+        consumer_theme = next(
+            theme for theme in payload["consumerEvidenceSnapshot"]["themes"] if theme["id"] == "ai_applications"
+        )
+        full_theme = next(theme for theme in payload["themes"] if theme["id"] == "ai_applications")
+
+        assert consumer_theme["breadthEvidence"] == {
+            "source": "rotation_theme_quote_breadth",
+            "observationOnly": True,
+            "authorityGrant": False,
+            "scoreContributionAllowed": False,
+            "observedMembers": full_theme["breadth"]["observedMembers"],
+            "configuredMembers": full_theme["breadth"]["configuredMembers"],
+            "coveragePercent": full_theme["breadth"]["coveragePercent"],
+            "percentUp": full_theme["breadth"]["percentUp"],
+            "percentOutperformingBenchmark": full_theme["breadth"]["percentOutperformingBenchmark"],
+        }
+        assert "providerPayload" not in consumer_theme["breadthEvidence"]
+        assert "adminDiagnostics" not in json.dumps(consumer_theme["breadthEvidence"], ensure_ascii=False)
     finally:
         client.close()
 
@@ -1270,6 +1340,13 @@ def test_market_rotation_radar_partial_quote_failures_are_sanitized_in_api_paylo
         assert consumer_snapshot["scoreContributionAllowed"] is False
         assert "partial_coverage" in consumer_snapshot["reasonCodes"]
         assert "live" not in {consumer_snapshot["freshness"], consumer_snapshot["providerState"]["freshness"]}
+        ai_consumer_theme = next(
+            theme for theme in consumer_snapshot["themes"] if theme["id"] == "ai_applications"
+        )
+        assert ai_consumer_theme["breadthEvidence"]["source"] == "rotation_theme_quote_breadth"
+        assert ai_consumer_theme["breadthEvidence"]["observationOnly"] is True
+        assert ai_consumer_theme["breadthEvidence"]["authorityGrant"] is False
+        assert ai_consumer_theme["breadthEvidence"]["scoreContributionAllowed"] is False
         _assert_consumer_snapshot_excludes_admin_fields(consumer_snapshot)
         ai_apps = next(theme for theme in payload["themes"] if theme["id"] == "ai_applications")
         assert ai_apps["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["freshness"] == "partial"

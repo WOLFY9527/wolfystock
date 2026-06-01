@@ -294,6 +294,21 @@ class RotationRadarConsumerThemeQualityModel(BaseModel):
     isPartial: bool = False
     evidenceQuality: str = "insufficient"
     dataGaps: List[str] = Field(default_factory=list)
+    breadthEvidence: Optional["RotationRadarConsumerThemeBreadthEvidenceModel"] = None
+
+
+class RotationRadarConsumerThemeBreadthEvidenceModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: str = "rotation_theme_quote_breadth"
+    observationOnly: bool = True
+    authorityGrant: bool = False
+    scoreContributionAllowed: bool = False
+    observedMembers: Optional[int] = None
+    configuredMembers: Optional[int] = None
+    coveragePercent: Optional[float] = None
+    percentUp: Optional[float] = None
+    percentOutperformingBenchmark: Optional[float] = None
 
 
 class RotationRadarConsumerEvidenceSnapshotModel(BaseModel):

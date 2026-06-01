@@ -563,6 +563,37 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertIn("医疗 / 生物科技", defensive_family["themeNames"])
         self.assertIn("no clear edge", defensive_family["themeFlowSignal"]["explanation"].lower())
 
+    def test_consumer_theme_breadth_evidence_projects_existing_theme_breadth_metrics(self) -> None:
+        payload = _rotation_family_payload(
+            {
+                "ai_applications": {
+                    "member_changes": [4.6, 4.1, 3.6, 3.3, 3.1, 2.8, 2.5, 2.2],
+                    "volume_ratio": 1.8,
+                    "proxy_changes": {"IGV": 2.1},
+                },
+            }
+        )
+
+        consumer_theme = next(
+            theme for theme in payload["consumerEvidenceSnapshot"]["themes"] if theme["id"] == "ai_applications"
+        )
+        full_theme = next(theme for theme in payload["themes"] if theme["id"] == "ai_applications")
+
+        self.assertEqual(
+            consumer_theme["breadthEvidence"],
+            {
+                "source": "rotation_theme_quote_breadth",
+                "observationOnly": True,
+                "authorityGrant": False,
+                "scoreContributionAllowed": False,
+                "observedMembers": full_theme["breadth"]["observedMembers"],
+                "configuredMembers": full_theme["breadth"]["configuredMembers"],
+                "coveragePercent": full_theme["breadth"]["coveragePercent"],
+                "percentUp": full_theme["breadth"]["percentUp"],
+                "percentOutperformingBenchmark": full_theme["breadth"]["percentOutperformingBenchmark"],
+            },
+        )
+
     def test_fallback_when_no_provider_never_marks_live_and_caps_confidence(self) -> None:
         service = MarketRotationRadarService(now_provider=lambda: datetime(2026, 5, 7, tzinfo=timezone.utc))
 
@@ -658,8 +689,27 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
                 "isPartial",
                 "evidenceQuality",
                 "dataGaps",
+                "breadthEvidence",
             },
         )
+        self.assertEqual(
+            set(consumer_snapshot["themes"][0]["breadthEvidence"]),
+            {
+                "source",
+                "observationOnly",
+                "authorityGrant",
+                "scoreContributionAllowed",
+                "observedMembers",
+                "configuredMembers",
+                "coveragePercent",
+                "percentUp",
+                "percentOutperformingBenchmark",
+            },
+        )
+        self.assertEqual(consumer_snapshot["themes"][0]["breadthEvidence"]["source"], "rotation_theme_quote_breadth")
+        self.assertTrue(consumer_snapshot["themes"][0]["breadthEvidence"]["observationOnly"])
+        self.assertFalse(consumer_snapshot["themes"][0]["breadthEvidence"]["authorityGrant"])
+        self.assertFalse(consumer_snapshot["themes"][0]["breadthEvidence"]["scoreContributionAllowed"])
         self.assertTrue(all(theme["rankingLane"] == "observation" for theme in consumer_snapshot["themes"]))
         self.assertTrue(all(theme["scoreContributionAllowed"] is False for theme in consumer_snapshot["themes"]))
         _assert_consumer_snapshot_excludes_admin_fields(self, consumer_snapshot)
@@ -3238,6 +3288,11 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(all(theme["rankingLane"] == "taxonomy" for theme in consumer_snapshot["themes"]))
         self.assertTrue(all(theme["taxonomyOnly"] is True for theme in consumer_snapshot["themes"]))
         self.assertTrue(all(theme["evidenceQuality"] == "taxonomy_only" for theme in consumer_snapshot["themes"]))
+        self.assertTrue(all(theme["breadthEvidence"]["observationOnly"] is True for theme in consumer_snapshot["themes"]))
+        self.assertTrue(all(theme["breadthEvidence"]["authorityGrant"] is False for theme in consumer_snapshot["themes"]))
+        self.assertTrue(
+            all(theme["breadthEvidence"]["scoreContributionAllowed"] is False for theme in consumer_snapshot["themes"])
+        )
         _assert_consumer_snapshot_excludes_admin_fields(self, consumer_snapshot)
 
     def test_stale_and_missing_data_penalizes_confidence_and_blocks_clean_rotation_claims(self) -> None:

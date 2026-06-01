@@ -76,14 +76,20 @@ fund-flow interpretation, or rotation evidence disclosure.
   Radar evidence. It is additive and whitelist-only: market/as-of/freshness,
   fallback/stale/partial flags, headline/observation/taxonomy counts, sanitized
   reason codes, provider state summary, ETF proxy-only leadership summary, and
-  per-theme public quality flags. It deliberately excludes credentials/env
-  visibility, missing env names, provider budgets/deadlines, request-window
-  results, raw failure samples, source-authority router internals, activation
-  hints/recommended actions, proxy environment, admin diagnostics, raw evidence
-  signals, score/weight breakdowns, ranking trust, ETF authority evidence rows,
-  and raw provider payloads/errors. It must not recompute source authority,
-  score authority, ranking, headline eligibility, provider routing, or cache
-  behavior.
+  per-theme public quality flags. Each
+  `consumerEvidenceSnapshot.themes[]` row may also expose additive
+  `breadthEvidence` built only from existing theme breadth payload fields
+  (`observedMembers`, `configuredMembers`, `coveragePercent`, `percentUp`,
+  `percentOutperformingBenchmark`) plus fixed observation-only metadata
+  (`source: "rotation_theme_quote_breadth"`, `observationOnly: true`,
+  `authorityGrant: false`, `scoreContributionAllowed: false`). It deliberately
+  excludes credentials/env visibility, missing env names, provider
+  budgets/deadlines, request-window results, raw failure samples,
+  source-authority router internals, activation hints/recommended actions,
+  proxy environment, admin diagnostics, raw evidence signals, score/weight
+  breakdowns, ranking trust, ETF authority evidence rows, and raw provider
+  payloads/errors. It must not recompute source authority, score authority,
+  ranking, headline eligibility, provider routing, or cache behavior.
 - Rotation Radar now also exposes additive `themeFlowSignal` on each US theme
   row plus `summary.rotationFamilyRollup` /
   `consumerEvidenceSnapshot.rotationFamilyRollup` for investor-readable AI,

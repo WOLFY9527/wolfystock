@@ -1706,9 +1706,43 @@ class MarketRotationRadarService:
             )
         return result
 
-    @staticmethod
-    def _consumer_theme_quality(theme: Mapping[str, Any]) -> Dict[str, Any]:
-        return {
+    def _consumer_theme_breadth_evidence(self, theme: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+        breadth = dict(theme.get("breadth")) if isinstance(theme.get("breadth"), Mapping) else {}
+        if not breadth:
+            return None
+
+        def optional_nonnegative_int(value: Any) -> Optional[int]:
+            number = self._number(value)
+            if number is None or number < 0 or not float(number).is_integer():
+                return None
+            return int(number)
+
+        evidence = {
+            "source": "rotation_theme_quote_breadth",
+            "observationOnly": True,
+            "authorityGrant": False,
+            "scoreContributionAllowed": False,
+            "observedMembers": optional_nonnegative_int(breadth.get("observedMembers")),
+            "configuredMembers": optional_nonnegative_int(breadth.get("configuredMembers")),
+            "coveragePercent": self._number(breadth.get("coveragePercent")),
+            "percentUp": self._number(breadth.get("percentUp")),
+            "percentOutperformingBenchmark": self._number(breadth.get("percentOutperformingBenchmark")),
+        }
+        if not any(
+            evidence[key] is not None
+            for key in (
+                "observedMembers",
+                "configuredMembers",
+                "coveragePercent",
+                "percentUp",
+                "percentOutperformingBenchmark",
+            )
+        ):
+            return None
+        return evidence
+
+    def _consumer_theme_quality(self, theme: Mapping[str, Any]) -> Dict[str, Any]:
+        quality = {
             "id": str(theme.get("id") or ""),
             "name": str(theme.get("name") or ""),
             "rankEligible": bool(theme.get("rankEligible")),
@@ -1724,6 +1758,10 @@ class MarketRotationRadarService:
             "evidenceQuality": str(theme.get("evidenceQuality") or "insufficient"),
             "dataGaps": [str(item) for item in (theme.get("dataGaps") or []) if str(item or "").strip()],
         }
+        breadth_evidence = self._consumer_theme_breadth_evidence(theme)
+        if breadth_evidence is not None:
+            quality["breadthEvidence"] = breadth_evidence
+        return quality
 
     def _attach_theme_flow_signal(self, theme: Dict[str, Any]) -> Dict[str, Any]:
         theme["themeFlowSignal"] = self._theme_flow_signal(theme)
