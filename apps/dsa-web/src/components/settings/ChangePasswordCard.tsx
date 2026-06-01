@@ -1,23 +1,33 @@
 import type React from 'react';
-import { useState } from 'react';
-import type { ParsedApiError } from '../../api/error';
+import { useReducer } from 'react';
 import { isParsedApiError } from '../../api/error';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { useAuth } from '../../hooks/useAuth';
 import { Input } from '../common/Input';
 import { SettingsAlert } from './SettingsAlert';
 import { TerminalButton } from '../terminal/TerminalPrimitives';
+import {
+  changePasswordCardReducer,
+  createInitialChangePasswordCardState,
+  validateChangePasswordForm,
+} from './changePasswordCardState';
 
 export const ChangePasswordCard: React.FC = () => {
   const { language, t } = useI18n();
   const { changePassword } = useAuth();
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
-  
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | ParsedApiError | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [state, dispatch] = useReducer(
+    changePasswordCardReducer,
+    undefined,
+    createInitialChangePasswordCardState,
+  );
+  const {
+    currentPassword,
+    newPassword,
+    newPasswordConfirm,
+    isSubmitting,
+    error,
+    success,
+  } = state;
 
   const successMessage = language === 'en'
     ? 'Your account password has been updated.'
@@ -25,41 +35,38 @@ export const ChangePasswordCard: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setSuccess(false);
+    const validationError = validateChangePasswordForm({
+      currentPassword,
+      newPassword,
+      newPasswordConfirm,
+      t,
+    });
 
-    if (!currentPassword.trim()) {
-      setError(t('settings.passwordErrorCurrentRequired'));
-      return;
-    }
-    if (!newPassword.trim()) {
-      setError(t('settings.passwordErrorNewRequired'));
-      return;
-    }
-    if (newPassword.length < 6) {
-      setError(t('settings.passwordErrorTooShort'));
-      return;
-    }
-    if (newPassword !== newPasswordConfirm) {
-      setError(t('settings.passwordErrorMismatch'));
+    if (validationError) {
+      dispatch({ type: 'submit-failed', error: validationError });
       return;
     }
 
-    setIsSubmitting(true);
+    dispatch({ type: 'submit-started' });
+
+    let result;
     try {
-      const result = await changePassword(currentPassword, newPassword, newPasswordConfirm);
-      if (result.success) {
-        setSuccess(true);
-        setCurrentPassword('');
-        setNewPassword('');
-        setNewPasswordConfirm('');
-        setTimeout(() => setSuccess(false), 4000);
-      } else {
-        setError(result.error ?? t('settings.passwordErrorGeneric'));
-      }
-    } finally {
-      setIsSubmitting(false);
+      result = await changePassword(currentPassword, newPassword, newPasswordConfirm);
+    } catch (requestError) {
+      dispatch({ type: 'submit-aborted' });
+      throw requestError;
     }
+
+    if (result.success) {
+      dispatch({ type: 'submit-succeeded' });
+      window.setTimeout(() => dispatch({ type: 'success-reset' }), 4000);
+      return;
+    }
+
+    dispatch({
+      type: 'submit-failed',
+      error: result.error ?? t('settings.passwordErrorGeneric'),
+    });
   };
 
   return (
@@ -81,7 +88,7 @@ export const ChangePasswordCard: React.FC = () => {
             label={t('settings.passwordCurrent')}
             placeholder={t('settings.passwordCurrentPlaceholder')}
             value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
+            onChange={(e) => dispatch({ type: 'current-password-changed', value: e.target.value })}
             disabled={isSubmitting}
             autoComplete="current-password"
           />
@@ -94,7 +101,7 @@ export const ChangePasswordCard: React.FC = () => {
             label={t('settings.passwordNew')}
             placeholder={t('settings.passwordNewPlaceholder')}
             value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
+            onChange={(e) => dispatch({ type: 'new-password-changed', value: e.target.value })}
             disabled={isSubmitting}
             autoComplete="new-password"
           />
@@ -109,7 +116,7 @@ export const ChangePasswordCard: React.FC = () => {
             label={t('settings.passwordConfirm')}
             placeholder={t('settings.passwordConfirmPlaceholder')}
             value={newPasswordConfirm}
-            onChange={(e) => setNewPasswordConfirm(e.target.value)}
+            onChange={(e) => dispatch({ type: 'new-password-confirm-changed', value: e.target.value })}
             disabled={isSubmitting}
             autoComplete="new-password"
           />
