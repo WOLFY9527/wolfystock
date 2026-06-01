@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useEffectEvent, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
@@ -49,6 +49,7 @@ import {
   createRuleBacktestPresetFromRun,
   getRuleScenarioPlans,
   loadRuleBacktestPresets,
+  RULE_BACKTEST_PRESET_STORAGE_KEY,
   saveRuleBacktestPreset,
   type RuleBacktestPreset,
   type RuleScenarioPlan,
@@ -75,7 +76,10 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 
 const RULE_POLL_INTERVAL_MS = 1800;
 const RESULT_HISTORY_PAGE_SIZE = 10;
+const RULE_BACKTEST_PRESET_STORAGE_EVENT = 'wolfystock.ruleBacktestPresets.changed';
 const BacktestResultReport = lazy(() => import('../components/backtest/BacktestResultReport'));
+let cachedRuleBacktestPresetSignature = '[]';
+let cachedRuleBacktestPresetSnapshot: RuleBacktestPreset[] = [];
 
 type ResultPageLocationState = {
   initialRun?: RuleBacktestRunResponse;
@@ -111,6 +115,43 @@ type ResultPageTabKey = 'overview' | 'audit' | 'trades' | 'parameters' | 'histor
 
 const RESULT_PAGE_TAB_KEYS: ResultPageTabKey[] = ['overview', 'audit', 'trades', 'parameters', 'history'];
 const BacktestAuditTables = lazy(() => import('../components/backtest/BacktestAuditTables'));
+
+function subscribeToRuleBacktestPresetStore(onStoreChange: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+
+  const handleStorage = (event: StorageEvent) => {
+    if (!event.key || event.key === RULE_BACKTEST_PRESET_STORAGE_KEY) {
+      onStoreChange();
+    }
+  };
+  const handlePresetChange = () => {
+    onStoreChange();
+  };
+
+  window.addEventListener('storage', handleStorage);
+  window.addEventListener(RULE_BACKTEST_PRESET_STORAGE_EVENT, handlePresetChange);
+  return () => {
+    window.removeEventListener('storage', handleStorage);
+    window.removeEventListener(RULE_BACKTEST_PRESET_STORAGE_EVENT, handlePresetChange);
+  };
+}
+
+function getRuleBacktestPresetSnapshot(): RuleBacktestPreset[] {
+  const next = loadRuleBacktestPresets();
+  const signature = JSON.stringify(next);
+  if (signature === cachedRuleBacktestPresetSignature) {
+    return cachedRuleBacktestPresetSnapshot;
+  }
+  cachedRuleBacktestPresetSignature = signature;
+  cachedRuleBacktestPresetSnapshot = next;
+  return next;
+}
+
+function notifyRuleBacktestPresetStoreChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(RULE_BACKTEST_PRESET_STORAGE_EVENT));
+  }
+}
 
 function formatWarningText(warning: Record<string, unknown>, index: number): string {
   const preferred = warning.message
@@ -667,44 +708,54 @@ const CompletedTabPanel: React.FC<CompletedTabPanelProps> = ({
   );
 };
 
-const DeterministicBacktestResultPage: React.FC = () => {
+type DeterministicBacktestResultPageContentProps = {
+  hasValidRunId: boolean;
+  initialRun: RuleBacktestRunResponse | null;
+  parsedRunId: number;
+  resultMode: BacktestResultReportMode;
+};
+
+const DeterministicBacktestResultPageContent: React.FC<DeterministicBacktestResultPageContentProps> = ({
+  hasValidRunId,
+  initialRun,
+  parsedRunId,
+  resultMode,
+}) => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { language, t } = useI18n();
-  const backtestCopy = useCallback((key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.${key}`, vars), [t]);
-  const resultPage = useCallback((key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.resultPage.${key}`, vars), [t]);
-  const { runId } = useParams<{ runId: string }>();
-  const locationState = location.state as ResultPageLocationState | null;
-  const initialRun = locationState?.initialRun || null;
-  const resultMode: BacktestResultReportMode = locationState?.resultMode === 'simple' ? 'simple' : 'professional';
-  const parsedRunId = Number.parseInt(runId || '', 10);
-  const hasValidRunId = Number.isFinite(parsedRunId) && parsedRunId > 0;
+  const backtestCopy = (key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.${key}`, vars);
+  const resultPage = (key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.resultPage.${key}`, vars);
+  const seededRun = initialRun && initialRun.id === parsedRunId ? initialRun : null;
 
   const [run, setRun] = useState<RuleBacktestRunResponse | null>(
-    initialRun && initialRun.id === parsedRunId ? initialRun : null,
+    seededRun,
   );
-  const [isLoadingRun, setIsLoadingRun] = useState(!initialRun || initialRun.id !== parsedRunId);
+  const [isLoadingRun, setIsLoadingRun] = useState(hasValidRunId && !seededRun);
   const [runError, setRunError] = useState<ParsedApiError | null>(null);
   const [historyItems, setHistoryItems] = useState<RuleBacktestHistoryItem[]>([]);
   const [historyError, setHistoryError] = useState<ParsedApiError | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [activeTab, setActiveTab] = useState<ResultPageTabKey>('overview');
   const [isPollingStatus, setIsPollingStatus] = useState(false);
-  const [lastStatusRefreshAt, setLastStatusRefreshAt] = useState<string | null>(null);
+  const [lastStatusRefreshAt, setLastStatusRefreshAt] = useState<string | null>(seededRun ? new Date().toISOString() : null);
   const [isCancellingRun, setIsCancellingRun] = useState(false);
   const [cancelError, setCancelError] = useState<ParsedApiError | null>(null);
   const [compareRunIds, setCompareRunIds] = useState<number[]>([]);
   const [compareRunMap, setCompareRunMap] = useState<Record<number, RuleBacktestRunResponse>>({});
   const [isLoadingCompareRuns, setIsLoadingCompareRuns] = useState(false);
-  const [compareError, setCompareError] = useState<ParsedApiError | null>(null);
+  const [compareErrorState, setCompareErrorState] = useState<ParsedApiError | null>(null);
   const [selectedScenarioPlanId, setSelectedScenarioPlanId] = useState<string | null>(null);
   const [scenarioRuns, setScenarioRuns] = useState<ScenarioRunState[]>([]);
   const [isSubmittingScenarioRuns, setIsSubmittingScenarioRuns] = useState(false);
   const [scenarioError, setScenarioError] = useState<ParsedApiError | null>(null);
   const [presetNotice, setPresetNotice] = useState<string | null>(null);
-  const [availablePresets, setAvailablePresets] = useState<RuleBacktestPreset[]>(() => loadRuleBacktestPresets());
   const [activeRobustnessKey, setActiveRobustnessKey] = useState<string | null>(null);
   const [activeRiskControlKey, setActiveRiskControlKey] = useState<RiskControlVisualRow['key'] | null>(null);
+  const availablePresets = useSyncExternalStore(
+    subscribeToRuleBacktestPresetStore,
+    getRuleBacktestPresetSnapshot,
+    getRuleBacktestPresetSnapshot,
+  );
   const density = useDeterministicResultDensity();
   const robustnessAnalysis = asObjectRecord(run?.robustnessAnalysis);
   const robustnessConfiguration = asObjectRecord(getObjectField(robustnessAnalysis, 'configuration'));
@@ -858,7 +909,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     label: backtestCopy(`resultPage.tabs.${key}`),
   }));
 
-  const fetchRun = useCallback(async (options: { suppressLoading?: boolean } = {}) => {
+  const fetchRun = async (options: { suppressLoading?: boolean } = {}) => {
     if (!hasValidRunId) return;
     const { suppressLoading = false } = options;
     if (!suppressLoading) setIsLoadingRun(true);
@@ -870,12 +921,11 @@ const DeterministicBacktestResultPage: React.FC = () => {
       setLastStatusRefreshAt(new Date().toISOString());
     } catch (error) {
       setRunError(getParsedApiError(error));
-    } finally {
-      if (!suppressLoading) setIsLoadingRun(false);
     }
-  }, [hasValidRunId, parsedRunId]);
+    if (!suppressLoading) setIsLoadingRun(false);
+  };
 
-  const fetchHistory = useCallback(async (code?: string) => {
+  const fetchHistory = async (code?: string) => {
     if (!code) {
       setHistoryItems([]);
       setHistoryError(null);
@@ -892,26 +942,22 @@ const DeterministicBacktestResultPage: React.FC = () => {
       setHistoryError(null);
     } catch (error) {
       setHistoryError(getParsedApiError(error));
-    } finally {
-      setIsLoadingHistory(false);
     }
-  }, []);
+    setIsLoadingHistory(false);
+  };
+
+  const fetchRunForEffect = useEffectEvent(async (options: { suppressLoading?: boolean } = {}) => {
+    await fetchRun(options);
+  });
+
+  const fetchHistoryForEffect = useEffectEvent(async (code?: string) => {
+    await fetchHistory(code);
+  });
 
   useEffect(() => {
-    if (!hasValidRunId) {
-      setRun(null);
-      setIsLoadingRun(false);
-      return;
-    }
-
-    const seededRun = initialRun && initialRun.id === parsedRunId ? initialRun : null;
-    setRun(seededRun);
-    setRunError(null);
-    setCancelError(null);
-    setIsLoadingRun(!seededRun);
-    setLastStatusRefreshAt(seededRun ? new Date().toISOString() : null);
-    void fetchRun({ suppressLoading: Boolean(seededRun) });
-  }, [fetchRun, hasValidRunId, initialRun, parsedRunId]);
+    if (!hasValidRunId) return;
+    void fetchRunForEffect({ suppressLoading: Boolean(seededRun) });
+  }, [hasValidRunId, parsedRunId, seededRun]);
 
   useEffect(() => {
     if (!run?.id || isRuleRunTerminal(run.status)) return undefined;
@@ -929,16 +975,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
         setLastStatusRefreshAt(new Date().toISOString());
         if (isRuleRunTerminal(status.status)) {
           await Promise.all([
-            fetchRun({ suppressLoading: true }),
-            fetchHistory(status.code),
+            fetchRunForEffect({ suppressLoading: true }),
+            fetchHistoryForEffect(status.code),
           ]);
           return;
         }
       } catch (error) {
         if (!cancelled) setRunError(getParsedApiError(error));
-      } finally {
-        if (!cancelled) setIsPollingStatus(false);
       }
+      if (!cancelled) setIsPollingStatus(false);
 
       if (!cancelled) timer = window.setTimeout(() => void poll(), RULE_POLL_INTERVAL_MS);
     };
@@ -949,39 +994,28 @@ const DeterministicBacktestResultPage: React.FC = () => {
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [fetchHistory, fetchRun, run?.id, run?.status]);
+  }, [run?.id, run?.status]);
 
   useEffect(() => {
-    if (!run?.code) {
-      setHistoryItems([]);
-      return;
+    if (run?.code) {
+      void fetchHistoryForEffect(run.code);
     }
-    void fetchHistory(run.code);
-  }, [fetchHistory, run?.code]);
-
-  useEffect(() => {
-    setCompareRunIds([]);
-    setScenarioRuns([]);
-    setScenarioError(null);
-  }, [run?.id]);
+  }, [run?.code]);
 
   useEffect(() => {
     document.title = hasValidRunId
-      ? `${backtestCopy('resultPage.documentTitle')} #${parsedRunId} - WolfyStock`
-      : `${backtestCopy('resultPage.documentTitle')} - WolfyStock`;
-  }, [backtestCopy, hasValidRunId, parsedRunId]);
+      ? `${t('backtest.resultPage.documentTitle')} #${parsedRunId} - WolfyStock`
+      : `${t('backtest.resultPage.documentTitle')} - WolfyStock`;
+  }, [hasValidRunId, parsedRunId, t]);
 
   useEffect(() => {
     if (!run || run.status !== 'completed') return;
-    const next = saveRuleBacktestPreset(createRuleBacktestPresetFromRun(run, { kind: 'recent' }));
-    setAvailablePresets(next);
+    saveRuleBacktestPreset(createRuleBacktestPresetFromRun(run, { kind: 'recent' }));
+    notifyRuleBacktestPresetStoreChanged();
   }, [run]);
 
   useEffect(() => {
-    if (compareRunIds.length === 0) {
-      setCompareError(null);
-      return;
-    }
+    if (compareRunIds.length === 0) return;
     let cancelled = false;
     const missingIds = compareRunIds.filter((id) => !compareRunMap[id]);
     if (missingIds.length === 0) return;
@@ -995,12 +1029,11 @@ const DeterministicBacktestResultPage: React.FC = () => {
           ...current,
           ...Object.fromEntries(items.map((item) => [item.id, item])),
         }));
-        setCompareError(null);
+        setCompareErrorState(null);
       } catch (error) {
-        if (!cancelled) setCompareError(getParsedApiError(error));
-      } finally {
-        if (!cancelled) setIsLoadingCompareRuns(false);
+        if (!cancelled) setCompareErrorState(getParsedApiError(error));
       }
+      if (!cancelled) setIsLoadingCompareRuns(false);
     };
 
     void loadRuns();
@@ -1244,6 +1277,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
   ] : [];
 
   const handleToggleCompareRun = (item: RuleBacktestHistoryItem) => {
+    setCompareErrorState(null);
     setCompareRunIds((current) => {
       if (current.includes(item.id)) return current.filter((id) => id !== item.id);
       return [...current, item.id].slice(0, 3);
@@ -1263,15 +1297,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
     const suggestedName = `${run.code} · ${getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language)}`;
     const name = window.prompt(resultPage('promptSavePreset'), suggestedName);
     if (!name || !name.trim()) return;
-    const next = saveRuleBacktestPreset(createRuleBacktestPresetFromRun(run, {
+    saveRuleBacktestPreset(createRuleBacktestPresetFromRun(run, {
       kind: 'saved',
       name,
     }));
-    setAvailablePresets(next);
+    notifyRuleBacktestPresetStoreChanged();
     setPresetNotice(resultPage('presetSaved', { name: name.trim() }));
   };
 
-  const handleExportDecisionReport = useCallback((format: 'md' | 'html') => {
+  const handleExportDecisionReport = (format: 'md' | 'html') => {
     if (!run || !normalized || !decisionReportMarkdown) return;
     if (format === 'md') {
       downloadTextFile(`backtest-run-${run.id}-summary.md`, decisionReportMarkdown, 'text/markdown;charset=utf-8');
@@ -1288,7 +1322,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
       '</body></html>',
     ].join('');
     downloadTextFile(`backtest-run-${run.id}-summary.html`, html, 'text/html;charset=utf-8');
-  }, [run, normalized, decisionReportMarkdown, resultPage]);
+  };
 
   const handleRunScenarioPlan = async () => {
     if (!run || !selectedScenarioPlan) return;
@@ -1321,9 +1355,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
       setScenarioRuns(nextStates);
     } catch (error) {
       setScenarioError(getParsedApiError(error));
-    } finally {
-      setIsSubmittingScenarioRuns(false);
     }
+    setIsSubmittingScenarioRuns(false);
   };
 
   const handleCancelRun = async () => {
@@ -1345,10 +1378,12 @@ const DeterministicBacktestResultPage: React.FC = () => {
       ]);
     } catch (error) {
       setCancelError(getParsedApiError(error));
-    } finally {
-      setIsCancellingRun(false);
     }
+    setIsCancellingRun(false);
   };
+
+  const visibleHistoryItems = run?.code ? historyItems : [];
+  const compareError = compareRunIds.length === 0 ? null : compareErrorState;
 
   const renderCompletedConsole = () => {
     if (!run || !normalized) return null;
@@ -1744,7 +1779,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                 strategyWarningEntries={strategyWarningEntries}
                 comparisonItems={comparisonItems}
                 compareRunIds={compareRunIds}
-                historyItems={historyItems}
+                historyItems={visibleHistoryItems}
                 historyError={historyError}
                 compareError={compareError}
                 fetchHistory={fetchHistory}
@@ -1768,6 +1803,27 @@ const DeterministicBacktestResultPage: React.FC = () => {
         </div>
       </TerminalPageShell>
     </main>
+  );
+};
+
+const DeterministicBacktestResultPage: React.FC = () => {
+  const location = useLocation();
+  const { runId } = useParams<{ runId: string }>();
+  const locationState = location.state as ResultPageLocationState | null;
+  const initialRun = locationState?.initialRun || null;
+  const resultMode: BacktestResultReportMode = locationState?.resultMode === 'simple' ? 'simple' : 'professional';
+  const parsedRunId = Number.parseInt(runId || '', 10);
+  const hasValidRunId = Number.isFinite(parsedRunId) && parsedRunId > 0;
+  const pageInstanceKey = `${location.key}:${runId || 'unknown'}`;
+
+  return (
+    <DeterministicBacktestResultPageContent
+      key={pageInstanceKey}
+      hasValidRunId={hasValidRunId}
+      initialRun={initialRun}
+      parsedRunId={parsedRunId}
+      resultMode={resultMode}
+    />
   );
 };
 
