@@ -12,6 +12,7 @@ import {
 import { EvidenceChips } from '../evidence/EvidenceChips';
 import type { NormalizedEvidenceSummary } from '../../utils/evidenceDisplay';
 import type {
+  InvestorSignalContract,
   ScannerCandidate,
   ScannerCandidateDiagnostic,
   ScannerLabeledValue,
@@ -33,6 +34,184 @@ type CandidateDetailOutcomeItem = {
   label: string;
   value: string;
 };
+
+const INVESTOR_SIGNAL_REASON_LABELS_ZH: Record<string, string> = {
+  source_authority_missing: '来源确认待补齐',
+  score_rights_missing: '暂不进入评分',
+  observation_only: '仅作观察',
+  partial_source: '部分数据仍待补齐',
+  stale_source: '部分线索已过期',
+  fallback_source: '当前仅保留最近一次可用线索',
+};
+
+const INVESTOR_SIGNAL_REASON_LABELS_EN: Record<string, string> = {
+  source_authority_missing: 'Source confirmation pending',
+  score_rights_missing: 'Score stays observational',
+  observation_only: 'Observation only',
+  partial_source: 'Some source coverage is still partial',
+  stale_source: 'Some supporting inputs are stale',
+  fallback_source: 'Using the latest available signal only',
+};
+
+const INVESTOR_SIGNAL_CONTRADICTION_LABELS_ZH: Record<string, string> = {
+  btc_not_confirming_growth_absorption: 'BTC 未确认当前吸纳',
+  rates_not_easing_broadly: '利率线索尚未同步转松',
+};
+
+const INVESTOR_SIGNAL_CONTRADICTION_LABELS_EN: Record<string, string> = {
+  btc_not_confirming_growth_absorption: 'BTC not confirming current absorption',
+  rates_not_easing_broadly: 'Rates are not easing broadly yet',
+};
+
+function formatInvestorSignalCodeLabel(
+  value: string,
+  language: 'zh' | 'en',
+  labelsZh: Record<string, string>,
+  labelsEn: Record<string, string>,
+): string {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return '';
+  const mapped = language === 'en' ? labelsEn[normalized] : labelsZh[normalized];
+  if (mapped) return mapped;
+  return normalized
+    .split('_')
+    .filter(Boolean)
+    .map((part) => (part === 'btc' || part === 'ai' ? part.toUpperCase() : part))
+    .join(' ');
+}
+
+function uniqueInvestorSignalLabels(items: string[]): string[] {
+  return items.filter((item, index, array) => item && array.indexOf(item) === index);
+}
+
+function formatInvestorSignalState(signal?: InvestorSignalContract | null): string | null {
+  const label = signal?.capitalFlowLabel || signal?.themeFlowLabel || signal?.marketRegimeLabel;
+  if (typeof label === 'string' && label.trim()) return label.trim();
+  const fallback = signal?.capitalFlowRegime || signal?.themeFlowState || signal?.marketRegime;
+  if (typeof fallback !== 'string' || !fallback.trim()) return null;
+  return fallback
+    .trim()
+    .split('_')
+    .map((part) => (part === 'ai' ? 'AI' : part))
+    .join(' ');
+}
+
+function formatInvestorSignalConfidence(signal?: InvestorSignalContract | null): string | null {
+  const label = String(signal?.confidenceText || signal?.confidenceLabel || '').trim();
+  if (label) return label;
+  const raw = signal?.confidence;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return `${Math.round(raw <= 1 ? raw * 100 : raw)}%`;
+  }
+  if (typeof raw === 'string') {
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric)) {
+      return `${Math.round(numeric <= 1 ? numeric * 100 : numeric)}%`;
+    }
+    return raw.trim() || null;
+  }
+  return null;
+}
+
+function formatInvestorSignalFreshness(value?: string | null, language: 'zh' | 'en' = 'zh'): string | null {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return null;
+  const labelsZh: Record<string, string> = {
+    live: '实时',
+    cached: '缓存',
+    delayed: '延迟',
+    partial: '部分',
+    stale: '过期',
+    fallback: '最近一次可用',
+  };
+  const labelsEn: Record<string, string> = {
+    live: 'Live',
+    cached: 'Cached',
+    delayed: 'Delayed',
+    partial: 'Partial',
+    stale: 'Stale',
+    fallback: 'Latest available',
+  };
+  return language === 'en' ? (labelsEn[normalized] || normalized) : (labelsZh[normalized] || normalized);
+}
+
+function investorSignalReasonLabels(signal?: InvestorSignalContract | null, language: 'zh' | 'en' = 'zh'): string[] {
+  const codes = Array.isArray(signal?.reasonCodes) ? signal.reasonCodes : [];
+  return uniqueInvestorSignalLabels(
+    codes
+      .map((code) => formatInvestorSignalCodeLabel(String(code || ''), language, INVESTOR_SIGNAL_REASON_LABELS_ZH, INVESTOR_SIGNAL_REASON_LABELS_EN))
+      .filter(Boolean),
+  ).slice(0, 3);
+}
+
+function investorSignalContradictionLabels(signal?: InvestorSignalContract | null, language: 'zh' | 'en' = 'zh'): string[] {
+  const codes = Array.isArray(signal?.contradictionCodes) ? signal.contradictionCodes : [];
+  return uniqueInvestorSignalLabels(
+    codes
+      .map((code) => formatInvestorSignalCodeLabel(String(code || ''), language, INVESTOR_SIGNAL_CONTRADICTION_LABELS_ZH, INVESTOR_SIGNAL_CONTRADICTION_LABELS_EN))
+      .filter(Boolean),
+  ).slice(0, 3);
+}
+
+function InvestorSignalDetailSection({
+  signal,
+  language,
+  candidateIdentity,
+}: {
+  signal?: InvestorSignalContract | null;
+  language: 'zh' | 'en';
+  candidateIdentity: string;
+}) {
+  const stateLabel = formatInvestorSignalState(signal);
+  const confidenceLabel = formatInvestorSignalConfidence(signal);
+  const freshnessLabel = formatInvestorSignalFreshness(signal?.freshness, language);
+  const reasonLabels = investorSignalReasonLabels(signal, language);
+  const contradictionLabels = investorSignalContradictionLabels(signal, language);
+  const explanation = typeof signal?.explanation === 'string' && signal.explanation.trim()
+    ? signal.explanation.trim()
+    : null;
+  const hasVisibleContent = Boolean(stateLabel || confidenceLabel || freshnessLabel || reasonLabels.length || contradictionLabels.length || explanation);
+
+  if (!hasVisibleContent) {
+    return null;
+  }
+
+  return (
+    <BoardDetailSection title={language === 'en' ? 'Investor signal' : '投资者信号'}>
+      <div data-testid={`scanner-investor-signal-${candidateIdentity}`} className="space-y-2">
+        <div className="flex flex-wrap gap-1.5">
+          {stateLabel ? <FieldChip label={language === 'en' ? 'State' : '状态'} value={stateLabel} /> : null}
+          {confidenceLabel ? <FieldChip label={language === 'en' ? 'Confidence' : '置信度'} value={confidenceLabel} /> : null}
+          {freshnessLabel ? <FieldChip label={language === 'en' ? 'Freshness' : '时效'} value={freshnessLabel} /> : null}
+        </div>
+        {reasonLabels.length ? (
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/36">
+              {language === 'en' ? 'Why constrained' : '为什么受限'}
+            </p>
+            <NotesList notes={reasonLabels} empty="" />
+          </div>
+        ) : null}
+        {contradictionLabels.length ? (
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/36">
+              {language === 'en' ? 'Counter cues' : '反向线索'}
+            </p>
+            <NotesList notes={contradictionLabels} empty="" />
+          </div>
+        ) : null}
+        {explanation ? (
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/36">
+              {language === 'en' ? 'Explanation' : '说明'}
+            </p>
+            <p className="text-xs leading-relaxed text-white/64">{explanation}</p>
+          </div>
+        ) : null}
+      </div>
+    </BoardDetailSection>
+  );
+}
 
 function BoardDetailSection({
   title,
@@ -115,6 +294,7 @@ export function ScannerCandidateDetailPanel({
   backtestItem?: ScannerBacktestItem;
 }) {
   const aiAvailable = Boolean(candidate.aiInterpretation?.available);
+  const investorSignal = candidate.consumerDiagnostics?.investorSignal;
 
   return (
     <div
@@ -199,6 +379,11 @@ export function ScannerCandidateDetailPanel({
                 <EvidenceChips summary={evidenceSummary} maxLabels={2} />
               </BoardDetailSection>
             ) : null}
+            <InvestorSignalDetailSection
+              signal={investorSignal}
+              language={language}
+              candidateIdentity={candidateIdentity}
+            />
             {featureSignalItems.length ? (
               <BoardDetailSection title={language === 'en' ? 'Feature signals' : '特征信号'}>
                 <LabeledValueGrid items={featureSignalItems.slice(0, 4)} empty={language === 'en' ? 'No feature signals provided' : '未提供特征信号'} />

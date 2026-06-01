@@ -1183,8 +1183,8 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const status = await screen.findByTestId('scanner-status-strip');
-    const candidates = screen.getByTestId('scanner-candidate-scroll-region');
-    const table = screen.getByTestId('scanner-result-table');
+    const candidates = await screen.findByTestId('scanner-candidate-scroll-region');
+    const table = await screen.findByTestId('scanner-result-table');
     expect(status).toHaveTextContent(/Best candidate|最佳候选/);
     expect(status).toHaveTextContent(/Candidate mix|候选分布/);
     expect(status).toHaveTextContent(/Signal state|信号状态/);
@@ -1319,6 +1319,67 @@ describe('UserScannerPage', () => {
     fireEvent.click(within(secondary).getByRole('button', { name: /展开.*次要说明|Expand.*Secondary notes|展开/i }));
     expect(within(detail).getByText('仅供观察')).toBeInTheDocument();
     expect(within(detail).queryByText(/provider_timeout/i)).not.toBeInTheDocument();
+  });
+
+  it('surfaces investor signal in candidate notes using consumer-safe labels only', async () => {
+    const investorSignalCandidate = makeCandidate({
+      symbol: 'WULF',
+      name: 'TeraWulf',
+      companyName: 'TeraWulf',
+      rank: 1,
+      score: 60,
+      diagnostics: makeTrustDiagnostics(),
+      consumerDiagnostics: {
+        investorSignal: {
+          contractVersion: 'investor_signal_contract_v1',
+          diagnosticOnly: true,
+          observationOnly: true,
+          authorityGrant: false,
+          decisionGrade: false,
+          sourceAuthorityAllowed: false,
+          scoreContributionAllowed: false,
+          capitalFlowRegime: 'inflow',
+          capitalFlowLabel: '资金净流入观察',
+          confidence: 'medium',
+          confidenceText: '中',
+          freshness: 'partial',
+          reasonCodes: ['source_authority_missing', 'score_rights_missing'],
+          contradictionCodes: ['btc_not_confirming_growth_absorption'],
+          explanation: 'Growth is absorbing more attention while BTC is not confirming the move.',
+          likelyDestination: 'growth_ai_software_semis',
+          sourceAssetPressure: [
+            { asset: 'growth_ai_software_semis', pressure: 'absorbing', freshness: 'delayed', isPartial: true },
+          ],
+        },
+      },
+    });
+
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun({
+      shortlist: [investorSignalCandidate],
+      selected: [investorSignalCandidate],
+    }));
+    renderUserScannerPage();
+
+    const detail = await screen.findByTestId('scanner-result-detail-WULF');
+    fireEvent.click(within(detail).getByRole('button', { name: /候选说明|Candidate notes/i }));
+    const secondary = await within(detail).findByTestId('scanner-result-detail-secondary-WULF');
+    fireEvent.click(within(secondary).getByRole('button', { name: /展开.*次要说明|Expand.*Secondary notes|展开/i }));
+
+    const signal = await within(detail).findByTestId('scanner-investor-signal-WULF');
+    expect(within(detail).getByText(/投资者信号|Investor signal/i)).toBeInTheDocument();
+    expect(signal).toHaveTextContent('资金净流入观察');
+    expect(signal).toHaveTextContent(/置信度|Confidence/i);
+    expect(signal).toHaveTextContent('中');
+    expect(signal).toHaveTextContent(/时效|Freshness/i);
+    expect(signal).toHaveTextContent(/部分|Partial/i);
+    expect(signal).toHaveTextContent(/来源确认待补齐|Source confirmation pending/i);
+    expect(signal).toHaveTextContent(/暂不进入评分|Score stays observational/i);
+    expect(signal).toHaveTextContent(/BTC 未确认当前吸纳|BTC not confirming current absorption/i);
+    expect(signal).toHaveTextContent('Growth is absorbing more attention while BTC is not confirming the move.');
+    expect(signal).not.toHaveTextContent(
+      /authorityGrant|decisionGrade|sourceAuthorityAllowed|scoreContributionAllowed|contractVersion|sourceAssetPressure|likelyDestination|raw/i,
+    );
+    expect(signal).not.toHaveTextContent(/source_authority_missing|score_rights_missing|btc_not_confirming_growth_absorption/i);
   });
 
   it('reveals rejection reasons from the diagnostics disclosure', async () => {
