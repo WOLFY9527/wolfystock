@@ -363,23 +363,6 @@ export function ConsoleContextRail({ className, children, ...props }: LinearPrim
   );
 }
 
-export function SectionDeck({
-  className,
-  children,
-  ...props
-}: LinearPrimitiveProps<HTMLDivElement>) {
-  return (
-    <div
-      data-linear-primitive="section-deck"
-      data-layout-zone="SecondaryDeck"
-      className={cn('grid min-w-0 gap-3', className)}
-      {...props}
-    >
-      {children}
-    </div>
-  );
-}
-
 export function ConsoleStatusStrip({
   items,
   className,

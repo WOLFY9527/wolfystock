@@ -118,17 +118,6 @@ export const formatNumber = (value?: unknown, digits = 2, options: NumberFormatO
     maximumFractionDigits: digits,
   });
 
-export const formatCompactNumber = (value?: unknown, options: NumberFormatOptions = {}): string => {
-  const numeric = parseFiniteNumber(value);
-  if (numeric == null) return MISSING_VALUE;
-  const locale = options.locale || 'zh-CN';
-  return getNumberFormat(locale, {
-    notation: 'compact',
-    compactDisplay: 'short',
-    maximumFractionDigits: options.digits ?? 1,
-  }).format(numeric);
-};
-
 export const formatPercent = (value?: unknown, options: PercentFormatOptions = {}): string => {
   const numeric = parseFiniteNumber(value);
   if (numeric == null) return MISSING_VALUE;
@@ -146,14 +135,6 @@ export const formatSignedNumber = (value?: unknown, digits = 2, options: SignedF
   const { showZeroSign, ...numberOptions } = options;
   const sign = numeric > 0 ? '+' : numeric < 0 ? '-' : showZeroSign ? '+' : '';
   return `${sign}${formatNumber(Math.abs(numeric), digits, numberOptions)}`;
-};
-
-export const formatSignedPercent = (value?: unknown, options: PercentFormatOptions & { showZeroSign?: boolean } = {}): string => {
-  const numeric = parseFiniteNumber(value);
-  if (numeric == null) return MISSING_VALUE;
-  const { showZeroSign, ...percentOptions } = options;
-  const sign = numeric > 0 ? '+' : numeric < 0 ? '-' : showZeroSign ? '+' : '';
-  return `${sign}${formatPercent(Math.abs(numeric), percentOptions)}`;
 };
 
 export const formatCurrency = (value?: unknown, options: CurrencyFormatOptions = {}): string => {

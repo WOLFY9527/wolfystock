@@ -4,27 +4,6 @@ import { toCamelCase } from '../api/utils';
 import type { TaskInfo } from '../types/analysis';
 
 /**
- * SSE event types.
- */
-export type SSEEventType =
-  | 'connected'
-  | 'task_created'
-  | 'task_started'
-  | 'task_updated'
-  | 'task_completed'
-  | 'task_failed'
-  | 'heartbeat';
-
-/**
- * SSE event payload.
- */
-export interface SSEEvent {
-  type: SSEEventType;
-  task?: TaskInfo;
-  timestamp?: string;
-}
-
-/**
  * SSE hook options.
  */
 export interface UseTaskStreamOptions {

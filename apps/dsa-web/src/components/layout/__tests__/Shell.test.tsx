@@ -8,7 +8,7 @@ import { expectNoRawI18nKeys } from '../../../test-utils/i18nRawKeySentinel';
 import { Shell } from '../Shell';
 import { ShellRailContext } from '../ShellRailContext';
 import { setAdminSurfaceMode } from '../../../hooks/useProductSurface';
-import { useStockPoolStore } from '../../../stores';
+import { useStockPoolStore } from '../../../stores/stockPoolStore';
 
 const { mockLogout, mockHardRedirect, useAuthMock } = vi.hoisted(() => ({
   mockLogout: vi.fn().mockResolvedValue(undefined),

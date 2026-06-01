@@ -19,10 +19,6 @@ function getTaskActivityTimestamp(task: TaskInfo): number {
   return Date.parse(task.updatedAt || task.completedAt || task.startedAt || task.createdAt || '');
 }
 
-function getCompletedTaskTimestamp(task: TaskInfo): number {
-  return Date.parse(task.completedAt || task.updatedAt || task.createdAt || '');
-}
-
 export function sortTasksByPriority(tasks: TaskInfo[]): TaskInfo[] {
   return tasks
     .slice()
@@ -35,16 +31,4 @@ export function sortTasksByPriority(tasks: TaskInfo[]): TaskInfo[] {
       return getTaskActivityTimestamp(right) - getTaskActivityTimestamp(left);
     })
     .slice(0, MAX_RECENT_TASKS);
-}
-
-export function selectPrimaryTask(tasks: TaskInfo[]): TaskInfo | null {
-  return sortTasksByPriority(tasks)[0] ?? null;
-}
-
-export function selectCompletedTasksByRecency(tasks: TaskInfo[]): TaskInfo[] {
-  return tasks
-    .filter((task) => task.status === 'completed')
-    .sort((left, right) => {
-      return getCompletedTaskTimestamp(right) - getCompletedTaskTimestamp(left);
-    });
 }
