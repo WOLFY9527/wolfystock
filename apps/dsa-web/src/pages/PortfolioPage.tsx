@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { MoreHorizontal, PenSquare, RefreshCw, Trash2 } from 'lucide-react';
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
@@ -88,6 +88,19 @@ const FALLBACK_BROKERS: PortfolioImportBrokerItem[] = [
   { broker: 'cmb', aliases: ['cmbchina', 'zhaoshang'], displayName: translate('zh', 'portfolio.brokerName.cmb'), fileExtensions: ['csv'] },
   { broker: 'ibkr', aliases: ['interactivebrokers'], displayName: translate('zh', 'portfolio.brokerName.ibkr'), fileExtensions: ['xml'] },
 ];
+
+function subscribeNarrowViewport(onStoreChange: () => void): () => void {
+  if (typeof window === 'undefined') {
+    return () => {};
+  }
+
+  window.addEventListener('resize', onStoreChange);
+  return () => window.removeEventListener('resize', onStoreChange);
+}
+
+function getNarrowViewportSnapshot(): boolean {
+  return typeof window !== 'undefined' ? window.innerWidth <= 390 : false;
+}
 
 type AccountOption = 'all' | number;
 type EventType = 'trade' | 'cash' | 'corporate';
@@ -1381,11 +1394,8 @@ const PortfolioPage: React.FC = () => {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editingTrade, setEditingTrade] = useState<EditingTrade | null>(null);
   const [tradeEditSubmitting, setTradeEditSubmitting] = useState(false);
-  const [tradeEditCurrencyManuallyEdited, setTradeEditCurrencyManuallyEdited] = useState(false);
   const [openTradeActionMenuId, setOpenTradeActionMenuId] = useState<number | null>(null);
-  const [isNarrowViewport, setIsNarrowViewport] = useState(() => (
-    typeof window !== 'undefined' ? window.innerWidth <= 390 : false
-  ));
+  const isNarrowViewport = useSyncExternalStore(subscribeNarrowViewport, getNarrowViewportSnapshot, () => false);
 
   const [tradeForm, setTradeForm] = useState<TradeFormState>({
     symbol: '',
@@ -1423,6 +1433,7 @@ const PortfolioPage: React.FC = () => {
   const queryAccountId = selectedAccount === 'all' ? undefined : selectedAccount;
   const refreshViewKey = `${selectedAccount === 'all' ? 'all' : `account:${selectedAccount}`}:cost:${costMethod}`;
   const refreshContextRef = useRef<FxRefreshContext>({ viewKey: refreshViewKey, requestId: 0 });
+  const tradeEditCurrencyManuallyEditedRef = useRef(false);
   const activeAccounts = accounts.filter((item) => item.isActive !== false);
   const writableAccounts = activeAccounts;
   const hasAccounts = accounts.length > 0;
@@ -1495,16 +1506,6 @@ const PortfolioPage: React.FC = () => {
       window.removeEventListener(PORTFOLIO_DISPLAY_CURRENCY_CHANGED_EVENT, handleDisplayCurrencyChange);
       window.removeEventListener('storage', handleStorage);
     };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return undefined;
-    }
-    const handleResize = () => setIsNarrowViewport(window.innerWidth <= 390);
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const isActiveRefreshContext = (requestedViewKey: string, requestedRequestId: number) => {
@@ -1752,7 +1753,7 @@ const PortfolioPage: React.FC = () => {
   }, [inferredTradeCurrency, tradeCurrencyManuallyEdited]);
 
   useEffect(() => {
-    if (!editingTrade || tradeEditCurrencyManuallyEdited) {
+    if (!editingTrade || tradeEditCurrencyManuallyEditedRef.current) {
       return;
     }
     if (editingTrade.currency === inferredEditTradeCurrency) {
@@ -1763,7 +1764,7 @@ const PortfolioPage: React.FC = () => {
         ? { ...prev, currency: inferredEditTradeCurrency }
         : prev
     ));
-  }, [editingTrade, inferredEditTradeCurrency, tradeEditCurrencyManuallyEdited]);
+  }, [editingTrade, inferredEditTradeCurrency]);
 
   const positionRows: FlatPosition[] = (() => {
     if (!snapshot) return [];
@@ -1937,7 +1938,7 @@ const PortfolioPage: React.FC = () => {
 
   const openTradeEditor = (item: PortfolioTradeListItem) => {
     setOpenTradeActionMenuId(null);
-    setTradeEditCurrencyManuallyEdited(false);
+    tradeEditCurrencyManuallyEditedRef.current = false;
     setEditingTrade({
       id: item.id,
       accountId: item.accountId,
@@ -1987,7 +1988,7 @@ const PortfolioPage: React.FC = () => {
       await portfolioApi.updateTrade(editingTrade.id, payload);
       await refreshPortfolioData();
       setEditingTrade(null);
-      setTradeEditCurrencyManuallyEdited(false);
+      tradeEditCurrencyManuallyEditedRef.current = false;
       setTradeFeedback({ tone: 'success', text: updateTradeSuccessLabel });
     } catch (err) {
       setError(getParsedApiError(err));
@@ -3626,7 +3627,7 @@ const PortfolioPage: React.FC = () => {
             return;
           }
           setEditingTrade(null);
-          setTradeEditCurrencyManuallyEdited(false);
+          tradeEditCurrencyManuallyEditedRef.current = false;
         }}
         title={editTradeTitle}
         width="max-w-[min(96vw,38rem)]"
@@ -3653,7 +3654,7 @@ const PortfolioPage: React.FC = () => {
                     ? {
                       ...prev,
                       symbol: e.target.value,
-                      currency: tradeEditCurrencyManuallyEdited
+                      currency: tradeEditCurrencyManuallyEditedRef.current
                         ? prev.currency
                         : inferSettlementCurrency(e.target.value, editingAccount?.baseCurrency),
                     }
@@ -3706,7 +3707,7 @@ const PortfolioPage: React.FC = () => {
                 className={PORTFOLIO_SELECT_CLASS}
                 value={editingTrade.currency}
                 onChange={(value) => {
-                  setTradeEditCurrencyManuallyEdited(true);
+                  tradeEditCurrencyManuallyEditedRef.current = true;
                   setEditingTrade((prev) => (prev ? { ...prev, currency: value } : prev));
                 }}
                 options={FX_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
@@ -3746,7 +3747,7 @@ const PortfolioPage: React.FC = () => {
                 className={PORTFOLIO_TEXT_BUTTON_CLASS}
                 onClick={() => {
                   setEditingTrade(null);
-                  setTradeEditCurrencyManuallyEdited(false);
+                  tradeEditCurrencyManuallyEditedRef.current = false;
                 }}
                 disabled={tradeEditSubmitting}
               >
