@@ -1435,6 +1435,23 @@ class MarketOverviewService:
                         f"rotation family freshness={signal.get('freshness')}，只能保持观察态。",
                     )
                 )
+            breadth_context = self._regime_summary_rotation_breadth_context(row, family_id)
+            if breadth_context.get("status") == "confirmed":
+                drivers.append(
+                    self._regime_summary_entry(
+                        f"rotation_breadth:{family_id}",
+                        f"{self._regime_summary_family_label(row, family_id)} quote-breadth proxy",
+                        str(breadth_context.get("detail") or ""),
+                    )
+                )
+            else:
+                next_watch_items.append(
+                    self._regime_summary_entry(
+                        f"watch:rotation_breadth:{family_id}",
+                        f"观察 {self._regime_summary_family_label(row, family_id)} quote-breadth proxy",
+                        str(breadth_context.get("detail") or ""),
+                    )
+                )
 
         for entry in market_regime_synthesis.get("counterEvidence") or []:
             if not isinstance(entry, Mapping):
@@ -1934,7 +1951,215 @@ class MarketOverviewService:
                 "explanation": str(signal.get("explanation") or ""),
             }
         )
+        breadth_evidence = self._consumer_safe_rotation_breadth_evidence(signal.get("breadthEvidence"))
+        if breadth_evidence:
+            safe_signal["breadthEvidence"] = breadth_evidence
         return safe_signal
+
+    def _consumer_safe_rotation_breadth_evidence(self, value: Any) -> Dict[str, Any]:
+        evidence: Dict[str, Any] = {
+            "diagnosticOnly": True,
+            "observationOnly": True,
+            "authorityGrant": False,
+            "scoreContributionAllowed": False,
+        }
+        if isinstance(value, str):
+            text = self._safe_rotation_breadth_text(value)
+            if not text:
+                return {}
+            evidence["text"] = text
+            return evidence
+        if not isinstance(value, Mapping):
+            return {}
+
+        observed_members = self._optional_nonnegative_int(value.get("observedMembers"))
+        configured_members = self._optional_nonnegative_int(value.get("configuredMembers"))
+        coverage_percent = self._optional_percent(value.get("coveragePercent"))
+        percent_up = self._optional_percent(value.get("percentUp"))
+        outperforming = self._optional_percent(value.get("percentOutperformingBenchmark"))
+        if not any(
+            item is not None
+            for item in (
+                observed_members,
+                configured_members,
+                coverage_percent,
+                percent_up,
+                outperforming,
+            )
+        ):
+            return {}
+        if observed_members is not None:
+            evidence["observedMembers"] = observed_members
+        if configured_members is not None:
+            evidence["configuredMembers"] = configured_members
+        if coverage_percent is not None:
+            evidence["coveragePercent"] = coverage_percent
+        if percent_up is not None:
+            evidence["percentUp"] = percent_up
+        if outperforming is not None:
+            evidence["percentOutperformingBenchmark"] = outperforming
+        return evidence
+
+    def _regime_summary_rotation_breadth_context(
+        self,
+        row: Mapping[str, Any],
+        family_id: str,
+    ) -> Dict[str, str]:
+        signal = row.get("themeFlowSignal") if isinstance(row.get("themeFlowSignal"), Mapping) else {}
+        evidence = signal.get("breadthEvidence") if isinstance(signal, Mapping) else None
+        family_label = self._regime_summary_family_label(row, family_id)
+        base_detail = f"{family_label} quote-breadth proxy is observation-only context; it is not real fund flow or score-grade evidence."
+        if not isinstance(signal, Mapping) or not evidence:
+            return {
+                "status": "watch",
+                "detail": f"{base_detail} Existing Rotation breadth evidence is missing, so breadth stays a next-watch item.",
+            }
+        if not isinstance(evidence, Mapping):
+            return {
+                "status": "watch",
+                "detail": f"{base_detail} Rotation breadth evidence is malformed, so breadth stays a next-watch item.",
+            }
+
+        state = str(signal.get("themeFlowState") or "")
+        reason_codes = {str(item or "") for item in signal.get("reasonCodes") or []}
+        contradiction_codes = [str(item or "") for item in signal.get("contradictionCodes") or [] if str(item or "")]
+        evidence_text = str(evidence.get("text") or "").strip()
+        metrics = self._rotation_breadth_evidence_metrics(evidence)
+        weak_reasons = self._rotation_breadth_weak_reasons(
+            evidence=evidence,
+            signal=signal,
+            state=state,
+            reason_codes=reason_codes,
+            contradiction_codes=contradiction_codes,
+            evidence_text=evidence_text,
+        )
+        metric_detail = self._rotation_breadth_metric_detail(metrics)
+        if weak_reasons:
+            reason_text = "、".join(weak_reasons)
+            detail = f"{base_detail} Breadth is not confirming yet ({reason_text})."
+            if metric_detail:
+                detail = f"{detail} {metric_detail}"
+            elif evidence_text:
+                detail = f"{detail} {evidence_text}"
+            return {"status": "watch", "detail": detail}
+
+        detail = f"{base_detail} Breadth confirms the existing Rotation {state or 'state'} context."
+        if metric_detail:
+            detail = f"{detail} {metric_detail}"
+        elif evidence_text:
+            detail = f"{detail} {evidence_text}"
+        return {"status": "confirmed", "detail": detail}
+
+    def _rotation_breadth_evidence_metrics(self, evidence: Mapping[str, Any]) -> Dict[str, Optional[float]]:
+        return {
+            "observedMembers": self._clean_number(evidence.get("observedMembers")),
+            "configuredMembers": self._clean_number(evidence.get("configuredMembers")),
+            "coveragePercent": self._clean_number(evidence.get("coveragePercent")),
+            "percentUp": self._clean_number(evidence.get("percentUp")),
+            "percentOutperformingBenchmark": self._clean_number(evidence.get("percentOutperformingBenchmark")),
+        }
+
+    def _rotation_breadth_weak_reasons(
+        self,
+        *,
+        evidence: Mapping[str, Any],
+        signal: Mapping[str, Any],
+        state: str,
+        reason_codes: set[str],
+        contradiction_codes: Sequence[str],
+        evidence_text: str,
+    ) -> List[str]:
+        reasons: List[str] = []
+        metrics = self._rotation_breadth_evidence_metrics(evidence)
+        if not evidence_text and not any(value is not None for value in metrics.values()):
+            reasons.append("missing breadth metrics")
+        if state not in {"leading", "broadening", "rotating"}:
+            reasons.append("rotation state not confirming")
+        if contradiction_codes:
+            reasons.append("contradictory rotation evidence")
+        if bool(signal.get("isPartial")) or "partial_source" in reason_codes:
+            reasons.append("partial rotation coverage")
+        coverage_percent = metrics["coveragePercent"]
+        percent_up = metrics["percentUp"]
+        outperforming = metrics["percentOutperformingBenchmark"]
+        observed_members = metrics["observedMembers"]
+        configured_members = metrics["configuredMembers"]
+        if coverage_percent is not None and coverage_percent < 50.0:
+            reasons.append("low breadth coverage")
+        if percent_up is not None and percent_up < 55.0:
+            reasons.append("weak percent-up breadth")
+        if outperforming is not None and outperforming < 50.0:
+            reasons.append("weak benchmark-outperformance breadth")
+        if observed_members is not None and observed_members < 3:
+            reasons.append("too few observed members")
+        if (
+            observed_members is not None
+            and configured_members is not None
+            and configured_members > 0
+            and observed_members / configured_members < 0.5
+        ):
+            reasons.append("incomplete member coverage")
+        if evidence_text and any(marker in evidence_text.lower() for marker in ("不足", "insufficient", "missing", "partial", "no clear edge")):
+            reasons.append("breadth text is not confirming")
+        return list(dict.fromkeys(reasons))
+
+    @staticmethod
+    def _rotation_breadth_metric_detail(metrics: Mapping[str, Optional[float]]) -> str:
+        parts: List[str] = []
+        observed = metrics.get("observedMembers")
+        configured = metrics.get("configuredMembers")
+        if observed is not None and configured is not None:
+            parts.append(f"observed members {int(observed)}/{int(configured)}")
+        coverage = metrics.get("coveragePercent")
+        if coverage is not None:
+            parts.append(f"coverage {coverage:.1f}%")
+        percent_up = metrics.get("percentUp")
+        if percent_up is not None:
+            parts.append(f"percent-up {percent_up:.1f}%")
+        outperforming = metrics.get("percentOutperformingBenchmark")
+        if outperforming is not None:
+            parts.append(f"outperforming-benchmark {outperforming:.1f}%")
+        return "; ".join(parts) + "." if parts else ""
+
+    @staticmethod
+    def _safe_rotation_breadth_text(value: Any) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        lowered = text.lower()
+        forbidden_markers = (
+            "provider",
+            "routing",
+            "router",
+            "admin",
+            "cache",
+            "payload",
+            "raw",
+            "internal",
+            "secret",
+            "token",
+            "api_key",
+            "apikey",
+            "credential",
+            "http",
+        )
+        if any(marker in lowered for marker in forbidden_markers):
+            return ""
+        return text[:240]
+
+    @staticmethod
+    def _optional_nonnegative_int(value: Any) -> Optional[int]:
+        number = MarketOverviewService._clean_number(value)
+        if number is None or number < 0:
+            return None
+        return int(number)
+
+    @staticmethod
+    def _optional_percent(value: Any) -> Optional[float]:
+        number = MarketOverviewService._clean_number(value)
+        if number is None or number < 0 or number > 100:
+            return None
+        return round(number, 2)
 
     @staticmethod
     def _extract_regime_summary_liquidity_signal(inputs: Mapping[str, Any]) -> Optional[Dict[str, Any]]:

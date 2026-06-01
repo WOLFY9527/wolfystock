@@ -1,4 +1,11 @@
 ## 2026-06-01
+- Market Overview `regimeSummary` now consumes existing Rotation
+  `rotationFamilyRollup[].themeFlowSignal.breadthEvidence` as explanatory
+  quote-breadth proxy context only. Confirming breadth can add a driver, while
+  weak, missing, partial, or contradictory breadth stays in next-watch items;
+  `regimeSummary.label`, confidence, source authority, score contribution,
+  provider routing/order/budgets, MarketCache behavior, and Rotation scoring
+  remain unchanged.
 - Rotation Radar `consumerEvidenceSnapshot.themes[]` now exposes additive
   sanitized `breadthEvidence` projected only from existing theme breadth
   payload fields (`observedMembers`, `configuredMembers`, `coveragePercent`,

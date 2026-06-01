@@ -551,6 +551,20 @@ class MarketOverviewApiTestCase(unittest.TestCase):
                             "freshness": "cached",
                             "sourceAuthorityAllowed": True,
                             "scoreContributionAllowed": False,
+                            "breadthEvidence": {
+                                "source": "rotation_theme_quote_breadth",
+                                "observationOnly": True,
+                                "authorityGrant": False,
+                                "scoreContributionAllowed": False,
+                                "observedMembers": 8,
+                                "configuredMembers": 10,
+                                "coveragePercent": 80.0,
+                                "percentUp": 74.0,
+                                "percentOutperformingBenchmark": 66.0,
+                                "providerRouting": {"winner": "internal"},
+                                "adminDiagnostics": {"payload": "secret"},
+                                "cacheBundleDiagnostics": {"cacheKey": "rotation:ai"},
+                            },
                             "providerRouting": {"winner": "internal"},
                             "adminDiagnostics": {"payload": "secret"},
                         },
@@ -581,8 +595,23 @@ class MarketOverviewApiTestCase(unittest.TestCase):
         assert family["themeFlowSignal"]["observationOnly"] is True
         assert family["themeFlowSignal"]["scoreContributionAllowed"] is False
         assert family["themeFlowSignal"]["sourceAuthorityAllowed"] is False
+        assert family["themeFlowSignal"]["breadthEvidence"] == {
+            "diagnosticOnly": True,
+            "observationOnly": True,
+            "authorityGrant": False,
+            "scoreContributionAllowed": False,
+            "observedMembers": 8,
+            "configuredMembers": 10,
+            "coveragePercent": 80.0,
+            "percentUp": 74.0,
+            "percentOutperformingBenchmark": 66.0,
+        }
         assert "providerRouting" not in family["themeFlowSignal"]
         assert "adminDiagnostics" not in family["themeFlowSignal"]
+        serialized_family = str(family["themeFlowSignal"])
+        assert "internal" not in serialized_family
+        assert "cacheBundleDiagnostics" not in serialized_family
+        assert "cacheKey" not in serialized_family
 
 
 if __name__ == "__main__":

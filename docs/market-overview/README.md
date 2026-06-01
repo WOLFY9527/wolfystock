@@ -25,6 +25,10 @@ evidence.
   Liquidity `capitalFlowSignal` and Rotation `rotationFamilyRollup`, but it
   must never promote source authority, score-grade rights, or live provider
   status.
+- Rotation `themeFlowSignal.breadthEvidence` may only become explanatory
+  `regimeSummary.drivers` or `regimeSummary.nextWatchItems` context. It remains
+  a quote-breadth proxy, not real fund-flow evidence, and must not change
+  `regimeSummary.label`, confidence, source authority, or score contribution.
 - Allowed `regimeSummary.label` values are:
   `risk_on_growth_led`, `risk_on_broad`, `risk_off_defensive`,
   `liquidity_positive`, `liquidity_negative`, `inflation_oil_pressure`,

@@ -1229,6 +1229,101 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
         assert any(item["key"] == "rotation:ai" for item in summary["drivers"])
         assert "AI" in summary["explanation"]
 
+    def test_market_temperature_regime_summary_confirmed_rotation_breadth_adds_driver_only(self) -> None:
+        synthesis = _risk_on_regime_synthesis()
+        baseline_payload = self._temperature_payload_with_regime_summary(
+            inputs=_regime_summary_growth_inputs(),
+            market_regime_synthesis=synthesis,
+        )
+        inputs = _regime_summary_growth_inputs()
+        inputs["rotationFamilyRollup"][0]["themeFlowSignal"]["breadthEvidence"] = {
+            "source": "rotation_theme_quote_breadth",
+            "observationOnly": True,
+            "authorityGrant": False,
+            "scoreContributionAllowed": False,
+            "observedMembers": 8,
+            "configuredMembers": 10,
+            "coveragePercent": 80.0,
+            "percentUp": 76.0,
+            "percentOutperformingBenchmark": 68.0,
+            "providerRouting": {"winner": "internal-provider"},
+            "adminDiagnostics": {"rawProviderPayload": "secret"},
+            "cacheBundleDiagnostics": {"cacheKey": "rotation:ai"},
+        }
+
+        payload = self._temperature_payload_with_regime_summary(
+            inputs=inputs,
+            market_regime_synthesis=synthesis,
+        )
+
+        summary = payload["regimeSummary"]
+        baseline_summary = baseline_payload["regimeSummary"]
+        assert summary["label"] == baseline_summary["label"] == "risk_on_growth_led"
+        assert summary["confidence"] == baseline_summary["confidence"]
+        assert summary["sourceAuthorityAllowed"] is False
+        assert summary["scoreContributionAllowed"] is False
+        assert any(item["key"] == "rotation_breadth:ai" for item in summary["drivers"])
+        assert not any(item["key"] == "watch:rotation_breadth:ai" for item in summary["nextWatchItems"])
+        assert not any(item["key"].startswith("rotation_breadth:") for item in summary["blockers"])
+        assert not any(item["key"].startswith("rotation_breadth:") for item in summary["confidenceCaps"])
+        breadth_driver = next(item for item in summary["drivers"] if item["key"] == "rotation_breadth:ai")
+        assert "quote-breadth proxy" in breadth_driver["detail"]
+        assert "observation-only" in breadth_driver["detail"]
+        serialized = json.dumps(summary, ensure_ascii=False, sort_keys=True)
+        for forbidden in (
+            "providerRouting",
+            "internal-provider",
+            "adminDiagnostics",
+            "rawProviderPayload",
+            "secret",
+            "cacheBundleDiagnostics",
+            "cacheKey",
+        ):
+            assert forbidden not in serialized
+
+    def test_market_temperature_regime_summary_weak_or_missing_rotation_breadth_adds_next_watch_only(self) -> None:
+        synthesis = _risk_on_regime_synthesis()
+        baseline_payload = self._temperature_payload_with_regime_summary(
+            inputs=_regime_summary_growth_inputs(),
+            market_regime_synthesis=synthesis,
+        )
+        weak_inputs = _regime_summary_growth_inputs()
+        weak_inputs["rotationFamilyRollup"][0]["themeFlowSignal"]["breadthEvidence"] = {
+            "source": "rotation_theme_quote_breadth",
+            "observationOnly": True,
+            "authorityGrant": False,
+            "scoreContributionAllowed": False,
+            "observedMembers": 2,
+            "configuredMembers": 10,
+            "coveragePercent": 20.0,
+            "percentUp": 46.0,
+            "percentOutperformingBenchmark": 41.0,
+            "adminDiagnostics": {"route": "debug-only"},
+        }
+        missing_inputs = _regime_summary_growth_inputs()
+
+        weak_payload = self._temperature_payload_with_regime_summary(
+            inputs=weak_inputs,
+            market_regime_synthesis=synthesis,
+        )
+        missing_payload = self._temperature_payload_with_regime_summary(
+            inputs=missing_inputs,
+            market_regime_synthesis=synthesis,
+        )
+
+        for payload in (weak_payload, missing_payload):
+            summary = payload["regimeSummary"]
+            baseline_summary = baseline_payload["regimeSummary"]
+            assert summary["label"] == baseline_summary["label"] == "risk_on_growth_led"
+            assert summary["confidence"] == baseline_summary["confidence"]
+            assert summary["sourceAuthorityAllowed"] is False
+            assert summary["scoreContributionAllowed"] is False
+            assert not any(item["key"] == "rotation_breadth:ai" for item in summary["drivers"])
+            assert any(item["key"] == "watch:rotation_breadth:ai" for item in summary["nextWatchItems"])
+            watch_item = next(item for item in summary["nextWatchItems"] if item["key"] == "watch:rotation_breadth:ai")
+            assert "quote-breadth proxy" in watch_item["detail"]
+            assert "observation-only" in watch_item["detail"]
+
     def test_market_temperature_regime_summary_official_macro_ready_adds_observation_only_context_without_score_change(self) -> None:
         synthesis = _risk_on_regime_synthesis()
         baseline_payload = self._temperature_payload_with_regime_summary(
