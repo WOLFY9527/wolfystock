@@ -1,4 +1,13 @@
 ## 2026-06-01
+- Scanner and Watchlist now add a shared consumer-safe investor-signal
+  projection for persisted scanner intelligence: Scanner
+  `consumerDiagnostics.investorSignal` and Watchlist
+  `intelligence.scanner.investor_signal` reuse the shared investor signal
+  vocabulary for confidence/freshness/reason-code labeling, fail closed when
+  source authority is missing or ambiguous, and keep observation-only/provider
+  capped states non-authoritative. Existing scanner scoring/ranking/caps,
+  provider routing/order/budget, persistence shape, raw diagnostics, and
+  watchlist refresh behavior remain unchanged.
 - Rotation Radar now exposes additive investor-readable flow signals built only
   from existing theme outputs: each theme includes a `themeFlowSignal`, while
   `summary.rotationFamilyRollup` and

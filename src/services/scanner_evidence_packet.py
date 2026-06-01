@@ -6,6 +6,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional, Sequence
 
+from src.services.investor_signal_model import build_consumer_safe_investor_signal
+
 
 SCANNER_EVIDENCE_VERSION = "scanner_evidence_v1"
 
@@ -166,6 +168,53 @@ def _freshness_category(value: Any) -> str:
     return "unknown"
 
 
+def _signal_freshness(
+    source_confidence: Dict[str, Any],
+    evidence_packet: Dict[str, Any],
+) -> Optional[str]:
+    freshness = str(source_confidence.get("freshness") or "").strip().lower()
+    if freshness:
+        return freshness
+    mapped = {
+        "complete": "fresh",
+        "fallback": "fallback",
+        "stale": "stale",
+        "partial": "partial",
+        "missing": "unknown",
+        "unknown": "unknown",
+    }.get(str(evidence_packet.get("freshnessState") or "").strip().lower())
+    return mapped or None
+
+
+def _signal_confidence_label(value: Any) -> Optional[str]:
+    score_confidence = _safe_float(value)
+    if score_confidence is None:
+        return None
+    if score_confidence >= 0.8:
+        return "high"
+    if score_confidence >= 0.5:
+        return "medium"
+    return "low"
+
+
+def _signal_reason_codes(
+    score_explainability: Dict[str, Any],
+    source_confidence: Dict[str, Any],
+    evidence_packet: Dict[str, Any],
+) -> List[str]:
+    codes: List[str] = []
+    for value in (
+        score_explainability.get("cap_reason"),
+        score_explainability.get("degradation_reason"),
+        source_confidence.get("capReason"),
+        source_confidence.get("degradationReason"),
+        evidence_packet.get("capReason"),
+        evidence_packet.get("degradationReason"),
+    ):
+        _append_unique(codes, str(value).strip() if value is not None else None)
+    return codes
+
+
 def _coarse_source_class(*values: Any) -> Optional[str]:
     text = " ".join(str(value or "").strip().lower() for value in values if value not in (None, "", [], ()))
     if "proxy" in text:
@@ -213,6 +262,50 @@ def _consumer_status(
     ):
         return "limited"
     return "complete"
+
+
+def build_scanner_investor_signal(diagnostics: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Project scanner diagnostics into the shared investor-signal vocabulary."""
+    payload = dict(diagnostics or {})
+    evidence_packet = payload.get("evidence_packet")
+    if not isinstance(evidence_packet, dict):
+        evidence_packet = {}
+    score_explainability = payload.get("score_explainability")
+    if not isinstance(score_explainability, dict):
+        score_explainability = {}
+    source_confidence = score_explainability.get("source_confidence")
+    if not isinstance(source_confidence, dict):
+        source_confidence = {}
+
+    score_confidence = score_explainability.get("score_confidence", evidence_packet.get("scoreConfidence"))
+    confidence_label = _signal_confidence_label(score_confidence)
+    freshness = _signal_freshness(source_confidence, evidence_packet)
+    reason_codes = _signal_reason_codes(score_explainability, source_confidence, evidence_packet)
+
+    if (
+        confidence_label is None
+        and freshness is None
+        and not source_confidence
+        and not reason_codes
+    ):
+        return None
+
+    signal_input: Dict[str, Any] = {
+        "source": source_confidence.get("source"),
+        "sourceType": source_confidence.get("sourceType"),
+        "freshness": freshness,
+        "isFallback": source_confidence.get("isFallback"),
+        "isStale": source_confidence.get("isStale"),
+        "isPartial": source_confidence.get("isPartial"),
+        "isSynthetic": source_confidence.get("isSynthetic"),
+        "isUnavailable": source_confidence.get("isUnavailable"),
+        "sourceAuthorityAllowed": source_confidence.get("sourceAuthorityAllowed"),
+        "scoreContributionAllowed": source_confidence.get("scoreContributionAllowed"),
+        "reasonCodes": reason_codes,
+    }
+    if confidence_label is not None:
+        signal_input["confidenceLabel"] = confidence_label
+    return build_consumer_safe_investor_signal(signal_input)
 
 
 def build_scanner_consumer_diagnostics(diagnostics: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -266,6 +359,9 @@ def build_scanner_consumer_diagnostics(diagnostics: Optional[Dict[str, Any]]) ->
     }
     if source_class:
         projection["sourceClass"] = source_class
+    investor_signal = build_scanner_investor_signal(payload)
+    if investor_signal is not None:
+        projection["investorSignal"] = investor_signal
     return projection
 
 

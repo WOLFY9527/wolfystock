@@ -438,9 +438,6 @@ def test_build_scanner_consumer_diagnostics_excludes_provider_observation_fields
         "akshare",
         "cn_realtime_snapshot",
         "source_confidence",
-        "sourceAuthorityAllowed",
-        "scoreContributionAllowed",
-        "observationOnly",
         "sourceType",
         "sourceTier",
         "trustLevel",
@@ -449,6 +446,65 @@ def test_build_scanner_consumer_diagnostics_excludes_provider_observation_fields
         "adminReasonCodes",
     ]:
         assert forbidden not in serialized
+
+
+def test_build_scanner_consumer_diagnostics_adds_fail_closed_investor_signal_projection() -> None:
+    candidate = _candidate_fixture()
+    score_explainability = {
+        "raw_score": 81.6,
+        "final_score": 40.0,
+        "cap_reason": "fallback_source",
+        "degradation_reason": "fallback_source",
+        "score_confidence": 0.4,
+        "evidence_coverage": 1.0,
+        "source_confidence": {
+            "source": "yfinance_proxy",
+            "sourceType": "proxy",
+            "freshness": "fallback",
+            "isFallback": True,
+            "isStale": True,
+            "isPartial": True,
+            "scoreContributionAllowed": False,
+            "sourceAuthorityAllowed": False,
+            "observationOnly": True,
+            "capReason": "fallback_source",
+            "degradationReason": "fallback_source",
+        },
+    }
+    packet = build_scanner_evidence_packet(
+        candidate,
+        {
+            "market": "us",
+            "run_id": 10,
+            "evidence_version": "scanner_evidence_v1",
+            "score_explainability": score_explainability,
+        },
+    )
+
+    projection = build_scanner_consumer_diagnostics(
+        {
+            "score_explainability": score_explainability,
+            "evidence_packet": packet,
+        }
+    )
+
+    signal = projection["investorSignal"]
+    assert signal["contractVersion"] == "investor_signal_contract_v1"
+    assert signal["diagnosticOnly"] is True
+    assert signal["observationOnly"] is True
+    assert signal["authorityGrant"] is False
+    assert signal["decisionGrade"] is False
+    assert signal["scoreContributionAllowed"] is False
+    assert signal["sourceAuthorityAllowed"] is False
+    assert signal["marketRegime"] == "insufficient_evidence"
+    assert signal["capitalFlowRegime"] == "insufficient_evidence"
+    assert signal["themeFlowState"] == "insufficient_evidence"
+    assert signal["confidenceLabel"] == "blocked"
+    assert signal["freshness"] == "fallback"
+    assert "fallback_source" in signal["reasonCodes"]
+    assert "source_authority_missing" in signal["reasonCodes"]
+    assert "score_rights_missing" in signal["reasonCodes"]
+    assert signal["contradictionCodes"] == []
 
 
 def test_build_scanner_consumer_diagnostics_does_not_default_score_grade_open() -> None:

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import re
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 from src.utils.symbol_normalization import canonical_stock_code
@@ -119,6 +119,7 @@ class WatchlistScannerIntelligenceResponse(BaseModel):
     degradation_reason: Optional[str] = None
     source_confidence: Optional["WatchlistScannerSourceConfidenceResponse"] = None
     reason_families: Optional["WatchlistScannerReasonFamiliesResponse"] = None
+    investor_signal: Optional[Dict[str, Any]] = None
 
 
 class WatchlistScannerSourceConfidenceResponse(BaseModel):

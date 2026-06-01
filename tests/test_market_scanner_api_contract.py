@@ -563,6 +563,13 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
         self.assertEqual(public_payload["consumerDiagnostics"]["scoreConfidence"], 0.4)
         self.assertEqual(public_payload["consumerDiagnostics"]["capReason"], "fallback_source")
         self.assertEqual(public_payload["consumerDiagnostics"]["sourceClass"], "fallback")
+        investor_signal = public_payload["consumerDiagnostics"]["investorSignal"]
+        self.assertEqual(investor_signal["contractVersion"], "investor_signal_contract_v1")
+        self.assertFalse(investor_signal["sourceAuthorityAllowed"])
+        self.assertEqual(investor_signal["freshness"], "fallback")
+        self.assertEqual(investor_signal["confidenceLabel"], "blocked")
+        self.assertIn("fallback_source", investor_signal["reasonCodes"])
+        self.assertIn("source_authority_missing", investor_signal["reasonCodes"])
 
         projection_json = json.dumps(public_payload["consumerDiagnostics"], ensure_ascii=False)
         for forbidden in [
@@ -574,15 +581,17 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             "public_proxy",
             "cn_realtime_quote",
             "source_confidence",
-            "sourceAuthorityAllowed",
-            "scoreContributionAllowed",
-            "observationOnly",
             "sourceType",
             "sourceTier",
             "trustLevel",
             "adminReasonCodes",
         ]:
             self.assertNotIn(forbidden, projection_json)
+        investor_signal_json = json.dumps(investor_signal, ensure_ascii=False)
+        self.assertNotIn("source", investor_signal)
+        self.assertNotIn("sourceType", investor_signal)
+        for forbidden in ["providerName", "providerId", "akshare", "public_proxy"]:
+            self.assertNotIn(forbidden, investor_signal_json)
 
     def test_get_scanner_themes_returns_registry_items(self) -> None:
         response = get_scanner_themes()

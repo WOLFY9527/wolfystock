@@ -23,5 +23,9 @@ export labels, or scanner frontend route hierarchy.
   data readiness, and a safe observation step.
 - Provider, mock, fallback, generated/failed counts, and raw diagnostics are
   secondary details by default.
+- Consumer-safe scanner/watchlist projections may add shared
+  `investorSignal`/`investor_signal` vocabulary sidecars, but they must stay
+  observation-only, fail closed on missing authority, and never expose provider
+  observations or alter scoring/ranking semantics.
 - Scoring and ranking semantics are protected runtime behavior; UI/docs changes
   must not imply score changes unless the task explicitly scopes them.

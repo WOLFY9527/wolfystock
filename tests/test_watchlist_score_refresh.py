@@ -185,6 +185,7 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         self.assertEqual(item["scanner_score"], 72.5)
         self.assertEqual(item["scanner_rank"], 3)
         self.assertNotIn("ohlcv_provenance", item["intelligence"]["scanner"])
+        self.assertNotIn("investor_signal", item["intelligence"]["scanner"])
         self.assertIsNone(item["intelligence"]["scanner"].get("score_confidence"))
         self.assertIsNone(item["intelligence"]["scanner"].get("cap_reason"))
         self.assertIsNone(item["intelligence"]["scanner"].get("degradation_reason"))
@@ -292,6 +293,13 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         self.assertFalse(disclosure["source_confidence"]["score_contribution_allowed"])
         self.assertFalse(disclosure["source_confidence"]["source_authority_allowed"])
         self.assertTrue(disclosure["source_confidence"]["observation_only"])
+        investor_signal = disclosure["investor_signal"]
+        self.assertEqual(investor_signal["contractVersion"], "investor_signal_contract_v1")
+        self.assertFalse(investor_signal["sourceAuthorityAllowed"])
+        self.assertEqual(investor_signal["freshness"], "fallback")
+        self.assertEqual(investor_signal["confidenceLabel"], "blocked")
+        self.assertIn("fallback_source", investor_signal["reasonCodes"])
+        self.assertIn("source_authority_missing", investor_signal["reasonCodes"])
 
     def test_refresh_projects_local_cache_score_disclosure_without_provider_calls(self) -> None:
         self.service.add_item(

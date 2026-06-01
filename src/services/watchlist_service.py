@@ -13,6 +13,7 @@ from sqlalchemy import and_, desc, select
 
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
 from src.services.reason_code_vocabulary import classify_reason_code
+from src.services.scanner_evidence_packet import build_scanner_investor_signal
 from src.storage import AppUser, DatabaseManager, MarketScannerCandidate, MarketScannerRun, RuleBacktestRun, UserWatchlistItem
 from src.utils.symbol_normalization import canonical_stock_code
 
@@ -267,10 +268,13 @@ class WatchlistService:
             context: Dict[str, Dict[str, Any]] = {}
             provenance = self._project_local_ohlcv_provenance(diagnostics)
             disclosure = self._project_scanner_score_disclosure(diagnostics)
+            investor_signal = build_scanner_investor_signal(diagnostics)
             if provenance is not None:
                 context["ohlcv_provenance"] = provenance
             if disclosure is not None:
                 context["score_disclosure"] = disclosure
+            if investor_signal is not None:
+                context["investor_signal"] = investor_signal
             if context:
                 context_by_key[key] = context
         return context_by_key
@@ -282,6 +286,7 @@ class WatchlistService:
         backtest: Optional[RuleBacktestRun] = None,
         scanner_ohlcv_provenance: Optional[Dict[str, str]] = None,
         scanner_score_disclosure: Optional[Dict[str, Any]] = None,
+        scanner_investor_signal: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         scanner_score = WatchlistService._safe_float(item.get("scanner_score"))
         scanner_status = "selected" if scanner_score is not None or item.get("scanner_run_id") else "unknown"
@@ -343,6 +348,8 @@ class WatchlistService:
             scanner_payload["ohlcv_provenance"] = scanner_ohlcv_provenance
         if scanner_score_disclosure is not None:
             scanner_payload.update(scanner_score_disclosure)
+        if scanner_investor_signal is not None:
+            scanner_payload["investor_signal"] = scanner_investor_signal
 
         return {
             "scanner": scanner_payload,
@@ -402,6 +409,7 @@ class WatchlistService:
                 backtest=backtests.get(str(item.get("symbol") or "").upper()),
                 scanner_ohlcv_provenance=intelligence_context.get("ohlcv_provenance"),
                 scanner_score_disclosure=intelligence_context.get("score_disclosure"),
+                scanner_investor_signal=intelligence_context.get("investor_signal"),
             )
         return items
 

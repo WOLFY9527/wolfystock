@@ -466,6 +466,13 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertFalse(scanner["source_confidence"]["score_contribution_allowed"])
         self.assertFalse(scanner["source_confidence"]["source_authority_allowed"])
         self.assertTrue(scanner["source_confidence"]["observation_only"])
+        investor_signal = scanner["investor_signal"]
+        self.assertEqual(investor_signal["contractVersion"], "investor_signal_contract_v1")
+        self.assertFalse(investor_signal["sourceAuthorityAllowed"])
+        self.assertEqual(investor_signal["freshness"], "cached")
+        self.assertEqual(investor_signal["confidenceLabel"], "blocked")
+        self.assertIn("source_authority_missing", investor_signal["reasonCodes"])
+        self.assertIn("score_rights_missing", investor_signal["reasonCodes"])
 
     def test_watchlist_items_include_read_only_intelligence_from_saved_records(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
