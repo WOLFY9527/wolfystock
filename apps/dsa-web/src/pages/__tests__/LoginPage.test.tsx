@@ -11,7 +11,7 @@ const { navigate, useSearchParamsMock, useAuthMock } = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
 }));
 
-vi.mock('../../hooks', () => ({
+vi.mock('../../hooks/useAuth', () => ({
   useAuth: () => useAuthMock(),
 }));
 
@@ -69,6 +69,27 @@ describe('LoginPage', () => {
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.submitLogin') }));
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
+  });
+
+  it('re-enables submit controls after an unsuccessful login response', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login: vi.fn().mockResolvedValue({ success: false }),
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    renderPage();
+
+    const passwordInput = screen.getByLabelText(translate('zh', 'auth.login.passwordLabelLogin'));
+    const submitButton = screen.getByRole('button', { name: translate('zh', 'auth.login.submitLogin') });
+
+    fireEvent.change(passwordInput, { target: { value: 'passwd6' } });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(submitButton).not.toBeDisabled();
+    });
   });
 
   it('enters create-account mode directly when requested by the route', () => {
