@@ -778,6 +778,8 @@ def test_official_macro_activation_cache_readiness_smoke_outputs_sanitized_requi
     assert payload["sourceAuthorityAllowed"] is False
     assert payload["scoreContributionAllowed"] is False
     assert payload["reason"] == "stale_series"
+    assert payload["operatorNextGate"] == "remediate_required_series_before_prewarm"
+    assert payload["requiredSeries"] == ["DTWEXBGS", "WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
     assert payload["requiredSeriesStatus"] == {
         "DTWEXBGS": "fulfilled",
         "WALCL": "fulfilled",
@@ -785,6 +787,53 @@ def test_official_macro_activation_cache_readiness_smoke_outputs_sanitized_requi
         "WTREGEN": "stale",
         "WRESBAL": "fulfilled",
     }
+    assert payload["seriesReadiness"] == [
+        {
+            "blocked": False,
+            "blockedReason": None,
+            "freshnessPolicy": "official_h10_weekly_batch_t_plus_7",
+            "group": "usd_pressure",
+            "series": "DTWEXBGS",
+            "status": "fulfilled",
+            "symbol": "USD_TWI",
+        },
+        {
+            "blocked": False,
+            "blockedReason": None,
+            "freshnessPolicy": "official_weekly_fed_liquidity_t_plus_7",
+            "group": "fed_liquidity",
+            "series": "WALCL",
+            "status": "fulfilled",
+            "symbol": "FED_ASSETS",
+        },
+        {
+            "blocked": True,
+            "blockedReason": "stale_series",
+            "freshnessPolicy": "official_daily_us_weekday_t_plus_1",
+            "group": "fed_liquidity",
+            "series": "RRPONTSYD",
+            "status": "missing",
+            "symbol": "FED_RRP",
+        },
+        {
+            "blocked": True,
+            "blockedReason": "stale_series",
+            "freshnessPolicy": "official_weekly_fed_liquidity_t_plus_7",
+            "group": "fed_liquidity",
+            "series": "WTREGEN",
+            "status": "stale",
+            "symbol": "TGA",
+        },
+        {
+            "blocked": False,
+            "blockedReason": None,
+            "freshnessPolicy": "official_weekly_fed_liquidity_t_plus_7",
+            "group": "fed_liquidity",
+            "series": "WRESBAL",
+            "status": "fulfilled",
+            "symbol": "RESERVES",
+        },
+    ]
     assert payload["missingSeries"] == ["RRPONTSYD"]
     assert payload["staleSeries"] == ["WTREGEN"]
     assert payload["groups"]["usdPressure"]["requiredSeriesStatus"] == {"DTWEXBGS": "fulfilled"}
@@ -812,6 +861,8 @@ def test_official_macro_activation_cache_readiness_unexpected_error_is_sanitized
     assert payload["sourceAuthorityAllowed"] is False
     assert payload["scoreContributionAllowed"] is False
     assert payload["reason"] == "unexpected_error"
+    assert payload["operatorNextGate"] == "remediate_required_series_before_prewarm"
+    assert payload["requiredSeries"] == ["DTWEXBGS", "WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"]
     assert payload["requiredSeriesStatus"] == {
         "DTWEXBGS": "missing",
         "WALCL": "missing",
@@ -819,7 +870,23 @@ def test_official_macro_activation_cache_readiness_unexpected_error_is_sanitized
         "WTREGEN": "missing",
         "WRESBAL": "missing",
     }
+    assert all(item["blocked"] is True for item in payload["seriesReadiness"])
+    assert all(item["blockedReason"] == "unexpected_error" for item in payload["seriesReadiness"])
     assert "SECRET" not in output
+
+
+def test_official_macro_activation_help_includes_cache_readiness_mode(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = _load_official_macro_activation_script()
+
+    with pytest.raises(SystemExit) as excinfo:
+        script.main(["--help"])
+
+    assert excinfo.value.code == 0
+    output = capsys.readouterr().out
+    assert "cache-readiness" in output
+    assert "official macro" in output.lower()
 
 
 def test_official_macro_cache_prewarm_dry_run_reports_sanitized_write_plan() -> None:

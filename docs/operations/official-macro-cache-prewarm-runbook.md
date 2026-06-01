@@ -5,6 +5,7 @@ prewarm.
 
 Scope:
 
+- `scripts/diagnose_official_macro_activation.py --cache-readiness`
 - `scripts/official_macro_cache_prewarm.py`
 - existing Market Overview cache refresh path only
 - readiness/dry-run evidence for official USD TWI and Fed liquidity cache rows
@@ -102,9 +103,32 @@ Behavior:
 
 Validation for this task must not execute `--write`.
 
+## Cache-Readiness Parity Diagnostic
+
+Use the bounded activation diagnostic when operators only need the official
+macro readiness gate without write-plan evidence:
+
+```bash
+python3 scripts/diagnose_official_macro_activation.py --cache-readiness
+```
+
+This diagnostic-only mode shares the same readiness vocabulary as the prewarm
+dry-run:
+
+- `requiredSeries`: the bounded official series gate
+- `requiredSeriesStatus`: compact per-series status map
+- `seriesReadiness`: per-series evidence with `group`, `symbol`,
+  `freshnessPolicy`, `status`, and `blockedReason`
+- `readiness` / `reason`: top-level ready vs blocked summary
+- `operatorNextGate`: what to do before entering the prewarm workflow
+
+This mode does not emit `writeEvidence` and does not attempt cache writes. Use
+`scripts/official_macro_cache_prewarm.py` when operators need write-plan
+diagnostics or the separately authorized write workflow.
+
 ## JSON Evidence To Read
 
-The script emits compact JSON. The main operator fields are:
+The prewarm script emits compact JSON. The main operator fields are:
 
 - `readiness` / `reason`: top-level gate result
 - `requiredSeries`, `fulfilledSeries`, `missingSeries`, `staleSeries`
@@ -115,6 +139,10 @@ The script emits compact JSON. The main operator fields are:
 - `writeEfficacy`
 - `writtenButNotScoreGradeReason`
 - `targetPanels`: which Market Overview cache keys would be refreshed
+
+The separate `diagnose_official_macro_activation.py --cache-readiness`
+diagnostic uses the same `requiredSeries` and `seriesReadiness` vocabulary, and
+adds `operatorNextGate` to point operators back into this prewarm workflow.
 
 Expected dry-run evidence:
 
@@ -158,8 +186,11 @@ ready for the existing prewarm path. It does not mean:
 
 ## Recommended Operator Flow
 
-1. Run `python3 scripts/official_macro_cache_prewarm.py --help`.
-2. Run the default dry-run and inspect `readiness`, `reason`,
+1. Run `python3 scripts/diagnose_official_macro_activation.py --help`.
+2. Run `python3 scripts/diagnose_official_macro_activation.py --cache-readiness`
+   and inspect `requiredSeries`, `seriesReadiness`, and `operatorNextGate`.
+3. Run `python3 scripts/official_macro_cache_prewarm.py --help`.
+4. Run the default dry-run and inspect `readiness`, `reason`,
    `seriesReadiness`, and `writeEvidence`.
-3. If blocked, remediate the missing/stale official cache inputs first.
-4. Only after the cache is ready, use the separately authorized write workflow.
+5. If blocked, remediate the missing/stale official cache inputs first.
+6. Only after the cache is ready, use the separately authorized write workflow.

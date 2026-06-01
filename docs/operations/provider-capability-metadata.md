@@ -166,9 +166,14 @@ Provider onboarding rows in this phase remain read-only diagnostics:
 The official macro cache prewarm workflow is an operator-facing diagnostics
 surface layered on top of existing Market Overview cache refresh logic:
 
+- `scripts/diagnose_official_macro_activation.py --cache-readiness` is the
+  bounded readiness-only entrypoint
 - default mode is dry-run
+- readiness output now exposes `requiredSeries`,
+  `requiredSeriesStatus`, `seriesReadiness`, and `operatorNextGate`
 - output now groups write-plan evidence under `writeEvidence`
-- per-series readiness evidence is emitted under `seriesReadiness`
+- the prewarm surface continues to emit per-series readiness evidence under
+  `seriesReadiness`
 - required official readiness series remain bounded to USD TWI plus Fed
   liquidity (`DTWEXBGS`, `WALCL`, `RRPONTSYD`, `WTREGEN`, `WRESBAL`)
 - the write path still refreshes existing Market Overview `rates` and `macro`

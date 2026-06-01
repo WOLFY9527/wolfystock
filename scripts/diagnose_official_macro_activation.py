@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -13,9 +14,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from src.services.official_macro_liquidity_cache_contracts import (
+    OFFICIAL_FED_LIQUIDITY_FRESHNESS_POLICIES,
+    OFFICIAL_FED_LIQUIDITY_REQUIRED_SERIES,
+    OFFICIAL_FED_LIQUIDITY_SERIES_TO_SYMBOL,
+    OFFICIAL_USD_PRESSURE_FRESHNESS_POLICIES,
+    OFFICIAL_USD_PRESSURE_REQUIRED_SERIES,
+    OFFICIAL_USD_PRESSURE_SYMBOL_TO_SERIES_ID,
+)
 from src.services.official_macro_transport import (
-    FED_LIQUIDITY_FRED_SERIES_IDS,
-    USD_PRESSURE_FRED_SERIES_IDS,
     run_fed_liquidity_live_smoke,
     run_official_macro_live_smoke,
     run_usd_pressure_live_smoke,
@@ -24,9 +31,25 @@ from src.services.official_macro_transport import (
 EXIT_OK = 0
 EXIT_FAILED = 1
 _CACHE_READINESS_GROUPS = {
-    "usdPressure": USD_PRESSURE_FRED_SERIES_IDS,
-    "fedLiquidity": FED_LIQUIDITY_FRED_SERIES_IDS,
+    "usdPressure": OFFICIAL_USD_PRESSURE_REQUIRED_SERIES,
+    "fedLiquidity": OFFICIAL_FED_LIQUIDITY_REQUIRED_SERIES,
 }
+_SERIES_READINESS_GROUPS: tuple[dict[str, object], ...] = (
+    {
+        "group": "usd_pressure",
+        "series": OFFICIAL_USD_PRESSURE_REQUIRED_SERIES,
+        "seriesToSymbol": {
+            series_id: symbol for symbol, series_id in OFFICIAL_USD_PRESSURE_SYMBOL_TO_SERIES_ID.items()
+        },
+        "freshnessPolicies": OFFICIAL_USD_PRESSURE_FRESHNESS_POLICIES,
+    },
+    {
+        "group": "fed_liquidity",
+        "series": OFFICIAL_FED_LIQUIDITY_REQUIRED_SERIES,
+        "seriesToSymbol": OFFICIAL_FED_LIQUIDITY_SERIES_TO_SYMBOL,
+        "freshnessPolicies": OFFICIAL_FED_LIQUIDITY_FRESHNESS_POLICIES,
+    },
+)
 _GROUP_FIELD_ALLOWLIST = (
     "credentialsPresent",
     "providerConstructed",
@@ -78,7 +101,8 @@ def _unexpected_error_summary() -> dict[str, object]:
 
 def _cache_readiness_unexpected_error_summary() -> dict[str, object]:
     required_series = [series for group in _CACHE_READINESS_GROUPS.values() for series in group]
-    return {
+    return _decorate_cache_readiness_summary(
+        {
         "credentialsPresent": False,
         "keyPresent": False,
         "providerConstructed": False,
@@ -93,7 +117,8 @@ def _cache_readiness_unexpected_error_summary() -> dict[str, object]:
         "staleSeries": [],
         "reason": "unexpected_error",
         "groups": {},
-    }
+        }
+    )
 
 
 def _as_list(values: object) -> list[str]:
@@ -133,6 +158,102 @@ def _aggregate_reason(groups: Mapping[str, Mapping[str, object]]) -> str | None:
     return None
 
 
+def _required_series() -> list[str]:
+    return [series for group in _CACHE_READINESS_GROUPS.values() for series in group]
+
+
+def _series_status(summary: Mapping[str, object], series_id: str) -> str:
+    required_series_status = summary.get("requiredSeriesStatus")
+    if isinstance(required_series_status, Mapping):
+        return str(required_series_status.get(series_id) or "missing").strip().lower()
+    if series_id in set(_as_list(summary.get("staleSeries"))):
+        return "stale"
+    if series_id in set(_as_list(summary.get("fulfilledSeries"))):
+        return "fulfilled"
+    if series_id in set(_as_list(summary.get("missingSeries"))):
+        return "missing"
+    return "missing"
+
+
+def _series_blocked_reason(summary: Mapping[str, object], series_id: str, status: str) -> str | None:
+    if status == "fulfilled":
+        return None
+    if status == "stale":
+        return "stale_series"
+    top_level_reason = str(summary.get("reason") or "").strip()
+    if top_level_reason:
+        return top_level_reason
+    if summary.get("sourceAuthorityAllowed") is False:
+        return "source_authority_blocked"
+    if summary.get("scoreContributionAllowed") is False:
+        return "score_contribution_blocked"
+    return "series_coverage" if series_id in set(_as_list(summary.get("missingSeries"))) else "readiness_blocked"
+
+
+def _series_readiness(summary: Mapping[str, object]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for group in _SERIES_READINESS_GROUPS:
+        group_name = str(group["group"])
+        series_to_symbol = group.get("seriesToSymbol")
+        freshness_policies = group.get("freshnessPolicies")
+        for series_id in _as_list(group.get("series")):
+            status = _series_status(summary, series_id)
+            symbol = (
+                str(series_to_symbol.get(series_id) or "").strip()
+                if isinstance(series_to_symbol, Mapping)
+                else ""
+            )
+            freshness_policy = (
+                str(freshness_policies.get(series_id) or "").strip()
+                if isinstance(freshness_policies, Mapping)
+                else ""
+            )
+            blocked_reason = _series_blocked_reason(summary, series_id, status)
+            rows.append(
+                {
+                    "group": group_name,
+                    "series": series_id,
+                    "symbol": symbol or None,
+                    "freshnessPolicy": freshness_policy or None,
+                    "status": status,
+                    "blocked": blocked_reason is not None,
+                    "blockedReason": blocked_reason,
+                }
+            )
+    return rows
+
+
+def _operator_next_gate(summary: Mapping[str, object]) -> str:
+    readiness = str(summary.get("readiness") or "").strip().lower()
+    return "run_official_macro_cache_prewarm" if readiness == "ready" else "remediate_required_series_before_prewarm"
+
+
+def _decorate_cache_readiness_summary(summary: Mapping[str, object]) -> dict[str, object]:
+    required_series = _as_list(summary.get("requiredSeries")) or _required_series()
+    decorated = dict(summary)
+    decorated["requiredSeries"] = required_series
+    if "requiredSeriesStatus" not in decorated:
+        decorated["requiredSeriesStatus"] = _required_series_status(summary, required_series)
+    decorated["seriesReadiness"] = _series_readiness(decorated)
+    decorated["operatorNextGate"] = _operator_next_gate(decorated)
+    return decorated
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Run a bounded official macro activation diagnostic.",
+    )
+    parser.add_argument(
+        "--cache-readiness",
+        action="store_true",
+        help=(
+            "Emit diagnostic-only official macro cache readiness evidence with "
+            "requiredSeries, seriesReadiness, and operatorNextGate fields."
+        ),
+    )
+    return parser
+
+
 def _run_cache_readiness_smoke() -> dict[str, object]:
     usd_pressure = run_usd_pressure_live_smoke()
     fed_liquidity = run_fed_liquidity_live_smoke()
@@ -167,7 +288,8 @@ def _run_cache_readiness_smoke() -> dict[str, object]:
     source_authority_allowed = all(bool(summary.get("sourceAuthorityAllowed")) for summary in groups.values())
     score_contribution_allowed = all(bool(summary.get("scoreContributionAllowed")) for summary in groups.values())
 
-    return {
+    return _decorate_cache_readiness_summary(
+        {
         "credentialsPresent": credentials_present,
         "keyPresent": credentials_present,
         "providerConstructed": provider_constructed,
@@ -182,12 +304,13 @@ def _run_cache_readiness_smoke() -> dict[str, object]:
         "staleSeries": stale_series,
         "reason": _aggregate_reason(groups),
         "groups": groups,
-    }
+        }
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = list(sys.argv[1:] if argv is None else argv)
-    cache_readiness = "--cache-readiness" in set(args)
+    parsed = _build_parser().parse_args(list(sys.argv[1:] if argv is None else argv))
+    cache_readiness = parsed.cache_readiness
     try:
         summary = _run_cache_readiness_smoke() if cache_readiness else run_official_macro_live_smoke()
     except Exception:

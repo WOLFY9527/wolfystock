@@ -54,12 +54,15 @@ boundaries.
   partially covered, date-ambiguous, or uses unsupported units/value formats,
   the contract fails closed and existing Market Overview `/rates` fallback
   behavior remains unchanged.
-- Official macro cache prewarm uses `scripts/official_macro_cache_prewarm.py`
-  as an operator-facing dry-run/write entrypoint for Market Overview `rates`
-  and `macro` cache rows. The dry-run/readiness surface is diagnostics only:
-  it helps operators verify USD TWI plus Fed liquidity cache readiness for
-  Market Overview and Liquidity Monitor, but it does not change provider
-  routing, promote source authority, or alter score gates.
+- Official macro operator diagnostics use
+  `scripts/diagnose_official_macro_activation.py --cache-readiness` for the
+  bounded readiness gate and `scripts/official_macro_cache_prewarm.py` for
+  dry-run/write-plan evidence on Market Overview `rates` and `macro` cache
+  rows. Both surfaces are diagnostics only and share the same
+  `requiredSeries`/`seriesReadiness` vocabulary; the readiness diagnostic adds
+  `operatorNextGate` to point operators into the prewarm workflow. Neither
+  surface changes provider routing, promotes source authority, or alters score
+  gates.
 
 ## Related Domains
 
