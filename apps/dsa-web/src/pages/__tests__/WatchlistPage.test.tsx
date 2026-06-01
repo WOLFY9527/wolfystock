@@ -895,6 +895,78 @@ describe('WatchlistPage', () => {
     expect(within(detailRail).getByText('TSMC')).toBeInTheDocument();
   });
 
+  it('renders saved watchlist notes inside the collapsed data notes rail without replacing existing evidence', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          notes: 'Scanner observation: watch post-earnings follow-through.',
+        }),
+      ],
+    });
+
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-NVDA');
+    const detailRail = screen.getByTestId('watchlist-detail-rail');
+    const dataNotes = within(detailRail).getByTestId('watchlist-data-notes');
+
+    expect(dataNotes).not.toHaveAttribute('open');
+    expect(within(dataNotes).getByRole('button', { name: '展开 数据备注' })).toHaveAttribute('aria-expanded', 'false');
+    expect(within(dataNotes).queryByTestId('watchlist-saved-note')).not.toBeInTheDocument();
+
+    fireEvent.click(within(dataNotes).getByRole('button', { name: '展开 数据备注' }));
+
+    const savedNote = within(dataNotes).getByTestId('watchlist-saved-note');
+    expect(savedNote).toHaveTextContent('保存备注');
+    expect(savedNote).toHaveTextContent('Scanner observation: watch post-earnings follow-through.');
+    expect(within(dataNotes).getByText('扫描候选')).toBeInTheDocument();
+    expect(within(dataNotes).getByText('Latest scanner score.')).toBeInTheDocument();
+    expect(within(dataNotes).getByText(/历史 \+3.2% · 命中 56%/)).toBeInTheDocument();
+    expect(screen.getByTestId('location')).toHaveTextContent('/watchlist');
+    expect(listWatchlistItems).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(getRefreshStatus).toHaveBeenCalledTimes(1));
+    expect(refreshScores).not.toHaveBeenCalled();
+    expect(runRuleBacktest).not.toHaveBeenCalled();
+    expect(analyzeAsync).not.toHaveBeenCalled();
+    expect(removeWatchlistItem).not.toHaveBeenCalled();
+  });
+
+  it('omits saved watchlist notes for missing or empty notes while keeping data notes available', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          id: 1,
+          symbol: 'NVDA',
+          notes: undefined,
+        }),
+        makeItem({
+          id: 2,
+          symbol: 'TSM',
+          name: 'TSMC',
+          notes: '   \n  ',
+        }),
+      ],
+    });
+
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-NVDA');
+    const detailRail = screen.getByTestId('watchlist-detail-rail');
+    const dataNotes = within(detailRail).getByTestId('watchlist-data-notes');
+
+    fireEvent.click(within(dataNotes).getByRole('button', { name: '展开 数据备注' }));
+
+    expect(within(dataNotes).queryByTestId('watchlist-saved-note')).not.toBeInTheDocument();
+    expect(within(dataNotes).queryByText('保存备注')).not.toBeInTheDocument();
+    expect(within(dataNotes).getByText('扫描候选')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看详情 TSM' }));
+
+    expect(within(detailRail).getByText('TSM')).toBeInTheDocument();
+    expect(within(dataNotes).queryByTestId('watchlist-saved-note')).not.toBeInTheDocument();
+    expect(within(dataNotes).queryByText('保存备注')).not.toBeInTheDocument();
+  });
+
   it('mounts the leveraged ETF mapper only inside the detail rail without changing existing rail blocks or routing', async () => {
     renderWatchlist();
 

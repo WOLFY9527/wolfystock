@@ -1464,6 +1464,7 @@ const WatchlistPage: React.FC = () => {
   const activeObservationSummary = activeItem ? buildObservationSummary(activeItem, language) : copy.noEvidence;
   const activeRiskNote = activeItem ? buildWatchRiskNote(activeItem, language) : null;
   const activeNextActionLabel = activeItem ? buildNextActionLabel(activeItem, language) : '--';
+  const activeSavedNote = activeItem ? normalizeText(activeItem.notes) : '';
   const activeContextTags = activeItem
     ? [
         activeItem.themeId ? `${copy.themePrefix}: ${activeItem.themeId}` : null,
@@ -2020,6 +2021,12 @@ const WatchlistPage: React.FC = () => {
                 >
                   <div className="space-y-3 text-xs leading-5 text-white/62">
                     <p>{formatWatchlistOrigin(activeItem.source, language)}</p>
+                    {activeSavedNote ? (
+                      <div data-testid="watchlist-saved-note" className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
+                        <p className="text-[11px] text-white/40">{language === 'zh' ? '保存备注' : 'Observation note'}</p>
+                        <p className="mt-1 whitespace-pre-wrap break-words text-white/72">{activeSavedNote}</p>
+                      </div>
+                    ) : null}
                     {activeScannerReason ? <p>{activeScannerReason}</p> : null}
                     {!activeHasEvidence ? <p>{copy.sourceUnknownNeedsRefresh}</p> : null}
                     {activeContextTags.length ? (
