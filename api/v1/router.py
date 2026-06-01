@@ -25,6 +25,7 @@ from api.v1.endpoints import (
     auth,
     backtest,
     history,
+    leveraged_etf_mapper,
     market,
     market_overview,
     market_provider_operations,
@@ -131,6 +132,12 @@ router.include_router(
     stocks.router,
     prefix="/stocks",
     tags=["Stocks"]
+)
+
+router.include_router(
+    leveraged_etf_mapper.router,
+    prefix="/leveraged-etf-mapper",
+    tags=["LeveragedEtfMapper"]
 )
 
 router.include_router(
