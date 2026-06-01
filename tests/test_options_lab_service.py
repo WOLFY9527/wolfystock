@@ -204,7 +204,17 @@ def test_options_lab_visible_surfaces_stay_fixture_backed_and_non_live() -> None
         assert payload.metadata.fixture_backed is True
         assert payload.metadata.live_provider_enabled is False
         assert payload.metadata.no_external_calls is True
+        assert payload.metadata.read_only is True
+        assert payload.metadata.no_order_placement is True
+        assert payload.metadata.no_broker_connection is True
+        assert payload.metadata.no_portfolio_mutation is True
+        assert payload.metadata.no_trading_recommendation is True
     assert decision.data_quality.source_type == "synthetic"
+    assert decision.decision_grade is False
+    assert decision.gate_decision == "数据不足，禁止判断"
+    assert decision.optimizer.preferred_strategy_key is None
+    assert decision.optimizer.no_trade_reason == "data_quality_not_decision_grade"
+    assert all(item.decision_label != "有条件可交易" for item in decision.ranked_alternatives)
 
 
 def test_chain_filters_side_expiration_liquidity_spread_and_greeks() -> None:

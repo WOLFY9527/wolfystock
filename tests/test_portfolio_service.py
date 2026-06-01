@@ -1020,6 +1020,92 @@ class PortfolioServiceTestCase(unittest.TestCase):
             self.assertFalse(item["authorityGrant"])
             self.assertFalse(item["decisionGrade"])
 
+    def test_snapshot_and_risk_reads_do_not_mutate_broker_connection_state(self) -> None:
+        account = self.service.create_account(name="Broker Safe", broker="Demo", market="us", base_currency="USD")
+        aid = account["id"]
+        self.service.create_broker_connection(
+            portfolio_account_id=aid,
+            broker_type="ibkr",
+            broker_name="Interactive Brokers",
+            connection_name="Primary IBKR",
+            broker_account_ref="U7654321",
+            import_mode="file",
+            sync_metadata={"source": "flex", "scope": "diagnostic_fixture"},
+        )
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 5, 10),
+            direction="in",
+            amount=5000,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 5, 10),
+            side="buy",
+            quantity=10,
+            price=100,
+            fee=1,
+            tax=0,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("AAPL", date(2026, 5, 10), 105.0)
+        before_counts = self._ledger_counts()
+        before_connections = [
+            {
+                "id": item["id"],
+                "portfolio_account_id": item["portfolio_account_id"],
+                "broker_type": item["broker_type"],
+                "broker_account_ref": item["broker_account_ref"],
+                "connection_name": item["connection_name"],
+                "status": item["status"],
+                "import_mode": item["import_mode"],
+                "sync_metadata": item["sync_metadata"],
+            }
+            for item in self.service.list_broker_connections(portfolio_account_id=aid)
+        ]
+
+        snapshot = self.service.get_portfolio_snapshot(
+            account_id=aid,
+            as_of=date(2026, 5, 10),
+            cost_method="fifo",
+        )
+        report = PortfolioRiskService(portfolio_service=self.service).get_risk_report(
+            account_id=aid,
+            as_of=date(2026, 5, 10),
+            cost_method="fifo",
+        )
+
+        after_connections = [
+            {
+                "id": item["id"],
+                "portfolio_account_id": item["portfolio_account_id"],
+                "broker_type": item["broker_type"],
+                "broker_account_ref": item["broker_account_ref"],
+                "connection_name": item["connection_name"],
+                "status": item["status"],
+                "import_mode": item["import_mode"],
+                "sync_metadata": item["sync_metadata"],
+            }
+            for item in self.service.list_broker_connections(portfolio_account_id=aid)
+        ]
+
+        self.assertEqual(self._ledger_counts(), before_counts)
+        self.assertEqual(before_connections, after_connections)
+        self.assertIsNone(self.service.get_latest_broker_sync_state(portfolio_account_id=aid))
+        self.assertEqual(snapshot["sourceAuthorityState"], "manual")
+        provenance = report["sectorSourceProvenance"]
+        self.assertTrue(provenance["diagnosticOnly"])
+        self.assertTrue(provenance["observationOnly"])
+        self.assertFalse(provenance["authorityGrant"])
+        self.assertFalse(provenance["decisionGrade"])
+        self.assertFalse(provenance["accountingMutation"])
+        self.assertFalse(provenance["providerRoutingChanged"])
+        self.assertFalse(provenance["externalProviderCallsAdded"])
+        self.assertFalse(provenance["marketCacheMutation"])
+
     def test_corporate_actions_dividend_and_split(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
         aid = account["id"]

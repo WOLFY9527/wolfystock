@@ -1224,7 +1224,11 @@ def test_decision_endpoint_returns_safe_demo_only_contract_quality() -> None:
         assert payload["failClosedReasonCodes"]
         assert "provider_fixture_not_decision_grade" in payload["failClosedReasonCodes"]
         assert payload["metadata"]["noExternalCalls"] is True
+        assert payload["metadata"]["readOnly"] is True
         assert payload["metadata"]["noOrderPlacement"] is True
+        assert payload["metadata"]["noBrokerConnection"] is True
+        assert payload["metadata"]["noPortfolioMutation"] is True
+        assert payload["metadata"]["noTradingRecommendation"] is True
         assert "not personalized financial advice" in payload["noAdviceDisclosure"]
     finally:
         client.close()
@@ -1353,6 +1357,11 @@ def test_decision_endpoint_tradier_live_provider_opt_in_uses_mocked_http_and_fai
         assert payload["decisionLabel"] == "数据不足，禁止判断"
         assert "provider_authority_tier_observation_only" in payload["failClosedReasonCodes"]
         assert "provider_tradeable_data_false" in payload["failClosedReasonCodes"]
+        assert payload["metadata"]["readOnly"] is True
+        assert payload["metadata"]["noOrderPlacement"] is True
+        assert payload["metadata"]["noBrokerConnection"] is True
+        assert payload["metadata"]["noPortfolioMutation"] is True
+        assert payload["metadata"]["noTradingRecommendation"] is True
         assert all(item["decisionLabel"] != "有条件可交易" for item in payload["rankedAlternatives"])
         assert credential.lower() not in _json_text(payload).lower()
         _assert_no_safety_leaks(payload)
@@ -1385,6 +1394,11 @@ def test_decision_endpoint_delayed_fixture_keeps_tradeability_cap() -> None:
         assert payload["decisionGrade"] is False
         assert "provider_fixture_not_decision_grade" in payload["failClosedReasonCodes"]
         assert payload["gateDecision"] in {"数据不足，禁止判断", "仅观察", "需人工复核"}
+        assert payload["metadata"]["readOnly"] is True
+        assert payload["metadata"]["noOrderPlacement"] is True
+        assert payload["metadata"]["noBrokerConnection"] is True
+        assert payload["metadata"]["noPortfolioMutation"] is True
+        assert payload["metadata"]["noTradingRecommendation"] is True
         assert all(item["decisionLabel"] != "有条件可交易" for item in payload["rankedAlternatives"])
         provenance = project_source_provenance(
             source=payload["metadata"]["providerName"],
