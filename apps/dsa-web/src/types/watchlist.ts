@@ -1,3 +1,5 @@
+import type { InvestorSignalContract } from './scanner';
+
 export interface WatchlistScannerIntelligence {
   lastScore?: number | null;
   lastRank?: number | null;
@@ -7,6 +9,7 @@ export interface WatchlistScannerIntelligence {
   profile?: string | null;
   reason?: string | null;
   lastScannedAt?: string | null;
+  investorSignal?: InvestorSignalContract | null;
 }
 
 export interface WatchlistStrategySimulationIntelligence {

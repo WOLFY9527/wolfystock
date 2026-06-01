@@ -243,6 +243,56 @@ export interface ScannerEvidencePacket {
   } | null;
 }
 
+export interface InvestorSignalAssetPressure {
+  asset?: string | null;
+  pressure?: string | null;
+  freshness?: string | null;
+  isFallback?: boolean;
+  isStale?: boolean;
+  isPartial?: boolean;
+}
+
+export interface InvestorSignalContract {
+  contractVersion?: string;
+  diagnosticOnly?: boolean;
+  observationOnly?: boolean;
+  authorityGrant?: boolean;
+  decisionGrade?: boolean;
+  sourceAuthorityAllowed?: boolean;
+  scoreContributionAllowed?: boolean;
+  marketRegime?: string | null;
+  marketRegimeLabel?: string | null;
+  capitalFlowRegime?: string | null;
+  capitalFlowLabel?: string | null;
+  themeFlowState?: string | null;
+  themeFlowLabel?: string | null;
+  confidenceLabel?: string | null;
+  confidenceText?: string | null;
+  freshness?: string | null;
+  reasonCodes?: string[];
+  contradictionCodes?: string[];
+  confidence?: string | number | null;
+  isFallback?: boolean;
+  isStale?: boolean;
+  isPartial?: boolean;
+  likelyDestination?: string | null;
+  sourceAssetPressure?: InvestorSignalAssetPressure[];
+  contradictionSignals?: string[];
+  explanation?: string | null;
+  relativeStrengthEvidence?: string | null;
+  breadthEvidence?: string | null;
+}
+
+export interface ScannerConsumerDiagnostics {
+  status?: string | null;
+  scoreGradeAllowed?: boolean | null;
+  scoreConfidence?: number | null;
+  capReason?: string | null;
+  sourceClass?: string | null;
+  investorSignal?: InvestorSignalContract | null;
+  [key: string]: unknown;
+}
+
 export interface ScannerRunDiagnostics {
   coverageSummary?: ScannerCoverageSummary;
   providerDiagnostics?: ScannerProviderDiagnostics;
@@ -324,6 +374,7 @@ export interface ScannerCandidate {
   aiInterpretation: ScannerAiInterpretation;
   realizedOutcome: ScannerCandidateOutcome;
   diagnostics: ScannerRunDiagnostics;
+  consumerDiagnostics?: ScannerConsumerDiagnostics | null;
 }
 
 export interface ScannerRunDetail {

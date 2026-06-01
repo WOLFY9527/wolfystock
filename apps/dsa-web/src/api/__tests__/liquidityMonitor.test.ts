@@ -196,6 +196,37 @@ describe('liquidityMonitorApi', () => {
           provider_runtime_changed: false,
           market_cache_mutation: false,
         },
+        capital_flow_signal: {
+          contract_version: 'investor_signal_contract_v1',
+          diagnostic_only: true,
+          observation_only: true,
+          authority_grant: false,
+          decision_grade: false,
+          source_authority_allowed: false,
+          score_contribution_allowed: false,
+          market_regime: 'risk_on',
+          market_regime_label: '风险偏好回升',
+          capital_flow_regime: 'inflow',
+          capital_flow_label: '资金净流入观察',
+          theme_flow_state: 'leading',
+          theme_flow_label: '主线领涨观察',
+          confidence_label: 'medium',
+          confidence_text: '中',
+          confidence: 'medium',
+          freshness: 'partial',
+          is_fallback: false,
+          is_stale: false,
+          is_partial: true,
+          reason_codes: ['source_authority_missing', 'score_rights_missing', 'partial_source'],
+          contradiction_codes: ['capital_flow_signal_mismatch'],
+          likely_destination: 'growth_ai_software_semis',
+          source_asset_pressure: [
+            { asset: 'growth_ai_software_semis', pressure: 'absorbing', freshness: 'delayed', is_partial: true },
+            { asset: 'btc', pressure: 'lagging', freshness: 'live', is_partial: false },
+          ],
+          contradiction_signals: ['btc_not_confirming_growth_absorption'],
+          explanation: 'Growth is absorbing more attention while BTC is not confirming the move.',
+        },
       },
     });
 
@@ -238,6 +269,23 @@ describe('liquidityMonitorApi', () => {
     });
     expect(payload.liquidityImpulseSynthesis?.counterEvidence[0].reason).toBe('conflicts_with_primary_regime');
     expect(payload.liquidityImpulseSynthesis?.counterEvidence[0].scoreContributionAllowed).toBeUndefined();
+    expect(payload.capitalFlowSignal?.contractVersion).toBe('investor_signal_contract_v1');
+    expect(payload.capitalFlowSignal?.freshness).toBe('partial');
+    expect(payload.capitalFlowSignal?.confidence).toBe('medium');
+    expect(payload.capitalFlowSignal?.reasonCodes).toEqual([
+      'source_authority_missing',
+      'score_rights_missing',
+      'partial_source',
+    ]);
+    expect(payload.capitalFlowSignal?.sourceAssetPressure[0]).toEqual({
+      asset: 'growth_ai_software_semis',
+      pressure: 'absorbing',
+      freshness: 'delayed',
+      isFallback: false,
+      isStale: false,
+      isPartial: true,
+    });
+    expect(payload.capitalFlowSignal?.contradictionSignals).toEqual(['btc_not_confirming_growth_absorption']);
     expect(payload.sourceMetadata.externalProviderCalls).toBe(false);
   });
 });

@@ -429,6 +429,32 @@ export type MarketDecisionSemantics = {
   notInvestmentAdvice: boolean;
 };
 
+export type MarketRegimeSummaryEntry = {
+  key: string;
+  label: string;
+  detail: string;
+};
+
+export type MarketRegimeSummary = {
+  label: string;
+  title: string;
+  diagnosticOnly: boolean;
+  observationOnly: boolean;
+  sourceAuthorityAllowed: boolean;
+  scoreContributionAllowed: boolean;
+  notInvestmentAdvice: boolean;
+  drivers: MarketRegimeSummaryEntry[];
+  blockers: MarketRegimeSummaryEntry[];
+  contradictions: MarketRegimeSummaryEntry[];
+  confidence: {
+    value: number;
+    label: string;
+  };
+  confidenceCaps: MarketRegimeSummaryEntry[];
+  nextWatchItems: MarketRegimeSummaryEntry[];
+  explanation: string;
+};
+
 export type MarketTemperatureResponse = {
   source: 'computed' | 'fallback' | 'mixed' | string;
   sourceLabel?: string;
@@ -458,6 +484,7 @@ export type MarketTemperatureResponse = {
   scoreCap?: number;
   degradationReasons?: string[];
   conclusionAllowed?: boolean;
+  regimeSummary?: MarketRegimeSummary;
   marketRegimeSynthesis?: MarketRegimeSynthesis;
   marketDecisionSemantics?: MarketDecisionSemantics;
   scores: {
@@ -597,6 +624,57 @@ function normalizeMarketDecisionSemantics(
   };
 }
 
+function normalizeMarketRegimeSummaryEntry(
+  item?: Partial<MarketRegimeSummaryEntry> | null,
+): MarketRegimeSummaryEntry | null {
+  if (!item?.key || !item.label || !item.detail) {
+    return null;
+  }
+  return {
+    key: item.key,
+    label: item.label,
+    detail: item.detail,
+  };
+}
+
+function normalizeMarketRegimeSummary(
+  summary?: Partial<MarketRegimeSummary> | null,
+): MarketRegimeSummary | undefined {
+  if (!summary?.label || !summary.title) {
+    return undefined;
+  }
+
+  const normalizeEntries = (
+    items?: Array<Partial<MarketRegimeSummaryEntry> | null>,
+  ): MarketRegimeSummaryEntry[] => (
+    Array.isArray(items)
+      ? items
+        .map((item) => normalizeMarketRegimeSummaryEntry(item))
+        .filter((item): item is MarketRegimeSummaryEntry => Boolean(item))
+      : []
+  );
+
+  return {
+    label: summary.label,
+    title: summary.title,
+    diagnosticOnly: summary.diagnosticOnly !== false,
+    observationOnly: summary.observationOnly !== false,
+    sourceAuthorityAllowed: summary.sourceAuthorityAllowed === true,
+    scoreContributionAllowed: summary.scoreContributionAllowed === true,
+    notInvestmentAdvice: summary.notInvestmentAdvice !== false,
+    drivers: normalizeEntries(summary.drivers),
+    blockers: normalizeEntries(summary.blockers),
+    contradictions: normalizeEntries(summary.contradictions),
+    confidence: {
+      value: typeof summary.confidence?.value === 'number' ? summary.confidence.value : 0,
+      label: summary.confidence?.label || '',
+    },
+    confidenceCaps: normalizeEntries(summary.confidenceCaps),
+    nextWatchItems: normalizeEntries(summary.nextWatchItems),
+    explanation: summary.explanation || '',
+  };
+}
+
 export function normalizeMarketTemperatureResponse(
   payload?: Partial<MarketTemperatureResponse> | null,
 ): MarketTemperatureResponse {
@@ -652,6 +730,7 @@ export function normalizeMarketTemperatureResponse(
     scoreCap: payload?.scoreCap,
     degradationReasons: payload?.degradationReasons,
     conclusionAllowed,
+    regimeSummary: normalizeMarketRegimeSummary(payload?.regimeSummary),
     marketRegimeSynthesis: normalizeMarketRegimeSynthesis(payload?.marketRegimeSynthesis),
     marketDecisionSemantics: normalizeMarketDecisionSemantics(payload?.marketDecisionSemantics),
     scores: {

@@ -1,6 +1,7 @@
 import apiClient from './index';
 import { normalizeMarketIntelligenceEvidenceItem } from './marketIntelligenceEvidence';
 import { toCamelCase } from './utils';
+import type { InvestorSignalAssetPressure, InvestorSignalContract } from '../types/scanner';
 
 export type LiquidityMonitorFreshness = 'live' | 'cached' | 'delayed' | 'stale' | 'fallback' | 'mock' | 'error' | 'unavailable';
 export type LiquidityMonitorRegime = 'abundant' | 'supportive' | 'neutral' | 'tight' | 'stress' | 'unavailable';
@@ -155,6 +156,10 @@ export interface LiquidityImpulseSynthesis {
   notInvestmentAdvice: boolean;
 }
 
+export interface LiquidityCapitalFlowSignal extends InvestorSignalContract {
+  sourceAssetPressure?: InvestorSignalAssetPressure[];
+}
+
 export interface LiquidityMonitorResponse {
   endpoint: string;
   generatedAt: string;
@@ -162,8 +167,44 @@ export interface LiquidityMonitorResponse {
   freshness: LiquidityMonitorFreshnessSummary;
   indicators: LiquidityMonitorIndicator[];
   liquidityImpulseSynthesis?: LiquidityImpulseSynthesis;
+  capitalFlowSignal?: LiquidityCapitalFlowSignal;
   advisoryDisclosure: string;
   sourceMetadata: LiquidityMonitorSourceMetadata;
+}
+
+function normalizeInvestorSignalAssetPressure(
+  item?: InvestorSignalAssetPressure | null,
+): InvestorSignalAssetPressure | null {
+  if (!item || typeof item !== 'object') {
+    return null;
+  }
+  return {
+    asset: item.asset || null,
+    pressure: item.pressure || null,
+    freshness: item.freshness || null,
+    isFallback: item.isFallback === true,
+    isStale: item.isStale === true,
+    isPartial: item.isPartial === true,
+  };
+}
+
+function normalizeCapitalFlowSignal(
+  signal?: LiquidityCapitalFlowSignal | null,
+): LiquidityCapitalFlowSignal | undefined {
+  if (!signal || typeof signal !== 'object') {
+    return undefined;
+  }
+  return {
+    ...signal,
+    reasonCodes: Array.isArray(signal.reasonCodes) ? signal.reasonCodes.filter(Boolean) : [],
+    contradictionCodes: Array.isArray(signal.contradictionCodes) ? signal.contradictionCodes.filter(Boolean) : [],
+    sourceAssetPressure: Array.isArray(signal.sourceAssetPressure)
+      ? signal.sourceAssetPressure
+        .map((item) => normalizeInvestorSignalAssetPressure(item))
+        .filter((item): item is InvestorSignalAssetPressure => Boolean(item))
+      : [],
+    contradictionSignals: Array.isArray(signal.contradictionSignals) ? signal.contradictionSignals.filter(Boolean) : [],
+  };
 }
 
 function normalizeLiquidityImpulseEvidenceItem(
@@ -220,6 +261,7 @@ function normalizeLiquidityMonitor(payload: Record<string, unknown>): LiquidityM
     freshness: normalized.freshness,
     indicators: Array.isArray(normalized.indicators) ? normalized.indicators : [],
     liquidityImpulseSynthesis: normalizeLiquidityImpulseSynthesis(normalized.liquidityImpulseSynthesis),
+    capitalFlowSignal: normalizeCapitalFlowSignal(normalized.capitalFlowSignal),
     advisoryDisclosure: normalized.advisoryDisclosure,
     sourceMetadata: normalized.sourceMetadata,
   };

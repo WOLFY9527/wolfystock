@@ -90,6 +90,31 @@ describe('marketRotationApi', () => {
               source_authority_allowed: true,
               evidence_quality: 'degraded_proxy',
               data_gaps: ['true_flow_data_missing', 'flow_methodology_missing'],
+              theme_flow_signal: {
+                contract_version: 'investor_signal_contract_v1',
+                diagnostic_only: true,
+                observation_only: true,
+                authority_grant: false,
+                decision_grade: false,
+                source_authority_allowed: false,
+                score_contribution_allowed: false,
+                market_regime: 'risk_on',
+                market_regime_label: '风险偏好回升',
+                capital_flow_regime: 'inflow',
+                capital_flow_label: '资金净流入观察',
+                theme_flow_state: 'leading',
+                theme_flow_label: '主线领涨观察',
+                confidence_label: 'medium',
+                confidence_text: '中',
+                freshness: 'cached',
+                reason_codes: ['source_authority_missing', 'score_rights_missing'],
+                contradiction_codes: [],
+                confidence: 0.72,
+                is_fallback: false,
+                is_stale: false,
+                is_partial: false,
+                explanation: 'AI leadership still leads the tape.',
+              },
             },
           ],
           accelerating_themes: [],
@@ -126,10 +151,115 @@ describe('marketRotationApi', () => {
           headline_warning: '当前头部主题仅满足代理证据，不代表真实资金流。',
           no_headline_reason: '等待真实行情覆盖后再生成头部排名。',
           ranking_policy: '仅 headlineEligible 主题参与头部排序；observation/taxonomy 仅作说明。',
+          rotation_family_rollup: [
+            {
+              family_id: 'ai',
+              family_name: 'AI',
+              theme_ids: ['ai_applications'],
+              theme_names: ['AI 应用'],
+              leader_theme_ids: ['ai_applications'],
+              theme_count: 1,
+              signal_theme_count: 1,
+              average_rotation_score: 78,
+              average_confidence: 0.72,
+              theme_flow_signal: {
+                contract_version: 'investor_signal_contract_v1',
+                diagnostic_only: true,
+                observation_only: true,
+                authority_grant: false,
+                decision_grade: false,
+                source_authority_allowed: false,
+                score_contribution_allowed: false,
+                market_regime: 'risk_on',
+                market_regime_label: '风险偏好回升',
+                capital_flow_regime: 'inflow',
+                capital_flow_label: '资金净流入观察',
+                theme_flow_state: 'leading',
+                theme_flow_label: '主线领涨观察',
+                confidence_label: 'medium',
+                confidence_text: '中',
+                freshness: 'fallback',
+                reason_codes: ['source_authority_missing', 'score_rights_missing'],
+                contradiction_codes: [],
+                confidence: 0.72,
+                is_fallback: true,
+                is_stale: false,
+                is_partial: false,
+                explanation: 'AI leadership still leads the tape.',
+              },
+            },
+          ],
           watchlist_signals: [
             { theme_id: 'ai_applications', symbol: 'APP', label: '关注候选', signal: 'confirmed_rotation', signal_label: '确认轮动', read_only: true, delivery_enabled: false },
           ],
           safe_wording: ['资金轮动迹象', '非买卖建议'],
+        },
+        consumer_evidence_snapshot: {
+          market: 'US',
+          generated_at: '2026-05-07T09:50:00Z',
+          freshness: 'partial',
+          is_fallback: false,
+          is_stale: false,
+          is_partial: true,
+          headline_eligible_theme_count: 1,
+          observation_theme_count: 1,
+          taxonomy_theme_count: 1,
+          score_contribution_allowed: false,
+          reason_codes: ['partial_source'],
+          provider_state: {
+            present: true,
+            status: 'partial',
+            source_type: 'proxy_bundle',
+            source_tier: 'public_proxy',
+            provider_tier: 'mixed',
+            freshness: 'partial',
+            source_authority_allowed: false,
+            score_contribution_allowed: false,
+            no_external_calls: true,
+          },
+          etf_proxy_summary: {
+            present: true,
+            proxy_only: true,
+            fund_flow_authority_allowed: false,
+            enabled: true,
+            source: 'alpaca_etf_authority_spine',
+            reason_codes: ['bounded_etf_authority_active'],
+          },
+          themes: [
+            {
+              id: 'ai_applications',
+              name: 'AI 应用',
+              rank_eligible: true,
+              headline_eligible: true,
+              ranking_lane: 'headline',
+              observation_only: false,
+              taxonomy_only: false,
+              score_contribution_allowed: true,
+              freshness: 'delayed',
+              is_fallback: false,
+              is_stale: false,
+              is_partial: false,
+              evidence_quality: 'degraded_proxy',
+              data_gaps: ['true_flow_data_missing'],
+            },
+          ],
+          rotation_family_rollup: [
+            {
+              family_id: 'ai',
+              family_name: 'AI',
+              theme_ids: ['ai_applications'],
+              theme_names: ['AI 应用'],
+              leader_theme_ids: ['ai_applications'],
+              theme_count: 1,
+              signal_theme_count: 1,
+              average_rotation_score: 78,
+              average_confidence: 0.72,
+              theme_flow_signal: {
+                theme_flow_state: 'leading',
+                freshness: 'fallback',
+              },
+            },
+          ],
         },
         themes: [
           {
@@ -178,6 +308,31 @@ describe('marketRotationApi', () => {
             source_authority_allowed: true,
             evidence_quality: 'degraded_proxy',
             data_gaps: ['true_flow_data_missing', 'flow_methodology_missing'],
+            theme_flow_signal: {
+              contract_version: 'investor_signal_contract_v1',
+              diagnostic_only: true,
+              observation_only: true,
+              authority_grant: false,
+              decision_grade: false,
+              source_authority_allowed: false,
+              score_contribution_allowed: false,
+              market_regime: 'risk_on',
+              market_regime_label: '风险偏好回升',
+              capital_flow_regime: 'inflow',
+              capital_flow_label: '资金净流入观察',
+              theme_flow_state: 'leading',
+              theme_flow_label: '主线领涨观察',
+              confidence_label: 'medium',
+              confidence_text: '中',
+              freshness: 'cached',
+              reason_codes: ['source_authority_missing', 'score_rights_missing'],
+              contradiction_codes: [],
+              confidence: 0.72,
+              is_fallback: false,
+              is_stale: false,
+              is_partial: false,
+              explanation: 'AI leadership still leads the tape.',
+            },
             evidence: ['无明显新闻的同步异动'],
             relative_strength: { average_relative_strength_percent: 2.6 },
             proxy_quality: {
@@ -246,10 +401,16 @@ describe('marketRotationApi', () => {
     expect(payload.summary.eligibleThemeCount).toBe(3);
     expect(payload.summary.headlineEligibleThemeCount).toBe(1);
     expect(payload.summary.observationThemeCount).toBe(1);
+    expect(payload.summary.strongestThemes[0].themeFlowSignal?.themeFlowState).toBe('leading');
+    expect(payload.summary.rotationFamilyRollup?.[0].familyId).toBe('ai');
+    expect(payload.summary.rotationFamilyRollup?.[0].themeFlowSignal?.freshness).toBe('fallback');
     expect(payload.etfLeadershipDiagnostics.enabled).toBe(true);
     expect(payload.etfLeadershipDiagnostics.source).toBe('alpaca_etf_authority_spine');
     expect(payload.etfLeadershipDiagnostics.leadingSymbols).toEqual(['SMH', 'SOXX', 'QQQ']);
     expect(payload.etfLeadershipDiagnostics.laggingSymbols).toEqual(['IWM', 'IGV', 'SPY']);
+    expect(payload.consumerEvidenceSnapshot?.freshness).toBe('partial');
+    expect(payload.consumerEvidenceSnapshot?.rotationFamilyRollup[0].themeFlowSignal?.themeFlowState).toBe('leading');
+    expect(payload.consumerEvidenceSnapshot?.providerState.sourceType).toBe('proxy_bundle');
     expect(payload.etfLeadershipDiagnostics.evidence[0]).toMatchObject({
       symbol: 'SMH',
       sourceLabel: 'Alpaca SIP',
@@ -269,6 +430,8 @@ describe('marketRotationApi', () => {
     expect(payload.themes[0].evidenceQuality).toBe('degraded_proxy');
     expect(payload.themes[0].dataGaps).toContain('true_flow_data_missing');
     expect(payload.themes[0].persistenceEvidence?.label).toBe('跨时窗延续');
+    expect(payload.themes[0].themeFlowSignal?.themeFlowState).toBe('leading');
+    expect(payload.themes[0].themeFlowSignal?.freshness).toBe('cached');
     expect(payload.themes[0].alertCandidates?.[0].readOnly).toBe(true);
     expect(payload.themes[0].alertCandidates?.[0].sortExplanation).toContain('非买卖建议');
     expect(payload.summary.watchlistSignals[0].label).toBe('关注候选');

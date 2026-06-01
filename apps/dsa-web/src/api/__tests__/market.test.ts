@@ -27,6 +27,75 @@ describe('market API path join hygiene', () => {
 });
 
 describe('market temperature evidence normalization', () => {
+  it('preserves additive regime summary payloads from snake_case responses', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({
+      data: {
+        source: 'computed',
+        updated_at: '2026-06-01T09:00:00Z',
+        conclusion_allowed: false,
+        scores: {
+          overall: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+          us_risk_appetite: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+          cn_money_effect: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+          macro_pressure: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+          liquidity: { value: 55, label: 'neutral', trend: 'stable', description: 'neutral' },
+        },
+        regime_summary: {
+          label: 'growth-led risk-on',
+          title: 'Growth-led risk-on watch',
+          diagnostic_only: true,
+          observation_only: true,
+          source_authority_allowed: false,
+          score_contribution_allowed: false,
+          not_investment_advice: true,
+          drivers: [
+            {
+              key: 'watch:capital_flow_signal',
+              label: 'Capital flow signal',
+              detail: 'Liquidity still leans into growth leadership.',
+            },
+          ],
+          blockers: [],
+          contradictions: [],
+          confidence: {
+            value: 0.62,
+            label: 'medium',
+          },
+          confidence_caps: [
+            {
+              key: 'partial_context_only',
+              label: 'Partial context only',
+              detail: 'Signal remains observation-only.',
+            },
+          ],
+          next_watch_items: [
+            {
+              key: 'rotation_follow_through',
+              label: 'Rotation follow-through',
+              detail: 'Need fresh confirmation from leadership breadth.',
+            },
+          ],
+          explanation: 'Liquidity and rotation still lean risk-on, but authority stays fail-closed.',
+        },
+      },
+    });
+
+    const payload = await marketModule.marketApi.getTemperature();
+
+    expect(payload.regimeSummary?.label).toBe('growth-led risk-on');
+    expect(payload.regimeSummary?.drivers[0]).toEqual({
+      key: 'watch:capital_flow_signal',
+      label: 'Capital flow signal',
+      detail: 'Liquidity still leans into growth leadership.',
+    });
+    expect(payload.regimeSummary?.confidence).toEqual({
+      value: 0.62,
+      label: 'medium',
+    });
+    expect(payload.regimeSummary?.confidenceCaps[0].key).toBe('partial_context_only');
+    expect(payload.regimeSummary?.nextWatchItems[0].key).toBe('rotation_follow_through');
+  });
+
   it('preserves source-confidence fields without accepting unlabeled market evidence', () => {
     const payload = marketModule.normalizeMarketTemperatureResponse({
       source: 'computed',

@@ -1,6 +1,7 @@
 import apiClient from './index';
 import { toCamelCase } from './utils';
 import type { MarketDataFreshness } from './marketOverview';
+import type { InvestorSignalContract } from '../types/scanner';
 
 export type MarketRotationStage =
   | 'early_watch'
@@ -101,11 +102,95 @@ export type MarketRotationSummaryItem = {
   signalType?: MarketRotationSignalType;
   flowEvidenceType?: string;
   flowLanguageAllowed?: boolean;
+  themeFlowSignal?: InvestorSignalContract | null;
   sourceAuthorityAllowed?: boolean;
   evidenceQuality?: MarketRotationEvidenceQuality | string;
   dataGaps?: string[];
   sourceTier?: string | null;
   trustLevel?: string | null;
+};
+
+export type MarketRotationFamilyRollupItem = {
+  familyId?: string;
+  familyName?: string;
+  themeIds?: string[];
+  themeNames?: string[];
+  leaderThemeIds?: string[];
+  themeCount?: number;
+  signalThemeCount?: number;
+  averageRotationScore?: number | null;
+  averageConfidence?: number | null;
+  themeFlowSignal?: InvestorSignalContract | null;
+};
+
+export type MarketRotationConsumerThemeQuality = {
+  id?: string;
+  name?: string;
+  rankEligible?: boolean;
+  headlineEligible?: boolean;
+  rankingLane?: string;
+  observationOnly?: boolean;
+  taxonomyOnly?: boolean;
+  scoreContributionAllowed?: boolean;
+  freshness?: string;
+  isFallback?: boolean;
+  isStale?: boolean;
+  isPartial?: boolean;
+  evidenceQuality?: string;
+  dataGaps?: string[];
+};
+
+export type MarketRotationConsumerProviderState = {
+  present?: boolean;
+  status?: string;
+  quoteMode?: string;
+  sourceType?: string;
+  sourceTier?: string;
+  providerTier?: string;
+  freshness?: string;
+  asOf?: string | null;
+  coverage?: {
+    requestedSymbolCount?: number;
+    usableSymbolCount?: number;
+    coveragePercent?: number;
+  };
+  sourceAuthorityAllowed?: boolean;
+  scoreContributionAllowed?: boolean;
+  noExternalCalls?: boolean;
+};
+
+export type MarketRotationConsumerEtfProxySummary = {
+  present?: boolean;
+  proxyOnly?: boolean;
+  label?: string;
+  fundFlowAuthorityAllowed?: boolean;
+  enabled?: boolean;
+  source?: string | null;
+  asOf?: string | null;
+  eligibleSymbolCount?: number;
+  leadingSymbols?: string[];
+  laggingSymbols?: string[];
+  reasonCodes?: string[];
+};
+
+export type MarketRotationConsumerEvidenceSnapshot = {
+  market?: string;
+  generatedAt?: string | null;
+  asOf?: string | null;
+  freshness?: string;
+  isFallback?: boolean;
+  isStale?: boolean;
+  isPartial?: boolean;
+  authorityGrant?: boolean;
+  headlineEligibleThemeCount?: number;
+  observationThemeCount?: number;
+  taxonomyThemeCount?: number;
+  scoreContributionAllowed?: boolean;
+  reasonCodes?: string[];
+  providerState?: MarketRotationConsumerProviderState;
+  etfProxySummary?: MarketRotationConsumerEtfProxySummary;
+  themes?: MarketRotationConsumerThemeQuality[];
+  rotationFamilyRollup: MarketRotationFamilyRollupItem[];
 };
 
 export type MarketRotationAlertCandidate = {
@@ -339,6 +424,7 @@ export type MarketRotationRadarResponse = {
     fadingThemes: MarketRotationSummaryItem[];
     observationThemes?: MarketRotationSummaryItem[];
     taxonomyThemes?: MarketRotationSummaryItem[];
+    rotationFamilyRollup?: MarketRotationFamilyRollupItem[];
     eligibleThemeCount?: number;
     headlineEligibleThemeCount?: number;
     observationThemeCount?: number;
@@ -350,8 +436,83 @@ export type MarketRotationRadarResponse = {
     safeWording: string[];
   };
   themes: MarketRotationTheme[];
+  consumerEvidenceSnapshot?: MarketRotationConsumerEvidenceSnapshot;
   metadata: Record<string, unknown>;
 };
+
+function normalizeRotationFamilyRollupItem(
+  item?: MarketRotationFamilyRollupItem | null,
+): MarketRotationFamilyRollupItem | null {
+  if (!item || typeof item !== 'object') {
+    return null;
+  }
+  return {
+    familyId: item.familyId,
+    familyName: item.familyName,
+    themeIds: Array.isArray(item.themeIds) ? item.themeIds.filter(Boolean) : [],
+    themeNames: Array.isArray(item.themeNames) ? item.themeNames.filter(Boolean) : [],
+    leaderThemeIds: Array.isArray(item.leaderThemeIds) ? item.leaderThemeIds.filter(Boolean) : [],
+    themeCount: item.themeCount,
+    signalThemeCount: item.signalThemeCount,
+    averageRotationScore: item.averageRotationScore,
+    averageConfidence: item.averageConfidence,
+    themeFlowSignal: item.themeFlowSignal || undefined,
+  };
+}
+
+function normalizeRotationConsumerEvidenceSnapshot(
+  snapshot?: MarketRotationConsumerEvidenceSnapshot | null,
+): MarketRotationConsumerEvidenceSnapshot | undefined {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return undefined;
+  }
+  return {
+    market: snapshot.market,
+    generatedAt: snapshot.generatedAt || null,
+    asOf: snapshot.asOf || null,
+    freshness: snapshot.freshness,
+    isFallback: snapshot.isFallback === true,
+    isStale: snapshot.isStale === true,
+    isPartial: snapshot.isPartial === true,
+    ...(typeof snapshot.authorityGrant === 'boolean' ? { authorityGrant: snapshot.authorityGrant } : {}),
+    headlineEligibleThemeCount: snapshot.headlineEligibleThemeCount,
+    observationThemeCount: snapshot.observationThemeCount,
+    taxonomyThemeCount: snapshot.taxonomyThemeCount,
+    scoreContributionAllowed: snapshot.scoreContributionAllowed === true,
+    reasonCodes: Array.isArray(snapshot.reasonCodes) ? snapshot.reasonCodes.filter(Boolean) : [],
+    providerState: snapshot.providerState
+      ? {
+        ...snapshot.providerState,
+        coverage: snapshot.providerState.coverage ? { ...snapshot.providerState.coverage } : undefined,
+      }
+      : undefined,
+    etfProxySummary: snapshot.etfProxySummary
+      ? {
+        ...snapshot.etfProxySummary,
+        leadingSymbols: Array.isArray(snapshot.etfProxySummary.leadingSymbols)
+          ? snapshot.etfProxySummary.leadingSymbols.filter(Boolean)
+          : [],
+        laggingSymbols: Array.isArray(snapshot.etfProxySummary.laggingSymbols)
+          ? snapshot.etfProxySummary.laggingSymbols.filter(Boolean)
+          : [],
+        reasonCodes: Array.isArray(snapshot.etfProxySummary.reasonCodes)
+          ? snapshot.etfProxySummary.reasonCodes.filter(Boolean)
+          : [],
+      }
+      : undefined,
+    themes: Array.isArray(snapshot.themes)
+      ? snapshot.themes.map((theme) => ({
+        ...theme,
+        dataGaps: Array.isArray(theme.dataGaps) ? theme.dataGaps.filter(Boolean) : [],
+      }))
+      : [],
+    rotationFamilyRollup: Array.isArray(snapshot.rotationFamilyRollup)
+      ? snapshot.rotationFamilyRollup
+        .map((item) => normalizeRotationFamilyRollupItem(item))
+        .filter((item): item is MarketRotationFamilyRollupItem => Boolean(item))
+      : [],
+  };
+}
 
 function normalizeTimeWindows(windows?: Record<string, MarketRotationTimeWindow> | null): Record<string, MarketRotationTimeWindow> {
   if (!windows || typeof windows !== 'object') {
@@ -440,6 +601,11 @@ export const marketRotationApi = {
         fadingThemes: normalized.summary?.fadingThemes || [],
         observationThemes: normalized.summary?.observationThemes,
         taxonomyThemes: normalized.summary?.taxonomyThemes,
+        rotationFamilyRollup: Array.isArray(normalized.summary?.rotationFamilyRollup)
+          ? normalized.summary.rotationFamilyRollup
+            .map((item) => normalizeRotationFamilyRollupItem(item))
+            .filter((item): item is MarketRotationFamilyRollupItem => Boolean(item))
+          : [],
         eligibleThemeCount: normalized.summary?.eligibleThemeCount,
         headlineEligibleThemeCount: normalized.summary?.headlineEligibleThemeCount,
         observationThemeCount: normalized.summary?.observationThemeCount,
@@ -450,6 +616,7 @@ export const marketRotationApi = {
         watchlistSortingExplanation: normalized.summary?.watchlistSortingExplanation || null,
         safeWording: normalized.summary?.safeWording || [],
       },
+      consumerEvidenceSnapshot: normalizeRotationConsumerEvidenceSnapshot(normalized.consumerEvidenceSnapshot),
       metadata: normalized.metadata || {},
     };
   },
