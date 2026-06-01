@@ -40,6 +40,7 @@ import {
   type MarketOverviewDecisionSemanticsView,
   type MarketOverviewDirectionReadinessView,
   type MarketOverviewHeroAnchorView,
+  type MarketOverviewRegimeSummaryView,
   type MarketOverviewTemperatureSummaryView,
 } from './MarketOverviewWorkbenchTopSurface';
 import type { MarketRegimeSynthesisEvidenceView, MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
@@ -1271,6 +1272,38 @@ function buildMarketRegimeSynthesisView(
     counterEvidence: buildRegimeEvidenceView(synthesis.counterEvidence, 'counter', 3, language),
     dataGaps: buildRegimeEvidenceView(synthesis.dataGaps, 'gap', 3, language),
     notInvestmentAdvice: Boolean(synthesis.notInvestmentAdvice),
+  };
+}
+
+function buildMarketOverviewRegimeSummaryView(
+  summary: MarketTemperatureResponse['regimeSummary'],
+  language: 'zh' | 'en',
+): MarketOverviewRegimeSummaryView | undefined {
+  if (!summary?.title || !summary.label) {
+    return undefined;
+  }
+
+  const toLineItems = (items: Array<{ key: string; label: string; detail: string }>): MarketOverviewDecisionSemanticsLineView[] => (
+    items.map((item) => ({
+      key: item.key,
+      label: item.label,
+      meta: item.detail,
+    }))
+  );
+
+  return {
+    title: summary.title,
+    label: summary.label,
+    confidenceLabel: language === 'en' ? 'Confidence' : '置信度',
+    confidenceValueText: [
+      regimeConfidenceLabel(summary.confidence?.label, summary.confidence?.value),
+      formatPercent(summary.confidence?.value),
+    ].filter(Boolean).join(' · '),
+    explanation: summary.explanation,
+    drivers: toLineItems(summary.drivers),
+    blockers: toLineItems(summary.blockers),
+    contradictions: toLineItems(summary.contradictions),
+    nextWatchItems: toLineItems(summary.nextWatchItems),
   };
 }
 
@@ -2548,6 +2581,10 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     decisionReliable,
     language,
   );
+  const regimeSummaryView = buildMarketOverviewRegimeSummaryView(
+    panels.temperature.regimeSummary,
+    language,
+  );
   const decisionSemanticsView = buildMarketDecisionSemanticsView(
     panels.temperature.marketDecisionSemantics,
     language,
@@ -2692,6 +2729,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
           heading={heading}
           directionalSummary={directionalSummaryView}
           regimeSynthesis={regimeSynthesisView}
+          regimeSummary={regimeSummaryView}
           decisionText={marketDecision.text}
           decisionChips={marketDecision.chips}
           decisionReliable={decisionReliable}

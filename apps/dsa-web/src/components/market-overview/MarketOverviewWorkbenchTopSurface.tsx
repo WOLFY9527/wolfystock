@@ -133,10 +133,23 @@ export type MarketOverviewDecisionSemanticsView = {
   notInvestmentAdvice: boolean;
 };
 
+export type MarketOverviewRegimeSummaryView = {
+  title: string;
+  label: string;
+  confidenceLabel: string;
+  confidenceValueText: string;
+  explanation: string;
+  drivers: MarketOverviewDecisionSemanticsLineView[];
+  blockers: MarketOverviewDecisionSemanticsLineView[];
+  contradictions: MarketOverviewDecisionSemanticsLineView[];
+  nextWatchItems: MarketOverviewDecisionSemanticsLineView[];
+};
+
 type MarketOverviewWorkbenchTopSurfaceProps = {
   heading: React.ReactNode;
   directionalSummary: MarketDirectionalSummary;
   regimeSynthesis: MarketRegimeSynthesisHeaderView;
+  regimeSummary?: MarketOverviewRegimeSummaryView;
   decisionText: string;
   decisionChips: MarketOverviewDecisionChipView[];
   decisionReliable: boolean;
@@ -278,6 +291,59 @@ const MarketDecisionSemanticsList: React.FC<{
       )) : <p className="text-white/34">{emptyLabel}</p>}
     </div>
   </div>
+);
+
+const MarketOverviewRegimeSummaryBlock: React.FC<{ view: MarketOverviewRegimeSummaryView }> = ({ view }) => (
+  <section
+    data-testid="market-overview-regime-summary"
+    className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-3"
+  >
+    <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="min-w-0">
+        <p className="text-[11px] font-medium text-white/48">市场温度摘要</p>
+        <h3
+          data-testid="market-overview-regime-summary-title"
+          className="mt-1 text-sm font-semibold leading-6 text-white/88"
+        >
+          {view.title}
+        </h3>
+        <p className="mt-2 max-w-4xl text-[11px] leading-5 text-white/56">{view.explanation}</p>
+      </div>
+      <div className="flex min-w-0 shrink-0 flex-wrap gap-2 lg:justify-end">
+        <TerminalChip variant="neutral">{view.label}</TerminalChip>
+        <TerminalChip variant="info">
+          {view.confidenceLabel}
+          {view.confidenceValueText ? ` · ${view.confidenceValueText}` : ''}
+        </TerminalChip>
+      </div>
+    </div>
+    <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-2">
+      <MarketDecisionSemanticsList
+        testId="market-overview-regime-summary-drivers"
+        label="驱动"
+        emptyLabel="暂无显式驱动"
+        items={view.drivers}
+      />
+      <MarketDecisionSemanticsList
+        testId="market-overview-regime-summary-blockers"
+        label="阻断"
+        emptyLabel="暂无显式阻断"
+        items={view.blockers}
+      />
+      <MarketDecisionSemanticsList
+        testId="market-overview-regime-summary-contradictions"
+        label="反证"
+        emptyLabel="暂无显式反证"
+        items={view.contradictions}
+      />
+      <MarketDecisionSemanticsList
+        testId="market-overview-regime-summary-next-watch"
+        label="下一观察"
+        emptyLabel="等待下一项确认信号"
+        items={view.nextWatchItems}
+      />
+    </div>
+  </section>
 );
 
 function directionUsabilitySummary(view: MarketOverviewDecisionSemanticsView): DirectionUsabilitySummary {
@@ -579,6 +645,7 @@ const MarketOverviewConclusionLayer: React.FC<{
 
 const MarketOverviewDataNotesDisclosure: React.FC<{
   directionalSummary: MarketDirectionalSummary;
+  regimeSummary?: MarketOverviewRegimeSummaryView;
   decisionChips: MarketOverviewDecisionChipView[];
   supportingEvidence: MarketOverviewDecisionSemanticsLineView[];
   counterEvidence: MarketOverviewDecisionSemanticsLineView[];
@@ -586,6 +653,7 @@ const MarketOverviewDataNotesDisclosure: React.FC<{
   watchNext: MarketOverviewDecisionSemanticsLineView[];
 }> = ({
   directionalSummary,
+  regimeSummary,
   decisionChips,
   supportingEvidence,
   counterEvidence,
@@ -599,6 +667,7 @@ const MarketOverviewDataNotesDisclosure: React.FC<{
     className="mt-3 bg-black/10"
   >
     <MarketOverviewDirectionSummary summary={directionalSummary} />
+    {regimeSummary ? <MarketOverviewRegimeSummaryBlock view={regimeSummary} /> : null}
     {decisionChips.length ? (
       <div data-testid="market-overview-decision-chip-details" className="mt-3 flex min-w-0 flex-wrap gap-2">
         {decisionChips.slice(0, 5).map((chip) => (
@@ -659,6 +728,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
   decisionReliable: boolean;
   dataState: MarketOverviewDataStateStripView;
   regimeSynthesis: MarketRegimeSynthesisHeaderView;
+  regimeSummary?: MarketOverviewRegimeSummaryView;
   temperatureSummary: MarketOverviewTemperatureSummaryView;
   briefingSummary: MarketOverviewBriefingSummaryView;
   officialMacroRecords: OfficialMacroAuthorityRecord[];
@@ -671,6 +741,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
   decisionReliable,
   dataState,
   regimeSynthesis,
+  regimeSummary,
   temperatureSummary,
   briefingSummary,
   officialMacroRecords,
@@ -726,6 +797,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
         />
         <MarketOverviewDataNotesDisclosure
           directionalSummary={directionalSummary}
+          regimeSummary={regimeSummary}
           decisionChips={decisionChips}
           supportingEvidence={supportingEvidence}
           counterEvidence={counterEvidence}
@@ -834,6 +906,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
   heading,
   directionalSummary,
   regimeSynthesis,
+  regimeSummary,
   decisionText,
   decisionChips,
   decisionReliable,
@@ -864,6 +937,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
               decisionReliable={decisionReliable}
               dataState={dataState}
               regimeSynthesis={regimeSynthesis}
+              regimeSummary={regimeSummary}
               temperatureSummary={temperatureSummary}
               briefingSummary={briefingSummary}
               officialMacroRecords={officialMacroRecords}

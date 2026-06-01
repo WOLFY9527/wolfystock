@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { createElement, StrictMode } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketOverviewPage from '../MarketOverviewPage';
@@ -807,6 +807,7 @@ const temperaturePayload = () => ({
   trustLevel: 'reliable',
   sourceTier: 'unofficial_public_api',
   conclusionAllowed: true,
+  regimeSummary: regimeSummaryPayload(),
   marketRegimeSynthesis: regimeSynthesisPayload(),
   marketDecisionSemantics: marketDecisionSemanticsPayload(),
   scores: {
@@ -1046,6 +1047,61 @@ const regimeSynthesisPayload = () => ({
     dataGapCount: 2,
   },
   notInvestmentAdvice: true,
+});
+
+const regimeSummaryPayload = () => ({
+  label: '偏观察的风险偏好修复',
+  title: '风险偏好修复仍以观察为主',
+  diagnosticOnly: true,
+  observationOnly: true,
+  sourceAuthorityAllowed: false,
+  scoreContributionAllowed: false,
+  notInvestmentAdvice: true,
+  drivers: [
+    {
+      key: 'watch:liquidity_impulse',
+      label: '流动性改善',
+      detail: '流动性脉冲仍在扩张，支撑风险偏好修复观察。',
+    },
+    {
+      key: 'watch:growth_rotation',
+      label: '成长轮动延续',
+      detail: '成长风格仍有延续，但暂不升级为方向性结论。',
+    },
+  ],
+  blockers: [
+    {
+      key: 'gap:cn_breadth',
+      label: 'A股宽度确认不足',
+      detail: '宽度尚未回到评分级覆盖，观察结论仍需保守。',
+    },
+  ],
+  contradictions: [
+    {
+      key: 'contra:rates_pressure',
+      label: '美国10年期国债收益率',
+      detail: '利率压力仍在，对风险偏好修复形成反证。',
+    },
+  ],
+  confidence: {
+    value: 0.62,
+    label: 'medium',
+  },
+  confidenceCaps: [
+    {
+      key: 'partial_context_only',
+      label: '仅限观察上下文',
+      detail: '当前仅能作为观察性市场状态摘要。',
+    },
+  ],
+  nextWatchItems: [
+    {
+      key: 'watch:small_caps_follow_through',
+      label: '小盘轮动延续',
+      detail: '继续观察小盘与高贝塔品种是否同步跟进。',
+    },
+  ],
+  explanation: '流动性与成长轮动仍支持风险偏好修复观察，但宽度确认与利率反证尚未解除。',
 });
 
 const briefingPayload = () => ({
@@ -1719,7 +1775,7 @@ describe('MarketOverviewPage', () => {
       quoteItem('WTI', 'WTI Crude', 78.4, -0.3),
     ]));
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     await screen.findByTestId('market-overview-hero-ribbon');
     expect(getPulseText()).toMatch(/标普500/);
@@ -1768,7 +1824,7 @@ describe('MarketOverviewPage', () => {
 
   it('keeps signal watch and coverage labels tab aware while switching tabs', async () => {
     vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     await screen.findByTestId('market-overview-rail-signal-watch');
     expect(screen.getByTestId('market-overview-coverage-summary')).toHaveTextContent(/最近更新：/);
@@ -1849,7 +1905,7 @@ describe('MarketOverviewPage', () => {
         snapshotPanel('ChinaIndicesCard', '000001.SH', '上证指数').items[0],
       ],
     });
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     expect(screen.getByRole('button', { name: '全部' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '美股' })).toBeInTheDocument();
@@ -1968,7 +2024,7 @@ describe('MarketOverviewPage', () => {
     window.localStorage.setItem(MARKET_OVERVIEW_LKG_STORAGE_KEY, JSON.stringify(localSnapshotPayload()));
     vi.mocked(marketOverviewApi.getIndices).mockReturnValueOnce(new Promise(() => {}));
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     expect((await screen.findAllByText('5,111.11')).length).toBeGreaterThan(0);
     const details = expandMarketDecisionDetails();
@@ -1983,7 +2039,7 @@ describe('MarketOverviewPage', () => {
       quoteItem('SPX', 'S&P 500', 5222.22, 0.52),
     ]));
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     await waitFor(() => {
       const saved = JSON.parse(window.localStorage.getItem(MARKET_OVERVIEW_LKG_STORAGE_KEY) || '{}');
@@ -2000,7 +2056,7 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketOverviewApi.getIndices).mockRejectedValueOnce(new Error('indices request timed out'));
     vi.mocked(marketApi.getRates).mockRejectedValueOnce(new Error('rates request timed out'));
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     expect((await screen.findAllByText('5,111.11')).length).toBeGreaterThan(0);
     const details = expandMarketDecisionDetails();
@@ -2016,7 +2072,7 @@ describe('MarketOverviewPage', () => {
   it('stages noncritical market overview panels after the primary route data starts loading', async () => {
     vi.useFakeTimers();
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     expect(countMarketPanelRequests()).toBe(10);
     expectMarketPanelRequestsCalledOnce(primaryMarketPanelRequests);
@@ -2079,7 +2135,7 @@ describe('MarketOverviewPage', () => {
       isAdminMode: false,
       canReadProviders: false,
     });
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     expect(await screen.findByTestId('market-overview-pulse-header')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-category-tabs')).toBeInTheDocument();
@@ -2102,7 +2158,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it('renders compact diagnostic disclosures instead of always-open rail cards', async () => {
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const sideRail = await screen.findByTestId('market-overview-side-rail');
     expect(sideRail).toContainElement(screen.getByTestId('market-overview-context-rail'));
@@ -2114,7 +2170,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it('keeps mobile DOM order with data state ahead of the overview summary', async () => {
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     await screen.findByTestId('market-overview-workbench');
     expect(screen.getByTestId('market-overview-top-stack').firstElementChild).toContainElement(
@@ -2125,7 +2181,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it('puts market state and compact data status ahead of controls and panel sprawl', async () => {
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const topStack = await screen.findByTestId('market-overview-top-stack');
     expect(topStack.firstElementChild).toContainElement(screen.getByTestId('market-decision-semantics-strip'));
@@ -2134,7 +2190,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it('renders each tab with deterministic row groups and the shared decision layer', async () => {
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const expectations: Array<[string, string[], string[]]> = [
       ['全部', ['all-hero', 'all-modules-1', 'all-modules-2', 'all-modules-3', 'all-modules-4'], ['market-overview-card-indices', 'market-overview-card-sentiment']],
@@ -2190,7 +2246,7 @@ describe('MarketOverviewPage', () => {
       quoteItem('NDX', 'Nasdaq 100', 18220.42, 0.68),
     ]));
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const indicesCard = await screen.findByTestId('market-overview-card-indices');
     await waitFor(() => {
@@ -2215,7 +2271,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it('copies a market overview summary from the current visible state', async () => {
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const exportButton = await screen.findByTestId('market-overview-export-summary');
     await waitFor(() => expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent('风险偏暖'));
@@ -2239,7 +2295,7 @@ describe('MarketOverviewPage', () => {
       quoteItem('399001.SZ', '深证成指', 9842.31, -0.18, 'sina'),
     ]));
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(await screen.findByRole('button', { name: '美股' }));
 
@@ -2338,7 +2394,7 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(limitedRealTemperaturePayload());
     vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const conclusion = await screen.findByTestId('market-overview-decision-readiness');
     expect(conclusion).toHaveTextContent('市场状态');
@@ -2363,7 +2419,7 @@ describe('MarketOverviewPage', () => {
       isAdminMode: false,
       canReadProviders: false,
     });
-    const readyView = render(<MarketOverviewPage />);
+    const readyView = render(createElement(MarketOverviewPage));
 
     const readyBand = await screen.findByTestId('market-overview-decision-readiness');
     expect(readyBand).toHaveTextContent('市场状态');
@@ -2423,7 +2479,7 @@ describe('MarketOverviewPage', () => {
     });
     vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
 
-    const observationView = render(<MarketOverviewPage />);
+    const observationView = render(createElement(MarketOverviewPage));
     await screen.findByTestId('market-overview-decision-readiness');
     await waitFor(() => expect(screen.getByTestId('market-overview-decision-readiness')).toHaveTextContent(/暂不形成方向结论|仅观察/));
     const observationBand = screen.getByTestId('market-overview-decision-readiness');
@@ -2437,7 +2493,7 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(unreliableTemperaturePayload());
     vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
 
-    const unavailableView = render(<MarketOverviewPage />);
+    const unavailableView = render(createElement(MarketOverviewPage));
     await screen.findByTestId('market-overview-decision-readiness');
     await waitFor(() => expect(screen.getByTestId('market-overview-decision-readiness')).toHaveTextContent(/暂不形成方向结论|仅观察|等待数据完成后再判断/));
     const unavailableBand = screen.getByTestId('market-overview-decision-readiness');
@@ -2451,7 +2507,7 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(unreliableTemperaturePayload());
     vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const details = expandMarketDecisionDetails();
     await waitFor(() => {
@@ -2483,7 +2539,7 @@ describe('MarketOverviewPage', () => {
       isAdminMode: false,
       canReadProviders: false,
     });
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const posturePanel = await screen.findByTestId('market-decision-semantics-strip');
 
@@ -2517,6 +2573,29 @@ describe('MarketOverviewPage', () => {
     expect(evidence).toHaveTextContent('Fed liquidity');
   });
 
+  it('surfaces regimeSummary inside the existing evidence disclosure without leaking internal field names', async () => {
+    render(createElement(MarketOverviewPage));
+
+    const evidence = expandMarketEvidenceDetails();
+    const regimeSummary = await within(evidence).findByTestId('market-overview-regime-summary');
+    const regimeSummaryText = regimeSummary.textContent || '';
+
+    expect(regimeSummaryText).toContain('风险偏好修复仍以观察为主');
+    expect(regimeSummaryText).toContain('偏观察的风险偏好修复');
+    expect(regimeSummaryText).toContain('中 · 62%');
+    expect(regimeSummaryText).toContain('流动性与成长轮动仍支持风险偏好修复观察');
+    expect(regimeSummaryText).toContain('流动性改善');
+    expect(regimeSummaryText).toContain('A股宽度确认不足');
+    expect(regimeSummaryText).toContain('美国10年期国债收益率');
+    expect(regimeSummaryText).toContain('小盘轮动延续');
+    expect(regimeSummaryText).not.toContain('diagnosticOnly');
+    expect(regimeSummaryText).not.toContain('observationOnly');
+    expect(regimeSummaryText).not.toContain('sourceAuthorityAllowed');
+    expect(regimeSummaryText).not.toContain('scoreContributionAllowed');
+    expect(regimeSummaryText).not.toContain('partial_context_only');
+    expect(regimeSummaryText).not.toContain('watch:liquidity_impulse');
+  });
+
   it('reveals technical diagnostics only in admin mode', async () => {
     useProductSurfaceMock.mockReturnValue({
       isAdminMode: true,
@@ -2524,7 +2603,7 @@ describe('MarketOverviewPage', () => {
     });
     vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(unreliableTemperaturePayload());
     vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const posturePanel = await screen.findByTestId('market-decision-semantics-strip');
     const debug = within(posturePanel).getByTestId('market-decision-debug-details');
@@ -2545,7 +2624,7 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(unreliableTemperaturePayload());
     vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const posturePanel = await screen.findByTestId('market-decision-semantics-strip');
     const text = posturePanel.textContent || '';
@@ -2592,7 +2671,7 @@ describe('MarketOverviewPage', () => {
       },
     } as never);
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     expect(await screen.findByTestId('market-overview-shell')).toBeInTheDocument();
     const details = expandMarketDecisionDetails();
@@ -2633,7 +2712,7 @@ describe('MarketOverviewPage', () => {
       },
     } as never);
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     expect(await screen.findByTestId('market-overview-shell')).toBeInTheDocument();
     const details = expandMarketDecisionDetails();
@@ -2644,7 +2723,7 @@ describe('MarketOverviewPage', () => {
   it('shows limited real temperature inputs instead of collapsing them to zero', async () => {
     vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(limitedRealTemperaturePayload());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const details = expandMarketDecisionDetails();
     const summary = await within(details).findByTestId('market-temperature-unreliable-summary');
@@ -2702,7 +2781,7 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(limitedRealTemperaturePayload());
     vi.mocked(marketApi.getMarketBriefing).mockResolvedValueOnce(unreliableBriefingPayload());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     expect(await screen.findByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/暂不形成方向结论|等待数据完成后再判断/);
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent('当前信号置信度较低，仅供观察。');
@@ -2773,7 +2852,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it('does not force indices and fundsFlow into the side rail globally', async () => {
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const primaryRail = await screen.findByTestId('market-overview-primary-rail');
     const sideRail = screen.getByTestId('market-overview-side-rail');
@@ -2805,7 +2884,7 @@ describe('MarketOverviewPage', () => {
         snapshotPanel('ChinaIndicesCard', '000001.SH', '上证指数').items[0],
       ],
     });
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const sideRail = await screen.findByTestId('market-overview-side-rail');
     expect(sideRail.className).not.toContain('max-h-[800px]');
@@ -2818,7 +2897,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it('keeps the primary market cards in a stable responsive grid below desktop', async () => {
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const primaryRail = await screen.findByTestId('market-overview-primary-rail');
     expect(primaryRail).toHaveClass('flex', 'flex-col', 'gap-4');
@@ -2843,7 +2922,7 @@ describe('MarketOverviewPage', () => {
     ], 'mixed'));
     vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const primaryRail = await screen.findByTestId('market-overview-primary-rail');
     for (const cardKey of ['indices', 'crypto'] as const) {
@@ -2872,7 +2951,7 @@ describe('MarketOverviewPage', () => {
       quoteItem('NDX', 'Nasdaq 100', 18220.42, 0.68),
     ]));
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const indicesCard = await screen.findByTestId('market-overview-card-indices');
     const firstQuote = await waitFor(() => within(indicesCard).getAllByTestId('market-overview-dense-quote-item')[0]);
@@ -2897,7 +2976,7 @@ describe('MarketOverviewPage', () => {
     ], 'mixed'));
     vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const sideRail = await screen.findByTestId('market-overview-side-rail');
     expect(sideRail).not.toContainElement(screen.getByTestId('market-overview-card-indices'));
@@ -2913,7 +2992,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it('keeps temperature and briefing summaries compact while moving data quality into the data-state strip', async () => {
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const details = expandMarketDecisionDetails();
     const statusStrip = within(details).getByTestId('market-overview-status-strip');
@@ -2938,7 +3017,7 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
     vi.mocked(marketApi.getRates).mockResolvedValueOnce(panel('RatesCard', 'US10Y', 'US 10Y'));
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(await screen.findByRole('button', { name: '美股' }));
     expect(getRowCardOrder('us-hero')).toEqual(['indices']);
@@ -2971,7 +3050,7 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
     vi.mocked(marketApi.getRates).mockResolvedValueOnce(panel('RatesCard', 'US10Y', 'US 10Y'));
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     await screen.findByTestId('market-overview-primary-rail');
     await waitFor(() => {
@@ -3038,7 +3117,7 @@ describe('MarketOverviewPage', () => {
       ],
     });
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     await screen.findByTestId('market-overview-primary-rail');
     expect(screen.getByTestId('market-overview-card-cnIndices')).toHaveAttribute('data-market-overview-module', 'cnSnapshot');
@@ -3068,7 +3147,7 @@ describe('MarketOverviewPage', () => {
       ],
     });
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
 
@@ -3079,7 +3158,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it('shows category data coverage while keeping fallback-heavy cards grouped in the workstation', async () => {
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
 
@@ -3092,7 +3171,7 @@ describe('MarketOverviewPage', () => {
   it('counts a real crypto card in crypto category coverage', async () => {
     vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
 
@@ -3105,7 +3184,7 @@ describe('MarketOverviewPage', () => {
   it('renders US breadth and sector health from the depth endpoint', async () => {
     vi.mocked(marketApi.getUsBreadth).mockResolvedValue(usBreadthPanel());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(await screen.findByRole('button', { name: '美股' }));
 
@@ -3147,7 +3226,7 @@ describe('MarketOverviewPage', () => {
   it('renders Polygon EOD computed US breadth with visible partial high-low gaps', async () => {
     vi.mocked(marketApi.getUsBreadth).mockResolvedValue(polygonUsBreadthPanel());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(await screen.findByRole('button', { name: '美股' }));
 
@@ -3198,7 +3277,7 @@ describe('MarketOverviewPage', () => {
   it('renders crypto funding and compact unavailable liquidity context without market dumps', async () => {
     vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(await screen.findByRole('button', { name: '加密货币' }));
 
@@ -3213,7 +3292,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it('does not show an empty state when fallback cards are still useful grouped content', async () => {
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
 
@@ -3223,7 +3302,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it('keeps fallback-only cards accessible without an empty-state detour', async () => {
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
 
@@ -3232,7 +3311,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it('does not show the category empty state when real cards are visible', async () => {
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
 
@@ -3244,7 +3323,7 @@ describe('MarketOverviewPage', () => {
   it('uses REST crypto snapshot first and updates from the realtime stream', async () => {
     vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     await waitFor(() => expect(screen.getAllByText('76,837.04').length).toBeGreaterThan(0));
     expect(MockEventSource.instances[0].url).toContain('/api/v1/market/crypto/stream');
@@ -3268,7 +3347,7 @@ describe('MarketOverviewPage', () => {
   it('keeps the latest crypto snapshot when the realtime stream errors', async () => {
     vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     await waitFor(() => expect(screen.getAllByText('76,837.04').length).toBeGreaterThan(0));
     act(() => {
@@ -3280,7 +3359,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it('closes the crypto realtime stream on unmount', async () => {
-    const view = render(<MarketOverviewPage />);
+    const view = render(createElement(MarketOverviewPage));
 
     expect(await screen.findByTestId('market-overview-card-crypto')).toBeInTheDocument();
     const source = MockEventSource.instances[0];
@@ -3294,7 +3373,7 @@ describe('MarketOverviewPage', () => {
     vi.stubGlobal('EventSource', undefined);
     vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFullPanel());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     await waitFor(() => expect(screen.getAllByText('76,837.04').length).toBeGreaterThan(0));
     expect(screen.getByTestId('market-overview-card-crypto')).toBeInTheDocument();
@@ -3336,7 +3415,7 @@ describe('MarketOverviewPage', () => {
       ],
     });
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
     const details = expandMarketDecisionDetails();
@@ -3380,7 +3459,7 @@ describe('MarketOverviewPage', () => {
       ],
     });
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
     expandPendingDataSourceSection();
@@ -3390,7 +3469,7 @@ describe('MarketOverviewPage', () => {
   });
 
   it('switches market categories without refetching all cards', async () => {
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     await waitFor(() => expect(marketApi.getCnIndices).toHaveBeenCalledTimes(1));
 
@@ -3426,7 +3505,7 @@ describe('MarketOverviewPage', () => {
   it('keeps other cards visible when one initial API request fails', async () => {
     vi.mocked(marketApi.getCnBreadth).mockRejectedValueOnce(new Error('breadth down'));
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     expect(await screen.findByTestId('market-overview-main-grid')).toBeInTheDocument();
     expect(screen.getByTestId('market-decision-semantics-strip')).toBeInTheDocument();
@@ -3437,7 +3516,7 @@ describe('MarketOverviewPage', () => {
   it('does not block settled cards when global indices request is still pending', async () => {
     vi.mocked(marketOverviewApi.getIndices).mockReturnValueOnce(new Promise(() => {}));
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     expect(await screen.findByTestId('market-sentiment-compact-card')).toBeInTheDocument();
     expect((await screen.findAllByText('26')).length).toBeGreaterThan(0);
@@ -3447,7 +3526,7 @@ describe('MarketOverviewPage', () => {
   it('stops showing global indices loading when the request fails', async () => {
     vi.mocked(marketOverviewApi.getIndices).mockRejectedValueOnce(new Error('indices down'));
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     expect(await screen.findByTestId('market-overview-card-indices')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /全球核心指数走势/i })).toBeInTheDocument();
@@ -3461,7 +3540,7 @@ describe('MarketOverviewPage', () => {
     vi.useFakeTimers();
     vi.mocked(marketApi.getCrypto).mockReturnValueOnce(new Promise(() => {}));
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     await advanceMarketOverviewTimersByTime(CRYPTO_PENDING_FALLBACK_DELAY_MS);
 
@@ -3478,7 +3557,7 @@ describe('MarketOverviewPage', () => {
   it('renders the crypto fallback response as a card with freshness metadata', async () => {
     vi.mocked(marketApi.getCrypto).mockResolvedValueOnce(cryptoFallbackPanel());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
     expect(await screen.findByRole('heading', { name: /加密核心/i })).toBeInTheDocument();
@@ -3496,7 +3575,7 @@ describe('MarketOverviewPage', () => {
       .mockResolvedValueOnce(cryptoPartialRefreshingPanel())
       .mockResolvedValueOnce(cryptoFullPanel());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
     await flushMarketOverviewMicrotasks(2);
@@ -3518,7 +3597,7 @@ describe('MarketOverviewPage', () => {
     vi.useFakeTimers();
     vi.mocked(marketApi.getCrypto).mockResolvedValue(cryptoPartialRefreshingPanel());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
     await flushMarketOverviewMicrotasks(2);
@@ -3545,7 +3624,7 @@ describe('MarketOverviewPage', () => {
       .mockResolvedValueOnce(cryptoFallbackPanel())
       .mockResolvedValueOnce(cryptoFullPanel());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(screen.getByRole('button', { name: '加密货币' }));
     expect((await screen.findAllByText('BTC')).length).toBeGreaterThan(0);
@@ -3564,7 +3643,7 @@ describe('MarketOverviewPage', () => {
   it('keeps other market cards visible when crypto initial API fails', async () => {
     vi.mocked(marketApi.getCrypto).mockRejectedValueOnce(new Error('crypto down'));
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     expandPendingDataSourceSection();
     expect(await screen.findByTestId('market-overview-card-crypto')).toBeInTheDocument();
@@ -3590,7 +3669,7 @@ describe('MarketOverviewPage', () => {
       })),
     });
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     await waitFor(() => expect(marketOverviewApi.getMacro).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(marketApi.getFutures).toHaveBeenCalledTimes(1));
@@ -3613,7 +3692,7 @@ describe('MarketOverviewPage', () => {
     vi.useFakeTimers();
     const setIntervalSpy = vi.spyOn(window, 'setInterval');
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     await drainStagedMarketPanelRequests();
     expectMarketPanelRequestsCalledOnce(allMarketPanelRequests);
@@ -3647,7 +3726,7 @@ describe('MarketOverviewPage', () => {
     const volatilityRefresh = createDeferredPromise<ReturnType<typeof panel>>();
     const sentimentRefresh = createDeferredPromise<ReturnType<typeof sentimentPanel>>();
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(screen.getByRole('button', { name: '美股' }));
     await waitFor(() => expect(marketOverviewApi.getVolatility).toHaveBeenCalledTimes(1));
@@ -3674,7 +3753,7 @@ describe('MarketOverviewPage', () => {
     vi.mocked(marketApi.getFutures).mockRejectedValueOnce(new Error('futures down'));
     vi.mocked(marketApi.getCnShortSentiment).mockRejectedValueOnce(new Error('sentiment down'));
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const details = expandMarketDecisionDetails();
     expect(await within(details).findByTestId('market-overview-temperature-summary')).toBeInTheDocument();
@@ -3695,7 +3774,7 @@ describe('MarketOverviewPage', () => {
         resolveRefresh = resolve;
       }));
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     fireEvent.click(screen.getByRole('button', { name: 'A股/港股' }));
     expandPendingDataSourceSection();
@@ -3710,7 +3789,7 @@ describe('MarketOverviewPage', () => {
   it('polls market cards in TTL-aware groups instead of one all-panel interval', async () => {
     vi.useFakeTimers();
     const setIntervalSpy = vi.spyOn(window, 'setInterval');
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     await drainStagedMarketPanelRequests();
     expectMarketPanelRequestsCalledOnce(allMarketPanelRequests);
@@ -3761,7 +3840,7 @@ describe('MarketOverviewPage', () => {
         snapshotPanel('ChinaIndicesCard', '000001.SH', '上证指数').items[0],
       ],
     });
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     await waitFor(() => expect(marketApi.getCrypto).toHaveBeenCalledTimes(1));
 
@@ -3784,7 +3863,7 @@ describe('MarketOverviewPage', () => {
     });
     vi.mocked(marketOverviewApi.getMacro).mockResolvedValueOnce(officialMacroPanel());
 
-    render(<MarketOverviewPage />);
+    render(createElement(MarketOverviewPage));
 
     const details = expandMarketDecisionDetails();
     const diagnostics = within(details).getByTestId('market-overview-official-macro-diagnostics');
