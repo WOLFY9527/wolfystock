@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from data_provider.realtime_types import RealtimeSource, UnifiedRealtimeQuote
@@ -76,6 +78,76 @@ def test_stock_evidence_base_fields_are_preserved_with_packet_without_sec_sideca
     assert packet["symbol"] == "AAPL"
     assert packet["dataGaps"]
     assert "secFilingEvidence" not in payload["items"][0]
+
+
+def test_stock_evidence_packet_includes_fundamentals_summary_from_analysis_history() -> None:
+    raw_result = {
+        "dashboard": {
+            "structured_analysis": {
+                "fundamentals": {
+                    "normalized": {
+                        "marketCap": 2800000000000,
+                        "trailingPE": 28.5,
+                        "priceToBook": 36.2,
+                        "beta": 1.1,
+                        "totalRevenue": 390000000000,
+                        "netIncome": 97000000000,
+                        "freeCashflow": 90000000000,
+                        "grossMargins": 0.44,
+                        "operatingMargins": 0.31,
+                        "returnOnEquity": 1.01,
+                        "returnOnAssets": 0.58,
+                        "rawProviderPayload": {"token": "must-not-emit"},
+                    },
+                    "field_sources": {
+                        "marketCap": "fmp",
+                        "trailingPE": "fmp",
+                    },
+                    "field_periods": {
+                        "marketCap": "latest",
+                        "totalRevenue": "ttm",
+                        "netIncome": "ttm",
+                        "freeCashflow": "ttm",
+                    },
+                    "adminDiagnostics": {"providerRoute": "must-not-emit"},
+                }
+            }
+        }
+    }
+    service = StockEvidenceService(
+        fetcher_manager=MagicMock(get_realtime_quote=lambda symbol: None),
+        stock_repo=MagicMock(get_recent_daily_rows=lambda code, limit=80: []),
+        analysis_repo=MagicMock(
+            get_latest_record=lambda code: SimpleNamespace(
+                raw_result=json.dumps(raw_result),
+                context_snapshot=None,
+                created_at=datetime(2026, 5, 19, 8, 0, tzinfo=timezone.utc),
+            )
+        ),
+    )
+
+    payload = service.get_stock_evidence(["AAPL"])
+
+    item = payload["items"][0]
+    summary = item["stockEvidencePacket"]["fundamentalsSummary"]
+    assert item["fundamental"]["status"] == "available"
+    assert summary["source"] == "analysis_history"
+    assert summary["freshness"] == "unknown"
+    assert summary["period"] == "mixed"
+    assert summary["marketCap"] == 2800000000000
+    assert summary["peTtm"] == 28.5
+    assert summary["pb"] == 36.2
+    assert summary["grossMargin"] == 0.44
+    assert summary["operatingMargin"] == 0.31
+    assert summary["roe"] == 1.01
+    assert summary["roa"] == 0.58
+    assert summary["missingFields"] == []
+    assert summary["notInvestmentAdvice"] is True
+    assert summary["scoreContributionAllowed"] is False
+    assert summary["sourceAuthorityAllowed"] is False
+    serialized = json.dumps(summary, sort_keys=True)
+    for forbidden in ["rawProviderPayload", "adminDiagnostics", "providerRoute", "must-not-emit"]:
+        assert forbidden not in serialized
 
 
 def test_stock_evidence_packet_is_additive_and_sec_remains_observation_only() -> None:

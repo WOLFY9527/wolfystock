@@ -57,6 +57,12 @@ def _compact_number(value: Any) -> Optional[float]:
     return round(number, 4)
 
 
+def _text(value: Any, default: str = "") -> str:
+    if value is None:
+        return default
+    return str(value).strip()
+
+
 def _normalize_symbol(symbol: str) -> str:
     return str(symbol or "").strip().upper().replace(".HK", "").removeprefix("HK")
 
@@ -123,6 +129,14 @@ def _nested(payload: Any, *path: str) -> Any:
     return current
 
 
+def _first_compact_number(*values: Any) -> Optional[float]:
+    for value in values:
+        number = _compact_number(value)
+        if number is not None:
+            return number
+    return None
+
+
 def _find_field(fields: Any, aliases: Iterable[str]) -> Optional[float]:
     alias_set = {alias.lower() for alias in aliases}
     if not isinstance(fields, list):
@@ -136,6 +150,40 @@ def _find_field(fields: Any, aliases: Iterable[str]) -> Optional[float]:
             if value is not None:
                 return value
     return None
+
+
+def _compact_or_find_field(fields: Any, aliases: Iterable[str], *values: Any) -> Optional[float]:
+    number = _first_compact_number(*values)
+    if number is not None:
+        return number
+    return _find_field(fields, aliases)
+
+
+def _fundamental_period(field_periods: Any) -> Optional[str]:
+    if not isinstance(field_periods, Mapping):
+        return None
+    values = []
+    for key in (
+        "marketCap",
+        "trailingPE",
+        "priceToBook",
+        "beta",
+        "totalRevenue",
+        "netIncome",
+        "freeCashflow",
+        "grossMargins",
+        "operatingMargins",
+        "returnOnEquity",
+        "returnOnAssets",
+    ):
+        value = _text(field_periods.get(key)).lower()
+        if value and value not in values:
+            values.append(value)
+    if not values:
+        return None
+    if len(values) == 1:
+        return values[0]
+    return "mixed"
 
 
 def _normalize_sec_filing_evidence_by_symbol(
@@ -432,6 +480,11 @@ class StockEvidenceService:
             or _nested(snapshot, "enhanced_context", "fundamentals", "normalized")
             or {}
         )
+        field_periods = (
+            _nested(raw, "dashboard", "structured_analysis", "fundamentals", "field_periods")
+            or _nested(snapshot, "enhanced_context", "fundamentals", "field_periods")
+            or {}
+        )
 
         payload: EvidencePayload = {
             "status": "missing",
@@ -442,6 +495,31 @@ class StockEvidenceService:
             "revenueTtm": _compact_number(normalized.get("totalRevenue")) or _find_field(fields, ["revenue", "营收"]),
             "netIncomeTtm": _compact_number(normalized.get("netIncome")) or _find_field(fields, ["net income", "净利润"]),
             "fcfTtm": _compact_number(normalized.get("freeCashflow")) or _find_field(fields, ["free cash flow", "自由现金流"]),
+            "grossMargin": _compact_or_find_field(
+                fields,
+                ["gross margin", "毛利率"],
+                normalized.get("grossMargins"),
+                normalized.get("grossMargin"),
+            ),
+            "operatingMargin": _compact_or_find_field(
+                fields,
+                ["operating margin", "营业利润率"],
+                normalized.get("operatingMargins"),
+                normalized.get("operatingMargin"),
+            ),
+            "roe": _compact_or_find_field(
+                fields,
+                ["roe"],
+                normalized.get("returnOnEquity"),
+                normalized.get("roe"),
+            ),
+            "roa": _compact_or_find_field(
+                fields,
+                ["roa"],
+                normalized.get("returnOnAssets"),
+                normalized.get("roa"),
+            ),
+            "period": _fundamental_period(field_periods),
             "provider": "analysis_history",
             "updatedAt": getattr(getattr(record, "created_at", None), "isoformat", lambda: None)(),
         }

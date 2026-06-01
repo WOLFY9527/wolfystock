@@ -123,6 +123,106 @@ def test_complete_strong_fixture_has_higher_confidence_and_is_not_advice() -> No
     assert "LLM" not in packet["promptSummary"]
 
 
+def test_fundamentals_summary_projects_whitelisted_fields_as_observation_only() -> None:
+    item = _strong_item()
+    item["fundamental"].update(
+        {
+            "grossMargin": 0.44,
+            "operatingMargin": 0.31,
+            "roe": 1.01,
+            "roa": 0.58,
+            "period": "ttm",
+            "source": "analysis_history",
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "rawProviderPayload": {"token": "must-not-emit"},
+            "adminDiagnostics": {"providerRoute": "must-not-emit"},
+            "valuationOpinion": "must-not-emit-opinion",
+        }
+    )
+
+    packet = project_stock_evidence_packet(item)
+
+    summary = packet["fundamentalsSummary"]
+    assert summary == {
+        "status": "available",
+        "marketCap": 2800000000000,
+        "peTtm": 28.5,
+        "pb": 36.2,
+        "beta": 1.1,
+        "revenueTtm": 390000000000,
+        "netIncomeTtm": 97000000000,
+        "fcfTtm": 90000000000,
+        "grossMargin": 0.44,
+        "operatingMargin": 0.31,
+        "roe": 1.01,
+        "roa": 0.58,
+        "period": "ttm",
+        "source": "analysis_history",
+        "freshness": "fresh",
+        "missingFields": [],
+        "notInvestmentAdvice": True,
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "sourceAuthorityAllowed": False,
+    }
+    serialized = json.dumps(summary, sort_keys=True)
+    for forbidden in [
+        "rawProviderPayload",
+        "adminDiagnostics",
+        "providerRoute",
+        "valuationOpinion",
+        "must-not-emit",
+    ]:
+        assert forbidden not in serialized
+
+
+def test_fundamentals_summary_fails_closed_for_partial_or_missing_data() -> None:
+    partial_item = _strong_item()
+    partial_item["fundamental"] = {
+        "status": "partial",
+        "marketCap": 1234000000,
+        "provider": "analysis_history",
+        "freshness": "stale",
+        "period": "latest",
+        "missingFields": ["peTtm", "pb", "beta", "revenueTtm", "netIncomeTtm", "fcfTtm"],
+        "rawPayload": {"secret": "must-not-emit"},
+    }
+
+    partial_packet = project_stock_evidence_packet(partial_item)
+
+    assert partial_packet["fundamentalsSummary"] == {
+        "status": "partial",
+        "marketCap": 1234000000,
+        "period": "latest",
+        "source": "analysis_history",
+        "freshness": "stale",
+        "missingFields": ["peTtm", "pb", "beta", "revenueTtm", "netIncomeTtm", "fcfTtm"],
+        "notInvestmentAdvice": True,
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "sourceAuthorityAllowed": False,
+    }
+    blocked = {
+        boundary["claim"]: boundary
+        for boundary in partial_packet["claimBoundaries"]
+        if not boundary["allowed"]
+    }
+    assert blocked["fundamentals_are_complete"]["reasonCode"] == "fundamentals_missing_or_fallback"
+    assert "rawPayload" not in json.dumps(partial_packet["fundamentalsSummary"], sort_keys=True)
+
+    missing_item = _strong_item()
+    missing_item["fundamental"] = {
+        "status": "missing",
+        "provider": "analysis_history",
+        "missingFields": ["marketCap", "peTtm"],
+    }
+
+    missing_packet = project_stock_evidence_packet(missing_item)
+
+    assert "fundamentalsSummary" not in missing_packet
+
+
 def test_missing_quote_fundamentals_and_unknown_news_create_gaps_and_lower_confidence() -> None:
     item = {
         "symbol": "AAPL",

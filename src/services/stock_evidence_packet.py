@@ -45,6 +45,19 @@ _SECRET_FIELD_TOKENS = (
     "credential",
     "header",
 )
+_FUNDAMENTALS_SUMMARY_FIELDS = (
+    "marketCap",
+    "peTtm",
+    "pb",
+    "beta",
+    "revenueTtm",
+    "netIncomeTtm",
+    "fcfTtm",
+    "grossMargin",
+    "operatingMargin",
+    "roe",
+    "roa",
+)
 
 
 def _as_mapping(value: Any) -> dict[str, Any]:
@@ -55,6 +68,14 @@ def _text(value: Any, default: str = "") -> str:
     if value is None:
         return default
     return str(value).strip()
+
+
+def _present_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str) and not value.strip():
+        return False
+    return True
 
 
 def _status(payload: Mapping[str, Any]) -> str:
@@ -201,8 +222,8 @@ def _fundamental_support(fundamental: Mapping[str, Any]) -> dict[str, Any] | Non
         return None
     fields = {
         key: fundamental.get(key)
-        for key in ("marketCap", "peTtm", "pb", "beta", "revenueTtm", "netIncomeTtm", "fcfTtm")
-        if fundamental.get(key) is not None
+        for key in _FUNDAMENTALS_SUMMARY_FIELDS
+        if _present_value(fundamental.get(key))
     }
     return {
         "evidenceClass": "fundamental",
@@ -291,6 +312,39 @@ def _packet_as_of(item: Mapping[str, Any], meta: Mapping[str, Any]) -> str | Non
         if as_of:
             return as_of
     return None
+
+
+def _fundamentals_summary(fundamental: Mapping[str, Any]) -> dict[str, Any] | None:
+    fields = {
+        key: fundamental.get(key)
+        for key in _FUNDAMENTALS_SUMMARY_FIELDS
+        if _present_value(fundamental.get(key))
+    }
+    if not fields:
+        return None
+
+    summary: dict[str, Any] = {"status": _status(fundamental)}
+    summary.update(fields)
+
+    period = _text(fundamental.get("period"))
+    if period:
+        summary["period"] = period
+
+    source = _text(fundamental.get("source") or _provider(fundamental))
+    if source:
+        summary["source"] = source
+    summary["freshness"] = _text(
+        fundamental.get("freshness") or fundamental.get("freshnessClass"),
+        "unknown",
+    )
+
+    missing_fields = fundamental.get("missingFields")
+    summary["missingFields"] = list(missing_fields) if isinstance(missing_fields, list) else []
+    summary["notInvestmentAdvice"] = True
+    summary["observationOnly"] = True
+    summary["scoreContributionAllowed"] = False
+    summary["sourceAuthorityAllowed"] = False
+    return summary
 
 
 def project_stock_evidence_packet(stock_evidence_payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -533,6 +587,9 @@ def project_stock_evidence_packet(stock_evidence_payload: Mapping[str, Any]) -> 
         ),
         "notInvestmentAdvice": True,
     }
+    fundamentals_summary = _fundamentals_summary(fundamental)
+    if fundamentals_summary is not None:
+        packet["fundamentalsSummary"] = fundamentals_summary
     return packet
 
 
