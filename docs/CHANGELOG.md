@@ -14,6 +14,15 @@
   account, broker, sync, provider refresh, order, trade, or mutation fields and
   preserves explicit no-broker-sync, no-accounting-mutation, no-order-placement,
   no-provider-runtime, and not-investment-advice metadata.
+- Watchlist Leveraged ETF Mapper v1 is now documented and covered by a browser
+  closeout smoke as a manual-only same-day linear calculator. The route smoke
+  expands the real Watchlist detail rail, verifies daily-reset/path-dependency,
+  fee/financing/tracking-error, no-advice, and non-executable limitations,
+  checks deterministic manual output plus invalid-input fail-closed behavior,
+  and asserts the browser path does not call mapper, quote, provider, broker,
+  order/trade, or portfolio-mutation APIs. V1 still does not call
+  `/api/v1/leveraged-etf-mapper/calculate`, fetch quotes, place orders, or
+  mutate portfolio state.
 
 ## 2026-06-01
 - User alert APIs now expose an owner-scoped, in-app-only backend contract for

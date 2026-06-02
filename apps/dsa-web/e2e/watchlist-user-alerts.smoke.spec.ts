@@ -2,6 +2,10 @@ import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures/appSmoke';
 
 type JsonRecord = Record<string, unknown>;
+type BrowserApiRequest = {
+  method: string;
+  pathname: string;
+};
 
 const initialRule = {
   id: 1,
@@ -231,9 +235,35 @@ async function expandDisclosure(panel: ReturnType<Page['getByTestId']>) {
   });
 }
 
+function isForbiddenMapperBrowserRequest(request: BrowserApiRequest) {
+  const pathname = request.pathname.toLowerCase();
+  return pathname.includes('/leveraged-etf-mapper')
+    || pathname.includes('/quote')
+    || pathname.includes('/quotes')
+    || pathname.includes('/provider')
+    || pathname.includes('/providers')
+    || pathname.includes('/broker')
+    || pathname.includes('/brokers')
+    || pathname.includes('/order')
+    || pathname.includes('/orders')
+    || pathname.includes('/trade')
+    || pathname.includes('/trades')
+    || (pathname.includes('/portfolio') && request.method !== 'GET');
+}
+
 test.describe('watchlist user alerts browser smoke', () => {
   test('watchlist detail rail keeps user alerts bounded and observation-only in the real route shell', async ({ page }) => {
     const createRuleRequests: JsonRecord[] = [];
+    const browserApiRequests: BrowserApiRequest[] = [];
+
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (!url.pathname.startsWith('/api/')) return;
+      browserApiRequests.push({
+        method: request.method(),
+        pathname: url.pathname,
+      });
+    });
 
     await page.route('**/api/v1/watchlist/items', async (route) => {
       await fulfillJson(route, makeWatchlistItemsPayload());
@@ -297,6 +327,34 @@ test.describe('watchlist user alerts browser smoke', () => {
     await expect(detailRail.getByTestId('watchlist-investor-signal')).toBeVisible();
     await expect(detailRail.getByTestId('watchlist-catalyst-exposures')).toBeVisible();
     await expect(detailRail.getByTestId('leveraged-etf-mapper')).toBeVisible();
+
+    const mapper = detailRail.getByTestId('leveraged-etf-mapper');
+    await expandDisclosure(mapper);
+
+    await expect(mapper).toContainText('手动输入');
+    await expect(mapper).toContainText('同日线性情景');
+    await expect(mapper).toContainText('每日重置、路径依赖、费用/融资、跟踪误差');
+    await expect(mapper).toContainText('不是投资建议');
+    await expect(mapper).toContainText('不是可执行或保证价格');
+
+    await mapper.getByLabel('ETF 代码').fill('NVDL');
+    await mapper.getByLabel('杠杆倍数 / 方向').fill('2');
+    await mapper.getByLabel('正股/指数参考价').fill('100');
+    await mapper.getByLabel('ETF 参考价').fill('10');
+    await mapper.getByLabel('正股/指数目标价').fill('110');
+    await mapper.getByLabel('ETF 目标价').fill('11');
+
+    await expect(mapper.getByTestId('leveraged-etf-forward-output')).toContainText('NVDL');
+    await expect(mapper.getByTestId('leveraged-etf-forward-output')).toContainText('12.00');
+    await expect(mapper.getByTestId('leveraged-etf-reverse-output')).toContainText('NVDA');
+    await expect(mapper.getByTestId('leveraged-etf-reverse-output')).toContainText('105.00');
+
+    await mapper.getByLabel('杠杆倍数 / 方向').fill('0');
+
+    await expect(mapper).toContainText('杠杆倍数不能为 0。');
+    await expect(mapper).toContainText('修正上方输入后再显示映射结果。');
+    await expect(mapper.getByTestId('leveraged-etf-forward-output')).toHaveCount(0);
+    await expect(mapper.getByTestId('leveraged-etf-reverse-output')).toHaveCount(0);
 
     await expandDisclosure(alertsPanel);
 
@@ -412,6 +470,7 @@ test.describe('watchlist user alerts browser smoke', () => {
     await expect(catalystExposures).not.toContainText('polygon.news');
     await expect(catalystExposures).not.toContainText('saved-news');
     await expect(catalystExposures).not.toContainText('news_proxy');
+    expect(browserApiRequests.filter(isForbiddenMapperBrowserRequest)).toEqual([]);
 
     await expectNoHorizontalOverflow(page);
   });
