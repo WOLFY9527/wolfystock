@@ -21,6 +21,17 @@ import type {
   PortfolioIbkrSyncRequest,
   PortfolioIbkrSyncResponse,
   PortfolioRiskResponse,
+  PortfolioScenarioRiskAppliedShock,
+  PortfolioScenarioRiskBucketContribution,
+  PortfolioScenarioRiskCoverage,
+  PortfolioScenarioRiskMetadata,
+  PortfolioScenarioRiskMissingCoverage,
+  PortfolioScenarioRiskPositionContribution,
+  PortfolioScenarioRiskRequest,
+  PortfolioScenarioRiskResponse,
+  PortfolioScenarioRiskScenarioInput,
+  PortfolioScenarioRiskScenarioResult,
+  PortfolioScenarioRiskShockValueInput,
   PortfolioSnapshotResponse,
   PortfolioTradeCreateRequest,
   PortfolioTradeListResponse,
@@ -112,6 +123,345 @@ function buildEventParams(query: EventQuery): Record<string, string | number> {
   return params;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function pickString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function pickNumber(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function pickBoolean(...values: unknown[]): boolean | undefined {
+  for (const value of values) {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function pickStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  return value.filter((item): item is string => typeof item === 'string');
+}
+
+function normalizeScenarioRiskShockValue(value: unknown): number | PortfolioScenarioRiskShockValueInput | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const normalized: PortfolioScenarioRiskShockValueInput = {};
+  const shockPct = pickNumber(value.shockPct, value.shock_pct, value.shock, value.return);
+  const labelType = pickString(value.labelType, value.label_type, value.type);
+
+  if (shockPct !== undefined) {
+    normalized.shockPct = shockPct;
+  }
+  if (labelType !== undefined) {
+    normalized.labelType = labelType;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function normalizeScenarioRiskScenarioInputs(value: unknown): PortfolioScenarioRiskScenarioInput[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+
+    const name = pickString(entry.name);
+    const shocks = isRecord(entry.shocks) ? entry.shocks : null;
+    if (!name || !shocks) {
+      return [];
+    }
+
+    const normalizedShocks = Object.fromEntries(
+      Object.entries(shocks).flatMap(([label, shockValue]) => {
+        const normalizedValue = normalizeScenarioRiskShockValue(shockValue);
+        return normalizedValue === undefined ? [] : [[label, normalizedValue]];
+      }),
+    );
+
+    return [{
+      name,
+      shocks: normalizedShocks,
+    }];
+  });
+}
+
+function normalizeScenarioRiskRequest(payload: PortfolioScenarioRiskRequest): Record<string, unknown> {
+  const source = payload as unknown as Record<string, unknown>;
+  const rawPositions = Array.isArray(source.positions) ? source.positions : [];
+  const rawExposures = Array.isArray(source.exposures) ? source.exposures : [];
+
+  return {
+    asOf: pickString(source.asOf, source.as_of) ?? '',
+    positions: rawPositions.flatMap((entry) => {
+      if (!isRecord(entry)) {
+        return [];
+      }
+
+      const normalized = {
+        symbol: pickString(entry.symbol),
+        weight: pickNumber(entry.weight),
+        weightPct: pickNumber(entry.weightPct, entry.weight_pct),
+        marketValue: pickNumber(entry.marketValue, entry.market_value),
+        marketValueBase: pickNumber(entry.marketValueBase, entry.market_value_base),
+        bucket: pickString(entry.bucket),
+        bucketLabel: pickString(entry.bucketLabel, entry.bucket_label),
+        theme: pickString(entry.theme),
+        currency: pickString(entry.currency),
+        factor: pickString(entry.factor),
+      };
+
+      return [Object.fromEntries(
+        Object.entries(normalized).filter(([, value]) => value !== undefined),
+      )];
+    }),
+    exposures: rawExposures.flatMap((entry) => {
+      if (!isRecord(entry)) {
+        return [];
+      }
+
+      const normalized = {
+        symbol: pickString(entry.symbol),
+        label: pickString(entry.label),
+        labelType: pickString(entry.labelType, entry.label_type),
+        exposure: pickNumber(entry.exposure),
+      };
+
+      return [Object.fromEntries(
+        Object.entries(normalized).filter(([, value]) => value !== undefined),
+      )];
+    }),
+    scenarioShocks: normalizeScenarioRiskScenarioInputs(source.scenarioShocks ?? source.scenario_shocks),
+  };
+}
+
+function normalizeScenarioRiskCoverage(value: unknown): PortfolioScenarioRiskCoverage {
+  const data = isRecord(value) ? value : {};
+
+  return Object.fromEntries(
+    Object.entries({
+      totalPositions: pickNumber(data.totalPositions),
+      positionsWithUsableWeight: pickNumber(data.positionsWithUsableWeight),
+      positionsWithMarketValue: pickNumber(data.positionsWithMarketValue),
+      effectiveWeightSum: pickNumber(data.effectiveWeightSum),
+      totalMarketValue: pickNumber(data.totalMarketValue),
+      explicitExposureRows: pickNumber(data.explicitExposureRows),
+      labelsWithExplicitCoverage: pickStringArray(data.labelsWithExplicitCoverage),
+    }).filter(([, entry]) => entry !== undefined),
+  ) as PortfolioScenarioRiskCoverage;
+}
+
+function normalizeScenarioRiskAppliedShocks(value: unknown): PortfolioScenarioRiskAppliedShock[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+
+    const label = pickString(entry.label);
+    if (!label) {
+      return [];
+    }
+
+    return [{
+      label,
+      ...Object.fromEntries(
+        Object.entries({
+          labelType: pickString(entry.labelType),
+          shockPct: pickNumber(entry.shockPct),
+          exposure: pickNumber(entry.exposure),
+          impactPct: pickNumber(entry.impactPct),
+          impactAmount: pickNumber(entry.impactAmount),
+        }).filter(([, item]) => item !== undefined),
+      ),
+    }];
+  });
+}
+
+function normalizeScenarioRiskPositionContributions(value: unknown): PortfolioScenarioRiskPositionContribution[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+
+    const symbol = pickString(entry.symbol);
+    if (!symbol) {
+      return [];
+    }
+
+    return [{
+      symbol,
+      ...Object.fromEntries(
+        Object.entries({
+          bucket: pickString(entry.bucket),
+          weight: pickNumber(entry.weight),
+          marketValue: pickNumber(entry.marketValue),
+          impactPct: pickNumber(entry.impactPct),
+          impactAmount: pickNumber(entry.impactAmount),
+          contributionToScenarioLoss: pickNumber(entry.contributionToScenarioLoss),
+          warnings: pickStringArray(entry.warnings),
+          appliedShocks: normalizeScenarioRiskAppliedShocks(entry.appliedShocks),
+        }).filter(([, item]) => item !== undefined),
+      ),
+    }];
+  });
+}
+
+function normalizeScenarioRiskBucketContributions(value: unknown): PortfolioScenarioRiskBucketContribution[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+
+    const bucket = pickString(entry.bucket);
+    if (!bucket) {
+      return [];
+    }
+
+    return [{
+      bucket,
+      ...Object.fromEntries(
+        Object.entries({
+          positionCount: pickNumber(entry.positionCount),
+          impactPct: pickNumber(entry.impactPct),
+          impactAmount: pickNumber(entry.impactAmount),
+          contributionToScenarioLoss: pickNumber(entry.contributionToScenarioLoss),
+        }).filter(([, item]) => item !== undefined),
+      ),
+    }];
+  });
+}
+
+function normalizeScenarioRiskMissingCoverage(value: unknown): PortfolioScenarioRiskMissingCoverage[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+
+    const label = pickString(entry.label);
+    if (!label) {
+      return [];
+    }
+
+    return [{
+      label,
+      ...Object.fromEntries(
+        Object.entries({
+          labelType: pickString(entry.labelType),
+          missingSymbols: pickStringArray(entry.missingSymbols),
+        }).filter(([, item]) => item !== undefined),
+      ),
+    }];
+  });
+}
+
+function normalizeScenarioRiskScenarios(value: unknown): PortfolioScenarioRiskScenarioResult[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+
+    const name = pickString(entry.name);
+    if (!name) {
+      return [];
+    }
+
+    return [{
+      name,
+      ...Object.fromEntries(
+        Object.entries({
+          portfolioImpactPct: pickNumber(entry.portfolioImpactPct),
+          portfolioImpactAmount: pickNumber(entry.portfolioImpactAmount),
+          coveredWeight: pickNumber(entry.coveredWeight),
+          coveredMarketValue: pickNumber(entry.coveredMarketValue),
+          warnings: pickStringArray(entry.warnings),
+          missingCoverage: normalizeScenarioRiskMissingCoverage(entry.missingCoverage),
+          positionContributions: normalizeScenarioRiskPositionContributions(entry.positionContributions),
+          bucketContributions: normalizeScenarioRiskBucketContributions(entry.bucketContributions),
+        }).filter(([, item]) => item !== undefined),
+      ),
+    }];
+  });
+}
+
+function normalizeScenarioRiskMetadata(value: unknown): PortfolioScenarioRiskMetadata {
+  const data = isRecord(value) ? value : {};
+
+  return Object.fromEntries(
+    Object.entries({
+      sideEffectFree: pickBoolean(data.sideEffectFree),
+      noBrokerSync: pickBoolean(data.noBrokerSync),
+      noAccountingMutation: pickBoolean(data.noAccountingMutation),
+      noOrderPlacement: pickBoolean(data.noOrderPlacement),
+      notInvestmentAdvice: pickBoolean(data.notInvestmentAdvice),
+    }).filter(([, item]) => item !== undefined),
+  ) as PortfolioScenarioRiskMetadata;
+}
+
+function normalizeScenarioRiskResponse(data: unknown): PortfolioScenarioRiskResponse {
+  const normalized = isRecord(toCamelCase<Record<string, unknown>>(data))
+    ? toCamelCase<Record<string, unknown>>(data)
+    : {};
+
+  return {
+    readModelType: pickString(normalized.readModelType) ?? '',
+    advisoryOnly: pickBoolean(normalized.advisoryOnly) ?? false,
+    executionReadiness: pickString(normalized.executionReadiness) ?? '',
+    asOf: pickString(normalized.asOf),
+    coverage: normalizeScenarioRiskCoverage(normalized.coverage),
+    scenarios: normalizeScenarioRiskScenarios(normalized.scenarios),
+    insufficientDataReasons: pickStringArray(normalized.insufficientDataReasons) ?? [],
+    missingDataWarnings: pickStringArray(normalized.missingDataWarnings) ?? [],
+    metadata: normalizeScenarioRiskMetadata(normalized.metadata),
+  };
+}
+
 export const portfolioApi = {
   async getAccounts(includeInactive = false): Promise<PortfolioAccountListResponse> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/portfolio/accounts', {
@@ -155,6 +505,14 @@ export const portfolioApi = {
       params: buildSnapshotParams(query),
     });
     return toCamelCase<PortfolioRiskResponse>(response.data);
+  },
+
+  async projectScenarioRisk(payload: PortfolioScenarioRiskRequest): Promise<PortfolioScenarioRiskResponse> {
+    const response = await apiClient.post<Record<string, unknown>>(
+      '/api/v1/portfolio/scenario-risk',
+      normalizeScenarioRiskRequest(payload),
+    );
+    return normalizeScenarioRiskResponse(response.data);
   },
 
   async refreshFx(query: FxRefreshQuery = {}): Promise<PortfolioFxRefreshResponse> {

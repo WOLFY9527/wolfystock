@@ -671,3 +671,117 @@ export interface PortfolioFxRefreshResponse {
   staleCount: number;
   errorCount: number;
 }
+
+export interface PortfolioScenarioRiskPositionInput {
+  symbol: string;
+  weight?: number | null;
+  weightPct?: number | null;
+  marketValue?: number | null;
+  marketValueBase?: number | null;
+  bucket?: string | null;
+  bucketLabel?: string | null;
+  theme?: string | null;
+  currency?: string | null;
+  factor?: string | null;
+}
+
+export interface PortfolioScenarioRiskExposureInput {
+  symbol: string;
+  label: string;
+  labelType?: string | null;
+  exposure?: number | null;
+}
+
+export interface PortfolioScenarioRiskShockValueInput {
+  shockPct?: number | null;
+  labelType?: string | null;
+}
+
+export interface PortfolioScenarioRiskScenarioInput {
+  name: string;
+  shocks: Record<string, number | PortfolioScenarioRiskShockValueInput>;
+}
+
+export interface PortfolioScenarioRiskRequest {
+  asOf: string;
+  positions: PortfolioScenarioRiskPositionInput[];
+  exposures: PortfolioScenarioRiskExposureInput[];
+  scenarioShocks: PortfolioScenarioRiskScenarioInput[];
+}
+
+export interface PortfolioScenarioRiskCoverage {
+  totalPositions?: number;
+  positionsWithUsableWeight?: number;
+  positionsWithMarketValue?: number;
+  effectiveWeightSum?: number;
+  totalMarketValue?: number | null;
+  explicitExposureRows?: number;
+  labelsWithExplicitCoverage?: string[];
+}
+
+export interface PortfolioScenarioRiskAppliedShock {
+  label: string;
+  labelType?: string;
+  shockPct?: number | null;
+  exposure?: number | null;
+  impactPct?: number | null;
+  impactAmount?: number | null;
+}
+
+export interface PortfolioScenarioRiskPositionContribution {
+  symbol: string;
+  bucket?: string | null;
+  weight?: number | null;
+  marketValue?: number | null;
+  impactPct?: number | null;
+  impactAmount?: number | null;
+  contributionToScenarioLoss?: number | null;
+  warnings?: string[];
+  appliedShocks?: PortfolioScenarioRiskAppliedShock[];
+}
+
+export interface PortfolioScenarioRiskBucketContribution {
+  bucket: string;
+  positionCount?: number;
+  impactPct?: number | null;
+  impactAmount?: number | null;
+  contributionToScenarioLoss?: number | null;
+}
+
+export interface PortfolioScenarioRiskMissingCoverage {
+  label: string;
+  labelType?: string;
+  missingSymbols?: string[];
+}
+
+export interface PortfolioScenarioRiskScenarioResult {
+  name: string;
+  portfolioImpactPct?: number | null;
+  portfolioImpactAmount?: number | null;
+  coveredWeight?: number | null;
+  coveredMarketValue?: number | null;
+  warnings?: string[];
+  missingCoverage?: PortfolioScenarioRiskMissingCoverage[];
+  positionContributions?: PortfolioScenarioRiskPositionContribution[];
+  bucketContributions?: PortfolioScenarioRiskBucketContribution[];
+}
+
+export interface PortfolioScenarioRiskMetadata {
+  sideEffectFree?: boolean;
+  noBrokerSync?: boolean;
+  noAccountingMutation?: boolean;
+  noOrderPlacement?: boolean;
+  notInvestmentAdvice?: boolean;
+}
+
+export interface PortfolioScenarioRiskResponse {
+  readModelType: string;
+  advisoryOnly: boolean;
+  executionReadiness: string;
+  asOf?: string | null;
+  coverage: PortfolioScenarioRiskCoverage;
+  scenarios: PortfolioScenarioRiskScenarioResult[];
+  insufficientDataReasons: string[];
+  missingDataWarnings: string[];
+  metadata: PortfolioScenarioRiskMetadata;
+}
