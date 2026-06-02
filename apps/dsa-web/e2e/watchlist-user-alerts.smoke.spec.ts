@@ -100,6 +100,70 @@ function makeWatchlistItemsPayload() {
               score_contribution_allowed: false,
               decision_grade: false,
               calendar_claim_allowed: false,
+              raw_provider_payload: { unsafe: true },
+              admin_diagnostics: { trace: 'hidden' },
+              provider_route: 'polygon.news',
+              authority_grant: false,
+              provider: 'polygon',
+              source: 'news_proxy',
+              raw_category: 'provider_internal_only',
+              raw_reason_codes: ['provider_internal_only'],
+              debug: { enabled: true },
+            },
+            {
+              id: 'catalyst:NVDA:us:news:1',
+              symbol: 'NVDA',
+              market: 'us',
+              category: 'stored_news_catalyst_proxy',
+              title: 'Stored news catalyst proxy',
+              summary: 'Stored article summary references a potential demand catalyst.',
+              evidence_status: 'proxy',
+              evidence_labels: ['proxy', 'unverified'],
+              as_of: '2026-05-17T20:00:00+00:00',
+              published_at: '2026-05-17T13:00:00+00:00',
+              reason_codes: ['observation_only', 'proxy_evidence_not_authoritative'],
+              observation_only: true,
+              source_authority_allowed: false,
+              score_contribution_allowed: false,
+              decision_grade: false,
+              calendar_claim_allowed: false,
+              provider_route: 'news.saved',
+              provider: 'saved-news',
+              source: 'stored_proxy',
+            },
+            {
+              id: 'catalyst:NVDA:us:macro',
+              symbol: 'NVDA',
+              market: 'us',
+              category: 'official_macro_cache_status',
+              title: 'Official macro cache/status exposure',
+              summary: 'Official macro cache/status is stale as diagnostic context only; no scheduled macro calendar authority is inferred.',
+              evidence_status: 'stale',
+              evidence_labels: ['stale'],
+              as_of: '2026-05-17',
+              reason_codes: ['observation_only', 'stale_evidence'],
+              observation_only: true,
+              source_authority_allowed: false,
+              score_contribution_allowed: false,
+              decision_grade: false,
+              calendar_claim_allowed: false,
+            },
+            {
+              id: 'catalyst:NVDA:us:news:2',
+              symbol: 'NVDA',
+              market: 'us',
+              category: 'stored_news_catalyst_proxy',
+              title: 'Extra hidden exposure',
+              summary: 'This item should stay outside the bounded disclosure.',
+              evidence_status: 'proxy',
+              evidence_labels: ['proxy'],
+              as_of: '2026-05-17T21:00:00+00:00',
+              reason_codes: ['observation_only'],
+              observation_only: true,
+              source_authority_allowed: false,
+              score_contribution_allowed: false,
+              decision_grade: false,
+              calendar_claim_allowed: false,
             },
           ],
         },
@@ -324,7 +388,30 @@ test.describe('watchlist user alerts browser smoke', () => {
     const catalystExposures = detailRail.getByTestId('watchlist-catalyst-exposures');
     await expandDisclosure(catalystExposures);
     await expect(catalystExposures).toContainText('Fundamental snapshot exposure');
+    await expect(catalystExposures).toContainText('Stored news catalyst proxy');
+    await expect(catalystExposures).toContainText('Official macro cache/status exposure');
+    await expect(catalystExposures).not.toContainText('Extra hidden exposure');
     await expect(catalystExposures).toContainText('仅观察');
+    await expect(catalystExposures).toContainText('延迟快照');
+    await expect(catalystExposures).toContainText('代理线索');
+    await expect(catalystExposures).toContainText('陈旧证据');
+    await expect(catalystExposures).toContainText('时间范围 2026Q2');
+    await expect(catalystExposures).toContainText('观察时间');
+    await expect(catalystExposures).toContainText('发布时间');
+    await expect(catalystExposures).toContainText('非财报日历主张');
+    await expect(catalystExposures).toContainText('已保存新闻，仅作线索');
+    await expect(catalystExposures).toContainText('仅展示最近保存的线索');
+    await expect(catalystExposures).not.toContainText('raw_provider_payload');
+    await expect(catalystExposures).not.toContainText('admin_diagnostics');
+    await expect(catalystExposures).not.toContainText('provider_route');
+    await expect(catalystExposures).not.toContainText('source_authority_allowed');
+    await expect(catalystExposures).not.toContainText('score_contribution_allowed');
+    await expect(catalystExposures).not.toContainText('calendar_claim_allowed');
+    await expect(catalystExposures).not.toContainText('authority_grant');
+    await expect(catalystExposures).not.toContainText('provider_internal_only');
+    await expect(catalystExposures).not.toContainText('polygon.news');
+    await expect(catalystExposures).not.toContainText('saved-news');
+    await expect(catalystExposures).not.toContainText('news_proxy');
 
     await expectNoHorizontalOverflow(page);
   });
