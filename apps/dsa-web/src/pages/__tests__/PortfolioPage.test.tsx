@@ -16,6 +16,7 @@ const {
   getAccounts,
   getSnapshot,
   getRisk,
+  projectScenarioRisk,
   refreshFxRate,
   listBrokerConnections,
   listImportBrokers,
@@ -38,6 +39,7 @@ const {
   getAccounts: vi.fn(),
   getSnapshot: vi.fn(),
   getRisk: vi.fn(),
+  projectScenarioRisk: vi.fn(),
   refreshFxRate: vi.fn(),
   listBrokerConnections: vi.fn(),
   listImportBrokers: vi.fn(),
@@ -63,6 +65,7 @@ vi.mock('../../api/portfolio', () => ({
     getAccounts,
     getSnapshot,
     getRisk,
+    projectScenarioRisk,
     refreshFxRate,
     listBrokerConnections,
     listImportBrokers,
@@ -380,6 +383,71 @@ describe('PortfolioPage FX refresh', () => {
     getAccounts.mockResolvedValue(makeAccounts());
     getSnapshot.mockImplementation(async ({ accountId }: { accountId?: number } = {}) => makeSnapshot({ accountId, fxStale: true }));
     getRisk.mockResolvedValue(makeRisk());
+    projectScenarioRisk.mockResolvedValue({
+      readModelType: 'portfolio_scenario_risk_advisory_v1',
+      advisoryOnly: true,
+      executionReadiness: 'advisory_only_not_trade_execution',
+      asOf: '2026-03-19T00:00:00Z',
+      coverage: {
+        totalPositions: 1,
+        positionsWithUsableWeight: 1,
+        positionsWithMarketValue: 1,
+        effectiveWeightSum: 1,
+        totalMarketValue: 1600,
+        explicitExposureRows: 0,
+        labelsWithExplicitCoverage: [],
+      },
+      scenarios: [
+        {
+          name: 'symbol_aapl_down_-8',
+          portfolioImpactPct: -8,
+          portfolioImpactAmount: -128,
+          coveredWeight: 1,
+          coveredMarketValue: 1600,
+          warnings: [],
+          missingCoverage: [],
+          positionContributions: [
+            {
+              symbol: 'AAPL',
+              bucket: 'Main',
+              weight: 1,
+              marketValue: 1600,
+              impactPct: -8,
+              impactAmount: -128,
+              contributionToScenarioLoss: 1,
+              warnings: [],
+              appliedShocks: [
+                {
+                  label: 'AAPL',
+                  shockPct: -8,
+                  exposure: 1,
+                  impactPct: -8,
+                  impactAmount: -128,
+                },
+              ],
+            },
+          ],
+          bucketContributions: [
+            {
+              bucket: 'Main',
+              positionCount: 1,
+              impactPct: -8,
+              impactAmount: -128,
+              contributionToScenarioLoss: 1,
+            },
+          ],
+        },
+      ],
+      insufficientDataReasons: [],
+      missingDataWarnings: [],
+      metadata: {
+        sideEffectFree: true,
+        noBrokerSync: true,
+        noAccountingMutation: true,
+        noOrderPlacement: true,
+        notInvestmentAdvice: true,
+      },
+    });
     refreshFxRate.mockResolvedValue({
       baseCurrency: 'USD',
       quoteCurrency: 'CNY',
@@ -756,6 +824,65 @@ describe('PortfolioPage FX refresh', () => {
     expect(risk).toHaveTextContent('主币种');
     expect(risk).toHaveTextContent('主市场');
     expect(risk).toHaveTextContent('最大持仓偏高');
+  });
+
+  it('renders the bounded scenario risk panel and sends only advisory scenario payload fields', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: false }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    expect(screen.getByTestId('portfolio-current-holdings-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-risk-card')).toBeInTheDocument();
+
+    const disclosure = screen.getByTestId('portfolio-scenario-risk-disclosure');
+    expect(disclosure).not.toHaveAttribute('open');
+
+    fireEvent.click(within(disclosure).getByRole('button', { name: '展开 查看压力情景' }));
+
+    fireEvent.change(screen.getByLabelText('冲击幅度（%）'), { target: { value: '-8' } });
+    fireEvent.click(screen.getByRole('button', { name: '运行压力情景' }));
+
+    await waitFor(() => expect(projectScenarioRisk).toHaveBeenCalledTimes(1));
+
+    expect(projectScenarioRisk).toHaveBeenCalledWith({
+      asOf: '2026-03-19',
+      positions: [
+        {
+          symbol: 'AAPL',
+          weightPct: 100,
+          marketValue: 1600,
+          marketValueBase: 1600,
+          bucketLabel: 'Account 1',
+          currency: 'USD',
+        },
+      ],
+      exposures: [],
+      scenarioShocks: [
+        {
+          name: 'symbol_aapl_down_-8',
+          shocks: {
+            AAPL: {
+              shockPct: -8,
+            },
+          },
+        },
+      ],
+    });
+
+    const sentPayload = projectScenarioRisk.mock.calls[0]?.[0];
+    const payloadText = JSON.stringify(sentPayload);
+    expect(payloadText).not.toMatch(/accountId|broker|provider|sync|order|tradeId|portfolioMutation/i);
+    expect(createTrade).not.toHaveBeenCalled();
+    expect(createCashLedger).not.toHaveBeenCalled();
+    expect(createCorporateAction).not.toHaveBeenCalled();
+    expect(syncIbkrReadOnly).not.toHaveBeenCalled();
+    expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('预估影响');
+    expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('不触发经纪商同步');
+    expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('不改动账务结果');
+    expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('不触发任何下单');
+    expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('不构成投资建议');
   });
 
   it('translates delayed fallback prices into consumer-safe valuation language', async () => {

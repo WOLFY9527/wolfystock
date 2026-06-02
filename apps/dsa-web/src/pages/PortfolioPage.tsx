@@ -6,6 +6,10 @@ import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Button, Checkbox, ConfirmDialog, Drawer, Input, PillBadge, SectionShell, SegmentedControl, Select } from '../components/common';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
+import {
+  PortfolioScenarioRiskPanel,
+  type PortfolioScenarioRiskVisiblePosition,
+} from '../components/portfolio/PortfolioScenarioRiskPanel';
 import { PortfolioTrustStrip, type PortfolioTrustChipItem } from '../components/portfolio/PortfolioTrustStrip';
 import {
   TerminalButton,
@@ -2040,6 +2044,16 @@ const PortfolioPage: React.FC = () => {
   const addHoldingActionLabel = language === 'zh' ? '添加持仓' : 'Add holding';
   const importTradesActionLabel = language === 'zh' ? '导入交易' : 'Import transactions';
   const manualLedgerActionLabel = language === 'zh' ? '手工记账' : 'Manual ledger';
+  const scenarioRiskPositions = useMemo<PortfolioScenarioRiskVisiblePosition[]>(
+    () => positionRows.map((row) => ({
+      symbol: row.symbol,
+      marketValue: row.marketValueBase,
+      marketValueBase: row.marketValueBase,
+      bucketLabel: row.accountName,
+      currency: row.currency || row.valuationCurrency || null,
+    })),
+    [positionRows],
+  );
   const syncDataActionLabel = language === 'zh' ? '同步数据' : 'Sync data';
   const openManualLedger = (nextLeftTab: 'trade' | 'account' | 'sync' | 'fx', nextTradeType?: TradeFormType) => {
     setLeftTab(nextLeftTab);
@@ -2750,6 +2764,11 @@ const PortfolioPage: React.FC = () => {
                       <PillBadge key={warning} variant="warning" className="text-white/55">{warning}</PillBadge>
                     ))}
                   </div>
+                  <PortfolioScenarioRiskPanel
+                    snapshotAsOf={snapshot?.asOf}
+                    positions={scenarioRiskPositions}
+                    onRunScenario={(payload) => portfolioApi.projectScenarioRisk(payload)}
+                  />
                 </TerminalPanel>
 
                 <TerminalPanel as="section" data-testid="portfolio-valuation-panel" className="min-w-0 flex flex-col gap-4">
