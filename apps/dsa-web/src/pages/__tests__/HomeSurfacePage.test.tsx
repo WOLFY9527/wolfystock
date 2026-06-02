@@ -650,7 +650,8 @@ describe('HomeSurfacePage', () => {
     renderSurface();
 
     const fundamentalsSummary = await screen.findByTestId('home-stock-fundamentals-summary');
-    expect(fundamentalsSummary).toHaveTextContent('暂无稳定基本面摘要');
+    await waitFor(() => expect(fundamentalsSummary).toHaveTextContent('正在整理受限基本面摘要'));
+    await waitFor(() => expect(fundamentalsSummary).toHaveTextContent('待补充 4 项'));
     expect(fundamentalsSummary).toHaveTextContent('数据不足');
     expect(fundamentalsSummary).toHaveTextContent('待补充 4 项');
     expect(fundamentalsSummary).toHaveTextContent('TTM');
@@ -694,7 +695,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-research-confidence-strip')).toHaveTextContent('可信度');
     expect(screen.getByTestId('home-research-data-state-strip')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-decision-score-value')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-dashboard')).toHaveTextContent('不构成投资建议');
+    await waitFor(() => expect(screen.getByTestId('home-bento-dashboard')).toHaveTextContent('不构成投资建议'));
     expect(screen.getByTestId('home-bento-dashboard')).not.toHaveTextContent(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|目标价|止损|加仓|减仓|buy recommendation|sell recommendation|trading recommendation|guaranteed|AI recommends you buy/i);
   });
 
