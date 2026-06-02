@@ -5,6 +5,7 @@ import { History, Lock, MoreHorizontal, Search, Star, Upload } from 'lucide-reac
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { publicAnalysisApi } from '../api/publicAnalysis';
 import { normalizeReportQuality } from '../api/reportNormalizer';
+import { stockEvidenceApi } from '../api/stockEvidence';
 import { withFallback } from '../api/withFallback';
 import {
   DeepReportDrawer,
@@ -28,6 +29,7 @@ import {
 import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
 import type { AnalysisReport, DataQualityReport, DecisionTrace, HistoryItem, ReportQuality, StandardReport, StandardReportField, TaskProgressModule } from '../types/analysis';
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
+import type { StockEvidenceFundamentalsSummary } from '../types/stockEvidence';
 import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores';
 import {
   buildInstitutionalReportMarkdown,
@@ -1699,6 +1701,8 @@ function LinearObservationPanel({
   locale,
   dashboard,
   dataQualityReport,
+  fundamentalsSummary,
+  isFundamentalsLoading,
   isGuest,
   guestPaywall,
   onOpenStrategy,
@@ -1707,6 +1711,8 @@ function LinearObservationPanel({
   locale: DashboardLocale;
   dashboard: DashboardPayload;
   dataQualityReport?: DataQualityReport;
+  fundamentalsSummary: StockEvidenceFundamentalsSummary | null;
+  isFundamentalsLoading: boolean;
   isGuest: boolean;
   guestPaywall?: React.ReactNode;
   onOpenStrategy: () => void;
@@ -1717,11 +1723,6 @@ function LinearObservationPanel({
     onClick: handleOpenStrategyClick,
     onPointerUp: handleOpenStrategyPointerUp,
   } = useSafariWarmActivation<HTMLButtonElement>(onOpenStrategy);
-  const {
-    ref: openFundamentalsButtonRef,
-    onClick: handleOpenFundamentalsClick,
-    onPointerUp: handleOpenFundamentalsPointerUp,
-  } = useSafariWarmActivation<HTMLButtonElement>(onOpenFundamentals);
   const isEnglish = locale === 'en';
   const observationRows = buildResearchFrameworkRows(locale, dashboard, dataQualityReport);
   const actionCopy = displaySlotValue(
@@ -1766,6 +1767,13 @@ function LinearObservationPanel({
         </p>
       </section>
 
+      <HomeFundamentalsSummaryBlock
+        locale={locale}
+        summary={fundamentalsSummary}
+        isLoading={isFundamentalsLoading}
+        onOpenFundamentals={onOpenFundamentals}
+      />
+
       <section
         className="home-research-rail-card min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-5 py-4"
         data-testid="home-bento-card-fundamentals"
@@ -1774,16 +1782,6 @@ function LinearObservationPanel({
       >
         <div className="flex min-w-0 items-center justify-between gap-3">
           <p className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Main risk' : '主要风险'}</p>
-          <button
-            ref={openFundamentalsButtonRef}
-            type="button"
-            className="home-research-action-button rounded-lg border px-2.5 py-1 text-[11px] font-medium text-white/48 transition-colors hover:text-white/72"
-            data-testid="home-bento-drawer-trigger-fundamentals"
-            onClick={handleOpenFundamentalsClick}
-            onPointerUp={handleOpenFundamentalsPointerUp}
-          >
-            {dashboard.fundamentals.detailLabel}
-          </button>
         </div>
         <p className="mt-2 line-clamp-2 min-w-0 break-words text-xs leading-[1.65] text-white/72">
           {riskCopy}
@@ -1921,6 +1919,108 @@ function buildHomeCatalystEvents(report: AnalysisReport | null | undefined, loca
   }).slice(0, 4);
 }
 
+function HomeFundamentalsSummaryBlock({
+  locale,
+  summary,
+  isLoading,
+  onOpenFundamentals,
+}: {
+  locale: DashboardLocale;
+  summary: StockEvidenceFundamentalsSummary | null;
+  isLoading: boolean;
+  onOpenFundamentals: () => void;
+}) {
+  const {
+    ref: openFundamentalsButtonRef,
+    onClick: handleOpenFundamentalsClick,
+    onPointerUp: handleOpenFundamentalsPointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(onOpenFundamentals);
+  const isEnglish = locale === 'en';
+  const metrics = buildHomeFundamentalsMetrics(locale, summary);
+  const hasStableCoverage = hasStableFundamentalsCoverage(metrics);
+  const sourceLabel = sanitizeFundamentalsSourceLabel(locale, summary?.source);
+  const freshnessLabel = sanitizeFundamentalsFreshnessLabel(locale, summary?.freshness);
+  const missingFieldsCount = summary?.missingFields.length || 0;
+  const guidanceCopy = isLoading
+    ? (isEnglish ? 'Preparing a bounded fundamentals snapshot.' : '正在整理受限基本面摘要。')
+    : hasStableCoverage
+      ? (isEnglish ? 'Observation only, not investment advice.' : '仅供观察，不构成投资建议。')
+      : (isEnglish ? 'Stable fundamentals summary unavailable; keep this as observation-only.' : '暂无稳定基本面摘要，当前仅作观察。');
+  const stateCopy = isLoading
+    ? (isEnglish ? 'Preparing summary' : '摘要整理中')
+    : hasStableCoverage
+      ? (isEnglish ? 'Stable fields ready' : '稳定字段已整理')
+      : (isEnglish ? 'Insufficient data' : '数据不足');
+  const missingFieldsCopy = missingFieldsCount > 0
+    ? (isEnglish ? `${missingFieldsCount} fields pending` : `待补充 ${missingFieldsCount} 项`)
+    : (isEnglish ? 'Stable coverage ready' : '稳定覆盖已就绪');
+
+  return (
+    <section
+      className="home-research-rail-card min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-5 py-4"
+      data-testid="home-stock-fundamentals-summary"
+      data-research-card="fundamentals-summary"
+      data-rail-section="fundamentals-summary"
+    >
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Fundamentals summary' : '基本面摘要'}</p>
+          <p className="mt-1 text-[11px] text-white/44">{guidanceCopy}</p>
+        </div>
+        <button
+          ref={openFundamentalsButtonRef}
+          type="button"
+          className="home-research-action-button rounded-lg border px-2.5 py-1 text-[11px] font-medium text-white/48 transition-colors hover:text-white/72"
+          data-testid="home-bento-drawer-trigger-fundamentals"
+          onClick={handleOpenFundamentalsClick}
+          onPointerUp={handleOpenFundamentalsPointerUp}
+        >
+          {isEnglish ? 'Details' : '细节'}
+        </button>
+      </div>
+
+      <div className="mt-3 flex min-w-0 flex-wrap gap-2 text-[11px] text-white/54">
+        <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1">{stateCopy}</span>
+        {summary?.period ? (
+          <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1">{summary.period}</span>
+        ) : null}
+        {freshnessLabel ? (
+          <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1">{freshnessLabel}</span>
+        ) : null}
+        <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1">{missingFieldsCopy}</span>
+      </div>
+
+      {hasStableCoverage ? (
+        <div className="mt-3 grid min-w-0 grid-cols-2 gap-x-3 gap-y-2.5">
+          {metrics.map((metric) => (
+            <div
+              key={metric.key}
+              className="min-w-0 rounded-[8px] border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
+              data-testid={`home-stock-fundamentals-metric-${metric.key}`}
+            >
+              <p className="truncate text-[10px] uppercase tracking-[0.12em] text-white/38">{metric.label}</p>
+              <p className="mt-1 truncate text-sm font-semibold text-white/88">{metric.value}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-[8px] border border-dashed border-white/[0.08] bg-white/[0.02] px-3 py-3">
+          <p className="text-xs font-medium text-white/76">{isEnglish ? 'Insufficient data' : '数据不足'}</p>
+          <p className="mt-1 text-xs leading-[1.65] text-white/56">
+            {isEnglish ? 'Wait for more stable fields before using fundamentals as supporting context.' : '等待更多稳定字段后，再把基本面作为辅助观察材料。'}
+          </p>
+        </div>
+      )}
+
+      {sourceLabel ? (
+        <p className="mt-3 text-[11px] text-white/40">
+          {isEnglish ? `Summary source: ${sourceLabel}` : `摘要来源：${sourceLabel}`}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 function LinearEventsStrip({
   locale,
   report,
@@ -2034,6 +2134,12 @@ type DashboardSignal = DashboardField & {
   tone: SignalTone;
 };
 
+type HomeFundamentalsMetric = {
+  key: string;
+  label: string;
+  value: string;
+};
+
 type HomePriceCurrency = 'usd' | 'cny' | 'hkd' | 'crypto' | 'unknown';
 
 type HomePriceDisplayContext = {
@@ -2081,6 +2187,152 @@ function isPendingMetricValue(value?: string): boolean {
 
 function sanitizeMetricValue(value?: string): string {
   return isPendingMetricValue(value) ? '-' : String(value || '').trim();
+}
+
+function formatCompactMagnitude(value: number): string {
+  const absolute = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+  const format = (scaled: number, suffix: string, digits: number) => `${sign}${scaled.toFixed(digits).replace(/\.0$/, '')}${suffix}`;
+
+  if (absolute >= 1_000_000_000_000) {
+    return format(absolute / 1_000_000_000_000, 'T', absolute >= 10_000_000_000_000 ? 1 : 2);
+  }
+  if (absolute >= 1_000_000_000) {
+    return format(absolute / 1_000_000_000, 'B', absolute >= 10_000_000_000 ? 1 : 2);
+  }
+  if (absolute >= 1_000_000) {
+    return format(absolute / 1_000_000, 'M', absolute >= 10_000_000 ? 1 : 2);
+  }
+  if (absolute >= 1_000) {
+    return format(absolute / 1_000, 'K', absolute >= 10_000 ? 1 : 2);
+  }
+  return `${sign}${absolute.toFixed(absolute >= 100 ? 0 : 2).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')}`;
+}
+
+function formatCompactMultiple(value: number): string {
+  const digits = Math.abs(value) >= 10 ? 1 : 2;
+  return `${value.toFixed(digits).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')}x`;
+}
+
+function formatCompactScalar(value: number): string {
+  const digits = Math.abs(value) >= 10 ? 1 : 2;
+  return value.toFixed(digits).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
+}
+
+function formatCompactPercent(value: number): string {
+  const normalized = Math.abs(value) <= 1 ? value * 100 : value;
+  const digits = Math.abs(normalized) >= 10 ? 1 : 2;
+  return `${normalized.toFixed(digits).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')}%`;
+}
+
+function sanitizeFundamentalsSourceLabel(locale: DashboardLocale, source?: string): string | null {
+  if (!source) {
+    return null;
+  }
+
+  const normalized = source.toLowerCase();
+  if (normalized.includes('filing') || normalized.includes('disclosure') || normalized.includes('earn') || normalized.includes('company')) {
+    return locale === 'en' ? 'Public disclosure digest' : '公开披露整理';
+  }
+  if (normalized.includes('market') || normalized.includes('financial') || normalized.includes('fundamental')) {
+    return locale === 'en' ? 'Market data digest' : '市场数据整理';
+  }
+  return locale === 'en' ? 'Fundamentals digest' : '基本面整理';
+}
+
+function sanitizeFundamentalsFreshnessLabel(locale: DashboardLocale, freshness?: string): string | null {
+  if (!freshness) {
+    return null;
+  }
+
+  const normalized = freshness.toLowerCase();
+  if (normalized.includes('recent') || normalized.includes('current') || normalized.includes('live')) {
+    return locale === 'en' ? 'Recent update' : '最近更新';
+  }
+  if (normalized.includes('partial') || normalized.includes('limited')) {
+    return locale === 'en' ? 'Partial refresh' : '部分更新';
+  }
+  if (normalized.includes('fallback') || normalized.includes('proxy')) {
+    return locale === 'en' ? 'Supplemental snapshot' : '补充快照';
+  }
+  if (normalized.includes('stale') || normalized.includes('old')) {
+    return locale === 'en' ? 'Earlier snapshot' : '较早快照';
+  }
+  return locale === 'en' ? 'Prepared summary' : '已整理摘要';
+}
+
+function buildHomeFundamentalsMetrics(
+  locale: DashboardLocale,
+  summary: StockEvidenceFundamentalsSummary | null | undefined,
+): HomeFundamentalsMetric[] {
+  if (!summary) {
+    return [];
+  }
+
+  const isEnglish = locale === 'en';
+  const metrics: Array<HomeFundamentalsMetric | null> = [
+    summary.marketCap !== undefined ? {
+      key: 'market-cap',
+      label: isEnglish ? 'Market cap' : '市值',
+      value: formatCompactMagnitude(summary.marketCap),
+    } : null,
+    summary.peTtm !== undefined ? {
+      key: 'pe-ttm',
+      label: isEnglish ? 'PE (TTM)' : 'PE(TTM)',
+      value: formatCompactMultiple(summary.peTtm),
+    } : null,
+    summary.pb !== undefined ? {
+      key: 'pb',
+      label: 'PB',
+      value: formatCompactMultiple(summary.pb),
+    } : null,
+    summary.beta !== undefined ? {
+      key: 'beta',
+      label: 'Beta',
+      value: formatCompactScalar(summary.beta),
+    } : null,
+    summary.revenueTtm !== undefined ? {
+      key: 'revenue-ttm',
+      label: isEnglish ? 'Revenue TTM' : '营收TTM',
+      value: formatCompactMagnitude(summary.revenueTtm),
+    } : null,
+    summary.netIncomeTtm !== undefined ? {
+      key: 'net-income-ttm',
+      label: isEnglish ? 'Net income TTM' : '净利润TTM',
+      value: formatCompactMagnitude(summary.netIncomeTtm),
+    } : null,
+    summary.fcfTtm !== undefined ? {
+      key: 'fcf-ttm',
+      label: isEnglish ? 'FCF TTM' : '自由现金流TTM',
+      value: formatCompactMagnitude(summary.fcfTtm),
+    } : null,
+    summary.grossMargin !== undefined ? {
+      key: 'gross-margin',
+      label: isEnglish ? 'Gross margin' : '毛利率',
+      value: formatCompactPercent(summary.grossMargin),
+    } : null,
+    summary.operatingMargin !== undefined ? {
+      key: 'operating-margin',
+      label: isEnglish ? 'Operating margin' : '营业利润率',
+      value: formatCompactPercent(summary.operatingMargin),
+    } : null,
+    summary.roe !== undefined ? {
+      key: 'roe',
+      label: 'ROE',
+      value: formatCompactPercent(summary.roe),
+    } : null,
+    summary.roa !== undefined ? {
+      key: 'roa',
+      label: 'ROA',
+      value: formatCompactPercent(summary.roa),
+    } : null,
+  ];
+
+  return metrics.filter((metric): metric is HomeFundamentalsMetric => Boolean(metric));
+}
+
+function hasStableFundamentalsCoverage(metrics: HomeFundamentalsMetric[]): boolean {
+  return metrics.length >= 3;
 }
 
 function isPeLikeMetric(label: string): boolean {
@@ -4374,6 +4626,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [isFullReportDrawerOpen, setFullReportDrawerOpen] = useState(false);
   const [mainCopyState, setMainCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [homeChartContext, setHomeChartContext] = useState<HomeCandlestickChartContext | null>(null);
+  const [stockEvidenceFundamentals, setStockEvidenceFundamentals] = useState<StockEvidenceFundamentalsSummary | null>(null);
+  const [isStockEvidenceLoading, setStockEvidenceLoading] = useState(false);
   const routeTaskId = searchParams.get('task_id') || searchParams.get('taskId') || null;
   const routeSymbol = normalizeTickerQuery(searchParams.get('symbol') || undefined);
   const routeSource = searchParams.get('source') || null;
@@ -4522,6 +4776,19 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     [activeDecisionTrace, activeReportQuality, locale],
   );
   const hasActiveTraceReport = Boolean(activeTraceReport);
+  const activeEvidenceTicker = useMemo(() => {
+    if (isGuest) {
+      return '';
+    }
+    const candidate = normalizeTickerQuery(
+      activeTraceReport?.meta.stockCode
+      || routeSymbol
+      || activeTicker
+      || selectedTicker
+      || recentHistoryItems[0]?.stockCode,
+    );
+    return TICKER_FORMAT_RE.test(candidate) ? candidate : '';
+  }, [activeTicker, activeTraceReport?.meta.stockCode, isGuest, recentHistoryItems, routeSymbol, selectedTicker]);
   const reanalysisTicker = useMemo(() => {
     const reportTicker = normalizeTickerQuery(activeTraceReport?.meta.stockCode);
     const candidate = reportTicker || (hasActiveTraceReport ? '' : normalizeTickerQuery(dashboardData.ticker));
@@ -4544,6 +4811,42 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   useEffect(() => {
     document.title = copy.documentTitle;
   }, [copy.documentTitle]);
+
+  useEffect(() => {
+    if (isGuest || !activeEvidenceTicker) {
+      setStockEvidenceFundamentals(null);
+      setStockEvidenceLoading(false);
+      return;
+    }
+
+    let isCancelled = false;
+    setStockEvidenceLoading(true);
+    setStockEvidenceFundamentals(null);
+
+    void stockEvidenceApi.getStockEvidence(activeEvidenceTicker)
+      .then((response) => {
+        if (isCancelled) {
+          return;
+        }
+        const matchedItem = response.items.find((item) => normalizeTickerQuery(item.symbol) === activeEvidenceTicker)
+          || response.items[0];
+        setStockEvidenceFundamentals(matchedItem?.stockEvidencePacket?.fundamentalsSummary ?? null);
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setStockEvidenceFundamentals(null);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setStockEvidenceLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeEvidenceTicker, isGuest]);
 
   useEffect(() => {
     if (traceFixtureReport && searchParams.get('trace') === 'open' && !isTraceDrawerOpen) {
@@ -5135,6 +5438,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               locale={locale}
               dashboard={readyCopy}
               dataQualityReport={activeDataQualityReport}
+              fundamentalsSummary={stockEvidenceFundamentals}
+              isFundamentalsLoading={isStockEvidenceLoading}
               isGuest={Boolean(isGuest)}
               guestPaywall={guestPaywall}
               onOpenStrategy={() => setActiveDrawer('strategy')}

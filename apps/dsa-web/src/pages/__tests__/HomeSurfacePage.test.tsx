@@ -5,6 +5,7 @@ import { analysisApi } from '../../api/analysis';
 import { createApiError, createParsedApiError } from '../../api/error';
 import { historyApi } from '../../api/history';
 import { normalizeFrontendReportContract } from '../../api/reportNormalizer';
+import { stockEvidenceApi } from '../../api/stockEvidence';
 import { UiPreferencesProvider } from '../../contexts/UiPreferencesContext';
 import { stocksApi } from '../../api/stocks';
 import { resolveHomeCandlestickTooltipPosition } from '../../components/home-bento/homeCandlestickChartUtils';
@@ -35,6 +36,12 @@ vi.mock('../../api/stocks', () => ({
   stocksApi: {
     verifyTickerExists: vi.fn(),
     getHistory: vi.fn(),
+  },
+}));
+
+vi.mock('../../api/stockEvidence', () => ({
+  stockEvidenceApi: {
+    getStockEvidence: vi.fn(),
   },
 }));
 
@@ -227,6 +234,41 @@ const homeDailyCandles = Array.from({ length: 24 }, (_, index) => {
 });
 
 const HOME_CHART_UNAVAILABLE_INTERNAL_COPY_PATTERN = /provider|fallback|diagnostic|source|source confidence|confidence|Alpaca|Yahoo Finance|Yfinance|raw diagnostics|reasonCode|providerTrace|sourceConfidence|localFallback|freshness|rawRows|主数据源|回补|诊断|来源|可信度/i;
+const defaultStockEvidenceResponse = {
+  symbols: ['ORCL'],
+  items: [
+    {
+      symbol: 'ORCL',
+      stockEvidencePacket: {
+        fundamentalsSummary: {
+          marketCap: 512_300_000_000,
+          peTtm: 31.7,
+          pb: 23.1,
+          beta: 1.08,
+          revenueTtm: 54_200_000_000,
+          netIncomeTtm: 12_400_000_000,
+          fcfTtm: 14_100_000_000,
+          grossMargin: 0.714,
+          operatingMargin: 0.326,
+          roe: 0.412,
+          roa: 0.123,
+          period: 'TTM',
+          source: 'company_fundamentals_digest',
+          freshness: 'recent',
+          missingFields: ['dividendYield'],
+          notInvestmentAdvice: true,
+          observationOnly: true,
+          scoreContributionAllowed: false,
+          sourceAuthorityAllowed: false,
+        },
+      },
+    },
+  ],
+  meta: {
+    generatedAt: '2026-06-01T08:00:00Z',
+    source: 'stock_evidence',
+  },
+};
 
 describe('HomeSurfacePage', () => {
   beforeEach(() => {
@@ -268,6 +310,7 @@ describe('HomeSurfacePage', () => {
       progress: 18,
       modules: [],
     });
+    vi.mocked(stockEvidenceApi.getStockEvidence).mockResolvedValue(defaultStockEvidenceResponse);
   });
 
   const renderSurface = (initialPath = '/') => render(
@@ -434,6 +477,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-drawer-trigger-tech')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-strategy')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-drawer-trigger-fundamentals')).toBeInTheDocument();
+    const fundamentalsSummary = await screen.findByTestId('home-stock-fundamentals-summary');
 
     expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('仅观察');
     expect(screen.getByTestId('home-research-judgment-gate')).toHaveTextContent('可信度 · 高');
@@ -482,15 +526,24 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-tech-signal-detail-MACD')).toHaveAttribute('title', '零轴上方，动能再扩张。');
 
     expect(within(rail).getByText('当前动作')).toBeInTheDocument();
+    expect(within(rail).getByText('基本面摘要')).toBeInTheDocument();
     expect(within(rail).getByText('主要风险')).toBeInTheDocument();
     expect(within(rail).getByText('下一步')).toBeInTheDocument();
+    expect(fundamentalsSummary).toHaveTextContent('仅供观察');
+    expect(fundamentalsSummary).toHaveTextContent('不构成投资建议');
+    expect(fundamentalsSummary).toHaveTextContent('TTM');
+    expect(fundamentalsSummary).toHaveTextContent('最近更新');
+    expect(fundamentalsSummary).toHaveTextContent('待补充 1 项');
+    expect(fundamentalsSummary).toHaveTextContent('31.7x');
+    expect(fundamentalsSummary).toHaveTextContent('71.4%');
     expect(screen.getByTestId('home-linear-quant-snapshot')).toHaveAttribute('data-research-card', 'next-step');
     expect(screen.getByTestId('home-bento-card-strategy')).toHaveAttribute('data-research-card', 'research-actions');
     expect(screen.getByTestId('home-bento-card-fundamentals')).toHaveAttribute('data-research-card', 'risk-boundary');
+    expect(screen.getByTestId('home-stock-fundamentals-summary')).toHaveAttribute('data-research-card', 'fundamentals-summary');
     const railSections = Array.from(rail.querySelectorAll('[data-rail-section]'))
       .map((node) => node.getAttribute('data-rail-section'));
-    expect(railSections).toEqual(['current-action', 'main-risk', 'next-step']);
-    expect(rail.querySelectorAll('.home-research-rail-card')).toHaveLength(3);
+    expect(railSections).toEqual(['current-action', 'fundamentals-summary', 'main-risk', 'next-step']);
+    expect(rail.querySelectorAll('.home-research-rail-card')).toHaveLength(4);
     expect(rail.querySelector('[class*="bg-black"]')).toBeNull();
 
     expect(secondaryDeck).toContainElement(catalysts);
@@ -539,10 +592,70 @@ describe('HomeSurfacePage', () => {
     expect(researchConsole.querySelector('[data-research-card] [data-research-card]')).toBeNull();
     const cardZones = Array.from(researchConsole.querySelectorAll('[data-research-card]'))
       .map((node) => node.closest('[data-layout-zone]')?.getAttribute('data-layout-zone'));
-    expect(researchConsole.querySelectorAll('[data-research-card]').length).toBeLessThanOrEqual(5);
+    expect(researchConsole.querySelectorAll('[data-research-card]').length).toBeLessThanOrEqual(6);
     expect(cardZones.every((zone) => zone === 'PrimaryWorkRegion' || zone === 'ContextRail')).toBe(true);
     expect(cardZones.filter((zone) => zone === 'PrimaryWorkRegion')).toHaveLength(2);
-    expect(cardZones.filter((zone) => zone === 'ContextRail')).toHaveLength(3);
+    expect(cardZones.filter((zone) => zone === 'ContextRail')).toHaveLength(4);
+  });
+
+  it('renders a compact observation-only fundamentals summary from stock evidence for the current stock only', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+
+    renderSurface();
+
+    const fundamentalsSummary = await screen.findByTestId('home-stock-fundamentals-summary');
+    expect(await screen.findByText('Oracle Corporation')).toBeInTheDocument();
+    expect(vi.mocked(stockEvidenceApi.getStockEvidence)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(stockEvidenceApi.getStockEvidence)).toHaveBeenCalledWith('ORCL');
+
+    expect(fundamentalsSummary).toHaveTextContent('基本面摘要');
+    expect(fundamentalsSummary).toHaveTextContent('市值');
+    expect(fundamentalsSummary).toHaveTextContent('PE(TTM)');
+    expect(fundamentalsSummary).toHaveTextContent('ROE');
+    expect(fundamentalsSummary).toHaveTextContent('营业利润率');
+    expect(fundamentalsSummary).toHaveTextContent('仅供观察，不构成投资建议');
+    expect(fundamentalsSummary).toHaveTextContent('31.7x');
+    expect(fundamentalsSummary).toHaveTextContent('41.2%');
+
+    expect(within(fundamentalsSummary).queryByText(/observationOnly|scoreContributionAllowed|sourceAuthorityAllowed/i)).not.toBeInTheDocument();
+    expect(within(fundamentalsSummary).queryByText(/company_fundamentals_digest|stock_evidence|provider|admin/i)).not.toBeInTheDocument();
+  });
+
+  it('renders a safe insufficient-data fundamentals state when the summary is missing or only partially available', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stockEvidenceApi.getStockEvidence).mockResolvedValueOnce({
+      symbols: ['ORCL'],
+      items: [
+        {
+          symbol: 'ORCL',
+          stockEvidencePacket: {
+            fundamentalsSummary: {
+              marketCap: 512_300_000_000,
+              period: 'TTM',
+              freshness: 'partial',
+              missingFields: ['peTtm', 'pb', 'roe', 'roa'],
+              notInvestmentAdvice: true,
+              observationOnly: true,
+              scoreContributionAllowed: false,
+              sourceAuthorityAllowed: false,
+            },
+          },
+        },
+      ],
+      meta: {
+        generatedAt: '2026-06-01T08:00:00Z',
+      },
+    });
+
+    renderSurface();
+
+    const fundamentalsSummary = await screen.findByTestId('home-stock-fundamentals-summary');
+    expect(fundamentalsSummary).toHaveTextContent('暂无稳定基本面摘要');
+    expect(fundamentalsSummary).toHaveTextContent('数据不足');
+    expect(fundamentalsSummary).toHaveTextContent('待补充 4 项');
+    expect(fundamentalsSummary).toHaveTextContent('TTM');
+    expect(fundamentalsSummary).toHaveTextContent('部分更新');
+    expect(within(fundamentalsSummary).queryByTestId('home-stock-fundamentals-metric-market-cap')).not.toBeInTheDocument();
   });
 
   it('renders a conclusion-first Home research console instead of the old score-led first screen', async () => {
@@ -581,7 +694,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-research-confidence-strip')).toHaveTextContent('可信度');
     expect(screen.getByTestId('home-research-data-state-strip')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-decision-score-value')).not.toBeInTheDocument();
-    expect(screen.getByTestId('home-bento-dashboard')).not.toHaveTextContent(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|目标价|止损|加仓|减仓|建议|recommendation|target|stop|guaranteed|AI recommends you buy/i);
+    expect(screen.getByTestId('home-bento-dashboard')).toHaveTextContent('不构成投资建议');
+    expect(screen.getByTestId('home-bento-dashboard')).not.toHaveTextContent(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|目标价|止损|加仓|减仓|buy recommendation|sell recommendation|trading recommendation|guaranteed|AI recommends you buy/i);
   });
 
   it('keeps US equity key levels non-CNY and makes the right rail conclusion-first', async () => {
