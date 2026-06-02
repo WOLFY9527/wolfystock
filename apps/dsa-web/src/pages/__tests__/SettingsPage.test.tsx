@@ -142,6 +142,30 @@ vi.mock('../../hooks', () => ({
   useSystemConfig: () => useSystemConfigMock(),
 }));
 
+vi.mock('../../hooks/useAuth', () => ({
+  useAuth: () => useAuthMock(),
+}));
+
+vi.mock('../../hooks/useSystemConfig', async () => {
+  const React = await import('react');
+  return {
+    useSystemConfig: (initialActiveCategory?: string) => {
+      const state = useSystemConfigMock();
+      const [activeCategory, setMockActiveCategory] = React.useState(
+        initialActiveCategory || state.activeCategory,
+      );
+      return {
+        ...state,
+        activeCategory,
+        setActiveCategory: (category: string) => {
+          state.setActiveCategory(category);
+          setMockActiveCategory(category);
+        },
+      };
+    },
+  };
+});
+
 vi.mock('../../components/theme/ThemeProvider', () => ({
   useThemeStyle: () => ({
     themeStyle: 'spacex',

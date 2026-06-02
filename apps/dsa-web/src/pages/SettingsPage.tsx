@@ -110,11 +110,34 @@ const buildNextDraftState = <T,>(
   const nextValue = typeof updater === 'function'
     ? (updater as (previousState: T) => T)(baseValue)
     : updater;
+  if (draftState.source === source && nextValue === draftState.value) {
+    return draftState;
+  }
   return {
     source,
     value: nextValue,
   };
 };
+
+const taskDraftsEqual = (
+  left: Record<OverrideTaskKey, TaskOverrideDraft>,
+  right: Record<OverrideTaskKey, TaskOverrideDraft>,
+): boolean => (
+  left.stock_chat.inherit === right.stock_chat.inherit
+  && left.stock_chat.gateway === right.stock_chat.gateway
+  && left.stock_chat.model === right.stock_chat.model
+  && left.backtest.inherit === right.backtest.inherit
+  && left.backtest.gateway === right.backtest.gateway
+  && left.backtest.model === right.backtest.model
+);
+
+const taskRecordEqual = <T,>(
+  left: Record<OverrideTaskKey, T>,
+  right: Record<OverrideTaskKey, T>,
+): boolean => (
+  left.stock_chat === right.stock_chat
+  && left.backtest === right.backtest
+);
 
 const DataSourceLibraryDrawerFallback: React.FC<{
   bodyClassName?: string;
@@ -308,6 +331,10 @@ const CATEGORY_TO_DOMAIN: Partial<Record<SystemConfigCategory, SettingsDomain>> 
   uncategorized: 'advanced',
 };
 
+const getSettingsDomainForCategory = (category: string): SettingsDomain => (
+  CATEGORY_TO_DOMAIN[category as SystemConfigCategory] || 'advanced'
+);
+
 const FALSE_VALUES = new Set(['', '0', 'false', 'no', 'off']);
 const PROVIDER_LABEL_MAP: Record<string, string> = {
   aihubmix: 'AIHubMix',
@@ -337,6 +364,24 @@ const uniqueValues = (values: Array<string | null | undefined>): string[] => {
     list.push(normalized);
   });
   return list;
+};
+
+const effectiveRoute = (values: Array<string | undefined | null>): string[] => uniqueValues(values);
+
+const normalizeProviderCredential = (value: string): string => {
+  const normalized = String(value || '').trim();
+  if (!normalized || /^\*+$/.test(normalized) || normalized === '已配置' || normalized.includes('...')) {
+    return '';
+  }
+  return normalized;
+};
+
+const normalizeQuickProviderTestModel = (provider: QuickProviderKey, model: string): string => {
+  const normalizedModel = String(model || '').trim();
+  if (!normalizedModel) return '';
+  if (provider === 'aihubmix') return normalizedModel;
+  if (!normalizedModel.includes('/')) return normalizedModel;
+  return normalizedModel.split('/').slice(1).join('/') || normalizedModel;
 };
 
 const hasConfigValue = (value: string): boolean => String(value || '').trim().length > 0;
@@ -554,7 +599,7 @@ const SettingsPage: React.FC = () => {
     resetDraft,
     setDraftValue,
     adminUnlockToken,
-  } = useSystemConfig();
+  } = useSystemConfig(shouldFocusDataSources ? 'data_source' : undefined);
   const [activeDomain, setActiveDomain] = useState<SettingsDomain>(shouldFocusDataSources ? 'data_sources' : 'advanced');
   const [activePanel, setActivePanel] = useState<SettingsWorkspacePanel>(initialActivePanel);
   const [isBriefDrawerOpen, setIsBriefDrawerOpen] = useState(false);
@@ -585,17 +630,7 @@ const SettingsPage: React.FC = () => {
   const rawActiveItemMap = new Map(rawActiveItems.map((item) => [item.key, String(item.value ?? '')]));
   const allItems = Object.values(itemsByCategory).flat();
   const allItemMap = new Map(allItems.map((item) => [item.key, String(item.value ?? '')]));
-  const categoryDomainMap = (() => {
-    const map = new Map<string, SettingsDomain>();
-    categories.forEach((category) => {
-      map.set(
-        category.category,
-        CATEGORY_TO_DOMAIN[category.category as SystemConfigCategory] || 'advanced',
-      );
-    });
-    return map;
-  })();
-  const domainCategories = categories.filter((category) => (categoryDomainMap.get(category.category) || 'advanced') === activeDomain);
+  const domainCategories = categories.filter((category) => getSettingsDomainForCategory(category.category) === activeDomain);
   const hasConfiguredChannels = Boolean((rawActiveItemMap.get('LLM_CHANNELS') || '').trim());
   const hasLitellmConfig = Boolean((rawActiveItemMap.get('LITELLM_CONFIG') || '').trim());
   const rawEditableActiveItems = (itemsByCategory[activeCategory] || []).filter(isRawEditableConfigItem);
@@ -623,36 +658,6 @@ const SettingsPage: React.FC = () => {
   const rawFieldsToggleLabel = activeCategory === 'ai_model'
     ? t('settings.aiRawFieldsToggle')
     : t('settings.rawFieldsToggle');
-
-  useEffect(() => {
-    const inferredDomain = categoryDomainMap.get(activeCategory) || 'advanced';
-    setActiveDomain((previous) => (previous === inferredDomain ? previous : inferredDomain));
-    setActivePanel((previous) => (previous === 'overview' ? previous : inferredDomain));
-  }, [activeCategory, categoryDomainMap]);
-
-  useEffect(() => {
-    if (domainCategories.length === 0) {
-      return;
-    }
-    if (domainCategories.some((category) => category.category === activeCategory)) {
-      return;
-    }
-    const firstCategory = domainCategories[0]?.category;
-    if (firstCategory) {
-      setActiveCategory(firstCategory);
-    }
-  }, [activeCategory, domainCategories, setActiveCategory]);
-
-  useEffect(() => {
-    if (!shouldFocusDataSources) {
-      return;
-    }
-    setActiveDomain('data_sources');
-    setActivePanel('data_sources');
-    if (activeCategory !== 'data_source') {
-      setActiveCategory('data_source');
-    }
-  }, [activeCategory, setActiveCategory, shouldFocusDataSources]);
 
   const panelNavItems = ([
     {
@@ -1086,7 +1091,6 @@ const SettingsPage: React.FC = () => {
     });
   };
 
-  const effectiveRoute = (values: Array<string | undefined | null>): string[] => uniqueValues(values);
   const removeDataSourceFromRoutingDraft = (sourceId: string) => {
     setRoutingDraft((prev) => ({
       ...prev,
@@ -1423,7 +1427,9 @@ const SettingsPage: React.FC = () => {
         model: backtestOverrideModel || defaultModel,
       },
     };
-    setTaskRoutingDraft(nextTaskDraft);
+    setTaskRoutingDraft((previous) => (
+      taskDraftsEqual(previous, nextTaskDraft) ? previous : nextTaskDraft
+    ));
 
     const stockChatOptions = getModelsForGateway(
       stockChatGateway,
@@ -1437,19 +1443,29 @@ const SettingsPage: React.FC = () => {
       availableProviders.aiModels,
       aiSavedModels,
     );
-    setTaskModelMode({
+    const nextTaskModelMode: Record<OverrideTaskKey, ModelInputMode> = {
       stock_chat: stockChatGateway && agentOverrideModel && !stockChatOptions.includes(agentOverrideModel)
         ? 'custom'
         : 'preset',
       backtest: backtestGateway && backtestOverrideModel && !backtestOptions.includes(backtestOverrideModel)
         ? 'custom'
         : 'preset',
-    });
-    setTaskRouteModelMode({
+    };
+    setTaskModelMode((previous) => (
+      taskRecordEqual(previous, nextTaskModelMode) ? previous : nextTaskModelMode
+    ));
+    const nextTaskRouteModelMode: Record<OverrideTaskKey, RouteModelMode> = {
       stock_chat: inferRouteModelMode(stockChatGateway, agentOverrideModel || defaultModel, stockChatOptions),
       backtest: inferRouteModelMode(backtestGateway, backtestOverrideModel || defaultModel, backtestOptions),
-    });
-    setTaskRoutingError({ stock_chat: null, backtest: null });
+    };
+    setTaskRouteModelMode((previous) => (
+      taskRecordEqual(previous, nextTaskRouteModelMode) ? previous : nextTaskRouteModelMode
+    ));
+    setTaskRoutingError((previous) => (
+      previous.stock_chat === null && previous.backtest === null
+        ? previous
+        : { stock_chat: null, backtest: null }
+    ));
   }, [
     agentOverrideModel,
     aiGatewayModelMap,
@@ -1749,13 +1765,6 @@ const SettingsPage: React.FC = () => {
     deepseek: { status: 'idle', text: '' },
     zhipu: { status: 'idle', text: '' },
   });
-  const normalizeProviderCredential = (value: string): string => {
-    const normalized = String(value || '').trim();
-    if (!normalized || /^\*+$/.test(normalized) || normalized === '已配置' || normalized.includes('...')) {
-      return '';
-    }
-    return normalized;
-  };
   const resolveQuickProviderCredential = (provider: QuickProviderKey): string => {
     const draftValue = normalizeProviderCredential(directProviderDraft[provider] || '');
     if (draftValue) return draftValue;
@@ -1833,13 +1842,6 @@ const SettingsPage: React.FC = () => {
     }
     const presets = KNOWN_GATEWAY_MODEL_PRESETS[provider] || [];
     return presets[0] || '';
-  };
-  const normalizeQuickProviderTestModel = (provider: QuickProviderKey, model: string): string => {
-    const normalizedModel = String(model || '').trim();
-    if (!normalizedModel) return '';
-    if (provider === 'aihubmix') return normalizedModel;
-    if (!normalizedModel.includes('/')) return normalizedModel;
-    return normalizedModel.split('/').slice(1).join('/') || normalizedModel;
   };
   const testQuickProviderConnection = async (provider: QuickProviderKey) => {
     const advancedTemplate = resolveQuickProviderAdvancedTemplate(provider);
@@ -1947,10 +1949,12 @@ const SettingsPage: React.FC = () => {
   };
   const openAiRoutingDrawer = () => {
     setActiveDomain('ai_models');
+    setActiveCategory('ai_model');
     setAiRoutingDrawerOpen(true);
   };
   const openQuickProviderDrawer = (provider: QuickProviderKey) => {
     setActiveDomain('ai_models');
+    setActiveCategory('ai_model');
     setQuickProviderDrawerProvider(provider);
   };
   const resolveAdvancedChannelProvider = (channelName: string): QuickProviderKey | '' => {
@@ -2204,7 +2208,7 @@ const SettingsPage: React.FC = () => {
     }
     setActiveDomain(panel);
     const firstCategory = categories.find(
-      (category) => (categoryDomainMap.get(category.category) || 'advanced') === panel,
+      (category) => getSettingsDomainForCategory(category.category) === panel,
     )?.category;
     if (firstCategory) {
       setActiveCategory(firstCategory);
@@ -2213,7 +2217,7 @@ const SettingsPage: React.FC = () => {
 
   const handleSelectCategory = (category: string) => {
     setActiveCategory(category);
-    const nextDomain = categoryDomainMap.get(category) || 'advanced';
+    const nextDomain = getSettingsDomainForCategory(category);
     setActiveDomain(nextDomain);
     setActivePanel(nextDomain);
   };

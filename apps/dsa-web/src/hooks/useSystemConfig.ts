@@ -103,7 +103,7 @@ function setAdminUnlockSession(token: string, expiresAt: number) {
 
 function clearAdminUnlockSession() {}
 
-export function useSystemConfig() {
+export function useSystemConfig(initialActiveCategory = 'base') {
   // Server state
   const [configVersion, setConfigVersion] = useState<string>('');
   const [maskToken, setMaskToken] = useState<string>('******');
@@ -111,7 +111,7 @@ export function useSystemConfig() {
 
   // UI state
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
-  const [activeCategory, setActiveCategory] = useState<string>('base');
+  const [activeCategory, setActiveCategory] = useState<string>(initialActiveCategory);
   const [validationIssues, setValidationIssues] = useState<ConfigValidationIssue[]>([]);
   const [toast, setToast] = useState<ToastState>(null);
 
