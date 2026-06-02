@@ -234,6 +234,8 @@ const homeDailyCandles = Array.from({ length: 24 }, (_, index) => {
 });
 
 const HOME_CHART_UNAVAILABLE_INTERNAL_COPY_PATTERN = /provider|fallback|diagnostic|source|source confidence|confidence|Alpaca|Yahoo Finance|Yfinance|raw diagnostics|reasonCode|providerTrace|sourceConfidence|localFallback|freshness|rawRows|主数据源|回补|诊断|来源|可信度/i;
+const HOME_FUNDAMENTALS_FORBIDDEN_COPY_PATTERN =
+  /buy|sell|undervalued|overvalued|rawProviderPayload|adminDiagnostics|providerRoute|valuationOpinion/i;
 const defaultStockEvidenceResponse = {
   symbols: ['ORCL'],
   items: [
@@ -650,13 +652,17 @@ describe('HomeSurfacePage', () => {
     renderSurface();
 
     const fundamentalsSummary = await screen.findByTestId('home-stock-fundamentals-summary');
-    await waitFor(() => expect(fundamentalsSummary).toHaveTextContent('正在整理受限基本面摘要'));
+    await waitFor(() =>
+      expect(fundamentalsSummary).toHaveTextContent(/暂无稳定基本面摘要|正在整理受限基本面摘要/),
+    );
     await waitFor(() => expect(fundamentalsSummary).toHaveTextContent('待补充 4 项'));
     expect(fundamentalsSummary).toHaveTextContent('数据不足');
     expect(fundamentalsSummary).toHaveTextContent('待补充 4 项');
     expect(fundamentalsSummary).toHaveTextContent('TTM');
     expect(fundamentalsSummary).toHaveTextContent('部分更新');
+    expect(fundamentalsSummary).toHaveTextContent('仅作观察');
     expect(within(fundamentalsSummary).queryByTestId('home-stock-fundamentals-metric-market-cap')).not.toBeInTheDocument();
+    expect(fundamentalsSummary).not.toHaveTextContent(HOME_FUNDAMENTALS_FORBIDDEN_COPY_PATTERN);
   });
 
   it('renders a conclusion-first Home research console instead of the old score-led first screen', async () => {
