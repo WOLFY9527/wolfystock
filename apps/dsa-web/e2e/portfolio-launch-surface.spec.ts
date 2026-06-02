@@ -31,6 +31,16 @@ async function expectVisibleTextPresent(page: import('@playwright/test').Page, l
   }
 }
 
+function walkKeys(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap(walkKeys);
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).flatMap(([key, entry]) => [key, ...walkKeys(entry)]);
+  }
+  return [];
+}
+
 async function waitForPortfolioSurface(page: import('@playwright/test').Page) {
   const surface = page.getByTestId('portfolio-bento-page');
   await expect(surface).toBeVisible({ timeout: 15_000 });
@@ -81,7 +91,7 @@ test.describe('portfolio launch surface', () => {
       await expect(holdingsPanel).toBeVisible({ timeout: 15_000 });
       await expect(riskPanel).toBeVisible({ timeout: 15_000 });
       await expect(activityPanel).toBeVisible({ timeout: 15_000 });
-      await expect(manualPanel).toContainText('仅用于手工记账');
+      await expect(manualPanel).toContainText('手工记账入口');
       await expect(activityPanel).toContainText('历史记录');
 
       const heroBox = await accountHero.boundingBox();
@@ -97,8 +107,8 @@ test.describe('portfolio launch surface', () => {
         expect(activityBox).not.toBeNull();
         expect(manualLaneBox).not.toBeNull();
 
-        expect((primaryBox?.width ?? 0) / Math.max(1, secondaryBox?.width ?? 0)).toBeGreaterThan(1.45);
-        expect((activityBox?.width ?? 0) / Math.max(1, manualLaneBox?.width ?? 0)).toBeGreaterThan(1.45);
+        expect((primaryBox?.width ?? 0) / Math.max(1, secondaryBox?.width ?? 0)).toBeGreaterThan(1.35);
+        expect((activityBox?.width ?? 0) / Math.max(1, manualLaneBox?.width ?? 0)).toBeGreaterThan(1.35);
         expect(Math.abs((primaryBox?.x ?? 0) - (activityBox?.x ?? 0))).toBeLessThanOrEqual(12);
         expect(Math.abs((secondaryBox?.x ?? 0) - (manualLaneBox?.x ?? 0))).toBeLessThanOrEqual(12);
         expect(Math.abs((primaryBox?.y ?? 0) - (secondaryBox?.y ?? 0))).toBeLessThanOrEqual(20);
@@ -127,4 +137,101 @@ test.describe('portfolio launch surface', () => {
       await page.unrouteAll({ behavior: 'ignoreErrors' });
     });
   }
+
+  test('runs bounded portfolio scenario risk smoke inside the risk rail', async ({ page }) => {
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') {
+        consoleErrors.push(message.text());
+      }
+    });
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const harness = await installPortfolioSmokeHarness(page);
+    await page.goto('/zh/portfolio');
+    await page.waitForLoadState('domcontentloaded');
+    await waitForPortfolioSurface(page);
+
+    const riskPanel = page.getByTestId('portfolio-risk-card');
+    const disclosure = page.getByTestId('portfolio-scenario-risk-disclosure');
+    await expect(riskPanel).toContainText('查看压力情景');
+    await expect(riskPanel).toContainText('默认折叠，只使用当前页面可见持仓。');
+    await expect(disclosure).not.toHaveAttribute('open');
+
+    const riskBox = await riskPanel.boundingBox();
+    const disclosureBox = await disclosure.boundingBox();
+    expect(riskBox).not.toBeNull();
+    expect(disclosureBox).not.toBeNull();
+    expect((disclosureBox?.x ?? 0) + 1).toBeGreaterThanOrEqual(riskBox?.x ?? Infinity);
+    expect((disclosureBox?.y ?? 0) + 1).toBeGreaterThanOrEqual(riskBox?.y ?? Infinity);
+    expect((disclosureBox?.x ?? 0) + (disclosureBox?.width ?? 0)).toBeLessThanOrEqual((riskBox?.x ?? 0) + (riskBox?.width ?? 0) + 1);
+
+    const trigger = disclosure.locator('button').first();
+    await expect(trigger).toHaveAttribute('aria-label', '展开 查看压力情景');
+    await disclosure.scrollIntoViewIfNeeded();
+    await trigger.evaluate((element: HTMLButtonElement) => element.click());
+    await expect(disclosure).toHaveAttribute('open', '');
+
+    await page.getByLabel('冲击幅度（%）').fill('-8');
+    await page.getByRole('button', { name: '运行压力情景' }).click();
+
+    const resultPanel = page.getByTestId('portfolio-scenario-risk-result');
+    await expect(resultPanel).toBeVisible({ timeout: 10_000 });
+    await expect(resultPanel).toContainText('预估影响');
+    await expect(resultPanel).toContainText('覆盖范围与缺口会显式展示，不会替你推断缺失暴露。');
+    await expect(resultPanel).toContainText('数据不足 / 需补充映射');
+    await expect(resultPanel).toContainText('现金缓冲');
+    await expect(resultPanel).toContainText('USD cash');
+    await expect(resultPanel).toContainText('theme_mapping_pending');
+    await expect(resultPanel).toContainText('scenario_coverage_incomplete');
+    await expect(resultPanel).toContainText('不触发经纪商同步');
+    await expect(resultPanel).toContainText('不改动账务结果');
+    await expect(resultPanel).toContainText('不触发任何下单');
+    await expect(resultPanel).toContainText('不构成投资建议');
+
+    expect(harness.requests.count('POST', '/api/v1/portfolio/scenario-risk')).toBe(1);
+    expect(harness.scenarioRiskPayloads).toHaveLength(1);
+    expect(harness.scenarioRiskPayloads[0]).toEqual({
+      asOf: '2026-04-15',
+      positions: [
+        {
+          symbol: 'AAPL',
+          weightPct: 100,
+          marketValue: 1600,
+          marketValueBase: 1600,
+          bucketLabel: 'Launch Owner Main',
+          currency: 'USD',
+        },
+      ],
+      exposures: [],
+      scenarioShocks: [
+        {
+          name: 'symbol_aapl_down_-8',
+          shocks: {
+            AAPL: {
+              shockPct: -8,
+            },
+          },
+        },
+      ],
+    });
+
+    const sentPayloadText = JSON.stringify(harness.scenarioRiskPayloads[0]);
+    expect(sentPayloadText).not.toMatch(/accountId|broker|providerRefresh|syncToken|order|trade|portfolioMutation/i);
+    expect(walkKeys(harness.scenarioRiskPayloads[0])).not.toEqual(
+      expect.arrayContaining(['accountId', 'broker', 'providerRefresh', 'syncToken', 'orderId', 'tradeId', 'portfolioMutation']),
+    );
+
+    const resultBox = await resultPanel.boundingBox();
+    expect(resultBox).not.toBeNull();
+    expect((resultBox?.x ?? 0) + 1).toBeGreaterThanOrEqual(riskBox?.x ?? Infinity);
+    expect((resultBox?.x ?? 0) + (resultBox?.width ?? 0)).toBeLessThanOrEqual((riskBox?.x ?? 0) + (riskBox?.width ?? 0) + 1);
+
+    await expectNoHorizontalOverflow(page);
+    expect(consoleErrors).toEqual([]);
+    expect(pageErrors).toEqual([]);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+  });
 });

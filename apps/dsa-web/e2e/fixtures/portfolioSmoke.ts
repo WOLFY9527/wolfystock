@@ -8,6 +8,7 @@ type ApiRequestLog = {
 
 type PortfolioSmokeHarness = {
   requests: ApiRequestLog;
+  scenarioRiskPayloads: unknown[];
 };
 
 const timestamp = '2026-05-06T09:45:00-04:00';
@@ -236,6 +237,7 @@ function emptyListPayload() {
 export async function installPortfolioSmokeHarness(page: Page): Promise<PortfolioSmokeHarness> {
   const calls: string[] = [];
   const requests = createRequestLog(calls);
+  const scenarioRiskPayloads: unknown[] = [];
 
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
@@ -261,6 +263,14 @@ export async function installPortfolioSmokeHarness(page: Page): Promise<Portfoli
 
     if (method === 'GET' && path === '/api/v1/agent/status') {
       return fulfillJson(route, { enabled: false });
+    }
+
+    if (method === 'GET' && path === '/api/v1/history') {
+      return fulfillJson(route, { total: 0, page: 1, limit: 20, items: [] });
+    }
+
+    if (method === 'GET' && path === '/api/v1/analysis/tasks') {
+      return fulfillJson(route, { tasks: [], total: 0 });
     }
 
     if (method === 'GET' && path === '/api/v1/portfolio/accounts') {
@@ -320,10 +330,91 @@ export async function installPortfolioSmokeHarness(page: Page): Promise<Portfoli
       });
     }
 
+    if (method === 'POST' && path === '/api/v1/portfolio/scenario-risk') {
+      try {
+        scenarioRiskPayloads.push(request.postDataJSON());
+      } catch {
+        scenarioRiskPayloads.push(null);
+      }
+
+      return fulfillJson(route, {
+        readModelType: 'portfolio_scenario_risk_advisory_v1',
+        advisoryOnly: true,
+        executionReadiness: 'advisory_only_not_trade_execution',
+        asOf: '2026-04-15',
+        coverage: {
+          totalPositions: 1,
+          positionsWithUsableWeight: 1,
+          positionsWithMarketValue: 1,
+          effectiveWeightSum: 1,
+          totalMarketValue: 1600,
+          explicitExposureRows: 0,
+          labelsWithExplicitCoverage: [],
+        },
+        scenarios: [
+          {
+            name: 'symbol_aapl_down_-8',
+            portfolioImpactPct: -8,
+            portfolioImpactAmount: -128,
+            coveredWeight: 0.85,
+            coveredMarketValue: 1360,
+            warnings: ['coverage_partial'],
+            missingCoverage: [
+              {
+                label: '现金缓冲',
+                labelType: 'cash_buffer',
+                missingSymbols: ['USD cash', 'theme mapping pending'],
+              },
+            ],
+            positionContributions: [
+              {
+                symbol: 'AAPL',
+                bucket: 'Launch Owner Main',
+                weight: 1,
+                marketValue: 1600,
+                impactPct: -8,
+                impactAmount: -128,
+                contributionToScenarioLoss: 1,
+                warnings: [],
+                appliedShocks: [
+                  {
+                    label: 'AAPL',
+                    labelType: 'symbol',
+                    shockPct: -8,
+                    exposure: 1,
+                    impactPct: -8,
+                    impactAmount: -128,
+                  },
+                ],
+              },
+            ],
+            bucketContributions: [
+              {
+                bucket: 'Launch Owner Main',
+                positionCount: 1,
+                impactPct: -8,
+                impactAmount: -128,
+                contributionToScenarioLoss: 1,
+              },
+            ],
+          },
+        ],
+        insufficientDataReasons: ['theme_mapping_pending'],
+        missingDataWarnings: ['scenario_coverage_incomplete'],
+        metadata: {
+          sideEffectFree: true,
+          noBrokerSync: true,
+          noAccountingMutation: true,
+          noOrderPlacement: true,
+          notInvestmentAdvice: true,
+        },
+      });
+    }
+
     return fulfillJson(route, { error: `Unhandled portfolio smoke route: ${method} ${path}` }, 500);
   });
 
-  return { requests };
+  return { requests, scenarioRiskPayloads };
 }
 
 export { expect };
