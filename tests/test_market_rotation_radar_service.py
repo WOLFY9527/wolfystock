@@ -485,7 +485,9 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(ai_family["themeFlowSignal"]["observationOnly"])
         self.assertFalse(ai_family["themeFlowSignal"]["decisionGrade"])
         self.assertFalse(ai_family["themeFlowSignal"]["scoreContributionAllowed"])
-        self.assertTrue(ai_family["themeFlowSignal"]["sourceAuthorityAllowed"])
+        self.assertFalse(ai_family["themeFlowSignal"]["sourceAuthorityAllowed"])
+        self.assertEqual(ai_family["themeFlowSignal"]["freshness"], "delayed")
+        self.assertNotEqual(ai_family["themeFlowSignal"]["freshness"], "fresh")
         self.assertGreaterEqual(ai_family["themeFlowSignal"]["confidence"], 0.6)
         self.assertEqual(ai_family["themeFlowSignal"]["confidenceLabel"], "high")
         self.assertIn("ai_applications", ai_family["leaderThemeIds"])
@@ -563,6 +565,96 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertIn("公用事业", defensive_family["themeNames"])
         self.assertIn("医疗 / 生物科技", defensive_family["themeNames"])
         self.assertIn("no clear edge", defensive_family["themeFlowSignal"]["explanation"].lower())
+
+    def test_signal_freshness_does_not_promote_authority_allowed_cached_or_unknown_sources(self) -> None:
+        signal_freshness = MarketRotationRadarService._signal_freshness
+
+        self.assertEqual(
+            signal_freshness(
+                freshness="cached",
+                source_authority_allowed=True,
+                is_fallback=False,
+                is_stale=False,
+                is_partial=False,
+            ),
+            "cached",
+        )
+        self.assertEqual(
+            signal_freshness(
+                freshness="delayed",
+                source_authority_allowed=True,
+                is_fallback=False,
+                is_stale=False,
+                is_partial=False,
+            ),
+            "delayed",
+        )
+        self.assertEqual(
+            signal_freshness(
+                freshness="unknown",
+                source_authority_allowed=True,
+                is_fallback=False,
+                is_stale=False,
+                is_partial=False,
+            ),
+            "unknown",
+        )
+        self.assertEqual(
+            signal_freshness(
+                freshness=None,
+                source_authority_allowed=True,
+                is_fallback=False,
+                is_stale=False,
+                is_partial=False,
+            ),
+            "fallback",
+        )
+
+    def test_rotation_family_flow_signal_uses_actual_theme_freshness(self) -> None:
+        service = MarketRotationRadarService()
+        signal_themes = [
+            {
+                "id": "ai_applications",
+                "name": "AI 应用",
+                "rotationScore": 82,
+                "confidence": 0.82,
+                "freshness": "cached",
+                "sourceAuthorityAllowed": True,
+                "isFallback": False,
+                "isStale": False,
+                "isPartial": False,
+                "relativeStrength": {"averageRelativeStrengthPercent": 1.4},
+                "breadth": {"percentOutperformingBenchmark": 72, "percentUp": 80},
+                "volume": {"averageRelativeVolume": 1.4},
+                "themeFlowSignal": {"themeFlowState": "leading"},
+            },
+            {
+                "id": "ai_infrastructure",
+                "name": "AI 基建",
+                "rotationScore": 76,
+                "confidence": 0.76,
+                "freshness": "delayed",
+                "sourceAuthorityAllowed": True,
+                "isFallback": False,
+                "isStale": False,
+                "isPartial": False,
+                "relativeStrength": {"averageRelativeStrengthPercent": 1.0},
+                "breadth": {"percentOutperformingBenchmark": 68, "percentUp": 75},
+                "volume": {"averageRelativeVolume": 1.2},
+                "themeFlowSignal": {"themeFlowState": "leading"},
+            },
+        ]
+
+        signal = service._rotation_family_flow_signal(
+            family_id="ai",
+            family_name="AI",
+            family_themes=signal_themes,
+            signal_themes=signal_themes,
+            leader_theme_ids=["ai_applications", "ai_infrastructure"],
+        )
+
+        self.assertEqual(signal["freshness"], "cached")
+        self.assertNotEqual(signal["freshness"], "fresh")
 
     def test_consumer_theme_breadth_evidence_projects_existing_theme_breadth_metrics(self) -> None:
         payload = _rotation_family_payload(

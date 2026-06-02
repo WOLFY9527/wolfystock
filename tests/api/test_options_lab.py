@@ -81,8 +81,12 @@ SAFETY_BLOCKED_MARKERS = [
     "sell now",
     "trade-ready",
     "trade ready",
+    "trade quality",
     "you should buy",
     "you should sell",
+    "决策实验室",
+    "可成交性",
+    "有条件可交易",
 ]
 
 
@@ -180,6 +184,23 @@ def test_summary_endpoint_returns_safe_normalized_fixture_response() -> None:
         assert payload["metadata"]["noOrderPlacement"] is True
         assert payload["limitations"]["optionsAreHighRisk"] is True
         assert payload["limitations"]["dataMayBeDelayedOrStale"] is True
+    finally:
+        client.close()
+
+
+def test_openapi_decision_summary_uses_no_decision_grade_copy() -> None:
+    client = _client()
+    try:
+        response = client.get("/openapi.json")
+        assert response.status_code == 200
+        payload = response.json()
+        operation = payload["paths"]["/api/v1/options/decision/evaluate"]["post"]
+        summary = operation["summary"]
+
+        assert "trade quality" not in summary.lower()
+        assert "decision" not in summary.lower()
+        assert "read-only" in summary.lower()
+        assert "analytical" in summary.lower()
     finally:
         client.close()
 
@@ -1702,6 +1723,11 @@ def test_options_launch_source_does_not_import_broker_order_or_portfolio_mutatio
         ".create_order(",
         ".execute_order(",
         ".mutate_portfolio(",
+        ".create_broker_connection(",
+        ".update_broker_connection(",
+        ".mark_broker_connection_imported(",
+        ".mark_broker_connection_synced(",
+        ".replace_broker_sync_state(",
         ".sync_broker(",
     ]
 

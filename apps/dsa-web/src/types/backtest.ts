@@ -1009,6 +1009,47 @@ export interface RuleBacktestCompareHeatmapProjection {
   cells: RuleBacktestCompareHeatmapProjectionCell[];
 }
 
+export interface RuleBacktestParameterStabilityEvidenceCoverage {
+  requestedRunCount?: number | null;
+  resolvedRunCount?: number | null;
+  compatibleRunCount?: number | null;
+  missingRunCount?: number | null;
+  skippedRunCount?: number | null;
+  compatibleRunIds?: number[];
+  missingRunIds?: number[];
+  skippedRunIds?: number[];
+}
+
+export interface RuleBacktestParameterStabilityEvidenceAuthority {
+  inputMode?: string | null;
+  executionCount?: number | null;
+  strategyExecutionCount?: number | null;
+  providerCallsExecuted?: boolean | null;
+  engineMathChanged?: boolean | null;
+  strategyParametersMutated?: boolean | null;
+  [key: string]: unknown;
+}
+
+export interface RuleBacktestParameterStabilityEvidence {
+  contractKind?: string | null;
+  contractVersion?: string | null;
+  state?: string | null;
+  source?: string | null;
+  readMode?: string | null;
+  diagnosticOnly?: boolean | null;
+  decisionGrade?: boolean | null;
+  parameterKeys?: string[];
+  parameterSetCount?: number | null;
+  metricKeys?: string[];
+  metricDispersion?: Record<string, Record<string, unknown>>;
+  metricMissingCounts?: Record<string, number>;
+  compatibleRunCoverage?: RuleBacktestParameterStabilityEvidenceCoverage | null;
+  skippedRunDiagnostics?: Array<Record<string, unknown>>;
+  missingRunDiagnostics?: Array<Record<string, unknown>>;
+  authority?: RuleBacktestParameterStabilityEvidenceAuthority | null;
+  [key: string]: unknown;
+}
+
 export interface RuleBacktestCompareResponse {
   comparisonSource: string;
   readMode: string;
@@ -1026,6 +1067,7 @@ export interface RuleBacktestCompareResponse {
   comparisonHighlights?: RuleBacktestCompareHighlightsSummary | null;
   parameterComparison?: RuleBacktestCompareParameterComparison | null;
   heatmapProjection?: RuleBacktestCompareHeatmapProjection | null;
+  parameterStabilityEvidence?: RuleBacktestParameterStabilityEvidence | null;
   items: RuleBacktestCompareRunItem[];
 }
 

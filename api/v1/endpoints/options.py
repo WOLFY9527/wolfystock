@@ -554,7 +554,7 @@ def analyze_options(request: OptionsAnalyzeRequest) -> OptionsAnalyzeResponse:
 @router.post(
     "/decision/evaluate",
     response_model=OptionsDecisionResponse,
-    summary="Evaluate fixture-backed Options Lab trade quality",
+    summary="Evaluate read-only analytical Options Lab observations",
 )
 def evaluate_options_decision(request: OptionsDecisionRequest) -> OptionsDecisionResponse:
     try:

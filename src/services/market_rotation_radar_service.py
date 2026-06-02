@@ -92,6 +92,20 @@ _RANK_UNAVAILABLE_MARKERS = {"unavailable", "missing", "disabled_live_stub", "ma
 ROTATION_RADAR_SOURCE_AUTHORITY_REJECTED_REASON = "source_authority_router_rejected"
 _ROTATION_RADAR_PROXY_AUTHORITY_SOURCES = {"yahoo", "yahooquery", "yfinance", "yfinance_proxy"}
 _ROTATION_RADAR_PROXY_AUTHORITY_SOURCE_TYPES = {"unofficial_proxy", "unofficial_public_api"}
+_SIGNAL_FRESHNESS_PRIORITY = {
+    "fallback": 0,
+    "stale": 1,
+    "partial": 2,
+    "unknown": 3,
+    "unavailable": 3,
+    "error": 3,
+    "synthetic": 3,
+    "mock": 3,
+    "cached": 4,
+    "delayed": 5,
+    "live": 6,
+    "fresh": 6,
+}
 _ROTATION_EVIDENCE_FORBIDDEN_RELIABLE_CLAIMS = (
     (
         "proxy",
@@ -1961,7 +1975,7 @@ class MarketRotationRadarService:
             for theme in signal_themes
         )
         freshness = self._signal_freshness(
-            freshness="fresh" if source_authority_allowed else "partial" if any(bool(theme.get("isPartial")) for theme in signal_themes) else "fallback",
+            freshness=self._rotation_family_source_freshness(signal_themes),
             source_authority_allowed=source_authority_allowed,
             is_fallback=not bool(signal_themes) or any(bool(theme.get("isFallback")) for theme in signal_themes),
             is_stale=any(bool(theme.get("isStale")) for theme in signal_themes),
@@ -2014,6 +2028,38 @@ class MarketRotationRadarService:
             }
         )
         return signal
+
+    def _rotation_family_source_freshness(self, signal_themes: Sequence[Mapping[str, Any]]) -> str:
+        if not signal_themes:
+            return "fallback"
+
+        values: List[str] = []
+        for theme in signal_themes:
+            theme_signal = theme.get("themeFlowSignal") if isinstance(theme.get("themeFlowSignal"), Mapping) else None
+            raw_freshness = theme.get("freshness") or (theme_signal.get("freshness") if theme_signal else None)
+            values.append(
+                self._signal_freshness(
+                    freshness=raw_freshness,
+                    source_authority_allowed=bool(theme.get("sourceAuthorityAllowed")),
+                    is_fallback=bool(theme.get("isFallback")),
+                    is_stale=bool(theme.get("isStale")),
+                    is_partial=bool(theme.get("isPartial")),
+                )
+            )
+        return self._weakest_signal_freshness(values)
+
+    @staticmethod
+    def _weakest_signal_freshness(values: Sequence[str]) -> str:
+        normalized_values = [
+            str(value or "").strip().lower() or "fallback"
+            for value in values
+        ]
+        if not normalized_values:
+            return "fallback"
+        return min(
+            normalized_values,
+            key=lambda value: _SIGNAL_FRESHNESS_PRIORITY.get(value, _SIGNAL_FRESHNESS_PRIORITY["unknown"]),
+        )
 
     @staticmethod
     def _theme_flow_state(
@@ -2237,8 +2283,6 @@ class MarketRotationRadarService:
             return "stale"
         if is_partial:
             return "partial"
-        if source_authority_allowed:
-            return "fresh"
         normalized = str(freshness or "").strip().lower()
         return normalized or "fallback"
 

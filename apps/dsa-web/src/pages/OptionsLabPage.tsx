@@ -708,7 +708,6 @@ function decisionStatusLabel(decision?: OptionsDecisionResponse | null): string 
   if (label === '数据不足，禁止判断' || tier === 'synthetic_demo_only' || tier === 'insufficient') return '数据不足，禁止判断';
   if (label === '不建议' || label === '不建议交易') return '观察边界明确';
   if (label === '仅观察' || label === '可关注替代结构') return '可记录低风险观察结构';
-  if (label === '有条件可交易') return '定价条件需继续观察';
   return '仅供观察';
 }
 
@@ -758,7 +757,7 @@ function heroSummaryLine(
   }
 
   if (observationStrategy) {
-    return `当前优先跟踪 ${strategyChineseLabel(observationStrategy)}，先复核最大亏损、盈亏平衡与可成交性。`;
+    return `当前优先跟踪 ${strategyChineseLabel(observationStrategy)}，先复核最大亏损、盈亏平衡与成交可观察性。`;
   }
 
   return availability.explanation;
@@ -790,7 +789,7 @@ const ProductHero: React.FC<{
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className={labelClass}>决策实验室</p>
+            <p className={labelClass}>分析实验室</p>
             <Pill tone={availability.stateTone}>{availability.stateLabel}</Pill>
             <Pill tone={availability.confidenceTone}>{availability.confidenceLabel}</Pill>
           </div>
@@ -816,13 +815,16 @@ const ProductHero: React.FC<{
             </p>
             <p className={cn('mt-1 text-sm', changeClass)}>{ratio(underlying?.changePct)}</p>
           </div>
-          <div className={cn(innerBlockClass, 'p-3')}>
-            <p className={labelClass}>当前说明</p>
+          <div className={cn(innerBlockClass, 'p-3')} data-testid="options-lab-consumer-availability">
+            <p className={labelClass}>可用性</p>
             <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
               {availability.explanation}
             </p>
             <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
               仅做只读情景分析，不构成买卖建议。
+            </p>
+            <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
+              不会提交订单，不连接经纪商，不改动投资组合。
             </p>
           </div>
         </div>
@@ -1003,7 +1005,7 @@ const StrategyComparisonPanel: React.FC<{
         </div>
       </SectionHeader>
       <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-        先看排序靠前的结构，再复核最大亏损、盈亏平衡与可成交性。
+        先看排序靠前的结构，再复核最大亏损、盈亏平衡与成交可观察性。
       </p>
       {emptyMessage ? (
         <div className={cn(innerBlockClass, 'mt-5 border-dashed px-4 py-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>

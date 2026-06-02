@@ -1,6 +1,11 @@
 import type React from 'react';
 import { useMemo, useState } from 'react';
-import type { BacktestDiagnosticWarning, RuleBacktestRunResponse, RuleBacktestTradeItem } from '../../types/backtest';
+import type {
+  BacktestDiagnosticWarning,
+  RuleBacktestParameterStabilityEvidence,
+  RuleBacktestRunResponse,
+  RuleBacktestTradeItem,
+} from '../../types/backtest';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { EvidenceChips } from '../evidence/EvidenceChips';
 import { StatusBadge } from '../ui/StatusBadge';
@@ -64,6 +69,7 @@ type BacktestResultReportProps = {
   normalized?: DeterministicBacktestNormalizedResult;
   densityConfig?: DeterministicResultDensityConfig;
   chartNode?: React.ReactNode;
+  parameterStabilityEvidence?: RuleBacktestParameterStabilityEvidence | null;
 };
 
 type ConsumerReliabilityItem = {
@@ -370,7 +376,13 @@ function getWalkForwardRecord(run: RuleBacktestRunResponse): Record<string, unkn
   return nestedRecord(robustness, 'walkForward', 'walk_forward');
 }
 
-function getParameterStabilityRecord(run: RuleBacktestRunResponse): Record<string, unknown> | null {
+function getParameterStabilityRecord(
+  run: RuleBacktestRunResponse,
+  parameterStabilityEvidence?: RuleBacktestParameterStabilityEvidence | null,
+): Record<string, unknown> | null {
+  const externalEvidence = asRecord(parameterStabilityEvidence);
+  if (hasRecordContent(externalEvidence)) return externalEvidence;
+
   const root = asRecord(run);
   const robustness = asRecord(run.robustnessAnalysis);
   const summary = asRecord(run.summary);
@@ -399,6 +411,7 @@ function getResearchQualityReviewItems({
   hasDataQualityEntries,
   dataQualityWarnings,
   executionWarnings,
+  parameterStabilityEvidence,
 }: {
   run: RuleBacktestRunResponse;
   normalized: DeterministicBacktestNormalizedResult;
@@ -408,6 +421,7 @@ function getResearchQualityReviewItems({
   hasDataQualityEntries: boolean;
   dataQualityWarnings: string[];
   executionWarnings: string[];
+  parameterStabilityEvidence?: RuleBacktestParameterStabilityEvidence | null;
 }): ResearchReviewItem[] {
   const dataQuality = run.dataQuality;
   const benchmarkSummary = run.benchmarkSummary || {};
@@ -420,7 +434,7 @@ function getResearchQualityReviewItems({
   const traceRows = Array.isArray(run.executionTrace?.rows) ? run.executionTrace.rows.length : 0;
   const walkForward = getWalkForwardRecord(run);
   const walkForwardCount = getWindowCount(walkForward);
-  const parameterStability = getParameterStabilityRecord(run);
+  const parameterStability = getParameterStabilityRecord(run, parameterStabilityEvidence);
   const robustness = asRecord(run.robustnessAnalysis);
   const monteCarlo = nestedRecord(robustness, 'monteCarlo', 'monte_carlo');
   const stressTests = nestedRecord(robustness, 'stressTests', 'stress_tests');
@@ -1104,6 +1118,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
   normalized: providedNormalized,
   densityConfig,
   chartNode,
+  parameterStabilityEvidence,
 }) => {
   const { language } = useI18n();
   const [moreMetricsOpen, setMoreMetricsOpen] = useState(mode === 'professional');
@@ -1209,8 +1224,9 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
       hasDataQualityEntries: dataQuality.length > 0,
       dataQualityWarnings,
       executionWarnings,
+      parameterStabilityEvidence,
     }),
-    [dataQuality.length, dataQualityWarnings, executionWarnings, hasExplicitAssumptions, hasExplicitTraceRows, normalized, readinessSummary, run],
+    [dataQuality.length, dataQualityWarnings, executionWarnings, hasExplicitAssumptions, hasExplicitTraceRows, normalized, parameterStabilityEvidence, readinessSummary, run],
   );
   const researchReviewOverall = useMemo(() => getResearchReviewOverall(researchReviewItems), [researchReviewItems]);
 

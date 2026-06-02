@@ -55,6 +55,7 @@ import {
 import type {
   RuleBacktestCancelResponse,
   RuleBacktestHistoryItem,
+  RuleBacktestParameterStabilityEvidence,
   RuleBacktestRunResponse,
   RuleBacktestStatusResponse,
 } from '../types/backtest';
@@ -299,6 +300,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const [compareRunMap, setCompareRunMap] = useState<Record<number, RuleBacktestRunResponse>>({});
   const [isLoadingCompareRuns, setIsLoadingCompareRuns] = useState(false);
   const [compareError, setCompareError] = useState<ParsedApiError | null>(null);
+  const [parameterStabilityEvidence, setParameterStabilityEvidence] = useState<RuleBacktestParameterStabilityEvidence | null>(null);
   const [selectedScenarioPlanId, setSelectedScenarioPlanId] = useState<string | null>(null);
   const [scenarioRuns, setScenarioRuns] = useState<ScenarioRunState[]>([]);
   const [isSubmittingScenarioRuns, setIsSubmittingScenarioRuns] = useState(false);
@@ -588,6 +590,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     setCompareRunIds([]);
     setScenarioRuns([]);
     setScenarioError(null);
+    setParameterStabilityEvidence(null);
   }, [run?.id]);
 
   useEffect(() => {
@@ -637,6 +640,36 @@ const DeterministicBacktestResultPage: React.FC = () => {
       cancelled = true;
     };
   }, [compareRunIds, compareRunMap]);
+
+  useEffect(() => {
+    const currentRunId = run?.id;
+    if (!currentRunId || compareRunIds.length === 0) {
+      setParameterStabilityEvidence(null);
+      return;
+    }
+
+    let cancelled = false;
+    const selectedRunIds = [currentRunId, ...compareRunIds];
+
+    const loadCompareEvidence = async () => {
+      try {
+        const comparison = await backtestApi.compareRuleBacktestRuns({ runIds: selectedRunIds });
+        if (cancelled) return;
+        setParameterStabilityEvidence(comparison.parameterStabilityEvidence ?? null);
+        setCompareError(null);
+      } catch (error) {
+        if (cancelled) return;
+        setParameterStabilityEvidence(null);
+        setCompareError(getParsedApiError(error));
+      }
+    };
+
+    void loadCompareEvidence();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [compareRunIds, run?.id]);
 
   useEffect(() => {
     const pendingRuns = scenarioRuns.filter((item) => item.runId && !isRuleRunTerminal(item.status));
@@ -1475,6 +1508,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   mode={resultMode}
                   normalized={normalized}
                   densityConfig={density}
+                  parameterStabilityEvidence={parameterStabilityEvidence}
                   chartNode={(
                     <BacktestChartWorkspace
                       run={run}
