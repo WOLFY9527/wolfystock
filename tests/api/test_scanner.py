@@ -29,4 +29,5 @@ def test_scanner_run_response_accepts_legacy_shortlist_without_diagnostics() -> 
     assert response.shortlist == []
     assert response.selected == []
     assert response.candidates == []
+    assert response.scannerContextFrame == {}
     assert response.summary.universe_count == 0

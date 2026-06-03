@@ -710,6 +710,42 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             },
         }
 
+    def _record_context_run(
+        self,
+        *,
+        market: str,
+        profile: str,
+        diagnostics: dict,
+        shortlist: list[dict] | None = None,
+    ) -> dict:
+        resolved_profile = get_scanner_profile(market=market, profile=profile)
+        detail = self.service.record_terminal_run(
+            market=resolved_profile.market,
+            profile=resolved_profile.key,
+            profile_label=resolved_profile.label,
+            universe_name=resolved_profile.universe_name,
+            status="completed",
+            headline="context test",
+            trigger_mode="manual",
+            request_source="test",
+            watchlist_date="2026-06-03",
+            source_summary="scanner=test",
+            diagnostics=diagnostics,
+            universe_notes=["context note"],
+            scoring_notes=["context score note"],
+            shortlist=shortlist
+            or [
+                self._candidate_payload("NVDA" if market == "us" else "600001", "主候选", 1, 88.0, "2026-06-02"),
+                self._candidate_payload("AAPL" if market == "us" else "600002", "次候选", 2, 81.0, "2026-06-02"),
+            ],
+            universe_size=120,
+            preselected_size=20,
+            evaluated_size=12,
+            scope="user",
+        )
+        assert detail is not None
+        return detail
+
     @staticmethod
     def _baostock_history_observation(
         *,
@@ -840,6 +876,8 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(result["shortlist_size"], 3)
         self.assertEqual(result["headline"].startswith("今日 A 股盘前优先观察："), True)
         self.assertGreaterEqual(result["diagnostics"]["history_stats"]["local_hits"], 1)
+        self.assertIn("scannerContextFrame", result)
+        self.assertFalse(result["scannerContextFrame"]["marketReadiness"]["researchReady"])
         self.assertNotIn("600001", self.data_manager.daily_history_calls)
 
         shortlist = result["shortlist"]
@@ -884,6 +922,265 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 for item in detail["shortlist"]
             ],
             shortlist_signature,
+        )
+
+    def test_get_run_detail_adds_supportive_scanner_context_frame_for_us_runs(self) -> None:
+        detail = self._record_context_run(
+            market="us",
+            profile="us_preopen_v1",
+            diagnostics={
+                "market_temperature": {
+                    "source": "computed",
+                    "freshness": "cached",
+                    "conclusionAllowed": True,
+                    "marketRegimeSynthesis": {
+                        "primaryRegime": "risk_on_liquidity_expansion",
+                        "confidence": 0.78,
+                        "confidenceLabel": "high",
+                        "blockers": [],
+                        "observationOnly": False,
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": True,
+                    },
+                    "capitalFlowSignal": {
+                        "likelyDestination": "growth_ai_software_semis",
+                        "explanation": "Liquidity still leans into growth leadership.",
+                        "freshness": "cached",
+                        "observationOnly": False,
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": True,
+                        "contradictionCodes": [],
+                    },
+                    "rotationFamilyRollup": [
+                        {
+                            "familyId": "ai",
+                            "familyLabel": "AI",
+                            "themeFlowSignal": {
+                                "themeFlowState": "leading",
+                                "explanation": "AI themes still lead the tape.",
+                                "freshness": "cached",
+                                "observationOnly": False,
+                                "sourceAuthorityAllowed": True,
+                                "scoreContributionAllowed": True,
+                            },
+                        },
+                        {
+                            "familyId": "software",
+                            "familyLabel": "Software",
+                            "themeFlowSignal": {
+                                "themeFlowState": "broadening",
+                                "explanation": "Software participation is broadening.",
+                                "freshness": "cached",
+                                "observationOnly": False,
+                                "sourceAuthorityAllowed": True,
+                                "scoreContributionAllowed": True,
+                            },
+                        },
+                    ],
+                },
+            },
+        )
+
+        frame = detail["scannerContextFrame"]
+        self.assertTrue(frame["marketReadiness"]["researchReady"])
+        self.assertEqual(frame["marketReadiness"]["readinessState"], "ready")
+        self.assertEqual(frame["macroRegime"]["state"], "supportive")
+        self.assertEqual(frame["macroRegime"]["source"], "computed")
+        self.assertEqual(frame["macroRegime"]["freshness"], "cached")
+        self.assertEqual(frame["macroRegime"]["confidence"]["label"], "high")
+        self.assertEqual(frame["liquidityFrame"]["state"], "supportive")
+        self.assertFalse(frame["liquidityFrame"]["observationOnly"])
+        self.assertEqual(frame["assetClassBias"]["state"], "supportive")
+        self.assertEqual(frame["themeFrame"]["state"], "supportive")
+        self.assertEqual([item["id"] for item in frame["themeFrame"]["themes"]], ["ai", "software"])
+        self.assertEqual(frame["universePolicy"]["type"], "default")
+        self.assertTrue(frame["noAdviceBoundary"])
+
+    def test_get_run_detail_scanner_context_frame_fail_closes_when_context_missing(self) -> None:
+        detail = self._record_context_run(
+            market="us",
+            profile="us_preopen_v1",
+            diagnostics={},
+        )
+
+        frame = detail["scannerContextFrame"]
+        self.assertFalse(frame["marketReadiness"]["researchReady"])
+        self.assertEqual(frame["marketReadiness"]["readinessState"], "insufficient")
+        self.assertIn("macro", frame["marketReadiness"]["missingEvidence"])
+        self.assertIn("liquidity", frame["marketReadiness"]["missingEvidence"])
+        self.assertEqual(frame["macroRegime"]["state"], "insufficient")
+        self.assertEqual(frame["liquidityFrame"]["state"], "insufficient")
+        self.assertEqual(frame["assetClassBias"]["state"], "observe_only")
+        self.assertEqual(frame["themeFrame"]["state"], "insufficient")
+        self.assertEqual(frame["themeFrame"]["themes"], [])
+        self.assertTrue(frame["noAdviceBoundary"])
+
+    def test_get_run_detail_scanner_context_frame_marks_fallback_proxy_context_observe_only(self) -> None:
+        detail = self._record_context_run(
+            market="us",
+            profile="us_preopen_v1",
+            diagnostics={
+                "market_temperature": {
+                    "source": "mixed",
+                    "freshness": "fallback",
+                    "conclusionAllowed": False,
+                    "marketRegimeSynthesis": {
+                        "primaryRegime": "risk_on_liquidity_expansion",
+                        "confidence": 0.42,
+                        "confidenceLabel": "low",
+                        "blockers": [{"key": "proxy_context_only"}],
+                        "observationOnly": True,
+                        "sourceAuthorityAllowed": False,
+                        "scoreContributionAllowed": False,
+                    },
+                    "capitalFlowSignal": {
+                        "likelyDestination": "growth_ai_software_semis",
+                        "explanation": "Proxy-only liquidity context.",
+                        "freshness": "fallback",
+                        "observationOnly": True,
+                        "sourceAuthorityAllowed": False,
+                        "scoreContributionAllowed": False,
+                        "proxyOnly": True,
+                        "contradictionCodes": ["proxy_context_only"],
+                    },
+                    "rotationFamilyRollup": [
+                        {
+                            "familyId": "ai",
+                            "familyLabel": "AI",
+                            "themeFlowSignal": {
+                                "themeFlowState": "leading",
+                                "explanation": "Leadership is still observation-only.",
+                                "freshness": "fallback",
+                                "observationOnly": True,
+                                "sourceAuthorityAllowed": False,
+                                "scoreContributionAllowed": False,
+                                "proxyOnly": True,
+                            },
+                        }
+                    ],
+                },
+            },
+        )
+
+        frame = detail["scannerContextFrame"]
+        self.assertFalse(frame["marketReadiness"]["researchReady"])
+        self.assertEqual(frame["marketReadiness"]["readinessState"], "observe_only")
+        self.assertEqual(frame["marketReadiness"]["freshnessFloor"], "fallback")
+        self.assertEqual(frame["marketReadiness"]["sourceAuthority"], "observationOnly")
+        self.assertEqual(frame["macroRegime"]["state"], "observe_only")
+        self.assertEqual(frame["liquidityFrame"]["state"], "observe_only")
+        self.assertTrue(frame["liquidityFrame"]["proxyOnly"])
+        self.assertEqual(frame["assetClassBias"]["state"], "observe_only")
+        self.assertEqual(frame["themeFrame"]["state"], "observe_only")
+        self.assertTrue(frame["themeFrame"]["proxyOnly"])
+
+    def test_get_run_detail_scanner_context_frame_blocks_unavailable_cn_context(self) -> None:
+        detail = self._record_context_run(
+            market="cn",
+            profile="cn_preopen_v1",
+            diagnostics={
+                "market_temperature": {
+                    "source": "fallback",
+                    "freshness": "unavailable",
+                    "conclusionAllowed": False,
+                    "marketRegimeSynthesis": {
+                        "primaryRegime": "data_insufficient",
+                        "confidence": 0.0,
+                        "confidenceLabel": "insufficient",
+                        "blockers": [{"key": "cn_context_unavailable"}],
+                        "observationOnly": True,
+                        "sourceAuthorityAllowed": False,
+                        "scoreContributionAllowed": False,
+                    },
+                    "capitalFlowSignal": {
+                        "liquidityImpulse": "data_insufficient",
+                        "explanation": "CN macro/liquidity context unavailable.",
+                        "freshness": "unavailable",
+                        "observationOnly": True,
+                        "sourceAuthorityAllowed": False,
+                        "scoreContributionAllowed": False,
+                        "missingProviderReason": "cn_context_unavailable",
+                    },
+                    "rotationFamilyRollup": [],
+                },
+            },
+        )
+
+        frame = detail["scannerContextFrame"]
+        self.assertFalse(frame["marketReadiness"]["researchReady"])
+        self.assertIn(frame["marketReadiness"]["readinessState"], {"insufficient", "observe_only"})
+        self.assertEqual(frame["macroRegime"]["state"], "blocked")
+        self.assertEqual(frame["liquidityFrame"]["state"], "blocked")
+        self.assertEqual(frame["assetClassBias"]["state"], "blocked")
+        self.assertEqual(frame["themeFrame"]["state"], "blocked")
+        self.assertTrue(frame["macroRegime"]["blockers"])
+        self.assertTrue(frame["liquidityFrame"]["blockers"])
+
+    def test_scanner_context_frame_does_not_mutate_shortlist_rank_or_score(self) -> None:
+        shortlist = [
+            self._candidate_payload("NVDA", "NVIDIA", 1, 91.2, "2026-06-02"),
+            self._candidate_payload("AAPL", "Apple", 2, 86.4, "2026-06-02"),
+        ]
+        baseline = self._record_context_run(
+            market="us",
+            profile="us_preopen_v1",
+            diagnostics={},
+            shortlist=shortlist,
+        )
+        contextual = self._record_context_run(
+            market="us",
+            profile="us_preopen_v1",
+            diagnostics={
+                "market_temperature": {
+                    "source": "computed",
+                    "freshness": "cached",
+                    "conclusionAllowed": True,
+                    "marketRegimeSynthesis": {
+                        "primaryRegime": "risk_on_liquidity_expansion",
+                        "confidence": 0.74,
+                        "confidenceLabel": "high",
+                        "blockers": [],
+                        "observationOnly": False,
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": True,
+                    },
+                    "capitalFlowSignal": {
+                        "likelyDestination": "growth_ai_software_semis",
+                        "freshness": "cached",
+                        "observationOnly": False,
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": True,
+                    },
+                    "rotationFamilyRollup": [
+                        {
+                            "familyId": "ai",
+                            "familyLabel": "AI",
+                            "themeFlowSignal": {
+                                "themeFlowState": "leading",
+                                "freshness": "cached",
+                                "observationOnly": False,
+                                "sourceAuthorityAllowed": True,
+                                "scoreContributionAllowed": True,
+                            },
+                        }
+                    ],
+                },
+            },
+            shortlist=shortlist,
+        )
+
+        baseline_signature = [
+            (item["symbol"], item["rank"], float(item["score"]))
+            for item in baseline["shortlist"]
+        ]
+        contextual_signature = [
+            (item["symbol"], item["rank"], float(item["score"]))
+            for item in contextual["shortlist"]
+        ]
+        self.assertEqual(contextual_signature, baseline_signature)
+        self.assertEqual(
+            [(item["symbol"], item["rank"], float(item["score"])) for item in contextual["selected"]],
+            baseline_signature,
         )
 
     def test_prepare_shortlist_sorts_by_score_then_symbol_and_assigns_rank_before_ai(self) -> None:

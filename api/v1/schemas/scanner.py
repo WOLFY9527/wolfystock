@@ -284,6 +284,7 @@ class ScannerRunDetailResponse(BaseModel):
     accepted_symbols_count: int = 0
     rejected_symbols: List[str] = Field(default_factory=list)
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
+    scannerContextFrame: Dict[str, Any] = Field(default_factory=dict)
     notification: ScannerNotificationResult = Field(default_factory=ScannerNotificationResult)
     failure_reason: Optional[str] = None
     comparison_to_previous: ScannerWatchlistComparisonResponse = Field(default_factory=ScannerWatchlistComparisonResponse)

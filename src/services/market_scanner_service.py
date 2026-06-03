@@ -34,6 +34,7 @@ from src.services.scanner_evidence_packet import (
 )
 from src.services.scanner_factor_observations import attach_scanner_factor_observations
 from src.services.provider_capability_matrix import get_provider_capability_support_contract
+from src.services.research_readiness_contract import build_research_readiness_v1
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback, get_us_stock_parquet_dir
 from src.storage import (
     DatabaseManager,
@@ -106,6 +107,26 @@ SCANNER_OBSERVATION_AUTHORITY_TRUST_LEVELS = frozenset(
         "score_grade",
         "decision_grade",
         "reliable_for_filings_metadata",
+    }
+)
+SCANNER_CONTEXT_STATE_VALUES = frozenset({"supportive", "mixed", "observe_only", "insufficient", "blocked"})
+SCANNER_CONTEXT_BLOCKED_TOKENS = (
+    "unavailable",
+    "missing_provider",
+    "missing_context",
+    "provider_down",
+    "budget_blocked",
+    "blocked",
+    "failed",
+    "error",
+)
+SCANNER_CONTEXT_SUPPORTIVE_REGIMES = frozenset(
+    {
+        "risk_on",
+        "risk_on_liquidity_expansion",
+        "bullish_trend",
+        "expansion",
+        "liquidity_expansion",
     }
 )
 CURATED_US_LIQUID_SEED_SYMBOLS: Tuple[str, ...] = (
@@ -468,6 +489,82 @@ def _append_reason_code(reason_codes: List[str], code: Optional[str]) -> None:
     text = str(code or "").strip()
     if text and text not in reason_codes:
         reason_codes.append(text)
+
+
+def _context_mapping(value: Any) -> Dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _context_items(value: Any) -> List[Dict[str, Any]]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return []
+    return [dict(item) for item in value if isinstance(item, Mapping)]
+
+
+def _context_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _context_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "y"}
+
+
+def _context_float(value: Any) -> Optional[float]:
+    try:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        number = float(value)
+        if np.isnan(number) or np.isinf(number):
+            return None
+        return number
+    except Exception:
+        return None
+
+
+def _context_has_blocked_token(*values: Any) -> bool:
+    for value in values:
+        text = _context_text(value).lower()
+        if not text:
+            continue
+        if any(token in text for token in SCANNER_CONTEXT_BLOCKED_TOKENS):
+            return True
+    return False
+
+
+def _context_proxy_only(*values: Mapping[str, Any]) -> bool:
+    for value in values:
+        payload = _context_mapping(value)
+        if not payload:
+            continue
+        if _context_bool(payload.get("proxyOnly")):
+            return True
+        source_type = _context_text(payload.get("sourceType")).lower()
+        source_tier = _context_text(payload.get("sourceTier")).lower()
+        source = _context_text(payload.get("source")).lower()
+        if "proxy" in source_type or "proxy" in source_tier or "proxy" in source:
+            return True
+    return False
+
+
+def _context_blockers(value: Any) -> List[Dict[str, str]]:
+    result: List[Dict[str, str]] = []
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        for item in value:
+            if isinstance(item, Mapping):
+                key = _context_text(item.get("key") or item.get("reason") or item.get("code"))
+                label = _context_text(item.get("label") or item.get("message") or key)
+            else:
+                key = _context_text(item)
+                label = key
+            if key and key not in {entry["key"] for entry in result}:
+                result.append({"key": key, "label": label or key})
+    else:
+        key = _context_text(value)
+        if key:
+            result.append({"key": key, "label": key})
+    return result
 
 
 class MarketScannerService:
@@ -1798,6 +1895,11 @@ class MarketScannerService:
             "accepted_symbols_count": public_universe_selection["accepted_symbols_count"],
             "rejected_symbols": public_universe_selection["rejected_symbols"],
             "diagnostics": finalized_diagnostics,
+            "scannerContextFrame": self._build_scanner_context_frame(
+                run_id=int(saved_run.id),
+                diagnostics=finalized_diagnostics,
+                universe_selection=public_universe_selection,
+            ),
             "theme": theme_payload,
             "summary": summary_payload,
             "selected": response_shortlist,
@@ -3037,6 +3139,458 @@ class MarketScannerService:
             "negative_candidate_avg_score": None,
         }
 
+    @staticmethod
+    def _resolve_scanner_context_inputs(diagnostics: Dict[str, Any]) -> Dict[str, Any]:
+        market_context = _context_mapping(
+            diagnostics.get("market_temperature")
+            or diagnostics.get("marketTemperature")
+            or diagnostics.get("market_overview")
+            or diagnostics.get("marketOverview")
+            or diagnostics.get("market_context")
+            or diagnostics.get("marketContext")
+        )
+        liquidity_context = _context_mapping(
+            diagnostics.get("liquidity_context")
+            or diagnostics.get("liquidityContext")
+            or diagnostics.get("liquidity_monitor")
+            or diagnostics.get("liquidityMonitor")
+        )
+        rotation_context = _context_mapping(
+            diagnostics.get("rotation_context")
+            or diagnostics.get("rotationContext")
+            or diagnostics.get("rotation_radar")
+            or diagnostics.get("rotationRadar")
+        )
+        regime = _context_mapping(market_context.get("marketRegimeSynthesis") or market_context.get("regimeSummary"))
+        liquidity = _context_mapping(
+            market_context.get("capitalFlowSignal")
+            or market_context.get("liquidityFrame")
+            or market_context.get("liquidityImpulseSynthesis")
+            or liquidity_context.get("capitalFlowSignal")
+            or liquidity_context.get("liquidityImpulseSynthesis")
+        )
+        rotation_families = _context_items(
+            market_context.get("rotationFamilyRollup")
+            or rotation_context.get("rotationFamilyRollup")
+            or rotation_context.get("families")
+        )
+        explicit_readiness = _context_mapping(
+            diagnostics.get("researchReadiness")
+            or diagnostics.get("research_readiness")
+            or market_context.get("researchReadiness")
+            or market_context.get("marketReadiness")
+        )
+        return {
+            "market_context": market_context,
+            "liquidity_context": liquidity_context,
+            "rotation_context": rotation_context,
+            "market_regime": regime,
+            "liquidity_frame": liquidity,
+            "rotation_families": rotation_families,
+            "explicit_readiness": explicit_readiness,
+        }
+
+    @staticmethod
+    def _context_authority_allowed(*values: Mapping[str, Any]) -> bool:
+        for value in values:
+            payload = _context_mapping(value)
+            if not payload:
+                continue
+            explicit = payload.get("sourceAuthorityAllowed")
+            if explicit is not None:
+                return explicit is True
+        for value in values:
+            payload = _context_mapping(value)
+            if payload and payload.get("conclusionAllowed") is not None:
+                return payload.get("conclusionAllowed") is True
+        return False
+
+    @staticmethod
+    def _context_score_allowed(*values: Mapping[str, Any]) -> bool:
+        for value in values:
+            payload = _context_mapping(value)
+            if not payload:
+                continue
+            explicit = payload.get("scoreContributionAllowed")
+            if explicit is not None:
+                return explicit is True
+        return False
+
+    def _build_scanner_context_readiness(self, diagnostics: Dict[str, Any], run_id: int) -> Dict[str, Any]:
+        inputs = self._resolve_scanner_context_inputs(diagnostics)
+        explicit = inputs["explicit_readiness"]
+        if explicit.get("readinessState"):
+            return explicit
+
+        market_context = inputs["market_context"]
+        market_regime = inputs["market_regime"]
+        liquidity_frame = inputs["liquidity_frame"]
+        evidence: List[Dict[str, Any]] = []
+        missing_evidence: List[str] = []
+
+        if market_regime:
+            macro_authority_allowed = self._context_authority_allowed(market_regime, market_context)
+            macro_score_allowed = self._context_score_allowed(market_regime, market_context)
+            evidence.append(
+                {
+                    "domain": "macro",
+                    "source": _context_text(market_context.get("source") or "market_temperature"),
+                    "sourceType": (
+                        market_context.get("sourceType")
+                        or "official_public"
+                        if macro_authority_allowed and macro_score_allowed
+                        else market_context.get("source")
+                    ),
+                    "sourceTier": (
+                        market_context.get("sourceTier")
+                        or "score_grade"
+                        if macro_authority_allowed and macro_score_allowed
+                        else market_context.get("sourceType")
+                    ),
+                    "trustLevel": market_context.get("trustLevel") or ("score_grade" if macro_authority_allowed and macro_score_allowed else None),
+                    "freshness": market_context.get("freshness") or market_regime.get("freshness") or "unknown",
+                    "sourceAuthorityAllowed": macro_authority_allowed,
+                    "scoreContributionAllowed": macro_score_allowed,
+                    "observationOnly": not macro_score_allowed,
+                    "isFallback": _context_text(market_context.get("freshness")).lower() == "fallback",
+                    "isStale": _context_text(market_context.get("freshness")).lower() == "stale",
+                    "isUnavailable": _context_text(market_context.get("freshness")).lower() == "unavailable",
+                    "proxyOnly": _context_proxy_only(market_regime, market_context),
+                }
+            )
+        else:
+            missing_evidence.append("macro")
+
+        if liquidity_frame:
+            liquidity_authority_allowed = self._context_authority_allowed(liquidity_frame, market_context)
+            liquidity_score_allowed = self._context_score_allowed(liquidity_frame, market_context)
+            evidence.append(
+                {
+                    "domain": "liquidity",
+                    "source": _context_text(liquidity_frame.get("source") or "market_overview"),
+                    "sourceType": (
+                        liquidity_frame.get("sourceType")
+                        or "official_public"
+                        if liquidity_authority_allowed and liquidity_score_allowed
+                        else liquidity_frame.get("source")
+                    ),
+                    "sourceTier": (
+                        liquidity_frame.get("sourceTier")
+                        or "score_grade"
+                        if liquidity_authority_allowed and liquidity_score_allowed
+                        else liquidity_frame.get("sourceType")
+                    ),
+                    "trustLevel": liquidity_frame.get("trustLevel") or ("score_grade" if liquidity_authority_allowed and liquidity_score_allowed else None),
+                    "freshness": liquidity_frame.get("freshness") or market_context.get("freshness") or "unknown",
+                    "sourceAuthorityAllowed": liquidity_authority_allowed,
+                    "scoreContributionAllowed": liquidity_score_allowed,
+                    "observationOnly": not liquidity_score_allowed,
+                    "isFallback": _context_text(liquidity_frame.get("freshness")).lower() == "fallback",
+                    "isStale": _context_text(liquidity_frame.get("freshness")).lower() == "stale",
+                    "isUnavailable": _context_text(liquidity_frame.get("freshness")).lower() == "unavailable",
+                    "proxyOnly": _context_proxy_only(liquidity_frame, market_context),
+                }
+            )
+        else:
+            missing_evidence.append("liquidity")
+
+        source_authority_allowed = all(bool(item.get("sourceAuthorityAllowed")) for item in evidence) and not missing_evidence
+        score_allowed = all(bool(item.get("scoreContributionAllowed")) for item in evidence) and not missing_evidence
+        freshness = "unknown"
+        for item in evidence:
+            candidate = _context_text(item.get("freshness")).lower()
+            if candidate in {"unavailable", "fallback", "stale", "delayed", "cached", "fresh"}:
+                freshness = candidate
+                if candidate in {"unavailable", "fallback"}:
+                    break
+        payload = {
+            "requiredEvidence": ["macro", "liquidity"],
+            "missingEvidence": missing_evidence,
+            "evidence": evidence,
+            "sourceAuthorityAllowed": source_authority_allowed,
+            "scoreContributionAllowed": score_allowed,
+            "freshness": freshness,
+            "noAdviceBoundary": True,
+            "consumerActionBoundary": "no_advice",
+            "debugRef": f"scanner:{run_id}:context",
+        }
+        return build_research_readiness_v1(payload)
+
+    @staticmethod
+    def _classify_scanner_context_state(
+        *,
+        present: bool,
+        blockers: Sequence[Dict[str, str]],
+        observation_only: bool,
+        proxy_only: bool,
+        freshness: str,
+        supportive_signal: bool,
+        insufficient_signal: bool,
+    ) -> str:
+        blocked = any(_context_has_blocked_token(item.get("key"), item.get("label")) for item in blockers) or freshness == "unavailable"
+        if blocked:
+            return "blocked"
+        if not present or insufficient_signal:
+            return "insufficient"
+        if observation_only or proxy_only or freshness in {"fallback", "stale"}:
+            return "observe_only"
+        if supportive_signal:
+            return "supportive"
+        return "mixed"
+
+    def _build_scanner_macro_regime(self, diagnostics: Dict[str, Any]) -> Dict[str, Any]:
+        inputs = self._resolve_scanner_context_inputs(diagnostics)
+        market_context = inputs["market_context"]
+        regime = inputs["market_regime"]
+        confidence_value = _context_float(regime.get("confidence") or _context_mapping(regime.get("confidence")).get("value"))
+        confidence_label = _context_text(regime.get("confidenceLabel") or _context_mapping(regime.get("confidence")).get("label") or "insufficient")
+        blockers = _context_blockers(regime.get("blockers"))
+        primary_regime = _context_text(regime.get("primaryRegime")).lower()
+        freshness = _context_text(market_context.get("freshness") or regime.get("freshness") or "unknown").lower()
+        observation_only = not self._context_score_allowed(regime, market_context)
+        source_authority_allowed = self._context_authority_allowed(regime, market_context)
+        state = self._classify_scanner_context_state(
+            present=bool(regime),
+            blockers=blockers,
+            observation_only=observation_only,
+            proxy_only=_context_proxy_only(regime, market_context),
+            freshness=freshness,
+            supportive_signal=primary_regime in SCANNER_CONTEXT_SUPPORTIVE_REGIMES or primary_regime.startswith("risk_on"),
+            insufficient_signal=primary_regime in {"", "data_insufficient"} or confidence_label == "insufficient",
+        )
+        return {
+            "state": state,
+            "label": (
+                "Supportive macro regime"
+                if state == "supportive"
+                else "Blocked macro context"
+                if state == "blocked"
+                else "Observation-only macro context"
+                if state == "observe_only"
+                else "Insufficient macro context"
+                if state == "insufficient"
+                else "Mixed macro regime"
+            ),
+            "regime": primary_regime or "data_insufficient",
+            "source": _context_text(market_context.get("source") or "unavailable"),
+            "freshness": freshness or "unknown",
+            "confidence": {
+                "value": confidence_value if confidence_value is not None else 0.0,
+                "label": confidence_label or "insufficient",
+            },
+            "blockers": blockers,
+            "observationOnly": observation_only,
+            "sourceAuthorityAllowed": source_authority_allowed,
+            "scoreContributionAllowed": self._context_score_allowed(regime, market_context),
+        }
+
+    def _build_scanner_liquidity_frame(self, diagnostics: Dict[str, Any]) -> Dict[str, Any]:
+        inputs = self._resolve_scanner_context_inputs(diagnostics)
+        market_context = inputs["market_context"]
+        liquidity = inputs["liquidity_frame"]
+        contradictions = _context_items(liquidity.get("contradictionCodes")) if liquidity else []
+        contradiction_codes = [_context_text(item.get("key") or item.get("code") or item) for item in contradictions]
+        blockers = _context_blockers(
+            contradiction_codes
+            or liquidity.get("blockers")
+            or liquidity.get("missingProviderReason")
+        )
+        freshness = _context_text(liquidity.get("freshness") or market_context.get("freshness") or "unknown").lower()
+        observation_only = not self._context_score_allowed(liquidity, market_context)
+        proxy_only = _context_proxy_only(liquidity, market_context)
+        likely_destination = _context_text(liquidity.get("likelyDestination"))
+        impulse = _context_text(liquidity.get("liquidityImpulse")).lower()
+        state = self._classify_scanner_context_state(
+            present=bool(liquidity),
+            blockers=blockers,
+            observation_only=observation_only,
+            proxy_only=proxy_only,
+            freshness=freshness,
+            supportive_signal=bool(likely_destination) or impulse in {"expanding_liquidity", "supportive"},
+            insufficient_signal=impulse == "data_insufficient",
+        )
+        return {
+            "state": state,
+            "label": (
+                "Liquidity supports current scanner setup"
+                if state == "supportive"
+                else "Blocked liquidity context"
+                if state == "blocked"
+                else "Observation-only liquidity context"
+                if state == "observe_only"
+                else "Insufficient liquidity context"
+                if state == "insufficient"
+                else "Mixed liquidity context"
+            ),
+            "signal": likely_destination or impulse or "data_insufficient",
+            "source": _context_text(liquidity.get("source") or "market_overview"),
+            "freshness": freshness or "unknown",
+            "observationOnly": observation_only,
+            "sourceAuthorityAllowed": self._context_authority_allowed(liquidity, market_context),
+            "scoreContributionAllowed": self._context_score_allowed(liquidity, market_context),
+            "proxyOnly": proxy_only,
+            "blockers": blockers,
+        }
+
+    def _build_scanner_theme_frame(self, diagnostics: Dict[str, Any]) -> Dict[str, Any]:
+        inputs = self._resolve_scanner_context_inputs(diagnostics)
+        families = inputs["rotation_families"]
+        market_context = inputs["market_context"]
+        themes: List[Dict[str, Any]] = []
+        blockers: List[Dict[str, str]] = []
+        proxy_only = False
+        observation_only = False
+        supportive_theme_count = 0
+        for family in families[:5]:
+            signal = _context_mapping(family.get("themeFlowSignal"))
+            family_id = _context_text(family.get("familyId") or family.get("id"))
+            family_label = _context_text(family.get("familyLabel") or family.get("label") or family_id)
+            theme_state = _context_text(signal.get("themeFlowState")).lower()
+            freshness = _context_text(signal.get("freshness") or market_context.get("freshness") or "unknown").lower()
+            theme_observation_only = not self._context_score_allowed(signal, market_context)
+            theme_proxy_only = _context_proxy_only(signal, market_context)
+            if theme_state in {"leading", "broadening", "confirming"} and not theme_observation_only:
+                supportive_theme_count += 1
+            observation_only = observation_only or theme_observation_only
+            proxy_only = proxy_only or theme_proxy_only
+            blockers.extend(_context_blockers(signal.get("blockers")))
+            themes.append(
+                {
+                    "id": family_id or family_label.lower(),
+                    "label": family_label,
+                    "state": theme_state or "unknown",
+                    "source": _context_text(signal.get("source") or "rotation_radar"),
+                    "freshness": freshness or "unknown",
+                    "observationOnly": theme_observation_only,
+                    "proxyOnly": theme_proxy_only,
+                }
+            )
+        if not themes and _context_has_blocked_token(
+            _context_text(inputs["rotation_context"].get("status")),
+            _context_text(market_context.get("source")),
+            _context_text(market_context.get("freshness")),
+        ):
+            blockers.extend(_context_blockers("rotation_context_unavailable"))
+        state = self._classify_scanner_context_state(
+            present=bool(families),
+            blockers=blockers,
+            observation_only=observation_only,
+            proxy_only=proxy_only,
+            freshness=_context_text(market_context.get("freshness") or "unknown").lower(),
+            supportive_signal=supportive_theme_count > 0,
+            insufficient_signal=False,
+        )
+        return {
+            "state": state,
+            "label": (
+                "Theme leadership supports the shortlist"
+                if state == "supportive"
+                else "Blocked theme context"
+                if state == "blocked"
+                else "Observation-only theme context"
+                if state == "observe_only"
+                else "Insufficient theme context"
+                if state == "insufficient"
+                else "Mixed theme context"
+            ),
+            "freshness": _context_text(market_context.get("freshness") or "unknown").lower() or "unknown",
+            "observationOnly": observation_only,
+            "proxyOnly": proxy_only,
+            "blockers": blockers,
+            "themes": themes,
+        }
+
+    @staticmethod
+    def _build_scanner_universe_policy(universe_selection: Dict[str, Any]) -> Dict[str, Any]:
+        universe_type = _context_text(universe_selection.get("universe_type") or "default").lower() or "default"
+        if universe_type == "theme":
+            return {
+                "type": "theme",
+                "label": _context_text(universe_selection.get("theme_label") or "Theme universe"),
+                "reason": "scanner_theme_universe",
+                "themeId": universe_selection.get("theme_id"),
+            }
+        if universe_type == "symbols":
+            return {
+                "type": "symbols",
+                "label": "Custom symbol universe",
+                "reason": "scanner_symbols_universe",
+                "acceptedSymbolsCount": int(universe_selection.get("accepted_symbols_count") or 0),
+            }
+        return {
+            "type": "default",
+            "label": "Profile default universe",
+            "reason": "scanner_profile_default_universe",
+        }
+
+    def _build_scanner_asset_class_bias(
+        self,
+        *,
+        macro_regime: Dict[str, Any],
+        liquidity_frame: Dict[str, Any],
+        theme_frame: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        macro_state = _context_text(macro_regime.get("state")).lower()
+        liquidity_state = _context_text(liquidity_frame.get("state")).lower()
+        theme_state = _context_text(theme_frame.get("state")).lower()
+        if "blocked" in {macro_state, liquidity_state, theme_state}:
+            state = "blocked"
+        elif macro_state == "supportive" and liquidity_state == "supportive":
+            state = "supportive"
+        elif (
+            macro_state in {"insufficient", "observe_only"}
+            and liquidity_state in {"insufficient", "observe_only"}
+            and theme_state in {"insufficient", "observe_only", ""}
+        ):
+            state = "observe_only"
+        elif "observe_only" in {macro_state, liquidity_state, theme_state}:
+            state = "observe_only"
+        elif "insufficient" in {macro_state, liquidity_state}:
+            state = "insufficient"
+        else:
+            state = "mixed"
+        return {
+            "state": state,
+            "label": (
+                "Equities preferred"
+                if state == "supportive"
+                else "Blocked top-down bias"
+                if state == "blocked"
+                else "Observe only"
+                if state == "observe_only"
+                else "Insufficient top-down context"
+                if state == "insufficient"
+                else "Mixed top-down bias"
+            ),
+            "observationOnly": state == "observe_only",
+            "blockers": list(macro_regime.get("blockers") or []) + list(liquidity_frame.get("blockers") or []),
+        }
+
+    def _build_scanner_context_frame(
+        self,
+        *,
+        run_id: int,
+        diagnostics: Dict[str, Any],
+        universe_selection: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        market_readiness = self._build_scanner_context_readiness(diagnostics, run_id)
+        macro_regime = self._build_scanner_macro_regime(diagnostics)
+        liquidity_frame = self._build_scanner_liquidity_frame(diagnostics)
+        theme_frame = self._build_scanner_theme_frame(diagnostics)
+        return {
+            "marketReadiness": market_readiness,
+            "macroRegime": macro_regime,
+            "liquidityFrame": liquidity_frame,
+            "assetClassBias": self._build_scanner_asset_class_bias(
+                macro_regime=macro_regime,
+                liquidity_frame=liquidity_frame,
+                theme_frame=theme_frame,
+            ),
+            "themeFrame": theme_frame,
+            "universePolicy": self._build_scanner_universe_policy(universe_selection),
+            "noAdviceBoundary": True,
+        }
+
     def _select_watchlist_runs(
         self,
         *,
@@ -3908,6 +4462,11 @@ class MarketScannerService:
             "accepted_symbols_count": universe_selection["accepted_symbols_count"],
             "rejected_symbols": universe_selection["rejected_symbols"],
             "diagnostics": diagnostics if isinstance(diagnostics, dict) else {},
+            "scannerContextFrame": self._build_scanner_context_frame(
+                run_id=int(run.id),
+                diagnostics=diagnostics if isinstance(diagnostics, dict) else {},
+                universe_selection=universe_selection,
+            ),
             "notification": self._normalize_notification_result(diagnostics.get("notification")),
             "failure_reason": self._extract_failure_reason(diagnostics),
             "comparison_to_previous": self._build_watchlist_comparison(

@@ -350,6 +350,104 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             notify=False,
         )
 
+    def test_run_market_scan_preserves_additive_scanner_context_frame(self) -> None:
+        service = MagicMock()
+        payload = _make_run_payload(
+            run_id=24,
+            market="us",
+            profile="us_preopen_v1",
+            profile_label="US Pre-open Scanner v1",
+            benchmark_code="SPY",
+        )
+        payload["scannerContextFrame"] = {
+            "marketReadiness": {
+                "contractVersion": "research_readiness_v1",
+                "researchReady": True,
+                "readinessState": "ready",
+                "verdictLabel": "研究证据可用",
+                "blockingReasons": [],
+                "missingEvidence": [],
+                "evidenceCoverage": {
+                    "scoreGradeCount": 2,
+                    "observationOnlyCount": 0,
+                    "missingCount": 0,
+                    "totalCount": 2,
+                },
+                "sourceAuthority": "scoreGradeAllowed",
+                "freshnessFloor": "delayed",
+                "consumerActionBoundary": "no_advice",
+                "nextEvidenceNeeded": [],
+                "debugRef": "scanner:24:context",
+            },
+            "macroRegime": {
+                "state": "supportive",
+                "label": "Supportive macro regime",
+                "source": "computed",
+                "freshness": "cached",
+                "confidence": {"value": 0.78, "label": "high"},
+                "blockers": [],
+                "observationOnly": False,
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+            },
+            "liquidityFrame": {
+                "state": "supportive",
+                "label": "Liquidity supports equity leadership",
+                "source": "market_overview",
+                "freshness": "cached",
+                "observationOnly": False,
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "proxyOnly": False,
+                "blockers": [],
+            },
+            "assetClassBias": {
+                "state": "supportive",
+                "label": "Equities preferred",
+                "observationOnly": False,
+                "blockers": [],
+            },
+            "themeFrame": {
+                "state": "supportive",
+                "label": "AI/software/semis leadership intact",
+                "freshness": "cached",
+                "observationOnly": False,
+                "proxyOnly": False,
+                "blockers": [],
+                "themes": [
+                    {"id": "ai", "label": "AI", "state": "leading"},
+                    {"id": "software", "label": "Software", "state": "broadening"},
+                ],
+            },
+            "universePolicy": {
+                "type": "default",
+                "label": "Profile default universe",
+                "reason": "scanner_profile_default_universe",
+            },
+            "noAdviceBoundary": True,
+        }
+        service.run_manual_scan.return_value = payload
+
+        request = ScannerRunRequest(
+            market="us",
+            profile="us_preopen_v1",
+            shortlist_size=5,
+            universe_limit=180,
+            detail_limit=40,
+        )
+
+        with patch("api.v1.endpoints.scanner.MarketScannerOperationsService", return_value=service):
+            response = run_market_scan(request, db_manager=MagicMock())
+
+        self.assertEqual(response.scannerContextFrame["marketReadiness"]["readinessState"], "ready")
+        self.assertEqual(response.scannerContextFrame["macroRegime"]["state"], "supportive")
+        self.assertEqual(response.scannerContextFrame["liquidityFrame"]["state"], "supportive")
+        self.assertEqual(response.scannerContextFrame["themeFrame"]["themes"][0]["id"], "ai")
+        self.assertTrue(response.scannerContextFrame["noAdviceBoundary"])
+        serialized = response.model_dump()
+        self.assertEqual(serialized["scannerContextFrame"]["assetClassBias"]["state"], "supportive")
+        self.assertEqual(serialized["scannerContextFrame"]["universePolicy"]["type"], "default")
+
     def test_run_market_scan_preserves_provider_observation_metadata_in_response_model(self) -> None:
         service = MagicMock()
         payload = _make_run_payload()
