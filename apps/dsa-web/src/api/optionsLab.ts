@@ -1,5 +1,6 @@
 import apiClient from './index';
 import { toCamelCase } from './utils';
+import type { OptionsResearchReadiness } from '../types/researchReadiness';
 
 export type OptionsDirection = 'bullish' | 'bearish' | 'neutral' | 'volatility';
 export type OptionsRiskProfile = 'conservative' | 'balanced' | 'aggressive';
@@ -36,6 +37,8 @@ export type OptionsUnderlyingSummaryResponse = {
   underlying: OptionsUnderlyingSnapshot;
   optionsAvailability: OptionsAvailability;
   metadata: OptionsLabMetadata;
+  optionsReadiness?: OptionsResearchReadiness | null;
+  optionsResearchReadiness?: OptionsResearchReadiness | null;
 };
 
 export type OptionsExpiration = {
@@ -52,6 +55,8 @@ export type OptionsExpirationsResponse = {
   symbol: string;
   expirations: OptionsExpiration[];
   metadata: OptionsLabMetadata;
+  optionsReadiness?: OptionsResearchReadiness | null;
+  optionsResearchReadiness?: OptionsResearchReadiness | null;
 };
 
 export type OptionContract = {
@@ -89,6 +94,8 @@ export type OptionsChainResponse = {
   source: string;
   limitations: string[];
   metadata: OptionsLabMetadata;
+  optionsReadiness?: OptionsResearchReadiness | null;
+  optionsResearchReadiness?: OptionsResearchReadiness | null;
 };
 
 export type OptionsStrategyCompareRequest = {
@@ -153,6 +160,8 @@ export type OptionsStrategyCompareResponse = {
   strategies: OptionsStrategyComparison[];
   limitations: string[];
   metadata: OptionsStrategyCompareMetadata;
+  optionsReadiness?: OptionsResearchReadiness | null;
+  optionsResearchReadiness?: OptionsResearchReadiness | null;
 };
 
 export type OptionsDecisionLeg = {
@@ -255,6 +264,8 @@ export type OptionsDecisionResponse = {
     asOf?: string | null;
   } | null;
   metadata?: OptionsStrategyCompareMetadata | null;
+  optionsReadiness?: OptionsResearchReadiness | null;
+  optionsResearchReadiness?: OptionsResearchReadiness | null;
 };
 
 export type OptionsOptimizerAlternative = {

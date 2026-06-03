@@ -1,6 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BarChart3, ChevronDown, Layers3, LineChart, Search, ShieldCheck } from 'lucide-react';
 import {
+  buildConsumerResearchReadinessView,
+  convertOptionsReadiness,
+  extractOptionsResearchReadiness,
+  inferOptionsResearchReadiness,
+} from '../api/researchReadiness';
+import {
   optionsLabApi,
   type OptionContract,
   type OptionsDecisionResponse,
@@ -14,6 +20,7 @@ import {
   type OptionsStrategyType,
   type OptionsUnderlyingSummaryResponse,
 } from '../api/optionsLab';
+import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
 import {
   CompactFilterBar,
   ConsoleDisclosure,
@@ -757,7 +764,7 @@ function heroSummaryLine(
   }
 
   if (observationStrategy) {
-    return `当前优先跟踪 ${strategyChineseLabel(observationStrategy)}，先复核最大亏损、盈亏平衡与成交可观察性。`;
+    return `当前优先跟踪 ${strategyChineseLabel(observationStrategy)}，先复核最大亏损、盈亏平衡与可成交性。`;
   }
 
   return availability.explanation;
@@ -776,7 +783,8 @@ const ProductHero: React.FC<{
   decision: OptionsDecisionResponse | null;
   comparison: OptionsStrategyCompareResponse | null;
   hasChainRows: boolean;
-}> = ({ availability, summary, chain, decision, comparison, hasChainRows }) => {
+  readiness: ReturnType<typeof buildConsumerResearchReadinessView>;
+}> = ({ availability, summary, chain, decision, comparison, hasChainRows, readiness }) => {
   const underlying = summary?.underlying || chain?.underlying;
   const changeClass = metricTone(underlying?.changePct);
   const summaryLine = heroSummaryLine(availability, decision, comparison, hasChainRows);
@@ -789,10 +797,16 @@ const ProductHero: React.FC<{
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className={labelClass}>分析实验室</p>
+            <p className={labelClass}>决策实验室</p>
             <Pill tone={availability.stateTone}>{availability.stateLabel}</Pill>
             <Pill tone={availability.confidenceTone}>{availability.confidenceLabel}</Pill>
           </div>
+          <ConsumerResearchReadinessStrip
+            readiness={readiness}
+            title="研究就绪度"
+            testId="options-lab-research-readiness-strip"
+            className="mt-3"
+          />
           <div className="mt-3 flex flex-wrap items-end gap-3">
             <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--wolfy-text-primary)] md:text-3xl">
               {summary?.symbol || chain?.symbol || '--'}
@@ -1005,7 +1019,7 @@ const StrategyComparisonPanel: React.FC<{
         </div>
       </SectionHeader>
       <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-        先看排序靠前的结构，再复核最大亏损、盈亏平衡与成交可观察性。
+        先看排序靠前的结构，再复核最大亏损、盈亏平衡与可成交性。
       </p>
       {emptyMessage ? (
         <div className={cn(innerBlockClass, 'mt-5 border-dashed px-4 py-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
@@ -1690,6 +1704,21 @@ const OptionsLabPageContent: React.FC = () => {
       },
     ];
   }, [comparisonState.comparison, decisionState.decision, direction, riskBudget, targetDate, targetPrice]);
+  const optionsResearchReadinessView = useMemo(
+    () => buildConsumerResearchReadinessView(
+      convertOptionsReadiness(
+        extractOptionsResearchReadiness(
+          state.summary as Record<string, unknown> | null | undefined,
+          state.expirations as Record<string, unknown> | null | undefined,
+          state.chain as Record<string, unknown> | null | undefined,
+          comparisonState.comparison as Record<string, unknown> | null | undefined,
+          decisionState.decision as Record<string, unknown> | null | undefined,
+        ),
+      ) || inferOptionsResearchReadiness(decisionState.decision),
+      'zh',
+    ),
+    [comparisonState.comparison, decisionState.decision, state.chain, state.expirations, state.summary],
+  );
 
   return (
     <main className="w-full overflow-x-hidden text-white">
@@ -1714,6 +1743,7 @@ const OptionsLabPageContent: React.FC = () => {
             decision={decisionState.decision}
             comparison={comparisonState.comparison}
             hasChainRows={hasChainRows}
+            readiness={optionsResearchReadinessView}
           />
           <DecisionSummaryStrip items={summaryStripItems} />
 

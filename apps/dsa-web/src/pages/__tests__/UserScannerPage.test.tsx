@@ -966,10 +966,13 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const band = await screen.findByTestId('scanner-conclusion-band');
+    const readinessStrip = screen.getByTestId('scanner-research-readiness-strip');
     expect(band).toHaveTextContent('当前候选 WULF');
     expect(band).toHaveTextContent('候选 1');
     expect(band).toHaveTextContent('观察 WULF 的下一次更新');
     expect(band).toHaveTextContent('部分结果使用最近一次可用数据。');
+    expect(readinessStrip).toHaveTextContent('研究就绪度');
+    expect(readinessStrip).toHaveTextContent(/仅观察|证据不足|等待证据更新/);
     expect(band).not.toHaveTextContent(/Fallback|Proxy|Stale|Capped|Limited\s+1|受限\s+1|备用数据|代理|过期|封顶/i);
   });
 

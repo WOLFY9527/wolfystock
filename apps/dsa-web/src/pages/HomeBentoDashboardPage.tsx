@@ -4,6 +4,11 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { History, Lock, MoreHorizontal, Search, Star, Upload } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { publicAnalysisApi } from '../api/publicAnalysis';
+import {
+  buildConsumerResearchReadinessView,
+  extractAnalysisResearchReadiness,
+  inferAnalysisResearchReadiness,
+} from '../api/researchReadiness';
 import { normalizeReportQuality } from '../api/reportNormalizer';
 import { stockEvidenceApi } from '../api/stockEvidence';
 import { withFallback } from '../api/withFallback';
@@ -18,6 +23,7 @@ import {
   MetricStrip,
 } from '../components/linear';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
+import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useUiPreferences } from '../contexts/UiPreferencesContext';
 import {
@@ -29,6 +35,7 @@ import {
 import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
 import type { AnalysisReport, DataQualityReport, DecisionTrace, HistoryItem, ReportQuality, StandardReport, StandardReportField, TaskProgressModule } from '../types/analysis';
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
+import type { ConsumerResearchReadinessView } from '../types/researchReadiness';
 import type { StockEvidenceFundamentalsSummary } from '../types/stockEvidence';
 import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores';
 import {
@@ -1064,6 +1071,7 @@ function HomeConclusionFirstConsole({
   locale,
   dashboard,
   dataQualityReport,
+  researchReadiness,
   decisionTrace,
   sourceSummary,
   stanceLabel,
@@ -1073,6 +1081,7 @@ function HomeConclusionFirstConsole({
   locale: DashboardLocale;
   dashboard: DashboardPayload;
   dataQualityReport?: DataQualityReport;
+  researchReadiness: ConsumerResearchReadinessView;
   decisionTrace?: DecisionTrace;
   sourceSummary?: string;
   stanceLabel: string;
@@ -1130,6 +1139,12 @@ function HomeConclusionFirstConsole({
             {confidenceVisual.label}
           </TraceBadge>
         </div>
+        <ConsumerResearchReadinessStrip
+          readiness={researchReadiness}
+          title={isEnglish ? 'Research readiness' : '研究就绪度'}
+          testId="home-research-readiness-strip"
+          className="mb-4"
+        />
 
         <div className="min-w-0" data-testid="home-research-current-conclusion">
           <p className="text-[12px] font-semibold tracking-[0] text-white/52">
@@ -4771,6 +4786,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const activeDecisionTrace = useMemo(() => (activeTraceReport ? getDecisionTrace(activeTraceReport) : undefined), [activeTraceReport]);
   const activeReportQuality = useMemo(() => getReportQuality(activeTraceReport), [activeTraceReport]);
   const activeDataQualityReport = useMemo(() => getDataQualityReport(activeTraceReport), [activeTraceReport]);
+  const activeResearchReadiness = useMemo(
+    () => extractAnalysisResearchReadiness(activeTraceReport) || inferAnalysisResearchReadiness(activeDataQualityReport),
+    [activeDataQualityReport, activeTraceReport],
+  );
+  const activeResearchReadinessView = useMemo(
+    () => buildConsumerResearchReadinessView(activeResearchReadiness, locale === 'en' ? 'en' : 'zh'),
+    [activeResearchReadiness, locale],
+  );
   const sourceSummary = useMemo(
     () => buildTraceSummary(activeDecisionTrace, activeReportQuality, locale),
     [activeDecisionTrace, activeReportQuality, locale],
@@ -5566,6 +5589,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                               locale={locale}
                               dashboard={readyCopy}
                               dataQualityReport={activeDataQualityReport}
+                              researchReadiness={activeResearchReadinessView}
                               decisionTrace={activeDecisionTrace}
                               sourceSummary={sourceSummary}
                               stanceLabel={stanceLabel}

@@ -4,6 +4,7 @@ import { toCamelCase } from './utils';
 import { API_BASE_URL } from '../utils/constants';
 import { buildAbsoluteApiUrl, joinApiPath } from './path';
 import { normalizeMarketIntelligenceEvidenceItem } from './marketIntelligenceEvidence';
+import type { ResearchReadinessV1 } from '../types/researchReadiness';
 
 type MarketSnapshotItem = {
   symbol?: string;
@@ -484,6 +485,7 @@ export type MarketTemperatureResponse = {
   scoreCap?: number;
   degradationReasons?: string[];
   conclusionAllowed?: boolean;
+  researchReadiness?: ResearchReadinessV1;
   regimeSummary?: MarketRegimeSummary;
   marketRegimeSynthesis?: MarketRegimeSynthesis;
   marketDecisionSemantics?: MarketDecisionSemantics;
@@ -730,6 +732,7 @@ export function normalizeMarketTemperatureResponse(
     scoreCap: payload?.scoreCap,
     degradationReasons: payload?.degradationReasons,
     conclusionAllowed,
+    researchReadiness: payload?.researchReadiness,
     regimeSummary: normalizeMarketRegimeSummary(payload?.regimeSummary),
     marketRegimeSynthesis: normalizeMarketRegimeSynthesis(payload?.marketRegimeSynthesis),
     marketDecisionSemantics: normalizeMarketDecisionSemantics(payload?.marketDecisionSemantics),

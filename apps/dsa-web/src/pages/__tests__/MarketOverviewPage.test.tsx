@@ -1919,6 +1919,8 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-decision-semantics-strip')).toBeInTheDocument();
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/市场状态/);
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/数据说明/);
+    expect(screen.getByTestId('market-overview-research-readiness-strip')).toHaveTextContent('研究就绪度');
+    expect(screen.getByTestId('market-overview-research-readiness-strip')).toHaveTextContent(/仅观察|证据不足|研究证据可用/);
     const conclusion = screen.getByTestId('market-overview-decision-readiness');
     expect(conclusion).toHaveTextContent('市场状态');
     expect(conclusion).toHaveTextContent('主驱动');

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MarketDataMeta, MarketOverviewPanel } from '../api/marketOverview';
 import { marketOverviewApi } from '../api/marketOverview';
+import {
+  buildConsumerResearchReadinessView,
+  extractMarketResearchReadiness,
+  inferMarketResearchReadiness,
+} from '../api/researchReadiness';
 import type {
   CnShortSentimentResponse,
   MarketBriefingResponse,
@@ -8,6 +13,7 @@ import type {
   MarketTemperatureResponse,
 } from '../api/market';
 import { marketApi, normalizeMarketTemperatureResponse } from '../api/market';
+import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
 import {
   MarketOverviewWorkbench,
   type CryptoRealtimeStatus,
@@ -905,9 +911,22 @@ const MarketOverviewPage = () => {
     resetAutoRevalidatePanel(panelKey);
     void refreshPanel(panelKey, loadPanel);
   }, [refreshPanel, resetAutoRevalidatePanel]);
+  const marketResearchReadinessView = useMemo(
+    () => buildConsumerResearchReadinessView(
+      extractMarketResearchReadiness(panels.temperature) || inferMarketResearchReadiness(panels.temperature),
+      language,
+    ),
+    [language, panels.temperature],
+  );
 
   return (
     <ConsumerWorkspaceScope className="min-h-0 flex-1">
+      <ConsumerResearchReadinessStrip
+        readiness={marketResearchReadinessView}
+        title={language === 'en' ? 'Research readiness' : '研究就绪度'}
+        testId="market-overview-research-readiness-strip"
+        className="mx-4 mt-4 shrink-0 md:mx-6"
+      />
       <MarketOverviewWorkbench
         heading={(
           <TerminalPageHeading

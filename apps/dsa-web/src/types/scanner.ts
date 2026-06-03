@@ -1,3 +1,5 @@
+import type { ScannerContextFrame } from './researchReadiness';
+
 export interface ScannerRunRequest {
   market?: 'cn' | 'us' | 'hk';
   profile?: string;
@@ -403,6 +405,7 @@ export interface ScannerRunDetail {
   acceptedSymbolsCount: number;
   rejectedSymbols: string[];
   diagnostics: Record<string, unknown>;
+  scannerContextFrame?: ScannerContextFrame | null;
   theme?: ScannerThemeDiagnostics;
   summary?: ScannerSummaryDiagnostics;
   selected?: ScannerCandidate[];

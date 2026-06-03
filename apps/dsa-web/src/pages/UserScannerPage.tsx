@@ -15,8 +15,13 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
+import {
+  buildConsumerResearchReadinessView,
+  inferScannerResearchReadiness,
+} from '../api/researchReadiness';
 import { scannerApi } from '../api/scanner';
 import { watchlistApi } from '../api/watchlist';
+import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
 import { ScannerActionButton as ActionButton } from '../components/scanner/ScannerActionButton';
 import {
   ScannerCandidateDetailPanel,
@@ -2664,6 +2669,10 @@ const UserScannerPage: React.FC = () => {
   const scannerDataStateLabel = runDetail
     ? `${normalizeRunState(runDetail.status) === 'failed' || normalizeRunState(runDetail.status) === 'error' ? `${currentRunSummary?.statusLabel || compactScannerStateLabel(runDetail.status, language)} · ` : ''}${getRunDataStatusLabel(runDetail, language)}`
     : (language === 'en' ? 'Waiting' : '等待');
+  const scannerResearchReadinessView = useMemo(
+    () => buildConsumerResearchReadinessView(inferScannerResearchReadiness(runDetail), language),
+    [language, runDetail],
+  );
   const scannerConclusion = useMemo(
     () => buildScannerConclusion(runDetail, language),
     [language, runDetail],
@@ -2758,6 +2767,12 @@ const UserScannerPage: React.FC = () => {
                 dataStateLabel={scannerDataStateLabel}
                 latestLabel={heroLatestLabel}
                 language={language}
+              />
+              <ConsumerResearchReadinessStrip
+                readiness={scannerResearchReadinessView}
+                title={language === 'en' ? 'Research readiness' : '研究就绪度'}
+                testId="scanner-research-readiness-strip"
+                className="mx-3"
               />
               <DenseStatusStrip
                 data-testid="scanner-status-strip"

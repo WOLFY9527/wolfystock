@@ -3,6 +3,8 @@
  * Aligned with the API schema.
  */
 
+import type { ResearchReadinessV1 } from './researchReadiness';
+
 // ============ Request Types ============
 
 export interface AnalysisRequest {
@@ -39,6 +41,7 @@ export interface ReportMeta {
   changePct?: number;
   modelUsed?: string;  // LLM model used for analysis
   dataQualityReport?: DataQualityReport;
+  researchReadiness?: ResearchReadinessV1;
 }
 
 /** Sentiment label */
@@ -315,7 +318,9 @@ export interface ReportDetails {
   contextSnapshot?: Record<string, unknown>;
   standardReport?: StandardReport;
   dataQualityReport?: DataQualityReport;
-  analysisResult?: Record<string, unknown>;
+  analysisResult?: Record<string, unknown> & {
+    researchReadiness?: ResearchReadinessV1;
+  };
   rawAiResponse?: string | Record<string, unknown>;
   financialReport?: Record<string, unknown>;
   dividendMetrics?: Record<string, unknown>;
@@ -508,6 +513,7 @@ export interface AnalysisReport {
   details?: ReportDetails;
   decisionTrace?: DecisionTrace;
   dataQualityReport?: DataQualityReport;
+  researchReadiness?: ResearchReadinessV1;
   contractMeta?: FrontendReportContractMeta;
   reportQuality?: ReportQuality;
 }

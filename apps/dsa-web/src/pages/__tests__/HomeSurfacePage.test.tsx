@@ -459,6 +459,8 @@ describe('HomeSurfacePage', () => {
     expect(conclusionConsole).toHaveAttribute('data-first-screen-priority', 'conclusion-first');
     expect(conclusionConsole).toHaveAttribute('data-visual-role', 'conclusion-research-console');
     expect(screen.getByTestId('home-research-judgment-gate')).toHaveTextContent(/可以形成研究判断|证据受限|仅观察/);
+    expect(screen.getByTestId('home-research-readiness-strip')).toHaveTextContent(/研究就绪度|Research readiness/);
+    expect(screen.getByTestId('home-research-readiness-strip')).toHaveTextContent(/仅观察|证据不足|研究证据可用|Observe only|Evidence insufficient/);
     expect(within(decisionCard).getByText('当前结论')).toBeInTheDocument();
     expect(within(decisionCard).queryByText('可信度 / 数据质量')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-research-trust-strip')).not.toHaveAttribute('open');

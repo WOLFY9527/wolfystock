@@ -407,6 +407,8 @@ describe('OptionsLabPage', () => {
       expect(productHero).toHaveTextContent('期权数据暂不可用，本模块已暂停生成策略。');
       expect(productHero).toHaveTextContent('最后更新：');
     });
+    expect(screen.getByTestId('options-lab-research-readiness-strip')).toHaveTextContent('研究就绪度');
+    expect(screen.getByTestId('options-lab-research-readiness-strip')).toHaveTextContent(/研究结论受限|仅观察|等待证据更新/);
     const summaryStrip = screen.getByTestId('options-lab-summary-strip');
     expect(summaryStrip).toHaveTextContent('输入情景');
     expect(summaryStrip).toHaveTextContent('首个候选');
