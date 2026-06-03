@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from './fixtures/adminAuth';
+import { expect, expectNoHorizontalOverflow, test, type Page, type Route } from './fixtures/adminAuth';
 import {
   expectNoRawSecretLikeText,
   installAdminAuthHarness,
@@ -6,6 +6,7 @@ import {
 
 const viewports = [
   { width: 1440, height: 1000 },
+  { width: 390, height: 844 },
 ];
 
 const timestamp = '2026-05-06T10:30:00+08:00';
@@ -486,6 +487,7 @@ test.describe('admin ops launch surfaces', () => {
           expect(disclosureCount).toBeGreaterThanOrEqual(route.disclosureCountMin);
         }
         await expectClosedDisclosureButtons(page);
+        await expectNoHorizontalOverflow(page);
         await page.unrouteAll({ behavior: 'ignoreErrors' });
       }
     });

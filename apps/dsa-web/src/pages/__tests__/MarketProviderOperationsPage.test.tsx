@@ -1040,4 +1040,13 @@ describe('MarketProviderOperationsPage', () => {
     expect(document.body).not.toHaveTextContent('super-secret-token');
     expect(document.body).not.toHaveTextContent('SECRET');
   });
+
+  it('wraps visible code-like provider detail values instead of letting them overflow the side rail', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+
+    render(<MarketProviderOperationsPage />);
+
+    expect(await screen.findByTestId('market-provider-detail-endpoint')).toHaveClass('break-all');
+    expect(screen.getByTestId('market-provider-detail-provider-id')).toHaveClass('break-all');
+  });
 });

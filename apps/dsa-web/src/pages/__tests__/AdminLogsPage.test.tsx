@@ -712,7 +712,7 @@ describe('AdminLogsPage', () => {
     expect(screen.queryByText('成功 0 · 跳过 0 · 失败 0 · 未确认 0')).not.toBeInTheDocument();
     expect(screen.getByText('Scanner: 大盘单机游戏')).toBeInTheDocument();
     expect(screen.getByText('Backtest: MA20 Breakout')).toBeInTheDocument();
-    expect(screen.getByTestId('business-events-table-shell')).not.toHaveClass('overflow-x-auto');
+    expect(screen.getByTestId('business-events-table-shell')).toHaveClass('overflow-x-auto');
     expect(screen.getByTestId('admin-logs-pagination')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '上一页' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '下一页' })).toBeInTheDocument();
@@ -1003,7 +1003,7 @@ describe('AdminLogsPage', () => {
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('overflow-x-hidden');
-    expect(screen.getByTestId('business-events-table-shell')).not.toHaveClass('overflow-x-auto');
+    expect(screen.getByTestId('business-events-table-shell')).toHaveClass('overflow-x-auto');
     expect(screen.getByText('调用链时间线')).toBeInTheDocument();
     expect(screen.getByTestId('root-cause-section')).toBeInTheDocument();
     expect(screen.queryByText('Root Cause')).not.toBeInTheDocument();
@@ -1303,6 +1303,14 @@ describe('AdminLogsPage', () => {
     expect(screen.getByLabelText('级别筛选')).toBeInTheDocument();
     expect(screen.getByTestId('raw-logs-table-shell')).toHaveClass('overflow-x-auto');
     await waitFor(() => expect(listSessions).toHaveBeenCalledWith(expect.objectContaining({ minLevel: 'WARNING' })));
+  });
+
+  it('contains the default business event queue inside a narrow-safe horizontal rail', async () => {
+    render(<AdminLogsPage />);
+
+    const shell = await screen.findByTestId('business-events-table-shell');
+    expect(shell).toHaveClass('overflow-x-auto');
+    expect(screen.getByTestId('business-events-table-inner')).toHaveClass('min-w-[44rem]');
   });
 
   it('renders English page-local copy on English routes', async () => {

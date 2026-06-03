@@ -191,14 +191,14 @@ const AdminDrillThroughStrip: React.FC<AdminDrillThroughStripProps> = ({
           <a
             key={`${item.target}-${item.label}-${item.href}`}
             href={item.href}
-            className="group rounded-lg border border-white/8 bg-black/10 px-3 py-2.5 transition hover:border-cyan-300/25 hover:bg-white/[0.04]"
+            className="group min-w-0 rounded-lg border border-white/8 bg-black/10 px-3 py-2.5 transition hover:border-cyan-300/25 hover:bg-white/[0.04]"
           >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-semibold text-white/86">{item.label}</span>
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <span className="min-w-0 break-words text-sm font-semibold text-white/86">{item.label}</span>
               <ExternalLink className="h-3.5 w-3.5 text-white/42 transition group-hover:text-cyan-100" aria-hidden="true" />
             </div>
-            <p className="mt-1 text-[11px] text-white/42">{item.evidenceType}{item.redacted === false ? '' : ' · 已脱敏引用'}</p>
-            <p className="mt-1 text-[11px] leading-5 text-white/58">{item.reason}</p>
+            <p className="mt-1 break-words text-[11px] text-white/42">{item.evidenceType}{item.redacted === false ? '' : ' · 已脱敏引用'}</p>
+            <p className="mt-1 break-words text-[11px] leading-5 text-white/58">{item.reason}</p>
           </a>
         ))}
       </div>

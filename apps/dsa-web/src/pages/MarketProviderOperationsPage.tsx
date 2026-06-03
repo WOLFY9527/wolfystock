@@ -1382,7 +1382,7 @@ const ProviderOperationsMatrixPanel: React.FC<{
             className="mt-2 bg-black/10"
           >
             <TerminalDenseTable>
-              <table className="min-w-full table-fixed">
+              <table className="min-w-[52rem] table-fixed">
                 <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
                   <tr className="border-b border-white/5 text-left">
                     <th className="px-3 py-3 font-medium">数据源</th>
@@ -1471,7 +1471,7 @@ const ProviderOperationsTable: React.FC<{
         <TerminalEmptyState title="暂无数据源运维条目">缺失快照时只显示只读边界，不推断 provider 运行状态。</TerminalEmptyState>
       ) : (
         <TerminalDenseTable>
-          <table className="min-w-full table-fixed">
+          <table className="min-w-[44rem] table-fixed">
             <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
               <tr className="border-b border-white/5 text-left">
                 <th className="px-3 py-3 font-medium">数据源</th>
@@ -1554,11 +1554,11 @@ const ProviderDetailsPanel: React.FC<{ item: MarketProviderOperationItem | null 
         <TerminalDenseList className="mt-4">
           <TerminalNestedBlock className="px-3 py-2">
             <p className="text-[10px] uppercase tracking-widest text-white/35">数据源 ID</p>
-            <p className="mt-1 font-mono text-[11px] text-white/65">{item.provider}</p>
+            <p data-testid="market-provider-detail-provider-id" className="mt-1 max-w-full break-all font-mono text-[11px] text-white/65">{item.provider}</p>
           </TerminalNestedBlock>
           <TerminalNestedBlock className="px-3 py-2">
             <p className="text-[10px] uppercase tracking-widest text-white/35">API</p>
-            <p className="mt-1 font-mono text-[11px] text-white/65">{item.endpoint}</p>
+            <p data-testid="market-provider-detail-endpoint" className="mt-1 max-w-full break-all font-mono text-[11px] text-white/65">{item.endpoint}</p>
           </TerminalNestedBlock>
           <DrillLink drill={item.adminLogDrillThrough} />
         </TerminalDenseList>

@@ -2276,83 +2276,85 @@ const AdminLogsPage: React.FC = () => {
                   : t('adminLogs.noSessionsBody')}
               </TerminalEmptyState>
             ) : (
-              <TerminalDenseList data-testid="business-events-table-shell" className="mt-3 gap-0 overflow-hidden rounded-xl border border-white/6 bg-black/15">
-                <div className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
-                  <div>{locale === 'zh' ? '时间' : 'Time'}</div>
-                  <div>{locale === 'zh' ? '事件' : 'Event'}</div>
-                  <div>{locale === 'zh' ? '状态 / 严重度' : 'Status / Severity'}</div>
-                  <div>{locale === 'zh' ? '原因' : 'Reason'}</div>
-                  <div className="hidden xl:block">{locale === 'zh' ? '操作者' : 'Actor'}</div>
-                  <div className="hidden xl:block">{locale === 'zh' ? '上下文' : 'Context'}</div>
-                  <div className="hidden xl:block">{locale === 'zh' ? '来源 / 供应商' : 'Source / Provider'}</div>
-                  <div>{locale === 'zh' ? '操作' : 'Action'}</div>
-                </div>
-                <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto no-scrollbar">
-                  {businessEvents.map((item) => {
-                    const status = normalizeStatus(item.status);
-                    const actorRole = actorBadgeLabel(item.actorType);
-                    const actorType = actorBadgeDisplay(item.actorType, locale);
-                    const actorSecondary = text(item.actorLabel || item.userId || item.requestId, locale === 'zh' ? '未记录' : 'Not recorded');
-                    const contextPrimary = text(item.contextLabel || item.symbol || item.subject || item.event, locale === 'zh' ? '未记录' : 'Not recorded');
-                    const contextSecondary = [item.market, item.route || item.endpoint, item.component || item.feature]
-                      .map((value) => String(value || '').trim())
-                      .filter(Boolean)
-                      .join(' · ');
-                    const sourcePrimary = text(item.provider || item.source || item.category, locale === 'zh' ? '未记录' : 'Not recorded');
-                    const sourceSecondary = [item.source && item.source !== item.provider ? item.source : null, item.category, item.type]
-                      .map((value) => String(value || '').trim())
-                      .filter(Boolean)
-                      .filter((value, index, values) => values.indexOf(value) === index)
-                      .join(' · ');
-                    const severity = businessEventSeverity(item);
-                    const reason = friendlyRawStatusLabel(item.reason || (isFailedStatus(item.status) ? 'unknown' : '--'), locale);
-                    const errorSummary = friendlyRawStatusLabel(item.errorSummary || item.rootCauseSummary, locale);
-                    const traceValue = item.traceId || item.requestId;
-                    const stepLabel = stepStatsLabel(item, locale);
-                    return (
-                      <div key={item.id} data-testid="business-event-row" className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] items-center gap-3 px-3 py-2.5 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
-                        <p className="truncate text-xs text-secondary-text" title={formatDateTime(item.startedAt, locale)}>{formatDateTime(item.startedAt, locale)}</p>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-foreground" title={text(item.event || item.symbol)}>{text(item.event || item.symbol)}</p>
-                          <p className="mt-0.5 truncate text-[11px] text-muted-text" title={text(item.type)}>{text(item.eventType || item.type)}</p>
+              <TerminalDenseList data-testid="business-events-table-shell" className="mt-3 gap-0 overflow-x-auto overflow-y-hidden no-scrollbar rounded-xl border border-white/6 bg-black/15">
+                <div data-testid="business-events-table-inner" className="min-w-[44rem]">
+                  <div className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
+                    <div>{locale === 'zh' ? '时间' : 'Time'}</div>
+                    <div>{locale === 'zh' ? '事件' : 'Event'}</div>
+                    <div>{locale === 'zh' ? '状态 / 严重度' : 'Status / Severity'}</div>
+                    <div>{locale === 'zh' ? '原因' : 'Reason'}</div>
+                    <div className="hidden xl:block">{locale === 'zh' ? '操作者' : 'Actor'}</div>
+                    <div className="hidden xl:block">{locale === 'zh' ? '上下文' : 'Context'}</div>
+                    <div className="hidden xl:block">{locale === 'zh' ? '来源 / 供应商' : 'Source / Provider'}</div>
+                    <div>{locale === 'zh' ? '操作' : 'Action'}</div>
+                  </div>
+                  <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto no-scrollbar">
+                    {businessEvents.map((item) => {
+                      const status = normalizeStatus(item.status);
+                      const actorRole = actorBadgeLabel(item.actorType);
+                      const actorType = actorBadgeDisplay(item.actorType, locale);
+                      const actorSecondary = text(item.actorLabel || item.userId || item.requestId, locale === 'zh' ? '未记录' : 'Not recorded');
+                      const contextPrimary = text(item.contextLabel || item.symbol || item.subject || item.event, locale === 'zh' ? '未记录' : 'Not recorded');
+                      const contextSecondary = [item.market, item.route || item.endpoint, item.component || item.feature]
+                        .map((value) => String(value || '').trim())
+                        .filter(Boolean)
+                        .join(' · ');
+                      const sourcePrimary = text(item.provider || item.source || item.category, locale === 'zh' ? '未记录' : 'Not recorded');
+                      const sourceSecondary = [item.source && item.source !== item.provider ? item.source : null, item.category, item.type]
+                        .map((value) => String(value || '').trim())
+                        .filter(Boolean)
+                        .filter((value, index, values) => values.indexOf(value) === index)
+                        .join(' · ');
+                      const severity = businessEventSeverity(item);
+                      const reason = friendlyRawStatusLabel(item.reason || (isFailedStatus(item.status) ? 'unknown' : '--'), locale);
+                      const errorSummary = friendlyRawStatusLabel(item.errorSummary || item.rootCauseSummary, locale);
+                      const traceValue = item.traceId || item.requestId;
+                      const stepLabel = stepStatsLabel(item, locale);
+                      return (
+                        <div key={item.id} data-testid="business-event-row" className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] items-center gap-3 px-3 py-2.5 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
+                          <p className="truncate text-xs text-secondary-text" title={formatDateTime(item.startedAt, locale)}>{formatDateTime(item.startedAt, locale)}</p>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-foreground" title={text(item.event || item.symbol)}>{text(item.event || item.symbol)}</p>
+                            <p className="mt-0.5 truncate text-[11px] text-muted-text" title={text(item.type)}>{text(item.eventType || item.type)}</p>
+                          </div>
+                          <div className="min-w-0 space-y-1">
+                            <StatusChip status={status} locale={locale} className="w-fit" />
+                            <SeverityChip severity={severity} locale={locale} className="w-fit" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="line-clamp-2 text-xs font-medium leading-5 text-foreground" title={errorSummary || reason || stepLabel}>{errorSummary || reason || stepLabel}</p>
+                            <p className="mt-1 truncate text-[11px] text-muted-text" title={stepLabel}>{stepLabel}</p>
+                          </div>
+                          <div className="hidden min-w-0 xl:block">
+                            <TerminalChip variant={actorRole === 'admin' ? 'info' : actorRole === 'system' ? 'success' : actorRole === 'guest' || actorRole === 'anonymous' ? 'caution' : 'neutral'} className="w-fit font-semibold">{actorType}</TerminalChip>
+                            <p className="mt-1 truncate text-[11px] text-muted-text" title={actorSecondary}>{actorSecondary}</p>
+                          </div>
+                          <div className="hidden min-w-0 xl:block">
+                            <p className="truncate text-xs font-medium text-foreground" title={contextPrimary}>{contextPrimary}</p>
+                            <p className="mt-1 truncate text-[11px] text-muted-text" title={contextSecondary || text(item.summary)}>{contextSecondary || text(item.summary)}</p>
+                            <p className="mt-0.5 truncate text-[11px] text-muted-text" title={text(traceValue)}>{traceValue ? `trace ${shortIdentifier(traceValue)}` : '--'}</p>
+                          </div>
+                          <div className="hidden min-w-0 xl:block">
+                            <p className="truncate text-xs text-secondary-text" title={sourcePrimary}>{sourcePrimary}</p>
+                            <p className="mt-1 truncate text-[11px] text-muted-text" title={sourceSecondary}>{sourceSecondary || '--'}</p>
+                          </div>
+                          <TerminalButton type="button" variant="compact" className="w-fit px-2.5 py-1 text-xs" onClick={() => void openBusinessDetail(item)}>
+                            {t('adminLogs.viewDetails')}
+                          </TerminalButton>
                         </div>
-                        <div className="min-w-0 space-y-1">
-                          <StatusChip status={status} locale={locale} className="w-fit" />
-                          <SeverityChip severity={severity} locale={locale} className="w-fit" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="line-clamp-2 text-xs font-medium leading-5 text-foreground" title={errorSummary || reason || stepLabel}>{errorSummary || reason || stepLabel}</p>
-                          <p className="mt-1 truncate text-[11px] text-muted-text" title={stepLabel}>{stepLabel}</p>
-                        </div>
-                        <div className="hidden min-w-0 xl:block">
-                          <TerminalChip variant={actorRole === 'admin' ? 'info' : actorRole === 'system' ? 'success' : actorRole === 'guest' || actorRole === 'anonymous' ? 'caution' : 'neutral'} className="w-fit font-semibold">{actorType}</TerminalChip>
-                          <p className="mt-1 truncate text-[11px] text-muted-text" title={actorSecondary}>{actorSecondary}</p>
-                        </div>
-                        <div className="hidden min-w-0 xl:block">
-                          <p className="truncate text-xs font-medium text-foreground" title={contextPrimary}>{contextPrimary}</p>
-                          <p className="mt-1 truncate text-[11px] text-muted-text" title={contextSecondary || text(item.summary)}>{contextSecondary || text(item.summary)}</p>
-                          <p className="mt-0.5 truncate text-[11px] text-muted-text" title={text(traceValue)}>{traceValue ? `trace ${shortIdentifier(traceValue)}` : '--'}</p>
-                        </div>
-                        <div className="hidden min-w-0 xl:block">
-                          <p className="truncate text-xs text-secondary-text" title={sourcePrimary}>{sourcePrimary}</p>
-                          <p className="mt-1 truncate text-[11px] text-muted-text" title={sourceSecondary}>{sourceSecondary || '--'}</p>
-                        </div>
-                        <TerminalButton type="button" variant="compact" className="w-fit px-2.5 py-1 text-xs" onClick={() => void openBusinessDetail(item)}>
-                          {t('adminLogs.viewDetails')}
-                        </TerminalButton>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div data-testid="admin-logs-pagination" className="flex flex-wrap items-center justify-between gap-3 border-t border-white/6 px-3 py-2.5">
-                  <p className="text-xs text-muted-text">{locale === 'zh' ? `第 ${Math.floor(pageOffset / PAGE_SIZE) + 1} 页` : `Page ${Math.floor(pageOffset / PAGE_SIZE) + 1}`}</p>
-                  <div className="flex gap-2">
-                    <TerminalButton type="button" variant="compact" className="px-3 py-1 text-xs" disabled={pageOffset <= 0 || isLoadingList} onClick={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}>
-                      {locale === 'zh' ? '上一页' : 'Previous'}
-                    </TerminalButton>
-                    <TerminalButton type="button" variant="compact" className="px-3 py-1 text-xs" disabled={!businessHasMore || isLoadingList} onClick={() => setPageOffset((current) => current + PAGE_SIZE)}>
-                      {locale === 'zh' ? '下一页' : 'Next'}
-                    </TerminalButton>
+                      );
+                    })}
+                  </div>
+                  <div data-testid="admin-logs-pagination" className="flex flex-wrap items-center justify-between gap-3 border-t border-white/6 px-3 py-2.5">
+                    <p className="text-xs text-muted-text">{locale === 'zh' ? `第 ${Math.floor(pageOffset / PAGE_SIZE) + 1} 页` : `Page ${Math.floor(pageOffset / PAGE_SIZE) + 1}`}</p>
+                    <div className="flex gap-2">
+                      <TerminalButton type="button" variant="compact" className="px-3 py-1 text-xs" disabled={pageOffset <= 0 || isLoadingList} onClick={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}>
+                        {locale === 'zh' ? '上一页' : 'Previous'}
+                      </TerminalButton>
+                      <TerminalButton type="button" variant="compact" className="px-3 py-1 text-xs" disabled={!businessHasMore || isLoadingList} onClick={() => setPageOffset((current) => current + PAGE_SIZE)}>
+                        {locale === 'zh' ? '下一页' : 'Next'}
+                      </TerminalButton>
+                    </div>
                   </div>
                 </div>
               </TerminalDenseList>
