@@ -328,6 +328,7 @@ describe('AdminCostObservabilityPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     capabilityState.canReadCostObservability = true;
+    window.history.replaceState({}, '', '/zh/admin/cost-observability');
     runQuotaDryRun.mockResolvedValue(quotaAllowedPayload);
     getLlmLedgerSummary.mockResolvedValue(ledgerPayload);
     getModelPricingPolicies.mockResolvedValue(pricingPoliciesPayload);
@@ -778,5 +779,19 @@ describe('AdminCostObservabilityPage', () => {
     await openCostSecondaryDisclosure();
     expect(await screen.findByTestId('llm-ledger-panel')).toBeInTheDocument();
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+  });
+
+  it('initializes window and area filters from safe query params and renders drill-through controls', async () => {
+    window.history.replaceState({}, '', '/zh/admin/cost-observability?window=7d&bucket=day&area=provider&limit=25&token=SECRET');
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+
+    render(<AdminCostObservabilityPage />);
+
+    await screen.findByTestId('admin-cost-l0-overview-strip');
+    expect(getDuplicateSummary).toHaveBeenCalledWith({ window: '7d', bucket: 'day', area: 'provider', limit: 25 });
+    expect(screen.getByRole('link', { name: /查看相关日志/i })).toHaveAttribute('href', '/zh/admin/logs?tab=data_source&query=provider&since=7d');
+    expect(screen.getByRole('link', { name: /查看熔断与配额/i })).toHaveAttribute('href', '/zh/admin/provider-circuits?since=7d');
+    expect(screen.getByRole('link', { name: /查看数据源维护/i })).toHaveAttribute('href', '/zh/admin/market-providers?surface=market_overview');
+    expect(document.body).not.toHaveTextContent('SECRET');
   });
 });

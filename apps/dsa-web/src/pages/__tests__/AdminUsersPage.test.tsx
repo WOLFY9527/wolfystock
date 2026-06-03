@@ -306,7 +306,7 @@ describe('AdminUsersPage', () => {
     expect(within(overviewStrip).getByText('证据参考')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('最近更新')).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { name: '用户目录' }).length).toBeGreaterThan(0);
-    expect(await screen.findByText('Alice')).toBeInTheDocument();
+    expect((await screen.findAllByText('Alice')).length).toBeGreaterThan(0);
     expect(screen.getByText('安全搜索')).toBeInTheDocument();
     expect(screen.getAllByText('只读投影').length).toBeGreaterThan(0);
     expect(screen.getByText('Admin Logs')).toHaveAttribute('href', '/zh/admin/logs?user_id=user-123');
@@ -322,7 +322,7 @@ describe('AdminUsersPage', () => {
 
     renderAt('/zh/admin/users');
 
-    expect(await screen.findByText('Alice')).toBeInTheDocument();
+    expect((await screen.findAllByText('Alice')).length).toBeGreaterThan(0);
     expect(screen.queryByText('Admin Logs')).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent('/zh/admin/logs');
     expectNoSecrets();
@@ -599,5 +599,17 @@ describe('AdminUsersPage', () => {
     }));
     await waitFor(() => expect(screen.getByText('安全操作失败')).toBeInTheDocument());
     expectNoSecrets();
+  });
+
+  it('renders safe drill-through controls from the user detail route', async () => {
+    getUserDetail.mockResolvedValue(detailPayload);
+
+    renderAt('/zh/admin/users/user-123');
+
+    expect((await screen.findAllByText('Alice')).length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: /查看相关日志/i })).toHaveAttribute('href', '/zh/admin/logs?tab=business&query=user-123&since=24h&userId=user-123');
+    expect(screen.getByRole('link', { name: /查看证据工作流/i })).toHaveAttribute('href', '/zh/admin/evidence-workflow?ref=user-safe-id#runbook');
+    expect(document.body).not.toHaveTextContent('token');
+    expect(document.body).not.toHaveTextContent('payload');
   });
 });

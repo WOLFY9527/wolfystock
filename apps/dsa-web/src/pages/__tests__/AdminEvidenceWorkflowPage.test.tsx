@@ -148,7 +148,11 @@ describe('AdminEvidenceWorkflowPage', () => {
 
     render(<AdminEvidenceWorkflowPage />);
 
-    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    const drillLinks = screen.getAllByRole('link');
+    expect(drillLinks.length).toBeGreaterThan(0);
+    drillLinks.forEach((link) => {
+      expect(link.getAttribute('href') || '').toMatch(/^\/zh\/admin\/(logs|evidence-workflow|market-providers|provider-circuits|cost-observability)(\?|#|$)/);
+    });
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     expect(document.querySelector('form')).not.toBeInTheDocument();
     expect(document.querySelector('input[type="file"]')).not.toBeInTheDocument();
@@ -157,6 +161,20 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(screen.queryByRole('button', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('renders sanitized drill-through links for logs, provider ops, circuits, and cost follow-up', () => {
+    render(<AdminEvidenceWorkflowPage />);
+
+    const page = screen.getByTestId('admin-evidence-workflow-page');
+    expect(within(page).getByText('已脱敏引用')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /查看相关日志/i })).toHaveAttribute('href', '/zh/admin/logs?tab=business&query=evidence&since=24h');
+    expect(screen.getByRole('link', { name: /查看数据源维护/i })).toHaveAttribute('href', '/zh/admin/market-providers?surface=market_overview');
+    expect(screen.getByRole('link', { name: /查看熔断与配额/i })).toHaveAttribute('href', '/zh/admin/provider-circuits?provider=provider&since=24h');
+    expect(screen.getByRole('link', { name: /查看成本观测/i })).toHaveAttribute('href', '/zh/admin/cost-observability?window=24h&area=llm');
+    expect(page).not.toHaveTextContent('token');
+    expect(page).not.toHaveTextContent('secret');
+    expect(page).not.toHaveTextContent('payload');
   });
 
   it('renders static local runbook reference cards for the operator workflow', () => {

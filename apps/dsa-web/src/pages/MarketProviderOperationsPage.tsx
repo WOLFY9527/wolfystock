@@ -16,6 +16,7 @@ import {
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { ApiErrorAlert, Input } from '../components/common';
 import { DataFreshnessBadge } from '../components/market-overview/marketOverviewPrimitives';
+import AdminDrillThroughStrip from '../components/admin/AdminDrillThroughStrip';
 import AdminOpsL0OverviewStrip, { type AdminOpsTrustState } from '../components/admin/AdminOpsL0OverviewStrip';
 import AdminOpsSectionHeading from '../components/admin/AdminOpsSectionHeading';
 import {
@@ -2062,6 +2063,40 @@ const MarketProviderOperationsPage: React.FC = () => {
             recommendedAction={l0RecommendedAction}
             evidenceRef="路线图 / 本地行情就绪诊断 / Admin Logs"
             lastUpdated={formatDisplayDate(response?.generatedAt, '待统计')}
+          />
+          <AdminDrillThroughStrip
+            className="mt-4"
+            items={[
+              {
+                label: '查看相关日志',
+                target: 'logs',
+                evidenceType: 'provider symptom',
+                reason: '从当前窗口回看 provider 失败、备用与缓存事件。',
+                params: { since: response?.window?.key || '24h', query: 'market provider' },
+              },
+              {
+                label: '查看熔断与配额',
+                target: 'providerCircuits',
+                evidenceType: 'provider name',
+                reason: '继续核对熔断、配额拒绝与探测事件。',
+                params: { provider: selectedItem?.provider || response?.eventRollups?.[0]?.provider || '', since: response?.window?.key || '24h' },
+              },
+              {
+                label: '查看成本观测',
+                target: 'cost',
+                evidenceType: 'provider cost window',
+                reason: '确认数据源成本、缓存命中与重复调用线索。',
+                params: { area: 'provider', window: response?.window?.key || '24h' },
+              },
+              {
+                label: '查看证据工作流',
+                target: 'evidence',
+                evidenceType: 'sanitized evidence ref',
+                reason: '核对离线证据包、runbook 与 schema 边界。',
+                params: { ref: 'provider_bundle' },
+                hash: 'schema-ref',
+              },
+            ]}
           />
           <ProviderOpsTopSummary data={topSummary} isLoading={isLoading || isMatrixLoading || isReadinessLoading} />
           {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}

@@ -34,6 +34,7 @@ import {
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal';
+import AdminDrillThroughStrip from '../components/admin/AdminDrillThroughStrip';
 import AdminOpsL0OverviewStrip, { type AdminOpsTrustState } from '../components/admin/AdminOpsL0OverviewStrip';
 import { getStatusLabel, normalizeStatus, type UnifiedStatus } from '../components/ui/StatusBadge.helpers';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -67,6 +68,13 @@ type TerminalChipVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info'
 
 const INCIDENT_KIND_ORDER = ['data_quality', 'provider_cache_circuit', 'llm_cost', 'notification', 'evidence_posture'] as const;
 
+type AdminLogsQueryState = {
+  activeTab: LogsTab;
+  searchQuery: string;
+  sinceFilter: (typeof SINCE_OPTIONS)[number];
+  eventId: string | null;
+};
+
 function statusChipVariant(status: UnifiedStatus): TerminalChipVariant {
   if (status === 'success') return 'success';
   if (status === 'failed' || status === 'error' || status === 'cancelled') return 'danger';
@@ -80,6 +88,38 @@ function levelChipVariant(level: LogLevel): TerminalChipVariant {
   if (level === 'WARNING') return 'caution';
   if (level === 'ERROR' || level === 'CRITICAL') return 'danger';
   return 'neutral';
+}
+
+function readAdminLogsQuery(): AdminLogsQueryState {
+  if (typeof window === 'undefined') {
+    return { activeTab: 'business', searchQuery: '', sinceFilter: '24h', eventId: null };
+  }
+  const query = new URLSearchParams(window.location.search);
+  const tab = String(query.get('tab') || '').trim();
+  const since = String(query.get('since') || '').trim();
+  const combinedQuery = [
+    query.get('query'),
+    query.get('requestId'),
+    query.get('userId'),
+  ]
+    .map((value) => String(value || '')
+      .replace(/https?:\/\/\S+|www\.\S+/gi, ' ')
+      .replace(/\b(token|secret|cookie|session|password|bearer|api[_-]?key|stack|trace|payload|prompt|credential)\b[:=]?\S*/gi, ' ')
+      .replace(/[^a-zA-Z0-9 _:-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim())
+    .filter(Boolean)
+    .filter((value, index, list) => list.indexOf(value) === index)
+    .join(' ')
+    .trim()
+    .slice(0, 80);
+  const eventId = String(query.get('eventId') || '').replace(/[^a-zA-Z0-9:_-]/g, '').slice(0, 80);
+  return {
+    activeTab: (['business', 'analysis', 'scanner', 'backtest', 'data_source', 'security', 'raw'] as LogsTab[]).includes(tab as LogsTab) ? tab as LogsTab : 'business',
+    searchQuery: combinedQuery,
+    sinceFilter: (['15m', '1h', '24h', '7d'] as const).includes(since as (typeof SINCE_OPTIONS)[number]) ? since as (typeof SINCE_OPTIONS)[number] : '24h',
+    eventId: eventId || null,
+  };
 }
 
 function StatusChip({
@@ -1092,12 +1132,13 @@ async function copyTextValue(value: unknown): Promise<void> {
 const AdminLogsPage: React.FC = () => {
   const { language, t } = useI18n();
   const locale = language as AdminLogsLanguage;
-  const [activeTab, setActiveTab] = useState<LogsTab>('business');
+  const drillQuery = useMemo(() => readAdminLogsQuery(), []);
+  const [activeTab, setActiveTab] = useState<LogsTab>(drillQuery.activeTab);
   const [levelFilter, setLevelFilter] = useState<LevelFilter>('warning_plus');
   const [categoryFilter, setCategoryFilter] = useState<'all' | LogCategory>('all');
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTER_OPTIONS)[number]>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sinceFilter, setSinceFilter] = useState<(typeof SINCE_OPTIONS)[number]>('24h');
+  const [searchQuery, setSearchQuery] = useState(drillQuery.searchQuery);
+  const [sinceFilter, setSinceFilter] = useState<(typeof SINCE_OPTIONS)[number]>(drillQuery.sinceFilter);
   const [showDebugLogs, setShowDebugLogs] = useState(false);
   const [businessEvents, setBusinessEvents] = useState<BusinessEvent[]>([]);
   const [businessTotal, setBusinessTotal] = useState(0);
@@ -1127,6 +1168,7 @@ const AdminLogsPage: React.FC = () => {
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [detailError, setDetailError] = useState<ParsedApiError | null>(null);
   const skipDebugClickRef = useRef(false);
+  const [drillHighlight] = useState<string | null>(drillQuery.eventId);
 
   const loadStorageSummary = useCallback(async () => {
     try {
@@ -1670,6 +1712,37 @@ const AdminLogsPage: React.FC = () => {
               evidenceRef={locale === 'zh' ? '当前页 / 业务事件 / 运维问题 / 数据缺口' : 'Current page / business events / operator issues / data gaps'}
               lastUpdated={formatDateTime(latestOverviewTimestamp, locale)}
             />
+            <AdminDrillThroughStrip
+              className="mt-4"
+              items={[
+                {
+                  label: '查看数据源维护',
+                  target: 'marketProviders',
+                  evidenceType: 'surface focus',
+                  reason: '从症状回看数据源矩阵、来源缺口与就绪检查。',
+                  params: { surface: 'market_overview' },
+                },
+                {
+                  label: '查看熔断与配额',
+                  target: 'providerCircuits',
+                  evidenceType: 'circuit window',
+                  reason: '继续核对 provider 熔断、配额和探测事件。',
+                  params: { since: sinceFilter },
+                },
+                {
+                  label: '查看成本观测',
+                  target: 'cost',
+                  evidenceType: 'provider cost window',
+                  reason: '确认成本、缓存与重复调用是否同步异常。',
+                  params: { area: 'provider', window: sinceFilter },
+                },
+              ]}
+            />
+            {drillHighlight ? (
+              <TerminalNotice data-testid="admin-logs-drill-highlight" variant="info" className="mt-3">
+                已从安全引用预填筛选，当前高亮事件引用：{drillHighlight}
+              </TerminalNotice>
+            ) : null}
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <TerminalMetric
                 label={locale === 'zh' ? '页面用途' : 'Purpose'}

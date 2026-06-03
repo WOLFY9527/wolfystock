@@ -541,6 +541,7 @@ const operationsMatrixPayload = {
 describe('MarketProviderOperationsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState({}, '', '/zh/admin/market-providers');
     getDataReadiness.mockResolvedValue(readinessPayload);
     getOperationsMatrix.mockResolvedValue(operationsMatrixPayload);
   });
@@ -1024,5 +1025,19 @@ describe('MarketProviderOperationsPage', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(within(screen.getByRole('alert')).getByText('读取市场数据源运维失败')).toBeInTheDocument();
+  });
+
+  it('renders unified drill-through controls to logs, circuits, cost, and evidence surfaces', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+
+    render(<MarketProviderOperationsPage />);
+
+    await screen.findByTestId('market-provider-l0-overview-strip');
+    expect(screen.getByRole('link', { name: /查看相关日志/i })).toHaveAttribute('href', '/zh/admin/logs?query=market%20provider&since=24h');
+    expect(screen.getByRole('link', { name: /查看熔断与配额/i })).toHaveAttribute('href', '/zh/admin/provider-circuits?provider=fallback&since=24h');
+    expect(screen.getByRole('link', { name: /查看成本观测/i })).toHaveAttribute('href', '/zh/admin/cost-observability?window=24h&area=provider');
+    expect(screen.getByRole('link', { name: /查看证据工作流/i })).toHaveAttribute('href', '/zh/admin/evidence-workflow?ref=provider_bundle#schema-ref');
+    expect(document.body).not.toHaveTextContent('super-secret-token');
+    expect(document.body).not.toHaveTextContent('SECRET');
   });
 });

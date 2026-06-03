@@ -522,6 +522,7 @@ describe('AdminLogsPage', () => {
         writeText: vi.fn().mockResolvedValue(undefined),
       },
     });
+    window.history.replaceState({}, '', '/zh/admin/logs');
     mockLanguage = 'zh';
     listBusinessEvents.mockResolvedValue({
       total: businessEvents.length,
@@ -1312,5 +1313,21 @@ describe('AdminLogsPage', () => {
     expect(screen.getByRole('tab', { name: 'Business events' })).toBeInTheDocument();
     expect(screen.getByLabelText('Status filter')).toBeInTheDocument();
     expect((await screen.findAllByText('TSLA')).length).toBeGreaterThan(0);
+  });
+
+  it('initializes safe query params and renders sanitized drill-through controls for issue triage', async () => {
+    window.history.replaceState({}, '', '/zh/admin/logs?tab=data_source&query=fallback%20market&since=24h&eventId=market-card-failed&token=SECRET');
+
+    render(<AdminLogsPage />);
+
+    const search = await screen.findByLabelText('搜索日志');
+    expect(search).toHaveValue('fallback market');
+    expect(screen.getByLabelText('时间范围')).toHaveValue('24h');
+    expect(screen.getByRole('tab', { name: '数据源' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('admin-logs-drill-highlight')).toHaveTextContent('market-card-failed');
+    expect(screen.getByRole('link', { name: /查看数据源维护/i })).toHaveAttribute('href', '/zh/admin/market-providers?surface=market_overview');
+    expect(screen.getByRole('link', { name: /查看熔断与配额/i })).toHaveAttribute('href', '/zh/admin/provider-circuits?since=24h');
+    expect(screen.getByRole('link', { name: /查看成本观测/i })).toHaveAttribute('href', '/zh/admin/cost-observability?window=24h&area=provider');
+    expect(document.body).not.toHaveTextContent('SECRET');
   });
 });

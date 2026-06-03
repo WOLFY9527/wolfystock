@@ -20,6 +20,7 @@ import {
   TerminalSectionHeader,
 } from '../components/terminal';
 import AdminOpsL0OverviewStrip from '../components/admin/AdminOpsL0OverviewStrip';
+import AdminDrillThroughStrip from '../components/admin/AdminDrillThroughStrip';
 
 type CommandSnippet = {
   label: string;
@@ -180,6 +181,39 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
           evidenceRef="当前页 / 离线证据路径"
           lastUpdated="静态流程 / 状态未汇总"
         />
+        <AdminDrillThroughStrip
+          className="mt-4"
+          items={[
+            {
+              label: '查看相关日志',
+              target: 'logs',
+              evidenceType: 'evidence posture',
+              reason: '从人工复核入口回看业务事件与证据相关日志。',
+              params: { tab: 'business', query: 'evidence', since: '24h' },
+            },
+            {
+              label: '查看数据源维护',
+              target: 'marketProviders',
+              evidenceType: 'provider checklist',
+              reason: '核对当前证据包是否对应数据源覆盖与就绪缺口。',
+              params: { surface: 'market_overview' },
+            },
+            {
+              label: '查看熔断与配额',
+              target: 'providerCircuits',
+              evidenceType: 'provider window',
+              reason: '继续检查 provider 熔断、配额与探测是否影响证据解释。',
+              params: { provider: 'provider', since: '24h' },
+            },
+            {
+              label: '查看成本观测',
+              target: 'cost',
+              evidenceType: 'cost window',
+              reason: '确认人工复核前是否存在 AI / 配额异常线索。',
+              params: { area: 'llm', window: '24h' },
+            },
+          ]}
+        />
         <div
           data-testid="admin-evidence-operational-verdict"
           className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.42fr)]"
@@ -284,7 +318,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
       </TerminalDisclosure>
 
       <TerminalDisclosure title="二级细节：Runbook 参考" summary="默认折叠">
-        <div data-testid="admin-evidence-runbook-references">
+        <div id="runbook" data-testid="admin-evidence-runbook-references">
           <TerminalSectionHeader
             eyebrow="本地操作手册"
             title="操作员工作流参考"
@@ -317,7 +351,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
       </TerminalDisclosure>
 
       <TerminalDisclosure title="二级细节：Schema 与字段参考" summary="默认折叠">
-        <div data-testid="admin-evidence-schema-reference">
+        <div id="schema-ref" data-testid="admin-evidence-schema-reference">
           <TerminalSectionHeader
             eyebrow="本地参考"
             title="离线证据数据结构参考"

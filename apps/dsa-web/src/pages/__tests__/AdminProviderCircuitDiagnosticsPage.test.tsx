@@ -160,6 +160,7 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useProductSurfaceMock.mockReturnValue({ canReadProviders: true });
+    window.history.replaceState({}, '', '/zh/admin/provider-circuits');
   });
 
   it('renders compressed operational verdict and four L1 summary metrics', async () => {
@@ -315,6 +316,20 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
 
     expect(await screen.findByText(/已脱敏线索/)).toBeInTheDocument();
     expect(screen.queryByText('https://provider.example/query?token=SECRET')).not.toBeInTheDocument();
+  });
+
+  it('initializes safe provider filters from query params and exposes sanitized drill-through links', async () => {
+    window.history.replaceState({}, '', '/zh/admin/provider-circuits?provider=Finnhub&routeFamily=analysis&since=24h&token=SECRET');
+    getDiagnostics.mockResolvedValue(response);
+
+    render(<AdminProviderCircuitDiagnosticsPage />);
+
+    await screen.findByTestId('provider-circuit-l0-overview-strip');
+    expect(getDiagnostics).toHaveBeenCalledWith({ limit: 50, provider: 'finnhub', routeFamily: 'analysis', since: '24h' });
+    expect(screen.getByRole('link', { name: /查看相关日志/i })).toHaveAttribute('href', '/zh/admin/logs?tab=data_source&query=finnhub&since=24h');
+    expect(screen.getByRole('link', { name: /查看数据源维护/i })).toHaveAttribute('href', '/zh/admin/market-providers?surface=market_overview');
+    expect(screen.getByRole('link', { name: /查看成本观测/i })).toHaveAttribute('href', '/zh/admin/cost-observability?window=24h&area=provider');
+    expect(document.body).not.toHaveTextContent('SECRET');
   });
 
   it('renders API errors with the shared alert pattern', async () => {

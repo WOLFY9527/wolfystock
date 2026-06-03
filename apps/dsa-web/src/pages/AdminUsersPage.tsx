@@ -42,6 +42,7 @@ import {
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal';
+import AdminDrillThroughStrip from '../components/admin/AdminDrillThroughStrip';
 import AdminOpsL0OverviewStrip, { type AdminOpsTrustState } from '../components/admin/AdminOpsL0OverviewStrip';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
@@ -1380,6 +1381,28 @@ const AdminUsersPage: React.FC = () => {
           evidenceRef={headerEvidenceRef}
           lastUpdated={headerLastUpdated}
         />
+        {userId ? (
+          <AdminDrillThroughStrip
+            className="mt-4"
+            items={[
+              {
+                label: '查看相关日志',
+                target: 'logs',
+                evidenceType: 'user-safe id',
+                reason: '回看该用户的安全业务事件与只读审计线索。',
+                params: { tab: 'business', userId, query: userId, since: '24h' },
+              },
+              {
+                label: '查看证据工作流',
+                target: 'evidence',
+                evidenceType: 'sanitized evidence ref',
+                reason: '核对脱敏交付、人工复核与 runbook 边界。',
+                params: { ref: 'user-safe-id' },
+                hash: 'runbook',
+              },
+            ]}
+          />
+        ) : null}
         {content}
         <TerminalNotice variant="caution">
           <div className="flex items-start gap-3">

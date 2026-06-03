@@ -34,6 +34,7 @@ import {
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal';
+import AdminDrillThroughStrip from '../components/admin/AdminDrillThroughStrip';
 import AdminOpsL0OverviewStrip from '../components/admin/AdminOpsL0OverviewStrip';
 import AdminOpsSectionHeading from '../components/admin/AdminOpsSectionHeading';
 import { useProductSurface } from '../hooks/useProductSurface';
@@ -85,6 +86,23 @@ const AREA_OPTIONS: Array<{ value: AdminCostArea; label: string }> = [
 ];
 
 const LIMIT_OPTIONS = [25, 50, 100, 200];
+
+function readCostFilters(): Required<AdminCostSummaryParams> {
+  if (typeof window === 'undefined') {
+    return { window: '24h', bucket: 'hour', area: 'all', limit: 50 };
+  }
+  const query = new URLSearchParams(window.location.search);
+  const windowValue = String(query.get('window') || '');
+  const bucketValue = String(query.get('bucket') || '');
+  const areaValue = String(query.get('area') || '');
+  const limitValue = Number(query.get('limit') || 50);
+  return {
+    window: WINDOW_OPTIONS.some((item) => item.value === windowValue) ? windowValue as AdminCostWindowKey : '24h',
+    bucket: BUCKET_OPTIONS.some((item) => item.value === bucketValue) ? bucketValue as AdminCostBucket : 'hour',
+    area: AREA_OPTIONS.some((item) => item.value === areaValue) ? areaValue as AdminCostArea : 'all',
+    limit: Number.isFinite(limitValue) ? Math.min(Math.max(Math.trunc(limitValue), 1), 200) : 50,
+  };
+}
 
 const ROUTE_FAMILY_OPTIONS = [
   { value: 'analysis', label: '分析' },
@@ -920,12 +938,7 @@ const QuotaDryRunPanel: React.FC = () => {
 };
 
 const AdminCostObservabilityPage: React.FC = () => {
-  const [filters, setFilters] = useState<Required<AdminCostSummaryParams>>({
-    window: '24h',
-    bucket: 'hour',
-    area: 'all',
-    limit: 50,
-  });
+  const [filters, setFilters] = useState<Required<AdminCostSummaryParams>>(() => readCostFilters());
   const [state, setState] = useState<LoadState>({ loading: true, error: null, data: null });
 
   useEffect(() => {
@@ -995,6 +1008,36 @@ const AdminCostObservabilityPage: React.FC = () => {
             recommendedAction={needsAttentionCount ? '先做配额试运行，再定位归属。' : '保持观测，按需切换窗口与范围。'}
             evidenceRef="主诊断板 / 二级细节：账本、价格、Provider / 缓存"
             lastUpdated={formatDate(data?.generatedAt)}
+          />
+          <AdminDrillThroughStrip
+            className="mt-4"
+            items={[
+              {
+                label: '查看相关日志',
+                target: 'logs',
+                evidenceType: 'cost area',
+                reason: '回看当前窗口内与成本/数据源相关的业务事件。',
+                params: {
+                  tab: 'data_source',
+                  query: filters.area === 'provider' ? 'provider' : filters.area,
+                  since: filters.window,
+                },
+              },
+              {
+                label: '查看熔断与配额',
+                target: 'providerCircuits',
+                evidenceType: 'window',
+                reason: '继续核对 provider 配额、拒绝与探测窗口。',
+                params: { since: filters.window },
+              },
+              {
+                label: '查看数据源维护',
+                target: 'marketProviders',
+                evidenceType: 'surface focus',
+                reason: '对照数据源运维矩阵、缓存与就绪线索。',
+                params: { surface: 'market_overview' },
+              },
+            ]}
           />
           <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <TerminalMetric

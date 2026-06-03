@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Activity, ChevronDown, ChevronRight } from 'lucide-react';
 import {
   adminProviderCircuitsApi,
+  type ProviderCircuitDiagnosticsParams,
   type ProviderCircuitDiagnosticsBundle,
   type ProviderCircuitEventItem,
   type ProviderCircuitStateItem,
@@ -24,6 +25,7 @@ import {
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal';
+import AdminDrillThroughStrip from '../components/admin/AdminDrillThroughStrip';
 import AdminOpsL0OverviewStrip from '../components/admin/AdminOpsL0OverviewStrip';
 import AdminOpsSectionHeading from '../components/admin/AdminOpsSectionHeading';
 import { useProductSurface } from '../hooks/useProductSurface';
@@ -933,8 +935,25 @@ const LoadingState: React.FC = () => (
   </TerminalPanel>
 );
 
+function readCircuitQuery(): ProviderCircuitDiagnosticsParams {
+  if (typeof window === 'undefined') {
+    return { limit: 50 };
+  }
+  const query = new URLSearchParams(window.location.search);
+  const provider = String(query.get('provider') || '').trim().toLowerCase().replace(/[^a-z0-9:_-]/g, '').slice(0, 64);
+  const routeFamily = String(query.get('routeFamily') || '').trim().toLowerCase().replace(/[^a-z0-9:_-]/g, '').slice(0, 64);
+  const since = String(query.get('since') || '').trim();
+  return {
+    limit: 50,
+    provider: provider || undefined,
+    routeFamily: routeFamily || undefined,
+    since: ['15m', '1h', '24h', '7d'].includes(since) ? since : undefined,
+  };
+}
+
 const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
   const { canReadProviders } = useProductSurface();
+  const initialQuery = useMemo(() => readCircuitQuery(), []);
   const [data, setData] = useState<ProviderCircuitDiagnosticsBundle | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
@@ -944,7 +963,7 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
       return;
     }
     let cancelled = false;
-    adminProviderCircuitsApi.getDiagnostics({ limit: 50 })
+    adminProviderCircuitsApi.getDiagnostics(initialQuery)
       .then((payload) => {
         if (!cancelled) setData(payload);
       })
@@ -960,7 +979,7 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [canReadProviders]);
+  }, [canReadProviders, initialQuery]);
 
   const summary = useMemo(() => buildOperationalSummary(data), [data]);
   const operationalVerdict = useMemo(
@@ -1015,6 +1034,36 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
             recommendedAction={operationalVerdict.nextAction}
             evidenceRef="L3 诊断细节 / 熔断、SLA、事件、配额、探测"
             lastUpdated={safeDate(data?.states.generatedAt)}
+          />
+          <AdminDrillThroughStrip
+            className="mt-4"
+            items={[
+              {
+                label: '查看相关日志',
+                target: 'logs',
+                evidenceType: 'provider name',
+                reason: '回看当前 provider 的业务事件与降级线索。',
+                params: {
+                  tab: 'data_source',
+                  query: initialQuery.provider || data?.states.items?.[0]?.provider || '',
+                  since: initialQuery.since || '24h',
+                },
+              },
+              {
+                label: '查看数据源维护',
+                target: 'marketProviders',
+                evidenceType: 'surface focus',
+                reason: '对照 provider 运维矩阵与本地就绪检查。',
+                params: { surface: 'market_overview' },
+              },
+              {
+                label: '查看成本观测',
+                target: 'cost',
+                evidenceType: 'provider cost window',
+                reason: '继续确认配额、缓存与成本压力是否同步异常。',
+                params: { area: 'provider', window: initialQuery.since || '24h' },
+              },
+            ]}
           />
           {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}
         </TerminalPanel>
