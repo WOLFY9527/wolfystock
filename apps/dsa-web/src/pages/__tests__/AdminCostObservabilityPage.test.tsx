@@ -320,7 +320,7 @@ const pricingPoliciesPayload = {
 };
 
 async function openCostSecondaryDisclosure() {
-  const toggle = await screen.findByRole('button', { name: '展开 二级细节：账本、价格、Provider / 缓存' });
+  const toggle = await screen.findByRole('button', { name: '展开 L2 配额 / 成本运维细节：账本、价格、Provider / 缓存' });
   fireEvent.click(toggle);
 }
 
@@ -356,6 +356,8 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.getByText('只读')).toBeInTheDocument();
     expect(screen.getByText('外部调用关闭')).toBeInTheDocument();
     expect(screen.getAllByText('观测值非账单').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('L2 配额 / 成本运维').length).toBeGreaterThan(0);
+    expect(screen.getByText('窗口与范围')).toBeInTheDocument();
     await openCostSecondaryDisclosure();
     expect(screen.getAllByText('LLM 调用').length).toBeGreaterThan(0);
     expect(screen.getByText('数据源状态 / 备用链路')).toBeInTheDocument();
@@ -364,7 +366,7 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.getByText('Guest Preview / Report duplicate candidates')).toBeInTheDocument();
     expect(screen.getByText('限制与数据质量')).toBeInTheDocument();
     expect(screen.getByText('计数器快照不含历史时间戳')).toBeInTheDocument();
-    expect(screen.getByText('配额试运行诊断')).toBeInTheDocument();
+    expect(screen.getByText('L2 配额 / 成本运维：配额试运行')).toBeInTheDocument();
     expect(screen.getAllByText('AI 调用账本').length).toBeGreaterThan(0);
     expect(screen.getByText('模型价格策略')).toBeInTheDocument();
   });
@@ -408,7 +410,7 @@ describe('AdminCostObservabilityPage', () => {
     render(<AdminCostObservabilityPage />);
 
     await openCostSecondaryDisclosure();
-    expect(await screen.findByText('开发者 / 响应形状')).toBeInTheDocument();
+    expect(await screen.findByText('开发者 / 响应形状（已脱敏）')).toBeInTheDocument();
     expect(screen.queryByText('SHOULD_NOT_RENDER')).not.toBeInTheDocument();
     expect(screen.queryByText('SHOULD_NOT_RENDER_PAYLOAD')).not.toBeInTheDocument();
     expect(screen.queryByText('KEY_SHOULD_NOT_RENDER')).not.toBeInTheDocument();
@@ -521,7 +523,7 @@ describe('AdminCostObservabilityPage', () => {
     render(<AdminCostObservabilityPage />);
 
     await openCostSecondaryDisclosure();
-    expect(await screen.findByText('配额试运行诊断')).toBeInTheDocument();
+    expect(await screen.findByText('L2 配额 / 成本运维：配额试运行')).toBeInTheDocument();
     await waitFor(() => expect(runQuotaDryRun).toHaveBeenCalled());
     expect(screen.getByText('17')).toBeInTheDocument();
     expect(screen.getByText('预算内')).toBeInTheDocument();
@@ -700,7 +702,7 @@ describe('AdminCostObservabilityPage', () => {
     await openCostSecondaryDisclosure();
     expect(await screen.findByText('读取 AI 调用账本失败')).toBeInTheDocument();
     expect(screen.getByText('当前账号没有成本观测权限。')).toBeInTheDocument();
-    expect(screen.getByText('配额试运行诊断')).toBeInTheDocument();
+    expect(screen.getByText('L2 配额 / 成本运维：配额试运行')).toBeInTheDocument();
     expect(screen.queryByText(/token=secret/)).not.toBeInTheDocument();
 
     getLlmLedgerSummary.mockRejectedValueOnce({ response: { status: 500, data: { detail: { message: 'stack trace apiKey=secret' } } } });
@@ -740,7 +742,7 @@ describe('AdminCostObservabilityPage', () => {
     render(<AdminCostObservabilityPage />);
 
     await openCostSecondaryDisclosure();
-    expect(await screen.findByText('开发者 / Quota 响应形状')).toBeInTheDocument();
+    expect(await screen.findByText('开发者 / Quota 响应形状（已脱敏）')).toBeInTheDocument();
     expect(screen.queryByText('diagnosticOnly')).not.toBeInTheDocument();
   });
 
@@ -751,7 +753,7 @@ describe('AdminCostObservabilityPage', () => {
 
     await openCostSecondaryDisclosure();
     const panel = await screen.findByTestId('llm-ledger-panel');
-    await waitFor(() => expect(within(panel).getByText('开发者 / LLM 账本响应形状')).toBeInTheDocument());
+    await waitFor(() => expect(within(panel).getByText('开发者 / LLM 账本响应形状（已脱敏）')).toBeInTheDocument());
     expect(within(panel).queryByText('liveEnforcement')).not.toBeInTheDocument();
   });
 
@@ -762,7 +764,7 @@ describe('AdminCostObservabilityPage', () => {
 
     await openCostSecondaryDisclosure();
     const panel = await screen.findByTestId('model-pricing-policy-panel');
-    await waitFor(() => expect(within(panel).getByText('开发者 / 价格策略响应形状')).toBeInTheDocument());
+    await waitFor(() => expect(within(panel).getByText('开发者 / 价格策略响应形状（已脱敏）')).toBeInTheDocument());
     expect(within(panel).queryByText('manualMaintenance')).not.toBeInTheDocument();
   });
 

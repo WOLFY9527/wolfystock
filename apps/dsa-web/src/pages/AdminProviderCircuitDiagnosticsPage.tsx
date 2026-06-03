@@ -25,6 +25,7 @@ import {
   TerminalSectionHeader,
 } from '../components/terminal';
 import AdminOpsL0OverviewStrip from '../components/admin/AdminOpsL0OverviewStrip';
+import AdminOpsSectionHeading from '../components/admin/AdminOpsSectionHeading';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { cn } from '../utils/cn';
 import { formatDateTime, formatNumber } from '../utils/format';
@@ -474,7 +475,7 @@ const CurrentStatesPanel: React.FC<{ items: ProviderCircuitStateItem[] }> = ({ i
     <TerminalSectionHeader
       eyebrow="当前熔断"
       title="当前熔断状态"
-      action={<TerminalChip variant="neutral">只读快照</TerminalChip>}
+      action={<TerminalChip variant="neutral">{items.length ? `${formatNumber(items.length, 0)} 个状态快照` : '只读快照'}</TerminalChip>}
     />
     {items.length === 0 ? (
       <TerminalNotice variant="neutral" className="mt-4">
@@ -518,7 +519,7 @@ const CurrentStatesPanel: React.FC<{ items: ProviderCircuitStateItem[] }> = ({ i
 
 const EventsPanel: React.FC<{ items: ProviderCircuitEventItem[] }> = ({ items }) => (
   <TerminalPanel as="section" dense>
-    <TerminalSectionHeader eyebrow="事件" title="最近熔断事件" />
+    <TerminalSectionHeader eyebrow="事件" title="最近熔断事件" action={<TerminalChip variant="neutral">{items.length ? `${formatNumber(items.length, 0)} 条已脱敏事件` : '暂无事件'}</TerminalChip>} />
     {items.length === 0 ? (
       <TerminalNotice variant="neutral" className="mt-4">
         暂无熔断事件
@@ -565,7 +566,7 @@ const EventsPanel: React.FC<{ items: ProviderCircuitEventItem[] }> = ({ items })
 
 const QuotaWindowsPanel: React.FC<{ items: ProviderQuotaWindowItem[] }> = ({ items }) => (
   <TerminalPanel as="section" dense>
-    <TerminalSectionHeader eyebrow="配额" title="配额窗口" />
+    <TerminalSectionHeader eyebrow="配额" title="配额窗口" action={<TerminalChip variant="neutral">{items.length ? `${formatNumber(items.length, 0)} 个窗口` : '暂无窗口'}</TerminalChip>} />
     {items.length === 0 ? (
       <TerminalNotice variant="neutral" className="mt-4">
         暂无配额窗口
@@ -636,7 +637,7 @@ const QuotaWindowsPanel: React.FC<{ items: ProviderQuotaWindowItem[] }> = ({ ite
 
 const ProbeEventsPanel: React.FC<{ items: ProviderProbeEventItem[] }> = ({ items }) => (
   <TerminalPanel as="section" dense>
-    <TerminalSectionHeader eyebrow="探测" title="探测事件" />
+    <TerminalSectionHeader eyebrow="探测" title="探测事件" action={<TerminalChip variant="neutral">{items.length ? `${formatNumber(items.length, 0)} 条探测` : '暂无探测'}</TerminalChip>} />
     {items.length === 0 ? (
       <TerminalNotice variant="neutral" className="mt-4">
         暂无探测事件
@@ -682,7 +683,7 @@ const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ it
     <TerminalSectionHeader
       eyebrow="就绪度"
       title="Provider SLA / 凭证就绪"
-      action={<TerminalChip variant="neutral">只读 · 外部调用关闭</TerminalChip>}
+      action={<TerminalChip variant="neutral">{items.length ? `${formatNumber(items.length, 0)} 个就绪信号 · 外呼关闭` : '只读 · 外部调用关闭'}</TerminalChip>}
     />
     {items.length === 0 ? (
       <TerminalNotice variant="neutral" className="mt-4">
@@ -762,7 +763,7 @@ const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ it
                   />
                 </div>
 
-                <DiagnosticsDisclosure title="最近错误 buckets" summary={`${(item.recentErrors || []).length} 项，默认收起`} className="mt-3">
+                <DiagnosticsDisclosure title="L3 最近错误 buckets（已脱敏）" summary={`${(item.recentErrors || []).length} 项，默认收起`} className="mt-3">
                   {(item.recentErrors || []).length === 0 ? (
                     <p className="text-white/48">暂无错误 bucket</p>
                   ) : (
@@ -776,7 +777,7 @@ const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ it
                   )}
                 </DiagnosticsDisclosure>
 
-                <DiagnosticsDisclosure title="技术边界" summary="默认收起" className="mt-3">
+                <DiagnosticsDisclosure title="L3 技术边界（只读 / 外呼 / 门禁）" summary="默认收起" className="mt-3">
                   <div className="grid grid-cols-1 gap-2 text-[11px] text-white/50 md:grid-cols-2">
                       <p>
                         调用门禁
@@ -817,7 +818,7 @@ const BoundaryPanel: React.FC<{ data?: ProviderCircuitDiagnosticsBundle | null }
       <TerminalNotice variant="info" className="mt-4">
         当前为诊断观测，不会改变 provider fallback 或 MarketCache 行为。
       </TerminalNotice>
-      <DiagnosticsDisclosure title="技术边界" summary="读取、外呼、门禁与脱敏信息默认收起" className="mt-3">
+      <DiagnosticsDisclosure title="L3 技术边界（读取 / 外呼 / 门禁 / 脱敏）" summary="读取、外呼、门禁与脱敏信息默认收起" className="mt-3">
         <div className="grid grid-cols-1 gap-2 text-[11px] text-white/50">
           <p>
             读取边界
@@ -1035,18 +1036,36 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
         <OperatorActionListPanel actions={operatorActions} isLoading={isLoading && !data && !error} />
 
         <DiagnosticsDisclosure
-          title="L3 诊断细节：熔断、SLA、事件、配额、探测"
-          summary="Provider blocks、bucket、quota、probe 与技术边界默认折叠"
+          title="L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA"
+          summary={`${formatNumber(summary.states, 0)} 个状态 · ${formatNumber(summary.events, 0)} 个事件 · ${formatNumber(summary.quotaWindows, 0)} 个配额窗口 · 已脱敏 bucket/边界默认折叠`}
           className="px-3 py-3"
         >
           <TerminalGrid>
+            <AdminOpsSectionHeading
+              eyebrow="L2 / Circuit State"
+              title="熔断状态与当前门禁"
+              description="先判断哪些 provider 已打开/半开，以及当前页面对外呼、门禁和 redaction 的只读边界。"
+              action={<TerminalChip variant="neutral">{formatNumber(summary.states, 0)} 个状态快照</TerminalChip>}
+            />
             <div className="col-span-12 xl:col-span-8">
               <CurrentStatesPanel items={data?.states.items || []} />
             </div>
             <div className="col-span-12 xl:col-span-4">
               <BoundaryPanel data={data} />
             </div>
+            <AdminOpsSectionHeading
+              eyebrow="L2 / SLA Readiness"
+              title="SLA / 凭证就绪"
+              description="把 SLA、freshness、latency、错误与凭证门禁放在单独分组里，避免和熔断事件混读。"
+              action={<TerminalChip variant="neutral">{formatNumber(summary.slaReadiness, 0)} 个就绪信号</TerminalChip>}
+            />
             <SlaReadinessPanel items={data?.slaReadiness.items || []} />
+            <AdminOpsSectionHeading
+              eyebrow="L2 / Events-Quota-Probe"
+              title="熔断事件、配额窗口与探测事件"
+              description="这组保留原有事件、quota 与 probe 细节，但让每个子面板各自表达数量和已脱敏 bucket 影响。"
+              action={<TerminalChip variant="caution">{formatNumber(summary.events + summary.quotaWindows + summary.probeEvents, 0)} 条线索</TerminalChip>}
+            />
             <div className="min-w-0 xl:col-span-4">
               <ProbeEventsPanel items={data?.probeEvents.items || []} />
             </div>

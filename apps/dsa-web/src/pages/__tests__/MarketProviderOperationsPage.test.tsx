@@ -623,14 +623,17 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getByText('部分代表样本缺少本地历史缓存，离线覆盖检查只能显示部分就绪。')).toBeInTheDocument();
     expect(screen.queryByText('Tushare token is not configured.')).not.toBeInTheDocument();
     expect(screen.queryByText('Set TUSHARE_TOKEN when local operators need Tushare-backed CN/HK market intelligence inputs.')).not.toBeInTheDocument();
-    expect(screen.getByText('限制与快照摘要')).toBeInTheDocument();
+    expect(screen.getAllByText('配额 / 成本线索与下钻').length).toBeGreaterThan(0);
+    expect(screen.getByText('Provider 就绪与运维状态')).toBeInTheDocument();
+    expect(screen.getByText('来源缺口、配置清单与完整矩阵')).toBeInTheDocument();
+    expect(screen.getByText('本地数据就绪与样本诊断')).toBeInTheDocument();
     const sourceGapDisclosure = screen.getByTestId('market-provider-source-gap-disclosure');
     expect(sourceGapDisclosure).toHaveAttribute('data-open', 'false');
-    expect(within(sourceGapDisclosure).getByRole('button', { name: '展开 数据源缺口诊断' })).toBeInTheDocument();
+    expect(within(sourceGapDisclosure).getByRole('button', { name: '展开 L2 来源缺口：影响产品面 / 解锁能力 / 下一步' })).toBeInTheDocument();
     expect(screen.queryByTestId('market-provider-source-gap-board')).not.toBeInTheDocument();
     expect(sourceGapDisclosure).not.toHaveTextContent('P0 市场方向判断');
     expect(sourceGapDisclosure).not.toHaveTextContent('当前为什么不可用');
-    fireEvent.click(within(sourceGapDisclosure).getByRole('button', { name: '展开 数据源缺口诊断' }));
+    fireEvent.click(within(sourceGapDisclosure).getByRole('button', { name: '展开 L2 来源缺口：影响产品面 / 解锁能力 / 下一步' }));
     expect(sourceGapDisclosure).toHaveAttribute('data-open', 'true');
     const gapBoard = screen.getByTestId('market-provider-source-gap-board');
     expect(gapBoard).toHaveTextContent('优先级路线图');
@@ -648,7 +651,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(gapBoard).toHaveTextContent('所需工作');
     expect(gapBoard).toHaveTextContent('阻断评分级结论：是');
     expect(gapBoard).not.toHaveTextContent('missing_provider_configuration');
-    expect(within(sourceGapDisclosure).getByRole('button', { name: '收起 数据源缺口诊断' })).toBeInTheDocument();
+    expect(within(sourceGapDisclosure).getByRole('button', { name: '收起 L2 来源缺口：影响产品面 / 解锁能力 / 下一步' })).toBeInTheDocument();
     expect(screen.queryByText('official_public.fed_liquidity')).not.toBeInTheDocument();
     expect(screen.getAllByText('缓存状态').length).toBeGreaterThan(0);
     expect(screen.getAllByText('最近异常').length).toBeGreaterThan(0);
@@ -667,17 +670,17 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.queryByText('/Users/example/provider')).not.toBeInTheDocument();
 
     const diagnosticsDisclosure = screen.getByTestId('market-provider-diagnostics-disclosure');
-    const disclosureToggle = screen.getByRole('button', { name: '展开 二级细节：限制代码、快照摘要、追踪标识' });
+    const disclosureToggle = screen.getByRole('button', { name: '展开 L3 已脱敏细节：限制代码 / 快照摘要 / 追踪标识' });
     expect(disclosureToggle).toBeInTheDocument();
     expect(diagnosticsDisclosure).not.toHaveAttribute('open');
     fireEvent.click(disclosureToggle);
     expect(diagnosticsDisclosure).toHaveAttribute('open');
-    expect(screen.getByRole('button', { name: '收起 二级细节：限制代码、快照摘要、追踪标识' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '收起 L3 已脱敏细节：限制代码 / 快照摘要 / 追踪标识' })).toBeInTheDocument();
     expect(screen.getByText('cache_metadata_unavailable:rates')).toBeVisible();
 
     const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
     expect(matrixDisclosure).not.toHaveAttribute('open');
-    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 完整数据源矩阵' }));
+    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码' }));
     expect(matrixDisclosure).toHaveTextContent('数据源');
     expect(matrixDisclosure).toHaveTextContent('来源');
     expect(matrixDisclosure).toHaveTextContent('就绪状态');
@@ -753,16 +756,16 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklistText.indexOf('Watchlist')).toBeLessThan(checklistText.indexOf('Options Lab'));
 
     const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
-    expect(matrixDisclosure).toHaveTextContent('完整数据源矩阵');
+    expect(matrixDisclosure).toHaveTextContent('L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码');
     expect(matrixDisclosure).not.toHaveTextContent('Provider');
     expect(matrixDisclosure).not.toHaveTextContent('Readiness');
     expect(matrixDisclosure).not.toHaveTextContent('Reason codes');
-    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 完整数据源矩阵' }));
+    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码' }));
     expect(matrixDisclosure).toHaveTextContent('cache-required');
     expect(matrixDisclosure).toHaveTextContent('present');
     expect(matrixDisclosure).toHaveTextContent('polygon_high_low_history_unavailable');
     expect(matrixDisclosure).toHaveTextContent('missing_provider_configuration');
-    expect(within(matrixDisclosure).getByRole('button', { name: '收起 完整数据源矩阵' })).toBeInTheDocument();
+    expect(within(matrixDisclosure).getByRole('button', { name: '收起 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码' })).toBeInTheDocument();
   });
 
   it('keeps non-scoring setup copy conservative and leaves score eligibility to existing source gates', async () => {
@@ -773,7 +776,7 @@ describe('MarketProviderOperationsPage', () => {
     const checklist = await screen.findByTestId('market-provider-setup-checklist');
     const sourceGapDisclosure = screen.getByTestId('market-provider-source-gap-disclosure');
     expect(sourceGapDisclosure).toHaveAttribute('data-open', 'false');
-    fireEvent.click(within(sourceGapDisclosure).getByRole('button', { name: '展开 数据源缺口诊断' }));
+    fireEvent.click(within(sourceGapDisclosure).getByRole('button', { name: '展开 L2 来源缺口：影响产品面 / 解锁能力 / 下一步' }));
     const gapBoard = screen.getByTestId('market-provider-source-gap-board');
 
     expect(gapBoard).toHaveTextContent('补足可用性说明');
@@ -884,7 +887,7 @@ describe('MarketProviderOperationsPage', () => {
       expect(checklist).not.toHaveTextContent('Portfolio');
 
       const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
-      fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 完整数据源矩阵' }));
+      fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码' }));
       expect(matrixDisclosure).toHaveTextContent('cache.cn_hk_connect_daily');
       expect(matrixDisclosure).toHaveTextContent('authorized.cn_index_futures_feed');
     } finally {
@@ -1011,7 +1014,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getByText('暂无缓存状态')).toBeInTheDocument();
     expect(screen.getAllByText('窗口内暂无异常').length).toBeGreaterThan(0);
     expect(screen.getByText('缓存元数据未覆盖 indices')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '展开 二级细节：限制代码、快照摘要、追踪标识' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '展开 L3 已脱敏细节：限制代码 / 快照摘要 / 追踪标识' })).toBeInTheDocument();
   });
 
   it('renders API errors with the existing alert pattern', async () => {

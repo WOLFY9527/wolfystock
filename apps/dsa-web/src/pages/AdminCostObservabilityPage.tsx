@@ -35,6 +35,7 @@ import {
   TerminalSectionHeader,
 } from '../components/terminal';
 import AdminOpsL0OverviewStrip from '../components/admin/AdminOpsL0OverviewStrip';
+import AdminOpsSectionHeading from '../components/admin/AdminOpsSectionHeading';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { cn } from '../utils/cn';
 import { formatDateTime, formatNumber, formatPercent } from '../utils/format';
@@ -300,7 +301,7 @@ const FilterRail: React.FC<{
 }> = ({ filters, onChange }) => (
   <TerminalPanel as="aside">
     <TerminalSectionHeader
-      eyebrow="观测过滤"
+      eyebrow="L2 配额 / 成本运维"
       title={iconTitle(<ShieldCheck className="h-4 w-4" />, '窗口与范围')}
       action={<TerminalChip variant="neutral">只读筛选</TerminalChip>}
     />
@@ -424,7 +425,7 @@ const LimitationsPanel: React.FC<{ data: AdminCostSummaryResponse }> = ({ data }
 );
 
 const DeveloperDetails: React.FC<{ data: AdminCostSummaryResponse }> = ({ data }) => (
-  <TerminalDisclosure title="开发者 / 响应形状" summary="默认折叠" className="mt-4">
+  <TerminalDisclosure title="开发者 / 响应形状（已脱敏）" summary="默认折叠，仅显示 redaction 后字段" className="mt-4">
     <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
       <div className="min-w-0">
         <dt className="text-white/32">countersSource</dt>
@@ -599,7 +600,7 @@ const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = 
               />
             </section>
           </div>
-          <TerminalDisclosure title="开发者 / LLM 账本响应形状" summary="默认折叠" className="mt-4">
+          <TerminalDisclosure title="开发者 / LLM 账本响应形状（已脱敏）" summary="默认折叠，仅显示 redaction 后字段" className="mt-4">
             <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
               <div className="min-w-0">
                 <dt className="text-white/32">readOnly</dt>
@@ -723,7 +724,7 @@ const PricingPolicyPanel: React.FC = () => {
       ) : null}
 
       {state.data ? (
-        <TerminalDisclosure title="开发者 / 价格策略响应形状" summary="默认折叠" className="mt-4">
+        <TerminalDisclosure title="开发者 / 价格策略响应形状（已脱敏）" summary="默认折叠，仅显示 redaction 后字段" className="mt-4">
           <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
             <div className="min-w-0">
               <dt className="text-white/32">readOnly</dt>
@@ -805,7 +806,7 @@ const QuotaDryRunPanel: React.FC = () => {
     <TerminalPanel as="section" data-testid="quota-dry-run-panel">
       <TerminalSectionHeader
         eyebrow="Quota Pilot"
-        title={iconTitle(<Gauge className="h-4 w-4" />, '配额试运行诊断')}
+        title={iconTitle(<Gauge className="h-4 w-4" />, 'L2 配额 / 成本运维：配额试运行')}
         action={<TerminalChip variant="info">只读诊断</TerminalChip>}
       />
 
@@ -894,7 +895,7 @@ const QuotaDryRunPanel: React.FC = () => {
       ) : null}
       {state.error ? <div className="mt-4"><ApiErrorAlert error={state.error} /></div> : null}
 
-      <TerminalDisclosure title="开发者 / Quota 响应形状" summary="默认折叠" className="mt-4">
+      <TerminalDisclosure title="开发者 / Quota 响应形状（已脱敏）" summary="默认折叠，仅显示 redaction 后字段" className="mt-4">
         <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
           <div className="min-w-0">
             <dt className="text-white/32">diagnosticOnly</dt>
@@ -1072,12 +1073,18 @@ const AdminCostObservabilityPage: React.FC = () => {
                 <LimitationsPanel data={data} />
               </div>
               <div className="min-w-0 space-y-6 xl:col-span-4">
+                <AdminOpsSectionHeading
+                  eyebrow="L2 / Quota-Cost Ops"
+                  title="L2 配额 / 成本运维"
+                  description="保留窗口过滤、Quota dry-run、账本与价格策略，但把它们明确标成运维控制与观测，而不是产品行为开关。"
+                  action={<TerminalChip variant="info">只读控制与下钻</TerminalChip>}
+                />
                 <FilterRail filters={filters} onChange={updateFilters} />
                 <QuotaDryRunPanel />
               </div>
             </div>
 
-            <TerminalDisclosure title="二级细节：账本、价格、Provider / 缓存" summary="默认折叠">
+            <TerminalDisclosure title="L2 配额 / 成本运维细节：账本、价格、Provider / 缓存" summary={`默认折叠 · ${compactNumber(needsAttentionCount)} 个压力线索 · 开发者形状保持已脱敏`}>
               <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
                 <div className="min-w-0 space-y-6 xl:col-span-12">
                   <LlmLedgerPanel key={`${filters.window}-${filters.bucket}-${filters.limit}`} filters={filters} />

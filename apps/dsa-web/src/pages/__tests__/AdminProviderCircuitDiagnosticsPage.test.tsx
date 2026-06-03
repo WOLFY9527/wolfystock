@@ -229,23 +229,26 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
 
     render(<AdminProviderCircuitDiagnosticsPage />);
 
-    expect(await screen.findByText('L3 诊断细节：熔断、SLA、事件、配额、探测')).toBeInTheDocument();
+    expect(await screen.findByText('L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA')).toBeInTheDocument();
     expect(screen.queryByText('最近熔断事件')).not.toBeInTheDocument();
     expect(screen.queryByText('配额窗口')).not.toBeInTheDocument();
     expect(screen.queryByText('探测事件')).not.toBeInTheDocument();
     expect(screen.queryByText('Provider SLA / 凭证就绪')).not.toBeInTheDocument();
     expect(screen.queryByText('Provider 429')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText('展开 L3 诊断细节：熔断、SLA、事件、配额、探测'));
+    fireEvent.click(screen.getByLabelText('展开 L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA'));
 
     expect((await screen.findAllByText('finnhub')).length).toBeGreaterThan(0);
+    expect(screen.getByText('熔断状态与当前门禁')).toBeInTheDocument();
+    expect(screen.getByText('SLA / 凭证就绪')).toBeInTheDocument();
+    expect(screen.getByText('熔断事件、配额窗口与探测事件')).toBeInTheDocument();
     expect(screen.getAllByText('当前为诊断观测，不会改变 provider fallback 或 MarketCache 行为。').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Provider 429').length).toBeGreaterThan(0);
     expect(screen.getByText('Provider SLA / 凭证就绪')).toBeInTheDocument();
     expect(screen.getByText('已配置')).toBeInTheDocument();
     expect(screen.getByText('趋势请求')).toBeInTheDocument();
     expect(screen.getByText('6_20')).toBeInTheDocument();
-    expect(screen.getByText('最近错误 buckets')).toBeInTheDocument();
+    expect(screen.getByText('L3 最近错误 buckets（已脱敏）')).toBeInTheDocument();
     expect(screen.getByText('最近熔断事件')).toBeInTheDocument();
     expect(screen.getAllByText('配额窗口').length).toBeGreaterThan(0);
     expect(screen.getByText('探测事件')).toBeInTheDocument();
@@ -254,9 +257,19 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(screen.getByText('不执行熔断门禁')).toBeInTheDocument();
     expect(screen.getByText('不触发外部调用').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
     expect(screen.getByText('不执行熔断门禁').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
-    expect(screen.getByText('只读快照').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
+    expect(
+      screen
+        .getAllByText(/个状态快照|只读快照/)
+        .find((element) => element.closest('[data-terminal-primitive="chip"]'))
+        ?.closest('[data-terminal-primitive="chip"]'),
+    ).not.toBeNull();
     expect(screen.getByText('打开').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
-    expect(screen.getByText('只读 · 外部调用关闭').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
+    expect(
+      screen
+        .getAllByText(/个就绪信号 · 外呼关闭|只读 · 外部调用关闭/)
+        .find((element) => element.closest('[data-terminal-primitive="chip"]'))
+        ?.closest('[data-terminal-primitive="chip"]'),
+    ).not.toBeNull();
     expect(screen.queryByText('ops:providers:read')).not.toBeInTheDocument();
     expect(screen.queryByText(/live call/i)).not.toBeInTheDocument();
     expect(screen.queryByText('SECRET')).not.toBeInTheDocument();

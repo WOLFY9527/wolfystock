@@ -17,6 +17,7 @@ import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { ApiErrorAlert, Input } from '../components/common';
 import { DataFreshnessBadge } from '../components/market-overview/marketOverviewPrimitives';
 import AdminOpsL0OverviewStrip, { type AdminOpsTrustState } from '../components/admin/AdminOpsL0OverviewStrip';
+import AdminOpsSectionHeading from '../components/admin/AdminOpsSectionHeading';
 import {
   TerminalButton,
   TerminalChip,
@@ -1198,6 +1199,7 @@ const SourceGapBoard: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ row
 
 const SourceGapDisclosure: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ rows }) => {
   const [open, setOpen] = useState(false);
+  const gapCount = rows.filter(matrixRowHasMissingSetup).length;
   return (
     <TerminalNestedBlock
       data-testid="market-provider-source-gap-disclosure"
@@ -1206,15 +1208,15 @@ const SourceGapDisclosure: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = (
     >
       <div className="flex min-w-0 items-center justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="truncate text-xs font-medium text-[color:var(--wolfy-text-secondary)]">数据源缺口诊断</h3>
+          <h3 className="truncate text-xs font-medium text-[color:var(--wolfy-text-secondary)]">L2 来源缺口：影响产品面 / 解锁能力 / 下一步</h3>
           <p className="mt-0.5 truncate text-[11px] text-[color:var(--wolfy-text-muted)]">
-            默认折叠，展开查看分组缺口与工作说明
+            默认折叠 · {formatNumber(gapCount, 0)} 个缺口线索 · 仅显示已脱敏原因与工作说明
           </p>
         </div>
         <TerminalButton
           variant="compact"
           aria-expanded={open}
-          aria-label={`${open ? '收起' : '展开'} 数据源缺口诊断`}
+          aria-label={`${open ? '收起' : '展开'} L2 来源缺口：影响产品面 / 解锁能力 / 下一步`}
           onClick={() => setOpen((current) => !current)}
         >
           {open ? '收起' : '展开'}
@@ -1374,8 +1376,8 @@ const ProviderOperationsMatrixPanel: React.FC<{
           <SourceGapDisclosure rows={rows} />
           <TerminalDisclosure
             data-testid="market-provider-matrix-disclosure"
-            title="完整数据源矩阵"
-            summary="默认折叠，保留来源类型、运行状态、门槛与原因代码原始诊断"
+            title="L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码"
+            summary={`默认折叠 · ${formatNumber(rows.length, 0)} 行 · ${formatNumber(summary.paidDataLikelyRequiredRows, 0)} 行含付费/配额线索 · 原始代码仅限这里`}
             className="mt-2 bg-black/10"
           >
             <TerminalDenseTable>
@@ -1641,15 +1643,37 @@ const EventRollupsPanel: React.FC<{ eventRollups: MarketProviderEventRollup[] }>
 const DiagnosticsPanel: React.FC<{
   response: MarketProviderOperationsResponse;
   selectedItem: MarketProviderOperationItem | null;
-}> = ({ response, selectedItem }) => {
+  matrixSummary: ProviderOperationsMatrixResponse['summary'] | null;
+}> = ({ response, selectedItem, matrixSummary }) => {
   const tickflowProjection = readTickflowProjection(response.metadata);
+  const paidRows = matrixSummary?.paidDataLikelyRequiredRows ?? 0;
+  const missingRows = matrixSummary?.missingProviderRows ?? 0;
   return (
     <TerminalPanel as="section" className="col-span-12">
       <TerminalSectionHeader
-        eyebrow="二级详情"
-        title="限制与快照摘要"
-        action={response.limitations.length ? <TerminalChip variant="caution">{response.limitations.length} 条限制</TerminalChip> : <TerminalChip variant="neutral">暂无限制</TerminalChip>}
+        eyebrow="L2 配额 / 成本线索"
+        title="配额 / 成本线索与下钻"
+        action={(
+          <div className="flex flex-wrap gap-1.5">
+            <TerminalChip variant={paidRows > 0 ? 'caution' : 'neutral'}>付费线索 {formatNumber(paidRows, 0)}</TerminalChip>
+            <TerminalChip variant={missingRows > 0 ? 'caution' : 'neutral'}>缺口 {formatNumber(missingRows, 0)}</TerminalChip>
+            <TerminalChip variant={response.limitations.length ? 'caution' : 'neutral'}>限制 {formatNumber(response.limitations.length, 0)}</TerminalChip>
+          </div>
+        )}
       />
+      <p className="mt-2 text-[11px] leading-5 text-white/46">
+        这里只汇总既有付费/缺口/限制线索，并保留到 Admin Logs 的下钻入口；不新增配额 API，不扩展原始 provider 载荷。
+      </p>
+      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+        <TerminalMetric label="可能需付费" value={formatNumber(paidRows, 0)} valueClassName="text-sm" />
+        <TerminalMetric label="失败 / 降级" value={formatNumber(response.summary.failureCount + response.summary.fallbackCount + response.summary.staleCount, 0)} valueClassName="text-sm" />
+        <TerminalMetric label="限制代码" value={formatNumber(response.limitations.length, 0)} valueClassName="text-sm" />
+        <TerminalMetric label="追踪标识" value={selectedItem ? providerLabel(selectedItem) : 'Admin Logs'} valueClassName="truncate text-sm" />
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <DrillLink drill={response.adminLogDrillThrough} />
+        {selectedItem ? <DrillLink drill={selectedItem.adminLogDrillThrough} /> : null}
+      </div>
       {tickflowProjection ? <div className="mt-4"><TickflowEntitlementRow projection={tickflowProjection} /></div> : null}
       <div className="mt-4 flex flex-wrap gap-2">
         {response.limitations.length ? response.limitations.map((limitation) => (
@@ -1657,8 +1681,8 @@ const DiagnosticsPanel: React.FC<{
         )) : <TerminalChip variant="neutral">暂无限制</TerminalChip>}
       </div>
       <TerminalDisclosure
-        title="二级细节：限制代码、快照摘要、追踪标识"
-        summary="默认折叠"
+        title="L3 已脱敏细节：限制代码 / 快照摘要 / 追踪标识"
+        summary="默认折叠 · 原始代码与追踪标识只保留已脱敏摘要"
         className="mt-4"
         data-testid="market-provider-diagnostics-disclosure"
       >
@@ -1808,8 +1832,8 @@ const MarketDataReadinessPanel: React.FC<{
                         ))}
                       </div>
                       <TerminalDisclosure
-                        title="技术细节"
-                        summary="诊断 ID、原始影响面与样本差异"
+                        title="L3 已脱敏技术细节"
+                        summary="诊断 ID、影响面与样本差异"
                         className="mt-2 bg-black/10"
                       >
                         <div className="space-y-2 text-[11px] leading-5 text-white/50">
@@ -2063,6 +2087,24 @@ const MarketProviderOperationsPage: React.FC = () => {
         {error && !response && !isLoading ? <EmptyErrorState /> : null}
         {!isLoading ? (
           <TerminalGrid>
+            <AdminOpsSectionHeading
+              eyebrow="L1 / Provider Readiness"
+              title="Provider 就绪与运维状态"
+              description="先看当前数据源状态、熔断、缓存和最近异常，再决定是否需要下钻到矩阵或 Admin Logs。"
+              action={<TerminalChip variant="neutral">{formatNumber(items.length, 0)} 个 provider 快照</TerminalChip>}
+            />
+            {response ? (
+              <>
+                <ProviderOperationsTable items={items} selectedKey={effectiveSelectedProviderKey} onSelect={setSelectedProviderKey} />
+                <ProviderDetailsPanel item={selectedItem} />
+              </>
+            ) : null}
+            <AdminOpsSectionHeading
+              eyebrow="L2 / Operations Matrix"
+              title="来源缺口、配置清单与完整矩阵"
+              description="这一组只重排既有来源缺口、配置动作和完整矩阵，不改变评分、fallback、provider 顺序或就绪语义。"
+              action={<TerminalChip variant="info">{formatNumber(matrixRows.length, 0)} 条矩阵行</TerminalChip>}
+            />
             <ProviderOperationsMatrixPanel
               response={matrixResponse}
               readiness={readiness}
@@ -2071,14 +2113,12 @@ const MarketProviderOperationsPage: React.FC = () => {
               error={matrixError}
               surfaceFocus={surfaceFocus}
             />
-            {response ? (
-              <>
-                <ProviderOperationsTable items={items} selectedKey={effectiveSelectedProviderKey} onSelect={setSelectedProviderKey} />
-                <ProviderDetailsPanel item={selectedItem} />
-                <EventRollupsPanel eventRollups={eventRollups} />
-                <CacheStatesPanel cacheStates={cacheStates} />
-              </>
-            ) : null}
+            <AdminOpsSectionHeading
+              eyebrow="L2 / Data Readiness"
+              title="本地数据就绪与样本诊断"
+              description="继续把本地行情只读诊断放在独立分组中，明确它解释的是环境/样本覆盖，而不是 provider 运行时行为。"
+              action={<TerminalChip variant={readiness?.readinessStatus === 'ready' ? 'success' : readiness?.readinessStatus === 'partial' ? 'caution' : 'neutral'}>{readiness ? readinessStatusLabel(readiness.readinessStatus) : '待读取'}</TerminalChip>}
+            />
             <MarketDataReadinessPanel
               data={readiness}
               isLoading={isReadinessLoading}
@@ -2087,7 +2127,19 @@ const MarketProviderOperationsPage: React.FC = () => {
               onSymbolInputChange={setReadinessSymbolsInput}
               onSymbolSubmit={submitReadinessSymbols}
             />
-            {response ? <DiagnosticsPanel response={response} selectedItem={selectedItem} /> : null}
+            <AdminOpsSectionHeading
+              eyebrow="L2 / Quota-Cost Signals"
+              title="配额 / 成本线索与下钻"
+              description="保留既有失败、缓存、限制代码和 Admin Logs 下钻入口，把付费/配额线索集中到一组里展示。"
+              action={<TerminalChip variant="caution">{formatNumber((matrixResponse?.summary?.paidDataLikelyRequiredRows ?? 0) + (response?.limitations.length ?? 0), 0)} 个线索</TerminalChip>}
+            />
+            {response ? (
+              <>
+                <EventRollupsPanel eventRollups={eventRollups} />
+                <CacheStatesPanel cacheStates={cacheStates} />
+                <DiagnosticsPanel response={response} selectedItem={selectedItem} matrixSummary={matrixResponse?.summary ?? null} />
+              </>
+            ) : null}
           </TerminalGrid>
         ) : null}
       </TerminalPageShell>
