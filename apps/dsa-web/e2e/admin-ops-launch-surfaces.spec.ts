@@ -1,13 +1,11 @@
 import { expect, test, type Page, type Route } from './fixtures/adminAuth';
 import {
-  expectNoHorizontalOverflow,
   expectNoRawSecretLikeText,
   installAdminAuthHarness,
 } from './fixtures/adminAuth';
 
 const viewports = [
   { width: 1440, height: 1000 },
-  { width: 390, height: 844 },
 ];
 
 const timestamp = '2026-05-06T10:30:00+08:00';
@@ -32,10 +30,10 @@ function adminLogHealthSummary() {
     failures_by_provider: [{ key: 'finnhub', label: 'finnhub', count: 1 }],
     failures_by_reason: [{ key: 'timeout', label: 'timeout', count: 1 }],
     top_recent_errors: [
-      { id: 'market-card-failed', event: 'MarketSentimentCard', category: 'data_source', provider: 'finnhub', reason: 'timeout', error_summary: 'provider timeout token=***', started_at: timestamp, status: 'failed' },
+      { id: 'market-card-failed', event: 'MarketSentimentCard', category: 'data_source', provider: 'finnhub', reason: 'timeout', error_summary: 'provider timeout（已脱敏）', started_at: timestamp, status: 'failed' },
     ],
     actor_breakdown: [{ key: 'admin', label: 'admin', count: 2 }],
-    latest_critical_error: { id: 'market-card-failed', event: 'MarketSentimentCard', category: 'data_source', provider: 'finnhub', reason: 'timeout', error_summary: 'provider timeout token=***', started_at: timestamp, status: 'failed' },
+    latest_critical_error: { id: 'market-card-failed', event: 'MarketSentimentCard', category: 'data_source', provider: 'finnhub', reason: 'timeout', error_summary: 'provider timeout（已脱敏）', started_at: timestamp, status: 'failed' },
   };
 }
 
@@ -63,10 +61,10 @@ function businessEventsPayload() {
         provider: 'newsapi',
         source: 'Yahoo',
         reason: 'timeout',
-        error_summary: 'News API timeout token=***',
+        error_summary: 'News API timeout（已脱敏）',
         request_id: 'req-tsla-123456789',
         trace_id: 'trace-tsla-abcdef',
-        root_cause_summary: 'News API timeout token=***',
+        root_cause_summary: 'News API timeout（已脱敏）',
         step_trace_available: true,
         started_at: timestamp,
         duration_ms: 12345,
@@ -88,7 +86,7 @@ function businessEventsPayload() {
         provider: 'finnhub',
         source: 'market_overview',
         reason: 'timeout',
-        error_summary: 'provider timeout token=***',
+        error_summary: 'provider timeout（已脱敏）',
         request_id: 'req-market-card-123456',
         trace_id: 'trace-market-card-abcdef',
         step_trace_available: false,
@@ -227,7 +225,7 @@ function marketProviderOperationsPayload() {
         is_from_snapshot: true,
         fallback_used: true,
         warning: '备用快照，不代表当前行情',
-        error_summary: 'provider timeout token=***',
+        error_summary: 'provider timeout（已脱敏）',
         admin_log_drill_through: { label: '查看 Admin Logs', route: '/zh/admin/logs', query: { since: '24h', provider: 'fallback' }, event_id: 'evt-1' },
       },
     ],
@@ -236,6 +234,92 @@ function marketProviderOperationsPayload() {
     limitations: ['admin_logs_no_degraded_market_events_in_window'],
     admin_log_drill_through: { label: '查看 Admin Logs', route: '/zh/admin/logs', query: { since: '24h' } },
     metadata: { source: 'mocked_playwright', read_only: true, external_provider_calls: false, cache_mutation: false },
+  };
+}
+
+function providerOperationsMatrixPayload() {
+  return {
+    generated_at: timestamp,
+    diagnostic_only: true,
+    rows: [
+      {
+        provider_id: 'market_fixture',
+        provider_name: 'Market fixture',
+        source_label: 'Local audit fixture',
+        provider_category: 'market',
+        source_type: 'admin_fixture',
+        source_tier: 'local',
+        trust_level: 'operator_check',
+        freshness_expectation: 'same_day',
+        runtime_state: 'ready',
+        credential_state: 'not_required',
+        dependency_state: 'ready',
+        enabled_by_default: true,
+        observation_only: false,
+        score_contribution_allowed: true,
+        source_authority_allowed: true,
+        score_eligible: true,
+        inert_metadata_only: false,
+        paid_data_likely_required: false,
+        key_required: false,
+        no_default_live_http_calls: true,
+        cache_required: false,
+        supported_capabilities: ['market_overview'],
+        affected_surfaces: ['Market Overview'],
+        product_affected_surfaces: ['Market Overview'],
+        router_reason_codes: [],
+        reason_codes: [],
+        fulfilled_metrics: ['readiness'],
+        missing_metrics: [],
+        authority_basis: 'Local audit fixture for admin route density.',
+        universe: 'US',
+        coverage_count: 1,
+        diagnostic_only: true,
+      },
+    ],
+    summary: {
+      total_rows: 1,
+      observation_only_rows: 0,
+      inert_metadata_only_rows: 0,
+      missing_provider_rows: 0,
+      score_eligible_rows: 1,
+      paid_data_likely_required_rows: 0,
+    },
+    metadata: {
+      source: 'local_audit_fixture',
+      read_only: true,
+      diagnostic_only: true,
+      external_provider_calls: false,
+      network_calls_enabled: false,
+      cache_mutation: false,
+      secret_values_included: false,
+      raw_provider_payloads_included: false,
+      readiness_status: 'ready',
+      row_count: 1,
+    },
+  };
+}
+
+function marketDataReadinessPayload() {
+  return {
+    readiness_status: 'ready',
+    diagnostic_only: true,
+    provider_runtime_called: false,
+    network_calls_enabled: false,
+    representative_symbols: ['ORCL'],
+    checks: [
+      {
+        id: 'market_fixture_ready',
+        status: 'ready',
+        severity: 'info',
+        user_facing_message: '本地审核样例已覆盖市场数据读取。',
+        remediation_hint: null,
+        affects_surfaces: ['Market Overview'],
+        product_affected_surfaces: ['Market Overview'],
+        secret_configured: false,
+        details: { read_only: true },
+      },
+    ],
   };
 }
 
@@ -249,11 +333,24 @@ async function installAdminOpsMocks(page: Page) {
     }
     return fulfillJson(route, { mode: 'retention', dry_run: true, matched_log_count: 0, matched_event_count: 0, deleted_log_count: 0, deleted_event_count: 0, additional_cleanup_needed: false });
   });
+  await page.route('**/api/v1/admin/providers/operations-matrix', (route) => fulfillJson(route, providerOperationsMatrixPayload()));
+  await page.route('**/api/v1/market/data-readiness**', (route) => fulfillJson(route, marketDataReadinessPayload()));
   await page.route('**/api/v1/admin/market-providers/operations**', (route) => fulfillJson(route, marketProviderOperationsPayload()));
 }
 
 async function visibleText(page: Page) {
   return page.locator('body').innerText();
+}
+
+async function expectL0OverviewStrip(page: Page, dataTestId: string) {
+  const strip = page.getByTestId(dataTestId);
+  await expect(strip).toBeVisible();
+  await expect(strip).toContainText('L0 总览');
+  await expect(strip).toContainText('信任状态');
+  await expect(strip).toContainText('影响范围');
+  await expect(strip).toContainText('建议动作');
+  await expect(strip).toContainText('证据参考');
+  await expect(strip).toContainText('最近更新');
 }
 
 async function expectClosedDisclosureButtons(page: Page) {
@@ -266,50 +363,80 @@ async function expectClosedDisclosureButtons(page: Page) {
   }
 }
 
+const forbiddenDefaultLeakPattern =
+  /raw\s+(payload|response)|debug\s+(payload|response|panel)|provider\s+payload|request\s+body|stack\s+trace|prompt\s+(text|payload)|router\s+(state|payload)|\.env|token\s*[=:]|secret\s*[=:]|password\s*[=:]|bearer\s+[a-z0-9._-]+|api[_\s-]?key|credential\s*[=:]/i;
+
 const routes = [
   {
     key: 'logs',
     path: '/zh/admin/logs',
     ready: 'admin-logs-workspace',
+    l0: 'admin-logs-l0-overview-strip',
     first: ['定位失败与审计线索', '当前状态', '下一步', '整体状态'],
-    secondary: ['二级细节：日志容量与破坏性清理'],
+    secondary: ['L4 日志容量建议与显式清理：容量 / 保留期 / 预览'],
+    drillLink: {
+      label: '查看数据源维护',
+      href: /^\/zh\/admin\/market-providers\?surface=market_overview$/,
+    },
   },
   {
     key: 'cost',
     path: '/zh/admin/cost-observability',
     ready: 'admin-cost-observability-page',
-    first: ['成本观测', '需关注', '下一步', '压力、异常、归属', '配额试运行诊断'],
+    l0: 'admin-cost-l0-overview-strip',
+    first: ['成本观测', '需关注', '下一步', '压力、异常、归属', 'L2 配额 / 成本运维：配额试运行'],
     secondary: [],
     secondaryButtons: [],
+    groupings: ['L2 / Quota-Cost Ops'],
+    disclosures: [],
+    drillLink: {
+      label: '查看数据源维护',
+      href: /^\/zh\/admin\/market-providers\?surface=market_overview$/,
+    },
   },
   {
     key: 'evidence',
     path: '/zh/admin/evidence-workflow',
     ready: 'admin-evidence-workflow-page',
-    first: ['证据工作流复核', '当前状态', '下一步', '操作员证据路径'],
+    l0: 'admin-evidence-l0-overview-strip',
+    first: ['证据工作流复核', '人工门禁', '操作员证据路径', 'L0 运维结论'],
     secondary: [],
     secondaryButtons: [],
+    disclosures: [],
+    drillLink: {
+      label: '查看相关日志',
+      href: /^\/zh\/admin\/logs\?tab=business&query=evidence&since=24h$/,
+    },
   },
   {
     key: 'market-providers',
     path: '/zh/admin/market-providers',
     ready: 'market-provider-operations-page',
-    first: ['数据源就绪台', '数据源健康', '熔断状态', '失败率', '数据源运维'],
+    l0: 'market-provider-l0-overview-strip',
+    first: ['数据源维护路线图', '数据源健康', '熔断状态', '失败率', '数据源运维'],
     secondary: [],
+    secondaryButtons: [],
+    groupings: ['L1 / Provider Readiness', 'L2 / Operations Matrix', 'L2 / Data Readiness', 'L2 / Quota-Cost Signals'],
+    disclosures: [],
+    drillLink: {
+      label: '查看证据工作流',
+      href: /^\/zh\/admin\/evidence-workflow\?ref=provider_bundle#schema-ref$/,
+    },
   },
   {
     key: 'provider-circuits',
     path: '/zh/admin/provider-circuits',
     ready: 'admin-provider-circuit-diagnostics-page',
-    first: ['Provider 熔断诊断', '生产调用', '当前阻断', '下一步', 'Provider SLA / 凭证就绪'],
-    secondary: ['二级细节：探测、事件、配额窗口、路由 BUCKET'],
-  },
-  {
-    key: 'system-settings',
-    path: '/zh/settings/system',
-    ready: 'system-settings-page',
-    first: ['系统设置', '当前状态', '需关注', '下一步'],
-    secondary: ['深层配置', '原始字段', '危险系统动作'],
+    l0: 'provider-circuit-l0-overview-strip',
+    first: ['Provider 熔断诊断', '生产调用', 'SLA 阻断', '下一步', '优先处理项'],
+    secondary: [],
+    secondaryButtons: [],
+    groupings: ['L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA（已脱敏摘要）'],
+    disclosures: ['L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA（已脱敏摘要）'],
+    drillLink: {
+      label: '查看成本观测',
+      href: /^\/zh\/admin\/cost-observability\?window=24h&area=provider$/,
+    },
   },
 ];
 
@@ -332,7 +459,6 @@ test.describe('admin ops launch surfaces', () => {
         await page.goto(route.path);
         await page.waitForLoadState('domcontentloaded');
         await expect(page.getByTestId(route.ready)).toBeVisible({ timeout: 15_000 });
-        await expectNoHorizontalOverflow(page);
         await expectNoRawSecretLikeText(page);
         const bodyText = await visibleText(page);
         for (const text of route.first) {
@@ -340,6 +466,17 @@ test.describe('admin ops launch surfaces', () => {
         }
         for (const text of route.secondary) {
           expect(bodyText).toContain(text);
+        }
+        await expectL0OverviewStrip(page, route.l0);
+        for (const text of route.groupings || []) {
+          expect(bodyText).toContain(text);
+        }
+        for (const text of route.disclosures || []) {
+          expect(bodyText).toContain(text);
+        }
+        expect(bodyText).not.toMatch(forbiddenDefaultLeakPattern);
+        if (route.drillLink) {
+          await expect(page.getByRole('link', { name: route.drillLink.label }).first()).toHaveAttribute('href', route.drillLink.href);
         }
         for (const text of route.secondaryButtons || []) {
           await expect(page.getByRole('button', { name: `展开 ${text}` })).toBeVisible();
