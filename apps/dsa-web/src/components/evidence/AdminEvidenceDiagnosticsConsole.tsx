@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Activity, Radar, ShieldAlert, Waves, Wallet } from 'lucide-react';
 import { backtestApi } from '../../api/backtest';
 import { marketRotationApi } from '../../api/marketRotation';
@@ -24,7 +24,7 @@ import {
   TerminalNotice,
   TerminalPanel,
   TerminalSectionHeader,
-} from '../terminal';
+} from '../terminal/TerminalPrimitives';
 
 type EngineId = 'scanner' | 'rotation' | 'options' | 'backtest' | 'portfolio_risk';
 type LoadState = 'loading' | 'ready' | 'empty' | 'error';
@@ -110,15 +110,23 @@ function candidateEvidenceContainer(candidate: unknown): Record<string, unknown>
 }
 
 function pickScannerCandidate(detail: Record<string, unknown>): Record<string, unknown> | null {
-  const candidateGroups = [
-    Array.isArray(detail.selected) ? detail.selected : [],
-    Array.isArray(detail.shortlist) ? detail.shortlist : [],
-    Array.isArray(detail.candidates) ? detail.candidates : [],
+  const allCandidates = [
+    ...(Array.isArray(detail.selected) ? detail.selected : []),
+    ...(Array.isArray(detail.shortlist) ? detail.shortlist : []),
+    ...(Array.isArray(detail.candidates) ? detail.candidates : []),
   ];
 
-  for (const group of candidateGroups) {
-    const match = group.find((candidate) => Boolean(candidateEvidenceContainer(candidate)));
-    if (isRecord(match)) return match;
+  const candidateMap = new Map<Record<string, unknown>, Record<string, unknown> | null>();
+  for (const candidate of allCandidates) {
+    if (isRecord(candidate)) {
+      candidateMap.set(candidate, candidateEvidenceContainer(candidate));
+    }
+  }
+
+  for (const candidate of allCandidates) {
+    if (isRecord(candidate) && candidateMap.get(candidate)) {
+      return candidate;
+    }
   }
   return null;
 }
@@ -352,7 +360,7 @@ function metricTone(section: EngineSection): string {
   return 'text-white';
 }
 
-function renderSectionBody(section: EngineSection) {
+function SectionBody({ section }: { section: EngineSection }) {
   if (section.state === 'loading') {
     return <TerminalEmptyState title="正在汇总">{`读取 ${section.title}…`}</TerminalEmptyState>;
   }
@@ -466,10 +474,7 @@ export function AdminEvidenceDiagnosticsConsole() {
     };
   }, []);
 
-  const orderedSections = useMemo(
-    () => (['scanner', 'rotation', 'options', 'backtest', 'portfolio_risk'] as EngineId[]).map((id) => sections[id]),
-    [sections],
-  );
+  const orderedSections = (['scanner', 'rotation', 'options', 'backtest', 'portfolio_risk'] as EngineId[]).map((id) => sections[id]);
 
   const unavailableCount = orderedSections.filter((section) => section.state === 'error' || section.state === 'empty').length;
 
@@ -528,7 +533,7 @@ export function AdminEvidenceDiagnosticsConsole() {
                 eyebrow={section.eyebrow}
                 title={
                   <span className="inline-flex min-w-0 items-center gap-2">
-                    <Icon className="h-4 w-4 shrink-0 text-cyan-200" aria-hidden="true" />
+                    <Icon className="size-4 shrink-0 text-cyan-200" aria-hidden="true" />
                     <span className="truncate">{section.title}</span>
                   </span>
                 }
@@ -538,7 +543,7 @@ export function AdminEvidenceDiagnosticsConsole() {
                   </TerminalChip>
                 ) : null}
               />
-              {renderSectionBody(section)}
+              <SectionBody section={section} />
             </TerminalPanel>
           );
         })}

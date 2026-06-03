@@ -1,7 +1,7 @@
 import {
   TerminalChip,
   TerminalDisclosure,
-} from '../terminal';
+} from '../terminal/TerminalPrimitives';
 import type { NormalizedEvidenceSummary } from '../../utils/evidenceDisplay';
 import { cn } from '../../utils/cn';
 

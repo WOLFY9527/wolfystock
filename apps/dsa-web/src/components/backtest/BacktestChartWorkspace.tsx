@@ -71,7 +71,7 @@ export function RobustnessCoverageTrack({
             <div className="flex items-start justify-between gap-3">
               <p className="metric-card__label">{row.label}</p>
               <span
-                className="inline-block h-2.5 w-2.5 rounded-full"
+                className="inline-block size-2.5 rounded-full"
                 style={{ backgroundColor: COVERAGE_TRACK_COLORS[index % COVERAGE_TRACK_COLORS.length] }}
               />
             </div>
@@ -208,14 +208,15 @@ function AdditiveDashboardPanels({
             </div>
             <div className="space-y-2.5">
               {robustnessLensRows.map((row) => (
-                <div
+                <button
+                  type="button"
                   key={`dashboard-${row.key}`}
                   className={`rounded-[1rem] px-3 py-2.5 transition-colors ${
                     activeRobustnessKey === row.key ? 'bg-[rgba(125,211,252,0.18)]' : 'bg-[rgba(15,23,42,0.18)]'
                   } focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(125,211,252,0.45)]`}
+                  tabIndex={0}
                   data-linked-highlight={activeRobustnessKey === row.key ? 'true' : undefined}
                   data-testid={`dashboard-robustness-row-${row.key}`}
-                  tabIndex={0}
                   aria-label={`${row.label} ${row.summary} ${row.detail}`}
                   aria-describedby={hoveredRobustnessRow?.key === row.key ? 'dashboard-robustness-hover-tooltip' : undefined}
                   onMouseEnter={() => activateRobustnessRow(row)}
@@ -223,13 +224,13 @@ function AdditiveDashboardPanels({
                   onFocus={() => activateRobustnessRow(row)}
                   onBlur={clearRobustnessRow}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="metric-card__label">{row.label}</p>
+                  <span className="flex items-center justify-between gap-3">
+                    <span className="metric-card__label">{row.label}</span>
                     <span className="product-chip">{row.state}</span>
-                  </div>
-                  <p className="mt-1 preview-card__text">{row.summary}</p>
-                  <p className="text-[11px] text-secondary">{row.detail}</p>
-                </div>
+                  </span>
+                  <span className="mt-1 block preview-card__text">{row.summary}</span>
+                  <span className="block text-[11px] text-secondary">{row.detail}</span>
+                </button>
               ))}
             </div>
             {hoveredRobustnessRow ? (
@@ -269,14 +270,15 @@ function AdditiveDashboardPanels({
             </div>
             <div className="space-y-2.5">
               {riskControlRows.map((row) => (
-                <div
+                <button
+                  type="button"
                   key={`dashboard-risk-${row.key}`}
                   className={`rounded-[1rem] px-3 py-2.5 transition-colors ${
                     activeRiskControlKey === row.key ? 'bg-[rgba(125,211,252,0.18)]' : 'bg-[rgba(15,23,42,0.18)]'
                   } focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(125,211,252,0.45)]`}
+                  tabIndex={0}
                   data-linked-highlight={activeRiskControlKey === row.key ? 'true' : undefined}
                   data-testid={`dashboard-risk-controls-row-${row.key}`}
-                  tabIndex={0}
                   aria-label={`${row.label} ${row.valueLabel}`}
                   aria-describedby={hoveredRiskControlRow?.key === row.key ? 'dashboard-risk-controls-hover-tooltip' : undefined}
                   onMouseEnter={() => activateRiskControlRow(row)}
@@ -284,11 +286,11 @@ function AdditiveDashboardPanels({
                   onFocus={() => activateRiskControlRow(row)}
                   onBlur={clearRiskControlRow}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="metric-card__label">{row.label}</p>
+                  <span className="flex items-center justify-between gap-3">
+                    <span className="metric-card__label">{row.label}</span>
                     <span className="preview-card__text">{row.valueLabel}</span>
-                  </div>
-                </div>
+                  </span>
+                </button>
               ))}
             </div>
             {hoveredRiskControlRow ? (

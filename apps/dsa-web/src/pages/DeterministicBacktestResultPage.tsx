@@ -1,10 +1,11 @@
 import type React from 'react';
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useEffectEvent, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Button } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Button } from '../components/common/Button';
 import type { BacktestResultReportMode } from '../components/backtest/BacktestResultReport';
 import BacktestChartWorkspace, {
   type CoverageTrackItem,
@@ -48,6 +49,7 @@ import {
   createRuleBacktestPresetFromRun,
   getRuleScenarioPlans,
   loadRuleBacktestPresets,
+  RULE_BACKTEST_PRESET_STORAGE_KEY,
   saveRuleBacktestPreset,
   type RuleBacktestPreset,
   type RuleScenarioPlan,
@@ -69,13 +71,16 @@ import {
   KeyLevelStrip,
   ResearchConsoleShell,
   WolfyCommandBar,
-} from '../components/linear';
-import { TerminalPageShell } from '../components/terminal';
+} from '../components/linear/LinearPrimitives';
+import { TerminalPageShell } from '../components/terminal/TerminalPrimitives';
 import { StatusBadge } from '../components/ui/StatusBadge';
 
 const RULE_POLL_INTERVAL_MS = 1800;
 const RESULT_HISTORY_PAGE_SIZE = 10;
+const RULE_BACKTEST_PRESET_STORAGE_EVENT = 'wolfystock.ruleBacktestPresets.changed';
 const BacktestResultReport = lazy(() => import('../components/backtest/BacktestResultReport'));
+let cachedRuleBacktestPresetSignature = '[]';
+let cachedRuleBacktestPresetSnapshot: RuleBacktestPreset[] = [];
 
 type ResultPageLocationState = {
   initialRun?: RuleBacktestRunResponse;
@@ -111,6 +116,43 @@ type ResultPageTabKey = 'overview' | 'audit' | 'trades' | 'parameters' | 'histor
 
 const RESULT_PAGE_TAB_KEYS: ResultPageTabKey[] = ['overview', 'audit', 'trades', 'parameters', 'history'];
 const BacktestAuditTables = lazy(() => import('../components/backtest/BacktestAuditTables'));
+
+function subscribeToRuleBacktestPresetStore(onStoreChange: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+
+  const handleStorage = (event: StorageEvent) => {
+    if (!event.key || event.key === RULE_BACKTEST_PRESET_STORAGE_KEY) {
+      onStoreChange();
+    }
+  };
+  const handlePresetChange = () => {
+    onStoreChange();
+  };
+
+  window.addEventListener('storage', handleStorage);
+  window.addEventListener(RULE_BACKTEST_PRESET_STORAGE_EVENT, handlePresetChange);
+  return () => {
+    window.removeEventListener('storage', handleStorage);
+    window.removeEventListener(RULE_BACKTEST_PRESET_STORAGE_EVENT, handlePresetChange);
+  };
+}
+
+function getRuleBacktestPresetSnapshot(): RuleBacktestPreset[] {
+  const next = loadRuleBacktestPresets();
+  const signature = JSON.stringify(next);
+  if (signature === cachedRuleBacktestPresetSignature) {
+    return cachedRuleBacktestPresetSnapshot;
+  }
+  cachedRuleBacktestPresetSignature = signature;
+  cachedRuleBacktestPresetSnapshot = next;
+  return next;
+}
+
+function notifyRuleBacktestPresetStoreChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(RULE_BACKTEST_PRESET_STORAGE_EVENT));
+  }
+}
 
 function formatWarningText(warning: Record<string, unknown>, index: number): string {
   const preferred = warning.message
@@ -244,14 +286,17 @@ function getRiskControlVisualRows(
     },
   ];
 
-  return controls
-    .filter((item) => typeof item.value === 'number' && Number.isFinite(item.value))
-    .map((item) => ({
-      key: item.key,
-      label: item.label,
-      value: Number(item.value),
-      valueLabel: formatPercent(Number(item.value), { digits: 2 }),
-    }));
+  return controls.reduce<RiskControlVisualRow[]>((acc, item) => {
+    if (typeof item.value === 'number' && Number.isFinite(item.value)) {
+      acc.push({
+        key: item.key as RiskControlVisualRow['key'],
+        label: item.label,
+        value: item.value,
+        valueLabel: formatPercent(item.value, { digits: 2 }),
+      });
+    }
+    return acc;
+  }, []);
 }
 
 function downloadTextFile(filename: string, content: string, mimeType: string): void {
@@ -264,84 +309,479 @@ function downloadTextFile(filename: string, content: string, mimeType: string): 
   URL.revokeObjectURL(url);
 }
 
-const DeterministicBacktestResultPage: React.FC = () => {
+type RunStatusSectionProps = {
+  run: RuleBacktestRunResponse | null;
+  runError: ParsedApiError | null;
+  cancelError: ParsedApiError | null;
+  statusSummaryItems: Array<{ label: string; value: string; note: string }>;
+  uiState: {
+    isLoadingRun: boolean;
+    isPollingStatus: boolean;
+    isCancellingRun: boolean;
+    canCancelCurrentRun: boolean;
+    canExportTrace: boolean;
+  };
+  presetNotice: string | null;
+  availablePresets: RuleBacktestPreset[];
+  resultPage: (key: string, vars?: Record<string, string | number | undefined>) => string;
+  fetchRun: () => void;
+  handleCancelRun: () => void;
+  handleExportDecisionReport: (format: 'md' | 'html') => void;
+};
+
+const RunStatusSection: React.FC<RunStatusSectionProps> = ({
+  run,
+  runError,
+  cancelError,
+  statusSummaryItems,
+  uiState,
+  presetNotice,
+  availablePresets,
+  resultPage,
+  fetchRun,
+  handleCancelRun,
+  handleExportDecisionReport,
+}) => {
+  const {
+    isLoadingRun,
+    isPollingStatus,
+    isCancellingRun,
+    canCancelCurrentRun,
+    canExportTrace,
+  } = uiState;
+
+  if (!run && isLoadingRun) {
+    return (
+      <section className="backtest-display-section" data-testid="deterministic-result-page-status">
+        <ConsoleBoard>
+          <div className="flex flex-col gap-3 p-4 md:p-5">
+            <div>
+              <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('statusCard.loadingSubtitle')}</p>
+              <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPage('statusCard.title')}</h2>
+            </div>
+            <div className="text-sm text-[color:var(--wolfy-text-secondary)]">{resultPage('statusCard.loadingBody')}</div>
+          </div>
+        </ConsoleBoard>
+      </section>
+    );
+  }
+
+  if (!run) {
+    return (
+      <section className="backtest-display-section" data-testid="deterministic-result-page-status">
+        <ConsoleBoard>
+          <div className="flex flex-col gap-3 p-4 md:p-5">
+            <div>
+              <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('statusCard.unavailableSubtitle')}</p>
+              <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPage('statusCard.title')}</h2>
+            </div>
+            {runError ? <ApiErrorAlert error={runError} /> : (
+              <div className="text-sm text-[color:var(--wolfy-text-secondary)]">{resultPage('statusCard.unavailableBody')}</div>
+            )}
+          </div>
+        </ConsoleBoard>
+      </section>
+    );
+  }
+
+  return (
+    <section className="backtest-display-section" data-testid="deterministic-result-page-status">
+      <ConsoleBoard>
+        <div className="flex flex-col gap-4 p-4 md:p-5">
+          <div>
+            <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('statusCard.controlsSubtitle')}</p>
+            <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPage('statusCard.title')}</h2>
+          </div>
+        <RuleRunStatusBanner run={run} />
+        <ConsoleStatusStrip
+          items={statusSummaryItems.map((item) => ({
+            key: item.label,
+            label: item.label,
+            value: item.value,
+          }))}
+        />
+        {!isRuleRunTerminal(run.status) ? (
+          <div>
+            <Banner
+              tone="info"
+              title={resultPage('statusCard.autoTrackingTitle')}
+              body={resultPage('statusCard.autoTrackingBody')}
+            />
+          </div>
+        ) : null}
+        {run.status === 'completed' ? (
+          <div>
+            <Banner
+              tone="success"
+              title={resultPage('statusCard.completedTitle')}
+              body={resultPage('statusCard.completedBody')}
+            />
+          </div>
+        ) : null}
+        {run.status === 'cancelled' ? (
+          <div>
+            <Banner
+              tone="warning"
+              title={resultPage('statusCard.cancelledTitle')}
+              body={resultPage('statusCard.cancelledBody')}
+            />
+          </div>
+        ) : null}
+        {run.status === 'failed' ? (
+          <div>
+            <Banner
+              tone="danger"
+              title={resultPage('statusCard.failedTitle')}
+              body={resultPage('statusCard.failedBody')}
+            />
+          </div>
+        ) : null}
+        <div className="product-action-row">
+          <Button variant="ghost" onClick={() => void fetchRun()} disabled={isCancellingRun}>
+            {isPollingStatus || isLoadingRun ? resultPage('statusCard.refreshing') : resultPage('statusCard.refreshStatus')}
+          </Button>
+          {canCancelCurrentRun ? (
+            <Button
+              variant="danger-subtle"
+              onClick={() => void handleCancelRun()}
+              isLoading={isCancellingRun}
+              loadingText={resultPage('statusCard.cancelling')}
+            >
+              {resultPage('statusCard.cancelRun')}
+            </Button>
+          ) : null}
+          {isRuleRunTerminal(run.status) && canExportTrace ? (
+            <>
+              <Button variant="secondary" onClick={() => downloadExecutionTraceCsv(run)}>
+                {resultPage('statusCard.exportCsv')}
+              </Button>
+              <Button variant="ghost" onClick={() => downloadExecutionTraceJson(run)}>
+                {resultPage('statusCard.exportJson')}
+              </Button>
+              <Button variant="ghost" onClick={() => handleExportDecisionReport('md')}>
+                {resultPage('statusCard.exportSummaryMd')}
+              </Button>
+            </>
+          ) : null}
+        </div>
+        {run.statusHistory?.length ? (
+          <Disclosure summary={resultPage('statusCard.viewStatusTimeline', { count: run.statusHistory.length })}>
+            <div className="product-chip-list">
+              {run.statusHistory.map((item, index) => (
+                <span key={`${item.status}-${item.at || index}`} className="product-chip">
+                  {index + 1}. {`${String(item.status || '--')} · ${item.at ? formatDateTime(item.at) : '--'}`}
+                </span>
+              ))}
+            </div>
+          </Disclosure>
+        ) : null}
+        {runError ? <ApiErrorAlert error={runError} /> : null}
+        {cancelError ? <ApiErrorAlert error={cancelError} /> : null}
+        {presetNotice ? (
+          <div>
+            <Banner tone="success" title={presetNotice} body={resultPage('statusCard.reusableBanner', { count: availablePresets.length })} />
+          </div>
+        ) : null}
+        </div>
+      </ConsoleBoard>
+    </section>
+  );
+};
+
+type CompletedTabPanelProps = {
+  run: RuleBacktestRunResponse;
+  normalized: ReturnType<typeof normalizeDeterministicBacktestResult>;
+  activeTab: ResultPageTabKey;
+  resultPage: (key: string, vars?: Record<string, string | number | undefined>) => string;
+  backtestCopy: (key: string, vars?: Record<string, string | number | undefined>) => string;
+  language: UiLanguage;
+  uiState: {
+    hasRobustnessAnalysis: boolean;
+    isLoadingHistory: boolean;
+    isLoadingCompareRuns: boolean;
+    isSubmittingScenarioRuns: boolean;
+  };
+  selectedBenchmarkLabel: string;
+  buyAndHoldLabel: string;
+  benchmarkStatusNote: string;
+  walkForwardOverview: BacktestWalkForwardOverview;
+  decisionReportMarkdown: string;
+  handleExportDecisionReport: (format: 'md' | 'html') => void;
+  robustnessAnalysis: Record<string, unknown> | null;
+  robustnessLensRows: CoverageTrackItem[];
+  riskControlRows: RiskControlVisualRow[];
+  activeRobustnessKey: string | null;
+  activeRiskControlKey: RiskControlVisualRow['key'] | null;
+  walkForward: Record<string, unknown> | null;
+  monteCarlo: Record<string, unknown> | null;
+  stressTests: Record<string, unknown> | null;
+  walkForwardAggregate: Record<string, unknown> | null;
+  monteCarloAggregate: Record<string, unknown> | null;
+  worstScenarioLabel: string;
+  monteCarloDetailRows: RobustnessMetricRow[];
+  monteCarloDetailEmptyText: string;
+  stressScenarioRows: StressScenarioDetail[];
+  stressScenarioDetailEmptyText: string;
+  strategySummaryRows: Array<{ key: string; label: string; value: string }>;
+  parsedSummaryEntries: Array<{ label: string; value: string }>;
+  strategyWarningEntries: string[];
+  comparisonItems: RuleComparisonItem[];
+  compareRunIds: number[];
+  historyItems: RuleBacktestHistoryItem[];
+  historyError: ParsedApiError | null;
+  compareError: ParsedApiError | null;
+  fetchHistory: (code?: string) => void;
+  handleOpenCompareWorkbench: () => void;
+  setCompareRunIds: React.Dispatch<React.SetStateAction<number[]>>;
+  handleOpenHistoryRun: (item: RuleBacktestHistoryItem) => void;
+  handleToggleCompareRun: (item: RuleBacktestHistoryItem) => void;
+  scenarioPlans: RuleScenarioPlan[];
+  selectedScenarioPlanId: string | null;
+  setSelectedScenarioPlanId: React.Dispatch<React.SetStateAction<string | null>>;
+  handleRunScenarioPlan: () => Promise<void>;
+  scenarioRuns: ScenarioRunState[];
+  scenarioError: ParsedApiError | null;
+  scenarioComparisonItems: RuleComparisonItem[];
+  availablePresets: RuleBacktestPreset[];
+  handleSavePreset: () => void;
+  navigate: (path: string) => void;
+};
+
+const CompletedTabPanel: React.FC<CompletedTabPanelProps> = ({
+  run,
+  normalized,
+  activeTab,
+  resultPage,
+  backtestCopy,
+  language,
+  uiState,
+  selectedBenchmarkLabel,
+  buyAndHoldLabel,
+  benchmarkStatusNote,
+  walkForwardOverview,
+  decisionReportMarkdown,
+  handleExportDecisionReport,
+  robustnessAnalysis,
+  robustnessLensRows,
+  riskControlRows,
+  activeRobustnessKey,
+  activeRiskControlKey,
+  walkForward,
+  monteCarlo,
+  stressTests,
+  walkForwardAggregate,
+  monteCarloAggregate,
+  worstScenarioLabel,
+  monteCarloDetailRows,
+  monteCarloDetailEmptyText,
+  stressScenarioRows,
+  stressScenarioDetailEmptyText,
+  strategySummaryRows,
+  parsedSummaryEntries,
+  strategyWarningEntries,
+  comparisonItems,
+  compareRunIds,
+  historyItems,
+  historyError,
+  compareError,
+  fetchHistory,
+  handleOpenCompareWorkbench,
+  setCompareRunIds,
+  handleOpenHistoryRun,
+  handleToggleCompareRun,
+  scenarioPlans,
+  selectedScenarioPlanId,
+  setSelectedScenarioPlanId,
+  handleRunScenarioPlan,
+  scenarioRuns,
+  scenarioError,
+  scenarioComparisonItems,
+  availablePresets,
+  handleSavePreset,
+  navigate,
+}) => {
+  const {
+    hasRobustnessAnalysis,
+    isLoadingHistory,
+    isLoadingCompareRuns,
+    isSubmittingScenarioRuns,
+  } = uiState;
+
+  if (activeTab === 'overview') {
+    return (
+      <BacktestOverviewSummary
+        resultPage={resultPage}
+        run={run}
+        normalized={normalized}
+        selectedBenchmarkLabel={selectedBenchmarkLabel}
+        buyAndHoldLabel={buyAndHoldLabel}
+        benchmarkStatusNote={benchmarkStatusNote}
+        walkForwardOverview={walkForwardOverview}
+        decisionReportMarkdown={decisionReportMarkdown}
+        onExportDecisionReport={handleExportDecisionReport}
+      />
+    );
+  }
+
+  const activeTabLabel = backtestCopy(`resultPage.tabs.${activeTab}`);
+
+  return (
+    <Suspense
+      fallback={(
+        <section
+          className="backtest-display-section"
+          data-testid="deterministic-result-tab-lazy-fallback"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="rounded-[16px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-md">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
+                  WolfyStock
+                </p>
+                <p className="truncate text-sm text-white/78">{activeTabLabel}</p>
+              </div>
+              <span
+                className="inline-flex size-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
+                aria-hidden="true"
+              />
+            </div>
+            <p className="mt-2 text-xs text-white/45">正在加载该分区的回测明细。</p>
+          </div>
+        </section>
+      )}
+    >
+      <BacktestAuditTables
+        activeTab={activeTab}
+        resultPage={resultPage}
+        backtestCopy={backtestCopy}
+        language={language}
+        run={run}
+        normalized={normalized}
+        selectedBenchmarkLabel={selectedBenchmarkLabel}
+        buyAndHoldLabel={buyAndHoldLabel}
+        benchmarkStatusNote={benchmarkStatusNote}
+        hasRobustnessAnalysis={hasRobustnessAnalysis}
+        robustnessAnalysisStateLabel={getRobustnessStateLabel(getObjectField(robustnessAnalysis, 'state'), language)}
+        robustnessLensRows={robustnessLensRows}
+        riskControlRows={riskControlRows}
+        activeRobustnessKey={activeRobustnessKey}
+        activeRiskControlKey={activeRiskControlKey}
+        walkForwardWindowCount={formatNumber(getObjectField(walkForward, 'windowCount') as number | null | undefined, 0)}
+        monteCarloSimulationCount={formatNumber(getObjectField(monteCarlo, 'simulationCount') as number | null | undefined, 0)}
+        stressScenarioCount={formatNumber(getObjectField(stressTests, 'scenarioCount') as number | null | undefined, 0)}
+        walkForwardMeanReturn={pct(getObjectField(walkForwardAggregate, 'meanTotalReturnPct') as number | null | undefined)}
+        monteCarloMedianReturn={pct(getObjectField(monteCarloAggregate, 'medianTotalReturnPct') as number | null | undefined)}
+        worstScenarioLabel={worstScenarioLabel}
+        monteCarloDetailRows={monteCarloDetailRows}
+        monteCarloDetailEmptyText={monteCarloDetailEmptyText}
+        stressScenarioRows={stressScenarioRows}
+        stressScenarioDetailEmptyText={stressScenarioDetailEmptyText}
+        strategySummaryRows={strategySummaryRows}
+        parsedSummaryEntries={parsedSummaryEntries}
+        strategyWarningEntries={strategyWarningEntries}
+        comparisonItems={comparisonItems}
+        compareRunIds={compareRunIds}
+        historyItems={historyItems}
+        historyError={historyError}
+        compareError={compareError}
+        isLoadingHistory={isLoadingHistory}
+        isLoadingCompareRuns={isLoadingCompareRuns}
+        onRefreshHistory={() => void fetchHistory(run.code)}
+        onOpenCompareWorkbench={handleOpenCompareWorkbench}
+        onClearComparison={() => setCompareRunIds([])}
+        onOpenHistoryRun={handleOpenHistoryRun}
+        onToggleCompareRun={handleToggleCompareRun}
+        scenarioPlans={scenarioPlans}
+        selectedScenarioPlanId={selectedScenarioPlanId}
+        onSelectScenarioPlanId={setSelectedScenarioPlanId}
+        onRunScenarioPlan={handleRunScenarioPlan}
+        isSubmittingScenarioRuns={isSubmittingScenarioRuns}
+        scenarioRuns={scenarioRuns}
+        scenarioError={scenarioError}
+        scenarioComparisonItems={scenarioComparisonItems}
+        availablePresets={availablePresets}
+        onSavePreset={handleSavePreset}
+        onOpenScenarioRun={(runId) => navigate(`/backtest/results/${runId}`)}
+      />
+    </Suspense>
+  );
+};
+
+type DeterministicBacktestResultPageContentProps = {
+  hasValidRunId: boolean;
+  initialRun: RuleBacktestRunResponse | null;
+  parsedRunId: number;
+  resultMode: BacktestResultReportMode;
+};
+
+const DeterministicBacktestResultPageContent: React.FC<DeterministicBacktestResultPageContentProps> = ({
+  hasValidRunId,
+  initialRun,
+  parsedRunId,
+  resultMode,
+}) => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { language, t } = useI18n();
-  const backtestCopy = useCallback(
-    (key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.${key}`, vars),
-    [t],
-  );
-  const resultPage = useCallback(
-    (key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.resultPage.${key}`, vars),
-    [t],
-  );
-  const { runId } = useParams<{ runId: string }>();
-  const locationState = location.state as ResultPageLocationState | null;
-  const initialRun = locationState?.initialRun || null;
-  const resultMode: BacktestResultReportMode = locationState?.resultMode === 'simple' ? 'simple' : 'professional';
-  const parsedRunId = useMemo(() => Number.parseInt(runId || '', 10), [runId]);
-  const hasValidRunId = Number.isFinite(parsedRunId) && parsedRunId > 0;
+  const backtestCopy = (key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.${key}`, vars);
+  const resultPage = (key: string, vars?: Record<string, string | number | undefined>) => t(`backtest.resultPage.${key}`, vars);
+  const seededRun = initialRun && initialRun.id === parsedRunId ? initialRun : null;
 
   const [run, setRun] = useState<RuleBacktestRunResponse | null>(
-    initialRun && initialRun.id === parsedRunId ? initialRun : null,
+    seededRun,
   );
-  const [isLoadingRun, setIsLoadingRun] = useState(!initialRun || initialRun.id !== parsedRunId);
+  const [isLoadingRun, setIsLoadingRun] = useState(hasValidRunId && !seededRun);
   const [runError, setRunError] = useState<ParsedApiError | null>(null);
   const [historyItems, setHistoryItems] = useState<RuleBacktestHistoryItem[]>([]);
   const [historyError, setHistoryError] = useState<ParsedApiError | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [activeTab, setActiveTab] = useState<ResultPageTabKey>('overview');
   const [isPollingStatus, setIsPollingStatus] = useState(false);
-  const [lastStatusRefreshAt, setLastStatusRefreshAt] = useState<string | null>(null);
+  const [lastStatusRefreshAt, setLastStatusRefreshAt] = useState<string | null>(seededRun ? new Date().toISOString() : null);
   const [isCancellingRun, setIsCancellingRun] = useState(false);
   const [cancelError, setCancelError] = useState<ParsedApiError | null>(null);
   const [compareRunIds, setCompareRunIds] = useState<number[]>([]);
   const [compareRunMap, setCompareRunMap] = useState<Record<number, RuleBacktestRunResponse>>({});
   const [isLoadingCompareRuns, setIsLoadingCompareRuns] = useState(false);
-  const [compareError, setCompareError] = useState<ParsedApiError | null>(null);
+  const [compareErrorState, setCompareErrorState] = useState<ParsedApiError | null>(null);
   const [parameterStabilityEvidence, setParameterStabilityEvidence] = useState<RuleBacktestParameterStabilityEvidence | null>(null);
   const [selectedScenarioPlanId, setSelectedScenarioPlanId] = useState<string | null>(null);
   const [scenarioRuns, setScenarioRuns] = useState<ScenarioRunState[]>([]);
   const [isSubmittingScenarioRuns, setIsSubmittingScenarioRuns] = useState(false);
   const [scenarioError, setScenarioError] = useState<ParsedApiError | null>(null);
   const [presetNotice, setPresetNotice] = useState<string | null>(null);
-  const [availablePresets, setAvailablePresets] = useState<RuleBacktestPreset[]>([]);
   const [activeRobustnessKey, setActiveRobustnessKey] = useState<string | null>(null);
   const [activeRiskControlKey, setActiveRiskControlKey] = useState<RiskControlVisualRow['key'] | null>(null);
+  const availablePresets = useSyncExternalStore(
+    subscribeToRuleBacktestPresetStore,
+    getRuleBacktestPresetSnapshot,
+    getRuleBacktestPresetSnapshot,
+  );
   const density = useDeterministicResultDensity();
-  const robustnessAnalysis = useMemo(() => asObjectRecord(run?.robustnessAnalysis), [run?.robustnessAnalysis]);
-  const robustnessConfiguration = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'configuration')), [robustnessAnalysis]);
-  const walkForward = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'walkForward')), [robustnessAnalysis]);
-  const walkForwardConfig = useMemo(() => asObjectRecord(getObjectField(robustnessConfiguration, 'walkForward')), [robustnessConfiguration]);
-  const walkForwardAggregate = useMemo(() => asObjectRecord(getObjectField(walkForward, 'aggregateMetrics')), [walkForward]);
-  const monteCarlo = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'monteCarlo')), [robustnessAnalysis]);
-  const monteCarloConfig = useMemo(() => asObjectRecord(getObjectField(robustnessConfiguration, 'monteCarlo')), [robustnessConfiguration]);
-  const monteCarloAggregate = useMemo(() => asObjectRecord(getObjectField(monteCarlo, 'aggregateMetrics')), [monteCarlo]);
-  const stressTests = useMemo(() => asObjectRecord(getObjectField(robustnessAnalysis, 'stressTests')), [robustnessAnalysis]);
-  const stressTestsConfig = useMemo(() => asObjectRecord(getObjectField(robustnessConfiguration, 'stressTests')), [robustnessConfiguration]);
-  const worstScenario = useMemo(() => asObjectRecord(getObjectField(stressTests, 'worstScenario')), [stressTests]);
-  const stressScenarios = useMemo(
-    () => {
-      const value = getObjectField(stressTests, 'scenarios');
-      return Array.isArray(value) ? value : [];
-    },
-    [stressTests],
+  const robustnessAnalysis = asObjectRecord(run?.robustnessAnalysis);
+  const robustnessConfiguration = asObjectRecord(getObjectField(robustnessAnalysis, 'configuration'));
+  const walkForward = asObjectRecord(getObjectField(robustnessAnalysis, 'walkForward'));
+  const walkForwardConfig = asObjectRecord(getObjectField(robustnessConfiguration, 'walkForward'));
+  const walkForwardAggregate = asObjectRecord(getObjectField(walkForward, 'aggregateMetrics'));
+  const monteCarlo = asObjectRecord(getObjectField(robustnessAnalysis, 'monteCarlo'));
+  const monteCarloConfig = asObjectRecord(getObjectField(robustnessConfiguration, 'monteCarlo'));
+  const monteCarloAggregate = asObjectRecord(getObjectField(monteCarlo, 'aggregateMetrics'));
+  const stressTests = asObjectRecord(getObjectField(robustnessAnalysis, 'stressTests'));
+  const stressTestsConfig = asObjectRecord(getObjectField(robustnessConfiguration, 'stressTests'));
+  const worstScenario = asObjectRecord(getObjectField(stressTests, 'worstScenario'));
+  const stressScenarios = (() => {
+    const value = getObjectField(stressTests, 'scenarios');
+    return Array.isArray(value) ? value : [];
+  })();
+  const worstScenarioLabel = getStressScenarioLabel(getObjectField(worstScenario, 'scenarioKey'), language);
+  const hasRobustnessAnalysis = Boolean(
+    getObjectField(robustnessAnalysis, 'state')
+    || hasObjectFields(walkForward)
+    || hasObjectFields(monteCarlo)
+    || hasObjectFields(stressTests)
   );
-  const worstScenarioLabel = useMemo(
-    () => getStressScenarioLabel(getObjectField(worstScenario, 'scenarioKey'), language),
-    [language, worstScenario],
-  );
-  const hasRobustnessAnalysis = useMemo(
-    () => Boolean(
-      getObjectField(robustnessAnalysis, 'state')
-      || hasObjectFields(walkForward)
-      || hasObjectFields(monteCarlo)
-      || hasObjectFields(stressTests)
-    ),
-    [monteCarlo, robustnessAnalysis, stressTests, walkForward],
-  );
-  const robustnessLensRows = useMemo<CoverageTrackItem[]>(() => {
+  const robustnessLensRows: CoverageTrackItem[] = (() => {
     const walkForwardCount = getFiniteNumber(getObjectField(walkForward, 'windowCount'));
     const walkForwardMax = getFiniteNumber(getObjectField(walkForwardConfig, 'maxWindows'));
     const monteCarloCount = getFiniteNumber(getObjectField(monteCarlo, 'simulationCount'));
@@ -376,20 +816,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
         ratio: clampRatio(stressScenarioCount != null && stressScenarioMax ? stressScenarioCount / stressScenarioMax : (hasObjectFields(stressTests) ? 1 : 0)),
       },
     ];
-  }, [
-    monteCarlo,
-    monteCarloAggregate,
-    monteCarloConfig,
-    language,
-    robustnessAnalysis,
-    stressTests,
-    stressTestsConfig,
-    walkForward,
-    walkForwardAggregate,
-    walkForwardConfig,
-    worstScenarioLabel,
-  ]);
-  const monteCarloDetailRows = useMemo<RobustnessMetricRow[]>(() => {
+  })();
+  const monteCarloDetailRows: RobustnessMetricRow[] = (() => {
     const rows: RobustnessMetricRow[] = [];
     const p05Return = getFiniteNumber(getObjectField(monteCarloAggregate, 'p05TotalReturnPct'));
     const medianReturn = getFiniteNumber(getObjectField(monteCarloAggregate, 'medianTotalReturnPct'));
@@ -412,9 +840,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
     }
 
     return rows;
-  }, [language, monteCarlo, monteCarloAggregate]);
-  const stressScenarioRows = useMemo<StressScenarioDetail[]>(
-    () => stressScenarios
+  })();
+  const stressScenarioRows: StressScenarioDetail[] = (() => stressScenarios
       .map((scenario, index) => {
         const record = asObjectRecord(scenario);
         const metrics = asObjectRecord(getObjectField(record, 'metrics'));
@@ -438,22 +865,21 @@ const DeterministicBacktestResultPage: React.FC = () => {
           isWorst: getStringValue(getObjectField(worstScenario, 'scenarioKey')) === scenarioKey,
         };
       })
-      .filter((row) => row.totalReturn != null || row.sharpe != null || row.maxDrawdown != null),
-    [language, stressScenarios, worstScenario],
-  );
-  const monteCarloDetailEmptyText = useMemo(() => {
+      .filter((row) => row.totalReturn != null || row.sharpe != null || row.maxDrawdown != null)
+  )();
+  const monteCarloDetailEmptyText = (() => {
     const state = normalizeRobustnessState(getObjectField(monteCarlo, 'state'));
     return state === 'insufficient_history'
       ? btr(language, 'riskControls.monteCarloDetailsEmptyInsufficient')
       : btr(language, 'riskControls.monteCarloDetailsEmpty');
-  }, [language, monteCarlo]);
-  const stressScenarioDetailEmptyText = useMemo(() => {
+  })();
+  const stressScenarioDetailEmptyText = (() => {
     const state = normalizeRobustnessState(getObjectField(stressTests, 'state'));
     return state === 'insufficient_history'
       ? btr(language, 'riskControls.stressScenarioDetailsEmptyInsufficient')
       : btr(language, 'riskControls.stressScenarioDetailsEmpty');
-  }, [language, stressTests]);
-  const walkForwardOverview = useMemo<BacktestWalkForwardOverview>(() => {
+  })();
+  const walkForwardOverview: BacktestWalkForwardOverview = (() => {
     const walkForwardState = normalizeRobustnessState(getObjectField(walkForward, 'state'));
     const robustnessState = normalizeRobustnessState(getObjectField(robustnessAnalysis, 'state'));
     const windowCount = getFiniteNumber(getObjectField(walkForward, 'windowCount'));
@@ -479,13 +905,13 @@ const DeterministicBacktestResultPage: React.FC = () => {
       meanReturn: meanReturn == null ? null : pct(meanReturn),
       maxDrawdown,
     };
-  }, [language, robustnessAnalysis, walkForward, walkForwardAggregate]);
+  })();
   const tabs = RESULT_PAGE_TAB_KEYS.map((key) => ({
     key,
     label: backtestCopy(`resultPage.tabs.${key}`),
   }));
 
-  const fetchRun = useCallback(async (options: { suppressLoading?: boolean } = {}) => {
+  const fetchRun = async (options: { suppressLoading?: boolean } = {}) => {
     if (!hasValidRunId) return;
     const { suppressLoading = false } = options;
     if (!suppressLoading) setIsLoadingRun(true);
@@ -497,12 +923,11 @@ const DeterministicBacktestResultPage: React.FC = () => {
       setLastStatusRefreshAt(new Date().toISOString());
     } catch (error) {
       setRunError(getParsedApiError(error));
-    } finally {
-      if (!suppressLoading) setIsLoadingRun(false);
     }
-  }, [hasValidRunId, parsedRunId]);
+    if (!suppressLoading) setIsLoadingRun(false);
+  };
 
-  const fetchHistory = useCallback(async (code?: string) => {
+  const fetchHistory = async (code?: string) => {
     if (!code) {
       setHistoryItems([]);
       setHistoryError(null);
@@ -519,26 +944,22 @@ const DeterministicBacktestResultPage: React.FC = () => {
       setHistoryError(null);
     } catch (error) {
       setHistoryError(getParsedApiError(error));
-    } finally {
-      setIsLoadingHistory(false);
     }
-  }, []);
+    setIsLoadingHistory(false);
+  };
+
+  const fetchRunForEffect = useEffectEvent(async (options: { suppressLoading?: boolean } = {}) => {
+    await fetchRun(options);
+  });
+
+  const fetchHistoryForEffect = useEffectEvent(async (code?: string) => {
+    await fetchHistory(code);
+  });
 
   useEffect(() => {
-    if (!hasValidRunId) {
-      setRun(null);
-      setIsLoadingRun(false);
-      return;
-    }
-
-    const seededRun = initialRun && initialRun.id === parsedRunId ? initialRun : null;
-    setRun(seededRun);
-    setRunError(null);
-    setCancelError(null);
-    setIsLoadingRun(!seededRun);
-    setLastStatusRefreshAt(seededRun ? new Date().toISOString() : null);
-    void fetchRun({ suppressLoading: Boolean(seededRun) });
-  }, [fetchRun, hasValidRunId, initialRun, parsedRunId]);
+    if (!hasValidRunId) return;
+    void fetchRunForEffect({ suppressLoading: Boolean(seededRun) });
+  }, [hasValidRunId, parsedRunId, seededRun]);
 
   useEffect(() => {
     if (!run?.id || isRuleRunTerminal(run.status)) return undefined;
@@ -556,16 +977,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
         setLastStatusRefreshAt(new Date().toISOString());
         if (isRuleRunTerminal(status.status)) {
           await Promise.all([
-            fetchRun({ suppressLoading: true }),
-            fetchHistory(status.code),
+            fetchRunForEffect({ suppressLoading: true }),
+            fetchHistoryForEffect(status.code),
           ]);
           return;
         }
       } catch (error) {
         if (!cancelled) setRunError(getParsedApiError(error));
-      } finally {
-        if (!cancelled) setIsPollingStatus(false);
       }
+      if (!cancelled) setIsPollingStatus(false);
 
       if (!cancelled) timer = window.setTimeout(() => void poll(), RULE_POLL_INTERVAL_MS);
     };
@@ -576,44 +996,43 @@ const DeterministicBacktestResultPage: React.FC = () => {
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [fetchHistory, fetchRun, run?.id, run?.status]);
+  }, [run?.id, run?.status]);
 
   useEffect(() => {
-    if (!run?.code) {
-      setHistoryItems([]);
-      return;
+    if (run?.code) {
+      void fetchHistoryForEffect(run.code);
     }
-    void fetchHistory(run.code);
-  }, [fetchHistory, run?.code]);
+  }, [run?.code]);
 
   useEffect(() => {
-    setCompareRunIds([]);
-    setScenarioRuns([]);
-    setScenarioError(null);
-    setParameterStabilityEvidence(null);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setCompareRunIds([]);
+      setCompareErrorState(null);
+      setScenarioRuns([]);
+      setScenarioError(null);
+      setParameterStabilityEvidence(null);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [run?.id]);
 
   useEffect(() => {
     document.title = hasValidRunId
-      ? `${backtestCopy('resultPage.documentTitle')} #${parsedRunId} - WolfyStock`
-      : `${backtestCopy('resultPage.documentTitle')} - WolfyStock`;
-  }, [backtestCopy, hasValidRunId, parsedRunId]);
-
-  useEffect(() => {
-    setAvailablePresets(loadRuleBacktestPresets());
-  }, []);
+      ? `${t('backtest.resultPage.documentTitle')} #${parsedRunId} - WolfyStock`
+      : `${t('backtest.resultPage.documentTitle')} - WolfyStock`;
+  }, [hasValidRunId, parsedRunId, t]);
 
   useEffect(() => {
     if (!run || run.status !== 'completed') return;
-    const next = saveRuleBacktestPreset(createRuleBacktestPresetFromRun(run, { kind: 'recent' }));
-    setAvailablePresets(next);
+    saveRuleBacktestPreset(createRuleBacktestPresetFromRun(run, { kind: 'recent' }));
+    notifyRuleBacktestPresetStoreChanged();
   }, [run]);
 
   useEffect(() => {
-    if (compareRunIds.length === 0) {
-      setCompareError(null);
-      return;
-    }
+    if (compareRunIds.length === 0) return;
     let cancelled = false;
     const missingIds = compareRunIds.filter((id) => !compareRunMap[id]);
     if (missingIds.length === 0) return;
@@ -627,12 +1046,11 @@ const DeterministicBacktestResultPage: React.FC = () => {
           ...current,
           ...Object.fromEntries(items.map((item) => [item.id, item])),
         }));
-        setCompareError(null);
+        setCompareErrorState(null);
       } catch (error) {
-        if (!cancelled) setCompareError(getParsedApiError(error));
-      } finally {
-        if (!cancelled) setIsLoadingCompareRuns(false);
+        if (!cancelled) setCompareErrorState(getParsedApiError(error));
       }
+      if (!cancelled) setIsLoadingCompareRuns(false);
     };
 
     void loadRuns();
@@ -643,10 +1061,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
 
   useEffect(() => {
     const currentRunId = run?.id;
-    if (!currentRunId || compareRunIds.length === 0) {
-      setParameterStabilityEvidence(null);
-      return;
-    }
+    if (!currentRunId || compareRunIds.length === 0) return;
 
     let cancelled = false;
     const selectedRunIds = [currentRunId, ...compareRunIds];
@@ -656,11 +1071,11 @@ const DeterministicBacktestResultPage: React.FC = () => {
         const comparison = await backtestApi.compareRuleBacktestRuns({ runIds: selectedRunIds });
         if (cancelled) return;
         setParameterStabilityEvidence(comparison.parameterStabilityEvidence ?? null);
-        setCompareError(null);
+        setCompareErrorState(null);
       } catch (error) {
         if (cancelled) return;
         setParameterStabilityEvidence(null);
-        setCompareError(getParsedApiError(error));
+        setCompareErrorState(getParsedApiError(error));
       }
     };
 
@@ -712,9 +1127,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
     };
   }, [scenarioRuns]);
 
-  const handleOpenHistoryRun = useCallback((item: RuleBacktestHistoryItem) => {
+  const handleOpenHistoryRun = (item: RuleBacktestHistoryItem) => {
     navigate(`/backtest/results/${item.id}`);
-  }, [navigate]);
+  };
 
   const benchmarkSummary = run?.benchmarkSummary;
   const buyAndHoldSummary = run?.buyAndHoldSummary;
@@ -745,24 +1160,11 @@ const DeterministicBacktestResultPage: React.FC = () => {
           : resultPage('benchmarkNotes.sameWindow'))
     )
     : resultPage('benchmarkNotes.pending');
-  const normalized = useMemo(
-    () => (run?.status === 'completed' ? normalizeDeterministicBacktestResult(run, language) : null),
-    [run, language],
-  );
-  const scenarioPlans = useMemo<RuleScenarioPlan[]>(
-    () => (run?.status === 'completed' ? getRuleScenarioPlans(run) : []),
-    [run],
-  );
-  const selectedScenarioPlan = useMemo(
-    () => scenarioPlans.find((plan) => plan.id === selectedScenarioPlanId) || scenarioPlans[0] || null,
-    [scenarioPlans, selectedScenarioPlanId],
-  );
-  useEffect(() => {
-    if (!selectedScenarioPlanId && scenarioPlans[0]) {
-      setSelectedScenarioPlanId(scenarioPlans[0].id);
-    }
-  }, [scenarioPlans, selectedScenarioPlanId]);
-  const comparisonItems = useMemo<RuleComparisonItem[]>(() => {
+  const normalized = run?.status === 'completed' ? normalizeDeterministicBacktestResult(run, language) : null;
+  const scenarioPlans: RuleScenarioPlan[] = run?.status === 'completed' ? getRuleScenarioPlans(run) : [];
+  const effectiveSelectedScenarioPlanId = selectedScenarioPlanId ?? scenarioPlans[0]?.id ?? null;
+  const selectedScenarioPlan = scenarioPlans.find((plan) => plan.id === effectiveSelectedScenarioPlanId) || scenarioPlans[0] || null;
+  const comparisonItems: RuleComparisonItem[] = (() => {
     if (!run || !normalized) return [];
     const items: RuleComparisonItem[] = [{
       run,
@@ -780,8 +1182,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
       });
     });
     return items;
-  }, [compareRunIds, compareRunMap, language, normalized, resultPage, run]);
-  const scenarioComparisonItems = useMemo<RuleComparisonItem[]>(() => {
+  })();
+  const scenarioComparisonItems: RuleComparisonItem[] = (() => {
     if (!run || !normalized) return [];
     const completedScenarioRuns = scenarioRuns.filter((item) => item.result?.status === 'completed' && item.result);
     return [
@@ -797,18 +1199,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
         label: item.label,
       })),
     ];
-  }, [language, normalized, resultPage, run, scenarioRuns]);
-  const decisionReportMarkdown = useMemo(
-    () => (run && normalized
-      ? buildRuleRunReportMarkdown({
-        run,
-        normalized,
-        comparedRuns: comparisonItems.slice(1).map((item) => item.run),
-        language,
-      })
-      : ''),
-    [comparisonItems, normalized, run, language],
-  );
+  })();
+  const decisionReportMarkdown = run && normalized
+    ? buildRuleRunReportMarkdown({
+      run,
+      normalized,
+      comparedRuns: comparisonItems.slice(1).map((item) => item.run),
+      language,
+    })
+    : '';
   const headerDescription = run
     ? resultPage('headerDescriptionLoaded', {
       code: run.code,
@@ -818,24 +1217,22 @@ const DeterministicBacktestResultPage: React.FC = () => {
     })
     : resultPage('headerDescriptionEmpty');
   const parsedSummaryEntries = Object.entries(run?.parsedStrategy?.summary || {})
-    .filter(([, value]) => typeof value === 'string' && value.trim())
-    .map(([key, value]) => ({
-      label: key
-        .replaceAll(/([a-z])([A-Z])/g, '$1 $2')
-        .replaceAll('_', ' ')
-        .trim(),
-      value: String(value),
-    }));
-  const strategySummaryRows = useMemo(
-    () => (run
-      ? buildRuleStrategySummaryRows(run.parsedStrategy, run.code, run.startDate || '', run.endDate || '', undefined, language)
-      : []),
-    [run, language],
-  );
-  const riskControlRows = useMemo(
-    () => getRiskControlVisualRows(run?.parsedStrategy, language),
-    [language, run?.parsedStrategy],
-  );
+    .reduce<Array<{ label: string; value: string }>>((acc, [key, value]) => {
+      if (typeof value === 'string' && value.trim()) {
+        acc.push({
+          label: key
+            .replaceAll(/([a-z])([A-Z])/g, '$1 $2')
+            .replaceAll('_', ' ')
+            .trim(),
+          value: String(value),
+        });
+      }
+      return acc;
+    }, []);
+  const strategySummaryRows = run
+    ? buildRuleStrategySummaryRows(run.parsedStrategy, run.code, run.startDate || '', run.endDate || '', undefined, language)
+    : [];
+  const riskControlRows = getRiskControlVisualRows(run?.parsedStrategy, language);
   const strategyWarningEntries = Array.from(
     new Set([
       ...(run?.parsedStrategy?.parseWarnings || []).map((warning, index) => formatWarningText(warning, index)),
@@ -844,10 +1241,6 @@ const DeterministicBacktestResultPage: React.FC = () => {
   );
   const canCancelCurrentRun = Boolean(run && canCancelRuleRun(run.status));
   const canExportTrace = Boolean(run && hasExecutionTraceRows(run));
-  const compareWorkbenchRunIds = useMemo(
-    () => (run ? [run.id, ...compareRunIds] : []),
-    [compareRunIds, run],
-  );
   const localizedNoResultMessage = isCanonicalNoEntrySignalMessage(run?.noResultMessage)
     ? resultPage('noEntrySignal')
     : null;
@@ -927,35 +1320,36 @@ const DeterministicBacktestResultPage: React.FC = () => {
     },
   ] : [];
 
-  const handleToggleCompareRun = useCallback((item: RuleBacktestHistoryItem) => {
+  const handleToggleCompareRun = (item: RuleBacktestHistoryItem) => {
+    setCompareErrorState(null);
     setCompareRunIds((current) => {
       if (current.includes(item.id)) return current.filter((id) => id !== item.id);
       return [...current, item.id].slice(0, 3);
     });
-  }, []);
+  };
 
-  const handleOpenCompareWorkbench = useCallback(() => {
+  const handleOpenCompareWorkbench = () => {
     if (!run || compareRunIds.length === 0) return;
     const params = new URLSearchParams({
-      runIds: compareWorkbenchRunIds.join(','),
+      runIds: [run.id, ...compareRunIds].join(','),
     });
     navigate(`/backtest/compare?${params.toString()}`);
-  }, [compareRunIds.length, compareWorkbenchRunIds, navigate, run]);
+  };
 
-  const handleSavePreset = useCallback(() => {
+  const handleSavePreset = () => {
     if (!run) return;
     const suggestedName = `${run.code} · ${getRuleStrategyTypeLabel(run.parsedStrategy, undefined, language)}`;
     const name = window.prompt(resultPage('promptSavePreset'), suggestedName);
     if (!name || !name.trim()) return;
-    const next = saveRuleBacktestPreset(createRuleBacktestPresetFromRun(run, {
+    saveRuleBacktestPreset(createRuleBacktestPresetFromRun(run, {
       kind: 'saved',
       name,
     }));
-    setAvailablePresets(next);
+    notifyRuleBacktestPresetStoreChanged();
     setPresetNotice(resultPage('presetSaved', { name: name.trim() }));
-  }, [language, resultPage, run]);
+  };
 
-  const handleExportDecisionReport = useCallback((format: 'md' | 'html') => {
+  const handleExportDecisionReport = (format: 'md' | 'html') => {
     if (!run || !normalized || !decisionReportMarkdown) return;
     if (format === 'md') {
       downloadTextFile(`backtest-run-${run.id}-summary.md`, decisionReportMarkdown, 'text/markdown;charset=utf-8');
@@ -972,9 +1366,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
       '</body></html>',
     ].join('');
     downloadTextFile(`backtest-run-${run.id}-summary.html`, html, 'text/html;charset=utf-8');
-  }, [decisionReportMarkdown, normalized, resultPage, run]);
+  };
 
-  const handleRunScenarioPlan = useCallback(async () => {
+  const handleRunScenarioPlan = async () => {
     if (!run || !selectedScenarioPlan) return;
     setIsSubmittingScenarioRuns(true);
     setScenarioError(null);
@@ -1005,12 +1399,11 @@ const DeterministicBacktestResultPage: React.FC = () => {
       setScenarioRuns(nextStates);
     } catch (error) {
       setScenarioError(getParsedApiError(error));
-    } finally {
-      setIsSubmittingScenarioRuns(false);
     }
-  }, [run, selectedScenarioPlan]);
+    setIsSubmittingScenarioRuns(false);
+  };
 
-  const handleCancelRun = useCallback(async () => {
+  const handleCancelRun = async () => {
     if (!run || !canCancelRuleRun(run.status) || isCancellingRun) return;
     const confirmed = window.confirm(resultPage('cancelConfirm'));
     if (!confirmed) return;
@@ -1029,254 +1422,13 @@ const DeterministicBacktestResultPage: React.FC = () => {
       ]);
     } catch (error) {
       setCancelError(getParsedApiError(error));
-    } finally {
-      setIsCancellingRun(false);
     }
-  }, [fetchHistory, fetchRun, isCancellingRun, resultPage, run]);
-
-  const renderRunStatusSection = () => {
-    if (!run && isLoadingRun) {
-      return (
-        <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-          <ConsoleBoard>
-            <div className="flex flex-col gap-3 p-4 md:p-5">
-              <div>
-                <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('statusCard.loadingSubtitle')}</p>
-                <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPage('statusCard.title')}</h2>
-              </div>
-              <div className="text-sm text-[color:var(--wolfy-text-secondary)]">{resultPage('statusCard.loadingBody')}</div>
-            </div>
-          </ConsoleBoard>
-        </section>
-      );
-    }
-
-    if (!run) {
-      return (
-        <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-          <ConsoleBoard>
-            <div className="flex flex-col gap-3 p-4 md:p-5">
-              <div>
-                <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('statusCard.unavailableSubtitle')}</p>
-                <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPage('statusCard.title')}</h2>
-              </div>
-              {runError ? <ApiErrorAlert error={runError} /> : (
-                <div className="text-sm text-[color:var(--wolfy-text-secondary)]">{resultPage('statusCard.unavailableBody')}</div>
-              )}
-            </div>
-          </ConsoleBoard>
-        </section>
-      );
-    }
-
-    return (
-      <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-        <ConsoleBoard>
-          <div className="flex flex-col gap-4 p-4 md:p-5">
-            <div>
-              <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{resultPage('statusCard.controlsSubtitle')}</p>
-              <h2 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{resultPage('statusCard.title')}</h2>
-            </div>
-          <RuleRunStatusBanner run={run} />
-          <ConsoleStatusStrip
-            items={statusSummaryItems.map((item) => ({
-              key: item.label,
-              label: item.label,
-              value: item.value,
-            }))}
-          />
-          {!isRuleRunTerminal(run.status) ? (
-            <div>
-              <Banner
-                tone="info"
-                title={resultPage('statusCard.autoTrackingTitle')}
-                body={resultPage('statusCard.autoTrackingBody')}
-              />
-            </div>
-          ) : null}
-          {run.status === 'completed' ? (
-            <div>
-              <Banner
-                tone="success"
-                title={resultPage('statusCard.completedTitle')}
-                body={resultPage('statusCard.completedBody')}
-              />
-            </div>
-          ) : null}
-          {run.status === 'cancelled' ? (
-            <div>
-              <Banner
-                tone="warning"
-                title={resultPage('statusCard.cancelledTitle')}
-                body={resultPage('statusCard.cancelledBody')}
-              />
-            </div>
-          ) : null}
-          {run.status === 'failed' ? (
-            <div>
-              <Banner
-                tone="danger"
-                title={resultPage('statusCard.failedTitle')}
-                body={resultPage('statusCard.failedBody')}
-              />
-            </div>
-          ) : null}
-          <div className="product-action-row">
-            <Button variant="ghost" onClick={() => void fetchRun()} disabled={isCancellingRun}>
-              {isPollingStatus || isLoadingRun ? resultPage('statusCard.refreshing') : resultPage('statusCard.refreshStatus')}
-            </Button>
-            {canCancelCurrentRun ? (
-              <Button
-                variant="danger-subtle"
-                onClick={() => void handleCancelRun()}
-                isLoading={isCancellingRun}
-                loadingText={resultPage('statusCard.cancelling')}
-              >
-                {resultPage('statusCard.cancelRun')}
-              </Button>
-            ) : null}
-            {isRuleRunTerminal(run.status) && canExportTrace ? (
-              <>
-                <Button variant="secondary" onClick={() => downloadExecutionTraceCsv(run)}>
-                  {resultPage('statusCard.exportCsv')}
-                </Button>
-                <Button variant="ghost" onClick={() => downloadExecutionTraceJson(run)}>
-                  {resultPage('statusCard.exportJson')}
-                </Button>
-                <Button variant="ghost" onClick={() => handleExportDecisionReport('md')}>
-                  {resultPage('statusCard.exportSummaryMd')}
-                </Button>
-              </>
-            ) : null}
-          </div>
-          {run.statusHistory?.length ? (
-            <Disclosure summary={resultPage('statusCard.viewStatusTimeline', { count: run.statusHistory.length })}>
-              <div className="product-chip-list">
-                {run.statusHistory.map((item, index) => (
-                  <span key={`${item.status}-${item.at || index}`} className="product-chip">
-                    {index + 1}. {`${String(item.status || '--')} · ${item.at ? formatDateTime(item.at) : '--'}`}
-                  </span>
-                ))}
-              </div>
-            </Disclosure>
-          ) : null}
-          {runError ? <ApiErrorAlert error={runError} /> : null}
-          {cancelError ? <ApiErrorAlert error={cancelError} /> : null}
-          {presetNotice ? (
-            <div>
-              <Banner tone="success" title={presetNotice} body={resultPage('statusCard.reusableBanner', { count: availablePresets.length })} />
-            </div>
-          ) : null}
-          </div>
-        </ConsoleBoard>
-      </section>
-    );
+    setIsCancellingRun(false);
   };
 
-  const renderCompletedTabPanel = () => {
-    if (!run || !normalized) return null;
-
-    if (activeTab === 'overview') {
-      return (
-        <BacktestOverviewSummary
-          resultPage={resultPage}
-          run={run}
-          normalized={normalized}
-          selectedBenchmarkLabel={selectedBenchmarkLabel}
-          buyAndHoldLabel={buyAndHoldLabel}
-          benchmarkStatusNote={benchmarkStatusNote}
-          walkForwardOverview={walkForwardOverview}
-          decisionReportMarkdown={decisionReportMarkdown}
-          onExportDecisionReport={handleExportDecisionReport}
-        />
-      );
-    }
-
-    const activeTabLabel = backtestCopy(`resultPage.tabs.${activeTab}`);
-
-    return (
-      <Suspense
-        fallback={(
-          <section
-            className="backtest-display-section"
-            data-testid="deterministic-result-tab-lazy-fallback"
-            role="status"
-            aria-live="polite"
-          >
-            <div className="rounded-[16px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-md">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
-                    WolfyStock
-                  </p>
-                  <p className="truncate text-sm text-white/78">{activeTabLabel}</p>
-                </div>
-                <span
-                  className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
-                  aria-hidden="true"
-                />
-              </div>
-              <p className="mt-2 text-xs text-white/45">正在加载该分区的回测明细。</p>
-            </div>
-          </section>
-        )}
-      >
-        <BacktestAuditTables
-          activeTab={activeTab}
-          resultPage={resultPage}
-          backtestCopy={backtestCopy}
-          language={language}
-          run={run}
-          normalized={normalized}
-          selectedBenchmarkLabel={selectedBenchmarkLabel}
-          buyAndHoldLabel={buyAndHoldLabel}
-          benchmarkStatusNote={benchmarkStatusNote}
-          hasRobustnessAnalysis={hasRobustnessAnalysis}
-          robustnessAnalysisStateLabel={getRobustnessStateLabel(getObjectField(robustnessAnalysis, 'state'), language)}
-          robustnessLensRows={robustnessLensRows}
-          riskControlRows={riskControlRows}
-          activeRobustnessKey={activeRobustnessKey}
-          activeRiskControlKey={activeRiskControlKey}
-          walkForwardWindowCount={formatNumber(getObjectField(walkForward, 'windowCount') as number | null | undefined, 0)}
-          monteCarloSimulationCount={formatNumber(getObjectField(monteCarlo, 'simulationCount') as number | null | undefined, 0)}
-          stressScenarioCount={formatNumber(getObjectField(stressTests, 'scenarioCount') as number | null | undefined, 0)}
-          walkForwardMeanReturn={pct(getObjectField(walkForwardAggregate, 'meanTotalReturnPct') as number | null | undefined)}
-          monteCarloMedianReturn={pct(getObjectField(monteCarloAggregate, 'medianTotalReturnPct') as number | null | undefined)}
-          worstScenarioLabel={worstScenarioLabel}
-          monteCarloDetailRows={monteCarloDetailRows}
-          monteCarloDetailEmptyText={monteCarloDetailEmptyText}
-          stressScenarioRows={stressScenarioRows}
-          stressScenarioDetailEmptyText={stressScenarioDetailEmptyText}
-          strategySummaryRows={strategySummaryRows}
-          parsedSummaryEntries={parsedSummaryEntries}
-          strategyWarningEntries={strategyWarningEntries}
-          comparisonItems={comparisonItems}
-          compareRunIds={compareRunIds}
-          historyItems={historyItems}
-          historyError={historyError}
-          compareError={compareError}
-          isLoadingHistory={isLoadingHistory}
-          isLoadingCompareRuns={isLoadingCompareRuns}
-          onRefreshHistory={() => void fetchHistory(run.code)}
-          onOpenCompareWorkbench={handleOpenCompareWorkbench}
-          onClearComparison={() => setCompareRunIds([])}
-          onOpenHistoryRun={handleOpenHistoryRun}
-          onToggleCompareRun={handleToggleCompareRun}
-          scenarioPlans={scenarioPlans}
-          selectedScenarioPlanId={selectedScenarioPlanId}
-          onSelectScenarioPlanId={setSelectedScenarioPlanId}
-          onRunScenarioPlan={handleRunScenarioPlan}
-          isSubmittingScenarioRuns={isSubmittingScenarioRuns}
-          scenarioRuns={scenarioRuns}
-          scenarioError={scenarioError}
-          scenarioComparisonItems={scenarioComparisonItems}
-          availablePresets={availablePresets}
-          onSavePreset={handleSavePreset}
-          onOpenScenarioRun={(runId) => navigate(`/backtest/results/${runId}`)}
-        />
-      </Suspense>
-    );
-  };
+  const visibleHistoryItems = run?.code ? historyItems : [];
+  const compareError = compareRunIds.length === 0 ? null : compareErrorState;
+  const activeParameterStabilityEvidence = compareRunIds.length === 0 ? null : parameterStabilityEvidence;
 
   const renderCompletedConsole = () => {
     if (!run || !normalized) return null;
@@ -1474,7 +1626,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                           <p className="truncate text-sm text-white/78">{run.code}</p>
                         </div>
                         <span
-                          className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
+                          className="inline-flex size-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
                           aria-hidden="true"
                         />
                       </div>
@@ -1508,7 +1660,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   mode={resultMode}
                   normalized={normalized}
                   densityConfig={density}
-                  parameterStabilityEvidence={parameterStabilityEvidence}
+                  parameterStabilityEvidence={activeParameterStabilityEvidence}
                   chartNode={(
                     <BacktestChartWorkspace
                       run={run}
@@ -1591,7 +1743,27 @@ const DeterministicBacktestResultPage: React.FC = () => {
             </section>
           ) : null}
 
-          {run?.status === 'completed' && normalized ? null : renderRunStatusSection()}
+          {run?.status === 'completed' && normalized ? null : (
+            <RunStatusSection
+              run={run}
+              runError={runError}
+              cancelError={cancelError}
+              statusSummaryItems={statusSummaryItems}
+              uiState={{
+                isLoadingRun,
+                isPollingStatus,
+                isCancellingRun,
+                canCancelCurrentRun,
+                canExportTrace,
+              }}
+              presetNotice={presetNotice}
+              availablePresets={availablePresets}
+              resultPage={resultPage}
+              fetchRun={() => void fetchRun()}
+              handleCancelRun={() => void handleCancelRun()}
+              handleExportDecisionReport={handleExportDecisionReport}
+            />
+          )}
 
           {run?.status === 'completed' && normalized ? (
             <>
@@ -1614,12 +1786,90 @@ const DeterministicBacktestResultPage: React.FC = () => {
                 </div>
               </section>
 
-              {renderCompletedTabPanel()}
+              <CompletedTabPanel
+                run={run}
+                normalized={normalized}
+                activeTab={activeTab}
+                resultPage={resultPage}
+                backtestCopy={backtestCopy}
+                language={language}
+                uiState={{
+                  hasRobustnessAnalysis,
+                  isLoadingHistory,
+                  isLoadingCompareRuns,
+                  isSubmittingScenarioRuns,
+                }}
+                selectedBenchmarkLabel={selectedBenchmarkLabel}
+                buyAndHoldLabel={buyAndHoldLabel}
+                benchmarkStatusNote={benchmarkStatusNote}
+                walkForwardOverview={walkForwardOverview}
+                decisionReportMarkdown={decisionReportMarkdown}
+                handleExportDecisionReport={handleExportDecisionReport}
+                robustnessAnalysis={robustnessAnalysis}
+                robustnessLensRows={robustnessLensRows}
+                riskControlRows={riskControlRows}
+                activeRobustnessKey={activeRobustnessKey}
+                activeRiskControlKey={activeRiskControlKey}
+                walkForward={walkForward}
+                monteCarlo={monteCarlo}
+                stressTests={stressTests}
+                walkForwardAggregate={walkForwardAggregate}
+                monteCarloAggregate={monteCarloAggregate}
+                worstScenarioLabel={worstScenarioLabel}
+                monteCarloDetailRows={monteCarloDetailRows}
+                monteCarloDetailEmptyText={monteCarloDetailEmptyText}
+                stressScenarioRows={stressScenarioRows}
+                stressScenarioDetailEmptyText={stressScenarioDetailEmptyText}
+                strategySummaryRows={strategySummaryRows}
+                parsedSummaryEntries={parsedSummaryEntries}
+                strategyWarningEntries={strategyWarningEntries}
+                comparisonItems={comparisonItems}
+                compareRunIds={compareRunIds}
+                historyItems={visibleHistoryItems}
+                historyError={historyError}
+                compareError={compareError}
+                fetchHistory={fetchHistory}
+                handleOpenCompareWorkbench={handleOpenCompareWorkbench}
+                setCompareRunIds={setCompareRunIds}
+                handleOpenHistoryRun={handleOpenHistoryRun}
+                handleToggleCompareRun={handleToggleCompareRun}
+                scenarioPlans={scenarioPlans}
+                selectedScenarioPlanId={effectiveSelectedScenarioPlanId}
+                setSelectedScenarioPlanId={setSelectedScenarioPlanId}
+                handleRunScenarioPlan={handleRunScenarioPlan}
+                scenarioRuns={scenarioRuns}
+                scenarioError={scenarioError}
+                scenarioComparisonItems={scenarioComparisonItems}
+                availablePresets={availablePresets}
+                handleSavePreset={handleSavePreset}
+                navigate={navigate}
+              />
             </>
           ) : null}
         </div>
       </TerminalPageShell>
     </main>
+  );
+};
+
+const DeterministicBacktestResultPage: React.FC = () => {
+  const location = useLocation();
+  const { runId } = useParams<{ runId: string }>();
+  const locationState = location.state as ResultPageLocationState | null;
+  const initialRun = locationState?.initialRun || null;
+  const resultMode: BacktestResultReportMode = locationState?.resultMode === 'simple' ? 'simple' : 'professional';
+  const parsedRunId = Number.parseInt(runId || '', 10);
+  const hasValidRunId = Number.isFinite(parsedRunId) && parsedRunId > 0;
+  const pageInstanceKey = `${location.key}:${runId || 'unknown'}`;
+
+  return (
+    <DeterministicBacktestResultPageContent
+      key={pageInstanceKey}
+      hasValidRunId={hasValidRunId}
+      initialRun={initialRun}
+      parsedRunId={parsedRunId}
+      resultMode={resultMode}
+    />
   );
 };
 

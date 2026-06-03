@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type {
   BacktestDiagnosticWarning,
   RuleBacktestParameterStabilityEvidence,
@@ -145,7 +145,7 @@ function valueToneClass(tone?: MetricItem['tone']): string {
   return 'text-white';
 }
 
-function renderValue(value: string, tone?: MetricItem['tone']) {
+function RenderedValue({ value, tone }: { value: string; tone?: MetricItem['tone'] }) {
   return <span className={`${VALUE_CLASS} ${valueToneClass(tone)}`}>{value}</span>;
 }
 
@@ -159,7 +159,7 @@ function getTradeReturn(trade: RuleBacktestTradeItem): number | null {
 }
 
 function getTradeSummary(run: RuleBacktestRunResponse, trades: RuleBacktestTradeItem[]): TradeSummary {
-  const returns = trades.map(getTradeReturn).filter((value): value is number => value != null);
+  const returns = trades.reduce<number[]>((acc, trade) => { const v = getTradeReturn(trade); if (v != null) acc.push(v); return acc; }, []);
   const wins = returns.filter((value) => value > 0);
   const losses = returns.filter((value) => value < 0);
   const winCount = safeNumber(run.winCount) ?? (returns.length ? wins.length : null);
@@ -177,7 +177,7 @@ function getTradeSummary(run: RuleBacktestRunResponse, trades: RuleBacktestTrade
     avgLossPct: average(losses),
     profitFactor: grossLossAbs > 0 ? grossWin / grossLossAbs : null,
     avgHoldingDays: safeNumber(run.avgHoldingDays)
-      ?? average(trades.map((trade) => safeNumber(trade.holdingDays)).filter((value): value is number => value != null)),
+      ?? average(trades.reduce<number[]>((acc, trade) => { const v = safeNumber(trade.holdingDays); if (v != null) acc.push(v); return acc; }, [])),
     bestTradePct: returns.length ? Math.max(...returns) : null,
     worstTradePct: returns.length ? Math.min(...returns) : null,
   };
@@ -569,16 +569,15 @@ function assumptionEntries(run: RuleBacktestRunResponse): Array<[string, string]
   const hasStructured = Boolean(recordValue(source, 'engine', 'feeModel', 'fee_model', 'slippageModel', 'slippage_model'));
   if (hasStructured) {
     return structured
-      .filter(([, value]) => value != null && value !== '')
-      .map(([key, value]) => [key, String(value)]);
+      .flatMap(([key, value]) => value != null && value !== '' ? [[key, String(value)]] : []);
   }
 
-  const explicit = Object.entries(source)
-    .map(([key, value]): [string, string] | null => {
-      if (value == null || value === '') return null;
-      return [humanToken(key), typeof value === 'object' ? JSON.stringify(value) : humanToken(value)];
-    })
-    .filter((entry): entry is [string, string] => entry != null);
+  const explicit = Object.entries(source).reduce<[string, string][]>((acc, [key, value]) => {
+    if (value != null && value !== '') {
+      acc.push([humanToken(key), typeof value === 'object' ? JSON.stringify(value) : humanToken(value)]);
+    }
+    return acc;
+  }, []);
   if (explicit.length) return explicit;
 
   const inferred: Array<[string, string | number | null | undefined]> = [
@@ -587,8 +586,7 @@ function assumptionEntries(run: RuleBacktestRunResponse): Array<[string, string]
     ['单边滑点', run.slippageBps],
   ];
   return inferred
-    .filter(([, value]) => value != null && value !== '')
-    .map(([key, value]) => [key, String(value)]);
+    .flatMap(([key, value]) => value != null && value !== '' ? [[key, String(value)]] : []);
 }
 
 function dataQualityEntries(run: RuleBacktestRunResponse, normalized: DeterministicBacktestNormalizedResult): Array<[string, string]> {
@@ -607,8 +605,7 @@ function dataQualityEntries(run: RuleBacktestRunResponse, normalized: Determinis
       ['质量提示', warnings],
     ];
     return entries
-      .filter(([, value]) => value != null && value !== '')
-      .map(([key, value]) => [key, String(value)]);
+      .flatMap(([key, value]) => value != null && value !== '' ? [[key, String(value)]] : []);
   }
 
   const benchmark = run.benchmarkSummary || {};
@@ -631,8 +628,7 @@ function dataQualityEntries(run: RuleBacktestRunResponse, normalized: Determinis
       : null],
   ];
   return entries
-    .filter(([, value]) => value != null && value !== '')
-    .map(([key, value]) => [key, String(value)]);
+    .flatMap(([key, value]) => value != null && value !== '' ? [[key, String(value)]] : []);
 }
 
 function getBenchmarkVerdict(totalReturnPct: number | null, benchmarkReturnPct: number | null, excessReturnPct: number | null): { label: string; tone: MetricItem['tone']; note: string } {
@@ -854,8 +850,8 @@ function buildAttribution(
     groups.set(key, [...(groups.get(key) || []), trade]);
   });
   return Array.from(groups.entries()).map(([key, group]) => {
-    const returns = group.map(getTradeReturn).filter((value): value is number => value != null);
-    const pnls = group.map(tradeNetPnl).filter((value): value is number => value != null);
+    const returns = group.reduce<number[]>((acc, trade) => { const v = getTradeReturn(trade); if (v != null) acc.push(v); return acc; }, []);
+    const pnls = group.reduce<number[]>((acc, trade) => { const v = tradeNetPnl(trade); if (v != null) acc.push(v); return acc; }, []);
     return {
       key,
       trades: group.length,
@@ -958,7 +954,7 @@ function MetricCard({ item }: { item: MetricItem }) {
   return (
     <div className="min-w-0 rounded-xl border border-white/5 bg-black/20 p-3">
       <p className={LABEL_CLASS}>{item.label}</p>
-      <p className="mt-2 truncate">{renderValue(item.value, item.tone)}</p>
+      <p className="mt-2 truncate">{<RenderedValue value={item.value} tone={item.tone} />}</p>
     </div>
   );
 }
@@ -1127,64 +1123,55 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [activeDetailTab, setActiveDetailTab] = useState<'trades' | 'risk' | 'params' | 'diagnostics'>('trades');
-  const normalized = useMemo(
-    () => providedNormalized ?? normalizeDeterministicBacktestResult(run, language),
-    [language, providedNormalized, run],
-  );
-  const trades = useMemo(() => (Array.isArray(run.trades) ? run.trades : []), [run.trades]);
-  const tradeSummary = useMemo(() => getTradeSummary(run, trades), [run, trades]);
-  const attributionByMonth = useMemo(() => buildAttribution(trades, getTradeMonth), [trades]);
-  const attributionByYear = useMemo(() => buildAttribution(trades, getTradeYear), [trades]);
-  const attributionByExitReason = useMemo(() => buildAttribution(trades, (trade) => compactToken(trade.exitReason || trade.exitTrigger || trade.exitSignal)), [trades]);
-  const attributionByHoldingBucket = useMemo(() => buildAttribution(trades, (trade) => holdingBucket(safeNumber(trade.holdingDays ?? trade.holdingCalendarDays ?? trade.holdingBars))), [trades]);
-  const tradeEvents = useMemo(() => buildEvents(trades), [trades]);
-  const grossPnlTotal = useMemo(() => sumNullable(trades.map((trade) => safeNumber(trade.grossPnl))), [trades]);
-  const netPnlTotal = useMemo(() => sumNullable(trades.map(tradeNetPnl)), [trades]);
-  const feesTotal = useMemo(() => sumNullable(trades.map(tradeFees)), [trades]);
-  const slippageTotal = useMemo(() => sumNullable(trades.map(tradeSlippage)), [trades]);
-  const drawdown = useMemo(() => drawdownPeriod(normalized.rows), [normalized.rows]);
-  const bestTrade = useMemo(() => trades.reduce<RuleBacktestTradeItem | null>((best, trade) => {
+  const normalized = providedNormalized ?? normalizeDeterministicBacktestResult(run, language);
+  const trades = Array.isArray(run.trades) ? run.trades : [];
+  const tradeSummary = getTradeSummary(run, trades);
+  const attributionByMonth = buildAttribution(trades, getTradeMonth);
+  const attributionByYear = buildAttribution(trades, getTradeYear);
+  const attributionByExitReason = buildAttribution(trades, (trade) => compactToken(trade.exitReason || trade.exitTrigger || trade.exitSignal));
+  const attributionByHoldingBucket = buildAttribution(trades, (trade) => holdingBucket(safeNumber(trade.holdingDays ?? trade.holdingCalendarDays ?? trade.holdingBars)));
+  const tradeEvents = buildEvents(trades);
+  const grossPnlTotal = sumNullable(trades.map((trade) => safeNumber(trade.grossPnl)));
+  const netPnlTotal = sumNullable(trades.map(tradeNetPnl));
+  const feesTotal = sumNullable(trades.map(tradeFees));
+  const slippageTotal = sumNullable(trades.map(tradeSlippage));
+  const drawdown = drawdownPeriod(normalized.rows);
+  const bestTrade = trades.reduce<RuleBacktestTradeItem | null>((best, trade) => {
     const value = getTradeReturn(trade);
     const bestValue = best ? getTradeReturn(best) : null;
     return value != null && (bestValue == null || value > bestValue) ? trade : best;
-  }, null), [trades]);
-  const worstTrade = useMemo(() => trades.reduce<RuleBacktestTradeItem | null>((worst, trade) => {
+  }, null);
+  const worstTrade = trades.reduce<RuleBacktestTradeItem | null>((worst, trade) => {
     const value = getTradeReturn(trade);
     const worstValue = worst ? getTradeReturn(worst) : null;
     return value != null && (worstValue == null || value < worstValue) ? trade : worst;
-  }, null), [trades]);
-  const consecutiveWins = useMemo(() => maxStreak(trades, (value) => value > 0), [trades]);
-  const consecutiveLosses = useMemo(() => maxStreak(trades, (value) => value < 0), [trades]);
-  const metrics = useMemo(() => getMetricItems(normalized), [normalized]);
-  const moreMetrics = useMemo(() => getMoreMetricItems(run, tradeSummary), [run, tradeSummary]);
-  const dataQuality = useMemo(() => dataQualityEntries(run, normalized), [run, normalized]);
-  const assumptions = useMemo(() => assumptionEntries(run), [run]);
-  const dataQualityWarnings = useMemo(() => (run.dataQuality?.warnings || []).map(warningText), [run.dataQuality?.warnings]);
-  const executionWarnings = useMemo(() => {
+  }, null);
+  const consecutiveWins = maxStreak(trades, (value) => value > 0);
+  const consecutiveLosses = maxStreak(trades, (value) => value < 0);
+  const metrics = getMetricItems(normalized);
+  const moreMetrics = getMoreMetricItems(run, tradeSummary);
+  const dataQuality = dataQualityEntries(run, normalized);
+  const assumptions = assumptionEntries(run);
+  const dataQualityWarnings = (run.dataQuality?.warnings || []).map(warningText);
+  const executionWarnings = (() => {
     const assumptionsPayload = (run.executionAssumptions || {}) as Record<string, unknown>;
-    const warnings = recordValue(assumptionsPayload, 'warnings') as Array<Record<string, unknown>> | null;
-    return Array.isArray(warnings) ? warnings.map(warningText) : [];
-  }, [run.executionAssumptions]);
+    const executionWarningItems = recordValue(assumptionsPayload, 'warnings') as Array<Record<string, unknown>> | null;
+    return Array.isArray(executionWarningItems) ? executionWarningItems.map(warningText) : [];
+  })();
   const hasExplicitAssumptions = Object.keys(run.executionAssumptions || {}).length > 0;
-  const diagnosisItems = useMemo(
-    () => getDiagnosisItems(normalized, tradeSummary, dataQualityWarnings, executionWarnings, hasExplicitAssumptions),
-    [dataQualityWarnings, executionWarnings, hasExplicitAssumptions, normalized, tradeSummary],
-  );
-  const benchmarkVerdict = useMemo(
-    () => getBenchmarkVerdict(
-      normalized.metrics.totalReturnPct,
-      normalized.metrics.benchmarkReturnPct,
-      normalized.metrics.excessReturnVsBenchmarkPct,
-    ),
-    [normalized.metrics.benchmarkReturnPct, normalized.metrics.excessReturnVsBenchmarkPct, normalized.metrics.totalReturnPct],
+  const diagnosisItems = getDiagnosisItems(normalized, tradeSummary, dataQualityWarnings, executionWarnings, hasExplicitAssumptions);
+  const benchmarkVerdict = getBenchmarkVerdict(
+    normalized.metrics.totalReturnPct,
+    normalized.metrics.benchmarkReturnPct,
+    normalized.metrics.excessReturnVsBenchmarkPct,
   );
   const volatilityPct = safeNumber(run.summary?.volatilityPct ?? run.summary?.volatility);
-  const worstDailyReturn = useMemo(() => {
+  const worstDailyReturn = (() => {
     const values = normalized.rows
       .map((row) => row.dailyReturn)
       .filter((value): value is number => value != null && Number.isFinite(value));
     return values.length ? Math.min(...values) : null;
-  }, [normalized.rows]);
+  })();
   const visibleTrades = trades.slice(0, TRADE_ROW_LIMIT);
   const visibleLedgerRows = normalized.rows.slice(0, LEDGER_ROW_LIMIT);
   const statusLabel = getRuleRunStatusLabel(run.status, language);
@@ -1192,43 +1179,34 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
   const firstDate = normalized.viewerMeta.firstDate || run.startDate || run.periodStart || null;
   const lastDate = normalized.viewerMeta.lastDate || run.endDate || run.periodEnd || null;
   const dateRange = firstDate || lastDate ? `${firstDate || '--'} -> ${lastDate || '--'}` : '--';
-  const readinessSummary = useMemo(
-    () => normalizeBacktestReadiness(run, { maxLimitationLabels: 5 }),
-    [run],
-  );
+  const readinessSummary = normalizeBacktestReadiness(run, { maxLimitationLabels: 5 });
   const showReadinessChips = readinessSummary.posture !== 'unknown'
     || readinessSummary.confidenceCap != null
     || readinessSummary.limitationLabels.length > 0
     || readinessSummary.freshnessLabel != null;
   const hasTraceRows = hasExecutionTraceRows(run);
   const hasExplicitTraceRows = Array.isArray(run.executionTrace?.rows) && run.executionTrace.rows.length > 0;
-  const consumerReliabilityItems = useMemo(
-    () => getConsumerReliabilityItems({
-      run,
-      readinessSummary,
-      hasExplicitTraceRows,
-      hasExplicitAssumptions,
-      hasDataQualityEntries: dataQuality.length > 0,
-      dataQualityWarnings,
-      executionWarnings,
-    }),
-    [dataQuality.length, dataQualityWarnings, executionWarnings, hasExplicitAssumptions, hasExplicitTraceRows, readinessSummary, run],
-  );
-  const researchReviewItems = useMemo(
-    () => getResearchQualityReviewItems({
-      run,
-      normalized,
-      readinessSummary,
-      hasExplicitTraceRows,
-      hasExplicitAssumptions,
-      hasDataQualityEntries: dataQuality.length > 0,
-      dataQualityWarnings,
-      executionWarnings,
-      parameterStabilityEvidence,
-    }),
-    [dataQuality.length, dataQualityWarnings, executionWarnings, hasExplicitAssumptions, hasExplicitTraceRows, normalized, parameterStabilityEvidence, readinessSummary, run],
-  );
-  const researchReviewOverall = useMemo(() => getResearchReviewOverall(researchReviewItems), [researchReviewItems]);
+  const consumerReliabilityItems = getConsumerReliabilityItems({
+    run,
+    readinessSummary,
+    hasExplicitTraceRows,
+    hasExplicitAssumptions,
+    hasDataQualityEntries: dataQuality.length > 0,
+    dataQualityWarnings,
+    executionWarnings,
+  });
+  const researchReviewItems = getResearchQualityReviewItems({
+    run,
+    normalized,
+    readinessSummary,
+    hasExplicitTraceRows,
+    hasExplicitAssumptions,
+    hasDataQualityEntries: dataQuality.length > 0,
+    dataQualityWarnings,
+    executionWarnings,
+    parameterStabilityEvidence,
+  });
+  const researchReviewOverall = getResearchReviewOverall(researchReviewItems);
 
   const exportTrades = () => {
     downloadCsv(
@@ -1310,14 +1288,14 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                 <span className="font-mono text-xs text-white/38">{dateRange}</span>
               </div>
               <div className="mt-3 flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-xs text-white/58">
-                <span>总收益 {renderValue(signedPct(normalized.metrics.totalReturnPct), toneFor(normalized.metrics.totalReturnPct))}</span>
-                <span>基准 {renderValue(signedPct(normalized.metrics.benchmarkReturnPct), toneFor(normalized.metrics.benchmarkReturnPct))}</span>
-                <span>超额 {renderValue(signedPct(normalized.metrics.excessReturnVsBenchmarkPct), toneFor(normalized.metrics.excessReturnVsBenchmarkPct))}</span>
+                <span>总收益 <RenderedValue value={signedPct(normalized.metrics.totalReturnPct)} tone={toneFor(normalized.metrics.totalReturnPct)} /></span>
+                <span>基准 <RenderedValue value={signedPct(normalized.metrics.benchmarkReturnPct)} tone={toneFor(normalized.metrics.benchmarkReturnPct)} /></span>
+                <span>超额 <RenderedValue value={signedPct(normalized.metrics.excessReturnVsBenchmarkPct)} tone={toneFor(normalized.metrics.excessReturnVsBenchmarkPct)} /></span>
               </div>
               <div className="mt-2 flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-xs text-white/50">
-                <span>最大回撤 {renderValue(signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), 'negative')}</span>
-                <span>夏普 {renderValue(signedNumber(normalized.metrics.sharpeRatio), toneFor(normalized.metrics.sharpeRatio))}</span>
-                <span>胜率 {renderValue(signedPct(normalized.metrics.winRatePct), toneFor(normalized.metrics.winRatePct))}</span>
+                <span>最大回撤 <RenderedValue value={signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct))} tone="negative" /></span>
+                <span>夏普 <RenderedValue value={signedNumber(normalized.metrics.sharpeRatio)} tone={toneFor(normalized.metrics.sharpeRatio)} /></span>
+                <span>胜率 <RenderedValue value={signedPct(normalized.metrics.winRatePct)} tone={toneFor(normalized.metrics.winRatePct)} /></span>
                 <span>交易次数 <span className="font-mono text-white">{normalized.metrics.tradeCount}</span></span>
               </div>
             </div>

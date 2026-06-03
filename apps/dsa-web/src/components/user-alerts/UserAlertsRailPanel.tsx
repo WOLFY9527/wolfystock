@@ -1,12 +1,16 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Checkbox, Input, Select } from '../common';
+import { Checkbox } from '../common/Checkbox';
+import { Input } from '../common/Input';
+import { Select } from '../common/Select';
 import {
   CompactEmptyRow,
   DenseSecondaryDisclosure,
+} from '../terminal/DenseWorkbenchPrimitives';
+import {
   TerminalButton,
   TerminalChip,
   TerminalNotice,
-} from '../terminal';
+} from '../terminal/TerminalPrimitives';
 import { userAlertsApi } from '../../api/userAlerts';
 import type {
   UserAlertDirection,

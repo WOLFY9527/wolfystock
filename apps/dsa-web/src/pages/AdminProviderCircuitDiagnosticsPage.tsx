@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Activity, ChevronDown, ChevronRight } from 'lucide-react';
 import {
   adminProviderCircuitsApi,
@@ -11,7 +11,7 @@ import {
   type ProviderSlaReadinessItem,
 } from '../api/adminProviderCircuits';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import {
   TerminalButton,
   TerminalChip,
@@ -23,7 +23,7 @@ import {
   TerminalPageShell,
   TerminalPanel,
   TerminalSectionHeader,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { cn } from '../utils/cn';
 import { formatDateTime, formatNumber } from '../utils/format';
@@ -109,7 +109,7 @@ const DiagnosticsDisclosure: React.FC<DiagnosticsDisclosureProps> = ({ title, su
           className="shrink-0 px-2 py-1 text-[11px]"
           onClick={() => setOpen((current) => !current)}
         >
-          {open ? <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" /> : <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />}
+          {open ? <ChevronDown className="size-3.5" aria-hidden="true" /> : <ChevronRight className="size-3.5" aria-hidden="true" />}
           <span>{open ? '收起' : '展开'}</span>
         </TerminalButton>
       </div>
@@ -889,7 +889,7 @@ const OperatorActionListPanel: React.FC<{ actions: OperatorActionItem[]; isLoadi
           <li key={action.id}>
             <TerminalNestedBlock className="h-full min-w-0">
               <div className="flex min-w-0 items-start gap-3">
-                <span className={cn('mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-[11px] font-semibold', METRIC_VALUE_CLASS_BY_TONE[action.tone])}>
+                <span className={cn('mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border text-[11px] font-semibold', METRIC_VALUE_CLASS_BY_TONE[action.tone])}>
                   {index + 1}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -922,7 +922,7 @@ const OperatorActionListPanel: React.FC<{ actions: OperatorActionItem[]; isLoadi
 const LoadingState: React.FC = () => (
   <TerminalPanel as="section" role="status" aria-label="正在读取 provider 熔断诊断">
     <div className="flex items-center gap-3">
-      <Activity className="h-4 w-4 animate-pulse text-cyan-200" aria-hidden="true" />
+      <Activity className="size-4 animate-pulse text-cyan-200" aria-hidden="true" />
       <div>
         <p className="text-sm font-semibold text-white">正在读取 provider 熔断诊断</p>
         <p className="mt-1 text-xs text-white/46">只读取现有诊断 API，不触发 provider 调用。</p>
@@ -933,9 +933,15 @@ const LoadingState: React.FC = () => (
 
 const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
   const { canReadProviders } = useProductSurface();
-  const [data, setData] = useState<ProviderCircuitDiagnosticsBundle | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<ParsedApiError | null>(null);
+  const [{ data, isLoading, error }, setState] = useState<{
+    data: ProviderCircuitDiagnosticsBundle | null;
+    isLoading: boolean;
+    error: ParsedApiError | null;
+  }>({
+    data: null,
+    isLoading: true,
+    error: null,
+  });
 
   useEffect(() => {
     if (!canReadProviders) {
@@ -944,29 +950,33 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
     let cancelled = false;
     adminProviderCircuitsApi.getDiagnostics({ limit: 50 })
       .then((payload) => {
-        if (!cancelled) setData(payload);
+        if (!cancelled) {
+          setState({
+            data: payload,
+            isLoading: false,
+            error: null,
+          });
+        }
       })
       .catch((apiError) => {
         if (!cancelled) {
           const parsed = getParsedApiError(apiError);
-          setError({ ...parsed, title: '读取 provider 熔断诊断失败' });
+          setState({
+            data: null,
+            isLoading: false,
+            error: { ...parsed, title: '读取 provider 熔断诊断失败' },
+          });
         }
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
       });
     return () => {
       cancelled = true;
     };
   }, [canReadProviders]);
 
-  const summary = useMemo(() => buildOperationalSummary(data), [data]);
-  const operationalVerdict = useMemo(
-    () => buildOperationalVerdict(summary, isLoading, Boolean(data), Boolean(error)),
-    [data, error, isLoading, summary],
-  );
-  const summaryMetrics = useMemo(() => buildSummaryMetrics(summary), [summary]);
-  const operatorActions = useMemo(() => buildOperatorActions(data), [data]);
+  const summary = buildOperationalSummary(data);
+  const operationalVerdict = buildOperationalVerdict(summary, isLoading, Boolean(data), Boolean(error));
+  const summaryMetrics = buildSummaryMetrics(summary);
+  const operatorActions = buildOperatorActions(data);
 
   if (!canReadProviders) {
     return null;
@@ -1019,7 +1029,7 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
         <DiagnosticsDisclosure
           title="L3 诊断细节：熔断、SLA、事件、配额、探测"
           summary="Provider blocks、bucket、quota、probe 与技术边界默认折叠"
-          className="px-3 py-3"
+          className="p-3"
         >
           <TerminalGrid>
             <div className="col-span-12 xl:col-span-8">

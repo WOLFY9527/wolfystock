@@ -35,7 +35,7 @@ vi.mock('../../api/auth', () => ({
   },
 }));
 
-vi.mock('../../stores', () => ({
+vi.mock('../../stores/stockPoolStore', () => ({
   useStockPoolStore: {
     getState: () => ({
       resetDashboardState,

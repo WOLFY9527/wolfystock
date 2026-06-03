@@ -13,7 +13,7 @@ export type CanonicalTrustDisclosureBucket = Exclude<TrustDisclosureBucket, 'ins
 
 export type TrustDisclosureChipVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info';
 
-export const TRUST_DISCLOSURE_BUCKET_ORDER: CanonicalTrustDisclosureBucket[] = [
+const TRUST_DISCLOSURE_BUCKET_ORDER: CanonicalTrustDisclosureBucket[] = [
   'confidence',
   'fallback',
   'stale',
@@ -132,8 +132,4 @@ export function resolveTrustDisclosureBuckets({
   });
 
   return TRUST_DISCLOSURE_BUCKET_ORDER.filter((bucket) => resolved.has(bucket));
-}
-
-export function trustDisclosureLabel(bucket: TrustDisclosureBucket): string {
-  return TRUST_DISCLOSURE_LABELS[canonicalBucket(bucket)];
 }

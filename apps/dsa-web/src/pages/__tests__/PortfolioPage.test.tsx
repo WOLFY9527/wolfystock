@@ -2621,4 +2621,31 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.click(getLeftTabButton('记账'));
     expect(screen.getByText(translate('zh', 'portfolio.manualTrade'))).toBeInTheDocument();
   });
+
+  it('does not repeat bootstrap fetches when switching local PortfolioPage tabs', async () => {
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+    await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(listImportBrokers).toHaveBeenCalledTimes(1));
+
+    expect(getAccounts).toHaveBeenCalledTimes(1);
+    expect(getSnapshot).toHaveBeenCalledTimes(1);
+    expect(getRisk).toHaveBeenCalledTimes(1);
+    expect(listTrades).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(getLeftTabButton('账户'));
+    fireEvent.click(getLeftTabButton('同步'));
+    fireEvent.click(getLeftTabButton('记账'));
+    fireEvent.click(screen.getByRole('button', { name: '资金划转' }));
+    fireEvent.click(within(screen.getByTestId('portfolio-trade-type-switcher')).getByRole('button', { name: '公司行为' }));
+    fireEvent.click(screen.getByRole('button', { name: '持仓流水' }));
+
+    expect(getAccounts).toHaveBeenCalledTimes(1);
+    expect(listImportBrokers).toHaveBeenCalledTimes(1);
+    expect(listBrokerConnections).toHaveBeenCalledTimes(1);
+    expect(getSnapshot).toHaveBeenCalledTimes(1);
+    expect(getRisk).toHaveBeenCalledTimes(1);
+    expect(listTrades).toHaveBeenCalledTimes(1);
+  });
 });

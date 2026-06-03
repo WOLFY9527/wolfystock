@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TaskInfo } from '../../types/analysis';
-import {
-  selectCompletedTasksByRecency,
-  selectPrimaryTask,
-  sortTasksByPriority,
-} from '../taskQueue';
+import { sortTasksByPriority } from '../taskQueue';
 
 function buildTask(overrides: Partial<TaskInfo>): TaskInfo {
   return {
@@ -60,46 +56,4 @@ describe('taskQueue', () => {
     ]);
   });
 
-  it('selects the first task from the shared priority order as primary', () => {
-    const primaryTask = selectPrimaryTask([
-      buildTask({
-        taskId: 'pending-task',
-        status: 'pending',
-        createdAt: '2026-03-18T12:00:00Z',
-      }),
-      buildTask({
-        taskId: 'processing-task',
-        status: 'processing',
-        createdAt: '2026-03-18T08:00:00Z',
-        updatedAt: '2026-03-18T08:30:00Z',
-      }),
-    ]);
-
-    expect(primaryTask?.taskId).toBe('processing-task');
-  });
-
-  it('orders completed tasks by completion recency for latest-report follow-up', () => {
-    const completedTasks = selectCompletedTasksByRecency([
-      buildTask({
-        taskId: 'completed-older',
-        status: 'completed',
-        completedAt: '2026-03-18T08:30:00Z',
-      }),
-      buildTask({
-        taskId: 'completed-latest',
-        status: 'completed',
-        completedAt: '2026-03-18T09:30:00Z',
-      }),
-      buildTask({
-        taskId: 'processing-task',
-        status: 'processing',
-        updatedAt: '2026-03-18T10:00:00Z',
-      }),
-    ]);
-
-    expect(completedTasks.map((task) => task.taskId)).toEqual([
-      'completed-latest',
-      'completed-older',
-    ]);
-  });
 });

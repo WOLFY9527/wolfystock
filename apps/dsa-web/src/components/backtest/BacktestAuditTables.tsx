@@ -1,5 +1,7 @@
 import type React from 'react';
-import { ApiErrorAlert, Button, Card } from '../common';
+import { ApiErrorAlert } from '../common/ApiErrorAlert';
+import { Button } from '../common/Button';
+import { Card } from '../common/Card';
 import {
   AssumptionList,
   Disclosure,
@@ -212,13 +214,19 @@ function getOrderedDrawdownAttributionBuckets(
     return [];
   }
 
-  const ordered = DRAWDOWN_ATTRIBUTION_BUCKET_ORDER
-    .filter((key) => isDrawdownAttributionPayload(bucketCounts[key]))
-    .map((key) => [key, bucketCounts[key]!] as [string, NonNullable<RuleBacktestDrawdownRegimeAttribution['bucketCounts']>[string]]);
+  const ordered = DRAWDOWN_ATTRIBUTION_BUCKET_ORDER.reduce((acc, key) => {
+    if (isDrawdownAttributionPayload(bucketCounts[key])) {
+      acc.push([key, bucketCounts[key]!]);
+    }
+    return acc;
+  }, [] as Array<[string, NonNullable<RuleBacktestDrawdownRegimeAttribution['bucketCounts']>[string]]>);
 
-  const remaining = Object.entries(bucketCounts)
-    .filter(([key, value]) => !DRAWDOWN_ATTRIBUTION_BUCKET_ORDER.includes(key as DrawdownAttributionBucketKey) && isDrawdownAttributionPayload(value))
-    .map(([key, value]) => [key, value] as [string, NonNullable<RuleBacktestDrawdownRegimeAttribution['bucketCounts']>[string]]);
+  const remaining = Object.entries(bucketCounts).reduce((acc, [key, value]) => {
+    if (!DRAWDOWN_ATTRIBUTION_BUCKET_ORDER.includes(key as DrawdownAttributionBucketKey) && isDrawdownAttributionPayload(value)) {
+      acc.push([key, value]);
+    }
+    return acc;
+  }, [] as Array<[string, NonNullable<RuleBacktestDrawdownRegimeAttribution['bucketCounts']>[string]]>);
 
   return [...ordered, ...remaining];
 }

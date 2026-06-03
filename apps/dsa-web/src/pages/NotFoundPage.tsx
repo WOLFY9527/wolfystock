@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TerminalButton, TerminalPageShell, TerminalPanel } from '../components/terminal';
+import { TerminalButton, TerminalPageShell, TerminalPanel } from '../components/terminal/TerminalPrimitives';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { buildLocalizedPath } from '../utils/localeRouting';
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useReducer, useRef, useState } from 'react';
 import { AlertTriangle, BarChart3, ChevronDown, Layers3, LineChart, Search, ShieldCheck } from 'lucide-react';
 import {
   optionsLabApi,
@@ -20,7 +20,7 @@ import {
   DataWorkbenchFrame,
   DenseRows,
   WolfyShellSurface,
-} from '../components/linear';
+} from '../components/linear/LinearPrimitives';
 import {
   TerminalButton,
   TerminalChip,
@@ -29,7 +29,7 @@ import {
   TerminalPageHeading,
   TerminalPageShell,
   TerminalSectionHeader,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { cn } from '../utils/cn';
 import { normalizeOptionsEvidence } from '../utils/evidenceDisplay';
@@ -55,6 +55,26 @@ type DecisionState = {
   decision: OptionsDecisionResponse | null;
 };
 
+type AssumptionsState = {
+  symbolInput: string;
+  direction: OptionsDirection;
+  riskProfile: OptionsRiskProfile;
+  targetPrice: string;
+  targetDate: string;
+  riskBudget: string;
+  selectedExpiration: string;
+};
+
+type AssumptionsAction =
+  | { type: 'setSymbolInput'; value: string }
+  | { type: 'setDirection'; value: OptionsDirection }
+  | { type: 'setRiskProfile'; value: OptionsRiskProfile }
+  | { type: 'setTargetPrice'; value: string }
+  | { type: 'setTargetDate'; value: string }
+  | { type: 'setRiskBudget'; value: string }
+  | { type: 'setSelectedExpiration'; value: string }
+  | { type: 'submitSymbol'; value: string };
+
 const DIRECTION_OPTIONS: Array<{ value: OptionsDirection; label: string }> = [
   { value: 'bullish', label: '上涨情景' },
   { value: 'bearish', label: '下跌情景' },
@@ -78,12 +98,44 @@ const OPTIONS_INSUFFICIENT_COPY = '当前期权信号数据不足，仅供观察
 const OPTIONS_UPDATING_COPY = '数据更新中，稍后将自动刷新。';
 const OPTIONS_UNAVAILABLE_COPY = '本模块暂不可用，请稍后重试。';
 const OPTIONS_DEMO_BOUNDARY_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不可用于真实交易判断。';
+const INITIAL_ASSUMPTIONS_STATE: AssumptionsState = {
+  symbolInput: 'TEM',
+  direction: 'bullish',
+  riskProfile: 'balanced',
+  targetPrice: '65',
+  targetDate: '2026-08-21',
+  riskBudget: '1000',
+  selectedExpiration: '2026-06-19',
+};
 
 const fieldShellClass = 'group flex min-h-[4rem] min-w-0 flex-col justify-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_92%,transparent)] px-3 py-2 transition-colors focus-within:border-[color:var(--wolfy-accent)]';
 const fieldClass = 'h-6 w-full border-0 bg-transparent p-0 font-mono text-sm text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)]';
 const labelClass = 'text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]';
 const panelClass = 'min-w-0 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-4 md:p-5';
 const innerBlockClass = 'rounded-md border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)]';
+
+function assumptionsReducer(state: AssumptionsState, action: AssumptionsAction): AssumptionsState {
+  switch (action.type) {
+    case 'setSymbolInput':
+      return { ...state, symbolInput: action.value.toUpperCase() };
+    case 'setDirection':
+      return { ...state, direction: action.value };
+    case 'setRiskProfile':
+      return { ...state, riskProfile: action.value };
+    case 'setTargetPrice':
+      return { ...state, targetPrice: action.value };
+    case 'setTargetDate':
+      return { ...state, targetDate: action.value };
+    case 'setRiskBudget':
+      return { ...state, riskBudget: action.value };
+    case 'setSelectedExpiration':
+      return { ...state, selectedExpiration: action.value };
+    case 'submitSymbol':
+      return { ...state, symbolInput: action.value };
+    default:
+      return state;
+  }
+}
 
 function money(value?: number | null): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
@@ -541,7 +593,7 @@ const SectionHeader: React.FC<{
   <TerminalSectionHeader
     eyebrow={(
       <span className="inline-flex items-center gap-2">
-        <Icon className="h-4 w-4 text-[color:var(--wolfy-accent)]" aria-hidden="true" />
+        <Icon className="size-4 text-[color:var(--wolfy-accent)]" aria-hidden="true" />
         <span>{eyebrow}</span>
       </span>
     )}
@@ -678,7 +730,7 @@ const AssumptionPanel: React.FC<{
                   </option>
                 ))}
               </select>
-              <ChevronDown className="pointer-events-none absolute right-0 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--wolfy-text-muted)]" aria-hidden="true" />
+              <ChevronDown className="pointer-events-none absolute right-0 top-1/2 size-4 -translate-y-1/2 text-[color:var(--wolfy-text-muted)]" aria-hidden="true" />
             </div>
           </label>
           <label className={fieldShellClass}>
@@ -784,7 +836,7 @@ const ProductHero: React.FC<{
   return (
     <section
       data-testid="options-lab-product-hero"
-      className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-console)_94%,transparent)] px-4 py-4 md:px-5"
+      className="rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-console)_94%,transparent)] p-4 md:px-5"
     >
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
@@ -991,7 +1043,7 @@ const StrategyComparisonPanel: React.FC<{
     : asArray(decision?.optimizer?.alternatives);
   const gateBlocked = isNonDecisionGrade(decision);
   const rankMap = new Map(rankedAlternatives.map((alternative, index) => [alternative.strategyKey, { alternative, index }]));
-  const rankedStrategies = [...strategies].sort((left, right) => {
+  const rankedStrategies = strategies.slice().sort((left, right) => {
     const leftRank = rankMap.get(left.strategyType)?.index ?? Number.MAX_SAFE_INTEGER;
     const rightRank = rankMap.get(right.strategyType)?.index ?? Number.MAX_SAFE_INTEGER;
     if (leftRank !== rightRank) return leftRank - rightRank;
@@ -1008,7 +1060,7 @@ const StrategyComparisonPanel: React.FC<{
         先看排序靠前的结构，再复核最大亏损、盈亏平衡与成交可观察性。
       </p>
       {emptyMessage ? (
-        <div className={cn(innerBlockClass, 'mt-5 border-dashed px-4 py-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
+        <div className={cn(innerBlockClass, 'mt-5 border-dashed p-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
           <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">等待策略对比前提</p>
           <p className="mt-2">{emptyMessage}</p>
         </div>
@@ -1090,7 +1142,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
         </div>
       </SectionHeader>
       {emptyMessage ? (
-        <p className={cn(innerBlockClass, 'mt-5 border-dashed px-4 py-4 text-sm text-[color:var(--wolfy-text-secondary)]')}>{emptyMessage}</p>
+        <p className={cn(innerBlockClass, 'mt-5 border-dashed p-4 text-sm text-[color:var(--wolfy-text-secondary)]')}>{emptyMessage}</p>
       ) : null}
       {!emptyMessage && decisionState.loading ? (
         <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 font-mono text-sm text-[color:var(--wolfy-accent-soft)]')}>正在计算情景准备度...</p>
@@ -1247,7 +1299,7 @@ const RiskBoundaryPanel: React.FC<{
               data-testid="options-lab-visible-risk-warning"
               className="flex gap-2 rounded-md border border-amber-300/20 bg-amber-300/5 px-3 py-2 text-xs leading-5 text-amber-200"
             >
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-200" aria-hidden="true" />
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-200" aria-hidden="true" />
               <span>{warningLabel(warning)}</span>
             </li>
           ))}
@@ -1388,7 +1440,7 @@ export class OptionsLabErrorBoundary extends React.Component<{ children: React.R
         <TerminalPageShell>
           <section className="mx-auto flex w-full max-w-[920px] flex-col gap-4 rounded-lg border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-[var(--wolfy-surface-console)] p-5 md:p-6">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="mt-1 h-5 w-5 shrink-0 text-amber-200" aria-hidden="true" />
+              <AlertTriangle className="mt-1 size-5 shrink-0 text-amber-200" aria-hidden="true" />
               <div className="min-w-0">
                 <p className={labelClass}>期权实验室</p>
                 <h1 className="mt-2 text-xl font-semibold text-[color:var(--wolfy-text-primary)]">{OPTIONS_LAB_CRASH_FALLBACK}</h1>
@@ -1405,16 +1457,11 @@ export class OptionsLabErrorBoundary extends React.Component<{ children: React.R
   }
 }
 
-const OptionsLabPageContent: React.FC = () => {
-  const [symbolInput, setSymbolInput] = useState('TEM');
-  const [activeSymbol, setActiveSymbol] = useState('TEM');
-  const [direction, setDirection] = useState<OptionsDirection>('bullish');
-  const [riskProfile, setRiskProfile] = useState<OptionsRiskProfile>('balanced');
-  const [targetPrice, setTargetPrice] = useState('65');
-  const [targetDate, setTargetDate] = useState('2026-08-21');
-  const [riskBudget, setRiskBudget] = useState('1000');
-  const [selectedExpiration, setSelectedExpiration] = useState('2026-06-19');
-  const [reloadKey, setReloadKey] = useState(0);
+function useOptionsLabPageModel() {
+  const [assumptions, dispatchAssumptions] = useReducer(assumptionsReducer, INITIAL_ASSUMPTIONS_STATE);
+  const { direction, riskBudget, riskProfile, selectedExpiration, symbolInput, targetDate, targetPrice } = assumptions;
+  const activeSymbolRef = useRef(INITIAL_ASSUMPTIONS_STATE.symbolInput);
+  const reloadRef = useRef<() => void>(() => {});
   const [state, setState] = useState<LoadState>({
     loading: true,
     error: null,
@@ -1434,9 +1481,13 @@ const OptionsLabPageContent: React.FC = () => {
   });
 
   useEffect(() => {
+    if (!state.loading) {
+      return;
+    }
     let ignored = false;
 
     async function load() {
+      const activeSymbol = activeSymbolRef.current;
       try {
         setState((current) => ({
           ...current,
@@ -1447,21 +1498,24 @@ const OptionsLabPageContent: React.FC = () => {
           optionsLabApi.getUnderlyingSummary(activeSymbol),
           optionsLabApi.getExpirations(activeSymbol),
         ]);
-        const expirationItems = asArray(expirations.expirations);
-        const nextExpiration = expirationItems.some((item) => item.date === selectedExpiration)
-          ? selectedExpiration
-          : expirationItems[0]?.date || selectedExpiration;
-        const chain = await optionsLabApi.getOptionChain(activeSymbol, nextExpiration);
-        if (ignored) return;
-        setSelectedExpiration(nextExpiration);
-        setState((current) => ({
-          ...current,
-          loading: false,
-          error: null,
-          summary,
-          expirations,
-          chain,
-        }));
+        if (!ignored) {
+          const expirationItems = asArray(expirations.expirations);
+          const nextExpiration = expirationItems.some((item) => item.date === selectedExpiration)
+            ? selectedExpiration
+            : expirationItems[0]?.date || selectedExpiration;
+          const chain = await optionsLabApi.getOptionChain(activeSymbol, nextExpiration);
+          if (!ignored) {
+            dispatchAssumptions({ type: 'setSelectedExpiration', value: nextExpiration });
+            setState((current) => ({
+              ...current,
+              loading: false,
+              error: null,
+              summary,
+              expirations,
+              chain,
+            }));
+          }
+        }
       } catch {
         if (ignored) return;
         setState((current) => ({
@@ -1473,18 +1527,23 @@ const OptionsLabPageContent: React.FC = () => {
       }
     }
 
+    reloadRef.current = () => {
+      void load();
+    };
+
     void load();
 
     return () => {
       ignored = true;
     };
-  }, [activeSymbol, reloadKey, selectedExpiration]);
+  }, [selectedExpiration, state.loading]);
 
   useEffect(() => {
     let ignored = false;
     let timeoutId: number | undefined;
 
     async function loadComparison() {
+      const activeSymbol = activeSymbolRef.current;
       const targetPriceValue = Number(targetPrice);
       const hasTargetPrice = Number.isFinite(targetPriceValue) && targetPriceValue > 0;
       const hasTargetDate = targetDate.trim().length > 0;
@@ -1523,13 +1582,14 @@ const OptionsLabPageContent: React.FC = () => {
           strategies: ['long_call', 'long_put', 'bull_call_spread', 'bear_put_spread'],
           forceRefresh: true,
         });
-        if (ignored) return;
-        window.clearTimeout(timeoutId);
-        setComparisonState({
-          loading: false,
-          error: null,
-          comparison,
-        });
+        if (!ignored) {
+          window.clearTimeout(timeoutId);
+          setComparisonState({
+            loading: false,
+            error: null,
+            comparison,
+          });
+        }
       } catch {
         if (ignored) return;
         window.clearTimeout(timeoutId);
@@ -1550,7 +1610,6 @@ const OptionsLabPageContent: React.FC = () => {
       }
     };
   }, [
-    activeSymbol,
     direction,
     riskBudget,
     riskProfile,
@@ -1567,6 +1626,7 @@ const OptionsLabPageContent: React.FC = () => {
     let ignored = false;
 
     async function loadDecision() {
+      const activeSymbol = activeSymbolRef.current;
       const targetPriceValue = Number(targetPrice);
       const riskBudgetValue = Number(riskBudget);
       const hasTargetPrice = Number.isFinite(targetPriceValue) && targetPriceValue > 0;
@@ -1589,8 +1649,9 @@ const OptionsLabPageContent: React.FC = () => {
           riskBudget: Number.isFinite(riskBudgetValue) && riskBudgetValue > 0 ? riskBudgetValue : undefined,
           forceRefresh: true,
         });
-        if (ignored) return;
-        setDecisionState({ loading: false, error: null, decision });
+        if (!ignored) {
+          setDecisionState({ loading: false, error: null, decision });
+        }
       } catch {
         if (ignored) return;
         setDecisionState({
@@ -1607,7 +1668,6 @@ const OptionsLabPageContent: React.FC = () => {
       ignored = true;
     };
   }, [
-    activeSymbol,
     riskBudget,
     selectedExpiration,
     state.chain,
@@ -1619,27 +1679,51 @@ const OptionsLabPageContent: React.FC = () => {
     targetPrice,
   ]);
 
-  const handleSubmit = useCallback(() => {
-    const normalized = symbolInput.trim().toUpperCase() || 'TEM';
-    setSymbolInput(normalized);
+  const handleSymbolChange = (value: string) => {
+    dispatchAssumptions({ type: 'setSymbolInput', value });
+  };
+
+  const handleSubmit = () => {
+    const normalized = symbolInput.trim().toUpperCase() || INITIAL_ASSUMPTIONS_STATE.symbolInput;
+    dispatchAssumptions({ type: 'submitSymbol', value: normalized });
     setState((current) => ({ ...current, loading: true, error: null }));
-    if (normalized === activeSymbol) {
-      setReloadKey((current) => current + 1);
+    if (normalized === activeSymbolRef.current) {
+      reloadRef.current();
       return;
     }
-    setActiveSymbol(normalized);
-  }, [activeSymbol, symbolInput]);
+    activeSymbolRef.current = normalized;
+  };
 
-  const handleExpirationSelect = useCallback((expiration: string) => {
+  const handleDirectionChange = (value: OptionsDirection) => {
+    dispatchAssumptions({ type: 'setDirection', value });
+  };
+
+  const handleRiskProfileChange = (value: OptionsRiskProfile) => {
+    dispatchAssumptions({ type: 'setRiskProfile', value });
+  };
+
+  const handleTargetPriceChange = (value: string) => {
+    dispatchAssumptions({ type: 'setTargetPrice', value });
+  };
+
+  const handleTargetDateChange = (value: string) => {
+    dispatchAssumptions({ type: 'setTargetDate', value });
+  };
+
+  const handleRiskBudgetChange = (value: string) => {
+    dispatchAssumptions({ type: 'setRiskBudget', value });
+  };
+
+  const handleExpirationSelect = (expiration: string) => {
     setState((current) => ({ ...current, loading: true, error: null }));
-    setSelectedExpiration(expiration);
-  }, []);
+    dispatchAssumptions({ type: 'setSelectedExpiration', value: expiration });
+  };
 
   const expirations = asArray(state.expirations?.expirations).length ? asArray(state.expirations?.expirations) : EMPTY_EXPIRATIONS;
   const calls = asArray(state.chain?.calls).length ? asArray(state.chain?.calls) : EMPTY_CONTRACTS;
   const puts = asArray(state.chain?.puts).length ? asArray(state.chain?.puts) : EMPTY_CONTRACTS;
   const hasChainRows = calls.length > 0 || puts.length > 0;
-  const comparisonEmptyMessage = useMemo(() => {
+  const comparisonEmptyMessage = (() => {
     if (state.loading) return '正在加载基础数据，稍后将自动计算策略对比。';
     if (state.error) return '期权链暂不可用，策略对比已暂停。';
     const targetPriceValue = Number(targetPrice);
@@ -1650,50 +1734,91 @@ const OptionsLabPageContent: React.FC = () => {
     if (!state.summary || !state.expirations || !state.chain) return COMPARISON_EMPTY_MESSAGE;
     if (!hasTargetPrice || !hasTargetDate || !hasExpirations || !hasContracts) return COMPARISON_EMPTY_MESSAGE;
     return null;
-  }, [expirations.length, hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
-  const decisionEmptyMessage = useMemo(() => {
+  })();
+  const decisionEmptyMessage = (() => {
     if (state.loading) return '正在加载基础数据，稍后将自动计算情景准备度。';
     if (state.error) return '期权链暂不可用，情景准备度已暂停。';
     const targetPriceValue = Number(targetPrice);
     if (!state.summary || !state.expirations || !state.chain || !hasChainRows) return '先加载合约链后，再进入情景准备度。';
     if (!Number.isFinite(targetPriceValue) || targetPriceValue <= 0 || !targetDate.trim()) return '先补齐目标价格与目标日期。';
     return null;
-  }, [hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
-  const consumerAvailability = useMemo(
-    () => consumerAvailabilitySummary(state, comparisonState, decisionState, hasChainRows),
-    [comparisonState, decisionState, hasChainRows, state],
-  );
-  const summaryStripItems = useMemo<SummaryStripItem[]>(() => {
-    const topCandidate = firstObservationStrategy(decisionState.decision, comparisonState.comparison);
-    const maxLoss = decisionState.decision?.riskReward?.maxLoss;
-    const scenarioMeta = targetDate.trim() ? `目标日 ${targetDate}` : '补齐目标日后可比较策略';
-    const candidateMeta = topCandidate ? '优先复核最大亏损与盈亏平衡' : '当前未形成可判断结构';
-    const riskValue = typeof maxLoss === 'number' && Number.isFinite(maxLoss)
-      ? `最大亏损 ${money(maxLoss)}`
-      : noTradeReasonLabel(decisionState.decision?.optimizer?.noTradeReason);
+  })();
+  const consumerAvailability = consumerAvailabilitySummary(state, comparisonState, decisionState, hasChainRows);
+  const topCandidate = firstObservationStrategy(decisionState.decision, comparisonState.comparison);
+  const maxLoss = decisionState.decision?.riskReward?.maxLoss;
+  const scenarioMeta = targetDate.trim() ? `目标日 ${targetDate}` : '补齐目标日后可比较策略';
+  const candidateMeta = topCandidate ? '优先复核最大亏损与盈亏平衡' : '当前未形成可判断结构';
+  const riskValue = typeof maxLoss === 'number' && Number.isFinite(maxLoss)
+    ? `最大亏损 ${money(maxLoss)}`
+    : noTradeReasonLabel(decisionState.decision?.optimizer?.noTradeReason);
+  const summaryStripItems: SummaryStripItem[] = [
+    {
+      label: '输入情景',
+      value: `${directionSummaryLabel(direction)} · 目标价 ${targetPrice || '--'}`,
+      meta: scenarioMeta,
+    },
+    {
+      label: '首个候选',
+      value: topCandidate ? strategyChineseLabel(topCandidate) : '暂无可判断结构',
+      meta: candidateMeta,
+    },
+    {
+      label: '风险边界',
+      value: riskValue,
+      meta: riskBudget ? `风险预算 ${riskBudget}` : '先定义可承受亏损',
+    },
+  ];
 
-    return [
-      {
-        label: '输入情景',
-        value: `${directionSummaryLabel(direction)} · 目标价 ${targetPrice || '--'}`,
-        meta: scenarioMeta,
-      },
-      {
-        label: '首个候选',
-        value: topCandidate ? strategyChineseLabel(topCandidate) : '暂无可判断结构',
-        meta: candidateMeta,
-      },
-      {
-        label: '风险边界',
-        value: riskValue,
-        meta: riskBudget ? `风险预算 ${riskBudget}` : '先定义可承受亏损',
-      },
-    ];
-  }, [comparisonState.comparison, decisionState.decision, direction, riskBudget, targetDate, targetPrice]);
+  return {
+    assumptions,
+    calls,
+    comparisonEmptyMessage,
+    comparisonState,
+    consumerAvailability,
+    decisionEmptyMessage,
+    decisionState,
+    expirations,
+    handleDirectionChange,
+    handleExpirationSelect,
+    handleRiskBudgetChange,
+    handleRiskProfileChange,
+    handleSubmit,
+    handleSymbolChange,
+    handleTargetDateChange,
+    handleTargetPriceChange,
+    hasChainRows,
+    puts,
+    state,
+    summaryStripItems,
+  };
+}
 
-  return (
-    <main className="w-full overflow-x-hidden text-white">
-      <ConsumerWorkspaceScope className="min-h-0 flex-1">
+type OptionsLabPageModel = ReturnType<typeof useOptionsLabPageModel>;
+
+const OptionsLabWorkspace: React.FC<OptionsLabPageModel> = ({
+  assumptions,
+  calls,
+  comparisonEmptyMessage,
+  comparisonState,
+  consumerAvailability,
+  decisionEmptyMessage,
+  decisionState,
+  expirations,
+  handleDirectionChange,
+  handleExpirationSelect,
+  handleRiskBudgetChange,
+  handleRiskProfileChange,
+  handleSubmit,
+  handleSymbolChange,
+  handleTargetDateChange,
+  handleTargetPriceChange,
+  hasChainRows,
+  puts,
+  state,
+  summaryStripItems,
+}) => (
+  <main className="w-full overflow-x-hidden text-white">
+    <ConsumerWorkspaceScope className="min-h-0 flex-1">
       <ConsumerWorkspacePageShell data-testid="options-lab-page-root">
         <TerminalPageHeading
           data-testid="options-lab-page-heading"
@@ -1720,21 +1845,21 @@ const OptionsLabPageContent: React.FC = () => {
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,0.85fr)]">
             <div className="grid min-w-0 gap-6">
               <AssumptionPanel
-                symbol={symbolInput}
-                direction={direction}
-                riskProfile={riskProfile}
-                targetPrice={targetPrice}
-                targetDate={targetDate}
-                riskBudget={riskBudget}
+                symbol={assumptions.symbolInput}
+                direction={assumptions.direction}
+                riskProfile={assumptions.riskProfile}
+                targetPrice={assumptions.targetPrice}
+                targetDate={assumptions.targetDate}
+                riskBudget={assumptions.riskBudget}
                 expirations={expirations}
-                selectedExpiration={selectedExpiration}
-                onSymbolChange={setSymbolInput}
+                selectedExpiration={assumptions.selectedExpiration}
+                onSymbolChange={handleSymbolChange}
                 onSubmit={handleSubmit}
-                onDirectionChange={setDirection}
-                onRiskProfileChange={setRiskProfile}
-                onTargetPriceChange={setTargetPrice}
-                onTargetDateChange={setTargetDate}
-                onRiskBudgetChange={setRiskBudget}
+                onDirectionChange={handleDirectionChange}
+                onRiskProfileChange={handleRiskProfileChange}
+                onTargetPriceChange={handleTargetPriceChange}
+                onTargetDateChange={handleTargetDateChange}
+                onRiskBudgetChange={handleRiskBudgetChange}
                 onExpirationSelect={handleExpirationSelect}
               />
 
@@ -1770,7 +1895,12 @@ const OptionsLabPageContent: React.FC = () => {
                 ) : null}
               </WolfyShellSurface>
 
-              <MethodologyDisclosure state={state} targetPrice={targetPrice} targetDate={targetDate} riskBudget={riskBudget} />
+              <MethodologyDisclosure
+                state={state}
+                targetPrice={assumptions.targetPrice}
+                targetDate={assumptions.targetDate}
+                riskBudget={assumptions.riskBudget}
+              />
             </div>
 
             <div className="grid min-w-0 gap-6 self-start">
@@ -1790,9 +1920,13 @@ const OptionsLabPageContent: React.FC = () => {
           </div>
         </div>
       </ConsumerWorkspacePageShell>
-      </ConsumerWorkspaceScope>
-    </main>
-  );
+    </ConsumerWorkspaceScope>
+  </main>
+);
+
+const OptionsLabPageContent: React.FC = () => {
+  const model = useOptionsLabPageModel();
+  return <OptionsLabWorkspace {...model} />;
 };
 
 const OptionsLabPage: React.FC = () => (

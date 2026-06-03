@@ -3,7 +3,7 @@
  * unchanged while the shared frame owns the Linear OS canvas and rhythm.
  */
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useReducer, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, LockKeyhole, LogOut, Menu, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
@@ -126,6 +126,44 @@ type AccountMenuItem = {
   icon: React.ComponentType<{ className?: string }>;
 };
 
+type OverlayState = {
+  mobileNavOpen: boolean;
+  railOpen: boolean;
+  accountMenuOpen: boolean;
+};
+
+type OverlayAction =
+  | { type: 'close_all' }
+  | { type: 'open_mobile_nav' }
+  | { type: 'close_mobile_nav' }
+  | { type: 'open_rail' }
+  | { type: 'close_rail' }
+  | { type: 'open_account_menu' }
+  | { type: 'close_account_menu' };
+
+function overlayReducer(state: OverlayState, action: OverlayAction): OverlayState {
+  switch (action.type) {
+    case 'close_all':
+      return state.mobileNavOpen || state.railOpen || state.accountMenuOpen
+        ? { mobileNavOpen: false, railOpen: false, accountMenuOpen: false }
+        : state;
+    case 'open_mobile_nav':
+      return { mobileNavOpen: true, railOpen: false, accountMenuOpen: false };
+    case 'close_mobile_nav':
+      return state.mobileNavOpen ? { ...state, mobileNavOpen: false } : state;
+    case 'open_rail':
+      return { mobileNavOpen: false, railOpen: true, accountMenuOpen: false };
+    case 'close_rail':
+      return state.railOpen ? { ...state, railOpen: false } : state;
+    case 'open_account_menu':
+      return state.accountMenuOpen ? state : { ...state, accountMenuOpen: true };
+    case 'close_account_menu':
+      return state.accountMenuOpen ? { ...state, accountMenuOpen: false } : state;
+    default:
+      return state;
+  }
+}
+
 function buildAccountPath(routeLocale: UiLanguage | null, target: string): string {
   return routeLocale ? buildLocalizedPath(target, routeLocale) : target;
 }
@@ -169,13 +207,16 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const accountTriggerRef = useRef<HTMLButtonElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const accountMenuItemRefs = useRef<Array<HTMLAnchorElement | HTMLButtonElement | null>>([]);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [railOpen, setRailOpen] = useState(false);
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [accountMenuFocusIndex, setAccountMenuFocusIndex] = useState<number | null>(null);
+  const accountMenuFocusIndexRef = useRef<number | null>(null);
+  const [overlayState, dispatchOverlay] = useReducer(overlayReducer, {
+    mobileNavOpen: false,
+    railOpen: false,
+    accountMenuOpen: false,
+  });
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [railContent, setRailContent] = useState<React.ReactNode | null>(null);
   const [headerUtilityIsland, setHeaderUtilityIsland] = useState<HTMLDivElement | null>(null);
+  const { mobileNavOpen, railOpen, accountMenuOpen } = overlayState;
   const hasRailContent = Boolean(railContent);
   const isMobileNavVisible = mobileNavOpen;
   const isRailVisible = hasRailContent && railOpen;
@@ -212,52 +253,51 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     { label: accountCopy.preferences, to: buildAccountPath(routeLocale, '/settings#preferences'), icon: SlidersHorizontal },
   ];
 
-  const closeMobileNav = useCallback(() => {
-    setMobileNavOpen(false);
-  }, [setMobileNavOpen]);
+  const closeMobileNav = () => {
+    dispatchOverlay({ type: 'close_mobile_nav' });
+  };
 
-  const openMobileNav = useCallback(() => {
-    setRailOpen(false);
-    setMobileNavOpen(true);
-  }, [setMobileNavOpen, setRailOpen]);
+  const openMobileNav = () => {
+    dispatchOverlay({ type: 'open_mobile_nav' });
+  };
 
-  const closeRail = useCallback(() => {
-    setRailOpen(false);
-  }, [setRailOpen]);
+  const closeRail = () => {
+    dispatchOverlay({ type: 'close_rail' });
+  };
 
-  const closeAccountMenu = useCallback((options?: { returnFocus?: boolean }) => {
-    setAccountMenuOpen(false);
-    setAccountMenuFocusIndex(null);
+  const closeAccountMenu = (options?: { returnFocus?: boolean }) => {
+    accountMenuFocusIndexRef.current = null;
+    dispatchOverlay({ type: 'close_account_menu' });
     if (options?.returnFocus) {
       window.setTimeout(() => {
         accountTriggerRef.current?.focus();
       }, 0);
     }
-  }, [setAccountMenuFocusIndex, setAccountMenuOpen]);
+  };
 
-  const openAccountMenu = useCallback((focusIndex = 0) => {
-    setAccountMenuOpen(true);
-    setAccountMenuFocusIndex(focusIndex);
-  }, [setAccountMenuFocusIndex, setAccountMenuOpen]);
+  const openAccountMenu = (focusIndex = 0) => {
+    accountMenuFocusIndexRef.current = focusIndex;
+    dispatchOverlay({ type: 'open_account_menu' });
+  };
 
-  const openRail = useCallback(() => {
-    setMobileNavOpen(false);
-    setRailOpen(true);
-  }, [setMobileNavOpen, setRailOpen]);
+  const openRail = () => {
+    dispatchOverlay({ type: 'open_rail' });
+  };
 
-  const shellMastheadInnerRef = useCallback((node: HTMLDivElement | null) => {
+  const closeAccountMenuForEffect = useEffectEvent((options?: { returnFocus?: boolean }) => {
+    closeAccountMenu(options);
+  });
+
+  const shellMastheadInnerRef = (node: HTMLDivElement | null) => {
     setHeaderUtilityIsland(node?.querySelector<HTMLDivElement>('[data-testid="shell-header-utility-island"]') ?? null);
-  }, [setHeaderUtilityIsland]);
+  };
 
-  const railContextValue = useMemo(
-    () => ({
-      setRailContent,
-      closeMobileRail: closeRail,
-      openRail,
-      isConnected: true,
-    }),
-    [closeRail, openRail, setRailContent],
-  );
+  const railContextValue = {
+    setRailContent,
+    closeMobileRail: closeRail,
+    openRail,
+    isConnected: true,
+  };
 
   useEffect(() => {
     if (pathname === previousPathnameRef.current) {
@@ -266,10 +306,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
 
     previousPathnameRef.current = pathname;
     const timer = window.setTimeout(() => {
-      setMobileNavOpen(false);
-      setRailOpen(false);
-      setAccountMenuOpen(false);
-      setAccountMenuFocusIndex(null);
+      accountMenuFocusIndexRef.current = null;
+      dispatchOverlay({ type: 'close_all' });
     }, 0);
 
     return () => window.clearTimeout(timer);
@@ -282,10 +320,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     }
 
     const timer = window.setTimeout(() => {
-      setMobileNavOpen(false);
-      setRailOpen(false);
-      setAccountMenuOpen(false);
-      setAccountMenuFocusIndex(null);
+      accountMenuFocusIndexRef.current = null;
+      dispatchOverlay({ type: 'close_all' });
     }, 0);
 
     return () => window.clearTimeout(timer);
@@ -300,12 +336,12 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
       if (accountMenuRef.current?.contains(event.target as Node)) {
         return;
       }
-      closeAccountMenu({ returnFocus: true });
+      closeAccountMenuForEffect({ returnFocus: true });
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        closeAccountMenu({ returnFocus: true });
+        closeAccountMenuForEffect({ returnFocus: true });
       }
     };
 
@@ -315,28 +351,32 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [accountMenuOpen, closeAccountMenu]);
+  }, [accountMenuOpen]);
 
   useEffect(() => {
-    if (!accountMenuOpen || accountMenuFocusIndex === null) {
+    if (!accountMenuOpen || accountMenuFocusIndexRef.current === null) {
       return undefined;
     }
 
     const timer = window.setTimeout(() => {
-      accountMenuItemRefs.current[accountMenuFocusIndex]?.focus();
+      const focusIndex = accountMenuFocusIndexRef.current;
+      if (focusIndex === null) {
+        return;
+      }
+      accountMenuItemRefs.current[focusIndex]?.focus();
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [accountMenuFocusIndex, accountMenuOpen]);
+  }, [accountMenuOpen]);
 
-  const handleAccountTriggerKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>) => {
+  const handleAccountTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown') {
       event.preventDefault();
       openAccountMenu(0);
     }
-  }, [openAccountMenu]);
+  };
 
-  const handleAccountMenuKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleAccountMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const items = accountMenuItemRefs.current.filter(Boolean) as Array<HTMLAnchorElement | HTMLButtonElement>;
     if (!items.length) {
       return;
@@ -369,7 +409,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
       event.preventDefault();
       closeAccountMenu({ returnFocus: true });
     }
-  }, [closeAccountMenu]);
+  };
 
   useEffect(() => {
     const root = document.documentElement;
@@ -441,7 +481,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
               <div className="shell-mobile-strip">
                 <NavLink to="/" end className="shell-mobile-brand shell-brand-link" aria-label="WolfyStock">
                   <span className="inline-flex min-w-0 items-center gap-3">
-                    <BrandLogo className="h-8 w-8" />
+                    <BrandLogo className="size-8" />
                     <span className={`shell-wordmark ${BRAND_WORDMARK_CLASSNAME}`}>WolfyStock</span>
                   </span>
                 </NavLink>
@@ -455,7 +495,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                   aria-label={t('shell.openMenu')}
                   title={t('shell.openMenu')}
                 >
-                  <Menu className="h-4 w-4" />
+                  <Menu className="size-4" />
                 </button>
               </div>
             )}
@@ -498,19 +538,20 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
               onKeyDown={handleAccountTriggerKeyDown}
             >
               <span
-                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.06] text-[10px] font-semibold text-white/82"
+                className="flex size-5 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.06] text-[10px] font-semibold text-white/82"
                 aria-hidden="true"
               >
                 {accountDisplayName.slice(0, 1)}
               </span>
               <span className="min-w-0 truncate">{accountDisplayName}</span>
-              <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-white/44 transition-transform', accountMenuOpen ? 'rotate-180 text-white/70' : '')} />
+              <ChevronDown className={cn('size-3.5 shrink-0 text-white/44 transition-transform', accountMenuOpen ? 'rotate-180 text-white/70' : '')} />
             </button>
 
             {accountMenuOpen ? (
               <div
                 id="shell-account-center-menu"
                 role="menu"
+                tabIndex={-1}
                 aria-label={accountCopy.menuLabel}
                 aria-orientation="vertical"
                 data-testid="shell-account-center-menu"
@@ -532,7 +573,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                     )}
                     onClick={() => closeAccountMenu()}
                   >
-                    <Icon className="h-4 w-4 shrink-0 text-white/56" />
+                    <Icon className="size-4 shrink-0 text-white/56" />
                     <span className="truncate">{label}</span>
                   </NavLink>
                 ))}
@@ -550,7 +591,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                     setShowLogoutConfirm(true);
                   }}
                 >
-                  <LogOut className="h-4 w-4 shrink-0 text-red-200/70" />
+                  <LogOut className="size-4 shrink-0 text-red-200/70" />
                   <span className="truncate">{accountCopy.logout}</span>
                 </button>
               </div>
@@ -595,7 +636,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                       aria-label={label}
                     >
                       <span className="shell-nav-item__icon" aria-hidden="true">
-                        <Icon className="h-4 w-4" />
+                        <Icon className="size-4" />
                       </span>
                       <span className="shell-nav-item__copy">
                         <span className="shell-nav-item__label">{label}</span>
@@ -612,7 +653,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                     }}
                   >
                     <span className="shell-nav-item__icon" aria-hidden="true">
-                      <LogOut className="h-4 w-4" />
+                      <LogOut className="size-4" />
                     </span>
                     <span className="shell-nav-item__copy">
                       <span className="shell-nav-item__label">{accountCopy.logout}</span>

@@ -128,16 +128,6 @@ export function DenseCommandBar({
   );
 }
 
-export function DenseTableFrame({ className, children, ...props }: DensePrimitiveProps<HTMLDivElement>) {
-  return (
-    <div data-terminal-primitive="dense-table-frame" className={cn('overflow-hidden', className)} {...props}>
-      <div className="overflow-x-auto no-scrollbar">
-        {children}
-      </div>
-    </div>
-  );
-}
-
 export function CompactEmptyRow({
   className,
   children,

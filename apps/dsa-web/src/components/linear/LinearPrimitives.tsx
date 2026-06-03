@@ -311,7 +311,7 @@ export function ResearchConsoleShell({
   );
 }
 
-export function RailPanel({
+function RailPanel({
   railWidth = 'md',
   className,
   children,
@@ -360,23 +360,6 @@ export function ConsoleContextRail({ className, children, ...props }: LinearPrim
     >
       {children}
     </RailPanel>
-  );
-}
-
-export function SectionDeck({
-  className,
-  children,
-  ...props
-}: LinearPrimitiveProps<HTMLDivElement>) {
-  return (
-    <div
-      data-linear-primitive="section-deck"
-      data-layout-zone="SecondaryDeck"
-      className={cn('grid min-w-0 gap-3', className)}
-      {...props}
-    >
-      {children}
-    </div>
   );
 }
 
@@ -471,7 +454,7 @@ export function ConsoleDisclosure({
           className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-transparent px-2 py-1 text-[11px] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)]"
           onClick={() => setOpen((current) => !current)}
         >
-          {open ? <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" /> : <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />}
+          {open ? <ChevronDown className="size-3.5" aria-hidden="true" /> : <ChevronRight className="size-3.5" aria-hidden="true" />}
           <span>{open ? '收起' : '展开'}</span>
         </button>
       </div>

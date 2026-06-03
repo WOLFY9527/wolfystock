@@ -1,5 +1,5 @@
 import type { MouseEvent, ReactNode } from 'react';
-import { TerminalButton } from '../terminal';
+import { TerminalButton } from '../terminal/TerminalPrimitives';
 
 type ScannerActionButtonVariant = 'primary' | 'secondary' | 'compact';
 

@@ -1,5 +1,5 @@
 import type React from 'react';
-import { createContext, useContext } from 'react';
+import { createContext } from 'react';
 
 type ShellRailContextValue = {
   setRailContent: (content: React.ReactNode | null) => void;
@@ -14,5 +14,3 @@ export const ShellRailContext = createContext<ShellRailContextValue>({
   openRail: () => undefined,
   isConnected: false,
 });
-
-export const useShellRail = () => useContext(ShellRailContext);

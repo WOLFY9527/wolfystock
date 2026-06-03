@@ -293,7 +293,7 @@ Warning concentration from existing guard scanner:
 | `src/pages/WatchlistPage.tsx` | 6 | native controls |
 | `src/pages/SettingsPage.tsx` | 4 | native controls |
 | `src/components/layout/SidebarNav.tsx` | 3 | native controls |
-| `src/components/report/ReportDetails.tsx` | 3 | native controls |
+| Legacy report details component | 3 | native controls |
 | `src/pages/HomeBentoDashboardPage.tsx` | 3 | native controls |
 | `src/components/report/ReportPriceChart.tsx` | 1 | native controls |
 | `src/components/settings/FontSizeSettingsCard.tsx` | 1 | native controls |

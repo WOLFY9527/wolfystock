@@ -1,7 +1,7 @@
 import type React from 'react';
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
-import { WorkspacePageHeader } from '../components/common';
-import { TerminalPageShell } from '../components/terminal';
+import { Suspense, lazy, useEffect, useState } from 'react';
+import { WorkspacePageHeader } from '../components/common/WorkspacePageHeader';
+import { TerminalPageShell } from '../components/terminal/TerminalPrimitives';
 import { previewReport } from '../dev/reportPreviewFixture';
 import { normalizeFrontendReportContract } from '../api/reportNormalizer';
 import type { ReportLanguage } from '../types/analysis';
@@ -17,10 +17,7 @@ const PreviewFullReportDrawerPage: React.FC = () => {
   const { t } = useI18n();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [language, setLanguage] = useState<ReportLanguage>('zh');
-  const normalizedPreviewReport = useMemo(
-    () => normalizeFrontendReportContract(previewReport),
-    [],
-  );
+  const normalizedPreviewReport = normalizeFrontendReportContract(previewReport);
 
   useEffect(() => {
     document.title = t('previewFullReport.documentTitle');
@@ -44,7 +41,7 @@ const PreviewFullReportDrawerPage: React.FC = () => {
         description={t('previewFullReport.description')}
       />
 
-      <div className="theme-panel-solid rounded-[1.25rem] px-4 py-4 md:px-5">
+      <div className="theme-panel-solid rounded-[1.25rem] p-4 md:px-5">
         <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{t('previewFullReport.fullModeTitle')}</p>
         <p className="mt-2 text-sm leading-6 text-secondary-text">
           {t('previewFullReport.fullModeBody')}
@@ -81,10 +78,10 @@ const PreviewFullReportDrawerPage: React.FC = () => {
               aria-busy="true"
               aria-live="polite"
               aria-label={t('previewFullReport.title')}
-              className="theme-panel-subtle rounded-[1.25rem] px-5 py-5 md:px-6"
+              className="theme-panel-subtle rounded-[1.25rem] p-5 md:px-6"
             >
               <div className="flex items-center gap-3">
-                <div className="home-spinner h-5 w-5 animate-spin border-2" />
+                <div className="home-spinner size-5 animate-spin border-2" />
                 <div className="flex-1 space-y-2">
                   <div className="h-3 w-32 rounded-full bg-white/10" />
                   <div className="h-3 w-full max-w-[22rem] rounded-full bg-white/5" />

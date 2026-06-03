@@ -1,12 +1,9 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import {
-  DensityRail,
-  GuidedDisclosure,
-  InsightStack,
-  MetricNarrativeCard,
-  SectionIntro,
-} from '..';
+import { DensityRail } from '../DensityRail';
+import { GuidedDisclosure } from '../GuidedDisclosure';
+import { InsightStack } from '../InsightStack';
+import { SectionIntro } from '../SectionIntro';
 
 describe('guidance primitives', () => {
   it('renders a SectionIntro with summary-first hierarchy and optional status', () => {
@@ -23,24 +20,6 @@ describe('guidance primitives', () => {
     expect(screen.getByText('先看敞口是否集中，再决定是否进入明细。')).toBeInTheDocument();
     expect(screen.getByText('部分可用')).toBeInTheDocument();
     expect(screen.getByText(/查看行业和货币分布。/)).toBeInTheDocument();
-  });
-
-  it('renders a MetricNarrativeCard with value, meaning, freshness, and glossary hook', () => {
-    render(
-      <MetricNarrativeCard
-        label="胜率"
-        value="62%"
-        meaning="样本显示策略在当前窗口内略占优势。"
-        freshnessNote="最近一次样本更新于 09:45。"
-        glossaryTerm="胜率"
-        tone="positive"
-      />,
-    );
-
-    expect(screen.getAllByText('胜率')).toHaveLength(2);
-    expect(screen.getByText('62%')).toBeInTheDocument();
-    expect(screen.getByText('样本显示策略在当前窗口内略占优势。')).toBeInTheDocument();
-    expect(screen.getByText('最近一次样本更新于 09:45。')).toBeInTheDocument();
   });
 
   it('renders at most four prioritized insights with severity labels', () => {

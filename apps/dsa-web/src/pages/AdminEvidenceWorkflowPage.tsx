@@ -18,7 +18,7 @@ import {
   TerminalPageShell,
   TerminalPanel,
   TerminalSectionHeader,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 
 type CommandSnippet = {
   label: string;
@@ -296,8 +296,8 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
                     </p>
                     <p className="mt-3 text-xs leading-5 text-white/44">{stage}</p>
                   </div>
-                  <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-cyan-300/15 bg-cyan-400/8 text-cyan-100">
-                    <Icon className="h-4 w-4" aria-hidden="true" />
+                  <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-cyan-300/15 bg-cyan-400/8 text-cyan-100">
+                    <Icon className="size-4" aria-hidden="true" />
                   </span>
                 </TerminalNestedBlock>
               </article>
@@ -387,7 +387,6 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
                         {snippet.label}
                       </p>
                       <pre
-                        tabIndex={0}
                         role="group"
                         aria-label={`可复制命令：${snippet.label}`}
                         className="mt-3 max-w-full overflow-x-auto no-scrollbar whitespace-pre-wrap break-all rounded-xl border border-white/[0.04] bg-white/[0.02] p-3 font-mono text-[11px] leading-5 text-cyan-100/86 outline-none transition-colors focus-visible:border-cyan-300/35 focus-visible:ring-2 focus-visible:ring-cyan-300/30"

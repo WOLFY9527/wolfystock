@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { TerminalChip, TerminalEmptyState, TerminalNestedBlock, TerminalSectionHeader } from '../terminal';
+import { TerminalChip, TerminalEmptyState, TerminalNestedBlock, TerminalSectionHeader } from '../terminal/TerminalPrimitives';
 import { formatNumber, pct } from './shared';
 import type { RuleBacktestCompareHeatmapProjection } from '../../types/backtest';
 
@@ -106,7 +106,7 @@ function formatSensitivityValue(value: unknown): string {
     return trimmed || '--';
   }
   if (Array.isArray(value)) {
-    const parts = value.map((entry) => formatSensitivityValue(entry)).filter(Boolean);
+    const parts = value.flatMap((entry) => { const v = formatSensitivityValue(entry); return v ? [v] : []; });
     return parts.length ? parts.join(' / ') : '--';
   }
   return '复杂值';
@@ -216,9 +216,9 @@ export default function RuleBacktestCompareHeatmapProjectionPanel({
             <p className="metric-card__label">{yAxisLabel}</p>
             <p className="product-footnote">{`横向 ${xAxisLabel}`}</p>
           </div>
-          {xValues.map((xValue, xIndex) => (
+          {xValues.map((xValue) => (
             <div
-              key={`compare-heatmap-x-${xIndex}`}
+              key={`compare-heatmap-x-${formatSensitivityValue(xValue)}`}
               className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3"
             >
               <p className="metric-card__label">{xAxisLabel}</p>
@@ -227,7 +227,7 @@ export default function RuleBacktestCompareHeatmapProjectionPanel({
           ))}
 
           {yValues.map((yValue, yIndex) => (
-            <Fragment key={`compare-heatmap-y-${yIndex}`}>
+            <Fragment key={`compare-heatmap-y-${formatSensitivityValue(yValue)}`}>
               <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
                 <p className="metric-card__label">{yAxisLabel}</p>
                 <p className="preview-card__text">{formatSensitivityValue(yValue)}</p>
@@ -242,7 +242,7 @@ export default function RuleBacktestCompareHeatmapProjectionPanel({
 
                 return (
                   <div
-                    key={`compare-heatmap-cell-${yIndex}-${xIndex}`}
+                    key={`compare-heatmap-cell-${createHeatmapCellKey(xValue, yValue)}`}
                     className="rounded-xl border border-white/[0.06] bg-black/20 p-3"
                     data-state={state || 'missing_cell'}
                     data-testid={`compare-heatmap-cell-${yIndex}-${xIndex}`}

@@ -1,17 +1,18 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Button } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Button } from '../components/common/Button';
 import {
   TerminalChip,
   TerminalEmptyState,
   TerminalNestedBlock,
   TerminalPageShell,
   TerminalSectionHeader,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 import {
   ConsoleBoard,
   ConsoleContextRail,
@@ -20,7 +21,7 @@ import {
   KeyLevelStrip,
   ResearchConsoleShell,
   WolfyCommandBar,
-} from '../components/linear';
+} from '../components/linear/LinearPrimitives';
 import RuleBacktestCompareHeatmapProjectionPanel from '../components/backtest/RuleBacktestCompareHeatmapProjectionPanel';
 import {
   Banner,
@@ -76,7 +77,7 @@ function parseRunIdsParam(value: string | null): number[] {
   return orderedIds;
 }
 
-function renderBooleanLabel(value: boolean | undefined): string {
+function formatBooleanLabel(value: boolean | undefined): string {
   return value ? '是' : '否';
 }
 
@@ -230,7 +231,7 @@ function formatSensitivityLabel(key: string): string {
 
 function formatSensitivityValue(value: unknown): string {
   if (value == null) return '缺失';
-  if (typeof value === 'boolean') return renderBooleanLabel(value);
+  if (typeof value === 'boolean') return formatBooleanLabel(value);
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) return '--';
     return Number.isInteger(value) ? String(value) : formatNumber(value);
@@ -240,7 +241,7 @@ function formatSensitivityValue(value: unknown): string {
     return trimmed || '--';
   }
   if (Array.isArray(value)) {
-    const parts = value.map((entry) => formatSensitivityValue(entry)).filter(Boolean);
+    const parts = value.flatMap((entry) => { const v = formatSensitivityValue(entry); return v ? [v] : []; });
     return parts.length ? parts.join(' / ') : '--';
   }
   return '复杂值';
@@ -535,27 +536,28 @@ function buildCompareCostSlippagePanelData({
   }
 
   const scenarioLabelsByRun = new Map(scenarios.map((scenario) => [scenario.runId, scenario.label]));
-  const signals = Object.entries(metricDeltas || {})
-    .filter(([, metric]) => metric.deltas.some((entry) => entry.runId !== baselineRunId && entry.deltaVsBaseline != null))
-    .slice(0, 3)
-    .map(([metricKey, metric]) => {
-      const highlight = highlights[metricKey];
-      const entries = metric.deltas
-        .filter((entry) => entry.runId !== baselineRunId && entry.deltaVsBaseline != null)
-        .map((entry) => {
-          const scenarioLabel = scenarioLabelsByRun.get(entry.runId) || `#${entry.runId}`;
-          const role = highlight?.winnerRunIds.includes(entry.runId) ? '领先' : '相对基准';
-          return `${scenarioLabel} · ${role} ${formatSignedPct(entry.deltaVsBaseline)}`;
-        });
-
-      return {
+  const signals = Object.entries(metricDeltas || {}).reduce<Array<{ metricKey: string; label: string; state: string; entries: string[] }>>((acc, [metricKey, metric]) => {
+    if (acc.length >= 3) return acc;
+    if (!metric.deltas.some((entry) => entry.runId !== baselineRunId && entry.deltaVsBaseline != null)) return acc;
+    const highlight = highlights[metricKey];
+    const entries = metric.deltas.reduce<string[]>((innerAcc, entry) => {
+      if (entry.runId !== baselineRunId && entry.deltaVsBaseline != null) {
+        const scenarioLabel = scenarioLabelsByRun.get(entry.runId) || `#${entry.runId}`;
+        const role = highlight?.winnerRunIds.includes(entry.runId) ? '领先' : '相对基准';
+        innerAcc.push(`${scenarioLabel} · ${role} ${formatSignedPct(entry.deltaVsBaseline)}`);
+      }
+      return innerAcc;
+    }, []);
+    if (entries.length > 0) {
+      acc.push({
         metricKey,
         label: formatMetricLabel(metricKey, metric.label),
         state: highlight?.state || metric.state,
         entries,
-      };
-    })
-    .filter((signal) => signal.entries.length > 0);
+      });
+    }
+    return acc;
+  }, []);
 
   return {
     scenarios,
@@ -569,9 +571,11 @@ function DiagnosticChipList({ diagnostics }: { diagnostics?: string[] }) {
   if (!diagnostics?.length) {
     return <p className="product-footnote">无额外限制。</p>;
   }
-  const labels = diagnostics
-    .map((diagnostic) => formatCompareStateLabel(diagnostic))
-    .filter((label, index, allLabels) => allLabels.indexOf(label) === index);
+  const labels = diagnostics.reduce<string[]>((acc, diagnostic) => {
+    const label = formatCompareStateLabel(diagnostic);
+    if (acc.indexOf(label) === -1) acc.push(label);
+    return acc;
+  }, []);
 
   return (
     <div className="product-chip-list">
@@ -615,7 +619,7 @@ function RobustnessDimensionCards({ dimensions }: { dimensions: Record<string, R
           <p className="metric-card__label">{formatCompareStateLabel(dimensionKey)}</p>
           <p className="preview-card__text">{formatCompareStateWithRaw(dimension.state)}</p>
           <p className="product-footnote">关系：{formatCompareStateWithRaw(dimension.relationship)}</p>
-          <p className="product-footnote">可直接比较：{dimension.directlyComparable == null ? '--' : renderBooleanLabel(dimension.directlyComparable)}</p>
+          <p className="product-footnote">可直接比较：{dimension.directlyComparable == null ? '--' : formatBooleanLabel(dimension.directlyComparable)}</p>
         </div>
       ))}
     </div>
@@ -708,7 +712,7 @@ function getMetricDeltaTone(value?: number | null, isBaseline?: boolean): string
 
 function orderCompareItems(items: RuleBacktestCompareRunItem[], runIds: number[]): RuleBacktestCompareRunItem[] {
   const orderMap = new Map(runIds.map((runId, index) => [runId, index]));
-  return [...items].sort((left, right) => {
+  return items.slice().sort((left, right) => {
     const leftOrder = orderMap.get(left.metadata.id) ?? Number.MAX_SAFE_INTEGER;
     const rightOrder = orderMap.get(right.metadata.id) ?? Number.MAX_SAFE_INTEGER;
     return leftOrder - rightOrder;
@@ -894,7 +898,7 @@ function CompareMetricChartStrip({
     <div className="comparison-chart compare-chart-strip" data-testid="compare-chart-strip">
       {metricEntries.map(([metricKey, metric]) => {
         const highlight = highlights[metricKey];
-        const availableValues = metric.deltas.map((entry) => Math.abs(entry.value ?? 0)).filter((value) => value > 0);
+        const availableValues = metric.deltas.reduce<number[]>((acc, entry) => { const v = Math.abs(entry.value ?? 0); if (v > 0) acc.push(v); return acc; }, []);
         const maxValue = availableValues.length ? Math.max(...availableValues) : 1;
 
         return (
@@ -1201,14 +1205,15 @@ function CompareCostSlippagePanel({
 const RuleBacktestComparePage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const runIds = useMemo(() => parseRunIdsParam(searchParams.get('runIds')), [searchParams]);
+  const runIdsParam = searchParams.get('runIds') || '';
+  const runIds = parseRunIdsParam(runIdsParam);
   const [response, setResponse] = useState<RuleBacktestCompareResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const copyResetTimerRef = useRef<number | null>(null);
 
-  const fetchCompare = useCallback(async () => {
+  const fetchCompare = async () => {
     if (runIds.length < 2) {
       setResponse(null);
       setError(null);
@@ -1217,24 +1222,37 @@ const RuleBacktestComparePage: React.FC = () => {
     }
 
     setIsLoading(true);
-    try {
-      const payload = await backtestApi.compareRuleBacktestRuns({ runIds });
+    const payload = await backtestApi.compareRuleBacktestRuns({ runIds })
+      .catch((nextError) => {
+        setError(getParsedApiError(nextError));
+        return null;
+      });
+    if (payload) {
       setResponse(payload);
       setError(null);
-    } catch (nextError) {
-      setError(getParsedApiError(nextError));
-    } finally {
-      setIsLoading(false);
     }
-  }, [runIds]);
+    setIsLoading(false);
+  };
+
+  const loadCompareOnParamChange = useEffectEvent(() => {
+    void fetchCompare();
+  });
 
   useEffect(() => {
     document.title = '规则回测比较工作台 - WolfyStock';
   }, []);
 
   useEffect(() => {
-    void fetchCompare();
-  }, [fetchCompare]);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        void loadCompareOnParamChange();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [runIdsParam]);
 
   useEffect(() => () => {
     if (copyResetTimerRef.current != null) {
@@ -1242,7 +1260,7 @@ const RuleBacktestComparePage: React.FC = () => {
     }
   }, []);
 
-  const orderedItems = useMemo(() => orderCompareItems(response?.items || [], runIds), [response?.items, runIds]);
+  const orderedItems = orderCompareItems(response?.items || [], runIds);
   const baselineRunId = response?.comparisonSummary?.baseline.runId
     ?? response?.robustnessSummary?.baselineRunId
     ?? response?.comparisonProfile?.baselineRunId
@@ -1256,11 +1274,11 @@ const RuleBacktestComparePage: React.FC = () => {
   const parameterComparison = response?.parameterComparison || null;
   const marketCodeComparison = response?.marketCodeComparison || null;
   const periodComparison = response?.periodComparison || null;
-  const compareUrl = useMemo(() => {
+  const compareUrl = (() => {
     const query = searchParams.toString();
     return `${window.location.origin}/backtest/compare${query ? `?${query}` : ''}`;
-  }, [searchParams]);
-  const compareSummaryText = useMemo(() => buildCompareShareSummary({
+  })();
+  const compareSummaryText = buildCompareShareSummary({
     runIds,
     baselineRunId,
     baselineCode: baselineItem?.metadata.code || comparisonSummary?.baseline.code || '--',
@@ -1268,16 +1286,7 @@ const RuleBacktestComparePage: React.FC = () => {
     primaryProfile: comparisonProfile?.primaryProfile,
     comparableCount: response?.comparableRunIds.length,
     requestedCount: response?.requestedRunIds.length,
-  }), [
-    baselineItem?.metadata.code,
-    baselineRunId,
-    comparisonProfile?.primaryProfile,
-    comparisonSummary?.baseline.code,
-    response?.comparableRunIds.length,
-    response?.requestedRunIds.length,
-    robustnessSummary?.overallState,
-    runIds,
-  ]);
+  });
   const advancedDiagnostics = collectCompareDiagnostics(
     comparisonHighlights?.diagnostics,
     robustnessSummary?.diagnostics,
@@ -1288,17 +1297,22 @@ const RuleBacktestComparePage: React.FC = () => {
     Object.values(robustnessSummary?.dimensions || {}).flatMap((dimension) => dimension.diagnostics || []),
   );
 
-  const handleOpenRun = useCallback((runId: number) => {
+  const handleOpenRun = (runId: number) => {
     navigate(`/backtest/results/${runId}`);
-  }, [navigate]);
+  };
 
-  const handleCopyText = useCallback(async (content: string, successMessage: string) => {
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard_unavailable');
-      await navigator.clipboard.writeText(content);
-      setCopyFeedback(successMessage);
-    } catch {
+  const handleCopyText = async (content: string, successMessage: string) => {
+    if (!navigator.clipboard?.writeText) {
       setCopyFeedback('复制失败，请手动复制');
+    } else {
+      const didCopy = await navigator.clipboard.writeText(content)
+        .then(() => true)
+        .catch(() => false);
+      if (didCopy) {
+        setCopyFeedback(successMessage);
+      } else {
+        setCopyFeedback('复制失败，请手动复制');
+      }
     }
     if (copyResetTimerRef.current != null) {
       window.clearTimeout(copyResetTimerRef.current);
@@ -1307,9 +1321,9 @@ const RuleBacktestComparePage: React.FC = () => {
       setCopyFeedback(null);
       copyResetTimerRef.current = null;
     }, 2000);
-  }, []);
+  };
 
-  const handleRemoveRun = useCallback((runId: number) => {
+  const handleRemoveRun = (runId: number) => {
     const nextRunIds = runIds.filter((id) => id !== runId);
     const nextParams = new URLSearchParams(searchParams);
     setResponse(null);
@@ -1319,16 +1333,16 @@ const RuleBacktestComparePage: React.FC = () => {
       nextParams.delete('runIds');
     }
     setSearchParams(nextParams);
-  }, [runIds, searchParams, setSearchParams]);
+  };
 
-  const handleMakeBaseline = useCallback((runId: number) => {
+  const handleMakeBaseline = (runId: number) => {
     if (runIds[0] === runId) return;
     const nextRunIds = [runId, ...runIds.filter((id) => id !== runId)];
     const nextParams = new URLSearchParams(searchParams);
     setResponse(null);
     nextParams.set('runIds', nextRunIds.join(','));
     setSearchParams(nextParams);
-  }, [runIds, searchParams, setSearchParams]);
+  };
 
   return (
     <main className="w-full overflow-x-hidden text-white">
@@ -1502,7 +1516,7 @@ const RuleBacktestComparePage: React.FC = () => {
                       {
                         label: '稳健性',
                         value: formatCompareStateWithRaw(robustnessSummary?.overallState),
-                        note: `可直接比较 ${robustnessSummary?.directlyComparable == null ? '--' : renderBooleanLabel(robustnessSummary.directlyComparable)}`,
+                        note: `可直接比较 ${robustnessSummary?.directlyComparable == null ? '--' : formatBooleanLabel(robustnessSummary.directlyComparable)}`,
                       },
                       {
                         label: '一致维度',
@@ -1524,19 +1538,19 @@ const RuleBacktestComparePage: React.FC = () => {
                   <div className="preview-grid mt-4">
                     <div className="preview-card">
                       <p className="metric-card__label">同一标的</p>
-                      <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.sameCode)}</p>
+                      <p className="preview-card__text">{formatBooleanLabel(comparisonProfile?.dimensionFlags.sameCode)}</p>
                     </div>
                     <div className="preview-card">
                       <p className="metric-card__label">同一市场</p>
-                      <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.sameMarket)}</p>
+                      <p className="preview-card__text">{formatBooleanLabel(comparisonProfile?.dimensionFlags.sameMarket)}</p>
                     </div>
                     <div className="preview-card">
                       <p className="metric-card__label">存在参数差异</p>
-                      <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.parameterDifferencesPresent)}</p>
+                      <p className="preview-card__text">{formatBooleanLabel(comparisonProfile?.dimensionFlags.parameterDifferencesPresent)}</p>
                     </div>
                     <div className="preview-card">
                       <p className="metric-card__label">存在区间差异</p>
-                      <p className="preview-card__text">{renderBooleanLabel(comparisonProfile?.dimensionFlags.periodDifferencesPresent)}</p>
+                      <p className="preview-card__text">{formatBooleanLabel(comparisonProfile?.dimensionFlags.periodDifferencesPresent)}</p>
                     </div>
                   </div>
                   <div className="mt-4">
@@ -1549,13 +1563,13 @@ const RuleBacktestComparePage: React.FC = () => {
                       <p className="metric-card__label">市场 / 代码比较</p>
                       <p className="preview-card__text">{formatCompareStateWithRaw(marketCodeComparison?.state)}</p>
                       <p className="product-footnote">关系：{formatCompareStateWithRaw(marketCodeComparison?.relationship)}</p>
-                      <p className="product-footnote">可直接比较：{marketCodeComparison?.directlyComparable == null ? '--' : renderBooleanLabel(marketCodeComparison.directlyComparable)}</p>
+                      <p className="product-footnote">可直接比较：{marketCodeComparison?.directlyComparable == null ? '--' : formatBooleanLabel(marketCodeComparison.directlyComparable)}</p>
                     </div>
                     <div className="preview-card">
                       <p className="metric-card__label">区间比较</p>
                       <p className="preview-card__text">{formatCompareStateWithRaw(periodComparison?.state)}</p>
                       <p className="product-footnote">关系：{formatCompareStateWithRaw(periodComparison?.relationship)}</p>
-                      <p className="product-footnote">有意义可比：{periodComparison?.meaningfullyComparable == null ? '--' : renderBooleanLabel(periodComparison.meaningfullyComparable)}</p>
+                      <p className="product-footnote">有意义可比：{periodComparison?.meaningfullyComparable == null ? '--' : formatBooleanLabel(periodComparison.meaningfullyComparable)}</p>
                     </div>
                   </div>
                 </ConsoleDisclosure>
@@ -1574,9 +1588,9 @@ const RuleBacktestComparePage: React.FC = () => {
                       </div>
                       <div className="preview-card">
                         <p className="metric-card__label">摘要上下文</p>
-                        <p className="preview-card__text">全部同标的：{renderBooleanLabel(comparisonSummary?.context.allSameCode)}</p>
-                        <p className="product-footnote">全部同周期：{renderBooleanLabel(comparisonSummary?.context.allSameTimeframe)}</p>
-                        <p className="product-footnote">全部同日期区间：{renderBooleanLabel(comparisonSummary?.context.allSameDateRange)}</p>
+                        <p className="preview-card__text">全部同标的：{formatBooleanLabel(comparisonSummary?.context.allSameCode)}</p>
+                        <p className="product-footnote">全部同周期：{formatBooleanLabel(comparisonSummary?.context.allSameTimeframe)}</p>
+                        <p className="product-footnote">全部同日期区间：{formatBooleanLabel(comparisonSummary?.context.allSameDateRange)}</p>
                       </div>
                     </div>
                     <MetricDeltaTable metricDeltas={comparisonSummary?.metricDeltas || {}} />

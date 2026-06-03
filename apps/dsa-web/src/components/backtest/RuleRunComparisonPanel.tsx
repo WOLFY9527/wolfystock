@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Card } from '../../components/common';
+import { Card } from '../common/Card';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 import type { DeterministicBacktestNormalizedResult } from './normalizeDeterministicBacktestResult';
 import { Banner, SummaryStrip, formatDateTime, formatNumber, pct } from './shared';
@@ -174,9 +174,9 @@ export const RuleRunComparisonPanel: React.FC<{
   }
 
   const warnings = buildRuleRunComparisonWarnings(items.map((item) => item.run), language);
-  const rankedByReturn = [...items].sort((left, right) => (right.run.totalReturnPct ?? Number.NEGATIVE_INFINITY) - (left.run.totalReturnPct ?? Number.NEGATIVE_INFINITY));
-  const rankedByDrawdown = [...items].sort((left, right) => Math.abs(left.run.maxDrawdownPct ?? Number.POSITIVE_INFINITY) - Math.abs(right.run.maxDrawdownPct ?? Number.POSITIVE_INFINITY));
-  const rankedByExcess = [...items].sort((left, right) => ((right.run.excessReturnVsBenchmarkPct ?? right.run.excessReturnVsBuyAndHoldPct) ?? Number.NEGATIVE_INFINITY) - ((left.run.excessReturnVsBenchmarkPct ?? left.run.excessReturnVsBuyAndHoldPct) ?? Number.NEGATIVE_INFINITY));
+  const rankedByReturn = items.slice().sort((left, right) => (right.run.totalReturnPct ?? Number.NEGATIVE_INFINITY) - (left.run.totalReturnPct ?? Number.NEGATIVE_INFINITY));
+  const rankedByDrawdown = items.slice().sort((left, right) => Math.abs(left.run.maxDrawdownPct ?? Number.POSITIVE_INFINITY) - Math.abs(right.run.maxDrawdownPct ?? Number.POSITIVE_INFINITY));
+  const rankedByExcess = items.slice().sort((left, right) => ((right.run.excessReturnVsBenchmarkPct ?? right.run.excessReturnVsBuyAndHoldPct) ?? Number.NEGATIVE_INFINITY) - ((left.run.excessReturnVsBenchmarkPct ?? left.run.excessReturnVsBuyAndHoldPct) ?? Number.NEGATIVE_INFINITY));
 
   const metrics: MetricRow[] = [
     {

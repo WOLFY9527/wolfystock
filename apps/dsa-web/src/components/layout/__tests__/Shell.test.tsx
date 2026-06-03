@@ -1,4 +1,4 @@
-import { useContext, useEffect } from 'react';
+import { use, useEffect } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,7 +8,7 @@ import { expectNoRawI18nKeys } from '../../../test-utils/i18nRawKeySentinel';
 import { Shell } from '../Shell';
 import { ShellRailContext } from '../ShellRailContext';
 import { setAdminSurfaceMode } from '../../../hooks/useProductSurface';
-import { useStockPoolStore } from '../../../stores';
+import { useStockPoolStore } from '../../../stores/stockPoolStore';
 
 const { mockLogout, mockHardRedirect, useAuthMock } = vi.hoisted(() => ({
   mockLogout: vi.fn().mockResolvedValue(undefined),
@@ -55,7 +55,7 @@ afterEach(() => {
 });
 
 const ShellRailFixture = () => {
-  const { setRailContent } = useContext(ShellRailContext);
+  const { setRailContent } = use(ShellRailContext);
 
   useEffect(() => {
     setRailContent(<div>archive content</div>);

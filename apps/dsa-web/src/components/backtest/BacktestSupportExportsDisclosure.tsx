@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { backtestApi } from '../../api/backtest';
 import { getApiErrorMessage } from '../../api/error';
 import { useI18n } from '../../contexts/UiLanguageContext';
@@ -375,70 +375,87 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
   const [downloadingId, setDownloadingId] = useState<SupportExportDefinition['id'] | null>(null);
   const [robustnessPreview, setRobustnessPreview] = useState<RobustnessEvidencePreviewState>({ status: 'idle' });
 
-  const loadIndex = useCallback(async () => {
+  const refreshIndex = async () => {
     setIsLoading(true);
     setLoadError(null);
-    try {
-      const payload = await backtestApi.getRuleBacktestSupportExportIndex(runId);
+    const payload = await backtestApi.getRuleBacktestSupportExportIndex(runId)
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, t('backtest.resultPage.supportExports.loadFailed')));
+        return null;
+      });
+    if (payload) {
       setItems(payload.exports || []);
-    } catch (error) {
-      setLoadError(getApiErrorMessage(error, t('backtest.resultPage.supportExports.loadFailed')));
-    } finally {
-      setIsLoading(false);
     }
+    setIsLoading(false);
+  };
+
+  const loadIndex = useEffectEvent(async () => {
+    await refreshIndex();
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        void loadIndex();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [runId, t]);
-
-  useEffect(() => {
-    void loadIndex();
-  }, [loadIndex]);
-
-  useEffect(() => {
-    setRobustnessPreview({ status: 'idle' });
-  }, [runId]);
 
   const robustnessEvidenceItem = getSupportExportItem(
     SUPPORT_EXPORT_DEFINITIONS.find((definition) => definition.id === 'robustnessEvidenceJson')!,
     items,
   );
 
-  useEffect(() => {
-    if (robustnessEvidenceItem?.available !== true || robustnessPreview.status !== 'idle') {
-      return;
-    }
-    let active = true;
+  const loadRobustnessPreview = async () => {
     setRobustnessPreview({ status: 'loading' });
-    void backtestApi.getRuleBacktestRobustnessEvidenceJson(runId)
-      .then((payload) => {
-        if (!active) {
-          return;
-        }
-        setRobustnessPreview({ status: 'ready', payload });
-      })
+    const payload = await backtestApi.getRuleBacktestRobustnessEvidenceJson(runId)
       .catch((error) => {
-        if (!active) {
-          return;
-        }
         setRobustnessPreview({
           status: 'error',
           message: getApiErrorMessage(error, t('backtest.resultPage.supportExports.downloadFailed')),
         });
+        return null;
       });
+    if (payload) {
+      setRobustnessPreview({ status: 'ready', payload });
+    }
+  };
+
+  const loadRobustnessPreviewForEffect = useEffectEvent(() => {
+    void loadRobustnessPreview();
+  });
+
+  useEffect(() => {
+    if (robustnessEvidenceItem?.available !== true || robustnessPreview.status !== 'idle') {
+      return;
+    }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        void loadRobustnessPreviewForEffect();
+      }
+    });
     return () => {
-      active = false;
+      cancelled = true;
     };
   }, [robustnessEvidenceItem?.available, robustnessPreview.status, runId, t]);
 
   const handleDownload = async (definition: SupportExportDefinition) => {
     setDownloadError(null);
     setDownloadingId(definition.id);
-    try {
-      const content = await definition.loadContent(runId);
+    const content = await definition.loadContent(runId)
+      .catch((error) => {
+        setDownloadError(getApiErrorMessage(error, t('backtest.resultPage.supportExports.downloadFailed')));
+        return null;
+      });
+    if (content !== null) {
       downloadTextFile(definition.fileName(code, runId), content, definition.mimeType);
-    } catch (error) {
-      setDownloadError(getApiErrorMessage(error, t('backtest.resultPage.supportExports.downloadFailed')));
-    } finally {
-      setDownloadingId(null);
     }
+    setDownloadingId(null);
   };
 
   const getAvailabilityText = (item: RuleBacktestSupportExportIndexItem | null): string => {
@@ -484,7 +501,7 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
       <div className="flex flex-col gap-3">
         <TerminalNotice variant="danger">{loadError}</TerminalNotice>
         <div>
-          <TerminalButton variant="compact" onClick={() => void loadIndex()}>
+          <TerminalButton variant="compact" onClick={() => void refreshIndex()}>
             {t('backtest.resultPage.supportExports.retry')}
           </TerminalButton>
         </div>
@@ -582,7 +599,7 @@ const BacktestSupportExportsDisclosure: React.FC<BacktestSupportExportsDisclosur
       className="mt-4"
       data-testid="backtest-support-exports-disclosure"
     >
-      <SupportExportsDisclosureBody runId={runId} code={code} />
+      <SupportExportsDisclosureBody key={runId} runId={runId} code={code} />
     </TerminalDisclosure>
   );
 };

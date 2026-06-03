@@ -1,7 +1,7 @@
 import type React from 'react';
 import type { MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
 import { useI18n } from '../../contexts/UiLanguageContext';
-import { TerminalChip } from '../terminal';
+import { TerminalChip } from '../terminal/TerminalPrimitives';
 import { isRenderableMarketOverviewItem } from './marketOverviewUtils';
 import {
   MarketOverviewCardFrame,

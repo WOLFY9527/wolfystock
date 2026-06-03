@@ -2,7 +2,7 @@ import type React from 'react';
 import type { MarketOverviewItem, MarketOverviewPanel } from '../../api/marketOverview';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
-import { TerminalChip } from '../terminal';
+import { TerminalChip } from '../terminal/TerminalPrimitives';
 import {
   formatChangeSummary,
   formatMetricValue,
@@ -57,8 +57,7 @@ export const MarketSentimentCard: React.FC<{
   const items = panel?.items || [];
   const primary = resolvePrimaryItem(items);
   const supporting = items
-    .filter((item) => item.symbol !== primary?.symbol)
-    .filter(isConsumerSafeSupportItem)
+    .filter((item) => item.symbol !== primary?.symbol && isConsumerSafeSupportItem(item))
     .slice(0, 2);
   const score = primary?.value ?? 50;
   const gaugeRatio = Math.min(1, Math.max(0, score / 100));

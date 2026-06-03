@@ -1,11 +1,12 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, Input } from '../components/common';
+import { Button } from '../components/common/Button';
+import { Input } from '../components/common/Input';
 import type { ParsedApiError } from '../api/error';
 import { isParsedApiError } from '../api/error';
-import { SettingsAlert } from '../components/settings';
-import { useAuth } from '../hooks';
+import { SettingsAlert } from '../components/settings/SettingsAlert';
+import { useAuth } from '../hooks/useAuth';
 import { translate, type UiLanguage } from '../i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 
@@ -119,7 +120,7 @@ const LoginPage: React.FC = () => {
   const createModeRequested = searchParams.get('mode') === 'create';
   const routeLanguage = parseLocaleFromPathname(window.location.pathname);
   const language: LoginLanguage = routeLanguage === 'en' ? 'en' : 'zh';
-  const copy = useMemo(() => buildLoginCopy(language), [language]);
+  const copy = buildLoginCopy(language);
   const homePath = routeLanguage ? buildLocalizedPath('/', routeLanguage) : '/';
   const guestPath = routeLanguage ? buildLocalizedPath('/guest', routeLanguage) : '/guest';
   const resetPasswordPath = routeLanguage ? buildLocalizedPath('/reset-password', routeLanguage) : '/reset-password';
@@ -128,23 +129,28 @@ const LoginPage: React.FC = () => {
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
-  const [createUser, setCreateUser] = useState(createModeRequested);
+  const [{ createUser, routeCreateMode }, setCreateModeState] = useState(() => ({
+    createUser: createModeRequested,
+    routeCreateMode: createModeRequested,
+  }));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | ParsedApiError | null>(null);
 
   const isAdminBootstrap = !authEnabled && setupState === 'no_password';
   const isAuthReenable = !authEnabled && setupState === 'password_retained';
+
+  if (!isAdminBootstrap && createModeRequested !== routeCreateMode) {
+    setCreateModeState({
+      createUser: createModeRequested,
+      routeCreateMode: createModeRequested,
+    });
+  }
+
   const isCreateUserMode = authEnabled && !isAdminBootstrap && !isAuthReenable && createUser;
 
   useEffect(() => {
     document.title = copy.documentTitle;
   }, [copy.documentTitle]);
-
-  useEffect(() => {
-    if (!isAdminBootstrap) {
-      setCreateUser(createModeRequested);
-    }
-  }, [createModeRequested, isAdminBootstrap]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -161,21 +167,26 @@ const LoginPage: React.FC = () => {
     }
 
     setIsSubmitting(true);
-    try {
-      const result = await login({
-        username: isAdminBootstrap || isAuthReenable ? 'admin' : (username.trim() || 'admin'),
-        displayName: isCreateUserMode ? displayName.trim() : undefined,
-        password,
-        passwordConfirm: isAdminBootstrap || isCreateUserMode ? passwordConfirm : undefined,
-        createUser: isCreateUserMode,
-      });
-      if (result.success) {
-        navigate(homePath, { replace: true });
-      } else {
-        setError(result.error ?? copy.errorLoginFailed);
-      }
-    } finally {
-      setIsSubmitting(false);
+    const [result, submitError] = await login({
+      username: isAdminBootstrap || isAuthReenable ? 'admin' : (username.trim() || 'admin'),
+      displayName: isCreateUserMode ? displayName.trim() : undefined,
+      password,
+      passwordConfirm: isAdminBootstrap || isCreateUserMode ? passwordConfirm : undefined,
+      createUser: isCreateUserMode,
+    }).then(
+      (value) => [value, null] as const,
+      (submitFailure: unknown) => [null, submitFailure] as const,
+    );
+    setIsSubmitting(false);
+
+    if (result == null) {
+      throw submitError;
+    }
+
+    if (result.success) {
+      navigate(homePath, { replace: true });
+    } else {
+      setError(result.error ?? copy.errorLoginFailed);
     }
   };
 
@@ -285,7 +296,10 @@ const LoginPage: React.FC = () => {
                 type="button"
                 className="btn-ghost w-full justify-center"
                 onClick={() => {
-                  setCreateUser((value) => !value);
+                  setCreateModeState((current) => ({
+                    ...current,
+                    createUser: !current.createUser,
+                  }));
                   setPasswordConfirm('');
                   setError(null);
                 }}

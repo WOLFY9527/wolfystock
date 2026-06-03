@@ -20,7 +20,7 @@ type RawI18nKeySentinelOptions = {
   patterns?: RegExp[];
 };
 
-export function collectRawI18nKeyMatches(
+function collectRawI18nKeyMatches(
   root: ParentNode & Pick<Node, 'textContent'>,
   options: RawI18nKeySentinelOptions = {},
 ) {
@@ -48,7 +48,9 @@ export function collectRawI18nKeyMatches(
     });
   });
 
-  return [...matches].sort();
+  const sortedMatches = Array.from(matches);
+  sortedMatches.sort();
+  return sortedMatches;
 }
 
 export function expectNoRawI18nKeys(

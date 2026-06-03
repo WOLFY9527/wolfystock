@@ -71,7 +71,7 @@ const BrandWordmark: React.FC<{
     className={({ isActive }) => cn('shell-brand-link', className || '', isActive ? 'is-active' : '')}
   >
     <span className="inline-flex min-w-0 items-center gap-3">
-      <BrandLogo className="h-8 w-8" />
+      <BrandLogo className="size-8" />
       <span className={`shell-wordmark ${BRAND_WORDMARK_CLASSNAME}`}>WolfyStock</span>
     </span>
   </NavLink>
@@ -115,12 +115,12 @@ function DrawerUtilityLabel({
   );
 }
 
-export const SidebarNav: React.FC<SidebarNavProps> = ({
+function useSidebarNavView({
   layout = 'header',
   onNavigate,
   onOpenArchive,
   hasArchive = false,
-}) => {
+}: SidebarNavProps) {
   const location = useLocation();
   const { authEnabled, logout } = useAuth();
   const {
@@ -231,7 +231,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       >
         {isDrawer ? (
           <span className="shell-nav-item__icon" aria-hidden="true">
-            <Icon className="h-4 w-4" />
+            <Icon className="size-4" />
           </span>
         ) : null}
         <span className={isDrawer ? 'shell-nav-item__label' : 'shell-header-link__label'}>
@@ -254,7 +254,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       {isDrawer ? (
         <>
           <span className="shell-nav-item__icon" aria-hidden="true">
-            <Archive className="h-4 w-4" />
+            <Archive className="size-4" />
           </span>
           <DrawerUtilityLabel label={t('shell.archiveTitle')} />
         </>
@@ -277,7 +277,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       {isDrawer ? (
         <>
           <span className="shell-nav-item__icon" aria-hidden="true">
-            <Globe className="h-4 w-4" />
+            <Globe className="size-4" />
           </span>
           <DrawerUtilityLabel
             label={t('language.toggle')}
@@ -304,7 +304,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       {isDrawer ? (
         <>
           <span className="shell-nav-item__icon" aria-hidden="true">
-            <Settings2 className="h-4 w-4" />
+            <Settings2 className="size-4" />
           </span>
           <DrawerUtilityLabel label={t('nav.settings')} />
         </>
@@ -325,10 +325,10 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
           aria-controls="shell-admin-utility-menu"
         >
           <span className="shell-nav-item__icon" aria-hidden="true">
-            <ShieldCheck className="h-4 w-4" />
+            <ShieldCheck className="size-4" />
           </span>
           <DrawerUtilityLabel label={consoleLabel} />
-          <ChevronDown className={cn('ml-auto h-4 w-4 text-white/48 transition-transform', showAdminMenu ? 'rotate-180' : '')} />
+          <ChevronDown className={cn('ml-auto size-4 text-white/48 transition-transform', showAdminMenu ? 'rotate-180' : '')} />
         </button>
         {showAdminMenu ? (
           <div
@@ -345,7 +345,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
                 aria-label={label}
               >
                 <span className="shell-nav-item__icon" aria-hidden="true">
-                  <Icon className="h-4 w-4" />
+                  <Icon className="size-4" />
                 </span>
                 <DrawerUtilityLabel label={label} />
               </NavLink>
@@ -363,9 +363,9 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
           aria-controls="shell-admin-utility-menu"
         >
           <span className="inline-flex items-center gap-1.5">
-            <ShieldCheck className="h-3.5 w-3.5" />
+            <ShieldCheck className="size-3.5" />
             <span>{consoleLabel}</span>
-            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showAdminMenu ? 'rotate-180' : '')} />
+            <ChevronDown className={cn('size-3.5 transition-transform', showAdminMenu ? 'rotate-180' : '')} />
           </span>
         </button>
         {showAdminMenu ? (
@@ -386,7 +386,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
                 )}
                 aria-label={label}
               >
-                <Icon className="h-4 w-4 shrink-0 text-white/56" />
+                <Icon className="size-4 shrink-0 text-white/56" />
                 <span className="truncate">{label}</span>
               </NavLink>
             ))}
@@ -410,7 +410,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       {isDrawer ? (
         <>
           <span className="shell-nav-item__icon" aria-hidden="true">
-            <LogIn className="h-4 w-4" />
+            <LogIn className="size-4" />
           </span>
           <DrawerUtilityLabel label={signInLabel} />
         </>
@@ -430,7 +430,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       {isDrawer ? (
         <>
           <span className="shell-nav-item__icon" aria-hidden="true">
-            <LogOut className="h-4 w-4" />
+            <LogOut className="size-4" />
           </span>
           <DrawerUtilityLabel label={t('nav.logout')} />
         </>
@@ -440,76 +440,87 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     </button>
   ) : null;
 
+  const navBody = isDrawer ? (
+    <div className="shell-drawer-nav">
+      <div className="shell-drawer-brand">
+        <BrandWordmark onNavigate={onNavigate} />
+        <span className="shell-drawer-note">{t('nav.terminal')}</span>
+      </div>
+      <nav className="shell-drawer-links" aria-label={t('shell.drawerTitle')}>
+        {navLinks}
+      </nav>
+      <div className="shell-drawer-footer">
+        {archiveAction}
+        {languageAction}
+        {settingsAction}
+        {adminMenuAction}
+        {signInAction}
+        {logoutAction}
+      </div>
+    </div>
+  ) : (
+    <div className="shell-header-nav">
+      <div className="shell-header-brand">
+        <BrandWordmark />
+      </div>
+      <nav className="shell-header-links" aria-label={t('shell.drawerTitle')}>
+        {navLinks}
+      </nav>
+      <div className="shell-header-utilities">
+        {archiveAction}
+        <div
+          data-testid="shell-header-utility-island"
+          className="flex items-center gap-0.5 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-1.5 py-1"
+        >
+          {languageAction}
+          {(settingsAction || adminMenuAction || signInAction || logoutAction) ? (
+            <div className="h-3 w-px bg-[var(--wolfy-divider)]" data-testid="shell-header-utility-divider" />
+          ) : null}
+          {settingsAction}
+          {adminMenuAction}
+          {signInAction}
+          {logoutAction && (settingsAction || adminMenuAction || signInAction) ? (
+            <div className="h-3 w-px bg-[var(--wolfy-divider)]" data-testid="shell-header-utility-divider" />
+          ) : null}
+          {logoutAction}
+        </div>
+      </div>
+    </div>
+  );
+
+  const confirmDialog = (
+    <ConfirmDialog
+      isOpen={showLogoutConfirm}
+      title={t('nav.logoutTitle')}
+      message={t('nav.logoutMessage')}
+      confirmText={t('nav.logoutConfirm')}
+      cancelText={t('nav.logoutCancel')}
+      isDanger
+      onConfirm={() => {
+        setShowLogoutConfirm(false);
+        onNavigate?.();
+        void (async () => {
+          try {
+            await logout();
+          } catch {
+            return;
+          }
+        })();
+      }}
+      onCancel={() => setShowLogoutConfirm(false)}
+    />
+  );
+
+  return { navBody, confirmDialog };
+}
+
+export const SidebarNav: React.FC<SidebarNavProps> = (props) => {
+  const { navBody, confirmDialog } = useSidebarNavView(props);
+
   return (
     <>
-      {isDrawer ? (
-        <div className="shell-drawer-nav">
-          <div className="shell-drawer-brand">
-            <BrandWordmark onNavigate={onNavigate} />
-            <span className="shell-drawer-note">{t('nav.terminal')}</span>
-          </div>
-          <nav className="shell-drawer-links" aria-label={t('shell.drawerTitle')}>
-            {navLinks}
-          </nav>
-          <div className="shell-drawer-footer">
-            {archiveAction}
-            {languageAction}
-            {settingsAction}
-            {adminMenuAction}
-            {signInAction}
-            {logoutAction}
-          </div>
-        </div>
-      ) : (
-        <div className="shell-header-nav">
-          <div className="shell-header-brand">
-            <BrandWordmark />
-          </div>
-          <nav className="shell-header-links" aria-label={t('shell.drawerTitle')}>
-            {navLinks}
-          </nav>
-          <div className="shell-header-utilities">
-            {archiveAction}
-            <div
-              data-testid="shell-header-utility-island"
-              className="flex items-center gap-0.5 rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-rail)] px-1.5 py-1"
-            >
-              {languageAction}
-              {(settingsAction || adminMenuAction || signInAction || logoutAction) ? (
-                <div className="h-3 w-px bg-[var(--wolfy-divider)]" data-testid="shell-header-utility-divider" />
-              ) : null}
-              {settingsAction}
-              {adminMenuAction}
-              {signInAction}
-              {logoutAction && (settingsAction || adminMenuAction || signInAction) ? (
-                <div className="h-3 w-px bg-[var(--wolfy-divider)]" data-testid="shell-header-utility-divider" />
-              ) : null}
-              {logoutAction}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <ConfirmDialog
-        isOpen={showLogoutConfirm}
-        title={t('nav.logoutTitle')}
-        message={t('nav.logoutMessage')}
-        confirmText={t('nav.logoutConfirm')}
-        cancelText={t('nav.logoutCancel')}
-        isDanger
-        onConfirm={() => {
-          setShowLogoutConfirm(false);
-          onNavigate?.();
-          void (async () => {
-            try {
-              await logout();
-            } catch {
-              return;
-            }
-          })();
-        }}
-        onCancel={() => setShowLogoutConfirm(false)}
-      />
+      {navBody}
+      {confirmDialog}
     </>
   );
 };

@@ -32,7 +32,7 @@ const settingsConsoleFallback = (
     aria-busy="true"
     aria-live="polite"
     data-testid="system-settings-loading"
-    className="min-h-[220px] rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] px-4 py-4 text-sm text-[color:var(--wolfy-text-secondary)]"
+    className="min-h-[220px] rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-4 text-sm text-[color:var(--wolfy-text-secondary)]"
   >
     <div className="flex min-w-0 flex-col gap-2">
       <span className="text-xs font-medium text-[color:var(--wolfy-text-primary)]">正在加载系统设置控制台</span>

@@ -2446,11 +2446,30 @@ describe('UserScannerPage', () => {
 
     expect(await screen.findByTestId('scanner-candidate-detail-MARA')).toHaveTextContent(/流动性不足|Liquidity weak/);
 
-    fireEvent.click(screen.getByRole('button', { name: /数据受限|Limited data/i }));
+    fireEvent.click(within(screen.getByTestId('scanner-candidate-filters')).getByRole('button', { name: /数据受限|Limited data/i }));
     fireEvent.click(await screen.findByTestId('scanner-candidate-row-CIFR'));
 
     expect(await screen.findByTestId('scanner-candidate-detail-CIFR')).toHaveTextContent(/历史数据不足|Historical data insufficient|数据不足/);
     expect(screen.getByTestId('scanner-inline-detail-panel')).toBeInTheDocument();
+  });
+
+  it('keeps the chosen preview threshold and falls back to the first visible candidate when filters hide the current detail row', async () => {
+    const themedRun = makeCryptoDiagnosticsRun();
+    getRun.mockResolvedValue(themedRun);
+    renderUserScannerPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /候选池|Candidate pool/i }));
+    const experiment = await screen.findByTestId('scanner-strategy-experiment');
+    fireEvent.click(within(experiment).getByRole('button', { name: /展开.*(?:回测准备|Backtest setup)|Expand.*(?:回测准备|Backtest setup)/i }));
+    const previewPanel = await screen.findByTestId('scanner-strategy-preview');
+    fireEvent.click(within(previewPanel).getByRole('button', { name: '60' }));
+    fireEvent.click(await screen.findByTestId('scanner-candidate-row-MARA'));
+    expect(await screen.findByTestId('scanner-candidate-detail-MARA')).toBeInTheDocument();
+
+    fireEvent.click(within(screen.getByTestId('scanner-candidate-filters')).getByRole('button', { name: /数据受限|Limited data/i }));
+
+    expect(await screen.findByTestId('scanner-candidate-detail-CIFR')).toBeInTheDocument();
+    expect(within(previewPanel).getByRole('button', { name: '60' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('keeps inline candidate detail free of developer fields', async () => {

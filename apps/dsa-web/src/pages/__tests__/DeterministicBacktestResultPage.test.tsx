@@ -604,9 +604,10 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getByTestId('deterministic-result-kpi-strip')).not.toHaveTextContent('{value}');
 
     fireEvent.click(screen.getByRole('tab', { name: '审计明细' }));
-    expect(await screen.findByTestId('deterministic-result-tab-panel-audit')).toBeInTheDocument();
-    expect(screen.getByText('日级审计 / 对账')).toBeInTheDocument();
-    expect(screen.getByText('执行轨迹')).toBeInTheDocument();
+    const auditPanel = await screen.findByTestId('deterministic-result-tab-panel-audit');
+    expect(auditPanel).toBeInTheDocument();
+    expect(within(auditPanel).getByText('日级审计 / 对账')).toBeInTheDocument();
+    expect(within(auditPanel).getByText('执行轨迹')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '关键节点' })).toHaveAttribute('aria-selected', 'true');
 
     fireEvent.click(screen.getByRole('tab', { name: '交易记录' }));

@@ -115,7 +115,7 @@ export const adminNotificationsApi = {
     return {
       items: Array.isArray(normalized.items) ? normalized.items.map(normalizeChannel) : [],
       availableSystemChannels: Array.isArray(normalized.availableSystemChannels)
-        ? normalized.availableSystemChannels.map((item) => String(item)).filter(Boolean)
+        ? normalized.availableSystemChannels.flatMap((item) => { const s = String(item); return s ? [s] : []; })
         : [],
     };
   },

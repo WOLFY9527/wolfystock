@@ -7,7 +7,7 @@ import { MARKET_OVERVIEW_TAB_CONFIG } from '../MarketOverviewTabConfig';
 import { marketOverviewApi } from '../../api/marketOverview';
 import { marketApi } from '../../api/market';
 import { DataFreshnessBadge, MarketDataRow } from '../../components/market-overview/marketOverviewPrimitives';
-import { TerminalPageHeading } from '../../components/terminal';
+import { TerminalPageHeading } from '../../components/terminal/TerminalPrimitives';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { UI_LANGUAGE_STORAGE_KEY } from '../../i18n/core';
 

@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BellRing, CheckCircle2, Power, Send, ShieldCheck, Trash2, Webhook } from 'lucide-react';
 import {
   adminNotificationsApi,
@@ -10,7 +10,10 @@ import {
   type NotificationSeverity,
 } from '../api/adminNotifications';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert, Checkbox, Input, Select } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Checkbox } from '../components/common/Checkbox';
+import { Input } from '../components/common/Input';
+import { Select } from '../components/common/Select';
 import {
   TerminalButton,
   TerminalChip,
@@ -112,7 +115,7 @@ function formatDeliveryError(
   }
 
   const troubleshooting = Array.isArray(diagnostics?.troubleshooting)
-    ? diagnostics.troubleshooting.map((item) => String(item)).filter(Boolean)
+    ? diagnostics.troubleshooting.flatMap((item) => { const v = String(item); return v ? [v] : []; })
     : [];
 
   if (isSslDeliveryError(rawMessage, code)) {
@@ -248,22 +251,30 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
     : (language === 'en' ? 'Unacknowledged' : '未确认');
 }
 
+async function fetchAdminNotificationsData() {
+  const [channelPayload, eventPayload] = await Promise.all([
+    adminNotificationsApi.listChannels(),
+    adminNotificationsApi.listNotifications(),
+  ]);
+  return { channelPayload, eventPayload };
+}
+
 const AdminNotificationsPage: React.FC = () => {
   const { language } = useI18n();
   const isEnglish = language === 'en';
-  const text = useCallback((en: string, zh: string) => (isEnglish ? en : zh), [isEnglish]);
+  const text = (en: string, zh: string) => (isEnglish ? en : zh);
   const [channels, setChannels] = useState<NotificationChannel[]>([]);
   const [availableSystemChannels, setAvailableSystemChannels] = useState<string[]>([]);
   const [events, setEvents] = useState<NotificationEvent[]>([]);
   const [draft, setDraft] = useState<ChannelDraft>(INITIAL_DRAFT);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<StatusNotice | null>(null);
   const [error, setError] = useState<ParsedApiError | null>(null);
 
-  const routeSummary = useMemo(() => {
+  const routeSummary = (() => {
     const enabledRoutes = channels.filter((channel) => channel.enabled).length;
     const disabledRoutes = channels.filter((channel) => !channel.enabled).length;
     const missingTargets = channels.filter((channel) => String(channel.targetSummary || '').includes('unconfigured')).length;
@@ -286,16 +297,13 @@ const AdminNotificationsPage: React.FC = () => {
       grouped,
       categories,
     };
-  }, [channels, text]);
+  })();
 
-  const loadAll = useCallback(async () => {
+  const loadAll = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [channelPayload, eventPayload] = await Promise.all([
-        adminNotificationsApi.listChannels(),
-        adminNotificationsApi.listNotifications(),
-      ]);
+      const { channelPayload, eventPayload } = await fetchAdminNotificationsData();
       setChannels(channelPayload.items);
       setAvailableSystemChannels(channelPayload.availableSystemChannels);
       if (channelPayload.availableSystemChannels.length) {
@@ -311,20 +319,55 @@ const AdminNotificationsPage: React.FC = () => {
       setChannels([]);
       setAvailableSystemChannels([]);
       setEvents([]);
-    } finally {
-      setIsLoading(false);
     }
-  }, []);
+    setIsLoading(false);
+  };
 
   useEffect(() => {
     document.title = isEnglish ? 'Admin Notifications - WolfyStock' : '管理通知 - WolfyStock';
   }, [isEnglish]);
 
   useEffect(() => {
-    void loadAll();
-  }, [loadAll]);
+    let active = true;
 
-  const payload = useMemo<NotificationChannelPayload>(() => {
+    async function loadInitial() {
+      try {
+        const { channelPayload, eventPayload } = await fetchAdminNotificationsData();
+        if (!active) {
+          return;
+        }
+        setChannels(channelPayload.items);
+        setAvailableSystemChannels(channelPayload.availableSystemChannels);
+        if (channelPayload.availableSystemChannels.length) {
+          setDraft((current) => (
+            channelPayload.availableSystemChannels.includes(current.systemChannel)
+              ? current
+              : { ...current, systemChannel: channelPayload.availableSystemChannels[0] }
+          ));
+        }
+        setEvents(eventPayload.items || []);
+      } catch (err) {
+        if (!active) {
+          return;
+        }
+        setError(getParsedApiError(err));
+        setChannels([]);
+        setAvailableSystemChannels([]);
+        setEvents([]);
+      }
+      if (active) {
+        setIsLoading(false);
+      }
+    }
+
+    void loadInitial();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const payload: NotificationChannelPayload = (() => {
     const config: Record<string, unknown> = {};
     if (draft.type === 'webhook') {
       config.webhookUrl = draft.webhookUrl.trim();
@@ -341,13 +384,16 @@ const AdminNotificationsPage: React.FC = () => {
       severityMin: draft.severityMin,
       eventTypes: draft.eventTypesText
         .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean),
+        .reduce<string[]>((acc, item) => {
+          const trimmed = item.trim();
+          if (trimmed) acc.push(trimmed);
+          return acc;
+        }, []),
       config,
     };
-  }, [draft]);
+  })();
 
-  const createChannel = useCallback(async () => {
+  const createChannel = async () => {
     setFormError(null);
     setNotice(null);
     if (!payload.name) {
@@ -370,12 +416,11 @@ const AdminNotificationsPage: React.FC = () => {
       await loadAll();
     } catch (err) {
       setError(getParsedApiError(err));
-    } finally {
-      setIsSaving(false);
     }
-  }, [loadAll, payload, text]);
+    setIsSaving(false);
+  };
 
-  const toggleChannel = useCallback(async (channel: NotificationChannel) => {
+  const toggleChannel = async (channel: NotificationChannel) => {
     setBusyId(channel.id);
     setNotice(null);
     try {
@@ -383,12 +428,11 @@ const AdminNotificationsPage: React.FC = () => {
       await loadAll();
     } catch (err) {
       setError(getParsedApiError(err));
-    } finally {
-      setBusyId(null);
     }
-  }, [loadAll]);
+    setBusyId(null);
+  };
 
-  const testChannel = useCallback(async (channelId: number, dryRun: boolean) => {
+  const testChannel = async (channelId: number, dryRun: boolean) => {
     setBusyId(channelId);
     setNotice(null);
     try {
@@ -411,12 +455,11 @@ const AdminNotificationsPage: React.FC = () => {
       await loadAll();
     } catch (err) {
       setError(getParsedApiError(err));
-    } finally {
-      setBusyId(null);
     }
-  }, [language, loadAll, text]);
+    setBusyId(null);
+  };
 
-  const deleteChannel = useCallback(async (channelId: number) => {
+  const deleteChannel = async (channelId: number) => {
     const confirmed = window.confirm(text(
       'Remove only this log notification route association? The configured system channel and credentials will not be deleted.',
       '仅解除日志路由绑定？这不会删除系统通道或已配置凭据。',
@@ -435,12 +478,11 @@ const AdminNotificationsPage: React.FC = () => {
       await loadAll();
     } catch (err) {
       setError(getParsedApiError(err));
-    } finally {
-      setBusyId(null);
     }
-  }, [loadAll, text]);
+    setBusyId(null);
+  };
 
-  const acknowledge = useCallback(async (eventId: number) => {
+  const acknowledge = async (eventId: number) => {
     setBusyId(eventId);
     setNotice(null);
     try {
@@ -448,10 +490,9 @@ const AdminNotificationsPage: React.FC = () => {
       await loadAll();
     } catch (err) {
       setError(getParsedApiError(err));
-    } finally {
-      setBusyId(null);
     }
-  }, [loadAll]);
+    setBusyId(null);
+  };
 
   return (
     <TerminalPageShell
@@ -512,7 +553,7 @@ const AdminNotificationsPage: React.FC = () => {
           title={channels.length
             ? text('Log notification rules mapped to safe operator channels.', '日志通知规则与安全运维通道的覆盖情况。')
             : text('No rules exist yet.', '暂无通知规则。')}
-          action={<TerminalChip variant="info"><ShieldCheck className="h-3.5 w-3.5" />{text('Operator route', '运维路由')}</TerminalChip>}
+          action={<TerminalChip variant="info"><ShieldCheck className="size-3.5" />{text('Operator route', '运维路由')}</TerminalChip>}
         />
         <TerminalGrid data-testid="admin-notifications-summary-grid" className="mt-4">
           <div className="col-span-12 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -649,7 +690,7 @@ const AdminNotificationsPage: React.FC = () => {
             <TerminalSectionHeader
               eyebrow={text('Notification rules', '通知规则')}
               title={text(`${channels.length} configured routes`, `${channels.length} 条已配置路由`)}
-              action={<TerminalChip variant="info"><BellRing className="h-3.5 w-3.5" />{text('Route bindings', '路由绑定')}</TerminalChip>}
+              action={<TerminalChip variant="info"><BellRing className="size-3.5" />{text('Route bindings', '路由绑定')}</TerminalChip>}
             />
             <TerminalDenseList className="mt-4 gap-3">
                 {channels.length ? channels.map((channel) => {
@@ -663,7 +704,7 @@ const AdminNotificationsPage: React.FC = () => {
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-white/90">{channel.name}</p>
                         <p className="mt-1 flex items-center gap-1 text-[11px] text-white/40">
-                          {channel.type === 'webhook' ? <Webhook className="h-3 w-3" /> : <BellRing className="h-3 w-3" />}
+                          {channel.type === 'webhook' ? <Webhook className="size-3" /> : <BellRing className="size-3" />}
                           {scopeLabel(channel, language as 'zh' | 'en')} · {channel.type === 'system_channel'
                             ? text('Existing channel', '已有通道')
                             : channel.type === 'webhook'
@@ -704,7 +745,7 @@ const AdminNotificationsPage: React.FC = () => {
                         onClick={() => void testChannel(channel.id, true)}
                         disabled={busyId === channel.id}
                       >
-                        <ShieldCheck className="h-3 w-3" />
+                        <ShieldCheck className="size-3" />
                         {text('Dry run', '仅验证')}
                       </TerminalButton>
                       <TerminalButton
@@ -713,7 +754,7 @@ const AdminNotificationsPage: React.FC = () => {
                         onClick={() => void toggleChannel(channel)}
                         disabled={busyId === channel.id}
                       >
-                        <Power className="h-3 w-3" />
+                        <Power className="size-3" />
                         {channel.enabled ? text('Disable', '停用') : text('Enable', '启用')}
                       </TerminalButton>
                       <TerminalButton
@@ -722,7 +763,7 @@ const AdminNotificationsPage: React.FC = () => {
                         onClick={() => void testChannel(channel.id, false)}
                         disabled={busyId === channel.id}
                       >
-                        <Send className="h-3 w-3" />
+                        <Send className="size-3" />
                         {text('Test send', '测试发送')}
                       </TerminalButton>
                       <TerminalButton
@@ -732,7 +773,7 @@ const AdminNotificationsPage: React.FC = () => {
                         disabled={busyId === channel.id}
                         title={text('Only unbind the log notification route; system channel is not deleted.', '仅解除日志路由绑定；不会删除系统通道。')}
                       >
-                        <Trash2 className="h-3 w-3" />
+                        <Trash2 className="size-3" />
                         {text('Unbind', '解除绑定')}
                       </TerminalButton>
                       <p className="basis-full text-[11px] leading-4 text-white/40 lg:text-right">
@@ -752,7 +793,7 @@ const AdminNotificationsPage: React.FC = () => {
             <TerminalSectionHeader
               eyebrow={text('Notifications', '通知事件')}
               title={text('Recent operational alert events and acknowledgement state.', '最近的运维告警事件与确认状态。')}
-              action={<TerminalChip variant="info"><CheckCircle2 className="h-3.5 w-3.5" />{text('Recent events', '最近事件')}</TerminalChip>}
+              action={<TerminalChip variant="info"><CheckCircle2 className="size-3.5" />{text('Recent events', '最近事件')}</TerminalChip>}
             />
             <TerminalDenseList className="mt-4 gap-3">
                 {events.length ? events.map((event) => (

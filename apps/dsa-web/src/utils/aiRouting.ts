@@ -42,7 +42,7 @@ export const GATEWAY_READINESS_NOTES: Record<string, string> = {
   zhipu: 'openai_compatible_dynamic',
 };
 
-export function normalizeGatewayKey(value: string): string {
+function normalizeGatewayKey(value: string): string {
   return String(value || '').trim().toLowerCase();
 }
 
@@ -52,7 +52,7 @@ export function parseGatewayFromModel(value: string): string {
   return normalizeGatewayKey(model.split('/', 1)[0] || '');
 }
 
-export function uniqueValues(values: Array<string | null | undefined>): string[] {
+function uniqueValues(values: Array<string | null | undefined>): string[] {
   const seen = new Set<string>();
   const list: string[] = [];
   values.forEach((value) => {

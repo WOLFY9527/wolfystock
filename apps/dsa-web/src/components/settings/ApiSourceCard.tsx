@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Button } from '../common';
+import { Button } from '../common/Button';
 
 type ApiSourceCardProps = {
   testId: string;

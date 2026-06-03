@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Activity, ExternalLink } from 'lucide-react';
 import { marketApi, type MarketDataReadinessCheck, type MarketDataReadinessResponse } from '../api/market';
 import {
@@ -14,7 +14,8 @@ import {
   type MarketProviderOperationsSummary,
 } from '../api/marketProviderOperations';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert, Input } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Input } from '../components/common/Input';
 import { DataFreshnessBadge } from '../components/market-overview/marketOverviewPrimitives';
 import {
   TerminalButton,
@@ -31,7 +32,7 @@ import {
   TerminalPageShell,
   TerminalPanel,
   TerminalSectionHeader,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 import type { MarketProviderHealthStatus } from '../api/marketOverview';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { cn } from '../utils/cn';
@@ -230,9 +231,11 @@ function surfaceLabel(surface: string): string {
 }
 
 function uniqueLabels(values: Array<string | null | undefined>): string[] {
-  return values
-    .map((value) => String(value || '').trim())
-    .filter((value, index, list) => Boolean(value) && list.indexOf(value) === index);
+  return values.reduce<string[]>((acc, value) => {
+    const v = String(value || '').trim();
+    if (v && acc.indexOf(v) === -1) acc.push(v);
+    return acc;
+  }, []);
 }
 
 function formatReadableList(values: string[], empty = '暂无可展示项'): string {
@@ -310,19 +313,39 @@ function buildProviderOpsTopSummary(
   rows: ProviderOperationsMatrixRow[],
   checks: MarketDataReadinessCheck[],
 ): ProviderOpsTopSummaryData {
-  const availableSources = uniqueLabels([
-    ...items.filter(operationItemIsAvailable).map(providerLabel),
-    ...rows.filter(matrixRowIsPrimaryAvailable).map(sourceGapName),
-  ]);
-  const missingSources = uniqueLabels([
-    ...rows.filter(matrixRowHasMissingSetup).map(sourceGapName),
-    ...checks.filter(shouldIncludeChecklistReadinessCheck).map(readinessCheckName),
-  ]);
-  const diagnosticSources = uniqueLabels(
-    rows
-      .filter(matrixRowIsDiagnosticOnly)
-      .map(sourceGapName),
-  );
+  const availableSourceCandidates: string[] = [];
+  for (const item of items) {
+    if (operationItemIsAvailable(item)) {
+      availableSourceCandidates.push(providerLabel(item));
+    }
+  }
+  for (const row of rows) {
+    if (matrixRowIsPrimaryAvailable(row)) {
+      availableSourceCandidates.push(sourceGapName(row));
+    }
+  }
+  const availableSources = uniqueLabels(availableSourceCandidates);
+
+  const missingSourceCandidates: string[] = [];
+  for (const row of rows) {
+    if (matrixRowHasMissingSetup(row)) {
+      missingSourceCandidates.push(sourceGapName(row));
+    }
+  }
+  for (const check of checks) {
+    if (shouldIncludeChecklistReadinessCheck(check)) {
+      missingSourceCandidates.push(readinessCheckName(check));
+    }
+  }
+  const missingSources = uniqueLabels(missingSourceCandidates);
+
+  const diagnosticSourceCandidates: string[] = [];
+  for (const row of rows) {
+    if (matrixRowIsDiagnosticOnly(row)) {
+      diagnosticSourceCandidates.push(sourceGapName(row));
+    }
+  }
+  const diagnosticSources = uniqueLabels(diagnosticSourceCandidates);
   const affectedSurfaces = uniqueLabels([
     ...rows.flatMap(resolveChecklistMatrixSurfaces),
     ...checks.flatMap(resolveChecklistReadinessSurfaces),
@@ -346,12 +369,12 @@ function summarizeReadinessFacts(check: MarketDataReadinessCheck): string[] {
   }
 
   const facts: string[] = [];
-  const envKeys = Array.isArray(details.envKeys) ? details.envKeys.map((key) => String(key)).filter(Boolean) : [];
+  const envKeys = Array.isArray(details.envKeys) ? details.envKeys.flatMap((key) => { const v = String(key); return v ? [v] : []; }) : [];
   const envKey = typeof details.envKey === 'string' ? details.envKey.trim() : '';
-  const availableModules = Array.isArray(details.availableModules) ? details.availableModules.map((name) => String(name)).filter(Boolean) : [];
-  const missingModules = Array.isArray(details.missingModules) ? details.missingModules.map((name) => String(name)).filter(Boolean) : [];
-  const representativeSymbols = Array.isArray(details.representativeSymbols) ? details.representativeSymbols.map((symbol) => String(symbol)).filter(Boolean) : [];
-  const missingSymbols = Array.isArray(details.missingSymbols) ? details.missingSymbols.map((symbol) => String(symbol)).filter(Boolean) : [];
+  const availableModules = Array.isArray(details.availableModules) ? details.availableModules.flatMap((name) => { const v = String(name); return v ? [v] : []; }) : [];
+  const missingModules = Array.isArray(details.missingModules) ? details.missingModules.flatMap((name) => { const v = String(name); return v ? [v] : []; }) : [];
+  const representativeSymbols = Array.isArray(details.representativeSymbols) ? details.representativeSymbols.flatMap((symbol) => { const v = String(symbol); return v ? [v] : []; }) : [];
+  const missingSymbols = Array.isArray(details.missingSymbols) ? details.missingSymbols.flatMap((symbol) => { const v = String(symbol); return v ? [v] : []; }) : [];
   const existingCount = typeof details.existingCount === 'number' ? details.existingCount : null;
 
   if (envKeys.length) {
@@ -583,8 +606,10 @@ function capabilityHaystack(row: ProviderOperationsMatrixRow): string[] {
     ...(row.missingMetrics || []),
     ...(row.requiredSourceTiers || []),
   ]
-    .map((value) => String(value || '').trim().toLowerCase())
-    .filter(Boolean);
+    .flatMap((value) => {
+      const normalized = String(value || '').trim().toLowerCase();
+      return normalized ? [normalized] : [];
+    });
 }
 
 function sourceGapCurrentState(row: ProviderOperationsMatrixRow): string {
@@ -659,8 +684,7 @@ function sourceGapBadges(row: ProviderOperationsMatrixRow): Array<{ label: strin
 
 function sourceGapRowsForCapability(rows: ProviderOperationsMatrixRow[], capability: SourceGapCapability): ProviderOperationsMatrixRow[] {
   return rows
-    .filter((row) => capability.match(row))
-    .filter((row) => sourceGapBlocksScoreGrade(row) || row.sourceType === 'missing' || row.inertMetadataOnly)
+    .filter((row) => capability.match(row) && (sourceGapBlocksScoreGrade(row) || row.sourceType === 'missing' || row.inertMetadataOnly))
     .slice(0, 3);
 }
 
@@ -888,39 +912,37 @@ function buildSetupChecklistEntries(
 ): SetupChecklistEntry[] {
   const entries: SetupChecklistEntry[] = [];
 
-  rows
-    .filter(shouldIncludeChecklistMatrixRow)
-    .forEach((row) => {
-      const copy = checklistCopyForMatrixRow(row);
-      const badges = checklistBadgesForMatrixRow(row);
-      resolveChecklistMatrixSurfaces(row).forEach((surface) => {
-        entries.push({
-          key: `matrix:${row.providerId}:${surface}`,
-          surface,
-          title: copy.title,
-          whyItMatters: copy.whyItMatters,
-          safeNextStep: copy.safeNextStep,
-          badges,
-        });
+  for (const row of rows) {
+    if (!shouldIncludeChecklistMatrixRow(row)) continue;
+    const copy = checklistCopyForMatrixRow(row);
+    const badges = checklistBadgesForMatrixRow(row);
+    resolveChecklistMatrixSurfaces(row).forEach((surface) => {
+      entries.push({
+        key: `matrix:${row.providerId}:${surface}`,
+        surface,
+        title: copy.title,
+        whyItMatters: copy.whyItMatters,
+        safeNextStep: copy.safeNextStep,
+        badges,
       });
     });
+  }
 
-  checks
-    .filter(shouldIncludeChecklistReadinessCheck)
-    .forEach((check) => {
-      const copy = checklistCopyForReadinessCheck(check);
-      const badges = checklistBadgesForReadinessCheck(check);
-      resolveChecklistReadinessSurfaces(check).forEach((surface) => {
-        entries.push({
-          key: `readiness:${check.id}:${surface}`,
-          surface,
-          title: copy.title,
-          whyItMatters: copy.whyItMatters,
-          safeNextStep: copy.safeNextStep,
-          badges,
-        });
+  for (const check of checks) {
+    if (!shouldIncludeChecklistReadinessCheck(check)) continue;
+    const copy = checklistCopyForReadinessCheck(check);
+    const badges = checklistBadgesForReadinessCheck(check);
+    resolveChecklistReadinessSurfaces(check).forEach((surface) => {
+      entries.push({
+        key: `readiness:${check.id}:${surface}`,
+        surface,
+        title: copy.title,
+        whyItMatters: copy.whyItMatters,
+        safeNextStep: copy.safeNextStep,
+        badges,
       });
     });
+  }
 
   return entries;
 }
@@ -1038,19 +1060,16 @@ const TickflowEntitlementRow: React.FC<{ projection: TickflowProjection }> = ({ 
   );
 };
 
+function providerScore(item: MarketProviderOperationItem): number {
+  return Number(Boolean(item.errorSummary)) * 10
+    + Number(Boolean(item.isFallback || item.fallbackUsed)) * 6
+    + Number(Boolean(item.isStale)) * 4
+    + Number(Boolean(item.isRefreshing)) * 2;
+}
+
 function selectPreferredProvider(items: MarketProviderOperationItem[]): MarketProviderOperationItem | null {
   if (!items.length) return null;
-  return [...items].sort((left, right) => {
-    const leftScore = Number(Boolean(left.errorSummary)) * 10
-      + Number(Boolean(left.isFallback || left.fallbackUsed)) * 6
-      + Number(Boolean(left.isStale)) * 4
-      + Number(Boolean(left.isRefreshing)) * 2;
-    const rightScore = Number(Boolean(right.errorSummary)) * 10
-      + Number(Boolean(right.isFallback || right.fallbackUsed)) * 6
-      + Number(Boolean(right.isStale)) * 4
-      + Number(Boolean(right.isRefreshing)) * 2;
-    return rightScore - leftScore;
-  })[0];
+  return items.reduce((best, current) => providerScore(current) > providerScore(best) ? current : best);
 }
 
 const DrillLink: React.FC<{ drill?: AdminLogDrillThrough; className?: string }> = ({ drill, className }) => {
@@ -1064,7 +1083,7 @@ const DrillLink: React.FC<{ drill?: AdminLogDrillThrough; className?: string }> 
       className={cn('inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-semibold text-white/62 transition hover:border-cyan-300/25 hover:text-cyan-100', className)}
     >
       {drill.label}
-      <ExternalLink className="h-3 w-3" aria-hidden="true" />
+      <ExternalLink className="size-3" aria-hidden="true" />
     </a>
   );
 };
@@ -1230,25 +1249,18 @@ const ProviderSetupChecklistPanel: React.FC<{
   isLoading: boolean;
   surfaceFocus: ProductSetupSurface | null;
 }> = ({ rows, checks, isLoading, surfaceFocus }) => {
-  const entries = useMemo(() => buildSetupChecklistEntries(rows, checks), [rows, checks]);
-  const visibleEntries = useMemo(
-    () => surfaceFocus ? entries.filter((entry) => entry.surface === surfaceFocus.label) : entries,
-    [entries, surfaceFocus],
-  );
-  const groups = useMemo(
-    () => CHECKLIST_SURFACE_ORDER
-      .map((surface) => ({
-        surface,
-        items: visibleEntries
-          .filter((entry) => entry.surface === surface)
-          .sort((left, right) => left.title.localeCompare(right.title)),
-      }))
-      .filter((group) => group.items.length > 0),
-    [visibleEntries],
-  );
+  const entries = buildSetupChecklistEntries(rows, checks);
+  const visibleEntries = surfaceFocus ? entries.filter((entry) => entry.surface === surfaceFocus.label) : entries;
+  const groups = CHECKLIST_SURFACE_ORDER.reduce<Array<{ surface: string; items: SetupChecklistEntry[] }>>((acc, surface) => {
+    const items = visibleEntries
+      .filter((entry) => entry.surface === surface)
+      .sort((left, right) => left.title.localeCompare(right.title));
+    if (items.length > 0) acc.push({ surface, items });
+    return acc;
+  }, []);
 
   return (
-    <TerminalNestedBlock data-testid="market-provider-setup-checklist" className="mt-4 bg-black/10 px-3 py-3">
+    <TerminalNestedBlock data-testid="market-provider-setup-checklist" className="mt-4 bg-black/10 p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">配置动作</p>
@@ -1284,7 +1296,7 @@ const ProviderSetupChecklistPanel: React.FC<{
       {groups.length ? (
         <div className="mt-3 grid gap-3 xl:grid-cols-2">
           {groups.map((group) => (
-            <div key={group.surface} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+            <div key={group.surface} className="rounded-md border border-white/[0.06] bg-white/[0.025] p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs font-semibold text-white/82">{group.surface}</p>
                 <TerminalChip variant="neutral">{formatNumber(group.items.length, 0)} 项</TerminalChip>
@@ -1381,11 +1393,11 @@ const ProviderOperationsMatrixPanel: React.FC<{
               <table className="min-w-full table-fixed">
                 <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
                   <tr className="border-b border-white/5 text-left">
-                    <th className="px-3 py-3 font-medium">数据源</th>
-                    <th className="px-3 py-3 font-medium">来源</th>
-                    <th className="px-3 py-3 font-medium">就绪状态</th>
-                    <th className="px-3 py-3 font-medium">门槛</th>
-                    <th className="px-3 py-3 font-medium">原因代码</th>
+                    <th className="p-3 font-medium">数据源</th>
+                    <th className="p-3 font-medium">来源</th>
+                    <th className="p-3 font-medium">就绪状态</th>
+                    <th className="p-3 font-medium">门槛</th>
+                    <th className="p-3 font-medium">原因代码</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1393,26 +1405,26 @@ const ProviderOperationsMatrixPanel: React.FC<{
                     const reasonCodes = matrixReasonCodes(row);
                     return (
                       <tr key={row.providerId} className="border-b border-white/[0.04] align-top">
-                        <td className="px-3 py-3">
+                        <td className="p-3">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-white">{row.providerName || row.providerId}</p>
                             <p className="mt-1 truncate font-mono text-[11px] text-white/42">{row.providerId}</p>
                           </div>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="p-3">
                           <div className="flex flex-wrap gap-1.5">
                             {row.sourceType ? <TerminalChip variant="neutral">{sanitizeCodeLabel(row.sourceType)}</TerminalChip> : null}
                             {row.sourceTier ? <TerminalChip variant="neutral">{sanitizeCodeLabel(row.sourceTier)}</TerminalChip> : null}
                           </div>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="p-3">
                           <div className="flex flex-wrap gap-1.5">
                             {row.runtimeState ? <TerminalChip variant={matrixStateVariant(row.runtimeState)}>{sanitizeCodeLabel(row.runtimeState)}</TerminalChip> : null}
                             {row.credentialState ? <TerminalChip variant={matrixStateVariant(row.credentialState)}>{sanitizeCodeLabel(row.credentialState)}</TerminalChip> : null}
                             {row.dependencyState ? <TerminalChip variant={matrixStateVariant(row.dependencyState)}>{sanitizeCodeLabel(row.dependencyState)}</TerminalChip> : null}
                           </div>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="p-3">
                           <div className="flex flex-wrap gap-1.5">
                             <TerminalChip variant={matrixCacheRequired(row) ? 'info' : 'neutral'}>
                               {matrixCacheRequired(row) ? 'cache-required' : 'cache-optional'}
@@ -1427,7 +1439,7 @@ const ProviderOperationsMatrixPanel: React.FC<{
                             ) : null}
                           </div>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="p-3">
                           {reasonCodes.length ? (
                             <div className="flex flex-wrap gap-1.5">
                               {reasonCodes.map((reason) => (
@@ -1470,12 +1482,12 @@ const ProviderOperationsTable: React.FC<{
           <table className="min-w-full table-fixed">
             <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
               <tr className="border-b border-white/5 text-left">
-                <th className="px-3 py-3 font-medium">数据源</th>
-                <th className="px-3 py-3 font-medium">状态</th>
-                <th className="px-3 py-3 font-medium">新鲜度</th>
-                <th className="px-3 py-3 font-medium">熔断</th>
-                <th className="px-3 py-3 font-medium">最近异常</th>
-                <th className="px-3 py-3 font-medium">操作</th>
+                <th className="p-3 font-medium">数据源</th>
+                <th className="p-3 font-medium">状态</th>
+                <th className="p-3 font-medium">新鲜度</th>
+                <th className="p-3 font-medium">熔断</th>
+                <th className="p-3 font-medium">最近异常</th>
+                <th className="p-3 font-medium">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -1485,31 +1497,31 @@ const ProviderOperationsTable: React.FC<{
                 const status = normalizeStatus(item.status);
                 return (
                   <tr key={key} className={cn('border-b border-white/[0.04] align-top', selected ? 'bg-white/[0.03]' : 'bg-transparent')}>
-                    <td className="px-3 py-3">
+                    <td className="p-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-white">{providerLabel(item)}</p>
                         <p className="mt-1 truncate font-mono text-[11px] text-white/42">{item.provider} · {item.domain}</p>
                       </div>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="p-3">
                       <div className="flex flex-wrap gap-1.5">
                         <TerminalChip variant={statusChipVariant(status)}>{statusLabel(status)}</TerminalChip>
                         {item.isRefreshing ? <TerminalChip variant="info">刷新中</TerminalChip> : null}
                       </div>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="p-3">
                       <div className="space-y-1">
                         <DataFreshnessBadge status={status as MarketProviderHealthStatus} />
                         <p className="text-[11px] text-white/42">{formatDisplayDate(item.updatedAt, '待统计')}</p>
                       </div>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="p-3">
                       <TerminalChip variant={circuitVariant(item)}>{circuitLabel(item)}</TerminalChip>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="p-3">
                       <p className="line-clamp-2 text-[11px] leading-5 text-white/60">{lastFailureLabel(item)}</p>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="p-3">
                       <TerminalButton
                         variant={selected ? 'secondary' : 'compact'}
                         className="w-full sm:w-auto"
@@ -1700,16 +1712,13 @@ const MarketDataReadinessPanel: React.FC<{
   onSymbolSubmit: () => void;
 }> = ({ data, isLoading, error, symbolInput, onSymbolInputChange, onSymbolSubmit }) => {
   const checks = data?.checks ?? EMPTY_READINESS_CHECKS;
-  const groupedChecks = useMemo(() => {
-    return READINESS_DIAGNOSTIC_GROUPS
-      .map((group) => ({
-        ...group,
-        items: checks
-          .filter((check) => readinessDiagnosticGroupId(check) === group.id)
-          .sort((left, right) => left.severity.localeCompare(right.severity) || left.status.localeCompare(right.status) || readinessCheckName(left).localeCompare(readinessCheckName(right))),
-      }))
-      .filter((group) => group.items.length > 0);
-  }, [checks]);
+  const groupedChecks = READINESS_DIAGNOSTIC_GROUPS.reduce<Array<typeof READINESS_DIAGNOSTIC_GROUPS[number] & { items: typeof checks }>>((acc, group) => {
+    const items = checks
+      .filter((check) => readinessDiagnosticGroupId(check) === group.id)
+      .sort((left, right) => left.severity.localeCompare(right.severity) || left.status.localeCompare(right.status) || readinessCheckName(left).localeCompare(readinessCheckName(right)));
+    if (items.length > 0) acc.push({ ...group, items });
+    return acc;
+  }, []);
 
   return (
     <TerminalPanel as="section" className="col-span-12">
@@ -1719,7 +1728,7 @@ const MarketDataReadinessPanel: React.FC<{
         action={data ? <TerminalChip variant={readinessStatusVariant(data.readinessStatus)}>{readinessStatusLabel(data.readinessStatus)}</TerminalChip> : <TerminalChip variant="neutral">待读取</TerminalChip>}
       />
       <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <TerminalNestedBlock className="px-3 py-3">
+        <TerminalNestedBlock className="p-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[10px] uppercase tracking-widest text-white/35">representative symbols</p>
@@ -1836,7 +1845,7 @@ const MarketDataReadinessPanel: React.FC<{
 const LoadingOperationsState: React.FC = () => (
   <TerminalPanel as="section" role="status" aria-label="正在读取市场数据源运维快照">
     <div className="flex items-center gap-3">
-      <Activity className="h-4 w-4 animate-pulse text-cyan-200" aria-hidden="true" />
+      <Activity className="size-4 animate-pulse text-cyan-200" aria-hidden="true" />
       <div>
         <p className="text-sm font-semibold text-white">正在读取只读运维快照</p>
         <p className="mt-1 text-xs text-white/46">不会触发外部 provider 调用，也不会变更缓存。</p>
@@ -1853,13 +1862,13 @@ const LoadingOperationsState: React.FC = () => (
 const EmptyErrorState: React.FC = () => (
   <TerminalPanel as="section">
     <div className="flex items-center gap-2 text-sm text-white/50">
-      <Activity className="h-4 w-4" aria-hidden="true" />
+      <Activity className="size-4" aria-hidden="true" />
       运维快照暂不可用
     </div>
   </TerminalPanel>
 );
 
-const MarketProviderOperationsPage: React.FC = () => {
+function useMarketProviderOperationsPageModel() {
   const { language } = useI18n();
   const surfaceFocus = productSetupSurfaceFromCurrentQuery();
   const [response, setResponse] = useState<MarketProviderOperationsResponse | null>(null);
@@ -1867,13 +1876,13 @@ const MarketProviderOperationsPage: React.FC = () => {
   const [readiness, setReadiness] = useState<MarketDataReadinessResponse | null>(null);
   const [selectedProviderKey, setSelectedProviderKey] = useState<string | null>(null);
   const [readinessSymbolsInput, setReadinessSymbolsInput] = useState('');
-  const [submittedReadinessSymbols, setSubmittedReadinessSymbols] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isMatrixLoading, setIsMatrixLoading] = useState(true);
   const [isReadinessLoading, setIsReadinessLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [matrixError, setMatrixError] = useState<ParsedApiError | null>(null);
   const [readinessError, setReadinessError] = useState<ParsedApiError | null>(null);
+  const submittedReadinessSymbolsRef = useRef('');
 
   useEffect(() => {
     let cancelled = false;
@@ -1915,30 +1924,45 @@ const MarketProviderOperationsPage: React.FC = () => {
     };
   }, []);
 
+  const loadReadiness = async (symbols?: string, cancelledRef?: { current: boolean }) => {
+    if (cancelledRef?.current) {
+      return;
+    }
+    const response = await marketApi.getDataReadiness(symbols ? { symbols } : undefined)
+      .then((payload) => ({ payload, error: null as ParsedApiError | null }))
+      .catch((apiError) => ({
+        payload: null,
+        error: { ...getParsedApiError(apiError), title: '读取本地行情就绪诊断失败' },
+      }));
+    if (!cancelledRef?.current) {
+      if (response.payload) {
+        setReadiness(response.payload);
+      } else if (response.error) {
+        setReadinessError(response.error);
+      }
+      setIsReadinessLoading(false);
+    }
+  };
+
   useEffect(() => {
-    let cancelled = false;
-    marketApi.getDataReadiness(submittedReadinessSymbols ? { symbols: submittedReadinessSymbols } : undefined)
-      .then((payload) => {
-        if (!cancelled) setReadiness(payload);
-      })
-      .catch((apiError) => {
-        if (!cancelled) {
-          const parsed = getParsedApiError(apiError);
-          setReadinessError({ ...parsed, title: '读取本地行情就绪诊断失败' });
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setIsReadinessLoading(false);
-      });
+    const cancelledRef = { current: false };
+    queueMicrotask(() => {
+      void loadReadiness(undefined, cancelledRef);
+    });
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
     };
-  }, [submittedReadinessSymbols]);
+  }, []);
 
   const submitReadinessSymbols = () => {
+    const nextSymbols = readinessSymbolsInput.trim();
+    if (nextSymbols === submittedReadinessSymbolsRef.current && !readinessError) {
+      return;
+    }
+    submittedReadinessSymbolsRef.current = nextSymbols;
     setReadinessError(null);
     setIsReadinessLoading(true);
-    setSubmittedReadinessSymbols(readinessSymbolsInput.trim());
+    void loadReadiness(nextSymbols);
   };
 
   const items = response?.items ?? EMPTY_PROVIDER_ITEMS;
@@ -1946,11 +1970,11 @@ const MarketProviderOperationsPage: React.FC = () => {
   const readinessChecks = readiness?.checks ?? EMPTY_READINESS_CHECKS;
   const cacheStates = response?.cacheStates ?? EMPTY_PROVIDER_CACHE_STATES;
   const eventRollups = response?.eventRollups ?? EMPTY_PROVIDER_EVENT_ROLLUPS;
-  const summary = useMemo(() => normalizeSummary(response?.summary ?? SUMMARY_DEFAULTS), [response?.summary]);
+  const summary = normalizeSummary(response?.summary ?? SUMMARY_DEFAULTS);
   const degradedCount = summary.fallbackCount + summary.partialCount + summary.unavailableCount + summary.errorCount + summary.failureCount;
-  const preferredProvider = useMemo(() => selectPreferredProvider(items), [items]);
+  const preferredProvider = selectPreferredProvider(items);
 
-  const effectiveSelectedProviderKey = useMemo(() => {
+  const effectiveSelectedProviderKey = (() => {
     if (!items.length) {
       return null;
     }
@@ -1958,45 +1982,89 @@ const MarketProviderOperationsPage: React.FC = () => {
       return selectedProviderKey;
     }
     return providerKey(preferredProvider || items[0]);
-  }, [items, preferredProvider, selectedProviderKey]);
+  })();
 
-  const selectedItem = useMemo(
-    () => items.find((item) => providerKey(item) === effectiveSelectedProviderKey) || preferredProvider || null,
-    [effectiveSelectedProviderKey, items, preferredProvider],
-  );
+  const selectedItem = items.find((item) => providerKey(item) === effectiveSelectedProviderKey) || preferredProvider || null;
 
-  const topException = useMemo(() => {
+  const topException = (() => {
     const withReason = eventRollups.find((rollup) => rollup.topReasons.length) || null;
     if (withReason) return sanitizeOperatorText(withReason.topReasons[0]);
     const withItemError = items.find((item) => item.errorSummary || item.warning) || null;
     return withItemError ? lastFailureLabel(withItemError) : '暂无数据';
-  }, [eventRollups, items]);
+  })();
 
-  const operatorMetrics = useMemo(() => {
-    const totalItems = summary.totalItems || items.length;
-    const healthValue = totalItems > 0 ? `${formatNumber(summary.liveCount, 0)}/${formatNumber(totalItems, 0)} 实时` : '暂无数据';
-    const circuitValue = totalItems > 0 ? (degradedCount > 0 ? `${formatNumber(degradedCount, 0)} 降级` : '正常') : '待统计';
-    const cacheValue = cacheStates.length > 0
-      ? cacheStates.some((state) => state.isRefreshing)
-        ? '刷新中'
-        : cacheStates.some((state) => state.isFresh === false)
-          ? `${formatNumber(cacheStates.filter((state) => state.isFresh === false).length, 0)} 过期`
-          : `${formatNumber(cacheStates.length, 0)} 正常`
-      : '待统计';
+  const totalItems = summary.totalItems || items.length;
+  const healthValue = totalItems > 0 ? `${formatNumber(summary.liveCount, 0)}/${formatNumber(totalItems, 0)} 实时` : '暂无数据';
+  const circuitValue = totalItems > 0 ? (degradedCount > 0 ? `${formatNumber(degradedCount, 0)} 降级` : '正常') : '待统计';
+  const cacheValue = cacheStates.length > 0
+    ? cacheStates.some((state) => state.isRefreshing)
+      ? '刷新中'
+      : cacheStates.some((state) => state.isFresh === false)
+        ? `${formatNumber(cacheStates.filter((state) => state.isFresh === false).length, 0)} 过期`
+        : `${formatNumber(cacheStates.length, 0)} 正常`
+    : '待统计';
 
-    return [
-      { label: '数据源健康', value: healthValue, subvalue: totalItems > 0 ? `共 ${formatNumber(totalItems, 0)} 个数据源` : '暂无 provider 快照' },
-      { label: '熔断状态', value: circuitValue, subvalue: degradedCount > 0 ? '优先核对降级与失败路径' : '当前未见降级聚合' },
-      { label: '失败率', value: safeRatio(summary.failureCount, summary.eventCount), subvalue: summary.eventCount > 0 ? `事件 ${formatNumber(summary.eventCount, 0)}` : '待统计' },
-      { label: '缓存状态', value: cacheValue, subvalue: cacheStates.length > 0 ? `快照 ${formatNumber(cacheStates.length, 0)}` : '暂无缓存快照' },
-      { label: '最近异常', value: topException, subvalue: eventRollups.length > 0 ? '保留异常可见性，但不暴露敏感内容' : '窗口内暂无异常' },
-    ];
-  }, [cacheStates, degradedCount, eventRollups.length, items.length, summary, topException]);
+  const operatorMetrics = [
+    { label: '数据源健康', value: healthValue, subvalue: totalItems > 0 ? `共 ${formatNumber(totalItems, 0)} 个数据源` : '暂无 provider 快照' },
+    { label: '熔断状态', value: circuitValue, subvalue: degradedCount > 0 ? '优先核对降级与失败路径' : '当前未见降级聚合' },
+    { label: '失败率', value: safeRatio(summary.failureCount, summary.eventCount), subvalue: summary.eventCount > 0 ? `事件 ${formatNumber(summary.eventCount, 0)}` : '待统计' },
+    { label: '缓存状态', value: cacheValue, subvalue: cacheStates.length > 0 ? `快照 ${formatNumber(cacheStates.length, 0)}` : '暂无缓存快照' },
+    { label: '最近异常', value: topException, subvalue: eventRollups.length > 0 ? '保留异常可见性，但不暴露敏感内容' : '窗口内暂无异常' },
+  ];
 
-  const topSummary = useMemo(
-    () => buildProviderOpsTopSummary(items, matrixRows, readinessChecks),
-    [items, matrixRows, readinessChecks],
-  );
+  const topSummary = buildProviderOpsTopSummary(items, matrixRows, readinessChecks);
+
+  return {
+    language,
+    surfaceFocus,
+    response,
+    matrixResponse,
+    readiness,
+    items,
+    effectiveSelectedProviderKey,
+    selectedItem,
+    eventRollups,
+    cacheStates,
+    isLoading,
+    isMatrixLoading,
+    isReadinessLoading,
+    error,
+    matrixError,
+    readinessError,
+    readinessSymbolsInput,
+    operatorMetrics,
+    topSummary,
+    setSelectedProviderKey,
+    setReadinessSymbolsInput,
+    submitReadinessSymbols,
+  };
+}
+
+const MarketProviderOperationsPage: React.FC = () => {
+  const {
+    language,
+    surfaceFocus,
+    response,
+    matrixResponse,
+    readiness,
+    items,
+    effectiveSelectedProviderKey,
+    selectedItem,
+    eventRollups,
+    cacheStates,
+    isLoading,
+    isMatrixLoading,
+    isReadinessLoading,
+    error,
+    matrixError,
+    readinessError,
+    readinessSymbolsInput,
+    operatorMetrics,
+    topSummary,
+    setSelectedProviderKey,
+    setReadinessSymbolsInput,
+    submitReadinessSymbols,
+  } = useMarketProviderOperationsPageModel();
 
   return (
     <div data-testid="market-provider-operations-page" className="market-provider-operations-page flex min-h-0 w-full flex-1 flex-col overflow-y-auto no-scrollbar text-white">

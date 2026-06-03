@@ -4,7 +4,7 @@
  * lighter ghost actions, and a calmer modal surface.
  */
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useReducer } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from './Button';
 import { useI18n } from '../../contexts/UiLanguageContext';
@@ -25,6 +25,55 @@ interface ConfirmDialogProps {
   onCancel: () => void;
 }
 
+type DialogUiState = 'open' | 'closed';
+
+type DialogState = {
+  isMounted: boolean;
+  uiState: DialogUiState;
+};
+
+type DialogAction =
+  | { type: 'mount' }
+  | { type: 'open' }
+  | { type: 'close' }
+  | { type: 'unmount' };
+
+function createDialogState(isOpen: boolean): DialogState {
+  return {
+    isMounted: isOpen,
+    uiState: isOpen ? 'open' : 'closed',
+  };
+}
+
+function dialogReducer(state: DialogState, action: DialogAction): DialogState {
+  if (action.type === 'mount') {
+    if (state.isMounted) {
+      return state;
+    }
+    return { isMounted: true, uiState: 'closed' };
+  }
+
+  if (action.type === 'open') {
+    if (!state.isMounted || state.uiState === 'open') {
+      return state;
+    }
+    return { ...state, uiState: 'open' };
+  }
+
+  if (action.type === 'close') {
+    if (!state.isMounted || state.uiState === 'closed') {
+      return state;
+    }
+    return { ...state, uiState: 'closed' };
+  }
+
+  if (!state.isMounted) {
+    return state;
+  }
+
+  return { isMounted: false, uiState: 'closed' };
+}
+
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   isOpen,
   title,
@@ -41,25 +90,44 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onCancel,
 }) => {
   const { t } = useI18n();
-  const [isMounted, setIsMounted] = useState(isOpen);
-  const [uiState, setUiState] = useState<'open' | 'closed'>(isOpen ? 'open' : 'closed');
+  const [{ isMounted, uiState }, dispatch] = useReducer(dialogReducer, isOpen, createDialogState);
+  const handleCancel = useEffectEvent(onCancel);
 
   useEffect(() => {
+    let mountFrame: number | null = null;
+    let openFrame: number | null = null;
+    let closeTimer: number | null = null;
+    const cancelFrame = typeof window.cancelAnimationFrame === 'function'
+      ? window.cancelAnimationFrame.bind(window)
+      : window.clearTimeout.bind(window);
+
     if (isOpen) {
-      window.requestAnimationFrame(() => {
-        setIsMounted(true);
-        window.requestAnimationFrame(() => setUiState('open'));
+      mountFrame = window.requestAnimationFrame(() => {
+        dispatch({ type: 'mount' });
+        openFrame = window.requestAnimationFrame(() => {
+          dispatch({ type: 'open' });
+        });
       });
-      return;
+    } else if (isMounted) {
+      queueMicrotask(() => {
+        dispatch({ type: 'close' });
+      });
+      closeTimer = window.setTimeout(() => {
+        dispatch({ type: 'unmount' });
+      }, 180);
     }
-    if (!isMounted) {
-      return;
-    }
-    queueMicrotask(() => setUiState('closed'));
-    const timer = window.setTimeout(() => {
-      setIsMounted(false);
-    }, 180);
-    return () => window.clearTimeout(timer);
+
+    return () => {
+      if (mountFrame !== null) {
+        cancelFrame(mountFrame);
+      }
+      if (openFrame !== null) {
+        cancelFrame(openFrame);
+      }
+      if (closeTimer !== null) {
+        window.clearTimeout(closeTimer);
+      }
+    };
   }, [isOpen, isMounted]);
 
   useEffect(() => {
@@ -69,7 +137,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onCancel();
+        handleCancel();
       }
     };
 
@@ -77,7 +145,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isMounted, onCancel]);
+  }, [isMounted]);
 
   if (!isMounted) return null;
   const normalizedTypedValue = String(confirmationValue || '');

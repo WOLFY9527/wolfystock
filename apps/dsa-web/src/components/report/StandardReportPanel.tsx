@@ -20,7 +20,8 @@ import type {
   StandardReportTableSection,
 } from '../../types/analysis';
 import { getSentimentColor, getSentimentLabel } from '../../types/analysis';
-import { Badge, Disclosure } from '../common';
+import { Badge } from '../common/Badge';
+import { Disclosure } from '../common/Disclosure';
 import { cn } from '../../utils/cn';
 import { ReportPriceChart, type ReportPriceChartFixtures } from './ReportPriceChart';
 import {
@@ -45,11 +46,11 @@ interface StandardReportPanelProps {
 }
 
 const solidCardClass =
-  'theme-panel-solid rounded-[var(--cohere-radius-signature)] px-4 py-4 md:px-5 md:py-5 xl:px-6 xl:py-6';
+  'theme-panel-solid rounded-[var(--cohere-radius-signature)] p-4 md:px-5 md:py-5 xl:px-6 xl:py-6';
 const chartLayerCardClass =
   'theme-panel-solid rounded-[var(--cohere-radius-signature)] py-4 md:py-5 xl:py-6';
 const glassCardClass =
-  'theme-panel-glass rounded-[var(--cohere-radius-signature)] px-4 py-4 md:px-5 md:py-5 xl:px-6 xl:py-6';
+  'theme-panel-glass rounded-[var(--cohere-radius-signature)] p-4 md:px-5 md:py-5 xl:px-6 xl:py-6';
 const subtlePanelClass = 'theme-panel-subtle rounded-[var(--cohere-radius-medium)] px-3.5 py-3';
 const rowGridClass = 'grid gap-4 lg:grid-cols-2';
 const primaryReportGridClass = 'grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] xl:items-start';
@@ -61,7 +62,7 @@ const localeColon = (): string => (isEnglishUi() ? ': ' : '：');
 const joinLabelValue = (label: string, value: string): string => {
   return `${label}${localeColon()}${value}`;
 };
-const renderGroupLabelClass = (): string => (
+const getGroupLabelClass = (): string => (
   isEnglishUi()
     ? 'text-[11px] font-normal uppercase tracking-[0.12em] text-muted-text'
     : 'text-[12px] font-normal tracking-[0.08em] text-muted-text'
@@ -274,8 +275,10 @@ const collectDedupedItems = ({
   const accepted: string[] = [];
   const localNormalized: string[] = [];
   const blockedNormalized = (blockedTexts || [])
-    .map((item) => normalizeComparableText(String(item || '').trim()))
-    .filter(Boolean);
+    .flatMap((item) => {
+      const normalized = normalizeComparableText(String(item || '').trim());
+      return normalized ? [normalized] : [];
+    });
   const globalSeen = seenKeys || new Set<string>();
 
   items.forEach((item) => {
@@ -422,7 +425,7 @@ const SectionHeader: React.FC<{
 }> = ({ eyebrow, title, description, level = 3 }) => (
   <div className="mb-4 space-y-2">
     {isMeaningfulText(eyebrow) ? (
-      <p className={cn(renderGroupLabelClass(), 'tracking-[0.16em]')}>
+      <p className={cn(getGroupLabelClass(), 'tracking-[0.16em]')}>
         {eyebrow}
       </p>
     ) : null}
@@ -463,7 +466,7 @@ const HeroStat: React.FC<{
   accent = 'default',
 }) => (
   <div className="theme-panel-subtle flex h-full flex-col rounded-[var(--cohere-radius-medium)] border border-[var(--theme-panel-subtle-border)] px-4 py-3.5">
-    <p className={renderGroupLabelClass()}>{label}</p>
+    <p className={getGroupLabelClass()}>{label}</p>
     <p
       className={cn(
         'mt-2 font-normal tracking-[-0.03em]',
@@ -515,7 +518,7 @@ const ExecutionListCard: React.FC<{
       <ul className="mt-3.5 space-y-2 text-sm leading-6 text-secondary-text">
         {items.map((item, index) => (
           <li key={`${item}-${index}`} className="flex items-start gap-2.5 border-b border-[var(--theme-panel-subtle-border)] pb-2 last:border-b-0 last:pb-0">
-            <span className="mt-2 inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent-primary)]" />
+            <span className="mt-2 inline-flex size-1.5 shrink-0 rounded-full bg-[var(--accent-primary)]" />
             <span className="min-w-0 flex-1">{item}</span>
           </li>
         ))}
@@ -564,29 +567,29 @@ const DenseTable: React.FC<{
               <div
                 key={`${field.label}-${index}`}
                 className={cn(
-                  'grid gap-3 px-3 py-3.5',
+                  'grid gap-3 p-3.5',
                   columnClass,
                 )}
               >
                 <div className="space-y-1">
-                  <p className={cn(renderGroupLabelClass(), 'md:hidden')}>{ui('report.field')}</p>
+                  <p className={cn(getGroupLabelClass(), 'md:hidden')}>{ui('report.field')}</p>
                   <p className="text-sm font-medium leading-6 text-foreground break-words">{localizeReportTermLabel(field.label, isEnglishUi() ? 'en' : 'zh')}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className={cn(renderGroupLabelClass(), 'md:hidden')}>{ui('report.value')}</p>
+                  <p className={cn(getGroupLabelClass(), 'md:hidden')}>{ui('report.value')}</p>
                   <p className={cn('text-sm leading-6 break-words', isMissingDisplayText(field.value) ? 'text-muted-text' : 'text-secondary-text')}>
                     {softenMissingValue(field.value)}
                   </p>
                 </div>
                 {showSource ? (
                   <div className="space-y-1">
-                    <p className={cn(renderGroupLabelClass(), 'md:hidden')}>{ui('report.source')}</p>
+                    <p className={cn(getGroupLabelClass(), 'md:hidden')}>{ui('report.source')}</p>
                     <p className="text-xs leading-5 text-muted-text break-words">{isMeaningfulMetaText(field.source) ? field.source : '—'}</p>
                   </div>
                 ) : null}
                 {showStatus ? (
                   <div className="space-y-1">
-                    <p className={cn(renderGroupLabelClass(), 'md:hidden')}>{ui('report.status')}</p>
+                    <p className={cn(getGroupLabelClass(), 'md:hidden')}>{ui('report.status')}</p>
                     <p className="text-xs leading-5 text-muted-text break-words">{isMeaningfulMetaText(field.status) ? field.status : '—'}</p>
                   </div>
                 ) : null}
@@ -607,7 +610,7 @@ const DenseTable: React.FC<{
 
 const CompactDecisionMetric: React.FC<{ label: string; value?: string | null }> = ({ label, value }) => (
   <div className="space-y-1">
-    <p className={renderGroupLabelClass()}>{label}</p>
+    <p className={getGroupLabelClass()}>{label}</p>
     <p className="text-sm leading-5 text-secondary-text">{softenMissingValue(value)}</p>
   </div>
 );
@@ -619,12 +622,12 @@ const DecisionExecutionPanel: React.FC<{
     <SectionHeader eyebrow={ui('report.executionRiskLayerTitle')} title={ui('report.tradeExecution')} />
 
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
-      <div className="theme-panel-subtle rounded-[1rem] px-4 py-4">
+      <div className="theme-panel-subtle rounded-[1rem] p-4">
         <div className="flex flex-wrap items-center gap-2.5">
           <Badge variant="info">{softenControlledValue(decisionPanel?.setupType)}</Badge>
           <Badge variant="history">{ui('report.confidenceLabel')} {softenControlledValue(decisionPanel?.confidence)}</Badge>
         </div>
-        <p className={cn('mt-3', renderGroupLabelClass())}>{ui('report.executionSummary')}</p>
+        <p className={cn('mt-3', getGroupLabelClass())}>{ui('report.executionSummary')}</p>
         <p className="mt-2 text-base font-semibold leading-7 text-foreground">
           {softenControlledValue(decisionPanel?.keyAction || decisionPanel?.noPositionAdvice)}
         </p>
@@ -636,8 +639,8 @@ const DecisionExecutionPanel: React.FC<{
         </div>
       </div>
 
-      <div className="theme-panel-subtle rounded-[1rem] px-4 py-4">
-        <p className={renderGroupLabelClass()}>{ui('report.structureSnapshot')}</p>
+      <div className="theme-panel-subtle rounded-[1rem] p-4">
+        <p className={getGroupLabelClass()}>{ui('report.structureSnapshot')}</p>
         <p className="mt-2 text-sm leading-6 text-secondary-text">
           {softenControlledValue(decisionPanel?.marketStructure)}
         </p>
@@ -1004,9 +1007,13 @@ const CoverageAuditPanel: React.FC<{
 }> = ({ coverageNotes, missingFieldAudit }) => {
   const buckets = missingFieldAudit.buckets.filter((bucket) => bucket.entries.length > 0);
   const missingFieldSemanticKeys = new Set(
-    buckets
-      .flatMap((bucket) => bucket.entries.map((entry) => coverageFieldSemanticKey(entry.field)))
-      .filter((token) => token.length > 0),
+    buckets.reduce<string[]>((acc, bucket) => {
+      for (const entry of bucket.entries) {
+        const token = coverageFieldSemanticKey(entry.field);
+        if (token.length > 0) acc.push(token);
+      }
+      return acc;
+    }, []),
   );
   const coverageGapItems = collectDedupedItems({
     items: coverageNotes?.coverageGaps || coverageNotes?.missingFieldNotes || [],
@@ -1052,7 +1059,7 @@ const CoverageAuditPanel: React.FC<{
           {buckets.map((bucket) => (
             <div key={bucket.category} className={subtlePanelClass}>
               <div className="flex items-center justify-between gap-2">
-                <p className={renderGroupLabelClass()}>
+                <p className={getGroupLabelClass()}>
                   {missingCategoryLabel(bucket.category)}
                 </p>
                 <Badge variant="warning">{bucket.entries.length}</Badge>
@@ -1112,9 +1119,9 @@ const BattlePlanPanel: React.FC<{
               className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-4"
             >
               {topGridItems.map((item, index) => (
-                <div key={`${item.label}-${index}`} className="theme-panel-subtle rounded-[1rem] px-3.5 py-3.5">
+                <div key={`${item.label}-${index}`} className="theme-panel-subtle rounded-[1rem] p-3.5">
                   <div className="flex items-center justify-between gap-3">
-                    <p className={renderGroupLabelClass()}>{localizeReportHeadingLabel(item.label, isEnglishUi() ? 'en' : 'zh')}</p>
+                    <p className={getGroupLabelClass()}>{localizeReportHeadingLabel(item.label, isEnglishUi() ? 'en' : 'zh')}</p>
                     <Badge variant={badgeTone(item.tone)} className="min-w-[3.75rem]">
                       {item.tone === 'buy'
                         ? ui('report.planBuy')
@@ -1136,7 +1143,7 @@ const BattlePlanPanel: React.FC<{
               {lowerNotes.map((item, index) => (
                 <div key={`${item.label}-${index}`} className="theme-panel-subtle rounded-[1rem] px-4 py-3.5">
                   <div className="flex items-center justify-between gap-3">
-                    <p className={renderGroupLabelClass()}>{localizeReportHeadingLabel(item.label, isEnglishUi() ? 'en' : 'zh')}</p>
+                    <p className={getGroupLabelClass()}>{localizeReportHeadingLabel(item.label, isEnglishUi() ? 'en' : 'zh')}</p>
                     <Badge variant={badgeTone(item.tone)} className="min-w-[3.75rem]">
                       {item.tone === 'position'
                         ? ui('report.planPosition')
@@ -1161,7 +1168,7 @@ const BattlePlanPanel: React.FC<{
         <div
           className="mt-4 rounded-[1rem] border border-[hsl(var(--accent-danger-hsl)/0.24)] bg-[hsl(var(--accent-danger-hsl)/0.12)] px-4 py-3"
         >
-          <p className={cn(renderGroupLabelClass(), 'text-[var(--accent-danger)]')}>{ui('report.reminders')}</p>
+          <p className={cn(getGroupLabelClass(), 'text-[var(--accent-danger)]')}>{ui('report.reminders')}</p>
           <ul className="mt-3 space-y-2 text-sm leading-6 text-[hsl(var(--accent-danger-hsl)/0.9)]">
             {battlePlan.warnings.map((warning, index) => (
               <li key={`${warning}-${index}`}>{warning}</li>
@@ -1179,7 +1186,7 @@ const MarketWarnings: React.FC<{ warnings: string[] }> = ({ warnings }) => {
   }
   return (
     <div className="rounded-[1rem] border border-[hsl(var(--accent-warning-hsl)/0.46)] bg-[hsl(var(--accent-warning-hsl)/0.14)] px-4 py-3">
-      <p className={cn(renderGroupLabelClass(), 'text-[var(--accent-warning)]')}>{ui('report.basisNotes')}</p>
+      <p className={cn(getGroupLabelClass(), 'text-[var(--accent-warning)]')}>{ui('report.basisNotes')}</p>
       <ul className="mt-3 space-y-2 text-sm leading-6 text-[hsl(var(--accent-warning-hsl)/0.9)]">
         {warnings.map((warning, index) => (
           <li key={`${warning}-${index}`}>{warning}</li>
@@ -1307,9 +1314,12 @@ const ExecutionPlanLayer: React.FC<{
   });
   const baseConditionsAndRiskControl = collectDedupedItems({
     items: [
-      ...checklistItems
-        .filter((item) => isPendingChecklistStatus(item.status))
-        .map((item) => localizeReportHeadingLabel(item.text, reportLanguage())),
+      ...checklistItems.reduce<string[]>((acc, item) => {
+        if (isPendingChecklistStatus(item.status)) {
+          acc.push(localizeReportHeadingLabel(item.text, reportLanguage()));
+        }
+        return acc;
+      }, []),
       isPresentValue(decisionPanel?.stopLoss) ? joinLabelValue(ui('report.stopLoss'), softenControlledValue(decisionPanel?.stopLoss)) : undefined,
       isPresentValue(decisionPanel?.targetOne || decisionPanel?.target) ? joinLabelValue(ui('report.targetOne'), softenControlledValue(decisionPanel?.targetOne || decisionPanel?.target)) : undefined,
       isPresentValue(decisionPanel?.targetTwo) ? joinLabelValue(ui('report.targetTwo'), softenControlledValue(decisionPanel?.targetTwo)) : undefined,

@@ -1,5 +1,5 @@
 import type React from 'react';
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { History, Lock, MoreHorizontal, Search, Star, Upload } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
@@ -7,17 +7,17 @@ import { publicAnalysisApi } from '../api/publicAnalysis';
 import { normalizeReportQuality } from '../api/reportNormalizer';
 import { stockEvidenceApi } from '../api/stockEvidence';
 import { withFallback } from '../api/withFallback';
-import {
-  DeepReportDrawer,
-  type SignalTone,
-} from '../components/home-bento';
+import { DeepReportDrawer } from '../components/home-bento/DeepReportDrawer';
+import type { SignalTone } from '../components/home-bento/theme';
 import type { HomeCandlestickChartContext } from '../components/home-bento/HomeCandlestickChart';
 import {
   CompactFilterBar,
   FixedRegionGrid,
   MetricStrip,
-} from '../components/linear';
-import { Button, ConfirmDialog, Drawer } from '../components/common';
+} from '../components/linear/LinearPrimitives';
+import { Button } from '../components/common/Button';
+import { ConfirmDialog } from '../components/common/ConfirmDialog';
+import { Drawer } from '../components/common/Drawer';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useUiPreferences } from '../contexts/UiPreferencesContext';
 import {
@@ -30,7 +30,7 @@ import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
 import type { AnalysisReport, DataQualityReport, DecisionTrace, HistoryItem, ReportQuality, StandardReport, StandardReportField, TaskProgressModule } from '../types/analysis';
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
 import type { StockEvidenceFundamentalsSummary } from '../types/stockEvidence';
-import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores';
+import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores/stockPoolStore';
 import {
   buildInstitutionalReportMarkdown,
   getCompanyDisplayName,
@@ -86,6 +86,25 @@ const HOME_CHART_FALLBACK_TIMEFRAMES = ['1D', '1W', '1M'];
 const HOME_CHART_FALLBACK_INDICATORS = ['MA5', 'MA10', 'MA20', 'MA60', 'VWAP'];
 const HOME_CHART_FALLBACK_GRID_ROWS = ['price-top', 'price-upper', 'price-mid', 'volume'];
 const HOME_CHART_IDLE_TIMEOUT_MS = 240;
+const LINEAR_EVENT_PLACEHOLDER_ROW_IDS = ['0', '1', '2'] as const;
+const EMPTY_PROGRESS_MODULES: TaskProgressModule[] = [];
+
+const HISTORY_TIMESTAMP_FMT_EN = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Shanghai',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+const HISTORY_TIMESTAMP_FMT_ZH = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
 
 function useDeferredHomeChartMount() {
   const [shouldRenderChart, setShouldRenderChart] = useState(false);
@@ -131,14 +150,13 @@ function HomeCandlestickChartFallback({
   statusLabel: string;
 }) {
   return (
-    <div
+    <output
       className={cn(
-        'home-chart-well min-w-0 rounded-[14px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-3 py-2.5 shadow-[var(--wolfy-shadow-panel)]',
+        'block home-chart-well min-w-0 rounded-[14px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-3 py-2.5 shadow-[var(--wolfy-shadow-panel)]',
         className,
       )}
       style={style}
       data-testid="home-candlestick-chart-fallback"
-      role="status"
       aria-live="polite"
       aria-atomic="true"
       aria-busy="true"
@@ -184,7 +202,7 @@ function HomeCandlestickChartFallback({
           </div>
         </div>
       </div>
-    </div>
+    </output>
   );
 }
 
@@ -683,10 +701,13 @@ function buildTraceSummary(trace: DecisionTrace | undefined, quality: ReportQual
     return qualitySummary || (isEnglish ? 'Source: unavailable' : '来源：未附');
   }
   const provenance = Array.from(new Set(
-    (trace.dataSources || [])
-      .filter((source) => !['missing', 'unknown'].includes(String(source.status || '').trim().toLowerCase()))
-      .map((source) => traceDataSourceLabel(source.name, locale))
-      .filter(Boolean),
+    (trace.dataSources || []).reduce<string[]>((acc, source) => {
+      if (!['missing', 'unknown'].includes(String(source.status || '').trim().toLowerCase())) {
+        const label = traceDataSourceLabel(source.name, locale);
+        if (label) acc.push(label);
+      }
+      return acc;
+    }, []),
   )).slice(0, 4);
   const sourceCount = trace.dataSources?.length || 0;
   const usedCount = (trace.dataSources || []).filter((source) => String(source.status || '').toLowerCase() === 'used').length;
@@ -900,19 +921,20 @@ function buildDataQualityPreview(report: DataQualityReport, locale: DashboardLoc
 }
 
 function uniqueCompactLabels(values: Array<string | undefined | null>, limit = 4): string[] {
-  return Array.from(new Set(values.map((item) => String(item || '').trim()).filter(Boolean))).slice(0, limit);
+  return Array.from(new Set(values.flatMap((item) => { const v = String(item || '').trim(); return v ? [v] : []; }))).slice(0, limit);
 }
 
 function buildAvailableDataCopy(report: DataQualityReport | undefined, trace: DecisionTrace | undefined, locale: DashboardLocale): string {
   const isEnglish = locale === 'en';
-  const traceSources = (trace?.dataSources || [])
-    .filter((item) => ['used', 'fallback'].includes(String(item.status || '').trim().toLowerCase()))
-    .map((item) => {
+  const traceSources = (trace?.dataSources || []).reduce<string[]>((acc, item) => {
+    if (['used', 'fallback'].includes(String(item.status || '').trim().toLowerCase())) {
       const label = userFacingDataSourceLabel(item.name, locale);
-      return String(item.status || '').trim().toLowerCase() === 'fallback'
+      acc.push(String(item.status || '').trim().toLowerCase() === 'fallback'
         ? (isEnglish ? `${label} fallback` : `${label}（备用数据）`)
-        : label;
-    });
+        : label);
+    }
+    return acc;
+  }, []);
   const completedSources = (report?.completedSources || []).map((item) => userFacingDataSourceLabel(item, locale));
   const available = uniqueCompactLabels([...traceSources, ...completedSources], 4);
   return available.length ? available.join(isEnglish ? ' / ' : '、') : (isEnglish ? 'No confirmed source yet' : '暂无已确认可用数据');
@@ -985,9 +1007,12 @@ function buildResearchFrameworkRows(
   const hasGaps = dataQualityReport ? hasDataQualityGaps(dataQualityReport) : true;
   const stanceLabel = resolveLinearStanceLabel(locale, dashboard.decision.signalLabel, dashboard.decision.signalTone);
   const supportSignals = uniqueCompactLabels(
-    dashboard.tech.signals
-      .filter((signal) => signal.tone === 'bullish' || /偏强|多头|上方|突破|扩张|bull|above|constructive|strong|expand/i.test(`${signal.label} ${signal.value} ${signal.details || ''}`))
-      .map((signal) => signal.label),
+    dashboard.tech.signals.reduce<string[]>((acc, signal) => {
+      if (signal.tone === 'bullish' || /偏强|多头|上方|突破|扩张|bull|above|constructive|strong|expand/i.test(`${signal.label} ${signal.value} ${signal.details || ''}`)) {
+        acc.push(signal.label);
+      }
+      return acc;
+    }, []),
     2,
   );
   const missingCopy = buildMissingDataCopy(dataQualityReport, locale);
@@ -1047,9 +1072,12 @@ function resolveJudgmentGateCopy(
 function buildSupportFactorCopy(locale: DashboardLocale, dashboard: DashboardPayload): string {
   const isEnglish = locale === 'en';
   const supportSignals = uniqueCompactLabels(
-    dashboard.tech.signals
-      .filter((signal) => signal.tone === 'bullish' || /偏强|多头|上方|突破|扩张|bull|above|constructive|strong|expand/i.test(`${signal.label} ${signal.value} ${signal.details || ''}`))
-      .map((signal) => signal.label),
+    dashboard.tech.signals.reduce<string[]>((acc, signal) => {
+      if (signal.tone === 'bullish' || /偏强|多头|上方|突破|扩张|bull|above|constructive|strong|expand/i.test(`${signal.label} ${signal.value} ${signal.details || ''}`)) {
+        acc.push(signal.label);
+      }
+      return acc;
+    }, []),
     3,
   );
   if (supportSignals.length) {
@@ -1111,7 +1139,7 @@ function HomeConclusionFirstConsole({
       data-first-screen-priority="conclusion-first"
       data-visual-role="conclusion-research-console"
     >
-      <div className="min-w-0 px-5 py-5 md:px-6">
+      <div className="min-w-0 p-5 md:px-6">
         <div
           className="mb-4 flex min-w-0 flex-wrap items-center gap-2"
           data-testid="home-research-judgment-gate"
@@ -1255,10 +1283,13 @@ function DecisionSourceDetailsPanel({
     ? (isEnglish ? 'Key data: limited' : '关键数据：受限')
     : (isEnglish ? 'Key data: usable' : '关键数据：可用');
   const sourceEntries = Array.from(new Set(
-    (trace?.dataSources || [])
-      .filter((item) => !['missing', 'unknown'].includes(String(item.status || '').trim().toLowerCase()))
-      .map((item) => traceDataSourceLabel(item.name, locale))
-      .filter(Boolean),
+    (trace?.dataSources || []).reduce<string[]>((acc, item) => {
+      if (!['missing', 'unknown'].includes(String(item.status || '').trim().toLowerCase())) {
+        const label = traceDataSourceLabel(item.name, locale);
+        if (label) acc.push(label);
+      }
+      return acc;
+    }, []),
   )).slice(0, 4);
   const missingCritical = !report
     ? (isEnglish ? 'No structured quality report' : '暂无结构化质量报告')
@@ -1272,10 +1303,13 @@ function DecisionSourceDetailsPanel({
   const enrichmentGaps = report ? summarizeEnrichmentGaps(report) : [];
   const enrichmentReasons = report ? summarizeEnrichmentReasons(report).map((item) => dataQualityReasonLabel(item, locale)) : [];
   const degradedSources = Array.from(new Set(
-    (trace?.dataSources || [])
-      .filter((item) => ['fallback', 'stale'].includes(String(item.status || '').trim().toLowerCase()))
-      .map((item) => traceDataSourceLabel(item.name, locale))
-      .filter(Boolean),
+    (trace?.dataSources || []).reduce<string[]>((acc, item) => {
+      if (['fallback', 'stale'].includes(String(item.status || '').trim().toLowerCase())) {
+        const label = traceDataSourceLabel(item.name, locale);
+        if (label) acc.push(label);
+      }
+      return acc;
+    }, []),
   )).slice(0, 4);
   const sourceText = sourceEntries.length
     ? sourceEntries.join(' / ')
@@ -1742,7 +1776,7 @@ function LinearObservationPanel({
   );
 
   return (
-    <div className="home-research-rail-body relative flex min-w-0 flex-col gap-3 px-0 py-0">
+    <div className="home-research-rail-body relative flex min-w-0 flex-col gap-3 p-0">
       <section
         className="home-research-rail-card min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-5 py-4"
         data-testid="home-bento-card-strategy"
@@ -2030,7 +2064,6 @@ function LinearEventsStrip({
 }) {
   const isEnglish = locale === 'en';
   const events = buildHomeCatalystEvents(report, locale);
-  const placeholderRows = Array.from({ length: 3 }, (_, index) => index);
   const pendingText = pendingDataText(locale);
 
   return (
@@ -2083,11 +2116,11 @@ function LinearEventsStrip({
           </div>
         )) : (
           <div data-testid="home-linear-events-empty">
-            {placeholderRows.map((index) => (
+            {LINEAR_EVENT_PLACEHOLDER_ROW_IDS.map((placeholderRowId) => (
               <div
-                key={`home-event-placeholder-${index}`}
+                key={`home-event-placeholder-${placeholderRowId}`}
                 className="home-research-event-row flex min-w-0 items-start justify-between gap-3 border-b border-[color:var(--wolfy-divider)] py-3 text-[color:var(--wolfy-text-muted)] last:border-b-0"
-                data-testid={`home-linear-event-placeholder-row-${index}`}
+                data-testid={`home-linear-event-placeholder-row-${placeholderRowId}`}
               >
                 <div className="min-w-0 flex-1">
                   <span className="block min-w-0 truncate">{pendingText}</span>
@@ -2507,7 +2540,7 @@ function resolveInsightBody(
   candidates: Array<string | undefined>,
   technicalFields?: StandardReportField[],
 ): string {
-  const normalizedCandidates = candidates.map((value) => String(value || '').trim()).filter(Boolean);
+  const normalizedCandidates = candidates.flatMap((value) => { const v = String(value || '').trim(); return v ? [v] : []; });
   const primary = normalizedCandidates.find((value) => value !== EMPTY_FIELD_VALUE && !isGenericInsightText(value));
   if (!primary) {
     return buildTechnicalInsightFallback(locale, tone, technicalFields);
@@ -3194,7 +3227,7 @@ function readHomePriceContextHint(report: HomePriceContextReport, stockCode: str
     readObjectField(standardReport, ['summaryPanel', 'priceContextNote']),
     readObjectField(standardReport, ['market', 'currency']),
   ];
-  return values.map((value) => String(value || '').trim()).filter(Boolean).join(' ');
+  return values.flatMap((value) => { const v = String(value || '').trim(); return v ? [v] : []; }).join(' ');
 }
 
 function resolveHomePriceDisplayContext(report: HomePriceContextReport, stockCode: string): HomePriceDisplayContext {
@@ -3265,8 +3298,11 @@ function formatHomePriceLevelValue(
   const isRange = matches.length > 1 || /[-~至到–—]/.test(priceSegment);
   const numbers = matches
     .slice(0, isRange ? 2 : 1)
-    .map((item) => Number.parseFloat(item.replace(/,/g, '')))
-    .filter((item) => Number.isFinite(item));
+    .reduce<number[]>((acc, item) => {
+      const n = Number.parseFloat(item.replace(/,/g, ''));
+      if (Number.isFinite(n)) acc.push(n);
+      return acc;
+    }, []);
   if (!numbers.length) {
     return value;
   }
@@ -3325,14 +3361,7 @@ function formatHistoryTimestamp(value?: string, locale: DashboardLocale = 'zh'):
     return text;
   }
 
-  const parts = new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(date);
+  const parts = (locale === 'en' ? HISTORY_TIMESTAMP_FMT_EN : HISTORY_TIMESTAMP_FMT_ZH).formatToParts(date);
   const get = (type: string) => parts.find((part) => part.type === type)?.value || '';
   return `${get('month')}/${get('day')} ${get('hour')}:${get('minute')}`;
 }
@@ -3532,11 +3561,21 @@ function localizeNarrativeText(locale: DashboardLocale, raw: string | undefined,
   return fallback;
 }
 
+function containsNormalizedText(haystack: string, needle: string): boolean {
+  return needle === '' || haystack.split(needle).length > 1;
+}
+
 function findStandardField(fields: StandardReportField[] | undefined, aliases: string[]): StandardReportField | undefined {
-  return aliases
-    .map((alias) => normalizeDetailKey(alias))
-    .flatMap((aliasKey) => (fields || []).filter((field) => normalizeDetailKey(field.label).includes(aliasKey) || aliasKey.includes(normalizeDetailKey(field.label))))
-    .find((field) => field?.label);
+  for (const alias of aliases) {
+    const aliasKey = normalizeDetailKey(alias);
+    for (const field of fields || []) {
+      const fieldLabelKey = normalizeDetailKey(field.label);
+      if ((containsNormalizedText(fieldLabelKey, aliasKey) || containsNormalizedText(aliasKey, fieldLabelKey)) && field?.label) {
+        return field;
+      }
+    }
+  }
+  return undefined;
 }
 
 function findFieldNumber(fields: StandardReportField[] | undefined, label: string): number | null {
@@ -4401,7 +4440,7 @@ function buildTimelineLeadCopy(locale: DashboardLocale, activeDetail?: string, m
 function InPlaceDecisionSkeleton({
   locale,
   ticker,
-  progressModules = [],
+  progressModules = EMPTY_PROGRESS_MODULES,
   message,
   progress,
 }: {
@@ -4419,10 +4458,7 @@ function InPlaceDecisionSkeleton({
     return () => window.clearInterval(timer);
   }, []);
 
-  const timelineStages = useMemo(
-    () => buildTimelineProgressState(locale, progressModules, message, progress, phaseTick),
-    [locale, progressModules, message, progress, phaseTick],
-  );
+  const timelineStages = buildTimelineProgressState(locale, progressModules, message, progress, phaseTick);
   const activeStage = timelineStages.find((stage) => stage.status === 'running') || timelineStages[0];
   const leadCopy = buildTimelineLeadCopy(locale, activeStage?.detail, message);
 
@@ -4477,7 +4513,7 @@ function InPlaceDecisionSkeleton({
                   className="relative grid grid-cols-[1.5rem_minmax(0,1fr)_4.5rem] items-start gap-3 border-b border-white/[0.06] py-2 last:border-b-0"
                   data-testid={`home-bento-progress-stage-${stage.key}`}
                 >
-                  <span className={`mt-1.5 h-2 w-2 rounded-full ${timelineDotTone(stage.status)}`} />
+                  <span className={`mt-1.5 size-2 rounded-full ${timelineDotTone(stage.status)}`} />
                   <div className="min-w-0">
                     <p className={cn('truncate text-sm font-medium', isRunning ? 'text-white' : 'text-white/58')}>{stage.label}</p>
                     {stage.detail ? <p className="mt-1 truncate text-xs text-white/40">{stage.detail}</p> : null}
@@ -4529,7 +4565,7 @@ function InPlaceListSkeleton({
 
   return (
     <section
-      className="min-w-0 rounded-lg border border-white/[0.07] bg-white/[0.018] px-3 py-3"
+      className="min-w-0 rounded-lg border border-white/[0.07] bg-white/[0.018] p-3"
       data-testid={kind === 'tech' ? 'home-bento-card-tech' : 'home-bento-card-fundamentals'}
     >
       <p className="text-sm font-semibold text-white">{title}</p>
@@ -4557,7 +4593,7 @@ function GuestPaywallOverlay({ locale, registrationPath }: { locale: DashboardLo
       className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-[rgba(8,12,24,0.58)] px-6 text-center backdrop-blur-[8px]"
       data-testid="guest-home-frosted-lock"
     >
-      <Lock className="h-7 w-7 text-white/85 drop-shadow-[0_0_14px_rgba(99,102,241,0.55)]" />
+      <Lock className="size-7 text-white/85 drop-shadow-[0_0_14px_rgba(99,102,241,0.55)]" />
       <p className="mt-4 max-w-xs text-sm font-medium leading-6 text-white/80">
         解锁完整 AI 量化策略与深度技术形态解析
       </p>
@@ -4610,33 +4646,48 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const { language, t } = useI18n();
   const shouldRenderHomeChart = useDeferredHomeChartMount();
   const locale: DashboardLocale = language === 'en' ? 'en' : 'zh';
+  const routeTaskId = searchParams.get('task_id') || searchParams.get('taskId') || null;
+  const routeSymbol = normalizeTickerQuery(searchParams.get('symbol') || undefined);
+  const routeSource = searchParams.get('source') || null;
+  const traceFixtureReport = (!isGuest && (import.meta.env.DEV || import.meta.env.MODE === 'test') && searchParams.get('fixture') === 'analysis-trace')
+    ? buildDecisionTraceFixtureReport()
+    : null;
+  const shouldOpenTraceDrawerOnLoad = Boolean(traceFixtureReport && searchParams.get('trace') === 'open');
+  const shouldOpenFullReportDrawerOnLoad = Boolean(traceFixtureReport && searchParams.get('report') === 'open');
   const [activeDrawer, setActiveDrawer] = useState<DetailDrawerKey | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTicker, setActiveTicker] = useState<string | null>(null);
-  const [pendingAnalysisTicker, setPendingAnalysisTicker] = useState<string | null>(null);
-  const [hasHydratedInitialTicker, setHasHydratedInitialTicker] = useState(false);
-  const [isDashboardLoading, setDashboardLoading] = useState(false);
+  const [dashboardTaskState, setDashboardTaskState] = useState<{
+    activeTicker: string | null;
+    pendingAnalysisTicker: string | null;
+    isDashboardLoading: boolean;
+  }>({
+    activeTicker: null,
+    pendingAnalysisTicker: null,
+    isDashboardLoading: false,
+  });
+  const { activeTicker, pendingAnalysisTicker, isDashboardLoading } = dashboardTaskState;
+  const patchDashboardTaskState = useCallback((patch: Partial<typeof dashboardTaskState>) => {
+    setDashboardTaskState((current) => {
+      const next = { ...current, ...patch };
+      return next.activeTicker === current.activeTicker
+        && next.pendingAnalysisTicker === current.pendingAnalysisTicker
+        && next.isDashboardLoading === current.isDashboardLoading
+        ? current
+        : next;
+    });
+  }, []);
   const [statusToast, setStatusToast] = useState<{ message: string; tone: 'error' | 'warning' } | null>(null);
   const [guestPreview, setGuestPreview] = useState<PublicAnalysisPreviewResponse | null>(null);
   const [guestError, setGuestError] = useState<ParsedApiError | null>(null);
   const [guestFallbackNotice, setGuestFallbackNotice] = useState<string | null>(null);
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<PendingHistoryDelete | null>(null);
-  const [hydratedRouteTaskId, setHydratedRouteTaskId] = useState<string | null>(null);
-  const [isTraceDrawerOpen, setTraceDrawerOpen] = useState(false);
-  const [isFullReportDrawerOpen, setFullReportDrawerOpen] = useState(false);
+  const hydratedRouteTaskIdRef = useRef<string | null>(null);
+  const [isTraceDrawerOpen, setTraceDrawerOpen] = useState(shouldOpenTraceDrawerOnLoad);
+  const [isFullReportDrawerOpen, setFullReportDrawerOpen] = useState(shouldOpenFullReportDrawerOnLoad);
   const [mainCopyState, setMainCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [homeChartContext, setHomeChartContext] = useState<HomeCandlestickChartContext | null>(null);
   const [stockEvidenceFundamentals, setStockEvidenceFundamentals] = useState<StockEvidenceFundamentalsSummary | null>(null);
   const [isStockEvidenceLoading, setStockEvidenceLoading] = useState(false);
-  const routeTaskId = searchParams.get('task_id') || searchParams.get('taskId') || null;
-  const routeSymbol = normalizeTickerQuery(searchParams.get('symbol') || undefined);
-  const routeSource = searchParams.get('source') || null;
-  const traceFixtureReport = useMemo(
-    () => (!isGuest && (import.meta.env.DEV || import.meta.env.MODE === 'test') && searchParams.get('fixture') === 'analysis-trace')
-      ? buildDecisionTraceFixtureReport()
-      : null,
-    [isGuest, searchParams],
-  );
   const isAnalyzing = useStockPoolStore((state) => state.isAnalyzing);
   const historyItems = useStockPoolStore((state) => state.historyItems);
   const selectedReport = useStockPoolStore((state) => state.selectedReport);
@@ -4656,19 +4707,17 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const syncTaskUpdated = useStockPoolStore((state) => state.syncTaskUpdated);
   const syncTaskFailed = useStockPoolStore((state) => state.syncTaskFailed);
   const refreshTaskProgress = useStockPoolStore((state) => state.refreshTaskProgress);
-  const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setHistoryDrawerOpen(true));
+  const {
+    ref: openHistoryDrawerButtonRef,
+    onClick: handleOpenHistoryDrawerClick,
+    onPointerUp: handleOpenHistoryDrawerPointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(() => setHistoryDrawerOpen(true));
   const registrationPath = '/login?mode=create&redirect=%2F';
   const homeChartLoadingLabel = language === 'en' ? 'Loading home price chart' : '正在加载首页价格图表';
-  const recentHistoryItems = useMemo(
-    () => historyItems.filter((item) => !item.isTest).slice(0, 8),
-    [historyItems],
-  );
-  const hasRunningTasks = useMemo(
-    () => activeTasks.some((task) => task.status === 'pending' || task.status === 'processing'),
-    [activeTasks],
-  );
+  const recentHistoryItems = historyItems.filter((item) => !item.isTest).slice(0, 8);
+  const hasRunningTasks = activeTasks.some((task) => task.status === 'pending' || task.status === 'processing');
   const selectedTicker = normalizeTickerQuery(selectedReport?.meta.stockCode);
-  const completedTaskReport = useMemo(() => {
+  const completedTaskReport = (() => {
     if (routeTaskId) {
       return activeTasks.find(
         (task) => task.taskId === routeTaskId && task.status === 'completed' && task.result?.report,
@@ -4681,8 +4730,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     return activeTasks.find(
       (task) => normalizeTickerQuery(task.stockCode) === taskTicker && task.status === 'completed' && task.result?.report,
     )?.result?.report || null;
-  }, [activeTasks, activeTicker, pendingAnalysisTicker, routeTaskId]);
-  const focusedTask = useMemo(() => {
+  })();
+  const focusedTask = (() => {
     if (routeTaskId) {
       const matchedById = activeTasks.find((task) => task.taskId === routeTaskId);
       if (matchedById) {
@@ -4697,7 +4746,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       }
     }
     return activeTasks[0] || null;
-  }, [activeTasks, activeTicker, pendingAnalysisTicker, routeTaskId]);
+  })();
   const isTaskAnalyzing = Boolean(
     (pendingAnalysisTicker || routeTaskId)
     && focusedTask
@@ -4706,7 +4755,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const isGuestAnalyzing = isGuest && isDashboardLoading;
   const isHomeAnalyzing = isGuestAnalyzing || (!isGuest && (isAnalyzing || isTaskAnalyzing || Boolean(pendingAnalysisTicker && isDashboardLoading)));
   const isBusy = isHomeAnalyzing || isDashboardLoading;
-  const dashboardData = useMemo<DashboardPayload>(() => {
+  const dashboardData: DashboardPayload = (() => {
     if (traceFixtureReport) {
       return buildDashboardFromReport(locale, traceFixtureReport);
     }
@@ -4736,8 +4785,8 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
 
     return buildInPlacePlaceholderDashboard(locale, effectiveTicker);
-  }, [activeTicker, completedTaskReport, guestPreview, isGuest, locale, pendingAnalysisTicker, recentHistoryItems, routeSymbol, selectedReport, selectedTicker, traceFixtureReport]);
-  const activeTraceReport = useMemo<AnalysisReport | null>(() => {
+  })();
+  const activeTraceReport: AnalysisReport | null = (() => {
     if (traceFixtureReport) {
       return traceFixtureReport;
     }
@@ -4754,49 +4803,39 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       return selectedReport;
     }
     return completedTaskReport || selectedReport || null;
-  }, [activeTicker, completedTaskReport, routeSymbol, selectedReport, selectedTicker, traceFixtureReport]);
+  })();
   const copy = dashboardData;
-  const standbyCopy = useMemo(() => (
-    locale === 'en'
-      ? {
-        analyzeButton: 'Analyze',
-        omnibarPlaceholder: 'Enter a valid ticker...',
-      }
-      : {
-        analyzeButton: '分析',
-        omnibarPlaceholder: '输入有效股票代码...',
-      }
-  ), [locale]);
-  const activeDrawerPayload = activeDrawer && copy ? buildDrawerPayload(locale, copy, activeDrawer) : null;
-  const activeDecisionTrace = useMemo(() => (activeTraceReport ? getDecisionTrace(activeTraceReport) : undefined), [activeTraceReport]);
-  const activeReportQuality = useMemo(() => getReportQuality(activeTraceReport), [activeTraceReport]);
-  const activeDataQualityReport = useMemo(() => getDataQualityReport(activeTraceReport), [activeTraceReport]);
-  const sourceSummary = useMemo(
-    () => buildTraceSummary(activeDecisionTrace, activeReportQuality, locale),
-    [activeDecisionTrace, activeReportQuality, locale],
-  );
-  const hasActiveTraceReport = Boolean(activeTraceReport);
-  const activeEvidenceTicker = useMemo(() => {
-    if (isGuest) {
-      return '';
+  const standbyCopy = locale === 'en'
+    ? {
+      analyzeButton: 'Analyze',
+      omnibarPlaceholder: 'Enter a valid ticker...',
     }
-    const candidate = normalizeTickerQuery(
+    : {
+      analyzeButton: '分析',
+      omnibarPlaceholder: '输入有效股票代码...',
+    };
+  const activeDrawerPayload = activeDrawer && copy ? buildDrawerPayload(locale, copy, activeDrawer) : null;
+  const activeDecisionTrace = activeTraceReport ? getDecisionTrace(activeTraceReport) : undefined;
+  const activeReportQuality = getReportQuality(activeTraceReport);
+  const activeDataQualityReport = getDataQualityReport(activeTraceReport);
+  const sourceSummary = buildTraceSummary(activeDecisionTrace, activeReportQuality, locale);
+  const hasActiveTraceReport = Boolean(activeTraceReport);
+  const activeEvidenceCandidate = isGuest
+    ? ''
+    : normalizeTickerQuery(
       activeTraceReport?.meta.stockCode
       || routeSymbol
       || activeTicker
       || selectedTicker
       || recentHistoryItems[0]?.stockCode,
     );
-    return TICKER_FORMAT_RE.test(candidate) ? candidate : '';
-  }, [activeTicker, activeTraceReport?.meta.stockCode, isGuest, recentHistoryItems, routeSymbol, selectedTicker]);
-  const reanalysisTicker = useMemo(() => {
-    const reportTicker = normalizeTickerQuery(activeTraceReport?.meta.stockCode);
-    const candidate = reportTicker || (hasActiveTraceReport ? '' : normalizeTickerQuery(dashboardData.ticker));
-    return TICKER_FORMAT_RE.test(candidate) ? candidate : '';
-  }, [activeTraceReport?.meta.stockCode, dashboardData.ticker, hasActiveTraceReport]);
+  const activeEvidenceTicker = TICKER_FORMAT_RE.test(activeEvidenceCandidate) ? activeEvidenceCandidate : '';
+  const reportTicker = normalizeTickerQuery(activeTraceReport?.meta.stockCode);
+  const reanalysisCandidate = reportTicker || (hasActiveTraceReport ? '' : normalizeTickerQuery(dashboardData.ticker));
+  const reanalysisTicker = TICKER_FORMAT_RE.test(reanalysisCandidate) ? reanalysisCandidate : '';
   const shouldRenderDashboardPanels = !isGuest || Boolean(guestPreview || pendingAnalysisTicker);
   const guestPaywall = isGuest ? <GuestPaywallOverlay locale={locale} registrationPath={registrationPath} /> : null;
-  const deleteCopy = useMemo(() => ({
+  const deleteCopy = {
     title: t('home.deleteTitle'),
     single: t('home.deleteSingle'),
     multiple: (count: number) => t('home.deleteMultiple', { count }),
@@ -4806,7 +4845,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     clearVisible: t('home.deleteAll'),
     deleteOne: t('home.deleteOne'),
     visibleCount: t('home.visibleCount'),
-  }), [t]);
+  };
 
   useEffect(() => {
     document.title = copy.documentTitle;
@@ -4814,14 +4853,19 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
 
   useEffect(() => {
     if (isGuest || !activeEvidenceTicker) {
-      setStockEvidenceFundamentals(null);
-      setStockEvidenceLoading(false);
+      queueMicrotask(() => {
+        setStockEvidenceFundamentals(null);
+        setStockEvidenceLoading(false);
+      });
       return;
     }
 
     let isCancelled = false;
-    setStockEvidenceLoading(true);
-    setStockEvidenceFundamentals(null);
+    queueMicrotask(() => {
+      if (isCancelled) return;
+      setStockEvidenceLoading(true);
+      setStockEvidenceFundamentals(null);
+    });
 
     void stockEvidenceApi.getStockEvidence(activeEvidenceTicker)
       .then((response) => {
@@ -4847,18 +4891,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       isCancelled = true;
     };
   }, [activeEvidenceTicker, isGuest]);
-
-  useEffect(() => {
-    if (traceFixtureReport && searchParams.get('trace') === 'open' && !isTraceDrawerOpen) {
-      setTraceDrawerOpen(true);
-    }
-  }, [isTraceDrawerOpen, searchParams, traceFixtureReport]);
-
-  useEffect(() => {
-    if (traceFixtureReport && searchParams.get('report') === 'open' && !isFullReportDrawerOpen) {
-      setFullReportDrawerOpen(true);
-    }
-  }, [isFullReportDrawerOpen, searchParams, traceFixtureReport]);
 
   useEffect(() => {
     if (mainCopyState === 'idle') {
@@ -4887,28 +4919,38 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     if (isGuest || !routeTaskId || !routeSymbol || routeSource !== 'watchlist') {
       return;
     }
-    if (hydratedRouteTaskId === routeTaskId) {
+    if (hydratedRouteTaskIdRef.current === routeTaskId) {
       return;
     }
-    setActiveTicker(routeSymbol);
-    setPendingAnalysisTicker(routeSymbol);
-    setDashboardLoading(true);
-    setHasHydratedInitialTicker(true);
-    setHydratedRouteTaskId(routeTaskId);
-    syncTaskCreated({
-      taskId: routeTaskId,
-      stockCode: routeSymbol,
-      status: 'pending',
-      progress: 0,
-      message: locale === 'en' ? `WOLFY AI analyzing ${routeSymbol}...` : `WOLFY AI 正在分析 ${routeSymbol}...`,
-      reportType: 'detailed',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      originalQuery: routeSymbol,
-      selectionSource: 'manual',
+    let cancelled = false;
+    hydratedRouteTaskIdRef.current = routeTaskId;
+    queueMicrotask(() => {
+      if (cancelled) {
+        return;
+      }
+      patchDashboardTaskState({
+        activeTicker: routeSymbol,
+        pendingAnalysisTicker: routeSymbol,
+        isDashboardLoading: true,
+      });
+      syncTaskCreated({
+        taskId: routeTaskId,
+        stockCode: routeSymbol,
+        status: 'pending',
+        progress: 0,
+        message: locale === 'en' ? `WOLFY AI analyzing ${routeSymbol}...` : `WOLFY AI 正在分析 ${routeSymbol}...`,
+        reportType: 'detailed',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        originalQuery: routeSymbol,
+        selectionSource: 'manual',
+      });
+      void refreshTaskProgress(routeTaskId);
     });
-    void refreshTaskProgress(routeTaskId);
-  }, [hydratedRouteTaskId, isGuest, locale, refreshTaskProgress, routeSource, routeSymbol, routeTaskId, syncTaskCreated]);
+    return () => {
+      cancelled = true;
+    };
+  }, [isGuest, locale, patchDashboardTaskState, refreshTaskProgress, routeSource, routeSymbol, routeTaskId, syncTaskCreated]);
 
   const focusedTaskId = focusedTask?.taskId;
   const focusedTaskStatus = focusedTask?.status;
@@ -4932,47 +4974,6 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   }, [focusedTaskId, focusedTaskStatus, refreshTaskProgress]);
 
   useEffect(() => {
-    if (hasHydratedInitialTicker) {
-      return;
-    }
-    if (pendingAnalysisTicker) {
-      return;
-    }
-
-    if (isGuest) {
-      return;
-    }
-
-    const nextTicker = normalizeTickerQuery(selectedReport?.meta.stockCode) || normalizeTickerQuery(recentHistoryItems[0]?.stockCode) || DEFAULT_HOME_TICKER;
-
-    const frame = window.requestAnimationFrame(() => {
-      setActiveTicker(nextTicker);
-      setHasHydratedInitialTicker(true);
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [hasHydratedInitialTicker, isGuest, pendingAnalysisTicker, recentHistoryItems, selectedReport?.meta.stockCode]);
-
-  useEffect(() => {
-    if (isGuest || pendingAnalysisTicker) {
-      return;
-    }
-
-    if (selectedTicker && !activeTicker) {
-      setActiveTicker(selectedTicker);
-      return;
-    }
-
-  }, [activeTicker, isGuest, pendingAnalysisTicker, selectedTicker]);
-
-  useEffect(() => {
-    if (!routeTaskId && pendingAnalysisTicker && selectedTicker === pendingAnalysisTicker) {
-      setPendingAnalysisTicker(null);
-      setDashboardLoading(false);
-    }
-  }, [pendingAnalysisTicker, routeTaskId, selectedTicker]);
-
-  useEffect(() => {
     if (!statusToast) {
       return undefined;
     }
@@ -4994,19 +4995,39 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       : activeTasks.find(
         (task) => normalizeTickerQuery(task.stockCode) === pendingAnalysisTicker && task.status === 'completed' && task.result?.report,
       );
-    if (!completedTask) {
+    const completedTicker = completedTask
+      ? (normalizeTickerQuery(completedTask.stockCode) || pendingAnalysisTicker || routeSymbol)
+      : (!routeTaskId && pendingAnalysisTicker && selectedTicker === pendingAnalysisTicker ? pendingAnalysisTicker : null);
+    if (!completedTicker) {
       return;
     }
 
-    const completedTicker = normalizeTickerQuery(completedTask.stockCode) || pendingAnalysisTicker || routeSymbol;
-    setActiveTicker(completedTicker);
-    setPendingAnalysisTicker(null);
-    setDashboardLoading(false);
-    void refreshHistory(true);
-    if (completedTicker) {
-      void focusLatestHistoryForStock(completedTicker);
-    }
-  }, [activeTasks, focusLatestHistoryForStock, pendingAnalysisTicker, refreshHistory, routeSymbol, routeTaskId]);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) {
+        return;
+      }
+      patchDashboardTaskState(
+        completedTask
+          ? {
+            activeTicker: completedTicker,
+            pendingAnalysisTicker: null,
+            isDashboardLoading: false,
+          }
+          : {
+            pendingAnalysisTicker: null,
+            isDashboardLoading: false,
+          },
+      );
+      if (completedTask) {
+        void refreshHistory(true);
+        void focusLatestHistoryForStock(completedTicker);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTasks, focusLatestHistoryForStock, patchDashboardTaskState, pendingAnalysisTicker, refreshHistory, routeSymbol, routeTaskId, selectedTicker]);
 
   const handleAnalyze = async (tickerOverride?: string) => {
     const rawQuery = (tickerOverride ?? searchQuery).trim();
@@ -5024,17 +5045,17 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
 
     setStatusToast(null);
-    setDashboardLoading(true);
-    setActiveTicker(normalizedTicker);
-    setPendingAnalysisTicker(normalizedTicker);
-    setHasHydratedInitialTicker(true);
+    patchDashboardTaskState({
+      activeTicker: normalizedTicker,
+      pendingAnalysisTicker: normalizedTicker,
+      isDashboardLoading: true,
+    });
     setSearchQuery('');
 
     if (isGuest) {
       setGuestError(null);
       setGuestFallbackNotice(null);
-      try {
-        const response = await withFallback(
+      const previewResult = await withFallback(
           () => publicAnalysisApi.preview({
             stockCode: normalizedTicker,
             stockName: undefined,
@@ -5043,57 +5064,75 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           {
             fallback: () => createPublicAnalysisFallbackPreview(normalizedTicker, language),
           },
-        );
-        setGuestPreview(response.data);
-        setPendingAnalysisTicker(null);
-        if (response.fallback) {
+        )
+        .then((response) => ({ response, error: null as unknown }))
+        .catch((error) => ({ response: null, error }));
+      if (previewResult.response) {
+        setGuestPreview(previewResult.response.data);
+        patchDashboardTaskState({
+          pendingAnalysisTicker: null,
+        });
+        if (previewResult.response.fallback) {
           setGuestFallbackNotice(language === 'en'
             ? 'Live preview is temporarily unavailable. Loaded a local snapshot instead.'
             : '实时预览暂时不可用，已切换到本地快照。');
         }
-      } catch (err) {
-        setGuestError(getParsedApiError(err));
-        setPendingAnalysisTicker(null);
-      } finally {
-        setDashboardLoading(false);
+      } else if (previewResult.error) {
+        setGuestError(getParsedApiError(previewResult.error));
+        patchDashboardTaskState({
+          pendingAnalysisTicker: null,
+        });
       }
+      patchDashboardTaskState({
+        isDashboardLoading: false,
+      });
       return;
     }
 
     clearError();
 
-    try {
-      const result = await submitAnalysis({
+    const submitResult = await submitAnalysis({
         stockCode: normalizedTicker,
         originalQuery: normalizedTicker,
         selectionSource: 'manual',
+      })
+      .then((result) => ({ result, error: null as unknown }))
+      .catch((error) => ({ result: null, error }));
+
+    if (submitResult.result?.ok) {
+      patchDashboardTaskState({
+        activeTicker: submitResult.result.stockCode,
+        isDashboardLoading: false,
       });
+      void refreshHistory(true);
+      return;
+    }
 
-      if (result.ok) {
-        setActiveTicker(result.stockCode);
-        void refreshHistory(true);
-        return;
-      }
+    if (submitResult.result?.duplicate) {
+      patchDashboardTaskState({
+        isDashboardLoading: false,
+      });
+      return;
+    }
 
-      if (result.duplicate) {
-        return;
-      }
-
-      setPendingAnalysisTicker(null);
+    patchDashboardTaskState({
+      pendingAnalysisTicker: null,
+    });
+    if (submitResult.result) {
       setStatusToast({
-        message: result.error?.message || (locale === 'en' ? 'LLM analysis failed. Please try again later.' : 'LLM 分析失败，请稍后重试'),
+        message: submitResult.result.error?.message || (locale === 'en' ? 'LLM analysis failed. Please try again later.' : 'LLM 分析失败，请稍后重试'),
         tone: 'error',
       });
-    } catch (error) {
-      const parsedError = getParsedApiError(error);
-      setPendingAnalysisTicker(null);
+    } else if (submitResult.error) {
+      const parsedError = getParsedApiError(submitResult.error);
       setStatusToast({
         message: parsedError.message || (locale === 'en' ? 'LLM analysis failed. Please try again later.' : 'LLM 分析失败，请稍后重试'),
         tone: 'error',
       });
-    } finally {
-      setDashboardLoading(false);
     }
+    patchDashboardTaskState({
+      isDashboardLoading: false,
+    });
   };
 
   const handleHistoryClick = async (historyItem: HistoryItem) => {
@@ -5104,20 +5143,30 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
 
     setHistoryDrawerOpen(false);
     setStatusToast(null);
-    setPendingAnalysisTicker(null);
+    patchDashboardTaskState({
+      pendingAnalysisTicker: null,
+    });
     clearError();
-    setActiveTicker(normalizedTicker);
+    patchDashboardTaskState({
+      activeTicker: normalizedTicker,
+    });
 
     // Local snapshots are only a visual bridge; the persisted history detail remains the source of truth.
     const hasCachedSnapshot = selectCachedHistoryForStock(normalizedTicker);
     if (!hasCachedSnapshot) {
-      setDashboardLoading(true);
+      patchDashboardTaskState({
+        isDashboardLoading: true,
+      });
     }
 
-    try {
-      await selectHistoryItem(historyItem.id);
-    } finally {
-      setDashboardLoading(false);
+    const selectionError = await selectHistoryItem(historyItem.id)
+      .then(() => null)
+      .catch((error) => error);
+    patchDashboardTaskState({
+      isDashboardLoading: false,
+    });
+    if (selectionError) {
+      throw selectionError;
     }
   };
 
@@ -5126,27 +5175,33 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       return;
     }
 
-    try {
-      await deleteHistoryRecords(
-        pendingHistoryDelete.recordIds,
-        pendingHistoryDelete.mode === 'visible' ? { deleteAll: true } : undefined,
-      );
+    const deleteError = await deleteHistoryRecords(
+      pendingHistoryDelete.recordIds,
+      pendingHistoryDelete.mode === 'visible' ? { deleteAll: true } : undefined,
+    )
+      .then(() => null)
+      .catch((error) => error);
+    setPendingHistoryDelete(null);
+    if (!deleteError) {
       setHistoryDrawerOpen(false);
-    } finally {
-      setPendingHistoryDelete(null);
+      return;
     }
+    throw deleteError;
   };
 
   const handleCopyActiveReport = async () => {
-    try {
-      if (!navigator.clipboard?.writeText) {
-        throw new Error('clipboard_unavailable');
-      }
-      await navigator.clipboard.writeText(buildInstitutionalReportMarkdown(activeTraceReport));
-      setMainCopyState('copied');
-    } catch {
+    if (!navigator.clipboard?.writeText) {
       setMainCopyState('failed');
+      return;
     }
+    const copyError = await navigator.clipboard.writeText(buildInstitutionalReportMarkdown(activeTraceReport))
+      .then(() => null)
+      .catch((error) => error);
+    if (!copyError) {
+      setMainCopyState('copied');
+      return;
+    }
+    setMainCopyState('failed');
   };
 
   const reportActionButtons = !isGuest ? (
@@ -5157,7 +5212,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         className="home-research-action-button inline-flex min-h-9 min-w-0 items-center gap-2 rounded-[7px] border px-3.5 py-1.5 text-xs font-medium text-white/72 transition-colors hover:text-white/90"
         onClick={() => { void handleCopyActiveReport(); }}
       >
-        <Star className="h-3.5 w-3.5 shrink-0" />
+        <Star className="size-3.5 shrink-0" />
         <span className="truncate">{mainCopyState === 'copied' ? (locale === 'en' ? 'Added' : '已加入') : (locale === 'en' ? 'Watch' : '加入观察')}</span>
       </button>
       <button
@@ -5166,17 +5221,17 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         className="home-research-action-button home-research-action-button--primary inline-flex min-h-9 min-w-0 items-center gap-2 rounded-[7px] border px-3.5 py-1.5 text-xs font-medium text-white/82 transition-colors hover:text-white"
         onClick={() => setFullReportDrawerOpen(true)}
       >
-        <Upload className="h-3.5 w-3.5 shrink-0" />
+        <Upload className="size-3.5 shrink-0" />
         <span className="truncate">{locale === 'en' ? 'Generate report' : '生成报告'}</span>
       </button>
       <button
         type="button"
-        className="home-research-action-button inline-flex min-h-9 w-9 items-center justify-center rounded-[7px] border text-white/58 transition-colors hover:text-white/82"
+        className="home-research-action-button inline-flex min-size-9 items-center justify-center rounded-[7px] border text-white/58 transition-colors hover:text-white/82"
         onClick={() => setTraceDrawerOpen(true)}
         data-testid="home-bento-decision-trace-trigger"
         aria-label={locale === 'en' ? 'Sources' : '决策来源'}
       >
-        <MoreHorizontal className="h-4 w-4" />
+        <MoreHorizontal className="size-4" />
       </button>
       <button
         type="button"
@@ -5240,6 +5295,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               <button
                 type="submit"
                 disabled={isBusy}
+                aria-label={locale === 'en' ? 'Analyze' : '分析'}
                 className="min-h-10 shrink-0 rounded-lg border border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] px-5 text-sm font-semibold text-white shadow-[0_0_22px_rgba(118,109,219,0.18)] transition-colors hover:bg-[#8178e7] disabled:cursor-wait disabled:bg-white/[0.05] disabled:text-white/42"
                 data-testid="home-bento-analyze-button"
               >
@@ -5247,16 +5303,16 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               </button>
               {!isGuest ? (
                 <button
-                  ref={openHistoryDrawerButton.ref}
+                  ref={openHistoryDrawerButtonRef}
                   type="button"
                   aria-label={locale === 'en' ? 'History' : '历史记录'}
-                  onClick={openHistoryDrawerButton.onClick}
-                  onPointerUp={openHistoryDrawerButton.onPointerUp}
+                  onClick={handleOpenHistoryDrawerClick}
+                  onPointerUp={handleOpenHistoryDrawerPointerUp}
                   disabled={isBusy}
                   className="home-research-action-button flex min-h-10 shrink-0 items-center justify-center rounded-lg border px-4 text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] disabled:cursor-wait disabled:text-white/34"
                   data-testid="home-bento-history-drawer-trigger"
                 >
-                  <History className="h-4 w-4" aria-hidden="true" />
+                  <History className="size-4" aria-hidden="true" />
                 </button>
               ) : null}
             </>
@@ -5267,7 +5323,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             data-testid="home-bento-omnibar-input-shell"
           >
             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-              <Search className="h-4 w-4 text-white/40" />
+              <Search className="size-4 text-white/40" />
             </div>
             <input
               data-testid="home-bento-omnibar-input"
@@ -5280,6 +5336,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               autoComplete="off"
               disabled={isBusy}
               placeholder={copy?.omnibarPlaceholder || standbyCopy.omnibarPlaceholder}
+              aria-label={copy?.omnibarPlaceholder || standbyCopy.omnibarPlaceholder}
             />
           </div>
         </CompactFilterBar>
@@ -5317,12 +5374,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       <main className="w-full flex-1 flex flex-col min-h-0 min-w-0" data-testid="home-bento-main">
         {!shouldRenderDashboardPanels ? (
           <section
-            className="mx-auto flex w-full max-w-[1880px] flex-1 min-w-0 flex-col px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
+            className="mx-auto flex w-full max-w-[1880px] flex-1 min-w-0 flex-col p-3 sm:px-4 xl:px-6 2xl:px-8"
             data-testid="guest-home-clean-search"
           >
             <div className="flex w-full min-w-0 flex-col gap-3" data-testid="guest-home-first-screen-stack">
               <section
-                className="min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-4 sm:px-5 sm:py-5"
+                className="min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] p-4 sm:px-5 sm:py-5"
                 data-testid="guest-home-command-surface"
                 data-layout-zone="RouteConsole"
                 data-visual-role="guest-command-console"
@@ -5448,7 +5505,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           );
           return (
             <div
-              className="home-research-stage mx-auto flex w-full max-w-[1880px] min-w-0 flex-col gap-2.5 px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
+              className="home-research-stage mx-auto flex w-full max-w-[1880px] min-w-0 flex-col gap-2.5 p-3 sm:px-4 xl:px-6 2xl:px-8"
               data-testid="home-research-stage"
             >
               {omnibarModule}
@@ -5490,7 +5547,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           <div className="flex min-w-0 items-start gap-4">
                             {readyCopy.ticker === 'ORCL' ? (
                               <div
-                                className="home-research-company-mark-oracle flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-[14px] border border-red-300/10 bg-[linear-gradient(145deg,#ff5b2d,#b51915)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_14px_34px_rgba(185,25,21,0.18)]"
+                                className="home-research-company-mark-oracle flex size-[72px] shrink-0 items-center justify-center rounded-[14px] border border-red-300/10 bg-[linear-gradient(145deg,#ff5b2d,#b51915)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_14px_34px_rgba(185,25,21,0.18)]"
                                 data-testid="home-research-company-mark"
                                 data-company-mark="oracle-logo"
                                 aria-label="Oracle"
@@ -5500,7 +5557,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                               </div>
                             ) : (
                               <div
-                                className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-[14px] border border-[color:var(--wolfy-border-subtle)] bg-[linear-gradient(145deg,rgba(118,109,219,0.34),rgba(23,31,54,0.92)_48%,rgba(75,94,172,0.28))] font-mono text-sm font-semibold text-white/88 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]"
+                                className="flex size-[72px] shrink-0 items-center justify-center rounded-[14px] border border-[color:var(--wolfy-border-subtle)] bg-[linear-gradient(145deg,rgba(118,109,219,0.34),rgba(23,31,54,0.92)_48%,rgba(75,94,172,0.28))] font-mono text-sm font-semibold text-white/88 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]"
                                 data-testid="home-research-company-mark"
                                 data-company-mark="fallback-monogram"
                                 aria-hidden="true"
@@ -5543,7 +5600,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                       </div>
                     ) : null}
                     <div
-                      className="min-w-0 rounded-none border-0 bg-transparent px-0 py-0"
+                      className="min-w-0 rounded-none border-0 bg-transparent p-0"
                       data-testid="home-research-primary-workspace"
                     >
                       {isHomeAnalyzing ? (
@@ -5708,7 +5765,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             return (
               <div
                 key={item.id}
-                className={`flex min-w-0 items-center gap-3 rounded-2xl border px-3 py-3 transition-colors ${
+                className={`flex min-w-0 items-center gap-3 rounded-2xl border p-3 transition-colors ${
                   isSelected
                     ? 'border-white/15 bg-white/[0.08] text-white'
                     : 'border-white/5 bg-white/[0.02] text-white/72 hover:bg-white/[0.05]'

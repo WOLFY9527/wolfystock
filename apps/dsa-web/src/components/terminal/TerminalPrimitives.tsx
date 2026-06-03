@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '../../utils/cn';
-import { WolfyShellSurface } from '../linear';
+import { WolfyShellSurface } from '../linear/LinearPrimitives';
 
 type PrimitiveProps<T extends HTMLElement = HTMLElement> = React.HTMLAttributes<T> & {
   children?: React.ReactNode;
@@ -150,9 +150,17 @@ const TERMINAL_BUTTON_CLASSES: Record<TerminalButtonVariant, string> = {
   danger: 'border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-transparent text-[color:var(--wolfy-market-down)] hover:bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_10%,transparent)] px-3 py-1.5 rounded-md text-xs transition-colors',
 };
 
-export const TerminalButton = /* @__PURE__ */ React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & {
+export const TerminalButton = /* @__PURE__ */ ({
+  variant = 'secondary',
+  className,
+  type = 'button',
+  children,
+  ref,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: TerminalButtonVariant;
-}>(({ variant = 'secondary', className, type = 'button', children, ...props }, ref) => (
+  ref?: React.Ref<HTMLButtonElement>;
+}) => (
   <button
     ref={ref}
     type={type}
@@ -162,8 +170,7 @@ export const TerminalButton = /* @__PURE__ */ React.forwardRef<HTMLButtonElement
   >
     {children}
   </button>
-));
-TerminalButton.displayName = 'TerminalButton';
+);
 
 type TerminalChipVariant = 'neutral' | 'success' | 'caution' | 'danger' | 'info';
 
@@ -289,7 +296,7 @@ export function TerminalDisclosure({
           className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-transparent px-2 py-1 text-[11px] text-[color:var(--wolfy-text-secondary)] hover:text-[color:var(--wolfy-text-primary)]"
           onClick={() => setOpen((current) => !current)}
         >
-          {open ? <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" /> : <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />}
+          {open ? <ChevronDown className="size-3.5" aria-hidden="true" /> : <ChevronRight className="size-3.5" aria-hidden="true" />}
           <span>{open ? '收起' : '展开'}</span>
         </button>
       </div>

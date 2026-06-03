@@ -4,8 +4,8 @@ import { DataFreshnessBadge, MarketOverviewCardFrame } from './marketOverviewPri
 import {
   ConsoleBoard,
   ConsoleContextRail,
-} from '../linear';
-import { TerminalGrid } from '../terminal';
+} from '../linear/LinearPrimitives';
+import { TerminalGrid } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
 
 export type MarketOverviewContextHighlightView = {

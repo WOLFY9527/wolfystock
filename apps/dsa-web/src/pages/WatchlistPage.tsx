@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useEffect, useRef, useState, type ComponentProps, type SetStateAction } from 'react';
 import {
   BarChart3,
   CheckSquare,
@@ -15,13 +15,15 @@ import { backtestApi } from '../api/backtest';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { watchlistApi } from '../api/watchlist';
 import { ConsumerProtectedFrame, ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
-import { ApiErrorAlert, Input, Select } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Input } from '../components/common/Input';
+import { Select } from '../components/common/Select';
 import {
   ConsoleBoard,
   ConsoleContextRail,
   CompactFilterBar,
   DenseRows,
-} from '../components/linear';
+} from '../components/linear/LinearPrimitives';
 import {
   CompactEmptyRow,
   DenseCommandBar,
@@ -29,11 +31,13 @@ import {
   DenseSecondaryDisclosure,
   DenseStatusStrip,
   DenseTableShell,
+} from '../components/terminal/DenseWorkbenchPrimitives';
+import {
   TerminalButton,
   TerminalChip,
   TerminalNotice,
   TerminalPanel,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 import UserAlertsRailPanel from '../components/user-alerts/UserAlertsRailPanel';
 import LeveragedEtfMapper from '../components/watchlist/LeveragedEtfMapper';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -91,10 +95,26 @@ type BatchProgress = {
   currentSymbol: string | null;
   failures: Record<string, BatchFailure>;
 } | null;
+type WatchlistListState = {
+  items: WatchlistItem[];
+  isLoading: boolean;
+  error: ParsedApiError | null;
+};
 
 type WatchlistMonitoringTone = 'success' | 'caution' | 'neutral';
 
 const ROW_SELECTION_BUTTON_CLASS = 'inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-lg border transition hover:border-white/30 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/35';
+
+const SCANNER_FAILURE_STATUSES = new Set(['data_failed', 'provider_down', 'provider_error', 'error', 'failed', 'critical']);
+const SIMULATION_FAILURE_STATUSES = new Set(['insufficient_history', 'data_failed', 'no_data', 'missing_data', 'partial']);
+const SCORE_DISCLOSURE_FAILED_STATUSES = new Set(['data_failed', 'provider_down', 'provider_error', 'failed', 'error', 'critical']);
+const SCORE_DISCLOSURE_STALE_STATUSES = new Set(['stale', 'partial']);
+const SCANNER_FORMAT_FAILED_STATUSES = new Set(['data_failed', 'provider_down', 'provider_error', 'error', 'failed', 'critical']);
+const SCANNER_FORMAT_VERIFIED_STATUSES = new Set(['selected', 'verified', 'ready', 'fresh']);
+const SCANNER_FORMAT_PASSED_STATUSES = new Set(['preview', 'candidate', 'passed']);
+const SCANNER_FORMAT_REJECTED_STATUSES = new Set(['rejected', 'not_selected', 'failed_filter']);
+const BACKTEST_DANGER_STATUSES = new Set(['回测失败', '行情缺失', '服务暂不可用', '超时']);
+const BACKTEST_CAUTION_STATUSES = new Set(['样本不足', '数据缺失']);
 
 function normalizeText(value?: string | null): string {
   return String(value || '').trim();
@@ -129,16 +149,24 @@ function formatWatchlistOrigin(value?: string | null, language: 'zh' | 'en' = 'z
   return language === 'en' ? 'Watch item' : '观察标的';
 }
 
+const WATCHLIST_DATE_FMT_EN = new Intl.DateTimeFormat('en-US', {
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+const WATCHLIST_DATE_FMT_ZH = new Intl.DateTimeFormat('zh-CN', {
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
 function formatDateTime(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
   if (!value) return '--';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
+  return (language === 'en' ? WATCHLIST_DATE_FMT_EN : WATCHLIST_DATE_FMT_ZH).format(date);
 }
 
 function titleCaseFromSnake(value?: string | null): string {
@@ -226,8 +254,8 @@ function isStaleIntelligence(item: WatchlistItem): boolean {
 function hasFailureOrNoData(item: WatchlistItem): boolean {
   const scannerStatus = normalizeText(item.intelligence?.scanner?.status || item.scoreStatus).toLowerCase();
   const simulationStatus = normalizeText(item.intelligence?.strategySimulation?.status).toLowerCase();
-  return ['data_failed', 'provider_down', 'provider_error', 'error', 'failed', 'critical'].includes(scannerStatus)
-    || ['insufficient_history', 'data_failed', 'no_data', 'missing_data', 'partial'].includes(simulationStatus)
+  return SCANNER_FAILURE_STATUSES.has(scannerStatus)
+    || SIMULATION_FAILURE_STATUSES.has(simulationStatus)
     || (!hasScannerEvidence(item) && !hasBacktestEvidence(item));
 }
 
@@ -238,7 +266,10 @@ function getLatestIntelligenceTime(item: WatchlistItem): string | null {
     item.lastScoredAt,
     item.updatedAt,
   ].filter(Boolean) as string[];
-  return values.sort((left, right) => getTime(right) - getTime(left))[0] || null;
+  return values.reduce<string | null>((best, current) => {
+    if (!best) return current;
+    return getTime(current) > getTime(best) ? current : best;
+  }, null);
 }
 
 function formatFreshness(value?: string | null): string {
@@ -270,11 +301,11 @@ function hasLimitedConfidenceScoreContext(item: WatchlistItem): boolean {
 
 function getScoreDisclosureState(item: WatchlistItem): WatchlistScoreDisclosureState {
   const status = normalizeToken(item.scoreStatus);
-  if (['data_failed', 'provider_down', 'provider_error', 'failed', 'error', 'critical'].includes(status)) {
+  if (SCORE_DISCLOSURE_FAILED_STATUSES.has(status)) {
     return 'failed';
   }
   if (hasLimitedConfidenceScoreContext(item)) return 'limitedConfidence';
-  if (['stale', 'partial'].includes(status)) return 'stale';
+  if (SCORE_DISCLOSURE_STALE_STATUSES.has(status)) return 'stale';
   if (status === 'fresh') return 'fresh';
   return 'unknown';
 }
@@ -337,12 +368,12 @@ function formatScannerStatus(item: WatchlistItem): string {
   const simulationStatus = normalizeText(item.intelligence?.strategySimulation?.status).toLowerCase();
   const scoreDisclosureState = getScoreDisclosureState(item);
   if (scoreDisclosureState === 'failed') return '扫描失败';
-  if (['data_failed', 'provider_down', 'provider_error', 'error', 'failed', 'critical'].includes(status)) return '扫描失败';
+  if (SCANNER_FORMAT_FAILED_STATUSES.has(status)) return '扫描失败';
   if (scoreDisclosureState === 'stale' || scoreDisclosureState === 'limitedConfidence') return '置信度较低';
   if (scoreDisclosureState === 'unknown') return hasScannerEvidence(item) ? '数据更新中' : '未扫描';
-  if (['selected', 'verified', 'ready', 'fresh'].includes(status)) return '已验证';
-  if (['preview', 'candidate', 'passed'].includes(status)) return '通过筛选';
-  if (['rejected', 'not_selected', 'failed_filter'].includes(status)) return '未通过';
+  if (SCANNER_FORMAT_VERIFIED_STATUSES.has(status)) return '已验证';
+  if (SCANNER_FORMAT_PASSED_STATUSES.has(status)) return '通过筛选';
+  if (SCANNER_FORMAT_REJECTED_STATUSES.has(status)) return '未通过';
   if (simulationStatus === 'insufficient_history' || status === 'insufficient_history') return '数据不足';
   if (!hasScannerEvidence(item)) return '未扫描';
   return '通过筛选';
@@ -608,9 +639,11 @@ function buildWatchlistConclusion(items: WatchlistItem[], language: 'zh' | 'en')
     }
   });
 
-  const topItem = [...items]
-    .filter((item) => getTrustState(item) === 'fresh' && getScannerScore(item) !== null)
-    .sort((left, right) => (getScannerScore(right) ?? Number.NEGATIVE_INFINITY) - (getScannerScore(left) ?? Number.NEGATIVE_INFINITY))[0] || null;
+  const topItem = items.reduce<WatchlistItem | null>((best, item) => {
+    if (getTrustState(item) !== 'fresh' || getScannerScore(item) === null) return best;
+    if (!best) return item;
+    return (getScannerScore(item) ?? Number.NEGATIVE_INFINITY) > (getScannerScore(best) ?? Number.NEGATIVE_INFINITY) ? item : best;
+  }, null);
   if (!items.length) {
     return {
       title: language === 'en' ? 'Needs watch items' : '需要观察标的',
@@ -1045,7 +1078,7 @@ function WatchlistConclusionBand({
       as="section"
       dense
       data-testid="watchlist-conclusion-band"
-      className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start"
+      className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start"
     >
       <div className="min-w-0">
         <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
@@ -1080,14 +1113,13 @@ function WatchlistConclusionBand({
   );
 }
 
-const WatchlistPage: React.FC = () => {
+function useWatchlistPageModel() {
   const navigate = useNavigate();
   const { language } = useI18n();
   const { isGuest } = useProductSurface();
   const copy = getCopy(language);
-  const [items, setItems] = useState<WatchlistItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<ParsedApiError | null>(null);
+  const [listState, setListState] = useState<WatchlistListState>({ items: [], isLoading: true, error: null });
+  const { items, isLoading, error } = listState;
   const [notice, setNotice] = useState<Notice>(null);
   const [query, setQuery] = useState('');
   const [marketFilter, setMarketFilter] = useState('all');
@@ -1105,11 +1137,21 @@ const WatchlistPage: React.FC = () => {
   const [batchProgress, setBatchProgress] = useState<BatchProgress>(null);
   const [isBatchBacktesting, setIsBatchBacktesting] = useState(false);
   const [isBatchScanning, setIsBatchScanning] = useState(false);
-  const [backtestSessionKeys, setBacktestSessionKeys] = useState<Set<string>>(() => new Set());
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
+  const backtestSessionKeysRef = useRef<Set<string> | null>(null);
+  if (backtestSessionKeysRef.current === null) {
+    backtestSessionKeysRef.current = new Set();
+  }
+  const backtestSessionKeys = backtestSessionKeysRef.current;
+  const [selectedIdsState, setSelectedIdsState] = useState<Set<number>>(() => new Set());
   const [useSelectedScope, setUseSelectedScope] = useState(false);
-  const [activeItemId, setActiveItemId] = useState<number | null>(null);
+  const [requestedActiveItemId, setRequestedActiveItemId] = useState<number | null>(null);
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const setWatchlistItems = (value: SetStateAction<WatchlistItem[]>) => {
+    setListState((current) => ({
+      ...current,
+      items: typeof value === 'function' ? value(current.items) : value,
+    }));
+  };
 
   useEffect(() => {
     document.title = language === 'en' ? 'Watchlist - WolfyStock' : '观察列表 - WolfyStock';
@@ -1117,23 +1159,29 @@ const WatchlistPage: React.FC = () => {
 
   useEffect(() => {
     if (isGuest) return;
-    let isMounted = true;
-    setIsLoading(true);
-    watchlistApi.listWatchlistItems()
-      .then((response) => {
-        if (!isMounted) return;
-        setItems(response.items || []);
-        setError(null);
-      })
-      .catch((err) => {
-        if (!isMounted) return;
-        setError(getParsedApiError(err));
-      })
-      .finally(() => {
-        if (isMounted) setIsLoading(false);
-      });
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      watchlistApi.listWatchlistItems()
+        .then((response) => {
+          if (cancelled) return;
+          setListState({
+            items: response.items || [],
+            error: null,
+            isLoading: false,
+          });
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setListState((current) => ({
+            ...current,
+            error: getParsedApiError(err),
+            isLoading: false,
+          }));
+        });
+    });
     return () => {
-      isMounted = false;
+      cancelled = true;
     };
   }, [isGuest]);
 
@@ -1154,23 +1202,23 @@ const WatchlistPage: React.FC = () => {
     };
   }, [isGuest]);
 
-  const marketOptions = useMemo(() => {
-    const markets = Array.from(new Set(items.map((item) => normalizeText(item.market).toLowerCase()).filter(Boolean))).sort();
+  const marketOptions = (() => {
+    const markets = Array.from(new Set(items.flatMap((item) => { const v = normalizeText(item.market).toLowerCase(); return v ? [v] : []; }))).sort();
     return [
       { value: 'all', label: copy.all },
       ...markets.map((market) => ({ value: market, label: formatMarket(market) })),
     ];
-  }, [copy.all, items]);
+  })();
 
-  const sourceOptions = useMemo(() => {
-    const sources = Array.from(new Set(items.map((item) => normalizeText(item.source).toLowerCase()).filter(Boolean))).sort();
+  const sourceOptions = (() => {
+    const sources = Array.from(new Set(items.flatMap((item) => { const v = normalizeText(item.source).toLowerCase(); return v ? [v] : []; }))).sort();
     return [
       { value: 'all', label: copy.all },
       ...sources.map((source) => ({ value: source, label: formatWatchlistOrigin(source, language) })),
     ];
-  }, [copy.all, items, language]);
+  })();
 
-  const contextOptions = useMemo(() => {
+  const contextOptions = (() => {
     const options = new Map<string, string>();
     items.forEach((item) => {
       if (item.themeId) options.set(`theme:${item.themeId}`, `${copy.themePrefix}: ${item.themeId}`);
@@ -1180,26 +1228,45 @@ const WatchlistPage: React.FC = () => {
       { value: 'all', label: copy.all },
       ...Array.from(options.entries()).map(([value, label]) => ({ value, label })),
     ];
-  }, [copy.all, copy.themePrefix, copy.universePrefix, items]);
+  })();
 
-  const summary = useMemo(() => {
-    const markets = new Set(items.map((item) => normalizeText(item.market).toLowerCase()).filter(Boolean));
-    const scannerSourced = items.filter((item) => normalizeText(item.source).toLowerCase() === 'scanner').length;
-    const latestTime = items.map(getLatestIntelligenceTime).filter(Boolean).sort((left, right) => getTime(right) - getTime(left))[0] || null;
+  const summary = (() => {
+    const markets = new Set<string>();
+    let scannerSourced = 0;
+    let recent = 0;
+    let scannerResults = 0;
+    let backtestResults = 0;
+    let stale = 0;
+    let failedOrNoData = 0;
+    let latestTime: string | null = null;
+
+    for (const item of items) {
+      const market = normalizeText(item.market).toLowerCase();
+      if (market) markets.add(market);
+      if (normalizeText(item.source).toLowerCase() === 'scanner') scannerSourced += 1;
+      if (isRecentlyAdded(item)) recent += 1;
+      if (hasScannerEvidence(item)) scannerResults += 1;
+      if (hasBacktestEvidence(item)) backtestResults += 1;
+      if (isStaleIntelligence(item)) stale += 1;
+      if (hasFailureOrNoData(item)) failedOrNoData += 1;
+      const v = getLatestIntelligenceTime(item);
+      if (v && (!latestTime || getTime(v) > getTime(latestTime))) latestTime = v;
+    }
+
     return {
       total: items.length,
       markets: markets.size,
       scannerSourced,
-      recent: items.filter(isRecentlyAdded).length,
-      scannerResults: items.filter(hasScannerEvidence).length,
-      backtestResults: items.filter(hasBacktestEvidence).length,
-      stale: items.filter(isStaleIntelligence).length,
-      failedOrNoData: items.filter(hasFailureOrNoData).length,
+      recent,
+      scannerResults,
+      backtestResults,
+      stale,
+      failedOrNoData,
       latestTime,
     };
-  }, [items]);
+  })();
 
-  const filteredItems = useMemo(() => {
+  const filteredItems = (() => {
     const search = query.trim().toLowerCase();
     const rows = items.filter((item) => {
       const matchesSearch = !search
@@ -1218,7 +1285,7 @@ const WatchlistPage: React.FC = () => {
       return matchesSearch && matchesMarket && matchesSource && matchesContext && matchesEvidence;
     });
 
-    return rows.sort((left, right) => {
+    rows.sort((left: WatchlistItem, right: WatchlistItem) => {
       if (sortKey === 'symbol') return left.symbol.localeCompare(right.symbol);
       if (sortKey === 'market') {
         const marketCompare = normalizeText(left.market).localeCompare(normalizeText(right.market));
@@ -1235,127 +1302,119 @@ const WatchlistPage: React.FC = () => {
       if (sortKey === 'recentlyBacktested') return getTime(right.intelligence?.backtest?.testedAt) - getTime(left.intelligence?.backtest?.testedAt);
       return getItemTime(right) - getItemTime(left);
     });
-  }, [contextFilter, evidenceFilter, items, marketFilter, query, sortKey, sourceFilter]);
+    return rows;
+  })();
 
-  useEffect(() => {
-    setSelectedIds((current) => {
-      const validIds = new Set(items.map((item) => item.id));
-      const next = new Set(Array.from(current).filter((id) => validIds.has(id)));
-      return next.size === current.size ? current : next;
-    });
-  }, [items]);
-
-  useEffect(() => {
-    if (selectedIds.size === 0 && useSelectedScope) {
-      setUseSelectedScope(false);
-    }
-  }, [selectedIds.size, useSelectedScope]);
-
-  useEffect(() => {
+  const selectedIds = (() => {
+    const validIds = new Set(items.map((item) => item.id));
+    return new Set(Array.from(selectedIdsState).filter((id) => validIds.has(id)));
+  })();
+  const isSelectedScopeActive = useSelectedScope && selectedIds.size > 0;
+  const selectedItems = filteredItems.filter((item) => selectedIds.has(item.id));
+  const activeItem = (() => {
     if (filteredItems.length === 0) {
-      if (activeItemId !== null) setActiveItemId(null);
-      return;
+      return null;
     }
-    if (!filteredItems.some((item) => item.id === activeItemId)) {
-      setActiveItemId(filteredItems[0].id);
+    if (requestedActiveItemId !== null) {
+      const matched = filteredItems.find((item) => item.id === requestedActiveItemId);
+      if (matched) {
+        return matched;
+      }
     }
-  }, [activeItemId, filteredItems]);
-
-  const selectedItems = useMemo(
-    () => filteredItems.filter((item) => selectedIds.has(item.id)),
-    [filteredItems, selectedIds],
-  );
-  const activeItem = useMemo(
-    () => filteredItems.find((item) => item.id === activeItemId) ?? filteredItems[0] ?? null,
-    [activeItemId, filteredItems],
-  );
-  const actionItems = useSelectedScope && selectedItems.length > 0 ? selectedItems : filteredItems;
+    return filteredItems[0];
+  })();
+  const actionItems = isSelectedScopeActive ? selectedItems : filteredItems;
   const actionScopeLabel = actionItems.length === 0
     ? copy.emptyFilteredSet
-    : `${useSelectedScope && selectedItems.length > 0 ? copy.scopeSelected : copy.scopeFiltered} ${actionItems.length} ${language === 'zh' ? '个标的' : 'symbols'}`;
+    : `${isSelectedScopeActive ? copy.scopeSelected : copy.scopeFiltered} ${actionItems.length} ${language === 'zh' ? '个标的' : 'symbols'}`;
   const isActionDisabled = actionItems.length === 0 || isBatchBacktesting || isBatchScanning;
-  const watchlistConclusion = useMemo(
-    () => buildWatchlistConclusion(filteredItems, language),
-    [filteredItems, language],
-  );
+  const watchlistConclusion = buildWatchlistConclusion(filteredItems, language);
 
-  const toggleSelected = useCallback((item: WatchlistItem) => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (next.has(item.id)) next.delete(item.id);
-      else next.add(item.id);
-      setUseSelectedScope(next.size > 0);
-      return next;
-    });
-  }, []);
+  const toggleSelected = (item: WatchlistItem) => {
+    const next = new Set(selectedIds);
+    if (next.has(item.id)) next.delete(item.id);
+    else next.add(item.id);
+    setSelectedIdsState(next);
+    setUseSelectedScope(next.size > 0);
+  };
 
-  const handleAnalyze = useCallback(async (item: WatchlistItem) => {
+  const handleAnalyze = async (item: WatchlistItem) => {
     setPendingAnalyzeId(item.id);
     setNotice(null);
-    try {
-      const response = await analysisApi.analyzeAsync({
-        stockCode: item.symbol,
-        reportType: 'detailed',
-        stockName: item.name || undefined,
-        originalQuery: item.symbol,
-        selectionSource: 'manual',
-      });
-      const taskId = extractAcceptedTaskId(response);
+    let nextPath: string | null = null;
+    const response = await analysisApi.analyzeAsync({
+      stockCode: item.symbol,
+      reportType: 'detailed',
+      stockName: item.name || undefined,
+      originalQuery: item.symbol,
+      selectionSource: 'manual',
+    })
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.error instanceof DuplicateTaskError) {
+      nextPath = buildWatchlistAnalysisPath(item, response.error.existingTaskId, language);
+    } else if (response.error) {
+      setNotice({ tone: 'danger', message: getParsedApiError(response.error).message });
+    } else if (response.value) {
+      const taskId = extractAcceptedTaskId(response.value);
       setNotice({ tone: 'success', message: copy.analyzeStarted });
-      navigate(taskId ? buildWatchlistAnalysisPath(item, taskId, language) : buildLocalizedPath('/', language));
-    } catch (err) {
-      if (err instanceof DuplicateTaskError) {
-        navigate(buildWatchlistAnalysisPath(item, err.existingTaskId, language));
-        return;
-      }
-      setNotice({ tone: 'danger', message: getParsedApiError(err).message });
-    } finally {
-      setPendingAnalyzeId((current) => (current === item.id ? null : current));
+      nextPath = taskId ? buildWatchlistAnalysisPath(item, taskId, language) : buildLocalizedPath('/', language);
     }
-  }, [copy.analyzeStarted, language, navigate]);
+    setPendingAnalyzeId((current) => (current === item.id ? null : current));
+    if (nextPath) {
+      navigate(nextPath);
+    }
+  };
 
-  const handleRemove = useCallback(async (item: WatchlistItem) => {
+  const handleRemove = async (item: WatchlistItem) => {
     setPendingRemoveId(item.id);
     setNotice(null);
-    try {
-      await watchlistApi.removeWatchlistItem(item.id);
-      setItems((current) => current.filter((row) => row.id !== item.id));
+    const error = await watchlistApi.removeWatchlistItem(item.id)
+      .then(() => null)
+      .catch((err) => err);
+    if (!error) {
+      setWatchlistItems((current) => current.filter((row) => row.id !== item.id));
       setNotice({ tone: 'success', message: copy.removed });
-    } catch (err) {
-      setNotice({ tone: 'danger', message: getParsedApiError(err).message });
-    } finally {
-      setPendingRemoveId((current) => (current === item.id ? null : current));
+    } else {
+      setNotice({ tone: 'danger', message: getParsedApiError(error).message });
     }
-  }, [copy.removed]);
+    setPendingRemoveId((current) => (current === item.id ? null : current));
+  };
 
-  const handleCopy = useCallback(async (item: WatchlistItem) => {
-    try {
-      if (!navigator.clipboard?.writeText) {
-        throw new Error(copy.clipboardUnavailable);
-      }
-      await navigator.clipboard.writeText(item.symbol);
+  const handleCopy = async (item: WatchlistItem) => {
+    if (!navigator.clipboard?.writeText) {
+      setNotice({ tone: 'danger', message: copy.clipboardUnavailable });
+      return;
+    }
+    const failure = await navigator.clipboard.writeText(item.symbol)
+      .then(() => null)
+      .catch((err) => err);
+    if (!failure) {
       setCopiedId(item.id);
       setNotice({ tone: 'success', message: `${item.symbol} ${copy.copied}` });
-    } catch (err) {
-      setNotice({ tone: 'danger', message: err instanceof Error ? err.message : copy.copyFailed });
+      return;
     }
-  }, [copy.clipboardUnavailable, copy.copied, copy.copyFailed]);
+    setNotice({ tone: 'danger', message: failure instanceof Error ? failure.message : copy.copyFailed });
+  };
 
-  const handleRefreshIntelligence = useCallback(async () => {
+  const handleRefreshIntelligence = async () => {
     setNotice(null);
     try {
       const [listResponse, statusResponse] = await Promise.all([
         watchlistApi.listWatchlistItems(),
         watchlistApi.getRefreshStatus().catch(() => null),
       ]);
-      setItems(listResponse.items || []);
+      setListState((current) => ({
+        ...current,
+        items: listResponse.items || [],
+      }));
       setRefreshStatus(statusResponse);
     } catch (err) {
       setNotice({ tone: 'danger', message: getParsedApiError(err).message });
     }
-  }, []);
+  };
 
-  const handleRefreshScores = useCallback(async (targetItems?: WatchlistItem[]) => {
+  const handleRefreshScores = async (targetItems?: WatchlistItem[]) => {
     const targets = targetItems || items;
     if (targets.length === 0 || isBatchScanning) return;
     setRefreshingScores(true);
@@ -1371,18 +1430,26 @@ const WatchlistPage: React.FC = () => {
       failures: {},
     });
     setNotice(null);
-    try {
-      const response = await watchlistApi.refreshScores(targetItems ? {
+    const response = await watchlistApi.refreshScores(targetItems ? {
         force: true,
-        symbols: targets.map((item) => item.symbol).filter(Boolean),
-      } : { force: true });
+        symbols: targets.flatMap((item) => item.symbol ? [item.symbol] : []),
+      } : { force: true })
+      .then((value) => ({ value, error: null as unknown }))
+      .catch((error) => ({ value: null, error }));
+    if (response.value) {
       const listResponse = await watchlistApi.listWatchlistItems();
       const failures = Object.fromEntries(
-        (response.results || [])
-          .filter((result) => normalizeText(result.status).toLowerCase() === 'failed')
-          .map((result) => [result.symbol, sanitizeFailureReason(result.message || '', '扫描失败')]),
+        (response.value.results || []).reduce<Array<[string, BatchFailure]>>((acc, result) => {
+          if (normalizeText(result.status).toLowerCase() === 'failed') {
+            acc.push([result.symbol, sanitizeFailureReason(result.message || '', '扫描失败')]);
+          }
+          return acc;
+        }, []),
       );
-      setItems(listResponse.items || []);
+      setListState((current) => ({
+        ...current,
+        items: listResponse.items || [],
+      }));
       setBatchFailures(failures);
       setBatchProgress({
         kind: 'scan',
@@ -1394,11 +1461,11 @@ const WatchlistPage: React.FC = () => {
         failures,
       });
       setNotice({
-        tone: response.failedCount > 0 ? 'warning' : 'success',
-        message: `${targetItems ? copy.scanComplete : copy.scoreRefreshComplete} ${response.updatedCount}/${response.updatedCount + response.skippedCount + response.failedCount}`,
+        tone: response.value.failedCount > 0 ? 'warning' : 'success',
+        message: `${targetItems ? copy.scanComplete : copy.scoreRefreshComplete} ${response.value.updatedCount}/${response.value.updatedCount + response.value.skippedCount + response.value.failedCount}`,
       });
-    } catch (err) {
-      const failure = sanitizeFailureReason(err, '扫描失败');
+    } else {
+      const failure = sanitizeFailureReason(response.error, '扫描失败');
       const failures = Object.fromEntries(targets.map((item) => [item.symbol, failure]));
       setBatchFailures(failures);
       setBatchProgress({
@@ -1411,13 +1478,12 @@ const WatchlistPage: React.FC = () => {
         failures,
       });
       setNotice({ tone: 'danger', message: failure.label });
-    } finally {
-      setRefreshingScores(false);
-      setIsBatchScanning(false);
     }
-  }, [copy.scanComplete, copy.scoreRefreshComplete, isBatchScanning, items]);
+    setRefreshingScores(false);
+    setIsBatchScanning(false);
+  };
 
-  const handleBatchBacktestCurrentFilter = useCallback(async () => {
+  const handleBatchBacktestCurrentFilter = async () => {
     if (isBatchBacktesting) return;
     const uniqueItems = Array.from(
       new Map(actionItems.map((item) => [normalizeText(item.symbol).toUpperCase(), item])).values(),
@@ -1461,7 +1527,7 @@ const WatchlistPage: React.FC = () => {
     const runOne = async (item: WatchlistItem) => {
       const symbol = normalizeText(item.symbol).toUpperCase();
       const key = `${symbol}:${startDate}:${endDate}:watchlist-default`;
-      setBacktestSessionKeys((current) => new Set(current).add(key));
+      backtestSessionKeys.add(key);
       setBatchStatuses((current) => ({ ...current, [item.symbol]: 'running' }));
       setBatchProgress((current) => current ? { ...current, currentSymbol: item.symbol } : current);
       try {
@@ -1478,7 +1544,7 @@ const WatchlistPage: React.FC = () => {
           waitForCompletion: true,
         });
         completed += 1;
-        setItems((current) => current.map((row) => (
+        setWatchlistItems((current) => current.map((row) => (
           normalizeText(row.symbol).toUpperCase() === symbol
             ? {
                 ...row,
@@ -1511,28 +1577,23 @@ const WatchlistPage: React.FC = () => {
       }
     };
 
-    const worker = async () => {
-      while (cursor < pendingItems.length) {
-        const next = pendingItems[cursor];
-        cursor += 1;
-        await runOne(next);
+    const worker = async (): Promise<void> => {
+      const next = pendingItems[cursor];
+      if (!next) {
+        return;
       }
+      cursor += 1;
+      await runOne(next);
+      await worker();
     };
 
-    try {
-      await Promise.all(Array.from({ length: Math.min(2, pendingItems.length) }, () => worker()));
-      setNotice({
-        tone: failed > 0 ? 'warning' : 'success',
-        message: `${copy.batchBacktestComplete} ${completed}/${pendingItems.length}`,
-      });
-    } finally {
-      setIsBatchBacktesting(false);
-    }
-  }, [actionItems, backtestSessionKeys, copy.batchBacktestComplete, copy.batchBacktestLabel, isBatchBacktesting]);
-
-  if (isGuest) {
-    return <ConsumerProtectedFrame moduleName={copy.signInModule} />;
-  }
+    await Promise.all(Array.from({ length: Math.min(2, pendingItems.length) }, () => worker()));
+    setNotice({
+      tone: failed > 0 ? 'warning' : 'success',
+      message: `${copy.batchBacktestComplete} ${completed}/${pendingItems.length}`,
+    });
+    setIsBatchBacktesting(false);
+  };
 
   const noticeClassName = notice?.tone === 'danger'
     ? 'border-rose-400/20 bg-rose-500/5 text-rose-100/80'
@@ -1587,776 +1648,955 @@ const WatchlistPage: React.FC = () => {
         : language === 'zh'
           ? '空闲'
           : 'Idle';
-  const runtimeStatusTone = batchProgress
+  const runtimeStatusTone: DisplayStatusTone = batchProgress
     ? 'info'
     : isBatchBacktesting || isBatchScanning
       ? 'warning'
       : 'neutral';
 
+  const openScanner = () => {
+    navigate(scannerPath);
+  };
+
+  const openBacktest = (item: WatchlistItem) => {
+    navigate(buildBacktestPath(item, language));
+  };
+
+  const openBacktestResult = (runId: number) => {
+    navigate(buildLocalizedPath(`/backtest/results/${runId}`, language));
+  };
+
+  const handleQueryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setQuery(event.target.value);
+  };
+
+  const handleMarketFilterChange = (value: string) => {
+    setMarketFilter(value);
+  };
+
+  const handleSortKeyChange = (value: string) => {
+    setSortKey(value as SortKey);
+  };
+
+  const handleSourceFilterChange = (value: string) => {
+    setSourceFilter(value);
+  };
+
+  const handleContextFilterChange = (value: string) => {
+    setContextFilter(value);
+  };
+
+  const handleEvidenceFilterChange = (value: string) => {
+    setEvidenceFilter(value as EvidenceFilter);
+  };
+
+  const toggleAdvancedFilters = () => {
+    setAdvancedFiltersOpen((current) => !current);
+  };
+
+  const focusItem = (itemId: number) => {
+    setRequestedActiveItemId(itemId);
+  };
+
+  const toggleSelectedScope = () => {
+    setUseSelectedScope((current) => selectedItems.length > 0 ? !current : current);
+  };
+
+  const clearSelection = () => {
+    setSelectedIdsState(new Set());
+    setUseSelectedScope(false);
+  };
+
+  return {
+    actionItems,
+    actionScopeLabel,
+    activeBacktest,
+    activeBacktestStatusLabel,
+    activeBacktestSummary,
+    activeCatalystExposures,
+    activeContextTags,
+    activeHasEvidence,
+    activeItem,
+    activeInvestorSignal,
+    activeLatestTime,
+    activeNextActionLabel,
+    activeObservationSummary,
+    activeRiskNote,
+    activeScannerFailure,
+    activeScannerReason,
+    activeScannerStatusLabel,
+    activeScore,
+    activeScoreDisclosureState,
+    activeSavedNote,
+    activeSimulation,
+    advancedFiltersOpen,
+    autoRefreshStatus,
+    batchFailures,
+    batchProgress,
+    batchStatuses,
+    contextFilter,
+    contextOptions,
+    copiedId,
+    copy,
+    error,
+    evidenceFilter,
+    filteredItems,
+    focusItem,
+    handleAnalyze,
+    handleBatchBacktestCurrentFilter,
+    handleContextFilterChange,
+    handleCopy,
+    clearSelection,
+    handleEvidenceFilterChange,
+    handleMarketFilterChange,
+    handleQueryChange,
+    handleRefreshIntelligence,
+    handleRefreshScores,
+    handleRemove,
+    handleSortKeyChange,
+    handleSourceFilterChange,
+    handleToggleAdvancedFilters: toggleAdvancedFilters,
+    isActionDisabled,
+    isBatchBacktesting,
+    isBatchScanning,
+    isGuest,
+    isLoading,
+    isRefreshingScores,
+    isSelectedScopeActive,
+    language,
+    marketFilter,
+    marketOptions,
+    monitoringStateLabel,
+    notice,
+    noticeClassName,
+    openBacktest,
+    openBacktestResult,
+    openScanner,
+    pendingAnalyzeId,
+    pendingRemoveId,
+    query,
+    refreshStatus,
+    runtimeStatusLabel,
+    runtimeStatusTone,
+    scannerPath,
+    selectedIds,
+    selectedItems,
+    sortKey,
+    sourceFilter,
+    sourceOptions,
+    statusItems,
+    summary,
+    toggleSelected,
+    toggleSelectedScope,
+    watchlistConclusion,
+  };
+}
+
+type WatchlistPageModel = ReturnType<typeof useWatchlistPageModel>;
+
+const WatchlistHeaderSection: React.FC<{ model: WatchlistPageModel }> = ({ model }) => (
+  <div data-layout-zone="HeaderStrip" data-testid="watchlist-header-strip" className="flex min-w-0 flex-col gap-3">
+    <DensePageHeader
+      eyebrow={model.language === 'zh' ? '监控队列' : 'Monitoring board'}
+      title={model.copy.title}
+      action={(
+        <TerminalButton
+          type="button"
+          variant="secondary"
+          className="h-9 px-3 text-xs"
+          onClick={model.openScanner}
+        >
+          <ExternalLink className="size-4" />
+          {model.copy.openScanner}
+        </TerminalButton>
+      )}
+    />
+
+    <WatchlistConclusionBand
+      model={model.watchlistConclusion}
+      trackedCount={model.summary.total}
+      monitoringStateLabel={model.monitoringStateLabel}
+      language={model.language}
+    />
+
+    <DenseStatusStrip
+      data-testid="watchlist-status-strip"
+      ariaLabel="watchlist summary"
+      items={model.statusItems}
+    />
+
+    {model.notice ? (
+      <TerminalNotice className={model.noticeClassName} role="status">
+        {model.notice.message}
+      </TerminalNotice>
+    ) : null}
+
+    {model.error ? (
+      <TerminalPanel as="section" dense>
+        <ApiErrorAlert error={model.error} />
+      </TerminalPanel>
+    ) : null}
+  </div>
+);
+
+const WatchlistFiltersBar: React.FC<{ model: WatchlistPageModel }> = ({ model }) => (
+  <CompactFilterBar
+    data-testid="watchlist-compact-filter-bar"
+    className="min-h-0 rounded-none border-x-0 border-t-0 px-3 py-2"
+    leading={<span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{model.copy.filters}</span>}
+  >
+    <div className="flex min-w-0 flex-col gap-2">
+      <div
+        data-testid="watchlist-filter-grid"
+        className="grid min-w-0 grid-cols-2 gap-2 md:flex md:flex-wrap md:items-end"
+      >
+        <div data-testid="watchlist-primary-filters" className="col-span-2 min-w-0 md:flex-[2_1_20rem]">
+          <Input
+            label={model.copy.search}
+            value={model.query}
+            onChange={model.handleQueryChange}
+            placeholder={model.copy.searchPlaceholder}
+            containerClassName="min-w-0"
+            trailingAction={<Search className="size-4 text-white/35" />}
+          />
+        </div>
+        <div className="min-w-0 md:flex-[0_0_9rem]">
+          <Select label={model.copy.market} value={model.marketFilter} onChange={model.handleMarketFilterChange} options={model.marketOptions} className="min-w-0" />
+        </div>
+        <div className="min-w-0 md:flex-[0_0_10.5rem]">
+          <Select
+            label={model.copy.sort}
+            value={model.sortKey}
+            onChange={model.handleSortKeyChange}
+            className="min-w-0"
+            options={[
+              { value: 'newest', label: model.copy.newest },
+              { value: 'scannerScore', label: model.copy.scannerScore },
+              { value: 'backtestReturn', label: model.copy.backtestReturn },
+              { value: 'historicalHitRate', label: model.copy.historicalHitRate },
+              { value: 'recentlyScored', label: model.copy.recentlyScored },
+              { value: 'recentlyBacktested', label: model.copy.recentlyBacktested },
+              { value: 'symbol', label: model.copy.symbol },
+              { value: 'market', label: model.copy.market },
+            ]}
+          />
+        </div>
+        <div className="min-w-0 md:flex-[0_0_9.5rem]">
+          <Select label={model.copy.source} value={model.sourceFilter} onChange={model.handleSourceFilterChange} options={model.sourceOptions} className="min-w-0" />
+        </div>
+        <div className="min-w-0">
+          <TerminalButton
+            type="button"
+            variant="secondary"
+            className="h-9 w-full px-3 text-xs"
+            aria-expanded={model.advancedFiltersOpen}
+            aria-controls="watchlist-advanced-filter-grid"
+            onClick={model.handleToggleAdvancedFilters}
+          >
+            {model.copy.advancedFilters}
+          </TerminalButton>
+        </div>
+      </div>
+      <div
+        data-testid="watchlist-advanced-filters"
+        className="flex min-w-0 flex-col gap-2 border-t border-[color:var(--wolfy-divider)] pt-2"
+      >
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">{model.copy.advancedFilters}</span>
+            <TerminalChip variant="neutral">{model.advancedFiltersOpen ? model.copy.enabled : model.language === 'zh' ? '默认收起' : 'Collapsed'}</TerminalChip>
+          </div>
+        </div>
+        {model.advancedFiltersOpen ? (
+          <div
+            id="watchlist-advanced-filter-grid"
+            data-testid="watchlist-advanced-filter-grid"
+            className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2"
+          >
+            <Select label={model.copy.context} value={model.contextFilter} onChange={model.handleContextFilterChange} options={model.contextOptions} className="min-w-0" />
+            <Select
+              label={model.copy.evidence}
+              value={model.evidenceFilter}
+              onChange={model.handleEvidenceFilterChange}
+              className="min-w-0"
+              options={[
+                { value: 'all', label: model.copy.all },
+                { value: 'hasScanner', label: model.copy.hasScanner },
+                { value: 'hasBacktest', label: model.copy.hasBacktest },
+                { value: 'scannerSelected', label: model.copy.scannerSelected },
+                { value: 'staleIntelligence', label: model.copy.staleIntelligence },
+              ]}
+            />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  </CompactFilterBar>
+);
+
+const WatchlistRow: React.FC<{ item: WatchlistItem; model: WatchlistPageModel }> = ({ item, model }) => {
+  const scanner = item.intelligence?.scanner;
+  const strategySimulation = item.intelligence?.strategySimulation;
+  const backtest = item.intelligence?.backtest;
+  const score = getScannerScore(item);
+  const hitRate = strategySimulation?.hitRate;
+  const avgForward = strategySimulation?.avgForwardReturnPct;
+  const batchStatus = model.batchStatuses[item.symbol];
+  const batchFailure = model.batchFailures[item.symbol];
+  const scannerFailure = item.scoreError || scanner?.reason
+    ? sanitizeFailureReason(item.scoreError || scanner?.reason || '', '扫描失败')
+    : null;
+  const latestTime = getLatestIntelligenceTime(item);
+  const scannerStatusLabel = formatScannerStatus(item);
+  const backtestStatusLabel = formatBacktestStatus(item, batchFailure);
+  const isActive = model.activeItem?.id === item.id;
+  const scoreDisclosureState = getScoreDisclosureState(item);
+  const scoreDisclosureStatusLabel = formatScoreDisclosureStatus(scoreDisclosureState, model.language);
+  const rowRiskNote = buildWatchRiskNote(item, model.language);
+  const originLabel = formatWatchlistOrigin(item.source, model.language);
+  const scoreFreshnessVariant = scoreDisclosureChipVariant(scoreDisclosureState);
+  const backtestStatusVariant = backtestStatusLabel === '已回测'
+    ? 'success'
+    : BACKTEST_DANGER_STATUSES.has(backtestStatusLabel)
+      ? 'danger'
+      : BACKTEST_CAUTION_STATUSES.has(backtestStatusLabel)
+        ? 'caution'
+        : 'neutral';
+  const batchDisplayStatus = batchStatus
+    ? describeDisplayStatus(
+        batchStatus === 'completed'
+          ? 'success'
+          : batchStatus === 'failed'
+            ? 'failed'
+            : batchStatus === 'running'
+              ? 'info'
+              : batchStatus === 'skipped'
+                ? 'disabled'
+                : 'pending',
+        batchStatus === 'running' ? '运行中' : batchStatus === 'completed' ? '完成' : batchStatus === 'failed' ? '失败' : batchStatus === 'skipped' ? '已跳过' : '等待',
+        { language: model.language },
+      )
+    : null;
+  const rowObservation = buildObservationSummary(item, model.language);
+  const rowNextAction = buildNextActionLabel(item, model.language);
+  const resultId = backtest?.lastResultId;
+  const rowStateLine = [
+    `${model.copy.score} ${formatScore(score)}`,
+    typeof avgForward === 'number' ? `${model.copy.historyPrefix} ${formatPct(avgForward)}` : null,
+    typeof hitRate === 'number' ? `${model.copy.hitPrefix} ${Math.round(hitRate * 100)}%` : null,
+  ].filter(Boolean).join(' · ');
+
   return (
-    <ConsumerWorkspaceScope data-testid="watchlist-wide-workspace-scope" className="min-h-0 flex-1">
-      <ConsumerWorkspacePageShell data-testid="watchlist-page" className="flex-1">
-      <div data-layout-zone="HeaderStrip" data-testid="watchlist-header-strip" className="flex min-w-0 flex-col gap-3">
-        <DensePageHeader
-          eyebrow={language === 'zh' ? '监控队列' : 'Monitoring board'}
-          title={copy.title}
+    <article
+      key={item.id}
+      data-testid={`watchlist-row-${item.symbol}`}
+      className={`min-w-0 border-b border-[color:var(--wolfy-divider)] p-3 transition-colors md:px-4 ${isActive ? 'bg-white/[0.045]' : 'bg-transparent hover:bg-white/[0.02]'}`}
+    >
+      <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_auto] lg:items-start lg:gap-4">
+        <div className="flex min-w-0 gap-3">
+          <button
+            type="button"
+            className={`${ROW_SELECTION_BUTTON_CLASS} ${
+              model.selectedIds.has(item.id)
+                ? 'border-cyan-300 bg-cyan-300/30 shadow-[0_0_10px_rgba(103,232,249,0.25)]'
+                : 'border-white/15 bg-white/[0.03] hover:border-white/30'
+            }`}
+            role="checkbox"
+            aria-checked={model.selectedIds.has(item.id)}
+            aria-label={`${model.language === 'zh' ? '选择' : 'Select'} ${item.symbol}`}
+            onClick={() => model.toggleSelected(item)}
+          >
+            <span
+              aria-hidden="true"
+              className={`size-3 rounded-sm border transition ${
+                model.selectedIds.has(item.id)
+                  ? 'border-cyan-100 bg-cyan-100 shadow-[0_0_8px_rgba(103,232,249,0.35)]'
+                  : 'border-white/20 bg-transparent'
+              }`}
+            />
+          </button>
+          <button
+            type="button"
+            aria-pressed={isActive}
+            aria-label={`${model.language === 'zh' ? '查看详情' : 'View details'} ${item.symbol}`}
+            className={`flex min-w-0 flex-1 flex-col items-start gap-1 rounded-lg border px-3 py-2 text-left transition ${
+              isActive
+                ? 'border-[color:var(--wolfy-accent)] bg-[var(--wolfy-surface-input)]'
+                : 'border-transparent bg-transparent hover:border-[color:var(--wolfy-border-subtle)] hover:bg-white/[0.02]'
+            }`}
+            onClick={() => model.focusItem(item.id)}
+          >
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="font-semibold text-white">{item.symbol}</span>
+              <TerminalChip variant="neutral">{formatMarket(item.market)}</TerminalChip>
+              {isRecentlyAdded(item) ? <TerminalChip variant="info">{model.copy.recentlyAdded}</TerminalChip> : null}
+            </div>
+            <p className="truncate text-sm text-white/78">{item.name || '--'}</p>
+            <p className="truncate text-[11px] text-white/45">{originLabel}</p>
+          </button>
+        </div>
+
+        <div className="min-w-0 space-y-2">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
+            {model.language === 'en' ? 'State' : '状态'}
+          </p>
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <TerminalChip variant={scoreFreshnessVariant} className="font-mono uppercase tracking-widest">
+              {scoreDisclosureStatusLabel}
+            </TerminalChip>
+            <TerminalChip variant={scannerStatusChipVariant(scannerStatusLabel)}>
+              {scannerStatusLabel}
+            </TerminalChip>
+            <TerminalChip variant={backtestStatusVariant}>{backtestStatusLabel}</TerminalChip>
+            {batchDisplayStatus ? (
+              <TerminalChip variant={terminalChipVariant(batchDisplayStatus.tone)} className="font-mono">
+                {batchDisplayStatus.label}
+              </TerminalChip>
+            ) : null}
+          </div>
+          <p className="truncate text-xs font-mono text-white/55">{rowStateLine || `${model.copy.score} ${formatScore(score)}`}</p>
+        </div>
+
+        <div className="min-w-0 space-y-2">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
+            {model.language === 'en' ? 'Observation' : '观察'}
+          </p>
+          <p className="text-sm leading-6 text-white/72">{rowObservation}</p>
+          <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
+            {latestTime ? <span className="font-mono text-white/45">{model.copy.latestUpdate} {formatDateTime(latestTime, model.language)}</span> : null}
+            <span className="text-white/55">{model.language === 'en' ? 'Next' : '下一步'} {rowNextAction}</span>
+          </div>
+          {rowRiskNote ? (
+            <p className="text-xs leading-5 text-white/52" data-testid={`watchlist-row-note-${item.symbol}`}>
+              {rowRiskNote}
+            </p>
+          ) : scannerFailure && scannerStatusLabel === '扫描失败' ? (
+            <p className="text-xs leading-5 text-rose-100/75">{scannerFailure.label}</p>
+          ) : null}
+        </div>
+
+        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+          <TerminalButton
+            type="button"
+            variant="compact"
+            onClick={() => void model.handleAnalyze(item)}
+            disabled={model.pendingAnalyzeId === item.id}
+          >
+            <Play className="size-3.5" />
+            {model.pendingAnalyzeId === item.id ? model.copy.analyzing : model.copy.analyze}
+          </TerminalButton>
+          <TerminalButton
+            type="button"
+            variant="compact"
+            onClick={() => model.openBacktest(item)}
+          >
+            <BarChart3 className="size-3.5" />
+            {model.copy.backtest}
+          </TerminalButton>
+          {resultId != null ? (
+            <TerminalButton
+              type="button"
+              variant="compact"
+              className="font-mono text-[11px]"
+              onClick={() => model.openBacktestResult(resultId)}
+            >
+              {model.copy.resultPrefix} {resultId}
+            </TerminalButton>
+          ) : null}
+          <TerminalButton
+            type="button"
+            aria-label={`${model.copy.copySymbol} ${item.symbol}`}
+            title={model.copiedId === item.id ? model.copy.copied : model.copy.copySymbol}
+            variant="compact"
+            className="size-[34px] min-h-[34px] px-0 text-white/55"
+            onClick={() => void model.handleCopy(item)}
+          >
+            <Copy className="size-3.5" />
+          </TerminalButton>
+          <TerminalButton
+            type="button"
+            aria-label={`${model.copy.remove} ${item.symbol}`}
+            variant="danger"
+            className="size-[34px] min-h-[34px] px-0"
+            onClick={() => void model.handleRemove(item)}
+            disabled={model.pendingRemoveId === item.id}
+          >
+            <Trash2 className="size-3.5" />
+          </TerminalButton>
+        </div>
+      </div>
+    </article>
+  );
+};
+
+const WatchlistPrimaryBoardSection: React.FC<{ model: WatchlistPageModel }> = ({ model }) => (
+  <div data-layout-zone="PrimaryWorkRegion" data-testid="watchlist-primary-work-region" className="min-w-0">
+    <ConsoleBoard className="rounded-none border-0 bg-transparent">
+      <div className="flex min-w-0 items-center justify-between gap-3 border-b border-[color:var(--wolfy-divider)] px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{model.copy.tableTitle}</p>
+          <p className="truncate text-xs text-[color:var(--wolfy-text-secondary)]">{model.copy.tableDescription}</p>
+        </div>
+        <TerminalChip variant="neutral" className="font-mono">
+          {model.actionScopeLabel}
+        </TerminalChip>
+      </div>
+      <div
+        data-testid="watchlist-list-header"
+        className="hidden min-w-0 grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_auto] gap-4 border-b border-[color:var(--wolfy-divider)] px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)] lg:grid"
+      >
+        <span>{model.language === 'en' ? 'Symbol' : '标的'}</span>
+        <span>{model.language === 'en' ? 'State' : '状态'}</span>
+        <span>{model.language === 'en' ? 'Observation' : '观察'}</span>
+        <span className="text-right">{model.copy.actions}</span>
+      </div>
+      {model.isLoading ? (
+        <TerminalPanel as="section" dense className="py-8 text-center text-sm text-white/45" role="status">
+          {model.copy.loading}
+        </TerminalPanel>
+      ) : model.filteredItems.length > 0 ? (
+        <DenseRows data-testid="watchlist-candidate-list">
+          {model.filteredItems.map((item) => (
+            <WatchlistRow key={item.id} item={item} model={model} />
+          ))}
+        </DenseRows>
+      ) : (
+        <CompactEmptyRow
+          data-testid="watchlist-compact-empty-state"
+          title={model.copy.emptyTitle}
+          className="rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent p-4 min-h-[72px]"
           action={(
             <TerminalButton
               type="button"
               variant="secondary"
               className="h-9 px-3 text-xs"
-              onClick={() => navigate(scannerPath)}
+              onClick={model.openScanner}
             >
-              <ExternalLink className="h-4 w-4" />
-              {copy.openScanner}
+              <ExternalLink className="size-4" />
+              {model.copy.openScanner}
             </TerminalButton>
           )}
-        />
-
-        <WatchlistConclusionBand
-          model={watchlistConclusion}
-          trackedCount={summary.total}
-          monitoringStateLabel={monitoringStateLabel}
-          language={language}
-        />
-
-        <DenseStatusStrip
-          data-testid="watchlist-status-strip"
-          ariaLabel="watchlist summary"
-          items={statusItems}
-        />
-
-        {notice ? (
-          <TerminalNotice className={noticeClassName} role="status">
-            {notice.message}
-          </TerminalNotice>
-        ) : null}
-
-        {error ? (
-          <TerminalPanel as="section" dense>
-            <ApiErrorAlert error={error} />
-          </TerminalPanel>
-        ) : null}
-      </div>
-
-      <DenseTableShell data-testid="watchlist-watch-board" variant="board">
-        <CompactFilterBar
-          data-testid="watchlist-compact-filter-bar"
-          className="min-h-0 rounded-none border-x-0 border-t-0 px-3 py-2"
-          leading={<span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.filters}</span>}
         >
-          <div className="flex min-w-0 flex-col gap-2">
-            <div
-              data-testid="watchlist-filter-grid"
-              className="grid min-w-0 grid-cols-2 gap-2 md:flex md:flex-wrap md:items-end"
-            >
-              <div data-testid="watchlist-primary-filters" className="col-span-2 min-w-0 md:flex-[2_1_20rem]">
-                <Input
-                  label={copy.search}
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={copy.searchPlaceholder}
-                  containerClassName="min-w-0"
-                  trailingAction={<Search className="h-4 w-4 text-white/35" />}
-                />
-              </div>
-              <div className="min-w-0 md:flex-[0_0_9rem]">
-                <Select label={copy.market} value={marketFilter} onChange={setMarketFilter} options={marketOptions} className="min-w-0" />
-              </div>
-              <div className="min-w-0 md:flex-[0_0_10.5rem]">
-                <Select
-                  label={copy.sort}
-                  value={sortKey}
-                  onChange={(value) => setSortKey(value as SortKey)}
-                  className="min-w-0"
-                  options={[
-                    { value: 'newest', label: copy.newest },
-                    { value: 'scannerScore', label: copy.scannerScore },
-                    { value: 'backtestReturn', label: copy.backtestReturn },
-                    { value: 'historicalHitRate', label: copy.historicalHitRate },
-                    { value: 'recentlyScored', label: copy.recentlyScored },
-                    { value: 'recentlyBacktested', label: copy.recentlyBacktested },
-                    { value: 'symbol', label: copy.symbol },
-                    { value: 'market', label: copy.market },
-                  ]}
-                />
-              </div>
-              <div className="min-w-0 md:flex-[0_0_9.5rem]">
-                <Select label={copy.source} value={sourceFilter} onChange={setSourceFilter} options={sourceOptions} className="min-w-0" />
-              </div>
-              <div className="min-w-0">
-                <TerminalButton
-                  type="button"
-                  variant="secondary"
-                  className="h-9 w-full px-3 text-xs"
-                  aria-expanded={advancedFiltersOpen}
-                  aria-controls="watchlist-advanced-filter-grid"
-                  onClick={() => setAdvancedFiltersOpen((current) => !current)}
-                >
-                  {copy.advancedFilters}
-                </TerminalButton>
-              </div>
+          {model.copy.emptyBody}
+        </CompactEmptyRow>
+      )}
+    </ConsoleBoard>
+  </div>
+);
+
+const WatchlistDetailRailSection: React.FC<{ model: WatchlistPageModel }> = ({ model }) => {
+  const activeItem = model.activeItem;
+
+  if (!activeItem || model.filteredItems.length === 0) {
+    return null;
+  }
+
+  const activeBacktestResultId = model.activeBacktest?.lastResultId;
+
+  return (
+    <div
+      data-layout-zone="ContextRail"
+      data-linear-primitive="context-rail"
+      data-testid="watchlist-detail-rail"
+      className="min-w-0 border-t border-[color:var(--wolfy-divider)] lg:border-l lg:border-t-0"
+    >
+      <ConsoleContextRail className="rounded-none border-0 bg-[var(--wolfy-surface-rail)] p-4">
+        <section className="min-w-0 pb-4">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] text-white/40">{model.language === 'zh' ? '已选项目' : 'Selected item'}</p>
+              <h2 className="truncate text-base font-semibold text-white">{activeItem.symbol}</h2>
+              <p className="truncate text-xs text-white/58">{activeItem.name || '--'}</p>
             </div>
-            <div
-              data-testid="watchlist-advanced-filters"
-              className="flex min-w-0 flex-col gap-2 border-t border-[color:var(--wolfy-divider)] pt-2"
-            >
-              <div className="flex min-w-0 items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.advancedFilters}</span>
-                  <TerminalChip variant="neutral">{advancedFiltersOpen ? copy.enabled : language === 'zh' ? '默认收起' : 'Collapsed'}</TerminalChip>
+            <TerminalChip variant="neutral">{formatMarket(activeItem.market)}</TerminalChip>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <TerminalChip variant="info" className="font-mono text-cyan-100">
+              {model.language === 'zh' ? '分数' : 'SCORE'} {formatScore(model.activeScore)}
+            </TerminalChip>
+            <TerminalChip variant={scoreDisclosureChipVariant(model.activeScoreDisclosureState)}>
+              {formatScoreDisclosureStatus(model.activeScoreDisclosureState, model.language)}
+            </TerminalChip>
+            <TerminalChip variant={model.activeBacktestStatusLabel === '已回测' ? 'success' : BACKTEST_DANGER_STATUSES.has(model.activeBacktestStatusLabel) ? 'danger' : BACKTEST_CAUTION_STATUSES.has(model.activeBacktestStatusLabel) ? 'caution' : 'neutral'}>
+              {model.activeBacktestStatusLabel}
+            </TerminalChip>
+          </div>
+        </section>
+
+        <section className="grid min-w-0 gap-3 border-y border-[color:var(--wolfy-divider)] py-4">
+          <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+            <p className="text-[11px] text-white/40">{model.language === 'zh' ? '当前状态' : 'Current state'}</p>
+            <p className="mt-1 text-sm text-white/78">{formatScoreDisclosureFreshness(activeItem, model.activeLatestTime, model.language)}</p>
+          </div>
+          <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+            <p className="text-[11px] text-white/40">{model.language === 'zh' ? '风险提示' : 'Risk note'}</p>
+            <p className="mt-1 text-sm text-white/78">{model.activeRiskNote || (model.language === 'en' ? 'State is stable for observation.' : '当前状态适合继续观察。')}</p>
+          </div>
+          <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3">
+            <p className="text-[11px] text-white/40">{model.language === 'zh' ? '下一步' : 'Next step'}</p>
+            <p className="mt-1 text-sm text-white/78">{model.activeNextActionLabel}</p>
+          </div>
+        </section>
+
+        <section className="min-w-0 py-4">
+          <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-white">{model.language === 'zh' ? '观察摘要' : 'Observation summary'}</h3>
+          </div>
+          <div className="space-y-3">
+            <p className="text-sm leading-6 text-white/72">{model.activeObservationSummary}</p>
+            <div className="divide-y divide-[color:var(--wolfy-divider)]">
+              {[
+                { label: model.copy.lastScored, value: formatDateTime(activeItem.lastScoredAt, model.language) },
+                { label: model.copy.added, value: formatDateTime(activeItem.createdAt || activeItem.updatedAt, model.language) },
+                { label: model.copy.latestUpdate, value: model.activeLatestTime ? formatDateTime(model.activeLatestTime, model.language) : '--' },
+              ].map((row) => (
+                <div key={String(row.label)} className="flex min-w-0 items-start justify-between gap-4 py-2.5 text-[11px]">
+                  <span className="truncate text-white/38">{row.label}</span>
+                  <span className="min-w-0 text-right text-white/68">{row.value}</span>
                 </div>
-              </div>
-              {advancedFiltersOpen ? (
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="min-w-0 py-4">
+          <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-white">{model.copy.intelligence}</h3>
+          </div>
+          <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3 text-xs leading-5 text-white/68">
+            {model.activeBacktestSummary}
+          </div>
+        </section>
+
+        <UserAlertsRailPanel
+          symbol={activeItem.symbol}
+          language={model.language}
+        />
+
+        {model.activeCatalystExposures ? (
+          <DenseSecondaryDisclosure
+            data-testid="watchlist-catalyst-exposures"
+            variant="row"
+            title={model.copy.catalystExposures}
+            summary={model.copy.catalystExposuresSummary}
+          >
+            <div className="space-y-3 text-xs leading-5 text-white/68">
+              {model.activeCatalystExposures.items.map((exposure) => (
                 <div
-                  id="watchlist-advanced-filter-grid"
-                  data-testid="watchlist-advanced-filter-grid"
-                  className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2"
+                  key={exposure.id}
+                  className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] p-3"
                 >
-                  <Select label={copy.context} value={contextFilter} onChange={setContextFilter} options={contextOptions} className="min-w-0" />
-                  <Select
-                    label={copy.evidence}
-                    value={evidenceFilter}
-                    onChange={(value) => setEvidenceFilter(value as EvidenceFilter)}
-                    className="min-w-0"
-                    options={[
-                      { value: 'all', label: copy.all },
-                      { value: 'hasScanner', label: copy.hasScanner },
-                      { value: 'hasBacktest', label: copy.hasBacktest },
-                      { value: 'scannerSelected', label: copy.scannerSelected },
-                      { value: 'staleIntelligence', label: copy.staleIntelligence },
-                    ]}
-                  />
+                  <p className="truncate text-sm text-white/82">{exposure.title}</p>
+                  {exposure.summary ? (
+                    <p className="mt-1 text-xs leading-5 text-white/65">{exposure.summary}</p>
+                  ) : null}
+                  {exposure.statusLabels.length ? (
+                    <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+                      {exposure.statusLabels.map((label) => (
+                        <TerminalChip key={`${exposure.id}:${label}`} variant="neutral">{label}</TerminalChip>
+                      ))}
+                    </div>
+                  ) : null}
+                  {exposure.metadata.length ? (
+                    <div className="mt-2 flex min-w-0 flex-wrap gap-2 text-[11px] text-white/45">
+                      {exposure.metadata.map((label) => (
+                        <span key={`${exposure.id}:${label}`}>{label}</span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {exposure.reasonLabels.length ? (
+                    <div className="mt-2 space-y-1.5">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-white/38">{model.copy.catalystExposuresReasons}</p>
+                      <div className="flex min-w-0 flex-wrap gap-1.5">
+                        {exposure.reasonLabels.map((label) => (
+                          <TerminalChip key={`${exposure.id}:reason:${label}`} variant="caution">{label}</TerminalChip>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+              {model.activeCatalystExposures.hiddenCount > 0 ? (
+                <p className="text-[11px] text-white/45">{model.copy.catalystExposuresBounded}</p>
+              ) : null}
+            </div>
+          </DenseSecondaryDisclosure>
+        ) : null}
+
+        {model.activeInvestorSignal ? (
+          <DenseSecondaryDisclosure
+            data-testid="watchlist-investor-signal"
+            variant="row"
+            title={model.copy.investorSignal}
+            summary={model.copy.investorSignalSummary}
+          >
+            <div className="space-y-3 text-xs leading-5 text-white/68">
+              <div className="grid min-w-0 gap-2 sm:grid-cols-3">
+                {model.activeInvestorSignal.stateLabel ? (
+                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
+                    <p className="text-[11px] text-white/40">{model.copy.investorSignalState}</p>
+                    <p className="mt-1 text-sm text-white/78">{model.activeInvestorSignal.stateLabel}</p>
+                  </div>
+                ) : null}
+                {model.activeInvestorSignal.confidenceLabel ? (
+                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
+                    <p className="text-[11px] text-white/40">{model.copy.investorSignalConfidence}</p>
+                    <p className="mt-1 text-sm text-white/78">{model.activeInvestorSignal.confidenceLabel}</p>
+                  </div>
+                ) : null}
+                {model.activeInvestorSignal.freshnessLabel ? (
+                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
+                    <p className="text-[11px] text-white/40">{model.copy.investorSignalFreshness}</p>
+                    <p className="mt-1 text-sm text-white/78">{model.activeInvestorSignal.freshnessLabel}</p>
+                  </div>
+                ) : null}
+              </div>
+              {model.activeInvestorSignal.explanation ? (
+                <p data-testid="watchlist-investor-signal-explanation">{model.activeInvestorSignal.explanation}</p>
+              ) : null}
+              {model.activeInvestorSignal.reasonCodes.length ? (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/38">{model.copy.investorSignalReasons}</p>
+                  <div className="flex min-w-0 flex-wrap gap-1.5">
+                    {model.activeInvestorSignal.reasonCodes.map((reason) => (
+                      <TerminalChip key={reason} variant="neutral">{reason}</TerminalChip>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {model.activeInvestorSignal.contradictionCodes.length ? (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/38">{model.copy.investorSignalContradictions}</p>
+                  <div className="flex min-w-0 flex-wrap gap-1.5">
+                    {model.activeInvestorSignal.contradictionCodes.map((reason) => (
+                      <TerminalChip key={reason} variant="caution">{reason}</TerminalChip>
+                    ))}
+                  </div>
                 </div>
               ) : null}
             </div>
-          </div>
-        </CompactFilterBar>
+          </DenseSecondaryDisclosure>
+        ) : null}
 
-        <div
-          data-testid="watchlist-board-shell"
-          className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_340px]"
+        <LeveragedEtfMapper
+          defaultUnderlyingSymbol={activeItem.symbol}
+          language={model.language}
+          className="pt-4"
+        />
+
+        <DenseSecondaryDisclosure
+          data-testid="watchlist-data-notes"
+          variant="row"
+          title={model.language === 'zh' ? '数据备注' : 'Data notes'}
+          summary={model.language === 'zh' ? '默认收起' : 'Collapsed by default'}
+          className="pt-4"
         >
-          <div data-layout-zone="PrimaryWorkRegion" data-testid="watchlist-primary-work-region" className="min-w-0">
-            <ConsoleBoard className="rounded-none border-0 bg-transparent">
-              <div className="flex min-w-0 items-center justify-between gap-3 border-b border-[color:var(--wolfy-divider)] px-4 py-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.tableTitle}</p>
-                  <p className="truncate text-xs text-[color:var(--wolfy-text-secondary)]">{copy.tableDescription}</p>
-                </div>
-                <TerminalChip variant="neutral" className="font-mono">
-                  {actionScopeLabel}
-                </TerminalChip>
+          <div className="space-y-3 text-xs leading-5 text-white/62">
+            <p>{formatWatchlistOrigin(activeItem.source, model.language)}</p>
+            {model.activeSavedNote ? (
+              <div data-testid="watchlist-saved-note" className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
+                <p className="text-[11px] text-white/40">{model.language === 'zh' ? '保存备注' : 'Observation note'}</p>
+                <p className="mt-1 whitespace-pre-wrap break-words text-white/72">{model.activeSavedNote}</p>
               </div>
-              <div
-                data-testid="watchlist-list-header"
-                className="hidden min-w-0 grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_auto] gap-4 border-b border-[color:var(--wolfy-divider)] px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)] lg:grid"
-              >
-                <span>{language === 'en' ? 'Symbol' : '标的'}</span>
-                <span>{language === 'en' ? 'State' : '状态'}</span>
-                <span>{language === 'en' ? 'Observation' : '观察'}</span>
-                <span className="text-right">{copy.actions}</span>
+            ) : null}
+            {model.activeScannerReason ? <p>{model.activeScannerReason}</p> : null}
+            {!model.activeHasEvidence ? <p>{model.copy.sourceUnknownNeedsRefresh}</p> : null}
+            {model.activeContextTags.length ? (
+              <div className="flex min-w-0 flex-wrap gap-1.5">
+                {model.activeContextTags.map((tag) => (
+                  <TerminalChip key={tag} variant="neutral">{tag}</TerminalChip>
+                ))}
               </div>
-              {isLoading ? (
-                <TerminalPanel as="section" dense className="py-8 text-center text-sm text-white/45" role="status">
-                  {copy.loading}
-                </TerminalPanel>
-              ) : filteredItems.length > 0 ? (
-                <DenseRows data-testid="watchlist-candidate-list">
-                  {filteredItems.map((item) => {
-                    const scanner = item.intelligence?.scanner;
-                    const strategySimulation = item.intelligence?.strategySimulation;
-                    const backtest = item.intelligence?.backtest;
-                    const score = getScannerScore(item);
-                    const hitRate = strategySimulation?.hitRate;
-                    const avgForward = strategySimulation?.avgForwardReturnPct;
-                    const batchStatus = batchStatuses[item.symbol];
-                    const batchFailure = batchFailures[item.symbol];
-                    const scannerFailure = item.scoreError || scanner?.reason
-                      ? sanitizeFailureReason(item.scoreError || scanner?.reason || '', '扫描失败')
-                      : null;
-                    const latestTime = getLatestIntelligenceTime(item);
-                    const scannerStatusLabel = formatScannerStatus(item);
-                    const backtestStatusLabel = formatBacktestStatus(item, batchFailure);
-                    const isActive = activeItem?.id === item.id;
-                    const scoreDisclosureState = getScoreDisclosureState(item);
-                    const scoreDisclosureStatusLabel = formatScoreDisclosureStatus(scoreDisclosureState, language);
-                    const rowRiskNote = buildWatchRiskNote(item, language);
-                    const originLabel = formatWatchlistOrigin(item.source, language);
-                    const scoreFreshnessVariant = scoreDisclosureChipVariant(scoreDisclosureState);
-                    const backtestStatusVariant = backtestStatusLabel === '已回测'
-                      ? 'success'
-                      : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(backtestStatusLabel)
-                        ? 'danger'
-                        : ['样本不足', '数据缺失'].includes(backtestStatusLabel)
-                          ? 'caution'
-                          : 'neutral';
-                    const batchDisplayStatus = batchStatus
-                      ? describeDisplayStatus(
-                          batchStatus === 'completed'
-                            ? 'success'
-                            : batchStatus === 'failed'
-                              ? 'failed'
-                              : batchStatus === 'running'
-                                ? 'info'
-                                : batchStatus === 'skipped'
-                                  ? 'disabled'
-                                  : 'pending',
-                          batchStatus === 'running' ? '运行中' : batchStatus === 'completed' ? '完成' : batchStatus === 'failed' ? '失败' : batchStatus === 'skipped' ? '已跳过' : '等待',
-                          { language },
-                        )
-                      : null;
-                    const rowObservation = buildObservationSummary(item, language);
-                    const rowNextAction = buildNextActionLabel(item, language);
-                    const rowStateLine = [
-                      `${copy.score} ${formatScore(score)}`,
-                      typeof avgForward === 'number' ? `${copy.historyPrefix} ${formatPct(avgForward)}` : null,
-                      typeof hitRate === 'number' ? `${copy.hitPrefix} ${Math.round(hitRate * 100)}%` : null,
-                    ].filter(Boolean).join(' · ');
-
-                    return (
-                      <article
-                        key={item.id}
-                        data-testid={`watchlist-row-${item.symbol}`}
-                        className={`min-w-0 border-b border-[color:var(--wolfy-divider)] px-3 py-3 transition-colors md:px-4 ${isActive ? 'bg-white/[0.045]' : 'bg-transparent hover:bg-white/[0.02]'}`}
-                      >
-                        <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_auto] lg:items-start lg:gap-4">
-                          <div className="flex min-w-0 gap-3">
-                            <button
-                              type="button"
-                              className={`${ROW_SELECTION_BUTTON_CLASS} ${
-                                selectedIds.has(item.id)
-                                  ? 'border-cyan-300 bg-cyan-300/30 shadow-[0_0_10px_rgba(103,232,249,0.25)]'
-                                  : 'border-white/15 bg-white/[0.03] hover:border-white/30'
-                              }`}
-                              role="checkbox"
-                              aria-checked={selectedIds.has(item.id)}
-                              aria-label={`${language === 'zh' ? '选择' : 'Select'} ${item.symbol}`}
-                              onClick={() => toggleSelected(item)}
-                            >
-                              <span
-                                aria-hidden="true"
-                                className={`h-3 w-3 rounded-sm border transition ${
-                                  selectedIds.has(item.id)
-                                    ? 'border-cyan-100 bg-cyan-100 shadow-[0_0_8px_rgba(103,232,249,0.35)]'
-                                    : 'border-white/20 bg-transparent'
-                                }`}
-                              />
-                            </button>
-                            <button
-                              type="button"
-                              aria-pressed={isActive}
-                              aria-label={`${language === 'zh' ? '查看详情' : 'View details'} ${item.symbol}`}
-                              className={`flex min-w-0 flex-1 flex-col items-start gap-1 rounded-lg border px-3 py-2 text-left transition ${
-                                isActive
-                                  ? 'border-[color:var(--wolfy-accent)] bg-[var(--wolfy-surface-input)]'
-                                  : 'border-transparent bg-transparent hover:border-[color:var(--wolfy-border-subtle)] hover:bg-white/[0.02]'
-                              }`}
-                              onClick={() => setActiveItemId(item.id)}
-                            >
-                              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                <span className="font-semibold text-white">{item.symbol}</span>
-                                <TerminalChip variant="neutral">{formatMarket(item.market)}</TerminalChip>
-                                {isRecentlyAdded(item) ? <TerminalChip variant="info">{copy.recentlyAdded}</TerminalChip> : null}
-                              </div>
-                              <p className="truncate text-sm text-white/78">{item.name || '--'}</p>
-                              <p className="truncate text-[11px] text-white/45">{originLabel}</p>
-                            </button>
-                          </div>
-
-                          <div className="min-w-0 space-y-2">
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
-                              {language === 'en' ? 'State' : '状态'}
-                            </p>
-                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                              <TerminalChip variant={scoreFreshnessVariant} className="font-mono uppercase tracking-widest">
-                                {scoreDisclosureStatusLabel}
-                              </TerminalChip>
-                              <TerminalChip variant={scannerStatusChipVariant(scannerStatusLabel)}>
-                                {scannerStatusLabel}
-                              </TerminalChip>
-                              <TerminalChip variant={backtestStatusVariant}>{backtestStatusLabel}</TerminalChip>
-                              {batchDisplayStatus ? (
-                                <TerminalChip variant={terminalChipVariant(batchDisplayStatus.tone)} className="font-mono">
-                                  {batchDisplayStatus.label}
-                                </TerminalChip>
-                              ) : null}
-                            </div>
-                            <p className="truncate text-xs font-mono text-white/55">{rowStateLine || `${copy.score} ${formatScore(score)}`}</p>
-                          </div>
-
-                          <div className="min-w-0 space-y-2">
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">
-                              {language === 'en' ? 'Observation' : '观察'}
-                            </p>
-                            <p className="text-sm leading-6 text-white/72">{rowObservation}</p>
-                            <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
-                              {latestTime ? <span className="font-mono text-white/45">{copy.latestUpdate} {formatDateTime(latestTime, language)}</span> : null}
-                              <span className="text-white/55">{language === 'en' ? 'Next' : '下一步'} {rowNextAction}</span>
-                            </div>
-                            {rowRiskNote ? (
-                              <p className="text-xs leading-5 text-white/52" data-testid={`watchlist-row-note-${item.symbol}`}>
-                                {rowRiskNote}
-                              </p>
-                            ) : scannerFailure && scannerStatusLabel === '扫描失败' ? (
-                              <p className="text-xs leading-5 text-rose-100/75">{scannerFailure.label}</p>
-                            ) : null}
-                          </div>
-
-                          <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
-                            <TerminalButton
-                              type="button"
-                              variant="compact"
-                              onClick={() => void handleAnalyze(item)}
-                              disabled={pendingAnalyzeId === item.id}
-                            >
-                              <Play className="h-3.5 w-3.5" />
-                              {pendingAnalyzeId === item.id ? copy.analyzing : copy.analyze}
-                            </TerminalButton>
-                            <TerminalButton
-                              type="button"
-                              variant="compact"
-                              onClick={() => navigate(buildBacktestPath(item, language))}
-                            >
-                              <BarChart3 className="h-3.5 w-3.5" />
-                              {copy.backtest}
-                            </TerminalButton>
-                            {backtest?.lastResultId != null ? (
-                              <TerminalButton
-                                type="button"
-                                variant="compact"
-                                className="font-mono text-[11px]"
-                                onClick={() => navigate(buildLocalizedPath(`/backtest/results/${backtest.lastResultId}`, language))}
-                              >
-                                {copy.resultPrefix} {backtest.lastResultId}
-                              </TerminalButton>
-                            ) : null}
-                            <TerminalButton
-                              type="button"
-                              aria-label={`${copy.copySymbol} ${item.symbol}`}
-                              title={copiedId === item.id ? copy.copied : copy.copySymbol}
-                              variant="compact"
-                              className="h-[34px] min-h-[34px] w-[34px] px-0 text-white/55"
-                              onClick={() => void handleCopy(item)}
-                            >
-                              <Copy className="h-3.5 w-3.5" />
-                            </TerminalButton>
-                            <TerminalButton
-                              type="button"
-                              aria-label={`${copy.remove} ${item.symbol}`}
-                              variant="danger"
-                              className="h-[34px] min-h-[34px] w-[34px] px-0"
-                              onClick={() => void handleRemove(item)}
-                              disabled={pendingRemoveId === item.id}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </TerminalButton>
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </DenseRows>
-              ) : (
-                <CompactEmptyRow
-                  data-testid="watchlist-compact-empty-state"
-                  title={copy.emptyTitle}
-                  className="rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent px-4 py-4 min-h-[72px]"
-                  action={(
-                    <TerminalButton
-                      type="button"
-                      variant="secondary"
-                      className="h-9 px-3 text-xs"
-                      onClick={() => navigate(scannerPath)}
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                      {copy.openScanner}
-                    </TerminalButton>
-                  )}
-                >
-                  {copy.emptyBody}
-                </CompactEmptyRow>
-              )}
-            </ConsoleBoard>
-          </div>
-
-          {filteredItems.length > 0 && activeItem ? (
-            <div
-              data-layout-zone="ContextRail"
-              data-linear-primitive="context-rail"
-              data-testid="watchlist-detail-rail"
-              className="min-w-0 border-t border-[color:var(--wolfy-divider)] lg:border-l lg:border-t-0"
-            >
-              <ConsoleContextRail className="rounded-none border-0 bg-[var(--wolfy-surface-rail)] px-4 py-4">
-                <section className="min-w-0 pb-4">
-                  <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[11px] text-white/40">{language === 'zh' ? '已选项目' : 'Selected item'}</p>
-                      <h2 className="truncate text-base font-semibold text-white">{activeItem.symbol}</h2>
-                      <p className="truncate text-xs text-white/58">{activeItem.name || '--'}</p>
-                    </div>
-                    <TerminalChip variant="neutral">{formatMarket(activeItem.market)}</TerminalChip>
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                    <TerminalChip variant="info" className="font-mono text-cyan-100">
-                      {language === 'zh' ? '分数' : 'SCORE'} {formatScore(activeScore)}
-                    </TerminalChip>
-                    <TerminalChip variant={scoreDisclosureChipVariant(activeScoreDisclosureState)}>
-                      {formatScoreDisclosureStatus(activeScoreDisclosureState, language)}
-                    </TerminalChip>
-                    <TerminalChip variant={activeBacktestStatusLabel === '已回测' ? 'success' : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(activeBacktestStatusLabel) ? 'danger' : ['样本不足', '数据缺失'].includes(activeBacktestStatusLabel) ? 'caution' : 'neutral'}>
-                      {activeBacktestStatusLabel}
-                    </TerminalChip>
-                  </div>
-                </section>
-
-                <section className="grid min-w-0 gap-3 border-y border-[color:var(--wolfy-divider)] py-4">
-                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
-                    <p className="text-[11px] text-white/40">{language === 'zh' ? '当前状态' : 'Current state'}</p>
-                    <p className="mt-1 text-sm text-white/78">{formatScoreDisclosureFreshness(activeItem, activeLatestTime, language)}</p>
-                  </div>
-                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
-                    <p className="text-[11px] text-white/40">{language === 'zh' ? '风险提示' : 'Risk note'}</p>
-                    <p className="mt-1 text-sm text-white/78">{activeRiskNote || (language === 'en' ? 'State is stable for observation.' : '当前状态适合继续观察。')}</p>
-                  </div>
-                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
-                    <p className="text-[11px] text-white/40">{language === 'zh' ? '下一步' : 'Next step'}</p>
-                    <p className="mt-1 text-sm text-white/78">{activeNextActionLabel}</p>
-                  </div>
-                </section>
-
-                <section className="min-w-0 py-4">
-                  <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-white">{language === 'zh' ? '观察摘要' : 'Observation summary'}</h3>
-                  </div>
-                  <div className="space-y-3">
-                    <p className="text-sm leading-6 text-white/72">{activeObservationSummary}</p>
-                    <div className="divide-y divide-[color:var(--wolfy-divider)]">
-                      {[
-                        { label: copy.lastScored, value: formatDateTime(activeItem.lastScoredAt, language) },
-                        { label: copy.added, value: formatDateTime(activeItem.createdAt || activeItem.updatedAt, language) },
-                        { label: copy.latestUpdate, value: activeLatestTime ? formatDateTime(activeLatestTime, language) : '--' },
-                      ].map((row) => (
-                        <div key={String(row.label)} className="flex min-w-0 items-start justify-between gap-4 py-2.5 text-[11px]">
-                          <span className="truncate text-white/38">{row.label}</span>
-                          <span className="min-w-0 text-right text-white/68">{row.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </section>
-
-                <section className="min-w-0 py-4">
-                  <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-white">{copy.intelligence}</h3>
-                  </div>
-                  <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-xs leading-5 text-white/68">
-                    {activeBacktestSummary}
-                  </div>
-                </section>
-
-                <UserAlertsRailPanel
-                  symbol={activeItem.symbol}
-                  language={language}
-                />
-
-                {activeCatalystExposures ? (
-                  <DenseSecondaryDisclosure
-                    data-testid="watchlist-catalyst-exposures"
-                    variant="row"
-                    title={copy.catalystExposures}
-                    summary={copy.catalystExposuresSummary}
-                  >
-                    <div className="space-y-3 text-xs leading-5 text-white/68">
-                      {activeCatalystExposures.items.map((exposure) => (
-                        <div
-                          key={exposure.id}
-                          className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3"
-                        >
-                          <p className="truncate text-sm text-white/82">{exposure.title}</p>
-                          {exposure.summary ? (
-                            <p className="mt-1 text-xs leading-5 text-white/65">{exposure.summary}</p>
-                          ) : null}
-                          {exposure.statusLabels.length ? (
-                            <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
-                              {exposure.statusLabels.map((label) => (
-                                <TerminalChip key={`${exposure.id}:${label}`} variant="neutral">{label}</TerminalChip>
-                              ))}
-                            </div>
-                          ) : null}
-                          {exposure.metadata.length ? (
-                            <div className="mt-2 flex min-w-0 flex-wrap gap-2 text-[11px] text-white/45">
-                              {exposure.metadata.map((label) => (
-                                <span key={`${exposure.id}:${label}`}>{label}</span>
-                              ))}
-                            </div>
-                          ) : null}
-                          {exposure.reasonLabels.length ? (
-                            <div className="mt-2 space-y-1.5">
-                              <p className="text-[11px] uppercase tracking-[0.18em] text-white/38">{copy.catalystExposuresReasons}</p>
-                              <div className="flex min-w-0 flex-wrap gap-1.5">
-                                {exposure.reasonLabels.map((label) => (
-                                  <TerminalChip key={`${exposure.id}:reason:${label}`} variant="caution">{label}</TerminalChip>
-                                ))}
-                              </div>
-                            </div>
-                          ) : null}
-                        </div>
-                      ))}
-                      {activeCatalystExposures.hiddenCount > 0 ? (
-                        <p className="text-[11px] text-white/45">{copy.catalystExposuresBounded}</p>
-                      ) : null}
-                    </div>
-                  </DenseSecondaryDisclosure>
-                ) : null}
-
-                {activeInvestorSignal ? (
-                  <DenseSecondaryDisclosure
-                    data-testid="watchlist-investor-signal"
-                    variant="row"
-                    title={copy.investorSignal}
-                    summary={copy.investorSignalSummary}
-                  >
-                    <div className="space-y-3 text-xs leading-5 text-white/68">
-                      <div className="grid min-w-0 gap-2 sm:grid-cols-3">
-                        {activeInvestorSignal.stateLabel ? (
-                          <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
-                            <p className="text-[11px] text-white/40">{copy.investorSignalState}</p>
-                            <p className="mt-1 text-sm text-white/78">{activeInvestorSignal.stateLabel}</p>
-                          </div>
-                        ) : null}
-                        {activeInvestorSignal.confidenceLabel ? (
-                          <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
-                            <p className="text-[11px] text-white/40">{copy.investorSignalConfidence}</p>
-                            <p className="mt-1 text-sm text-white/78">{activeInvestorSignal.confidenceLabel}</p>
-                          </div>
-                        ) : null}
-                        {activeInvestorSignal.freshnessLabel ? (
-                          <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
-                            <p className="text-[11px] text-white/40">{copy.investorSignalFreshness}</p>
-                            <p className="mt-1 text-sm text-white/78">{activeInvestorSignal.freshnessLabel}</p>
-                          </div>
-                        ) : null}
-                      </div>
-                      {activeInvestorSignal.explanation ? (
-                        <p data-testid="watchlist-investor-signal-explanation">{activeInvestorSignal.explanation}</p>
-                      ) : null}
-                      {activeInvestorSignal.reasonCodes.length ? (
-                        <div className="space-y-1.5">
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-white/38">{copy.investorSignalReasons}</p>
-                          <div className="flex min-w-0 flex-wrap gap-1.5">
-                            {activeInvestorSignal.reasonCodes.map((reason) => (
-                              <TerminalChip key={reason} variant="neutral">{reason}</TerminalChip>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-                      {activeInvestorSignal.contradictionCodes.length ? (
-                        <div className="space-y-1.5">
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-white/38">{copy.investorSignalContradictions}</p>
-                          <div className="flex min-w-0 flex-wrap gap-1.5">
-                            {activeInvestorSignal.contradictionCodes.map((reason) => (
-                              <TerminalChip key={reason} variant="caution">{reason}</TerminalChip>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  </DenseSecondaryDisclosure>
-                ) : null}
-
-                <LeveragedEtfMapper
-                  defaultUnderlyingSymbol={activeItem.symbol}
-                  language={language}
-                  className="pt-4"
-                />
-
-                <DenseSecondaryDisclosure
-                  data-testid="watchlist-data-notes"
-                  variant="row"
-                  title={language === 'zh' ? '数据备注' : 'Data notes'}
-                  summary={language === 'zh' ? '默认收起' : 'Collapsed by default'}
-                  className="pt-4"
-                >
-                  <div className="space-y-3 text-xs leading-5 text-white/62">
-                    <p>{formatWatchlistOrigin(activeItem.source, language)}</p>
-                    {activeSavedNote ? (
-                      <div data-testid="watchlist-saved-note" className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
-                        <p className="text-[11px] text-white/40">{language === 'zh' ? '保存备注' : 'Observation note'}</p>
-                        <p className="mt-1 whitespace-pre-wrap break-words text-white/72">{activeSavedNote}</p>
-                      </div>
-                    ) : null}
-                    {activeScannerReason ? <p>{activeScannerReason}</p> : null}
-                    {!activeHasEvidence ? <p>{copy.sourceUnknownNeedsRefresh}</p> : null}
-                    {activeContextTags.length ? (
-                      <div className="flex min-w-0 flex-wrap gap-1.5">
-                        {activeContextTags.map((tag) => (
-                          <TerminalChip key={tag} variant="neutral">{tag}</TerminalChip>
-                        ))}
-                      </div>
-                    ) : null}
-                    {activeScannerFailure && activeScannerStatusLabel === '扫描失败' ? <p>{activeScannerFailure.label}</p> : null}
-                    {typeof activeSimulation?.avgForwardReturnPct === 'number' || typeof activeSimulation?.hitRate === 'number' ? (
-                      <p>
-                        {copy.historyPrefix} {formatPct(activeSimulation?.avgForwardReturnPct)} · {copy.hitPrefix} {typeof activeSimulation?.hitRate === 'number' ? `${Math.round(activeSimulation.hitRate * 100)}%` : '--'}
-                      </p>
-                    ) : null}
-                  </div>
-                </DenseSecondaryDisclosure>
-
-                <section className="min-w-0 pt-4">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <TerminalButton
-                      type="button"
-                      variant="secondary"
-                      onClick={() => void handleAnalyze(activeItem)}
-                      disabled={pendingAnalyzeId === activeItem.id}
-                    >
-                      <Play className="h-3.5 w-3.5" />
-                      {pendingAnalyzeId === activeItem.id ? copy.analyzing : copy.analyze}
-                    </TerminalButton>
-                    <TerminalButton
-                      type="button"
-                      variant="compact"
-                      onClick={() => navigate(buildBacktestPath(activeItem, language))}
-                    >
-                      <BarChart3 className="h-3.5 w-3.5" />
-                      {copy.backtest}
-                    </TerminalButton>
-                    {activeBacktest?.lastResultId != null ? (
-                      <TerminalButton
-                        type="button"
-                        variant="compact"
-                        onClick={() => navigate(buildLocalizedPath(`/backtest/results/${activeBacktest.lastResultId}`, language))}
-                      >
-                        {copy.resultPrefix} {activeBacktest.lastResultId}
-                      </TerminalButton>
-                    ) : null}
-                    <TerminalButton
-                      type="button"
-                      aria-label={`${copy.copySymbol} ${activeItem.symbol}`}
-                      variant="compact"
-                      onClick={() => void handleCopy(activeItem)}
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                      {copy.copySymbol}
-                    </TerminalButton>
-                    <TerminalButton
-                      type="button"
-                      variant="danger"
-                      onClick={() => void handleRemove(activeItem)}
-                      disabled={pendingRemoveId === activeItem.id}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      {copy.remove}
-                    </TerminalButton>
-                  </div>
-                </section>
-              </ConsoleContextRail>
-            </div>
-          ) : null}
-        </div>
-
-        <div data-layout-zone="SecondaryDeck" data-testid="watchlist-secondary-deck" className="min-w-0 border-t border-[color:var(--wolfy-divider)]">
-          <DenseCommandBar
-            data-testid="watchlist-command-bar"
-            className="border-t-0"
-            heading={copy.batchActions}
-            summary={<span data-testid="watchlist-action-scope">{copy.runtimeStatus} · {actionScopeLabel}</span>}
-            notice={actionItems.length === 0 ? <TerminalChip variant="caution">{copy.noMatchedSymbols}</TerminalChip> : null}
-            progress={batchProgress ? (
-              <p data-testid="watchlist-batch-progress" className="text-xs text-white/55">
-                {batchProgress.completed} / {batchProgress.total}
-                {batchProgress.currentSymbol ? ` · ${batchProgress.currentSymbol}` : ''}
-                {' · '}
-                {language === 'zh' ? '成功' : 'Success'} {batchProgress.succeeded}
-                {' · '}
-                {language === 'zh' ? '失败' : 'Failed'} {batchProgress.failed}
+            ) : null}
+            {model.activeScannerFailure && model.activeScannerStatusLabel === '扫描失败' ? <p>{model.activeScannerFailure.label}</p> : null}
+            {typeof model.activeSimulation?.avgForwardReturnPct === 'number' || typeof model.activeSimulation?.hitRate === 'number' ? (
+              <p>
+                {model.copy.historyPrefix} {formatPct(model.activeSimulation?.avgForwardReturnPct)} · {model.copy.hitPrefix} {typeof model.activeSimulation?.hitRate === 'number' ? `${Math.round(model.activeSimulation.hitRate * 100)}%` : '--'}
               </p>
             ) : null}
-            actions={(
-              <>
-              <TerminalButton
-                type="button"
-                variant="compact"
-                onClick={() => void handleRefreshScores(actionItems)}
-                disabled={isActionDisabled}
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${isBatchScanning ? 'animate-spin' : ''}`} />
-                {copy.batchScanFilter}
-              </TerminalButton>
-              <TerminalButton
-                type="button"
-                variant="secondary"
-                onClick={() => void handleBatchBacktestCurrentFilter()}
-                disabled={isActionDisabled}
-              >
-                <BarChart3 className="h-3.5 w-3.5" />
-                {isBatchBacktesting ? copy.batchBacktesting : copy.batchBacktestFilter}
-              </TerminalButton>
-              <TerminalButton
-                type="button"
-                variant="compact"
-                aria-pressed={useSelectedScope && selectedItems.length > 0}
-                onClick={() => setUseSelectedScope((current) => selectedItems.length > 0 ? !current : current)}
-                disabled={selectedItems.length === 0}
-              >
-                <CheckSquare className="h-3.5 w-3.5" />
-                {copy.selectedOnly}
-              </TerminalButton>
-              <TerminalButton
-                type="button"
-                variant="compact"
-                onClick={() => {
-                  setSelectedIds(new Set());
-                  setUseSelectedScope(false);
-                }}
-                disabled={selectedIds.size === 0}
-              >
-                {copy.clearSelection}
-              </TerminalButton>
-              <TerminalButton type="button" variant="compact" onClick={() => void handleRefreshIntelligence()}>
-                <RefreshCw className="h-3.5 w-3.5" />
-                {copy.refreshIntelligence}
-              </TerminalButton>
-              <TerminalButton
-                type="button"
-                variant="compact"
-                className="disabled:cursor-wait"
-                onClick={() => void handleRefreshScores()}
-                disabled={isRefreshingScores}
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingScores ? 'animate-spin' : ''}`} />
-                {isRefreshingScores ? copy.refreshingScores : copy.refreshScores}
-              </TerminalButton>
-              </>
-            )}
-          />
-          <div
-            data-testid="watchlist-runtime-status"
-            className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2"
-          >
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.autoRefresh}</span>
-              <TerminalChip variant={terminalChipVariant(autoRefreshStatus.tone)} className="font-mono">
-                {refreshStatus ? autoRefreshStatus.label : '--'}
-              </TerminalChip>
-              <span className="truncate font-mono text-[11px] text-white/45">
-                US {refreshStatus?.usTime || '08:45'} / CN {refreshStatus?.cnTime || '09:00'} / HK {refreshStatus?.hkTime || '09:00'}
-              </span>
-            </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.runtimeStatus}</span>
-              <TerminalChip variant={terminalChipVariant(runtimeStatusTone)} className="font-mono">
-                {runtimeStatusLabel}
-              </TerminalChip>
-            </div>
           </div>
-        </div>
-      </DenseTableShell>
-      </ConsumerWorkspacePageShell>
-    </ConsumerWorkspaceScope>
+        </DenseSecondaryDisclosure>
+
+        <section className="min-w-0 pt-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <TerminalButton
+              type="button"
+              variant="secondary"
+              onClick={() => void model.handleAnalyze(activeItem)}
+              disabled={model.pendingAnalyzeId === activeItem.id}
+            >
+              <Play className="size-3.5" />
+              {model.pendingAnalyzeId === activeItem.id ? model.copy.analyzing : model.copy.analyze}
+            </TerminalButton>
+            <TerminalButton
+              type="button"
+              variant="compact"
+              onClick={() => model.openBacktest(activeItem)}
+            >
+              <BarChart3 className="size-3.5" />
+              {model.copy.backtest}
+            </TerminalButton>
+            {activeBacktestResultId != null ? (
+              <TerminalButton
+                type="button"
+                variant="compact"
+                onClick={() => model.openBacktestResult(activeBacktestResultId)}
+              >
+                {model.copy.resultPrefix} {activeBacktestResultId}
+              </TerminalButton>
+            ) : null}
+            <TerminalButton
+              type="button"
+              aria-label={`${model.copy.copySymbol} ${activeItem.symbol}`}
+              variant="compact"
+              onClick={() => void model.handleCopy(activeItem)}
+            >
+              <Copy className="size-3.5" />
+              {model.copy.copySymbol}
+            </TerminalButton>
+            <TerminalButton
+              type="button"
+              variant="danger"
+              onClick={() => void model.handleRemove(activeItem)}
+              disabled={model.pendingRemoveId === activeItem.id}
+            >
+              <Trash2 className="size-3.5" />
+              {model.copy.remove}
+            </TerminalButton>
+          </div>
+        </section>
+      </ConsoleContextRail>
+    </div>
   );
+};
+
+const WatchlistSecondaryDeckSection: React.FC<{ model: WatchlistPageModel }> = ({ model }) => (
+  <div data-layout-zone="SecondaryDeck" data-testid="watchlist-secondary-deck" className="min-w-0 border-t border-[color:var(--wolfy-divider)]">
+    <DenseCommandBar
+      data-testid="watchlist-command-bar"
+      className="border-t-0"
+      heading={model.copy.batchActions}
+      summary={<span data-testid="watchlist-action-scope">{model.copy.runtimeStatus} · {model.actionScopeLabel}</span>}
+      notice={model.actionItems.length === 0 ? <TerminalChip variant="caution">{model.copy.noMatchedSymbols}</TerminalChip> : null}
+      progress={model.batchProgress ? (
+        <p data-testid="watchlist-batch-progress" className="text-xs text-white/55">
+          {model.batchProgress.completed} / {model.batchProgress.total}
+          {model.batchProgress.currentSymbol ? ` · ${model.batchProgress.currentSymbol}` : ''}
+          {' · '}
+          {model.language === 'zh' ? '成功' : 'Success'} {model.batchProgress.succeeded}
+          {' · '}
+          {model.language === 'zh' ? '失败' : 'Failed'} {model.batchProgress.failed}
+        </p>
+      ) : null}
+      actions={(
+        <>
+          <TerminalButton
+            type="button"
+            variant="compact"
+            onClick={() => void model.handleRefreshScores(model.actionItems)}
+            disabled={model.isActionDisabled}
+          >
+            <RefreshCw className={`size-3.5 ${model.isBatchScanning ? 'animate-spin' : ''}`} />
+            {model.copy.batchScanFilter}
+          </TerminalButton>
+          <TerminalButton
+            type="button"
+            variant="secondary"
+            onClick={() => void model.handleBatchBacktestCurrentFilter()}
+            disabled={model.isActionDisabled}
+          >
+            <BarChart3 className="size-3.5" />
+            {model.isBatchBacktesting ? model.copy.batchBacktesting : model.copy.batchBacktestFilter}
+          </TerminalButton>
+          <TerminalButton
+            type="button"
+            variant="compact"
+            aria-pressed={model.isSelectedScopeActive}
+            onClick={model.toggleSelectedScope}
+            disabled={model.selectedItems.length === 0}
+          >
+            <CheckSquare className="size-3.5" />
+            {model.copy.selectedOnly}
+          </TerminalButton>
+          <TerminalButton
+            type="button"
+            variant="compact"
+            onClick={model.clearSelection}
+            disabled={model.selectedIds.size === 0}
+          >
+            {model.copy.clearSelection}
+          </TerminalButton>
+          <TerminalButton type="button" variant="compact" onClick={() => void model.handleRefreshIntelligence()}>
+            <RefreshCw className="size-3.5" />
+            {model.copy.refreshIntelligence}
+          </TerminalButton>
+          <TerminalButton
+            type="button"
+            variant="compact"
+            className="disabled:cursor-wait"
+            onClick={() => void model.handleRefreshScores()}
+            disabled={model.isRefreshingScores}
+          >
+            <RefreshCw className={`size-3.5 ${model.isRefreshingScores ? 'animate-spin' : ''}`} />
+            {model.isRefreshingScores ? model.copy.refreshingScores : model.copy.refreshScores}
+          </TerminalButton>
+        </>
+      )}
+    />
+    <div
+      data-testid="watchlist-runtime-status"
+      className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-3 py-2"
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">{model.copy.autoRefresh}</span>
+        <TerminalChip variant={terminalChipVariant(model.autoRefreshStatus.tone)} className="font-mono">
+          {model.refreshStatus ? model.autoRefreshStatus.label : '--'}
+        </TerminalChip>
+        <span className="truncate font-mono text-[11px] text-white/45">
+          US {model.refreshStatus?.usTime || '08:45'} / CN {model.refreshStatus?.cnTime || '09:00'} / HK {model.refreshStatus?.hkTime || '09:00'}
+        </span>
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">{model.copy.runtimeStatus}</span>
+        <TerminalChip variant={terminalChipVariant(model.runtimeStatusTone)} className="font-mono">
+          {model.runtimeStatusLabel}
+        </TerminalChip>
+      </div>
+    </div>
+  </div>
+);
+
+const WatchlistBoardSection: React.FC<{ model: WatchlistPageModel }> = ({ model }) => (
+  <DenseTableShell data-testid="watchlist-watch-board" variant="board">
+    <WatchlistFiltersBar model={model} />
+    <div
+      data-testid="watchlist-board-shell"
+      className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_340px]"
+    >
+      <WatchlistPrimaryBoardSection model={model} />
+      <WatchlistDetailRailSection model={model} />
+    </div>
+    <WatchlistSecondaryDeckSection model={model} />
+  </DenseTableShell>
+);
+
+const WatchlistPageLayout: React.FC<{ model: WatchlistPageModel }> = ({ model }) => (
+  <ConsumerWorkspaceScope data-testid="watchlist-wide-workspace-scope" className="min-h-0 flex-1">
+    <ConsumerWorkspacePageShell data-testid="watchlist-page" className="flex-1">
+      <WatchlistHeaderSection model={model} />
+      <WatchlistBoardSection model={model} />
+    </ConsumerWorkspacePageShell>
+  </ConsumerWorkspaceScope>
+);
+
+const WatchlistPage: React.FC = () => {
+  const model = useWatchlistPageModel();
+
+  if (model.isGuest) {
+    return <ConsumerProtectedFrame moduleName={model.copy.signInModule} />;
+  }
+
+  return <WatchlistPageLayout model={model} />;
 };
 
 export default WatchlistPage;

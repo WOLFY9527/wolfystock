@@ -10,7 +10,7 @@ import { UiPreferencesProvider } from '../../contexts/UiPreferencesContext';
 import { stocksApi } from '../../api/stocks';
 import { resolveHomeCandlestickTooltipPosition } from '../../components/home-bento/homeCandlestickChartUtils';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
-import { useStockPoolStore } from '../../stores';
+import { useStockPoolStore } from '../../stores/stockPoolStore';
 import { buildInstitutionalReportMarkdown, getCompanyWithTicker } from '../../utils/homeReportIdentity';
 import HomeSurfacePage from '../HomeSurfacePage';
 
@@ -355,6 +355,7 @@ describe('HomeSurfacePage', () => {
       const chartWorkspace = screen.getByTestId('home-research-chart-workspace');
       expect(chartWorkspace).toContainElement(screen.getByRole('status', { name: '正在加载首页价格图表' }));
       expect(chartWorkspace).toContainElement(screen.getByTestId('home-candlestick-chart-fallback'));
+      await screen.findByText('Oracle Corporation');
       await waitFor(() => expect(window.requestIdleCallback).toHaveBeenCalledTimes(1));
       expect(stocksApi.getHistory).not.toHaveBeenCalled();
       expect(screen.queryByTestId('home-candlestick-chart-frame')).not.toBeInTheDocument();
@@ -367,8 +368,8 @@ describe('HomeSurfacePage', () => {
         } as IdleDeadline);
       });
 
-      expect(await screen.findByTestId('home-candlestick-chart-frame')).toBeInTheDocument();
-      expect(stocksApi.getHistory).toHaveBeenCalled();
+      await waitFor(() => expect(stocksApi.getHistory).toHaveBeenCalled());
+      await waitFor(() => expect(screen.getByTestId('home-candlestick-chart-frame')).toBeInTheDocument());
     } finally {
       window.requestIdleCallback = originalRequestIdleCallback;
       window.cancelIdleCallback = originalCancelIdleCallback;
@@ -404,7 +405,20 @@ describe('HomeSurfacePage', () => {
     expect(root.getAttribute('style') || '').not.toContain('radial-gradient');
     expect(main).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'min-h-0');
     expect(main.firstElementChild).toBe(stage);
-    expect(stage).toHaveClass('home-research-stage', 'mx-auto', 'w-full', 'max-w-[1880px]', 'min-w-0', 'px-3', '2xl:px-8');
+    expect(stage).toHaveClass(
+      'home-research-stage',
+      'mx-auto',
+      'flex',
+      'w-full',
+      'max-w-[1880px]',
+      'min-w-0',
+      'flex-col',
+      'gap-2.5',
+      'p-3',
+      'sm:px-4',
+      'xl:px-6',
+      '2xl:px-8',
+    );
     expect(stage).not.toHaveClass('lg:w-[96vw]', 'lg:max-w-[1840px]');
     expect(stage.contains(commandBar)).toBe(true);
     expect(stage.contains(researchConsole)).toBe(true);
@@ -429,7 +443,7 @@ describe('HomeSurfacePage', () => {
     expect(commandBar).toHaveClass('home-research-command-bar', 'rounded-xl', 'bg-[var(--wolfy-surface-input)]', 'border-[color:var(--wolfy-border-subtle)]');
     expect(headerStrip.closest('[data-layout-zone="HeaderStrip"]')).toBeInTheDocument();
     expect(primaryWorkspace.closest('[data-layout-zone="PrimaryWorkRegion"]')).toBeInTheDocument();
-    expect(primaryWorkspace).toHaveClass('rounded-none', 'border-0', 'bg-transparent', 'px-0', 'py-0');
+    expect(primaryWorkspace).toHaveClass('rounded-none', 'border-0', 'bg-transparent', 'p-0');
     expect(secondaryDeck).toHaveAttribute('data-linear-primitive', 'secondary-deck');
     expect(secondaryDeck).toHaveAttribute('data-layout-zone', 'SecondaryDeck');
     expect(secondaryDeck).toHaveClass('home-research-secondary-deck');
@@ -489,7 +503,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-decision-sector')).toHaveTextContent('科技');
     expect(screen.getByTestId('home-research-company-mark')).toHaveTextContent('OR');
     expect(screen.getByTestId('home-research-company-mark')).toHaveAttribute('data-company-mark', 'oracle-logo');
-    expect(screen.getByTestId('home-research-company-mark')).toHaveClass('h-[72px]', 'w-[72px]', 'rounded-[14px]');
+    expect(screen.getByTestId('home-research-company-mark')).toHaveClass('size-[72px]', 'rounded-[14px]');
     expect(screen.queryByTestId('home-bento-decision-hero-row')).not.toBeInTheDocument();
     expect(conclusionConsole).toHaveClass('home-research-conclusion-console', 'rounded-[8px]', 'border');
 
@@ -3348,6 +3362,11 @@ describe('HomeSurfacePage', () => {
 
   it('hydrates final analysis in place without auto-scrolling', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(analysisApi.analyzeAsync).mockResolvedValueOnce({
+      taskId: 'task-complete',
+      status: 'pending',
+      message: 'submitted',
+    });
     const scrollIntoView = vi.fn();
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
@@ -3356,19 +3375,9 @@ describe('HomeSurfacePage', () => {
 
     renderSurface();
 
-    await act(async () => {
-      useStockPoolStore.getState().syncTaskCreated({
-        taskId: 'task-complete',
-        stockCode: 'ORCL',
-        stockName: 'Oracle',
-        status: 'processing',
-        progress: 72,
-        reportType: 'detailed',
-        createdAt: '2026-04-29T10:00:00Z',
-        updatedAt: '2026-04-29T10:00:00Z',
-        message: 'assembling report',
-      });
-    });
+    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'ORCL' } });
+    fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
+    await waitFor(() => expect(useStockPoolStore.getState().activeTasks.some((task) => task.taskId === 'task-complete')).toBe(true));
 
     await act(async () => {
       useStockPoolStore.getState().syncTaskUpdated({

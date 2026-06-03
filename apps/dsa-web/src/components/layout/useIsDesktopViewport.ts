@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-export function getIsDesktopViewport(): boolean {
+function getIsDesktopViewport(): boolean {
   if (typeof window === 'undefined') {
     return true;
   }
@@ -15,7 +15,6 @@ export function useIsDesktopViewport(): boolean {
       setIsDesktop(getIsDesktopViewport());
     };
 
-    handleResize();
     window.addEventListener('resize', handleResize);
     return () => {
       window.removeEventListener('resize', handleResize);
