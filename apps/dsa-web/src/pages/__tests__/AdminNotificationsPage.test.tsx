@@ -300,7 +300,7 @@ describe('AdminNotificationsPage', () => {
         (content, element) => element?.tagName?.toLowerCase() === 'li' && (element.textContent?.includes('请检查证书链。') ?? false),
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText('开发者细节')).toBeInTheDocument();
+    expect(screen.getByText('L4 已脱敏投递诊断：错误摘要 / 渠道状态')).toBeInTheDocument();
     expect(screen.getByTestId('notification-notice-raw-diagnostics')).toHaveAttribute('data-terminal-primitive', 'disclosure');
     expect(screen.getByTestId('notification-notice-raw-diagnostics')).not.toHaveAttribute('open');
   });
@@ -329,7 +329,7 @@ describe('AdminNotificationsPage', () => {
         (content, element) => element?.tagName?.toLowerCase() === 'li' && (element.textContent?.includes('Check the certificate chain.') ?? false),
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText('Developer details')).toBeInTheDocument();
+    expect(screen.getByText('L4 sanitized delivery diagnostics: error summary / channel state')).toBeInTheDocument();
   });
 
   it('renders notifications with severity and acknowledge action', async () => {

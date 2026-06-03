@@ -443,7 +443,7 @@ const LimitationsPanel: React.FC<{ data: AdminCostSummaryResponse }> = ({ data }
 );
 
 const DeveloperDetails: React.FC<{ data: AdminCostSummaryResponse }> = ({ data }) => (
-  <TerminalDisclosure title="开发者 / 响应形状（已脱敏）" summary="默认折叠，仅显示 redaction 后字段" className="mt-4">
+  <TerminalDisclosure title="L4 已脱敏观测响应：来源 / exactness / redaction" summary="默认折叠 · 仅显示 redaction 后字段" className="mt-4">
     <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
       <div className="min-w-0">
         <dt className="text-white/32">countersSource</dt>
@@ -618,7 +618,7 @@ const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = 
               />
             </section>
           </div>
-          <TerminalDisclosure title="开发者 / LLM 账本响应形状（已脱敏）" summary="默认折叠，仅显示 redaction 后字段" className="mt-4">
+          <TerminalDisclosure title="L4 已脱敏 LLM 账本响应：readOnly / 来源 / redaction" summary="默认折叠 · 仅显示 redaction 后字段" className="mt-4">
             <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
               <div className="min-w-0">
                 <dt className="text-white/32">readOnly</dt>
@@ -742,7 +742,7 @@ const PricingPolicyPanel: React.FC = () => {
       ) : null}
 
       {state.data ? (
-        <TerminalDisclosure title="开发者 / 价格策略响应形状（已脱敏）" summary="默认折叠，仅显示 redaction 后字段" className="mt-4">
+        <TerminalDisclosure title="L4 已脱敏价格策略响应：readOnly / 维护状态 / 来源" summary="默认折叠 · 仅显示 redaction 后字段" className="mt-4">
           <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
             <div className="min-w-0">
               <dt className="text-white/32">readOnly</dt>
@@ -913,7 +913,7 @@ const QuotaDryRunPanel: React.FC = () => {
       ) : null}
       {state.error ? <div className="mt-4"><ApiErrorAlert error={state.error} /></div> : null}
 
-      <TerminalDisclosure title="开发者 / Quota 响应形状（已脱敏）" summary="默认折叠，仅显示 redaction 后字段" className="mt-4">
+      <TerminalDisclosure title="L4 已脱敏 Quota 试运行响应：门禁 / 来源 / redaction" summary="默认折叠 · 仅显示 redaction 后字段" className="mt-4">
         <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
           <div className="min-w-0">
             <dt className="text-white/32">diagnosticOnly</dt>
@@ -1127,7 +1127,7 @@ const AdminCostObservabilityPage: React.FC = () => {
               </div>
             </div>
 
-            <TerminalDisclosure title="L2 配额 / 成本运维细节：账本、价格、Provider / 缓存" summary={`默认折叠 · ${compactNumber(needsAttentionCount)} 个压力线索 · 开发者形状保持已脱敏`}>
+            <TerminalDisclosure title="L2 配额 / 成本运维细节：账本、价格、Provider / 缓存、Scanner" summary={`默认折叠 · ${compactNumber(needsAttentionCount)} 个压力线索 · 生成 ${formatDate(data?.generatedAt)} · 开发者形状保持已脱敏`}>
               <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
                 <div className="min-w-0 space-y-6 xl:col-span-12">
                   <LlmLedgerPanel key={`${filters.window}-${filters.bucket}-${filters.limit}`} filters={filters} />

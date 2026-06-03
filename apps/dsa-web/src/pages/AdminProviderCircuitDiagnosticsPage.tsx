@@ -765,7 +765,7 @@ const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ it
                   />
                 </div>
 
-                <DiagnosticsDisclosure title="L3 最近错误 buckets（已脱敏）" summary={`${(item.recentErrors || []).length} 项，默认收起`} className="mt-3">
+                <DiagnosticsDisclosure title="L3 最近错误 buckets：已脱敏原因 / 计数 / 最近观察" summary={`${(item.recentErrors || []).length} 项 · 最近 ${safeDate(item.trendSummary?.latestObservationAt)} · 默认收起`} className="mt-3">
                   {(item.recentErrors || []).length === 0 ? (
                     <p className="text-white/48">暂无错误 bucket</p>
                   ) : (
@@ -779,7 +779,7 @@ const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ it
                   )}
                 </DiagnosticsDisclosure>
 
-                <DiagnosticsDisclosure title="L3 技术边界（只读 / 外呼 / 门禁）" summary="默认收起" className="mt-3">
+                <DiagnosticsDisclosure title="L3 已脱敏技术边界：只读 / 外呼 / 门禁" summary="默认收起 · 当前 provider 不展示原始载荷或秘钥线索" className="mt-3">
                   <div className="grid grid-cols-1 gap-2 text-[11px] text-white/50 md:grid-cols-2">
                       <p>
                         调用门禁
@@ -820,7 +820,7 @@ const BoundaryPanel: React.FC<{ data?: ProviderCircuitDiagnosticsBundle | null }
       <TerminalNotice variant="info" className="mt-4">
         当前为诊断观测，不会改变 provider fallback 或 MarketCache 行为。
       </TerminalNotice>
-      <DiagnosticsDisclosure title="L3 技术边界（读取 / 外呼 / 门禁 / 脱敏）" summary="读取、外呼、门禁与脱敏信息默认收起" className="mt-3">
+      <DiagnosticsDisclosure title="L3 页面边界与脱敏姿态" summary="读取、外呼、门禁与脱敏信息默认收起" className="mt-3">
         <div className="grid grid-cols-1 gap-2 text-[11px] text-white/50">
           <p>
             读取边界
@@ -1085,8 +1085,8 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
         <OperatorActionListPanel actions={operatorActions} isLoading={isLoading && !data && !error} />
 
         <DiagnosticsDisclosure
-          title="L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA"
-          summary={`${formatNumber(summary.states, 0)} 个状态 · ${formatNumber(summary.events, 0)} 个事件 · ${formatNumber(summary.quotaWindows, 0)} 个配额窗口 · 已脱敏 bucket/边界默认折叠`}
+          title="L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA（已脱敏摘要）"
+          summary={`${formatNumber(summary.states, 0)} 个状态 · ${formatNumber(summary.events, 0)} 个事件 · ${formatNumber(summary.quotaWindows, 0)} 个配额窗口 · 生成 ${safeDate(data?.states.generatedAt)} · 已脱敏 bucket/边界默认折叠`}
           className="px-3 py-3"
         >
           <TerminalGrid>

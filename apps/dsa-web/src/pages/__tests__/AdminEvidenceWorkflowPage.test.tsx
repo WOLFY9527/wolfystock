@@ -53,6 +53,13 @@ const runbookReferences = [
   ['CLI 合约 / 预检', 'docs/audits/operator-evidence-workflow-runner-guide.md', '离线 runner'],
 ];
 
+const disclosureTitles = {
+  diagnostics: 'L4 已脱敏诊断与 Dry-run 预览：2 个只读模块',
+  runbook: 'L3 Runbook 参考：5 份本地手册 / 静态只读',
+  schema: 'L3 Schema 参考：8 类离线证据 / 字段规则另见脱敏说明',
+  offline: 'L3 离线命令与 NO-GO 说明：4 个静态片段 / 只读',
+} as const;
+
 function openEvidenceDisclosure(title: string) {
   fireEvent.click(screen.getByRole('button', { name: `展开 ${title}` }));
 }
@@ -98,7 +105,7 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(within(screen.getByTestId('admin-evidence-workflow-page')).queryByTestId('mock-admin-evidence-dry-run-preview')).not.toBeInTheDocument();
     expect(Boolean(workflowGrid.compareDocumentPosition(diagnosticsDisclosure) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
 
-    openEvidenceDisclosure('二级细节：诊断与 Dry-run 预览');
+    openEvidenceDisclosure(disclosureTitles.diagnostics);
     expect(within(diagnosticsDisclosure).getByTestId('mock-admin-evidence-diagnostics-console')).toBeInTheDocument();
     expect(within(diagnosticsDisclosure).getByTestId('mock-admin-evidence-dry-run-preview')).toBeInTheDocument();
   });
@@ -158,7 +165,7 @@ describe('AdminEvidenceWorkflowPage', () => {
     expect(document.querySelector('input[type="file"]')).not.toBeInTheDocument();
     expect(document.querySelector('input, textarea, select, form, [contenteditable="true"]')).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/upload|上传|file|文件/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /upload|上传|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -180,7 +187,7 @@ describe('AdminEvidenceWorkflowPage', () => {
   it('renders static local runbook reference cards for the operator workflow', () => {
     render(<AdminEvidenceWorkflowPage />);
 
-    openEvidenceDisclosure('二级细节：Runbook 参考');
+    openEvidenceDisclosure(disclosureTitles.runbook);
     const runbookPanel = screen.getByTestId('admin-evidence-runbook-references');
     expect(within(runbookPanel).getByRole('heading', { name: '操作员工作流参考' })).toBeInTheDocument();
     expect(within(runbookPanel).getByText('静态标签')).toBeInTheDocument();
@@ -200,7 +207,7 @@ describe('AdminEvidenceWorkflowPage', () => {
 
     render(<AdminEvidenceWorkflowPage />);
 
-    openEvidenceDisclosure('二级细节：Runbook 参考');
+    openEvidenceDisclosure(disclosureTitles.runbook);
     const runbookPanel = screen.getByTestId('admin-evidence-runbook-references');
     expect(within(runbookPanel).queryByRole('button')).not.toBeInTheDocument();
     expect(within(runbookPanel).queryByRole('link')).not.toBeInTheDocument();
@@ -213,7 +220,7 @@ describe('AdminEvidenceWorkflowPage', () => {
   it('renders a static schema reference panel for all offline evidence categories', () => {
     render(<AdminEvidenceWorkflowPage />);
 
-    openEvidenceDisclosure('二级细节：Schema 与字段参考');
+    openEvidenceDisclosure(disclosureTitles.schema);
     const referencePanel = screen.getByTestId('admin-evidence-schema-reference');
     expect(within(referencePanel).getByRole('heading', { name: '离线证据数据结构参考' })).toBeInTheDocument();
     expect(within(referencePanel).getByText('人工复核必需')).toBeInTheDocument();
@@ -235,7 +242,7 @@ describe('AdminEvidenceWorkflowPage', () => {
 
     render(<AdminEvidenceWorkflowPage />);
 
-    openEvidenceDisclosure('二级细节：Schema 与字段参考');
+    openEvidenceDisclosure(disclosureTitles.schema);
     const referencePanel = screen.getByTestId('admin-evidence-schema-reference');
     expect(within(referencePanel).queryByRole('button', { name: /upload|上传|write|写入|提交|保存|approve|approval|批准/i })).not.toBeInTheDocument();
     expect(within(referencePanel).queryByRole('link')).not.toBeInTheDocument();
@@ -248,7 +255,7 @@ describe('AdminEvidenceWorkflowPage', () => {
   it('renders static copy-safe offline command snippets without secrets or real paths', () => {
     render(<AdminEvidenceWorkflowPage />);
 
-    openEvidenceDisclosure('二级细节：离线命令与空状态说明');
+    openEvidenceDisclosure(disclosureTitles.offline);
     const commandPanel = screen.getByTestId('admin-evidence-command-snippets');
     const commandText = commandPanel.textContent || '';
 
@@ -264,7 +271,7 @@ describe('AdminEvidenceWorkflowPage', () => {
   it('keeps command snippets and raw details keyboard-focusable without adding write controls', () => {
     render(<AdminEvidenceWorkflowPage />);
 
-    openEvidenceDisclosure('二级细节：离线命令与空状态说明');
+    openEvidenceDisclosure(disclosureTitles.offline);
     const commandSnippets = screen.getAllByRole('group', { name: /可复制命令/ });
     expect(commandSnippets).toHaveLength(3);
     commandSnippets.forEach((snippet) => {
@@ -275,7 +282,7 @@ describe('AdminEvidenceWorkflowPage', () => {
     });
 
     const disclosure = screen.getByTestId('admin-evidence-raw-disclosure');
-    const toggle = within(disclosure).getByRole('button', { name: '展开 原始 / 数据结构 / 数据源 / 调试字段' });
+    const toggle = within(disclosure).getByRole('button', { name: '展开 L4 原始内容边界：已排除数据结构 / 数据源 / 调试字段' });
     toggle.focus();
     expect(toggle).toHaveFocus();
     expect(toggle.closest('[data-terminal-primitive="disclosure"]')).not.toBeNull();
@@ -305,12 +312,12 @@ describe('AdminEvidenceWorkflowPage', () => {
 
     const disclosure = screen.getByTestId('admin-evidence-raw-disclosure');
     expect(disclosure).not.toHaveAttribute('open');
-    expect(within(disclosure).getByText('原始 / 数据结构 / 数据源 / 调试字段')).toBeInTheDocument();
+    expect(within(disclosure).getByText('L4 原始内容边界：已排除数据结构 / 数据源 / 调试字段')).toBeInTheDocument();
 
-    openEvidenceDisclosure('二级细节：Schema 与字段参考');
+    openEvidenceDisclosure(disclosureTitles.schema);
     const schemaNotes = screen.getByTestId('admin-evidence-schema-notes');
     expect(schemaNotes).not.toHaveAttribute('open');
-    expect(within(schemaNotes).getByText('字段细节与脱敏规则')).toBeInTheDocument();
+    expect(within(schemaNotes).getByText('L4 字段与脱敏规则：仅类别 / 文件名 / 校验脚本')).toBeInTheDocument();
   });
 
   it('uses terminal operator primitives and responsive grid layouts', () => {

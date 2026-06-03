@@ -320,7 +320,7 @@ const pricingPoliciesPayload = {
 };
 
 async function openCostSecondaryDisclosure() {
-  const toggle = await screen.findByRole('button', { name: '展开 L2 配额 / 成本运维细节：账本、价格、Provider / 缓存' });
+  const toggle = await screen.findByRole('button', { name: '展开 L2 配额 / 成本运维细节：账本、价格、Provider / 缓存、Scanner' });
   fireEvent.click(toggle);
 }
 
@@ -411,7 +411,7 @@ describe('AdminCostObservabilityPage', () => {
     render(<AdminCostObservabilityPage />);
 
     await openCostSecondaryDisclosure();
-    expect(await screen.findByText('开发者 / 响应形状（已脱敏）')).toBeInTheDocument();
+    expect(await screen.findByText('L4 已脱敏观测响应：来源 / exactness / redaction')).toBeInTheDocument();
     expect(screen.queryByText('SHOULD_NOT_RENDER')).not.toBeInTheDocument();
     expect(screen.queryByText('SHOULD_NOT_RENDER_PAYLOAD')).not.toBeInTheDocument();
     expect(screen.queryByText('KEY_SHOULD_NOT_RENDER')).not.toBeInTheDocument();
@@ -743,7 +743,7 @@ describe('AdminCostObservabilityPage', () => {
     render(<AdminCostObservabilityPage />);
 
     await openCostSecondaryDisclosure();
-    expect(await screen.findByText('开发者 / Quota 响应形状（已脱敏）')).toBeInTheDocument();
+    expect(await screen.findByText('L4 已脱敏 Quota 试运行响应：门禁 / 来源 / redaction')).toBeInTheDocument();
     expect(screen.queryByText('diagnosticOnly')).not.toBeInTheDocument();
   });
 
@@ -754,7 +754,7 @@ describe('AdminCostObservabilityPage', () => {
 
     await openCostSecondaryDisclosure();
     const panel = await screen.findByTestId('llm-ledger-panel');
-    await waitFor(() => expect(within(panel).getByText('开发者 / LLM 账本响应形状（已脱敏）')).toBeInTheDocument());
+    await waitFor(() => expect(within(panel).getByText('L4 已脱敏 LLM 账本响应：readOnly / 来源 / redaction')).toBeInTheDocument());
     expect(within(panel).queryByText('liveEnforcement')).not.toBeInTheDocument();
   });
 
@@ -765,7 +765,7 @@ describe('AdminCostObservabilityPage', () => {
 
     await openCostSecondaryDisclosure();
     const panel = await screen.findByTestId('model-pricing-policy-panel');
-    await waitFor(() => expect(within(panel).getByText('开发者 / 价格策略响应形状（已脱敏）')).toBeInTheDocument());
+    await waitFor(() => expect(within(panel).getByText('L4 已脱敏价格策略响应：readOnly / 维护状态 / 来源')).toBeInTheDocument());
     expect(within(panel).queryByText('manualMaintenance')).not.toBeInTheDocument();
   });
 

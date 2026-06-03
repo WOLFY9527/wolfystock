@@ -234,14 +234,14 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
 
     render(<AdminProviderCircuitDiagnosticsPage />);
 
-    expect(await screen.findByText('L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA')).toBeInTheDocument();
+    expect(await screen.findByText('L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA（已脱敏摘要）')).toBeInTheDocument();
     expect(screen.queryByText('最近熔断事件')).not.toBeInTheDocument();
     expect(screen.queryByText('配额窗口')).not.toBeInTheDocument();
     expect(screen.queryByText('探测事件')).not.toBeInTheDocument();
     expect(screen.queryByText('Provider SLA / 凭证就绪')).not.toBeInTheDocument();
     expect(screen.queryByText('Provider 429')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText('展开 L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA'));
+    fireEvent.click(screen.getByLabelText('展开 L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA（已脱敏摘要）'));
 
     expect((await screen.findAllByText('finnhub')).length).toBeGreaterThan(0);
     expect(screen.getByText('熔断状态与当前门禁')).toBeInTheDocument();
@@ -253,7 +253,7 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(screen.getByText('已配置')).toBeInTheDocument();
     expect(screen.getByText('趋势请求')).toBeInTheDocument();
     expect(screen.getByText('6_20')).toBeInTheDocument();
-    expect(screen.getByText('L3 最近错误 buckets（已脱敏）')).toBeInTheDocument();
+    expect(screen.getByText('L3 最近错误 buckets：已脱敏原因 / 计数 / 最近观察')).toBeInTheDocument();
     expect(screen.getByText('最近熔断事件')).toBeInTheDocument();
     expect(screen.getAllByText('配额窗口').length).toBeGreaterThan(0);
     expect(screen.getByText('探测事件')).toBeInTheDocument();

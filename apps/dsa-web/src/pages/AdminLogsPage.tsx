@@ -1899,8 +1899,8 @@ const AdminLogsPage: React.FC = () => {
 
         <AdminLogsTerminalSection
           data-testid="admin-logs-storage-disclosure"
-          title={locale === 'zh' ? '二级细节：日志容量建议与显式清理' : 'Secondary details: storage advisory and explicit cleanup'}
-          summary={locale === 'zh' ? '仅建议' : 'advisory only'}
+          title={locale === 'zh' ? 'L4 日志容量建议与显式清理：容量 / 保留期 / 预览' : 'L4 storage advisory and explicit cleanup: size / retention / preview'}
+          summary={locale === 'zh' ? '默认折叠 · 仅建议，不自动执行' : 'collapsed by default · advisory only, no automatic execution'}
           className="px-4 py-3"
         >
           <section

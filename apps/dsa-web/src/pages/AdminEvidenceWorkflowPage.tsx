@@ -308,8 +308,8 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
 
       <TerminalDisclosure
         data-testid="admin-evidence-diagnostics-disclosure"
-        title="二级细节：诊断与 Dry-run 预览"
-        summary="默认折叠"
+        title="L4 已脱敏诊断与 Dry-run 预览：2 个只读模块"
+        summary="默认折叠 · 不读原始证据"
       >
         <div className="space-y-4">
           <AdminEvidenceDiagnosticsConsole />
@@ -317,7 +317,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
         </div>
       </TerminalDisclosure>
 
-      <TerminalDisclosure title="二级细节：Runbook 参考" summary="默认折叠">
+      <TerminalDisclosure title="L3 Runbook 参考：5 份本地手册 / 静态只读" summary="默认折叠 · 只给复核路径，不给写入入口">
         <div id="runbook" data-testid="admin-evidence-runbook-references">
           <TerminalSectionHeader
             eyebrow="本地操作手册"
@@ -350,7 +350,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
         </div>
       </TerminalDisclosure>
 
-      <TerminalDisclosure title="二级细节：Schema 与字段参考" summary="默认折叠">
+      <TerminalDisclosure title="L3 Schema 参考：8 类离线证据 / 字段规则另见脱敏说明" summary="默认折叠 · 只展示文件、validator 与复核姿态">
         <div id="schema-ref" data-testid="admin-evidence-schema-reference">
           <TerminalSectionHeader
             eyebrow="本地参考"
@@ -403,8 +403,8 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
 
           <TerminalDisclosure
             data-testid="admin-evidence-schema-notes"
-            title="字段细节与脱敏规则"
-            summary="默认折叠"
+            title="L4 字段与脱敏规则：仅类别 / 文件名 / 校验脚本"
+            summary="默认折叠 · 原始结构与载荷不展开"
             className="mt-4"
           >
             <TerminalNotice variant="neutral">
@@ -414,7 +414,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
         </div>
       </TerminalDisclosure>
 
-      <TerminalDisclosure title="二级细节：离线命令与空状态说明" summary="默认折叠">
+      <TerminalDisclosure title="L3 离线命令与 NO-GO 说明：4 个静态片段 / 只读" summary="默认折叠 · 仅复制静态命令与空状态边界">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
           <div className="xl:col-span-8">
             <div data-testid="admin-evidence-command-snippets">
@@ -462,8 +462,8 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
 
       <TerminalDisclosure
         data-testid="admin-evidence-raw-disclosure"
-        title="原始 / 数据结构 / 数据源 / 调试字段"
-        summary="默认折叠"
+        title="L4 原始内容边界：已排除数据结构 / 数据源 / 调试字段"
+        summary="默认折叠 · 只说明已排除内容"
       >
         <TerminalNotice variant="neutral">
           原始诊断、数据源载荷、数据结构字段和调试内容不在本视图展开。复核材料只以脱敏状态码和人工检查结论进入页面。

@@ -681,7 +681,7 @@ describe('MarketProviderOperationsPage', () => {
 
     const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
     expect(matrixDisclosure).not.toHaveAttribute('open');
-    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码' }));
+    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' }));
     expect(matrixDisclosure).toHaveTextContent('数据源');
     expect(matrixDisclosure).toHaveTextContent('来源');
     expect(matrixDisclosure).toHaveTextContent('就绪状态');
@@ -757,16 +757,16 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklistText.indexOf('Watchlist')).toBeLessThan(checklistText.indexOf('Options Lab'));
 
     const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
-    expect(matrixDisclosure).toHaveTextContent('L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码');
+    expect(matrixDisclosure).toHaveTextContent('L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）');
     expect(matrixDisclosure).not.toHaveTextContent('Provider');
     expect(matrixDisclosure).not.toHaveTextContent('Readiness');
     expect(matrixDisclosure).not.toHaveTextContent('Reason codes');
-    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码' }));
+    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' }));
     expect(matrixDisclosure).toHaveTextContent('cache-required');
     expect(matrixDisclosure).toHaveTextContent('present');
     expect(matrixDisclosure).toHaveTextContent('polygon_high_low_history_unavailable');
     expect(matrixDisclosure).toHaveTextContent('missing_provider_configuration');
-    expect(within(matrixDisclosure).getByRole('button', { name: '收起 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码' })).toBeInTheDocument();
+    expect(within(matrixDisclosure).getByRole('button', { name: '收起 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' })).toBeInTheDocument();
   });
 
   it('keeps non-scoring setup copy conservative and leaves score eligibility to existing source gates', async () => {
@@ -888,7 +888,7 @@ describe('MarketProviderOperationsPage', () => {
       expect(checklist).not.toHaveTextContent('Portfolio');
 
       const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
-      fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码' }));
+      fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' }));
       expect(matrixDisclosure).toHaveTextContent('cache.cn_hk_connect_daily');
       expect(matrixDisclosure).toHaveTextContent('authorized.cn_index_futures_feed');
     } finally {

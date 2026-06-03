@@ -541,8 +541,8 @@ const AdminNotificationsPage: React.FC = () => {
           {notice.rawMessage && notice.rawMessage !== notice.message ? (
             <TerminalDisclosure
               data-testid="notification-notice-raw-diagnostics"
-              title={text('Developer details', '开发者细节')}
-              summary={text('Collapsed by default', '默认收起')}
+              title={text('L4 sanitized delivery diagnostics: error summary / channel state', 'L4 已脱敏投递诊断：错误摘要 / 渠道状态')}
+              summary={text('Collapsed by default · sanitized message only', '默认收起 · 仅显示脱敏消息')}
               className="mt-3"
             >
               <pre className="whitespace-pre-wrap break-words text-[11px] leading-5 text-white/55">{notice.rawMessage}</pre>

@@ -1377,7 +1377,7 @@ const ProviderOperationsMatrixPanel: React.FC<{
           <SourceGapDisclosure rows={rows} />
           <TerminalDisclosure
             data-testid="market-provider-matrix-disclosure"
-            title="L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码"
+            title="L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）"
             summary={`默认折叠 · ${formatNumber(rows.length, 0)} 行 · ${formatNumber(summary.paidDataLikelyRequiredRows, 0)} 行含付费/配额线索 · 原始代码仅限这里`}
             className="mt-2 bg-black/10"
           >
@@ -1833,8 +1833,8 @@ const MarketDataReadinessPanel: React.FC<{
                         ))}
                       </div>
                       <TerminalDisclosure
-                        title="L3 已脱敏技术细节"
-                        summary="诊断 ID、影响面与样本差异"
+                        title="L3 已脱敏样本差异：诊断 ID / 影响面 / 样本缺口"
+                        summary="默认折叠 · 只保留诊断 ID、影响面与样本差异摘要"
                         className="mt-2 bg-black/10"
                       >
                         <div className="space-y-2 text-[11px] leading-5 text-white/50">

@@ -646,6 +646,7 @@ describe('AdminLogsPage', () => {
     expect(screen.getByTestId('admin-logs-page-shell')).toHaveClass('py-5', 'md:py-6');
     expect(screen.getByTestId('admin-logs-header-panel')).toHaveAttribute('data-terminal-primitive', 'panel');
     expect(screen.getByTestId('admin-logs-storage-disclosure')).toHaveAttribute('data-terminal-primitive', 'disclosure');
+    expect(screen.getByText('L4 日志容量建议与显式清理：容量 / 保留期 / 预览')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '业务事件' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '股票分析' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '扫描器' })).toBeInTheDocument();

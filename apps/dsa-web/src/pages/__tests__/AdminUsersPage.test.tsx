@@ -393,9 +393,9 @@ describe('AdminUsersPage', () => {
 
     expect(await screen.findByText('活动时间线')).toBeInTheDocument();
     expect(screen.getByText('analysis.completed')).toBeInTheDocument();
-    const disclosure = screen.getByText('脱敏元数据').closest('details');
+    const disclosure = screen.getByText('L3 脱敏元数据：可见字段与已屏蔽计数').closest('details');
     expect(disclosure).not.toHaveAttribute('open');
-    fireEvent.click(within(disclosure as HTMLDetailsElement).getByRole('button', { name: '展开 脱敏元数据' }));
+    fireEvent.click(within(disclosure as HTMLDetailsElement).getByRole('button', { name: '展开 L3 脱敏元数据：可见字段与已屏蔽计数' }));
     expect(await screen.findByText('standard')).toBeInTheDocument();
     expect(screen.getByText('5 个敏感字段已屏蔽')).toBeInTheDocument();
     expectNoSecrets();
