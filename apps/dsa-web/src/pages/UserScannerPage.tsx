@@ -17,12 +17,14 @@ import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   buildConsumerResearchReadinessView,
+  buildScannerTopDownContextView,
   inferScannerResearchReadiness,
 } from '../api/researchReadiness';
 import { scannerApi } from '../api/scanner';
 import { watchlistApi } from '../api/watchlist';
 import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
 import { ScannerActionButton as ActionButton } from '../components/scanner/ScannerActionButton';
+import ScannerTopDownContextStrip from '../components/scanner/ScannerTopDownContextStrip';
 import {
   ScannerCandidateDetailPanel,
   ScannerCandidateDiagnosticRow,
@@ -2673,6 +2675,10 @@ const UserScannerPage: React.FC = () => {
     () => buildConsumerResearchReadinessView(inferScannerResearchReadiness(runDetail), language),
     [language, runDetail],
   );
+  const scannerTopDownContextView = useMemo(
+    () => buildScannerTopDownContextView(runDetail, language),
+    [language, runDetail],
+  );
   const scannerConclusion = useMemo(
     () => buildScannerConclusion(runDetail, language),
     [language, runDetail],
@@ -2774,6 +2780,14 @@ const UserScannerPage: React.FC = () => {
                 testId="scanner-research-readiness-strip"
                 className="mx-3"
               />
+              {scannerTopDownContextView ? (
+                <ScannerTopDownContextStrip
+                  context={scannerTopDownContextView}
+                  title={language === 'en' ? 'Top-down context' : '自上而下上下文'}
+                  testId="scanner-top-down-context-strip"
+                  className="mx-3"
+                />
+              ) : null}
               <DenseStatusStrip
                 data-testid="scanner-status-strip"
                 ariaLabel={language === 'en' ? 'Scanner summary strip' : '扫描摘要条'}

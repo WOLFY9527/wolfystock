@@ -9,6 +9,7 @@ import type {
 import type { MarketDirectionReadiness, MarketTemperatureResponse } from './market';
 import type { OptionsDecisionResponse } from './optionsLab';
 import type {
+  ConsumerReadinessChip,
   ConsumerReadinessTone,
   ConsumerResearchReadinessView,
   OptionsResearchReadiness,
@@ -24,6 +25,22 @@ import type { ScannerRunDetail } from '../types/scanner';
 type ReadinessLocale = 'zh' | 'en';
 
 type UnknownRecord = Record<string, unknown>;
+
+export type ScannerTopDownContextPosture =
+  | 'supportive'
+  | 'mixed'
+  | 'observe_only'
+  | 'insufficient'
+  | 'blocked'
+  | 'waiting';
+
+export interface ScannerTopDownContextView {
+  posture: ScannerTopDownContextPosture;
+  postureLabel: string;
+  tone: ConsumerReadinessTone;
+  summaryLine: string;
+  chips: ConsumerReadinessChip[];
+}
 
 const EVIDENCE_LABELS: Record<string, { zh: string; en: string }> = {
   technical: { zh: '技术证据', en: 'technical evidence' },
@@ -204,6 +221,173 @@ function summarizeReadiness(
     return locale === 'en' ? 'Waiting for the next evidence refresh.' : '等待下一次证据更新。';
   }
   return locale === 'en' ? 'Keep this result in observe-only mode.' : '当前结果先按仅观察处理。';
+}
+
+function localizedScannerContextPostureLabel(
+  posture: ScannerTopDownContextPosture,
+  locale: ReadinessLocale,
+): string {
+  const labels: Record<ScannerTopDownContextPosture, { zh: string; en: string }> = {
+    supportive: { zh: '支持性', en: 'Supportive' },
+    mixed: { zh: '混合', en: 'Mixed' },
+    observe_only: { zh: '仅观察', en: 'Observe only' },
+    insufficient: { zh: '证据不足', en: 'Evidence insufficient' },
+    blocked: { zh: '阻断', en: 'Blocked' },
+    waiting: { zh: '等待中', en: 'Waiting' },
+  };
+  return labels[posture][locale];
+}
+
+function scannerContextTone(
+  posture: ScannerTopDownContextPosture,
+): ConsumerReadinessTone {
+  if (posture === 'supportive') return 'success';
+  if (posture === 'blocked') return 'danger';
+  if (posture === 'insufficient') return 'caution';
+  if (posture === 'waiting') return 'neutral';
+  return 'info';
+}
+
+function normalizeScannerContextPosture(state: string | null | undefined): ScannerTopDownContextPosture {
+  const normalized = String(state || '').trim().toLowerCase();
+  if (!normalized) return 'insufficient';
+  if (normalized === 'ready' || normalized === 'supportive') return 'supportive';
+  if (normalized === 'mixed' || normalized === 'partial') return 'mixed';
+  if (normalized === 'observe_only' || normalized === 'observation_only') return 'observe_only';
+  if (normalized === 'blocked') return 'blocked';
+  if (normalized === 'waiting') return 'waiting';
+  if (normalized === 'insufficient' || normalized === 'data_insufficient' || normalized === 'missing' || normalized === 'unavailable') {
+    return 'insufficient';
+  }
+  return 'observe_only';
+}
+
+function localizedSignalStateLabel(
+  posture: ScannerTopDownContextPosture,
+  locale: ReadinessLocale,
+): string {
+  return localizedScannerContextPostureLabel(posture, locale);
+}
+
+function localizedUniversePolicyLabel(
+  type: string | null | undefined,
+  locale: ReadinessLocale,
+): string {
+  const labels: Record<string, { zh: string; en: string }> = {
+    default: { zh: '默认池', en: 'Default universe' },
+    theme: { zh: '主题池', en: 'Theme universe' },
+    symbols: { zh: '自选池', en: 'Custom symbols' },
+  };
+  return labels[String(type || '').trim().toLowerCase()]?.[locale] || (locale === 'en' ? 'Universe pending' : '标的池待确认');
+}
+
+function themeLabels(frame: ScannerContextFrame | null | undefined): string[] {
+  const labels = (frame?.themeFrame?.themes || [])
+    .map((item) => sanitizeHumanReason(item?.label || null))
+    .filter((item): item is string => Boolean(item));
+  return uniqueStrings(labels);
+}
+
+function collectScannerContextBlockers(frame: ScannerContextFrame | null | undefined): string[] {
+  return uniqueStrings([
+    ...asStringArray(frame?.macroRegime?.blockers),
+    ...asStringArray(frame?.liquidityFrame?.blockers),
+    ...asStringArray(frame?.assetClassBias?.blockers),
+    ...asStringArray(frame?.themeFrame?.blockers),
+    ...asStringArray(frame?.universePolicy?.blockers),
+    ...asStringArray(frame?.marketReadiness?.blockingReasons),
+  ]);
+}
+
+function hasMeaningfulScannerContext(frame: ScannerContextFrame | null | undefined): boolean {
+  return Boolean(
+    frame?.marketReadiness
+    || frame?.macroRegime
+    || frame?.liquidityFrame
+    || frame?.assetClassBias
+    || frame?.themeFrame
+    || frame?.universePolicy
+    || frame?.noAdviceBoundary === true,
+  );
+}
+
+function deriveScannerContextPosture(
+  frame: ScannerContextFrame | null | undefined,
+): ScannerTopDownContextPosture {
+  if (!hasMeaningfulScannerContext(frame)) return 'insufficient';
+
+  const postures: ScannerTopDownContextPosture[] = [
+    frame?.marketReadiness ? normalizeScannerContextPosture(frame.marketReadiness.readinessState) : 'insufficient',
+    frame?.macroRegime ? normalizeScannerContextPosture(frame.macroRegime.state) : 'insufficient',
+    frame?.liquidityFrame ? normalizeScannerContextPosture(frame.liquidityFrame.state) : 'insufficient',
+    frame?.assetClassBias ? normalizeScannerContextPosture(frame.assetClassBias.state) : 'insufficient',
+    frame?.themeFrame ? normalizeScannerContextPosture(frame.themeFrame.state) : 'insufficient',
+  ];
+
+  if (postures.includes('blocked')) return 'blocked';
+  if (postures.includes('insufficient')) return 'insufficient';
+  if (postures.includes('mixed')) return 'mixed';
+
+  const hasSupportive = postures.includes('supportive');
+  const hasObserveOnly = postures.includes('observe_only');
+  if (hasSupportive && hasObserveOnly) return 'mixed';
+  if (hasSupportive) return 'supportive';
+  if (postures.includes('waiting')) return 'waiting';
+  return 'observe_only';
+}
+
+function buildScannerContextSummaryLine(
+  posture: ScannerTopDownContextPosture,
+  frame: ScannerContextFrame | null | undefined,
+  locale: ReadinessLocale,
+): string {
+  const themes = themeLabels(frame);
+  const themeText = themes.length ? themes.slice(0, 2).join(locale === 'en' ? ' / ' : ' / ') : null;
+  const blockers = collectScannerContextBlockers(frame);
+  const cnUnavailable = blockers.includes('cn_context_unavailable');
+
+  if (posture === 'supportive') {
+    return locale === 'en'
+      ? 'Candidates are framed by supportive macro, liquidity, and theme context.'
+      : '宏观、流动性与主题框架一致，当前候选来自支持性市场环境。';
+  }
+  if (posture === 'mixed') {
+    if (themeText) {
+      return locale === 'en'
+        ? `Candidates sit inside a mixed context; ${themeText} remains observe-only.`
+        : `当前候选来自支持与观察并存的市场框架，${themeText} 线索先按观察级处理。`;
+    }
+    return locale === 'en'
+      ? 'Candidates sit inside a mix of supportive and observe-only context.'
+      : '当前候选来自支持与观察并存的市场框架。';
+  }
+  if (posture === 'observe_only') {
+    if (themeText) {
+      return locale === 'en'
+        ? `${themeText} remains observe-only, so the context stays non-upgraded.`
+        : `当前候选主要来自观察级市场框架，${themeText} 线索不升级为更强研究结论。`;
+    }
+    return locale === 'en'
+      ? 'Context remains observe-only, so candidates stay in a bounded research mode.'
+      : '当前候选主要来自观察级市场框架，不升级为更强研究结论。';
+  }
+  if (posture === 'blocked') {
+    return cnUnavailable
+      ? (locale === 'en'
+          ? 'CN market context is currently unavailable, so candidates stay blocked from a stronger conclusion.'
+          : '当前市场上下文暂不可用，当前候选不升级为更强研究结论。')
+      : (locale === 'en'
+          ? 'A blocking market condition still limits the scanner context.'
+          : '当前市场上下文存在阻断条件，当前候选不升级为更强研究结论。');
+  }
+  if (posture === 'waiting') {
+    return locale === 'en'
+      ? 'Waiting for the next market and scanner context refresh.'
+      : '等待下一次市场与扫描上下文刷新。';
+  }
+  return locale === 'en'
+    ? 'Market, liquidity, or theme context is still incomplete, so candidates stay fail-closed.'
+    : '市场、流动性或主题上下文仍有缺口，当前候选先按证据不足处理。';
 }
 
 export function buildConsumerResearchReadinessView(
@@ -449,6 +633,59 @@ export function inferScannerResearchReadiness(
       : insufficient
         ? ['补齐市场框架与候选证据后再复核']
         : ['结合市场、流动性与主题框架继续观察'],
+  };
+}
+
+export function buildScannerTopDownContextView(
+  runDetail: ScannerRunDetail | null | undefined,
+  locale: ReadinessLocale,
+): ScannerTopDownContextView | null {
+  if (!runDetail) return null;
+
+  const frame = runDetail.scannerContextFrame as ScannerContextFrame | undefined;
+  const posture = deriveScannerContextPosture(frame);
+  const macroState = frame?.macroRegime ? normalizeScannerContextPosture(frame.macroRegime.state) : 'insufficient';
+  const liquidityState = frame?.liquidityFrame ? normalizeScannerContextPosture(frame.liquidityFrame.state) : 'insufficient';
+  const assetState = frame?.assetClassBias ? normalizeScannerContextPosture(frame.assetClassBias.state) : 'insufficient';
+  const themeState = frame?.themeFrame ? normalizeScannerContextPosture(frame.themeFrame.state) : 'insufficient';
+
+  return {
+    posture,
+    postureLabel: localizedScannerContextPostureLabel(posture, locale),
+    tone: scannerContextTone(posture),
+    summaryLine: buildScannerContextSummaryLine(posture, frame, locale),
+    chips: [
+      {
+        key: 'market',
+        label: `${locale === 'en' ? 'Market' : '市场'}：${frame?.marketReadiness
+          ? (sanitizeHumanReason(frame.marketReadiness.verdictLabel) || localizedStateLabel(frame.marketReadiness.readinessState, locale))
+          : localizedStateLabel('insufficient', locale)}`,
+      },
+      {
+        key: 'macro',
+        label: `${locale === 'en' ? 'Macro' : '宏观'}：${localizedSignalStateLabel(macroState, locale)}`,
+      },
+      {
+        key: 'liquidity',
+        label: `${locale === 'en' ? 'Liquidity' : '流动性'}：${localizedSignalStateLabel(liquidityState, locale)}`,
+      },
+      {
+        key: 'asset-class',
+        label: `${locale === 'en' ? 'Asset bias' : '资产'}：${localizedSignalStateLabel(assetState, locale)}`,
+      },
+      {
+        key: 'theme',
+        label: `${locale === 'en' ? 'Theme' : '主题'}：${localizedSignalStateLabel(themeState, locale)}`,
+      },
+      {
+        key: 'universe',
+        label: `${locale === 'en' ? 'Universe' : '标的池'}：${localizedUniversePolicyLabel(frame?.universePolicy?.type, locale)}`,
+      },
+      {
+        key: 'boundary',
+        label: locale === 'en' ? 'Boundary: research only' : '边界：仅研究观察',
+      },
+    ],
   };
 }
 

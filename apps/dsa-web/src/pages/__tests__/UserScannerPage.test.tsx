@@ -518,6 +518,73 @@ function makeCryptoDiagnosticsRun(overrides: Partial<ScannerRunDetail> = {}): Sc
   });
 }
 
+function makeScannerContextFrame(overrides: Partial<NonNullable<ScannerRunDetail['scannerContextFrame']>> = {}) {
+  return {
+    marketReadiness: {
+      contractVersion: 'research_readiness_v1',
+      researchReady: false,
+      readinessState: 'observe_only',
+      verdictLabel: '仅观察',
+      blockingReasons: [],
+      missingEvidence: [],
+      evidenceCoverage: {
+        scoreGradeCount: 2,
+        observationOnlyCount: 1,
+        missingCount: 0,
+        totalCount: 3,
+      },
+      sourceAuthority: 'observationOnly',
+      freshnessFloor: 'cached',
+      consumerActionBoundary: 'no_advice',
+      nextEvidenceNeeded: ['继续结合市场与主题框架观察'],
+    },
+    macroRegime: {
+      state: 'supportive',
+      label: 'Supportive macro regime',
+      freshness: 'cached',
+      blockers: [],
+      observationOnly: false,
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+    },
+    liquidityFrame: {
+      state: 'supportive',
+      label: 'Liquidity supports equity leadership',
+      freshness: 'cached',
+      blockers: [],
+      observationOnly: false,
+      sourceAuthorityAllowed: true,
+      scoreContributionAllowed: true,
+      proxyOnly: false,
+    },
+    assetClassBias: {
+      state: 'supportive',
+      label: 'Equities preferred',
+      blockers: [],
+      observationOnly: false,
+    },
+    themeFrame: {
+      state: 'observe_only',
+      label: 'AI leadership is still observation-only',
+      freshness: 'cached',
+      blockers: [],
+      observationOnly: true,
+      proxyOnly: true,
+      themes: [
+        { id: 'ai', label: 'AI', observationOnly: true, proxyOnly: true },
+        { id: 'software', label: 'Software', observationOnly: true, proxyOnly: true },
+      ],
+    },
+    universePolicy: {
+      type: 'theme',
+      label: 'Theme universe',
+      blockers: [],
+    },
+    noAdviceBoundary: true,
+    ...overrides,
+  };
+}
+
 function makeHistoryItem(overrides: Partial<ScannerRunHistoryItem> = {}): ScannerRunHistoryItem {
   return {
     id: 11,
@@ -974,6 +1041,129 @@ describe('UserScannerPage', () => {
     expect(readinessStrip).toHaveTextContent('研究就绪度');
     expect(readinessStrip).toHaveTextContent(/仅观察|证据不足|等待证据更新/);
     expect(band).not.toHaveTextContent(/Fallback|Proxy|Stale|Capped|Limited\s+1|受限\s+1|备用数据|代理|过期|封顶/i);
+  });
+
+  it('renders compact top-down context labels for mixed scanner context without mutating ranking or score order', async () => {
+    getRun.mockResolvedValue(makeRunDetail({
+      market: 'us',
+      profile: 'us_preopen_v1',
+      profileLabel: 'US Pre-open Scanner v1',
+      universeType: 'theme',
+      themeId: 'ai_semiconductors',
+      themeLabel: 'AI 半导体',
+      scannerContextFrame: makeScannerContextFrame(),
+    }));
+
+    renderUserScannerPage();
+
+    const strip = await screen.findByTestId('scanner-top-down-context-strip');
+    expect(strip).toHaveTextContent('自上而下上下文');
+    expect(strip).toHaveTextContent('混合');
+    expect(strip).toHaveTextContent('市场：仅观察');
+    expect(strip).toHaveTextContent('宏观：支持');
+    expect(strip).toHaveTextContent('流动性：支持');
+    expect(strip).toHaveTextContent('资产：支持');
+    expect(strip).toHaveTextContent('主题：仅观察');
+    expect(strip).toHaveTextContent('标的池：主题池');
+    expect(strip).toHaveTextContent('边界：仅研究观察');
+    expect(strip).toHaveTextContent('当前候选来自支持与观察并存的市场框架');
+
+    expect(within(await screen.findByTestId('scanner-result-row-NVDA')).getAllByText('94/100').length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId('scanner-result-row-AVGO')).getAllByText('88/100').length).toBeGreaterThan(0);
+    expect(orderedSymbolsFromRows()).toEqual(['NVDA', 'AVGO', 'AMD']);
+  });
+
+  it('fail closes missing scanner context as insufficient instead of supportive context', async () => {
+    renderUserScannerPage();
+
+    const strip = await screen.findByTestId('scanner-top-down-context-strip');
+    expect(strip).toHaveTextContent('自上而下上下文');
+    expect(strip).toHaveTextContent('证据不足');
+    expect(strip).toHaveTextContent('市场：证据不足');
+    expect(strip).toHaveTextContent('宏观：证据不足');
+    expect(strip).toHaveTextContent('流动性：证据不足');
+    expect(strip).toHaveTextContent('边界：仅研究观察');
+    expect(strip).toHaveTextContent('市场、流动性或主题上下文仍有缺口');
+    expect(strip).not.toHaveTextContent(/支持性上下文|supportive context/i);
+  });
+
+  it('marks unavailable cn context as blocked without leaking internal or trading terms', async () => {
+    getRun.mockResolvedValue(makeRunDetail({
+      market: 'cn',
+      profile: 'cn_preopen_v1',
+      scannerContextFrame: makeScannerContextFrame({
+        marketReadiness: {
+          contractVersion: 'research_readiness_v1',
+          researchReady: false,
+          readinessState: 'insufficient',
+          verdictLabel: '证据不足',
+          blockingReasons: ['source_authority_router_rejected'],
+          missingEvidence: ['macro', 'liquidity'],
+          evidenceCoverage: {
+            scoreGradeCount: 0,
+            observationOnlyCount: 1,
+            missingCount: 2,
+            totalCount: 3,
+          },
+          sourceAuthority: 'unavailable',
+          freshnessFloor: 'unknown',
+          consumerActionBoundary: 'no_advice',
+          nextEvidenceNeeded: ['等待中国市场上下文恢复后再复核'],
+        },
+        macroRegime: {
+          state: 'blocked',
+          label: 'CN context unavailable',
+          freshness: 'unknown',
+          blockers: ['cn_context_unavailable'],
+          observationOnly: true,
+          sourceAuthorityAllowed: false,
+          scoreContributionAllowed: false,
+        },
+        liquidityFrame: {
+          state: 'blocked',
+          label: 'CN liquidity context unavailable',
+          freshness: 'unknown',
+          blockers: ['cn_context_unavailable'],
+          observationOnly: true,
+          sourceAuthorityAllowed: false,
+          scoreContributionAllowed: false,
+          proxyOnly: false,
+        },
+        assetClassBias: {
+          state: 'blocked',
+          label: 'Bias unavailable',
+          blockers: ['cn_context_unavailable'],
+          observationOnly: true,
+        },
+        themeFrame: {
+          state: 'blocked',
+          label: 'Theme context unavailable',
+          freshness: 'unknown',
+          blockers: ['cn_context_unavailable'],
+          observationOnly: true,
+          proxyOnly: false,
+          themes: [],
+        },
+        universePolicy: {
+          type: 'default',
+          label: 'Profile default universe',
+          blockers: ['cn_context_unavailable'],
+        },
+      }),
+    }));
+
+    const { container } = renderUserScannerPage();
+
+    const strip = await screen.findByTestId('scanner-top-down-context-strip');
+    expect(strip).toHaveTextContent('阻断');
+    expect(strip).toHaveTextContent('市场：证据不足');
+    expect(strip).toHaveTextContent('宏观：阻断');
+    expect(strip).toHaveTextContent('流动性：阻断');
+    expect(strip).toHaveTextContent('资产：阻断');
+    expect(strip).toHaveTextContent('主题：阻断');
+    expect(strip).toHaveTextContent('标的池：默认池');
+    expect(strip).toHaveTextContent('当前市场上下文暂不可用');
+    expect(container).not.toHaveTextContent(/cn_context_unavailable|provider|cache|router|sourceAuthority|buy|sell|order|trade|broker|买入|卖出|下单/i);
   });
 
   it('renders a scanner conclusion band when no candidate is usable', async () => {
