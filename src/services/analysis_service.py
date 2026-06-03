@@ -11,9 +11,10 @@
 """
 
 import logging
+import re
 import uuid
 from datetime import datetime
-from typing import Optional, Dict, Any, Callable, List
+from typing import Optional, Dict, Any, Callable, List, Iterable
 
 from src.report_language import (
     get_sentiment_label,
@@ -24,8 +25,27 @@ from src.report_language import (
 )
 from src.utils.security import sanitize_message, sanitize_metadata
 from src.utils.time_utils import to_beijing_iso8601
+from src.services.research_readiness_contract import build_research_readiness_v1
 
 logger = logging.getLogger(__name__)
+
+
+_HOME_READINESS_STRUCTURED_DOMAINS = (
+    ("technical", "technicals"),
+    ("fundamentals", "fundamentals"),
+    ("news", "sentiment_analysis"),
+    ("catalyst", "catalyst"),
+)
+_HOME_READINESS_RUNTIME_DOMAINS = {
+    "market": ("technical",),
+    "technical": ("technical",),
+    "technicals": ("technical",),
+    "fundamentals": ("fundamentals",),
+    "news": ("news", "catalyst"),
+    "sentiment": ("news",),
+}
+_READINESS_MISSING_STATUSES = {"missing", "failed", "unavailable", "not_configured", "skipped", "error"}
+_READINESS_FALLBACK_STATUSES = {"partial", "fallback", "stale", "configured_not_used", "used_unrecorded"}
 
 
 def _first_present(*values: Any) -> Any:
@@ -56,6 +76,160 @@ def _extract_data_quality_report(result: Any) -> Optional[Dict[str, Any]]:
         structured = dashboard.get("structured_analysis")
         if isinstance(structured, dict) and isinstance(structured.get("data_quality_report"), dict):
             return structured["data_quality_report"]
+    return None
+
+
+def _iter_values(value: Any) -> Iterable[Any]:
+    if isinstance(value, (list, tuple, set)):
+        return value
+    if value is None:
+        return ()
+    return (value,)
+
+
+def _readiness_cap_fraction(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number > 1:
+        number = number / 100
+    return max(0.0, min(1.0, number))
+
+
+def _readiness_domains_from_value(value: Any) -> List[str]:
+    text = str(value or "").strip()
+    if not text:
+        return []
+    normalized = re.sub(r"[^a-zA-Z0-9]+", "_", text).strip("_").lower()
+    domains: List[str] = []
+
+    def _append(domain: str) -> None:
+        if domain not in domains:
+            domains.append(domain)
+
+    if normalized in {"price_ohlcv", "technical_history"} or "technical" in normalized or "ohlcv" in normalized:
+        _append("technical")
+    if "fundamental" in normalized or "financial" in normalized or "earnings" in normalized:
+        _append("fundamentals")
+    if "news" in normalized or "sentiment" in normalized:
+        _append("news")
+    if "catalyst" in normalized or normalized.endswith("_event") or normalized == "event":
+        _append("catalyst")
+    if normalized in {"macro", "market", "market_sector_context", "regime"} or "macro" in normalized:
+        _append("macro")
+    if "liquidity" in normalized or normalized == "flow":
+        _append("liquidity")
+    return domains
+
+
+def _append_readiness_domains(domains: List[str], value: Any) -> None:
+    for item in _iter_values(value):
+        for domain in _readiness_domains_from_value(item):
+            if domain not in domains:
+                domains.append(domain)
+
+
+def _block_status(value: Dict[str, Any]) -> str:
+    return str(value.get("status") or value.get("state") or "").strip().lower()
+
+
+def _analysis_readiness_evidence_item(domain: str, block: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    source = _first_present(
+        block.get("source"),
+        block.get("provider"),
+        block.get("providerId"),
+        block.get("providerName"),
+    )
+    status = _block_status(block)
+    if not source and status in _READINESS_MISSING_STATUSES:
+        return None
+    if not source and not any(
+        key in block
+        for key in (
+            "sourceType",
+            "sourceTier",
+            "trustLevel",
+            "freshness",
+            "sourceAuthorityAllowed",
+            "scoreContributionAllowed",
+        )
+    ):
+        return None
+
+    freshness = _first_present(block.get("freshness"), block.get("freshnessClass"))
+    if not freshness:
+        if status == "stale":
+            freshness = "stale"
+        elif status in {"partial", "fallback", "configured_not_used", "used_unrecorded"}:
+            freshness = "delayed"
+    item: Dict[str, Any] = {
+        "domain": domain,
+        "source": source or f"{domain}_metadata",
+        "freshness": freshness or "unknown",
+    }
+    for key in (
+        "sourceType",
+        "sourceTier",
+        "trustLevel",
+        "sourceAuthorityAllowed",
+        "scoreContributionAllowed",
+        "observationOnly",
+        "proxyOnly",
+        "isFallback",
+        "isStale",
+        "isSynthetic",
+        "isUnavailable",
+    ):
+        if key in block:
+            item[key] = block[key]
+    if "sourceTier" not in item and block.get("source_type"):
+        item["sourceTier"] = block.get("source_type")
+    if "sourceType" not in item and block.get("source_type"):
+        item["sourceType"] = block.get("source_type")
+    if status in _READINESS_FALLBACK_STATUSES:
+        item.setdefault("observationOnly", True)
+    if status in _READINESS_MISSING_STATUSES:
+        item["isUnavailable"] = True
+        item.setdefault("observationOnly", True)
+        item.setdefault("sourceAuthorityAllowed", False)
+        item.setdefault("scoreContributionAllowed", False)
+    cap = _readiness_cap_fraction(block.get("scoreCap"))
+    if cap is not None:
+        item["scoreCap"] = cap
+    return item
+
+
+def _home_research_readiness_missing_domains(data_quality_report: Optional[Dict[str, Any]]) -> List[str]:
+    missing: List[str] = []
+    if not isinstance(data_quality_report, dict):
+        return missing
+    for key in (
+        "missingRequiredDomains",
+        "importantDomainsMissing",
+        "optionalMissing",
+        "importantMissing",
+        "missingDomains",
+        "missingEvidence",
+    ):
+        _append_readiness_domains(missing, data_quality_report.get(key))
+    if data_quality_report.get("requiredAvailable") is False:
+        _append_readiness_domains(missing, data_quality_report.get("missingRequiredDomains") or "technical")
+    return missing
+
+
+def _home_research_readiness_freshness(data_quality_report: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not isinstance(data_quality_report, dict):
+        return None
+    reason_codes = {str(item or "").strip().lower() for item in data_quality_report.get("reasonCodes") or []}
+    if any("synthetic" in item or "mock" in item for item in reason_codes):
+        return "synthetic"
+    if any("fallback" in item or "non_live" in item for item in reason_codes):
+        return "fallback"
+    if data_quality_report.get("staleSources") or "stale_required_source" in reason_codes:
+        return "stale"
     return None
 
 
@@ -264,6 +438,11 @@ class AnalysisService:
         sentiment_label = _sentiment_label_for_score(result.sentiment_score, report_language, data_quality_report)
         stock_name = get_localized_stock_name(getattr(result, "name", None), result.code, report_language)
         dashboard = getattr(result, "dashboard", None) if isinstance(getattr(result, "dashboard", None), dict) else {}
+        structured_analysis = (
+            dashboard.get("structured_analysis")
+            if isinstance(dashboard.get("structured_analysis"), dict)
+            else {}
+        )
         decision_panel = _nested_get(dashboard, "battle_plan", "sniper_points") or {}
         trend_status = _nested_get(dashboard, "data_perspective", "trend_status") or {}
         technical_indicators = _nested_get(dashboard, "data_perspective", "technical_indicators") or {}
@@ -333,6 +512,13 @@ class AnalysisService:
             "full_reasoning": getattr(result, "analysis_summary", None),
             "summary": getattr(result, "analysis_summary", None),
         }
+        research_readiness = self._build_home_research_readiness(
+            result,
+            data_quality_report=data_quality_report,
+            structured_analysis=structured_analysis,
+            query_id=query_id,
+        )
+        analysis_result["researchReadiness"] = research_readiness
         decision_trace = self._build_decision_trace(
             result,
             query_id=query_id,
@@ -383,13 +569,91 @@ class AnalysisService:
                 "raw_ai_response": _redact_public_artifact(getattr(result, "raw_response", None)),
             },
             "decision_trace": decision_trace,
+            "researchReadiness": research_readiness,
         }
+        payload["meta"]["researchReadiness"] = research_readiness
         if data_quality_report:
             payload["dataQualityReport"] = data_quality_report
             payload["meta"]["dataQualityReport"] = data_quality_report
             payload["details"]["data_quality_report"] = data_quality_report
             payload["details"]["analysis_result"]["dataQualityReport"] = data_quality_report
         return payload
+
+    def _build_home_research_readiness(
+        self,
+        result: Any,
+        *,
+        data_quality_report: Optional[Dict[str, Any]],
+        structured_analysis: Dict[str, Any],
+        query_id: str,
+    ) -> Dict[str, Any]:
+        missing_domains = _home_research_readiness_missing_domains(data_quality_report)
+        evidence: List[Dict[str, Any]] = []
+        required_domains: List[str] = []
+
+        for domain, key in _HOME_READINESS_STRUCTURED_DOMAINS:
+            block = structured_analysis.get(key)
+            if not isinstance(block, dict):
+                continue
+            status = _block_status(block)
+            if status in _READINESS_MISSING_STATUSES:
+                _append_readiness_domains(missing_domains, domain)
+            item = _analysis_readiness_evidence_item(domain, block)
+            if item:
+                evidence.append(item)
+                _append_readiness_domains(required_domains, domain)
+
+        runtime = getattr(result, "runtime_execution", None) if isinstance(getattr(result, "runtime_execution", None), dict) else {}
+        runtime_data = runtime.get("data") if isinstance(runtime.get("data"), dict) else {}
+        for key, field in runtime_data.items():
+            if not isinstance(field, dict):
+                continue
+            for domain in _HOME_READINESS_RUNTIME_DOMAINS.get(str(key), ()):
+                status = str(field.get("status") or "").strip().lower()
+                if status in _READINESS_MISSING_STATUSES:
+                    _append_readiness_domains(missing_domains, domain)
+                item = _analysis_readiness_evidence_item(domain, field)
+                if item:
+                    evidence.append(item)
+                    _append_readiness_domains(required_domains, domain)
+
+        for domain in missing_domains:
+            _append_readiness_domains(required_domains, domain)
+
+        cap = (
+            _readiness_cap_fraction(data_quality_report.get("confidenceCap"))
+            if isinstance(data_quality_report, dict)
+            else None
+        )
+        score_state = _score_state_from_quality(getattr(result, "sentiment_score", None), data_quality_report)
+        evidence_by_domain = {
+            str(item.get("domain"))
+            for item in evidence
+            if item.get("sourceAuthorityAllowed") is True and item.get("scoreContributionAllowed") is True
+        }
+        source_authority_allowed = bool(
+            required_domains
+            and not missing_domains
+            and all(domain in evidence_by_domain for domain in required_domains)
+        )
+        payload: Dict[str, Any] = {
+            "requiredEvidence": required_domains,
+            "missingEvidence": missing_domains,
+            "evidence": evidence,
+            "dataQualityReport": data_quality_report or {},
+            "sourceAuthorityAllowed": source_authority_allowed,
+            "scoreContributionAllowed": source_authority_allowed,
+            "scoreState": score_state,
+            "noAdviceBoundary": True,
+            "consumerActionBoundary": "no_advice",
+            "debugRef": f"analysis:{query_id}",
+        }
+        if cap is not None:
+            payload["confidenceCap"] = cap
+        freshness = _home_research_readiness_freshness(data_quality_report)
+        if freshness:
+            payload["freshness"] = freshness
+        return build_research_readiness_v1(payload)
 
     @staticmethod
     def _normalize_action(value: Any) -> str:
@@ -776,7 +1040,7 @@ class AnalysisService:
             report,
         )
 
-        return {
+        response = {
             "stock_code": result.code,
             "stock_name": stock_name,
             "query_id": resolved_query_id,
@@ -784,6 +1048,9 @@ class AnalysisService:
             "runtime_execution": runtime_execution,
             "notification_result": getattr(result, "notification_result", None),
         }
+        if isinstance(report.get("researchReadiness"), dict):
+            response["researchReadiness"] = report["researchReadiness"]
+        return response
 
     @staticmethod
     def _attach_report_delivery_runtime(

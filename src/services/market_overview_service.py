@@ -87,6 +87,7 @@ from src.services.polygon_us_breadth_provider import (
     run_polygon_us_breadth_activation,
 )
 from src.services.provider_evidence_snapshot import build_provider_evidence_snapshot
+from src.services.research_readiness_contract import build_research_readiness_v1
 from src.services.market_overview_yfinance_transport import (
     fetch_yfinance_quote_history_frame,
     fetch_yfinance_spy_atr_history_frame,
@@ -112,6 +113,7 @@ CN_TZ = timezone(timedelta(hours=8))
 US_EASTERN_TZ = ZoneInfo("America/New_York")
 FALLBACK_WARNING = "备用示例数据，不代表当前行情"
 INSUFFICIENT_MARKET_DATA_WARNING = "当前真实数据不足，市场温度仅供界面演示"
+MARKET_RESEARCH_READINESS_REQUIRED_EVIDENCE = ("macro", "liquidity", "technical")
 OFFICIAL_MACRO_UNAVAILABLE_WARNING = "部分官方宏观指标暂不可用"
 OFFICIAL_DAILY_FRESHNESS_POLICY_ID = "official_daily_us_weekday_t_plus_1"
 OFFICIAL_WEEKLY_FED_LIQUIDITY_FRESHNESS_POLICY_ID = "official_weekly_fed_liquidity_t_plus_7"
@@ -1177,9 +1179,102 @@ class MarketOverviewService:
         started_at = time.monotonic()
         payload = self._cached_payload("temperature", fetcher, fallback_factory)
         payload = self._with_market_meta(payload, self._category_for_cache_key("temperature"))
+        payload = self._with_market_research_readiness(payload)
         payload["providerHealth"] = self._provider_health(payload, "temperature", duration_ms=int((time.monotonic() - started_at) * 1000), error_summary=_compact_error_summary(payload.get("lastError")))
         payload = self._with_evidence_snapshot(payload, self._category_for_cache_key("temperature"))
         return payload
+
+    @staticmethod
+    def _market_research_missing_evidence(payload: Mapping[str, Any]) -> List[str]:
+        missing: List[str] = []
+
+        def _append(value: str) -> None:
+            if value not in missing:
+                missing.append(value)
+
+        if not payload.get("temperatureAvailable"):
+            _append("macro")
+        if not payload.get("conclusionAllowed"):
+            _append("liquidity")
+        if payload.get("insufficientReliableInputs"):
+            _append("technical")
+
+        summary = payload.get("regimeSummary") if isinstance(payload.get("regimeSummary"), Mapping) else {}
+        for key in ("blockers", "confidenceCaps", "nextWatchItems"):
+            rows = summary.get(key)
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if not isinstance(row, Mapping):
+                    continue
+                row_key = str(row.get("key") or "").lower()
+                if "liquidity" in row_key:
+                    _append("liquidity")
+                if "macro" in row_key or "official_macro" in row_key:
+                    _append("macro")
+                if "rotation" in row_key or "breadth" in row_key or "technical" in row_key:
+                    _append("technical")
+
+        freshness_evidence = (
+            payload.get("sourceFreshnessEvidence")
+            if isinstance(payload.get("sourceFreshnessEvidence"), Mapping)
+            else {}
+        )
+        freshness = str(freshness_evidence.get("freshness") or payload.get("freshness") or "").lower()
+        if freshness in {"fallback", "stale", "synthetic", "mock", "unavailable", "error", "unknown"}:
+            _append("freshness")
+        if str(payload.get("sourceTier") or "").lower() in {"unavailable", "synthetic", "static_fallback"}:
+            _append("source_authority")
+        return missing
+
+    def _with_market_research_readiness(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        conclusion_allowed = bool(payload.get("conclusionAllowed"))
+        score_cap = self._clean_number(payload.get("scoreCap"))
+        if score_cap is None:
+            score_cap = 1.0 if conclusion_allowed else 0.0
+        freshness_evidence = (
+            payload.get("sourceFreshnessEvidence")
+            if isinstance(payload.get("sourceFreshnessEvidence"), Mapping)
+            else {}
+        )
+        freshness = freshness_evidence.get("freshness") or payload.get("freshness") or "unknown"
+        missing = self._market_research_missing_evidence(payload)
+        source_tier = payload.get("sourceTier") or payload.get("sourceType")
+        trust_level = payload.get("trustLevel")
+        evidence = [
+            {
+                "domain": domain,
+                "source": "market_intelligence_trust_gate",
+                "sourceType": source_tier,
+                "sourceTier": source_tier,
+                "trustLevel": trust_level,
+                "freshness": freshness,
+                "sourceAuthorityAllowed": conclusion_allowed,
+                "scoreContributionAllowed": conclusion_allowed,
+                "observationOnly": not conclusion_allowed,
+                "scoreCap": score_cap,
+                "isFallback": bool(payload.get("isFallback") or (payload.get("fallbackUsed") and not conclusion_allowed)),
+                "isStale": bool(payload.get("isStale")),
+                "isSynthetic": str(freshness).lower() in {"synthetic", "mock"},
+                "isUnavailable": bool(payload.get("isUnavailable")),
+            }
+            for domain in MARKET_RESEARCH_READINESS_REQUIRED_EVIDENCE
+        ]
+        readiness = build_research_readiness_v1(
+            {
+                "requiredEvidence": list(MARKET_RESEARCH_READINESS_REQUIRED_EVIDENCE),
+                "missingEvidence": missing,
+                "evidence": evidence,
+                "sourceAuthorityAllowed": conclusion_allowed,
+                "scoreContributionAllowed": conclusion_allowed,
+                "scoreCap": score_cap,
+                "freshness": freshness,
+                "noAdviceBoundary": True,
+                "consumerActionBoundary": "no_advice",
+                "debugRef": "market:temperature",
+            }
+        )
+        return {**payload, "researchReadiness": readiness}
 
     def get_market_briefing(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         def fetcher() -> Dict[str, Any]:

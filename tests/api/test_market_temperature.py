@@ -501,6 +501,50 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertTrue(semantics["claimBoundaries"])
         self.assertTrue(semantics["notInvestmentAdvice"])
 
+    def test_market_temperature_research_readiness_additive_compatibility_preserves_existing_payload(self) -> None:
+        service = MarketOverviewService()
+
+        payload = _market_temperature_api_payload(service, _decision_semantics_ready_temperature_inputs())
+
+        readiness = payload["researchReadiness"]
+        self.assertFalse(readiness["researchReady"])
+        self.assertIn(readiness["readinessState"], {"insufficient", "observe_only"})
+        self.assertIn("liquidity", readiness["missingEvidence"])
+        self.assertEqual(readiness["consumerActionBoundary"], "no_advice")
+        self.assertTrue(
+            {
+                "source",
+                "updatedAt",
+                "scores",
+                "marketRegimeSynthesis",
+                "marketDecisionSemantics",
+                "regimeSummary",
+                "providerHealth",
+                "evidenceSnapshot",
+                "temperatureAvailable",
+                "conclusionAllowed",
+            }.issubset(payload.keys())
+        )
+
+    def test_market_temperature_research_readiness_degraded_no_conclusion_is_not_ready(self) -> None:
+        service = MarketOverviewService()
+
+        payload = _market_temperature_api_payload(
+            service,
+            service._fallback_market_temperature_inputs(),
+        )
+
+        readiness = payload["researchReadiness"]
+        self.assertFalse(payload["temperatureAvailable"])
+        self.assertFalse(payload["conclusionAllowed"])
+        self.assertFalse(readiness["researchReady"])
+        self.assertEqual(readiness["readinessState"], "insufficient")
+        self.assertIn("macro", readiness["missingEvidence"])
+        self.assertIn("liquidity", readiness["missingEvidence"])
+        self.assertIn("freshness", readiness["missingEvidence"])
+        self.assertIn("missing_required_evidence", readiness["blockingReasons"])
+        self.assertEqual(readiness["freshnessFloor"], "fallback")
+
     def test_market_temperature_api_serializes_additive_regime_summary_contract(self) -> None:
         service = MarketOverviewService()
         inputs = _decision_semantics_ready_temperature_inputs()
