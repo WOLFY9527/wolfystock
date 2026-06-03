@@ -16,6 +16,8 @@ const viewports = [
 const rawLeakPattern = /raw|debug|provider|schema|payload|trace|internal/i;
 const tradingPattern = /buy|sell|order|trade|broker|买入|卖出|下单|交易|券商/i;
 const safeVerdictPattern = /研究证据可用|仅观察|证据不足|等待证据更新|Research-ready|Observe only|Evidence insufficient|Waiting/i;
+const internalEvidenceCoveragePattern =
+  /provider_timeout|sourceauthority|source_authority|fallbackorproxy|fallback_or_proxy|router|cache|credential|providerroute|partial_coverage|coverage_not_assembled|env/i;
 
 const signedInUser = {
   id: 'user-1',
@@ -112,6 +114,183 @@ async function installSignedInHomeRoutes(page: Page) {
       ],
     });
   });
+
+  await page.route('**/api/v1/history/3**', async (route) => {
+    await fulfillJson(route, {
+      meta: {
+        id: 3,
+        queryId: 'q3',
+        stockCode: 'ORCL',
+        stockName: 'Oracle',
+        companyName: 'Oracle',
+        reportType: 'detailed',
+        createdAt: '2026-04-27T08:00:00Z',
+        reportGeneratedAt: '2026-04-27T08:03:00Z',
+        currentPrice: 130.2,
+        changePct: -0.4,
+        modelUsed: 'fixture-model',
+        isTest: true,
+      },
+      summary: {
+        analysisSummary: 'Oracle is holding its post-earnings platform.',
+        operationAdvice: 'Wait for a controlled pullback before adding.',
+        trendPrediction: 'Constructive for the next 72 hours.',
+        sentimentScore: 78,
+        sentimentLabel: 'Bullish',
+      },
+      strategy: {
+        idealBuy: '121.80 - 124.60',
+        stopLoss: '117.40',
+        takeProfit: '133.50',
+      },
+      details: {
+        dataQualityReport: {
+          dataQualityTier: 'analysis_grade',
+          dataQualityScore: 68,
+          requiredAvailable: true,
+          importantMissing: ['fundamentals.eps'],
+          optionalMissing: ['optional_enrichment_pending'],
+          staleSources: [],
+          providerTimeouts: ['gnews:news'],
+          providerCooldowns: ['fmp:fundamentals'],
+          confidenceCap: 70,
+          reasonCodes: ['important_data_missing', 'optional_enrichment_missing'],
+          freshness: { marketSessionDate: '2026-05-05' },
+          enrichmentStatus: 'pending',
+          enrichmentSources: ['news', 'sentiment', 'detailed_fundamentals'],
+          completedSources: ['sentiment'],
+          pendingSources: ['news'],
+          failedSources: [],
+          skippedSources: ['detailed_fundamentals'],
+          enrichmentReasons: { news: ['optional_news_timeout'] },
+          enrichmentUpdatedAt: '2026-05-06T01:01:00Z',
+          enrichmentAsOf: '2026-05-06T01:00:00Z',
+        },
+        standardReport: {
+          summaryPanel: {
+            stock: 'Oracle',
+            ticker: 'ORCL',
+            oneSentence: 'Cloud backlog keeps the medium-term floor intact.',
+          },
+          decisionContext: {
+            shortTermView: 'Post-earnings strength still holds the upper rail',
+          },
+          decisionPanel: {
+            idealEntry: '121.80 - 124.60',
+            target: '133.50',
+            stopLoss: '117.40',
+            buildStrategy: 'Start light, then add only after the pullback stays orderly.',
+          },
+          reasonLayer: {
+            coreReasons: ['Institutional sponsorship remains intact after earnings.'],
+          },
+          technicalFields: [
+            { label: 'MACD', value: 'Second expansion above zero' },
+            { label: 'Moving Averages', value: 'MA20 lifting MA60' },
+          ],
+          fundamentalFields: [
+            { label: 'Revenue Growth', value: '+9.4%' },
+            { label: 'Free Cash Flow', value: '$12.1B' },
+          ],
+        },
+      },
+      dataQualityReport: {
+        dataQualityTier: 'analysis_grade',
+        dataQualityScore: 68,
+        requiredAvailable: true,
+        importantMissing: ['fundamentals.eps'],
+        optionalMissing: ['optional_enrichment_pending'],
+        staleSources: [],
+        providerTimeouts: ['gnews:news'],
+        providerCooldowns: ['fmp:fundamentals'],
+        confidenceCap: 70,
+        reasonCodes: ['important_data_missing', 'optional_enrichment_missing'],
+        freshness: { marketSessionDate: '2026-05-05' },
+        enrichmentStatus: 'pending',
+        enrichmentSources: ['news', 'sentiment', 'detailed_fundamentals'],
+        completedSources: ['sentiment'],
+        pendingSources: ['news'],
+        failedSources: [],
+        skippedSources: ['detailed_fundamentals'],
+        enrichmentReasons: { news: ['optional_news_timeout'] },
+        enrichmentUpdatedAt: '2026-05-06T01:01:00Z',
+        enrichmentAsOf: '2026-05-06T01:00:00Z',
+      },
+      evidenceCoverageFrame: {
+        technicals: {
+          status: 'available',
+          missingReasons: [],
+          nextEvidenceNeeded: [],
+        },
+        fundamentals: {
+          status: 'degraded',
+          missingReasons: ['partial_coverage', 'provider_timeout'],
+          nextEvidenceNeeded: ['补充基本面证据'],
+        },
+        news: {
+          status: 'missing',
+          missingReasons: ['evidence_missing'],
+          nextEvidenceNeeded: ['补充新闻证据'],
+        },
+        catalysts: {
+          status: 'blocked',
+          missingReasons: ['provider_timeout'],
+          nextEvidenceNeeded: ['补充催化证据'],
+        },
+        earnings: {
+          status: 'pending',
+          missingReasons: ['evidence_pending'],
+          nextEvidenceNeeded: ['补充财报证据'],
+        },
+        valuation: {
+          status: 'not_applicable',
+          missingReasons: [],
+          nextEvidenceNeeded: [],
+        },
+      },
+      decisionTrace: {
+        engineVersion: 'analysis_decision_trace_v1',
+        mode: 'rule_scoring_with_llm_explanation',
+        endpoint: '/api/v1/analysis/analyze',
+        taskId: 'q3',
+        symbol: 'ORCL',
+        market: 'US',
+        decisionFields: {
+          action: { value: 'hold', source: 'rule', confidence: 0.78, notes: 'stabilized score path' },
+          score: { value: 78, source: 'rule', scale: '0-100' },
+          confidence: { value: '高', source: 'llm' },
+          entry: { value: '121.80 - 124.60', source: 'llm' },
+          target: { value: '133.50', source: 'llm' },
+          stop: { value: '117.40', source: 'llm' },
+        },
+        dataSources: [
+          { name: 'quote', status: 'used', provider: 'Yahoo Finance' },
+          { name: 'fundamental', status: 'fallback', provider: 'FMP' },
+          { name: 'news', status: 'missing', provider: null },
+        ],
+        signals: [
+          { name: 'MA alignment', value: 'bullish', impact: 'positive', source: 'technical_rule' },
+        ],
+        llm: {
+          used: true,
+          provider: 'openai',
+          model: 'openai/gpt-4.1-mini',
+          template: 'decision_dashboard_v2',
+          structuredOutput: true,
+          schemaValidated: true,
+          promptExposed: false,
+        },
+        conflicts: [
+          {
+            type: 'action_plan_mismatch',
+            severity: 'warning',
+            message: 'Action says sell but plan includes entry/accumulation.',
+          },
+        ],
+        limitations: ['fundamental data partial'],
+      },
+    });
+  });
 }
 
 async function openSignedInHome(page: Page) {
@@ -146,6 +325,24 @@ async function expectSafeReadinessStrip(page: Page, testId: string) {
   await appExpect(strip).not.toContainText(tradingPattern);
 }
 
+async function expectSafeEvidenceCoverageStrip(page: Page) {
+  const strip = page.getByTestId('home-evidence-coverage-strip');
+  await appExpect(strip).toBeVisible({ timeout: 15_000 });
+  await appExpect(strip).toContainText('证据覆盖');
+  await appExpect(strip).toContainText('技术面 可用');
+  await appExpect(strip).toContainText('基本面 降级');
+  await appExpect(strip).toContainText('新闻 缺失');
+  await appExpect(strip).toContainText('催化 阻断');
+  await appExpect(strip).toContainText('财报 待补');
+  await appExpect(strip).toContainText('补充基本面证据');
+  await appExpect(strip).toContainText('补充新闻证据');
+  await appExpect(strip).toContainText('补充催化证据');
+  await appExpect(strip).toContainText('补充财报证据');
+  await appExpect(strip).not.toContainText(internalEvidenceCoveragePattern);
+  await appExpect(strip).not.toContainText(rawLeakPattern);
+  await appExpect(strip).not.toContainText(tradingPattern);
+}
+
 appTest.describe('consumer research readiness browser acceptance', () => {
   appTest('Home readiness strip is visible and consumer-safe', async ({ page, consoleErrors, unhandledApiRoutes }) => {
     for (const viewport of viewports) {
@@ -154,6 +351,7 @@ appTest.describe('consumer research readiness browser acceptance', () => {
       await expectRootNonEmpty(page);
       await expectNoHorizontalOverflow(page);
       await expectSafeReadinessStrip(page, 'home-research-readiness-strip');
+      await expectSafeEvidenceCoverageStrip(page);
       expect(consoleErrors).toEqual([]);
       expect(unhandledApiRoutes).toEqual([]);
     }
