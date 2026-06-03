@@ -18,6 +18,7 @@ operations dashboards, or admin frontend UX contracts.
 - [Admin Data Control Center Design](../audits/admin-data-control-center-design.md)
 - [Admin Data Control Center Frontend UX Contract](../audits/admin-data-control-center-frontend-ux-contract.md)
 - [Duplicate-Cost Admin Dashboard Frontend UX Contract](../audits/duplicate-cost-admin-dashboard-frontend-ux-contract.md)
+- [Admin/Ops IA Consolidation Blueprint](../product/ADMIN_OPS_IA_CONSOLIDATION.md)
 
 ## Current Rules
 
