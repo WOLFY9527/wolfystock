@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class _OptionsModel(BaseModel):
@@ -104,6 +104,27 @@ class OptionUnderlyingSummaryResponse(_OptionsModel):
     warnings: List[str] = Field(default_factory=list)
     limitations: OptionChainLimitations = Field(default_factory=OptionChainLimitations)
     metadata: OptionsMetadata = Field(default_factory=OptionsMetadata)
+    options_readiness: Optional[OptionsResearchReadiness] = Field(default=None, alias="optionsReadiness")
+    options_research_readiness: Optional[OptionsResearchReadiness] = Field(
+        default=None,
+        alias="optionsResearchReadiness",
+    )
+
+    @model_validator(mode="after")
+    def _populate_options_readiness(self) -> "OptionUnderlyingSummaryResponse":
+        computed = _build_contract_response_readiness(
+            metadata=self.metadata,
+            contracts=[],
+            scenario_coverage="missing_chain_data",
+            source_hint=self.source,
+            freshness_hint=str(self.underlying.get("freshness") or ""),
+        )
+        self.options_readiness, self.options_research_readiness = _ensure_readiness_aliases(
+            existing_readiness=self.options_readiness,
+            existing_alias=self.options_research_readiness,
+            computed=computed,
+        )
+        return self
 
 
 class OptionExpirationsResponse(_OptionsModel):
@@ -115,6 +136,27 @@ class OptionExpirationsResponse(_OptionsModel):
     warnings: List[str] = Field(default_factory=list)
     limitations: OptionChainLimitations = Field(default_factory=OptionChainLimitations)
     metadata: OptionsMetadata = Field(default_factory=OptionsMetadata)
+    options_readiness: Optional[OptionsResearchReadiness] = Field(default=None, alias="optionsReadiness")
+    options_research_readiness: Optional[OptionsResearchReadiness] = Field(
+        default=None,
+        alias="optionsResearchReadiness",
+    )
+
+    @model_validator(mode="after")
+    def _populate_options_readiness(self) -> "OptionExpirationsResponse":
+        computed = _build_contract_response_readiness(
+            metadata=self.metadata,
+            contracts=[],
+            scenario_coverage="missing_chain_data",
+            source_hint=self.source,
+            freshness_hint="",
+        )
+        self.options_readiness, self.options_research_readiness = _ensure_readiness_aliases(
+            existing_readiness=self.options_readiness,
+            existing_alias=self.options_research_readiness,
+            computed=computed,
+        )
+        return self
 
 
 class OptionChainResponse(_OptionsModel):
@@ -130,6 +172,28 @@ class OptionChainResponse(_OptionsModel):
     warnings: List[str] = Field(default_factory=list)
     limitations: OptionChainLimitations = Field(default_factory=OptionChainLimitations)
     metadata: OptionsMetadata = Field(default_factory=OptionsMetadata)
+    options_readiness: Optional[OptionsResearchReadiness] = Field(default=None, alias="optionsReadiness")
+    options_research_readiness: Optional[OptionsResearchReadiness] = Field(
+        default=None,
+        alias="optionsResearchReadiness",
+    )
+
+    @model_validator(mode="after")
+    def _populate_options_readiness(self) -> "OptionChainResponse":
+        contracts = [*self.calls, *self.puts]
+        computed = _build_contract_response_readiness(
+            metadata=self.metadata,
+            contracts=contracts,
+            scenario_coverage="single_contract",
+            source_hint=self.source,
+            freshness_hint=str(self.underlying.get("freshness") or ""),
+        )
+        self.options_readiness, self.options_research_readiness = _ensure_readiness_aliases(
+            existing_readiness=self.options_readiness,
+            existing_alias=self.options_research_readiness,
+            computed=computed,
+        )
+        return self
 
 
 OptionDirection = Literal["bullish", "bearish", "neutral", "volatility"]
@@ -142,6 +206,394 @@ OptionsGateStatus = Literal["clear", "blocked", "observe_only", "manual_review"]
 OptionsGateDecision = Literal["数据不足，禁止判断", "仅观察", "需人工复核"]
 OptionsIvRankStatus = Literal["unavailable", "available"]
 OptionsExpectedMoveSource = Literal["straddle_mid", "iv_dte", "unavailable"]
+OptionsReadinessState = Literal["live_usable", "delayed_usable", "insufficient", "blocked"]
+OptionsProviderAuthority = Literal["scoreGradeAllowed", "observationOnly", "unavailable"]
+OptionsScenarioCoverage = Literal["missing_chain_data", "single_contract", "strategy_compare_ready"]
+
+_READY_FRESHNESS_VALUES = {"fresh", "live", "realtime", "real_time", "real-time"}
+_DELAYED_FRESHNESS_VALUES = {"delayed", "cached", "stale", "delayed_usable"}
+_FIXTURE_SOURCE_MARKERS = ("fixture", "synthetic", "mock")
+_PROVIDER_BLOCKING_CODES = {
+    "provider_adapter_contract_not_decision_grade",
+    "provider_dry_run_not_decision_grade",
+    "provider_fixture_not_decision_grade",
+    "provider_synthetic_not_decision_grade",
+    "provider_live_disabled",
+    "provider_tradeable_data_false",
+    "provider_authority_tier_missing",
+    "provider_authority_tier_observation_only",
+    "provider_authority_tier_analysis_only",
+    "provider_authority_policy_not_granted",
+}
+
+
+class OptionsNoTradingBoundary(_OptionsModel):
+    analytical_only: bool = Field(default=True, alias="analyticalOnly")
+    no_broker_execution: bool = Field(default=True, alias="noBrokerExecution")
+    no_order_placement: bool = Field(default=True, alias="noOrderPlacement")
+    no_portfolio_mutation: bool = Field(default=True, alias="noPortfolioMutation")
+    no_trading_recommendation: bool = Field(default=True, alias="noTradingRecommendation")
+
+
+class OptionsResearchReadiness(_OptionsModel):
+    options_research_ready: bool = Field(alias="optionsResearchReady")
+    readiness_state: OptionsReadinessState = Field(alias="readinessState")
+    data_quality_tier: OptionsDataQualityTier = Field(alias="dataQualityTier")
+    decision_grade: bool = Field(alias="decisionGrade")
+    provider_authority: OptionsProviderAuthority = Field(alias="providerAuthority")
+    liquidity_gate: OptionsGateStatus = Field(alias="liquidityGate")
+    iv_greeks_gate: OptionsGateStatus = Field(alias="ivGreeksGate")
+    spread_gate: OptionsGateStatus = Field(alias="spreadGate")
+    scenario_coverage: OptionsScenarioCoverage = Field(alias="scenarioCoverage")
+    no_trading_boundary: OptionsNoTradingBoundary = Field(alias="noTradingBoundary")
+    blocking_reasons: List[str] = Field(default_factory=list, alias="blockingReasons")
+    next_evidence_needed: List[str] = Field(default_factory=list, alias="nextEvidenceNeeded")
+
+
+def _dedupe_codes(values: List[str]) -> List[str]:
+    seen: set[str] = set()
+    ordered: List[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        ordered.append(text)
+    return ordered
+
+
+def _source_text(*values: Any) -> str:
+    return " ".join(str(value or "") for value in values).lower()
+
+
+def _provider_caps(metadata: Optional["OptionsMetadata"]) -> Dict[str, Any]:
+    if metadata is None:
+        return {}
+    return dict(metadata.provider_capabilities or {})
+
+
+def _provider_authority_from_metadata(
+    metadata: Optional["OptionsMetadata"],
+    source_hint: str = "",
+) -> OptionsProviderAuthority:
+    caps = _provider_caps(metadata)
+    tier = str(caps.get("authorityTier") or "").strip().lower()
+    source_type = _source_text(caps.get("sourceType"), source_hint)
+    live_enabled = bool(caps.get("liveEnabled", metadata.live_provider_enabled if metadata else False))
+    tradeable = caps.get("tradeableData")
+    if tier == "decision_grade" and live_enabled and tradeable is True:
+        return "scoreGradeAllowed"
+    if (
+        (metadata is not None and (metadata.fixture_backed or metadata.synthetic_data))
+        or tier in {"live_observation_only", "live_analysis_grade"}
+        or any(marker in source_type for marker in ("fixture", "synthetic", "adapter_contract", "dry_run", "fallback"))
+    ):
+        return "observationOnly"
+    return "unavailable"
+
+
+def _provider_blocking_reasons(
+    metadata: Optional["OptionsMetadata"],
+    source_hint: str = "",
+) -> List[str]:
+    caps = _provider_caps(metadata)
+    issues: List[str] = []
+    tier = str(caps.get("authorityTier") or "").strip().lower()
+    source_type = _source_text(caps.get("sourceType"), source_hint)
+    live_enabled = bool(caps.get("liveEnabled", metadata.live_provider_enabled if metadata else False))
+    tradeable = caps.get("tradeableData")
+    if "adapter_contract" in source_type:
+        issues.append("provider_adapter_contract_not_decision_grade")
+    elif "dry_run" in source_type:
+        issues.append("provider_dry_run_not_decision_grade")
+    elif metadata is not None and metadata.fixture_backed:
+        issues.append("provider_fixture_not_decision_grade")
+    elif metadata is not None and metadata.synthetic_data:
+        issues.append("provider_synthetic_not_decision_grade")
+    if not live_enabled:
+        issues.append("provider_live_disabled")
+    if tradeable is not True:
+        issues.append("provider_tradeable_data_false")
+    if tier == "live_observation_only" or ((metadata is not None and metadata.fixture_backed) and not tier):
+        issues.append("provider_authority_tier_observation_only")
+    elif tier == "live_analysis_grade":
+        issues.append("provider_authority_tier_analysis_only")
+    elif not tier:
+        issues.append("provider_authority_tier_missing")
+    elif tier != "decision_grade":
+        issues.append("provider_authority_policy_not_granted")
+    return _dedupe_codes(issues)
+
+
+def _infer_data_quality_tier(
+    *,
+    explicit_tier: Optional[str] = None,
+    metadata: Optional["OptionsMetadata"] = None,
+    source_hint: str = "",
+    freshness_hint: str = "",
+) -> OptionsDataQualityTier:
+    if explicit_tier in {"live_usable", "delayed_usable", "synthetic_demo_only", "insufficient"}:
+        return explicit_tier
+    text = _source_text(source_hint, freshness_hint, getattr(metadata, "provider_name", ""))
+    if metadata is not None and (metadata.fixture_backed or metadata.synthetic_data):
+        return "synthetic_demo_only"
+    if any(marker in text for marker in _FIXTURE_SOURCE_MARKERS):
+        return "synthetic_demo_only"
+    if any(marker in text for marker in _READY_FRESHNESS_VALUES):
+        return "live_usable"
+    if any(marker in text for marker in _DELAYED_FRESHNESS_VALUES):
+        return "delayed_usable"
+    return "insufficient"
+
+
+def _status_from_value(value: Any, fallback: OptionsGateStatus = "clear") -> OptionsGateStatus:
+    text = str(value or "").strip().lower()
+    if text in {"clear", "blocked", "observe_only", "manual_review"}:
+        return text
+    return fallback
+
+
+def _liquidity_gate_from_contracts(contracts: List["OptionContract"]) -> OptionsGateStatus:
+    if not contracts:
+        return "blocked"
+    if any(contract.bid is None or contract.ask is None or contract.mid in {None, 0} for contract in contracts):
+        return "blocked"
+    if any(contract.spread_pct is not None and float(contract.spread_pct) > 25 for contract in contracts):
+        return "blocked"
+    if any(contract.spread_pct is None for contract in contracts):
+        return "manual_review"
+    if any(
+        (contract.volume is None or int(contract.volume) < 50)
+        or (contract.open_interest is None or int(contract.open_interest) < 100)
+        for contract in contracts
+    ):
+        return "manual_review"
+    return "clear"
+
+
+def _iv_greeks_gate_from_contracts(contracts: List["OptionContract"]) -> OptionsGateStatus:
+    if not contracts:
+        return "blocked"
+    if any(contract.implied_volatility is None or contract.greeks is None for contract in contracts):
+        return "blocked"
+    return "clear"
+
+
+def _spread_gate_from_contracts(contracts: List["OptionContract"]) -> OptionsGateStatus:
+    if not contracts:
+        return "blocked"
+    if any(contract.bid is None or contract.ask is None or contract.spread_pct is None for contract in contracts):
+        return "blocked"
+    if any(float(contract.spread_pct) > 25 for contract in contracts):
+        return "blocked"
+    if any(float(contract.spread_pct) > 12 for contract in contracts):
+        return "manual_review"
+    return "clear"
+
+
+def _contract_blocking_reasons(contracts: List["OptionContract"]) -> List[str]:
+    reasons: List[str] = []
+    if not contracts:
+        reasons.append("missing_contract_legs")
+        return reasons
+    if any(contract.bid is None or contract.ask is None for contract in contracts):
+        reasons.append("missing_bid_ask")
+    if any(contract.spread_pct is not None and float(contract.spread_pct) > 25 for contract in contracts):
+        reasons.append("wide_bid_ask_spread")
+    if any(contract.implied_volatility is None for contract in contracts):
+        reasons.append("missing_iv")
+    if any(contract.greeks is None for contract in contracts):
+        reasons.append("missing_greeks")
+    if any(contract.volume is None for contract in contracts):
+        reasons.append("missing_volume")
+    if any(contract.open_interest is None for contract in contracts):
+        reasons.append("missing_open_interest")
+    return _dedupe_codes(reasons)
+
+
+def _no_trading_boundary(metadata: Optional["OptionsMetadata"]) -> OptionsNoTradingBoundary:
+    return OptionsNoTradingBoundary(
+        analyticalOnly=True,
+        noBrokerExecution=metadata.no_broker_connection if metadata is not None else True,
+        noOrderPlacement=metadata.no_order_placement if metadata is not None else True,
+        noPortfolioMutation=metadata.no_portfolio_mutation if metadata is not None else True,
+        noTradingRecommendation=metadata.no_trading_recommendation if metadata is not None else True,
+    )
+
+
+def _next_evidence_needed(
+    *,
+    readiness_state: OptionsReadinessState,
+    blocking_reasons: List[str],
+    data_quality_tier: OptionsDataQualityTier,
+) -> List[str]:
+    if readiness_state == "live_usable":
+        return []
+    if readiness_state == "delayed_usable":
+        return ["等待更高新鲜度链路"]
+    items: List[str] = []
+    if any(code in _PROVIDER_BLOCKING_CODES for code in blocking_reasons):
+        items.append("补充 provider authority 与 live chain 证据")
+    if any(code in {"missing_bid_ask", "missing_contract_legs"} for code in blocking_reasons):
+        items.append("补充完整期权链路与 bid/ask")
+    if any(code in {"missing_iv", "missing_greeks"} for code in blocking_reasons):
+        items.append("补充 Greeks 与 IV 证据")
+    if any(
+        code
+        in {
+            "missing_volume",
+            "missing_open_interest",
+            "wide_bid_ask_spread",
+            "low_or_missing_volume",
+            "low_or_missing_open_interest",
+        }
+        for code in blocking_reasons
+    ):
+        items.append("补充 OI/成交量与更紧价差证据")
+    if not items and data_quality_tier in {"synthetic_demo_only", "insufficient"}:
+        items.append("补充 provider authority 与 live chain 证据")
+    return _dedupe_codes(items)
+
+
+def _readiness_state(
+    *,
+    data_quality_tier: OptionsDataQualityTier,
+    provider_authority: OptionsProviderAuthority,
+    decision_grade: bool,
+    liquidity_gate: OptionsGateStatus,
+    iv_greeks_gate: OptionsGateStatus,
+    spread_gate: OptionsGateStatus,
+    blocking_reasons: List[str],
+    freshness_hint: str = "",
+) -> OptionsReadinessState:
+    if provider_authority == "unavailable":
+        return "blocked"
+    if data_quality_tier in {"synthetic_demo_only", "insufficient"}:
+        return "blocked" if blocking_reasons else "insufficient"
+    if any(gate == "blocked" for gate in (liquidity_gate, iv_greeks_gate, spread_gate)):
+        return "blocked"
+    freshness = str(freshness_hint or "").strip().lower()
+    if data_quality_tier == "live_usable" and decision_grade and freshness in _READY_FRESHNESS_VALUES:
+        return "live_usable"
+    if data_quality_tier == "delayed_usable" and not blocking_reasons:
+        return "delayed_usable"
+    if data_quality_tier == "live_usable" and not blocking_reasons:
+        return "live_usable"
+    return "insufficient"
+
+
+def _build_research_readiness(
+    *,
+    metadata: Optional["OptionsMetadata"],
+    data_quality_tier: OptionsDataQualityTier,
+    decision_grade: bool,
+    liquidity_gate: OptionsGateStatus,
+    iv_greeks_gate: OptionsGateStatus,
+    spread_gate: OptionsGateStatus,
+    scenario_coverage: OptionsScenarioCoverage,
+    blocking_reasons: List[str],
+    source_hint: str = "",
+    freshness_hint: str = "",
+) -> OptionsResearchReadiness:
+    provider_authority = _provider_authority_from_metadata(metadata, source_hint=source_hint)
+    deduped_blockers = _dedupe_codes(
+        [*_provider_blocking_reasons(metadata, source_hint=source_hint), *blocking_reasons]
+    )
+    readiness_state = _readiness_state(
+        data_quality_tier=data_quality_tier,
+        provider_authority=provider_authority,
+        decision_grade=decision_grade,
+        liquidity_gate=liquidity_gate,
+        iv_greeks_gate=iv_greeks_gate,
+        spread_gate=spread_gate,
+        blocking_reasons=deduped_blockers,
+        freshness_hint=freshness_hint,
+    )
+    return OptionsResearchReadiness(
+        optionsResearchReady=readiness_state in {"delayed_usable", "live_usable"},
+        readinessState=readiness_state,
+        dataQualityTier=data_quality_tier,
+        decisionGrade=decision_grade,
+        providerAuthority=provider_authority,
+        liquidityGate=liquidity_gate,
+        ivGreeksGate=iv_greeks_gate,
+        spreadGate=spread_gate,
+        scenarioCoverage=scenario_coverage,
+        noTradingBoundary=_no_trading_boundary(metadata),
+        blockingReasons=deduped_blockers,
+        nextEvidenceNeeded=_next_evidence_needed(
+            readiness_state=readiness_state,
+            blocking_reasons=deduped_blockers,
+            data_quality_tier=data_quality_tier,
+        ),
+    )
+
+
+def _default_decision_grade(
+    *,
+    data_quality_tier: OptionsDataQualityTier,
+    provider_authority: OptionsProviderAuthority,
+    liquidity_gate: OptionsGateStatus,
+    iv_greeks_gate: OptionsGateStatus,
+    spread_gate: OptionsGateStatus,
+) -> bool:
+    return (
+        data_quality_tier == "live_usable"
+        and provider_authority == "scoreGradeAllowed"
+        and liquidity_gate == "clear"
+        and iv_greeks_gate == "clear"
+        and spread_gate == "clear"
+    )
+
+
+def _ensure_readiness_aliases(
+    *,
+    existing_readiness: Optional[OptionsResearchReadiness],
+    existing_alias: Optional[OptionsResearchReadiness],
+    computed: OptionsResearchReadiness,
+) -> tuple[OptionsResearchReadiness, OptionsResearchReadiness]:
+    readiness = existing_readiness or existing_alias or computed
+    return readiness, readiness
+
+
+def _build_contract_response_readiness(
+    *,
+    metadata: Optional["OptionsMetadata"],
+    contracts: List["OptionContract"],
+    scenario_coverage: OptionsScenarioCoverage,
+    source_hint: str = "",
+    freshness_hint: str = "",
+    explicit_tier: Optional[str] = None,
+) -> OptionsResearchReadiness:
+    data_quality_tier = _infer_data_quality_tier(
+        explicit_tier=explicit_tier,
+        metadata=metadata,
+        source_hint=source_hint,
+        freshness_hint=freshness_hint,
+    )
+    liquidity_gate = _liquidity_gate_from_contracts(contracts) if contracts else "manual_review"
+    iv_greeks_gate = _iv_greeks_gate_from_contracts(contracts) if contracts else "manual_review"
+    spread_gate = _spread_gate_from_contracts(contracts) if contracts else "manual_review"
+    provider_authority = _provider_authority_from_metadata(metadata, source_hint=source_hint)
+    decision_grade = _default_decision_grade(
+        data_quality_tier=data_quality_tier,
+        provider_authority=provider_authority,
+        liquidity_gate=liquidity_gate,
+        iv_greeks_gate=iv_greeks_gate,
+        spread_gate=spread_gate,
+    )
+    return _build_research_readiness(
+        metadata=metadata,
+        data_quality_tier=data_quality_tier,
+        decision_grade=decision_grade,
+        liquidity_gate=liquidity_gate,
+        iv_greeks_gate=iv_greeks_gate,
+        spread_gate=spread_gate,
+        scenario_coverage=scenario_coverage,
+        blocking_reasons=_contract_blocking_reasons(contracts),
+        source_hint=source_hint,
+        freshness_hint=freshness_hint,
+    )
 
 
 class OptionsAnalyzeRequest(_OptionsModel):
@@ -203,6 +655,28 @@ class OptionsAnalyzeResponse(_OptionsModel):
     risks: List[str] = Field(default_factory=list)
     limitations: List[str] = Field(default_factory=list)
     metadata: OptionsMetadata = Field(default_factory=OptionsMetadata)
+    options_readiness: Optional[OptionsResearchReadiness] = Field(default=None, alias="optionsReadiness")
+    options_research_readiness: Optional[OptionsResearchReadiness] = Field(
+        default=None,
+        alias="optionsResearchReadiness",
+    )
+
+    @model_validator(mode="after")
+    def _populate_options_readiness(self) -> "OptionsAnalyzeResponse":
+        contracts = [item.contract for item in self.candidate_contracts]
+        computed = _build_contract_response_readiness(
+            metadata=self.metadata,
+            contracts=contracts,
+            scenario_coverage="single_contract",
+            source_hint=str(self.option_chain_summary.get("source") or ""),
+            freshness_hint=str(self.underlying.get("freshness") or ""),
+        )
+        self.options_readiness, self.options_research_readiness = _ensure_readiness_aliases(
+            existing_readiness=self.options_readiness,
+            existing_alias=self.options_research_readiness,
+            computed=computed,
+        )
+        return self
 
 
 class OptionsScenarioRequest(_OptionsModel):
@@ -242,6 +716,27 @@ class OptionsScenarioResponse(_OptionsModel):
     pre_expiration_theoretical_pricing: Dict[str, Any] = Field(alias="preExpirationTheoreticalPricing")
     limitations: List[str] = Field(default_factory=list)
     metadata: OptionsMetadata = Field(default_factory=OptionsMetadata)
+    options_readiness: Optional[OptionsResearchReadiness] = Field(default=None, alias="optionsReadiness")
+    options_research_readiness: Optional[OptionsResearchReadiness] = Field(
+        default=None,
+        alias="optionsResearchReadiness",
+    )
+
+    @model_validator(mode="after")
+    def _populate_options_readiness(self) -> "OptionsScenarioResponse":
+        computed = _build_contract_response_readiness(
+            metadata=self.metadata,
+            contracts=[self.contract],
+            scenario_coverage="single_contract",
+            source_hint=self.contract.source,
+            freshness_hint=self.contract.freshness,
+        )
+        self.options_readiness, self.options_research_readiness = _ensure_readiness_aliases(
+            existing_readiness=self.options_readiness,
+            existing_alias=self.options_research_readiness,
+            computed=computed,
+        )
+        return self
 
 
 class OptionsStrategyCompareRequest(_OptionsModel):
@@ -292,6 +787,28 @@ class OptionsStrategyCompareResponse(_OptionsModel):
     strategies: List[OptionsStrategyComparison] = Field(default_factory=list)
     limitations: List[str] = Field(default_factory=list)
     metadata: OptionsMetadata = Field(default_factory=OptionsMetadata)
+    options_readiness: Optional[OptionsResearchReadiness] = Field(default=None, alias="optionsReadiness")
+    options_research_readiness: Optional[OptionsResearchReadiness] = Field(
+        default=None,
+        alias="optionsResearchReadiness",
+    )
+
+    @model_validator(mode="after")
+    def _populate_options_readiness(self) -> "OptionsStrategyCompareResponse":
+        contracts: List[OptionContract] = []
+        computed = _build_contract_response_readiness(
+            metadata=self.metadata,
+            contracts=contracts,
+            scenario_coverage="strategy_compare_ready",
+            source_hint="",
+            freshness_hint=str(self.underlying.get("freshness") or ""),
+        )
+        self.options_readiness, self.options_research_readiness = _ensure_readiness_aliases(
+            existing_readiness=self.options_readiness,
+            existing_alias=self.options_research_readiness,
+            computed=computed,
+        )
+        return self
 
 
 class OptionsDecisionLeg(_OptionsModel):
@@ -455,3 +972,109 @@ class OptionsDecisionResponse(_OptionsModel):
     no_advice_disclosure: str = Field(alias="noAdviceDisclosure")
     freshness: OptionsDecisionFreshness
     metadata: OptionsMetadata = Field(default_factory=OptionsMetadata)
+    options_readiness: Optional[OptionsResearchReadiness] = Field(default=None, alias="optionsReadiness")
+    options_research_readiness: Optional[OptionsResearchReadiness] = Field(
+        default=None,
+        alias="optionsResearchReadiness",
+    )
+
+    @model_validator(mode="after")
+    def _populate_options_readiness(self) -> "OptionsDecisionResponse":
+        provider_authority = _provider_authority_from_metadata(
+            self.metadata,
+            source_hint=self.freshness.source if self.freshness is not None else "",
+        )
+        liquidity_gate = (
+            _status_from_value(self.liquidity_gates.status, fallback="clear")
+            if self.liquidity_gates is not None
+            else "clear"
+        )
+        iv_greeks_gate = (
+            _status_from_value(self.data_quality_gates.status, fallback="clear")
+            if self.data_quality_gates is not None
+            else ("blocked" if self.iv_greeks.iv_rank_status == "unavailable" else "clear")
+        )
+        spread_gate = (
+            "blocked"
+            if any(code == "missing_bid_ask" for code in self.fail_closed_reason_codes)
+            else "manual_review"
+            if "wide_bid_ask_spread" in {
+                *list(self.fail_closed_reason_codes),
+                *list(self.liquidity.liquidity_warnings),
+            }
+            else "blocked"
+            if self.liquidity.spread_pct is None or float(self.liquidity.spread_pct) > 25
+            else "manual_review"
+            if float(self.liquidity.spread_pct) > 12
+            else "clear"
+        )
+        scenario_coverage: OptionsScenarioCoverage = (
+            "strategy_compare_ready"
+            if self.strategy in {"bull_call_spread", "bear_put_spread"}
+            else "missing_chain_data"
+            if any(code in {"missing_bid_ask", "missing_contract_legs"} for code in self.fail_closed_reason_codes)
+            else "single_contract"
+        )
+        data_quality_tier = _infer_data_quality_tier(
+            explicit_tier=self.data_quality.data_quality_tier,
+            metadata=self.metadata,
+            source_hint=self.freshness.source if self.freshness is not None else "",
+            freshness_hint=self.freshness.freshness if self.freshness is not None else "",
+        )
+        blocking_reasons = _dedupe_codes(
+            [
+                *_provider_blocking_reasons(
+                    self.metadata,
+                    source_hint=self.freshness.source if self.freshness is not None else "",
+                ),
+                *list(self.data_quality.blocking_reasons),
+                *list(self.fail_closed_reason_codes),
+                *[
+                    warning
+                    for warning in (
+                        *list(self.data_quality.warnings),
+                        *list(self.iv_greeks.warnings),
+                        *list(self.liquidity.liquidity_warnings),
+                    )
+                    if warning
+                    in {
+                        "missing_iv",
+                        "missing_greeks",
+                        "missing_volume",
+                        "missing_open_interest",
+                        "wide_bid_ask_spread",
+                        "low_or_missing_volume",
+                        "low_or_missing_open_interest",
+                    }
+                ],
+            ]
+        )
+        decision_grade = (
+            bool(self.decision_grade)
+            if self.decision_grade is not None
+            else _default_decision_grade(
+                data_quality_tier=data_quality_tier,
+                provider_authority=provider_authority,
+                liquidity_gate=liquidity_gate,
+                iv_greeks_gate=iv_greeks_gate,
+                spread_gate=spread_gate,
+            )
+        )
+        computed = _build_research_readiness(
+            metadata=self.metadata,
+            data_quality_tier=data_quality_tier,
+            decision_grade=decision_grade,
+            liquidity_gate=liquidity_gate,
+            iv_greeks_gate=iv_greeks_gate,
+            spread_gate=spread_gate,
+            scenario_coverage=scenario_coverage,
+            blocking_reasons=blocking_reasons,
+            source_hint=self.freshness.source if self.freshness is not None else "",
+            freshness_hint=self.freshness.freshness if self.freshness is not None else "",
+        )
+        self.options_readiness, self.options_research_readiness = _ensure_readiness_aliases(
+            existing_readiness=self.options_readiness,
+            existing_alias=self.options_research_readiness,
+            computed=computed,
+        )
+        return self

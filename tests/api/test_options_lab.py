@@ -234,7 +234,15 @@ def test_summary_and_expirations_endpoint_mappers_preserve_alias_contracts() -> 
         warnings=["synthetic_fixture_data", "options_are_high_risk"],
         metadata=OptionsLabMetadataModel(provider_name="synthetic_fixture"),
     )
-    assert options._map_underlying_summary_response(summary_result).model_dump(by_alias=True) == {
+    summary_payload = options._map_underlying_summary_response(summary_result).model_dump(by_alias=True)
+    assert summary_payload["optionsReadiness"] == summary_payload["optionsResearchReadiness"]
+    assert summary_payload["optionsReadiness"]["optionsResearchReady"] is False
+    assert summary_payload["optionsReadiness"]["readinessState"] == "blocked"
+    assert summary_payload["optionsReadiness"]["dataQualityTier"] == "synthetic_demo_only"
+    summary_contract_only = dict(summary_payload)
+    summary_contract_only.pop("optionsReadiness")
+    summary_contract_only.pop("optionsResearchReadiness")
+    assert summary_contract_only == {
         "symbol": "TEM",
         "market": "us",
         "currency": "USD",
@@ -287,7 +295,14 @@ def test_summary_and_expirations_endpoint_mappers_preserve_alias_contracts() -> 
         warnings=["synthetic_fixture_data", "options_are_high_risk"],
         metadata=OptionsLabMetadataModel(provider_name="synthetic_fixture"),
     )
-    assert options._map_expirations_response(expirations_result).model_dump(by_alias=True) == {
+    expirations_payload = options._map_expirations_response(expirations_result).model_dump(by_alias=True)
+    assert expirations_payload["optionsReadiness"] == expirations_payload["optionsResearchReadiness"]
+    assert expirations_payload["optionsReadiness"]["optionsResearchReady"] is False
+    assert expirations_payload["optionsReadiness"]["readinessState"] == "blocked"
+    expirations_contract_only = dict(expirations_payload)
+    expirations_contract_only.pop("optionsReadiness")
+    expirations_contract_only.pop("optionsResearchReadiness")
+    assert expirations_contract_only == {
         "symbol": "TEM",
         "market": "us",
         "expirations": [
@@ -901,7 +916,14 @@ def test_analyze_scenario_and_compare_endpoint_mappers_preserve_alias_contracts(
         limitations=["synthetic_fixture_data_only"],
         metadata=OptionsLabMetadataModel(scoring_engine="deterministic_fixture_scoring_v1"),
     )
-    assert options._map_analyze_response(analyze_result).model_dump(by_alias=True) == {
+    analyze_payload = options._map_analyze_response(analyze_result).model_dump(by_alias=True)
+    assert analyze_payload["optionsReadiness"] == analyze_payload["optionsResearchReadiness"]
+    assert analyze_payload["optionsReadiness"]["optionsResearchReady"] is False
+    assert analyze_payload["optionsReadiness"]["readinessState"] == "blocked"
+    analyze_contract_only = dict(analyze_payload)
+    analyze_contract_only.pop("optionsReadiness")
+    analyze_contract_only.pop("optionsResearchReadiness")
+    assert analyze_contract_only == {
         "symbol": "TEM",
         "underlying": {"symbol": "TEM", "price": 52.4},
         "assumptions": {
@@ -996,7 +1018,14 @@ def test_analyze_scenario_and_compare_endpoint_mappers_preserve_alias_contracts(
         limitations=["synthetic_fixture_data_only"],
         metadata=OptionsLabMetadataModel(strategy_engine="expiration_payoff_v1"),
     )
-    assert options._map_scenario_response(scenario_result).model_dump(by_alias=True) == {
+    scenario_payload = options._map_scenario_response(scenario_result).model_dump(by_alias=True)
+    assert scenario_payload["optionsReadiness"] == scenario_payload["optionsResearchReadiness"]
+    assert scenario_payload["optionsReadiness"]["optionsResearchReady"] is False
+    assert scenario_payload["optionsReadiness"]["readinessState"] == "blocked"
+    scenario_contract_only = dict(scenario_payload)
+    scenario_contract_only.pop("optionsReadiness")
+    scenario_contract_only.pop("optionsResearchReadiness")
+    assert scenario_contract_only == {
         "symbol": "TEM",
         "underlying": {"symbol": "TEM", "price": 52.4},
         "strategy": "long_put",
@@ -1076,7 +1105,14 @@ def test_analyze_scenario_and_compare_endpoint_mappers_preserve_alias_contracts(
         limitations=["synthetic_fixture_data_only"],
         metadata=OptionsLabMetadataModel(strategy_engine="defined_risk_strategy_compare_v1"),
     )
-    assert options._map_strategy_compare_response(compare_result).model_dump(by_alias=True) == {
+    compare_payload = options._map_strategy_compare_response(compare_result).model_dump(by_alias=True)
+    assert compare_payload["optionsReadiness"] == compare_payload["optionsResearchReadiness"]
+    assert compare_payload["optionsReadiness"]["optionsResearchReady"] is False
+    assert compare_payload["optionsReadiness"]["readinessState"] == "blocked"
+    compare_contract_only = dict(compare_payload)
+    compare_contract_only.pop("optionsReadiness")
+    compare_contract_only.pop("optionsResearchReadiness")
+    assert compare_contract_only == {
         "symbol": "TEM",
         "underlying": {"symbol": "TEM", "price": 52.4},
         "assumptions": {
@@ -1244,6 +1280,26 @@ def test_decision_endpoint_returns_safe_demo_only_contract_quality() -> None:
         assert payload["gateIssues"]
         assert payload["failClosedReasonCodes"]
         assert "provider_fixture_not_decision_grade" in payload["failClosedReasonCodes"]
+        assert payload["optionsResearchReadiness"] == payload["optionsReadiness"]
+        readiness = payload["optionsReadiness"]
+        assert readiness["optionsResearchReady"] is False
+        assert readiness["readinessState"] == "blocked"
+        assert readiness["dataQualityTier"] == "synthetic_demo_only"
+        assert readiness["decisionGrade"] is False
+        assert readiness["providerAuthority"] == "observationOnly"
+        assert readiness["liquidityGate"] in {"blocked", "manual_review"}
+        assert readiness["ivGreeksGate"] == "blocked"
+        assert readiness["spreadGate"] in {"blocked", "manual_review"}
+        assert readiness["scenarioCoverage"] == "single_contract"
+        assert readiness["noTradingBoundary"] == {
+            "analyticalOnly": True,
+            "noBrokerExecution": True,
+            "noOrderPlacement": True,
+            "noPortfolioMutation": True,
+            "noTradingRecommendation": True,
+        }
+        assert "provider_fixture_not_decision_grade" in readiness["blockingReasons"]
+        assert "补充 provider authority 与 live chain 证据" in readiness["nextEvidenceNeeded"]
         assert payload["metadata"]["noExternalCalls"] is True
         assert payload["metadata"]["readOnly"] is True
         assert payload["metadata"]["noOrderPlacement"] is True
@@ -1378,6 +1434,15 @@ def test_decision_endpoint_tradier_live_provider_opt_in_uses_mocked_http_and_fai
         assert payload["decisionLabel"] == "数据不足，禁止判断"
         assert "provider_authority_tier_observation_only" in payload["failClosedReasonCodes"]
         assert "provider_tradeable_data_false" in payload["failClosedReasonCodes"]
+        readiness = payload["optionsReadiness"]
+        assert payload["optionsResearchReadiness"] == readiness
+        assert readiness["optionsResearchReady"] is False
+        assert readiness["readinessState"] == "blocked"
+        assert readiness["dataQualityTier"] == "insufficient"
+        assert readiness["providerAuthority"] == "observationOnly"
+        assert readiness["decisionGrade"] is False
+        assert "provider_adapter_contract_not_decision_grade" in readiness["blockingReasons"]
+        assert "补充 provider authority 与 live chain 证据" in readiness["nextEvidenceNeeded"]
         assert payload["metadata"]["readOnly"] is True
         assert payload["metadata"]["noOrderPlacement"] is True
         assert payload["metadata"]["noBrokerConnection"] is True
@@ -1677,6 +1742,40 @@ def test_decision_endpoint_mapper_preserves_existing_alias_shape() -> None:
         "maxLoss": 230.0,
         "riskRewardRatio": 1.17,
     }
+    assert payload["optionsReadiness"] == payload["optionsResearchReadiness"]
+    assert payload["optionsReadiness"] == {
+        "optionsResearchReady": False,
+        "readinessState": "blocked",
+        "dataQualityTier": "delayed_usable",
+        "decisionGrade": False,
+        "providerAuthority": "observationOnly",
+        "liquidityGate": "manual_review",
+        "ivGreeksGate": "blocked",
+        "spreadGate": "clear",
+        "scenarioCoverage": "strategy_compare_ready",
+        "noTradingBoundary": {
+            "analyticalOnly": True,
+            "noBrokerExecution": True,
+            "noOrderPlacement": True,
+            "noPortfolioMutation": True,
+            "noTradingRecommendation": True,
+        },
+        "blockingReasons": [
+            "provider_fixture_not_decision_grade",
+            "provider_live_disabled",
+            "provider_tradeable_data_false",
+            "provider_authority_tier_observation_only",
+            "synthetic_or_fixture_data_not_decision_grade",
+            "missing_iv",
+            "missing_greeks",
+            "low_or_missing_volume",
+        ],
+        "nextEvidenceNeeded": [
+            "补充 provider authority 与 live chain 证据",
+            "补充 Greeks 与 IV 证据",
+            "补充 OI/成交量与更紧价差证据",
+        ],
+    }
     assert payload["optimizer"] == {
         "preferredStrategyKey": None,
         "optimizerLabel": "数据不足，禁止判断",
@@ -1700,6 +1799,352 @@ def test_decision_endpoint_mapper_preserves_existing_alias_shape() -> None:
         "noTradeReason": "data_quality_not_decision_grade",
     }
     assert payload["rankedAlternatives"] == payload["optimizer"]["alternatives"]
+
+
+def test_decision_endpoint_options_readiness_detects_missing_chain_fields_and_wide_spread() -> None:
+    result = DecisionEvaluationResult(
+        symbol="TEM",
+        strategy="long_call",
+        data_quality=DecisionDataQualityAssessment(
+            data_quality_score=34.0,
+            data_quality_tier="insufficient",
+            source_type="delayed",
+            as_of_age_minutes=12.0,
+            blocking_reasons=["missing_bid_ask", "missing_contract_legs"],
+            warnings=["missing_iv", "missing_greeks", "missing_volume", "missing_open_interest"],
+        ),
+        liquidity=LiquidityAssessment(
+            liquidity_score=28.0,
+            spread_pct=41.2,
+            liquidity_warnings=["wide_bid_ask_spread", "low_or_missing_volume", "low_or_missing_open_interest"],
+        ),
+        iv_greeks=IvGreeksAssessment(
+            iv_readiness=24.0,
+            iv_rank_status="unavailable",
+            iv_rank=None,
+            iv_percentile=None,
+            iv_rank_source=None,
+            iv_rank_confidence=None,
+            warnings=["missing_iv", "missing_greeks"],
+            dte_bucket="short",
+        ),
+        expected_move=ExpectedMoveEstimate(
+            expected_move_abs=None,
+            expected_move_pct=None,
+            expected_move_source="unavailable",
+            expected_move_warnings=["expected_move_unavailable"],
+        ),
+        optimizer=OptimizerResult(
+            preferred_strategy_key=None,
+            optimizer_label="数据不足，禁止判断",
+            alternatives=[],
+            no_trade_reason="data_quality_not_decision_grade",
+        ),
+        breakeven=BreakevenAssessment(
+            breakeven=None,
+            required_move_pct=None,
+            target_price_status="not_supplied",
+            score=20.0,
+        ),
+        risk_reward=RiskRewardAssessment(
+            max_loss=None,
+            max_gain=None,
+            risk_reward_ratio=None,
+            score=18.0,
+            warnings=[],
+        ),
+        trade_quality_score=18.0,
+        decision_label="数据不足，禁止判断",
+        primary_reasons=["missing_contract_legs"],
+        risk_warnings=["wide_bid_ask_spread"],
+        data_quality_gates={
+            "status": "blocked",
+            "issueCodes": ["missing_bid_ask", "missing_contract_legs"],
+            "decisionGrade": False,
+            "legDiagnostics": [],
+        },
+        liquidity_gates={
+            "status": "blocked",
+            "issueCodes": ["wide_bid_ask_spread", "low_or_missing_volume", "low_or_missing_open_interest"],
+            "decisionGrade": False,
+            "legDiagnostics": [],
+        },
+        gate_decision="数据不足，禁止判断",
+        gate_issues=[
+            {
+                "code": "missing_bid_ask",
+                "category": "data_quality",
+                "status": "blocked",
+                "label": "Missing bid ask",
+                "decisionGrade": False,
+                "legIndex": None,
+                "contractSymbol": None,
+            }
+        ],
+        decision_grade=False,
+        fail_closed_reason_codes=["missing_bid_ask", "missing_contract_legs"],
+        better_alternative=None,
+        no_advice_disclosure=(
+            "Analytical output under explicit assumptions only; not personalized financial advice "
+            "and not an instruction to trade."
+        ),
+        freshness=DecisionFreshnessModel(
+            source="delayed_feed",
+            freshness="delayed",
+            as_of="2026-05-06T16:00:00Z",
+        ),
+        metadata=OptionsLabMetadataModel(
+            fixture_backed=False,
+            synthetic_data=False,
+            no_external_calls=False,
+            provider_name="delayed_authorized_feed",
+            provider_capabilities={
+                "liveEnabled": True,
+                "tradeableData": True,
+                "authorityPolicySource": "wolfystock_options_provider_authority_policy_v1",
+                "authorityTier": "decision_grade",
+                "sourceType": "authorized_licensed_feed",
+            },
+            live_provider_enabled=True,
+        ),
+    )
+
+    readiness = options._map_decision_response(result).model_dump(by_alias=True)["optionsReadiness"]
+    assert readiness["optionsResearchReady"] is False
+    assert readiness["readinessState"] == "blocked"
+    assert readiness["dataQualityTier"] == "insufficient"
+    assert readiness["providerAuthority"] == "scoreGradeAllowed"
+    assert readiness["liquidityGate"] == "blocked"
+    assert readiness["ivGreeksGate"] == "blocked"
+    assert readiness["spreadGate"] == "blocked"
+    assert readiness["scenarioCoverage"] == "missing_chain_data"
+    assert "missing_bid_ask" in readiness["blockingReasons"]
+    assert "missing_contract_legs" in readiness["blockingReasons"]
+    assert "wide_bid_ask_spread" in readiness["blockingReasons"]
+    assert "missing_iv" in readiness["blockingReasons"]
+    assert "missing_greeks" in readiness["blockingReasons"]
+    assert "missing_volume" in readiness["blockingReasons"]
+    assert "missing_open_interest" in readiness["blockingReasons"]
+    assert readiness["nextEvidenceNeeded"] == [
+        "补充完整期权链路与 bid/ask",
+        "补充 Greeks 与 IV 证据",
+        "补充 OI/成交量与更紧价差证据",
+    ]
+
+
+def test_decision_endpoint_options_readiness_distinguishes_delayed_and_live_usable_states() -> None:
+    delayed_result = DecisionEvaluationResult(
+        symbol="TEM",
+        strategy="long_call",
+        data_quality=DecisionDataQualityAssessment(
+            data_quality_score=78.0,
+            data_quality_tier="delayed_usable",
+            source_type="delayed",
+            as_of_age_minutes=15.0,
+            blocking_reasons=[],
+            warnings=[],
+        ),
+        liquidity=LiquidityAssessment(liquidity_score=81.0, spread_pct=7.5, liquidity_warnings=[]),
+        iv_greeks=IvGreeksAssessment(
+            iv_readiness=76.0,
+            iv_rank_status="available",
+            iv_rank=58.0,
+            iv_percentile=62.0,
+            iv_rank_source="licensed_delayed_iv",
+            iv_rank_confidence="medium",
+            warnings=[],
+            dte_bucket="standard",
+        ),
+        expected_move=ExpectedMoveEstimate(
+            expected_move_abs=5.5,
+            expected_move_pct=10.2,
+            expected_move_source="iv_dte",
+            expected_move_warnings=[],
+        ),
+        optimizer=OptimizerResult(
+            preferred_strategy_key=None,
+            optimizer_label="仅观察",
+            alternatives=[],
+            no_trade_reason="delayed_evidence_manual_review",
+        ),
+        breakeven=BreakevenAssessment(
+            breakeven=57.0,
+            required_move_pct=8.3,
+            target_price_status="target_above_breakeven",
+            score=77.0,
+        ),
+        risk_reward=RiskRewardAssessment(
+            max_loss=180.0,
+            max_gain=None,
+            risk_reward_ratio=None,
+            score=55.0,
+            warnings=[],
+        ),
+        trade_quality_score=59.0,
+        decision_label="仅观察",
+        primary_reasons=["delayed chain usable with manual review"],
+        risk_warnings=[],
+        data_quality_gates={
+            "status": "manual_review",
+            "issueCodes": [],
+            "decisionGrade": False,
+            "legDiagnostics": [
+                {
+                    "legIndex": 0,
+                    "contractSymbol": "TEM260619C00050000",
+                    "dataQualityStatus": "manual_review",
+                    "liquidityStatus": "clear",
+                    "issueCodes": [],
+                    "decisionGrade": False,
+                }
+            ],
+        },
+        liquidity_gates={
+            "status": "clear",
+            "issueCodes": [],
+            "decisionGrade": True,
+            "legDiagnostics": [
+                {
+                    "legIndex": 0,
+                    "contractSymbol": "TEM260619C00050000",
+                    "dataQualityStatus": "manual_review",
+                    "liquidityStatus": "clear",
+                    "issueCodes": [],
+                    "decisionGrade": False,
+                }
+            ],
+        },
+        gate_decision="仅观察",
+        gate_issues=[],
+        decision_grade=False,
+        fail_closed_reason_codes=[],
+        better_alternative=None,
+        no_advice_disclosure=(
+            "Analytical output under explicit assumptions only; not personalized financial advice "
+            "and not an instruction to trade."
+        ),
+        freshness=DecisionFreshnessModel(
+            source="licensed_delayed_feed",
+            freshness="delayed",
+            as_of="2026-05-06T16:00:00Z",
+        ),
+        metadata=OptionsLabMetadataModel(
+            fixture_backed=False,
+            synthetic_data=False,
+            no_external_calls=False,
+            provider_name="licensed_delayed_feed",
+            provider_capabilities={
+                "liveEnabled": True,
+                "tradeableData": True,
+                "authorityPolicySource": "wolfystock_options_provider_authority_policy_v1",
+                "authorityTier": "decision_grade",
+                "sourceType": "authorized_licensed_feed",
+            },
+            live_provider_enabled=True,
+        ),
+    )
+    live_result = DecisionEvaluationResult(
+        symbol="TEM",
+        strategy=delayed_result.strategy,
+        data_quality=DecisionDataQualityAssessment(
+            data_quality_score=92.0,
+            data_quality_tier="live_usable",
+            source_type="live",
+            as_of_age_minutes=1.0,
+            blocking_reasons=[],
+            warnings=[],
+        ),
+        liquidity=delayed_result.liquidity,
+        iv_greeks=IvGreeksAssessment(
+            iv_readiness=82.0,
+            iv_rank_status="available",
+            iv_rank=61.0,
+            iv_percentile=66.0,
+            iv_rank_source="licensed_live_iv",
+            iv_rank_confidence="high",
+            warnings=[],
+            dte_bucket="standard",
+        ),
+        expected_move=delayed_result.expected_move,
+        optimizer=OptimizerResult(
+            preferred_strategy_key=None,
+            optimizer_label="仅观察",
+            alternatives=[],
+            no_trade_reason="research_only_boundary",
+        ),
+        breakeven=delayed_result.breakeven,
+        risk_reward=delayed_result.risk_reward,
+        trade_quality_score=72.0,
+        decision_label="仅观察",
+        primary_reasons=list(delayed_result.primary_reasons),
+        risk_warnings=[],
+        data_quality_gates={
+            "status": "clear",
+            "issueCodes": [],
+            "decisionGrade": True,
+            "legDiagnostics": [
+                {
+                    "legIndex": 0,
+                    "contractSymbol": "TEM260619C00050000",
+                    "dataQualityStatus": "clear",
+                    "liquidityStatus": "clear",
+                    "issueCodes": [],
+                    "decisionGrade": True,
+                }
+            ],
+        },
+        liquidity_gates=delayed_result.liquidity_gates,
+        gate_decision="仅观察",
+        gate_issues=[],
+        decision_grade=True,
+        fail_closed_reason_codes=[],
+        better_alternative=None,
+        no_advice_disclosure=delayed_result.no_advice_disclosure,
+        freshness=DecisionFreshnessModel(
+            source="authorized_live_feed",
+            freshness="fresh",
+            as_of="2026-05-06T16:14:00Z",
+        ),
+        metadata=OptionsLabMetadataModel(
+            fixture_backed=False,
+            synthetic_data=False,
+            no_external_calls=False,
+            provider_name="authorized_live_feed",
+            provider_capabilities={
+                "liveEnabled": True,
+                "tradeableData": True,
+                "authorityPolicySource": "wolfystock_options_provider_authority_policy_v1",
+                "authorityTier": "decision_grade",
+                "sourceType": "authorized_licensed_feed",
+            },
+            live_provider_enabled=True,
+        ),
+    )
+
+    delayed_readiness = options._map_decision_response(delayed_result).model_dump(by_alias=True)["optionsReadiness"]
+    live_readiness = options._map_decision_response(live_result).model_dump(by_alias=True)["optionsReadiness"]
+
+    assert delayed_readiness["optionsResearchReady"] is True
+    assert delayed_readiness["readinessState"] == "delayed_usable"
+    assert delayed_readiness["dataQualityTier"] == "delayed_usable"
+    assert delayed_readiness["providerAuthority"] == "scoreGradeAllowed"
+    assert delayed_readiness["liquidityGate"] == "clear"
+    assert delayed_readiness["ivGreeksGate"] == "manual_review"
+    assert delayed_readiness["spreadGate"] == "clear"
+    assert delayed_readiness["scenarioCoverage"] == "single_contract"
+    assert delayed_readiness["blockingReasons"] == []
+    assert delayed_readiness["nextEvidenceNeeded"] == ["等待更高新鲜度链路"]
+
+    assert live_readiness["optionsResearchReady"] is True
+    assert live_readiness["readinessState"] == "live_usable"
+    assert live_readiness["dataQualityTier"] == "live_usable"
+    assert live_readiness["providerAuthority"] == "scoreGradeAllowed"
+    assert live_readiness["liquidityGate"] == "clear"
+    assert live_readiness["ivGreeksGate"] == "clear"
+    assert live_readiness["spreadGate"] == "clear"
+    assert live_readiness["scenarioCoverage"] == "single_contract"
+    assert live_readiness["blockingReasons"] == []
+    assert live_readiness["nextEvidenceNeeded"] == []
 
 
 def test_options_launch_source_does_not_import_broker_order_or_portfolio_mutation_paths() -> None:
