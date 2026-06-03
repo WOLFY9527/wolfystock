@@ -293,6 +293,353 @@ async function installSignedInHomeRoutes(page: Page) {
   });
 }
 
+function buildScannerRunDetailWithContext(
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    id: 11,
+    market: 'cn',
+    profile: 'cn_preopen_v1',
+    profile_label: 'A-share Pre-open v1',
+    status: 'completed',
+    run_at: '2026-06-02T09:00:00Z',
+    completed_at: '2026-06-02T09:00:10Z',
+    watchlist_date: '2026-06-02',
+    trigger_mode: 'manual',
+    universe_name: 'cn_a_liquid_watchlist_v1',
+    shortlist_size: 18,
+    universe_size: 320,
+    preselected_size: 72,
+    evaluated_size: 48,
+    source_summary: 'Mocked scanner payload',
+    headline: 'Mock scanner shortlist for scanner top-down context smoke',
+    universe_type: 'theme',
+    theme_id: 'ai_semiconductors',
+    theme_label: 'AI 半导体',
+    requested_symbols_count: 0,
+    accepted_symbols_count: 0,
+    rejected_symbols: [],
+    shortlist: [
+      {
+        symbol: 'NVDA',
+        name: 'NVIDIA',
+        company_name: 'NVIDIA Corp',
+        rank: 1,
+        score: 98,
+        quality_hint: 'Liquid and trend-aligned',
+        reason_summary: 'NVDA keeps relative strength and breadth support.',
+        reasons: ['NVDA is holding above the recent breakout range.'],
+        key_metrics: [
+          { label: 'Entry range', value: '100-102' },
+          { label: 'Target price', value: '112' },
+          { label: 'Stop loss', value: '96' },
+        ],
+        feature_signals: [
+          { label: 'Theme', value: 'AI infrastructure' },
+          { label: 'Momentum', value: 'Improving' },
+        ],
+        risk_notes: ['Crowded trade if volume stalls.'],
+        watch_context: [{ label: 'Plan', value: 'Wait for first controlled pullback.' }],
+        boards: ['semis'],
+        tags: [{ name: 'High conviction', description: 'Top-ranked mock setup.', tone: 'indigo' }],
+        appeared_in_recent_runs: 2,
+        last_trade_date: '2026-06-01',
+        scan_timestamp: '2026-06-02T09:00:00Z',
+        ai_interpretation: {
+          available: false,
+          status: 'not_configured',
+          summary: null,
+          opportunity_type: null,
+          risk_interpretation: null,
+          watch_plan: null,
+          review_commentary: null,
+          provider: null,
+          model: null,
+          generated_at: null,
+          message: null,
+        },
+        realized_outcome: {
+          review_status: 'pending',
+          outcome_label: 'pending',
+          thesis_match: 'pending',
+          review_window_days: 3,
+          anchor_date: '2026-06-01',
+          window_end_date: '2026-06-04',
+          same_day_close_return_pct: null,
+          next_day_return_pct: null,
+          review_window_return_pct: null,
+          max_favorable_move_pct: null,
+          max_adverse_move_pct: null,
+          benchmark_code: null,
+          benchmark_return_pct: null,
+          outperformed_benchmark: null,
+        },
+        diagnostics: {},
+      },
+    ],
+    summary: {
+      selected_count: 18,
+      rejected_count: 5,
+      data_failed_count: 1,
+      error_count: 0,
+    },
+    scanner_context_frame: {
+      market_readiness: {
+        contract_version: 'research_readiness_v1',
+        research_ready: false,
+        readiness_state: 'observe_only',
+        verdict_label: '仅观察',
+        blocking_reasons: [],
+        missing_evidence: [],
+        evidence_coverage: {
+          score_grade_count: 2,
+          observation_only_count: 1,
+          missing_count: 0,
+          total_count: 3,
+        },
+        source_authority: 'observationOnly',
+        freshness_floor: 'cached',
+        consumer_action_boundary: 'no_advice',
+        next_evidence_needed: ['继续结合市场与主题框架观察'],
+      },
+      macro_regime: {
+        state: 'supportive',
+        label: 'Supportive macro regime',
+        freshness: 'cached',
+        blockers: [],
+        observation_only: false,
+        source_authority_allowed: true,
+        score_contribution_allowed: true,
+      },
+      liquidity_frame: {
+        state: 'supportive',
+        label: 'Liquidity supports equity leadership',
+        freshness: 'cached',
+        blockers: [],
+        observation_only: false,
+        source_authority_allowed: true,
+        score_contribution_allowed: true,
+        proxy_only: false,
+      },
+      asset_class_bias: {
+        state: 'supportive',
+        label: 'Equities preferred',
+        blockers: [],
+        observation_only: false,
+      },
+      theme_frame: {
+        state: 'observe_only',
+        label: 'AI leadership is still observation-only',
+        freshness: 'cached',
+        blockers: [],
+        observation_only: true,
+        proxy_only: true,
+        themes: [
+          { id: 'ai', label: 'AI', observation_only: true, proxy_only: true },
+          { id: 'software', label: 'Software', observation_only: true, proxy_only: true },
+        ],
+      },
+      universe_policy: {
+        type: 'theme',
+        label: 'Theme universe',
+        blockers: [],
+      },
+      no_advice_boundary: true,
+    },
+    ...overrides,
+  };
+}
+
+function buildScannerRunsPayload(itemOverrides: Record<string, unknown> = {}) {
+  return {
+    total: 1,
+    page: 1,
+    limit: 10,
+    items: [
+      {
+        id: 11,
+        market: 'cn',
+        profile: 'cn_preopen_v1',
+        profile_label: 'A-share Pre-open v1',
+        status: 'completed',
+        run_at: '2026-06-02T09:00:00Z',
+        completed_at: '2026-06-02T09:00:10Z',
+        watchlist_date: '2026-06-02',
+        trigger_mode: 'manual',
+        universe_name: 'cn_a_liquid_watchlist_v1',
+        shortlist_size: 18,
+        universe_size: 320,
+        preselected_size: 72,
+        evaluated_size: 48,
+        source_summary: 'Mocked scanner payload',
+        headline: 'Mock scanner shortlist for scanner top-down context smoke',
+        universe_type: 'theme',
+        theme_id: 'ai_semiconductors',
+        theme_label: 'AI 半导体',
+        requested_symbols_count: 0,
+        accepted_symbols_count: 0,
+        rejected_symbols: [],
+        top_symbols: ['NVDA'],
+        notification_status: 'not_attempted',
+        failure_reason: null,
+        ...itemOverrides,
+      },
+    ],
+  };
+}
+
+async function installScannerTopDownRoutes(page: Page) {
+  const mixedRun = buildScannerRunDetailWithContext();
+  const insufficientRun = buildScannerRunDetailWithContext({
+    scanner_context_frame: {
+      market_readiness: {
+        contract_version: 'research_readiness_v1',
+        research_ready: false,
+        readiness_state: 'insufficient',
+        verdict_label: '证据不足',
+        blocking_reasons: ['market_context_missing'],
+        missing_evidence: ['macro', 'liquidity'],
+        evidence_coverage: {
+          score_grade_count: 0,
+          observation_only_count: 1,
+          missing_count: 2,
+          total_count: 3,
+        },
+        source_authority: 'unavailable',
+        freshness_floor: 'unknown',
+        consumer_action_boundary: 'no_advice',
+        next_evidence_needed: ['补齐市场与流动性证据后再复核'],
+      },
+      macro_regime: {
+        state: 'insufficient',
+        label: 'Macro context missing',
+        freshness: 'unknown',
+        blockers: [],
+        observation_only: true,
+        source_authority_allowed: false,
+        score_contribution_allowed: false,
+      },
+      liquidity_frame: {
+        state: 'insufficient',
+        label: 'Liquidity context missing',
+        freshness: 'unknown',
+        blockers: [],
+        observation_only: true,
+        source_authority_allowed: false,
+        score_contribution_allowed: false,
+        proxy_only: false,
+      },
+      asset_class_bias: {
+        state: 'insufficient',
+        label: 'Bias unavailable',
+        blockers: [],
+        observation_only: true,
+      },
+      theme_frame: {
+        state: 'observe_only',
+        label: 'Theme remains observation-only',
+        freshness: 'cached',
+        blockers: [],
+        observation_only: true,
+        proxy_only: true,
+        themes: [{ id: 'ai', label: 'AI', observation_only: true, proxy_only: true }],
+      },
+      universe_policy: {
+        type: 'theme',
+        label: 'Theme universe',
+        blockers: [],
+      },
+      no_advice_boundary: true,
+    },
+  });
+  const blockedRun = buildScannerRunDetailWithContext({
+    market: 'cn',
+    scanner_context_frame: {
+      market_readiness: {
+        contract_version: 'research_readiness_v1',
+        research_ready: false,
+        readiness_state: 'insufficient',
+        verdict_label: '证据不足',
+        blocking_reasons: ['cn_context_unavailable'],
+        missing_evidence: ['macro', 'liquidity'],
+        evidence_coverage: {
+          score_grade_count: 0,
+          observation_only_count: 0,
+          missing_count: 3,
+          total_count: 3,
+        },
+        source_authority: 'unavailable',
+        freshness_floor: 'unknown',
+        consumer_action_boundary: 'no_advice',
+        next_evidence_needed: ['等待中国市场上下文恢复后再复核'],
+      },
+      macro_regime: {
+        state: 'blocked',
+        label: 'CN context unavailable',
+        freshness: 'unknown',
+        blockers: ['cn_context_unavailable'],
+        observation_only: true,
+        source_authority_allowed: false,
+        score_contribution_allowed: false,
+      },
+      liquidity_frame: {
+        state: 'blocked',
+        label: 'CN liquidity context unavailable',
+        freshness: 'unknown',
+        blockers: ['cn_context_unavailable'],
+        observation_only: true,
+        source_authority_allowed: false,
+        score_contribution_allowed: false,
+        proxy_only: false,
+      },
+      asset_class_bias: {
+        state: 'blocked',
+        label: 'Bias unavailable',
+        blockers: ['cn_context_unavailable'],
+        observation_only: true,
+      },
+      theme_frame: {
+        state: 'blocked',
+        label: 'Theme context unavailable',
+        freshness: 'unknown',
+        blockers: ['cn_context_unavailable'],
+        observation_only: true,
+        proxy_only: false,
+        themes: [],
+      },
+      universe_policy: {
+        type: 'default',
+        label: 'Default universe',
+        blockers: ['cn_context_unavailable'],
+      },
+      no_advice_boundary: true,
+    },
+  });
+  let activeRun = mixedRun;
+
+  await page.route('**/api/v1/scanner/runs**', async (route) => {
+    await fulfillJson(route, buildScannerRunsPayload());
+  });
+  await page.route('**/api/v1/scanner/watchlists/recent**', async (route) => {
+    await fulfillJson(route, buildScannerRunsPayload());
+  });
+  await page.route('**/api/v1/scanner/runs/11**', async (route) => {
+    await fulfillJson(route, activeRun);
+  });
+
+  return {
+    showMixed() {
+      activeRun = mixedRun;
+    },
+    showInsufficient() {
+      activeRun = insufficientRun;
+    },
+    showBlocked() {
+      activeRun = blockedRun;
+    },
+  };
+}
+
 async function openSignedInHome(page: Page) {
   await installSignedInHomeRoutes(page);
   await page.goto('/zh');
@@ -358,6 +705,7 @@ appTest.describe('consumer research readiness browser acceptance', () => {
   });
 
   appTest('Market Overview readiness strip is visible and consumer-safe', async ({ page, consoleErrors, unhandledApiRoutes }) => {
+    appTest.setTimeout(45_000);
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       await installSignedInHomeRoutes(page);
@@ -374,6 +722,7 @@ appTest.describe('consumer research readiness browser acceptance', () => {
   appTest('Scanner readiness strip is visible and consumer-safe', async ({ page, consoleErrors, unhandledApiRoutes }) => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
+      const scannerRoutes = await installScannerTopDownRoutes(page);
       await page.route('**/api/v1/auth/status', async (route) => {
         await fulfillJson(route, {
           authEnabled: true,
@@ -390,8 +739,47 @@ appTest.describe('consumer research readiness browser acceptance', () => {
       await expectRootNonEmpty(page);
       await expectNoHorizontalOverflow(page);
       await expectSafeReadinessStrip(page, 'scanner-research-readiness-strip');
+      const topDownStrip = page.getByTestId('scanner-top-down-context-strip');
+      await appExpect(topDownStrip).toBeVisible({ timeout: 15_000 });
+      await appExpect(topDownStrip).toContainText('自上而下上下文');
+      await appExpect(topDownStrip).toContainText('混合');
+      await appExpect(topDownStrip).toContainText('市场：仅观察');
+      await appExpect(topDownStrip).toContainText('宏观：支持');
+      await appExpect(topDownStrip).toContainText('流动性：支持');
+      await appExpect(topDownStrip).toContainText('主题：仅观察');
+      await appExpect(topDownStrip).toContainText('标的池：主题池');
+      await appExpect(topDownStrip).toContainText('边界：仅研究观察');
+      await appExpect(topDownStrip).not.toContainText(/raw|internal|debug|provider|cache|router|env|sourceAuthority|providerRoute|provider_timeout/i);
+      await appExpect(topDownStrip).not.toContainText(tradingPattern);
+      await appExpect(page.getByTestId('scanner-result-row-NVDA')).toBeVisible();
+
+      scannerRoutes.showInsufficient();
+      await page.goto('/zh/scanner');
+      await page.waitForLoadState('domcontentloaded');
+      const insufficientStrip = page.getByTestId('scanner-top-down-context-strip');
+      await appExpect(insufficientStrip).toContainText('证据不足');
+      await appExpect(insufficientStrip).toContainText('市场：证据不足');
+      await appExpect(insufficientStrip).toContainText('宏观：证据不足');
+      await appExpect(insufficientStrip).toContainText('流动性：证据不足');
+      await appExpect(insufficientStrip).toContainText('边界：仅研究观察');
+      await appExpect(insufficientStrip).not.toContainText(/buy|sell|order|trade|broker|买入|卖出|下单|交易|券商/i);
+
+      scannerRoutes.showBlocked();
+      await page.goto('/zh/scanner');
+      await page.waitForLoadState('domcontentloaded');
+      const blockedStrip = page.getByTestId('scanner-top-down-context-strip');
+      await appExpect(blockedStrip).toContainText('阻断');
+      await appExpect(blockedStrip).toContainText('市场：证据不足');
+      await appExpect(blockedStrip).toContainText('宏观：阻断');
+      await appExpect(blockedStrip).toContainText('流动性：阻断');
+      await appExpect(blockedStrip).toContainText('边界：仅研究观察');
+      await appExpect(blockedStrip).not.toContainText(/raw|internal|debug|provider|cache|router|env|sourceAuthority|providerRoute|provider_timeout/i);
+      await appExpect(blockedStrip).not.toContainText(tradingPattern);
       expect(consoleErrors).toEqual([]);
       expect(unhandledApiRoutes).toEqual([]);
+      await page.unroute('**/api/v1/scanner/runs**');
+      await page.unroute('**/api/v1/scanner/watchlists/recent**');
+      await page.unroute('**/api/v1/scanner/runs/11**');
     }
   });
 });
