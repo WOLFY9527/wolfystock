@@ -66,7 +66,13 @@ describe('AdminEvidenceWorkflowPage', () => {
     render(<AdminEvidenceWorkflowPage />);
 
     const page = screen.getByTestId('admin-evidence-workflow-page');
+    const overviewStrip = screen.getByTestId('admin-evidence-l0-overview-strip');
     const verdict = within(page).getByTestId('admin-evidence-operational-verdict');
+    expect(within(overviewStrip).getByText('信任状态')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('影响范围')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('建议动作')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('证据参考')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('最近更新')).toBeInTheDocument();
     expect(within(verdict).getByText('等待人工复核')).toBeInTheDocument();
     expect(within(verdict).getByText('先生成空白模板并脱敏填写，再运行 preflight。')).toBeInTheDocument();
 

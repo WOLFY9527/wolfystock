@@ -19,6 +19,7 @@ import {
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal';
+import AdminOpsL0OverviewStrip from '../components/admin/AdminOpsL0OverviewStrip';
 
 type CommandSnippet = {
   label: string;
@@ -169,6 +170,15 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
               <TerminalChip variant="caution">人工门禁</TerminalChip>
             </div>
           )}
+        />
+        <AdminOpsL0OverviewStrip
+          dataTestId="admin-evidence-l0-overview-strip"
+          className="mt-4"
+          systemTrustState="review_required"
+          impact="缺证据时保持 NO-GO，人工复核前不提升结论。"
+          recommendedAction="先生成空白模板并跑 preflight，再进入人工复核。"
+          evidenceRef="当前页 / 离线证据路径"
+          lastUpdated="静态流程 / 状态未汇总"
         />
         <div
           data-testid="admin-evidence-operational-verdict"

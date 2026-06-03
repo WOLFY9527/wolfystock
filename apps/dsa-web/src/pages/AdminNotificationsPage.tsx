@@ -26,6 +26,7 @@ import {
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal/TerminalPrimitives';
+import AdminOpsL0OverviewStrip, { type AdminOpsTrustState } from '../components/admin/AdminOpsL0OverviewStrip';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { cn } from '../utils/cn';
 import {
@@ -287,6 +288,40 @@ const AdminNotificationsPage: React.FC = () => {
       categories,
     };
   }, [channels, text]);
+  const unacknowledgedCriticalEvents = useMemo(
+    () => events.filter((event) => event.severity === 'critical' && !event.acknowledgedAt).length,
+    [events],
+  );
+  const latestOperationalTimestamp = useMemo(() => {
+    const timestamps = [
+      ...channels.flatMap((channel) => [channel.lastTriggeredAt, channel.lastSentAt, channel.updatedAt, channel.createdAt]),
+      ...events.map((event) => event.createdAt),
+    ].filter(Boolean) as string[];
+    if (timestamps.length === 0) return null;
+    return timestamps.reduce((latest, current) => (
+      new Date(current).getTime() > new Date(latest).getTime() ? current : latest
+    ));
+  }, [channels, events]);
+  const l0TrustState: AdminOpsTrustState = error && channels.length === 0 && events.length === 0
+    ? 'blocked'
+    : isLoading && channels.length === 0 && events.length === 0
+      ? 'unknown'
+      : routeSummary.missingTargets > 0
+        ? 'degraded'
+        : unacknowledgedCriticalEvents > 0
+          ? 'review_required'
+          : routeSummary.enabledRoutes > 0
+            ? 'healthy'
+            : 'observe';
+  const l0Impact = text(
+    `${routeSummary.enabledRoutes} enabled routes, ${unacknowledgedCriticalEvents} critical alerts need acknowledgement.`,
+    `${routeSummary.enabledRoutes} 条已启用路由，${unacknowledgedCriticalEvents} 条严重告警待确认。`,
+  );
+  const l0RecommendedAction = routeSummary.missingTargets > 0
+    ? text('Fix unconfigured targets before sending new tests.', '先补齐未配置目标，再发送测试通知。')
+    : unacknowledgedCriticalEvents > 0
+      ? text('Acknowledge critical alerts, then inspect the affected channel.', '先确认严重告警，再检查对应通道。')
+      : text('Keep route coverage current and dry-run when ownership changes.', '保持路由覆盖，通道变更时先做试运行。');
 
   const loadAll = useCallback(async () => {
     setIsLoading(true);
@@ -480,6 +515,16 @@ const AdminNotificationsPage: React.FC = () => {
             '将管理员日志、扫描器、市场数据和后续的供应商告警路由到站内记录或受控 webhook。',
           )}
         </p>
+        <AdminOpsL0OverviewStrip
+          dataTestId="admin-notifications-l0-overview-strip"
+          className="mt-5"
+          language={language as 'zh' | 'en'}
+          systemTrustState={l0TrustState}
+          impact={l0Impact}
+          recommendedAction={l0RecommendedAction}
+          evidenceRef={text('Notification events / notification rules', '通知事件 / 通知规则')}
+          lastUpdated={formatDate(latestOperationalTimestamp)}
+        />
       </TerminalPanel>
 
       {error ? <ApiErrorAlert error={error} /> : null}

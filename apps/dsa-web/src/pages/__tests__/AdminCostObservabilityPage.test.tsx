@@ -338,6 +338,12 @@ describe('AdminCostObservabilityPage', () => {
 
     render(<AdminCostObservabilityPage />);
 
+    const overviewStrip = await screen.findByTestId('admin-cost-l0-overview-strip');
+    expect(within(overviewStrip).getByText('信任状态')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('影响范围')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('建议动作')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('证据参考')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('最近更新')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: '成本观测' })).toBeInTheDocument();
     expect(screen.getByText('页面用途')).toBeInTheDocument();
     expect(screen.getByText('当前状态')).toBeInTheDocument();

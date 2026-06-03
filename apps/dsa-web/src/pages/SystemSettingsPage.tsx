@@ -5,6 +5,7 @@ import {
   TerminalPageHeading,
   TerminalPageShell,
 } from '../components/terminal/TerminalPrimitives';
+import AdminOpsL0OverviewStrip from '../components/admin/AdminOpsL0OverviewStrip';
 
 const SettingsPage = lazy(() => import('./SettingsPage'));
 
@@ -69,6 +70,14 @@ const SystemSettingsPage: FC = () => {
         <p className="max-w-3xl text-sm leading-6 text-white/58">
           先确认全局风险、待处理配置和下一步安全动作；深层配置、原始字段和危险系统动作留在下方控制台。
         </p>
+        <AdminOpsL0OverviewStrip
+          dataTestId="system-settings-l0-overview-strip"
+          systemTrustState="unknown"
+          impact="凭证、调度、缓存与危险动作仍需结合控制台快照确认。"
+          recommendedAction="先看系统控制台摘要，再进入具体配置域。"
+          evidenceRef="System control plane / 下方控制台"
+          lastUpdated="配置快照加载后更新"
+        />
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {SYSTEM_SETTINGS_OVERVIEW.map(({ label, value, note }) => (
             <TerminalMetric

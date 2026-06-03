@@ -24,6 +24,7 @@ import {
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal';
+import AdminOpsL0OverviewStrip from '../components/admin/AdminOpsL0OverviewStrip';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { cn } from '../utils/cn';
 import { formatDateTime, formatNumber } from '../utils/format';
@@ -997,6 +998,23 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
             </div>
             <OperationalVerdictPanel verdict={operationalVerdict} generatedAt={data?.states.generatedAt} />
           </div>
+          <AdminOpsL0OverviewStrip
+            dataTestId="provider-circuit-l0-overview-strip"
+            className="mt-5"
+            systemTrustState={
+              operationalVerdict.level === 'LIVE'
+                ? 'healthy'
+                : operationalVerdict.level === 'DEGRADED'
+                  ? 'degraded'
+                  : operationalVerdict.level === 'BLOCKED' || operationalVerdict.level === 'ERROR'
+                    ? 'blocked'
+                    : 'unknown'
+            }
+            impact={operationalVerdict.impact}
+            recommendedAction={operationalVerdict.nextAction}
+            evidenceRef="L3 诊断细节 / 熔断、SLA、事件、配额、探测"
+            lastUpdated={safeDate(data?.states.generatedAt)}
+          />
           {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}
         </TerminalPanel>
 

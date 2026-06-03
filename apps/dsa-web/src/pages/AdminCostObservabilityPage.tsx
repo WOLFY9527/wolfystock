@@ -34,6 +34,7 @@ import {
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal';
+import AdminOpsL0OverviewStrip from '../components/admin/AdminOpsL0OverviewStrip';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { cn } from '../utils/cn';
 import { formatDateTime, formatNumber, formatPercent } from '../utils/format';
@@ -960,6 +961,15 @@ const AdminCostObservabilityPage: React.FC = () => {
     : needsAttentionCount
       ? `${compactNumber(needsAttentionCount)} 个成本压力信号`
       : '暂无明显成本压力';
+  const l0TrustState = state.error && !data
+    ? 'blocked'
+    : state.loading && !data
+      ? 'unknown'
+      : emptyCounters
+        ? 'observe'
+        : needsAttentionCount
+          ? 'degraded'
+          : 'healthy';
 
   return (
     <div
@@ -976,6 +986,15 @@ const AdminCostObservabilityPage: React.FC = () => {
           <p className="mt-3 max-w-4xl text-sm leading-6 text-white/54">
             先判断预算压力、异常归属和下一步处理；账本、价格策略、Provider 与缓存细节默认后置到二级区。
           </p>
+          <AdminOpsL0OverviewStrip
+            dataTestId="admin-cost-l0-overview-strip"
+            className="mt-5"
+            systemTrustState={l0TrustState}
+            impact={emptyCounters ? '当前窗口缺少可用计数器，成本压力只能保持观察。' : `${operatorState} · ${attentionLabel}`}
+            recommendedAction={needsAttentionCount ? '先做配额试运行，再定位归属。' : '保持观测，按需切换窗口与范围。'}
+            evidenceRef="主诊断板 / 二级细节：账本、价格、Provider / 缓存"
+            lastUpdated={formatDate(data?.generatedAt)}
+          />
           <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <TerminalMetric
               label="页面用途"

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import SystemSettingsPage from '../SystemSettingsPage';
@@ -17,8 +17,14 @@ describe('SystemSettingsPage', () => {
 
     const pageRoot = screen.getByTestId('system-settings-page');
     const shellHeader = screen.getByTestId('system-settings-shell-header');
+    const overviewStrip = screen.getByTestId('system-settings-l0-overview-strip');
 
     expect(screen.getByRole('heading', { name: '系统设置' })).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('信任状态')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('影响范围')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('建议动作')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('证据参考')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('最近更新')).toBeInTheDocument();
     expect(screen.getByTestId('system-settings-loading')).toHaveAttribute('aria-busy', 'true');
     expect(await screen.findByText('settings-page-core')).toBeInTheDocument();
     expect(pageRoot).toHaveAttribute('data-terminal-primitive', 'page-shell');

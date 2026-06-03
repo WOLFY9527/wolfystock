@@ -16,6 +16,7 @@ import {
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { ApiErrorAlert, Input } from '../components/common';
 import { DataFreshnessBadge } from '../components/market-overview/marketOverviewPrimitives';
+import AdminOpsL0OverviewStrip, { type AdminOpsTrustState } from '../components/admin/AdminOpsL0OverviewStrip';
 import {
   TerminalButton,
   TerminalChip,
@@ -1997,6 +1998,23 @@ const MarketProviderOperationsPage: React.FC = () => {
     () => buildProviderOpsTopSummary(items, matrixRows, readinessChecks),
     [items, matrixRows, readinessChecks],
   );
+  const l0TrustState: AdminOpsTrustState = error && !response
+    ? 'blocked'
+    : isLoading && !response
+      ? 'unknown'
+      : degradedCount > 0 || readiness?.readinessStatus === 'partial'
+        ? 'degraded'
+        : summary.totalItems > 0
+          ? 'healthy'
+          : 'observe';
+  const l0Impact = topSummary.affectedSurfaces.length
+    ? `${formatNumber(degradedCount, 0)} 个降级信号，影响 ${formatReadableList(topSummary.affectedSurfaces, '影响面待汇总')}`
+    : (degradedCount > 0 ? `${formatNumber(degradedCount, 0)} 个降级信号待核对` : '当前未见跨页面影响汇总');
+  const l0RecommendedAction = topSummary.missingSources.length > 0
+    ? '先看来源缺口，再核对本地就绪诊断。'
+    : degradedCount > 0
+      ? '先看失败率、熔断与缓存，再下钻最近异常。'
+      : '保持只读观察，按需切换影响面。';
 
   return (
     <div data-testid="market-provider-operations-page" className="market-provider-operations-page flex min-h-0 w-full flex-1 flex-col overflow-y-auto no-scrollbar text-white">
@@ -2012,6 +2030,15 @@ const MarketProviderOperationsPage: React.FC = () => {
               ? '正在读取数据源维护快照'
               : `先看路线图与阻断项，再按需下钻健康、熔断、失败率与缓存。生成 ${formatDisplayDate(response?.generatedAt, '待统计')} · 窗口 ${response?.window?.key || '24h'} · 只读快照`}
           </p>
+          <AdminOpsL0OverviewStrip
+            dataTestId="market-provider-l0-overview-strip"
+            className="mt-5"
+            systemTrustState={l0TrustState}
+            impact={l0Impact}
+            recommendedAction={l0RecommendedAction}
+            evidenceRef="路线图 / 本地行情就绪诊断 / Admin Logs"
+            lastUpdated={formatDisplayDate(response?.generatedAt, '待统计')}
+          />
           <ProviderOpsTopSummary data={topSummary} isLoading={isLoading || isMatrixLoading || isReadinessLoading} />
           {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}
         </TerminalPanel>

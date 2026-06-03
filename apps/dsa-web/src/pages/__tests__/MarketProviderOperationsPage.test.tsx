@@ -574,6 +574,12 @@ describe('MarketProviderOperationsPage', () => {
 
     render(<MarketProviderOperationsPage />);
 
+    const overviewStrip = await screen.findByTestId('market-provider-l0-overview-strip');
+    expect(within(overviewStrip).getByText('信任状态')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('影响范围')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('建议动作')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('证据参考')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('最近更新')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: '数据源维护路线图' })).toBeInTheDocument();
     expect(screen.getAllByText('数据源健康').length).toBeGreaterThan(0);
     expect(screen.getAllByText('熔断状态').length).toBeGreaterThan(0);

@@ -34,6 +34,7 @@ import {
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal';
+import AdminOpsL0OverviewStrip, { type AdminOpsTrustState } from '../components/admin/AdminOpsL0OverviewStrip';
 import { getStatusLabel, normalizeStatus, type UnifiedStatus } from '../components/ui/StatusBadge.helpers';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { describeAdminLogLevel } from '../utils/displayStatus';
@@ -1636,6 +1637,15 @@ const AdminLogsPage: React.FC = () => {
   const operatorNextAction = healthSummary.failedEvents > 0
     ? (locale === 'zh' ? '先处理失败和数据源降级' : 'Review failures and data-source degradations first')
     : (locale === 'zh' ? '保持业务事件监控' : 'Keep monitoring business events');
+  const l0TrustState: AdminOpsTrustState = healthSummary.failedEvents > 0
+    ? 'degraded'
+    : healthSummary.warningEvents > 0
+      ? 'observe'
+      : 'healthy';
+  const latestOverviewTimestamp = latestCriticalError?.startedAt
+    || businessEvents[0]?.startedAt
+    || filteredSessions[0]?.startedAt
+    || null;
 
   return (
     <section data-testid="admin-logs-workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-x-hidden">
@@ -1650,6 +1660,16 @@ const AdminLogsPage: React.FC = () => {
               </p>
             </div>
 
+            <AdminOpsL0OverviewStrip
+              dataTestId="admin-logs-l0-overview-strip"
+              className="mt-1"
+              language={locale}
+              systemTrustState={l0TrustState}
+              impact={operatorCurrentState}
+              recommendedAction={operatorNextAction}
+              evidenceRef={locale === 'zh' ? '当前页 / 业务事件 / 运维问题 / 数据缺口' : 'Current page / business events / operator issues / data gaps'}
+              lastUpdated={formatDateTime(latestOverviewTimestamp, locale)}
+            />
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <TerminalMetric
                 label={locale === 'zh' ? '页面用途' : 'Purpose'}

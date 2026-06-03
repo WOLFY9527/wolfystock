@@ -42,6 +42,7 @@ import {
   TerminalPanel,
   TerminalSectionHeader,
 } from '../components/terminal';
+import AdminOpsL0OverviewStrip, { type AdminOpsTrustState } from '../components/admin/AdminOpsL0OverviewStrip';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import { cn } from '../utils/cn';
@@ -297,7 +298,11 @@ const PageHeader: React.FC<{
   user?: AdminUserListItem | null;
   currentState: string;
   nextAction: string;
-}> = ({ mode, user, currentState, nextAction }) => {
+  trustState: AdminOpsTrustState;
+  impact: string;
+  evidenceRef: string;
+  lastUpdated: string;
+}> = ({ mode, user, currentState, nextAction, trustState, impact, evidenceRef, lastUpdated }) => {
   const title = mode === 'directory'
     ? '用户目录'
     : mode === 'activity'
@@ -324,6 +329,14 @@ const PageHeader: React.FC<{
             </p>
           </div>
         </div>
+        <AdminOpsL0OverviewStrip
+          dataTestId="admin-users-l0-overview-strip"
+          systemTrustState={trustState}
+          impact={impact}
+          recommendedAction={nextAction}
+          evidenceRef={evidenceRef}
+          lastUpdated={lastUpdated}
+        />
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <TerminalMetric
             label="页面用途"
@@ -1249,6 +1262,34 @@ const AdminUsersPage: React.FC = () => {
       ? '筛选活动时间线'
       : '查看活动、组合或安全页签'
     : '打开用户详情或审计日志';
+  const headerTrustState: AdminOpsTrustState = userId
+    ? activeUser
+      ? activeUser.isActive
+        ? activeUser.riskBadges.length > 0
+          ? 'observe'
+          : 'healthy'
+        : 'degraded'
+      : detailState.loading
+        ? 'unknown'
+        : 'observe'
+    : usersState.data
+      ? usersState.data.total > 0
+        ? 'observe'
+        : 'unknown'
+      : usersState.loading
+        ? 'unknown'
+        : 'unknown';
+  const headerImpact = userId
+    ? `${headerCurrentState} · 当前页只显示账号、会话与活动的安全投影。`
+    : `${headerCurrentState} · 目录支持下钻详情、活动与组合只读投影。`;
+  const headerEvidenceRef = mode === 'activity'
+    ? '用户活动 / 时间线筛选'
+    : userId
+      ? '用户详情 / 组合 / 安全页签'
+      : '用户目录 / Admin Logs';
+  const headerLastUpdated = userId
+    ? formatDate(activeUser?.updatedAt || activeUser?.lastSeenAt || detailState.data?.sessions?.[0]?.lastSeenAt || activityState.data?.items?.[0]?.timestamp || null)
+    : formatDate(usersState.data?.items?.[0]?.updatedAt || usersState.data?.items?.[0]?.lastSeenAt || null);
 
   const content = useMemo(() => {
     if (!userId) {
@@ -1329,7 +1370,16 @@ const AdminUsersPage: React.FC = () => {
           <TerminalChip variant="neutral">无原始凭证</TerminalChip>
         </div>
         </div>
-        <PageHeader mode={mode} user={activeUser} currentState={headerCurrentState} nextAction={headerNextAction} />
+        <PageHeader
+          mode={mode}
+          user={activeUser}
+          currentState={headerCurrentState}
+          nextAction={headerNextAction}
+          trustState={headerTrustState}
+          impact={headerImpact}
+          evidenceRef={headerEvidenceRef}
+          lastUpdated={headerLastUpdated}
+        />
         {content}
         <TerminalNotice variant="caution">
           <div className="flex items-start gap-3">

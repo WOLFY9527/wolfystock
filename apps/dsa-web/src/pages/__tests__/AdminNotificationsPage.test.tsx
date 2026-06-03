@@ -118,7 +118,13 @@ describe('AdminNotificationsPage', () => {
     uiLanguageState.current = 'zh';
     render(<AdminNotificationsPage />);
 
-    expect(await screen.findByText('路由覆盖')).toBeInTheDocument();
+    const overviewStrip = await screen.findByTestId('admin-notifications-l0-overview-strip');
+    expect(within(overviewStrip).getByText('信任状态')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('影响范围')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('建议动作')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('证据参考')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('最近更新')).toBeInTheDocument();
+    expect((await screen.findAllByText('路由覆盖')).length).toBeGreaterThan(0);
     expect(screen.getByText('通知规则')).toBeInTheDocument();
     expect(screen.getAllByText('已启用').length).toBeGreaterThan(0);
     expect(screen.getByText('已配置通道')).toBeInTheDocument();
@@ -141,8 +147,14 @@ describe('AdminNotificationsPage', () => {
     render(<AdminNotificationsPage />);
 
     const pageShell = screen.getByTestId('admin-notifications-workspace');
+    const overviewStrip = await screen.findByTestId('admin-notifications-l0-overview-strip');
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Admin notifications' })).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('Trust state')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('Impact')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('Recommended action')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('Evidence reference')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('Last updated')).toBeInTheDocument();
     expect(pageShell).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(pageShell).toHaveClass('py-5', 'md:py-6');
     expect(screen.getByTestId('admin-notifications-summary-grid')).toHaveAttribute('data-terminal-primitive', 'grid');

@@ -51,6 +51,15 @@ vi.mock('../../components/common', async (importOriginal) => {
   };
 });
 
+function expectZhL0OverviewStrip(testId: string) {
+  const overviewStrip = screen.getByTestId(testId);
+  expect(within(overviewStrip).getByText('信任状态')).toBeInTheDocument();
+  expect(within(overviewStrip).getByText('影响范围')).toBeInTheDocument();
+  expect(within(overviewStrip).getByText('建议动作')).toBeInTheDocument();
+  expect(within(overviewStrip).getByText('证据参考')).toBeInTheDocument();
+  expect(within(overviewStrip).getByText('最近更新')).toBeInTheDocument();
+}
+
 const businessEvents = [
   {
     id: 'analysis-tsla',
@@ -630,6 +639,7 @@ describe('AdminLogsPage', () => {
   it('defaults to business events and does not show raw step names as the main list', async () => {
     render(<AdminLogsPage />);
 
+    expectZhL0OverviewStrip('admin-logs-l0-overview-strip');
     expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'overflow-x-hidden');
     expect(screen.getByTestId('admin-logs-page-shell')).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(screen.getByTestId('admin-logs-page-shell')).toHaveClass('py-5', 'md:py-6');
@@ -646,8 +656,8 @@ describe('AdminLogsPage', () => {
     expect(screen.getByText('当前状态')).toBeInTheDocument();
     expect(screen.getByText('下一步')).toBeInTheDocument();
     expect(screen.getByText('定位失败与审计线索')).toBeInTheDocument();
-    expect(await screen.findByText('1 个失败 / 6 条记录')).toBeInTheDocument();
-    expect(screen.getByText('先处理失败和数据源降级')).toBeInTheDocument();
+    expect((await screen.findAllByText('1 个失败 / 6 条记录')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('先处理失败和数据源降级').length).toBeGreaterThan(0);
     expect(screen.getByTestId('admin-logs-filter-bar')).toBeInTheDocument();
     expect(await screen.findByTestId('admin-logs-health-summary')).toBeInTheDocument();
     expect(await screen.findByTestId('admin-logs-operator-issue-rollup')).toHaveTextContent('Operator Issue Rollup');

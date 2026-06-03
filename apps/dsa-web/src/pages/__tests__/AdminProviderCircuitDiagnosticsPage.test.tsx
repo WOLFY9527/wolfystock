@@ -166,8 +166,14 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     getDiagnostics.mockResolvedValue(response);
 
     const { container } = render(<AdminProviderCircuitDiagnosticsPage />);
+    const overviewStrip = await screen.findByTestId('provider-circuit-l0-overview-strip');
 
     expect(screen.getByText('Provider 熔断诊断')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('信任状态')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('影响范围')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('建议动作')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('证据参考')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('最近更新')).toBeInTheDocument();
     expect(container.querySelector('[data-terminal-primitive="page-shell"]')).not.toBeNull();
     expect(container.querySelector('[data-terminal-primitive="page-heading"]')).not.toBeNull();
     expect(container.querySelector('[data-terminal-primitive="disclosure"]')).not.toBeNull();
@@ -175,8 +181,9 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
 
     expect(await screen.findByText('L0 运行判定')).toBeInTheDocument();
     expect(screen.getByText('Provider 熔断需要管理员处理')).toBeInTheDocument();
-    expect(within(screen.getByTestId('provider-circuit-operational-verdict')).getByText('BLOCKED')).toBeInTheDocument();
-    expect(screen.getByText('按下方动作列表先处理阻断项')).toBeInTheDocument();
+    const verdict = screen.getByTestId('provider-circuit-operational-verdict');
+    expect(within(verdict).getByText('BLOCKED')).toBeInTheDocument();
+    expect(within(verdict).getByText('按下方动作列表先处理阻断项')).toBeInTheDocument();
 
     const summaryMetrics = screen.getByTestId('provider-circuit-summary-metrics');
     expect(summaryMetrics.querySelectorAll('[data-terminal-primitive="nested-block"]')).toHaveLength(4);

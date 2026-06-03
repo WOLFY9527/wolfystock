@@ -295,10 +295,16 @@ describe('AdminUsersPage', () => {
     renderAt('/zh/admin/users');
 
     const shell = screen.getByTestId('admin-users-page-shell');
+    const overviewStrip = await screen.findByTestId('admin-users-l0-overview-strip');
     expect(shell).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(shell).toHaveClass('px-4', 'xl:px-8');
     expect(shell).not.toHaveClass('md:px-6', 'gap-5', 'py-5', 'md:py-6');
     expect(shell.parentElement).not.toHaveClass('py-5', 'md:py-6');
+    expect(within(overviewStrip).getByText('信任状态')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('影响范围')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('建议动作')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('证据参考')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('最近更新')).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { name: '用户目录' }).length).toBeGreaterThan(0);
     expect(await screen.findByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('安全搜索')).toBeInTheDocument();
