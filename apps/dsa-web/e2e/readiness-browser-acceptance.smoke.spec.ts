@@ -4,6 +4,7 @@ import {
   expectForbiddenTradingWordingAbsent,
   expectNoHorizontalOverflow,
   expectRootNonEmpty,
+  installProductAuthHarness,
   openProductRouteWithHarness,
   test as productTest,
 } from './fixtures/productAuth';
@@ -18,6 +19,38 @@ const tradingPattern = /buy|sell|order|trade|broker|买入|卖出|下单|交易|
 const safeVerdictPattern = /研究证据可用|仅观察|证据不足|等待证据更新|Research-ready|Observe only|Evidence insufficient|Waiting/i;
 const internalEvidenceCoveragePattern =
   /provider_timeout|sourceauthority|source_authority|fallbackorproxy|fallback_or_proxy|router|cache|credential|providerroute|partial_coverage|coverage_not_assembled|env/i;
+const optionsGateSummaryLeakPattern =
+  /raw|internal|debug|provider|cache|router|env|sourceAuthority|providerRoute|provider_timeout/i;
+
+const optionsReadinessSummaryFixture = {
+  options_research_ready: false,
+  readiness_state: 'blocked',
+  data_quality_tier: 'synthetic_demo_only',
+  decision_grade: false,
+  provider_authority: 'observationOnly',
+  liquidity_gate: 'manual_review',
+  iv_greeks_gate: 'blocked',
+  spread_gate: 'manual_review',
+  scenario_coverage: 'strategy_compare_ready',
+  no_trading_boundary: {
+    analytical_only: true,
+    no_broker_execution: true,
+    no_order_placement: true,
+    no_portfolio_mutation: true,
+    no_trading_recommendation: true,
+  },
+  blocking_reasons: [
+    'provider_authority_tier_observation_only',
+    'missing_greeks',
+    'wide_bid_ask_spread',
+    'synthetic_demo_only',
+  ],
+  next_evidence_needed: [
+    '补齐 provider authority 佐证',
+    '补齐 Greeks',
+    '补齐 OI/成交量与更紧价差',
+  ],
+};
 
 const signedInUser = {
   id: 'user-1',
@@ -690,6 +723,38 @@ async function expectSafeEvidenceCoverageStrip(page: Page) {
   await appExpect(strip).not.toContainText(tradingPattern);
 }
 
+async function installOptionsReadinessSummaryRoute(page: Page) {
+  await page.route('**/api/v1/options/underlyings/*/summary', async (route) => {
+    const url = new URL(route.request().url());
+    const pathParts = url.pathname.split('/');
+    const symbol = decodeURIComponent(pathParts[pathParts.length - 2] || 'TEM').toUpperCase();
+    await fulfillJson(route, {
+      symbol,
+      market: 'us',
+      underlying: {
+        price: 52.34,
+        change_pct: 1.2,
+        source: 'playwright_fixture',
+        as_of: '2026-05-06T09:45:00-04:00',
+        freshness: 'mock',
+      },
+      options_availability: {
+        supported: true,
+        provider: 'playwright_fixture',
+        limitations: ['mocked_product_route_harness'],
+      },
+      metadata: {
+        read_only: true,
+        no_external_calls_in_tests: true,
+        limitations: ['mocked_playwright_product_auth'],
+        source_label: 'Playwright Fixture',
+        updated_at: '2026-05-06T09:45:00-04:00',
+      },
+      options_readiness: optionsReadinessSummaryFixture,
+    });
+  });
+}
+
 appTest.describe('consumer research readiness browser acceptance', () => {
   appTest('Home readiness strip is visible and consumer-safe', async ({ page, consoleErrors, unhandledApiRoutes }) => {
     for (const viewport of viewports) {
@@ -792,7 +857,51 @@ productTest.describe('Options Lab readiness browser acceptance', () => {
       await expectRootNonEmpty(page);
       await expectNoHorizontalOverflow(page);
       await expectSafeReadinessStrip(page, 'options-lab-research-readiness-strip');
+      const summary = page.getByTestId('options-lab-readiness-gate-summary');
+      await appExpect(summary).toBeVisible({ timeout: 15_000 });
+      await appExpect(summary).toContainText('门控摘要');
+      await appExpect(summary).toContainText('数据层级：证据不足');
+      await appExpect(summary).toContainText('授权级别：待补证');
+      await appExpect(summary).toContainText('流动性：已阻断');
+      await appExpect(summary).toContainText('IV / Greeks：已阻断');
+      await appExpect(summary).toContainText('价差：已阻断');
+      await appExpect(summary).toContainText('情景覆盖：缺少链路');
+      await appExpect(summary).toContainText('判断等级：未通过');
+      await appExpect(summary).toContainText('执行边界：只读无执行');
+      await appExpect(summary).toContainText('当前缺少就绪度回执，先按证据不足处理。');
+      await appExpect(summary).not.toContainText(optionsGateSummaryLeakPattern);
+      await appExpect(summary).not.toContainText(tradingPattern);
       await expectForbiddenTradingWordingAbsent(page);
+      expect(consoleErrors).toEqual([]);
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+    }
+  });
+
+  productTest('gate summary labels are visible and sanitized when readiness gates are present', async ({ page, consoleErrors }) => {
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      await installProductAuthHarness(page);
+      await installOptionsReadinessSummaryRoute(page);
+      await page.goto('/zh/options-lab');
+      await page.waitForLoadState('domcontentloaded');
+      await expectRootNonEmpty(page);
+      await expectNoHorizontalOverflow(page);
+      await expectSafeReadinessStrip(page, 'options-lab-research-readiness-strip');
+      const summary = page.getByTestId('options-lab-readiness-gate-summary');
+      await appExpect(summary).toBeVisible({ timeout: 15_000 });
+      await appExpect(summary).toContainText('门控摘要');
+      await appExpect(summary).toContainText('数据层级：演示/延迟');
+      await appExpect(summary).toContainText('授权级别：观察级');
+      await appExpect(summary).toContainText('流动性：人工复核');
+      await appExpect(summary).toContainText('IV / Greeks：已阻断');
+      await appExpect(summary).toContainText('价差：人工复核');
+      await appExpect(summary).toContainText('情景覆盖：策略对比');
+      await appExpect(summary).toContainText('判断等级：未通过');
+      await appExpect(summary).toContainText('执行边界：只读无执行');
+      await appExpect(summary).toContainText('当前仍受授权、IV / Greeks 与流动性证据限制。');
+      await appExpect(summary).toContainText('下一步：补齐授权链路、IV / Greeks、OI / 成交量与更紧价差证据。');
+      await appExpect(summary).not.toContainText(optionsGateSummaryLeakPattern);
+      await appExpect(summary).not.toContainText(tradingPattern);
       expect(consoleErrors).toEqual([]);
       await page.unrouteAll({ behavior: 'ignoreErrors' });
     }
