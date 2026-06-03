@@ -20,7 +20,9 @@ import {
   type OptionsStrategyType,
   type OptionsUnderlyingSummaryResponse,
 } from '../api/optionsLab';
+import type { OptionsResearchReadiness } from '../types/researchReadiness';
 import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
+import OptionsReadinessGateSummary from '../components/options/OptionsReadinessGateSummary';
 import {
   CompactFilterBar,
   ConsoleDisclosure,
@@ -783,8 +785,9 @@ const ProductHero: React.FC<{
   decision: OptionsDecisionResponse | null;
   comparison: OptionsStrategyCompareResponse | null;
   hasChainRows: boolean;
+  readinessGates: OptionsResearchReadiness | null;
   readiness: ReturnType<typeof buildConsumerResearchReadinessView>;
-}> = ({ availability, summary, chain, decision, comparison, hasChainRows, readiness }) => {
+}> = ({ availability, summary, chain, decision, comparison, hasChainRows, readinessGates, readiness }) => {
   const underlying = summary?.underlying || chain?.underlying;
   const changeClass = metricTone(underlying?.changePct);
   const summaryLine = heroSummaryLine(availability, decision, comparison, hasChainRows);
@@ -805,6 +808,11 @@ const ProductHero: React.FC<{
             readiness={readiness}
             title="研究就绪度"
             testId="options-lab-research-readiness-strip"
+            className="mt-3"
+          />
+          <OptionsReadinessGateSummary
+            readiness={readinessGates}
+            testId="options-lab-readiness-gate-summary"
             className="mt-3"
           />
           <div className="mt-3 flex flex-wrap items-end gap-3">
@@ -1704,20 +1712,22 @@ const OptionsLabPageContent: React.FC = () => {
       },
     ];
   }, [comparisonState.comparison, decisionState.decision, direction, riskBudget, targetDate, targetPrice]);
-  const optionsResearchReadinessView = useMemo(
-    () => buildConsumerResearchReadinessView(
-      convertOptionsReadiness(
-        extractOptionsResearchReadiness(
-          state.summary as Record<string, unknown> | null | undefined,
-          state.expirations as Record<string, unknown> | null | undefined,
-          state.chain as Record<string, unknown> | null | undefined,
-          comparisonState.comparison as Record<string, unknown> | null | undefined,
-          decisionState.decision as Record<string, unknown> | null | undefined,
-        ),
-      ) || inferOptionsResearchReadiness(decisionState.decision),
-      'zh',
+  const optionsResearchReadiness = useMemo(
+    () => extractOptionsResearchReadiness(
+      state.summary as Record<string, unknown> | null | undefined,
+      state.expirations as Record<string, unknown> | null | undefined,
+      state.chain as Record<string, unknown> | null | undefined,
+      comparisonState.comparison as Record<string, unknown> | null | undefined,
+      decisionState.decision as Record<string, unknown> | null | undefined,
     ),
     [comparisonState.comparison, decisionState.decision, state.chain, state.expirations, state.summary],
+  );
+  const optionsResearchReadinessView = useMemo(
+    () => buildConsumerResearchReadinessView(
+      convertOptionsReadiness(optionsResearchReadiness) || inferOptionsResearchReadiness(decisionState.decision),
+      'zh',
+    ),
+    [decisionState.decision, optionsResearchReadiness],
   );
 
   return (
@@ -1743,6 +1753,7 @@ const OptionsLabPageContent: React.FC = () => {
             decision={decisionState.decision}
             comparison={comparisonState.comparison}
             hasChainRows={hasChainRows}
+            readinessGates={optionsResearchReadiness}
             readiness={optionsResearchReadinessView}
           />
           <DecisionSummaryStrip items={summaryStripItems} />

@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OptionsLabPage, { OptionsLabErrorBoundary } from '../OptionsLabPage';
 import { optionsLabApi } from '../../api/optionsLab';
+import type { OptionsResearchReadiness } from '../../types/researchReadiness';
 
 vi.mock('../../api/optionsLab', () => ({
   optionsLabApi: {
@@ -14,8 +15,60 @@ vi.mock('../../api/optionsLab', () => ({
   },
 }));
 
-function mockHappyPath() {
-  vi.mocked(optionsLabApi.getUnderlyingSummary).mockResolvedValue({
+function buildOptionsResearchReadiness(
+  overrides: Partial<OptionsResearchReadiness> = {},
+): OptionsResearchReadiness {
+  return {
+    optionsResearchReady: false,
+    readinessState: 'blocked',
+    dataQualityTier: 'synthetic_demo_only',
+    decisionGrade: false,
+    providerAuthority: 'observationOnly',
+    liquidityGate: 'manual_review',
+    ivGreeksGate: 'blocked',
+    spreadGate: 'manual_review',
+    scenarioCoverage: 'single_contract',
+    noTradingBoundary: {
+      analyticalOnly: true,
+      noBrokerExecution: true,
+      noOrderPlacement: true,
+      noPortfolioMutation: true,
+      noTradingRecommendation: true,
+    },
+    blockingReasons: [
+      'provider_authority_tier_observation_only',
+      'synthetic_or_fixture_data_not_decision_grade',
+      'missing_iv',
+      'missing_greeks',
+      'low_or_missing_volume',
+      'wide_bid_ask_spread',
+    ],
+    nextEvidenceNeeded: [
+      '补充 provider authority 与 live chain 证据',
+      '补充 Greeks 与 IV 证据',
+      '补充 OI/成交量与更紧价差证据',
+    ],
+    ...overrides,
+  };
+}
+
+function withOptionsReadiness<T extends object>(
+  payload: T,
+  readiness?: OptionsResearchReadiness | null,
+): T & {
+  optionsReadiness?: OptionsResearchReadiness | null;
+  optionsResearchReadiness?: OptionsResearchReadiness | null;
+} {
+  if (!readiness) return payload;
+  return {
+    ...payload,
+    optionsReadiness: readiness,
+    optionsResearchReadiness: readiness,
+  };
+}
+
+function mockHappyPath(readiness?: OptionsResearchReadiness | null) {
+  vi.mocked(optionsLabApi.getUnderlyingSummary).mockResolvedValue(withOptionsReadiness({
     symbol: 'TEM',
     market: 'us',
     underlying: {
@@ -35,8 +88,8 @@ function mockHappyPath() {
       noExternalCallsInTests: true,
       limitations: ['mocked_frontend_shell'],
     },
-  });
-  vi.mocked(optionsLabApi.getExpirations).mockResolvedValue({
+  }, readiness));
+  vi.mocked(optionsLabApi.getExpirations).mockResolvedValue(withOptionsReadiness({
     symbol: 'TEM',
     expirations: [
       {
@@ -54,8 +107,8 @@ function mockHappyPath() {
       noExternalCallsInTests: true,
       limitations: ['mocked_frontend_shell'],
     },
-  });
-  vi.mocked(optionsLabApi.getOptionChain).mockResolvedValue({
+  }, readiness));
+  vi.mocked(optionsLabApi.getOptionChain).mockResolvedValue(withOptionsReadiness({
     symbol: 'TEM',
     expiration: '2026-06-19',
     underlying: {
@@ -113,8 +166,8 @@ function mockHappyPath() {
       noExternalCallsInTests: true,
       limitations: ['mocked_frontend_shell'],
     },
-  });
-  vi.mocked(optionsLabApi.compareStrategies).mockResolvedValue({
+  }, readiness));
+  vi.mocked(optionsLabApi.compareStrategies).mockResolvedValue(withOptionsReadiness({
     symbol: 'TEM',
     underlying: {
       price: 52.34,
@@ -216,8 +269,8 @@ function mockHappyPath() {
       strategyEngine: 'fixture_frontend_phase4',
       forceRefreshIgnored: true,
     },
-  });
-  vi.mocked(optionsLabApi.evaluateDecision).mockResolvedValue({
+  }, readiness));
+  vi.mocked(optionsLabApi.evaluateDecision).mockResolvedValue(withOptionsReadiness({
     symbol: 'TEM',
     strategy: 'bull_call_spread',
     dataQuality: {
@@ -350,7 +403,7 @@ function mockHappyPath() {
       noTradingRecommendation: true,
       strategyEngine: 'options_decision_engine_r1',
     },
-  });
+  }, readiness));
 }
 
 function renderPage() {
@@ -605,6 +658,76 @@ describe('OptionsLabPage', () => {
     expect(decisionStrip.textContent || '').not.toContain('synthetic_or_fixture_data_not_decision_grade');
     expect(decisionStrip.textContent || '').not.toContain('wide_bid_ask_spread');
     expect(decisionStrip.textContent || '').not.toMatch(/买入|卖出|推荐/);
+  });
+
+  it('surfaces additive readiness gates near the hero area without leaking internal labels', async () => {
+    mockHappyPath(buildOptionsResearchReadiness());
+    renderPage();
+
+    const summary = await screen.findByTestId('options-lab-readiness-gate-summary');
+    expect(summary).toHaveTextContent('门控摘要');
+    expect(summary).toHaveTextContent('数据层级：演示/延迟');
+    expect(summary).toHaveTextContent('授权级别：观察级');
+    expect(summary).toHaveTextContent('流动性：人工复核');
+    expect(summary).toHaveTextContent('IV / Greeks：已阻断');
+    expect(summary).toHaveTextContent('价差：人工复核');
+    expect(summary).toHaveTextContent('情景覆盖：单合约');
+    expect(summary).toHaveTextContent('判断等级：未通过');
+    expect(summary).toHaveTextContent('执行边界：只读无执行');
+    expect(summary).toHaveTextContent('当前仍受授权、IV / Greeks 与流动性证据限制。');
+    expect(summary).toHaveTextContent('下一步：补齐授权链路、IV / Greeks、OI / 成交量与更紧价差证据。');
+    expect(summary.textContent || '').not.toContain('observationOnly');
+    expect(summary.textContent || '').not.toContain('manual_review');
+    expect(summary.textContent || '').not.toContain('single_contract');
+    expect(summary.textContent || '').not.toContain('provider_authority_tier_observation_only');
+    expect(summary.textContent || '').not.toContain('wide_bid_ask_spread');
+  });
+
+  it('fails closed when additive readiness is missing', async () => {
+    renderPage();
+
+    const summary = await screen.findByTestId('options-lab-readiness-gate-summary');
+    expect(summary).toHaveTextContent('数据层级：证据不足');
+    expect(summary).toHaveTextContent('授权级别：待补证');
+    expect(summary).toHaveTextContent('流动性：已阻断');
+    expect(summary).toHaveTextContent('IV / Greeks：已阻断');
+    expect(summary).toHaveTextContent('价差：已阻断');
+    expect(summary).toHaveTextContent('情景覆盖：缺少链路');
+    expect(summary).toHaveTextContent('判断等级：未通过');
+    expect(summary).toHaveTextContent('执行边界：只读无执行');
+    expect(summary).toHaveTextContent('当前缺少就绪度回执，先按证据不足处理。');
+    expect(summary).toHaveTextContent('下一步：补齐期权链、IV / Greeks 与流动性证据。');
+  });
+
+  it('keeps delayed usable readiness consumer-safe and observation-bounded', async () => {
+    mockHappyPath(buildOptionsResearchReadiness({
+      optionsResearchReady: true,
+      readinessState: 'delayed_usable',
+      dataQualityTier: 'delayed_usable',
+      decisionGrade: true,
+      providerAuthority: 'scoreGradeAllowed',
+      liquidityGate: 'clear',
+      ivGreeksGate: 'manual_review',
+      spreadGate: 'clear',
+      scenarioCoverage: 'single_contract',
+      blockingReasons: [],
+      nextEvidenceNeeded: ['等待更高新鲜度链路'],
+    }));
+    renderPage();
+
+    const summary = await screen.findByTestId('options-lab-readiness-gate-summary');
+    expect(summary).toHaveTextContent('数据层级：延迟可观察');
+    expect(summary).toHaveTextContent('授权级别：授权链路');
+    expect(summary).toHaveTextContent('流动性：已通过');
+    expect(summary).toHaveTextContent('IV / Greeks：人工复核');
+    expect(summary).toHaveTextContent('价差：已通过');
+    expect(summary).toHaveTextContent('情景覆盖：单合约');
+    expect(summary).toHaveTextContent('判断等级：可用');
+    expect(summary).toHaveTextContent('执行边界：只读无执行');
+    expect(summary).toHaveTextContent('等待更高新鲜度链路');
+    expect(summary.textContent || '').not.toContain('scoreGradeAllowed');
+    expect(summary.textContent || '').not.toContain('manual_review');
+    expect(summary.textContent || '').not.toMatch(/买入|卖出|推荐|下单|经纪商/);
   });
 
   it('renders safe guarded UI when gateIssues arrive as API issue objects', async () => {
