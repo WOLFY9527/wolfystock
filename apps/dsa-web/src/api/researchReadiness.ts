@@ -1,4 +1,11 @@
-import type { AnalysisReport, DataQualityReport, ReportMeta } from '../types/analysis';
+import type {
+  AnalysisEvidenceCoverageDomain,
+  AnalysisEvidenceCoverageEntry,
+  AnalysisEvidenceCoverageFrame,
+  AnalysisReport,
+  DataQualityReport,
+  ReportMeta,
+} from '../types/analysis';
 import type { MarketDirectionReadiness, MarketTemperatureResponse } from './market';
 import type { OptionsDecisionResponse } from './optionsLab';
 import type {
@@ -237,6 +244,46 @@ function readNestedResearchReadiness(value: unknown): ResearchReadinessV1 | null
   };
 }
 
+const ANALYSIS_EVIDENCE_COVERAGE_DOMAINS: AnalysisEvidenceCoverageDomain[] = [
+  'priceHistory',
+  'technicals',
+  'fundamentals',
+  'earnings',
+  'news',
+  'catalysts',
+  'sentiment',
+  'valuation',
+  'liquidityContext',
+  'macroContext',
+];
+
+function readEvidenceCoverageEntry(value: unknown): AnalysisEvidenceCoverageEntry | null {
+  if (!isRecord(value)) return null;
+  const status = typeof value.status === 'string' ? value.status : null;
+  if (!status) return null;
+  return {
+    status,
+    sourceTier: typeof value.sourceTier === 'string' ? value.sourceTier : null,
+    sourceAuthority: typeof value.sourceAuthority === 'string' ? value.sourceAuthority : null,
+    freshness: typeof value.freshness === 'string' ? value.freshness : null,
+    fallbackOrProxy: value.fallbackOrProxy === true,
+    missingReasons: asStringArray(value.missingReasons),
+    nextEvidenceNeeded: asStringArray(value.nextEvidenceNeeded),
+  };
+}
+
+function readEvidenceCoverageFrame(value: unknown): AnalysisEvidenceCoverageFrame | null {
+  if (!isRecord(value)) return null;
+  const frame = ANALYSIS_EVIDENCE_COVERAGE_DOMAINS.reduce<AnalysisEvidenceCoverageFrame>((acc, domain) => {
+    const entry = readEvidenceCoverageEntry(value[domain]);
+    if (entry) {
+      acc[domain] = entry;
+    }
+    return acc;
+  }, {});
+  return Object.keys(frame).length ? frame : null;
+}
+
 export function extractAnalysisResearchReadiness(report: AnalysisReport | null | undefined): ResearchReadinessV1 | null {
   const direct = readNestedResearchReadiness((report as AnalysisReport & { researchReadiness?: unknown } | null)?.researchReadiness);
   if (direct) return direct;
@@ -247,6 +294,20 @@ export function extractAnalysisResearchReadiness(report: AnalysisReport | null |
 
   const details = report?.details as { analysisResult?: UnknownRecord } | undefined;
   return readNestedResearchReadiness(details?.analysisResult?.researchReadiness);
+}
+
+export function extractAnalysisEvidenceCoverageFrame(
+  report: AnalysisReport | null | undefined,
+): AnalysisEvidenceCoverageFrame | null {
+  const direct = readEvidenceCoverageFrame((report as AnalysisReport & { evidenceCoverageFrame?: unknown } | null)?.evidenceCoverageFrame);
+  if (direct) return direct;
+
+  const meta = report?.meta as ReportMeta & { evidenceCoverageFrame?: unknown } | undefined;
+  const metaFrame = readEvidenceCoverageFrame(meta?.evidenceCoverageFrame);
+  if (metaFrame) return metaFrame;
+
+  const details = report?.details as { analysisResult?: UnknownRecord } | undefined;
+  return readEvidenceCoverageFrame(details?.analysisResult?.evidenceCoverageFrame);
 }
 
 function inferEvidenceFromDataQuality(report: DataQualityReport | undefined): string[] {

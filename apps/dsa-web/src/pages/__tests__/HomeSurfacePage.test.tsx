@@ -236,6 +236,8 @@ const homeDailyCandles = Array.from({ length: 24 }, (_, index) => {
 const HOME_CHART_UNAVAILABLE_INTERNAL_COPY_PATTERN = /provider|fallback|diagnostic|source|source confidence|confidence|Alpaca|Yahoo Finance|Yfinance|raw diagnostics|reasonCode|providerTrace|sourceConfidence|localFallback|freshness|rawRows|主数据源|回补|诊断|来源|可信度/i;
 const HOME_FUNDAMENTALS_FORBIDDEN_COPY_PATTERN =
   /buy|sell|undervalued|overvalued|rawProviderPayload|adminDiagnostics|providerRoute|valuationOpinion/i;
+const HOME_EVIDENCE_COVERAGE_INTERNAL_COPY_PATTERN =
+  /provider_timeout|sourceTier|sourceAuthority|fallbackOrProxy|router|cache|credential|providerRoute|partial_coverage|coverage_not_assembled/i;
 const defaultStockEvidenceResponse = {
   symbols: ['ORCL'],
   items: [
@@ -1512,6 +1514,59 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-bento-decision-source-details')).toHaveTextContent('报价 / 基本面');
     expect(within(panel).getByText('报价')).toBeInTheDocument();
     expect(within(panel).queryByTestId('home-bento-decision-trace-developer')).not.toBeInTheDocument();
+  });
+
+  it('shows a compact home evidence coverage strip with consumer-safe domain states', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      evidenceCoverageFrame: {
+        technicals: {
+          status: 'available',
+          missingReasons: [],
+          nextEvidenceNeeded: [],
+        },
+        fundamentals: {
+          status: 'degraded',
+          missingReasons: ['partial_coverage', 'provider_timeout'],
+          nextEvidenceNeeded: ['补充基本面证据'],
+        },
+        news: {
+          status: 'missing',
+          missingReasons: ['evidence_missing'],
+          nextEvidenceNeeded: ['补充新闻证据'],
+        },
+        catalysts: {
+          status: 'blocked',
+          missingReasons: ['provider_timeout'],
+          nextEvidenceNeeded: ['补充催化剂证据'],
+        },
+        earnings: {
+          status: 'pending',
+          missingReasons: ['evidence_pending'],
+          nextEvidenceNeeded: ['补充财报证据'],
+        },
+        valuation: {
+          status: 'not_applicable',
+          missingReasons: [],
+          nextEvidenceNeeded: [],
+        },
+      },
+    });
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+
+    const strip = screen.getByTestId('home-evidence-coverage-strip');
+    expect(strip).toHaveTextContent('证据覆盖');
+    expect(strip).toHaveTextContent('技术面 可用');
+    expect(strip).toHaveTextContent('基本面 降级');
+    expect(strip).toHaveTextContent('新闻 缺失');
+    expect(strip).toHaveTextContent('催化 阻断');
+    expect(strip).toHaveTextContent('财报 待补');
+    expect(strip).toHaveTextContent('估值 不适用');
+    expect(strip).toHaveTextContent('补充基本面证据');
+    expect(strip.textContent).not.toMatch(HOME_EVIDENCE_COVERAGE_INTERNAL_COPY_PATTERN);
   });
 
   it('opens the decision trace fixture drawer in a narrow viewport', async () => {

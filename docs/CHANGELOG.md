@@ -1,3 +1,6 @@
+## 2026-06-03
+- Home now surfaces a compact consumer-safe evidence coverage strip from the additive `evidenceCoverageFrame` report payload, showing bounded domain states for technicals, fundamentals, news, catalysts, earnings, and valuation with fail-closed unavailable handling and no raw provider/router/admin leakage.
+
 ## 2026-06-02
 - Stocks API now exposes a narrow read-only single-stock evidence contract at
   `GET /api/v1/stocks/{stock_code}/evidence`. The endpoint reuses the existing

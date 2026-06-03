@@ -6,6 +6,7 @@ import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { publicAnalysisApi } from '../api/publicAnalysis';
 import {
   buildConsumerResearchReadinessView,
+  extractAnalysisEvidenceCoverageFrame,
   extractAnalysisResearchReadiness,
   inferAnalysisResearchReadiness,
 } from '../api/researchReadiness';
@@ -23,6 +24,7 @@ import {
   MetricStrip,
 } from '../components/linear';
 import { Button, ConfirmDialog, Drawer } from '../components/common';
+import ConsumerEvidenceCoverageStrip from '../components/common/ConsumerEvidenceCoverageStrip';
 import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useUiPreferences } from '../contexts/UiPreferencesContext';
@@ -33,7 +35,17 @@ import {
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
 import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
-import type { AnalysisReport, DataQualityReport, DecisionTrace, HistoryItem, ReportQuality, StandardReport, StandardReportField, TaskProgressModule } from '../types/analysis';
+import type {
+  AnalysisEvidenceCoverageFrame,
+  AnalysisReport,
+  DataQualityReport,
+  DecisionTrace,
+  HistoryItem,
+  ReportQuality,
+  StandardReport,
+  StandardReportField,
+  TaskProgressModule,
+} from '../types/analysis';
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
 import type { ConsumerResearchReadinessView } from '../types/researchReadiness';
 import type { StockEvidenceFundamentalsSummary } from '../types/stockEvidence';
@@ -1072,6 +1084,7 @@ function HomeConclusionFirstConsole({
   dashboard,
   dataQualityReport,
   researchReadiness,
+  evidenceCoverageFrame,
   decisionTrace,
   sourceSummary,
   stanceLabel,
@@ -1082,6 +1095,7 @@ function HomeConclusionFirstConsole({
   dashboard: DashboardPayload;
   dataQualityReport?: DataQualityReport;
   researchReadiness: ConsumerResearchReadinessView;
+  evidenceCoverageFrame: AnalysisEvidenceCoverageFrame | null;
   decisionTrace?: DecisionTrace;
   sourceSummary?: string;
   stanceLabel: string;
@@ -1143,6 +1157,13 @@ function HomeConclusionFirstConsole({
           readiness={researchReadiness}
           title={isEnglish ? 'Research readiness' : '研究就绪度'}
           testId="home-research-readiness-strip"
+          className="mb-4"
+        />
+        <ConsumerEvidenceCoverageStrip
+          frame={evidenceCoverageFrame}
+          locale={isEnglish ? 'en' : 'zh'}
+          title={isEnglish ? 'Evidence coverage' : '证据覆盖'}
+          testId="home-evidence-coverage-strip"
           className="mb-4"
         />
 
@@ -4794,6 +4815,10 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     () => buildConsumerResearchReadinessView(activeResearchReadiness, locale === 'en' ? 'en' : 'zh'),
     [activeResearchReadiness, locale],
   );
+  const activeEvidenceCoverageFrame = useMemo(
+    () => extractAnalysisEvidenceCoverageFrame(activeTraceReport),
+    [activeTraceReport],
+  );
   const sourceSummary = useMemo(
     () => buildTraceSummary(activeDecisionTrace, activeReportQuality, locale),
     [activeDecisionTrace, activeReportQuality, locale],
@@ -5590,6 +5615,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                               dashboard={readyCopy}
                               dataQualityReport={activeDataQualityReport}
                               researchReadiness={activeResearchReadinessView}
+                              evidenceCoverageFrame={activeEvidenceCoverageFrame}
                               decisionTrace={activeDecisionTrace}
                               sourceSummary={sourceSummary}
                               stanceLabel={stanceLabel}

@@ -42,7 +42,41 @@ export interface ReportMeta {
   modelUsed?: string;  // LLM model used for analysis
   dataQualityReport?: DataQualityReport;
   researchReadiness?: ResearchReadinessV1;
+  evidenceCoverageFrame?: AnalysisEvidenceCoverageFrame;
 }
+
+export type AnalysisEvidenceCoverageStatus =
+  | 'available'
+  | 'degraded'
+  | 'missing'
+  | 'blocked'
+  | 'pending'
+  | 'not_applicable'
+  | string;
+
+export type AnalysisEvidenceCoverageDomain =
+  | 'priceHistory'
+  | 'technicals'
+  | 'fundamentals'
+  | 'earnings'
+  | 'news'
+  | 'catalysts'
+  | 'sentiment'
+  | 'valuation'
+  | 'liquidityContext'
+  | 'macroContext';
+
+export interface AnalysisEvidenceCoverageEntry {
+  status?: AnalysisEvidenceCoverageStatus;
+  sourceTier?: string | null;
+  sourceAuthority?: string | null;
+  freshness?: string | null;
+  fallbackOrProxy?: boolean;
+  missingReasons?: string[];
+  nextEvidenceNeeded?: string[];
+}
+
+export type AnalysisEvidenceCoverageFrame = Partial<Record<AnalysisEvidenceCoverageDomain, AnalysisEvidenceCoverageEntry>>;
 
 /** Sentiment label */
 export type SentimentLabel =
@@ -320,6 +354,7 @@ export interface ReportDetails {
   dataQualityReport?: DataQualityReport;
   analysisResult?: Record<string, unknown> & {
     researchReadiness?: ResearchReadinessV1;
+    evidenceCoverageFrame?: AnalysisEvidenceCoverageFrame;
   };
   rawAiResponse?: string | Record<string, unknown>;
   financialReport?: Record<string, unknown>;
@@ -514,6 +549,7 @@ export interface AnalysisReport {
   decisionTrace?: DecisionTrace;
   dataQualityReport?: DataQualityReport;
   researchReadiness?: ResearchReadinessV1;
+  evidenceCoverageFrame?: AnalysisEvidenceCoverageFrame;
   contractMeta?: FrontendReportContractMeta;
   reportQuality?: ReportQuality;
 }
