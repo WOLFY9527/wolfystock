@@ -46,6 +46,46 @@ _HOME_READINESS_RUNTIME_DOMAINS = {
 }
 _READINESS_MISSING_STATUSES = {"missing", "failed", "unavailable", "not_configured", "skipped", "error"}
 _READINESS_FALLBACK_STATUSES = {"partial", "fallback", "stale", "configured_not_used", "used_unrecorded"}
+_EVIDENCE_FRAME_DOMAIN_ORDER = (
+    "priceHistory",
+    "technicals",
+    "fundamentals",
+    "earnings",
+    "news",
+    "catalysts",
+    "sentiment",
+    "valuation",
+    "liquidityContext",
+    "macroContext",
+)
+_EVIDENCE_FRAME_SOURCE_AUTHORITY = {
+    True: "scoreGradeAllowed",
+    False: "observationOnly",
+}
+_EVIDENCE_FRAME_DEGRADED_STATUSES = {
+    "partial",
+    "weak",
+    "stale",
+    "fallback",
+    "configured_not_used",
+    "used_unrecorded",
+    "insufficient_history",
+    "data_unavailable",
+}
+_EVIDENCE_FRAME_WAITING_STATUSES = {"pending", "waiting", "queued", "loading", "scheduled", "in_progress"}
+_EVIDENCE_FRAME_TIMEOUT_TOKENS = ("timeout", "timed out", "deadline", "expired")
+_EVIDENCE_FRAME_NEXT_EVIDENCE = {
+    "priceHistory": "补充价格历史证据",
+    "technicals": "补充技术面证据",
+    "fundamentals": "补充基本面证据",
+    "earnings": "补充财报证据",
+    "news": "补充新闻证据",
+    "catalysts": "补充催化剂证据",
+    "sentiment": "补充情绪证据",
+    "valuation": "补充估值证据",
+    "liquidityContext": "补充流动性背景证据",
+    "macroContext": "补充宏观背景证据",
+}
 
 
 def _first_present(*values: Any) -> Any:
@@ -259,6 +299,229 @@ def _score_state_from_quality(score: Any, data_quality_report: Optional[Dict[str
         if cap_value < 100:
             return "capped"
     return "scored"
+
+
+def _runtime_field(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _runtime_field_status(value: Any) -> str:
+    field = _runtime_field(value)
+    status = str(field.get("status") or "").strip().lower()
+    if status in _EVIDENCE_FRAME_WAITING_STATUSES:
+        return "pending"
+    if status in {"failed", "error"}:
+        return "failed"
+    if status in {"missing", "unavailable", "not_configured", "skipped"}:
+        return "missing"
+    if status in _EVIDENCE_FRAME_DEGRADED_STATUSES:
+        return "degraded"
+    if status == "ok":
+        return "ok"
+    return status or "unknown"
+
+
+def _runtime_field_timeout(value: Any) -> bool:
+    field = _runtime_field(value)
+    text = " ".join(
+        str(field.get(key) or "").strip().lower()
+        for key in ("final_reason", "reason", "message", "note")
+    )
+    return any(token in text for token in _EVIDENCE_FRAME_TIMEOUT_TOKENS)
+
+
+def _normalize_freshness_value(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    if text in {"fresh", "live", "realtime", "real_time"}:
+        return "fresh"
+    if text in {"delayed", "partial", "cached"}:
+        return "delayed"
+    if text == "stale":
+        return "stale"
+    if text in {"fallback", "proxy"}:
+        return "fallback"
+    if text in {"synthetic", "mock"}:
+        return "synthetic"
+    return "unknown"
+
+
+def _coverage_freshness(*values: Any) -> str:
+    for value in values:
+        if isinstance(value, dict):
+            normalized = _normalize_freshness_value(
+                _first_present(
+                    value.get("freshness"),
+                    value.get("freshnessClass"),
+                    value.get("freshness_floor"),
+                )
+            )
+            if normalized != "unknown":
+                return normalized
+            if _runtime_field_status(value) == "degraded":
+                return "delayed"
+        else:
+            normalized = _normalize_freshness_value(value)
+            if normalized != "unknown":
+                return normalized
+    return "unknown"
+
+
+def _coverage_fallback_or_proxy(*values: Any) -> bool:
+    for value in values:
+        if not isinstance(value, dict):
+            text = str(value or "").strip().lower()
+            if text and ("proxy" in text or "fallback" in text):
+                return True
+            continue
+        if any(
+            value.get(key)
+            for key in ("proxyOnly", "isFallback", "fallback_occurred", "fallbackUsed", "proxy_only")
+        ):
+            return True
+        text = " ".join(
+            str(value.get(key) or "").strip().lower()
+            for key in ("source", "sourceType", "sourceTier", "status")
+        )
+        if "proxy" in text or "fallback" in text:
+            return True
+    return False
+
+
+def _coverage_source_tier(*values: Any) -> Optional[str]:
+    for value in values:
+        if not isinstance(value, dict):
+            continue
+        source_tier = _first_present(value.get("sourceTier"), value.get("sourceType"))
+        if source_tier is not None:
+            return str(source_tier)
+    return None
+
+
+def _coverage_source_authority(*values: Any) -> str:
+    saw_metadata = False
+    for value in values:
+        if not isinstance(value, dict):
+            continue
+        if any(
+            key in value
+            for key in ("sourceAuthorityAllowed", "scoreContributionAllowed", "sourceTier", "sourceType", "source")
+        ):
+            saw_metadata = True
+        if (
+            value.get("sourceAuthorityAllowed") is True
+            and value.get("scoreContributionAllowed") is True
+            and not _coverage_fallback_or_proxy(value)
+            and _coverage_freshness(value) == "fresh"
+        ):
+            return _EVIDENCE_FRAME_SOURCE_AUTHORITY[True]
+    if saw_metadata:
+        return _EVIDENCE_FRAME_SOURCE_AUTHORITY[False]
+    return "unavailable"
+
+
+def _coverage_missing_reasons(
+    *,
+    structured_status: str,
+    runtime_status: str,
+    freshness: str,
+    fallback_or_proxy: bool,
+    missing_fields: Optional[Iterable[Any]] = None,
+    partial_flags: Optional[Iterable[Any]] = None,
+    coverage_assembled: bool = True,
+    weak_relevance: bool = False,
+    timeout: bool = False,
+) -> List[str]:
+    reasons: List[str] = []
+    if timeout:
+        reasons.append("provider_timeout")
+    elif runtime_status == "failed":
+        reasons.append("provider_unavailable")
+    if structured_status in {"missing", "failed"}:
+        reasons.append("evidence_missing")
+    if structured_status in _EVIDENCE_FRAME_WAITING_STATUSES or runtime_status == "pending":
+        reasons.append("evidence_pending")
+    if structured_status in _EVIDENCE_FRAME_DEGRADED_STATUSES or runtime_status == "degraded":
+        reasons.append("partial_coverage")
+    if freshness in {"delayed", "stale"}:
+        reasons.append("stale_evidence")
+    if freshness == "fallback" or fallback_or_proxy:
+        reasons.append("fallback_proxy_evidence")
+    if weak_relevance:
+        reasons.append("weak_relevance")
+    if any(_iter_values(missing_fields)):
+        reasons.append("missing_required_fields")
+    if any(_iter_values(partial_flags)):
+        reasons.append("partial_coverage")
+    if not coverage_assembled:
+        reasons.append("coverage_not_assembled")
+    return list(dict.fromkeys(reasons))
+
+
+def _coverage_next_needed(domain: str, status: str) -> List[str]:
+    if status in {"available", "not_applicable"}:
+        return []
+    return [_EVIDENCE_FRAME_NEXT_EVIDENCE[domain]]
+
+
+def _coverage_frame_entry(
+    *,
+    domain: str,
+    status: str,
+    source_tier: Optional[str],
+    source_authority: str,
+    freshness: str,
+    fallback_or_proxy: bool,
+    missing_reasons: List[str],
+) -> Dict[str, Any]:
+    return {
+        "status": status,
+        "sourceTier": source_tier,
+        "sourceAuthority": source_authority,
+        "freshness": freshness,
+        "fallbackOrProxy": bool(fallback_or_proxy),
+        "missingReasons": missing_reasons,
+        "nextEvidenceNeeded": _coverage_next_needed(domain, status),
+    }
+
+
+def _coverage_status_from_signals(
+    *,
+    has_evidence: bool,
+    structured_status: str,
+    runtime_status: str,
+    freshness: str,
+    fallback_or_proxy: bool,
+    timeout: bool = False,
+    missing_reasons: Optional[List[str]] = None,
+) -> str:
+    reasons = missing_reasons or []
+    if structured_status in _EVIDENCE_FRAME_WAITING_STATUSES or runtime_status == "pending":
+        return "pending"
+    if timeout or runtime_status == "failed":
+        return "blocked"
+    if structured_status in {"missing", "failed"} and runtime_status in {"missing", "unknown", ""}:
+        return "missing"
+    if not has_evidence:
+        return "missing"
+    if (
+        structured_status in _EVIDENCE_FRAME_DEGRADED_STATUSES
+        or runtime_status == "degraded"
+        or freshness != "fresh"
+        or fallback_or_proxy
+        or reasons
+    ):
+        return "degraded"
+    return "available"
+
+
+def _has_any_metric(mapping: Any, keys: Iterable[str]) -> bool:
+    if not isinstance(mapping, dict):
+        return False
+    for key in keys:
+        value = mapping.get(key)
+        if value not in (None, "", "N/A"):
+            return True
+    return False
 
 
 def _is_ungrounded_level(value: Any) -> bool:
@@ -518,7 +781,13 @@ class AnalysisService:
             structured_analysis=structured_analysis,
             query_id=query_id,
         )
+        evidence_coverage_frame = self._build_home_evidence_coverage_frame(
+            result,
+            data_quality_report=data_quality_report,
+            structured_analysis=structured_analysis,
+        )
         analysis_result["researchReadiness"] = research_readiness
+        analysis_result["evidenceCoverageFrame"] = evidence_coverage_frame
         decision_trace = self._build_decision_trace(
             result,
             query_id=query_id,
@@ -540,6 +809,7 @@ class AnalysisService:
                 "change_pct": result.change_pct,
                 "model_used": getattr(result, "model_used", None),
                 "strategy_type": getattr(result, "decision_type", None) or report_type,
+                "evidenceCoverageFrame": evidence_coverage_frame,
             },
             "summary": {
                 "analysis_summary": result.analysis_summary,
@@ -570,6 +840,7 @@ class AnalysisService:
             },
             "decision_trace": decision_trace,
             "researchReadiness": research_readiness,
+            "evidenceCoverageFrame": evidence_coverage_frame,
         }
         payload["meta"]["researchReadiness"] = research_readiness
         if data_quality_report:
@@ -654,6 +925,334 @@ class AnalysisService:
         if freshness:
             payload["freshness"] = freshness
         return build_research_readiness_v1(payload)
+
+    def _build_home_evidence_coverage_frame(
+        self,
+        result: Any,
+        *,
+        data_quality_report: Optional[Dict[str, Any]],
+        structured_analysis: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        runtime = getattr(result, "runtime_execution", None) if isinstance(getattr(result, "runtime_execution", None), dict) else {}
+        runtime_data = runtime.get("data") if isinstance(runtime.get("data"), dict) else {}
+        quality = data_quality_report if isinstance(data_quality_report, dict) else {}
+
+        technicals = structured_analysis.get("technicals") if isinstance(structured_analysis.get("technicals"), dict) else {}
+        fundamentals = structured_analysis.get("fundamentals") if isinstance(structured_analysis.get("fundamentals"), dict) else {}
+        earnings = structured_analysis.get("earnings_analysis") if isinstance(structured_analysis.get("earnings_analysis"), dict) else {}
+        sentiment = structured_analysis.get("sentiment_analysis") if isinstance(structured_analysis.get("sentiment_analysis"), dict) else {}
+        catalyst = structured_analysis.get("catalyst") if isinstance(structured_analysis.get("catalyst"), dict) else {}
+        realtime_context = structured_analysis.get("realtime_context") if isinstance(structured_analysis.get("realtime_context"), dict) else {}
+        market_context = structured_analysis.get("market_context") if isinstance(structured_analysis.get("market_context"), dict) else {}
+
+        runtime_market = _runtime_field(runtime_data.get("market"))
+        runtime_fundamentals = _runtime_field(runtime_data.get("fundamentals"))
+        runtime_news = _runtime_field(runtime_data.get("news"))
+        runtime_sentiment = _runtime_field(runtime_data.get("sentiment"))
+
+        frame: Dict[str, Any] = {}
+
+        price_history_missing_fields = [
+            item for item in (quality.get("missingRequiredDomains") or [])
+            if "price" in str(item).lower() or "ohlcv" in str(item).lower() or "technical_history" in str(item).lower()
+        ]
+        price_history_structured_status = str(quality.get("price_history_status") or _block_status(technicals) or "").strip().lower()
+        price_history_runtime_status = _runtime_field_status(runtime_market)
+        price_history_freshness = _coverage_freshness(technicals, runtime_market, realtime_context)
+        price_history_fallback = _coverage_fallback_or_proxy(technicals, runtime_market, realtime_context)
+        price_history_has_evidence = bool(technicals or runtime_market or realtime_context)
+        price_history_reasons = _coverage_missing_reasons(
+            structured_status=price_history_structured_status,
+            runtime_status=price_history_runtime_status,
+            freshness=price_history_freshness,
+            fallback_or_proxy=price_history_fallback,
+            missing_fields=price_history_missing_fields,
+        )
+        frame["priceHistory"] = _coverage_frame_entry(
+            domain="priceHistory",
+            status=_coverage_status_from_signals(
+                has_evidence=price_history_has_evidence,
+                structured_status=price_history_structured_status,
+                runtime_status=price_history_runtime_status,
+                freshness=price_history_freshness,
+                fallback_or_proxy=price_history_fallback,
+                missing_reasons=price_history_reasons,
+            ),
+            source_tier=_coverage_source_tier(technicals, runtime_market),
+            source_authority=_coverage_source_authority(technicals, runtime_market),
+            freshness=price_history_freshness,
+            fallback_or_proxy=price_history_fallback,
+            missing_reasons=price_history_reasons,
+        )
+
+        technical_status = str(quality.get("technicals_status") or _block_status(technicals) or "").strip().lower()
+        technical_freshness = _coverage_freshness(technicals)
+        technical_fallback = _coverage_fallback_or_proxy(technicals)
+        technical_missing_fields = [item for item in (quality.get("missing_fields") or []) if str(item).startswith("technicals.")]
+        technical_reasons = _coverage_missing_reasons(
+            structured_status=technical_status,
+            runtime_status="unknown",
+            freshness=technical_freshness,
+            fallback_or_proxy=technical_fallback,
+            missing_fields=technical_missing_fields,
+        )
+        frame["technicals"] = _coverage_frame_entry(
+            domain="technicals",
+            status=_coverage_status_from_signals(
+                has_evidence=bool(technicals),
+                structured_status=technical_status,
+                runtime_status="unknown",
+                freshness=technical_freshness,
+                fallback_or_proxy=technical_fallback,
+                missing_reasons=technical_reasons,
+            ),
+            source_tier=_coverage_source_tier(technicals),
+            source_authority=_coverage_source_authority(technicals),
+            freshness=technical_freshness,
+            fallback_or_proxy=technical_fallback,
+            missing_reasons=technical_reasons,
+        )
+
+        fundamentals_status = str(quality.get("fundamentals_status") or _block_status(fundamentals) or "").strip().lower()
+        fundamentals_runtime_status = _runtime_field_status(runtime_fundamentals)
+        fundamentals_freshness = _coverage_freshness(fundamentals, runtime_fundamentals)
+        fundamentals_fallback = _coverage_fallback_or_proxy(fundamentals, runtime_fundamentals)
+        fundamentals_reasons = _coverage_missing_reasons(
+            structured_status=fundamentals_status,
+            runtime_status=fundamentals_runtime_status,
+            freshness=fundamentals_freshness,
+            fallback_or_proxy=fundamentals_fallback,
+            missing_fields=fundamentals.get("missing_fields"),
+            timeout=_runtime_field_timeout(runtime_fundamentals),
+        )
+        frame["fundamentals"] = _coverage_frame_entry(
+            domain="fundamentals",
+            status=_coverage_status_from_signals(
+                has_evidence=bool(fundamentals),
+                structured_status=fundamentals_status,
+                runtime_status=fundamentals_runtime_status,
+                freshness=fundamentals_freshness,
+                fallback_or_proxy=fundamentals_fallback,
+                timeout=_runtime_field_timeout(runtime_fundamentals),
+                missing_reasons=fundamentals_reasons,
+            ),
+            source_tier=_coverage_source_tier(fundamentals, runtime_fundamentals),
+            source_authority=_coverage_source_authority(fundamentals, runtime_fundamentals),
+            freshness=fundamentals_freshness,
+            fallback_or_proxy=fundamentals_fallback,
+            missing_reasons=fundamentals_reasons,
+        )
+
+        earnings_status = str(quality.get("earnings_status") or _block_status(earnings) or "").strip().lower()
+        earnings_freshness = _coverage_freshness(earnings)
+        earnings_partial_flags = [
+            item for item in (earnings.get("summary_flags") or [])
+            if any(token in str(item).lower() for token in ("partial", "unavailable", "missing"))
+        ]
+        earnings_reasons = _coverage_missing_reasons(
+            structured_status=earnings_status,
+            runtime_status="unknown",
+            freshness=earnings_freshness,
+            fallback_or_proxy=False,
+            partial_flags=earnings_partial_flags,
+        )
+        frame["earnings"] = _coverage_frame_entry(
+            domain="earnings",
+            status=_coverage_status_from_signals(
+                has_evidence=bool(earnings),
+                structured_status=earnings_status,
+                runtime_status="unknown",
+                freshness=earnings_freshness,
+                fallback_or_proxy=False,
+                missing_reasons=earnings_reasons,
+            ),
+            source_tier=_coverage_source_tier(earnings),
+            source_authority=_coverage_source_authority(earnings),
+            freshness=earnings_freshness,
+            fallback_or_proxy=False,
+            missing_reasons=earnings_reasons,
+        )
+
+        news_structured_status = str(_block_status(sentiment) or "").strip().lower()
+        news_runtime_status = _runtime_field_status(runtime_news)
+        news_freshness = _coverage_freshness(sentiment, runtime_news)
+        news_fallback = _coverage_fallback_or_proxy(sentiment, runtime_news)
+        weak_relevance = str(sentiment.get("relevance_type") or "").strip().lower() == "low_relevance"
+        news_reasons = _coverage_missing_reasons(
+            structured_status=news_structured_status,
+            runtime_status=news_runtime_status,
+            freshness=news_freshness,
+            fallback_or_proxy=news_fallback,
+            weak_relevance=weak_relevance,
+            timeout=_runtime_field_timeout(runtime_news),
+        )
+        frame["news"] = _coverage_frame_entry(
+            domain="news",
+            status=_coverage_status_from_signals(
+                has_evidence=bool(sentiment) or bool(runtime_news),
+                structured_status=news_structured_status,
+                runtime_status=news_runtime_status,
+                freshness=news_freshness,
+                fallback_or_proxy=news_fallback,
+                timeout=_runtime_field_timeout(runtime_news),
+                missing_reasons=news_reasons,
+            ),
+            source_tier=_coverage_source_tier(sentiment, runtime_news),
+            source_authority=_coverage_source_authority(sentiment, runtime_news),
+            freshness=news_freshness,
+            fallback_or_proxy=news_fallback,
+            missing_reasons=news_reasons,
+        )
+
+        catalyst_structured_status = str(_block_status(catalyst) or news_structured_status or "").strip().lower()
+        catalyst_runtime_status = news_runtime_status
+        catalyst_freshness = _coverage_freshness(catalyst, sentiment, runtime_news)
+        catalyst_fallback = _coverage_fallback_or_proxy(catalyst, sentiment, runtime_news)
+        catalyst_has_evidence = bool(catalyst) or bool(sentiment.get("classified_items"))
+        catalyst_reasons = _coverage_missing_reasons(
+            structured_status=catalyst_structured_status,
+            runtime_status=catalyst_runtime_status,
+            freshness=catalyst_freshness,
+            fallback_or_proxy=catalyst_fallback,
+            weak_relevance=weak_relevance,
+            timeout=_runtime_field_timeout(runtime_news),
+        )
+        frame["catalysts"] = _coverage_frame_entry(
+            domain="catalysts",
+            status=_coverage_status_from_signals(
+                has_evidence=catalyst_has_evidence,
+                structured_status=catalyst_structured_status,
+                runtime_status=catalyst_runtime_status,
+                freshness=catalyst_freshness,
+                fallback_or_proxy=catalyst_fallback,
+                timeout=_runtime_field_timeout(runtime_news),
+                missing_reasons=catalyst_reasons,
+            ),
+            source_tier=_coverage_source_tier(catalyst, sentiment, runtime_news),
+            source_authority=_coverage_source_authority(catalyst, sentiment, runtime_news),
+            freshness=catalyst_freshness,
+            fallback_or_proxy=catalyst_fallback,
+            missing_reasons=catalyst_reasons,
+        )
+
+        sentiment_structured_status = str(quality.get("sentiment_status") or _block_status(sentiment) or "").strip().lower()
+        sentiment_runtime_status = _runtime_field_status(runtime_sentiment)
+        sentiment_freshness = _coverage_freshness(sentiment, runtime_sentiment)
+        sentiment_fallback = _coverage_fallback_or_proxy(sentiment, runtime_sentiment)
+        sentiment_reasons = _coverage_missing_reasons(
+            structured_status=sentiment_structured_status,
+            runtime_status=sentiment_runtime_status,
+            freshness=sentiment_freshness,
+            fallback_or_proxy=sentiment_fallback,
+            weak_relevance=weak_relevance,
+            timeout=_runtime_field_timeout(runtime_sentiment),
+        )
+        frame["sentiment"] = _coverage_frame_entry(
+            domain="sentiment",
+            status=_coverage_status_from_signals(
+                has_evidence=bool(sentiment) or bool(runtime_sentiment),
+                structured_status=sentiment_structured_status,
+                runtime_status=sentiment_runtime_status,
+                freshness=sentiment_freshness,
+                fallback_or_proxy=sentiment_fallback,
+                timeout=_runtime_field_timeout(runtime_sentiment),
+                missing_reasons=sentiment_reasons,
+            ),
+            source_tier=_coverage_source_tier(sentiment, runtime_sentiment),
+            source_authority=_coverage_source_authority(sentiment, runtime_sentiment),
+            freshness=sentiment_freshness,
+            fallback_or_proxy=sentiment_fallback,
+            missing_reasons=sentiment_reasons,
+        )
+
+        valuation_has_metrics = _has_any_metric(fundamentals.get("normalized"), ("trailingPE", "forwardPE", "priceToBook"))
+        valuation_reasons = _coverage_missing_reasons(
+            structured_status=fundamentals_status,
+            runtime_status=fundamentals_runtime_status,
+            freshness=fundamentals_freshness,
+            fallback_or_proxy=fundamentals_fallback,
+            missing_fields=None if valuation_has_metrics else ["valuation_metrics_missing"],
+            timeout=_runtime_field_timeout(runtime_fundamentals),
+        )
+        frame["valuation"] = _coverage_frame_entry(
+            domain="valuation",
+            status=_coverage_status_from_signals(
+                has_evidence=valuation_has_metrics,
+                structured_status=fundamentals_status,
+                runtime_status=fundamentals_runtime_status,
+                freshness=fundamentals_freshness,
+                fallback_or_proxy=fundamentals_fallback,
+                timeout=_runtime_field_timeout(runtime_fundamentals),
+                missing_reasons=valuation_reasons,
+            ),
+            source_tier=_coverage_source_tier(fundamentals, runtime_fundamentals),
+            source_authority=_coverage_source_authority(fundamentals, runtime_fundamentals),
+            freshness=fundamentals_freshness,
+            fallback_or_proxy=fundamentals_fallback,
+            missing_reasons=valuation_reasons,
+        )
+
+        liquidity_has_evidence = any(
+            realtime_context.get(key) not in (None, "", "0", 0, "0.0")
+            for key in ("volume_ratio", "turnover_rate")
+        )
+        liquidity_freshness = _coverage_freshness(realtime_context, runtime_market)
+        liquidity_fallback = _coverage_fallback_or_proxy(realtime_context, runtime_market)
+        liquidity_reasons = _coverage_missing_reasons(
+            structured_status="ok" if liquidity_has_evidence else "missing",
+            runtime_status="unknown",
+            freshness=liquidity_freshness,
+            fallback_or_proxy=liquidity_fallback,
+            missing_fields=None if liquidity_has_evidence else ["liquidity_metrics_missing"],
+        )
+        frame["liquidityContext"] = _coverage_frame_entry(
+            domain="liquidityContext",
+            status=_coverage_status_from_signals(
+                has_evidence=liquidity_has_evidence,
+                structured_status="ok" if liquidity_has_evidence else "missing",
+                runtime_status="unknown",
+                freshness=liquidity_freshness,
+                fallback_or_proxy=liquidity_fallback,
+                missing_reasons=liquidity_reasons,
+            ),
+            source_tier=_coverage_source_tier(realtime_context, runtime_market),
+            source_authority=_coverage_source_authority(realtime_context, runtime_market),
+            freshness=liquidity_freshness,
+            fallback_or_proxy=liquidity_fallback,
+            missing_reasons=liquidity_reasons,
+        )
+
+        macro_has_evidence = any(
+            key in market_context
+            for key in ("macro", "regime", "breadth", "liquidity", "macroContext")
+        )
+        macro_freshness = _coverage_freshness(market_context)
+        macro_fallback = _coverage_fallback_or_proxy(market_context)
+        macro_reasons = _coverage_missing_reasons(
+            structured_status="ok" if macro_has_evidence else "missing",
+            runtime_status="unknown",
+            freshness=macro_freshness,
+            fallback_or_proxy=macro_fallback,
+            coverage_assembled=macro_has_evidence,
+        )
+        frame["macroContext"] = _coverage_frame_entry(
+            domain="macroContext",
+            status=_coverage_status_from_signals(
+                has_evidence=macro_has_evidence,
+                structured_status="ok" if macro_has_evidence else "missing",
+                runtime_status="unknown",
+                freshness=macro_freshness,
+                fallback_or_proxy=macro_fallback,
+                missing_reasons=macro_reasons,
+            ),
+            source_tier=_coverage_source_tier(market_context),
+            source_authority=_coverage_source_authority(market_context),
+            freshness=macro_freshness,
+            fallback_or_proxy=macro_fallback,
+            missing_reasons=macro_reasons,
+        )
+
+        return {domain: frame[domain] for domain in _EVIDENCE_FRAME_DOMAIN_ORDER}
 
     @staticmethod
     def _normalize_action(value: Any) -> str:
@@ -1050,6 +1649,8 @@ class AnalysisService:
         }
         if isinstance(report.get("researchReadiness"), dict):
             response["researchReadiness"] = report["researchReadiness"]
+        if isinstance(report.get("evidenceCoverageFrame"), dict):
+            response["evidenceCoverageFrame"] = report["evidenceCoverageFrame"]
         return response
 
     @staticmethod

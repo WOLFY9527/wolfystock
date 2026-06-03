@@ -37,6 +37,21 @@ def _result_with_quality(
             "freshness": "fresh",
             "sourceAuthorityAllowed": True,
             "scoreContributionAllowed": True,
+            "normalized": {
+                "trailingPE": 24.8,
+                "forwardPE": 22.1,
+                "priceToBook": 8.7,
+            },
+        },
+        "earnings_analysis": {
+            "status": "ok",
+            "field_sources": {"quarterly_series": "fmp_income_statement"},
+            "summary_flags": ["quarterly_series_available"],
+            "narrative_insights": ["盈利趋势稳定。"],
+            "sourceTier": "score_grade",
+            "freshness": "fresh",
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
         },
         "sentiment_analysis": {
             "status": "ok",
@@ -57,6 +72,19 @@ def _result_with_quality(
             "freshness": "fresh",
             "sourceAuthorityAllowed": True,
             "scoreContributionAllowed": True,
+            "relevance_type": "company_specific",
+            "classified_items": [{"title": "Apple launches new hardware"}],
+        },
+        "realtime_context": {
+            "price": 188.2,
+            "volume_ratio": 1.24,
+            "turnover_rate": 0.021,
+            "source": "polygon_us_grouped_daily",
+            "freshness": "fresh",
+        },
+        "market_context": {
+            "today": {"close": 188.2, "ma20": 184.0},
+            "yesterday": {"close": 186.4},
         },
         "data_quality_report": data_quality_report or {
             "dataQualityTier": "decision_grade",
@@ -207,3 +235,198 @@ def test_home_analysis_stale_fallback_proxy_inputs_cap_to_observe_only() -> None
     assert "public_proxy_evidence" in readiness["blockingReasons"]
     assert "stale_evidence" in readiness["blockingReasons"]
     assert "fallback_evidence" in readiness["blockingReasons"]
+
+
+def test_home_analysis_response_adds_evidence_coverage_frame_across_public_payloads() -> None:
+    response = _report_for(_result_with_quality())
+
+    frame = response["evidenceCoverageFrame"]
+
+    assert response["report"]["evidenceCoverageFrame"] == frame
+    assert response["report"]["meta"]["evidenceCoverageFrame"] == frame
+    assert response["report"]["details"]["analysis_result"]["evidenceCoverageFrame"] == frame
+    assert set(frame) == {
+        "priceHistory",
+        "technicals",
+        "fundamentals",
+        "earnings",
+        "news",
+        "catalysts",
+        "sentiment",
+        "valuation",
+        "liquidityContext",
+        "macroContext",
+    }
+    assert frame["priceHistory"]["status"] == "available"
+    assert frame["technicals"]["status"] == "available"
+    assert frame["fundamentals"]["status"] == "available"
+    assert frame["earnings"]["status"] == "available"
+    assert frame["news"]["status"] == "available"
+    assert frame["catalysts"]["status"] == "available"
+    assert frame["sentiment"]["status"] == "available"
+    assert frame["valuation"]["status"] == "available"
+    assert frame["liquidityContext"]["status"] == "available"
+    assert frame["macroContext"]["status"] in {"missing", "degraded"}
+
+
+def test_home_evidence_coverage_frame_marks_orcl_like_partial_domains_truthfully() -> None:
+    result = _result_with_quality(
+        code="ORCL",
+        data_quality_report={
+            "dataQualityTier": "analysis_grade",
+            "requiredAvailable": True,
+            "confidenceCap": 70,
+            "importantDomainsMissing": ["fundamentals", "news", "catalyst_news_event"],
+            "scoreSuppressed": False,
+            "stanceGuardrail": "observe_only",
+            "reasonCodes": ["important_data_missing"],
+        },
+        structured_overrides={
+            "fundamentals": {
+                "status": "partial",
+                "source": "fmp_fallback_chain",
+                "sourceType": "official_public",
+                "sourceTier": "score_grade",
+                "freshness": "delayed",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": False,
+                "missing_fields": ["netIncome", "freeCashflow"],
+                "normalized": {"trailingPE": 18.0},
+            },
+            "earnings_analysis": {
+                "status": "partial",
+                "summary_flags": ["earnings_partial"],
+                "field_sources": {},
+            },
+            "sentiment_analysis": {
+                "status": "weak",
+                "source": "gnews",
+                "sourceType": "public_api",
+                "freshness": "delayed",
+                "classified_items": [],
+                "relevance_type": "low_relevance",
+            },
+            "catalyst": {"status": "missing", "source": None},
+        },
+        runtime_data={
+            "market": {"status": "ok", "truth": "actual", "source": "polygon_us_grouped_daily", "fallback_occurred": False},
+            "fundamentals": {"status": "partial", "truth": "actual", "source": "fmp", "fallback_occurred": True},
+            "news": {"status": "partial", "truth": "actual", "source": "gnews", "fallback_occurred": True},
+            "sentiment": {"status": "partial", "truth": "actual", "source": "gnews", "fallback_occurred": True},
+        },
+    )
+
+    frame = _report_for(result)["evidenceCoverageFrame"]
+
+    assert frame["priceHistory"]["status"] == "available"
+    assert frame["technicals"]["status"] == "available"
+    assert frame["fundamentals"]["status"] == "degraded"
+    assert frame["earnings"]["status"] == "degraded"
+    assert frame["news"]["status"] == "degraded"
+    assert frame["catalysts"]["status"] in {"degraded", "missing"}
+    assert frame["sentiment"]["status"] == "degraded"
+    assert frame["valuation"]["status"] == "degraded"
+
+
+def test_home_evidence_coverage_frame_marks_missing_fundamentals_news_and_catalysts() -> None:
+    result = _result_with_quality(
+        data_quality_report={
+            "dataQualityTier": "partial",
+            "requiredAvailable": True,
+            "confidenceCap": 65,
+            "importantDomainsMissing": ["fundamentals", "catalyst_news_event"],
+            "optionalMissing": ["news", "sentiment", "detailed_fundamentals"],
+            "scoreSuppressed": False,
+            "stanceGuardrail": "observe_only",
+        },
+        structured_overrides={
+            "fundamentals": {"status": "missing", "source": None, "normalized": {}},
+            "earnings_analysis": {"status": "partial", "field_sources": {}, "summary_flags": ["earnings_data_unavailable"]},
+            "sentiment_analysis": {"status": "missing", "source": None, "classified_items": []},
+            "catalyst": {"status": "missing", "source": None},
+        },
+        runtime_data={
+            "market": {"status": "ok", "truth": "actual", "source": "polygon_us_grouped_daily", "fallback_occurred": False},
+            "fundamentals": {"status": "missing", "truth": "unavailable", "source": None, "fallback_occurred": False},
+            "news": {"status": "missing", "truth": "unavailable", "source": None, "fallback_occurred": False},
+            "sentiment": {"status": "missing", "truth": "unavailable", "source": None, "fallback_occurred": False},
+        },
+    )
+
+    frame = _report_for(result)["evidenceCoverageFrame"]
+
+    assert frame["fundamentals"]["status"] == "missing"
+    assert frame["news"]["status"] == "missing"
+    assert frame["catalysts"]["status"] == "missing"
+    assert frame["fundamentals"]["missingReasons"]
+    assert frame["news"]["missingReasons"]
+    assert frame["catalysts"]["missingReasons"]
+
+
+def test_home_evidence_coverage_frame_marks_provider_timeout_and_fallback_without_raw_leakage() -> None:
+    result = _result_with_quality(
+        data_quality_report={
+            "dataQualityTier": "analysis_grade",
+            "requiredAvailable": False,
+            "confidenceCap": 55,
+            "missingRequiredDomains": ["news", "catalyst_news_event"],
+            "scoreSuppressed": True,
+            "scoreSuppressedReason": "required_evidence_missing",
+            "reasonCodes": ["required_data_missing", "stale_required_source"],
+            "stanceGuardrail": "no_score",
+        },
+        structured_overrides={
+            "fundamentals": {
+                "status": "partial",
+                "source": "fallback_cache",
+                "sourceType": "fallback",
+                "sourceTier": "score_grade",
+                "freshness": "fallback",
+                "isFallback": True,
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": False,
+                "normalized": {"trailingPE": 19.2},
+            },
+            "sentiment_analysis": {
+                "status": "weak",
+                "source": "gnews",
+                "sourceType": "public_api",
+                "freshness": "stale",
+                "classified_items": [],
+                "relevance_type": "low_relevance",
+            },
+            "catalyst": {"status": "missing", "source": None},
+        },
+        runtime_data={
+            "market": {"status": "ok", "truth": "actual", "source": "polygon_us_grouped_daily", "fallback_occurred": False},
+            "fundamentals": {"status": "partial", "truth": "actual", "source": "fallback_cache", "fallback_occurred": True},
+            "news": {
+                "status": "failed",
+                "truth": "unavailable",
+                "source": None,
+                "fallback_occurred": False,
+                "final_reason": "finnhub timeout after 5s via cache_router stage=hot_path",
+            },
+            "sentiment": {
+                "status": "failed",
+                "truth": "unavailable",
+                "source": None,
+                "fallback_occurred": False,
+                "final_reason": "traceback token=secret-value",
+            },
+        },
+    )
+
+    frame = _report_for(result)["evidenceCoverageFrame"]
+    serialized = str(frame).lower()
+
+    assert frame["fundamentals"]["status"] == "degraded"
+    assert frame["fundamentals"]["fallbackOrProxy"] is True
+    assert frame["news"]["status"] == "blocked"
+    assert frame["sentiment"]["status"] == "blocked"
+    assert "provider_timeout" in frame["news"]["missingReasons"]
+    assert "fallback_proxy_evidence" in frame["fundamentals"]["missingReasons"]
+    assert "timeout after 5s" not in serialized
+    assert "cache_router" not in serialized
+    assert "traceback" not in serialized
+    assert "secret-value" not in serialized
