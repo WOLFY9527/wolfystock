@@ -215,6 +215,10 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     render(<AdminProviderCircuitDiagnosticsPage />);
 
     const actionList = await screen.findByTestId('provider-circuit-action-list');
+    await waitFor(() => {
+      expect(within(actionList).getAllByRole('listitem')).toHaveLength(4);
+    });
+    expect(within(actionList).queryByText('正在根据现有熔断、SLA、配额与探测快照生成动作队列。')).not.toBeInTheDocument();
     const rows = within(actionList).getAllByRole('listitem');
     expect(rows).toHaveLength(4);
     expect(within(rows[0]).getByText('finnhub 熔断打开')).toBeInTheDocument();
