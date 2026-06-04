@@ -54,6 +54,12 @@ const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] borde
 const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
 const SECTION_HEADER_CLASS = 'mt-8 mb-3 border-b border-white/10 pb-2 text-xs font-bold uppercase tracking-[0.2em] text-white/30 first:mt-0';
 const ROW_CLASS = 'flex items-center justify-between gap-4 border-b border-white/5 py-3 transition-colors hover:bg-white/[0.02]';
+const MODEL_SERVICES_LIBRARY_TITLE = '模型服务';
+const MODEL_SERVICES_LIST_TITLE = '服务清单';
+const CONFIGURED_MODEL_SERVICES_LABEL = '已接入模型服务';
+const TASK_ROUTE_STATUS_LABEL = '任务路由状态';
+const OPEN_SERVICE_CONFIG_LABEL = '打开服务配置';
+const SAVE_SERVICE_CONFIG_LABEL = '保存服务配置';
 
 const PROVIDER_LIBRARY_GROUPS: Array<{
   key: string;
@@ -62,12 +68,12 @@ const PROVIDER_LIBRARY_GROUPS: Array<{
 }> = [
   {
     key: 'llm',
-    title: '模型供应商',
+    title: '模型服务接入',
     keys: ['gemini', 'aihubmix', 'openai', 'anthropic', 'deepseek', 'zhipu'],
   },
   {
     key: 'embeddings',
-    title: '向量模型',
+    title: '向量服务',
     keys: [],
   },
 ];
@@ -193,10 +199,10 @@ const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
             </div>
           ))}
           <div className="px-1 pt-1 text-xs text-secondary-text">
-            {t('settings.aiConfiguredProviders')}: {configuredProvidersText}
+            {CONFIGURED_MODEL_SERVICES_LABEL}: {configuredProvidersText}
           </div>
           <div className="px-1 text-xs text-secondary-text">
-            {t('settings.aiRouteStatusLabel')}: {routeStatus}
+            {TASK_ROUTE_STATUS_LABEL}: {routeStatus}
           </div>
         </div>
         {aiRoutingError ? (
@@ -207,8 +213,8 @@ const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
       </div>
 
       <div className="settings-surface rounded-xl border settings-border p-4" data-testid="ai-provider-quick-section">
-        <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">{t('settings.aiHierarchyProviderTitle')}</p>
-        <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.aiDirectProviderTitle')}</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">{MODEL_SERVICES_LIBRARY_TITLE}</p>
+        <p className="mt-1 text-sm font-semibold text-foreground">{MODEL_SERVICES_LIST_TITLE}</p>
         <div className="mt-3 flex flex-col" data-testid="ai-provider-library-list">
           {groupedProviders(providerCards).map((group) => (
             <section key={group.key} aria-label={group.title}>
@@ -262,7 +268,7 @@ const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
                         onClick={() => onOpenQuickProviderDrawer(provider.key)}
                         disabled={adminLocked || isSaving}
                       >
-                        {t('settings.aiProviderQuickSetupOpen')}
+                        {OPEN_SERVICE_CONFIG_LABEL}
                       </Button>
                       <Button
                         type="button"
@@ -289,7 +295,7 @@ const AIProviderConfig: React.FC<AIProviderConfigProps> = ({
             onClick={onSaveDirectProviderKeys}
             disabled={adminLocked || isSaving}
           >
-            {t('settings.aiDirectProviderSave')}
+            {SAVE_SERVICE_CONFIG_LABEL}
           </Button>
         </div>
       </div>

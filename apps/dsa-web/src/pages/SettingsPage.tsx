@@ -640,12 +640,18 @@ const SettingsPage: React.FC = () => {
   const rawFieldsToggleLabel = activeCategory === 'ai_model'
     ? t('settings.aiRawFieldsToggle')
     : t('settings.rawFieldsToggle');
+  const operationsOverviewNavTitle = language === 'en' ? 'Operations Overview' : '运维总览';
+  const operationsOverviewNavDesc = language === 'en'
+    ? 'Operator-safe summary for global health, risk, and next actions.'
+    : '面向运维的全局健康、风险与下一步摘要。';
+  const operationsCenterTitle = language === 'en' ? 'System Operations Center' : '系统运维中心';
+  const operationsServicesMetricLabel = language === 'en' ? 'Model services' : '模型服务';
 
   const panelNavItems = ([
     {
       domain: 'overview' as const,
-      title: t('settings.controlPlaneTitle'),
-      desc: t('settings.controlPlaneDesc'),
+      title: operationsOverviewNavTitle,
+      desc: operationsOverviewNavDesc,
     },
     {
       domain: 'ai_models' as const,
@@ -1355,19 +1361,6 @@ const SettingsPage: React.FC = () => {
     }
     return `${providerLabel(normalizedGateway)} / ${normalizedModel}`;
   };
-  const askStockRouteSummary = (() => {
-    if (agentDisabled) {
-      return t('settings.aiAskStockRouteDisabled');
-    }
-    if (agentOverrideModel) {
-      const overrideGateway = parseGatewayFromModel(agentOverrideModel) || aiSummary.primaryChannel;
-      const route = overrideGateway ? formatRouteLine(overrideGateway, agentOverrideModel) : agentOverrideModel;
-      return t('settings.aiAskStockRouteDedicated', { model: agentOverrideModel, route });
-    }
-    return t('settings.aiAskStockRouteShared', {
-      route: formatRouteLine(aiSummary.primaryChannel, aiSummary.primaryModel),
-    });
-  })();
   const askStockRouteMode = agentDisabled ? 'disabled' : (agentOverrideModel ? 'dedicated' : 'shared');
   const askStockEffectiveModel = agentDisabled ? '' : (agentOverrideModel || aiSummary.primaryModel);
   const askStockEffectiveGateway = agentDisabled
@@ -2083,8 +2076,6 @@ const SettingsPage: React.FC = () => {
   const providerReadinessByGateway = new Map(aiGatewayReadiness.map((provider) => [provider.gateway, provider]));
   const quickProviderDrawerItem = PROVIDER_LIBRARY_ITEMS.find((provider) => provider.key === quickProviderDrawerProvider) || null;
 
-  const primarySummaryModel = aiSummary.primaryChannel ? aiSummary.primaryModel : '';
-  const backupSummaryModel = aiSummary.backupChannel ? aiSummary.backupModel : '';
   const primaryPresetOptions = primaryGatewayModels.slice(0, 12);
   const backupPresetOptions = backupGatewayModels
     .filter((model) => model !== routingDraft.ai.primaryModel)
@@ -2124,15 +2115,35 @@ const SettingsPage: React.FC = () => {
   const configuredProvidersText = aiSummary.configuredProviders.length
     ? aiSummary.configuredProviders.map(([name, count]) => `${providerLabel(name)} (${count})`).join(' · ')
     : t('settings.notConfigured');
+  const analysisRouteSummaryLabel = aiSummary.primaryChannel
+    ? (language === 'en' ? 'Primary model service configured' : '主模型服务已配置')
+    : t('settings.notConfigured');
+  const analysisBackupSummaryLabel = aiSummary.backupChannel
+    ? (language === 'en' ? 'Backup model service available' : '备用模型服务可用')
+    : '';
+  const askStockRouteSurfaceLabel = agentDisabled
+    ? (language === 'en' ? 'Ask-Stock task disabled' : '问股任务当前停用')
+    : agentOverrideModel
+      ? (language === 'en' ? 'Ask-Stock uses an independent model service' : '问股任务使用独立模型服务')
+      : (language === 'en' ? 'Ask-Stock follows the analysis service' : '问股任务沿用分析服务');
+  const askStockRouteSurfaceSummary = agentDisabled
+    ? (language === 'en' ? 'Ask-Stock remains off until the task is re-enabled.' : '问股任务保持停用，待重新启用后再接入服务。')
+    : agentOverrideModel
+      ? (language === 'en' ? 'Independent service path is active for Ask-Stock.' : '问股任务已启用独立服务路径。')
+      : (language === 'en' ? 'Ask-Stock currently inherits the analysis service path.' : '问股任务当前继承分析服务路径。');
+  const backtestRouteSurfaceLabel = backtestOverrideModel
+    ? (language === 'en' ? 'Backtesting uses an independent model service' : '回测任务使用独立模型服务')
+    : (language === 'en' ? 'Backtesting follows the analysis service' : '回测任务沿用分析服务');
+  const backtestRouteSurfaceSummary = backtestOverrideModel
+    ? (language === 'en' ? 'Independent service path is active for backtesting.' : '回测任务已启用独立服务路径。')
+    : (language === 'en' ? 'Backtesting currently inherits the analysis service path.' : '回测任务当前继承分析服务路径。');
   const aiRouteRows = ([
     {
       key: 'analysis',
       title: t('settings.aiTaskName.analysis'),
       routeMode: t(`settings.aiRouteModelMode.${aiRouteModelMode.primary}`),
-      route: formatRouteLine(aiSummary.primaryChannel, primarySummaryModel),
-      backup: aiSummary.backupChannel
-        ? formatRouteLine(aiSummary.backupChannel, backupSummaryModel)
-        : '',
+      route: analysisRouteSummaryLabel,
+      backup: analysisBackupSummaryLabel,
       summary: `${t('settings.aiRouteStatusLabel')}: ${t(`settings.aiRouteStatus.${aiSummary.routeStatus}`)}`,
       actionLabel: t('settings.aiTaskEditAction'),
       highlighted: true,
@@ -2141,9 +2152,9 @@ const SettingsPage: React.FC = () => {
       key: 'stock_chat',
       title: t('settings.aiTaskName.stock_chat'),
       routeMode: t(`settings.aiAskStockRouteMode.${askStockRouteMode}`),
-      route: formatRouteLine(askStockEffectiveGateway, askStockEffectiveModel),
+      route: askStockRouteSurfaceLabel,
       backup: '',
-      summary: askStockRouteSummary,
+      summary: askStockRouteSurfaceSummary,
       actionLabel: t('settings.aiTaskEditAction'),
       highlighted: false,
     },
@@ -2151,16 +2162,9 @@ const SettingsPage: React.FC = () => {
       key: 'backtest',
       title: t('settings.aiTaskName.backtest'),
       routeMode: t(`settings.aiTaskRouteMode.${backtestRouteMode}`),
-      route: formatRouteLine(backtestEffectiveGateway, backtestEffectiveModel),
+      route: backtestRouteSurfaceLabel,
       backup: '',
-      summary: backtestOverrideModel
-        ? t('settings.aiBacktestRouteDedicatedSummary', {
-          model: backtestOverrideModel,
-          route: formatRouteLine(backtestEffectiveGateway, backtestOverrideModel),
-        })
-        : t('settings.aiBacktestRouteSharedSummary', {
-          route: formatRouteLine(aiSummary.primaryChannel, aiSummary.primaryModel),
-        }),
+      summary: backtestRouteSurfaceSummary,
       actionLabel: t('settings.aiTaskEditAction'),
       highlighted: false,
     },
@@ -2307,7 +2311,7 @@ const SettingsPage: React.FC = () => {
         >
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-1">
-              <p className="mb-4 px-3 text-xs font-bold uppercase tracking-[0.22em] text-white/40">{t('settings.title')}</p>
+              <p className="mb-4 px-3 text-xs font-bold uppercase tracking-[0.22em] text-white/40">{operationsCenterTitle}</p>
               {panelNavItems.map((panel) => {
                 const nav = panelNavItems.find((item) => item.domain === panel.domain);
                 if (!nav) {
@@ -3499,14 +3503,14 @@ const SettingsPage: React.FC = () => {
       <PageBriefDrawer
         isOpen={isBriefDrawerOpen}
         onClose={() => setIsBriefDrawerOpen(false)}
-        title={t('settings.title')}
+        title={operationsCenterTitle}
         testId="settings-bento-drawer"
         summary={language === 'en'
-          ? 'This control plane now shares the Bento shell with the rest of the product while preserving the same admin-only routing, save flow, and provider drawers.'
-          : '这个控制面现在与产品其他页面共用 Bento 外壳，但管理员路由、保存流程和各类 provider 抽屉都保持不变。'}
+          ? 'This operations center now shares the Bento shell with the rest of the product while preserving the same admin-only routing, save flow, and service drawers.'
+          : '这个运维中心现在与产品其他页面共用 Bento 外壳，但管理员路由、保存流程和各类服务抽屉都保持不变。'}
         metrics={[
           {
-            label: t('settings.globalSummaryProviders'),
+            label: operationsServicesMetricLabel,
             value: aiSummary.configuredProviders,
             tone: Number(aiSummary.configuredProviders) > 0 ? 'bullish' : 'neutral',
           },
@@ -3526,8 +3530,8 @@ const SettingsPage: React.FC = () => {
         ]}
         bullets={[
           language === 'en'
-            ? 'The hero strip summarizes provider readiness, usable data sources, active domain, and dirty state before you scroll into the control plane.'
-            : 'Hero strip 先总结 provider 就绪度、可用数据源、当前域和脏状态，再进入控制面细节。',
+            ? 'The hero strip summarizes model-service readiness, usable data sources, active domain, and dirty state before you scroll into the operations overview.'
+            : 'Hero strip 先总结模型服务就绪度、可用数据源、当前域和脏状态，再进入运维总览细节。',
           language === 'en'
             ? 'All existing management drawers remain intact, so this pass does not rewrite admin workflows.'
             : '原有管理抽屉全部保留，因此这次改动没有重写管理员工作流。',

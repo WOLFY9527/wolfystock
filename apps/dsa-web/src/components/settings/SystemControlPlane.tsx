@@ -125,6 +125,9 @@ type SystemPrioritySettingsProps = {
   dataAccessCards: SystemHealthStatusCard[];
   adminEntryCards: SystemHealthStatusCard[];
   onOpenAdminLogs: () => void;
+  priorityGroupingSummary: string;
+  dataSourceStatusTitle: string;
+  dataSourceStatusDesc: string;
 };
 
 const SystemPrioritySettings: React.FC<SystemPrioritySettingsProps> = ({
@@ -133,6 +136,9 @@ const SystemPrioritySettings: React.FC<SystemPrioritySettingsProps> = ({
   dataAccessCards,
   adminEntryCards,
   onOpenAdminLogs,
+  priorityGroupingSummary,
+  dataSourceStatusTitle,
+  dataSourceStatusDesc,
 }) => (
   <section
     data-testid="system-priority-settings"
@@ -141,7 +147,7 @@ const SystemPrioritySettings: React.FC<SystemPrioritySettingsProps> = ({
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">风险与操作意图</p>
-        <p className="mt-1 text-sm font-semibold text-foreground">按 WolfyStock 运维意图分组，不把配置键或探测按钮铺在首屏</p>
+        <p className="mt-1 text-sm font-semibold text-foreground">{priorityGroupingSummary}</p>
       </div>
       <span className={GHOST_TAG_CLASS}>IA 分组</span>
     </div>
@@ -160,8 +166,8 @@ const SystemPrioritySettings: React.FC<SystemPrioritySettingsProps> = ({
       <section data-testid="system-data-probe-boundary" className={INTENT_PANEL_CLASS}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-white">数据接入与探测</h3>
-            <p className="mt-1 text-xs leading-5 text-white/45">数据路径和 Provider 探测只给出状态；远端校验仍需进入数据源详情显式触发。</p>
+            <h3 className="text-sm font-semibold text-white">{dataSourceStatusTitle}</h3>
+            <p className="mt-1 text-xs leading-5 text-white/45">{dataSourceStatusDesc}</p>
           </div>
           <span className={GHOST_TAG_CLASS}>探测二级</span>
         </div>
@@ -231,11 +237,17 @@ const RiskBoundaryStrip: React.FC<RiskBoundaryStripProps> = ({ cards }) => (
 type DeveloperCompatibilityDisclosureProps = {
   compatibilityCards: SystemHealthStatusCard[];
   duckdbConfigEnabledState: DuckDBConfigState;
+  compatibilitySummaryTitle: string;
+  compatibilitySummaryDesc: string;
+  compatibilityStatusEyebrow: string;
 };
 
 const DeveloperCompatibilityDisclosure: React.FC<DeveloperCompatibilityDisclosureProps> = ({
   compatibilityCards,
   duckdbConfigEnabledState,
+  compatibilitySummaryTitle,
+  compatibilitySummaryDesc,
+  compatibilityStatusEyebrow,
 }) => (
   <details
     data-testid="system-duckdb-disclosure"
@@ -243,8 +255,8 @@ const DeveloperCompatibilityDisclosure: React.FC<DeveloperCompatibilityDisclosur
   >
     <summary className={DISCLOSURE_SUMMARY_CLASS}>
       <span className="min-w-0">
-        <span className="block text-sm font-semibold text-white">开发者 / 兼容层</span>
-        <span className="mt-1 block text-xs leading-5 text-white/48">DuckDB、原始字段、兼容键和深层诊断默认收起，不作为首屏焦点。</span>
+        <span className="block text-sm font-semibold text-white">{compatibilitySummaryTitle}</span>
+        <span className="mt-1 block text-xs leading-5 text-white/48">{compatibilitySummaryDesc}</span>
       </span>
       <span className={GHOST_TAG_CLASS}>深层配置</span>
     </summary>
@@ -253,7 +265,7 @@ const DeveloperCompatibilityDisclosure: React.FC<DeveloperCompatibilityDisclosur
         <section className="rounded-2xl border border-white/5 bg-black/20 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">兼容层状态</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">{compatibilityStatusEyebrow}</p>
               <p className="mt-1 text-sm font-semibold text-white">可选依赖和深层引擎只做状态提示</p>
             </div>
             <span className={GHOST_TAG_CLASS}>可选</span>
@@ -283,6 +295,37 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
   const healthCard = summaryCards.find((item) => item.key === 'health');
   const healthTone = describeSettingsSystemHealthStatus(healthCard?.status || 'unknown').tone;
   const introTone = healthTone === 'success' ? 'ready' : healthTone === 'danger' ? 'risk' : 'watch';
+  const isEnglish = t('settings.controlPlaneTitle') === 'Global Control Plane Overview';
+  const copy = {
+    operationsCenterEyebrow: isEnglish ? 'System Operations Center' : '系统运维中心',
+    operationsOverviewTitle: isEnglish ? 'Operations Overview' : '运维总览',
+    operationsContextTitle: isEnglish ? 'Runtime Context' : '运行上下文',
+    compatibilitySummaryTitle: isEnglish ? 'Compatibility Summary' : '配置兼容摘要',
+    dataSourceStatusTitle: isEnglish ? 'Data Source Status' : '数据源状态',
+    dataSourceStatusDesc: isEnglish
+      ? 'Data paths and remote checks only expose status here; open data-source details when deeper diagnostics are needed.'
+      : '数据路径和远端校验只给出状态；需要深层诊断时再进入数据源详情显式触发。',
+    compatibilitySummaryDesc: isEnglish
+      ? 'DuckDB, config keys, diagnostic summaries, and environment context stay collapsed by default instead of taking first-viewport focus.'
+      : 'DuckDB、配置键、诊断摘要和环境上下文默认收起，不作为首屏焦点。',
+    compatibilityStatusEyebrow: isEnglish ? 'Compatibility status' : '兼容摘要状态',
+    introSummary: isEnglish
+      ? `Can the system operate safely right now: ${healthCard?.value || 'Awaiting snapshot'}. Start from the operations overview, then enter a specific configuration group.`
+      : `系统当前能否安全运行：${healthCard?.value || '等待快照'}。先看运维总览，再进入具体配置组。`,
+    introNextStep: isEnglish
+      ? 'Prioritize risk items first. Credentials, data-source status, and admin entry stay in the first viewport; compatibility summaries, remote checks, reloads, and dangerous actions remain secondary.'
+      : '优先处理风险项；安全凭证、数据源状态、管理入口在首屏分区呈现，配置兼容摘要、远端校验、重载和危险动作保持二级。',
+    activeTitle: isEnglish ? 'You are in the system operations center' : '当前已进入系统运维中心',
+    guidedDisclosureSummary: isEnglish
+      ? 'Technical detail: config keys, diagnostic summaries, and environment context stay collapsed by default and open only for admin troubleshooting.'
+      : '技术细节：配置键、诊断摘要和环境上下文默认收起，仅供管理员排障时展开。',
+    guidedDisclosureBeginner: isEnglish
+      ? 'Start with system health and the main settings groups during normal operation. This area exists for troubleshooting and compatibility checks, not for deciding whether routine configuration should be saved.'
+      : '日常操作先看系统健康和重要设置组；这里主要帮助排障和兼容核对，不用于判断是否保存常规配置。',
+    priorityGroupingSummary: isEnglish
+      ? 'Grouped by WolfyStock operator intent so config keys and probe controls do not dominate the first viewport.'
+      : '按 WolfyStock 运维意图分组，不把配置键或探测按钮铺在首屏',
+  };
   const attentionCards = statusCards.filter((card) => (
     card.status === 'attention'
     || card.status === 'not_configured'
@@ -314,9 +357,9 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
     <section className="space-y-5" aria-labelledby="system-control-plane-heading">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100/55">WolfyStock control plane</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100/55">{copy.operationsCenterEyebrow}</p>
           <h2 id="system-control-plane-heading" className="mt-1 text-xl font-semibold tracking-normal text-white">
-            {t('settings.controlPlaneTitle')}
+            {copy.operationsOverviewTitle}
           </h2>
         </div>
         <span className={GHOST_TAG_CLASS}>{t('settings.adminSurfaceGlobalScope')}</span>
@@ -329,8 +372,8 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
         <div className="min-w-0 space-y-5">
           <SectionIntro
             purpose="当前状态"
-            summary={`系统当前能否安全运行：${healthCard?.value || '等待快照'}。先看控制面结论，再进入具体配置组。`}
-            nextStep="优先处理风险项；安全凭证、数据接入、管理入口在首屏分区呈现，原始字段、Provider 探测、重载和危险动作保持二级。"
+            summary={copy.introSummary}
+            nextStep={copy.introNextStep}
             status={{ label: String(healthCard?.value || '等待配置快照'), tone: introTone }}
           />
 
@@ -342,6 +385,9 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
             dataAccessCards={dataAccessCards}
             adminEntryCards={adminEntryCards}
             onOpenAdminLogs={onOpenAdminLogs}
+            priorityGroupingSummary={copy.priorityGroupingSummary}
+            dataSourceStatusTitle={copy.dataSourceStatusTitle}
+            dataSourceStatusDesc={copy.dataSourceStatusDesc}
           />
         </div>
 
@@ -358,7 +404,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
           />
           <div data-testid="settings-bento-hero">
             <DensityRail
-              title="控制面上下文"
+              title={copy.operationsContextTitle}
               items={railItems}
               className="md:max-w-none"
             />
@@ -374,7 +420,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-200/80">
               {t('settings.adminSurfaceActiveLabel')}
             </p>
-            <p className="mt-2 text-sm font-semibold text-foreground">{t('settings.adminSurfaceActiveTitle')}</p>
+            <p className="mt-2 text-sm font-semibold text-foreground">{copy.activeTitle}</p>
             <p className="mt-2 text-xs leading-5 text-white/48">常规设置通过左侧分组进入；缓存、重载、危险动作不与常规保存按钮混排。</p>
           </div>
         </div>
@@ -466,12 +512,15 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
         <DeveloperCompatibilityDisclosure
           compatibilityCards={compatibilityCards}
           duckdbConfigEnabledState={duckdbConfigEnabledState}
+          compatibilitySummaryTitle={copy.compatibilitySummaryTitle}
+          compatibilitySummaryDesc={copy.compatibilitySummaryDesc}
+          compatibilityStatusEyebrow={copy.compatibilityStatusEyebrow}
         />
 
         <GuidedDisclosure
-          title="原始配置与兼容层"
-          summary="开发者 / 兼容层：原始字段、原始诊断、配置键、环境摘要默认收起，供审计时展开。"
-          beginner={<p>日常操作先看系统健康和重要设置组；这些内容主要帮助排障，不用于判断是否保存常规配置。</p>}
+          title={copy.compatibilitySummaryTitle}
+          summary={copy.guidedDisclosureSummary}
+          beginner={<p>{copy.guidedDisclosureBeginner}</p>}
           professional={(
             <div className="grid gap-3">
               {developerDetails.map((detail) => (

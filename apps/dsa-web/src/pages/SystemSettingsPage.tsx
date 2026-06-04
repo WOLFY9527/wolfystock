@@ -75,7 +75,7 @@ const SystemSettingsPage: FC = () => {
           systemTrustState="unknown"
           impact="凭证、调度、缓存与危险动作仍需结合运维中心快照确认。"
           recommendedAction="先看系统运维摘要，再进入具体配置域。"
-          evidenceRef="System operations / 下方运维中心"
+          evidenceRef="系统运维中心 / 下方摘要"
           lastUpdated="配置快照加载后更新"
         />
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">

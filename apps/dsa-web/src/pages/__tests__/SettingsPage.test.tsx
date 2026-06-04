@@ -894,7 +894,7 @@ async function openQuickProviderDrawer(providerName: string) {
         : providerName.toLowerCase();
   const providerSection = screen.getByTestId('ai-provider-quick-section');
   const providerCard = within(providerSection).getByTestId(`ai-provider-card-${providerKey}`);
-  fireEvent.click(within(providerCard as HTMLElement).getByRole('button', { name: '打开快速配置' }));
+  fireEvent.click(within(providerCard as HTMLElement).getByRole('button', { name: '打开服务配置' }));
   await waitFor(() => {
     expect(screen.getByRole('dialog', { name: `${providerName} 快速配置` })).toBeInTheDocument();
   });
@@ -1235,7 +1235,7 @@ describe('SettingsPage', () => {
     const briefDrawer = await screen.findByTestId('settings-bento-drawer');
     expect(briefDrawer).toBeInTheDocument();
     expectNoRawI18nKeys(briefDrawer);
-    expect(screen.getByRole('dialog', { name: '系统控制面' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '系统运维中心' })).toBeInTheDocument();
   });
 
   it('uses non-green semantic toggles for runtime visibility controls', async () => {
@@ -1261,12 +1261,12 @@ describe('SettingsPage', () => {
     await withSystemSettingsPath(async () => {
       render(<SettingsPage />);
 
-      expect(await screen.findByRole('heading', { name: '全局控制面概览' })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: '运维总览' })).toBeInTheDocument();
       expect(screen.getByTestId('settings-bento-hero')).toBeInTheDocument();
       expect(screen.getByTestId('settings-bento-hero-dirty-value')).toBeInTheDocument();
       expect(screen.getAllByText(zh('settings.controlPlaneStatProviders'))).toHaveLength(1);
       expect(screen.getAllByText(zh('settings.controlPlaneStatDataSources'))).toHaveLength(1);
-      expect(screen.getAllByText('当前已进入全局系统控制面').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('当前已进入系统运维中心').length).toBeGreaterThan(0);
       expect(screen.getByText('展开缓存维护与初始化动作')).toBeInTheDocument();
       expect(getMaintenancePanel()).not.toHaveAttribute('open');
       expect(screen.queryByText('认证与登录保护')).not.toBeInTheDocument();
@@ -1290,7 +1290,7 @@ describe('SettingsPage', () => {
 
       const subsystemCards = screen.getByTestId('system-subsystem-cards');
       expect(subsystemCards).toHaveTextContent('安全与凭证');
-      expect(subsystemCards).toHaveTextContent('数据接入与探测');
+      expect(subsystemCards).toHaveTextContent('数据源状态');
       expect(subsystemCards).toHaveTextContent('管理入口');
       expect(subsystemCards).toHaveTextContent('数据源');
       expect(subsystemCards).toHaveTextContent('市场总览');
@@ -1301,7 +1301,7 @@ describe('SettingsPage', () => {
       expect(screen.getByTestId('system-risk-boundary-strip')).toHaveTextContent('回测');
       expect(screen.getByTestId('system-risk-boundary-strip')).toHaveTextContent('投资组合');
       expect(screen.getByTestId('system-duckdb-disclosure')).toHaveTextContent('DuckDB 量化引擎');
-      expect(screen.getByTestId('system-duckdb-disclosure')).toHaveTextContent('开发者 / 兼容层');
+      expect(screen.getByTestId('system-duckdb-disclosure')).toHaveTextContent('配置兼容摘要');
       expect(screen.getByTestId('system-duckdb-disclosure')).toHaveTextContent('量化加速未启用；默认 Python 路径继续可用');
       expect(screen.getByTestId('system-duckdb-disclosure')).toHaveTextContent('可选代码检查');
       expect(screen.getByTestId('system-duckdb-disclosure')).toHaveTextContent('flake8 未安装；不影响运行时分析');
@@ -1320,14 +1320,14 @@ describe('SettingsPage', () => {
       expect(dashboard).toHaveTextContent('当前状态');
       expect(dashboard).toHaveTextContent('优先处理');
       expect(dashboard).toHaveTextContent('安全与凭证');
-      expect(dashboard).toHaveTextContent('数据接入与探测');
+      expect(dashboard).toHaveTextContent('数据源状态');
       expect(dashboard).toHaveTextContent('管理入口');
       expect(screen.getByTestId('system-secondary-zones')).toHaveTextContent('缓存 / 重载 / 危险动作');
-      expect(screen.getByTestId('system-secondary-zones')).toHaveTextContent('开发者 / 兼容层');
+      expect(screen.getByTestId('system-secondary-zones')).toHaveTextContent('配置兼容摘要');
 
       const visibleText = defaultVisibleText(document.body);
       expect(visibleText).toContain('只展示凭证就绪状态');
-      expect(visibleText).toContain('远端校验仍需进入数据源详情显式触发');
+      expect(visibleText).toContain('需要深层诊断时再进入数据源详情显式触发');
       expect(visibleText).not.toContain('重置运行时缓存');
       expect(visibleText).not.toContain('执行工厂重置');
       expect(visibleText).not.toContain('测试连接');
@@ -1698,7 +1698,7 @@ describe('SettingsPage', () => {
       render(<SettingsPage />);
 
       expect(await screen.findByText('原始诊断')).toBeInTheDocument();
-      const developerDetails = screen.getByText('原始配置与兼容层').closest('details');
+      const developerDetails = screen.getAllByText('配置兼容摘要')[1]?.closest('details');
       expect(developerDetails).not.toBeNull();
       expect(developerDetails).not.toHaveAttribute('open');
       expect(screen.queryByText('masked-vendor-key')).not.toBeInTheDocument();
@@ -1714,7 +1714,7 @@ describe('SettingsPage', () => {
     try {
       render(<SettingsPage />);
 
-      expect(await screen.findByRole('heading', { name: zh('settings.controlPlaneTitle') })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: '运维总览' })).toBeInTheDocument();
       expect(screen.queryByRole('heading', { name: zh('settings.runtimeSummaryVisibilityTitle') })).not.toBeInTheDocument();
       expect(screen.getByTestId('settings-main-panel')).toHaveClass(
         'overflow-y-auto',
@@ -1726,7 +1726,7 @@ describe('SettingsPage', () => {
       fireEvent.click(screen.getByRole('button', { name: /数据源/ }));
 
       expect(await screen.findByRole('heading', { name: '数据源配置' })).toBeInTheDocument();
-      expect(screen.queryByRole('heading', { name: zh('settings.controlPlaneTitle') })).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: '运维总览' })).not.toBeInTheDocument();
     } finally {
       window.history.replaceState({}, '', previousPath);
     }
@@ -1735,7 +1735,7 @@ describe('SettingsPage', () => {
   it('keeps the admin control plane focused on global domains without personal notification settings', async () => {
     render(<SettingsPage />);
 
-    expect(await screen.findByText('全局控制面概览')).toBeInTheDocument();
+    expect(await screen.findByText('运维总览')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '通知与告警' })).not.toBeInTheDocument();
     expect(screen.queryByText('个人通知渠道')).not.toBeInTheDocument();
   });
@@ -1791,7 +1791,7 @@ describe('SettingsPage', () => {
     await withSystemSettingsPath(async () => {
       render(<SettingsPage />);
 
-      expect(await screen.findByRole('heading', { name: '全局控制面概览' })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: '运维总览' })).toBeInTheDocument();
       expect(screen.getByText('展开缓存维护与初始化动作')).toBeInTheDocument();
       expect(screen.getByTestId('system-admin-entry-boundary')).toHaveTextContent('查看系统执行日志');
       expect(getMaintenancePanel()).not.toHaveAttribute('open');
@@ -2001,7 +2001,7 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    expect(await screen.findByText('服务商快速配置')).toBeInTheDocument();
+    expect(await screen.findByText('服务清单')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('raw-fields-drawer-trigger'));
 
     const drawer = await screen.findByRole('dialog', { name: zh('settings.rawFieldsSectionTitle') });
@@ -2771,11 +2771,11 @@ describe('SettingsPage', () => {
     await openAiRoutingDrawer();
     expect(screen.getByRole('dialog', { name: '任务路由编辑' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '编辑任务路由' })).toBeInTheDocument();
-    expect(screen.getByText('服务商快速配置')).toBeInTheDocument();
+    expect(screen.getByText('服务清单')).toBeInTheDocument();
     expect(screen.getByText('1. 任务路由')).toBeInTheDocument();
-    expect(screen.getByText('2. 服务商库')).toBeInTheDocument();
+    expect(screen.getByText('模型服务')).toBeInTheDocument();
     expect(screen.getByText('3. 高级配置（可选）')).toBeInTheDocument();
-    expect(screen.getByText('模型供应商')).toBeInTheDocument();
+    expect(screen.getByText('模型服务接入')).toBeInTheDocument();
     expect(screen.getByText('高级渠道配置')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '打开高级设置' })).toBeInTheDocument();
     expect(screen.getByTestId('ai-task-row-analysis')).toBeInTheDocument();
@@ -2812,7 +2812,8 @@ describe('SettingsPage', () => {
     expect(within(aiSummary).getAllByText('股票分析').length).toBeGreaterThan(0);
     expect(within(aiSummary).getByText('问股')).toBeInTheDocument();
     expect(within(aiSummary).getByText('回测')).toBeInTheDocument();
-    expect(within(aiSummary).getAllByText(/Gemini \/ gemini\/gemini-2\.5-flash/).length).toBeGreaterThan(0);
+    expect(within(aiSummary).getByText('主模型服务已配置')).toBeInTheDocument();
+    expect(within(aiSummary).queryByText(/Gemini \/ gemini\/gemini-2\.5-flash/)).not.toBeInTheDocument();
     expect(screen.queryByText('按任务配置模型')).toBeNull();
   });
 
@@ -2838,7 +2839,7 @@ describe('SettingsPage', () => {
     expect(aiSection).not.toBeNull();
 
     expect(
-      within(aiSection as HTMLElement).getAllByText(/回测路由：当前继承分析路由/).length,
+      within(aiSection as HTMLElement).getAllByText('回测任务当前继承分析服务路径。').length,
     ).toBe(1);
   });
 
@@ -3024,7 +3025,7 @@ describe('SettingsPage', () => {
     await withSystemSettingsPath(async () => {
       render(<SettingsPage />);
 
-      expect(await screen.findByRole('heading', { name: zh('settings.controlPlaneTitle') })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: '运维总览' })).toBeInTheDocument();
       expect(screen.queryByRole('heading', { name: zh('settings.basicTitle') })).not.toBeInTheDocument();
       expect(screen.queryByText(zh('settings.basicDesc'))).not.toBeInTheDocument();
     });
@@ -3773,8 +3774,9 @@ describe('SettingsPage', () => {
     const stockTaskRow = screen.getByTestId('ai-task-row-stock_chat');
     expect(within(stockTaskRow).getByText('问股')).toBeInTheDocument();
     expect(within(stockTaskRow).getByText('与分析共用')).toBeInTheDocument();
-    expect(within(stockTaskRow).getByText('Gemini / gemini/gemini-2.5-flash')).toBeInTheDocument();
-    expect(within(stockTaskRow).getByText(/问股路由：继承分析主路由/)).toBeInTheDocument();
+    expect(within(stockTaskRow).getByText('问股任务沿用分析服务')).toBeInTheDocument();
+    expect(within(stockTaskRow).getByText('问股任务当前继承分析服务路径。')).toBeInTheDocument();
+    expect(within(stockTaskRow).queryByText('Gemini / gemini/gemini-2.5-flash')).not.toBeInTheDocument();
   });
 
   it('shows Stock Chat as dedicated when AGENT_LITELLM_MODEL is set', async () => {
@@ -3814,8 +3816,9 @@ describe('SettingsPage', () => {
     const stockTaskRow = screen.getByTestId('ai-task-row-stock_chat');
     expect(within(stockTaskRow).getByText('问股')).toBeInTheDocument();
     expect(within(stockTaskRow).getByText('独立模型')).toBeInTheDocument();
-    expect(within(stockTaskRow).getByText('OpenAI / openai/gpt-4.1-mini')).toBeInTheDocument();
-    expect(within(stockTaskRow).getByText(/问股路由：使用独立模型（openai\/gpt-4\.1-mini）/)).toBeInTheDocument();
+    expect(within(stockTaskRow).getByText('问股任务使用独立模型服务')).toBeInTheDocument();
+    expect(within(stockTaskRow).getByText('问股任务已启用独立服务路径。')).toBeInTheDocument();
+    expect(within(stockTaskRow).queryByText('OpenAI / openai/gpt-4.1-mini')).not.toBeInTheDocument();
   });
 
   it('saves Stock Chat task override route independently', async () => {
@@ -3990,7 +3993,7 @@ describe('SettingsPage', () => {
     await withSystemSettingsPath(async () => {
       render(<LazySettingsPage />);
 
-      expect(await screen.findByRole('heading', { name: zh('settings.controlPlaneTitle') })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: '运维总览' })).toBeInTheDocument();
       expect(aiProviderConfigModuleLoad.loadCount).toBe(0);
       expect(dataSourceConfigModuleLoad.loadCount).toBe(0);
       expect(notificationChannelsConfigModuleLoad.loadCount).toBe(0);
@@ -4004,7 +4007,7 @@ describe('SettingsPage', () => {
     await withSystemSettingsPath(async () => {
       render(<LazySettingsPage />);
 
-      expect(await screen.findByRole('heading', { name: zh('settings.controlPlaneTitle') })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: '运维总览' })).toBeInTheDocument();
       expect(dataSourceConfigModuleLoad.loadCount).toBe(0);
 
       fireEvent.click(screen.getByRole('button', { name: /数据源/ }));
@@ -4026,7 +4029,7 @@ describe('SettingsPage', () => {
     await withSystemSettingsPath(async () => {
       render(<LazySettingsPage />);
 
-      expect(await screen.findByRole('heading', { name: zh('settings.controlPlaneTitle') })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: '运维总览' })).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole('button', { name: /数据源/ }));
 
