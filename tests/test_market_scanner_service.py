@@ -2449,6 +2449,92 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["market"], "us")
         self.assertEqual(detail["profile_label"], "US Pre-open Scanner v1")
 
+    def test_run_scan_adds_us_candidate_evidence_and_readiness_without_mutating_shortlist(self) -> None:
+        seed_us_local_history(self.stock_repo)
+        service = MarketScannerService(
+            self.db,
+            data_manager=SlowMissingQuoteDataManager(delay_seconds=0.0),
+        )
+
+        result = service.run_scan(
+            market="us",
+            profile="us_preopen_v1",
+            shortlist_size=3,
+            universe_limit=50,
+            detail_limit=10,
+            universe_type="symbols",
+            symbols=["NVDA", "AAPL", "PLTR"],
+        )
+
+        shortlist_signature = [
+            (item["symbol"], item["rank"], item["score"], item["raw_score"], item["final_score"])
+            for item in result["shortlist"]
+        ]
+        self.assertEqual(
+            shortlist_signature,
+            [("NVDA", 1, 65.8, 65.8, 65.8), ("AAPL", 2, 62.8, 62.8, 62.8), ("PLTR", 3, 40.0, 81.6, 40.0)],
+        )
+        self.assertEqual(
+            [
+                (item["symbol"], item["rank"], item["score"], item["raw_score"], item["final_score"])
+                for item in result["selected"]
+            ],
+            shortlist_signature,
+        )
+
+        candidate_map = {item["symbol"]: item for item in result["shortlist"]}
+        nvda = candidate_map["NVDA"]
+        self.assertEqual(nvda["candidateEvidenceFrame"]["contractVersion"], "scanner_candidate_evidence_v1")
+        self.assertEqual(
+            set(nvda["candidateEvidenceFrame"]["domains"]),
+            {
+                "technicals",
+                "priceHistory",
+                "liquidity",
+                "volume",
+                "gapMomentum",
+                "trend",
+                "theme",
+                "fundamentals",
+                "newsCatalyst",
+            },
+        )
+        self.assertEqual(nvda["candidateEvidenceFrame"]["domains"]["technicals"]["state"], "available")
+        self.assertEqual(nvda["candidateEvidenceFrame"]["domains"]["priceHistory"]["state"], "available")
+        self.assertEqual(nvda["candidateEvidenceFrame"]["domains"]["liquidity"]["state"], "available")
+        self.assertEqual(nvda["candidateEvidenceFrame"]["domains"]["fundamentals"]["state"], "missing")
+        self.assertEqual(nvda["candidateEvidenceFrame"]["domains"]["newsCatalyst"]["state"], "missing")
+        self.assertEqual(nvda["candidateResearchReadiness"]["contractVersion"], "research_readiness_v1")
+        self.assertEqual(nvda["candidateResearchReadiness"]["readinessState"], "insufficient")
+        self.assertIn("fundamentals", nvda["candidateResearchReadiness"]["missingEvidence"])
+        self.assertIn("news", nvda["candidateResearchReadiness"]["missingEvidence"])
+        self.assertIn("catalyst", nvda["candidateResearchReadiness"]["missingEvidence"])
+
+        pltr = candidate_map["PLTR"]
+        self.assertEqual(pltr["candidateEvidenceFrame"]["coverageState"], "observe_only")
+        self.assertEqual(pltr["candidateEvidenceFrame"]["domains"]["gapMomentum"]["state"], "partial")
+        self.assertTrue(pltr["candidateEvidenceFrame"]["domains"]["gapMomentum"]["observationOnly"])
+        self.assertEqual(pltr["candidateResearchReadiness"]["sourceAuthority"], "observationOnly")
+        self.assertIn("source_authority_not_score_grade", pltr["candidateResearchReadiness"]["blockingReasons"])
+
+        detail = service.get_run_detail(result["id"])
+        assert detail is not None
+        self.assertEqual(
+            [
+                (item["symbol"], item["rank"], item["score"], item["raw_score"], item["final_score"])
+                for item in detail["shortlist"]
+            ],
+            shortlist_signature,
+        )
+        self.assertEqual(
+            detail["shortlist"][0]["candidateEvidenceFrame"]["contractVersion"],
+            "scanner_candidate_evidence_v1",
+        )
+        self.assertEqual(
+            detail["shortlist"][0]["candidateResearchReadiness"]["contractVersion"],
+            "research_readiness_v1",
+        )
+
     def test_run_scan_restricts_us_custom_symbol_universe(self) -> None:
         seed_us_local_history(self.stock_repo)
         service = MarketScannerService(
@@ -3295,6 +3381,111 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             self.assertIsInstance(evidence_observation, dict)
             self.assertEqual(evidence_observation["entries"][2]["providerName"], "baostock")
             self.assertEqual(evidence_observation["entries"][2]["freshness"], "stale")
+
+    def test_public_candidate_dict_adds_cn_candidate_evidence_frame_for_observe_only_and_blocked_inputs(self) -> None:
+        service = object.__new__(MarketScannerService)
+        service.ai_service = MagicMock()
+        service.ai_service.public_payload_from_diagnostics.return_value = {"available": False, "status": "skipped"}
+
+        observe_candidate = {
+            "symbol": "600001",
+            "name": "算力龙头",
+            "rank": 1,
+            "score": 79.0,
+            "raw_score": 79.0,
+            "final_score": 79.0,
+            "boards": ["AI算力"],
+            "_component_scores": {"trend": 18.0},
+            "_diagnostics": {
+                "history": {
+                    "source": "PytdxFetcher",
+                    "latest_trade_date": "2026-05-08",
+                    "rows": 120,
+                },
+                "quote_context": {
+                    "available": True,
+                    "source": "akshare",
+                    "sourceType": "public_proxy",
+                },
+                "cn_provider_observation": {
+                    "observationOnly": True,
+                    "scoreContributionAllowed": False,
+                    "entries": [
+                        {
+                            "stage": "snapshot",
+                            "providerName": "akshare",
+                            "sourceType": "public_proxy",
+                        }
+                    ],
+                },
+                "score_explainability": {
+                    "raw_score": 79.0,
+                    "final_score": 79.0,
+                    "score_confidence": 1.0,
+                    "source_confidence": {
+                        "sourceAuthorityAllowed": False,
+                        "scoreContributionAllowed": False,
+                        "observationOnly": True,
+                        "sourceType": "public_proxy",
+                        "freshness": "delayed",
+                    },
+                },
+            },
+            "ret_5d": 6.0,
+            "ret_20d": 18.0,
+            "avg_amount_20": 9.0e8,
+            "amount": 1.25e9,
+            "avg_volume_20": 4.8e7,
+            "volume_expansion_20": 1.6,
+            "price": 18.4,
+            "close": 18.4,
+            "ma20": 17.8,
+            "ma60": 16.9,
+        }
+        blocked_candidate = {
+            "symbol": "600002",
+            "name": "观察样本",
+            "rank": 2,
+            "score": 35.0,
+            "raw_score": 35.0,
+            "final_score": 35.0,
+            "_diagnostics": {
+                "history": {
+                    "source": "unavailable",
+                    "rows": 0,
+                },
+                "quote_context": {
+                    "available": False,
+                    "source": None,
+                },
+                "score_explainability": {
+                    "raw_score": 35.0,
+                    "final_score": 35.0,
+                    "score_confidence": 0.2,
+                    "source_confidence": {
+                        "sourceAuthorityAllowed": False,
+                        "scoreContributionAllowed": False,
+                        "observationOnly": True,
+                        "freshness": "unknown",
+                        "isUnavailable": True,
+                    },
+                },
+            },
+        }
+
+        observed_public = service._public_candidate_dict(observe_candidate)
+        blocked_public = service._public_candidate_dict(blocked_candidate)
+
+        self.assertEqual(observed_public["candidateEvidenceFrame"]["coverageState"], "observe_only")
+        self.assertEqual(observed_public["candidateEvidenceFrame"]["domains"]["theme"]["state"], "available")
+        self.assertTrue(observed_public["candidateEvidenceFrame"]["domains"]["theme"]["observationOnly"])
+        self.assertEqual(observed_public["candidateResearchReadiness"]["sourceAuthority"], "observationOnly")
+        self.assertEqual(observed_public["candidateResearchReadiness"]["readinessState"], "insufficient")
+
+        self.assertEqual(blocked_public["candidateEvidenceFrame"]["coverageState"], "blocked")
+        self.assertEqual(blocked_public["candidateEvidenceFrame"]["domains"]["priceHistory"]["state"], "missing")
+        self.assertEqual(blocked_public["candidateEvidenceFrame"]["domains"]["liquidity"]["state"], "missing")
+        self.assertEqual(blocked_public["candidateResearchReadiness"]["readinessState"], "blocked")
 
     def test_attach_cn_provider_observation_metadata_projects_unavailable_baostock_cache_without_mutating_score(self) -> None:
         service = MarketScannerService(

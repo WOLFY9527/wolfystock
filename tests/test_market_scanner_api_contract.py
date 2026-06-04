@@ -589,6 +589,79 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
         ]:
             self.assertNotIn(forbidden, projection_json)
 
+    def test_run_market_scan_preserves_additive_candidate_evidence_and_readiness_fields(self) -> None:
+        service = MagicMock()
+        payload = _make_run_payload(
+            run_id=26,
+            market="us",
+            profile="us_preopen_v1",
+            profile_label="US Pre-open Scanner v1",
+            benchmark_code="SPY",
+        )
+        payload["shortlist"][0]["candidateEvidenceFrame"] = {
+            "contractVersion": "scanner_candidate_evidence_v1",
+            "coverageState": "partial",
+            "domains": {
+                "technicals": {"state": "available", "observationOnly": False, "scoreGradeAllowed": True},
+                "fundamentals": {"state": "missing", "observationOnly": False, "scoreGradeAllowed": False},
+                "newsCatalyst": {"state": "missing", "observationOnly": False, "scoreGradeAllowed": False},
+            },
+            "coverage": {
+                "availableCount": 1,
+                "partialCount": 0,
+                "observeOnlyCount": 0,
+                "missingCount": 2,
+                "totalCount": 3,
+            },
+            "noAdviceBoundary": True,
+        }
+        payload["shortlist"][0]["candidateResearchReadiness"] = {
+            "contractVersion": "research_readiness_v1",
+            "researchReady": False,
+            "readinessState": "insufficient",
+            "verdictLabel": "证据不足",
+            "blockingReasons": ["missing_required_evidence"],
+            "missingEvidence": ["fundamentals", "news", "catalyst"],
+            "evidenceCoverage": {
+                "scoreGradeCount": 1,
+                "observationOnlyCount": 0,
+                "missingCount": 3,
+                "totalCount": 4,
+            },
+            "sourceAuthority": "scoreGradeAllowed",
+            "freshnessFloor": "delayed",
+            "consumerActionBoundary": "no_advice",
+            "nextEvidenceNeeded": ["补充基本面证据", "补充新闻证据", "补充催化剂证据"],
+            "debugRef": "scanner:candidate:NVDA",
+            "noAdviceBoundary": True,
+        }
+        service.run_manual_scan.return_value = payload
+
+        request = ScannerRunRequest(
+            market="us",
+            profile="us_preopen_v1",
+            shortlist_size=5,
+            universe_limit=180,
+            detail_limit=40,
+        )
+
+        with patch("api.v1.endpoints.scanner.MarketScannerOperationsService", return_value=service):
+            response = run_market_scan(request, db_manager=MagicMock())
+
+        self.assertEqual(response.shortlist[0].candidateEvidenceFrame["contractVersion"], "scanner_candidate_evidence_v1")
+        self.assertEqual(response.shortlist[0].candidateEvidenceFrame["domains"]["technicals"]["state"], "available")
+        self.assertEqual(response.shortlist[0].candidateResearchReadiness["readinessState"], "insufficient")
+        self.assertIn("fundamentals", response.shortlist[0].candidateResearchReadiness["missingEvidence"])
+        serialized = response.model_dump()
+        self.assertEqual(
+            serialized["shortlist"][0]["candidateEvidenceFrame"]["coverage"]["missingCount"],
+            2,
+        )
+        self.assertEqual(
+            serialized["shortlist"][0]["candidateResearchReadiness"]["nextEvidenceNeeded"][0],
+            "补充基本面证据",
+        )
+
     def test_public_candidate_dict_adds_consumer_diagnostics_projection(self) -> None:
         service = object.__new__(MarketScannerService)
         service.ai_service = MagicMock()

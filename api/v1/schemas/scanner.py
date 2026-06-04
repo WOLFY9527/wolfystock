@@ -223,6 +223,8 @@ class ScannerCandidateResponse(BaseModel):
     realized_outcome: ScannerCandidateOutcomeResponse = Field(default_factory=ScannerCandidateOutcomeResponse)
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
     consumerDiagnostics: Dict[str, Any] = Field(default_factory=dict)
+    candidateEvidenceFrame: Dict[str, Any] = Field(default_factory=dict)
+    candidateResearchReadiness: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ScannerThemeDiagnosticsResponse(BaseModel):

@@ -26,6 +26,10 @@ from src.repositories.stock_repo import StockRepository
 from src.contracts.source_confidence import coerce_source_confidence_contract
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
 from src.services.market_scanner_context_adapter import adapt_scanner_topdown_context_diagnostics
+from src.services.market_scanner_candidate_evidence import (
+    build_scanner_candidate_evidence_frame,
+    build_scanner_candidate_research_readiness,
+)
 from src.services.data_source_router import CapabilityResolver, DataSourceRouteRequest, DataSourceRouter
 from src.services.scanner_ai_service import ScannerAiInterpretationService
 from src.services.scanner_evidence_packet import (
@@ -7248,7 +7252,7 @@ class MarketScannerService:
         explainability = dict(diagnostics.get("score_explainability") or {})
         final_score = explainability.get("final_score")
         raw_score = explainability.get("raw_score")
-        return {
+        payload = {
             "symbol": candidate.symbol,
             "name": candidate.name,
             "rank": int(candidate.rank),
@@ -7269,6 +7273,12 @@ class MarketScannerService:
             "diagnostics": diagnostics if isinstance(diagnostics, dict) else {},
             "consumerDiagnostics": build_scanner_consumer_diagnostics(diagnostics if isinstance(diagnostics, dict) else {}),
         }
+        payload["candidateEvidenceFrame"] = build_scanner_candidate_evidence_frame(payload)
+        payload["candidateResearchReadiness"] = build_scanner_candidate_research_readiness(
+            payload,
+            candidate_evidence_frame=payload["candidateEvidenceFrame"],
+        )
+        return payload
 
     def _public_candidate_dict(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
         diagnostics = {
@@ -7279,7 +7289,7 @@ class MarketScannerService:
         explainability = dict(diagnostics.get("score_explainability") or {})
         final_score = candidate.get("final_score", explainability.get("final_score", candidate.get("score")))
         raw_score = candidate.get("raw_score", explainability.get("raw_score", candidate.get("score")))
-        return {
+        payload = {
             "symbol": candidate["symbol"],
             "name": candidate["name"],
             "rank": int(candidate.get("rank") or 0),
@@ -7301,6 +7311,16 @@ class MarketScannerService:
             "diagnostics": diagnostics,
             "consumerDiagnostics": build_scanner_consumer_diagnostics(diagnostics),
         }
+        projection_source = {
+            **dict(candidate),
+            "diagnostics": diagnostics,
+        }
+        payload["candidateEvidenceFrame"] = build_scanner_candidate_evidence_frame(projection_source)
+        payload["candidateResearchReadiness"] = build_scanner_candidate_research_readiness(
+            projection_source,
+            candidate_evidence_frame=payload["candidateEvidenceFrame"],
+        )
+        return payload
 
     def _attach_shortlist_evidence_packets(
         self,

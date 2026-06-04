@@ -72,3 +72,72 @@ def test_scanner_run_response_accepts_additive_cn_blocked_scanner_context_frame(
     assert response.scannerContextFrame["marketReadiness"]["readinessState"] == "blocked"
     assert response.scannerContextFrame["marketReadiness"]["providerAuthority"] == "unavailable"
     assert response.scannerContextFrame["universePolicy"]["type"] == "default"
+
+
+def test_scanner_run_response_accepts_additive_candidate_evidence_and_readiness_fields() -> None:
+    response = ScannerRunDetailResponse(
+        id=3,
+        market="us",
+        profile="us_preopen_v1",
+        status="completed",
+        universe_name="us_liquid",
+        shortlist_size=1,
+        universe_size=3,
+        preselected_size=3,
+        evaluated_size=3,
+        shortlist=[
+            {
+                "symbol": "NVDA",
+                "name": "NVIDIA",
+                "rank": 1,
+                "score": 82.0,
+                "candidateEvidenceFrame": {
+                    "contractVersion": "scanner_candidate_evidence_v1",
+                    "coverageState": "partial",
+                    "domains": {
+                        "technicals": {"state": "available"},
+                        "fundamentals": {"state": "missing"},
+                        "newsCatalyst": {"state": "missing"},
+                    },
+                },
+                "candidateResearchReadiness": {
+                    "contractVersion": "research_readiness_v1",
+                    "researchReady": False,
+                    "readinessState": "insufficient",
+                    "missingEvidence": ["fundamentals", "news", "catalyst"],
+                    "blockingReasons": ["missing_required_evidence"],
+                    "evidenceCoverage": {
+                        "scoreGradeCount": 1,
+                        "observationOnlyCount": 0,
+                        "missingCount": 3,
+                        "totalCount": 4,
+                    },
+                    "sourceAuthority": "scoreGradeAllowed",
+                    "freshnessFloor": "delayed",
+                    "consumerActionBoundary": "no_advice",
+                    "nextEvidenceNeeded": ["补充基本面证据"],
+                    "debugRef": "scanner:candidate:NVDA",
+                },
+            }
+        ],
+        selected=[
+            {
+                "symbol": "NVDA",
+                "name": "NVIDIA",
+                "rank": 1,
+                "score": 82.0,
+                "candidateEvidenceFrame": {
+                    "contractVersion": "scanner_candidate_evidence_v1",
+                    "coverageState": "partial",
+                },
+                "candidateResearchReadiness": {
+                    "contractVersion": "research_readiness_v1",
+                    "readinessState": "insufficient",
+                },
+            }
+        ],
+    )
+
+    assert response.shortlist[0].candidateEvidenceFrame["contractVersion"] == "scanner_candidate_evidence_v1"
+    assert response.shortlist[0].candidateResearchReadiness["readinessState"] == "insufficient"
+    assert response.selected[0].candidateEvidenceFrame["coverageState"] == "partial"
