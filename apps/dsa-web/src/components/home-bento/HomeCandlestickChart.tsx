@@ -14,7 +14,7 @@ import type {
   TooltipComponentOption,
 } from 'echarts/components';
 import type { ComposeOption, ECharts, SetOptionOpts } from 'echarts/core';
-import { SVGRenderer } from 'echarts/renderers';
+import { CanvasRenderer } from 'echarts/renderers';
 import {
   stocksApi,
   type StockHistoryDiagnostics,
@@ -33,7 +33,7 @@ echarts.use([
   GridComponent,
   TooltipComponent,
   DataZoomComponent,
-  SVGRenderer,
+  CanvasRenderer,
 ]);
 
 type HomeChartOption = ComposeOption<
@@ -145,13 +145,13 @@ const HOME_CHART_GRID_SAFE_MARGIN = {
 const resolveHomeCandlestickGrid = (): GridComponentOption[] => [
   {
     ...HOME_CHART_GRID_SAFE_MARGIN,
-    top: '15%',
-    height: '55%',
+    top: '19%',
+    height: '56%',
   },
   {
     ...HOME_CHART_GRID_SAFE_MARGIN,
-    top: '78%',
-    bottom: '8%',
+    top: '77%',
+    height: '12%',
   },
 ];
 
@@ -417,20 +417,34 @@ const volumeSupportStatus = (candles: CandlePoint[]) => {
   const totalVolume = candles.reduce((sum, item) => sum + item.volume, 0);
   const positiveRatio = positiveVolumes / candles.length;
   return {
-    available: positiveVolumes >= Math.max(3, Math.ceil(candles.length * 0.6)) && totalVolume > 0,
+    available: positiveVolumes > 0 && totalVolume > 0,
     zeroHeavy: positiveRatio < 0.6 || totalVolume <= 0,
   };
 };
 
 const buildUnavailableProductState = (
   language: 'zh' | 'en',
-): UnavailableProductState => ({
-  status: language === 'en' ? 'UNAVAILABLE' : '暂不可用',
-  title: language === 'en'
-    ? 'The candlestick chart is temporarily unavailable. Please try again shortly.'
-    : '行情图表暂不可用，请稍后重试。',
-  body: null,
-});
+  reason: 'history' | 'volume',
+): UnavailableProductState => {
+  if (reason === 'volume') {
+    return {
+      status: language === 'en' ? 'UNAVAILABLE' : '暂不可用',
+      title: language === 'en'
+        ? 'The chart is unavailable because reliable volume data is missing.'
+        : '缺少可靠成交量，图表暂不可用。',
+      body: language === 'en'
+        ? 'Try again after volume history is available.'
+        : '请在成交量历史可用后重试。',
+    };
+  }
+  return {
+    status: language === 'en' ? 'UNAVAILABLE' : '暂不可用',
+    title: language === 'en'
+      ? 'The candlestick chart is temporarily unavailable. Please try again shortly.'
+      : '行情图表暂不可用，请稍后重试。',
+    body: null,
+  };
+};
 
 export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
   ticker,
@@ -526,10 +540,19 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
     vwap: vwapStatus.available && candles.some((item) => isFiniteNumber(item.vwap)),
   };
   const enabledIndicators = INDICATOR_CONFIGS.filter(({ key }) => indicatorVisibility[key] && indicatorEnabledState[key]);
-  const unavailableState = buildUnavailableProductState(language === 'en' ? 'en' : 'zh');
+  const viewportWidth = typeof window !== 'undefined'
+    ? window.innerWidth || document.documentElement.clientWidth || 0
+    : 0;
+  const isCompactChart = (size.width > 0 ? size.width : viewportWidth) < 520;
+  const hasRenderableChart = status === 'ready' && candles.length > 0 && vwapStatus.available;
+  const latestCandle = candles[candles.length - 1];
+  const unavailableState = buildUnavailableProductState(
+    language === 'en' ? 'en' : 'zh',
+    status === 'ready' && candles.length > 0 && !vwapStatus.available ? 'volume' : 'history',
+  );
 
   useEffect(() => {
-    if (status !== 'ready' || !candles.length) {
+    if (!hasRenderableChart) {
       onContextChange?.(null);
       return;
     }
@@ -537,10 +560,10 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       timeframe: activeTimeframe,
       sourceHint,
     });
-  }, [activeTimeframe, candles.length, onContextChange, sourceHint, status]);
+  }, [activeTimeframe, hasRenderableChart, onContextChange, sourceHint]);
 
   const option: HomeChartOption | null = (() => {
-    if (!candles.length) {
+    if (!hasRenderableChart) {
       return null;
     }
     const dates = candles.map((item) => item.date);
@@ -548,7 +571,6 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       ? Math.round(((candles.length - 120) / candles.length) * 100)
       : 0;
     const safeCurrentPrice = isFiniteNumber(currentPrice) ? currentPrice : undefined;
-    const isCompactChart = size.width > 0 && size.width < 520;
     const xLabelInterval = Math.max(0, Math.ceil(candles.length / (isCompactChart ? 4 : 7)) - 1);
 
     return {
@@ -676,6 +698,35 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           minValueSpan: candles.length > 24 ? 12 : undefined,
           filterMode: 'none',
         },
+        {
+          type: 'slider',
+          xAxisIndex: [0, 1],
+          start: visibleStart,
+          end: 100,
+          bottom: 4,
+          height: 14,
+          borderColor: 'rgba(166,176,230,0.08)',
+          backgroundColor: 'rgba(255,255,255,0.02)',
+          fillerColor: 'rgba(118,109,219,0.18)',
+          dataBackground: {
+            lineStyle: { color: 'rgba(186,194,238,0.16)' },
+            areaStyle: { color: 'rgba(186,194,238,0.06)' },
+          },
+          selectedDataBackground: {
+            lineStyle: { color: 'rgba(186,194,238,0.28)' },
+            areaStyle: { color: 'rgba(118,109,219,0.08)' },
+          },
+          handleStyle: {
+            color: 'rgba(230,236,250,0.88)',
+            borderColor: 'rgba(9,14,24,0.92)',
+          },
+          moveHandleStyle: {
+            color: 'rgba(166,176,230,0.18)',
+          },
+          brushSelect: false,
+          showDetail: false,
+          filterMode: 'none',
+        },
       ],
       series: [
         {
@@ -741,7 +792,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
     if (!host || !option || size.width <= 0 || size.height <= 0) {
       return undefined;
     }
-    const instance = chartRef.current ?? echarts.init(host, undefined, { renderer: 'svg' });
+    const instance = chartRef.current ?? echarts.init(host, undefined, { renderer: 'canvas' });
     chartRef.current = instance;
     const setOpts: SetOptionOpts = { notMerge: true, lazyUpdate: true };
     instance.setOption(option, setOpts);
@@ -792,7 +843,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
     ? (language === 'en' ? 'UPDATING' : '数据更新中')
     : unavailableState.status;
   const chartUnavailableTimeframe = language === 'en' ? `Timeframe ${activeTimeframe}` : `当前周期 ${activeTimeframe}`;
-  const shouldExposeHistoryDiagnostics = status === 'ready';
+  const shouldExposeHistoryDiagnostics = hasRenderableChart;
 
   return (
     <div
@@ -814,6 +865,9 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       data-history-confidence={shouldExposeHistoryDiagnostics ? historyMeta?.sourceConfidence?.freshness || 'unknown' : undefined}
       data-enabled-indicators={enabledIndicatorLabels}
       data-vwap-available={String(indicatorEnabledState.vwap)}
+      data-volume-panel={String(hasRenderableChart)}
+      data-datazoom-mode="inside"
+      data-compact-chart={String(isCompactChart)}
       data-axis-layout="split-price-volume"
       data-x-axis-density="sampled"
       data-tooltip-container="body"
@@ -886,18 +940,39 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
             <span className="text-[10px] text-white/30">{language === 'en' ? 'VWAP unavailable' : 'VWAP 暂不可用'}</span>
           ) : null}
         </div>
+
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] text-white/36">
+          <span
+            className="inline-flex min-h-6 items-center rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5"
+            data-testid="home-chart-context-price"
+          >
+            {language === 'en' ? `Price ${formatPrice(latestCandle?.close)}` : `价格 ${formatPrice(latestCandle?.close)}`}
+          </span>
+          <span
+            className="inline-flex min-h-6 items-center rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5"
+            data-testid="home-chart-context-volume"
+          >
+            {language === 'en' ? `Volume ${formatVolume(latestCandle?.volume)}` : `成交量 ${formatVolume(latestCandle?.volume)}`}
+          </span>
+          <span
+            className="inline-flex min-h-6 items-center rounded-full border border-white/[0.05] bg-white/[0.015] px-2.5"
+            data-testid="home-chart-range-hint"
+          >
+            {language === 'en' ? 'Zoom to inspect range' : '缩放查看区间'}
+          </span>
+        </div>
       </div>
 
-      {status === 'ready' && candles.length ? (
+      {hasRenderableChart ? (
         <div
-          className="relative h-[216px] min-w-[280px] overflow-visible sm:h-[228px] xl:h-[242px]"
+          className="relative h-[304px] min-w-0 max-w-full overflow-visible sm:h-[336px] xl:h-[360px]"
           data-testid="home-candlestick-chart-frame"
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoveredIndex(null)}
         >
           <figure
             ref={chartNodeRef}
-            className="size-full"
+            className="size-full min-h-full min-w-0"
             aria-label={language === 'en' ? `Interactive ${activeTimeframe} OHLC candlestick chart` : `可交互 ${activeTimeframe} OHLC K 线图`}
             data-testid="home-candlestick-echarts-node"
           />
@@ -935,7 +1010,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       ) : (
         <div
           className={cn(
-            'relative flex h-[208px] min-w-[280px] flex-col justify-center overflow-hidden rounded-[12px] border border-[color:var(--wolfy-border-faint)] bg-[linear-gradient(180deg,rgba(17,22,38,0.92),rgba(13,18,32,0.98))] px-5 text-left sm:h-[220px] xl:h-[232px]',
+            'relative flex h-[224px] min-w-0 max-w-full flex-col justify-center overflow-hidden rounded-[12px] border border-[color:var(--wolfy-border-faint)] bg-[linear-gradient(180deg,rgba(17,22,38,0.92),rgba(13,18,32,0.98))] px-5 text-left sm:h-[236px] xl:h-[248px]',
             status === 'loading' ? 'text-white/46' : 'text-white/42',
           )}
           data-testid="home-candlestick-unavailable"

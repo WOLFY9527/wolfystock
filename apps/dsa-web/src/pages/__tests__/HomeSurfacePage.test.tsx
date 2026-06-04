@@ -3196,6 +3196,8 @@ describe('HomeSurfacePage', () => {
     expect(chartRoot).toHaveAttribute('data-tooltip-bounds', 'viewport');
     expect(chartRoot).toHaveAttribute('data-axis-layout', 'split-price-volume');
     expect(chartRoot).toHaveAttribute('data-x-axis-density', 'sampled');
+    expect(chartRoot).toHaveAttribute('data-volume-panel', 'true');
+    expect(chartRoot).toHaveAttribute('data-datazoom-mode', 'inside');
     expect(chartRoot).toHaveAttribute('data-chart-timeframe', '1D');
     expect(chartRoot).toHaveAttribute('data-chart-source', 'stocks-history-daily');
     expect(chartRoot).toHaveAttribute('data-visual-role', 'primary-chart');
@@ -3205,6 +3207,10 @@ describe('HomeSurfacePage', () => {
       'border-0',
       'bg-transparent',
     );
+    expect(chartFrame).toHaveClass('h-[304px]', 'sm:h-[336px]', 'xl:h-[360px]');
+    expect(within(chartRoot).getByTestId('home-chart-context-price')).toHaveTextContent('价格');
+    expect(within(chartRoot).getByTestId('home-chart-context-volume')).toHaveTextContent('成交量');
+    expect(within(chartRoot).getByTestId('home-chart-range-hint')).toHaveTextContent('缩放');
 
     fireEvent.mouseMove(chartFrame, { clientX: 0 });
 
@@ -3223,6 +3229,24 @@ describe('HomeSurfacePage', () => {
       expect(tooltip).toHaveTextContent('MA10');
       expect(tooltip).toHaveTextContent('MA20');
     });
+  });
+
+  it('keeps the Home chart rendered with mobile-safe context labels in a 390px viewport', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    window.innerWidth = 390;
+    window.innerHeight = 844;
+    window.dispatchEvent(new Event('resize'));
+
+    renderSurface();
+
+    const chartRoot = await screen.findByTestId('home-linear-technical-chart');
+    expect(chartRoot).toHaveAttribute('data-compact-chart', 'true');
+    expect(chartRoot).toHaveAttribute('data-volume-panel', 'true');
+    expect(chartRoot).toHaveAttribute('data-datazoom-mode', 'inside');
+    expect(screen.getByTestId('home-candlestick-chart-frame')).toBeInTheDocument();
+    expect(screen.getByTestId('home-candlestick-echarts-node')).toBeInTheDocument();
+    expect(within(chartRoot).getByTestId('home-chart-context-price')).toHaveTextContent('价格');
+    expect(within(chartRoot).getByTestId('home-chart-context-volume')).toHaveTextContent('成交量');
   });
 
   it('renders timeframe controls, hides intraday controls, and aggregates 1W/1M from daily candles', async () => {

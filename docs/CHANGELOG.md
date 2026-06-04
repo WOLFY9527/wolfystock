@@ -1,3 +1,6 @@
+## 2026-06-05
+- Home research console technical chart now promotes the single-stock baseline chart from decorative candles to a research-ready view: the chart well is taller, the candlestick panel now includes a dedicated volume sub-chart, visible price/volume context chips, and bounded time-range zoom, mobile 390px-class viewports keep rendering a real chart, and missing/zero-heavy volume now fails closed with a compact unavailable state instead of exposing a partial chart. No backend/provider/cache/API/readiness semantics changed.
+
 ## 2026-06-04
 - Liquidity Monitor consumer-facing state copy now maps neutral posture to `无明显方向`, replaces hard gate phrasing with `数据不足，暂不形成结论`, and adds refresh plus Market Overview / Rotation Radar follow-up guidance without changing liquidity calculations, provider/runtime/cache behavior, or API contracts.
 - Scanner now surfaces additive per-candidate research summaries in the ranking rows and current-candidate detail rail, translating `candidateResearchSummaryFrame` into consumer-safe why/evidence/missing/market-driver/next-step copy without changing scanner ranking, scoring, filters, selection, or provider/runtime behavior.
