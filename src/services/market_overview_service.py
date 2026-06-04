@@ -99,6 +99,7 @@ from src.services.market_intelligence_trust_gate import (
 )
 from src.services.market_decision_semantics import derive_market_decision_semantics
 from src.services.market_intelligence_actionability import build_market_actionability_frame
+from src.services.market_intelligence_evidence import build_market_intelligence_evidence_frame
 from src.services.market_regime_synthesis_adapter import (
     build_liquidity_impulse_synthesis_payload,
     build_market_regime_synthesis_payload,
@@ -1141,6 +1142,11 @@ class MarketOverviewService:
                 inputs=inputs,
                 liquidity_impulse_synthesis=liquidity_impulse_synthesis,
             )
+            payload["marketIntelligenceEvidenceFrame"] = build_market_intelligence_evidence_frame(
+                payload,
+                inputs=inputs,
+                liquidity_impulse_synthesis=liquidity_impulse_synthesis,
+            )
             if not trust["isReliable"]:
                 payload["warning"] = INSUFFICIENT_MARKET_DATA_WARNING
                 payload["fallbackUsed"] = True
@@ -1152,10 +1158,20 @@ class MarketOverviewService:
                     inputs=inputs,
                     liquidity_impulse_synthesis=liquidity_impulse_synthesis,
                 )
+                payload["marketIntelligenceEvidenceFrame"] = build_market_intelligence_evidence_frame(
+                    payload,
+                    inputs=inputs,
+                    liquidity_impulse_synthesis=liquidity_impulse_synthesis,
+                )
             elif trust["fallbackInputCount"]:
                 payload["warning"] = "部分指标来自备用数据，评分仅使用真实数据。"
                 payload["fallbackUsed"] = True
                 payload["marketActionabilityFrame"] = build_market_actionability_frame(
+                    payload,
+                    inputs=inputs,
+                    liquidity_impulse_synthesis=liquidity_impulse_synthesis,
+                )
+                payload["marketIntelligenceEvidenceFrame"] = build_market_intelligence_evidence_frame(
                     payload,
                     inputs=inputs,
                     liquidity_impulse_synthesis=liquidity_impulse_synthesis,
@@ -1192,6 +1208,11 @@ class MarketOverviewService:
                 **self._market_temperature_disabled_state_meta(trust),
             }
             payload["marketActionabilityFrame"] = build_market_actionability_frame(
+                payload,
+                inputs=inputs,
+                liquidity_impulse_synthesis=liquidity_impulse_synthesis,
+            )
+            payload["marketIntelligenceEvidenceFrame"] = build_market_intelligence_evidence_frame(
                 payload,
                 inputs=inputs,
                 liquidity_impulse_synthesis=liquidity_impulse_synthesis,

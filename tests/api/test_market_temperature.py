@@ -302,6 +302,76 @@ def _official_macro_regime_summary_base_inputs() -> dict:
     return inputs
 
 
+def _scanner_context_frame_ready_snapshot() -> dict:
+    return {
+        "marketReadiness": {
+            "contractVersion": "research_readiness_v1",
+            "researchReady": True,
+            "readinessState": "ready",
+            "verdictLabel": "研究证据可用",
+            "blockingReasons": [],
+            "missingEvidence": [],
+            "evidenceCoverage": {
+                "scoreGradeCount": 2,
+                "observationOnlyCount": 0,
+                "missingCount": 0,
+                "totalCount": 2,
+            },
+            "sourceAuthority": "scoreGradeAllowed",
+            "freshnessFloor": "delayed",
+            "consumerActionBoundary": "no_advice",
+            "nextEvidenceNeeded": [],
+            "debugRef": "scanner:24:context",
+        },
+        "macroRegime": {
+            "state": "supportive",
+            "label": "Supportive macro regime",
+            "source": "computed",
+            "freshness": "cached",
+            "confidence": {"value": 0.78, "label": "high"},
+            "blockers": [],
+            "observationOnly": False,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+        },
+        "liquidityFrame": {
+            "state": "supportive",
+            "label": "Liquidity supports current scanner setup",
+            "source": "market_overview",
+            "freshness": "cached",
+            "observationOnly": False,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "proxyOnly": False,
+            "blockers": [],
+        },
+        "themeFrame": {
+            "state": "supportive",
+            "label": "Theme leadership supports the shortlist",
+            "freshness": "cached",
+            "observationOnly": False,
+            "proxyOnly": False,
+            "blockers": [],
+            "themes": [
+                {"id": "ai", "label": "AI", "state": "leading"},
+                {"id": "software", "label": "Software", "state": "broadening"},
+            ],
+        },
+        "assetClassBias": {
+            "state": "supportive",
+            "label": "Equities preferred",
+            "observationOnly": False,
+            "blockers": [],
+        },
+        "universePolicy": {
+            "type": "default",
+            "label": "Profile default universe",
+            "reason": "scanner_profile_default_universe",
+        },
+        "noAdviceBoundary": True,
+    }
+
+
 def _market_temperature_api_payload(service: MarketOverviewService, inputs: dict) -> dict:
     app = FastAPI()
     app.include_router(market.router, prefix="/api/v1/market")
@@ -548,7 +618,9 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
     def test_market_temperature_exposes_additive_market_actionability_frame_for_readyish_context(self) -> None:
         service = MarketOverviewService()
 
-        payload = _market_temperature_api_payload(service, _official_macro_regime_summary_base_inputs())
+        inputs = _official_macro_regime_summary_base_inputs()
+        inputs["scannerContextFrame"] = _scanner_context_frame_ready_snapshot()
+        payload = _market_temperature_api_payload(service, inputs)
 
         frame = payload["marketActionabilityFrame"]
         self.assertEqual(frame["contractVersion"], "market_intelligence_actionability_v1")
@@ -590,6 +662,54 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertEqual(payload["researchReadiness"]["readinessState"], "insufficient")
         self.assertEqual(payload["marketDecisionSemantics"]["directionReadiness"]["status"], "direction_ready")
 
+    def test_market_temperature_exposes_additive_market_intelligence_evidence_frame_for_readyish_context(self) -> None:
+        service = MarketOverviewService()
+
+        inputs = _official_macro_regime_summary_base_inputs()
+        inputs["scannerContextFrame"] = _scanner_context_frame_ready_snapshot()
+        payload = _market_temperature_api_payload(service, inputs)
+
+        frame = payload["marketIntelligenceEvidenceFrame"]
+        self.assertEqual(frame["contractVersion"], "market_intelligence_evidence_v1")
+        self.assertEqual(
+            set(frame),
+            {
+                "contractVersion",
+                "frameState",
+                "evidenceCoverage",
+                "regimeEvidence",
+                "liquidityEvidence",
+                "rotationEvidence",
+                "breadthEvidence",
+                "scannerContextEvidence",
+                "missingEvidence",
+                "blockingReasons",
+                "sourceAuthority",
+                "freshness",
+                "nextEvidenceNeeded",
+                "noAdviceBoundary",
+                "debugRef",
+            },
+        )
+        self.assertEqual(frame["frameState"], "observe_only")
+        self.assertEqual(frame["evidenceCoverage"]["scoreGradeCount"], 3)
+        self.assertEqual(frame["evidenceCoverage"]["observationOnlyCount"], 2)
+        self.assertEqual(frame["evidenceCoverage"]["missingCount"], 0)
+        self.assertEqual(frame["evidenceCoverage"]["totalCount"], 5)
+        self.assertEqual(frame["regimeEvidence"]["state"], "score_grade")
+        self.assertEqual(frame["liquidityEvidence"]["state"], "observation_only")
+        self.assertEqual(frame["rotationEvidence"]["state"], "observation_only")
+        self.assertEqual(frame["breadthEvidence"]["state"], "score_grade")
+        self.assertEqual(frame["scannerContextEvidence"]["state"], "score_grade")
+        self.assertEqual(frame["scannerContextEvidence"]["readinessState"], "ready")
+        self.assertEqual(frame["sourceAuthority"], "observationOnly")
+        self.assertEqual(frame["freshness"], "delayed")
+        self.assertEqual(frame["missingEvidence"], [])
+        self.assertIn("observation_only", frame["blockingReasons"])
+        self.assertEqual(frame["nextEvidenceNeeded"], [])
+        self.assertTrue(frame["noAdviceBoundary"])
+        self.assertEqual(frame["debugRef"], "market:temperature:evidence")
+
     def test_market_temperature_actionability_frame_fail_closes_missing_context(self) -> None:
         service = MarketOverviewService()
 
@@ -612,6 +732,32 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertEqual(frame["confidence"]["label"], "insufficient")
         self.assertIn("missing_required_evidence", frame["confidence"]["capReasons"])
 
+    def test_market_temperature_evidence_frame_fail_closes_missing_context(self) -> None:
+        service = MarketOverviewService()
+
+        payload = _market_temperature_api_payload(
+            service,
+            service._fallback_market_temperature_inputs(),
+        )
+
+        frame = payload["marketIntelligenceEvidenceFrame"]
+        self.assertEqual(frame["frameState"], "insufficient")
+        self.assertEqual(frame["sourceAuthority"], "unavailable")
+        self.assertEqual(frame["freshness"], "fallback")
+        self.assertTrue(frame["noAdviceBoundary"])
+        self.assertEqual(frame["regimeEvidence"]["state"], "missing")
+        self.assertEqual(frame["liquidityEvidence"]["state"], "missing")
+        self.assertEqual(frame["rotationEvidence"]["state"], "missing")
+        self.assertEqual(frame["scannerContextEvidence"]["state"], "missing")
+        self.assertIn("macro", frame["missingEvidence"])
+        self.assertIn("liquidity", frame["missingEvidence"])
+        self.assertIn("rotation", frame["missingEvidence"])
+        self.assertIn("scanner_context", frame["missingEvidence"])
+        self.assertIn("freshness", frame["missingEvidence"])
+        self.assertEqual(frame["evidenceCoverage"]["scoreGradeCount"], 0)
+        self.assertEqual(frame["evidenceCoverage"]["missingCount"], 5)
+        self.assertIn("missing_required_evidence", frame["blockingReasons"])
+
     def test_market_temperature_actionability_frame_downgrades_stale_and_fallback_context(self) -> None:
         service = MarketOverviewService()
         degraded_inputs = copy.deepcopy(_official_macro_regime_summary_base_inputs())
@@ -632,10 +778,42 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
             {"observation_only", "stale_evidence", "fallback_evidence"} & set(frame["confidence"]["capReasons"])
         )
 
+    def test_market_temperature_evidence_frame_downgrades_stale_and_fallback_context(self) -> None:
+        service = MarketOverviewService()
+        degraded_inputs = copy.deepcopy(_official_macro_regime_summary_base_inputs())
+        degraded_inputs["scannerContextFrame"] = _scanner_context_frame_ready_snapshot()
+        degraded_inputs["capitalFlowSignal"]["freshness"] = "stale"
+        degraded_inputs["capitalFlowSignal"]["contradictionCodes"] = ["partial_context_only"]
+        degraded_inputs["rotationFamilyRollup"][0]["themeFlowSignal"]["freshness"] = "fallback"
+        degraded_inputs["rotationFamilyRollup"][0]["themeFlowSignal"]["observationOnly"] = True
+        degraded_inputs["scannerContextFrame"]["marketReadiness"]["freshnessFloor"] = "fallback"
+        degraded_inputs["scannerContextFrame"]["marketReadiness"]["sourceAuthority"] = "observationOnly"
+        degraded_inputs["scannerContextFrame"]["marketReadiness"]["readinessState"] = "observe_only"
+        degraded_inputs["scannerContextFrame"]["marketReadiness"]["blockingReasons"] = ["fallback_evidence"]
+        degraded_inputs["scannerContextFrame"]["macroRegime"]["freshness"] = "fallback"
+        degraded_inputs["scannerContextFrame"]["macroRegime"]["observationOnly"] = True
+        degraded_inputs["scannerContextFrame"]["macroRegime"]["sourceAuthorityAllowed"] = False
+        degraded_inputs["scannerContextFrame"]["macroRegime"]["scoreContributionAllowed"] = False
+
+        payload = _market_temperature_api_payload(service, degraded_inputs)
+
+        frame = payload["marketIntelligenceEvidenceFrame"]
+        self.assertEqual(frame["frameState"], "insufficient")
+        self.assertEqual(frame["freshness"], "fallback")
+        self.assertIn("freshness", frame["missingEvidence"])
+        self.assertEqual(frame["sourceAuthority"], "observationOnly")
+        self.assertEqual(frame["rotationEvidence"]["state"], "degraded")
+        self.assertEqual(frame["scannerContextEvidence"]["state"], "degraded")
+        self.assertTrue(
+            {"stale_evidence", "fallback_evidence", "observation_only"} & set(frame["blockingReasons"])
+        )
+
     def test_market_temperature_actionability_frame_is_additive_and_preserves_existing_scores(self) -> None:
         service = MarketOverviewService()
 
-        payload = _market_temperature_api_payload(service, _official_macro_regime_summary_base_inputs())
+        inputs = _official_macro_regime_summary_base_inputs()
+        inputs["scannerContextFrame"] = _scanner_context_frame_ready_snapshot()
+        payload = _market_temperature_api_payload(service, inputs)
 
         self.assertTrue(
             {
@@ -651,6 +829,7 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
                 "conclusionAllowed",
                 "researchReadiness",
                 "marketActionabilityFrame",
+                "marketIntelligenceEvidenceFrame",
             }.issubset(payload.keys())
         )
         self.assertEqual(payload["researchReadiness"]["readinessState"], "insufficient")
@@ -689,6 +868,8 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
                 },
             },
         )
+        nested_keys = _collect_nested_mapping_keys(payload["marketIntelligenceEvidenceFrame"])
+        self.assertFalse({"prompt", "cookie", "token", "secret", "sessionId", "stackTrace"} & nested_keys)
 
     def test_market_temperature_api_serializes_additive_regime_summary_contract(self) -> None:
         service = MarketOverviewService()
