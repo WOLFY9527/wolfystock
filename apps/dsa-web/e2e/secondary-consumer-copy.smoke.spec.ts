@@ -39,6 +39,17 @@ const allowedBoundaryTerms = [
   '不构成交易建议',
 ];
 
+const mockCurrentUser = {
+  id: 'user-1',
+  username: 'wolfy-user',
+  displayName: 'Wolfy User',
+  role: 'user',
+  isAdmin: false,
+  isAuthenticated: true,
+  transitional: false,
+  authEnabled: true,
+};
+
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
   await route.fulfill({
     status,
@@ -288,32 +299,41 @@ async function installWatchlistEmptyHarness(page: Page) {
   });
 }
 
-async function signIn(page: Page, redirectPath: string) {
-  await page.goto(`/login?redirect=${encodeURIComponent(redirectPath)}`);
-  await page.locator('#username').fill('wolfy-user');
-  await page.locator('#password').fill('mock-password');
-  await Promise.all([
-    page.waitForResponse((response) => response.url().includes('/api/v1/auth/login') && response.status() === 200),
-    page.getByRole('button', { name: /sign in|登录继续|授权进入工作台|完成设置并登录/i }).click(),
-  ]);
-    await page.waitForURL(/\/$/);
-  await page.goto(redirectPath);
+async function openRouteWithMockSession(page: Page, path: string) {
+  await page.route('**/api/v1/auth/status**', async (route) => {
+    await fulfillJson(route, {
+      authEnabled: true,
+      loggedIn: true,
+      passwordSet: true,
+      passwordChangeable: true,
+      setupState: 'enabled',
+      currentUser: mockCurrentUser,
+    });
+  });
+  await page.route('**/api/v1/auth/me**', async (route) => {
+    await fulfillJson(route, mockCurrentUser);
+  });
+  await page.goto(path);
   await page.waitForLoadState('domcontentloaded');
+  await expect(page).not.toHaveURL(/\/guest(?:$|[/?#])/);
 }
 
 test.describe('secondary consumer copy smoke', () => {
   test('liquidity monitor keeps consumer-safe degraded copy', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await installLiquidityPayload(page);
-    await signIn(page, '/zh/market/liquidity-monitor');
+    await openRouteWithMockSession(page, '/zh/market/liquidity-monitor');
 
-    await expect(page.getByRole('heading', { name: '流动性监测' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('liquidity-summary-strip')).toContainText('仅观察');
-    await expect(page.getByTestId('liquidity-context-rail')).toContainText('数据不足，暂不形成结论');
-    await expectNoForbiddenTerms(page, forbiddenInternalPattern);
-    await expectNoForbiddenTerms(page, forbiddenTradingPattern, allowedBoundaryTerms);
-    await expectNoHorizontalOverflow(page);
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    try {
+      await expect(page.getByRole('heading', { name: '流动性监测' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('liquidity-summary-strip')).toContainText('仅观察');
+      await expect(page.getByTestId('liquidity-context-rail')).toContainText('数据不足，暂不形成结论');
+      await expectNoForbiddenTerms(page, forbiddenInternalPattern);
+      await expectNoForbiddenTerms(page, forbiddenTradingPattern, allowedBoundaryTerms);
+      await expectNoHorizontalOverflow(page);
+    } finally {
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+    }
   });
 
   test('portfolio keeps empty-state CTA copy without execution wording', async ({ page }) => {
@@ -336,29 +356,35 @@ test.describe('secondary consumer copy smoke', () => {
   test('watchlist keeps empty-state CTA copy without harsh wording', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await installWatchlistEmptyHarness(page);
-    await signIn(page, '/zh/watchlist');
+    await openRouteWithMockSession(page, '/zh/watchlist');
 
-    await expect(page.getByTestId('watchlist-page')).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('body')).toContainText(/观察列表|watchlist/i);
-    await expect(page.getByTestId('watchlist-compact-empty-state')).toContainText('先从扫描器加入候选，也可以在扫描器手动补充代码。');
-    await expect(page.getByTestId('watchlist-compact-empty-state')).toContainText('打开扫描器');
-    await expectNoForbiddenTerms(page, forbiddenInternalPattern);
-    await expectNoForbiddenTerms(page, forbiddenExecutionPattern, allowedBoundaryTerms);
-    await expectNoHorizontalOverflow(page);
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    try {
+      await expect(page.getByTestId('watchlist-page')).toBeVisible({ timeout: 15_000 });
+      await expect(page.locator('body')).toContainText(/观察列表|watchlist/i);
+      await expect(page.getByTestId('watchlist-compact-empty-state')).toContainText('先从扫描器加入候选，也可以在扫描器手动补充代码。');
+      await expect(page.getByTestId('watchlist-compact-empty-state')).toContainText('打开扫描器');
+      await expectNoForbiddenTerms(page, forbiddenInternalPattern);
+      await expectNoForbiddenTerms(page, forbiddenExecutionPattern, allowedBoundaryTerms);
+      await expectNoHorizontalOverflow(page);
+    } finally {
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+    }
   });
 
   test('backtest keeps rule preview and research-simulation boundary copy', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await signIn(page, '/zh/backtest');
+    await openRouteWithMockSession(page, '/zh/backtest');
 
-    await expect(page.getByTestId('backtest-bento-page')).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('body')).toContainText('回测规则预览');
-    await expect(page.locator('body')).toContainText('固定规则回测流程');
-    await expect(page.locator('body')).toContainText(/研究模拟/);
-    await expectNoForbiddenTerms(page, forbiddenInternalPattern);
-    await expectNoForbiddenTerms(page, forbiddenExecutionPattern, allowedBoundaryTerms);
-    await expectNoHorizontalOverflow(page);
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    try {
+      await expect(page.getByTestId('backtest-bento-page')).toBeVisible({ timeout: 15_000 });
+      await expect(page.locator('body')).toContainText('回测规则预览');
+      await expect(page.locator('body')).toContainText('固定规则回测流程');
+      await expect(page.locator('body')).toContainText(/研究模拟/);
+      await expectNoForbiddenTerms(page, forbiddenInternalPattern);
+      await expectNoForbiddenTerms(page, forbiddenExecutionPattern, allowedBoundaryTerms);
+      await expectNoHorizontalOverflow(page);
+    } finally {
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+    }
   });
 });
