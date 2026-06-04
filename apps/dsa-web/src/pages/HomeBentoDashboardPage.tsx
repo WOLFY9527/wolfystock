@@ -6,6 +6,7 @@ import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { publicAnalysisApi } from '../api/publicAnalysis';
 import {
   buildConsumerResearchReadinessView,
+  extractAnalysisEvidenceCitationFrame,
   extractAnalysisEvidenceCoverageFrame,
   extractAnalysisResearchReadiness,
   inferAnalysisResearchReadiness,
@@ -37,6 +38,7 @@ import {
 } from '../hooks/useSafariInteractionReady';
 import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
 import type {
+  AnalysisEvidenceCitationFrame,
   AnalysisEvidenceCoverageFrame,
   AnalysisReport,
   DataQualityReport,
@@ -107,6 +109,69 @@ const HOME_CHART_FALLBACK_TIMEFRAMES = ['1D', '1W', '1M'];
 const HOME_CHART_FALLBACK_INDICATORS = ['MA5', 'MA10', 'MA20', 'MA60', 'VWAP'];
 const HOME_CHART_FALLBACK_GRID_ROWS = ['price-top', 'price-upper', 'price-mid', 'volume'];
 const HOME_CHART_IDLE_TIMEOUT_MS = 240;
+const HOME_COMPLIANCE_ACTION_TEXT_PATTERN = /小仓试错|第二笔|建仓|加仓|减仓|买入|卖出|做多|做空|下单|券商|probe size|start light|add only|reduce into strength|trim rather than|buy recommendation|sell recommendation|trading recommendation|trade now|order now|broker/i;
+
+const HOME_EVIDENCE_CITATION_DOMAIN_LABELS: Record<string, { zh: string; en: string }> = {
+  priceHistory: { zh: '价格历史', en: 'Price history' },
+  technicals: { zh: '技术面', en: 'Technicals' },
+  fundamentals: { zh: '基本面', en: 'Fundamentals' },
+  earnings: { zh: '财报', en: 'Earnings' },
+  filings: { zh: '披露文件', en: 'Filings' },
+  news: { zh: '新闻', en: 'News' },
+  catalysts: { zh: '催化', en: 'Catalysts' },
+  sentiment: { zh: '情绪', en: 'Sentiment' },
+  valuation: { zh: '估值', en: 'Valuation' },
+  sectorTheme: { zh: '行业主题', en: 'Sector theme' },
+  macroLiquidity: { zh: '宏观流动性', en: 'Macro liquidity' },
+};
+
+const HOME_EVIDENCE_CITATION_STATUS_LABELS: Record<string, { zh: string; en: string }> = {
+  available: { zh: '可引', en: 'Cited' },
+  degraded: { zh: '受限', en: 'Bounded' },
+  missing: { zh: '待补', en: 'Missing' },
+  blocked: { zh: '阻断', en: 'Blocked' },
+  pending: { zh: '待补', en: 'Pending' },
+};
+
+function sanitizeHomeConsumerActionCopy(locale: DashboardLocale, raw: string): string {
+  const value = String(raw || '').trim();
+  if (!value || !HOME_COMPLIANCE_ACTION_TEXT_PATTERN.test(value)) {
+    return value;
+  }
+  return locale === 'en'
+    ? 'This remains observation-only; watch the key range behavior and wait for clearer confirming data.'
+    : '当前仅供观察，关注关键区间表现，并等待更明确数据确认。';
+}
+
+function homeEvidenceCitationDomainLabel(locale: DashboardLocale, domain: string | undefined): string {
+  return HOME_EVIDENCE_CITATION_DOMAIN_LABELS[String(domain || '').trim()]?.[locale] || (locale === 'en' ? 'Evidence' : '证据');
+}
+
+function homeEvidenceCitationStatusLabel(locale: DashboardLocale, status: string | undefined): string {
+  return HOME_EVIDENCE_CITATION_STATUS_LABELS[String(status || '').trim()]?.[locale] || (locale === 'en' ? 'Pending' : '待补');
+}
+
+function homeEvidenceCitationFrameStateMeta(
+  locale: DashboardLocale,
+  state: string | undefined,
+): { label: string; tone: 'used' | 'warning' | 'missing' } {
+  if (state === 'ready') {
+    return {
+      label: locale === 'en' ? 'Citations ready' : '引用已整理',
+      tone: 'used',
+    };
+  }
+  if (state === 'observe_only') {
+    return {
+      label: locale === 'en' ? 'Citations bounded' : '引用受限',
+      tone: 'warning',
+    };
+  }
+  return {
+    label: locale === 'en' ? 'Citations incomplete' : '引用待补',
+    tone: 'missing',
+  };
+}
 
 function useDeferredHomeChartMount() {
   const [shouldRenderChart, setShouldRenderChart] = useState(false);
@@ -1101,12 +1166,87 @@ function buildSupportFactorCopy(locale: DashboardLocale, dashboard: DashboardPay
   return isEnglish ? 'No stable support factor is confirmed yet.' : '暂未形成稳定支撑因素。';
 }
 
+function HomeEvidenceCitationSummary({
+  locale,
+  frame,
+}: {
+  locale: DashboardLocale;
+  frame: AnalysisEvidenceCitationFrame | null;
+}) {
+  if (!frame || frame.noAdviceBoundary !== true) {
+    return null;
+  }
+
+  const stateMeta = homeEvidenceCitationFrameStateMeta(locale, frame.frameState);
+  const citedEvidence = (frame.citedEvidence || []).slice(0, 3);
+  const domainCoverage = (frame.domainCoverage || []).slice(0, 4);
+  const missingEvidence = (frame.missingEvidence || []).slice(0, 3);
+  const nextEvidenceNeeded = (frame.nextEvidenceNeeded || []).slice(0, 2);
+  const isEnglish = locale === 'en';
+
+  return (
+    <section
+      className="min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-white/[0.025] px-4 py-3.5"
+      data-testid="home-evidence-citation-strip"
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <p className="text-[11px] font-semibold tracking-[0] text-white/52">
+          {isEnglish ? 'Evidence citations' : '证据引用'}
+        </p>
+        <TraceBadge tone={stateMeta.tone}>{stateMeta.label}</TraceBadge>
+        <TraceBadge tone="neutral">{isEnglish ? 'No-advice boundary' : '仅研究引用'}</TraceBadge>
+      </div>
+      {citedEvidence.length ? (
+        <div className="mt-3 grid gap-2">
+          {citedEvidence.map((item) => (
+            <div
+              key={`${item.domain || 'unknown'}-${item.id || 'missing'}`}
+              className="min-w-0 rounded-[7px] border border-white/[0.06] bg-white/[0.025] px-3 py-2.5"
+            >
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-white/48">
+                <span>{homeEvidenceCitationDomainLabel(locale, item.domain)}</span>
+                <span className="font-mono text-white/36">{item.id}</span>
+              </div>
+              <p className="mt-1 min-w-0 break-words text-sm leading-6 text-white/72">{item.summary}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+        {domainCoverage.map((item) => (
+          <span
+            key={`${item.domain || 'unknown'}-${item.status || 'missing'}`}
+            className="inline-flex min-h-8 items-center rounded-full border border-white/[0.07] bg-white/[0.03] px-3 text-xs font-medium text-white/68"
+          >
+            {homeEvidenceCitationDomainLabel(locale, item.domain)}
+            {' · '}
+            {homeEvidenceCitationStatusLabel(locale, item.status)}
+          </span>
+        ))}
+      </div>
+      {missingEvidence.length ? (
+        <p className="mt-3 min-w-0 break-words text-xs leading-5 text-white/56">
+          {isEnglish ? 'Missing evidence: ' : '待补证据：'}
+          {missingEvidence.map((item) => homeEvidenceCitationDomainLabel(locale, item)).join(isEnglish ? ', ' : '、')}
+        </p>
+      ) : null}
+      {nextEvidenceNeeded.length ? (
+        <p className="mt-1 min-w-0 break-words text-xs leading-5 text-white/56">
+          {isEnglish ? 'Next evidence: ' : '下一步证据：'}
+          {nextEvidenceNeeded.join(isEnglish ? '; ' : '；')}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 function HomeConclusionFirstConsole({
   locale,
   dashboard,
   dataQualityReport,
   researchReadiness,
   evidenceCoverageFrame,
+  evidenceCitationFrame,
   evidencePacket,
   decisionTrace,
   sourceSummary,
@@ -1119,6 +1259,7 @@ function HomeConclusionFirstConsole({
   dataQualityReport?: DataQualityReport;
   researchReadiness: ConsumerResearchReadinessView;
   evidenceCoverageFrame: AnalysisEvidenceCoverageFrame | null;
+  evidenceCitationFrame: AnalysisEvidenceCitationFrame | null;
   evidencePacket?: SingleStockEvidencePacket | null;
   decisionTrace?: DecisionTrace;
   sourceSummary?: string;
@@ -1197,6 +1338,11 @@ function HomeConclusionFirstConsole({
           testId="home-evidence-packet-strip"
           className="mb-4"
         />
+        {evidenceCitationFrame ? (
+          <div className="mb-4">
+            <HomeEvidenceCitationSummary locale={locale} frame={evidenceCitationFrame} />
+          </div>
+        ) : null}
 
         <div className="min-w-0" data-testid="home-research-current-conclusion">
           <p className="text-[12px] font-semibold tracking-[0] text-white/52">
@@ -2547,23 +2693,23 @@ function buildTechnicalInsightFallback(
 
   if (locale === 'en') {
     if (tone === 'bearish' || hasBearishMa) {
-      return 'Trend tape is losing sponsorship: moving-average pressure remains overhead, downside confirmation is not fully priced, and risk should be cut before adding exposure.';
+      return 'Trend tape is losing sponsorship: moving-average pressure remains overhead, so the setup should stay observation-only until downside pressure is re-evaluated.';
     }
     if (tone === 'bullish' || hasBullishMa) {
       return hasOverbought
-        ? 'The tape remains in bullish moving-average alignment with acceptable volume confirmation, but RSI is stretched into an overbought band, so near-term strength should be trimmed rather than chased.'
-        : 'The tape is holding bullish moving-average alignment with improving momentum confirmation; pullbacks into the short-term support cluster remain the cleaner execution window.';
+        ? 'The tape remains in bullish moving-average alignment with acceptable volume confirmation, but RSI is stretched into an overbought band, so near-term strength still needs more confirmation.'
+        : 'The tape is holding bullish moving-average alignment with improving momentum confirmation; watch the short-term support cluster for follow-up evidence.';
     }
-    return 'The setup is still a repair trade: short-term averages are stabilizing, but momentum confirmation is incomplete, so wait for a second volume expansion before increasing risk.';
+    return 'The setup is still in repair mode: short-term averages are stabilizing, but momentum confirmation is incomplete, so wait for a second volume expansion before upgrading the conclusion.';
   }
 
   if (tone === 'bearish' || hasBearishMa) {
-    return '技术面仍受均线压制，空头动能尚未完全释放，量价结构没有给出有效反包信号，短线应先降风险而不是补仓。';
+    return '技术面仍受均线压制，量价结构没有给出有效反包信号，当前仅供观察并等待更明确的数据确认。';
   }
   if (tone === 'bullish' || hasBullishMa) {
     return hasOverbought
-      ? '技术面呈现均线多头排列，量价配合理想，但 RSI 已进入超买区，短线更适合逢高减仓而不是追价。'
-      : '技术面维持均线多头排列，动能确认仍在，回踩短期支撑簇时更适合分批试仓，放量跌破则立即收缩风险。';
+      ? '技术面呈现均线多头排列，量价配合理想，但 RSI 已进入超买区，当前仅供观察并等待更明确的数据确认。'
+      : '技术面维持均线多头排列，动能确认仍在，关注短期支撑簇表现并等待后续证据确认。';
   }
   return '技术面处于均线修复段，短线动能尚未完全失效，但量价确认不足，当前以等待二次放量和支撑回踩确认为主。';
 }
@@ -2836,7 +2982,7 @@ function normalizeDecisionAction(value: unknown, locale: DashboardLocale): strin
   if (normalized in zhLabels) {
     return locale === 'en' ? enLabels[normalized] : zhLabels[normalized];
   }
-  return text;
+  return sanitizeHomeConsumerActionCopy(locale, text);
 }
 
 function firstMeaningfulValue(values: unknown[]): string | undefined {
@@ -3092,7 +3238,7 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVarian
           { label: '上方观察区', value: '183.00', tone: 'bullish' },
           { label: '风险失效线', value: '159.20', tone: 'bearish' },
         ],
-        positionBody: '只在确认量能延续时提高关注级别，否则保持试错假设，避免在事件回落中被动扩大风险。',
+        positionBody: '只在确认量能延续时提高关注级别，否则维持观察假设，等待更明确数据确认。',
       },
       tech: {
         ...CONTENT.zh.tech,
@@ -3145,7 +3291,7 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVarian
           { label: 'Upper Watch Zone', value: '133.50', tone: 'bullish' },
           { label: 'Invalidation Line', value: '117.40', tone: 'bearish' },
         ],
-        positionBody: 'Start light into the earnings-led base, then add only if the pullback stays orderly on lighter volume.',
+        positionBody: 'Keep this in observation mode around the earnings-led base, then wait for orderly pullback confirmation on lighter volume.',
       },
       tech: {
         ...CONTENT.en.tech,
@@ -3193,7 +3339,7 @@ const DASHBOARD_VARIANTS: Record<DashboardLocale, Record<string, DashboardVarian
           { label: 'Upper Watch Zone', value: '183.00', tone: 'bullish' },
           { label: 'Invalidation Line', value: '159.20', tone: 'bearish' },
         ],
-        positionBody: 'Add only when follow-through volume confirms. Otherwise keep risk in probe size and avoid forcing size into a news-driven retrace.',
+        positionBody: 'Wait for follow-through volume confirmation. Otherwise keep the setup observation-only and avoid upgrading the conclusion during a news-driven retrace.',
       },
       tech: {
         ...CONTENT.en.tech,
@@ -3368,17 +3514,19 @@ function polishHomeNarrativeCopy(locale: DashboardLocale, raw: string, context: 
       });
 
   if (locale === 'en') {
-    return relabeledCurrency
+    const sanitized = relabeledCurrency
       .replace(/\brecommend(?:s|ed|ation)?\b/gi, 'research note')
       .replace(/\bguaranteed\b/gi, 'unconfirmed');
+    return sanitizeHomeConsumerActionCopy(locale, sanitized);
   }
 
-  return relabeledCurrency
+  const sanitized = relabeledCurrency
     .replace(/建议观望等待/g, '当前仍以观察为主，等待')
     .replace(/建议继续观望/g, '当前结论仍是继续观察')
     .replace(/建议观望/g, '当前结论仍是观察')
     .replace(/建议等待/g, '当前仍需等待')
     .replace(/建议/g, '研究提示');
+  return sanitizeHomeConsumerActionCopy(locale, sanitized);
 }
 
 function formatHistoryTimestamp(value?: string, locale: DashboardLocale = 'zh'): string {
@@ -3496,7 +3644,7 @@ const REPORT_TEXT_EN_BY_KEY: Record<string, string> = {
   持有: 'Hold',
   技术面与基本面相互印证综合建议以持有为主: 'Technical and fundamental signals align, so the composite stance remains Hold.',
   持有技术结构价格仍位于ma20上方防守位在17548近期支撑ma簇一带若回踩企稳趋势延续概率更高方向偏多置信度中: 'Hold · Structure still sits above MA20, with defense near 175.48 (recent support / MA cluster). Trend continuation improves if the pullback stabilizes, and the directional bias remains constructive with medium conviction.',
-  理想做法是回踩支撑簇小仓试错若站回ma5ma10再做第二笔: 'Start with probe size on a pullback into the support cluster, then add only if price reclaims MA5 and MA10.',
+  理想做法是回踩支撑簇小仓试错若站回ma5ma10再做第二笔: 'Watch the support cluster on a pullback, then wait for clearer confirmation above MA5 and MA10.',
   短线技术偏强均线结构偏强价格位于ma20上方价格位于ma60上方: 'Short-term technical posture remains constructive, with price holding above both MA20 and MA60.',
   目标区间: 'Target zone',
   近期支撑ma簇: 'recent support / MA cluster',
@@ -4871,6 +5019,10 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     () => extractAnalysisEvidenceCoverageFrame(activeTraceReport),
     [activeTraceReport],
   );
+  const activeEvidenceCitationFrame = useMemo(
+    () => extractAnalysisEvidenceCitationFrame(activeTraceReport),
+    [activeTraceReport],
+  );
   const activeSingleStockEvidencePacket = useMemo(
     () => getSingleStockEvidencePacket(activeTraceReport),
     [activeTraceReport],
@@ -5680,6 +5832,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                               dataQualityReport={activeDataQualityReport}
                               researchReadiness={activeResearchReadinessView}
                               evidenceCoverageFrame={activeEvidenceCoverageFrame}
+                              evidenceCitationFrame={activeEvidenceCitationFrame}
                               evidencePacket={activeSingleStockEvidencePacket}
                               decisionTrace={activeDecisionTrace}
                               sourceSummary={sourceSummary}

@@ -1,4 +1,8 @@
 import type {
+  AnalysisEvidenceCitationDomain,
+  AnalysisEvidenceCitationDomainCoverageEntry,
+  AnalysisEvidenceCitationFrame,
+  AnalysisEvidenceCitationItem,
   AnalysisEvidenceCoverageDomain,
   AnalysisEvidenceCoverageEntry,
   AnalysisEvidenceCoverageFrame,
@@ -441,6 +445,23 @@ const ANALYSIS_EVIDENCE_COVERAGE_DOMAINS: AnalysisEvidenceCoverageDomain[] = [
   'macroContext',
 ];
 
+const ANALYSIS_EVIDENCE_CITATION_DOMAINS: AnalysisEvidenceCitationDomain[] = [
+  'priceHistory',
+  'technicals',
+  'fundamentals',
+  'earnings',
+  'filings',
+  'news',
+  'catalysts',
+  'sentiment',
+  'valuation',
+  'sectorTheme',
+  'macroLiquidity',
+];
+
+const ANALYSIS_EVIDENCE_CITATION_STATUSES = new Set(['available', 'degraded', 'missing', 'blocked', 'pending']);
+const ANALYSIS_EVIDENCE_CITATION_FORBIDDEN_TEXT = /provider|authority|freshness|debug|analysis:|router|cache|credential|token|prompt|request[\s_-]*body|raw[\s_-]*payload|article[\s_-]*body|sourceid|source_id|internal|env/i;
+
 function readEvidenceCoverageEntry(value: unknown): AnalysisEvidenceCoverageEntry | null {
   if (!isRecord(value)) return null;
   const status = typeof value.status === 'string' ? value.status : null;
@@ -468,6 +489,80 @@ function readEvidenceCoverageFrame(value: unknown): AnalysisEvidenceCoverageFram
   return Object.keys(frame).length ? frame : null;
 }
 
+function readEvidenceCitationDomain(value: unknown): AnalysisEvidenceCitationDomain | null {
+  const domain = typeof value === 'string' ? value.trim() : '';
+  return ANALYSIS_EVIDENCE_CITATION_DOMAINS.includes(domain as AnalysisEvidenceCitationDomain)
+    ? domain as AnalysisEvidenceCitationDomain
+    : null;
+}
+
+function readEvidenceCitationText(value: unknown): string | null {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text || ANALYSIS_EVIDENCE_CITATION_FORBIDDEN_TEXT.test(text)) {
+    return null;
+  }
+  return text;
+}
+
+function readEvidenceCitationItem(value: unknown): AnalysisEvidenceCitationItem | null {
+  if (!isRecord(value)) return null;
+  const id = readEvidenceCitationText(value.id);
+  const domain = readEvidenceCitationDomain(value.domain);
+  const summary = readEvidenceCitationText(value.summary);
+  if (!id || !domain || !summary) return null;
+  return { id, domain, summary };
+}
+
+function readEvidenceCitationCoverageEntry(value: unknown): AnalysisEvidenceCitationDomainCoverageEntry | null {
+  if (!isRecord(value)) return null;
+  const domain = readEvidenceCitationDomain(value.domain);
+  const status = typeof value.status === 'string' ? value.status.trim().toLowerCase() : '';
+  if (!domain || !ANALYSIS_EVIDENCE_CITATION_STATUSES.has(status)) {
+    return null;
+  }
+  return {
+    domain,
+    status,
+    evidenceRefIds: asStringArray(value.evidenceRefIds).filter((item) => !ANALYSIS_EVIDENCE_CITATION_FORBIDDEN_TEXT.test(item)),
+  };
+}
+
+function readEvidenceCitationFrame(value: unknown): AnalysisEvidenceCitationFrame | null {
+  if (!isRecord(value)) return null;
+  const frameState = typeof value.frameState === 'string' ? value.frameState.trim().toLowerCase() : '';
+  if (!frameState || !['ready', 'observe_only', 'blocked'].includes(frameState)) {
+    return null;
+  }
+
+  const citedEvidence = Array.isArray(value.citedEvidence)
+    ? value.citedEvidence.map(readEvidenceCitationItem).filter((item): item is AnalysisEvidenceCitationItem => Boolean(item))
+    : [];
+  const domainCoverage = Array.isArray(value.domainCoverage)
+    ? value.domainCoverage.map(readEvidenceCitationCoverageEntry).filter((item): item is AnalysisEvidenceCitationDomainCoverageEntry => Boolean(item))
+    : [];
+  const missingEvidence = asStringArray(value.missingEvidence)
+    .map(readEvidenceCitationText)
+    .filter((item): item is string => Boolean(item));
+  const nextEvidenceNeeded = asStringArray(value.nextEvidenceNeeded)
+    .map(readEvidenceCitationText)
+    .filter((item): item is string => Boolean(item));
+  const noAdviceBoundary = value.noAdviceBoundary === true;
+
+  if (!noAdviceBoundary) return null;
+  if (!citedEvidence.length && !domainCoverage.length && !missingEvidence.length && !nextEvidenceNeeded.length) {
+    return null;
+  }
+
+  return {
+    frameState,
+    citedEvidence,
+    domainCoverage,
+    missingEvidence,
+    nextEvidenceNeeded,
+    noAdviceBoundary,
+  };
+}
+
 export function extractAnalysisResearchReadiness(report: AnalysisReport | null | undefined): ResearchReadinessV1 | null {
   const direct = readNestedResearchReadiness((report as AnalysisReport & { researchReadiness?: unknown } | null)?.researchReadiness);
   if (direct) return direct;
@@ -492,6 +587,20 @@ export function extractAnalysisEvidenceCoverageFrame(
 
   const details = report?.details as { analysisResult?: UnknownRecord } | undefined;
   return readEvidenceCoverageFrame(details?.analysisResult?.evidenceCoverageFrame);
+}
+
+export function extractAnalysisEvidenceCitationFrame(
+  report: AnalysisReport | null | undefined,
+): AnalysisEvidenceCitationFrame | null {
+  const direct = readEvidenceCitationFrame((report as AnalysisReport & { evidenceCitationFrame?: unknown } | null)?.evidenceCitationFrame);
+  if (direct) return direct;
+
+  const meta = report?.meta as ReportMeta & { evidenceCitationFrame?: unknown } | undefined;
+  const metaFrame = readEvidenceCitationFrame(meta?.evidenceCitationFrame);
+  if (metaFrame) return metaFrame;
+
+  const details = report?.details as { analysisResult?: UnknownRecord } | undefined;
+  return readEvidenceCitationFrame(details?.analysisResult?.evidenceCitationFrame);
 }
 
 function inferEvidenceFromDataQuality(report: DataQualityReport | undefined): string[] {

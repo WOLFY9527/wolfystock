@@ -2,6 +2,7 @@
 - Scanner now surfaces additive per-candidate research summaries in the ranking rows and current-candidate detail rail, translating `candidateResearchSummaryFrame` into consumer-safe why/evidence/missing/market-driver/next-step copy without changing scanner ranking, scoring, filters, selection, or provider/runtime behavior.
 - Scanner run/detail payloads now expose additive per-candidate `candidateResearchSummaryFrame` projections built only from existing evidence, readiness, rank/score, and top-down scanner context, without changing scanner ranking, selection, provider/runtime, cache, or advice boundaries.
 - Consumer web shell labels and auth-guard copy are now product-safe and consistently localized across zh/en, including clearer Market Overview navigation, localized liquidity/rotation labels, sanitized admin account naming in the masthead, and neutral sign-in-required protected-route messaging without auth or route behavior changes.
+- Home research console now removes consumer-visible trading-action phrasing and surfaces a compact fail-closed `evidenceCitationFrame` summary with bounded citation ids, summaries, domain coverage, and no-advice evidence follow-ups, without changing backend/runtime/provider, chart/search, or route semantics.
 
 ## 2026-06-03
 - Added the docs-only Admin/Ops IA consolidation blueprint covering current route inventory, L0-L4 operator grouping, disclosure rules, safe drill-through contracts, and phased rewrite slices T-907 through T-910.

@@ -242,8 +242,10 @@ const HOME_EVIDENCE_COVERAGE_INTERNAL_COPY_PATTERN =
   /provider_timeout|sourceTier|sourceAuthority|fallbackOrProxy|router|cache|credential|providerRoute|partial_coverage|coverage_not_assembled/i;
 const HOME_EVIDENCE_PACKET_INTERNAL_COPY_PATTERN =
   /provider_timeout|raw_payload|internal_router|router_env|cache_key|trace_id|credential|prompt|schema|provider|debug|admin/i;
+const HOME_EVIDENCE_CITATION_INTERNAL_COPY_PATTERN =
+  /provider|authority|freshness|debugRef|analysis:|router|cache|credential|token|prompt|request body|raw payload|article body|sourceId|internal/i;
 const HOME_EVIDENCE_PACKET_TRADING_COPY_PATTERN =
-  /buy now|sell now|trade now|order now|broker route|买入|卖出|下单|交易|经纪商/i;
+  /buy now|sell now|trade now|order now|broker route|买入|卖出|下单|交易|经纪商|小仓试错|第二笔|建仓|加仓|减仓|probe size|start light|add only/i;
 const defaultStockEvidenceResponse = {
   symbols: ['ORCL'],
   items: [
@@ -746,7 +748,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-research-data-state-strip')).toBeInTheDocument();
     expect(screen.queryByTestId('home-bento-decision-score-value')).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('home-bento-dashboard')).toHaveTextContent('不构成投资建议'));
-    expect(screen.getByTestId('home-bento-dashboard')).not.toHaveTextContent(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|目标价|止损|加仓|减仓|buy recommendation|sell recommendation|trading recommendation|guaranteed|AI recommends you buy/i);
+    expect(screen.getByTestId('home-bento-dashboard')).not.toHaveTextContent(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|目标价|止损|建仓|加仓|减仓|小仓试错|第二笔|buy recommendation|sell recommendation|trading recommendation|probe size|start light|add only|guaranteed|AI recommends you buy/i);
   });
 
   it('keeps US equity key levels non-CNY and makes the right rail conclusion-first', async () => {
@@ -855,7 +857,7 @@ describe('HomeSurfacePage', () => {
     expect(trustStrip).not.toHaveTextContent(/\bnews\b/i);
 
     expect(screen.getByTestId('home-bento-decision-signal-hero')).toHaveTextContent('仅观察');
-    expect(screen.getByTestId('home-bento-dashboard')).not.toHaveTextContent(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|guaranteed|AI recommends you buy/i);
+    expect(screen.getByTestId('home-bento-dashboard')).not.toHaveTextContent(/买入|卖出|下单|立即交易|必买|稳赚|保证收益|建仓|加仓|减仓|小仓试错|第二笔|probe size|start light|add only|guaranteed|AI recommends you buy/i);
   });
 
   it('shows only verified catalyst-like events when report event data exists', async () => {
@@ -1609,6 +1611,70 @@ describe('HomeSurfacePage', () => {
     expect(strip.textContent).not.toMatch(HOME_EVIDENCE_COVERAGE_INTERNAL_COPY_PATTERN);
   });
 
+  it('shows a bounded home evidence citation summary when citation evidence is present', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      evidenceCitationFrame: {
+        frameState: 'observe_only',
+        citedEvidence: [
+          {
+            id: 'cit-fund-1',
+            domain: 'fundamentals',
+            summary: '自由现金流连续两个季度维持正向修复。',
+            sourceId: 'must-not-render',
+            providerAuthority: 'must-not-render',
+          },
+          {
+            id: 'cit-news-1',
+            domain: 'news',
+            summary: '云订单续签仍是当前观察主线。',
+            freshness: 'must-not-render',
+          },
+        ],
+        domainCoverage: [
+          {
+            domain: 'fundamentals',
+            status: 'available',
+            evidenceRefIds: ['cit-fund-1'],
+            notes: ['provider authority must-not-render'],
+          },
+          {
+            domain: 'news',
+            status: 'degraded',
+            evidenceRefIds: ['cit-news-1'],
+          },
+          {
+            domain: 'catalysts',
+            status: 'missing',
+            evidenceRefIds: ['internal_router'],
+          },
+        ],
+        missingEvidence: ['catalysts'],
+        nextEvidenceNeeded: ['补充催化剂证据', 'provider authority must-not-render'],
+        noAdviceBoundary: true,
+        debugRef: 'analysis:orcl-001',
+      },
+    } as never);
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+
+    const strip = screen.getByTestId('home-evidence-citation-strip');
+    expect(strip).toHaveTextContent('证据引用');
+    expect(strip).toHaveTextContent('引用受限');
+    expect(strip).toHaveTextContent('仅研究引用');
+    expect(strip).toHaveTextContent('基本面');
+    expect(strip).toHaveTextContent('cit-fund-1');
+    expect(strip).toHaveTextContent('自由现金流连续两个季度维持正向修复。');
+    expect(strip).toHaveTextContent('新闻');
+    expect(strip).toHaveTextContent('cit-news-1');
+    expect(strip).toHaveTextContent('待补证据：催化');
+    expect(strip).toHaveTextContent('下一步证据：补充催化剂证据');
+    expect(strip.textContent).not.toMatch(HOME_EVIDENCE_CITATION_INTERNAL_COPY_PATTERN);
+    expect(strip.textContent).not.toMatch(HOME_EVIDENCE_PACKET_TRADING_COPY_PATTERN);
+  });
+
   it('shows a compact home evidence packet strip for an ORCL-like partial packet', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
@@ -1703,6 +1769,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-research-readiness-strip')).toBeInTheDocument();
     expect(screen.getByTestId('home-evidence-coverage-strip')).toBeInTheDocument();
     expect(screen.queryByTestId('home-evidence-packet-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-evidence-citation-strip')).not.toBeInTheDocument();
   });
 
   it('opens the decision trace fixture drawer in a narrow viewport', async () => {

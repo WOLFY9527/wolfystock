@@ -43,6 +43,7 @@ export interface ReportMeta {
   dataQualityReport?: DataQualityReport;
   researchReadiness?: ResearchReadinessV1;
   evidenceCoverageFrame?: AnalysisEvidenceCoverageFrame;
+  evidenceCitationFrame?: AnalysisEvidenceCitationFrame;
   singleStockEvidencePacket?: SingleStockEvidencePacket;
 }
 
@@ -78,6 +79,46 @@ export interface AnalysisEvidenceCoverageEntry {
 }
 
 export type AnalysisEvidenceCoverageFrame = Partial<Record<AnalysisEvidenceCoverageDomain, AnalysisEvidenceCoverageEntry>>;
+
+export type AnalysisEvidenceCitationFrameState =
+  | 'ready'
+  | 'observe_only'
+  | 'blocked'
+  | string;
+
+export type AnalysisEvidenceCitationDomain =
+  | 'priceHistory'
+  | 'technicals'
+  | 'fundamentals'
+  | 'earnings'
+  | 'filings'
+  | 'news'
+  | 'catalysts'
+  | 'sentiment'
+  | 'valuation'
+  | 'sectorTheme'
+  | 'macroLiquidity';
+
+export interface AnalysisEvidenceCitationItem {
+  id?: string;
+  domain?: AnalysisEvidenceCitationDomain;
+  summary?: string;
+}
+
+export interface AnalysisEvidenceCitationDomainCoverageEntry {
+  domain?: AnalysisEvidenceCitationDomain;
+  status?: AnalysisEvidenceCitationFrameState;
+  evidenceRefIds?: string[];
+}
+
+export interface AnalysisEvidenceCitationFrame {
+  frameState?: AnalysisEvidenceCitationFrameState;
+  citedEvidence?: AnalysisEvidenceCitationItem[];
+  domainCoverage?: AnalysisEvidenceCitationDomainCoverageEntry[];
+  missingEvidence?: string[];
+  nextEvidenceNeeded?: string[];
+  noAdviceBoundary?: boolean;
+}
 
 export type SingleStockEvidencePacketStatus =
   | 'available'
@@ -409,6 +450,7 @@ export interface ReportDetails {
   analysisResult?: Record<string, unknown> & {
     researchReadiness?: ResearchReadinessV1;
     evidenceCoverageFrame?: AnalysisEvidenceCoverageFrame;
+    evidenceCitationFrame?: AnalysisEvidenceCitationFrame;
     singleStockEvidencePacket?: SingleStockEvidencePacket;
   };
   rawAiResponse?: string | Record<string, unknown>;
@@ -605,6 +647,7 @@ export interface AnalysisReport {
   dataQualityReport?: DataQualityReport;
   researchReadiness?: ResearchReadinessV1;
   evidenceCoverageFrame?: AnalysisEvidenceCoverageFrame;
+  evidenceCitationFrame?: AnalysisEvidenceCitationFrame;
   singleStockEvidencePacket?: SingleStockEvidencePacket;
   contractMeta?: FrontendReportContractMeta;
   reportQuality?: ReportQuality;
