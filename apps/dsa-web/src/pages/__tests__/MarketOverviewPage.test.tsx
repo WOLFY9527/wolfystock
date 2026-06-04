@@ -2525,6 +2525,68 @@ describe('MarketOverviewPage', () => {
     expect(changeBlock).toHaveClass('col-start-5', 'text-right');
   });
 
+  it('translates raw provider and proxy copy into consumer-safe market labels', async () => {
+    vi.mocked(marketApi.getSentiment).mockResolvedValueOnce({
+      ...sentimentPanel(),
+      items: [
+        sentimentPanel().items[0],
+        {
+          symbol: 'PUTCALL',
+          label: 'Put/Call',
+          value: 0.92,
+          unit: 'ratio',
+          changePct: null,
+          riskDirection: 'neutral' as const,
+          trend: [0.95, 0.92],
+          hoverDetails: [
+            'ETF flow proxy',
+            'Institutional pressure proxy',
+            'Industry breadth proxy',
+            'Rotation Non Scoring Or Taxonomy Only',
+            'REAL',
+            'MIXED',
+            'Sector ETF proxy 暂不可用',
+          ],
+        },
+        {
+          symbol: 'AAII',
+          label: 'AAII',
+          value: 38,
+          unit: 'score',
+          changePct: -2,
+          riskDirection: 'increasing' as const,
+          trend: [41, 39, 38],
+          hoverDetails: ['PROVIDER ALTERNATIVE_ME'],
+        },
+      ],
+    });
+    vi.mocked(marketApi.getCnShortSentiment).mockResolvedValueOnce({
+      ...cnShortSentimentPayload(),
+      source: 'ALTERNATIVE_ME',
+      sourceLabel: 'PROVIDER ALTERNATIVE_ME',
+      updatedAt: '',
+      asOf: undefined,
+    });
+
+    render(createElement(MarketOverviewPage));
+
+    expect(await screen.findByText('ETF 资金流指标')).toBeInTheDocument();
+    expect(screen.getByText('机构压力指标')).toBeInTheDocument();
+    expect(screen.getByText('行业广度指标')).toBeInTheDocument();
+    expect(screen.getByText('轮动仅作分类参考')).toBeInTheDocument();
+    expect(screen.getByText(/行业 ETF 指标\s*暂不可用/)).toBeInTheDocument();
+    expect(screen.getByText('Alternative.me 情绪数据')).toBeInTheDocument();
+
+    const footerTitles = screen.getAllByTestId('market-overview-footer-meta')
+      .map((node) => node.getAttribute('title') || '')
+      .join(' ');
+
+    const renderedCopy = `${document.body.textContent || ''} ${footerTitles}`;
+    expect(renderedCopy).not.toMatch(
+      /PROVIDER ALTERNATIVE_ME|ETF flow proxy|Institutional pressure proxy|Industry breadth proxy|Rotation Non Scoring Or Taxonomy Only|Sector ETF proxy/i,
+    );
+  });
+
   it('copies a market overview summary from the current visible state', async () => {
     render(createElement(MarketOverviewPage));
 

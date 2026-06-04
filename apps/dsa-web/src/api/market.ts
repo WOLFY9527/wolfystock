@@ -6,6 +6,157 @@ import { buildAbsoluteApiUrl, joinApiPath } from './path';
 import { normalizeMarketIntelligenceEvidenceItem } from './marketIntelligenceEvidence';
 import type { ResearchReadinessV1 } from '../types/researchReadiness';
 
+const CONSUMER_SOURCE_LABEL_MAP: Record<string, string> = {
+  'PROVIDER ALTERNATIVE_ME': 'Alternative.me 情绪数据',
+  ALTERNATIVE_ME: 'Alternative.me 情绪数据',
+  'ETF FLOW PROXY': 'ETF 资金流指标',
+  'INSTITUTIONAL PRESSURE PROXY': '机构压力指标',
+  'INDUSTRY BREADTH PROXY': '行业广度指标',
+  'SECTOR ETF PROXY': '行业 ETF 指标',
+  REAL: '实时',
+  MIXED: '混合来源',
+  'ROTATION NON SCORING OR TAXONOMY ONLY': '轮动仅作分类参考',
+  'YAHOO FINANCE': '市场行情数据',
+  'YAHOO PROXY': '市场参考指标',
+  SINA: '市场行情数据',
+  BINANCE: '加密行情数据',
+  'BINANCE WS': '加密实时行情',
+  'BINANCE + CACHE': '加密实时与最近快照',
+  'BINANCE PARTIAL SNAPSHOT': '最近可用快照',
+  'RECENT CACHE': '最近可用快照',
+  'LOCAL CACHE': '本地最近快照',
+  'OFFICIAL MACRO MIX': '宏观综合数据',
+  'NYSE OFFICIAL BREADTH CACHE': '市场宽度统计',
+  'POLYGON GROUPED DAILY': '市场宽度日频统计',
+  'SINA + YAHOO FINANCE': '多来源市场数据',
+  'SINA + 备用数据': '多来源市场数据',
+  'NOT RETURNED': '待补数据',
+};
+
+const CONSUMER_SOURCE_LABEL_RULES: Array<[RegExp, string]> = [
+  [/FRED\s+[A-Z0-9_]+/gi, '官方宏观数据'],
+  [/Sector ETF proxy/gi, '行业 ETF 指标'],
+  [/ETF flow proxy/gi, 'ETF 资金流指标'],
+  [/Institutional pressure proxy/gi, '机构压力指标'],
+  [/Industry breadth proxy/gi, '行业广度指标'],
+  [/Rotation Non Scoring Or Taxonomy Only/gi, '轮动仅作分类参考'],
+];
+
+function normalizeConsumerSourceKey(value?: string | null): string {
+  return String(value || '').replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+export function normalizeMarketConsumerText(value?: string | null): string | undefined {
+  const trimmed = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const exactMatch = CONSUMER_SOURCE_LABEL_MAP[normalizeConsumerSourceKey(trimmed)];
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  let normalized = trimmed;
+  CONSUMER_SOURCE_LABEL_RULES.forEach(([pattern, replacement]) => {
+    normalized = normalized.replace(pattern, replacement);
+  });
+
+  return normalized;
+}
+
+function normalizeMarketConsumerSourceLabel(sourceLabel?: string | null, source?: string | null): string | undefined {
+  return normalizeMarketConsumerText(sourceLabel)
+    || normalizeMarketConsumerText(source);
+}
+
+function normalizeMarketProviderHealth(providerHealth?: MarketProviderHealth | null): MarketProviderHealth | undefined {
+  if (!providerHealth) {
+    return undefined;
+  }
+  return {
+    ...providerHealth,
+    sourceLabel: normalizeMarketConsumerSourceLabel(providerHealth.sourceLabel, providerHealth.provider) || providerHealth.sourceLabel,
+  };
+}
+
+function normalizeMarketOverviewItemConsumerCopy(item: MarketOverviewItem): MarketOverviewItem {
+  return {
+    ...item,
+    sourceLabel: normalizeMarketConsumerSourceLabel(item.sourceLabel, item.source) || item.sourceLabel,
+    providerHealth: normalizeMarketProviderHealth(item.providerHealth) || item.providerHealth,
+    warning: normalizeMarketConsumerText(item.warning) || item.warning,
+    hoverDetails: Array.isArray(item.hoverDetails)
+      ? item.hoverDetails.map((detail) => normalizeMarketConsumerText(detail) || detail)
+      : item.hoverDetails,
+  };
+}
+
+export function normalizeMarketOverviewPanelConsumerCopy<T extends MarketOverviewPanel | null | undefined>(panel: T): T {
+  if (!panel) {
+    return panel;
+  }
+  return {
+    ...panel,
+    sourceLabel: normalizeMarketConsumerSourceLabel(panel.sourceLabel, panel.source) || panel.sourceLabel,
+    providerHealth: normalizeMarketProviderHealth(panel.providerHealth) || panel.providerHealth,
+    warning: normalizeMarketConsumerText(panel.warning) || panel.warning,
+    items: Array.isArray(panel.items) ? panel.items.map(normalizeMarketOverviewItemConsumerCopy) : [],
+  } as T;
+}
+
+export function normalizeMarketBriefingConsumerCopy<T extends MarketBriefingResponse | null | undefined>(response: T): T {
+  if (!response) {
+    return response;
+  }
+  return {
+    ...response,
+    sourceLabel: normalizeMarketConsumerSourceLabel(response.sourceLabel, response.source) || response.sourceLabel,
+    providerHealth: normalizeMarketProviderHealth(response.providerHealth) || response.providerHealth,
+    warning: normalizeMarketConsumerText(response.warning) || response.warning,
+    items: Array.isArray(response.items)
+      ? response.items.map((item) => ({
+          ...item,
+          title: normalizeMarketConsumerText(item.title) || item.title,
+          message: normalizeMarketConsumerText(item.message) || item.message,
+        }))
+      : [],
+  } as T;
+}
+
+export function normalizeMarketFuturesConsumerCopy<T extends MarketFuturesResponse | null | undefined>(response: T): T {
+  if (!response) {
+    return response;
+  }
+  return {
+    ...response,
+    sourceLabel: normalizeMarketConsumerSourceLabel(response.sourceLabel, response.source) || response.sourceLabel,
+    providerHealth: normalizeMarketProviderHealth(response.providerHealth) || response.providerHealth,
+    warning: normalizeMarketConsumerText(response.warning) || response.warning,
+    items: Array.isArray(response.items)
+      ? response.items.map((item) => ({
+          ...item,
+          sourceLabel: normalizeMarketConsumerSourceLabel(item.sourceLabel, item.source) || item.sourceLabel,
+          providerHealth: normalizeMarketProviderHealth(item.providerHealth) || item.providerHealth,
+          warning: normalizeMarketConsumerText(item.warning) || item.warning,
+        }))
+      : [],
+  } as T;
+}
+
+export function normalizeCnShortSentimentConsumerCopy<T extends CnShortSentimentResponse | null | undefined>(response: T): T {
+  if (!response) {
+    return response;
+  }
+  return {
+    ...response,
+    sourceLabel: normalizeMarketConsumerSourceLabel(response.sourceLabel, response.source) || response.sourceLabel,
+    providerHealth: normalizeMarketProviderHealth(response.providerHealth) || response.providerHealth,
+    warning: normalizeMarketConsumerText(response.warning) || response.warning,
+    summary: normalizeMarketConsumerText(response.summary) || response.summary,
+  } as T;
+}
+
 type MarketSnapshotItem = {
   symbol?: string;
   name?: string;
@@ -887,8 +1038,8 @@ export function normalizeMarketTemperatureResponse(
 
   return {
     source: payload?.source || 'fallback',
-    sourceLabel: payload?.sourceLabel,
-    providerHealth: payload?.providerHealth,
+    sourceLabel: normalizeMarketConsumerSourceLabel(payload?.sourceLabel, payload?.source),
+    providerHealth: normalizeMarketProviderHealth(payload?.providerHealth),
     updatedAt: payload?.updatedAt || new Date().toISOString(),
     asOf: payload?.asOf,
     freshness: payload?.freshness,
@@ -896,7 +1047,7 @@ export function normalizeMarketTemperatureResponse(
     isStale: payload?.isStale,
     isRefreshing: payload?.isRefreshing,
     delayMinutes: payload?.delayMinutes,
-    warning: payload?.warning,
+    warning: normalizeMarketConsumerText(payload?.warning) || payload?.warning,
     confidence: payload?.confidence,
     reliableInputCount: payload?.reliableInputCount,
     requiredReliableInputCount: payload?.requiredReliableInputCount,

@@ -12,7 +12,14 @@ import type {
   MarketFuturesResponse,
   MarketTemperatureResponse,
 } from '../api/market';
-import { marketApi, normalizeMarketTemperatureResponse } from '../api/market';
+import {
+  marketApi,
+  normalizeCnShortSentimentConsumerCopy,
+  normalizeMarketBriefingConsumerCopy,
+  normalizeMarketFuturesConsumerCopy,
+  normalizeMarketOverviewPanelConsumerCopy,
+  normalizeMarketTemperatureResponse,
+} from '../api/market';
 import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
 import MarketIntelligenceActionabilityStrip from '../components/market/MarketIntelligenceActionabilityStrip';
 import {
@@ -304,7 +311,12 @@ function buildInitialPanelsFromLocalSnapshot(): { panels: PanelState; source: 'l
     cnShortSentiment: FALLBACK_CN_SHORT_SENTIMENT,
     ...localSnapshot.payload,
   } as PanelState;
-  panels.temperature = normalizeMarketTemperatureResponse(panels.temperature);
+  (Object.keys(panels) as PanelKey[]).forEach((panelKey) => {
+    const value = panels[panelKey];
+    if (value) {
+      assignPanelValue(panels, panelKey, value as PanelState[PanelKey]);
+    }
+  });
   return {
     source: 'local',
     savedAt: localSnapshot.savedAt,
@@ -352,19 +364,19 @@ function assignPanelValue(nextPanels: PanelState, panelKey: PanelKey, value: Pan
     case 'usBreadth':
     case 'rates':
     case 'fxCommodities':
-      nextPanels[panelKey] = value as MarketOverviewPanel;
+      nextPanels[panelKey] = normalizeMarketOverviewPanelConsumerCopy(value as MarketOverviewPanel);
       break;
     case 'temperature':
       nextPanels.temperature = normalizeMarketTemperatureResponse(value as MarketTemperatureResponse);
       break;
     case 'briefing':
-      nextPanels.briefing = value as MarketBriefingResponse;
+      nextPanels.briefing = normalizeMarketBriefingConsumerCopy(value as MarketBriefingResponse);
       break;
     case 'futures':
-      nextPanels.futures = value as MarketFuturesResponse;
+      nextPanels.futures = normalizeMarketFuturesConsumerCopy(value as MarketFuturesResponse);
       break;
     case 'cnShortSentiment':
-      nextPanels.cnShortSentiment = value as CnShortSentimentResponse;
+      nextPanels.cnShortSentiment = normalizeCnShortSentimentConsumerCopy(value as CnShortSentimentResponse);
       break;
   }
 }
@@ -897,7 +909,7 @@ const MarketOverviewPage = () => {
         resetAutoRevalidatePanel('crypto');
         setPanels((currentPanels) => ({
           ...currentPanels,
-          crypto: panel,
+          crypto: normalizeMarketOverviewPanelConsumerCopy(panel),
         }));
       }
       setCryptoRealtimeStatus(status);
