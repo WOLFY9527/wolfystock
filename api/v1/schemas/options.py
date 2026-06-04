@@ -250,6 +250,30 @@ class OptionsResearchReadiness(_OptionsModel):
     next_evidence_needed: List[str] = Field(default_factory=list, alias="nextEvidenceNeeded")
 
 
+class OptionsConsumerScenarioFrame(_OptionsModel):
+    contract_version: str = Field(
+        default="options-consumer-scenario-frame-v1",
+        alias="contractVersion",
+    )
+    frame_state: Literal["ready", "observe_only", "insufficient", "blocked"] = Field(alias="frameState")
+    underlying: Dict[str, Any]
+    strategy_type: str = Field(alias="strategyType")
+    expiration: Optional[str] = None
+    scenario_coverage: OptionsScenarioCoverage = Field(alias="scenarioCoverage")
+    chain_quality: Dict[str, Any] = Field(alias="chainQuality")
+    liquidity_gate: OptionsGateStatus = Field(alias="liquidityGate")
+    iv_greeks_gate: OptionsGateStatus = Field(alias="ivGreeksGate")
+    spread_gate: OptionsGateStatus = Field(alias="spreadGate")
+    payoff_evidence: Dict[str, Any] = Field(alias="payoffEvidence")
+    risk_evidence: Dict[str, Any] = Field(alias="riskEvidence")
+    assumptions: Dict[str, Any]
+    missing_evidence: List[str] = Field(default_factory=list, alias="missingEvidence")
+    blocking_reasons: List[str] = Field(default_factory=list, alias="blockingReasons")
+    next_evidence_needed: List[str] = Field(default_factory=list, alias="nextEvidenceNeeded")
+    no_trading_boundary: OptionsNoTradingBoundary = Field(alias="noTradingBoundary")
+    debug_ref: str = Field(alias="debugRef")
+
+
 def _dedupe_codes(values: List[str]) -> List[str]:
     seen: set[str] = set()
     ordered: List[str] = []
@@ -596,6 +620,236 @@ def _build_contract_response_readiness(
     )
 
 
+def _frame_state_from_readiness(
+    readiness: Optional[OptionsResearchReadiness],
+) -> Literal["ready", "observe_only", "insufficient", "blocked"]:
+    if readiness is None:
+        return "insufficient"
+    if readiness.readiness_state == "live_usable" and readiness.decision_grade:
+        return "ready"
+    if readiness.readiness_state == "delayed_usable":
+        return "observe_only"
+    if readiness.readiness_state == "blocked":
+        return "blocked"
+    return "insufficient"
+
+
+def _missing_evidence_labels(
+    *,
+    readiness: Optional[OptionsResearchReadiness],
+    extra_codes: Optional[List[str]] = None,
+) -> List[str]:
+    if readiness is None:
+        return []
+    codes = set(readiness.blocking_reasons)
+    if extra_codes:
+        codes.update(str(code or "").strip() for code in extra_codes if str(code or "").strip())
+    missing: List[str] = []
+    if any(code in _PROVIDER_BLOCKING_CODES for code in codes):
+        missing.extend(["provider authority", "live chain"])
+    if any(code in {"missing_bid_ask", "missing_contract_legs"} for code in codes):
+        missing.append("bid ask")
+    if any(code in {"missing_iv", "missing_greeks"} for code in codes):
+        missing.append("iv greeks")
+    if any(code in {"missing_volume", "low_or_missing_volume"} for code in codes):
+        missing.append("volume")
+    if any(code in {"missing_open_interest", "low_or_missing_open_interest"} for code in codes):
+        missing.append("open interest")
+    if readiness.readiness_state == "delayed_usable":
+        missing.append("freshness")
+    return _dedupe_codes(missing)
+
+
+def _chain_quality_summary(
+    *,
+    has_chain: bool,
+    contract_count: int,
+    call_count: int,
+    put_count: int,
+    freshness: str,
+    source_type: str,
+    coverage_state: OptionsScenarioCoverage,
+) -> Dict[str, Any]:
+    return {
+        "hasChain": has_chain,
+        "contractCount": contract_count,
+        "callCount": call_count,
+        "putCount": put_count,
+        "freshness": freshness or "unknown",
+        "sourceType": source_type or "unknown",
+        "coverageState": coverage_state,
+    }
+
+
+def _build_scenario_frame(
+    response: "OptionsScenarioResponse",
+    readiness: Optional[OptionsResearchReadiness],
+) -> OptionsConsumerScenarioFrame:
+    target_row = next((row for row in response.expiration_payoff_grid if row.label == "custom_target"), None)
+    return OptionsConsumerScenarioFrame(
+        frameState=_frame_state_from_readiness(readiness),
+        underlying=dict(response.underlying),
+        strategyType=response.strategy,
+        expiration=response.contract.expiration,
+        scenarioCoverage=readiness.scenario_coverage if readiness is not None else "single_contract",
+        chainQuality=_chain_quality_summary(
+            has_chain=True,
+            contract_count=1,
+            call_count=1 if response.contract.side == "call" else 0,
+            put_count=1 if response.contract.side == "put" else 0,
+            freshness=response.contract.freshness,
+            source_type=response.contract.source,
+            coverage_state=readiness.scenario_coverage if readiness is not None else "single_contract",
+        ),
+        liquidityGate=readiness.liquidity_gate if readiness is not None else "manual_review",
+        ivGreeksGate=readiness.iv_greeks_gate if readiness is not None else "manual_review",
+        spreadGate=readiness.spread_gate if readiness is not None else "manual_review",
+        payoffEvidence={
+            "targetPrice": target_row.underlying_price if target_row is not None else None,
+            "payoffAtTarget": target_row.net_payoff if target_row is not None else None,
+            "payoffAtTargetLabel": target_row.label if target_row is not None else None,
+            "scenarioPoints": len(response.expiration_payoff_grid),
+            "theoreticalPricingAvailable": bool(response.pre_expiration_theoretical_pricing.get("available")),
+        },
+        riskEvidence={
+            "premiumAtRisk": response.risk.premium_at_risk,
+            "maxLoss": response.risk.max_loss,
+            "maxGain": None,
+            "breakeven": response.risk.breakeven,
+            "requiredMovePct": response.risk.required_move_pct,
+        },
+        assumptions={
+            "inputMode": "scenario",
+            "targetPrice": target_row.underlying_price if target_row is not None else None,
+            "customPriceCount": 0,
+            "preExpirationTheoreticalPricing": str(response.pre_expiration_theoretical_pricing.get("reason") or ""),
+        },
+        missingEvidence=_missing_evidence_labels(readiness=readiness),
+        blockingReasons=list(readiness.blocking_reasons if readiness is not None else []),
+        nextEvidenceNeeded=list(readiness.next_evidence_needed if readiness is not None else []),
+        noTradingBoundary=readiness.no_trading_boundary if readiness is not None else _no_trading_boundary(response.metadata),
+        debugRef="options:scenario",
+    )
+
+
+def _build_compare_frame(
+    response: "OptionsStrategyCompareResponse",
+    readiness: Optional[OptionsResearchReadiness],
+) -> OptionsConsumerScenarioFrame:
+    top_strategy = response.strategies[0] if response.strategies else None
+    legs = list(top_strategy.legs) if top_strategy is not None else []
+    return OptionsConsumerScenarioFrame(
+        frameState=_frame_state_from_readiness(readiness),
+        underlying=dict(response.underlying),
+        strategyType=top_strategy.strategy_type if top_strategy is not None else "long_call",
+        expiration=legs[0].expiration if legs else None,
+        scenarioCoverage=readiness.scenario_coverage if readiness is not None else "strategy_compare_ready",
+        chainQuality=_chain_quality_summary(
+            has_chain=top_strategy is not None,
+            contract_count=len(legs),
+            call_count=sum(1 for leg in legs if leg.side == "call"),
+            put_count=sum(1 for leg in legs if leg.side == "put"),
+            freshness=str(response.underlying.get("freshness") or "unknown"),
+            source_type="unknown",
+            coverage_state=readiness.scenario_coverage if readiness is not None else "strategy_compare_ready",
+        ),
+        liquidityGate=readiness.liquidity_gate if readiness is not None else "manual_review",
+        ivGreeksGate="manual_review",
+        spreadGate="manual_review",
+        payoffEvidence={
+            "targetPrice": response.assumptions.get("targetPrice"),
+            "payoffAtTarget": top_strategy.payoff_at_target if top_strategy is not None else None,
+            "candidateCount": len(response.strategies),
+            "topStrategyType": top_strategy.strategy_type if top_strategy is not None else None,
+            "comparisonState": readiness.scenario_coverage if readiness is not None else "strategy_compare_ready",
+        },
+        riskEvidence={
+            "premiumAtRisk": top_strategy.net_debit if top_strategy is not None else None,
+            "maxLoss": top_strategy.max_loss if top_strategy is not None else None,
+            "maxGain": top_strategy.max_gain if top_strategy is not None else None,
+            "breakeven": top_strategy.breakeven if top_strategy is not None else None,
+            "requiredMovePct": top_strategy.required_move_pct if top_strategy is not None else None,
+        },
+        assumptions={
+            "inputMode": "strategy_compare",
+            "direction": response.assumptions.get("direction"),
+            "targetPrice": response.assumptions.get("targetPrice"),
+            "targetDate": response.assumptions.get("targetDate"),
+            "riskProfile": response.assumptions.get("riskProfile"),
+        },
+        missingEvidence=_missing_evidence_labels(
+            readiness=readiness,
+            extra_codes=["missing_iv", "missing_greeks"],
+        ),
+        blockingReasons=list(readiness.blocking_reasons if readiness is not None else []),
+        nextEvidenceNeeded=list(readiness.next_evidence_needed if readiness is not None else []),
+        noTradingBoundary=readiness.no_trading_boundary if readiness is not None else _no_trading_boundary(response.metadata),
+        debugRef="options:strategies_compare",
+    )
+
+
+def _build_decision_frame(
+    response: "OptionsDecisionResponse",
+    readiness: Optional[OptionsResearchReadiness],
+) -> OptionsConsumerScenarioFrame:
+    leg_count = max(
+        len(response.data_quality_gates.leg_diagnostics) if response.data_quality_gates is not None else 0,
+        len(response.liquidity_gates.leg_diagnostics) if response.liquidity_gates is not None else 0,
+        1,
+    )
+    return OptionsConsumerScenarioFrame(
+        frameState=_frame_state_from_readiness(readiness),
+        underlying={"symbol": response.symbol},
+        strategyType=response.strategy,
+        expiration=None,
+        scenarioCoverage=readiness.scenario_coverage if readiness is not None else "single_contract",
+        chainQuality=_chain_quality_summary(
+            has_chain=True,
+            contract_count=leg_count,
+            call_count=0,
+            put_count=0,
+            freshness=response.freshness.freshness if response.freshness is not None else "unknown",
+            source_type=response.freshness.source if response.freshness is not None else "unknown",
+            coverage_state=readiness.scenario_coverage if readiness is not None else "single_contract",
+        ),
+        liquidityGate=readiness.liquidity_gate if readiness is not None else "manual_review",
+        ivGreeksGate=readiness.iv_greeks_gate if readiness is not None else "manual_review",
+        spreadGate=readiness.spread_gate if readiness is not None else "manual_review",
+        payoffEvidence={
+            "targetPrice": None,
+            "payoffAtTarget": None,
+            "expectedMoveAbs": response.expected_move.expected_move_abs,
+            "expectedMovePct": response.expected_move.expected_move_pct,
+            "expectedMoveSource": response.expected_move.expected_move_source,
+        },
+        riskEvidence={
+            "premiumAtRisk": None,
+            "maxLoss": response.risk_reward.max_loss,
+            "maxGain": response.risk_reward.max_gain,
+            "breakeven": response.breakeven.breakeven,
+            "requiredMovePct": response.breakeven.required_move_pct,
+        },
+        assumptions={
+            "inputMode": "decision",
+            "decisionLabel": "仅观察" if response.decision_label in {"有条件可交易", "高风险，仅小仓验证"} else response.decision_label,
+            "targetPriceStatus": response.breakeven.target_price_status,
+            "optimizerLabel": response.optimizer.optimizer_label,
+        },
+        missingEvidence=_missing_evidence_labels(
+            readiness=readiness,
+            extra_codes=[
+                *list(response.data_quality.warnings),
+                *list(response.iv_greeks.warnings),
+                *list(response.liquidity.liquidity_warnings),
+            ],
+        ),
+        blockingReasons=list(readiness.blocking_reasons if readiness is not None else []),
+        nextEvidenceNeeded=list(readiness.next_evidence_needed if readiness is not None else []),
+        noTradingBoundary=readiness.no_trading_boundary if readiness is not None else _no_trading_boundary(response.metadata),
+        debugRef="options:decision_evaluate",
+    )
+
+
 class OptionsAnalyzeRequest(_OptionsModel):
     symbol: str
     market_data_provider: str = Field(default="synthetic_fixture", alias="marketDataProvider")
@@ -721,6 +975,10 @@ class OptionsScenarioResponse(_OptionsModel):
         default=None,
         alias="optionsResearchReadiness",
     )
+    options_consumer_scenario_frame: Optional[OptionsConsumerScenarioFrame] = Field(
+        default=None,
+        alias="optionsConsumerScenarioFrame",
+    )
 
     @model_validator(mode="after")
     def _populate_options_readiness(self) -> "OptionsScenarioResponse":
@@ -735,6 +993,10 @@ class OptionsScenarioResponse(_OptionsModel):
             existing_readiness=self.options_readiness,
             existing_alias=self.options_research_readiness,
             computed=computed,
+        )
+        self.options_consumer_scenario_frame = self.options_consumer_scenario_frame or _build_scenario_frame(
+            self,
+            self.options_research_readiness,
         )
         return self
 
@@ -792,6 +1054,10 @@ class OptionsStrategyCompareResponse(_OptionsModel):
         default=None,
         alias="optionsResearchReadiness",
     )
+    options_consumer_scenario_frame: Optional[OptionsConsumerScenarioFrame] = Field(
+        default=None,
+        alias="optionsConsumerScenarioFrame",
+    )
 
     @model_validator(mode="after")
     def _populate_options_readiness(self) -> "OptionsStrategyCompareResponse":
@@ -807,6 +1073,10 @@ class OptionsStrategyCompareResponse(_OptionsModel):
             existing_readiness=self.options_readiness,
             existing_alias=self.options_research_readiness,
             computed=computed,
+        )
+        self.options_consumer_scenario_frame = self.options_consumer_scenario_frame or _build_compare_frame(
+            self,
+            self.options_research_readiness,
         )
         return self
 
@@ -977,6 +1247,10 @@ class OptionsDecisionResponse(_OptionsModel):
         default=None,
         alias="optionsResearchReadiness",
     )
+    options_consumer_scenario_frame: Optional[OptionsConsumerScenarioFrame] = Field(
+        default=None,
+        alias="optionsConsumerScenarioFrame",
+    )
 
     @model_validator(mode="after")
     def _populate_options_readiness(self) -> "OptionsDecisionResponse":
@@ -1076,5 +1350,9 @@ class OptionsDecisionResponse(_OptionsModel):
             existing_readiness=self.options_readiness,
             existing_alias=self.options_research_readiness,
             computed=computed,
+        )
+        self.options_consumer_scenario_frame = self.options_consumer_scenario_frame or _build_decision_frame(
+            self,
+            self.options_research_readiness,
         )
         return self

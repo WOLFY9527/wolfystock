@@ -106,6 +106,50 @@ def _assert_no_safety_leaks(payload) -> None:
         assert value not in text
 
 
+def _assert_consumer_scenario_frame_contract(frame: dict) -> None:
+    assert set(frame.keys()) == {
+        "contractVersion",
+        "frameState",
+        "underlying",
+        "strategyType",
+        "expiration",
+        "scenarioCoverage",
+        "chainQuality",
+        "liquidityGate",
+        "ivGreeksGate",
+        "spreadGate",
+        "payoffEvidence",
+        "riskEvidence",
+        "assumptions",
+        "missingEvidence",
+        "blockingReasons",
+        "nextEvidenceNeeded",
+        "noTradingBoundary",
+        "debugRef",
+    }
+    assert frame["contractVersion"] == "options-consumer-scenario-frame-v1"
+    assert frame["underlying"]
+    assert frame["strategyType"]
+    assert frame["scenarioCoverage"] in {"missing_chain_data", "single_contract", "strategy_compare_ready"}
+    assert frame["liquidityGate"] in {"clear", "blocked", "observe_only", "manual_review"}
+    assert frame["ivGreeksGate"] in {"clear", "blocked", "observe_only", "manual_review"}
+    assert frame["spreadGate"] in {"clear", "blocked", "observe_only", "manual_review"}
+    assert frame["payoffEvidence"]
+    assert frame["riskEvidence"]
+    assert frame["assumptions"] is not None
+    assert isinstance(frame["missingEvidence"], list)
+    assert isinstance(frame["blockingReasons"], list)
+    assert isinstance(frame["nextEvidenceNeeded"], list)
+    assert frame["noTradingBoundary"] == {
+        "analyticalOnly": True,
+        "noBrokerExecution": True,
+        "noOrderPlacement": True,
+        "noPortfolioMutation": True,
+        "noTradingRecommendation": True,
+    }
+    assert frame["debugRef"].startswith("options:")
+
+
 class _MockTradierHttpResponse:
     def __init__(self, payload: object) -> None:
         self.payload = payload
@@ -1022,7 +1066,53 @@ def test_analyze_scenario_and_compare_endpoint_mappers_preserve_alias_contracts(
     assert scenario_payload["optionsReadiness"] == scenario_payload["optionsResearchReadiness"]
     assert scenario_payload["optionsReadiness"]["optionsResearchReady"] is False
     assert scenario_payload["optionsReadiness"]["readinessState"] == "blocked"
+    scenario_frame = scenario_payload["optionsConsumerScenarioFrame"]
+    _assert_consumer_scenario_frame_contract(scenario_frame)
+    assert scenario_frame["frameState"] == "blocked"
+    assert scenario_frame["underlying"] == {"symbol": "TEM", "price": 52.4}
+    assert scenario_frame["strategyType"] == "long_put"
+    assert scenario_frame["expiration"] == "2026-06-19"
+    assert scenario_frame["scenarioCoverage"] == "single_contract"
+    assert scenario_frame["chainQuality"] == {
+        "hasChain": True,
+        "contractCount": 1,
+        "callCount": 0,
+        "putCount": 1,
+        "freshness": "synthetic_delayed",
+        "sourceType": "synthetic_options_lab_fixture",
+        "coverageState": "single_contract",
+    }
+    assert scenario_frame["liquidityGate"] == "clear"
+    assert scenario_frame["ivGreeksGate"] == "clear"
+    assert scenario_frame["spreadGate"] == "clear"
+    assert scenario_frame["payoffEvidence"] == {
+        "targetPrice": 65.0,
+        "payoffAtTarget": 730.0,
+        "payoffAtTargetLabel": "custom_target",
+        "scenarioPoints": 1,
+        "theoreticalPricingAvailable": False,
+    }
+    assert scenario_frame["riskEvidence"] == {
+        "premiumAtRisk": 270.0,
+        "maxLoss": 270.0,
+        "maxGain": None,
+        "breakeven": 57.7,
+        "requiredMovePct": 10.11,
+    }
+    assert scenario_frame["assumptions"] == {
+        "inputMode": "scenario",
+        "targetPrice": 65.0,
+        "customPriceCount": 0,
+        "preExpirationTheoreticalPricing": "phase3_expiration_payoff_only",
+    }
+    assert scenario_frame["missingEvidence"] == [
+        "provider authority",
+        "live chain",
+    ]
+    assert scenario_frame["blockingReasons"] == scenario_payload["optionsReadiness"]["blockingReasons"]
+    assert scenario_frame["nextEvidenceNeeded"] == scenario_payload["optionsReadiness"]["nextEvidenceNeeded"]
     scenario_contract_only = dict(scenario_payload)
+    scenario_contract_only.pop("optionsConsumerScenarioFrame")
     scenario_contract_only.pop("optionsReadiness")
     scenario_contract_only.pop("optionsResearchReadiness")
     assert scenario_contract_only == {
@@ -1109,7 +1199,56 @@ def test_analyze_scenario_and_compare_endpoint_mappers_preserve_alias_contracts(
     assert compare_payload["optionsReadiness"] == compare_payload["optionsResearchReadiness"]
     assert compare_payload["optionsReadiness"]["optionsResearchReady"] is False
     assert compare_payload["optionsReadiness"]["readinessState"] == "blocked"
+    compare_frame = compare_payload["optionsConsumerScenarioFrame"]
+    _assert_consumer_scenario_frame_contract(compare_frame)
+    assert compare_frame["frameState"] == "blocked"
+    assert compare_frame["underlying"] == {"symbol": "TEM", "price": 52.4}
+    assert compare_frame["strategyType"] == "bull_call_spread"
+    assert compare_frame["expiration"] == "2026-06-19"
+    assert compare_frame["scenarioCoverage"] == "strategy_compare_ready"
+    assert compare_frame["chainQuality"] == {
+        "hasChain": True,
+        "contractCount": 2,
+        "callCount": 2,
+        "putCount": 0,
+        "freshness": "unknown",
+        "sourceType": "unknown",
+        "coverageState": "strategy_compare_ready",
+    }
+    assert compare_frame["liquidityGate"] == "manual_review"
+    assert compare_frame["ivGreeksGate"] == "manual_review"
+    assert compare_frame["spreadGate"] == "manual_review"
+    assert compare_frame["payoffEvidence"] == {
+        "targetPrice": 65.0,
+        "payoffAtTarget": 270.0,
+        "candidateCount": 1,
+        "topStrategyType": "bull_call_spread",
+        "comparisonState": "strategy_compare_ready",
+    }
+    assert compare_frame["riskEvidence"] == {
+        "premiumAtRisk": 230.0,
+        "maxLoss": 230.0,
+        "maxGain": 270.0,
+        "breakeven": 52.3,
+        "requiredMovePct": -0.19,
+    }
+    assert compare_frame["assumptions"] == {
+        "inputMode": "strategy_compare",
+        "direction": "bullish",
+        "targetPrice": 65.0,
+        "targetDate": "2026-06-19",
+        "riskProfile": "balanced",
+    }
+    assert compare_frame["missingEvidence"] == [
+        "provider authority",
+        "live chain",
+        "bid ask",
+        "iv greeks",
+    ]
+    assert compare_frame["blockingReasons"] == compare_payload["optionsReadiness"]["blockingReasons"]
+    assert compare_frame["nextEvidenceNeeded"] == compare_payload["optionsReadiness"]["nextEvidenceNeeded"]
     compare_contract_only = dict(compare_payload)
+    compare_contract_only.pop("optionsConsumerScenarioFrame")
     compare_contract_only.pop("optionsReadiness")
     compare_contract_only.pop("optionsResearchReadiness")
     assert compare_contract_only == {
@@ -1776,6 +1915,48 @@ def test_decision_endpoint_mapper_preserves_existing_alias_shape() -> None:
             "补充 OI/成交量与更紧价差证据",
         ],
     }
+    frame = payload["optionsConsumerScenarioFrame"]
+    _assert_consumer_scenario_frame_contract(frame)
+    assert frame["frameState"] == "blocked"
+    assert frame["underlying"] == {"symbol": "TEM"}
+    assert frame["strategyType"] == "bull_call_spread"
+    assert frame["expiration"] is None
+    assert frame["scenarioCoverage"] == "strategy_compare_ready"
+    assert frame["chainQuality"] == {
+        "hasChain": True,
+        "contractCount": 1,
+        "callCount": 0,
+        "putCount": 0,
+        "freshness": "synthetic_delayed",
+        "sourceType": "synthetic_fixture",
+        "coverageState": "strategy_compare_ready",
+    }
+    assert frame["liquidityGate"] == "manual_review"
+    assert frame["ivGreeksGate"] == "blocked"
+    assert frame["spreadGate"] == "clear"
+    assert frame["payoffEvidence"] == {
+        "targetPrice": None,
+        "payoffAtTarget": None,
+        "expectedMoveAbs": 7.5,
+        "expectedMovePct": 14.31,
+        "expectedMoveSource": "straddle_mid",
+    }
+    assert frame["riskEvidence"] == {
+        "premiumAtRisk": None,
+        "maxLoss": 230.0,
+        "maxGain": 270.0,
+        "breakeven": 57.7,
+        "requiredMovePct": 10.11,
+    }
+    assert frame["assumptions"] == {
+        "inputMode": "decision",
+        "decisionLabel": "仅观察",
+        "targetPriceStatus": "target_above_breakeven",
+        "optimizerLabel": "数据不足，禁止判断",
+    }
+    assert frame["missingEvidence"] == ["provider authority", "live chain", "iv greeks", "volume"]
+    assert frame["blockingReasons"] == payload["optionsReadiness"]["blockingReasons"]
+    assert frame["nextEvidenceNeeded"] == payload["optionsReadiness"]["nextEvidenceNeeded"]
     assert payload["optimizer"] == {
         "preferredStrategyKey": None,
         "optimizerLabel": "数据不足，禁止判断",
@@ -1909,7 +2090,8 @@ def test_decision_endpoint_options_readiness_detects_missing_chain_fields_and_wi
         ),
     )
 
-    readiness = options._map_decision_response(result).model_dump(by_alias=True)["optionsReadiness"]
+    payload = options._map_decision_response(result).model_dump(by_alias=True)
+    readiness = payload["optionsReadiness"]
     assert readiness["optionsResearchReady"] is False
     assert readiness["readinessState"] == "blocked"
     assert readiness["dataQualityTier"] == "insufficient"
@@ -1930,6 +2112,17 @@ def test_decision_endpoint_options_readiness_detects_missing_chain_fields_and_wi
         "补充 Greeks 与 IV 证据",
         "补充 OI/成交量与更紧价差证据",
     ]
+    frame = payload["optionsConsumerScenarioFrame"]
+    _assert_consumer_scenario_frame_contract(frame)
+    assert frame["frameState"] == "blocked"
+    assert frame["scenarioCoverage"] == "missing_chain_data"
+    assert frame["liquidityGate"] == "blocked"
+    assert frame["ivGreeksGate"] == "blocked"
+    assert frame["spreadGate"] == "blocked"
+    assert frame["payoffEvidence"]["expectedMoveSource"] == "unavailable"
+    assert frame["riskEvidence"]["breakeven"] is None
+    assert frame["missingEvidence"] == ["bid ask", "iv greeks", "volume", "open interest"]
+    assert frame["blockingReasons"] == readiness["blockingReasons"]
 
 
 def test_decision_endpoint_options_readiness_distinguishes_delayed_and_live_usable_states() -> None:
@@ -2121,8 +2314,10 @@ def test_decision_endpoint_options_readiness_distinguishes_delayed_and_live_usab
         ),
     )
 
-    delayed_readiness = options._map_decision_response(delayed_result).model_dump(by_alias=True)["optionsReadiness"]
-    live_readiness = options._map_decision_response(live_result).model_dump(by_alias=True)["optionsReadiness"]
+    delayed_payload = options._map_decision_response(delayed_result).model_dump(by_alias=True)
+    live_payload = options._map_decision_response(live_result).model_dump(by_alias=True)
+    delayed_readiness = delayed_payload["optionsReadiness"]
+    live_readiness = live_payload["optionsReadiness"]
 
     assert delayed_readiness["optionsResearchReady"] is True
     assert delayed_readiness["readinessState"] == "delayed_usable"
@@ -2145,6 +2340,16 @@ def test_decision_endpoint_options_readiness_distinguishes_delayed_and_live_usab
     assert live_readiness["scenarioCoverage"] == "single_contract"
     assert live_readiness["blockingReasons"] == []
     assert live_readiness["nextEvidenceNeeded"] == []
+    delayed_frame = delayed_payload["optionsConsumerScenarioFrame"]
+    live_frame = live_payload["optionsConsumerScenarioFrame"]
+    _assert_consumer_scenario_frame_contract(delayed_frame)
+    _assert_consumer_scenario_frame_contract(live_frame)
+    assert delayed_frame["frameState"] == "observe_only"
+    assert live_frame["frameState"] == "ready"
+    assert delayed_frame["missingEvidence"] == ["freshness"]
+    assert live_frame["missingEvidence"] == []
+    assert delayed_frame["nextEvidenceNeeded"] == ["等待更高新鲜度链路"]
+    assert live_frame["nextEvidenceNeeded"] == []
 
 
 def test_options_launch_source_does_not_import_broker_order_or_portfolio_mutation_paths() -> None:
