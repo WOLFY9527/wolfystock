@@ -893,6 +893,7 @@ function buildLiquidityNextWatch(
     missing.length ? `优先补齐 ${missing.join('、')}` : '',
     observation.length ? `继续观察 ${observation.join('、')}` : '',
     coverageSummary.directionLabel === '可参考' ? '确认新增反证是否进入可计分范围' : '',
+    '等待刷新后，对照 Market Overview / Rotation Radar 的主线是否一致',
   ].filter(Boolean);
   return parts.length ? parts.join('；') : '等待新的评分级证据进入可计分范围。';
 }
@@ -968,7 +969,7 @@ function buildLiquidityDecisionReadiness(
 }
 
 type LiquidityBiasSummary = {
-  label: '偏宽松' | '偏收紧' | '中性观察' | '仅观察' | '不可判断';
+  label: '偏宽松' | '偏收紧' | '无明显方向' | '仅观察' | '不可判断';
   variant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
   toneClassName: string;
   detail: string;
@@ -1032,10 +1033,10 @@ function buildLiquidityBiasSummary(
   }
 
   return {
-    label: '中性观察',
+    label: '无明显方向',
     variant: 'neutral',
     toneClassName: 'text-white/78',
-    detail: '扩张与收缩证据未形成单边方向，仅作为观察背景。',
+    detail: '扩张与收缩证据暂未形成单边方向，可先对照 Market Overview / Rotation Radar 继续观察。',
   };
 }
 
@@ -1250,13 +1251,13 @@ function buildConsumerGapSummary(
   consumerView: ConsumerLiquidityStatusView,
 ): string {
   if (missing.count > 0) {
-    return `仍有 ${missing.count} 项关键信号待恢复，当前先保留状态与最近更新。`;
+    return `数据不足，暂不形成结论；仍有 ${missing.count} 项关键信号待恢复，当前先保留状态与最近更新。`;
   }
   if (observation.count > 0) {
-    return `部分线索仍仅供观察，当前先不升级为完整方向判断。`;
+    return '数据不足，暂不形成结论；部分线索仍仅供观察，当前先不升级为完整方向判断。';
   }
   if (consumerView.scoringLabel === '评分已暂停') {
-    return '当前评分仍处于暂停状态，等待更多可用线索恢复。';
+    return '数据不足，暂不形成结论；当前评分仍处于暂停状态，等待更多可用线索恢复。';
   }
   return '当前没有新增缺口，继续跟踪后续变化。';
 }
@@ -1319,11 +1320,11 @@ function buildConsumerLiquidityStatusView(
           : '当前仍有部分信号待恢复，先保持观察。'
         : '当前主要流动性读数已返回，可继续观察。',
     scoringDetail: availabilityLabel === '暂不可用'
-      ? '本模块暂不可用，请稍后重试。'
+      ? '数据不足，暂不形成结论；请等待刷新，并对照 Market Overview / Rotation Radar 的相关线索。'
       : limitedConfidence
-        ? '当前流动性信号置信度较低，仅供观察。'
+        ? '数据不足，暂不形成结论；当前流动性信号置信度较低，请等待刷新并先查看当前证据。'
         : scoringPaused
-          ? '部分流动性数据暂不可用，当前评分已暂停。'
+          ? '数据不足，暂不形成结论；部分流动性数据暂不可用，当前评分已暂停。'
           : '当前流动性评分可继续参考。',
     freshnessSummary,
     freshnessDetail: `最近更新：${formatDateTime(data.freshness.latestAsOf) || '待确认'}`,

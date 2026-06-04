@@ -597,6 +597,103 @@ function withBreadthIndicator(indicator: Record<string, unknown>) {
   };
 }
 
+function buildNeutralReadyPayload() {
+  return {
+    ...payload,
+    score: {
+      ...payload.score,
+      regime: 'neutral',
+      confidence: 0.82,
+      includedIndicatorCount: payload.indicators.length,
+      includedIndicatorWeight: payload.score.possibleIndicatorWeight,
+    },
+    freshness: {
+      ...payload.freshness,
+      status: 'live',
+      weakestIndicatorFreshness: 'live',
+    },
+    indicators: payload.indicators.map((indicator) => ({
+      ...indicator,
+      status: 'live',
+      freshness: 'live',
+      includedInScore: true,
+      scoreContribution: indicator.scoreContribution || Math.max(1, indicator.scoreWeight || 1),
+      scoreWeight: indicator.scoreWeight || Math.max(1, indicator.scoreContribution || 1),
+      summary: indicator.key === 'crypto_funding' ? '当前信号可继续跟踪。' : indicator.summary,
+      evidence: indicator.evidence
+        ? {
+          ...indicator.evidence,
+          freshness: 'live',
+          isFallback: false,
+          isStale: false,
+          isPartial: false,
+          isUnavailable: false,
+          inputs: (indicator.evidence.inputs || []).map((input) => ({
+            ...input,
+            freshness: 'live',
+            isFallback: false,
+            isStale: false,
+            isPartial: false,
+            isUnavailable: false,
+            observationOnly: false,
+            sourceAuthorityAllowed: true,
+            scoreContributionAllowed: true,
+            sourceAuthorityReason: null,
+            sourceAuthorityRouteRejected: false,
+            routeRejectedReasonCodes: [],
+          })),
+        }
+        : indicator.evidence,
+      coverageDiagnostics: {
+        indicatorId: indicator.coverageDiagnostics?.indicatorId || indicator.key,
+        indicatorName: indicator.coverageDiagnostics?.indicatorName || indicator.label,
+        requiredInputs: indicator.coverageDiagnostics?.requiredInputs || [],
+        fulfilledInputs: indicator.coverageDiagnostics?.requiredInputs || [],
+        missingInputs: [],
+        configuredProviderAvailable: true,
+        realSourceAvailable: true,
+        proxyOnly: false,
+        observationOnly: false,
+        scoreContributionAllowed: true,
+        scoreExclusionReason: null,
+        requiredRealSourceForScore: true,
+        proxyObservationOnlyReason: null,
+        missingProviderReason: null,
+        paidDataLikelyRequired: false,
+        sourceTier: 'official_public',
+        freshness: 'live',
+        trustLevel: 'reliable',
+        contributesToScore: true,
+        scoreContribution: indicator.scoreContribution || Math.max(1, indicator.scoreWeight || 1),
+        capReason: null,
+        degradationReason: null,
+        sourceAuthorityRouteRejected: false,
+        sourceAuthorityReason: null,
+        routeRejectedReasonCodes: [],
+      },
+    })),
+    liquidityImpulseSynthesis: {
+      ...payload.liquidityImpulseSynthesis,
+      liquidityImpulse: 'balanced_liquidity',
+      impulseLabel: 'No Clear Edge',
+      subtype: 'broad_liquidity_expansion',
+      confidence: 0.78,
+      confidenceLabel: 'high',
+      directionScore: 0,
+      dataGaps: [],
+      evidenceQuality: {
+        scoringEvidenceCount: 3,
+        scoringPillarCount: 3,
+        discountedEvidenceCount: 0,
+        dataGapCount: 0,
+        proxyOnlyScoringCount: 0,
+        realScoringEvidenceCount: 3,
+        allScoringEvidenceProxyOnly: false,
+      },
+    },
+  };
+}
+
 describe('LiquidityMonitorPage', () => {
   afterEach(() => {
     cleanup();
@@ -634,6 +731,7 @@ describe('LiquidityMonitorPage', () => {
     expect(screen.getByTestId('liquidity-consumer-evidence')).toHaveTextContent('美国利率压力');
     expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('当前缺口');
     expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('下一次关注');
+    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('对照 Market Overview / Rotation Radar');
     const disclosure = screen.getByTestId('liquidity-monitor-consumer-details');
     expect(disclosure).toHaveAttribute('data-terminal-primitive', 'disclosure');
     expect(disclosure).not.toHaveAttribute('open');
@@ -696,6 +794,7 @@ describe('LiquidityMonitorPage', () => {
     expect(resolvedReadyBand).toHaveTextContent('当前流动性仍在观察中，主线索是美国利率压力。');
     expect(resolvedReadyBand).toHaveTextContent('下一次关注');
     expect(resolvedReadyBand).toHaveTextContent('当前证据');
+    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('数据不足，暂不形成结论');
     expect(within(resolvedReadyBand).queryByText('查看提供方覆盖')).not.toBeInTheDocument();
     expect(within(resolvedReadyBand).queryByText('前往数据源设置')).not.toBeInTheDocument();
     expect(resolvedReadyBand.textContent || '').not.toMatch(/买入|卖出|buy now|sell now|recommend/i);
@@ -813,6 +912,21 @@ describe('LiquidityMonitorPage', () => {
     expect(unavailableBand).not.toHaveTextContent('数据源不可用');
     expect(unavailableBand).not.toHaveTextContent('Provider unavailable');
     expect(unavailableBand).not.toHaveTextContent('前往数据源设置');
+    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('数据不足，暂不形成结论');
+    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('等待刷新');
+  });
+
+  it('renders a neutral consumer state as 无明显方向 without raw edge labels', async () => {
+    getLiquidityMonitor.mockResolvedValueOnce(buildNeutralReadyPayload());
+
+    render(<LiquidityMonitorPage />);
+
+    const summaryStrip = await screen.findByTestId('liquidity-summary-strip');
+    expect(summaryStrip).toHaveTextContent('当前读数');
+    expect(summaryStrip).toHaveTextContent('无明显方向');
+    expect(summaryStrip).not.toHaveTextContent('中性观察');
+    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('对照 Market Overview / Rotation Radar');
+    expect(screen.queryByText('No Clear Edge')).not.toBeInTheDocument();
   });
 
   it('renders capital flow signal as compact observation-only context without raw diagnostic fields', async () => {
