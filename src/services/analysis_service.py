@@ -26,6 +26,13 @@ from src.report_language import (
 from src.utils.security import sanitize_message, sanitize_metadata
 from src.utils.time_utils import to_beijing_iso8601
 from src.services.research_readiness_contract import build_research_readiness_v1
+from src.services.single_stock_evidence_packet import build_single_stock_evidence_packet_v1
+from src.services.single_stock_fundamentals_earnings_normalizer import (
+    build_single_stock_fundamentals_earnings_normalizer_v1,
+)
+from src.services.single_stock_news_catalyst_extractor import (
+    build_single_stock_news_catalyst_extractor_v1,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -786,8 +793,15 @@ class AnalysisService:
             data_quality_report=data_quality_report,
             structured_analysis=structured_analysis,
         )
+        single_stock_evidence_packet = self._build_home_single_stock_evidence_packet(
+            result,
+            data_quality_report=data_quality_report,
+            structured_analysis=structured_analysis,
+            query_id=query_id,
+        )
         analysis_result["researchReadiness"] = research_readiness
         analysis_result["evidenceCoverageFrame"] = evidence_coverage_frame
+        analysis_result["singleStockEvidencePacket"] = single_stock_evidence_packet
         decision_trace = self._build_decision_trace(
             result,
             query_id=query_id,
@@ -810,6 +824,7 @@ class AnalysisService:
                 "model_used": getattr(result, "model_used", None),
                 "strategy_type": getattr(result, "decision_type", None) or report_type,
                 "evidenceCoverageFrame": evidence_coverage_frame,
+                "singleStockEvidencePacket": single_stock_evidence_packet,
             },
             "summary": {
                 "analysis_summary": result.analysis_summary,
@@ -841,6 +856,7 @@ class AnalysisService:
             "decision_trace": decision_trace,
             "researchReadiness": research_readiness,
             "evidenceCoverageFrame": evidence_coverage_frame,
+            "singleStockEvidencePacket": single_stock_evidence_packet,
         }
         payload["meta"]["researchReadiness"] = research_readiness
         if data_quality_report:
@@ -925,6 +941,40 @@ class AnalysisService:
         if freshness:
             payload["freshness"] = freshness
         return build_research_readiness_v1(payload)
+
+    def _build_home_single_stock_evidence_packet(
+        self,
+        result: Any,
+        *,
+        data_quality_report: Optional[Dict[str, Any]],
+        structured_analysis: Dict[str, Any],
+        query_id: str,
+    ) -> Dict[str, Any]:
+        runtime = (
+            getattr(result, "runtime_execution", None)
+            if isinstance(getattr(result, "runtime_execution", None), dict)
+            else {}
+        )
+        runtime_data = runtime.get("data") if isinstance(runtime.get("data"), dict) else {}
+        packet_payload: Dict[str, Any] = {
+            "symbol": getattr(result, "code", None),
+            "market": self._market_from_symbol(getattr(result, "code", "")).lower(),
+            "debugRef": f"analysis:{query_id}",
+            "noAdviceBoundary": True,
+            "dataQualityReport": data_quality_report or {},
+            "structuredAnalysis": structured_analysis,
+            "runtimeData": runtime_data,
+        }
+        news_context = structured_analysis.get("news_context")
+        if isinstance(news_context, str) and news_context.strip():
+            packet_payload["news_context"] = news_context
+
+        packet = build_single_stock_evidence_packet_v1(packet_payload)
+        packet["fundamentalsEarnings"] = build_single_stock_fundamentals_earnings_normalizer_v1(
+            packet_payload
+        )
+        packet["newsCatalysts"] = build_single_stock_news_catalyst_extractor_v1(packet_payload)
+        return packet
 
     def _build_home_evidence_coverage_frame(
         self,
@@ -1651,6 +1701,8 @@ class AnalysisService:
             response["researchReadiness"] = report["researchReadiness"]
         if isinstance(report.get("evidenceCoverageFrame"), dict):
             response["evidenceCoverageFrame"] = report["evidenceCoverageFrame"]
+        if isinstance(report.get("singleStockEvidencePacket"), dict):
+            response["singleStockEvidencePacket"] = report["singleStockEvidencePacket"]
         return response
 
     @staticmethod
