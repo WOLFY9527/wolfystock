@@ -10,7 +10,12 @@ import {
   TestTubeDiagonal,
 } from 'lucide-react';
 import { EvidenceChips } from '../evidence/EvidenceChips';
+import {
+  ScannerCandidateEvidenceStrip,
+  type CandidateEvidenceFrame,
+} from './ScannerCandidateEvidenceStrip';
 import type { NormalizedEvidenceSummary } from '../../utils/evidenceDisplay';
+import type { ResearchReadinessV1 } from '../../types/researchReadiness';
 import type {
   InvestorSignalContract,
   ScannerCandidate,
@@ -34,6 +39,15 @@ type CandidateDetailOutcomeItem = {
   label: string;
   value: string;
 };
+
+type ScannerCandidateWithEvidence = ScannerCandidate & {
+  candidateEvidenceFrame?: CandidateEvidenceFrame | null;
+  candidateResearchReadiness?: ResearchReadinessV1 | null;
+};
+
+function asScannerCandidateWithEvidence(candidate: ScannerCandidate): ScannerCandidateWithEvidence {
+  return candidate as ScannerCandidateWithEvidence;
+}
 
 const INVESTOR_SIGNAL_REASON_LABELS_ZH: Record<string, string> = {
   source_authority_missing: '来源确认待补齐',
@@ -293,6 +307,7 @@ export function ScannerCandidateDetailPanel({
   backtestTitle?: string;
   backtestItem?: ScannerBacktestItem;
 }) {
+  const candidateWithEvidence = asScannerCandidateWithEvidence(candidate);
   const aiAvailable = Boolean(candidate.aiInterpretation?.available);
   const investorSignal = candidate.consumerDiagnostics?.investorSignal;
 
@@ -323,6 +338,17 @@ export function ScannerCandidateDetailPanel({
       <BoardDetailSection title={language === 'en' ? 'Key metrics' : '关键指标'}>
         <LabeledValueGrid items={keyMetricItems.slice(0, 5)} empty={language === 'en' ? 'No key metrics provided' : '未提供关键指标'} />
       </BoardDetailSection>
+      {candidateWithEvidence.candidateEvidenceFrame || candidateWithEvidence.candidateResearchReadiness ? (
+        <BoardDetailSection title={language === 'en' ? 'Evidence coverage' : '证据覆盖'}>
+          <ScannerCandidateEvidenceStrip
+            frame={candidateWithEvidence.candidateEvidenceFrame}
+            readiness={candidateWithEvidence.candidateResearchReadiness}
+            language={language}
+            variant="detail"
+            testId={`scanner-candidate-evidence-detail-${candidateIdentity}`}
+          />
+        </BoardDetailSection>
+      ) : null}
       {outcomeItems.length ? (
         <BoardDetailSection title={language === 'en' ? 'Realized outcome' : '实际表现'}>
           <div className="flex flex-wrap gap-2">
@@ -583,6 +609,8 @@ export function ScannerCandidateDiagnosticRow({
   watchSummary,
   rangeSummary,
   evidenceSummary,
+  candidateEvidenceFrame,
+  candidateResearchReadiness,
   scoreLabel,
   scoreDelta,
   comparisonLabel,
@@ -621,6 +649,8 @@ export function ScannerCandidateDiagnosticRow({
   watchSummary: string;
   rangeSummary: string;
   evidenceSummary: NormalizedEvidenceSummary | null;
+  candidateEvidenceFrame?: CandidateEvidenceFrame | null;
+  candidateResearchReadiness?: ResearchReadinessV1 | null;
   scoreLabel: string;
   scoreDelta?: string | null;
   comparisonLabel?: string | null;
@@ -698,6 +728,15 @@ export function ScannerCandidateDiagnosticRow({
             <div className="min-w-0" onClick={onSelect}>
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Data quality' : '数据质量'}</p>
               <p className="mt-1 truncate text-xs text-white/62" title={dataQualityLabel}>{dataQualityLabel}</p>
+              {candidateEvidenceFrame || candidateResearchReadiness ? (
+                <ScannerCandidateEvidenceStrip
+                  frame={candidateEvidenceFrame}
+                  readiness={candidateResearchReadiness}
+                  language={language}
+                  variant="row"
+                  testId={`scanner-candidate-evidence-row-${candidate.symbol}`}
+                />
+              ) : null}
               {evidenceSummary ? <EvidenceChips summary={evidenceSummary} maxLabels={1} className="mt-1" /> : null}
             </div>
             <div className="min-w-0" onClick={onSelect}>
@@ -740,6 +779,15 @@ export function ScannerCandidateDiagnosticRow({
             <div className="grid gap-1.5 text-xs text-white/66" onClick={onSelect}>
               <p title={keyReason}>{keyReason}</p>
               <p title={dataQualityLabel}>{dataQualityLabel}</p>
+              {candidateEvidenceFrame || candidateResearchReadiness ? (
+                <ScannerCandidateEvidenceStrip
+                  frame={candidateEvidenceFrame}
+                  readiness={candidateResearchReadiness}
+                  language={language}
+                  variant="row"
+                  testId={`scanner-candidate-evidence-mobile-row-${candidate.symbol}`}
+                />
+              ) : null}
               <p title={watchSummary}>{watchSummary}</p>
               <p className="text-[11px] text-white/38" title={rangeSummary}>{rangeSummary}</p>
               <ScannerScoreTrustStrip sources={resolvedTrustSources} language={language} className="pt-0.5" testId={`scanner-score-trust-mobile-${candidate.symbol}`} />

@@ -585,6 +585,57 @@ function makeScannerContextFrame(overrides: Partial<NonNullable<ScannerRunDetail
   };
 }
 
+function makeCandidateEvidenceFrame(overrides: Record<string, unknown> = {}) {
+  return {
+    contractVersion: 'scanner_candidate_evidence_v1',
+    coverageState: 'partial',
+    domains: {
+      technicals: { state: 'available', observationOnly: false, scoreGradeAllowed: true },
+      priceHistory: { state: 'available', observationOnly: false, scoreGradeAllowed: true },
+      liquidity: { state: 'available', observationOnly: false, scoreGradeAllowed: true },
+      volume: { state: 'available', observationOnly: false, scoreGradeAllowed: true },
+      trend: { state: 'available', observationOnly: false, scoreGradeAllowed: true },
+      theme: { state: 'available', observationOnly: true, scoreGradeAllowed: false },
+      fundamentals: { state: 'missing', observationOnly: false, scoreGradeAllowed: false },
+      newsCatalyst: { state: 'missing', observationOnly: false, scoreGradeAllowed: false },
+    },
+    coverage: {
+      availableCount: 6,
+      partialCount: 0,
+      observeOnlyCount: 1,
+      missingCount: 2,
+      totalCount: 8,
+    },
+    noAdviceBoundary: true,
+    debugRef: 'scanner:candidate:NVDA',
+    ...overrides,
+  };
+}
+
+function makeCandidateResearchReadiness(overrides: Record<string, unknown> = {}) {
+  return {
+    contractVersion: 'research_readiness_v1',
+    researchReady: false,
+    readinessState: 'insufficient',
+    verdictLabel: '证据不足',
+    blockingReasons: ['source_authority_router_rejected', 'missing_required_evidence'],
+    missingEvidence: ['fundamentals', 'news', 'catalyst'],
+    evidenceCoverage: {
+      scoreGradeCount: 5,
+      observationOnlyCount: 1,
+      missingCount: 3,
+      totalCount: 9,
+    },
+    sourceAuthority: 'observationOnly',
+    freshnessFloor: 'delayed',
+    consumerActionBoundary: 'no_advice',
+    nextEvidenceNeeded: ['补充基本面证据', '补充新闻证据'],
+    debugRef: 'scanner:candidate:NVDA',
+    noAdviceBoundary: true,
+    ...overrides,
+  };
+}
+
 function makeHistoryItem(overrides: Partial<ScannerRunHistoryItem> = {}): ScannerRunHistoryItem {
   return {
     id: 11,
@@ -1071,6 +1122,60 @@ describe('UserScannerPage', () => {
     expect(within(await screen.findByTestId('scanner-result-row-NVDA')).getAllByText('94/100').length).toBeGreaterThan(0);
     expect(within(screen.getByTestId('scanner-result-row-AVGO')).getAllByText('88/100').length).toBeGreaterThan(0);
     expect(orderedSymbolsFromRows()).toEqual(['NVDA', 'AVGO', 'AMD']);
+  });
+
+  it('renders candidate evidence coverage without changing row order or score labels', async () => {
+    const nvda = makeCandidate({ symbol: 'NVDA', rank: 1, score: 94 });
+    (nvda as ScannerCandidate & Record<string, unknown>).candidateEvidenceFrame = makeCandidateEvidenceFrame();
+    (nvda as ScannerCandidate & Record<string, unknown>).candidateResearchReadiness = makeCandidateResearchReadiness();
+
+    getRun.mockResolvedValue(makeRunDetail({
+      shortlist: [
+        nvda,
+        makeCandidate({ symbol: 'AVGO', rank: 2, score: 88 }),
+        makeCandidate({ symbol: 'AMD', rank: 3, score: 76 }),
+      ],
+      selected: [nvda],
+    }));
+
+    const { container } = renderUserScannerPage();
+
+    const row = await screen.findByTestId('scanner-result-row-NVDA');
+    expect(row).toHaveTextContent('证据不足');
+    expect(row).toHaveTextContent('待补');
+    expect(row).toHaveTextContent('基本面');
+    expect(row).toHaveTextContent('新闻催化');
+
+    const detail = screen.getAllByTestId('scanner-result-detail-NVDA')[0];
+    expect(detail).toHaveTextContent('证据覆盖');
+    expect(detail).toHaveTextContent('技术面');
+    expect(detail).toHaveTextContent('价格历史');
+    expect(detail).toHaveTextContent('流动性');
+    expect(detail).toHaveTextContent('成交量');
+    expect(detail).toHaveTextContent('趋势');
+    expect(detail).toHaveTextContent('主题');
+    expect(detail).toHaveTextContent('基本面');
+    expect(detail).toHaveTextContent('新闻催化');
+    expect(detail).toHaveTextContent('仅观察');
+    expect(detail).toHaveTextContent('缺失');
+    expect(detail).not.toHaveTextContent(/debugRef|source_authority_router_rejected|provider|router|cache|trace/i);
+
+    expect(within(row).getAllByText('94/100').length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId('scanner-result-row-AVGO')).getAllByText('88/100').length).toBeGreaterThan(0);
+    expect(orderedSymbolsFromRows()).toEqual(['NVDA', 'AVGO', 'AMD']);
+    expect(container).not.toHaveTextContent(/买入|卖出|下单|trade|broker|order/i);
+    expectNoRawI18nKeys(container);
+  });
+
+  it('keeps legacy scanner responses rendering when candidate evidence fields are absent', async () => {
+    const { container } = renderUserScannerPage();
+
+    const row = await screen.findByTestId('scanner-result-row-NVDA');
+    expect(within(row).getAllByText('94/100').length).toBeGreaterThan(0);
+    expect(row).not.toHaveTextContent('待补');
+    expect(screen.queryByText('证据覆盖')).not.toBeInTheDocument();
+    expect(orderedSymbolsFromRows()).toEqual(['NVDA', 'AVGO', 'AMD']);
+    expectNoRawI18nKeys(container);
   });
 
   it('fail closes missing scanner context as insufficient instead of supportive context', async () => {

@@ -29,6 +29,7 @@ import {
   ScannerCandidateDetailPanel,
   ScannerCandidateDiagnosticRow,
 } from '../components/scanner/ScannerCandidatePresenters';
+import { ScannerCandidateEvidenceStrip } from '../components/scanner/ScannerCandidateEvidenceStrip';
 import {
   AdvancedDisclosure,
   FieldChip,
@@ -80,6 +81,7 @@ import type {
   ScannerTheme,
   ScannerWatchlistComparison,
 } from '../types/scanner';
+import type { ResearchReadinessV1 } from '../types/researchReadiness';
 import type { WatchlistItem } from '../types/watchlist';
 import { buildLocalizedPath } from '../utils/localeRouting';
 import { normalizeScannerEvidence } from '../utils/evidenceDisplay';
@@ -91,6 +93,7 @@ import {
   getScannerUniverseOptions,
   SCANNER_PROFILE_DEFAULTS,
 } from './scannerPageShared';
+import type { CandidateEvidenceFrame } from '../components/scanner/ScannerCandidateEvidenceStrip';
 
 const LazyScannerStrategySimulationPanel = lazy(async () => {
   const module = await import('../components/scanner/ScannerStrategySimulationPanel');
@@ -170,9 +173,18 @@ type ScannerValidationErrors = {
   customThemeManualSymbols?: string;
 };
 
+type ScannerCandidateWithEvidence = ScannerCandidate & {
+  candidateEvidenceFrame?: CandidateEvidenceFrame | null;
+  candidateResearchReadiness?: ResearchReadinessV1 | null;
+};
+
 function normalizeCandidateSymbol(symbol?: string | null): string | null {
   const normalized = String(symbol || '').trim().toUpperCase();
   return normalized || null;
+}
+
+function withCandidateEvidence(candidate: ScannerCandidate): ScannerCandidateWithEvidence {
+  return candidate as ScannerCandidateWithEvidence;
 }
 
 function getCandidateIdentity(candidate: ScannerCandidate): string {
@@ -2471,6 +2483,7 @@ const UserScannerPage: React.FC = () => {
     backtestItem?: ScannerBacktestItem,
   ) => {
     if (!runDetail) return null;
+    const candidateWithEvidence = withCandidateEvidence(candidate);
     const ai = candidate.aiInterpretation;
     const detailQualityNotice = getScannerConsumerQualityNotice(candidate, language);
     const outcomeItems = hasOutcome(candidate.realizedOutcome)
@@ -2557,6 +2570,21 @@ const UserScannerPage: React.FC = () => {
             <FieldChip key={`${item.label}-${item.value}`} label={item.label} value={item.value} />
           ))}
         </div>
+
+        {candidateWithEvidence.candidateEvidenceFrame || candidateWithEvidence.candidateResearchReadiness ? (
+          <div className="grid gap-2 rounded-xl border border-white/8 bg-white/[0.015] p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+              {language === 'en' ? 'Evidence coverage' : '证据覆盖'}
+            </p>
+            <ScannerCandidateEvidenceStrip
+              frame={candidateWithEvidence.candidateEvidenceFrame}
+              readiness={candidateWithEvidence.candidateResearchReadiness}
+              language={language}
+              variant="detail"
+              testId={`scanner-inline-candidate-evidence-${getCandidateIdentity(candidate)}`}
+            />
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-1.5">
           <ActionButton
@@ -3174,6 +3202,7 @@ const UserScannerPage: React.FC = () => {
                                   const activeRunDetail = runDetail;
                                   if (!activeRunDetail) return null;
                                   const sourceCandidate = shortlistCandidateBySymbol.get(normalizeCandidateSymbol(candidate.symbol)) || diagnosticToCandidate(candidate);
+                                  const sourceCandidateWithEvidence = withCandidateEvidence(sourceCandidate);
                                   const candidateMarket = normalizeScannerMarket(activeRunDetail.market || market);
                                   const candidateIdentity = getWatchlistIdentity(candidateMarket, candidate.symbol);
                                   const isTracked = Boolean(candidateIdentity && trackedWatchlistIdentitySet.has(candidateIdentity));
@@ -3196,6 +3225,8 @@ const UserScannerPage: React.FC = () => {
                                       watchSummary={formatWorkbenchWatchSummary(sourceCandidate, language)}
                                       rangeSummary={formatWorkbenchRangeSummary(sourceCandidate, language)}
                                       evidenceSummary={null}
+                                      candidateEvidenceFrame={sourceCandidateWithEvidence.candidateEvidenceFrame}
+                                      candidateResearchReadiness={sourceCandidateWithEvidence.candidateResearchReadiness}
                                       scoreLabel={candidate.score == null ? '--' : `${candidate.score}/100`}
                                       trustSources={[stripScannerConsumerTrustSource(sourceCandidate), stripScannerConsumerTrustSource(candidate)]}
                                       scoreDelta={formatScoreDelta(comparison?.scoreDelta ?? null)}
