@@ -570,10 +570,10 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('grid', 'xl:grid-cols-[minmax(0,1.6fr)_minmax(360px,1fr)]');
     expect(screen.getByTestId('portfolio-account-status-strip')).toHaveAttribute('data-terminal-primitive', 'panel');
     expect(screen.getByTestId('portfolio-total-assets-card')).toHaveClass('min-w-0');
-    expect(screen.getByTestId('portfolio-account-status-strip')).toHaveTextContent('暂无持仓。添加持仓或导入交易后显示组合状态。');
+    expect(screen.getByTestId('portfolio-account-status-strip')).toHaveTextContent('先创建或选择账户，再添加第一笔持仓或导入历史记录。');
     const commandStrip = screen.getByTestId('portfolio-command-strip');
     expect(within(commandStrip).getByRole('button', { name: '添加持仓' })).toHaveAttribute('data-terminal-primitive', 'button');
-    expect(within(commandStrip).getByRole('button', { name: '导入交易' })).toHaveAttribute('data-terminal-primitive', 'button');
+    expect(within(commandStrip).getByRole('button', { name: '导入记录' })).toHaveAttribute('data-terminal-primitive', 'button');
     expect(within(commandStrip).getByRole('button', { name: '同步数据' })).toHaveAttribute('data-terminal-primitive', 'button');
     expect(screen.getByRole('heading', { name: /总资产|Total Assets/ })).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveClass('text-white');
@@ -718,7 +718,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(workflowColumn).toHaveClass('min-w-0');
     expect(startCard).not.toHaveClass('xl:min-h-[300px]', 'min-h-[520px]');
     expect(within(startCard).getByText('暂无持仓')).toBeInTheDocument();
-    expect(within(startCard).getByText('暂无持仓。添加持仓或导入交易后显示组合状态。')).toBeInTheDocument();
+    expect(within(startCard).getByText('先创建或选择账户，再添加第一笔持仓或导入历史记录。')).toBeInTheDocument();
     expect(within(startCard).getByText('历史记录存在，当前无持仓')).toBeInTheDocument();
     expect(within(startCard).queryByText('活跃账户')).not.toBeInTheDocument();
     expect(within(startCard).queryByText('可写账户')).not.toBeInTheDocument();
@@ -757,18 +757,21 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('grid', 'xl:grid-cols-[minmax(0,1.6fr)_minmax(360px,1fr)]');
     const commandStrip = screen.getByTestId('portfolio-command-strip');
     expect(within(commandStrip).getByRole('button', { name: '添加持仓' })).toBeInTheDocument();
-    expect(within(commandStrip).getByRole('button', { name: '导入交易' })).toBeInTheDocument();
+    expect(within(commandStrip).getByRole('button', { name: '导入记录' })).toBeInTheDocument();
     expect(within(commandStrip).getByRole('button', { name: '同步数据' })).toBeInTheDocument();
     expect(commandStrip).toContainElement(screen.getByTestId('portfolio-display-currency-select'));
 
     const startCard = screen.getByTestId('portfolio-start-card');
     expect(startCard).toHaveAttribute('data-terminal-primitive', 'empty-state');
     expect(startCard).toHaveClass('min-h-[72px]');
-    expect(startCard).toHaveTextContent('暂无持仓。添加持仓或导入交易后显示组合状态。');
+    expect(startCard).toHaveTextContent('先创建或选择账户，再添加第一笔持仓或导入历史记录。');
+    expect(screen.getByTestId('portfolio-empty-workflow-column')).toHaveTextContent('完成后可在右侧查看风险与数据说明。');
+    expect(screen.getByTestId('portfolio-empty-workflow-column')).not.toHaveTextContent(/数据不足，禁止判断|买入|卖出|下单|券商|broker/i);
     expect(startCard).not.toHaveClass('min-h-[300px]', 'min-h-[520px]', 'xl:min-h-[300px]');
     expect(within(startCard).queryByText('活跃账户')).not.toBeInTheDocument();
     expect(within(startCard).queryByText('可写账户')).not.toBeInTheDocument();
     expect(within(startCard).queryByText('当前记账账户')).not.toBeInTheDocument();
+    expect(screen.getByTestId('portfolio-next-action-panel')).toHaveTextContent('数据不足，暂不形成结论。');
 
     const manualDisclosure = screen.getByTestId('portfolio-manual-record-disclosure');
     expect(manualDisclosure).not.toHaveAttribute('open');

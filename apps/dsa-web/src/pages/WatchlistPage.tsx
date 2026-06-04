@@ -907,7 +907,8 @@ function getCopy(language: 'zh' | 'en') {
       copySymbol: 'Copy symbol',
       copied: 'Copied',
       emptyTitle: 'No tracked candidates yet.',
-      emptyBody: 'No watched symbols yet. Add candidates from Scanner, or adjust filters to review existing evidence.',
+      emptyBody: 'Add candidates from Scanner, or use Scanner manual symbol entry for a focused list.',
+      emptyHelp: 'Return here to review candidate evidence and status.',
       openScanner: 'Open Scanner',
       tableTitle: 'Monitoring list',
       tableDescription: 'Rows keep state, observation, and actions aligned.',
@@ -1012,7 +1013,8 @@ function getCopy(language: 'zh' | 'en') {
     copySymbol: '复制代码',
     copied: '已复制',
     emptyTitle: '还没有观察标的',
-    emptyBody: '先从扫描器加入候选，再回到这里持续跟踪状态变化。',
+    emptyBody: '先从扫描器加入候选，也可以在扫描器手动补充代码。',
+    emptyHelp: '加入后回到这里查看候选证据与状态。',
     openScanner: '打开扫描器',
     tableTitle: '监控列表',
     tableDescription: '按行查看状态、观察与操作。',
@@ -1978,7 +1980,10 @@ const WatchlistPage: React.FC = () => {
                     </TerminalButton>
                   )}
                 >
-                  {copy.emptyBody}
+                  <div className="space-y-1">
+                    <p>{copy.emptyBody}</p>
+                    <p className="text-[11px] text-white/45">{copy.emptyHelp}</p>
+                  </div>
                 </CompactEmptyRow>
               )}
             </ConsoleBoard>

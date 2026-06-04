@@ -2455,10 +2455,13 @@ const PortfolioPage: React.FC = () => {
       ? (language === 'zh' ? `${activeAccounts.length} 个活跃账户` : `${activeAccounts.length} active accounts`)
       : scopedAccount?.name || copy.allAccounts;
   const compactNoHoldingText = language === 'zh'
-    ? '暂无持仓。添加持仓或导入交易后显示组合状态。'
-    : 'No holdings yet. Add holdings or import transactions to show portfolio state.';
+    ? '先创建或选择账户，再添加第一笔持仓或导入历史记录。'
+    : 'Create or select an account, then add the first holding or import records.';
+  const portfolioEmptyHelpText = language === 'zh'
+    ? '完成后可在右侧查看风险与数据说明。'
+    : 'Then review risk and evidence on the right.';
   const addHoldingActionLabel = language === 'zh' ? '添加持仓' : 'Add holding';
-  const importTradesActionLabel = language === 'zh' ? '导入交易' : 'Import transactions';
+  const importTradesActionLabel = language === 'zh' ? '导入记录' : 'Import records';
   const manualLedgerActionLabel = language === 'zh' ? '手工记账' : 'Manual ledger';
   const scenarioRiskPositions = useMemo<PortfolioScenarioRiskVisiblePosition[]>(
     () => positionRows.map((row) => ({
@@ -2556,7 +2559,7 @@ const PortfolioPage: React.FC = () => {
   const nextActionHeadline = !hasAccounts
     ? (language === 'zh' ? '先创建一个组合账户' : 'Create your first portfolio account')
     : !hasHoldings
-      ? (language === 'zh' ? '先补第一笔持仓或导入交易' : 'Add the first holding or import transactions')
+      ? (language === 'zh' ? '先补第一笔持仓或导入历史记录' : 'Add the first holding or import records')
       : hasFxUnavailable
         ? (language === 'zh' ? '先确认汇率与估值状态' : 'Check FX and valuation status first')
         : hasHistory
@@ -2564,12 +2567,12 @@ const PortfolioPage: React.FC = () => {
           : (language === 'zh' ? '继续补充记录，完善组合画像' : 'Add more records to complete the portfolio picture');
   const nextActionBody = !hasAccounts
     ? (language === 'zh'
-      ? '账户创建后即可记录持仓、导入交易并查看组合风险。'
-      : 'After the account is created, you can record holdings, import transactions, and review risk.')
+      ? '账户准备好后即可添加持仓、导入历史记录，并查看风险与数据说明。'
+      : 'Once the account is ready, you can add holdings, import records, and review risk and evidence.')
     : !hasHoldings
       ? (language === 'zh'
-        ? '当前组合仍为空；建议优先添加持仓，或从现有券商流水导入。'
-        : 'The portfolio is still empty. Add holdings first or import an existing broker ledger.')
+        ? '当前组合仍为空；数据不足，暂不形成结论。建议先添加持仓或导入历史记录，再查看风险与数据说明。'
+        : 'The portfolio is still empty. Evidence is not yet sufficient to form a conclusion. Add holdings or import records first, then review risk and evidence.')
       : hasFxUnavailable
         ? (language === 'zh'
           ? '部分汇率或折算暂不可用，先查看估值说明，再决定是否同步或刷新。'
@@ -3087,6 +3090,9 @@ const PortfolioPage: React.FC = () => {
                             {importTradesActionLabel}
                           </TerminalButton>
                         </div>
+                        <p data-testid="portfolio-empty-help" className="mt-2 text-xs leading-5 text-white/45">
+                          {portfolioEmptyHelpText}
+                        </p>
                         {!hasWritableAccounts ? (
                           <TerminalNotice variant="caution" className="mt-3">
                             {hasActiveAccounts
