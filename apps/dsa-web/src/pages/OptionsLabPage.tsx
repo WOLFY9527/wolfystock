@@ -97,11 +97,15 @@ const EMPTY_EXPIRATIONS: OptionsExpiration[] = [];
 const COMPARISON_LOADING_TIMEOUT_MS = 12000;
 const COMPARISON_EMPTY_MESSAGE = '先选择可用到期日并加载合约后，再进入策略对比。';
 const OPTIONS_LAB_CRASH_FALLBACK = '期权实验室暂时无法加载，请刷新或稍后重试。';
-const OPTIONS_MODULE_PAUSED_COPY = '期权数据暂不可用，本模块已暂停生成策略。';
+const OPTIONS_MODULE_PAUSED_COPY = '期权数据暂不可用，情景分析已暂停。';
 const OPTIONS_INSUFFICIENT_COPY = '当前期权信号数据不足，仅供观察。';
 const OPTIONS_UPDATING_COPY = '数据更新中，稍后将自动刷新。';
 const OPTIONS_UNAVAILABLE_COPY = '本模块暂不可用，请稍后重试。';
-const OPTIONS_DEMO_BOUNDARY_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不可用于真实交易判断。';
+const OPTIONS_NO_CONCLUSION_COPY = '数据不足，暂不形成结论';
+const OPTIONS_SAFE_INSTRUCTION_COPY = '仅做只读情景分析，不构成交易或下单指令。';
+const OPTIONS_READ_ONLY_BOUNDARY_COPY = '不触发执行动作，不改动现有持仓。';
+const OPTIONS_OBSERVE_ONLY_COPY = '仅供观察，不作为结论依据';
+const OPTIONS_DEMO_BOUNDARY_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不作为结论依据。';
 
 const fieldShellClass = 'group flex min-h-[4rem] min-w-0 flex-col justify-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_92%,transparent)] px-3 py-2 transition-colors focus-within:border-[color:var(--wolfy-accent)]';
 const fieldClass = 'h-6 w-full border-0 bg-transparent p-0 font-mono text-sm text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)]';
@@ -205,8 +209,8 @@ function warningLabel(value: string): string {
   if (value === 'max_gain_not_defined_for_long_option') return '单腿多头收益边界不固定';
   if (value === 'iv_rank_unavailable') return 'IV 分位不可用';
   if (value === 'synthetic_or_fixture_data_not_decision_grade') return '演示数据不可用于真实判断';
-  if (value === '不可作为交易信号') return '不可作为交易信号';
-  if (value === '不可用于真实交易判断') return '不可作为交易信号';
+  if (value === '不可作为交易信号') return OPTIONS_OBSERVE_ONLY_COPY;
+  if (value === '不可用于真实交易判断') return OPTIONS_OBSERVE_ONLY_COPY;
   if (value === '需人工复核') return '需人工复核';
   return limitationLabel(value);
 }
@@ -549,14 +553,16 @@ function isDemoOrDelayedDecision(decision?: OptionsDecisionResponse | null): boo
 }
 
 function observationBoundaryCopy(decision?: OptionsDecisionResponse | null): string | null {
-  if (isNonDecisionGrade(decision)) return '未达到可判断等级，仅供情景观察，不可作为交易信号。';
+  if (isNonDecisionGrade(decision)) return '未达到可判断等级，仅供情景观察，暂不形成结论。';
   if (isDemoOrDelayedDecision(decision)) return OPTIONS_DEMO_BOUNDARY_COPY;
   return null;
 }
 
 type ConsumerAvailabilityTone = 'neutral' | 'info' | 'warn' | 'risk' | 'good';
+type ConsumerAvailabilityStateKey = 'UPDATING' | 'PAUSED' | 'UNAVAILABLE' | 'INSUFFICIENT' | 'PARTIAL' | 'AVAILABLE';
 
 type ConsumerAvailabilitySummary = {
+  stateKey: ConsumerAvailabilityStateKey;
   stateLabel: string;
   stateTone: ConsumerAvailabilityTone;
   confidenceLabel: string;
@@ -592,7 +598,8 @@ function consumerAvailabilitySummary(
 
   if (loadState.loading || comparisonState.loading || decisionState.loading) {
     return {
-      stateLabel: 'UPDATING',
+      stateKey: 'UPDATING',
+      stateLabel: '等待数据整理',
       stateTone: 'info',
       confidenceLabel: '置信度更新中',
       confidenceTone: 'info',
@@ -603,7 +610,8 @@ function consumerAvailabilitySummary(
 
   if (loadState.error) {
     return {
-      stateLabel: 'PAUSED',
+      stateKey: 'PAUSED',
+      stateLabel: '情景分析已暂停',
       stateTone: 'risk',
       confidenceLabel: '不可判断',
       confidenceTone: 'risk',
@@ -618,7 +626,8 @@ function consumerAvailabilitySummary(
 
   if (decisionState.error) {
     return {
-      stateLabel: hasChainRows ? 'PARTIAL' : 'UNAVAILABLE',
+      stateKey: hasChainRows ? 'PARTIAL' : 'UNAVAILABLE',
+      stateLabel: hasChainRows ? '等待数据确认' : '数据暂不可用',
       stateTone: hasChainRows ? 'warn' : 'risk',
       confidenceLabel: '有限置信度',
       confidenceTone: 'warn',
@@ -629,7 +638,8 @@ function consumerAvailabilitySummary(
 
   if (!hasChainRows || tier === 'insufficient') {
     return {
-      stateLabel: 'INSUFFICIENT',
+      stateKey: 'INSUFFICIENT',
+      stateLabel: '等待数据确认',
       stateTone: 'warn',
       confidenceLabel: '有限置信度',
       confidenceTone: 'warn',
@@ -640,7 +650,8 @@ function consumerAvailabilitySummary(
 
   if (isNonDecisionGrade(decision)) {
     return {
-      stateLabel: tier === 'synthetic_demo_only' ? 'PAUSED' : 'PARTIAL',
+      stateKey: tier === 'synthetic_demo_only' ? 'PAUSED' : 'PARTIAL',
+      stateLabel: '等待数据确认',
       stateTone: 'warn',
       confidenceLabel: '有限置信度',
       confidenceTone: 'warn',
@@ -651,7 +662,8 @@ function consumerAvailabilitySummary(
 
   if (!decision) {
     return {
-      stateLabel: 'PARTIAL',
+      stateKey: 'PARTIAL',
+      stateLabel: '等待数据确认',
       stateTone: 'warn',
       confidenceLabel: '置信度待确认',
       confidenceTone: 'warn',
@@ -661,7 +673,8 @@ function consumerAvailabilitySummary(
   }
 
   return {
-    stateLabel: tier === 'delayed_usable' ? 'PARTIAL' : 'AVAILABLE',
+    stateKey: tier === 'delayed_usable' ? 'PARTIAL' : 'AVAILABLE',
+    stateLabel: tier === 'delayed_usable' ? '等待数据确认' : '情景证据可用',
     stateTone: tier === 'delayed_usable' ? 'warn' : 'good',
     confidenceLabel: confidenceCap != null ? `有限置信度 ${confidenceCap}` : '置信度可用',
     confidenceTone: confidenceCap != null ? 'warn' : 'good',
@@ -785,7 +798,7 @@ const AssumptionPanel: React.FC<{
           </div>
         </SectionHeader>
         <p className="mt-2 text-sm text-[color:var(--wolfy-text-secondary)]">
-          控制区只记录假设；数据是否可判断以后续准备度和风险边界为准，不构成买卖建议。
+          控制区只记录假设；数据是否可判断以后续准备度和风险边界为准，不构成交易或下单指令。
         </p>
       </div>
 
@@ -865,7 +878,8 @@ const AssumptionPanel: React.FC<{
 function decisionStatusLabel(decision?: OptionsDecisionResponse | null): string {
   const label = decision?.decisionLabel || decision?.optimizer?.optimizerLabel;
   const tier = decision?.dataQuality?.dataQualityTier;
-  if (label === '数据不足，禁止判断' || tier === 'synthetic_demo_only' || tier === 'insufficient') return '数据不足，禁止判断';
+  if (!label?.trim()) return OPTIONS_NO_CONCLUSION_COPY;
+  if (label === '数据不足，禁止判断' || tier === 'synthetic_demo_only' || tier === 'insufficient') return OPTIONS_NO_CONCLUSION_COPY;
   if (label === '不建议' || label === '不建议交易') return '观察边界明确';
   if (label === '仅观察' || label === '可关注替代结构') return '可记录低风险观察结构';
   return '仅供观察';
@@ -904,8 +918,8 @@ function heroSummaryLine(
   hasChainRows: boolean,
 ): string {
   if (!hasChainRows) return '先加载可用期权链，再进入候选策略与风险边界。';
-  if (availability.stateLabel === 'UPDATING') return '正在整理情景输入、候选结构与风险边界。';
-  if (availability.stateLabel === 'UNAVAILABLE' || availability.stateLabel === 'PAUSED') {
+  if (availability.stateKey === 'UPDATING') return '正在整理情景输入、候选结构与风险边界。';
+  if (availability.stateKey === 'UNAVAILABLE' || availability.stateKey === 'PAUSED') {
     return '当前不形成判断，先保留输入与风险预算，等待下一次数据刷新。';
   }
 
@@ -994,10 +1008,10 @@ const ProductHero: React.FC<{
               {availability.explanation}
             </p>
             <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
-              仅做只读情景分析，不构成买卖建议。
+              {OPTIONS_SAFE_INSTRUCTION_COPY}
             </p>
             <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
-              不会提交订单，不连接经纪商，不改动投资组合。
+              {OPTIONS_READ_ONLY_BOUNDARY_COPY}
             </p>
           </div>
         </div>
@@ -1095,6 +1109,24 @@ function strategyPrimaryReason(strategy: OptionsStrategyComparison, alternative?
   return warning ? limitationLabel(warning) : '需结合假设继续观察';
 }
 
+type LabelSummary = {
+  label: string;
+  count: number;
+};
+
+function summarizeLabels(values: string[], mapLabel: (value: string) => string): LabelSummary[] {
+  const counts = new Map<string, number>();
+  values.forEach((value) => {
+    const label = mapLabel(value);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  });
+  return Array.from(counts, ([label, count]) => ({ label, count }));
+}
+
+function formatLabelSummary(item: LabelSummary): string {
+  return item.count > 1 ? `${item.label}（${item.count}项）` : item.label;
+}
+
 const StrategyRow: React.FC<{
   strategy: OptionsStrategyComparison;
   rank: number;
@@ -1170,6 +1202,7 @@ const StrategyComparisonPanel: React.FC<{
     if (leftRank !== rightRank) return leftRank - rightRank;
     return (right.riskRewardRatio || 0) - (left.riskRewardRatio || 0);
   });
+  const limitationSummary = summarizeLabels(limitations, limitationLabel);
   return (
     <section className={cn(panelClass, className)} data-testid="options-lab-strategy-comparison">
       <SectionHeader eyebrow="主工作区" title="候选策略" icon={Layers3}>
@@ -1214,7 +1247,7 @@ const StrategyComparisonPanel: React.FC<{
       <div className={cn(innerBlockClass, 'mt-5 p-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
         <span className={labelClass}>候选约束</span>
         <p className="mt-2">
-          {limitations.length ? limitations.map(limitationLabel).join(' · ') : '当前数据可用于情景比较'}
+          {limitationSummary.length ? limitationSummary.map(formatLabelSummary).join(' · ') : '当前数据可用于情景比较'}
         </p>
       </div>
     </section>
@@ -1322,7 +1355,7 @@ const ScenarioEvidencePanel: React.FC<{
 
 const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: string | null; className?: string }> = ({ decisionState, emptyMessage, className }) => {
   const decision = decisionState.decision;
-  const label = decision?.decisionLabel || '数据不足，禁止判断';
+  const label = decisionStatusLabel(decision);
   const expectedMove = decision?.expectedMove;
   const optimizer = decision?.optimizer;
   const rankedAlternatives = asArray(decision?.rankedAlternatives).length
@@ -1335,7 +1368,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
   const demoBoundaryCopy = isDemoOrDelayedDecision(decision)
     ? OPTIONS_DEMO_BOUNDARY_COPY
     : null;
-  const labelTone = label === '数据不足，禁止判断' || label === '不建议'
+  const labelTone = label === OPTIONS_NO_CONCLUSION_COPY || label === '不建议'
     ? 'text-[color:var(--wolfy-market-down)]'
     : label === '仅观察'
       ? 'text-[color:var(--wolfy-accent-soft)]'
@@ -1350,7 +1383,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
     <section className={cn(panelClass, className)} data-testid="options-lab-decision-engine">
       <SectionHeader eyebrow="判断内容" title="情景判断" icon={ShieldCheck}>
         <div className="flex flex-wrap justify-end gap-2">
-          <Pill tone={label.includes('禁止') || label.includes('不建议') ? 'risk' : 'warn'}>{label}</Pill>
+          <Pill tone={label === OPTIONS_NO_CONCLUSION_COPY || label.includes('不建议') ? 'risk' : 'warn'}>{label}</Pill>
           {decision?.dataQuality?.dataQualityTier ? <Pill tone="info">{dataTierLabel(decision.dataQuality.dataQualityTier)}</Pill> : null}
         </div>
       </SectionHeader>
@@ -1462,7 +1495,7 @@ const RiskBoundaryPanel: React.FC<{
     ...asArray(decision?.expectedMove?.expectedMoveWarnings),
   ];
   const riskWarnings = asArray(decision?.riskWarnings);
-  const allWarnings = [...new Set([
+  const warningSummary = summarizeLabels([
     loading ? '等待快照' : null,
     error ? '部分外部数据暂不可用' : null,
     decision?.dataQuality?.dataQualityTier === 'synthetic_demo_only' ? '不可作为交易信号' : null,
@@ -1471,9 +1504,9 @@ const RiskBoundaryPanel: React.FC<{
     ...ivWarnings,
     ...riskWarnings,
     '需人工复核',
-  ].filter(Boolean) as string[])];
-  const visibleWarnings = allWarnings.slice(0, 3);
-  const hiddenWarnings = allWarnings.slice(3);
+  ].filter(Boolean) as string[], warningLabel);
+  const visibleWarnings = warningSummary.slice(0, 3);
+  const hiddenWarnings = warningSummary.slice(3);
   const dataState = loading
     ? '等待快照'
     : error
@@ -1483,7 +1516,7 @@ const RiskBoundaryPanel: React.FC<{
   return (
     <section className={cn(panelClass, className)} data-testid="options-lab-risk-boundary-panel">
       <SectionHeader eyebrow="风险控制" title="风险边界" icon={AlertTriangle}>
-        <Pill tone={topState.includes('禁止') ? 'risk' : 'info'}>
+        <Pill tone={topState === OPTIONS_NO_CONCLUSION_COPY ? 'risk' : 'info'}>
           {topState}
         </Pill>
       </SectionHeader>
@@ -1491,7 +1524,7 @@ const RiskBoundaryPanel: React.FC<{
         <div className="rounded-md border border-[color:color-mix(in_srgb,var(--wolfy-market-down)_34%,transparent)] bg-[color:color-mix(in_srgb,var(--wolfy-market-down)_10%,transparent)] p-3">
           <p className={labelClass}>观察边界</p>
           <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-market-down)]">{topState}</p>
-          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{boundaryCopy || '仅供观察，不可作为交易信号。'}</p>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{boundaryCopy || '仅供观察，暂不形成结论。'}</p>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           <div className={cn(innerBlockClass, 'p-3')}>
@@ -1508,12 +1541,12 @@ const RiskBoundaryPanel: React.FC<{
         <ul className="grid gap-2" aria-label="风险边界警示">
           {visibleWarnings.map((warning) => (
             <li
-              key={warning}
+              key={warning.label}
               data-testid="options-lab-visible-risk-warning"
               className="flex gap-2 rounded-md border border-amber-300/20 bg-amber-300/5 px-3 py-2 text-xs leading-5 text-amber-200"
             >
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-200" aria-hidden="true" />
-              <span>{warningLabel(warning)}</span>
+              <span>{formatLabelSummary(warning)}</span>
             </li>
           ))}
         </ul>
@@ -1521,7 +1554,7 @@ const RiskBoundaryPanel: React.FC<{
           {hiddenWarnings.length ? (
             <div className="flex flex-wrap gap-2">
               {hiddenWarnings.map((warning) => (
-                <Pill key={warning} tone="neutral">{warningLabel(warning)}</Pill>
+                <Pill key={warning.label} tone="neutral">{formatLabelSummary(warning)}</Pill>
               ))}
             </div>
           ) : (
@@ -1988,7 +2021,7 @@ const OptionsLabPageContent: React.FC = () => {
           action={(
             <div className="flex flex-wrap justify-end gap-2">
               <Pill tone="info">门控优先</Pill>
-              <Pill tone="warn">不构成买卖建议</Pill>
+              <Pill tone="warn">不构成交易/下单指令</Pill>
             </div>
           )}
         />

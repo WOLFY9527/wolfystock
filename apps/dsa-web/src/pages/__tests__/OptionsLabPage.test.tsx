@@ -15,6 +15,13 @@ vi.mock('../../api/optionsLab', () => ({
   },
 }));
 
+const NO_CONCLUSION_LABEL = '数据不足，暂不形成结论';
+const WAITING_STATE_LABEL = '等待数据确认';
+const SAFE_INSTRUCTION_BOUNDARY = '不构成交易或下单指令';
+const OBSERVE_ONLY_EVIDENCE_COPY = '仅供观察，不作为结论依据';
+const DEMO_EVIDENCE_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不作为结论依据。';
+const NON_DECISION_BOUNDARY_COPY = '未达到可判断等级，仅供情景观察，暂不形成结论。';
+
 function buildOptionsResearchReadiness(
   overrides: Partial<OptionsResearchReadiness> = {},
 ): OptionsResearchReadiness {
@@ -527,7 +534,7 @@ describe('OptionsLabPage', () => {
     expect(commandArea).toHaveTextContent('期权情景输入');
     expect(commandArea).toHaveTextContent('只读观察');
     expect(commandArea).toHaveTextContent('门控优先');
-    expect(commandArea).toHaveTextContent('不构成买卖建议');
+    expect(commandArea).toHaveTextContent(SAFE_INSTRUCTION_BOUNDARY);
     expect(commandArea).not.toHaveTextContent('ExperimentConsole');
     expect(within(commandArea).getByLabelText('标的代码')).toHaveValue('TEM');
     expect(within(commandArea).getByRole('button', { name: '刷新情景' })).toHaveAttribute('data-terminal-primitive', 'button');
@@ -541,9 +548,9 @@ describe('OptionsLabPage', () => {
     expect(productHero).toHaveTextContent('情景分析台');
     await waitFor(() => {
       expect(productHero).toHaveTextContent('TEM');
-      expect(productHero).toHaveTextContent('PAUSED');
+      expect(productHero).toHaveTextContent(WAITING_STATE_LABEL);
       expect(productHero).toHaveTextContent('有限置信度');
-      expect(productHero).toHaveTextContent('期权数据暂不可用，本模块已暂停生成策略。');
+      expect(productHero).toHaveTextContent('期权数据暂不可用，情景分析已暂停。');
       expect(productHero).toHaveTextContent('最后更新：');
     });
     expect(screen.getByTestId('options-lab-research-readiness-strip')).toHaveTextContent('研究就绪度');
@@ -568,7 +575,7 @@ describe('OptionsLabPage', () => {
     expect(screen.getAllByText('行权价').length).toBeGreaterThan(0);
     expect(screen.getAllByText('中间价').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('options-lab-chain-panel')).toHaveLength(2);
-    expect(screen.getAllByText('不可作为交易信号').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent(/仅供观察|暂不形成结论/);
   });
 
   it('renders ranked compact strategy candidates with one highlighted primary row', async () => {
@@ -604,9 +611,9 @@ describe('OptionsLabPage', () => {
     });
     expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('数据状态');
     expect(within(section).getByText('最大亏损')).toBeInTheDocument();
-    expect(within(section).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
+    expect(within(section).getAllByText(NO_CONCLUSION_LABEL).length).toBeGreaterThan(0);
     expect(within(section).getAllByText('演示/延迟数据').length).toBeGreaterThan(0);
-    expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('不可作为交易信号');
+    expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent(OBSERVE_ONLY_EVIDENCE_COPY);
     expect(within(section).getByText('IV / 敏感度')).toBeInTheDocument();
     expect(within(section).getAllByText('IV 分位不可用').length).toBeGreaterThan(0);
     expect(within(section).getAllByText('$7.50').length).toBeGreaterThan(0);
@@ -659,8 +666,8 @@ describe('OptionsLabPage', () => {
       expect(screen.getByTestId('options-lab-decision-summary')).toBeInTheDocument();
     });
 
-    expect(within(section).getAllByText('未达到可判断等级，仅供情景观察，不可作为交易信号。').length).toBeGreaterThan(0);
-    expect(within(riskPanel).getByText('未达到可判断等级，仅供情景观察，不可作为交易信号。')).toBeInTheDocument();
+    expect(within(section).getAllByText(NON_DECISION_BOUNDARY_COPY).length).toBeGreaterThan(0);
+    expect(within(riskPanel).getByText(NON_DECISION_BOUNDARY_COPY)).toBeInTheDocument();
     expect(within(section).getByText('观察结构')).toBeInTheDocument();
     expect(within(section).queryByText('主要策略')).not.toBeInTheDocument();
     expect(document.body.textContent || '').not.toContain('决策中枢');
@@ -996,12 +1003,12 @@ describe('OptionsLabPage', () => {
 
     const productHero = await screen.findByTestId('options-lab-product-hero');
     await waitFor(() => {
-      expect(productHero).toHaveTextContent('期权数据暂不可用，本模块已暂停生成策略。');
+      expect(productHero).toHaveTextContent('期权数据暂不可用，情景分析已暂停。');
     });
     expect(screen.queryByTestId('options-lab-setup-path')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '查看 Provider Ops' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '前往数据源设置' })).not.toBeInTheDocument();
-    expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('不可作为交易信号');
+    expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent(OBSERVE_ONLY_EVIDENCE_COPY);
     expect(document.body.textContent || '').not.toMatch(/Provider Ops|数据源设置|fallback\/proxy|live options/i);
   });
 
@@ -1131,11 +1138,11 @@ describe('OptionsLabPage', () => {
     const evidence = await screen.findByTestId('options-lab-scenario-evidence');
     const productHero = screen.getByTestId('options-lab-product-hero');
     await waitFor(() => {
-      expect(within(section).getAllByText('演示数据：当前数据延迟，仅用于界面与情景验证，不可用于真实交易判断。').length).toBeGreaterThan(0);
+      expect(within(section).getAllByText(DEMO_EVIDENCE_COPY).length).toBeGreaterThan(0);
     });
 
-    expect(within(productHero).getByText('PAUSED')).toBeInTheDocument();
-    expect(within(productHero).getByText('数据不足，禁止判断')).toBeInTheDocument();
+    expect(within(productHero).getByText(WAITING_STATE_LABEL)).toBeInTheDocument();
+    expect(within(productHero).getByText(NO_CONCLUSION_LABEL)).toBeInTheDocument();
     expect(within(section).getAllByText('演示/延迟数据').length).toBeGreaterThan(0);
     expect(evidence).toHaveTextContent('演示/延迟');
     expect(evidence).toHaveTextContent('仅观察');
@@ -1147,7 +1154,7 @@ describe('OptionsLabPage', () => {
 
     const riskPanel = await screen.findByTestId('options-lab-risk-boundary-panel');
     await waitFor(() => {
-      expect(within(riskPanel).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
+      expect(within(riskPanel).getAllByText(NO_CONCLUSION_LABEL).length).toBeGreaterThan(0);
     });
     const visibleWarnings = within(riskPanel).getAllByTestId('options-lab-visible-risk-warning');
     expect(visibleWarnings.length).toBeLessThanOrEqual(3);
@@ -1155,6 +1162,138 @@ describe('OptionsLabPage', () => {
     expect(within(riskPanel).getByText('数据状态')).toBeInTheDocument();
     expect(riskPanel.textContent || '').not.toContain('synthetic_or_fixture_data_not_decision_grade');
     expect(riskPanel.textContent || '').not.toContain('synthetic delayed');
+  });
+
+  it('deduplicates repeated external-data warnings into one counted summary', async () => {
+    vi.mocked(optionsLabApi.evaluateDecision).mockResolvedValueOnce(withOptionsReadiness({
+      symbol: 'TEM',
+      strategy: 'bull_call_spread',
+      dataQuality: {
+        dataQualityScore: 25,
+        dataQualityTier: 'synthetic_demo_only',
+        blockingReasons: ['synthetic_or_fixture_data_not_decision_grade'],
+        warnings: ['opaque_gap_a', 'opaque_gap_b'],
+        sourceType: 'synthetic',
+        asOfAgeMinutes: 0,
+      },
+      liquidity: {
+        liquidityScore: 76,
+        spreadPct: 10,
+        liquidityWarnings: ['opaque_gap_c'],
+      },
+      ivGreeks: {
+        ivReadiness: 82,
+        ivRankStatus: 'unavailable',
+        ivRank: null,
+        ivPercentile: null,
+        warnings: ['iv_rank_unavailable'],
+      },
+      ivRank: null,
+      ivPercentile: null,
+      ivRankStatus: 'unavailable',
+      decisionGrade: false,
+      gateDecision: 'blocked',
+      failClosedReasonCodes: ['synthetic_or_fixture_data_not_decision_grade'],
+      dataQualityGates: {
+        decisionGrade: false,
+        tier: 'synthetic_demo_only',
+      },
+      liquidityGates: {
+        passed: true,
+        liquidityScore: 76,
+      },
+      expectedMove: {
+        expectedMoveAbs: 7.5,
+        expectedMovePct: 14.31,
+        expectedMoveSource: 'straddle_mid',
+        expectedMoveWarnings: ['expected_move_uses_fixture_mid_prices'],
+      },
+      optimizer: {
+        preferredStrategyKey: null,
+        optimizerLabel: '数据不足，禁止判断',
+        noTradeReason: 'data_quality_not_decision_grade',
+        alternatives: [
+          {
+            strategyKey: 'bull_call_spread',
+            dataQualityTier: 'synthetic_demo_only',
+            liquidityScore: 76,
+            breakevenPressure: 0.19,
+            maxLoss: 230,
+            maxGain: 270,
+            riskRewardRatio: 1.17,
+            expectedMoveAlignment: 92,
+            ivReadiness: 82,
+            tradeQualityScore: 35,
+            decisionLabel: '数据不足，禁止判断',
+            primaryReasons: ['当前为 synthetic delayed / 演示数据'],
+            riskWarnings: ['不可用于真实交易判断'],
+          },
+        ],
+      },
+      rankedAlternatives: [
+        {
+          strategyKey: 'bull_call_spread',
+          dataQualityTier: 'synthetic_demo_only',
+          liquidityScore: 76,
+          breakevenPressure: 0.19,
+          maxLoss: 230,
+          maxGain: 270,
+          riskRewardRatio: 1.17,
+          expectedMoveAlignment: 92,
+          ivReadiness: 82,
+          tradeQualityScore: 35,
+          decisionLabel: '数据不足，禁止判断',
+          primaryReasons: ['当前为 synthetic delayed / 演示数据'],
+          riskWarnings: ['不可用于真实交易判断'],
+        },
+      ],
+      breakeven: {
+        breakeven: 52.3,
+        requiredMovePct: -0.19,
+        targetPriceStatus: 'target_above_breakeven',
+        score: 86,
+      },
+      riskReward: {
+        maxLoss: 230,
+        maxGain: 270,
+        riskRewardRatio: 1.17,
+        score: 72,
+      },
+      tradeQualityScore: 35,
+      decisionLabel: '数据不足，禁止判断',
+      primaryReasons: ['当前为 synthetic delayed / 演示数据'],
+      riskWarnings: ['opaque_gap_d', 'opaque_gap_e'],
+      betterAlternative: {
+        strategyType: 'bull_call_spread',
+        reason: '定义风险结构降低权利金风险',
+      },
+      noAdviceDisclosure: 'Analytical output only; not personalized financial advice.',
+      optionsConsumerScenarioFrame: buildScenarioEvidenceFrame(),
+      freshness: {
+        source: 'synthetic_options_lab_fixture',
+        freshness: 'synthetic_delayed',
+        asOf: '2026-05-06T09:45:00Z',
+      },
+      metadata: {
+        readOnly: true,
+        fixtureBacked: true,
+        syntheticData: true,
+        noExternalCalls: true,
+        noOrderPlacement: true,
+        noBrokerConnection: true,
+        noPortfolioMutation: true,
+        noTradingRecommendation: true,
+        strategyEngine: 'options_decision_engine_r1',
+      },
+    }, buildOptionsResearchReadiness()));
+
+    renderPage();
+
+    const riskPanel = await screen.findByTestId('options-lab-risk-boundary-panel');
+    await waitFor(() => {
+      expect(within(riskPanel).getByText(/部分外部数据暂不可用（\d+项）/)).toBeInTheDocument();
+    });
+    expect(within(riskPanel).queryAllByText('部分外部数据暂不可用')).toHaveLength(0);
   });
 
   it('renders compact fail-closed evidence badges on decision and risk panels', async () => {
@@ -1165,9 +1304,9 @@ describe('OptionsLabPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('options-lab-decision-summary')).toBeInTheDocument();
     });
-    expect(within(decision).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
+    expect(within(decision).getAllByText(NO_CONCLUSION_LABEL).length).toBeGreaterThan(0);
     expect(within(decision).getAllByText('演示/延迟数据').length).toBeGreaterThan(0);
-    expect(within(riskPanel).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
+    expect(within(riskPanel).getAllByText(NO_CONCLUSION_LABEL).length).toBeGreaterThan(0);
     expect(within(riskPanel).queryByText(/synthetic_or_fixture_data_not_decision_grade|provider_timeout/i)).not.toBeInTheDocument();
   });
 
@@ -1184,7 +1323,7 @@ describe('OptionsLabPage', () => {
     const assumptions = screen.getByTestId('options-lab-assumptions-panel');
     expect(decision).toContainElement(summary);
     expect(summary).toHaveTextContent('判断状态');
-    expect(summary).toHaveTextContent('数据不足，禁止判断');
+    expect(summary).toHaveTextContent(NO_CONCLUSION_LABEL);
     expect(summary).toHaveTextContent('牛市看涨价差');
     expect(summary).toHaveTextContent('边界原因：数据质量未达到可判断等级');
     expect(Boolean(assumptions.compareDocumentPosition(decision) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
@@ -1240,7 +1379,7 @@ describe('OptionsLabPage', () => {
     await waitFor(() => {
       expect(within(decision).getAllByText('暂无可判断结构').length).toBeGreaterThan(0);
     });
-    expect(within(decision).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
+    expect(within(decision).getAllByText(NO_CONCLUSION_LABEL).length).toBeGreaterThan(0);
     expect(within(decision).getByText(/边界原因：候选结构边际优势或风险回报不足/)).toBeInTheDocument();
   });
 
@@ -1315,8 +1454,8 @@ describe('OptionsLabPage', () => {
     await act(async () => {
       within(riskPanel).getByRole('button', { name: /展开 更多限制/ }).click();
     });
-    expect(within(riskPanel).getAllByText('买卖价差过宽').length).toBeGreaterThan(0);
-    expect(within(riskPanel).getAllByText('敏感度缺失').length).toBeGreaterThan(0);
+    expect(within(riskPanel).getAllByText(/买卖价差过宽/).length).toBeGreaterThan(0);
+    expect(within(riskPanel).getAllByText(/敏感度缺失/).length).toBeGreaterThan(0);
     expect(evidence).toHaveTextContent('波动率与敏感度待补证');
     expect(evidence).toHaveTextContent('双边报价待补证');
     expect(evidence).toHaveTextContent('人工复核');
@@ -1717,15 +1856,15 @@ describe('OptionsLabPage', () => {
       expect(screen.queryByTestId(testId)).not.toBeInTheDocument();
     });
     const productHero = screen.getByTestId('options-lab-product-hero');
-    expect(productHero).toHaveTextContent(/当前期权信号数据不足，仅供观察。|期权数据暂不可用，本模块已暂停生成策略。/);
+    expect(productHero).toHaveTextContent(/当前期权信号数据不足，仅供观察。|期权数据暂不可用，情景分析已暂停。/);
     expect(productHero).toHaveTextContent('最后更新：');
     const decision = await screen.findByTestId('options-lab-decision-engine');
     await waitFor(() => {
       expect(screen.getByTestId('options-lab-decision-summary')).toBeInTheDocument();
     });
-    expect(decision).toHaveTextContent('数据不足，禁止判断');
+    expect(decision).toHaveTextContent(NO_CONCLUSION_LABEL);
     expect(decision).toHaveTextContent('演示数据');
-    expect(decision).toHaveTextContent('不可用于真实交易判断');
+    expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent(OBSERVE_ONLY_EVIDENCE_COPY);
     expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent('风险边界');
     expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('数据注记');
     expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('默认折叠');
@@ -1784,7 +1923,6 @@ describe('OptionsLabPage', () => {
       '稳赚',
       '必买',
       '买入按钮',
-      '下单',
       '立即交易',
       '立即买入',
       '立即卖出',
@@ -1868,7 +2006,7 @@ describe('OptionsLabPage', () => {
     const section = await screen.findByTestId('options-lab-decision-engine');
     expect(within(section).getByText('情景判断')).toBeInTheDocument();
     await waitFor(() => {
-      expect(within(section).getAllByText('数据不足，禁止判断').length).toBeGreaterThan(0);
+      expect(within(section).getAllByText(NO_CONCLUSION_LABEL).length).toBeGreaterThan(0);
     });
     expect(document.body.textContent || '').not.toContain('TypeError');
   });
