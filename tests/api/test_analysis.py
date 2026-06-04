@@ -1,4 +1,284 @@
+from __future__ import annotations
+
+import sys
+from unittest.mock import MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+try:
+    import litellm  # noqa: F401
+except ModuleNotFoundError:
+    sys.modules["litellm"] = MagicMock()
+
+import src.auth as auth
+from api.app import create_app
+from src.analyzer import AnalysisResult
+from src.services.analysis_service import AnalysisService
 from src.services.task_queue import AnalysisTaskQueue
+
+
+@pytest.fixture(autouse=True)
+def disable_auth():
+    auth._auth_enabled = None
+    with patch("api.middlewares.auth.is_auth_enabled", return_value=False), patch(
+        "api.deps.is_auth_enabled", return_value=False
+    ), patch("src.auth.is_auth_enabled", return_value=False):
+        yield
+    auth._auth_enabled = None
+
+
+@pytest.fixture
+def client(tmp_path):
+    app = create_app(static_dir=tmp_path)
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+def _service_response_for_api_contract() -> dict:
+    result = AnalysisResult(
+        code="AAPL",
+        name="Apple",
+        sentiment_score=74,
+        trend_prediction="Bullish bias with bounded risk",
+        operation_advice="Observe only",
+        decision_type="hold",
+        confidence_level="中",
+        report_language="en",
+        analysis_summary="Observation only while evidence remains consumer-safe.",
+        technical_analysis="Trend remains constructive with fresh price history.",
+        fundamental_analysis="Fundamentals and earnings are available from bounded sources.",
+        news_summary="Recent earnings and guidance coverage remain relevant.",
+        risk_warning="Risk remains elevated if evidence freshness degrades.",
+        dashboard={
+            "battle_plan": {"sniper_points": {"ideal_buy": "184-186", "stop_loss": "179", "take_profit": "195-198"}},
+            "structured_analysis": {
+                "technicals": {
+                    "status": "ok",
+                    "source": "polygon_us_grouped_daily",
+                    "sourceType": "authorized_licensed_feed",
+                    "sourceTier": "score_grade",
+                    "freshness": "fresh",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                },
+                "fundamentals": {
+                    "status": "ok",
+                    "source": "fmp",
+                    "sourceType": "official_public",
+                    "sourceTier": "score_grade",
+                    "freshness": "fresh",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "asOf": "2026-04-28",
+                    "normalized": {
+                        "marketCap": 3010000000000,
+                        "trailingPE": 24.8,
+                        "forwardPE": 22.1,
+                        "priceToBook": 8.7,
+                        "revenueGrowth": 0.11,
+                        "freeCashflow": 108000000000,
+                        "returnOnEquity": 1.48,
+                    },
+                    "field_sources": {
+                        "marketCap": "fmp",
+                        "trailingPE": "fmp",
+                        "forwardPE": "fmp",
+                        "priceToBook": "fmp",
+                        "revenueGrowth": "fmp",
+                        "freeCashflow": "fmp",
+                        "returnOnEquity": "fmp",
+                    },
+                    "field_periods": {
+                        "marketCap": "latest",
+                        "trailingPE": "ttm",
+                        "forwardPE": "consensus",
+                        "priceToBook": "latest",
+                        "revenueGrowth": "ttm_yoy",
+                        "freeCashflow": "ttm",
+                        "returnOnEquity": "ttm",
+                    },
+                    "topEvidenceRefs": ["fund:market-cap", "fund:roe"],
+                },
+                "earnings_analysis": {
+                    "status": "ok",
+                    "source": "fmp_income_statement",
+                    "field_sources": {"quarterly_series": "fmp_income_statement"},
+                    "summary_flags": ["quarterly_series_available", "financial_report_available"],
+                    "narrative_insights": ["Earnings trend remains stable."],
+                    "sourceTier": "score_grade",
+                    "freshness": "fresh",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "reporting_basis": "latest_quarter",
+                    "summary_basis": "yoy",
+                    "derived_metrics": {
+                        "yoy_revenue_growth": 0.08,
+                        "yoy_net_income_change": 0.06,
+                    },
+                    "quarterly_series": [
+                        {
+                            "quarter": "2026Q1",
+                            "fiscalDateEnding": "2026-03-31",
+                            "revenue": 90340000000,
+                            "net_income": 21400000000,
+                        }
+                    ],
+                    "topEvidenceRefs": ["earnings:q1-2026"],
+                },
+                "fundamental_context": {
+                    "status": "supported",
+                    "market": "us",
+                    "valuation": {
+                        "data": {
+                            "marketCap": 3010000000000,
+                            "trailingPE": 24.8,
+                            "priceToBook": 8.7,
+                        }
+                    },
+                    "earnings": {
+                        "data": {
+                            "quarterly_series": [
+                                {
+                                    "quarter": "2026Q1",
+                                    "fiscalDateEnding": "2026-03-31",
+                                    "revenue": 90340000000,
+                                    "net_income": 21400000000,
+                                }
+                            ],
+                            "financial_report": {
+                                "reportDate": "2026-03-31",
+                                "revenue": 90340000000,
+                                "netIncome": 21400000000,
+                            },
+                        }
+                    },
+                },
+                "sentiment_analysis": {
+                    "status": "ok",
+                    "source": "finnhub",
+                    "sourceType": "official_public",
+                    "sourceTier": "observation_only",
+                    "trustLevel": "observation_only",
+                    "freshness": "fresh",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": False,
+                    "sentiment_summary": "positive",
+                    "top_positive_items": [
+                        {
+                            "id": "news-earnings",
+                            "headline": "Apple beats earnings and raises guidance",
+                            "summary": "Quarterly earnings beat expectations and guidance increased.",
+                            "source": "finnhub",
+                            "published_at": "2026-06-03T13:00:00Z",
+                            "sentiment": "positive",
+                            "relevance_score": 0.96,
+                        }
+                    ],
+                    "top_negative_items": [],
+                    "classified_items": [],
+                    "topEvidenceRefs": ["news:earnings"],
+                },
+                "catalyst": {
+                    "status": "ok",
+                    "source": "gnews",
+                    "sourceType": "official_public",
+                    "sourceTier": "observation_only",
+                    "trustLevel": "observation_only",
+                    "freshness": "fresh",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": False,
+                    "classified_items": [
+                        {
+                            "id": "cat-guidance",
+                            "headline": "Apple raises full-year guidance",
+                            "summary": "Management raised the full-year outlook.",
+                            "source": "finnhub",
+                            "published_at": "2026-06-03T13:05:00Z",
+                            "relevance_score": 0.95,
+                            "catalyst_type": "guidance",
+                            "sentiment": "positive",
+                        }
+                    ],
+                    "topEvidenceRefs": ["catalyst:guidance"],
+                },
+                "realtime_context": {
+                    "price": 188.2,
+                    "volume_ratio": 1.24,
+                    "turnover_rate": 0.021,
+                    "source": "polygon_us_grouped_daily",
+                    "freshness": "fresh",
+                },
+                "market_context": {
+                    "today": {"close": 188.2, "ma20": 184.0},
+                    "yesterday": {"close": 186.4},
+                    "sectorTheme": {"sector": "software", "theme": "ai"},
+                    "macro": {"regime": "risk_on"},
+                    "liquidity": {"usd": "stable"},
+                    "source": "official_macro_bundle",
+                    "sourceTier": "official_public",
+                    "providerAuthority": "observationOnly",
+                    "freshness": "delayed",
+                    "topEvidenceRefs": ["macro:fred-weekly", "theme:software-ai"],
+                },
+                "data_quality_report": {
+                    "dataQualityTier": "decision_grade",
+                    "requiredAvailable": True,
+                    "confidenceCap": 100,
+                    "missingRequiredDomains": [],
+                    "importantDomainsMissing": [],
+                    "scoreSuppressed": False,
+                    "stanceGuardrail": "none",
+                },
+            },
+        },
+        runtime_execution={
+            "data_quality_report": {
+                "dataQualityTier": "decision_grade",
+                "requiredAvailable": True,
+                "confidenceCap": 100,
+                "missingRequiredDomains": [],
+                "importantDomainsMissing": [],
+                "scoreSuppressed": False,
+                "stanceGuardrail": "none",
+            },
+            "data": {
+                "market": {
+                    "status": "ok",
+                    "truth": "actual",
+                    "source": "polygon",
+                    "freshness": "fresh",
+                    "sourceTier": "score_grade",
+                    "providerAuthority": "scoreGradeAllowed",
+                },
+                "fundamentals": {
+                    "status": "ok",
+                    "truth": "actual",
+                    "source": "fmp",
+                    "freshness": "fresh",
+                    "sourceTier": "score_grade",
+                    "providerAuthority": "scoreGradeAllowed",
+                },
+                "news": {
+                    "status": "ok",
+                    "truth": "actual",
+                    "source": "gnews",
+                    "freshness": "fresh",
+                    "sourceTier": "observation_only",
+                    "providerAuthority": "observationOnly",
+                },
+                "sentiment": {
+                    "status": "ok",
+                    "truth": "actual",
+                    "source": "finnhub",
+                    "freshness": "fresh",
+                    "sourceTier": "observation_only",
+                    "providerAuthority": "observationOnly",
+                },
+            },
+        },
+    )
+    return AnalysisService()._build_analysis_response(result, query_id="api-contract-001")
 
 
 def test_progress_status_updates_include_meaningful_data_stages():
@@ -22,3 +302,40 @@ def test_progress_status_updates_include_meaningful_data_stages():
     assert steps["data_fetch"]["detail"] == "Loading news"
     assert steps["ai_analysis"]["status"] == "partial"
     assert steps["ai_analysis"]["detail"] == "Running AI analysis"
+
+
+def test_sync_analysis_api_preserves_home_evidence_packet_contract(client) -> None:
+    service_response = _service_response_for_api_contract()
+    service_report = service_response["report"]
+
+    with patch("api.v1.endpoints.analysis._raise_if_llm_model_unavailable", return_value=None), patch(
+        "src.services.analysis_service.AnalysisService.analyze_stock",
+        return_value=service_response,
+    ), patch(
+        "api.v1.endpoints.analysis._load_sync_fundamental_sources",
+        return_value=(None, None),
+    ):
+        response = client.post(
+            "/api/v1/analysis/analyze",
+            json={"stock_code": "AAPL", "stock_name": "Apple", "async_mode": False},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    report = payload["report"]
+    packet = report["singleStockEvidencePacket"]
+
+    assert report["researchReadiness"] == service_report["researchReadiness"]
+    assert report["evidenceCoverageFrame"] == service_report["evidenceCoverageFrame"]
+    assert report["singleStockEvidencePacket"] == service_report["singleStockEvidencePacket"]
+    assert report["meta"]["researchReadiness"] == report["researchReadiness"]
+    assert report["meta"]["evidenceCoverageFrame"] == report["evidenceCoverageFrame"]
+    assert report["meta"]["singleStockEvidencePacket"] == packet
+    assert report["details"]["analysis_result"]["researchReadiness"] == report["researchReadiness"]
+    assert report["details"]["analysis_result"]["evidenceCoverageFrame"] == report["evidenceCoverageFrame"]
+    assert report["details"]["analysis_result"]["singleStockEvidencePacket"] == packet
+    assert packet["contractVersion"] == "single_stock_evidence_packet_v1"
+    assert packet["fundamentalsEarnings"]["normalizerState"] == "ready"
+    assert packet["newsCatalysts"]["extractionState"] == "ready"
+    assert packet["newsCatalysts"]["topNewsItems"][0]["id"] == "news-earnings"
+    assert packet["newsCatalysts"]["topCatalystItems"][0]["id"] == "cat-guidance"

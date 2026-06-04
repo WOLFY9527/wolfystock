@@ -516,7 +516,36 @@ def test_home_analysis_response_adds_single_stock_evidence_packet_across_public_
     assert packet["domains"]["earnings"]["status"] == "available"
     assert packet["domains"]["news"]["status"] == "available"
     assert packet["domains"]["catalysts"]["status"] == "available"
-
+    assert set(packet) == {
+        "contractVersion",
+        "symbol",
+        "market",
+        "packetState",
+        "domains",
+        "sourceSummary",
+        "missingEvidence",
+        "blockingReasons",
+        "nextEvidenceNeeded",
+        "noAdviceBoundary",
+        "debugRef",
+        "fundamentalsEarnings",
+        "newsCatalysts",
+    }
+    assert set(packet["domains"]) == {
+        "priceHistory",
+        "technicals",
+        "fundamentals",
+        "earnings",
+        "filings",
+        "news",
+        "catalysts",
+        "sentiment",
+        "valuation",
+        "sectorTheme",
+        "macroLiquidity",
+    }
+    assert packet["fundamentalsEarnings"]["contractVersion"] == "single_stock_fundamentals_earnings_normalizer_v1"
+    assert packet["newsCatalysts"]["contractVersion"] == "single_stock_news_catalyst_extractor_v1"
 
 def test_home_single_stock_evidence_packet_preserves_orcl_like_partial_without_raw_leakage() -> None:
     result = _result_with_quality(
@@ -562,6 +591,8 @@ def test_home_single_stock_evidence_packet_preserves_orcl_like_partial_without_r
                 "classified_items": [],
                 "raw_payload": {"headline": "do not leak"},
                 "stack_trace": "Traceback: secret",
+                "article_body": "Full article body should not leak into packet output.",
+                "prompt": "buy now before the market opens",
             },
             "catalyst": {
                 "status": "missing",
@@ -633,6 +664,115 @@ def test_home_single_stock_evidence_packet_preserves_orcl_like_partial_without_r
     assert "cache_router" not in serialized
     assert "traceback" not in serialized
     assert "secret-value" not in serialized
+    assert "article body" not in serialized
+    assert "prompt:" not in serialized
+    assert "buy now" not in serialized
+    assert "sell now" not in serialized
+    assert "submit order" not in serialized
+    assert "trade now" not in serialized
+    assert packet["newsCatalysts"]["sourceSummary"]["news"]["status"] == "blocked"
+    assert packet["newsCatalysts"]["sourceSummary"]["catalysts"]["status"] in {"missing", "blocked"}
+    assert packet["newsCatalysts"]["sourceSummary"]["sentiment"]["status"] == "missing"
+
+
+def test_home_single_stock_evidence_packet_fails_closed_for_unsupported_hk_fundamental_context() -> None:
+    result = _result_with_quality(
+        code="HK00700",
+        data_quality_report={
+            "dataQualityTier": "analysis_grade",
+            "requiredAvailable": True,
+            "confidenceCap": 68,
+            "missingRequiredDomains": ["fundamentals", "earnings", "news"],
+            "importantDomainsMissing": ["valuation", "catalyst_news_event"],
+            "scoreSuppressed": False,
+            "stanceGuardrail": "observe_only",
+            "reasonCodes": ["fundamental_context_unavailable", "provider_timeout"],
+        },
+        structured_overrides={
+            "fundamentals": {
+                "status": "missing",
+                "source": None,
+                "freshness": "unknown",
+                "normalized": {},
+            },
+            "earnings_analysis": {
+                "status": "missing",
+                "source": None,
+                "freshness": "unknown",
+                "quarterly_series": [],
+                "summary_flags": ["earnings_data_unavailable"],
+            },
+            "fundamental_context": {
+                "status": "market not supported",
+                "market": "hk",
+                "reason": "fundamental_context unavailable",
+            },
+            "sentiment_analysis": {
+                "status": "missing",
+                "source": None,
+                "freshness": "unknown",
+                "top_positive_items": [],
+                "top_negative_items": [],
+                "classified_items": [],
+            },
+            "catalyst": {
+                "status": "missing",
+                "source": None,
+                "freshness": "unknown",
+                "classified_items": [],
+            },
+        },
+        runtime_data={
+            "market": {
+                "status": "ok",
+                "truth": "actual",
+                "source": "twelve_data",
+                "fallback_occurred": False,
+                "freshness": "fresh",
+            },
+            "fundamentals": {
+                "status": "missing",
+                "truth": "unavailable",
+                "source": None,
+                "fallback_occurred": False,
+                "freshness": "unknown",
+            },
+            "news": {
+                "status": "timeout",
+                "truth": "unavailable",
+                "source": None,
+                "fallback_occurred": False,
+                "freshness": "unknown",
+                "error": "provider_timeout after 8s",
+            },
+            "sentiment": {
+                "status": "missing",
+                "truth": "unavailable",
+                "source": None,
+                "fallback_occurred": False,
+                "freshness": "unknown",
+            },
+        },
+        score=66,
+    )
+
+    packet = _report_for(result)["singleStockEvidencePacket"]
+
+    assert packet["market"] == "hk"
+    assert packet["domains"]["priceHistory"]["status"] == "available"
+    assert packet["domains"]["technicals"]["status"] == "available"
+    assert packet["domains"]["fundamentals"]["status"] == "missing"
+    assert packet["domains"]["earnings"]["status"] == "missing"
+    assert packet["domains"]["valuation"]["status"] == "missing"
+    assert packet["domains"]["news"]["status"] == "blocked"
+    assert packet["fundamentalsEarnings"]["normalizerState"] == "insufficient"
+    assert packet["newsCatalysts"]["extractionState"] == "blocked"
+    assert "fundamental_context_unavailable" in packet["blockingReasons"]
+    assert "fundamental_context_unavailable" in packet["fundamentalsEarnings"]["blockingReasons"]
+    assert "fundamentals" in packet["fundamentalsEarnings"]["missingEvidence"]
+    assert "provider_timeout" in packet["newsCatalysts"]["blockingReasons"]
+    assert packet["newsCatalysts"]["topNewsItems"] == []
+    assert packet["newsCatalysts"]["topCatalystItems"] == []
 
 
 def test_home_evidence_coverage_frame_marks_orcl_like_partial_domains_truthfully() -> None:

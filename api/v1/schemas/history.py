@@ -11,7 +11,7 @@
 
 from typing import Optional, List, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class HistoryItem(BaseModel):
@@ -142,6 +142,9 @@ class ReportMeta(BaseModel):
     current_price: Optional[float] = Field(None, description="分析时股价")
     change_pct: Optional[float] = Field(None, description="分析时涨跌幅(%)")
     model_used: Optional[str] = Field(None, description="分析使用的 LLM 模型")
+    researchReadiness: Optional[Any] = Field(None, description="研究就绪度投影（可选）")
+    evidenceCoverageFrame: Optional[Any] = Field(None, description="证据覆盖框架（可选）")
+    singleStockEvidencePacket: Optional[Any] = Field(None, description="单票证据包（可选）")
 
 
 class ReportSummary(BaseModel):
@@ -180,6 +183,15 @@ class ReportDetails(BaseModel):
     data_quality_report: Optional[Any] = Field(None, description="决策关键数据质量报告（可选）")
     financial_report: Optional[Any] = Field(None, description="结构化财报摘要（来自 fundamental_context）")
     dividend_metrics: Optional[Any] = Field(None, description="结构化分红指标（含 TTM 口径）")
+    analysis_result: Optional[Any] = Field(None, description="结构化分析结果（API 恢复镜像）")
+
+    @model_validator(mode="after")
+    def _hydrate_analysis_result_from_raw_result(self) -> "ReportDetails":
+        if self.analysis_result is None and isinstance(self.raw_result, dict):
+            analysis_result = self.raw_result.get("analysis_result")
+            if analysis_result is not None:
+                self.analysis_result = analysis_result
+        return self
 
 
 class AnalysisReport(BaseModel):
@@ -221,6 +233,37 @@ class AnalysisReport(BaseModel):
     decision_trace: Optional[Any] = Field(None, description="决策溯源元数据（可选）")
     data_quality_report: Optional[Any] = Field(None, description="决策关键数据质量报告（可选）")
     report_quality: Optional[Any] = Field(None, description="报告完整性/溯源状态摘要（可选）")
+    researchReadiness: Optional[Any] = Field(None, description="研究就绪度投影（可选）")
+    evidenceCoverageFrame: Optional[Any] = Field(None, description="证据覆盖框架（可选）")
+    singleStockEvidencePacket: Optional[Any] = Field(None, description="单票证据包（可选）")
+
+    @model_validator(mode="after")
+    def _hydrate_home_evidence_contracts(self) -> "AnalysisReport":
+        analysis_result = None
+        if isinstance(self.details, ReportDetails):
+            analysis_result = self.details.analysis_result
+        elif isinstance(self.details, dict):
+            analysis_result = self.details.get("analysis_result")
+
+        if not isinstance(analysis_result, dict):
+            return self
+
+        if self.researchReadiness is None and isinstance(analysis_result.get("researchReadiness"), dict):
+            self.researchReadiness = analysis_result["researchReadiness"]
+        if self.evidenceCoverageFrame is None and isinstance(analysis_result.get("evidenceCoverageFrame"), dict):
+            self.evidenceCoverageFrame = analysis_result["evidenceCoverageFrame"]
+        if self.singleStockEvidencePacket is None and isinstance(analysis_result.get("singleStockEvidencePacket"), dict):
+            self.singleStockEvidencePacket = analysis_result["singleStockEvidencePacket"]
+
+        if isinstance(self.meta, ReportMeta):
+            if self.meta.researchReadiness is None:
+                self.meta.researchReadiness = self.researchReadiness
+            if self.meta.evidenceCoverageFrame is None:
+                self.meta.evidenceCoverageFrame = self.evidenceCoverageFrame
+            if self.meta.singleStockEvidencePacket is None:
+                self.meta.singleStockEvidencePacket = self.singleStockEvidencePacket
+
+        return self
 
 
 class MarkdownReportResponse(BaseModel):
