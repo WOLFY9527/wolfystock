@@ -33,6 +33,10 @@ from src.services.single_stock_fundamentals_earnings_normalizer import (
 from src.services.single_stock_news_catalyst_extractor import (
     build_single_stock_news_catalyst_extractor_v1,
 )
+from src.services.home_llm_evidence_input import build_home_llm_evidence_input_v1
+from src.services.home_report_evidence_citations import (
+    build_home_report_evidence_citation_frame_v1,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -799,9 +803,17 @@ class AnalysisService:
             structured_analysis=structured_analysis,
             query_id=query_id,
         )
+        evidence_citation_frame = self._build_home_report_evidence_citation_frame(
+            result,
+            research_readiness=research_readiness,
+            evidence_coverage_frame=evidence_coverage_frame,
+            single_stock_evidence_packet=single_stock_evidence_packet,
+            query_id=query_id,
+        )
         analysis_result["researchReadiness"] = research_readiness
         analysis_result["evidenceCoverageFrame"] = evidence_coverage_frame
         analysis_result["singleStockEvidencePacket"] = single_stock_evidence_packet
+        analysis_result["evidenceCitationFrame"] = evidence_citation_frame
         decision_trace = self._build_decision_trace(
             result,
             query_id=query_id,
@@ -825,6 +837,7 @@ class AnalysisService:
                 "strategy_type": getattr(result, "decision_type", None) or report_type,
                 "evidenceCoverageFrame": evidence_coverage_frame,
                 "singleStockEvidencePacket": single_stock_evidence_packet,
+                "evidenceCitationFrame": evidence_citation_frame,
             },
             "summary": {
                 "analysis_summary": result.analysis_summary,
@@ -857,8 +870,10 @@ class AnalysisService:
             "researchReadiness": research_readiness,
             "evidenceCoverageFrame": evidence_coverage_frame,
             "singleStockEvidencePacket": single_stock_evidence_packet,
+            "evidenceCitationFrame": evidence_citation_frame,
         }
         payload["meta"]["researchReadiness"] = research_readiness
+        payload["meta"]["evidenceCitationFrame"] = evidence_citation_frame
         if data_quality_report:
             payload["dataQualityReport"] = data_quality_report
             payload["meta"]["dataQualityReport"] = data_quality_report
@@ -975,6 +990,27 @@ class AnalysisService:
         )
         packet["newsCatalysts"] = build_single_stock_news_catalyst_extractor_v1(packet_payload)
         return packet
+
+    def _build_home_report_evidence_citation_frame(
+        self,
+        result: Any,
+        *,
+        research_readiness: Dict[str, Any],
+        evidence_coverage_frame: Dict[str, Any],
+        single_stock_evidence_packet: Dict[str, Any],
+        query_id: str,
+    ) -> Dict[str, Any]:
+        packet_payload: Dict[str, Any] = {
+            "singleStockEvidencePacket": single_stock_evidence_packet,
+            "fundamentalsEarnings": single_stock_evidence_packet.get("fundamentalsEarnings"),
+            "newsCatalysts": single_stock_evidence_packet.get("newsCatalysts"),
+            "researchReadiness": research_readiness,
+            "evidenceCoverageFrame": evidence_coverage_frame,
+            "debugRef": f"analysis:{query_id}",
+        }
+        home_llm_evidence_input = build_home_llm_evidence_input_v1(packet_payload)
+        packet_payload["homeLlmEvidenceInput"] = home_llm_evidence_input
+        return build_home_report_evidence_citation_frame_v1(packet_payload)
 
     def _build_home_evidence_coverage_frame(
         self,
@@ -1703,6 +1739,8 @@ class AnalysisService:
             response["evidenceCoverageFrame"] = report["evidenceCoverageFrame"]
         if isinstance(report.get("singleStockEvidencePacket"), dict):
             response["singleStockEvidencePacket"] = report["singleStockEvidencePacket"]
+        if isinstance(report.get("evidenceCitationFrame"), dict):
+            response["evidenceCitationFrame"] = report["evidenceCitationFrame"]
         return response
 
     @staticmethod

@@ -936,3 +936,466 @@ def test_home_evidence_coverage_frame_marks_provider_timeout_and_fallback_withou
     assert "cache_router" not in serialized
     assert "traceback" not in serialized
     assert "secret-value" not in serialized
+
+
+def test_home_analysis_response_adds_evidence_citation_frame_across_public_payloads() -> None:
+    result = _result_with_quality(
+        runtime_data={
+            "market": {
+                "status": "ok",
+                "truth": "actual",
+                "source": "polygon",
+                "freshness": "fresh",
+                "sourceTier": "score_grade",
+                "providerAuthority": "scoreGradeAllowed",
+            },
+            "fundamentals": {
+                "status": "ok",
+                "truth": "actual",
+                "source": "fmp",
+                "freshness": "fresh",
+                "sourceTier": "score_grade",
+                "providerAuthority": "scoreGradeAllowed",
+            },
+            "news": {
+                "status": "ok",
+                "truth": "actual",
+                "source": "gnews",
+                "freshness": "fresh",
+                "sourceTier": "observation_only",
+                "providerAuthority": "observationOnly",
+            },
+            "sentiment": {
+                "status": "ok",
+                "truth": "actual",
+                "source": "finnhub",
+                "freshness": "fresh",
+                "sourceTier": "observation_only",
+                "providerAuthority": "observationOnly",
+            },
+        },
+        structured_overrides={
+            "fundamentals": {
+                "status": "ok",
+                "source": "fmp",
+                "sourceType": "official_public",
+                "sourceTier": "score_grade",
+                "trustLevel": "score_grade",
+                "freshness": "fresh",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "asOf": "2026-04-28",
+                "normalized": {
+                    "marketCap": 3010000000000,
+                    "trailingPE": 24.8,
+                    "forwardPE": 22.1,
+                    "priceToBook": 8.7,
+                    "revenueGrowth": 0.11,
+                    "freeCashflow": 108000000000,
+                    "returnOnEquity": 1.48,
+                },
+                "field_sources": {
+                    "marketCap": "fmp",
+                    "trailingPE": "fmp",
+                    "forwardPE": "fmp",
+                    "priceToBook": "fmp",
+                    "revenueGrowth": "fmp",
+                    "freeCashflow": "fmp",
+                    "returnOnEquity": "fmp",
+                },
+                "field_periods": {
+                    "marketCap": "latest",
+                    "trailingPE": "ttm",
+                    "forwardPE": "consensus",
+                    "priceToBook": "latest",
+                    "revenueGrowth": "ttm_yoy",
+                    "freeCashflow": "ttm",
+                    "returnOnEquity": "ttm",
+                },
+            },
+            "earnings_analysis": {
+                "status": "ok",
+                "source": "fmp_income_statement",
+                "field_sources": {"quarterly_series": "fmp_income_statement"},
+                "summary_flags": ["quarterly_series_available", "financial_report_available"],
+                "narrative_insights": ["盈利趋势稳定。"],
+                "sourceTier": "score_grade",
+                "freshness": "fresh",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "reporting_basis": "latest_quarter",
+                "summary_basis": "yoy",
+                "derived_metrics": {
+                    "yoy_revenue_growth": 0.08,
+                    "yoy_net_income_change": 0.06,
+                },
+                "quarterly_series": [
+                    {
+                        "quarter": "2026Q1",
+                        "fiscalDateEnding": "2026-03-31",
+                        "revenue": 90340000000,
+                        "net_income": 21400000000,
+                    }
+                ],
+            },
+            "fundamental_context": {
+                "status": "supported",
+                "market": "us",
+                "valuation": {
+                    "data": {
+                        "marketCap": 3010000000000,
+                        "trailingPE": 24.8,
+                        "priceToBook": 8.7,
+                    }
+                },
+                "earnings": {
+                    "data": {
+                        "quarterly_series": [
+                            {
+                                "quarter": "2026Q1",
+                                "fiscalDateEnding": "2026-03-31",
+                                "revenue": 90340000000,
+                                "net_income": 21400000000,
+                            }
+                        ],
+                        "financial_report": {
+                            "reportDate": "2026-03-31",
+                            "revenue": 90340000000,
+                            "netIncome": 21400000000,
+                        },
+                    }
+                },
+            },
+            "filings": {
+                "status": "ok",
+                "source": "sec_10q",
+                "sourceTier": "official_public",
+                "providerAuthority": "scoreGradeAllowed",
+                "freshness": "fresh",
+                "items": [
+                    {
+                        "formType": "10-Q",
+                        "filedAt": "2026-04-30",
+                        "periodEnd": "2026-03-31",
+                        "accessionNumber": "0000320193-26-000077",
+                    }
+                ],
+            },
+            "sentiment_analysis": {
+                "status": "ok",
+                "source": "finnhub",
+                "sourceType": "official_public",
+                "sourceTier": "observation_only",
+                "trustLevel": "observation_only",
+                "freshness": "fresh",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": False,
+                "sentiment_summary": "positive",
+                "top_positive_items": [
+                    {
+                        "id": "news-earnings",
+                        "headline": "Apple beats earnings and raises guidance",
+                        "summary": "季度盈利超预期，管理层上调指引。",
+                        "source": "finnhub",
+                        "published_at": "2026-06-03T13:00:00Z",
+                        "sentiment": "positive",
+                        "relevance_score": 0.96,
+                    }
+                ],
+                "top_negative_items": [],
+                "classified_items": [
+                    {
+                        "id": "news-earnings",
+                        "title": "Apple beats earnings and raises guidance",
+                        "summary": "季度盈利超预期，管理层上调指引。",
+                        "source": "finnhub",
+                        "news_published_at": "2026-06-03T13:00:00Z",
+                        "sentiment": "positive",
+                        "relevance_score": 0.96,
+                    },
+                    {
+                        "id": "news-wwdc",
+                        "title": "WWDC reveals on-device AI roadmap",
+                        "summary": "新品发布提升产品催化预期。",
+                        "source": "gnews",
+                        "news_published_at": "2026-06-03T09:00:00Z",
+                        "sentiment": "positive",
+                        "relevance_score": 0.82,
+                        "catalyst_type": "product_launch",
+                    },
+                ],
+            },
+            "catalyst": {
+                "status": "ok",
+                "source": "gnews",
+                "sourceType": "official_public",
+                "sourceTier": "observation_only",
+                "trustLevel": "observation_only",
+                "freshness": "fresh",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": False,
+                "classified_items": [
+                    {
+                        "id": "cat-guidance",
+                        "headline": "Apple raises full-year guidance",
+                        "summary": "管理层上调全年业绩预期。",
+                        "source": "finnhub",
+                        "published_at": "2026-06-03T13:05:00Z",
+                        "relevance_score": 0.95,
+                        "catalyst_type": "guidance",
+                        "sentiment": "positive",
+                    }
+                ],
+            },
+            "market_context": {
+                "today": {"close": 188.2, "ma20": 184.0},
+                "yesterday": {"close": 186.4},
+                "sectorTheme": {"sector": "software", "theme": "ai"},
+                "macro": {"regime": "risk_on"},
+                "liquidity": {"usd": "stable"},
+                "source": "official_macro_bundle",
+                "sourceTier": "official_public",
+                "providerAuthority": "observationOnly",
+                "freshness": "delayed",
+            },
+        },
+    )
+
+    response = _report_for(result)
+    frame = response["evidenceCitationFrame"]
+
+    assert response["report"]["evidenceCitationFrame"] == frame
+    assert response["report"]["meta"]["evidenceCitationFrame"] == frame
+    assert response["report"]["details"]["analysis_result"]["evidenceCitationFrame"] == frame
+    assert frame["contractVersion"] == "home_report_evidence_citation_frame_v1"
+    assert frame["frameState"] == "ready"
+    assert frame["symbol"] == "AAPL"
+    assert frame["market"] == "us"
+    assert frame["missingEvidence"] == []
+    assert frame["blockingReasons"] == []
+    assert frame["noAdviceBoundary"] is True
+    assert isinstance(frame["citedEvidence"], list)
+    assert {item["domain"] for item in frame["citedEvidence"]} >= {
+        "fundamentals",
+        "earnings",
+        "valuation",
+        "news",
+        "catalysts",
+        "sentiment",
+    }
+    assert isinstance(frame["domainCoverage"], list)
+    assert isinstance(frame["nextEvidenceNeeded"], list)
+    assert {item["domain"] for item in frame["domainCoverage"]} >= {
+        "fundamentals",
+        "earnings",
+        "news",
+        "catalysts",
+    }
+
+
+def test_home_evidence_citation_frame_preserves_orcl_like_partial_without_raw_leakage() -> None:
+    result = _result_with_quality(
+        code="ORCL",
+        data_quality_report={
+            "dataQualityTier": "analysis_grade",
+            "requiredAvailable": True,
+            "confidenceCap": 70,
+            "missingRequiredDomains": ["fundamentals", "earnings", "news", "catalyst_news_event"],
+            "importantDomainsMissing": ["valuation", "sentiment"],
+            "scoreSuppressed": False,
+            "stanceGuardrail": "observe_only",
+            "reasonCodes": ["fundamental_context_unavailable", "provider_timeout", "fallback_proxy_evidence"],
+        },
+        structured_overrides={
+            "fundamentals": {
+                "status": "missing",
+                "source": None,
+                "freshness": "unknown",
+                "normalized": {},
+            },
+            "earnings_analysis": {
+                "status": "missing",
+                "source": None,
+                "freshness": "unknown",
+                "quarterly_series": [],
+                "summary_flags": ["earnings_data_unavailable"],
+            },
+            "fundamental_context": {
+                "status": "market not supported",
+                "market": "us",
+                "reason": "fundamental_context unavailable",
+            },
+            "sentiment_analysis": {
+                "status": "partial",
+                "source": "tavily",
+                "sourceTier": "observation_only",
+                "providerAuthority": "observationOnly",
+                "freshness": "delayed",
+                "sentiment_summary": "no_reliable_news",
+                "top_positive_items": [],
+                "top_negative_items": [],
+                "classified_items": [],
+                "raw_payload": {"headline": "do not leak"},
+                "stack_trace": "Traceback: secret",
+                "article_body": "Full article body should not leak into packet output.",
+                "prompt": "buy now before the market opens",
+            },
+            "catalyst": {
+                "status": "missing",
+                "source": None,
+                "freshness": "unknown",
+                "classified_items": [],
+            },
+        },
+        runtime_data={
+            "market": {
+                "status": "ok",
+                "truth": "actual",
+                "source": "polygon_us_grouped_daily",
+                "fallback_occurred": False,
+                "freshness": "fresh",
+            },
+            "fundamentals": {
+                "status": "missing",
+                "truth": "unavailable",
+                "source": None,
+                "fallback_occurred": False,
+                "freshness": "unknown",
+            },
+            "news": {
+                "status": "timeout",
+                "truth": "unavailable",
+                "source": None,
+                "fallback_occurred": False,
+                "freshness": "unknown",
+                "error": "provider_timeout after 8s Authorization: Bearer secret",
+                "final_reason": "finnhub timeout via cache_router token=secret",
+                "router_debug": "news_router>provider_a",
+            },
+            "sentiment": {
+                "status": "fallback",
+                "truth": "unavailable",
+                "source": "fallback_cache",
+                "fallback_occurred": True,
+                "freshness": "fallback",
+                "final_reason": "traceback token=secret-value",
+            },
+        },
+        score=72,
+    )
+
+    response = _report_for(result)
+    frame = response["evidenceCitationFrame"]
+    serialized = str(frame).lower()
+
+    assert frame["frameState"] == "blocked"
+    assert frame["symbol"] == "ORCL"
+    assert "fundamentals" in frame["missingEvidence"]
+    assert "news" in frame["missingEvidence"]
+    assert "fundamental_context_unavailable" in frame["blockingReasons"]
+    assert "provider_timeout" in frame["blockingReasons"]
+    assert frame["citedEvidence"] == []
+    assert frame["nextEvidenceNeeded"]
+    assert "authorization" not in serialized
+    assert "bearer" not in serialized
+    assert "cache_router" not in serialized
+    assert "traceback" not in serialized
+    assert "secret-value" not in serialized
+    assert "article body" not in serialized
+    assert "prompt:" not in serialized
+    assert "buy now" not in serialized
+    assert "sell now" not in serialized
+    assert "submit order" not in serialized
+    assert "trade now" not in serialized
+
+
+def test_home_evidence_citation_frame_fails_closed_for_unsupported_hk_fundamental_context() -> None:
+    result = _result_with_quality(
+        code="HK00700",
+        data_quality_report={
+            "dataQualityTier": "analysis_grade",
+            "requiredAvailable": True,
+            "confidenceCap": 68,
+            "missingRequiredDomains": ["fundamentals", "earnings", "news"],
+            "importantDomainsMissing": ["valuation", "catalyst_news_event"],
+            "scoreSuppressed": False,
+            "stanceGuardrail": "observe_only",
+            "reasonCodes": ["fundamental_context_unavailable", "provider_timeout"],
+        },
+        structured_overrides={
+            "fundamentals": {
+                "status": "missing",
+                "source": None,
+                "freshness": "unknown",
+                "normalized": {},
+            },
+            "earnings_analysis": {
+                "status": "missing",
+                "source": None,
+                "freshness": "unknown",
+                "quarterly_series": [],
+                "summary_flags": ["earnings_data_unavailable"],
+            },
+            "fundamental_context": {
+                "status": "market not supported",
+                "market": "hk",
+                "reason": "fundamental_context unavailable",
+            },
+            "sentiment_analysis": {
+                "status": "missing",
+                "source": None,
+                "freshness": "unknown",
+                "top_positive_items": [],
+                "top_negative_items": [],
+                "classified_items": [],
+            },
+            "catalyst": {
+                "status": "missing",
+                "source": None,
+                "freshness": "unknown",
+                "classified_items": [],
+            },
+        },
+        runtime_data={
+            "market": {
+                "status": "ok",
+                "truth": "actual",
+                "source": "twelve_data",
+                "fallback_occurred": False,
+                "freshness": "fresh",
+            },
+            "fundamentals": {
+                "status": "missing",
+                "truth": "unavailable",
+                "source": None,
+                "fallback_occurred": False,
+                "freshness": "unknown",
+            },
+            "news": {
+                "status": "timeout",
+                "truth": "unavailable",
+                "source": None,
+                "fallback_occurred": False,
+                "freshness": "unknown",
+                "error": "provider_timeout after 8s",
+            },
+            "sentiment": {
+                "status": "missing",
+                "truth": "unavailable",
+                "source": None,
+                "fallback_occurred": False,
+                "freshness": "unknown",
+            },
+        },
+        score=66,
+    )
+
+    frame = _report_for(result)["evidenceCitationFrame"]
+
+    assert frame["market"] == "hk"
+    assert frame["frameState"] == "blocked"
+    assert "fundamentals" in frame["missingEvidence"]
+    assert "news" in frame["missingEvidence"]
+    assert "fundamental_context_unavailable" in frame["blockingReasons"]
+    assert "provider_timeout" in frame["blockingReasons"]
+    assert frame["citedEvidence"] == []
