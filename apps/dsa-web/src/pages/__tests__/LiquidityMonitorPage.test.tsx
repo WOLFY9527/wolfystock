@@ -727,6 +727,11 @@ describe('LiquidityMonitorPage', () => {
     expect(screen.getByTestId('liquidity-summary-strip')).toHaveTextContent('当前读数');
     expect(screen.getByTestId('liquidity-summary-strip')).toHaveTextContent('主线索');
     expect(screen.getByTestId('liquidity-summary-strip')).toHaveTextContent('最近更新');
+    expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('流动性姿态');
+    expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('证据覆盖');
+    expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('关键驱动');
+    expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('压力走势');
+    expect(screen.getByTestId('liquidity-visual-trend')).toHaveTextContent('图形证据缺失，当前保持观察');
     expect(screen.getByTestId('liquidity-consumer-evidence')).toHaveTextContent('当前证据');
     expect(screen.getByTestId('liquidity-consumer-evidence')).toHaveTextContent('美国利率压力');
     expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('当前缺口');
@@ -909,6 +914,10 @@ describe('LiquidityMonitorPage', () => {
     const unavailableBand = screen.getByTestId('liquidity-decision-readiness');
     expect(unavailableBand).toHaveTextContent('当前流动性读数暂不可用，仅保留最近一次状态与更新时间。');
     expect(unavailableBand).toHaveTextContent('评分已暂停');
+    expect(screen.getByTestId('liquidity-visual-posture')).toHaveTextContent('不可判断');
+    expect(screen.getByTestId('liquidity-visual-coverage')).toHaveTextContent('缺口');
+    expect(screen.getByTestId('liquidity-visual-trend')).toHaveTextContent('图形证据缺失，当前保持观察');
+    expect(screen.getByTestId('liquidity-visual-trend')).toHaveTextContent('需要连续时间序列后才展示走势');
     expect(unavailableBand).not.toHaveTextContent('数据源不可用');
     expect(unavailableBand).not.toHaveTextContent('Provider unavailable');
     expect(unavailableBand).not.toHaveTextContent('前往数据源设置');
@@ -925,6 +934,8 @@ describe('LiquidityMonitorPage', () => {
     expect(summaryStrip).toHaveTextContent('当前读数');
     expect(summaryStrip).toHaveTextContent('无明显方向');
     expect(summaryStrip).not.toHaveTextContent('中性观察');
+    expect(screen.getByTestId('liquidity-visual-posture')).toHaveTextContent('无明显方向');
+    expect(screen.getByTestId('liquidity-visual-coverage')).toHaveTextContent('可判断');
     expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('对照 Market Overview / Rotation Radar');
     expect(screen.queryByText('No Clear Edge')).not.toBeInTheDocument();
   });

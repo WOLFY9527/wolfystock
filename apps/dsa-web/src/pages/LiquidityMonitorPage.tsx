@@ -1096,6 +1096,24 @@ type ConsumerLiquidityEvidenceRowView = {
   detail: string;
 };
 
+type ConsumerLiquidityVisualDriver = {
+  key: string;
+  label: string;
+  detail: string;
+  emphasisPct: number;
+  toneClassName: string;
+  barClassName: string;
+};
+
+type ConsumerLiquidityCoverageSegment = {
+  key: string;
+  label: string;
+  count: number;
+  widthPct: number;
+  chipVariant: 'neutral' | 'success' | 'caution' | 'info';
+  barClassName: string;
+};
+
 const CONSUMER_FORBIDDEN_COPY_PATTERN = /provider|proxy|fallback|reason|source|authority|cache|runtime|raw|json|diagnostic|official_or_authorized|marketcache|scorecontributionallowed|sourceauthorityallowed|yfinance|fred|binance|polygon|tushare|bucket|backend|snake_case|routeRejected/i;
 
 function consumerFreshnessLabel(freshness: LiquidityMonitorFreshness): string {
@@ -1262,6 +1280,122 @@ function buildConsumerGapSummary(
   return '当前没有新增缺口，继续跟踪后续变化。';
 }
 
+function clampPercent(value: number, min = 8, max = 100): number {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  return Math.max(min, Math.min(max, value));
+}
+
+function buildConsumerCoverageSegments(
+  coverageSummary: LiquidityCoverageReadinessSummary,
+  indicatorCount: number,
+): ConsumerLiquidityCoverageSegment[] {
+  void indicatorCount;
+  const rawSegments: Array<Omit<ConsumerLiquidityCoverageSegment, 'widthPct'>> = [
+    {
+      key: 'scoring',
+      label: '可判断',
+      count: coverageSummary.scoreGradeCount,
+      chipVariant: 'success',
+      barClassName: 'bg-emerald-300/80',
+    },
+    {
+      key: 'observation',
+      label: '仅观察',
+      count: coverageSummary.observationOnlyCount,
+      chipVariant: 'info',
+      barClassName: 'bg-cyan-300/75',
+    },
+    {
+      key: 'missing',
+      label: '缺口',
+      count: coverageSummary.missingOrUnavailableCount,
+      chipVariant: 'caution',
+      barClassName: 'bg-amber-300/80',
+    },
+  ];
+
+  const activeCount = rawSegments.filter((segment) => segment.count > 0).length;
+  const reserved = activeCount > 0 ? activeCount * 8 : 0;
+  const proportionalPool = Math.max(100 - reserved, 0);
+  const proportionalTotal = rawSegments.reduce((sum, segment) => sum + Math.max(segment.count, 0), 0);
+
+  return rawSegments.map((segment) => {
+    const proportionalWidth = proportionalTotal > 0
+      ? (Math.max(segment.count, 0) / proportionalTotal) * proportionalPool
+      : 0;
+    const widthPct = segment.count > 0 ? clampPercent(proportionalWidth + 8) : 0;
+    return {
+      ...segment,
+      widthPct,
+    };
+  }).filter((segment) => segment.count > 0);
+}
+
+function buildConsumerVisualDrivers(
+  data: LiquidityMonitorResponse,
+  indicators: LiquidityMonitorIndicator[],
+): ConsumerLiquidityVisualDriver[] {
+  const dominantDrivers = data.liquidityImpulseSynthesis?.dominantDrivers || [];
+  if (dominantDrivers.length > 0) {
+    const emphasisBase = dominantDrivers.reduce((maxValue, item) => {
+      const rawValue = Math.max(Math.abs(item.impact || 0), Math.abs(item.signal || 0), 0.12);
+      return Math.max(maxValue, rawValue);
+    }, 0.12);
+
+    return dominantDrivers.slice(0, 3).map((item) => {
+      const rawValue = Math.max(Math.abs(item.impact || 0), Math.abs(item.signal || 0), 0.12);
+      const emphasisPct = clampPercent((rawValue / emphasisBase) * 100, 18, 100);
+      const direction = evidenceDirectionLabel(item.direction);
+      const detailParts = [
+        direction,
+        item.observationOnly ? '观察线索' : '当前线索',
+      ].filter(Boolean);
+      const contractionLike = item.direction === 'supports_contraction' || item.direction === 'negative';
+      const expansionLike = item.direction === 'supports_expansion' || item.direction === 'positive';
+
+      return {
+        key: item.key,
+        label: evidenceItemDisplayLabel(item),
+        detail: detailParts.join(' · ') || '当前线索',
+        emphasisPct,
+        toneClassName: contractionLike
+          ? 'text-amber-100'
+          : expansionLike
+            ? 'text-emerald-100'
+            : 'text-cyan-100',
+        barClassName: contractionLike
+          ? 'from-amber-300/85 via-amber-200/70 to-transparent'
+          : expansionLike
+            ? 'from-emerald-300/85 via-emerald-200/70 to-transparent'
+            : 'from-cyan-300/80 via-sky-200/65 to-transparent',
+      };
+    });
+  }
+
+  const scoreReadyIndicators = indicators.filter((indicator) => (
+    indicator.coverageDiagnostics?.scoreContributionAllowed === true || indicator.includedInScore
+  ));
+  const rankedIndicators = (scoreReadyIndicators.length > 0 ? scoreReadyIndicators : indicators)
+    .slice()
+    .sort((left, right) => Math.abs(right.scoreContribution || 0) - Math.abs(left.scoreContribution || 0));
+  const emphasisBase = rankedIndicators.reduce((maxValue, indicator) => {
+    return Math.max(maxValue, Math.abs(indicator.scoreContribution || 0), 1);
+  }, 1);
+
+  return rankedIndicators.slice(0, 3).map((indicator) => ({
+    key: indicator.key,
+    label: displayLabel(indicator),
+    detail: indicator.includedInScore || indicator.coverageDiagnostics?.scoreContributionAllowed
+      ? '当前可判断线索'
+      : '当前观察线索',
+    emphasisPct: clampPercent((Math.abs(indicator.scoreContribution || 0) / emphasisBase) * 100, 18, 100),
+    toneClassName: 'text-cyan-100',
+    barClassName: 'from-cyan-300/80 via-sky-200/65 to-transparent',
+  }));
+}
+
 function buildConsumerLiquidityStatusView(
   data: LiquidityMonitorResponse,
   coverageSummary: LiquidityCoverageReadinessSummary,
@@ -1330,6 +1464,162 @@ function buildConsumerLiquidityStatusView(
     freshnessDetail: `最近更新：${formatDateTime(data.freshness.latestAsOf) || '待确认'}`,
   };
 }
+
+const ConsumerLiquidityVisualEvidence: React.FC<{
+  data: LiquidityMonitorResponse;
+  coverageSummary: LiquidityCoverageReadinessSummary;
+  readinessSummary: DecisionReadinessSummary;
+  synthesisView: LiquidityImpulseSynthesisHeaderView;
+  indicators: LiquidityMonitorIndicator[];
+}> = ({ data, coverageSummary, readinessSummary, synthesisView, indicators }) => {
+  const bias = buildLiquidityBiasSummary(data, readinessSummary, synthesisView);
+  const coverageSegments = buildConsumerCoverageSegments(coverageSummary, indicators.length);
+  const visualDrivers = buildConsumerVisualDrivers(data, indicators);
+  const postureFillPct = data.score.regime === 'unavailable'
+    ? 0
+    : clampPercent(Math.max(data.score.value || 0, 0), 0, 100);
+
+  return (
+    <section data-testid="liquidity-visual-evidence" className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
+      <div
+        data-testid="liquidity-visual-posture"
+        className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3"
+      >
+        <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium text-white/48">流动性姿态</p>
+            <p className={cn('mt-1 text-sm font-semibold', bias.toneClassName)}>{bias.label}</p>
+            <p className="mt-1 text-[11px] leading-5 text-white/56">{bias.detail}</p>
+          </div>
+          <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
+            <TerminalChip variant={bias.variant}>{REGIME_LABELS[data.score.regime]}</TerminalChip>
+            <TerminalChip variant={readinessSummary.stateVariant}>{readinessSummary.stateLabel}</TerminalChip>
+          </div>
+        </div>
+        <div className="mt-3 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.24em] text-white/34">Posture</p>
+              <p className="mt-2 font-mono text-3xl font-semibold text-white/86">{scoreLabel(data.score.value)}</p>
+            </div>
+            <p className="text-[11px] leading-5 text-white/48">
+              {coverageSummary.directionLabel === '可参考' ? '当前读数可继续跟踪' : '当前读数先保持观察'}
+            </p>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.06]">
+            <div
+              className={cn(
+                'h-full rounded-full transition-[width]',
+                data.score.regime === 'stress' || data.score.regime === 'tight'
+                  ? 'bg-gradient-to-r from-amber-300/85 to-amber-100/65'
+                  : data.score.regime === 'supportive' || data.score.regime === 'abundant'
+                    ? 'bg-gradient-to-r from-emerald-300/85 to-cyan-200/65'
+                    : 'bg-gradient-to-r from-white/45 to-cyan-200/45',
+              )}
+              style={{ width: `${postureFillPct}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div
+        data-testid="liquidity-visual-coverage"
+        className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3"
+      >
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium text-white/48">证据覆盖</p>
+            <p className="mt-1 text-sm font-semibold text-white/84">
+              {coverageSummary.scoreGradeCount}/{Math.max(indicators.length, 1)} 项当前可判断
+            </p>
+            <p className="mt-1 text-[11px] leading-5 text-white/56">
+              缺口 {coverageSummary.missingOrUnavailableCount} 项，观察 {coverageSummary.observationOnlyCount} 项。
+            </p>
+          </div>
+          <TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.directionLabel}</TerminalChip>
+        </div>
+        <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-white/[0.06]">
+          {coverageSegments.map((segment) => (
+            <div
+              key={segment.key}
+              className={segment.barClassName}
+              style={{ width: `${segment.widthPct}%` }}
+            />
+          ))}
+        </div>
+        <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
+          {coverageSegments.map((segment) => (
+            <TerminalChip key={segment.key} variant={segment.chipVariant}>
+              {segment.label} {segment.count}
+            </TerminalChip>
+          ))}
+        </div>
+      </div>
+
+      <div
+        data-testid="liquidity-visual-drivers"
+        className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3"
+      >
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium text-white/48">关键驱动</p>
+            <p className="mt-1 text-sm font-semibold text-white/84">当前最影响状态的线索</p>
+          </div>
+          <TerminalChip variant="neutral">最多 3 项</TerminalChip>
+        </div>
+        <div className="mt-3 grid gap-2">
+          {visualDrivers.map((driver) => (
+            <div key={driver.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className={cn('truncate text-sm font-semibold', driver.toneClassName)}>{driver.label}</p>
+                  <p className="mt-1 text-[11px] leading-5 text-white/52">{driver.detail}</p>
+                </div>
+                <span className="shrink-0 text-[11px] font-medium text-white/40">{driver.emphasisPct}%</span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                <div
+                  className={cn('h-full rounded-full bg-gradient-to-r', driver.barClassName)}
+                  style={{ width: `${driver.emphasisPct}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div
+        data-testid="liquidity-visual-trend"
+        className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3"
+      >
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium text-white/48">压力走势</p>
+            <p className="mt-1 text-sm font-semibold text-white/84">图形证据缺失，当前保持观察</p>
+            <p className="mt-1 text-[11px] leading-5 text-white/56">
+              当前页面没有连续走势数据，先对照读数、覆盖与缺口继续观察。
+            </p>
+          </div>
+          <TerminalChip variant="neutral">未返回走势</TerminalChip>
+        </div>
+        <div className="mt-3 rounded-lg border border-dashed border-white/[0.08] bg-black/10 px-3 py-4">
+          <div className="grid grid-cols-12 gap-1 opacity-60" aria-hidden="true">
+            {Array.from({ length: 12 }).map((_, index) => (
+              <div
+                key={`trend-placeholder-${index}`}
+                className="h-10 rounded-sm bg-white/[0.03]"
+                style={{ marginTop: `${(index % 3) * 6}px` }}
+              />
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] leading-5 text-white/48">
+            需要连续时间序列后才展示走势；当前不推断上升、下降或拐点。
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+};
 
 const LiquiditySetupPath: React.FC<{ testId: string }> = ({ testId }) => (
   <div
@@ -1591,6 +1881,14 @@ const DecisionReadinessBand: React.FC<{
                 </div>
               ))}
             </div>
+
+            <ConsumerLiquidityVisualEvidence
+              data={data}
+              coverageSummary={coverageSummary}
+              readinessSummary={summary}
+              synthesisView={synthesisView}
+              indicators={indicators}
+            />
 
             {consumerEvidenceRows.length ? (
               <div
