@@ -73,7 +73,7 @@ const THEME_FLOW_STATE_LABELS: Record<string, string> = {
   crowded: '拥挤观察',
   fading: '热度回落',
   mixed: '信号分化',
-  insufficient_evidence: '证据不足',
+  insufficient_evidence: '数据不足',
 };
 const THEME_FLOW_REASON_LABELS: Record<string, string> = {
   fallback_source: '最近一次可用数据',
@@ -267,7 +267,7 @@ function consumerConfidenceLabel(state: DecisionReadinessState): string {
   if (state === 'observe') {
     return '当前信号置信度较低，仅供观察。';
   }
-  return '当前轮动信号数据不足，暂不生成评分。';
+  return '当前轮动数据不足，暂不能形成稳定判断。';
 }
 
 function consumerSufficiencyLabel(state: DecisionReadinessState): string {
@@ -277,12 +277,12 @@ function consumerSufficiencyLabel(state: DecisionReadinessState): string {
   if (state === 'observe') {
     return '部分轮动数据暂不可用。';
   }
-  return '当前轮动信号数据不足，暂不生成评分。';
+  return '当前轮动数据不足，暂不能形成稳定判断。';
 }
 
 function consumerStatusLabel(state: DecisionReadinessState, payload: MarketRotationRadarResponse): string {
   if (!payload.themes.length) {
-    return '信号不可用';
+    return '暂不能判断';
   }
   if (state === 'ready') {
     return payload.freshness === 'delayed' ? '信号延迟可用' : '信号可用';
@@ -291,12 +291,12 @@ function consumerStatusLabel(state: DecisionReadinessState, payload: MarketRotat
     return payload.isFallback || payload.isStale ? '信号延迟观察' : '信号部分可用';
   }
   if (isRotationLibraryMode(payload)) {
-    return '信号不足';
+    return '数据不足';
   }
   if (payload.isFallback || payload.isStale) {
     return '信号延迟';
   }
-  return payload.themes.length ? '信号不足' : '信号不可用';
+  return payload.themes.length ? '数据不足' : '暂不能判断';
 }
 
 function formatThemeStage(stage?: MarketRotationStage): string {
@@ -394,7 +394,7 @@ function mapDataStateLabel(theme: DataStateFields): string {
   if (theme.freshness === 'live') {
     return '实时';
   }
-  return '缓存/部分';
+  return '数据更新中';
 }
 
 function formatConfidenceValue(confidence?: number | null): string {
@@ -436,6 +436,11 @@ function sanitizeRotationText(value?: string | null, fallback = '数据不足，
     return '部分轮动数据暂不可用。';
   }
   const consumerText = text
+    .replaceAll('备用篮子', '备选分类')
+    .replaceAll('备用主题池', '备选分类')
+    .replaceAll('缺少可用行情与时窗证据', '当前缺少足够行情与时间窗口数据，暂不能形成稳定轮动判断')
+    .replaceAll('缺少可用行情和时窗证据', '当前缺少足够行情与时间窗口数据，暂不能形成稳定轮动判断')
+    .replaceAll('新鲜度', '数据更新')
     .replaceAll('静态主题库', '分类浏览')
     .replaceAll('主题库', '分类浏览')
     .replaceAll('真实资金流', '确认信号')
@@ -626,7 +631,7 @@ function deriveMissingEvidence(
   return uniqueReadinessItems(
     missing,
     5,
-    tiers.confirmedLeaders.length ? '暂无关键限制，继续复核风险与新鲜度' : '确认信号、广度与观察时窗仍待补齐',
+    tiers.confirmedLeaders.length ? '暂无关键限制，继续复核风险与数据更新' : '确认信号、广度与观察时窗仍待补齐',
   );
 }
 
@@ -643,10 +648,10 @@ function deriveRotationConclusion(
     return {
       state,
       title: '可判断',
-      detail: '当前轮动信号较完整，可形成主题轮动方向的研究观察；仍需持续复核反证、风险与新鲜度。',
+      detail: '当前轮动信号较完整，可形成主题轮动方向的研究观察；仍需持续复核反证、风险与数据更新。',
       whyNotConclusion: '当前已具备研究判断所需的核心证据，但页面仍只输出观察结论，不扩展为交易动作。',
       missingEvidence,
-      nextStep: '继续观察退潮主题、风险标签与数据新鲜度；若反证增加，应降级为仅观察。',
+      nextStep: '继续观察退潮主题、风险标签与更新时间；若反证增加，应降级为仅观察。',
       variant: 'success',
     };
   }
@@ -658,20 +663,24 @@ function deriveRotationConclusion(
       detail: '已有候选线索，但确认度或广度仍不足，暂不能判断轮动方向。',
       whyNotConclusion: `${themeScope}主要依赖相对强弱、观察项或局部样本，尚不能证明扩散与连续性同时成立。`,
       missingEvidence,
-      nextStep: '等待新的多时窗与成员广度快照；确认信号不足时保持观察。',
+      nextStep: tiers.libraryMode
+        ? '可先查看下方分类候选，或切换到其他市场对比；待数据更新后再复核。'
+        : '可先查看候选主题，并等待新的多时窗与成员广度快照；必要时切换市场对比。',
       variant: 'info',
     };
   }
 
   return {
     state,
-    title: '当前无法判断轮动方向',
-    detail: '当前证据不足，不能把主题、行业或概念列表解释为轮动方向。',
+    title: '当前暂不能判断轮动方向',
+    detail: '当前缺少足够行情与时间窗口数据，暂不能形成稳定轮动判断。',
     whyNotConclusion: tiers.libraryMode || payload.themes.length === 0
-      ? `${themeScope}，没有足够的可比较行情时窗、成员广度或确认信号。`
-      : `${themeScope}缺少足够的新鲜行情、广度扩散和确认信号，不能形成方向结论。`,
+      ? `${themeScope}，缺少足够的可比较行情、时间窗口、成员广度或确认信号。`
+      : `${themeScope}缺少足够的近期行情、广度扩散和确认信号，暂不能形成方向结论。`,
     missingEvidence,
-    nextStep: '数据更新中，稍后将自动刷新；若仍不足，等待新的多时窗快照再复核。',
+    nextStep: tiers.libraryMode
+      ? '可先查看下方分类候选，或切换到其他市场对比；待数据更新后再复核。'
+      : '可切换到其他市场查看分类候选，或等待数据更新后再复核。',
     variant: 'danger',
   };
 }
@@ -740,7 +749,7 @@ function buildRotationDecisionReadiness(payload: MarketRotationRadarResponse): D
     blockers: [consumerFreshnessLabel(payload.freshness, payload.isFallback, payload.isStale)],
     nextEvidence: [consumerSufficiencyLabel(state)],
     conclusion: state === 'ready'
-      ? '当前轮动信号可用于研究观察，仍需结合风险与新鲜度复核。'
+      ? '当前轮动信号可用于研究观察，仍需结合风险与数据更新复核。'
       : state === 'observe'
         ? consumerConfidenceLabel(state)
         : consumerSufficiencyLabel(state),
@@ -778,7 +787,7 @@ function deriveCapitalRotationSummary(payload: MarketRotationRadarResponse): Cap
         key: 'confirmed',
         label: '确认信号',
         value: themeNamesSummary(confirmedLeaders, '暂无确认信号'),
-        detail: confirmedLeaders.length ? '当前信号较完整，仍仅作研究观察。' : '当前轮动信号数据不足，暂不生成评分。',
+        detail: confirmedLeaders.length ? '当前信号较完整，仍仅作研究观察。' : '当前轮动数据不足，暂不能形成稳定判断。',
         variant: confirmedLeaders.length ? 'success' : 'caution',
       },
       {
@@ -852,7 +861,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
     ? '正常'
     : decisionSummary.state === 'observe'
       ? '观察中'
-      : '证据不足';
+      : '暂不能判断';
   const heroTitle = selectedTheme?.name || topThemeTitle;
   const heroSummary = selectedTheme
     ? sanitizeRotationText(
@@ -861,7 +870,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
         ? `${selectedTheme.name} 当前信号较完整，继续观察节奏与回落风险。`
         : decisionSummary.state === 'observe'
           ? `${selectedTheme.name} 仍在观察阶段，先看持续性、广度与量能是否继续同步。`
-          : `${selectedTheme.name} 当前证据不足，先保留分类与观察结论。`,
+          : `${selectedTheme.name} 当前数据不足，可先查看分类候选并等待数据更新。`,
     )
     : guidance.detail;
   const heroCards = [
@@ -1052,7 +1061,7 @@ const CommandBar: React.FC<{
     trailing={(
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <TerminalNestedBlock data-testid="rotation-radar-freshness" className="inline-flex items-center gap-2 px-3 py-2">
-          <span className="text-[10px] font-bold uppercase text-white/35">新鲜度</span>
+          <span className="text-[10px] font-bold uppercase text-white/35">更新时间</span>
           <DataFreshnessBadge freshness={freshness || 'fallback'} />
         </TerminalNestedBlock>
         <TerminalButton
@@ -1311,7 +1320,7 @@ const ThemeDetailPanel: React.FC<{
               <p className="mt-1">
                 {taxonomyOnly
                   ? '当前页面先保留分类、观察范围与后续跟踪方向，等待更多行情覆盖后再确认强弱。'
-                  : '默认先展示主题、当前信号、置信与新鲜度，再把更深一层的支持证据与方法说明折叠起来。'}
+                  : '默认先展示主题、当前信号、置信与更新时间，再把更深一层的支持证据与方法说明折叠起来。'}
               </p>
             </div>
           </div>
@@ -1584,13 +1593,13 @@ const MarketRotationRadarPage: React.FC = () => {
                         className="min-h-[104px] items-start justify-start p-3 text-left text-sm text-white/52"
                       >
                         <span className="block font-semibold text-white/82">
-                          {rotationConclusion?.title || '当前无法判断轮动方向'}
+                          {rotationConclusion?.title || '当前暂不能判断轮动方向'}
                         </span>
                         <span className="mt-2 block leading-5">
-                          {rotationConclusion?.whyNotConclusion || '当前轮动信号数据不足，暂不生成评分。'}
+                          {rotationConclusion?.whyNotConclusion || '当前轮动数据不足，暂不能形成稳定判断。'}
                         </span>
                         <span className="mt-3 block leading-5 text-white/60">
-                          {rotationConclusion?.nextStep || '等待新的多时窗行情和成员广度快照后再复核。'}
+                          {rotationConclusion?.nextStep || '可切换到其他市场查看分类候选，或等待数据更新后再复核。'}
                         </span>
                       </TerminalEmptyState>
                     </div>

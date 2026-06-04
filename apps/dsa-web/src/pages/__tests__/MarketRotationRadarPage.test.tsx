@@ -646,7 +646,7 @@ function insufficientEvidenceFixture(): MarketRotationRadarResponse {
     fadingThemes: [],
     watchlistSignals: [],
     noHeadlineReason: '没有可比较主题/行业/概念样本。',
-    safeWording: ['仅观察', '证据不足', '非买卖建议'],
+    safeWording: ['仅观察', '暂不能判断', '非买卖建议'],
   };
   fixture.themes = [];
   fixture.etfLeadershipDiagnostics = {
@@ -764,6 +764,7 @@ describe('MarketRotationRadarPage', () => {
     expect(screen.getByTestId('rotation-radar-mode-controls')).toHaveAttribute('data-linear-primitive', 'command-bar');
     expect(screen.getByTestId('rotation-market-tab-US')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByPlaceholderText('搜索主题、英文名或成员')).toBeInTheDocument();
+    expect(screen.getByTestId('rotation-radar-freshness')).toHaveTextContent('更新时间');
 
     const guidance = screen.getByTestId('rotation-radar-guidance');
     expect(guidance).toHaveTextContent('观察中');
@@ -920,7 +921,7 @@ describe('MarketRotationRadarPage', () => {
 
     expect(screen.getByTestId('rotation-market-tab-CN')).toHaveAttribute('aria-pressed', 'true');
     expect(within(screen.getByTestId('rotation-radar-leader-list')).queryAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(0);
-    expect(screen.getByTestId('rotation-radar-guidance')).toHaveTextContent('证据不足');
+    expect(screen.getByTestId('rotation-radar-guidance')).toHaveTextContent('暂不能判断');
     expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('AI算力');
     expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('当前主题');
     expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('AI算力');
@@ -977,9 +978,10 @@ describe('MarketRotationRadarPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '刷新主题轮动雷达' }));
 
     const unavailableGuidance = await screen.findByTestId('rotation-radar-guidance');
-    expect(unavailableGuidance).toHaveTextContent('证据不足');
-    expect(unavailableGuidance).toHaveTextContent('当前证据不足，不能把主题、行业或概念列表解释为轮动方向。');
-    expect(screen.getByTestId('rotation-radar-insufficient-empty')).toHaveTextContent('当前无法判断轮动方向');
+    expect(unavailableGuidance).toHaveTextContent('暂不能判断');
+    expect(unavailableGuidance).toHaveTextContent('当前缺少足够行情与时间窗口数据，暂不能形成稳定轮动判断。');
+    expect(unavailableGuidance).toHaveTextContent('可切换到其他市场查看分类候选，或等待数据更新后再复核。');
+    expect(screen.getByTestId('rotation-radar-insufficient-empty')).toHaveTextContent('当前暂不能判断轮动方向');
     expect(screen.queryByTestId('rotation-theme-detail-panel')).not.toBeInTheDocument();
 
     const bodyText = document.body.textContent || '';
