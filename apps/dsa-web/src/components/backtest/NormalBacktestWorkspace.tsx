@@ -87,17 +87,17 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
         <div className="flex min-w-0 flex-col gap-6">
           <div className="flex min-w-0 flex-col gap-2">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">
-              {language === 'en' ? 'Point-and-shoot lane' : '普通模式'}
+              {language === 'en' ? 'Quick-start research lane' : '普通模式'}
             </p>
             <div className="flex min-w-0 flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
               <div className="min-w-0">
                 <h2 className="text-2xl font-semibold text-white">
-                  {language === 'en' ? 'Single launch card' : '单卡片回测表单'}
+                  {language === 'en' ? 'Quick research setup' : '快速研究回测表单'}
                 </h2>
                 <p className="mt-1 max-w-3xl text-sm leading-6 text-white/58">
                   {language === 'en'
-                    ? 'Keep symbol, benchmark, time range, capital, friction, and the selected template in one dense launch surface.'
-                    : '把标的、基准、区间、资金、摩擦成本与模板收束到同一块高密度发射面板里。'}
+                    ? 'Keep symbol, benchmark, time range, capital, friction, and the selected template in one dense research surface.'
+                    : '把标的、基准、区间、资金、摩擦成本与模板收束到同一块高密度研究面板里。'}
                 </p>
               </div>
               <div className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/50">
@@ -254,7 +254,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
                   </div>
                 </div>
                 <div className="min-w-0 rounded-[24px] border border-white/5 bg-black/20 p-5">
-                  <p className={LABEL_CLASS}>{language === 'en' ? 'Preparing compile preview' : '正在准备编译预览'}</p>
+                  <p className={LABEL_CLASS}>{language === 'en' ? 'Preparing backtest rule preview' : '正在准备回测规则预览'}</p>
                   <div className="mt-4 space-y-2" aria-hidden="true">
                     <div className="h-4 rounded-full bg-white/10" />
                     <div className="h-4 rounded-full bg-white/10" />
@@ -280,8 +280,8 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
           >
             <div className="min-w-0 text-sm text-white/46">
               {language === 'en'
-                ? 'Point-and-shoot compiles the selected template into the deterministic rule lane, then opens the dedicated result route.'
-                : '普通模式会先把模板编译进确定性规则链路，再跳转到独立结果页。'}
+                ? 'Quick-start mode first turns the selected template into a fixed-rule backtest flow, then opens the dedicated result page.'
+                : '普通模式会先把模板整理为固定规则回测流程，再跳转到独立结果页。'}
             </div>
             <button
               type="button"

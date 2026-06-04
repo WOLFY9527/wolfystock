@@ -46,9 +46,12 @@ const NormalBacktestTemplateInsights: React.FC<NormalBacktestTemplateInsightsPro
         <h3 className="mt-2 text-base font-semibold text-white">{templateName}</h3>
         <p className="mt-2 text-sm leading-6 text-white/60">{templateDescription}</p>
         <p className="mt-3 text-sm leading-6 text-white/48">{templateLogicSummary}</p>
+        <p className="mt-3 text-xs leading-5 text-white/42">
+          {language === 'en' ? 'Templates are for research simulations only and are not trading instructions.' : '模板仅用于研究模拟，不构成交易建议。'}
+        </p>
       </div>
       <div className="min-w-0 rounded-[24px] border border-white/5 bg-black/20 p-5">
-        <p className={LABEL_CLASS}>{language === 'en' ? 'Compile preview' : '编译预览'}</p>
+        <p className={LABEL_CLASS}>{language === 'en' ? 'Backtest rule preview' : '回测规则预览'}</p>
         <p className="mt-2 text-sm leading-7 text-white/72">{templatePreview}</p>
       </div>
     </div>

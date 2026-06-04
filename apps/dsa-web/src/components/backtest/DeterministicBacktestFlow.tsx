@@ -310,8 +310,8 @@ function getUnsupportedMessages(parsed: RuleBacktestParseResponse, language: Bac
     return [
       unsupportedReason,
       language === 'en'
-        ? 'Add the missing fields or rewrite the setup into a supported deterministic single-instrument rule.'
-        : '请补齐关键字段，或改写成当前已支持的确定性单标的规则。',
+        ? 'Add the missing fields or rewrite the setup into a supported fixed-rule single-symbol backtest flow.'
+        : '请补齐关键字段，或改写成当前已支持的固定规则单标的回测流程。',
     ];
   }
   const messages = parsed.ambiguities
@@ -320,8 +320,8 @@ function getUnsupportedMessages(parsed: RuleBacktestParseResponse, language: Bac
 
   if (messages.length > 0) return messages;
   return language === 'en'
-    ? ['The current input has not been normalized into an executable deterministic rule yet.', 'Tighten the wording, or switch to a supported single-instrument accumulation or simple rule-based strategy.']
-    : ['当前输入还没有被归一化成可执行的确定性规则。', '请收紧表达，或改用当前已支持的单标的区间定投 / 简单条件规则。'];
+    ? ['The current input has not been organized into an executable fixed-rule backtest flow yet.', 'Tighten the wording, or switch to a supported single-symbol accumulation or simple rule-based setup.']
+    : ['当前输入还没有整理成可执行的固定规则回测流程。', '请收紧表达，或改用当前已支持的单标的区间定投 / 简单条件规则。'];
 }
 
 function getParseState(parsed: RuleBacktestParseResponse | null, parseStale: boolean): ParseState {

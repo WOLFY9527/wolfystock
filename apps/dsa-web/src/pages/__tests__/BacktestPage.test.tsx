@@ -937,6 +937,11 @@ describe('BacktestPage', () => {
     expect(screen.getByLabelText('手续费 (bp)')).toBeInTheDocument();
     expect(screen.getByLabelText('策略模板')).toHaveClass('min-h-[44px]', 'leading-6');
     expect(screen.queryByLabelText('策略文本')).not.toBeInTheDocument();
+    expect(screen.getByText('模板仅用于研究模拟，不构成交易建议。')).toBeInTheDocument();
+    expect(screen.getByText('回测规则预览')).toBeInTheDocument();
+    expect(screen.getByText('普通模式会先把模板整理为固定规则回测流程，再跳转到独立结果页。')).toBeInTheDocument();
+    expect(screen.queryByText('编译预览')).not.toBeInTheDocument();
+    expect(screen.queryByText('确定性规则链路')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '执行回测任务' })).toHaveClass('bg-emerald-500/10', 'text-emerald-400', 'rounded-lg');
   });
 
@@ -1053,9 +1058,11 @@ describe('BacktestPage', () => {
     expect(await screen.findByTestId('pro-strategy-catalog-drawer')).toBeInTheDocument();
     const catalog = screen.getByTestId('pro-strategy-catalog');
     expect(catalog).toBeInTheDocument();
+    expect(screen.getByText('一次只浏览一个类别，选中后可带回编辑器继续研究。')).toBeInTheDocument();
     expect(screen.getAllByText('基础 / 默认策略').length).toBeGreaterThan(0);
     expect(within(catalog).getByText('均线交叉（SMA / EMA）')).toBeInTheDocument();
     expect(within(catalog).getAllByText('可执行').length).toBeGreaterThan(0);
+    expect(within(catalog).getAllByText('该模板可直接用于当前固定规则回测流程。').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: '进阶 / 扩展策略' }));
     expect(screen.getByText('简单动量')).toBeInTheDocument();
     expect(screen.getAllByText('当前不支持').length).toBeGreaterThan(0);

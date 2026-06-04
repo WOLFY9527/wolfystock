@@ -1160,11 +1160,11 @@ const BacktestPage: React.FC = () => {
           setRuleParseError({
             title: language === 'en' ? 'Template needs professional review' : '模板需要专业模式复查',
             message: language === 'en'
-              ? 'The selected template did not compile into a runnable deterministic rule. The page has switched to Professional mode so you can inspect and revise it.'
-              : '当前模板没有成功编译成可执行的确定性规则，已自动切到专业模式以便继续检查和改写。',
+              ? 'The selected template could not be organized into a runnable fixed-rule backtest flow. The page has switched to Professional mode so you can inspect and revise it.'
+              : '当前模板暂时无法整理成可执行的固定规则回测流程，已自动切到专业模式以便继续检查和改写。',
             rawMessage: language === 'en'
-              ? 'The selected template did not compile into a runnable deterministic rule.'
-              : '当前模板没有成功编译成可执行的确定性规则。',
+              ? 'The selected template could not be organized into a runnable fixed-rule backtest flow.'
+              : '当前模板暂时无法整理成可执行的固定规则回测流程。',
             category: 'validation_error',
           });
           return;

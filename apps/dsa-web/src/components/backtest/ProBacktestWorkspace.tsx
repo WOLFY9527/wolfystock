@@ -302,6 +302,17 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   const assumptionItems = getAssumptionItems(parsedStrategy, language);
   const strategyCatalogGroups = getStrategyCatalogGroups();
   const activeCatalogGroup = strategyCatalogGroups.find((group) => group.id === catalogGroupId) || strategyCatalogGroups[0];
+  const catalogGroupDescription = activeCatalogGroup.id === 'basic'
+    ? (language === 'en'
+      ? 'Keeps the ready-to-run default templates used for research simulations and quick backtest setup.'
+      : '保留当前可直接用于研究模拟的默认模板，便于快速开始回测。')
+    : activeCatalogGroup.id === 'advanced'
+      ? (language === 'en'
+        ? 'Expands the catalog with classic price, volume, and volatility setups; supported templates can be used for research simulations while the rest remain references.'
+        : '扩展更多经典量价、波动率与区间模板；已支持的条目可直接用于研究模拟，其余保留参考。')
+      : (language === 'en'
+        ? 'Keeps multi-indicator combination templates available for professional research-simulation and rewrite workflows.'
+        : '保留多指标联合确认模板，适合在专业模式中继续做研究模拟与改写。');
   const latestHistory = historyItems[0] as RuleBacktestHistoryItem | undefined;
   const visibleActiveStep = getVisibleWorkspaceStep(currentStep, activeStep);
 
@@ -1366,8 +1377,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             <h3 className="text-lg font-semibold text-white">{language === 'en' ? 'Built-in template catalog' : '内置模板目录'}</h3>
             <p className="text-sm leading-6 text-white/58">
               {language === 'en'
-                ? 'Browse one category at a time, then inject a template back into the strategy editor.'
-                : '一次只浏览一个类别，确认后再把模板注入回策略编辑器。'}
+                ? 'Browse one category at a time, then bring the template back into the editor for further research.'
+                : '一次只浏览一个类别，选中后可带回编辑器继续研究。'}
             </p>
           </div>
 
@@ -1388,7 +1399,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             <div data-testid="pro-strategy-catalog" className="flex flex-col gap-4">
               <div>
                 <h4 className="text-base font-semibold text-white">{activeCatalogGroup.title[language]}</h4>
-                <p className="mt-1 text-sm text-white/52">{activeCatalogGroup.description[language]}</p>
+                <p className="mt-1 text-sm text-white/52">{catalogGroupDescription}</p>
               </div>
               <div className="grid gap-4">
                 {activeCatalogGroup.templates.map((template) => (
@@ -1421,8 +1432,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                       <p className="text-xs leading-5 text-white/45">
                         {template.executable
                           ? (language === 'en'
-                            ? 'Maps to the current deterministic engine.'
-                            : '该模板可直接映射到当前 deterministic 引擎。')
+                            ? 'Fits the current fixed-rule backtest flow.'
+                            : '该模板可直接用于当前固定规则回测流程。')
                           : (language === 'en'
                             ? 'Reference only. Edit before running.'
                             : '仅作参考模板。执行前请先在编辑器中修改。')}
