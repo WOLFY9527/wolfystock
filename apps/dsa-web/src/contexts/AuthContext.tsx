@@ -111,9 +111,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     resetAdminSurfaceMode();
   };
 
-  const fetchStatus = useCallback(async () => {
-    setIsLoading(true);
-    setLoadError(null);
+  const loadAuthStatus = useCallback(async ({ primeLoading }: { primeLoading: boolean }) => {
+    if (primeLoading) {
+      setIsLoading(true);
+      setLoadError(null);
+    }
     try {
       const status = await authApi.getStatus();
       setAuthEnabled(status.authEnabled);
@@ -139,9 +141,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const fetchStatus = useCallback(() => loadAuthStatus({ primeLoading: true }), [loadAuthStatus]);
+
   useEffect(() => {
-    void fetchStatus();
-  }, [fetchStatus]);
+    void loadAuthStatus({ primeLoading: false });
+  }, [loadAuthStatus]);
 
   const login = async (
     params: {

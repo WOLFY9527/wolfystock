@@ -1770,7 +1770,7 @@ const PortfolioPage: React.FC = () => {
     ));
   }, [editingTrade, inferredEditTradeCurrency]);
 
-  const positionRows: FlatPosition[] = (() => {
+  const positionRows = useMemo<FlatPosition[]>(() => {
     if (!snapshot) return [];
     const rows: FlatPosition[] = [];
     for (const account of snapshot.accounts || []) {
@@ -1784,7 +1784,7 @@ const PortfolioPage: React.FC = () => {
     }
     rows.sort((a, b) => Number(b.marketValueBase || 0) - Number(a.marketValueBase || 0));
     return rows;
-  })();
+  }, [snapshot]);
 
   const handleTradeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -4723,7 +4723,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const syncTaskUpdated = useStockPoolStore((state) => state.syncTaskUpdated);
   const syncTaskFailed = useStockPoolStore((state) => state.syncTaskFailed);
   const refreshTaskProgress = useStockPoolStore((state) => state.refreshTaskProgress);
-  const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setHistoryDrawerOpen(true));
+  const {
+    ref: openHistoryDrawerButtonRef,
+    onClick: handleOpenHistoryDrawerClick,
+    onPointerUp: handleOpenHistoryDrawerPointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(() => setHistoryDrawerOpen(true));
   const registrationPath = '/login?mode=create&redirect=%2F';
   const homeChartLoadingLabel = language === 'en' ? 'Loading home price chart' : '正在加载首页价格图表';
   const recentHistoryItems = useMemo(
@@ -5330,11 +5334,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               </button>
               {!isGuest ? (
                 <button
-                  ref={openHistoryDrawerButton.ref}
+                  ref={openHistoryDrawerButtonRef}
                   type="button"
                   aria-label={locale === 'en' ? 'History' : '历史记录'}
-                  onClick={openHistoryDrawerButton.onClick}
-                  onPointerUp={openHistoryDrawerButton.onPointerUp}
+                  onClick={handleOpenHistoryDrawerClick}
+                  onPointerUp={handleOpenHistoryDrawerPointerUp}
                   disabled={isBusy}
                   className="home-research-action-button flex min-h-10 shrink-0 items-center justify-center rounded-lg border px-4 text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] disabled:cursor-wait disabled:text-white/34"
                   data-testid="home-bento-history-drawer-trigger"
