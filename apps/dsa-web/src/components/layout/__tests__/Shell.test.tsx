@@ -10,7 +10,8 @@ import { ShellRailContext } from '../ShellRailContext';
 import { setAdminSurfaceMode } from '../../../hooks/useProductSurface';
 import { useStockPoolStore } from '../../../stores/stockPoolStore';
 
-const { mockLogout, mockHardRedirect, useAuthMock } = vi.hoisted(() => ({
+const { languageState, mockLogout, mockHardRedirect, useAuthMock } = vi.hoisted(() => ({
+  languageState: { value: 'zh' as 'zh' | 'en' },
   mockLogout: vi.fn().mockResolvedValue(undefined),
   mockHardRedirect: vi.fn(),
   useAuthMock: vi.fn(),
@@ -22,9 +23,9 @@ vi.mock('../../../contexts/AuthContext', () => ({
 
 vi.mock('../../../contexts/UiLanguageContext', () => ({
   useI18n: () => ({
-    language: 'zh',
+    language: languageState.value,
     toggleLanguage: vi.fn(),
-    t: (key: string, vars?: Record<string, string | number | undefined>) => translate('zh', key, vars),
+    t: (key: string, vars?: Record<string, string | number | undefined>) => translate(languageState.value, key, vars),
   }),
 }));
 
@@ -85,6 +86,7 @@ const fullCapabilityAdminUser = {
 describe('Shell', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    languageState.value = 'zh';
     setAdminSurfaceMode('user');
     window.sessionStorage.clear();
     window.localStorage.clear();
@@ -201,6 +203,31 @@ describe('Shell', () => {
     expect(overviewLink).not.toHaveClass('is-active');
     expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
+  });
+
+  it('localizes market navigation labels consistently in English mode', async () => {
+    languageState.value = 'en';
+
+    render(
+      <MemoryRouter initialEntries={['/en/market/liquidity-monitor']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const primaryNav = screen.getByRole('navigation', { name: translate('en', 'shell.drawerTitle') });
+    expect(within(primaryNav).getByRole('link', { name: 'Home' })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole('link', { name: 'Scanner' })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole('link', { name: 'Holdings' })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole('link', { name: 'Market Overview' })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole('link', { name: 'Liquidity Monitor' })).toHaveClass('is-active');
+    expect(within(primaryNav).getByRole('link', { name: 'Rotation Radar' })).toBeInTheDocument();
+    expect(within(primaryNav).queryByRole('link', { name: '市场总览' })).not.toBeInTheDocument();
+    expect(within(primaryNav).queryByRole('link', { name: '流动性监测' })).not.toBeInTheDocument();
+    expect(within(primaryNav).queryByRole('link', { name: '轮动雷达' })).not.toBeInTheDocument();
   });
 
   it('shows the guest navigation routes without member-only account controls', () => {
@@ -662,6 +689,33 @@ describe('Shell', () => {
     expect(within(actionIsland).getByRole('button', { name: '账户中心' })).toBeInTheDocument();
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /管理员模式/ })).not.toBeInTheDocument();
+  });
+
+  it('replaces bootstrap-style admin names with a product-safe account label in the masthead', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      currentUser: {
+        ...fullCapabilityAdminUser,
+        displayName: 'Bootstrap Admin...',
+      },
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/settings']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const actionIsland = await screen.findByTestId('shell-header-utility-island');
+    const accountEntry = await within(actionIsland).findByTestId('shell-account-center-entry');
+    expect(accountEntry).toHaveTextContent('管理员账户');
+    expect(accountEntry).not.toHaveTextContent('Bootstrap Admin...');
   });
 
   it('groups header utilities inside a compact Linear OS action island', async () => {

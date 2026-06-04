@@ -42,11 +42,11 @@ export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName, 
   const routeLocale = parseLocaleFromPathname(location.pathname);
   const loginPath = routeLocale ? buildLocalizedPath('/login', routeLocale) : '/login';
   const homePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
-  const title = language === 'en' ? `Sign in to unlock ${moduleName}` : `登录解锁 ${moduleName}`;
+  const title = language === 'en' ? `Sign in to continue to ${moduleName}` : `登录后即可进入 ${moduleName}`;
   const body = language === 'en'
-    ? 'Guest mode only supports the home preview. Personal workspaces, historical review, and advanced metrics require a real account.'
-    : '游客模式仅支持首页基础查询。保存个人工作区、深度历史回溯及进阶指标测算，均需绑定正式账户。';
-  const buttonLabel = language === 'en' ? 'Sign in / Create account' : '登录 / 创建账户';
+    ? 'This route is available to signed-in accounts only. Sign in to continue with your saved workspace, historical review, and advanced research views.'
+    : '当前功能仅对已登录账户开放。登录后可继续使用个人工作区、历史复盘和进阶研究视图。';
+  const buttonLabel = language === 'en' ? 'Sign in or create account' : '登录或创建账户';
   const safeExitLabel = language === 'en' ? 'Return home' : '返回首页';
 
   useEffect(() => {

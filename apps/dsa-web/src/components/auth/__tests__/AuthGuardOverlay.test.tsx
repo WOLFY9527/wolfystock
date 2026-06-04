@@ -38,7 +38,7 @@ describe('AuthGuardOverlay', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('dialog', { name: '登录解锁 市场总览' })).toHaveAttribute('aria-modal', 'true');
+    expect(screen.getByRole('dialog', { name: '登录后即可进入 市场总览' })).toHaveAttribute('aria-modal', 'true');
     expect(screen.getByTestId('auth-guard-overlay')).toHaveClass(
       'fixed',
       'inset-0',
@@ -60,11 +60,11 @@ describe('AuthGuardOverlay', () => {
       'border',
       'backdrop-blur-2xl',
     );
-    expect(screen.getByRole('heading', { name: '登录解锁 市场总览' })).toBeInTheDocument();
-    expect(screen.getByText('游客模式仅支持首页基础查询。保存个人工作区、深度历史回溯及进阶指标测算，均需绑定正式账户。')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '登录后即可进入 市场总览' })).toBeInTheDocument();
+    expect(screen.getByText('当前功能仅对已登录账户开放。登录后可继续使用个人工作区、历史复盘和进阶研究视图。')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '返回首页' })).toBeInTheDocument();
     expectNoRawI18nKeys(container);
-    fireEvent.click(screen.getByRole('button', { name: '登录 / 创建账户' }));
+    fireEvent.click(screen.getByRole('button', { name: '登录或创建账户' }));
     expect(navigate).toHaveBeenCalledWith('/zh/login');
   });
 
@@ -95,11 +95,12 @@ describe('AuthGuardOverlay', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: 'Sign in to unlock Portfolio' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sign in / Create account' })).toHaveClass('bg-[var(--wolfy-accent)]', 'text-[#f7f8ff]');
+    expect(screen.getByRole('heading', { name: 'Sign in to continue to Portfolio' })).toBeInTheDocument();
+    expect(screen.getByText('This route is available to signed-in accounts only. Sign in to continue with your saved workspace, historical review, and advanced research views.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in or create account' })).toHaveClass('bg-[var(--wolfy-accent)]', 'text-[#f7f8ff]');
     expect(screen.getByRole('button', { name: 'Return home' })).toBeInTheDocument();
     expectNoRawI18nKeys(container);
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in / Create account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in or create account' }));
     expect(navigate).toHaveBeenCalledWith('/en/login');
   });
 
@@ -116,7 +117,7 @@ describe('AuthGuardOverlay', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('button', { name: '登录 / 创建账户' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: '登录或创建账户' })).toHaveFocus();
   });
 
   it('wraps Tab and Shift+Tab inside the auth dialog instead of exposing protected backdrop controls', () => {
@@ -128,7 +129,7 @@ describe('AuthGuardOverlay', () => {
       </MemoryRouter>,
     );
 
-    const loginCta = screen.getByRole('button', { name: '登录 / 创建账户' });
+    const loginCta = screen.getByRole('button', { name: '登录或创建账户' });
     const safeExitButton = screen.getByRole('button', { name: '返回首页' });
     expect(loginCta).toHaveFocus();
 
@@ -157,7 +158,7 @@ describe('AuthGuardOverlay', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('button', { name: '登录 / 创建账户' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: '登录或创建账户' })).toHaveFocus();
 
     unmount();
 
@@ -173,13 +174,13 @@ describe('AuthGuardOverlay', () => {
 
     fireEvent.keyDown(document, { key: 'Escape' });
 
-    expect(screen.getByRole('dialog', { name: '登录解锁 持仓管理' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '登录后即可进入 持仓管理' })).toBeInTheDocument();
     expect(navigate).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: '返回首页' }));
     expect(navigate).toHaveBeenCalledWith('/zh');
 
-    fireEvent.click(screen.getByRole('button', { name: '登录 / 创建账户' }));
+    fireEvent.click(screen.getByRole('button', { name: '登录或创建账户' }));
     expect(navigate).toHaveBeenLastCalledWith('/zh/login');
   });
 });

@@ -51,7 +51,7 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, l
     return t('nav.marketOverview');
   }
   if (pathname.startsWith('/market/rotation-radar')) {
-    return '轮动雷达';
+    return t('nav.rotationRadar');
   }
   if (pathname.startsWith('/watchlist')) {
     return t('nav.watchlist');
@@ -87,6 +87,24 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, l
     return t('nav.costObservability');
   }
   return t('nav.terminal');
+}
+
+function sanitizeAccountDisplayName(
+  rawDisplayName: string | null | undefined,
+  options: { isAdmin: boolean; language: UiLanguage },
+): string {
+  const trimmed = rawDisplayName?.trim();
+  if (!trimmed) {
+    return options.isAdmin
+      ? (options.language === 'en' ? 'Admin account' : '管理员账户')
+      : (options.language === 'en' ? 'Account' : '账户');
+  }
+
+  if (options.isAdmin && /bootstrap\s*admin/i.test(trimmed)) {
+    return options.language === 'en' ? 'Admin account' : '管理员账户';
+  }
+
+  return trimmed;
 }
 
 const ShellRailPanel: React.FC<{
@@ -221,7 +239,13 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const isMobileNavVisible = mobileNavOpen;
   const isRailVisible = hasRailContent && railOpen;
   const mobileRouteLabel = resolveMobileRouteLabel(surfacePathname, t, language);
-  const accountDisplayName = currentUser?.displayName || currentUser?.username || (language === 'en' ? 'Account' : '账户');
+  const accountDisplayName = sanitizeAccountDisplayName(
+    currentUser?.displayName || currentUser?.username,
+    {
+      isAdmin: Boolean(currentUser?.isAdmin),
+      language,
+    },
+  );
   const accountCopy: AccountMenuCopy = language === 'en'
     ? {
       accountCenter: 'Account Center',

@@ -1,3 +1,6 @@
+## 2026-06-04
+- Consumer web shell labels and auth-guard copy are now product-safe and consistently localized across zh/en, including clearer Market Overview navigation, localized liquidity/rotation labels, sanitized admin account naming in the masthead, and neutral sign-in-required protected-route messaging without auth or route behavior changes.
+
 ## 2026-06-03
 - Added the docs-only Admin/Ops IA consolidation blueprint covering current route inventory, L0-L4 operator grouping, disclosure rules, safe drill-through contracts, and phased rewrite slices T-907 through T-910.
 - Home now surfaces a compact consumer-safe evidence coverage strip from the additive `evidenceCoverageFrame` report payload, showing bounded domain states for technicals, fundamentals, news, catalysts, earnings, and valuation with fail-closed unavailable handling and no raw provider/router/admin leakage.
