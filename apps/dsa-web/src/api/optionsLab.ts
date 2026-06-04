@@ -153,6 +153,56 @@ export type OptionsStrategyCompareMetadata = {
 
 export type OptionsGateDetails = Record<string, unknown> | null;
 
+export type OptionsConsumerScenarioFrame = {
+  contractVersion?: string | null;
+  frameState?: 'ready' | 'observe_only' | 'insufficient' | 'blocked' | string | null;
+  underlying?: Record<string, unknown> | null;
+  strategyType?: string | null;
+  expiration?: string | null;
+  scenarioCoverage?: string | null;
+  chainQuality?: {
+    hasChain?: boolean | null;
+    contractCount?: number | null;
+    callCount?: number | null;
+    putCount?: number | null;
+    freshness?: string | null;
+    sourceType?: string | null;
+    coverageState?: string | null;
+  } | null;
+  liquidityGate?: string | null;
+  ivGreeksGate?: string | null;
+  spreadGate?: string | null;
+  payoffEvidence?: {
+    targetPrice?: number | null;
+    payoffAtTarget?: number | null;
+    expectedMoveAbs?: number | null;
+    expectedMovePct?: number | null;
+    expectedMoveSource?: string | null;
+    candidateCount?: number | null;
+    comparisonState?: string | null;
+    scenarioPoints?: number | null;
+    theoreticalPricingAvailable?: boolean | null;
+  } | null;
+  riskEvidence?: {
+    premiumAtRisk?: number | null;
+    maxLoss?: number | null;
+    maxGain?: number | null;
+    breakeven?: number | null;
+    requiredMovePct?: number | null;
+  } | null;
+  assumptions?: Record<string, unknown> | null;
+  missingEvidence?: string[] | null;
+  blockingReasons?: string[] | null;
+  nextEvidenceNeeded?: string[] | null;
+  noTradingBoundary?: {
+    analyticalOnly?: boolean | null;
+    noBrokerExecution?: boolean | null;
+    noOrderPlacement?: boolean | null;
+    noPortfolioMutation?: boolean | null;
+    noTradingRecommendation?: boolean | null;
+  } | null;
+};
+
 export type OptionsStrategyCompareResponse = {
   symbol: string;
   underlying: Record<string, unknown>;
@@ -162,6 +212,7 @@ export type OptionsStrategyCompareResponse = {
   metadata: OptionsStrategyCompareMetadata;
   optionsReadiness?: OptionsResearchReadiness | null;
   optionsResearchReadiness?: OptionsResearchReadiness | null;
+  optionsConsumerScenarioFrame?: OptionsConsumerScenarioFrame | null;
 };
 
 export type OptionsDecisionLeg = {
@@ -266,6 +317,7 @@ export type OptionsDecisionResponse = {
   metadata?: OptionsStrategyCompareMetadata | null;
   optionsReadiness?: OptionsResearchReadiness | null;
   optionsResearchReadiness?: OptionsResearchReadiness | null;
+  optionsConsumerScenarioFrame?: OptionsConsumerScenarioFrame | null;
 };
 
 export type OptionsOptimizerAlternative = {

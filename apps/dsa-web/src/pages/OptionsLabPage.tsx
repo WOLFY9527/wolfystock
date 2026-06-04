@@ -11,6 +11,7 @@ import {
   type OptionContract,
   type OptionsDecisionResponse,
   type OptionsChainResponse,
+  type OptionsConsumerScenarioFrame,
   type OptionsDirection,
   type OptionsExpiration,
   type OptionsExpirationsResponse,
@@ -62,6 +63,20 @@ type DecisionState = {
   loading: boolean;
   error: string | null;
   decision: OptionsDecisionResponse | null;
+};
+
+type ScenarioEvidenceView = {
+  frameState: string;
+  frameTone: 'good' | 'warn' | 'risk' | 'info';
+  scenarioCoverage: string;
+  chainQuality: string;
+  gateChips: Array<{ label: string; value: string; tone: 'good' | 'warn' | 'risk' | 'info' }>;
+  payoffLines: string[];
+  riskLines: string[];
+  assumptionLines: string[];
+  missingEvidence: string[];
+  nextEvidenceNeeded: string[];
+  boundaryLines: string[];
 };
 
 const DIRECTION_OPTIONS: Array<{ value: OptionsDirection; label: string }> = [
@@ -369,6 +384,142 @@ function expectedMoveSourceLabel(value?: string | null): string {
   if (value === 'iv_dte') return 'IV / DTE';
   if (value === 'unavailable') return '不可用';
   return '--';
+}
+
+function scenarioFrameStateLabel(value?: string | null): { label: string; tone: 'good' | 'warn' | 'risk' | 'info' } {
+  if (value === 'ready') return { label: '可观察', tone: 'good' };
+  if (value === 'observe_only') return { label: '仅观察', tone: 'warn' };
+  if (value === 'insufficient') return { label: '证据不足', tone: 'warn' };
+  if (value === 'blocked') return { label: '已阻断', tone: 'risk' };
+  return { label: '等待证据更新', tone: 'info' };
+}
+
+function scenarioCoverageLabel(value?: string | null): string {
+  if (value === 'strategy_compare_ready') return '策略比较覆盖';
+  if (value === 'single_contract') return '单合约覆盖';
+  if (value === 'missing_chain_data') return '缺少链路';
+  if (value === 'decision_ready') return '判断级覆盖';
+  return '等待证据更新';
+}
+
+function scenarioGateLabel(value?: string | null): string {
+  if (value === 'clear') return '已通过';
+  if (value === 'manual_review') return '人工复核';
+  if (value === 'blocked') return '已阻断';
+  return '待补证';
+}
+
+function scenarioMissingEvidenceLabel(value: string): string {
+  if (value === 'provider authority') return '授权链路待补证';
+  if (value === 'live chain') return '实时链路待补证';
+  if (value === 'iv greeks') return '波动率与敏感度待补证';
+  if (value === 'bid ask') return '双边报价待补证';
+  if (value === 'volume') return '成交量待补证';
+  if (value === 'open interest') return '持仓量待补证';
+  return '证据待补充';
+}
+
+function scenarioNextEvidenceLabel(value: string): string {
+  if (value.includes('provider authority')) return '补齐授权链路与实时链路证据';
+  if (value.includes('Greeks') || value.includes('IV')) return '补齐波动率与敏感度证据';
+  if (value.includes('OI') || value.includes('成交量') || value.includes('价差')) return '补齐成交深度与更紧价差证据';
+  return '等待证据更新';
+}
+
+function scenarioAssumptionLines(assumptions?: Record<string, unknown> | null): string[] {
+  if (!assumptions) return [];
+
+  const lines: string[] = [];
+  const inputMode = typeof assumptions.inputMode === 'string' ? assumptions.inputMode : null;
+  const direction = typeof assumptions.direction === 'string' ? assumptions.direction : null;
+  const targetPrice = typeof assumptions.targetPrice === 'number' ? assumptions.targetPrice : null;
+  const targetDate = typeof assumptions.targetDate === 'string' ? assumptions.targetDate : null;
+  const riskProfile = typeof assumptions.riskProfile === 'string' ? assumptions.riskProfile : null;
+  const targetPriceStatus = typeof assumptions.targetPriceStatus === 'string' ? assumptions.targetPriceStatus : null;
+
+  if (inputMode === 'decision') lines.push('当前来自判断回执');
+  if (inputMode === 'strategy_compare') lines.push('当前来自候选结构比较');
+  if (inputMode === 'scenario') lines.push('当前来自单结构情景推演');
+  if (direction === 'bullish' || direction === 'bearish' || direction === 'neutral' || direction === 'volatility') {
+    lines.push(`方向：${directionSummaryLabel(direction)}`);
+  }
+  if (typeof targetPrice === 'number' && Number.isFinite(targetPrice)) {
+    lines.push(`目标价：${money(targetPrice)}`);
+  }
+  if (targetDate) {
+    lines.push(`目标日：${targetDate}`);
+  }
+  if (riskProfile === 'conservative' || riskProfile === 'balanced' || riskProfile === 'aggressive') {
+    lines.push(`风险偏好：${RISK_PROFILE_OPTIONS.find((item) => item.value === riskProfile)?.label || '待确认'}`);
+  }
+  if (targetPriceStatus === 'target_above_breakeven') lines.push('目标价仍在盈亏平衡线之上');
+  if (targetPriceStatus === 'target_below_breakeven') lines.push('目标价仍在盈亏平衡线之下');
+
+  return lines.slice(0, 4);
+}
+
+function scenarioChainQualityLine(frame?: OptionsConsumerScenarioFrame | null): string {
+  const chain = frame?.chainQuality;
+  if (!chain) return '等待链路证据';
+
+  const parts: string[] = [];
+  if (chain.hasChain === true) parts.push('链路已加载');
+  if (typeof chain.contractCount === 'number') parts.push(`${number(chain.contractCount)} 份合约`);
+  if (typeof chain.callCount === 'number' || typeof chain.putCount === 'number') {
+    parts.push(`Call ${number(chain.callCount)} / Put ${number(chain.putCount)}`);
+  }
+  if (chain.freshness === 'synthetic_delayed' || chain.freshness === 'mock' || chain.freshness === 'delayed') {
+    parts.push('演示/延迟');
+  } else if (chain.freshness === 'live') {
+    parts.push('较新快照');
+  }
+
+  return parts.length ? parts.join(' · ') : '等待链路证据';
+}
+
+function buildScenarioEvidenceView(frame?: OptionsConsumerScenarioFrame | null): ScenarioEvidenceView | null {
+  if (!frame) return null;
+
+  const frameState = scenarioFrameStateLabel(frame.frameState);
+  const missingEvidence = [...new Set(asArray(frame.missingEvidence).map(scenarioMissingEvidenceLabel))].slice(0, 4);
+  const nextEvidenceNeeded = [...new Set(asArray(frame.nextEvidenceNeeded).map(scenarioNextEvidenceLabel))].slice(0, 3);
+  const payoffLines = [
+    typeof frame.payoffEvidence?.expectedMoveAbs === 'number' ? `预期波动：${money(frame.payoffEvidence.expectedMoveAbs)}` : null,
+    typeof frame.payoffEvidence?.expectedMovePct === 'number' ? `预期波动幅度：${ratio(frame.payoffEvidence.expectedMovePct)}` : null,
+    typeof frame.payoffEvidence?.payoffAtTarget === 'number' ? `目标情景收益：${money(frame.payoffEvidence.payoffAtTarget)}` : null,
+    frame.payoffEvidence?.expectedMoveSource ? `波动来源：${expectedMoveSourceLabel(frame.payoffEvidence.expectedMoveSource)}` : null,
+  ].filter((item): item is string => Boolean(item)).slice(0, 4);
+  const riskLines = [
+    typeof frame.riskEvidence?.premiumAtRisk === 'number' ? `权利金风险：${money(frame.riskEvidence.premiumAtRisk)}` : null,
+    typeof frame.riskEvidence?.maxLoss === 'number' ? `最大亏损：${money(frame.riskEvidence.maxLoss)}` : null,
+    typeof frame.riskEvidence?.maxGain === 'number' ? `最大收益：${money(frame.riskEvidence.maxGain)}` : null,
+    typeof frame.riskEvidence?.breakeven === 'number' ? `盈亏平衡：${money(frame.riskEvidence.breakeven)}` : null,
+    typeof frame.riskEvidence?.requiredMovePct === 'number' ? `所需波动：${ratio(frame.riskEvidence.requiredMovePct)}` : null,
+  ].filter((item): item is string => Boolean(item)).slice(0, 4);
+  const boundaryLines = [
+    frame.frameState === 'observe_only' || frame.frameState === 'blocked' || frame.frameState === 'insufficient' ? '仅观察' : null,
+    frame.noTradingBoundary?.noOrderPlacement ? '不触发执行动作' : null,
+    frame.noTradingBoundary?.noPortfolioMutation ? '不改动现有持仓' : null,
+    frame.noTradingBoundary?.analyticalOnly || frame.noTradingBoundary?.noTradingRecommendation ? '结论仅用于研究记录' : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return {
+    frameState: frameState.label,
+    frameTone: frameState.tone,
+    scenarioCoverage: scenarioCoverageLabel(frame.scenarioCoverage),
+    chainQuality: scenarioChainQualityLine(frame),
+    gateChips: [
+      { label: '流动性', value: scenarioGateLabel(frame.liquidityGate), tone: frame.liquidityGate === 'clear' ? 'good' : frame.liquidityGate === 'blocked' ? 'risk' : 'warn' },
+      { label: 'IV / Greeks', value: scenarioGateLabel(frame.ivGreeksGate), tone: frame.ivGreeksGate === 'clear' ? 'good' : frame.ivGreeksGate === 'blocked' ? 'risk' : 'warn' },
+      { label: '价差', value: scenarioGateLabel(frame.spreadGate), tone: frame.spreadGate === 'clear' ? 'good' : frame.spreadGate === 'blocked' ? 'risk' : 'warn' },
+    ],
+    payoffLines,
+    riskLines,
+    assumptionLines: scenarioAssumptionLines(frame.assumptions),
+    missingEvidence,
+    nextEvidenceNeeded,
+    boundaryLines,
+  };
 }
 
 function noTradeReasonLabel(value?: string | null): string {
@@ -1077,6 +1228,98 @@ const DecisionMetric: React.FC<{ label: string; value: string; tone?: string }> 
   </div>
 );
 
+const ScenarioEvidencePanel: React.FC<{
+  frame: OptionsConsumerScenarioFrame;
+  className?: string;
+}> = ({ frame, className }) => {
+  const view = buildScenarioEvidenceView(frame);
+  if (!view) return null;
+
+  return (
+    <section className={cn(panelClass, className)} data-testid="options-lab-scenario-evidence">
+      <SectionHeader eyebrow="证据工作区" title="情景证据" icon={LineChart}>
+        <Pill tone={view.frameTone}>{view.frameState}</Pill>
+      </SectionHeader>
+      <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+        先确认覆盖范围、链路质量与缺口，再读收益/风险证据；当前结论始终停留在只读观察边界内。
+      </p>
+      <div className="mt-5 grid gap-3 xl:grid-cols-2">
+        <div className={cn(innerBlockClass, 'p-4')}>
+          <p className={labelClass}>证据状态</p>
+          <p className="mt-2 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{view.frameState}</p>
+        </div>
+        <div className={cn(innerBlockClass, 'p-4')}>
+          <p className={labelClass}>情景覆盖</p>
+          <p className="mt-2 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{view.scenarioCoverage}</p>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+        <div className={cn(innerBlockClass, 'p-4')}>
+          <p className={labelClass}>链路质量</p>
+          <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{view.chainQuality}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {view.gateChips.map((chip) => (
+              <Pill key={`${chip.label}-${chip.value}`} tone={chip.tone}>{chip.label}：{chip.value}</Pill>
+            ))}
+          </div>
+        </div>
+        <div className={cn(innerBlockClass, 'p-4')}>
+          <p className={labelClass}>假设摘要</p>
+          <div className="mt-2 space-y-1.5 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+            {view.assumptionLines.length ? view.assumptionLines.map((line) => (
+              <p key={line}>{line}</p>
+            )) : <p>当前假设仍待补齐。</p>}
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-3 xl:grid-cols-2">
+        <div className={cn(innerBlockClass, 'p-4')}>
+          <p className={labelClass}>收益证据</p>
+          <div className="mt-2 space-y-1.5 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+            {view.payoffLines.length ? view.payoffLines.map((line) => (
+              <p key={line}>{line}</p>
+            )) : <p>当前缺少可读的收益证据。</p>}
+          </div>
+        </div>
+        <div className={cn(innerBlockClass, 'p-4')}>
+          <p className={labelClass}>风险证据</p>
+          <div className="mt-2 space-y-1.5 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+            {view.riskLines.length ? view.riskLines.map((line) => (
+              <p key={line}>{line}</p>
+            )) : <p>当前缺少可读的风险证据。</p>}
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-3 xl:grid-cols-3">
+        <div className={cn(innerBlockClass, 'p-4')}>
+          <p className={labelClass}>缺失证据</p>
+          <div className="mt-2 space-y-1.5 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+            {view.missingEvidence.length ? view.missingEvidence.map((line) => (
+              <p key={line}>{line}</p>
+            )) : <p>当前未发现额外缺口。</p>}
+          </div>
+        </div>
+        <div className={cn(innerBlockClass, 'p-4')}>
+          <p className={labelClass}>下一步补证</p>
+          <div className="mt-2 space-y-1.5 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+            {view.nextEvidenceNeeded.length ? view.nextEvidenceNeeded.map((line) => (
+              <p key={line}>{line}</p>
+            )) : <p>等待下一次证据更新。</p>}
+          </div>
+        </div>
+        <div className={cn(innerBlockClass, 'p-4')}>
+          <p className={labelClass}>只读边界</p>
+          <div className="mt-2 space-y-1.5 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+            {view.boundaryLines.length ? view.boundaryLines.map((line) => (
+              <p key={line}>{line}</p>
+            )) : <p>当前仅保留研究记录边界。</p>}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
 const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: string | null; className?: string }> = ({ decisionState, emptyMessage, className }) => {
   const decision = decisionState.decision;
   const label = decision?.decisionLabel || '数据不足，禁止判断';
@@ -1729,6 +1972,10 @@ const OptionsLabPageContent: React.FC = () => {
     ),
     [decisionState.decision, optionsResearchReadiness],
   );
+  const scenarioEvidenceFrame = useMemo(
+    () => decisionState.decision?.optionsConsumerScenarioFrame || comparisonState.comparison?.optionsConsumerScenarioFrame || null,
+    [comparisonState.comparison, decisionState.decision],
+  );
 
   return (
     <main className="w-full overflow-x-hidden text-white">
@@ -1786,6 +2033,7 @@ const OptionsLabPageContent: React.FC = () => {
                 emptyMessage={comparisonEmptyMessage}
                 chain={state.chain}
               />
+              {scenarioEvidenceFrame ? <ScenarioEvidencePanel frame={scenarioEvidenceFrame} /> : null}
               <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} />
 
               <WolfyShellSurface variant="console" padding="sm" className="overflow-hidden">

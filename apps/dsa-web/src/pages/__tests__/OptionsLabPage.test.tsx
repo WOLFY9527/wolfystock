@@ -67,6 +67,64 @@ function withOptionsReadiness<T extends object>(
   };
 }
 
+function buildScenarioEvidenceFrame(overrides: Record<string, unknown> = {}) {
+  return {
+    contractVersion: 'options-consumer-scenario-frame-v1',
+    frameState: 'blocked',
+    scenarioCoverage: 'strategy_compare_ready',
+    chainQuality: {
+      hasChain: true,
+      contractCount: 2,
+      callCount: 2,
+      putCount: 0,
+      freshness: 'synthetic_delayed',
+      sourceType: 'synthetic_fixture',
+      coverageState: 'strategy_compare_ready',
+    },
+    liquidityGate: 'manual_review',
+    ivGreeksGate: 'blocked',
+    spreadGate: 'manual_review',
+    payoffEvidence: {
+      targetPrice: 65,
+      payoffAtTarget: 270,
+      expectedMoveAbs: 7.5,
+      expectedMovePct: 14.31,
+      expectedMoveSource: 'straddle_mid',
+      candidateCount: 4,
+      comparisonState: 'strategy_compare_ready',
+    },
+    riskEvidence: {
+      premiumAtRisk: 230,
+      maxLoss: 230,
+      maxGain: 270,
+      breakeven: 52.3,
+      requiredMovePct: -0.19,
+    },
+    assumptions: {
+      inputMode: 'decision',
+      direction: 'bullish',
+      targetPrice: 65,
+      targetDate: '2026-08-21',
+      riskProfile: 'balanced',
+      targetPriceStatus: 'target_above_breakeven',
+    },
+    missingEvidence: ['provider authority', 'live chain', 'iv greeks', 'bid ask'],
+    nextEvidenceNeeded: [
+      '补充 provider authority 与 live chain 证据',
+      '补充 Greeks 与 IV 证据',
+      '补充 OI/成交量与更紧价差证据',
+    ],
+    noTradingBoundary: {
+      analyticalOnly: true,
+      noBrokerExecution: true,
+      noOrderPlacement: true,
+      noPortfolioMutation: true,
+      noTradingRecommendation: true,
+    },
+    ...overrides,
+  };
+}
+
 function mockHappyPath(readiness?: OptionsResearchReadiness | null) {
   vi.mocked(optionsLabApi.getUnderlyingSummary).mockResolvedValue(withOptionsReadiness({
     symbol: 'TEM',
@@ -256,6 +314,33 @@ function mockHappyPath(readiness?: OptionsResearchReadiness | null) {
       },
     ],
     limitations: ['fixture_backed_defined_risk_only', 'analytical_only_not_advice'],
+    optionsConsumerScenarioFrame: buildScenarioEvidenceFrame({
+      frameState: 'blocked',
+      scenarioCoverage: 'strategy_compare_ready',
+      chainQuality: {
+        hasChain: true,
+        contractCount: 2,
+        callCount: 2,
+        putCount: 0,
+        freshness: 'unknown',
+        sourceType: 'unknown',
+        coverageState: 'strategy_compare_ready',
+      },
+      payoffEvidence: {
+        targetPrice: 65,
+        payoffAtTarget: 270,
+        candidateCount: 4,
+        comparisonState: 'strategy_compare_ready',
+      },
+      assumptions: {
+        inputMode: 'strategy_compare',
+        direction: 'bullish',
+        targetPrice: 65,
+        targetDate: '2026-08-21',
+        riskProfile: 'balanced',
+      },
+      missingEvidence: ['provider authority', 'live chain', 'bid ask', 'iv greeks'],
+    }),
     metadata: {
       readOnly: true,
       fixtureBacked: true,
@@ -387,6 +472,7 @@ function mockHappyPath(readiness?: OptionsResearchReadiness | null) {
       reason: '定义风险结构降低权利金风险',
     },
     noAdviceDisclosure: 'Analytical output only; not personalized financial advice.',
+    optionsConsumerScenarioFrame: buildScenarioEvidenceFrame(),
     freshness: {
       source: 'synthetic_options_lab_fixture',
       freshness: 'synthetic_delayed',
@@ -530,6 +616,38 @@ describe('OptionsLabPage', () => {
     expect(document.body.textContent || '').not.toContain('有条件可交易');
     expect(document.body.textContent || '').not.toContain('适合等待更好定价');
     expect(within(section).queryByText(/synthetic_or_fixture_data_not_decision_grade|provider_timeout/i)).not.toBeInTheDocument();
+  });
+
+  it('renders a compact scenario evidence section from the consumer scenario frame and keeps existing decision numerics unchanged', async () => {
+    renderPage();
+
+    const section = await screen.findByTestId('options-lab-scenario-evidence');
+    expect(within(section).getByText('情景证据')).toBeInTheDocument();
+    expect(within(section).getByText('证据状态')).toBeInTheDocument();
+    expect(within(section).getByText('情景覆盖')).toBeInTheDocument();
+    expect(within(section).getByText('链路质量')).toBeInTheDocument();
+    expect(within(section).getByText('收益证据')).toBeInTheDocument();
+    expect(within(section).getByText('风险证据')).toBeInTheDocument();
+    expect(within(section).getByText('假设摘要')).toBeInTheDocument();
+    expect(within(section).getByText('缺失证据')).toBeInTheDocument();
+    expect(within(section).getByText('下一步补证')).toBeInTheDocument();
+    expect(within(section).getByText('只读边界')).toBeInTheDocument();
+    expect(within(section).getAllByText('已阻断').length).toBeGreaterThan(0);
+    expect(within(section).getByText('策略比较覆盖')).toBeInTheDocument();
+    expect(within(section).getByText('双边报价待补证')).toBeInTheDocument();
+    expect(within(section).getByText('波动率与敏感度待补证')).toBeInTheDocument();
+    expect(within(section).getByText('不触发执行动作')).toBeInTheDocument();
+    expect(within(section).getByText('不改动现有持仓')).toBeInTheDocument();
+    expect(within(section).getByText('结论仅用于研究记录')).toBeInTheDocument();
+    expect(section).toHaveTextContent('$7.50');
+    expect(section).toHaveTextContent('$230.00');
+    expect(within(section).queryByText(/provider authority|live chain|iv greeks|bid ask|synthetic_fixture|debugRef/i)).not.toBeInTheDocument();
+    expect(within(section).queryByText(/经纪商|订单|交易|buy|sell|trade|broker|order/i)).not.toBeInTheDocument();
+
+    const decisionSection = screen.getByTestId('options-lab-decision-engine');
+    expect(within(decisionSection).getAllByText('$7.50').length).toBeGreaterThan(0);
+    expect(within(decisionSection).getAllByText('$230.00').length).toBeGreaterThan(0);
+    expect(within(decisionSection).getAllByText('牛市看涨价差').length).toBeGreaterThan(0);
   });
 
   it('shows a non-decision-grade boundary for blocked gate payloads', async () => {
@@ -1010,6 +1128,7 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-decision-engine');
+    const evidence = await screen.findByTestId('options-lab-scenario-evidence');
     const productHero = screen.getByTestId('options-lab-product-hero');
     await waitFor(() => {
       expect(within(section).getAllByText('演示数据：当前数据延迟，仅用于界面与情景验证，不可用于真实交易判断。').length).toBeGreaterThan(0);
@@ -1018,6 +1137,8 @@ describe('OptionsLabPage', () => {
     expect(within(productHero).getByText('PAUSED')).toBeInTheDocument();
     expect(within(productHero).getByText('数据不足，禁止判断')).toBeInTheDocument();
     expect(within(section).getAllByText('演示/延迟数据').length).toBeGreaterThan(0);
+    expect(evidence).toHaveTextContent('演示/延迟');
+    expect(evidence).toHaveTextContent('仅观察');
     expect(document.body.textContent || '').not.toContain('适合等待更好定价');
   });
 
@@ -1160,6 +1281,13 @@ describe('OptionsLabPage', () => {
       primaryReasons: ['Greeks 缺失，无法评估时间价值与敏感度'],
       riskWarnings: ['wide_bid_ask_spread', 'missing_greeks_degrade_confidence'],
       noAdviceDisclosure: 'Analytical output only; not personalized financial advice.',
+      optionsConsumerScenarioFrame: buildScenarioEvidenceFrame({
+        frameState: 'blocked',
+        ivGreeksGate: 'blocked',
+        spreadGate: 'manual_review',
+        missingEvidence: ['iv greeks', 'bid ask', 'volume'],
+        nextEvidenceNeeded: ['补充 Greeks 与 IV 证据', '补充 OI/成交量与更紧价差证据'],
+      }),
       freshness: {
         source: 'synthetic_options_lab_fixture',
         freshness: 'synthetic_delayed',
@@ -1179,6 +1307,7 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-decision-engine');
+    const evidence = await screen.findByTestId('options-lab-scenario-evidence');
     const riskPanel = screen.getByTestId('options-lab-risk-boundary-panel');
     await waitFor(() => {
       expect(within(riskPanel).getByRole('button', { name: /展开 更多限制/ })).toHaveAttribute('aria-expanded', 'false');
@@ -1188,7 +1317,90 @@ describe('OptionsLabPage', () => {
     });
     expect(within(riskPanel).getAllByText('买卖价差过宽').length).toBeGreaterThan(0);
     expect(within(riskPanel).getAllByText('敏感度缺失').length).toBeGreaterThan(0);
+    expect(evidence).toHaveTextContent('波动率与敏感度待补证');
+    expect(evidence).toHaveTextContent('双边报价待补证');
+    expect(evidence).toHaveTextContent('人工复核');
+    expect(evidence).toHaveTextContent('已阻断');
     expect(section).toHaveTextContent('情景判断');
+  });
+
+  it('keeps the page compatible when compare and decision responses do not include the new scenario frame', async () => {
+    mockHappyPath();
+    vi.mocked(optionsLabApi.compareStrategies).mockResolvedValueOnce(withOptionsReadiness({
+      symbol: 'TEM',
+      underlying: {
+        price: 52.34,
+        source: 'fixture',
+        freshness: 'mock',
+      },
+      assumptions: {
+        direction: 'bullish',
+        targetPrice: 65,
+        targetDate: '2026-08-21',
+        maxPremium: 1000,
+        riskProfile: 'balanced',
+      },
+      strategies: [],
+      limitations: ['fixture_backed_defined_risk_only'],
+      metadata: {
+        readOnly: true,
+        fixtureBacked: true,
+        syntheticData: true,
+        noExternalCalls: true,
+        noTradingRecommendation: true,
+      },
+    }));
+    vi.mocked(optionsLabApi.evaluateDecision).mockResolvedValueOnce(withOptionsReadiness({
+      symbol: 'TEM',
+      strategy: 'bull_call_spread',
+      dataQuality: {
+        dataQualityScore: 25,
+        dataQualityTier: 'synthetic_demo_only',
+      },
+      liquidity: {
+        liquidityScore: 76,
+        spreadPct: 10,
+      },
+      ivGreeks: {
+        ivReadiness: 82,
+        ivRankStatus: 'unavailable',
+      },
+      breakeven: {
+        breakeven: 52.3,
+        requiredMovePct: -0.19,
+        targetPriceStatus: 'target_above_breakeven',
+        score: 86,
+      },
+      riskReward: {
+        maxLoss: 230,
+        maxGain: 270,
+        riskRewardRatio: 1.17,
+        score: 72,
+      },
+      tradeQualityScore: 35,
+      decisionLabel: '数据不足，禁止判断',
+      freshness: {
+        source: 'synthetic_options_lab_fixture',
+        freshness: 'synthetic_delayed',
+      },
+      metadata: {
+        readOnly: true,
+        fixtureBacked: true,
+        syntheticData: true,
+        noExternalCalls: true,
+        noTradingRecommendation: true,
+      },
+    }));
+
+    renderPage();
+
+    expect(await screen.findByTestId('options-lab-decision-engine')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText('$230.00').length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByTestId('options-lab-scenario-evidence')).not.toBeInTheDocument();
+    expect(screen.getAllByText('$230.00').length).toBeGreaterThan(0);
+    expect(screen.getByText('期权实验室')).toBeInTheDocument();
   });
 
   it('recomputes comparison and decision requests from the latest assumptions panel values', async () => {
