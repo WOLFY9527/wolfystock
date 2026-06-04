@@ -10,6 +10,17 @@ const rawLeakPattern =
   /raw|debug|provider|schema|payload|trace|internal|cache|router|env|credential|sourceauthority|source_authority/i;
 const tradingPattern = /buy|sell|order|trade|broker|买入|卖出|下单|交易|券商/i;
 
+const signedInUser = {
+  id: 'user-1',
+  username: 'wolfy-user',
+  displayName: 'Wolfy User',
+  role: 'user',
+  isAdmin: false,
+  isAuthenticated: true,
+  transitional: false,
+  authEnabled: true,
+};
+
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
   await route.fulfill({
     status,
@@ -18,7 +29,25 @@ async function fulfillJson(route: Route, payload: unknown, status = 200) {
   });
 }
 
+async function installSignedInAuthRoutes(page: Page) {
+  await page.route('**/api/v1/auth/status**', async (route) => {
+    await fulfillJson(route, {
+      authEnabled: true,
+      loggedIn: true,
+      passwordSet: true,
+      passwordChangeable: true,
+      setupState: 'enabled',
+      currentUser: signedInUser,
+    });
+  });
+
+  await page.route('**/api/v1/auth/me**', async (route) => {
+    await fulfillJson(route, signedInUser);
+  });
+}
+
 async function installHomeEvidenceOverrides(page: Page) {
+  await installSignedInAuthRoutes(page);
   await page.route('**/api/v1/stocks/*/evidence**', async (route) => {
     await fulfillJson(route, {
       symbols: ['ORCL'],
@@ -189,6 +218,53 @@ async function installHomeEvidenceOverrides(page: Page) {
 }
 
 async function installScannerEvidenceOverrides(page: Page) {
+  await installSignedInAuthRoutes(page);
+  const runSummary = {
+    id: 11,
+    market: 'cn',
+    profile: 'cn_preopen_v1',
+    profile_label: 'A-share Pre-open v1',
+    status: 'completed',
+    run_at: '2026-06-02T09:00:00Z',
+    completed_at: '2026-06-02T09:00:10Z',
+    watchlist_date: '2026-06-02',
+    trigger_mode: 'manual',
+    universe_name: 'cn_a_liquid_watchlist_v1',
+    shortlist_size: 18,
+    universe_size: 320,
+    preselected_size: 72,
+    evaluated_size: 48,
+    source_summary: 'Mocked scanner payload',
+    headline: 'Mock scanner shortlist for scanner evidence smoke',
+    universe_type: 'theme',
+    theme_id: 'ai_semiconductors',
+    theme_label: 'AI 半导体',
+    requested_symbols_count: 0,
+    accepted_symbols_count: 0,
+    rejected_symbols: [],
+    top_symbols: ['NVDA'],
+    notification_status: 'not_attempted',
+    failure_reason: null,
+  };
+
+  await page.route('**/api/v1/scanner/runs**', async (route) => {
+    await fulfillJson(route, {
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [runSummary],
+    });
+  });
+
+  await page.route('**/api/v1/scanner/watchlists/recent**', async (route) => {
+    await fulfillJson(route, {
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [runSummary],
+    });
+  });
+
   await page.route('**/api/v1/scanner/runs/11', async (route) => {
     await fulfillJson(route, {
       id: 11,
@@ -379,16 +455,8 @@ async function expectNoHorizontalOverflow(page: Page) {
     .toBe(true);
 }
 
-async function signIn(page: Page, redirectPath: string) {
-  await page.goto(`/zh/login?redirect=${encodeURIComponent(redirectPath)}`);
-  const submitButton = page.getByRole('button', { name: /sign in|登录继续|授权进入工作台|完成设置并登录/i });
-  if (await submitButton.count()) {
-    await Promise.all([
-      page.waitForResponse((response) => response.url().includes('/api/v1/auth/login') && response.status() === 200),
-      submitButton.click(),
-    ]);
-  }
-  await page.goto(redirectPath);
+async function openSignedInRoute(page: Page, path: string) {
+  await page.goto(path);
   await page.waitForLoadState('domcontentloaded');
 }
 
@@ -397,7 +465,7 @@ test.describe('Home and Scanner evidence browser smoke', () => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       await installHomeEvidenceOverrides(page);
-      await signIn(page, '/zh');
+      await openSignedInRoute(page, '/zh');
       await appExpect(page.getByTestId('home-bento-dashboard')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('home-evidence-packet-strip')).toBeVisible({ timeout: 15_000 });
       const strip = page.getByTestId('home-evidence-packet-strip');
@@ -420,6 +488,8 @@ test.describe('Home and Scanner evidence browser smoke', () => {
       await expectNoHorizontalOverflow(page);
       expect(consoleErrors).toEqual([]);
       expect(unhandledApiRoutes).toEqual([]);
+      await page.unroute('**/api/v1/auth/status**');
+      await page.unroute('**/api/v1/auth/me**');
       await page.unroute('**/api/v1/stocks/*/evidence**');
       await page.unroute('**/api/v1/stocks/ORCL/history**');
       await page.unroute('**/api/v1/history/3');
@@ -430,7 +500,7 @@ test.describe('Home and Scanner evidence browser smoke', () => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       await installScannerEvidenceOverrides(page);
-      await signIn(page, '/zh/scanner');
+      await openSignedInRoute(page, '/zh/scanner');
       await appExpect(page.getByTestId('user-scanner-workspace')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('scanner-result-row-NVDA')).toBeVisible({ timeout: 15_000 });
       const strip = page.getByTestId('scanner-inline-candidate-evidence-NVDA');
@@ -449,6 +519,10 @@ test.describe('Home and Scanner evidence browser smoke', () => {
       await expectNoHorizontalOverflow(page);
       expect(consoleErrors).toEqual([]);
       expect(unhandledApiRoutes).toEqual([]);
+      await page.unroute('**/api/v1/auth/status**');
+      await page.unroute('**/api/v1/auth/me**');
+      await page.unroute('**/api/v1/scanner/runs**');
+      await page.unroute('**/api/v1/scanner/watchlists/recent**');
       await page.unroute('**/api/v1/scanner/runs/11');
     }
   });
