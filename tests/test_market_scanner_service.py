@@ -20,6 +20,7 @@ from data_provider.base import BaseFetcher, DataFetchError, DataFetcherManager, 
 from src.repositories.stock_repo import StockRepository
 from src.core.scanner_profile import get_scanner_profile
 from src.core.scanner_theme_registry import create_ai_scanner_theme, get_scanner_theme
+from src.services.market_cache import market_cache
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
 from src.services.scanner_evidence_packet import SCANNER_EVIDENCE_VERSION, build_scanner_evidence_packet
@@ -637,6 +638,7 @@ class FetcherStub(BaseFetcher):
 class MarketScannerServiceTestCase(unittest.TestCase):
     def setUp(self) -> None:
         DatabaseManager.reset_instance()
+        market_cache.clear()
         self.db = DatabaseManager(db_url="sqlite:///:memory:")
         self.stock_repo = StockRepository(self.db)
         self.data_manager = FakeScannerDataManager()
@@ -660,6 +662,7 @@ class MarketScannerServiceTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         self._config_patcher.stop()
         self._cache_temp_dir.cleanup()
+        market_cache.clear()
         DatabaseManager.reset_instance()
 
     def _make_review_df(self, rows: list[tuple[str, float, float, float]]) -> pd.DataFrame:
@@ -996,6 +999,79 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(frame["universePolicy"]["type"], "default")
         self.assertTrue(frame["noAdviceBoundary"])
 
+    def test_get_run_detail_adapts_cached_market_temperature_context_for_us_runs(self) -> None:
+        market_cache.set(
+            "temperature_input_snapshot",
+            {
+                "source": "computed",
+                "freshness": "cached",
+                "marketRegimeSynthesis": {
+                    "primaryRegime": "risk_on_liquidity_expansion",
+                    "confidence": 0.78,
+                    "confidenceLabel": "high",
+                    "blockers": [],
+                    "observationOnly": False,
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "freshness": "cached",
+                },
+                "capitalFlowSignal": {
+                    "likelyDestination": "growth_ai_software_semis",
+                    "explanation": "Liquidity still leans into growth leadership.",
+                    "freshness": "cached",
+                    "observationOnly": False,
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "contradictionCodes": [],
+                    "source": "market_overview",
+                },
+                "rotationFamilyRollup": [
+                    {
+                        "familyId": "ai",
+                        "familyLabel": "AI",
+                        "themeFlowSignal": {
+                            "themeFlowState": "leading",
+                            "explanation": "AI themes still lead the tape.",
+                            "freshness": "cached",
+                            "observationOnly": False,
+                            "sourceAuthorityAllowed": True,
+                            "scoreContributionAllowed": True,
+                            "source": "rotation_radar",
+                        },
+                    },
+                    {
+                        "familyId": "software",
+                        "familyLabel": "Software",
+                        "themeFlowSignal": {
+                            "themeFlowState": "broadening",
+                            "explanation": "Software participation is broadening.",
+                            "freshness": "cached",
+                            "observationOnly": False,
+                            "sourceAuthorityAllowed": True,
+                            "scoreContributionAllowed": True,
+                            "source": "rotation_radar",
+                        },
+                    },
+                ],
+            },
+            ttl_seconds=60,
+        )
+
+        detail = self._record_context_run(
+            market="us",
+            profile="us_preopen_v1",
+            diagnostics={},
+        )
+
+        frame = detail["scannerContextFrame"]
+        self.assertTrue(frame["marketReadiness"]["researchReady"])
+        self.assertEqual(frame["marketReadiness"]["readinessState"], "ready")
+        self.assertEqual(frame["macroRegime"]["state"], "supportive")
+        self.assertEqual(frame["liquidityFrame"]["state"], "supportive")
+        self.assertEqual(frame["assetClassBias"]["state"], "supportive")
+        self.assertEqual(frame["themeFrame"]["state"], "supportive")
+        self.assertEqual([item["id"] for item in frame["themeFrame"]["themes"]], ["ai", "software"])
+
     def test_get_run_detail_scanner_context_frame_fail_closes_when_context_missing(self) -> None:
         detail = self._record_context_run(
             market="us",
@@ -1074,6 +1150,71 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(frame["themeFrame"]["state"], "observe_only")
         self.assertTrue(frame["themeFrame"]["proxyOnly"])
 
+    def test_get_run_detail_adapts_cached_fallback_context_as_observe_only(self) -> None:
+        market_cache.set(
+            "temperature_input_snapshot",
+            {
+                "source": "mixed",
+                "freshness": "fallback",
+                "marketRegimeSynthesis": {
+                    "primaryRegime": "risk_on_liquidity_expansion",
+                    "confidence": 0.42,
+                    "confidenceLabel": "low",
+                    "blockers": [{"key": "proxy_context_only"}],
+                    "observationOnly": True,
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "freshness": "fallback",
+                },
+                "capitalFlowSignal": {
+                    "likelyDestination": "growth_ai_software_semis",
+                    "explanation": "Proxy-only liquidity context.",
+                    "freshness": "fallback",
+                    "observationOnly": True,
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "proxyOnly": True,
+                    "contradictionCodes": ["proxy_context_only"],
+                    "source": "market_overview",
+                },
+                "rotationFamilyRollup": [
+                    {
+                        "familyId": "ai",
+                        "familyLabel": "AI",
+                        "themeFlowSignal": {
+                            "themeFlowState": "leading",
+                            "explanation": "Leadership is still observation-only.",
+                            "freshness": "fallback",
+                            "observationOnly": True,
+                            "sourceAuthorityAllowed": False,
+                            "scoreContributionAllowed": False,
+                            "proxyOnly": True,
+                            "source": "rotation_radar",
+                        },
+                    }
+                ],
+            },
+            ttl_seconds=60,
+        )
+
+        detail = self._record_context_run(
+            market="us",
+            profile="us_preopen_v1",
+            diagnostics={},
+        )
+
+        frame = detail["scannerContextFrame"]
+        self.assertFalse(frame["marketReadiness"]["researchReady"])
+        self.assertEqual(frame["marketReadiness"]["readinessState"], "observe_only")
+        self.assertEqual(frame["marketReadiness"]["freshnessFloor"], "fallback")
+        self.assertEqual(frame["marketReadiness"]["sourceAuthority"], "observationOnly")
+        self.assertEqual(frame["macroRegime"]["state"], "observe_only")
+        self.assertEqual(frame["liquidityFrame"]["state"], "observe_only")
+        self.assertEqual(frame["assetClassBias"]["state"], "observe_only")
+        self.assertEqual(frame["themeFrame"]["state"], "observe_only")
+        self.assertTrue(frame["liquidityFrame"]["proxyOnly"])
+        self.assertTrue(frame["themeFrame"]["proxyOnly"])
+
     def test_get_run_detail_scanner_context_frame_blocks_unavailable_cn_context(self) -> None:
         detail = self._record_context_run(
             market="cn",
@@ -1115,6 +1256,89 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(frame["themeFrame"]["state"], "blocked")
         self.assertTrue(frame["macroRegime"]["blockers"])
         self.assertTrue(frame["liquidityFrame"]["blockers"])
+
+    def test_get_run_detail_preserves_cn_blocked_overlay_over_supportive_cached_context(self) -> None:
+        market_cache.set(
+            "temperature_input_snapshot",
+            {
+                "source": "computed",
+                "freshness": "cached",
+                "marketRegimeSynthesis": {
+                    "primaryRegime": "risk_on_liquidity_expansion",
+                    "confidence": 0.81,
+                    "confidenceLabel": "high",
+                    "blockers": [],
+                    "observationOnly": False,
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "freshness": "cached",
+                },
+                "capitalFlowSignal": {
+                    "likelyDestination": "growth_ai_software_semis",
+                    "freshness": "cached",
+                    "observationOnly": False,
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                    "contradictionCodes": [],
+                    "source": "market_overview",
+                },
+                "rotationFamilyRollup": [
+                    {
+                        "familyId": "ai",
+                        "familyLabel": "AI",
+                        "themeFlowSignal": {
+                            "themeFlowState": "leading",
+                            "freshness": "cached",
+                            "observationOnly": False,
+                            "sourceAuthorityAllowed": True,
+                            "scoreContributionAllowed": True,
+                            "source": "rotation_radar",
+                        },
+                    }
+                ],
+            },
+            ttl_seconds=60,
+        )
+
+        detail = self.service.record_failed_run(
+            market="cn",
+            profile="cn_preopen_v1",
+            profile_label="A股盘前扫描 v1",
+            universe_name="cn_a_liquid_watchlist_v1",
+            trigger_mode="manual",
+            request_source="test",
+            watchlist_date="2026-06-03",
+            error_message="A 股全市场快照不可用。",
+            diagnostics={
+                "reason_code": "no_realtime_snapshot_available",
+                "universe_resolution": {
+                    "success": True,
+                    "source": "builtin_stock_mapping",
+                },
+                "snapshot_resolution": {
+                    "success": False,
+                    "source": None,
+                    "error_code": "no_realtime_snapshot_available",
+                    "attempts": [
+                        {
+                            "fetcher": "AkshareFetcher",
+                            "status": "failed",
+                            "reason_code": "akshare_snapshot_fetch_failed",
+                        }
+                    ],
+                },
+                "universe_selection": {"universe_type": "default"},
+            },
+            source_summary="scanner=test",
+            scope="user",
+        )
+
+        frame = detail["scannerContextFrame"]
+        self.assertEqual(frame["marketReadiness"]["readinessState"], "blocked")
+        self.assertEqual(frame["macroRegime"]["state"], "blocked")
+        self.assertEqual(frame["liquidityFrame"]["state"], "blocked")
+        self.assertEqual(frame["assetClassBias"]["state"], "blocked")
+        self.assertEqual(frame["themeFrame"]["state"], "blocked")
 
     def test_get_run_detail_projects_blocked_cn_universe_readiness(self) -> None:
         detail = self.service.record_failed_run(

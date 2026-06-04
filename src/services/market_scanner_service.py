@@ -25,6 +25,7 @@ from src.repositories.scanner_repo import ScannerRepository
 from src.repositories.stock_repo import StockRepository
 from src.contracts.source_confidence import coerce_source_confidence_contract
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
+from src.services.market_scanner_context_adapter import adapt_scanner_topdown_context_diagnostics
 from src.services.data_source_router import CapabilityResolver, DataSourceRouteRequest, DataSourceRouter
 from src.services.scanner_ai_service import ScannerAiInterpretationService
 from src.services.scanner_evidence_packet import (
@@ -1807,7 +1808,10 @@ class MarketScannerService:
 
         shortlisted_codes = [str(item["symbol"]) for item in shortlist_list]
         headline = self._build_headline(shortlist_list, market=profile_config.market)
-        finalized_diagnostics = dict(diagnostics or {})
+        finalized_diagnostics = adapt_scanner_topdown_context_diagnostics(
+            diagnostics or {},
+            market=profile_config.market,
+        )
         finalized_diagnostics["ai_interpretation"] = dict(ai_interpretation_diag or {})
         finalized_diagnostics["run_duration_seconds"] = round((run_completed_at - run_started_at).total_seconds(), 2)
         public_universe_selection = self._public_universe_selection(universe_selection)
@@ -3769,6 +3773,13 @@ class MarketScannerService:
         macro_regime = self._build_scanner_macro_regime(diagnostics)
         liquidity_frame = self._build_scanner_liquidity_frame(diagnostics)
         theme_frame = self._build_scanner_theme_frame(diagnostics)
+        if str(market or "").lower() == "cn" and _context_text(market_readiness.get("readinessState")).lower() == "blocked":
+            macro_regime, liquidity_frame, theme_frame = self._apply_cn_blocked_context_overlay(
+                market_readiness=market_readiness,
+                macro_regime=macro_regime,
+                liquidity_frame=liquidity_frame,
+                theme_frame=theme_frame,
+            )
         return {
             "marketReadiness": market_readiness,
             "macroRegime": macro_regime,
@@ -3782,6 +3793,46 @@ class MarketScannerService:
             "universePolicy": self._build_scanner_universe_policy(universe_selection),
             "noAdviceBoundary": True,
         }
+
+    @staticmethod
+    def _apply_cn_blocked_context_overlay(
+        *,
+        market_readiness: Mapping[str, Any],
+        macro_regime: Dict[str, Any],
+        liquidity_frame: Dict[str, Any],
+        theme_frame: Dict[str, Any],
+    ) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+        readiness_blockers = _context_blockers(
+            market_readiness.get("blockingReasons") or market_readiness.get("blockedReasons")
+        )
+        if not readiness_blockers:
+            readiness_blockers = [{"key": "cn_context_blocked", "label": "cn_context_blocked"}]
+
+        def overlay(frame: Dict[str, Any], label: str) -> Dict[str, Any]:
+            combined_blockers: List[Dict[str, str]] = []
+            for item in list(frame.get("blockers") or []) + readiness_blockers:
+                blocker = _context_mapping(item)
+                key = _context_text(blocker.get("key") or blocker.get("label"))
+                if not key or any(existing.get("key") == key for existing in combined_blockers):
+                    continue
+                combined_blockers.append(
+                    {
+                        "key": key,
+                        "label": _context_text(blocker.get("label") or key),
+                    }
+                )
+            return {
+                **dict(frame),
+                "state": "blocked",
+                "label": label,
+                "blockers": combined_blockers,
+            }
+
+        return (
+            overlay(macro_regime, "Blocked macro context"),
+            overlay(liquidity_frame, "Blocked liquidity context"),
+            overlay(theme_frame, "Blocked theme context"),
+        )
 
     def _select_watchlist_runs(
         self,
@@ -4931,14 +4982,17 @@ class MarketScannerService:
             source_summary=source_summary,
             summary_json=json.dumps(summary, ensure_ascii=False),
             diagnostics_json=json.dumps(
-                {
-                    **dict(diagnostics or {}),
-                    "operation": {
-                        "trigger_mode": trigger_mode,
-                        "request_source": request_source,
-                        "watchlist_date": watchlist_date,
+                adapt_scanner_topdown_context_diagnostics(
+                    {
+                        **dict(diagnostics or {}),
+                        "operation": {
+                            "trigger_mode": trigger_mode,
+                            "request_source": request_source,
+                            "watchlist_date": watchlist_date,
+                        },
                     },
-                },
+                    market=market,
+                ),
                 ensure_ascii=False,
             ),
             universe_notes_json=json.dumps(universe_notes or [], ensure_ascii=False),
