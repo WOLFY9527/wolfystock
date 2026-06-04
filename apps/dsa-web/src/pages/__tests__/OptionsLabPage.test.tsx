@@ -560,7 +560,7 @@ describe('OptionsLabPage', () => {
     expect(summaryStrip).toHaveTextContent('首个候选');
     expect(summaryStrip).toHaveTextContent('风险边界');
     expect(screen.getByTestId('options-lab-bento-grid')).toHaveClass('mt-5', 'grid', 'gap-6');
-    ['期权情景输入', '候选策略', '情景判断', '风险边界', '数据注记', 'Call / Put 链', '流动性与下一步'].forEach((label) => {
+    ['期权情景输入', '候选策略', '收益边界与 IV 快照', '情景判断', '风险边界', '数据注记', 'Call / Put 链', '流动性与下一步'].forEach((label) => {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     });
     expect(screen.getByTestId('options-lab-analysis-details')).toHaveTextContent('默认折叠');
@@ -655,6 +655,139 @@ describe('OptionsLabPage', () => {
     expect(within(decisionSection).getAllByText('$7.50').length).toBeGreaterThan(0);
     expect(within(decisionSection).getAllByText('$230.00').length).toBeGreaterThan(0);
     expect(within(decisionSection).getAllByText('牛市看涨价差').length).toBeGreaterThan(0);
+  });
+
+  it('renders payoff and IV visuals from existing strategy and chain data without changing read-only framing', async () => {
+    renderPage();
+
+    const section = await screen.findByTestId('options-lab-visuals-panel');
+    expect(within(section).getByText('收益边界与 IV 快照')).toBeInTheDocument();
+    expect(within(section).getByText('到期收益示意')).toBeInTheDocument();
+    expect(within(section).getByText('IV 偏斜示意')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(section).getByTestId('options-lab-payoff-visual')).toBeInTheDocument();
+      expect(within(section).getByTestId('options-lab-iv-visual')).toBeInTheDocument();
+    });
+    expect(within(section).getByText('观察结构')).toBeInTheDocument();
+    expect(within(section).getAllByText('牛市看涨价差').length).toBeGreaterThan(0);
+    expect(within(section).getByText('Call / Put 点位')).toBeInTheDocument();
+    expect(within(section).getByText('不构成买卖建议')).toBeInTheDocument();
+    expect(within(section).getByText('不会提交订单')).toBeInTheDocument();
+    expect(within(section).getByText('不连接经纪商')).toBeInTheDocument();
+    expect(within(section).getByText('不改动投资组合')).toBeInTheDocument();
+    expect(within(section).queryByText(/best contract|AI recommends you buy|buy now|sell now/i)).not.toBeInTheDocument();
+  });
+
+  it('shows compact missing-data states when payoff or IV inputs are unavailable', async () => {
+    vi.mocked(optionsLabApi.getOptionChain).mockResolvedValueOnce(withOptionsReadiness({
+      symbol: 'TEM',
+      expiration: '2026-06-19',
+      underlying: {
+        price: 52.34,
+        changePct: 1.2,
+        source: 'fixture',
+        asOf: '2026-05-06T09:45:00-04:00',
+        freshness: 'mock',
+      },
+      calls: [
+        {
+          contractSymbol: 'TEM260619C00055000',
+          side: 'call',
+          strike: 55,
+          bid: 4.1,
+          ask: 4.35,
+          mid: 4.23,
+          volume: 830,
+          openInterest: 6120,
+          impliedVolatility: null,
+          delta: 0.42,
+          theta: -0.05,
+          spreadPct: 5.9,
+          moneyness: 'otm',
+          liquidityScore: 82,
+        },
+      ],
+      puts: [
+        {
+          contractSymbol: 'TEM260619P00050000',
+          side: 'put',
+          strike: 50,
+          bid: 3.2,
+          ask: 3.5,
+          mid: 3.35,
+          volume: 410,
+          openInterest: 2900,
+          impliedVolatility: null,
+          delta: -0.36,
+          theta: -0.04,
+          spreadPct: 9,
+          moneyness: 'otm',
+          liquidityScore: 74,
+        },
+      ],
+      filtersApplied: {
+        minOpenInterest: 100,
+        maxSpreadPct: 20,
+      },
+      chainAsOf: '2026-05-06T09:45:00-04:00',
+      source: 'fixture',
+      limitations: ['provider_validation_required'],
+      metadata: {
+        readOnly: true,
+        noExternalCallsInTests: true,
+        limitations: ['mocked_frontend_shell'],
+      },
+    }, buildOptionsResearchReadiness()));
+    vi.mocked(optionsLabApi.compareStrategies).mockResolvedValueOnce(withOptionsReadiness({
+      symbol: 'TEM',
+      underlying: {
+        price: 52.34,
+        source: 'fixture',
+        freshness: 'mock',
+      },
+      assumptions: {
+        direction: 'bullish',
+        targetPrice: 65,
+        targetDate: '2026-08-21',
+        riskProfile: 'balanced',
+      },
+      strategies: [
+        {
+          strategyType: 'bull_call_spread',
+          legs: [],
+          netDebit: 423,
+          maxLoss: 423,
+          maxGain: 500,
+          breakeven: 59.23,
+          requiredMovePct: 13.17,
+          payoffAtTarget: 577,
+          riskRewardRatio: 1.36,
+          liquidityWarnings: [],
+          ivThetaNotes: ['fixture_iv_only'],
+          suitabilityNotes: ['scenario_analysis_only'],
+          limitations: ['mocked_product_route_harness'],
+          noAdviceDisclosure: 'Scenario analysis only; not personalized financial advice.',
+        },
+      ],
+      limitations: ['mocked_product_route_harness'],
+      metadata: {
+        readOnly: true,
+        fixtureBacked: true,
+        syntheticData: true,
+        noExternalCalls: true,
+        noLlmCalls: true,
+        noOrderPlacement: true,
+        noBrokerConnection: true,
+        noPortfolioMutation: true,
+        noTradingRecommendation: true,
+      },
+    }, buildOptionsResearchReadiness()));
+
+    renderPage();
+
+    const section = await screen.findByTestId('options-lab-visuals-panel');
+    expect(within(section).getByTestId('options-lab-payoff-empty')).toHaveTextContent('收益边界待补证');
+    expect(within(section).getByTestId('options-lab-iv-empty')).toHaveTextContent('IV / 行权价快照待补证');
   });
 
   it('shows a non-decision-grade boundary for blocked gate payloads', async () => {

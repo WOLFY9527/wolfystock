@@ -965,12 +965,17 @@ appTest.describe('consumer copy regression smoke', () => {
       const hero = page.getByTestId('options-lab-product-hero');
       const decisionEngine = page.getByTestId('options-lab-decision-engine');
       const boundaryPanel = page.getByTestId('options-lab-risk-boundary-panel');
+      const visualsPanel = page.getByTestId('options-lab-visuals-panel');
       await appExpect(hero).toBeVisible();
       await appExpect(decisionEngine).toBeVisible();
       await appExpect(boundaryPanel).toBeVisible();
+      await appExpect(visualsPanel).toBeVisible();
       await appExpect(decisionEngine).toContainText(/数据不足，暂不形成结论|情景分析已暂停/);
       await appExpect(boundaryPanel).toContainText('未达到可判断等级，仅供情景观察，暂不形成结论。');
       await appExpect(boundaryPanel).toContainText('仅供观察，不作为结论依据');
+      await appExpect(visualsPanel).toContainText('收益边界与 IV 快照');
+      await appExpect(visualsPanel).toContainText('不构成买卖建议');
+      await appExpect(visualsPanel).toContainText('不会提交订单');
       await appExpect(pageRoot).toContainText('不构成交易或下单指令');
       await expectConsumerSafeSurface(pageRoot);
       pwExpect(harness.count('POST', '/api/v1/options/strategies/compare')).toBeGreaterThan(0);

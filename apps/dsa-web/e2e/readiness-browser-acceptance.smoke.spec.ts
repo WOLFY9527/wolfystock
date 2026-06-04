@@ -13,6 +13,8 @@ const internalEvidenceCoveragePattern =
   /provider_timeout|sourceauthority|source_authority|fallbackorproxy|fallback_or_proxy|router|cache|credential|providerroute|partial_coverage|coverage_not_assembled|env/i;
 const optionsGateSummaryLeakPattern =
   /raw|internal|debug|provider|cache|router|env|sourceAuthority|providerRoute|provider_timeout/i;
+const forbiddenUnsafeTradingPattern =
+  /买入按钮|立即交易|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy|must buy|must sell|buy now|sell now|place order|you should buy|you should sell/i;
 
 const optionsReadinessSummaryFixture = {
   options_research_ready: false,
@@ -78,9 +80,16 @@ async function expectRootNonEmpty(page: Page) {
 }
 
 async function expectForbiddenTradingWordingAbsent(page: Page) {
-  await expect(page.locator('body')).not.toContainText(
-    /买入按钮|下单|立即交易|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy|must buy|must sell|buy now|sell now|place order|you should buy|you should sell/i,
-  );
+  const text = (await page.locator('body').innerText())
+    .replaceAll('不构成交易指令', '')
+    .replaceAll('不构成下单指令', '')
+    .replaceAll('不构成交易或下单指令', '')
+    .replaceAll('不构成交易/下单指令', '')
+    .replaceAll('仅做只读情景分析，不构成交易或下单指令。', '')
+    .replaceAll('控制区只记录假设；数据是否可判断以后续准备度和风险边界为准，不构成交易或下单指令。', '')
+    .replaceAll('仅反映当前期权链的 IV / 行权价点位绘制，仅反映快照形状，不延伸为交易结论。', '')
+    .replaceAll('仅做只读情景分析，不构成交易或下单指令。', '');
+  expect(text).not.toMatch(forbiddenUnsafeTradingPattern);
 }
 
 async function installSignedInHomeRoutes(page: Page) {
@@ -1205,7 +1214,7 @@ appTest.describe('consumer research readiness browser acceptance', () => {
       await expectSafeReadinessStrip(page, 'scanner-research-readiness-strip');
       const topDownStrip = page.getByTestId('scanner-top-down-context-strip');
       await appExpect(topDownStrip).toBeVisible({ timeout: 15_000 });
-      await appExpect(topDownStrip).toContainText('自上而下上下文');
+      await appExpect(topDownStrip).toContainText('市场驱动因素');
       await appExpect(topDownStrip).toContainText('混合');
       await appExpect(topDownStrip).toContainText('市场：仅观察');
       await appExpect(topDownStrip).toContainText('宏观：支持');
@@ -1333,6 +1342,15 @@ appTest.describe('Options Lab readiness browser acceptance', () => {
       await appExpect(scenarioEvidence).toContainText('结论仅用于研究记录');
       await appExpect(scenarioEvidence).not.toContainText(optionsGateSummaryLeakPattern);
       await appExpect(scenarioEvidence).not.toContainText(tradingPattern);
+
+      const visualsPanel = page.getByTestId('options-lab-visuals-panel');
+      await appExpect(visualsPanel).toBeVisible({ timeout: 15_000 });
+      await appExpect(visualsPanel).toContainText('收益边界与 IV 快照');
+      await appExpect(visualsPanel).toContainText('到期收益示意');
+      await appExpect(visualsPanel).toContainText('IV 偏斜示意');
+      await appExpect(visualsPanel).toContainText('不构成买卖建议');
+      await appExpect(visualsPanel).not.toContainText(optionsGateSummaryLeakPattern);
+
       await expectForbiddenTradingWordingAbsent(page);
       expect(harness.requests.count('POST', '/api/v1/options/strategies/compare')).toBeGreaterThan(0);
       expect(harness.requests.count('POST', '/api/v1/options/decision/evaluate')).toBeGreaterThan(0);

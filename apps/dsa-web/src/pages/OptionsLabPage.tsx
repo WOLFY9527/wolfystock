@@ -9,6 +9,7 @@ import {
 import {
   optionsLabApi,
   type OptionContract,
+  type OptionSide,
   type OptionsDecisionResponse,
   type OptionsChainResponse,
   type OptionsConsumerScenarioFrame,
@@ -104,6 +105,10 @@ const OPTIONS_UNAVAILABLE_COPY = '本模块暂不可用，请稍后重试。';
 const OPTIONS_NO_CONCLUSION_COPY = '数据不足，暂不形成结论';
 const OPTIONS_SAFE_INSTRUCTION_COPY = '仅做只读情景分析，不构成交易或下单指令。';
 const OPTIONS_READ_ONLY_BOUNDARY_COPY = '不触发执行动作，不改动现有持仓。';
+const OPTIONS_NON_ADVICE_COPY = '不构成买卖建议';
+const OPTIONS_NO_ORDER_COPY = '不会提交订单';
+const OPTIONS_NO_BROKER_COPY = '不连接经纪商';
+const OPTIONS_NO_PORTFOLIO_MUTATION_COPY = '不改动投资组合';
 const OPTIONS_OBSERVE_ONLY_COPY = '仅供观察，不作为结论依据';
 const OPTIONS_DEMO_BOUNDARY_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不作为结论依据。';
 
@@ -722,6 +727,468 @@ const SectionHeader: React.FC<{
     action={children}
   />
 );
+
+type PayoffChartPoint = {
+  price: number;
+  payoff: number;
+  label?: string;
+  tone?: 'neutral' | 'target' | 'boundary';
+};
+
+type PayoffVisualModel = {
+  points: PayoffChartPoint[];
+  minPrice: number;
+  maxPrice: number;
+  minPayoff: number;
+  maxPayoff: number;
+};
+
+type IvVisualPoint = {
+  strike: number;
+  iv: number;
+  side: OptionSide;
+  contractSymbol: string;
+};
+
+type IvVisualModel = {
+  points: IvVisualPoint[];
+  minStrike: number;
+  maxStrike: number;
+  minIv: number;
+  maxIv: number;
+};
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function padDomain(minimum: number, maximum: number, ratioValue: number, fallback = 1): [number, number] {
+  const span = Math.abs(maximum - minimum);
+  const padding = Math.max(span * ratioValue, fallback);
+  if (span === 0) {
+    return [Math.max(0, minimum - padding), maximum + padding];
+  }
+  return [Math.max(0, minimum - padding), maximum + padding];
+}
+
+function payoffBoundaryLabel(strategyType: OptionsStrategyType): string {
+  if (strategyType === 'long_call') return '单腿多头收益上沿不封顶，图形仅示意边界变化。';
+  if (strategyType === 'long_put') return '单腿多头收益受标的下行限制，图形仅示意边界变化。';
+  if (strategyType === 'bull_call_spread') return '定义风险结构：亏损与收益边界都已封顶。';
+  return '定义风险结构：下行收益与风险边界都已封顶。';
+}
+
+function buildPayoffVisualModel(
+  strategy: OptionsStrategyComparison | null,
+  underlyingPrice?: number | null,
+  targetPrice?: number | null,
+): PayoffVisualModel | null {
+  if (!strategy) return null;
+
+  const breakeven = finiteNumber(strategy.breakeven);
+  const maxLoss = finiteNumber(strategy.maxLoss);
+  const payoffAtTarget = finiteNumber(strategy.payoffAtTarget);
+  const strikes = strategy.legs
+    .map((leg) => finiteNumber(leg.strike))
+    .filter((value): value is number => value != null)
+    .sort((left, right) => left - right);
+
+  if (breakeven == null || maxLoss == null || payoffAtTarget == null || strikes.length === 0) {
+    return null;
+  }
+
+  const lowStrike = strikes[0];
+  const highStrike = strikes[strikes.length - 1];
+  const target = finiteNumber(targetPrice);
+  const spot = finiteNumber(underlyingPrice);
+  const maxGain = finiteNumber(strategy.maxGain);
+
+  const priceAnchors = [lowStrike, highStrike, breakeven, target, spot].filter((value): value is number => value != null);
+  const [minPrice, maxPrice] = padDomain(Math.min(...priceAnchors), Math.max(...priceAnchors), 0.18, 2);
+
+  const points: PayoffChartPoint[] = [];
+  const pushPoint = (price: number, payoff: number, label?: string, tone: PayoffChartPoint['tone'] = 'neutral') => {
+    if (!Number.isFinite(price) || !Number.isFinite(payoff)) return;
+    points.push({ price, payoff, label, tone });
+  };
+
+  switch (strategy.strategyType) {
+    case 'long_call':
+      pushPoint(minPrice, -Math.abs(maxLoss), '低位风险', 'boundary');
+      pushPoint(breakeven, 0, '盈亏平衡');
+      if (target != null) pushPoint(target, payoffAtTarget, '目标情景', 'target');
+      else pushPoint(maxPrice, Math.max(payoffAtTarget, 0), '高位观察');
+      break;
+    case 'long_put':
+      if (target != null) pushPoint(target, payoffAtTarget, '目标情景', 'target');
+      else pushPoint(minPrice, Math.max(payoffAtTarget, 0), '下行观察', 'boundary');
+      pushPoint(breakeven, 0, '盈亏平衡');
+      pushPoint(maxPrice, -Math.abs(maxLoss), '高位风险', 'boundary');
+      break;
+    case 'bull_call_spread':
+      pushPoint(minPrice, -Math.abs(maxLoss), '低位风险', 'boundary');
+      pushPoint(lowStrike, -Math.abs(maxLoss));
+      pushPoint(breakeven, 0, '盈亏平衡');
+      pushPoint(highStrike, maxGain ?? payoffAtTarget, '收益上沿', 'boundary');
+      pushPoint(maxPrice, maxGain ?? payoffAtTarget);
+      if (target != null) pushPoint(target, payoffAtTarget, '目标情景', 'target');
+      break;
+    case 'bear_put_spread':
+      pushPoint(minPrice, maxGain ?? payoffAtTarget, '收益上沿', 'boundary');
+      pushPoint(lowStrike, maxGain ?? payoffAtTarget);
+      if (target != null) pushPoint(target, payoffAtTarget, '目标情景', 'target');
+      pushPoint(breakeven, 0, '盈亏平衡');
+      pushPoint(highStrike, -Math.abs(maxLoss));
+      pushPoint(maxPrice, -Math.abs(maxLoss), '高位风险', 'boundary');
+      break;
+  }
+
+  const sortedPoints = points
+    .sort((left, right) => left.price - right.price || left.payoff - right.payoff)
+    .filter((point, index, items) => index === 0 || point.price !== items[index - 1].price || point.payoff !== items[index - 1].payoff);
+
+  if (sortedPoints.length < 2) return null;
+
+  const payoffValues = sortedPoints.map((point) => point.payoff);
+  const [minPayoff, maxPayoff] = padDomain(Math.min(...payoffValues, 0), Math.max(...payoffValues, 0), 0.14, 40);
+
+  return {
+    points: sortedPoints,
+    minPrice,
+    maxPrice,
+    minPayoff,
+    maxPayoff,
+  };
+}
+
+function buildIvVisualModel(chain: OptionsChainResponse | null): IvVisualModel | null {
+  if (!chain) return null;
+
+  const points = [...asArray(chain.calls), ...asArray(chain.puts)]
+    .map((contract) => {
+      const strike = finiteNumber(contract.strike);
+      const iv = finiteNumber(contract.impliedVolatility);
+      if (strike == null || iv == null) return null;
+      return {
+        strike,
+        iv,
+        side: contract.side,
+        contractSymbol: contract.contractSymbol,
+      } satisfies IvVisualPoint;
+    })
+    .filter((item): item is IvVisualPoint => item != null)
+    .sort((left, right) => left.strike - right.strike);
+
+  if (points.length === 0) return null;
+
+  const strikes = points.map((point) => point.strike);
+  const ivs = points.map((point) => point.iv);
+  const [minStrike, maxStrike] = padDomain(Math.min(...strikes), Math.max(...strikes), 0.08, 1);
+  const [minIv, maxIv] = padDomain(Math.min(...ivs), Math.max(...ivs), 0.16, 0.02);
+
+  return {
+    points,
+    minStrike,
+    maxStrike,
+    minIv,
+    maxIv,
+  };
+}
+
+function selectedComparisonStrategy(
+  decision?: OptionsDecisionResponse | null,
+  comparison?: OptionsStrategyCompareResponse | null,
+): OptionsStrategyComparison | null {
+  const preferred = firstObservationStrategy(decision, comparison);
+  const strategies = asArray(comparison?.strategies);
+  if (!strategies.length) return null;
+  if (!preferred) return strategies[0] ?? null;
+  return strategies.find((strategy) => strategy.strategyType === preferred) ?? strategies[0] ?? null;
+}
+
+function scaleValue(value: number, minValue: number, maxValue: number, length: number): number {
+  if (maxValue <= minValue) return length / 2;
+  return ((value - minValue) / (maxValue - minValue)) * length;
+}
+
+function axisPrice(value: number): string {
+  return `$${formatNumber(value, value >= 100 ? 0 : 2)}`;
+}
+
+const CompactVisualEmptyState: React.FC<{
+  title: string;
+  body: string;
+  testId: string;
+}> = ({ title, body, testId }) => (
+  <div
+    data-testid={testId}
+    className="flex min-h-[13rem] flex-col justify-center rounded-md border border-dashed border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-4 py-5 text-center"
+  >
+    <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{title}</p>
+    <p className="mt-2 text-xs leading-6 text-[color:var(--wolfy-text-secondary)]">{body}</p>
+  </div>
+);
+
+const StrategyPayoffVisual: React.FC<{
+  strategy: OptionsStrategyComparison | null;
+  underlyingPrice?: number | null;
+  targetPrice?: number | null;
+}> = ({ strategy, underlyingPrice, targetPrice }) => {
+  const model = buildPayoffVisualModel(strategy, underlyingPrice, targetPrice);
+
+  if (!strategy || !model) {
+    return (
+      <CompactVisualEmptyState
+        testId="options-lab-payoff-empty"
+        title="收益边界待补证"
+        body="当前缺少可绘制的收益边界。等待候选结构、腿部行权价与目标情景收益同时可用后，再显示图形示意。"
+      />
+    );
+  }
+
+  const width = 520;
+  const height = 220;
+  const paddingLeft = 44;
+  const paddingRight = 16;
+  const paddingTop = 16;
+  const paddingBottom = 30;
+  const plotWidth = width - paddingLeft - paddingRight;
+  const plotHeight = height - paddingTop - paddingBottom;
+  const zeroY = paddingTop + (plotHeight - scaleValue(0, model.minPayoff, model.maxPayoff, plotHeight));
+  const path = model.points.map((point, index) => {
+    const x = paddingLeft + scaleValue(point.price, model.minPrice, model.maxPrice, plotWidth);
+    const y = paddingTop + (plotHeight - scaleValue(point.payoff, model.minPayoff, model.maxPayoff, plotHeight));
+    return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+  const tickPrices = [model.minPrice, finiteNumber(targetPrice), model.maxPrice]
+    .filter((value): value is number => value != null)
+    .filter((value, index, items) => items.findIndex((item) => Math.abs(item - value) < 0.001) === index);
+
+  return (
+    <div data-testid="options-lab-payoff-visual" className="grid gap-3">
+      <DataWorkbenchFrame>
+        <div className="min-w-[28rem] p-4">
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            role="img"
+            aria-label={`到期收益示意，${strategyChineseLabel(strategy.strategyType)}`}
+            className="h-auto w-full"
+          >
+            {[0.25, 0.5, 0.75].map((ratioValue) => {
+              const y = paddingTop + plotHeight * ratioValue;
+              return (
+                <line
+                  key={ratioValue}
+                  x1={paddingLeft}
+                  y1={y}
+                  x2={width - paddingRight}
+                  y2={y}
+                  stroke="rgba(148, 163, 184, 0.14)"
+                  strokeDasharray="4 6"
+                />
+              );
+            })}
+            <line x1={paddingLeft} y1={zeroY} x2={width - paddingRight} y2={zeroY} stroke="rgba(226,232,240,0.28)" />
+            <path d={path} fill="none" stroke="rgba(129,140,248,0.95)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+            {model.points.map((point) => {
+              const x = paddingLeft + scaleValue(point.price, model.minPrice, model.maxPrice, plotWidth);
+              const y = paddingTop + (plotHeight - scaleValue(point.payoff, model.minPayoff, model.maxPayoff, plotHeight));
+              const fill = point.tone === 'target'
+                ? 'rgba(52, 211, 153, 0.95)'
+                : point.tone === 'boundary'
+                  ? 'rgba(251, 191, 36, 0.9)'
+                  : 'rgba(226, 232, 240, 0.9)';
+              return (
+                <g key={`${point.price}-${point.payoff}-${point.label || 'point'}`}>
+                  <circle cx={x} cy={y} r="4.5" fill={fill} />
+                  {point.label ? (
+                    <text
+                      x={x}
+                      y={y - 10}
+                      textAnchor="middle"
+                      fill="rgba(226,232,240,0.78)"
+                      fontSize="10"
+                    >
+                      {point.label}
+                    </text>
+                  ) : null}
+                </g>
+              );
+            })}
+            {tickPrices.map((price) => {
+              const x = paddingLeft + scaleValue(price, model.minPrice, model.maxPrice, plotWidth);
+              return (
+                <g key={price}>
+                  <line x1={x} y1={paddingTop + plotHeight} x2={x} y2={paddingTop + plotHeight + 5} stroke="rgba(226,232,240,0.32)" />
+                  <text x={x} y={height - 6} textAnchor="middle" fill="rgba(148,163,184,0.78)" fontSize="10">
+                    {axisPrice(price)}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      </DataWorkbenchFrame>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div className={cn(innerBlockClass, 'p-3')}>
+          <p className={labelClass}>观察结构</p>
+          <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{strategyChineseLabel(strategy.strategyType)}</p>
+        </div>
+        <div className={cn(innerBlockClass, 'p-3')}>
+          <p className={labelClass}>目标情景收益</p>
+          <p className={cn('mt-2 font-mono text-sm font-semibold', metricTone(strategy.payoffAtTarget))}>{money(strategy.payoffAtTarget)}</p>
+        </div>
+        <div className={cn(innerBlockClass, 'p-3')}>
+          <p className={labelClass}>边界说明</p>
+          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{payoffBoundaryLabel(strategy.strategyType)}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const IvSmileVisual: React.FC<{ chain: OptionsChainResponse | null }> = ({ chain }) => {
+  const model = buildIvVisualModel(chain);
+
+  if (!model) {
+    return (
+      <CompactVisualEmptyState
+        testId="options-lab-iv-empty"
+        title="IV / 行权价快照待补证"
+        body="当前缺少可绘制的 IV / 行权价快照。等待链上 IV 与行权价同时可用后，再显示 smile / skew 示意。"
+      />
+    );
+  }
+
+  const width = 520;
+  const height = 220;
+  const paddingLeft = 44;
+  const paddingRight = 18;
+  const paddingTop = 16;
+  const paddingBottom = 30;
+  const plotWidth = width - paddingLeft - paddingRight;
+  const plotHeight = height - paddingTop - paddingBottom;
+  const callPoints = model.points.filter((point) => point.side === 'call');
+  const putPoints = model.points.filter((point) => point.side === 'put');
+  const buildPath = (points: IvVisualPoint[]) => points.map((point, index) => {
+    const x = paddingLeft + scaleValue(point.strike, model.minStrike, model.maxStrike, plotWidth);
+    const y = paddingTop + (plotHeight - scaleValue(point.iv, model.minIv, model.maxIv, plotHeight));
+    return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+
+  return (
+    <div data-testid="options-lab-iv-visual" className="grid gap-3">
+      <DataWorkbenchFrame>
+        <div className="min-w-[28rem] p-4">
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            role="img"
+            aria-label="IV 与行权价示意"
+            className="h-auto w-full"
+          >
+            {[0.25, 0.5, 0.75].map((ratioValue) => {
+              const y = paddingTop + plotHeight * ratioValue;
+              return (
+                <line
+                  key={ratioValue}
+                  x1={paddingLeft}
+                  y1={y}
+                  x2={width - paddingRight}
+                  y2={y}
+                  stroke="rgba(148, 163, 184, 0.14)"
+                  strokeDasharray="4 6"
+                />
+              );
+            })}
+            {callPoints.length > 1 ? (
+              <path d={buildPath(callPoints)} fill="none" stroke="rgba(96, 165, 250, 0.92)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+            ) : null}
+            {putPoints.length > 1 ? (
+              <path d={buildPath(putPoints)} fill="none" stroke="rgba(248, 113, 113, 0.92)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+            ) : null}
+            {model.points.map((point) => {
+              const x = paddingLeft + scaleValue(point.strike, model.minStrike, model.maxStrike, plotWidth);
+              const y = paddingTop + (plotHeight - scaleValue(point.iv, model.minIv, model.maxIv, plotHeight));
+              const fill = point.side === 'call' ? 'rgba(96, 165, 250, 0.95)' : 'rgba(248, 113, 113, 0.95)';
+              return <circle key={point.contractSymbol} cx={x} cy={y} r="4" fill={fill} />;
+            })}
+            {[model.minStrike, model.maxStrike].map((strike) => {
+              const x = paddingLeft + scaleValue(strike, model.minStrike, model.maxStrike, plotWidth);
+              return (
+                <g key={strike}>
+                  <line x1={x} y1={paddingTop + plotHeight} x2={x} y2={paddingTop + plotHeight + 5} stroke="rgba(226,232,240,0.32)" />
+                  <text x={x} y={height - 6} textAnchor="middle" fill="rgba(148,163,184,0.78)" fontSize="10">
+                    {axisPrice(strike)}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      </DataWorkbenchFrame>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div className={cn(innerBlockClass, 'p-3')}>
+          <p className={labelClass}>Call / Put 点位</p>
+          <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{number(callPoints.length)} / {number(putPoints.length)}</p>
+        </div>
+        <div className={cn(innerBlockClass, 'p-3')}>
+          <p className={labelClass}>IV 区间</p>
+          <p className="mt-2 font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{ratio(model.minIv)} - {ratio(model.maxIv)}</p>
+        </div>
+        <div className={cn(innerBlockClass, 'p-3')}>
+          <p className={labelClass}>图形说明</p>
+          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">仅反映当前链快照中的 IV / 行权价分布，不单独形成方向或执行结论。</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ResearchVisualsPanel: React.FC<{
+  decision: OptionsDecisionResponse | null;
+  comparison: OptionsStrategyCompareResponse | null;
+  chain: OptionsChainResponse | null;
+  targetPrice?: number | null;
+  className?: string;
+}> = ({ decision, comparison, chain, targetPrice, className }) => {
+  const strategy = selectedComparisonStrategy(decision, comparison);
+  const underlyingPrice = chain?.underlying?.price;
+
+  return (
+    <section className={cn(panelClass, className)} data-testid="options-lab-visuals-panel">
+      <SectionHeader eyebrow="图形证据" title="收益边界与 IV 快照" icon={LineChart}>
+        <div className="flex flex-wrap gap-2">
+          <Pill tone="info">只读观察</Pill>
+          <Pill tone="warn">示意图</Pill>
+        </div>
+      </SectionHeader>
+      <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+        先用现有候选结构与链快照观察收益边界和 IV 分布，再回到门控、缺口与风险约束做交叉复核。
+      </p>
+      <div className="mt-5 grid gap-4 xl:grid-cols-2">
+        <div className={cn(innerBlockClass, 'p-4')}>
+          <p className={labelClass}>到期收益示意</p>
+          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">基于当前候选结构的现有收益边界字段绘制，仅用于情景观察。</p>
+          <div className="mt-4">
+            <StrategyPayoffVisual strategy={strategy} underlyingPrice={underlyingPrice} targetPrice={targetPrice} />
+          </div>
+        </div>
+        <div className={cn(innerBlockClass, 'p-4')}>
+          <p className={labelClass}>IV 偏斜示意</p>
+          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">基于当前期权链的 IV / 行权价点位绘制，仅反映快照形状，不延伸为交易结论。</p>
+          <div className="mt-4">
+            <IvSmileVisual chain={chain} />
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2 text-xs text-[color:var(--wolfy-text-muted)]">
+        {[OPTIONS_SAFE_INSTRUCTION_COPY, OPTIONS_NON_ADVICE_COPY, OPTIONS_NO_ORDER_COPY, OPTIONS_NO_BROKER_COPY, OPTIONS_NO_PORTFOLIO_MUTATION_COPY].map((line) => (
+          <Pill key={line} tone="neutral">{line}</Pill>
+        ))}
+      </div>
+    </section>
+  );
+};
 
 const SegmentedButtons = <T extends string>({
   options,
@@ -2065,6 +2532,12 @@ const OptionsLabPageContent: React.FC = () => {
                 loading={comparisonState.loading}
                 emptyMessage={comparisonEmptyMessage}
                 chain={state.chain}
+              />
+              <ResearchVisualsPanel
+                decision={decisionState.decision}
+                comparison={comparisonState.comparison}
+                chain={state.chain}
+                targetPrice={Number.isFinite(Number(targetPrice)) ? Number(targetPrice) : null}
               />
               {scenarioEvidenceFrame ? <ScenarioEvidencePanel frame={scenarioEvidenceFrame} /> : null}
               <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} />
