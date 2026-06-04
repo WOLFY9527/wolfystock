@@ -636,6 +636,35 @@ function makeCandidateResearchReadiness(overrides: Record<string, unknown> = {})
   };
 }
 
+function makeCandidateResearchSummaryFrame(overrides: Record<string, unknown> = {}) {
+  return {
+    contractVersion: 'scanner_candidate_research_summary_v1',
+    frameState: 'insufficient',
+    symbol: 'NVDA',
+    rank: 1,
+    scoreBand: 'limited',
+    primaryResearchReason: 'Current signals support shortlist review, but fundamentals are still missing.',
+    evidenceHighlights: [
+      'Technicals available',
+      'Price history available',
+      'Liquidity available',
+    ],
+    missingEvidence: ['fundamentals', 'newsCatalyst'],
+    blockingReasons: ['source_authority_router_rejected', 'missing_required_evidence'],
+    topDownContextRefs: [
+      { key: 'marketReadiness', state: 'observe_only', label: 'Top-down market context available' },
+      { key: 'liquidityFrame', state: 'supportive', label: 'Liquidity context available' },
+      { key: 'themeFrame', state: 'observe_only', label: 'Theme leadership context available' },
+    ],
+    sourceAuthority: 'observationOnly',
+    freshness: 'delayed',
+    nextResearchStep: 'Wait for more complete evidence.',
+    noAdviceBoundary: true,
+    debugRef: 'scanner:candidate_summary:NVDA',
+    ...overrides,
+  };
+}
+
 function makeHistoryItem(overrides: Partial<ScannerRunHistoryItem> = {}): ScannerRunHistoryItem {
   return {
     id: 11,
@@ -1107,8 +1136,11 @@ describe('UserScannerPage', () => {
 
     renderUserScannerPage();
 
+    expect(await screen.findByTestId('scanner-page-heading')).toHaveTextContent('US Pre-open Scanner');
+    expect(screen.getByTestId('scanner-page-heading')).not.toHaveTextContent(/v1/);
+
     const strip = await screen.findByTestId('scanner-top-down-context-strip');
-    expect(strip).toHaveTextContent('自上而下上下文');
+    expect(strip).toHaveTextContent('市场驱动因素');
     expect(strip).toHaveTextContent('混合');
     expect(strip).toHaveTextContent('市场：仅观察');
     expect(strip).toHaveTextContent('宏观：支持');
@@ -1167,6 +1199,52 @@ describe('UserScannerPage', () => {
     expectNoRawI18nKeys(container);
   });
 
+  it('renders candidate research summary additively without changing row order or score labels', async () => {
+    const nvda = makeCandidate({ symbol: 'NVDA', rank: 1, score: 94 });
+    (nvda as ScannerCandidate & Record<string, unknown>).candidateEvidenceFrame = makeCandidateEvidenceFrame();
+    (nvda as ScannerCandidate & Record<string, unknown>).candidateResearchReadiness = makeCandidateResearchReadiness();
+    (nvda as ScannerCandidate & Record<string, unknown>).candidateResearchSummaryFrame = makeCandidateResearchSummaryFrame();
+
+    getRun.mockResolvedValue(makeRunDetail({
+      shortlist: [
+        nvda,
+        makeCandidate({ symbol: 'AVGO', rank: 2, score: 88 }),
+        makeCandidate({ symbol: 'AMD', rank: 3, score: 76 }),
+      ],
+      selected: [nvda],
+      scannerContextFrame: makeScannerContextFrame(),
+    }));
+
+    const { container } = renderUserScannerPage();
+
+    const row = await screen.findByTestId('scanner-result-row-NVDA');
+    expect(screen.getByTestId('scanner-page-heading')).toHaveTextContent('A股盘前扫描');
+    expect(screen.getByTestId('scanner-page-heading')).not.toHaveTextContent(/CN\s*·|v1/);
+    expect(row).toHaveTextContent('当前候选进入研究列表');
+    expect(row).toHaveTextContent('待补 基本面 / 新闻催化');
+    expect(row).toHaveTextContent('仅研究观察');
+
+    const detail = screen.getAllByTestId('scanner-result-detail-NVDA')[0];
+    expect(detail).toHaveTextContent('研究摘要');
+    expect(detail).toHaveTextContent('技术面可用');
+    expect(detail).toHaveTextContent('价格历史可用');
+    expect(detail).toHaveTextContent('流动性可用');
+    expect(detail).toHaveTextContent('市场驱动因素');
+    expect(detail).toHaveTextContent('市场：仅观察');
+    expect(detail).toHaveTextContent('流动性：支持');
+    expect(detail).toHaveTextContent('主题：仅观察');
+    expect(detail).toHaveTextContent('观察级线索');
+    expect(detail).toHaveTextContent('延迟更新');
+    expect(detail).toHaveTextContent('先补充基本面与新闻催化');
+    expect(detail).not.toHaveTextContent(/debugRef|source_authority_router_rejected|missing_required_evidence|Top-down market context available/i);
+
+    expect(within(row).getAllByText('94/100').length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId('scanner-result-row-AVGO')).getAllByText('88/100').length).toBeGreaterThan(0);
+    expect(orderedSymbolsFromRows()).toEqual(['NVDA', 'AVGO', 'AMD']);
+    expect(container).not.toHaveTextContent(/买入|卖出|下单|trade|broker|order/i);
+    expectNoRawI18nKeys(container);
+  });
+
   it('keeps legacy scanner responses rendering when candidate evidence fields are absent', async () => {
     const { container } = renderUserScannerPage();
 
@@ -1182,7 +1260,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const strip = await screen.findByTestId('scanner-top-down-context-strip');
-    expect(strip).toHaveTextContent('自上而下上下文');
+    expect(strip).toHaveTextContent('市场驱动因素');
     expect(strip).toHaveTextContent('证据不足');
     expect(strip).toHaveTextContent('市场：证据不足');
     expect(strip).toHaveTextContent('宏观：证据不足');

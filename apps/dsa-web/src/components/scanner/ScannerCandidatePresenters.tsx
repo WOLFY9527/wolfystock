@@ -14,6 +14,9 @@ import {
   ScannerCandidateEvidenceStrip,
   type CandidateEvidenceFrame,
 } from './ScannerCandidateEvidenceStrip';
+import ScannerCandidateResearchSummary, {
+  type ScannerCandidateResearchSummaryFrame,
+} from './ScannerCandidateResearchSummary';
 import type { NormalizedEvidenceSummary } from '../../utils/evidenceDisplay';
 import type { ResearchReadinessV1 } from '../../types/researchReadiness';
 import type {
@@ -43,6 +46,7 @@ type CandidateDetailOutcomeItem = {
 type ScannerCandidateWithEvidence = ScannerCandidate & {
   candidateEvidenceFrame?: CandidateEvidenceFrame | null;
   candidateResearchReadiness?: ResearchReadinessV1 | null;
+  candidateResearchSummaryFrame?: ScannerCandidateResearchSummaryFrame | null;
 };
 
 function asScannerCandidateWithEvidence(candidate: ScannerCandidate): ScannerCandidateWithEvidence {
@@ -611,6 +615,7 @@ export function ScannerCandidateDiagnosticRow({
   evidenceSummary,
   candidateEvidenceFrame,
   candidateResearchReadiness,
+  candidateResearchSummaryFrame,
   scoreLabel,
   scoreDelta,
   comparisonLabel,
@@ -651,6 +656,7 @@ export function ScannerCandidateDiagnosticRow({
   evidenceSummary: NormalizedEvidenceSummary | null;
   candidateEvidenceFrame?: CandidateEvidenceFrame | null;
   candidateResearchReadiness?: ResearchReadinessV1 | null;
+  candidateResearchSummaryFrame?: ScannerCandidateResearchSummaryFrame | null;
   scoreLabel: string;
   scoreDelta?: string | null;
   comparisonLabel?: string | null;
@@ -724,6 +730,14 @@ export function ScannerCandidateDiagnosticRow({
             <div className="min-w-0" onClick={onSelect}>
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Key reason' : '关键原因'}</p>
               <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-white/68" title={keyReason}>{keyReason}</p>
+              {candidateResearchSummaryFrame ? (
+                <ScannerCandidateResearchSummary
+                  frame={candidateResearchSummaryFrame}
+                  language={language}
+                  variant="row"
+                  testId={`scanner-candidate-summary-row-${candidate.symbol}`}
+                />
+              ) : null}
             </div>
             <div className="min-w-0" onClick={onSelect}>
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">{language === 'en' ? 'Data quality' : '数据质量'}</p>
@@ -778,6 +792,14 @@ export function ScannerCandidateDiagnosticRow({
             </div>
             <div className="grid gap-1.5 text-xs text-white/66" onClick={onSelect}>
               <p title={keyReason}>{keyReason}</p>
+              {candidateResearchSummaryFrame ? (
+                <ScannerCandidateResearchSummary
+                  frame={candidateResearchSummaryFrame}
+                  language={language}
+                  variant="row"
+                  testId={`scanner-candidate-summary-mobile-row-${candidate.symbol}`}
+                />
+              ) : null}
               <p title={dataQualityLabel}>{dataQualityLabel}</p>
               {candidateEvidenceFrame || candidateResearchReadiness ? (
                 <ScannerCandidateEvidenceStrip

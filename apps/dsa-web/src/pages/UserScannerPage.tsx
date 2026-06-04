@@ -30,6 +30,9 @@ import {
   ScannerCandidateDiagnosticRow,
 } from '../components/scanner/ScannerCandidatePresenters';
 import { ScannerCandidateEvidenceStrip } from '../components/scanner/ScannerCandidateEvidenceStrip';
+import ScannerCandidateResearchSummary, {
+  type ScannerCandidateResearchSummaryFrame,
+} from '../components/scanner/ScannerCandidateResearchSummary';
 import {
   AdvancedDisclosure,
   FieldChip,
@@ -176,6 +179,7 @@ type ScannerValidationErrors = {
 type ScannerCandidateWithEvidence = ScannerCandidate & {
   candidateEvidenceFrame?: CandidateEvidenceFrame | null;
   candidateResearchReadiness?: ResearchReadinessV1 | null;
+  candidateResearchSummaryFrame?: ScannerCandidateResearchSummaryFrame | null;
 };
 
 function normalizeCandidateSymbol(symbol?: string | null): string | null {
@@ -194,6 +198,18 @@ function getCandidateIdentity(candidate: ScannerCandidate): string {
 function normalizeScannerMarket(market?: string | null): string | null {
   const normalized = String(market || '').trim().toUpperCase();
   return normalized === 'CN' || normalized === 'US' || normalized === 'HK' ? normalized : null;
+}
+
+function sanitizeScannerProfileLabel(label?: string | null): string {
+  const raw = String(label || '').trim();
+  if (!raw) return '';
+  if (raw === 'cn_preopen_v1') return 'A股盘前扫描';
+  if (raw === 'us_preopen_v1') return 'US Pre-open Scanner';
+  if (raw === 'hk_preopen_v1') return 'HK Pre-open Scanner';
+  return raw
+    .replace(/^[A-Z]{2}\s*[·-]\s*/u, '')
+    .replace(/\s+v\d+$/iu, '')
+    .trim();
 }
 
 function getWatchlistIdentity(market?: string | null, symbol?: string | null): string {
@@ -868,7 +884,7 @@ function buildScannerConclusion(runDetail: ScannerRunDetail | null, language: 'z
   if (evidenceInsufficient) {
     return {
       state: 'insufficient',
-      title: language === 'en' ? 'Evidence insufficient' : '证据不足',
+      title: language === 'en' ? 'Research evidence pending' : '证据不足',
       detail: language === 'en'
         ? 'Refresh quotes or history evidence before treating this scan as evidence.'
         : '补齐行情或历史证据后，再将本次扫描视为证据。',
@@ -1767,7 +1783,13 @@ const UserScannerPage: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const profileOptions = useMemo(() => getScannerProfileOptions(market, t), [market, t]);
+  const profileOptions = useMemo(
+    () => getScannerProfileOptions(market, t).map((option) => ({
+      ...option,
+      label: sanitizeScannerProfileLabel(option.label),
+    })),
+    [market, t],
+  );
   const universeOptions = useMemo(() => getScannerUniverseOptions(market, language), [language, market]);
   const detailOptions = useMemo(() => getScannerDetailOptions(market, language), [language, market]);
   const marketThemes = useMemo(
@@ -2255,7 +2277,7 @@ const UserScannerPage: React.FC = () => {
       statusLabel: compactScannerStateLabel(item.status, language),
       statusVariant: statusVariant(item.status),
       watchlistDateLabel: item.watchlistDate ? formatDateOnly(item.watchlistDate, language) : null,
-      profileLabel: item.profileLabel || item.profile,
+      profileLabel: sanitizeScannerProfileLabel(item.profileLabel || item.profile),
       title: historyHeadline.title,
       detail: historyHeadline.detail,
       shortlistSize: item.shortlistSize,
@@ -2586,6 +2608,15 @@ const UserScannerPage: React.FC = () => {
           </div>
         ) : null}
 
+        {candidateWithEvidence.candidateResearchSummaryFrame ? (
+          <ScannerCandidateResearchSummary
+            frame={candidateWithEvidence.candidateResearchSummaryFrame}
+            language={language}
+            variant="detail"
+            testId={`scanner-inline-candidate-summary-${getCandidateIdentity(candidate)}`}
+          />
+        ) : null}
+
         <div className="flex flex-wrap items-center gap-1.5">
           <ActionButton
             label={pendingAnalyzeSymbol === candidate.symbol ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
@@ -2752,7 +2783,7 @@ const UserScannerPage: React.FC = () => {
               {/* <TerminalPageHeading /> marker: DensePageHeader emits the page-level h1. */}
               <DensePageHeader
                 data-testid="scanner-page-heading"
-                eyebrow={runDetail ? `${runDetail.market.toUpperCase()} · ${runDetail.profileLabel || runDetail.profile}` : (language === 'en' ? 'Candidate workbench' : '候选工作台')}
+                eyebrow={runDetail ? sanitizeScannerProfileLabel(runDetail.profileLabel || runDetail.profile) : (language === 'en' ? 'Candidate workbench' : '候选工作台')}
                 title={language === 'en' ? 'Scanner' : '扫描器'}
                 action={(
                   <TerminalButton
@@ -2811,7 +2842,7 @@ const UserScannerPage: React.FC = () => {
               {scannerTopDownContextView ? (
                 <ScannerTopDownContextStrip
                   context={scannerTopDownContextView}
-                  title={language === 'en' ? 'Top-down context' : '自上而下上下文'}
+                  title={language === 'en' ? 'Market drivers' : '市场驱动因素'}
                   testId="scanner-top-down-context-strip"
                   className="mx-3"
                 />
@@ -3227,6 +3258,7 @@ const UserScannerPage: React.FC = () => {
                                       evidenceSummary={null}
                                       candidateEvidenceFrame={sourceCandidateWithEvidence.candidateEvidenceFrame}
                                       candidateResearchReadiness={sourceCandidateWithEvidence.candidateResearchReadiness}
+                                      candidateResearchSummaryFrame={sourceCandidateWithEvidence.candidateResearchSummaryFrame}
                                       scoreLabel={candidate.score == null ? '--' : `${candidate.score}/100`}
                                       trustSources={[stripScannerConsumerTrustSource(sourceCandidate), stripScannerConsumerTrustSource(candidate)]}
                                       scoreDelta={formatScoreDelta(comparison?.scoreDelta ?? null)}

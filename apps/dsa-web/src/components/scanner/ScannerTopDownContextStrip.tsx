@@ -22,7 +22,7 @@ function variantForTone(
 
 const ScannerTopDownContextStrip: React.FC<ScannerTopDownContextStripProps> = ({
   context,
-  title = '自上而下上下文',
+  title = '市场驱动因素',
   testId,
   className,
 }) => (
