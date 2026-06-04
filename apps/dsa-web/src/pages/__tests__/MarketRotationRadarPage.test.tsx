@@ -13,6 +13,7 @@ vi.mock('../../api/marketRotation', () => ({
 }));
 
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
 });
 
@@ -979,6 +980,30 @@ describe('MarketRotationRadarPage', () => {
     expect(bodyText).not.toMatch(forbiddenTradingActionPattern);
     expect(bodyText).not.toMatch(rawI18nKeyPattern);
     expect(bodyText).not.toMatch(consumerDiagnosticLeakPattern);
+  });
+
+  it('fails closed when the route request never settles', async () => {
+    vi.useFakeTimers();
+    vi.mocked(marketRotationApi.getRotationRadar).mockImplementationOnce(
+      () => new Promise<MarketRotationRadarResponse>(() => {}),
+    );
+
+    render(<MarketRotationRadarPage />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('正在读取主题轮动 / 相对强弱雷达');
+
+    await vi.runAllTicks();
+
+    await vi.advanceTimersByTimeAsync(12_000);
+    await vi.runAllTicks();
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('主题轮动暂时不可用');
+    expect(alert).toHaveTextContent('页面未在预期时间内完成读取，当前无法判断轮动方向。请稍后刷新重试。');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('rotation-radar-guidance')).not.toBeInTheDocument();
+    expect(alert.textContent || '').not.toMatch(forbiddenTradingActionPattern);
+    expect(alert.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
   });
 
   it('keeps real-flow-ready states compact while preserving selected theme usability', async () => {

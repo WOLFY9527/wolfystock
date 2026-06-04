@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useReducer, useState } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 import { Gauge, RefreshCcw, Search, SlidersHorizontal } from 'lucide-react';
 import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import {
@@ -21,7 +21,7 @@ import {
   TerminalSectionHeader,
 } from '../components/terminal/TerminalPrimitives';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
-import { getParsedApiError, type ParsedApiError } from '../api/error';
+import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import {
   marketRotationApi,
   type MarketRotationEvidenceQuality,
@@ -38,6 +38,7 @@ import { decisionReadinessVariant, sanitizeMarketGuidanceCopy, type DecisionRead
 
 const TOP_THEME_LIMIT = 10;
 const DEFAULT_MARKET = 'US';
+const ROTATION_RADAR_ROUTE_TIMEOUT_MS = 12000;
 const MARKET_OPTIONS = [
   { id: 'US', label: '美股' },
   { id: 'CN', label: 'A股' },
@@ -1329,6 +1330,14 @@ const LoadingPanel: React.FC = () => (
   </TerminalPanel>
 );
 
+function createRotationRadarTimeoutError(): ParsedApiError {
+  return createParsedApiError({
+    title: '主题轮动暂时不可用',
+    message: '页面未在预期时间内完成读取，当前无法判断轮动方向。请稍后刷新重试。',
+    category: 'upstream_timeout',
+  });
+}
+
 interface RadarPageState {
   payload: MarketRotationRadarResponse | null;
   loading: boolean;
@@ -1360,8 +1369,10 @@ function radarPageReducer(state: RadarPageState, action: RadarPageAction): Radar
     case 'loadStarted':
       return {
         ...state,
+        payload: null,
         loading: true,
         error: null,
+        selectedThemeId: '',
       };
     case 'loadSucceeded':
       return {
@@ -1400,21 +1411,41 @@ function radarPageReducer(state: RadarPageState, action: RadarPageAction): Radar
 
 const MarketRotationRadarPage: React.FC = () => {
   const [state, dispatch] = useReducer(radarPageReducer, initialRadarPageState);
+  const activeRequestIdRef = useRef(0);
 
   const loadRadar = async (market: string) => {
+    const requestId = activeRequestIdRef.current + 1;
+    activeRequestIdRef.current = requestId;
     dispatch({ type: 'loadStarted' });
-    const response = await marketRotationApi.getRotationRadar(market)
-      .then((payload) => ({ payload, error: null as ParsedApiError | null }))
-      .catch((nextError) => ({
-        payload: null,
-        error: { ...getParsedApiError(nextError), title: '读取主题轮动雷达失败' },
-      }));
-    if (response.payload) {
-      dispatch({ type: 'loadSucceeded', payload: response.payload });
-      return;
-    }
-    if (response.error) {
-      dispatch({ type: 'loadFailed', error: response.error });
+    let timeoutHandle: number | undefined;
+    try {
+      const payload = await Promise.race<MarketRotationRadarResponse>([
+        marketRotationApi.getRotationRadar(market),
+        new Promise<never>((_, reject) => {
+          timeoutHandle = window.setTimeout(() => {
+            reject(createRotationRadarTimeoutError());
+          }, ROTATION_RADAR_ROUTE_TIMEOUT_MS);
+        }),
+      ]);
+      if (requestId !== activeRequestIdRef.current) {
+        return;
+      }
+      dispatch({ type: 'loadSucceeded', payload });
+    } catch (nextError) {
+      if (requestId !== activeRequestIdRef.current) {
+        return;
+      }
+      const parsed = getParsedApiError(nextError);
+      dispatch({
+        type: 'loadFailed',
+        error: parsed.title === '主题轮动暂时不可用'
+          ? parsed
+          : { ...parsed, title: '读取主题轮动雷达失败' },
+      });
+    } finally {
+      if (timeoutHandle !== undefined) {
+        window.clearTimeout(timeoutHandle);
+      }
     }
   };
 
@@ -1422,6 +1453,9 @@ const MarketRotationRadarPage: React.FC = () => {
     queueMicrotask(() => {
       void loadRadar(DEFAULT_MARKET);
     });
+    return () => {
+      activeRequestIdRef.current += 1;
+    };
   }, []);
 
   const handleMarketChange = (market: string) => {
@@ -1463,7 +1497,11 @@ const MarketRotationRadarPage: React.FC = () => {
 
         {state.error ? (
           <TerminalPanel as="section">
-            <ApiErrorAlert error={state.error} />
+            <ApiErrorAlert
+              error={state.error}
+              actionLabel="重新读取"
+              onAction={handleRefresh}
+            />
           </TerminalPanel>
         ) : null}
 
