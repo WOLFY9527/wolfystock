@@ -318,7 +318,7 @@ const PageHeader: React.FC<{
         <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
             <TerminalPageHeading
-              eyebrow="WolfyStock 用户治理终端"
+              eyebrow="用户支持与治理"
               title={title}
               action={(
                 <div className="flex flex-wrap justify-end gap-2">
@@ -329,7 +329,7 @@ const PageHeader: React.FC<{
               )}
             />
             <p className="mt-2 max-w-3xl text-sm leading-6 text-white/52">
-              账号、会话、组合投影与审计线索共用同一套紧凑运维终端节奏；敏感凭证材料、原始会话标识和底层调试载荷默认不进入界面。
+              账号、会话、组合投影与审计线索共用同一套紧凑支持界面节奏；敏感凭证材料、原始会话标识和底层调试载荷默认不进入界面。
             </p>
           </div>
         </div>
@@ -580,7 +580,7 @@ const FuturePlaceholders: React.FC = () => (
     <TerminalSectionHeader eyebrow="边界" title="后续能力占位" />
     <div className="mt-4 grid gap-3">
       <TerminalNotice variant="neutral">安全控制只保留本阶段允许的只读与显式确认能力，不扩展到重置密码或 RBAC 变更。</TerminalNotice>
-      <TerminalDisclosure title="L4 后续阶段占位：组合 / 分析 / Scanner / Backtest" summary="默认收起 · 原始数据库与 prompt 不开放">
+      <TerminalDisclosure title="L4 后续阶段占位：组合 / 分析 / 扫描 / 回测" summary="默认收起 · 原始数据库与 prompt 不开放">
         <div className="grid gap-2 text-xs leading-5 text-white/48">
           <p>组合、分析、Scanner、Backtest 管理视图等待独立后端合同。</p>
           <p>原始数据库浏览器、原始 prompt、provider 载荷与堆栈明细不在本阶段展示。</p>
@@ -848,7 +848,7 @@ const SecurityTab: React.FC<{
           <TerminalNotice variant="info" className="mt-4">
             安全状态查看和控制操作都会被审计；响应不会返回敏感凭证字段、原始会话标识或底层调试材料。
           </TerminalNotice>
-          <TerminalDisclosure title="L4 后续安全能力占位：reset-password / RBAC" summary="默认收起 · 不改变当前审计与权限边界" className="mt-4">
+          <TerminalDisclosure title="L4 后续安全能力占位：密码重置 / 权限治理" summary="默认收起 · 不改变当前审计与权限边界" className="mt-4">
             <div className="grid gap-2 text-xs text-white/42">
               <p>reset-password 后续阶段，不在本次实现。</p>
               <p>force-password-change 后续阶段，不在本次实现。</p>

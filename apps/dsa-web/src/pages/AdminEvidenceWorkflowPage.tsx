@@ -163,7 +163,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
     <TerminalPageShell className="py-5 md:py-6">
       <TerminalPanel as="section" className="relative overflow-hidden">
         <TerminalPageHeading
-          eyebrow="ADMIN EVIDENCE REVIEW"
+          eyebrow="证据复核总览"
           title="证据工作流复核"
           action={(
             <div className="flex flex-wrap gap-2">
@@ -194,15 +194,15 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
             {
               label: '查看数据源维护',
               target: 'marketProviders',
-              evidenceType: 'provider checklist',
+              evidenceType: '数据源清单',
               reason: '核对当前证据包是否对应数据源覆盖与就绪缺口。',
               params: { surface: 'market_overview' },
             },
             {
               label: '查看熔断与配额',
               target: 'providerCircuits',
-              evidenceType: 'provider window',
-              reason: '继续检查 provider 熔断、配额与探测是否影响证据解释。',
+              evidenceType: '数据源窗口',
+              reason: '继续检查数据源熔断、配额与探测是否影响证据解释。',
               params: { provider: 'provider', since: '24h' },
             },
             {
@@ -291,8 +291,8 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
             data-testid="admin-evidence-local-workspace-guard"
           >
             <TerminalSectionHeader
-              eyebrow="LOCAL GUARD"
-              title="本地目录保护"
+              eyebrow="本地边界"
+              title="本地目录边界"
             />
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
               {localWorkspaceGuards.map((guard) => (
@@ -308,7 +308,7 @@ const AdminEvidenceWorkflowPage: React.FC = () => (
 
       <TerminalDisclosure
         data-testid="admin-evidence-diagnostics-disclosure"
-        title="L4 已脱敏诊断与 Dry-run 预览：2 个只读模块"
+        title="L4 已脱敏诊断与试运行预览：2 个只读模块"
         summary="默认折叠 · 不读原始证据"
       >
         <div className="space-y-4">

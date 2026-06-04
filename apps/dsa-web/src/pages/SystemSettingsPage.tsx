@@ -13,7 +13,7 @@ const SYSTEM_SETTINGS_OVERVIEW = [
   {
     label: '当前状态',
     value: '等待配置快照',
-    note: '由下方控制台加载系统健康、路由与凭证摘要',
+    note: '由下方运维中心加载系统健康、配置域与凭证摘要',
   },
   {
     label: '需关注',
@@ -36,9 +36,9 @@ const settingsConsoleFallback = (
     className="min-h-[220px] rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-4 text-sm text-[color:var(--wolfy-text-secondary)]"
   >
     <div className="flex min-w-0 flex-col gap-2">
-      <span className="text-xs font-medium text-[color:var(--wolfy-text-primary)]">正在加载系统设置控制台</span>
+      <span className="text-xs font-medium text-[color:var(--wolfy-text-primary)]">正在加载系统运维中心</span>
       <span className="text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
-        外层风险总览已就绪，配置快照与操作面板正在进入控制台。
+        外层风险总览已就绪，配置快照与操作面板正在进入运维中心。
       </span>
     </div>
     <div className="mt-4 grid gap-2" aria-hidden="true">
@@ -68,14 +68,14 @@ const SystemSettingsPage: FC = () => {
           )}
         />
         <p className="max-w-3xl text-sm leading-6 text-white/58">
-          先确认全局风险、待处理配置和下一步安全动作；深层配置、原始字段和危险系统动作留在下方控制台。
+          先确认全局风险、待处理配置和下一步安全动作；深层配置、原始字段和危险系统动作留在下方运维中心。
         </p>
         <AdminOpsL0OverviewStrip
           dataTestId="system-settings-l0-overview-strip"
           systemTrustState="unknown"
-          impact="凭证、调度、缓存与危险动作仍需结合控制台快照确认。"
-          recommendedAction="先看系统控制台摘要，再进入具体配置域。"
-          evidenceRef="System control plane / 下方控制台"
+          impact="凭证、调度、缓存与危险动作仍需结合运维中心快照确认。"
+          recommendedAction="先看系统运维摘要，再进入具体配置域。"
+          evidenceRef="System operations / 下方运维中心"
           lastUpdated="配置快照加载后更新"
         />
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">

@@ -25,6 +25,9 @@ describe('SystemSettingsPage', () => {
     expect(within(overviewStrip).getByText('建议动作')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('证据参考')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('最近更新')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('System operations / 下方运维中心')).toBeInTheDocument();
+    expect(screen.getByText(/深层配置、原始字段和危险系统动作留在下方运维中心/)).toBeInTheDocument();
+    expect(screen.queryByText(/control plane/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('system-settings-loading')).toHaveAttribute('aria-busy', 'true');
     expect(await screen.findByText('settings-page-core')).toBeInTheDocument();
     expect(pageRoot).toHaveAttribute('data-terminal-primitive', 'page-shell');

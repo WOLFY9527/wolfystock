@@ -320,7 +320,7 @@ const pricingPoliciesPayload = {
 };
 
 async function openCostSecondaryDisclosure() {
-  const toggle = await screen.findByRole('button', { name: '展开 L2 配额 / 成本运维细节：账本、价格、Provider / 缓存、Scanner' });
+  const toggle = await screen.findByRole('button', { name: '展开 L2 配额 / 成本运维细节：账本、价格、数据源 / 缓存、扫描解释' });
   fireEvent.click(toggle);
 }
 
@@ -364,7 +364,7 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.getByText('数据源状态 / 备用链路')).toBeInTheDocument();
     expect(screen.getByText('市场缓存命中 / 过期 / 缺失')).toBeInTheDocument();
     expect(screen.getByText('Scanner AI 解释')).toBeInTheDocument();
-    expect(screen.getByText('Guest Preview / Report duplicate candidates')).toBeInTheDocument();
+    expect(screen.getByText('重复候选与报告重合')).toBeInTheDocument();
     expect(screen.getByText('限制与数据质量')).toBeInTheDocument();
     expect(screen.getByText('计数器快照不含历史时间戳')).toBeInTheDocument();
     expect(screen.getByText('L2 配额 / 成本运维：配额试运行')).toBeInTheDocument();
@@ -551,7 +551,8 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.getByText('user-a')).toBeInTheDocument();
     expect(screen.getByText('user-b')).toBeInTheDocument();
     expect(screen.getByText('模型成本分布')).toBeInTheDocument();
-    expect(screen.getByText('openai / gpt-4o-mini')).toBeInTheDocument();
+    expect(screen.getByText('模型成本条目 01')).toBeInTheDocument();
+    expect(screen.queryByText('openai / gpt-4o-mini')).not.toBeInTheDocument();
     expect(screen.getByText('功能成本分布')).toBeInTheDocument();
     expect(screen.getAllByText('analysis').length).toBeGreaterThan(0);
     expect(screen.getByText('价格未知 1')).toBeInTheDocument();
@@ -598,16 +599,18 @@ describe('AdminCostObservabilityPage', () => {
     const panel = await screen.findByTestId('model-pricing-policy-panel');
     expect(getModelPricingPolicies).toHaveBeenCalledTimes(1);
     expect(within(panel).getByText('模型价格策略')).toBeInTheDocument();
-    expect(within(panel).getByText('价格由本地策略维护，需定期按供应商官网更新；估算值不等同于供应商账单。')).toBeInTheDocument();
+    expect(within(panel).getByText('价格由本地策略维护，需定期按公开价格来源更新；估算值不等同于供应商账单。')).toBeInTheDocument();
     expect(await within(panel).findByText('激活 1')).toBeInTheDocument();
-    expect(within(panel).getByText('openai / openai/gpt-4o-mini')).toBeInTheDocument();
-    expect(within(panel).getByText('deepseek / deepseek/deepseek-chat')).toBeInTheDocument();
+    expect(within(panel).getByText('模型价格条目 01')).toBeInTheDocument();
+    expect(within(panel).getByText('模型价格条目 02')).toBeInTheDocument();
+    expect(within(panel).queryByText('openai / openai/gpt-4o-mini')).not.toBeInTheDocument();
+    expect(within(panel).queryByText('deepseek / deepseek/deepseek-chat')).not.toBeInTheDocument();
     expect(within(panel).getByText('USD 0.1000')).toBeInTheDocument();
     expect(within(panel).getAllByText('USD 0.0500').length).toBeGreaterThan(0);
     expect(within(panel).getByText('USD 0.4000')).toBeInTheDocument();
-    expect(within(panel).getByRole('link', { name: 'OpenAI pricing page' })).toHaveAttribute('href', 'https://openai.com/api/pricing/');
-    expect(within(panel).getByText('active')).toBeInTheDocument();
-    expect(within(panel).getByText('inactive')).toBeInTheDocument();
+    expect(within(panel).getByRole('link', { name: '公开价格来源 01' })).toHaveAttribute('href', 'https://openai.com/api/pricing/');
+    expect(within(panel).getByText('已启用')).toBeInTheDocument();
+    expect(within(panel).getByText('已停用')).toBeInTheDocument();
   });
 
   it('renders compact empty model pricing policy state', async () => {

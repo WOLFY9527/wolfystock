@@ -54,7 +54,7 @@ const runbookReferences = [
 ];
 
 const disclosureTitles = {
-  diagnostics: 'L4 已脱敏诊断与 Dry-run 预览：2 个只读模块',
+  diagnostics: 'L4 已脱敏诊断与试运行预览：2 个只读模块',
   runbook: 'L3 Runbook 参考：5 份本地手册 / 静态只读',
   schema: 'L3 Schema 参考：8 类离线证据 / 字段规则另见脱敏说明',
   offline: 'L3 离线命令与 NO-GO 说明：4 个静态片段 / 只读',
@@ -75,6 +75,8 @@ describe('AdminEvidenceWorkflowPage', () => {
     const page = screen.getByTestId('admin-evidence-workflow-page');
     const overviewStrip = screen.getByTestId('admin-evidence-l0-overview-strip');
     const verdict = within(page).getByTestId('admin-evidence-operational-verdict');
+    expect(screen.getByText('证据复核总览')).toBeInTheDocument();
+    expect(page).not.toHaveTextContent('ADMIN EVIDENCE REVIEW');
     expect(within(overviewStrip).getByText('信任状态')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('影响范围')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('建议动作')).toBeInTheDocument();
@@ -142,7 +144,8 @@ describe('AdminEvidenceWorkflowPage', () => {
     render(<AdminEvidenceWorkflowPage />);
 
     const guardPanel = screen.getByTestId('admin-evidence-local-workspace-guard');
-    expect(within(guardPanel).getByRole('heading', { name: '本地目录保护' })).toBeInTheDocument();
+    expect(within(guardPanel).getByRole('heading', { name: '本地目录边界' })).toBeInTheDocument();
+    expect(guardPanel).not.toHaveTextContent('LOCAL GUARD');
     localWorkspaceLabels.forEach((label) => {
       expect(within(guardPanel).getByText(label)).toBeInTheDocument();
     });

@@ -355,7 +355,7 @@ const FilterRail: React.FC<{
       />
     </div>
     <TerminalNotice variant="info" className="mt-4">
-      仅使用窗口、粒度、区域和数量上限；不会按用户、凭证、地址或原始供应商内容搜索。
+      仅使用窗口、粒度、区域和数量上限；不会按用户、凭证、地址或原始数据源内容搜索。
     </TerminalNotice>
   </TerminalPanel>
 );
@@ -412,7 +412,7 @@ const CacheEfficiencyList: React.FC<{ items: AdminCostCacheEfficiency[] }> = ({ 
 const LimitationsPanel: React.FC<{ data: AdminCostSummaryResponse }> = ({ data }) => (
   <TerminalPanel as="section">
     <TerminalSectionHeader
-      eyebrow="Limitations"
+      eyebrow="边界说明"
       title={iconTitle(<AlertTriangle className="h-4 w-4" />, '限制与数据质量')}
       action={(
         <TerminalChip variant={data.limitations.length ? 'caution' : 'neutral'}>
@@ -496,27 +496,44 @@ function pricePerMillion(value?: string | null, currency = 'USD'): string {
   return `${currency} ${formatted}`;
 }
 
-function sourceLabel(policy: ModelPricingPolicyItem): string {
-  return policy.sourceLabel?.trim() || '本地策略';
+function ordinalLabel(index: number): string {
+  return String(index + 1).padStart(2, '0');
+}
+
+function ledgerModelEntryLabel(index: number): string {
+  return `模型成本条目 ${ordinalLabel(index)}`;
+}
+
+function pricingEntryLabel(index: number): string {
+  return `模型价格条目 ${ordinalLabel(index)}`;
+}
+
+function pricingSourceDisplayLabel(policy: ModelPricingPolicyItem, index: number): string {
+  if (policy.sourceUrl) return `公开价格来源 ${ordinalLabel(index)}`;
+  return `本地策略说明 ${ordinalLabel(index)}`;
 }
 
 const LedgerRollupList: React.FC<{
   items: LlmLedgerSummaryRollup[];
   empty: string;
-  labelFor: (item: LlmLedgerSummaryRollup) => string;
-}> = ({ items, empty, labelFor }) => {
+  labelFor: (item: LlmLedgerSummaryRollup, index: number) => string;
+  detailFor?: (item: LlmLedgerSummaryRollup, index: number) => string | null;
+}> = ({ items, empty, labelFor, detailFor }) => {
   if (items.length === 0) {
     return <TerminalEmptyState title={empty} />;
   }
   return (
     <TerminalDenseList>
-      {items.slice(0, 5).map((item) => (
+      {items.slice(0, 5).map((item, index) => (
         <article key={`${item.group}-${item.totalTokens}-${item.totalCostUsd}`} className="min-w-0">
           <TerminalNestedBlock className="min-w-0">
             <div className="flex items-start justify-between gap-3">
-              <p className="min-w-0 truncate font-mono text-sm font-semibold text-white">{labelFor(item)}</p>
+              <p className="min-w-0 truncate font-mono text-sm font-semibold text-white">{labelFor(item, index)}</p>
               <TerminalChip variant="info">{moneyUsd(item.totalCostUsd)}</TerminalChip>
             </div>
+            <p className="mt-2 truncate text-[11px] text-white/42">
+              {detailFor?.(item, index) || safeDimensionText(item.dimensions)}
+            </p>
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/42">
               <span>用量 <b className="font-mono text-white/68">{compactNumber(item.totalTokens)}</b></span>
               <span>请求 <b className="font-mono text-white/68">{compactNumber(item.requestCount ?? item.ledgerCount ?? item.calls)}</b></span>
@@ -607,7 +624,8 @@ const LlmLedgerPanel: React.FC<{ filters: Required<AdminCostSummaryParams> }> = 
               <LedgerRollupList
                 items={data.byProviderModel}
                 empty="暂无模型成本记录"
-                labelFor={(item) => `${item.dimensions.provider || 'unknown'} / ${item.dimensions.model || item.group}`}
+                labelFor={(_, index) => ledgerModelEntryLabel(index)}
+                detailFor={() => '来源与模型标识已收敛到 L4 响应'}
               />
             </section>
             <section className="min-w-0">
@@ -675,7 +693,7 @@ const PricingPolicyPanel: React.FC = () => {
   return (
     <TerminalPanel as="section" data-testid="model-pricing-policy-panel">
       <TerminalSectionHeader
-        eyebrow="Pricing Policies"
+        eyebrow="价格策略"
         title={iconTitle(<Tags className="h-4 w-4" />, '模型价格策略')}
         action={(
           <div className="flex flex-wrap gap-2">
@@ -686,7 +704,7 @@ const PricingPolicyPanel: React.FC = () => {
       />
 
       <TerminalNotice variant="caution" className="mt-4">
-        价格由本地策略维护，需定期按供应商官网更新；估算值不等同于供应商账单。
+        价格由本地策略维护，需定期按公开价格来源更新；估算值不等同于供应商账单。
       </TerminalNotice>
 
       {state.loading ? <TerminalNotice variant="neutral" className="mt-4">正在读取模型价格策略</TerminalNotice> : null}
@@ -697,7 +715,7 @@ const PricingPolicyPanel: React.FC = () => {
 
       {policies.length > 0 ? (
         <div className="mt-4 grid gap-3">
-          {policies.map((policy) => (
+          {policies.map((policy, index) => (
             <article
               key={`${policy.provider}-${policy.model}-${policy.effectiveFrom || 'na'}`}
               className="min-w-0"
@@ -705,15 +723,13 @@ const PricingPolicyPanel: React.FC = () => {
               <TerminalNestedBlock className="min-w-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="break-words font-mono text-sm font-semibold text-white">
-                      {policy.provider} / {policy.model}
-                    </p>
+                    <p className="break-words font-mono text-sm font-semibold text-white">{pricingEntryLabel(index)}</p>
                     <p className="mt-1 text-[11px] text-white/42">
                       {formatDate(policy.effectiveFrom)} - {formatDate(policy.effectiveUntil)}
                     </p>
                   </div>
                   <TerminalChip variant={policy.active ? 'success' : 'neutral'}>
-                    {policy.active ? 'active' : 'inactive'}
+                    {policy.active ? '已启用' : '已停用'}
                   </TerminalChip>
                 </div>
                 <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -730,10 +746,10 @@ const PricingPolicyPanel: React.FC = () => {
                       target="_blank"
                       rel="noreferrer"
                     >
-                      {sourceLabel(policy)}
+                      {pricingSourceDisplayLabel(policy, index)}
                     </a>
                   ) : (
-                    <TerminalChip variant="neutral">{sourceLabel(policy)}</TerminalChip>
+                    <TerminalChip variant="neutral">{pricingSourceDisplayLabel(policy, index)}</TerminalChip>
                   )}
                 </div>
               </TerminalNestedBlock>
@@ -824,7 +840,7 @@ const QuotaDryRunPanel: React.FC = () => {
   return (
     <TerminalPanel as="section" data-testid="quota-dry-run-panel">
       <TerminalSectionHeader
-        eyebrow="Quota Pilot"
+        eyebrow="配额试运行"
         title={iconTitle(<Gauge className="h-4 w-4" />, 'L2 配额 / 成本运维：配额试运行')}
         action={<TerminalChip variant="info">只读诊断</TerminalChip>}
       />
@@ -999,7 +1015,7 @@ const AdminCostObservabilityPage: React.FC = () => {
             action={<ReadOnlyBadges data={data} />}
           />
           <p className="mt-3 max-w-4xl text-sm leading-6 text-white/54">
-            先判断预算压力、异常归属和下一步处理；账本、价格策略、Provider 与缓存细节默认后置到二级区。
+            先判断预算压力、异常归属和下一步处理；账本、价格策略、数据源与缓存细节默认后置到二级区。
           </p>
           <AdminOpsL0OverviewStrip
             dataTestId="admin-cost-l0-overview-strip"
@@ -1007,7 +1023,7 @@ const AdminCostObservabilityPage: React.FC = () => {
             systemTrustState={l0TrustState}
             impact={emptyCounters ? '当前窗口缺少可用计数器，成本压力只能保持观察。' : `${operatorState} · ${attentionLabel}`}
             recommendedAction={needsAttentionCount ? '先做配额试运行，再定位归属。' : '保持观测，按需切换窗口与范围。'}
-            evidenceRef="主诊断板 / 二级细节：账本、价格、Provider / 缓存"
+            evidenceRef="主诊断板 / 二级细节：账本、价格、数据源 / 缓存"
             lastUpdated={formatDate(data?.generatedAt)}
           />
           <AdminDrillThroughStrip
@@ -1118,7 +1134,7 @@ const AdminCostObservabilityPage: React.FC = () => {
               </div>
               <div className="min-w-0 space-y-6 xl:col-span-4">
                 <AdminOpsSectionHeading
-                  eyebrow="L2 / Quota-Cost Ops"
+                  eyebrow="L2 / 成本运维"
                   title="L2 配额 / 成本运维"
                   description="保留窗口过滤、Quota dry-run、账本与价格策略，但把它们明确标成运维控制与观测，而不是产品行为开关。"
                   action={<TerminalChip variant="info">只读控制与下钻</TerminalChip>}
@@ -1128,7 +1144,7 @@ const AdminCostObservabilityPage: React.FC = () => {
               </div>
             </div>
 
-            <TerminalDisclosure title="L2 配额 / 成本运维细节：账本、价格、Provider / 缓存、Scanner" summary={`默认折叠 · ${compactNumber(needsAttentionCount)} 个压力线索 · 生成 ${formatDate(data?.generatedAt)} · 开发者形状保持已脱敏`}>
+            <TerminalDisclosure title="L2 配额 / 成本运维细节：账本、价格、数据源 / 缓存、扫描解释" summary={`默认折叠 · ${compactNumber(needsAttentionCount)} 个压力线索 · 生成 ${formatDate(data?.generatedAt)} · 开发者形状保持已脱敏`}>
               <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
                 <div className="min-w-0 space-y-6 xl:col-span-12">
                   <LlmLedgerPanel key={`${filters.window}-${filters.bucket}-${filters.limit}`} filters={filters} />
@@ -1141,7 +1157,7 @@ const AdminCostObservabilityPage: React.FC = () => {
                       </div>
                     </TerminalPanel>
                     <TerminalPanel as="section">
-                      <TerminalSectionHeader eyebrow="Duplicate" title={iconTitle(<BarChart3 className="h-4 w-4" />, 'Guest Preview / Report duplicate candidates')} />
+                      <TerminalSectionHeader eyebrow="重复候选" title={iconTitle(<BarChart3 className="h-4 w-4" />, '重复候选与报告重合')} />
                       <div className="mt-4">
                         <RollupList items={[...data.llm.duplicateCandidates, ...data.providers.duplicateCandidates, ...data.scannerAi.duplicateCandidates]} empty="暂无重复候选" />
                       </div>

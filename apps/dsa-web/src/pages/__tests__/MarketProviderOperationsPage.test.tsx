@@ -625,7 +625,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.queryByText('Tushare token is not configured.')).not.toBeInTheDocument();
     expect(screen.queryByText('Set TUSHARE_TOKEN when local operators need Tushare-backed CN/HK market intelligence inputs.')).not.toBeInTheDocument();
     expect(screen.getAllByText('配额 / 成本线索与下钻').length).toBeGreaterThan(0);
-    expect(screen.getByText('Provider 就绪与运维状态')).toBeInTheDocument();
+    expect(screen.getByText('数据源就绪与运维状态')).toBeInTheDocument();
     expect(screen.getByText('来源缺口、配置清单与完整矩阵')).toBeInTheDocument();
     expect(screen.getByText('本地数据就绪与样本诊断')).toBeInTheDocument();
     const sourceGapDisclosure = screen.getByTestId('market-provider-source-gap-disclosure');

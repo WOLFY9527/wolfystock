@@ -336,7 +336,7 @@ function buildOperationalVerdict(
   if (hasError) {
     return {
       level: 'ERROR',
-      title: '无法确认 provider 熔断状态',
+      title: '无法确认数据源熔断状态',
       description: '诊断 API 读取失败，当前页面不能给出可靠运维判断。',
       impact: '管理员需要先恢复诊断读取',
       nextAction: '查看错误提示并重试读取',
@@ -346,8 +346,8 @@ function buildOperationalVerdict(
   if (isLoading && !hasData) {
     return {
       level: 'LOADING',
-      title: '正在读取 provider 熔断快照',
-      description: '只读取现有诊断 API，不触发 provider 调用。',
+      title: '正在读取数据源熔断快照',
+      description: '只读取现有诊断 API，不触发外部数据调用。',
       impact: '等待快照后判断生产调用',
       nextAction: '读取完成后查看动作列表',
       tone: 'info',
@@ -356,9 +356,9 @@ function buildOperationalVerdict(
   if (summary.open > 0 || summary.slaBlocked > 0 || summary.slaCredentialGaps > 0) {
     return {
       level: 'BLOCKED',
-      title: 'Provider 熔断需要管理员处理',
+      title: '数据源熔断需要管理员处理',
       description: `${summary.open} 个熔断打开，${summary.slaBlocked + summary.slaCredentialGaps} 个 SLA / 凭证阻断信号。`,
-      impact: '相关 provider 生产调用应暂缓',
+      impact: '相关数据源生产调用应暂缓',
       nextAction: '按下方动作列表先处理阻断项',
       tone: 'danger',
     };
@@ -366,7 +366,7 @@ function buildOperationalVerdict(
   if (summary.warn > 0 || summary.quotaRejected > 0 || summary.quotaLimitOrAuth > 0 || summary.failedProbes > 0 || summary.slaWatch > 0) {
     return {
       level: 'DEGRADED',
-      title: 'Provider 熔断可用但有降级信号',
+      title: '数据源熔断可用但有降级信号',
       description: `${summary.warn} 个降级观察，${summary.quotaRejected} 次配额拒绝，${summary.failedProbes} 个探测异常。`,
       impact: '可继续观察，但需处理高优先级风险',
       nextAction: '先核对动作列表中的配额、SLA 与探测项',
@@ -375,7 +375,7 @@ function buildOperationalVerdict(
   }
   return {
     level: 'LIVE',
-    title: 'Provider 熔断当前可运营',
+    title: '数据源熔断当前可运营',
     description: `${summary.states} 个状态快照未显示阻断，事件和诊断细节默认后置。`,
     impact: '生产调用可继续按既有门禁观察',
     nextAction: '保持监控，必要时展开 L3 诊断',
@@ -423,7 +423,7 @@ function buildOperatorActions(data: ProviderCircuitDiagnosticsBundle | null): Op
     actions.push({
       id: `state-${item.provider}-${index}`,
       issue: `${safeText(item.provider)} 熔断${tone === 'danger' ? '打开' : '降级观察'}`,
-      impact: tone === 'danger' ? '相关生产调用应暂缓，避免继续命中失败路径。' : '仍可观察，但当前 provider 处于降级或缓存路径。',
+      impact: tone === 'danger' ? '相关生产调用应暂缓，避免继续命中失败路径。' : '仍可观察，但当前数据源处于降级或缓存路径。',
       nextAction: `核对 ${actionReasonLabel(item.reasonBucket)} 与冷却时间 ${safeDate(item.cooldownUntil)}。`,
       tone,
       priority: tone === 'danger' ? 10 : 30,
@@ -436,9 +436,9 @@ function buildOperatorActions(data: ProviderCircuitDiagnosticsBundle | null): Op
     actions.push({
       id: `sla-${item.provider}-${index}`,
       issue: `${safeText(item.provider)} SLA / 凭证需核对`,
-      impact: blocked ? '门禁判断可能阻断 provider 调用。' : '延迟、错误或熔断建议显示该 provider 需要观察。',
+      impact: blocked ? '门禁判断可能阻断数据源调用。' : '延迟、错误或熔断建议显示该数据源需要观察。',
       nextAction: item.credentialsPresent === false
-        ? '先核对凭证配置与 provider 开关。'
+        ? '先核对凭证配置与数据源开关。'
         : '展开 L3 诊断查看最近错误 bucket 与趋势窗口。',
       tone: blocked ? 'danger' : 'warn',
       priority: blocked ? 15 : 35,
@@ -451,7 +451,7 @@ function buildOperatorActions(data: ProviderCircuitDiagnosticsBundle | null): Op
       id: `quota-${item.provider}-${index}`,
       issue: `${safeText(item.provider)} 配额窗口出现拒绝或限流`,
       impact: `${formatNumber(item.rejectedCount, 0)} 次拒绝，${formatNumber(item.provider429Count + item.provider403Count, 0)} 次限流或授权拒绝会推高熔断风险。`,
-      nextAction: '核对配额消耗、provider 授权与请求节奏。',
+      nextAction: '核对配额消耗、数据源授权与请求节奏。',
       tone: item.provider403Count > 0 ? 'danger' : 'warn',
       priority: item.provider403Count > 0 ? 18 : 28,
     });
@@ -462,7 +462,7 @@ function buildOperatorActions(data: ProviderCircuitDiagnosticsBundle | null): Op
     actions.push({
       id: `probe-${item.provider}-${index}`,
       issue: `${safeText(item.provider)} 探测未成功`,
-      impact: '连通性或可用性探测异常，可能影响后续 provider 判断。',
+      impact: '连通性或可用性探测异常，可能影响后续数据源判断。',
       nextAction: `查看 ${bucketLabel(item.resultBucket)} 探测结果与最近事件。`,
       tone: 'danger',
       priority: 20,
@@ -481,7 +481,7 @@ const CurrentStatesPanel: React.FC<{ items: ProviderCircuitStateItem[] }> = ({ i
     />
     {items.length === 0 ? (
       <TerminalNotice variant="neutral" className="mt-4">
-        暂无 provider 熔断状态
+        暂无数据源熔断状态
       </TerminalNotice>
     ) : (
       <div className="mt-4 grid grid-cols-1 gap-3 2xl:grid-cols-2">
@@ -779,7 +779,7 @@ const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ it
                   )}
                 </DiagnosticsDisclosure>
 
-                <DiagnosticsDisclosure title="L3 已脱敏技术边界：只读 / 外呼 / 门禁" summary="默认收起 · 当前 provider 不展示原始载荷或秘钥线索" className="mt-3">
+                <DiagnosticsDisclosure title="L3 已脱敏技术边界：只读 / 外呼 / 门禁" summary="默认收起 · 当前数据源不展示原始载荷或秘钥线索" className="mt-3">
                   <div className="grid grid-cols-1 gap-2 text-[11px] text-white/50 md:grid-cols-2">
                       <p>
                         调用门禁
@@ -818,13 +818,13 @@ const BoundaryPanel: React.FC<{ data?: ProviderCircuitDiagnosticsBundle | null }
     <TerminalPanel as="aside" dense className="h-full">
       <TerminalSectionHeader eyebrow="边界" title="诊断观测" />
       <TerminalNotice variant="info" className="mt-4">
-        当前为诊断观测，不会改变 provider fallback 或 MarketCache 行为。
+        当前为诊断观测，不会改变数据源 fallback 或 MarketCache 行为。
       </TerminalNotice>
       <DiagnosticsDisclosure title="L3 页面边界与脱敏姿态" summary="读取、外呼、门禁与脱敏信息默认收起" className="mt-3">
         <div className="grid grid-cols-1 gap-2 text-[11px] text-white/50">
           <p>
             读取边界
-            <span className="block font-mono text-white/68">沿用既有 provider 读取门禁</span>
+            <span className="block font-mono text-white/68">沿用既有数据源读取门禁</span>
           </p>
           <p>
             只读 / 外呼 / 门禁
@@ -885,7 +885,7 @@ const OperatorActionListPanel: React.FC<{ actions: OperatorActionItem[]; isLoadi
       </TerminalNotice>
     ) : actions.length === 0 ? (
       <TerminalNotice variant="neutral" className="mt-4">
-        暂无需要管理员处理的 provider 熔断动作；如需审计证据，可展开 L3 诊断细节。
+        暂无需要管理员处理的数据源熔断动作；如需审计证据，可展开 L3 诊断细节。
       </TerminalNotice>
     ) : (
       <ol className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -924,12 +924,12 @@ const OperatorActionListPanel: React.FC<{ actions: OperatorActionItem[]; isLoadi
 );
 
 const LoadingState: React.FC = () => (
-  <TerminalPanel as="section" role="status" aria-label="正在读取 provider 熔断诊断">
+  <TerminalPanel as="section" role="status" aria-label="正在读取数据源熔断诊断">
     <div className="flex items-center gap-3">
       <Activity className="h-4 w-4 animate-pulse text-cyan-200" aria-hidden="true" />
       <div>
-        <p className="text-sm font-semibold text-white">正在读取 provider 熔断诊断</p>
-        <p className="mt-1 text-xs text-white/46">只读取现有诊断 API，不触发 provider 调用。</p>
+        <p className="text-sm font-semibold text-white">正在读取数据源熔断诊断</p>
+        <p className="mt-1 text-xs text-white/46">只读取现有诊断 API，不触发外部数据调用。</p>
       </div>
     </div>
   </TerminalPanel>
@@ -970,7 +970,7 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
       .catch((apiError) => {
         if (!cancelled) {
           const parsed = getParsedApiError(apiError);
-          setError({ ...parsed, title: '读取 provider 熔断诊断失败' });
+          setError({ ...parsed, title: '读取数据源熔断诊断失败' });
         }
       })
       .finally(() => {
@@ -1000,11 +1000,11 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/50 to-transparent" />
           <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0 flex-1">
-              <TerminalPageHeading eyebrow="生产调用门禁" title="Provider 熔断诊断" />
+              <TerminalPageHeading eyebrow="生产调用门禁" title="数据源熔断诊断" />
               <p className="mt-3 max-w-4xl text-sm leading-6 text-white/54">
                 {isLoading
                   ? '正在读取只读诊断快照'
-                  : '先判断生产调用是否可继续、哪里被阻断、需要管理员处理什么；事件、配额、探测与 bucket 细节默认折叠。'}
+                  : '先判断数据源调用是否可继续、哪里被阻断、需要管理员处理什么；事件、配额、探测与 bucket 细节默认折叠。'}
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <TerminalChip variant="info">只读诊断</TerminalChip>
@@ -1041,8 +1041,8 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
               {
                 label: '查看相关日志',
                 target: 'logs',
-                evidenceType: 'provider name',
-                reason: '回看当前 provider 的业务事件与降级线索。',
+                evidenceType: '数据源名称',
+                reason: '回看当前数据源的业务事件与降级线索。',
                 params: {
                   tab: 'data_source',
                   query: initialQuery.provider || data?.states.items?.[0]?.provider || '',
@@ -1052,14 +1052,14 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
               {
                 label: '查看数据源维护',
                 target: 'marketProviders',
-                evidenceType: 'surface focus',
-                reason: '对照 provider 运维矩阵与本地就绪检查。',
+                evidenceType: '运维矩阵',
+                reason: '对照数据源运维矩阵与本地就绪检查。',
                 params: { surface: 'market_overview' },
               },
               {
                 label: '查看成本观测',
                 target: 'cost',
-                evidenceType: 'provider cost window',
+                evidenceType: '数据源成本窗口',
                 reason: '继续确认配额、缓存与成本压力是否同步异常。',
                 params: { area: 'provider', window: initialQuery.since || '24h' },
               },
@@ -1091,9 +1091,9 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
         >
           <TerminalGrid>
             <AdminOpsSectionHeading
-              eyebrow="L2 / Circuit State"
+              eyebrow="L2 / 熔断状态"
               title="熔断状态与当前门禁"
-              description="先判断哪些 provider 已打开/半开，以及当前页面对外呼、门禁和 redaction 的只读边界。"
+              description="先判断哪些数据源已打开/半开，以及当前页面对外呼、门禁和 redaction 的只读边界。"
               action={<TerminalChip variant="neutral">{formatNumber(summary.states, 0)} 个状态快照</TerminalChip>}
             />
             <div className="col-span-12 xl:col-span-8">
@@ -1103,14 +1103,14 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
               <BoundaryPanel data={data} />
             </div>
             <AdminOpsSectionHeading
-              eyebrow="L2 / SLA Readiness"
+              eyebrow="L2 / 就绪与凭据"
               title="SLA / 凭证就绪"
               description="把 SLA、freshness、latency、错误与凭证门禁放在单独分组里，避免和熔断事件混读。"
               action={<TerminalChip variant="neutral">{formatNumber(summary.slaReadiness, 0)} 个就绪信号</TerminalChip>}
             />
             <SlaReadinessPanel items={data?.slaReadiness.items || []} />
             <AdminOpsSectionHeading
-              eyebrow="L2 / Events-Quota-Probe"
+              eyebrow="L2 / 事件与配额"
               title="熔断事件、配额窗口与探测事件"
               description="这组保留原有事件、quota 与 probe 细节，但让每个子面板各自表达数量和已脱敏 bucket 影响。"
               action={<TerminalChip variant="caution">{formatNumber(summary.events + summary.quotaWindows + summary.probeEvents, 0)} 条线索</TerminalChip>}
@@ -1127,7 +1127,7 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
           </TerminalGrid>
         </DiagnosticsDisclosure>
       </TerminalPageShell>
-      <span className="sr-only">Provider 熔断诊断只读页面</span>
+      <span className="sr-only">数据源熔断诊断只读页面</span>
     </div>
   );
 };

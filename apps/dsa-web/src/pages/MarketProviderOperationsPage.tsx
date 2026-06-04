@@ -2071,21 +2071,21 @@ const MarketProviderOperationsPage: React.FC = () => {
               {
                 label: '查看相关日志',
                 target: 'logs',
-                evidenceType: 'provider symptom',
-                reason: '从当前窗口回看 provider 失败、备用与缓存事件。',
+                evidenceType: '数据源症状',
+                reason: '从当前窗口回看数据源失败、备用与缓存事件。',
                 params: { since: response?.window?.key || '24h', query: 'market provider' },
               },
               {
                 label: '查看熔断与配额',
                 target: 'providerCircuits',
-                evidenceType: 'provider name',
+                evidenceType: '数据源名称',
                 reason: '继续核对熔断、配额拒绝与探测事件。',
                 params: { provider: selectedItem?.provider || response?.eventRollups?.[0]?.provider || '', since: response?.window?.key || '24h' },
               },
               {
                 label: '查看成本观测',
                 target: 'cost',
-                evidenceType: 'provider cost window',
+                evidenceType: '数据源成本窗口',
                 reason: '确认数据源成本、缓存命中与重复调用线索。',
                 params: { area: 'provider', window: response?.window?.key || '24h' },
               },
@@ -2124,10 +2124,10 @@ const MarketProviderOperationsPage: React.FC = () => {
         {!isLoading ? (
           <TerminalGrid>
             <AdminOpsSectionHeading
-              eyebrow="L1 / Provider Readiness"
-              title="Provider 就绪与运维状态"
+              eyebrow="L1 / 数据源就绪"
+              title="数据源就绪与运维状态"
               description="先看当前数据源状态、熔断、缓存和最近异常，再决定是否需要下钻到矩阵或 Admin Logs。"
-              action={<TerminalChip variant="neutral">{formatNumber(items.length, 0)} 个 provider 快照</TerminalChip>}
+              action={<TerminalChip variant="neutral">{formatNumber(items.length, 0)} 个数据源快照</TerminalChip>}
             />
             {response ? (
               <>
@@ -2136,9 +2136,9 @@ const MarketProviderOperationsPage: React.FC = () => {
               </>
             ) : null}
             <AdminOpsSectionHeading
-              eyebrow="L2 / Operations Matrix"
+              eyebrow="L2 / 运维矩阵"
               title="来源缺口、配置清单与完整矩阵"
-              description="这一组只重排既有来源缺口、配置动作和完整矩阵，不改变评分、fallback、provider 顺序或就绪语义。"
+              description="这一组只重排既有来源缺口、配置动作和完整矩阵，不改变评分、fallback、数据源顺序或就绪语义。"
               action={<TerminalChip variant="info">{formatNumber(matrixRows.length, 0)} 条矩阵行</TerminalChip>}
             />
             <ProviderOperationsMatrixPanel
@@ -2150,9 +2150,9 @@ const MarketProviderOperationsPage: React.FC = () => {
               surfaceFocus={surfaceFocus}
             />
             <AdminOpsSectionHeading
-              eyebrow="L2 / Data Readiness"
+              eyebrow="L2 / 本地就绪"
               title="本地数据就绪与样本诊断"
-              description="继续把本地行情只读诊断放在独立分组中，明确它解释的是环境/样本覆盖，而不是 provider 运行时行为。"
+              description="继续把本地行情只读诊断放在独立分组中，明确它解释的是环境/样本覆盖，而不是数据源运行时行为。"
               action={<TerminalChip variant={readiness?.readinessStatus === 'ready' ? 'success' : readiness?.readinessStatus === 'partial' ? 'caution' : 'neutral'}>{readiness ? readinessStatusLabel(readiness.readinessStatus) : '待读取'}</TerminalChip>}
             />
             <MarketDataReadinessPanel
@@ -2164,7 +2164,7 @@ const MarketProviderOperationsPage: React.FC = () => {
               onSymbolSubmit={submitReadinessSymbols}
             />
             <AdminOpsSectionHeading
-              eyebrow="L2 / Quota-Cost Signals"
+              eyebrow="L2 / 配额与成本"
               title="配额 / 成本线索与下钻"
               description="保留既有失败、缓存、限制代码和 Admin Logs 下钻入口，把付费/配额线索集中到一组里展示。"
               action={<TerminalChip variant="caution">{formatNumber((matrixResponse?.summary?.paidDataLikelyRequiredRows ?? 0) + (response?.limitations.length ?? 0), 0)} 个线索</TerminalChip>}

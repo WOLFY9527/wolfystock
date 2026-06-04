@@ -169,7 +169,7 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     const { container } = render(<AdminProviderCircuitDiagnosticsPage />);
     const overviewStrip = await screen.findByTestId('provider-circuit-l0-overview-strip');
 
-    expect(screen.getByText('Provider 熔断诊断')).toBeInTheDocument();
+    expect(screen.getByText('数据源熔断诊断')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('信任状态')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('影响范围')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('建议动作')).toBeInTheDocument();
@@ -181,7 +181,7 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(getDiagnostics).toHaveBeenCalledWith({ limit: 50 });
 
     expect(await screen.findByText('L0 运行判定')).toBeInTheDocument();
-    expect(screen.getByText('Provider 熔断需要管理员处理')).toBeInTheDocument();
+    expect(screen.getByText('数据源熔断需要管理员处理')).toBeInTheDocument();
     const verdict = screen.getByTestId('provider-circuit-operational-verdict');
     expect(within(verdict).getByText('BLOCKED')).toBeInTheDocument();
     expect(within(verdict).getByText('按下方动作列表先处理阻断项')).toBeInTheDocument();
@@ -238,7 +238,7 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(screen.queryByText('最近熔断事件')).not.toBeInTheDocument();
     expect(screen.queryByText('配额窗口')).not.toBeInTheDocument();
     expect(screen.queryByText('探测事件')).not.toBeInTheDocument();
-    expect(screen.queryByText('Provider SLA / 凭证就绪')).not.toBeInTheDocument();
+    expect(screen.queryByText('SLA / 凭证就绪')).not.toBeInTheDocument();
     expect(screen.queryByText('Provider 429')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText('展开 L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA（已脱敏摘要）'));
@@ -247,9 +247,9 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(screen.getByText('熔断状态与当前门禁')).toBeInTheDocument();
     expect(screen.getByText('SLA / 凭证就绪')).toBeInTheDocument();
     expect(screen.getByText('熔断事件、配额窗口与探测事件')).toBeInTheDocument();
-    expect(screen.getAllByText('当前为诊断观测，不会改变 provider fallback 或 MarketCache 行为。').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('当前为诊断观测，不会改变数据源 fallback 或 MarketCache 行为。').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Provider 429').length).toBeGreaterThan(0);
-    expect(screen.getByText('Provider SLA / 凭证就绪')).toBeInTheDocument();
+    expect(screen.getByText('SLA / 凭证就绪')).toBeInTheDocument();
     expect(screen.getByText('已配置')).toBeInTheDocument();
     expect(screen.getByText('趋势请求')).toBeInTheDocument();
     expect(screen.getByText('6_20')).toBeInTheDocument();
@@ -342,6 +342,6 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     render(<AdminProviderCircuitDiagnosticsPage />);
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
-    expect(screen.getByText('读取 provider 熔断诊断失败')).toBeInTheDocument();
+    expect(screen.getByText('读取数据源熔断诊断失败')).toBeInTheDocument();
   });
 });
