@@ -2386,6 +2386,67 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(historyPanel).getByRole('button', { name: translate('zh', 'portfolio.refreshLedger') })).toBeInTheDocument();
   });
 
+  it('resets history to page 1 before retargeting account-scope queries', async () => {
+    getAccounts.mockResolvedValue(makeAccounts([
+      { id: 1, name: 'Main', baseCurrency: 'CNY', market: 'us' },
+      { id: 2, name: 'Alt', baseCurrency: 'USD', market: 'us' },
+    ]));
+    getSnapshot.mockImplementation(async ({ accountId }: { accountId?: number } = {}) =>
+      makeSnapshot({ accountId, includePosition: true, fxStale: false })
+    );
+    listTrades.mockImplementation(async ({ accountId, page }: { accountId?: number; page: number }) => ({
+      items: Array.from({ length: 20 }, (_, index) => ({
+        id: (accountId ?? 0) * 1000 + page * 100 + index,
+        accountId: accountId ?? 1,
+        symbol: `T${accountId ?? 'all'}-${page}-${index}`,
+        market: 'us',
+        tradeDate: '2026-03-18',
+        side: 'buy',
+        quantity: 1,
+        price: 100 + index,
+        fee: 0,
+        tax: 0,
+        currency: 'USD',
+        note: null,
+        isActive: true,
+        voidedAt: null,
+        createdAt: '2026-03-18T00:00:00Z',
+        updatedAt: '2026-03-18T00:00:00Z',
+      })),
+      total: 40,
+      page,
+      pageSize: 20,
+    }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const historyPanel = screen.getByTestId('portfolio-history-full');
+    fireEvent.click(within(historyPanel).getByRole('button', { name: translate('zh', 'portfolio.nextPage') }));
+
+    await waitFor(() => {
+      expect(listTrades.mock.calls.map(([args]) => args)).toContainEqual(expect.objectContaining({
+        accountId: undefined,
+        page: 2,
+      }));
+    });
+
+    const accountViewSelect = within(screen.getByTestId('portfolio-command-strip')).getByLabelText(
+      translate('zh', 'portfolio.accountView'),
+    ) as HTMLSelectElement;
+    fireEvent.change(accountViewSelect, { target: { value: '2' } });
+
+    await waitFor(() => {
+      expect(accountViewSelect.value).toBe('2');
+      const scopedCalls = listTrades.mock.calls.map(([args]) => ({ accountId: args.accountId, page: args.page }));
+      expect(scopedCalls).toContainEqual({ accountId: 2, page: 1 });
+    });
+
+    const scopedCalls = listTrades.mock.calls.map(([args]) => ({ accountId: args.accountId, page: args.page }));
+    expect(scopedCalls).not.toContainEqual({ accountId: 2, page: 2 });
+  });
+
   it('renders trade history actions while non-trade ledgers do not expose edit actions', async () => {
     getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true }));
     listTrades.mockResolvedValueOnce({
@@ -2733,6 +2794,102 @@ describe('PortfolioPage FX refresh', () => {
     expect(manualLane).toContainElement(tradeStation);
     expect(Boolean(holdingsPanel.compareDocumentPosition(historyPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(screen.getByTestId('portfolio-risk-card').compareDocumentPosition(tradeStation) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+  });
+
+  it('resets IBKR connection-derived fields on trade-account changes while preserving the typed session token', async () => {
+    getAccounts.mockResolvedValue(makeAccounts([
+      { id: 1, name: 'Main', baseCurrency: 'USD', market: 'us' },
+      { id: 2, name: 'Alt', baseCurrency: 'HKD', market: 'hk' },
+    ]));
+    listImportBrokers.mockResolvedValueOnce({
+      brokers: [
+        { broker: 'huatai', aliases: [], displayName: '华泰', fileExtensions: ['csv'] },
+        { broker: 'ibkr', aliases: ['interactivebrokers'], displayName: 'Interactive Brokers', fileExtensions: ['xml'] },
+      ],
+    });
+    listBrokerConnections.mockImplementation(async (accountId: number) => {
+      if (accountId === 2) {
+        return {
+          connections: [
+            {
+              id: 12,
+              portfolioAccountId: 2,
+              connectionName: 'Secondary IBKR',
+              brokerType: 'ibkr',
+              brokerAccountRef: 'U7654321',
+              importMode: 'api',
+              status: 'active',
+              syncMetadata: {
+                ibkrApi: {
+                  apiBaseUrl: 'https://localhost:6000/v1/api',
+                  verifySsl: true,
+                  brokerAccountRef: 'U7654321',
+                },
+              },
+            },
+          ],
+        };
+      }
+      return {
+        connections: [
+          {
+            id: 9,
+            portfolioAccountId: 1,
+            connectionName: 'Primary IBKR',
+            brokerType: 'ibkr',
+            brokerAccountRef: 'U1234567',
+            importMode: 'api',
+            status: 'active',
+            syncMetadata: {
+              ibkrApi: {
+                apiBaseUrl: 'https://localhost:5000/v1/api',
+                verifySsl: false,
+                brokerAccountRef: 'U1234567',
+              },
+            },
+          },
+        ],
+      };
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+    fireEvent.click(getLeftTabButton('同步'));
+
+    const brokerSelect = screen.getAllByRole('combobox').find((element) =>
+      (element as HTMLSelectElement).value === 'huatai'
+    ) as HTMLSelectElement;
+    fireEvent.change(brokerSelect, { target: { value: 'ibkr' } });
+
+    expect(await screen.findByText('Primary IBKR')).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText(translate('zh', 'portfolio.ibkrSessionTokenPlaceholder')), {
+      target: { value: 'session-token-123' },
+    });
+    fireEvent.change(screen.getByLabelText('IBKR API 地址'), {
+      target: { value: 'https://override.local/v1/api' },
+    });
+    fireEvent.change(screen.getByLabelText('IBKR 账户引用'), {
+      target: { value: 'U0000000' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'portfolio.syncIbkr') }));
+
+    await waitFor(() => expect(syncIbkrReadOnly).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(translate('zh', 'portfolio.syncResult'))).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('IBKR 会话令牌'), {
+      target: { value: 'session-token-123' },
+    });
+
+    const tradeAccountSelect = screen.getByLabelText(/记账账户|ledger account/i) as HTMLSelectElement;
+    fireEvent.change(tradeAccountSelect, { target: { value: '2' } });
+
+    await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(2));
+    await waitFor(() => expect(screen.getByText('Secondary IBKR')).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(translate('zh', 'portfolio.syncResult'))).not.toBeInTheDocument());
+    expect(screen.getByLabelText('IBKR API 地址')).toHaveValue('https://localhost:6000/v1/api');
+    expect(screen.getByLabelText('IBKR 账户引用')).toHaveValue('U7654321');
+    expect(screen.getByLabelText('IBKR 会话令牌')).toHaveValue('session-token-123');
+    expect(screen.getByLabelText(translate('zh', 'portfolio.verifyIbkrSsl'))).toBeChecked();
   });
 
   it('keeps the rebuilt shell navigable by tabs instead of the removed attribution widgets', async () => {

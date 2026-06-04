@@ -956,6 +956,13 @@ function extractIbkrSyncConfig(connection?: PortfolioBrokerConnectionItem | null
   };
 }
 
+function buildPortfolioRefreshViewKey(
+  selectedAccount: AccountOption,
+  costMethod: PortfolioCostMethod,
+): string {
+  return `${selectedAccount === 'all' ? 'all' : `account:${selectedAccount}`}:cost:${costMethod}`;
+}
+
 type PortfolioCopy = ReturnType<typeof getPortfolioCopy>;
 
 function PortfolioTradeActions({
@@ -1368,10 +1375,10 @@ const PortfolioPage: React.FC = () => {
   const [brokers, setBrokers] = useState<PortfolioImportBrokerItem[]>([]);
   const [brokerConnections, setBrokerConnections] = useState<PortfolioBrokerConnectionItem[]>([]);
   const [selectedBroker, setSelectedBroker] = useState('huatai');
-  const [ibkrApiBaseUrl, setIbkrApiBaseUrl] = useState('https://localhost:5000/v1/api');
-  const [ibkrVerifySsl, setIbkrVerifySsl] = useState(false);
+  const [ibkrApiBaseUrlDraft, setIbkrApiBaseUrlDraft] = useState<string | null>(null);
+  const [ibkrVerifySslDraft, setIbkrVerifySslDraft] = useState<boolean | null>(null);
   const [ibkrSessionToken, setIbkrSessionToken] = useState('');
-  const [ibkrBrokerAccountRef, setIbkrBrokerAccountRef] = useState('');
+  const [ibkrBrokerAccountRefDraft, setIbkrBrokerAccountRefDraft] = useState<string | null>(null);
   const [ibkrSyncing, setIbkrSyncing] = useState(false);
   const [ibkrSyncResult, setIbkrSyncResult] = useState<PortfolioIbkrSyncResponse | null>(null);
 
@@ -1431,7 +1438,7 @@ const PortfolioPage: React.FC = () => {
   const [liveFxRate, setLiveFxRate] = useState<PortfolioLiveFxRateResponse | null>(null);
   const [pendingAccountDelete, setPendingAccountDelete] = useState<{ id: number; name: string } | null>(null);
   const queryAccountId = selectedAccount === 'all' ? undefined : selectedAccount;
-  const refreshViewKey = `${selectedAccount === 'all' ? 'all' : `account:${selectedAccount}`}:cost:${costMethod}`;
+  const refreshViewKey = buildPortfolioRefreshViewKey(selectedAccount, costMethod);
   const refreshContextRef = useRef<FxRefreshContext>({ viewKey: refreshViewKey, requestId: 0 });
   const activeAccounts = accounts.filter((item) => item.isActive !== false);
   const writableAccounts = activeAccounts;
@@ -1441,9 +1448,12 @@ const PortfolioPage: React.FC = () => {
   const scopedAccount = selectedAccount === 'all' ? undefined : accounts.find((item) => item.id === selectedAccount);
   const writableAccount = selectedTradeAccount === 'all' ? undefined : writableAccounts.find((item) => item.id === selectedTradeAccount);
   const writableAccountId = writableAccount?.id;
-  const writeBlocked = !writableAccountId;
   const editingAccount = editingTrade ? activeAccounts.find((item) => item.id === editingTrade.accountId) : undefined;
   const ibkrConnection = brokerConnections.find((item) => item.brokerType === 'ibkr') || null;
+  const ibkrSyncConfig = extractIbkrSyncConfig(ibkrConnection);
+  const ibkrApiBaseUrl = ibkrApiBaseUrlDraft ?? ibkrSyncConfig.apiBaseUrl ?? 'https://localhost:5000/v1/api';
+  const ibkrVerifySsl = ibkrVerifySslDraft ?? ibkrSyncConfig.verifySsl ?? false;
+  const ibkrBrokerAccountRef = ibkrBrokerAccountRefDraft ?? ibkrSyncConfig.brokerAccountRef ?? ibkrConnection?.brokerAccountRef ?? '';
   const currentEventCount = eventType === 'trade'
     ? tradeEvents.length
     : eventType === 'cash'
@@ -1520,6 +1530,39 @@ const PortfolioPage: React.FC = () => {
       refreshContextRef.current.viewKey === requestedViewKey
       && refreshContextRef.current.requestId === requestedRequestId
     );
+  };
+
+  const resetIbkrConnectionDrafts = () => {
+    setIbkrApiBaseUrlDraft(null);
+    setIbkrVerifySslDraft(null);
+    setIbkrBrokerAccountRefDraft(null);
+  };
+
+  const invalidateFxRefreshScope = (
+    nextSelectedAccount: AccountOption = selectedAccount,
+    nextCostMethod: PortfolioCostMethod = costMethod,
+  ) => {
+    refreshContextRef.current = {
+      viewKey: buildPortfolioRefreshViewKey(nextSelectedAccount, nextCostMethod),
+      requestId: refreshContextRef.current.requestId + 1,
+    };
+    setFxRefreshing(false);
+    setFxRefreshFeedback(null);
+  };
+
+  const resetHistoryNavigation = () => {
+    setEventPage(1);
+    setOpenTradeActionMenuId(null);
+  };
+
+  const clearAccountRequirementWarning = () => {
+    setWriteWarning((prev) => (
+      prev === copy.writeRequiresAccount
+      || prev === copy.syncRequiresAccount
+      || prev === copy.deleteRequiresAccount
+        ? null
+        : prev
+    ));
   };
 
   const loadAccounts = useCallback(async () => {
@@ -1712,46 +1755,12 @@ const PortfolioPage: React.FC = () => {
   }, [loadBrokerConnections, writableAccountId]);
 
   useEffect(() => {
-    const config = extractIbkrSyncConfig(ibkrConnection);
-    setIbkrApiBaseUrl(config.apiBaseUrl || 'https://localhost:5000/v1/api');
-    setIbkrVerifySsl(config.verifySsl ?? false);
-    setIbkrBrokerAccountRef(config.brokerAccountRef || ibkrConnection?.brokerAccountRef || '');
-  }, [ibkrConnection, writableAccountId]);
-
-  useEffect(() => {
-    setIbkrSyncResult(null);
-    if (selectedBroker !== 'ibkr') {
-      setIbkrSessionToken('');
-    }
-  }, [selectedBroker, writableAccountId]);
-
-  useEffect(() => {
     void loadSnapshotAndRisk();
   }, [loadSnapshotAndRisk]);
 
   useEffect(() => {
     void loadEvents();
   }, [loadEvents]);
-
-  useEffect(() => {
-    refreshContextRef.current = {
-      viewKey: refreshViewKey,
-      requestId: refreshContextRef.current.requestId + 1,
-    };
-    setFxRefreshing(false);
-    setFxRefreshFeedback(null);
-  }, [refreshViewKey]);
-
-  useEffect(() => {
-    setEventPage(1);
-    setOpenTradeActionMenuId(null);
-  }, [eventType, queryAccountId, eventDateFrom, eventDateTo, eventSymbol, eventSide, eventDirection, eventActionType]);
-
-  useEffect(() => {
-    if (!writeBlocked) {
-      setWriteWarning(null);
-    }
-  }, [writeBlocked]);
 
   const positionRows = useMemo<FlatPosition[]>(() => {
     if (!snapshot) return [];
@@ -1997,6 +2006,10 @@ const PortfolioPage: React.FC = () => {
       const fallbackId = result.nextAccountId ?? activeAccounts[0]?.id;
       setSelectedAccount(fallbackId ?? 'all');
       setSelectedTradeAccount(fallbackId ?? 'all');
+      resetHistoryNavigation();
+      invalidateFxRefreshScope(fallbackId ?? 'all', costMethod);
+      resetIbkrConnectionDrafts();
+      setIbkrSyncResult(null);
       setPendingAccountDelete(null);
       setAccountCreateSuccess(copy.accountArchived);
       setAccountCreateError(null);
@@ -2028,6 +2041,10 @@ const PortfolioPage: React.FC = () => {
       await loadAccounts();
       setSelectedAccount(created.id);
       setSelectedTradeAccount(created.id);
+      resetHistoryNavigation();
+      invalidateFxRefreshScope(created.id, costMethod);
+      resetIbkrConnectionDrafts();
+      setIbkrSyncResult(null);
       setShowCreateAccount(false);
       setWriteWarning(null);
       setAccountForm({
@@ -2063,24 +2080,26 @@ const PortfolioPage: React.FC = () => {
     setRiskWarning(null);
 
     try {
-      const snapshotData = await portfolioApi.getSnapshot({
+      const snapshotPromise = portfolioApi.getSnapshot({
         accountId: requestedAccountId,
         costMethod: requestedCostMethod,
       });
       if (!isActiveRefreshContext(requestedViewKey, requestedRequestId)) {
         return false;
       }
+      const snapshotData = await snapshotPromise;
       setSnapshot(snapshotData);
       setError(null);
 
       try {
-        await portfolioApi.getRisk({
+        const riskPromise = portfolioApi.getRisk({
           accountId: requestedAccountId,
           costMethod: requestedCostMethod,
         });
         if (!isActiveRefreshContext(requestedViewKey, requestedRequestId)) {
           return false;
         }
+        await riskPromise;
         setRiskWarning(null);
       } catch (riskErr) {
         if (!isActiveRefreshContext(requestedViewKey, requestedRequestId)) {
@@ -2601,7 +2620,10 @@ const PortfolioPage: React.FC = () => {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <PortfolioSegmentedControl
               value={eventType}
-              onChange={(next) => setEventType(next as EventType)}
+              onChange={(next) => {
+                setEventType(next as EventType);
+                resetHistoryNavigation();
+              }}
               options={[
                 { value: 'trade', label: copy.tradeLedger },
                 { value: 'cash', label: copy.cashLedger },
@@ -2867,7 +2889,12 @@ const PortfolioPage: React.FC = () => {
                       label={copy.accountView}
                       labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                       value={String(selectedAccount)}
-                      onChange={(value) => setSelectedAccount(value === 'all' ? 'all' : Number(value))}
+                      onChange={(value) => {
+                        const nextAccount = value === 'all' ? 'all' : Number(value);
+                        setSelectedAccount(nextAccount);
+                        resetHistoryNavigation();
+                        invalidateFxRefreshScope(nextAccount, costMethod);
+                      }}
                       options={[
                         { value: 'all', label: copy.allAccounts },
                         ...activeAccounts.map((account) => ({ value: String(account.id), label: account.name })),
@@ -3373,7 +3400,12 @@ const PortfolioPage: React.FC = () => {
                   label={language === 'zh' ? '记账账户' : 'Ledger account'}
                   labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                   value={String(selectedTradeAccount)}
-                  onChange={(value) => setSelectedTradeAccount(value === 'all' ? 'all' : Number(value))}
+                  onChange={(value) => {
+                    setSelectedTradeAccount(value === 'all' ? 'all' : Number(value));
+                    clearAccountRequirementWarning();
+                    resetIbkrConnectionDrafts();
+                    setIbkrSyncResult(null);
+                  }}
                   options={[
                     { value: 'all', label: copy.allAccounts },
                     ...writableAccounts.map((account) => ({ value: String(account.id), label: account.name })),
@@ -3385,7 +3417,11 @@ const PortfolioPage: React.FC = () => {
                   label={language === 'zh' ? '成本方法' : 'Cost method'}
                   labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                   value={costMethod}
-                  onChange={(value) => setCostMethod(value as PortfolioCostMethod)}
+                  onChange={(value) => {
+                    const nextCostMethod = value as PortfolioCostMethod;
+                    setCostMethod(nextCostMethod);
+                    invalidateFxRefreshScope(selectedAccount, nextCostMethod);
+                  }}
                   options={[
                     { value: 'fifo', label: copy.costFifo },
                     { value: 'avg', label: copy.costAvg },
@@ -3526,15 +3562,22 @@ const PortfolioPage: React.FC = () => {
                     <p>{writableAccount ? `${writableAccount.name} (#${writableAccount.id})` : copy.brokerFallbackEmpty}</p>
                     <p>{selectedBroker === 'ibkr' ? copy.ibkrImportHint : copy.brokerImportHint}</p>
                   </div>
-                  <Select label={language === 'zh' ? '导入来源' : 'Broker'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={selectedBroker} onChange={setSelectedBroker} options={brokers.map((broker) => ({ value: broker.broker, label: formatBrokerLabel(broker.broker, broker.displayName, language) }))} />
+                  <Select label={language === 'zh' ? '导入来源' : 'Broker'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_SELECT_CLASS} value={selectedBroker} onChange={(value) => {
+                    setSelectedBroker(value);
+                    setIbkrSyncResult(null);
+                    resetIbkrConnectionDrafts();
+                    if (value !== 'ibkr') {
+                      setIbkrSessionToken('');
+                    }
+                  }} options={brokers.map((broker) => ({ value: broker.broker, label: formatBrokerLabel(broker.broker, broker.displayName, language) }))} />
                   {selectedBroker === 'ibkr' ? (
                     <SectionShell className="rounded-2xl border border-white/5 bg-white/[0.02] p-4" contentClassName="space-y-3">
                       <PortfolioIbkrImportHeader copy={copy} />
                       {ibkrConnection ? <p className="text-sm text-foreground">{ibkrConnection.connectionName}</p> : null}
-                      <Input label={language === 'zh' ? 'IBKR API 地址' : 'IBKR API base URL'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrApiBasePlaceholder} value={ibkrApiBaseUrl} onChange={(e) => setIbkrApiBaseUrl(e.target.value)} />
-                      <Input label={language === 'zh' ? 'IBKR 账户引用' : 'IBKR account ref'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrAccountRefPlaceholder} value={ibkrBrokerAccountRef} onChange={(e) => setIbkrBrokerAccountRef(e.target.value)} />
+                      <Input label={language === 'zh' ? 'IBKR API 地址' : 'IBKR API base URL'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrApiBasePlaceholder} value={ibkrApiBaseUrl} onChange={(e) => setIbkrApiBaseUrlDraft(e.target.value)} />
+                      <Input label={language === 'zh' ? 'IBKR 账户引用' : 'IBKR account ref'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrAccountRefPlaceholder} value={ibkrBrokerAccountRef} onChange={(e) => setIbkrBrokerAccountRefDraft(e.target.value)} />
                       <Input label={language === 'zh' ? 'IBKR 会话令牌' : 'IBKR session token'} labelClassName={PORTFOLIO_FIELD_LABEL_CLASS} className={PORTFOLIO_INPUT_CLASS} placeholder={copy.ibkrSessionTokenPlaceholder} value={ibkrSessionToken} onChange={(e) => setIbkrSessionToken(e.target.value)} />
-                      <Checkbox checked={ibkrVerifySsl} onChange={(e) => setIbkrVerifySsl(e.target.checked)} label={copy.verifyIbkrSsl} containerClassName="text-xs text-secondary-text" />
+                      <Checkbox checked={ibkrVerifySsl} onChange={(e) => setIbkrVerifySslDraft(e.target.checked)} label={copy.verifyIbkrSsl} containerClassName="text-xs text-secondary-text" />
                       <Button type="button" variant="primary" className={`${PORTFOLIO_PRIMARY_BUTTON_CLASS} w-full`} onClick={() => void handleSyncIbkr()} disabled={!writableAccountId || ibkrSyncing}>
                         {ibkrSyncing ? copy.syncing : copy.syncIbkr}
                       </Button>
