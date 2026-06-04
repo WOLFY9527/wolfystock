@@ -1109,6 +1109,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- 🧭 **Rotation Radar visual matrix now adds a consumer-safe theme board** — `/zh/market/rotation-radar` 现已在既有引导区与列表之间增加只读的“相对强弱矩阵 + 主题排行”视觉层，仅消费现有 `relativeStrength.averageRelativeStrengthPercent`、`stage`、`rotationScore`、`confidence` 与 freshness 状态字段来呈现主题强弱和阶段分布，不改写 rotation score/stage/fund-flow semantics、排序、筛选、API 调用或列表细节。taxonomy/library 模式与数据不足场景继续 fail closed，改为显示紧凑 unavailable visual，而不伪造二维矩阵。
+
 - Added a Liquidity Monitor score-grade coverage summary so the page explicitly shows direction-readiness, score-grade evidence count, observation-only evidence count, missing/unavailable count, and blocking reasons without changing scoring or promoting proxy/fallback data.
 
 - Hardened GitHub release creation to fail closed: annotated tags are required, release notes must come from a non-empty annotated tag body or explicit repository notes file, the generic `See CHANGELOG` fallback was removed, and release-secret-scan plus full `ci_gate.sh` now run before publishing.

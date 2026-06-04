@@ -760,8 +760,9 @@ describe('MarketRotationRadarPage', () => {
     render(<MarketRotationRadarPage />);
 
     const page = await screen.findByTestId('market-rotation-radar-page');
+    const controls = await screen.findByTestId('rotation-radar-mode-controls');
     expect(page).toHaveTextContent('主题轮动雷达');
-    expect(screen.getByTestId('rotation-radar-mode-controls')).toHaveAttribute('data-linear-primitive', 'command-bar');
+    expect(controls).toHaveAttribute('data-linear-primitive', 'command-bar');
     expect(screen.getByTestId('rotation-market-tab-US')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByPlaceholderText('搜索主题、英文名或成员')).toBeInTheDocument();
     expect(screen.getByTestId('rotation-radar-freshness')).toHaveTextContent('更新时间');
@@ -779,6 +780,17 @@ describe('MarketRotationRadarPage', () => {
     expect(summaryBand).toHaveTextContent('当前市场');
     expect(summaryBand).toHaveTextContent('当前信号');
     expect(summaryBand).toHaveTextContent('置信 / 更新');
+
+    const visualMatrix = screen.getByTestId('rotation-radar-visual-matrix');
+    expect(visualMatrix).toHaveTextContent('相对强弱矩阵');
+    expect(visualMatrix).toHaveTextContent('主题排行');
+    expect(visualMatrix).toHaveTextContent('AI 应用');
+    expect(visualMatrix).toHaveTextContent('半导体');
+    expect(visualMatrix).toHaveTextContent('强弱轴');
+    expect(visualMatrix).toHaveTextContent('阶段轴');
+    expect(within(visualMatrix).getAllByTestId(/rotation-radar-matrix-point-/).length).toBeGreaterThanOrEqual(3);
+    expect(within(visualMatrix).getAllByTestId(/rotation-radar-ranking-bar-/).length).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByTestId('rotation-radar-visual-unavailable')).not.toBeInTheDocument();
 
     const familyRollup = screen.getByTestId('rotation-family-flow-rollup');
     expect(familyRollup).toHaveTextContent('家族流向观察');
@@ -922,6 +934,8 @@ describe('MarketRotationRadarPage', () => {
     expect(screen.getByTestId('rotation-market-tab-CN')).toHaveAttribute('aria-pressed', 'true');
     expect(within(screen.getByTestId('rotation-radar-leader-list')).queryAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(0);
     expect(screen.getByTestId('rotation-radar-guidance')).toHaveTextContent('暂不能判断');
+    expect(screen.getByTestId('rotation-radar-visual-unavailable')).toHaveTextContent('矩阵暂不可用');
+    expect(screen.queryByTestId('rotation-radar-visual-matrix')).not.toBeInTheDocument();
     expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('AI算力');
     expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('当前主题');
     expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('AI算力');
@@ -973,6 +987,7 @@ describe('MarketRotationRadarPage', () => {
     expect(observationGuidance).toHaveTextContent('观察中');
     expect(observationGuidance).toHaveTextContent('AI 应用');
     expect(observationGuidance.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
+    expect(screen.getByTestId('rotation-radar-visual-matrix')).toBeInTheDocument();
 
     vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(insufficientEvidenceFixture());
     fireEvent.click(screen.getByRole('button', { name: '刷新主题轮动雷达' }));
@@ -981,6 +996,7 @@ describe('MarketRotationRadarPage', () => {
     expect(unavailableGuidance).toHaveTextContent('暂不能判断');
     expect(unavailableGuidance).toHaveTextContent('当前缺少足够行情与时间窗口数据，暂不能形成稳定轮动判断。');
     expect(unavailableGuidance).toHaveTextContent('可切换到其他市场查看分类候选，或等待数据更新后再复核。');
+    expect(screen.getByTestId('rotation-radar-visual-unavailable')).toHaveTextContent('矩阵暂不可用');
     expect(screen.getByTestId('rotation-radar-insufficient-empty')).toHaveTextContent('当前暂不能判断轮动方向');
     expect(screen.queryByTestId('rotation-theme-detail-panel')).not.toBeInTheDocument();
 

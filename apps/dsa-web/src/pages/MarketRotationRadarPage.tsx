@@ -122,6 +122,18 @@ type RotationTierView = {
 };
 
 type ThemeFlowSignalView = NonNullable<MarketRotationTheme['themeFlowSignal']>;
+type RotationMatrixStageMeta = {
+  key: MarketRotationStage;
+  label: string;
+};
+
+const ROTATION_MATRIX_STAGE_ORDER: RotationMatrixStageMeta[] = [
+  { key: 'confirmed_rotation', label: '确认轮动' },
+  { key: 'extended_watch', label: '延展观察' },
+  { key: 'early_watch', label: '早期观察' },
+  { key: 'cooling_watch', label: '降温观察' },
+  { key: 'weak_or_no_signal', label: '信号较弱' },
+];
 
 function hasMomentumProxyInputs(theme: MarketRotationTheme): boolean {
   return [
@@ -404,6 +416,14 @@ function formatConfidenceValue(confidence?: number | null): string {
   return `${Math.round(Number(confidence) * 100)}%`;
 }
 
+function formatRelativeStrengthValue(value?: number | null): string {
+  if (!Number.isFinite(Number(value))) {
+    return '待补齐';
+  }
+  const numeric = Number(value);
+  return `${numeric >= 0 ? '+' : ''}${numeric.toFixed(1)}%`;
+}
+
 function themeConfidenceSummary(theme?: MarketRotationTheme): string {
   if (!theme) {
     return '待确认';
@@ -412,6 +432,39 @@ function themeConfidenceSummary(theme?: MarketRotationTheme): string {
     return '分类观察';
   }
   return `置信 ${formatConfidenceValue(theme.confidence)}`;
+}
+
+function themeRelativeStrengthValue(theme?: MarketRotationTheme): number | null {
+  const raw = theme?.relativeStrength?.averageRelativeStrengthPercent;
+  return Number.isFinite(Number(raw)) ? Number(raw) : null;
+}
+
+function themeSupportsVisualMatrix(theme?: MarketRotationTheme): theme is MarketRotationTheme {
+  if (!theme || isTaxonomyOnlyTheme(theme)) {
+    return false;
+  }
+  return themeRelativeStrengthValue(theme) !== null && Boolean(theme.stage);
+}
+
+function deriveVisualMatrixThemes(themes: MarketRotationTheme[]): MarketRotationTheme[] {
+  return themes.filter(themeSupportsVisualMatrix);
+}
+
+function deriveVisualStrengthDomain(themes: MarketRotationTheme[]): { min: number; max: number } {
+  const values = themes
+    .map((theme) => themeRelativeStrengthValue(theme))
+    .filter((value): value is number => value !== null);
+
+  if (!values.length) {
+    return { min: -1, max: 1 };
+  }
+
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 0);
+  if (min === max) {
+    return { min: min - 1, max: max + 1 };
+  }
+  return { min, max };
 }
 
 function isInternalRotationIssue(value?: string | null): boolean {
@@ -807,6 +860,171 @@ function deriveCapitalRotationSummary(payload: MarketRotationRadarResponse): Cap
     ],
   };
 }
+
+const RotationVisualPanel: React.FC<{
+  themes: MarketRotationTheme[];
+  selectedThemeId?: string;
+  marketLabelText: string;
+  unavailableReason: string;
+  unavailableDetail: string;
+  onSelectTheme: (themeId: string) => void;
+}> = ({ themes, selectedThemeId, marketLabelText, unavailableReason, unavailableDetail, onSelectTheme }) => {
+  const visualThemes = deriveVisualMatrixThemes(themes);
+
+  if (!visualThemes.length) {
+    return (
+      <TerminalPanel data-testid="rotation-radar-visual-unavailable" className="overflow-hidden">
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-medium tracking-[0.22em] text-white/38">相对强弱矩阵</p>
+            <h3 className="mt-2 text-lg font-semibold text-white/88">矩阵暂不可用</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/58">{unavailableReason}</p>
+            <p className="mt-2 text-[11px] leading-5 text-white/48">{unavailableDetail}</p>
+          </div>
+          <TerminalChip variant="caution">等待结构化维度</TerminalChip>
+        </div>
+      </TerminalPanel>
+    );
+  }
+
+  const domain = deriveVisualStrengthDomain(visualThemes);
+  const rankingThemes = deriveTopThemes(visualThemes, 6);
+
+  return (
+    <TerminalPanel data-testid="rotation-radar-visual-matrix" className="overflow-hidden">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-medium tracking-[0.22em] text-white/38">相对强弱矩阵</p>
+          <h3 className="mt-2 text-lg font-semibold text-white/88">主题排行与阶段分布</h3>
+          <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">
+            仅用现有相对强弱与阶段字段组织可视化，不改写当前排序、结论或信号口径。
+          </p>
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-2">
+          <TerminalChip variant="neutral">强弱轴</TerminalChip>
+          <TerminalChip variant="neutral">阶段轴</TerminalChip>
+          <TerminalChip variant="neutral">{marketLabelText}</TerminalChip>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(22rem,0.9fr)]">
+        <div className="min-w-0 rounded-xl border border-white/[0.06] bg-black/10 p-3">
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium text-white/48">矩阵视图</p>
+              <p className="mt-1 text-[11px] leading-5 text-white/58">
+                横轴按主题相对基准的强弱变化，纵轴按当前阶段分层。
+              </p>
+            </div>
+            <span className="shrink-0 text-[10px] text-white/40">
+              {formatRelativeStrengthValue(domain.min)} - {formatRelativeStrengthValue(domain.max)}
+            </span>
+          </div>
+          <div className="mt-4 overflow-x-auto no-scrollbar">
+            <div className="min-w-[20rem]">
+              {ROTATION_MATRIX_STAGE_ORDER.map((stageMeta) => {
+                const stageThemes = visualThemes.filter((theme) => theme.stage === stageMeta.key);
+                return (
+                  <div key={stageMeta.key} className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-stretch gap-3 border-t border-white/[0.05] py-2 first:border-t-0 first:pt-0 last:pb-0">
+                    <div className="flex items-center text-[11px] font-medium text-white/48">{stageMeta.label}</div>
+                    <div className="relative h-12 rounded-lg border border-white/[0.05] bg-white/[0.02]">
+                      <div className="absolute inset-y-2 left-1/2 w-px bg-white/[0.08]" aria-hidden="true" />
+                      {stageThemes.map((theme) => {
+                        const strength = themeRelativeStrengthValue(theme) ?? 0;
+                        const range = domain.max - domain.min || 1;
+                        const left = `${((strength - domain.min) / range) * 100}%`;
+                        const bubbleVariant = selectedThemeId === theme.id
+                          ? 'border-cyan-200/40 bg-cyan-200/[0.18] text-cyan-50'
+                          : 'border-white/[0.08] bg-white/[0.08] text-white/82 hover:bg-white/[0.12]';
+                        return (
+                          <button
+                            key={theme.id}
+                            type="button"
+                            data-testid={`rotation-radar-matrix-point-${theme.id}`}
+                            className={cn(
+                              'absolute top-1/2 inline-flex h-7 -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border px-2 text-[10px] transition-colors',
+                              bubbleVariant,
+                            )}
+                            style={{ left }}
+                            onClick={() => onSelectTheme(theme.id)}
+                            aria-label={`${theme.name} ${formatThemeStage(theme.stage)} ${formatRelativeStrengthValue(strength)}`}
+                          >
+                            <span className="max-w-[6.5rem] truncate">{theme.name}</span>
+                            <span className="text-white/55">{formatRelativeStrengthValue(strength)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="mt-3 flex items-center justify-between px-[4.5rem] text-[10px] text-white/40">
+                <span>偏弱</span>
+                <span>基准</span>
+                <span>偏强</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="min-w-0 rounded-xl border border-white/[0.06] bg-black/10 p-3">
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium text-white/48">主题排行</p>
+              <p className="mt-1 text-[11px] leading-5 text-white/58">
+                沿用现有排序字段，仅把头部主题转换为条带视图。
+              </p>
+            </div>
+            <TerminalChip variant="neutral">Top {rankingThemes.length}</TerminalChip>
+          </div>
+          <div className="mt-4 space-y-2">
+            {rankingThemes.map((theme, index) => {
+              const scoreWidth = `${Math.max(8, Math.min(100, theme.rotationScore))}%`;
+              const selected = selectedThemeId === theme.id;
+              return (
+                <button
+                  key={theme.id}
+                  type="button"
+                  data-testid={`rotation-radar-ranking-bar-${theme.id}`}
+                  className={cn(
+                    'block w-full rounded-lg border border-white/[0.05] bg-white/[0.02] p-2 text-left transition-colors',
+                    selected ? 'bg-cyan-200/[0.08]' : 'hover:bg-white/[0.04]',
+                  )}
+                  onClick={() => onSelectTheme(theme.id)}
+                >
+                  <div className="flex min-w-0 items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="text-[10px] font-medium text-white/40">{String(index + 1).padStart(2, '0')}</span>
+                        <span className="truncate text-sm font-semibold text-white/84">{theme.name}</span>
+                      </div>
+                      <p className="mt-1 truncate text-[10px] text-white/42">
+                        {formatThemeStage(theme.stage)} · {themeConfidenceSummary(theme)}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-[11px] font-semibold text-white/72">{theme.rotationScore.toFixed(0)}</p>
+                      <p className="text-[10px] text-white/40">{formatRelativeStrengthValue(themeRelativeStrengthValue(theme))}</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 h-2 rounded-full bg-white/[0.06]">
+                    <div
+                      className={cn(
+                        'h-full rounded-full',
+                        selected ? 'bg-cyan-200/75' : 'bg-white/55',
+                      )}
+                      style={{ width: scoreWidth }}
+                    />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </TerminalPanel>
+  );
+};
 
 const ConsumerDisclosure: React.FC<{
   testId: string;
@@ -1488,6 +1706,10 @@ const MarketRotationRadarPage: React.FC = () => {
   const rotationConclusion = state.payload && rotationTiers ? deriveRotationConclusion(state.payload, rotationTiers) : null;
   const primaryTierLabel = libraryMode ? '分类浏览' : rotationTiers?.confirmedLeaders.length ? '确认信号' : '观察信号';
   const marketLabelText = marketLabel(state.payload?.market || state.selectedMarket);
+  const visualUnavailableReason = rotationConclusion?.title || '矩阵暂不可用';
+  const visualUnavailableDetail = libraryMode
+    ? '当前仅有分类浏览条目，缺少可用于矩阵定位的相对强弱与阶段组合。'
+    : rotationConclusion?.whyNotConclusion || '当前缺少足够的结构化强弱维度，暂不展示矩阵。';
 
   return (
     <div
@@ -1530,6 +1752,15 @@ const MarketRotationRadarPage: React.FC = () => {
             />
 
             <RotationGuidancePanel payload={state.payload} />
+
+            <RotationVisualPanel
+              themes={filteredThemes}
+              selectedThemeId={selectedTheme?.id}
+              marketLabelText={marketLabelText}
+              unavailableReason={visualUnavailableReason}
+              unavailableDetail={visualUnavailableDetail}
+              onSelectTheme={(themeId) => dispatch({ type: 'selectTheme', themeId })}
+            />
 
             <TerminalGrid className="gap-4" data-workbench-split="8:4">
               <section className="min-w-0 space-y-4 xl:col-span-8" aria-label={libraryMode ? '分类浏览与观察线索' : primaryTierLabel}>
