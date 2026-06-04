@@ -91,6 +91,8 @@ def test_scanner_run_response_accepts_additive_candidate_evidence_and_readiness_
                 "name": "NVIDIA",
                 "rank": 1,
                 "score": 82.0,
+                "raw_score": 87.0,
+                "final_score": 82.0,
                 "candidateEvidenceFrame": {
                     "contractVersion": "scanner_candidate_evidence_v1",
                     "coverageState": "partial",
@@ -126,6 +128,8 @@ def test_scanner_run_response_accepts_additive_candidate_evidence_and_readiness_
                 "name": "NVIDIA",
                 "rank": 1,
                 "score": 82.0,
+                "raw_score": 87.0,
+                "final_score": 82.0,
                 "candidateEvidenceFrame": {
                     "contractVersion": "scanner_candidate_evidence_v1",
                     "coverageState": "partial",
@@ -141,3 +145,10 @@ def test_scanner_run_response_accepts_additive_candidate_evidence_and_readiness_
     assert response.shortlist[0].candidateEvidenceFrame["contractVersion"] == "scanner_candidate_evidence_v1"
     assert response.shortlist[0].candidateResearchReadiness["readinessState"] == "insufficient"
     assert response.selected[0].candidateEvidenceFrame["coverageState"] == "partial"
+    assert [
+        (item.symbol, item.rank, item.score, item.raw_score, item.final_score)
+        for item in response.shortlist
+    ] == [
+        (item.symbol, item.rank, item.score, item.raw_score, item.final_score)
+        for item in response.selected
+    ]

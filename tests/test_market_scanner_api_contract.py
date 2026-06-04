@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import unittest
 from unittest.mock import MagicMock, patch
@@ -101,6 +102,10 @@ def _make_run_payload(
     headline = "今日美股盘前优先观察：NVDA / AAPL" if is_us else "今日 A 股盘前优先观察：600001 / 600002"
     primary_symbol = "NVDA" if is_us else "600001"
     secondary_symbol = "AAPL" if is_us else "600002"
+    shortlist = [
+        _make_candidate(primary_symbol, 1, benchmark_code=benchmark_code),
+        _make_candidate(secondary_symbol, 2, benchmark_code=benchmark_code),
+    ]
     return {
         "id": run_id,
         "market": market,
@@ -178,10 +183,8 @@ def _make_run_payload(
             "weakest_return_pct": -1.2,
         },
         "candidates": [],
-        "shortlist": [
-            _make_candidate(primary_symbol, 1, benchmark_code=benchmark_code),
-            _make_candidate(secondary_symbol, 2, benchmark_code=benchmark_code),
-        ],
+        "selected": copy.deepcopy(shortlist),
+        "shortlist": shortlist,
     }
 
 
@@ -349,6 +352,71 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             request_source="api",
             notify=False,
         )
+
+    def test_run_market_scan_preserves_selected_signature_when_projection_frames_are_present(self) -> None:
+        service = MagicMock()
+        payload = _make_run_payload(
+            run_id=24,
+            market="us",
+            profile="us_preopen_v1",
+            profile_label="US Pre-open Scanner v1",
+            benchmark_code="SPY",
+        )
+        payload["scannerContextFrame"] = {
+            "marketReadiness": {
+                "contractVersion": "research_readiness_v1",
+                "researchReady": True,
+                "readinessState": "ready",
+                "blockingReasons": [],
+                "missingEvidence": [],
+                "evidenceCoverage": {
+                    "scoreGradeCount": 2,
+                    "observationOnlyCount": 0,
+                    "missingCount": 0,
+                    "totalCount": 2,
+                },
+                "sourceAuthority": "scoreGradeAllowed",
+                "freshnessFloor": "delayed",
+                "consumerActionBoundary": "no_advice",
+                "nextEvidenceNeeded": [],
+                "debugRef": "scanner:24:context",
+            },
+            "noAdviceBoundary": True,
+        }
+        payload["shortlist"][0]["candidateEvidenceFrame"] = {
+            "contractVersion": "scanner_candidate_evidence_v1",
+            "coverageState": "partial",
+        }
+        payload["shortlist"][0]["candidateResearchReadiness"] = {
+            "contractVersion": "research_readiness_v1",
+            "readinessState": "insufficient",
+        }
+        payload["selected"][0]["candidateEvidenceFrame"] = copy.deepcopy(payload["shortlist"][0]["candidateEvidenceFrame"])
+        payload["selected"][0]["candidateResearchReadiness"] = copy.deepcopy(
+            payload["shortlist"][0]["candidateResearchReadiness"]
+        )
+        service.run_manual_scan.return_value = payload
+
+        request = ScannerRunRequest(
+            market="us",
+            profile="us_preopen_v1",
+            shortlist_size=5,
+            universe_limit=180,
+            detail_limit=40,
+        )
+
+        with patch("api.v1.endpoints.scanner.MarketScannerOperationsService", return_value=service):
+            response = run_market_scan(request, db_manager=MagicMock())
+
+        shortlist_signature = [
+            (item.symbol, item.rank, item.score, item.raw_score, item.final_score)
+            for item in response.shortlist
+        ]
+        selected_signature = [
+            (item.symbol, item.rank, item.score, item.raw_score, item.final_score)
+            for item in response.selected
+        ]
+        self.assertEqual(selected_signature, shortlist_signature)
 
     def test_run_market_scan_preserves_additive_scanner_context_frame(self) -> None:
         service = MagicMock()

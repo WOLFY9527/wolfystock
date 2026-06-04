@@ -1524,6 +1524,106 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             baseline_signature,
         )
 
+    def test_scanner_context_frame_keeps_us_persisted_signature_and_history_readback_projection_only(self) -> None:
+        shortlist = []
+        for symbol, name, rank, score, raw_score, final_score in [
+            ("NVDA", "NVIDIA", 1, 91.2, 94.6, 91.2),
+            ("AAPL", "Apple", 2, 86.4, 88.1, 86.4),
+        ]:
+            item = self._candidate_payload(symbol, name, rank, score, "2026-06-02")
+            item["raw_score"] = raw_score
+            item["final_score"] = final_score
+            shortlist.append(item)
+
+        baseline = self._record_context_run(
+            market="us",
+            profile="us_preopen_v1",
+            diagnostics={},
+            shortlist=shortlist,
+        )
+        contextual = self._record_context_run(
+            market="us",
+            profile="us_preopen_v1",
+            diagnostics={
+                "market_temperature": {
+                    "source": "computed",
+                    "freshness": "cached",
+                    "conclusionAllowed": True,
+                    "marketRegimeSynthesis": {
+                        "primaryRegime": "risk_on_liquidity_expansion",
+                        "confidence": 0.74,
+                        "confidenceLabel": "high",
+                        "blockers": [],
+                        "observationOnly": False,
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": True,
+                    },
+                    "capitalFlowSignal": {
+                        "likelyDestination": "growth_ai_software_semis",
+                        "freshness": "cached",
+                        "observationOnly": False,
+                        "sourceAuthorityAllowed": True,
+                        "scoreContributionAllowed": True,
+                    },
+                    "rotationFamilyRollup": [
+                        {
+                            "familyId": "ai",
+                            "familyLabel": "AI",
+                            "themeFlowSignal": {
+                                "themeFlowState": "leading",
+                                "freshness": "cached",
+                                "observationOnly": False,
+                                "sourceAuthorityAllowed": True,
+                                "scoreContributionAllowed": True,
+                            },
+                        }
+                    ],
+                },
+            },
+            shortlist=shortlist,
+        )
+
+        baseline_signature = [
+            (
+                item["symbol"],
+                item["rank"],
+                float(item["score"]),
+                float(item["raw_score"]),
+                float(item["final_score"]),
+            )
+            for item in baseline["shortlist"]
+        ]
+        contextual_signature = [
+            (
+                item["symbol"],
+                item["rank"],
+                float(item["score"]),
+                float(item["raw_score"]),
+                float(item["final_score"]),
+            )
+            for item in contextual["shortlist"]
+        ]
+        self.assertEqual(contextual_signature, baseline_signature)
+        self.assertEqual(
+            [
+                (
+                    item["symbol"],
+                    item["rank"],
+                    float(item["score"]),
+                    float(item["raw_score"]),
+                    float(item["final_score"]),
+                )
+                for item in contextual["selected"]
+            ],
+            baseline_signature,
+        )
+
+        history = self.service.list_runs(market="us", profile="us_preopen_v1", page=1, limit=10)
+        self.assertEqual(history["total"], 2)
+        history_by_id = {item["id"]: item for item in history["items"]}
+        self.assertEqual(history_by_id[baseline["id"]]["top_symbols"], ["NVDA", "AAPL"])
+        self.assertEqual(history_by_id[contextual["id"]]["top_symbols"], ["NVDA", "AAPL"])
+
     def test_prepare_shortlist_sorts_by_score_then_symbol_and_assigns_rank_before_ai(self) -> None:
         ai_service = RecordingScannerAiService()
         service = MarketScannerService(
@@ -2451,9 +2551,10 @@ class MarketScannerServiceTestCase(unittest.TestCase):
 
     def test_run_scan_adds_us_candidate_evidence_and_readiness_without_mutating_shortlist(self) -> None:
         seed_us_local_history(self.stock_repo)
+        data_manager = SlowMissingQuoteDataManager(delay_seconds=0.0)
         service = MarketScannerService(
             self.db,
-            data_manager=SlowMissingQuoteDataManager(delay_seconds=0.0),
+            data_manager=data_manager,
         )
 
         result = service.run_scan(
@@ -2480,6 +2581,13 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 for item in result["selected"]
             ],
             shortlist_signature,
+        )
+        self.assertEqual(len(data_manager.realtime_quote_calls), 3)
+        self.assertEqual(set(data_manager.realtime_quote_calls), {"NVDA", "AAPL", "PLTR"})
+        candidate_status_by_symbol = {item["symbol"]: item["status"] for item in result["candidates"]}
+        self.assertEqual(
+            {symbol: candidate_status_by_symbol[symbol] for symbol, *_ in shortlist_signature},
+            {"NVDA": "selected", "AAPL": "selected", "PLTR": "selected"},
         )
 
         candidate_map = {item["symbol"]: item for item in result["shortlist"]}
@@ -2527,6 +2635,13 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             shortlist_signature,
         )
         self.assertEqual(
+            [
+                (item["symbol"], item["rank"], item["score"], item["raw_score"], item["final_score"])
+                for item in detail["selected"]
+            ],
+            shortlist_signature,
+        )
+        self.assertEqual(
             detail["shortlist"][0]["candidateEvidenceFrame"]["contractVersion"],
             "scanner_candidate_evidence_v1",
         )
@@ -2534,6 +2649,8 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             detail["shortlist"][0]["candidateResearchReadiness"]["contractVersion"],
             "research_readiness_v1",
         )
+        self.assertEqual(len(data_manager.realtime_quote_calls), 3)
+        self.assertEqual(set(data_manager.realtime_quote_calls), {"NVDA", "AAPL", "PLTR"})
 
     def test_run_scan_restricts_us_custom_symbol_universe(self) -> None:
         seed_us_local_history(self.stock_repo)
@@ -3259,6 +3376,14 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 for item in observed["shortlist"]
             ]
             self.assertEqual(observed_shortlist, baseline_shortlist)
+            self.assertEqual(
+                [
+                    (item["symbol"], item["rank"], item["score"], item["raw_score"], item["final_score"])
+                    for item in observed["selected"]
+                ],
+                baseline_shortlist,
+            )
+            observed_history_calls_before_detail = list(observed_service.data_manager.daily_history_calls)
 
             candidate = observed["shortlist"][0]
             observation = candidate["diagnostics"].get("cn_provider_observation")
@@ -3286,6 +3411,24 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             self.assertFalse(explainability["source_confidence"]["observationOnly"])
             self.assertIsNotNone(candidate["diagnostics"]["evidence_packet"]["providerObservation"])
             self.assertTrue(candidate["diagnostics"]["evidence_packet"]["providerObservation"]["observationOnly"])
+
+            detail = observed_service.get_run_detail(observed["id"])
+            assert detail is not None
+            self.assertEqual(
+                [
+                    (item["symbol"], item["rank"], item["score"], item["raw_score"], item["final_score"])
+                    for item in detail["shortlist"]
+                ],
+                baseline_shortlist,
+            )
+            self.assertEqual(
+                [
+                    (item["symbol"], item["rank"], item["score"], item["raw_score"], item["final_score"])
+                    for item in detail["selected"]
+                ],
+                baseline_shortlist,
+            )
+            self.assertEqual(observed_service.data_manager.daily_history_calls, observed_history_calls_before_detail)
 
     def test_run_scan_attaches_baostock_scanner_diagnostics_sidecar_without_changing_scores_or_ranks(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
