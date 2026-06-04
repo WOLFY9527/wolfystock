@@ -545,6 +545,151 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertIn("missing_required_evidence", readiness["blockingReasons"])
         self.assertEqual(readiness["freshnessFloor"], "fallback")
 
+    def test_market_temperature_exposes_additive_market_actionability_frame_for_readyish_context(self) -> None:
+        service = MarketOverviewService()
+
+        payload = _market_temperature_api_payload(service, _official_macro_regime_summary_base_inputs())
+
+        frame = payload["marketActionabilityFrame"]
+        self.assertEqual(frame["contractVersion"], "market_intelligence_actionability_v1")
+        self.assertEqual(
+            set(frame),
+            {
+                "contractVersion",
+                "verdict",
+                "confidence",
+                "evidenceCoverage",
+                "missingEvidence",
+                "regimeContext",
+                "sourceAuthority",
+                "freshness",
+                "noAdviceBoundary",
+                "nextResearchStep",
+                "debugRef",
+            },
+        )
+        self.assertEqual(frame["verdict"], "observe_only")
+        self.assertEqual(frame["sourceAuthority"], "observationOnly")
+        self.assertEqual(frame["freshness"], "delayed")
+        self.assertTrue(frame["noAdviceBoundary"])
+        self.assertEqual(frame["evidenceCoverage"]["scoreGradeCount"], 2)
+        self.assertEqual(frame["evidenceCoverage"]["observationOnlyCount"], 1)
+        self.assertEqual(frame["evidenceCoverage"]["missingCount"], 0)
+        self.assertEqual(frame["evidenceCoverage"]["totalCount"], 3)
+        self.assertEqual(frame["missingEvidence"], [])
+        self.assertEqual(frame["regimeContext"]["primaryRegime"], "risk_on_liquidity_expansion")
+        self.assertIn(frame["regimeContext"]["liquidityImpulse"], {"expanding_liquidity", "stable_liquidity"})
+        self.assertEqual(frame["regimeContext"]["rotationPosture"], "leading")
+        self.assertEqual(frame["regimeContext"]["freshnessFloor"], "delayed")
+        self.assertGreaterEqual(frame["regimeContext"]["contradictionCount"], 0)
+        self.assertEqual(frame["confidence"]["label"], "low")
+        self.assertLess(frame["confidence"]["value"], 0.5)
+        self.assertIn("observation_only", frame["confidence"]["capReasons"])
+        self.assertTrue(frame["nextResearchStep"])
+        self.assertEqual(frame["debugRef"], "market:temperature:actionability")
+        self.assertEqual(payload["researchReadiness"]["readinessState"], "insufficient")
+        self.assertEqual(payload["marketDecisionSemantics"]["directionReadiness"]["status"], "direction_ready")
+
+    def test_market_temperature_actionability_frame_fail_closes_missing_context(self) -> None:
+        service = MarketOverviewService()
+
+        payload = _market_temperature_api_payload(
+            service,
+            service._fallback_market_temperature_inputs(),
+        )
+
+        frame = payload["marketActionabilityFrame"]
+        self.assertEqual(frame["verdict"], "insufficient")
+        self.assertEqual(frame["sourceAuthority"], "unavailable")
+        self.assertEqual(frame["freshness"], "fallback")
+        self.assertTrue(frame["noAdviceBoundary"])
+        self.assertIn("macro", frame["missingEvidence"])
+        self.assertIn("liquidity", frame["missingEvidence"])
+        self.assertIn("technical", frame["missingEvidence"])
+        self.assertIn("freshness", frame["missingEvidence"])
+        self.assertEqual(frame["evidenceCoverage"]["scoreGradeCount"], 0)
+        self.assertEqual(frame["evidenceCoverage"]["missingCount"], 4)
+        self.assertEqual(frame["confidence"]["label"], "insufficient")
+        self.assertIn("missing_required_evidence", frame["confidence"]["capReasons"])
+
+    def test_market_temperature_actionability_frame_downgrades_stale_and_fallback_context(self) -> None:
+        service = MarketOverviewService()
+        degraded_inputs = copy.deepcopy(_official_macro_regime_summary_base_inputs())
+        degraded_inputs["capitalFlowSignal"]["freshness"] = "stale"
+        degraded_inputs["capitalFlowSignal"]["contradictionCodes"] = ["partial_context_only"]
+        degraded_inputs["rotationFamilyRollup"][0]["themeFlowSignal"]["freshness"] = "fallback"
+        degraded_inputs["rotationFamilyRollup"][0]["themeFlowSignal"]["observationOnly"] = True
+
+        payload = _market_temperature_api_payload(service, degraded_inputs)
+
+        frame = payload["marketActionabilityFrame"]
+        self.assertEqual(frame["verdict"], "insufficient")
+        self.assertEqual(frame["freshness"], "fallback")
+        self.assertIn("freshness", frame["missingEvidence"])
+        self.assertEqual(frame["sourceAuthority"], "observationOnly")
+        self.assertEqual(frame["confidence"]["label"], "insufficient")
+        self.assertTrue(
+            {"observation_only", "stale_evidence", "fallback_evidence"} & set(frame["confidence"]["capReasons"])
+        )
+
+    def test_market_temperature_actionability_frame_is_additive_and_preserves_existing_scores(self) -> None:
+        service = MarketOverviewService()
+
+        payload = _market_temperature_api_payload(service, _official_macro_regime_summary_base_inputs())
+
+        self.assertTrue(
+            {
+                "source",
+                "updatedAt",
+                "scores",
+                "marketRegimeSynthesis",
+                "marketDecisionSemantics",
+                "regimeSummary",
+                "providerHealth",
+                "evidenceSnapshot",
+                "temperatureAvailable",
+                "conclusionAllowed",
+                "researchReadiness",
+                "marketActionabilityFrame",
+            }.issubset(payload.keys())
+        )
+        self.assertEqual(payload["researchReadiness"]["readinessState"], "insufficient")
+        self.assertEqual(
+            payload["scores"],
+            {
+                "overall": {
+                    "value": 67,
+                    "label": "偏暖",
+                    "trend": "improving",
+                    "description": "风险偏好改善，但宏观压力仍需关注。",
+                },
+                "usRiskAppetite": {
+                    "value": 85,
+                    "label": "过热",
+                    "trend": "improving",
+                    "description": "美股指数与风险情绪同步改善。",
+                },
+                "cnMoneyEffect": {
+                    "value": 45,
+                    "label": "偏冷",
+                    "trend": "cooling",
+                    "description": "指数表现尚可，市场宽度决定赚钱效应。",
+                },
+                "macroPressure": {
+                    "value": 13,
+                    "label": "极冷",
+                    "trend": "stable",
+                    "description": "美元、利率与波动率共同决定宏观压力。",
+                },
+                "liquidity": {
+                    "value": 54,
+                    "label": "中性",
+                    "trend": "stable",
+                    "description": "资金环境结合 ETF、利率、美元和跨境资金判断。",
+                },
+            },
+        )
+
     def test_market_temperature_api_serializes_additive_regime_summary_contract(self) -> None:
         service = MarketOverviewService()
         inputs = _decision_semantics_ready_temperature_inputs()

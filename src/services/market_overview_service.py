@@ -98,6 +98,7 @@ from src.services.market_intelligence_trust_gate import (
     evaluate_market_intelligence_trust_from_sources,
 )
 from src.services.market_decision_semantics import derive_market_decision_semantics
+from src.services.market_intelligence_actionability import build_market_actionability_frame
 from src.services.market_regime_synthesis_adapter import (
     build_liquidity_impulse_synthesis_payload,
     build_market_regime_synthesis_payload,
@@ -1135,15 +1136,30 @@ class MarketOverviewService:
                 ),
                 **trust,
             }
+            payload["marketActionabilityFrame"] = build_market_actionability_frame(
+                payload,
+                inputs=inputs,
+                liquidity_impulse_synthesis=liquidity_impulse_synthesis,
+            )
             if not trust["isReliable"]:
                 payload["warning"] = INSUFFICIENT_MARKET_DATA_WARNING
                 payload["fallbackUsed"] = True
                 payload["isFallback"] = trust["reliableInputCount"] == 0
                 payload["freshness"] = "fallback" if trust["reliableInputCount"] == 0 else "stale"
                 payload.update(self._market_temperature_disabled_state_meta(trust))
+                payload["marketActionabilityFrame"] = build_market_actionability_frame(
+                    payload,
+                    inputs=inputs,
+                    liquidity_impulse_synthesis=liquidity_impulse_synthesis,
+                )
             elif trust["fallbackInputCount"]:
                 payload["warning"] = "部分指标来自备用数据，评分仅使用真实数据。"
                 payload["fallbackUsed"] = True
+                payload["marketActionabilityFrame"] = build_market_actionability_frame(
+                    payload,
+                    inputs=inputs,
+                    liquidity_impulse_synthesis=liquidity_impulse_synthesis,
+                )
             return payload
 
         def fallback_factory() -> Dict[str, Any]:
@@ -1154,7 +1170,7 @@ class MarketOverviewService:
             )
             market_regime_synthesis = self._build_market_regime_synthesis_payload(inputs)
             liquidity_impulse_synthesis = self._build_liquidity_impulse_synthesis_payload(inputs)
-            return {
+            payload = {
                 "source": "fallback",
                 "updatedAt": _now_iso(),
                 "scores": self._insufficient_market_temperature_scores(),
@@ -1175,6 +1191,12 @@ class MarketOverviewService:
                 **trust,
                 **self._market_temperature_disabled_state_meta(trust),
             }
+            payload["marketActionabilityFrame"] = build_market_actionability_frame(
+                payload,
+                inputs=inputs,
+                liquidity_impulse_synthesis=liquidity_impulse_synthesis,
+            )
+            return payload
 
         started_at = time.monotonic()
         payload = self._cached_payload("temperature", fetcher, fallback_factory)
