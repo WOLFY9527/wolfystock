@@ -19,7 +19,7 @@ import json
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError, as_completed
 from datetime import date, datetime, timedelta, timezone, time as clock_time
-from typing import List, Dict, Any, Optional, Tuple, Callable
+from typing import List, Dict, Any, Optional, Tuple, Callable, Mapping
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -50,7 +50,18 @@ from src.services.analysis_provider_planner import (
     get_analysis_provider_executor,
 )
 from src.services.data_criticality import build_data_quality_report
+from src.services.home_llm_evidence_input import (
+    build_home_llm_evidence_input_v1,
+    format_home_llm_evidence_input_prompt_section,
+)
 from src.services.research_budget_profiles import ResearchBudgetProfile, get_research_budget_profile
+from src.services.single_stock_evidence_packet import build_single_stock_evidence_packet_v1
+from src.services.single_stock_fundamentals_earnings_normalizer import (
+    build_single_stock_fundamentals_earnings_normalizer_v1,
+)
+from src.services.single_stock_news_catalyst_extractor import (
+    build_single_stock_news_catalyst_extractor_v1,
+)
 from src.enums import ReportType
 from src.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
 from src.core.trading_calendar import get_market_for_stock, is_market_open
@@ -975,6 +986,19 @@ class StockAnalysisPipeline:
                 'sma60': tech.get("ma60", {}).get("value", 'N/A'),
                 'sources': {k: v.get("source") for k, v in tech.items() if isinstance(v, dict)},
             }
+            home_llm_evidence_payload = self._build_home_llm_evidence_adapter_payload(
+                code=code,
+                query_id=query_id,
+                enhanced_context=enhanced_context,
+                diagnostics=diagnostics,
+                news_context=news_context,
+            )
+            home_llm_evidence_input = build_home_llm_evidence_input_v1(home_llm_evidence_payload)
+            enhanced_context["home_llm_evidence_input"] = home_llm_evidence_input
+            news_context = self._append_home_llm_evidence_input_to_news_context(
+                news_context,
+                home_llm_evidence_input,
+            )
 
             self._emit_progress(
                 progress_callback,
@@ -1361,6 +1385,155 @@ class StockAnalysisPipeline:
             intel.setdefault("social_context", enhanced_context.get("social_context"))
         dashboard["intelligence"] = intel
         result.dashboard = dashboard
+
+    @staticmethod
+    def _append_home_llm_evidence_input_to_news_context(
+        news_context: Optional[str],
+        evidence_input: Mapping[str, Any] | None,
+    ) -> Optional[str]:
+        section = format_home_llm_evidence_input_prompt_section(evidence_input)
+        if not section:
+            return news_context
+        base = str(news_context or "").strip()
+        if base:
+            return f"{base}\n\n{section}"
+        return section
+
+    @staticmethod
+    def _market_from_symbol(symbol: str) -> str:
+        market = str(get_market_for_stock(symbol) or "").strip().lower()
+        if market in {"us", "hk", "cn"}:
+            return market
+        return "unknown"
+
+    def _build_home_llm_runtime_data(
+        self,
+        *,
+        enhanced_context: Dict[str, Any],
+        diagnostics: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        realtime_context = enhanced_context.get("realtime") if isinstance(enhanced_context.get("realtime"), dict) else {}
+        fundamentals_block = enhanced_context.get("fundamentals") if isinstance(enhanced_context.get("fundamentals"), dict) else {}
+        sentiment_block = enhanced_context.get("sentiment_analysis") if isinstance(enhanced_context.get("sentiment_analysis"), dict) else {}
+        fundamental_context = enhanced_context.get("fundamental_context") if isinstance(enhanced_context.get("fundamental_context"), dict) else {}
+        fundamental_chain = fundamental_context.get("source_chain") if isinstance(fundamental_context.get("source_chain"), list) else []
+
+        market_source_chain = diagnostics.get("market_source_chain")
+        if not isinstance(market_source_chain, list):
+            market_source_chain = []
+        market_source, market_fallback = self._pick_success_provider_from_chain(market_source_chain)
+        if not market_source:
+            market_source = str(realtime_context.get("source") or "").strip() or None
+            market_fallback = bool(market_source and "fallback" in market_source.lower())
+
+        fundamental_source, fundamental_fallback = self._pick_success_provider_from_chain(fundamental_chain)
+        if not fundamental_source:
+            fundamental_source = str(fundamentals_block.get("source") or "").strip() or None
+            fundamental_fallback = bool(fundamentals_block.get("isFallback") or fundamentals_block.get("proxyOnly"))
+
+        news_provider_chain = diagnostics.get("news_provider_chain")
+        if not isinstance(news_provider_chain, list):
+            news_provider_chain = []
+        news_status = self._safe_runtime_status(diagnostics.get("news_status"))
+        if news_status == "unknown":
+            news_status = "configured_not_used" if diagnostics.get("search_enabled") else "not_configured"
+        news_provider = str(diagnostics.get("news_provider") or "").strip() or None
+        if not news_provider:
+            picked_news_provider, _ = self._pick_success_provider_from_chain(news_provider_chain)
+            news_provider = picked_news_provider
+
+        sentiment_status = self._safe_runtime_status(sentiment_block.get("status"))
+        if sentiment_status == "unknown":
+            sentiment_status = "configured_not_used" if diagnostics.get("search_enabled") else "not_configured"
+        sentiment_provider = str(diagnostics.get("sentiment_provider") or "").strip() or str(sentiment_block.get("source") or "").strip() or None
+
+        return {
+            "market": {
+                "source": market_source,
+                "truth": "actual" if market_source else "unavailable",
+                "fallback_occurred": market_fallback,
+                "status": "ok" if market_source else "unknown",
+                "source_chain": market_source_chain,
+            },
+            "fundamentals": {
+                "source": fundamental_source,
+                "truth": "actual" if fundamental_source else "unavailable",
+                "fallback_occurred": fundamental_fallback,
+                "status": self._safe_runtime_status(fundamentals_block.get("status")),
+                "source_chain": fundamental_chain,
+            },
+            "news": {
+                "source": news_provider,
+                "truth": "actual" if news_provider else ("inferred" if diagnostics.get("search_enabled") else "unavailable"),
+                "fallback_occurred": bool(diagnostics.get("news_fallback_triggered")),
+                "status": news_status,
+                "source_chain": news_provider_chain,
+            },
+            "sentiment": {
+                "source": sentiment_provider,
+                "truth": "actual" if sentiment_provider else ("inferred" if diagnostics.get("search_enabled") else "unavailable"),
+                "fallback_occurred": False,
+                "status": sentiment_status,
+            },
+        }
+
+    def _build_home_llm_evidence_adapter_payload(
+        self,
+        *,
+        code: str,
+        query_id: str,
+        enhanced_context: Dict[str, Any],
+        diagnostics: Dict[str, Any],
+        news_context: Optional[str],
+    ) -> Dict[str, Any]:
+        structured_analysis = {
+            "technicals": enhanced_context.get("technicals", {}),
+            "trend_analysis": enhanced_context.get("trend_analysis", {}),
+            "fundamentals": enhanced_context.get("fundamentals", {}),
+            "earnings_analysis": enhanced_context.get("earnings_analysis", {}),
+            "sentiment_analysis": enhanced_context.get("sentiment_analysis", {}),
+            "catalyst": enhanced_context.get("catalyst", {}),
+            "data_quality": enhanced_context.get("data_quality", {}),
+            "data_quality_report": enhanced_context.get("data_quality_report", {}),
+            "realtime_context": enhanced_context.get("realtime", {}),
+            "market_context": {
+                "today": enhanced_context.get("today", {}),
+                "yesterday": enhanced_context.get("yesterday", {}),
+            },
+            "fundamental_context": enhanced_context.get("fundamental_context", {}),
+        }
+        if enhanced_context.get("social_context"):
+            sentiment_block = structured_analysis["sentiment_analysis"] if isinstance(structured_analysis.get("sentiment_analysis"), dict) else {}
+            sentiment_block.setdefault("social_context", enhanced_context.get("social_context"))
+            structured_analysis["sentiment_analysis"] = sentiment_block
+        if isinstance(news_context, str) and news_context.strip():
+            structured_analysis["news_context"] = news_context
+
+        packet_payload: Dict[str, Any] = {
+            "symbol": code,
+            "market": self._market_from_symbol(code),
+            "debugRef": f"analysis:{query_id}",
+            "noAdviceBoundary": True,
+            "dataQualityReport": enhanced_context.get("data_quality_report", {}) or {},
+            "structuredAnalysis": structured_analysis,
+            "runtimeData": self._build_home_llm_runtime_data(
+                enhanced_context=enhanced_context,
+                diagnostics=diagnostics,
+            ),
+        }
+        if isinstance(news_context, str) and news_context.strip():
+            packet_payload["news_context"] = news_context
+
+        single_stock_packet = build_single_stock_evidence_packet_v1(packet_payload)
+        fundamentals_earnings = build_single_stock_fundamentals_earnings_normalizer_v1(packet_payload)
+        news_catalysts = build_single_stock_news_catalyst_extractor_v1(packet_payload)
+        return {
+            "singleStockEvidencePacket": single_stock_packet,
+            "fundamentalsEarnings": fundamentals_earnings,
+            "newsCatalysts": news_catalysts,
+            "dataQualityReport": enhanced_context.get("data_quality_report", {}) or {},
+            "debugRef": f"analysis:{query_id}",
+        }
 
     @staticmethod
     def _runtime_truth(value: str) -> str:
