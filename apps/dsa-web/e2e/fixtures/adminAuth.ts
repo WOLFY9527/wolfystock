@@ -558,6 +558,21 @@ function systemConfigPayload() {
   };
 }
 
+function notificationPreferencesPayload() {
+  return {
+    channel: 'email',
+    enabled: false,
+    email: null,
+    emailEnabled: false,
+    discordEnabled: false,
+    discordWebhook: null,
+    deliveryAvailable: true,
+    emailDeliveryAvailable: true,
+    discordDeliveryAvailable: true,
+    updatedAt: null,
+  };
+}
+
 function duckdbHealthPayload() {
   return {
     status: 'disabled',
@@ -603,6 +618,12 @@ export async function installAdminAuthHarness(
     }
     if (method === 'GET' && path === '/api/v1/auth/me') {
       return fulfillJson(route, currentUser);
+    }
+    if (method === 'GET' && path === '/api/v1/auth/preferences/notifications') {
+      return fulfillJson(route, notificationPreferencesPayload());
+    }
+    if (method === 'PUT' && path === '/api/v1/auth/preferences/notifications') {
+      return fulfillJson(route, notificationPreferencesPayload());
     }
     if (method === 'GET' && path === '/api/v1/agent/status') {
       return fulfillJson(route, { enabled: false });
