@@ -567,6 +567,11 @@ def _context_blockers(value: Any) -> List[Dict[str, str]]:
     return result
 
 
+def _scanner_runtime_resolution(diagnostics: Mapping[str, Any], key: str) -> Dict[str, Any]:
+    scanner_data = _context_mapping(diagnostics.get("scanner_data"))
+    return _context_mapping(scanner_data.get(key) or diagnostics.get(key))
+
+
 class MarketScannerService:
     """End-to-end market scanner orchestration."""
 
@@ -1896,6 +1901,7 @@ class MarketScannerService:
             "rejected_symbols": public_universe_selection["rejected_symbols"],
             "diagnostics": finalized_diagnostics,
             "scannerContextFrame": self._build_scanner_context_frame(
+                market=profile_config.market,
                 run_id=int(saved_run.id),
                 diagnostics=finalized_diagnostics,
                 universe_selection=public_universe_selection,
@@ -3216,11 +3222,185 @@ class MarketScannerService:
                 return explicit is True
         return False
 
-    def _build_scanner_context_readiness(self, diagnostics: Dict[str, Any], run_id: int) -> Dict[str, Any]:
+    @staticmethod
+    def _scanner_runtime_reason_codes(*values: Mapping[str, Any]) -> List[str]:
+        reason_codes: List[str] = []
+        for value in values:
+            payload = _context_mapping(value)
+            if not payload:
+                continue
+            _append_reason_code(reason_codes, payload.get("reason_code") or payload.get("error_code"))
+            for attempt in _context_items(payload.get("attempts")):
+                _append_reason_code(reason_codes, attempt.get("reason_code"))
+        return reason_codes
+
+    @staticmethod
+    def _scanner_runtime_source_tier(*sources: Any) -> str:
+        for source in sources:
+            normalized = _context_text(source)
+            if not normalized:
+                continue
+            source_type = resolve_source_type(normalized)
+            if source_type in SCANNER_PROXY_QUOTE_SOURCE_TYPES:
+                return "unofficial_public_api"
+            if source_type:
+                return source_type
+        return "unknown"
+
+    @staticmethod
+    def _is_cn_observation_source(*sources: Any) -> bool:
+        for source in sources:
+            normalized = _context_text(source).lower()
+            if not normalized:
+                continue
+            compact = _compact_source_marker(normalized)
+            if any(
+                marker in compact
+                for marker in ("akshare", "efinance", "tushare", "pytdx", "baostock", "localhistorydegraded")
+            ):
+                return True
+            source_type = resolve_source_type(normalized)
+            if source_type in SCANNER_PROXY_QUOTE_SOURCE_TYPES | SCANNER_SCORE_CAP_FALLBACK_SOURCE_TYPES:
+                return True
+        return False
+
+    def _build_cn_scanner_runtime_readiness(
+        self,
+        diagnostics: Dict[str, Any],
+        run_id: int,
+        *,
+        market: Optional[str] = None,
+        universe_selection: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        resolved_market = _context_text(market or diagnostics.get("market")).lower()
+        if resolved_market != "cn":
+            return None
+
+        resolved_universe_selection = self._public_universe_selection(universe_selection or diagnostics.get("universe_selection"))
+        universe_resolution = _scanner_runtime_resolution(diagnostics, "universe_resolution")
+        snapshot_resolution = _scanner_runtime_resolution(diagnostics, "snapshot_resolution")
+        scanner_data = _context_mapping(diagnostics.get("scanner_data"))
+
+        stock_list_source = _context_text(
+            diagnostics.get("stock_list_source")
+            or universe_resolution.get("source")
+        ).lower()
+        snapshot_source = _context_text(
+            diagnostics.get("snapshot_source")
+            or snapshot_resolution.get("source")
+        ).lower()
+        degraded_mode_used = bool(scanner_data.get("degraded_mode_used") or snapshot_resolution.get("degraded_mode_used"))
+        universe_blocked = _context_text(
+            diagnostics.get("reason_code") or universe_resolution.get("error_code")
+        ).lower() == "universe_source_unavailable"
+        snapshot_blocked = _context_text(
+            diagnostics.get("reason_code") or snapshot_resolution.get("error_code")
+        ).lower() == "no_realtime_snapshot_available" and not degraded_mode_used
+        observation_only = degraded_mode_used or self._is_cn_observation_source(
+            stock_list_source,
+            snapshot_source,
+            universe_resolution.get("source"),
+            snapshot_resolution.get("source"),
+        )
+        if not any((universe_blocked, snapshot_blocked, observation_only)):
+            return None
+
+        source_tier = (
+            "unavailable"
+            if universe_blocked or snapshot_blocked
+            else self._scanner_runtime_source_tier(snapshot_source, stock_list_source)
+        )
+        freshness = "unavailable" if universe_blocked or snapshot_blocked else "fallback" if degraded_mode_used else "delayed"
+        blocked_reasons = self._scanner_runtime_reason_codes(diagnostics, universe_resolution, snapshot_resolution)
+        missing_evidence = ["technical", "freshness"] if universe_blocked or snapshot_blocked else []
+
+        payload: Dict[str, Any] = {
+            "requiredEvidence": ["technical", "freshness"] if universe_blocked or snapshot_blocked else ["technical"],
+            "missingEvidence": missing_evidence,
+            "noAdviceBoundary": True,
+            "consumerActionBoundary": "no_advice",
+            "freshness": freshness,
+            "debugRef": f"scanner:{run_id}:cn_runtime",
+        }
+        if observation_only and not (universe_blocked or snapshot_blocked):
+            payload["evidence"] = [
+                {
+                    "domain": "technical",
+                    "source": snapshot_source or stock_list_source or "cn_scanner_observation",
+                    "sourceType": resolve_source_type(snapshot_source or stock_list_source or "public_proxy"),
+                    "sourceTier": source_tier,
+                    "freshness": freshness,
+                    "sourceAuthorityAllowed": False,
+                    "scoreContributionAllowed": False,
+                    "observationOnly": True,
+                    "proxyOnly": source_tier == "unofficial_public_api",
+                }
+            ]
+
+        readiness = build_research_readiness_v1(payload)
+        if universe_blocked or snapshot_blocked:
+            readiness.update(
+                {
+                    "researchReady": False,
+                    "readinessState": "blocked",
+                    "verdictLabel": "研究结论受限",
+                    "sourceAuthority": "unavailable",
+                    "freshnessFloor": "unknown",
+                }
+            )
+        else:
+            readiness.update(
+                {
+                    "researchReady": False,
+                    "readinessState": "observe_only",
+                    "verdictLabel": "仅观察",
+                    "sourceAuthority": "observationOnly",
+                }
+            )
+            _append_reason_code(blocked_reasons, "source_authority_not_score_grade")
+            readiness["nextEvidenceNeeded"] = list(
+                dict.fromkeys(
+                    [
+                        *list(readiness.get("nextEvidenceNeeded") or []),
+                        "补充来源授权证据",
+                        "补充新鲜度证据" if degraded_mode_used else "",
+                    ]
+                )
+            )
+            readiness["nextEvidenceNeeded"] = [item for item in readiness["nextEvidenceNeeded"] if item]
+
+        merged_blocking_reasons = list(dict.fromkeys([*list(readiness.get("blockingReasons") or []), *blocked_reasons]))
+        readiness["blockingReasons"] = merged_blocking_reasons
+        readiness["blockedReasons"] = list(merged_blocking_reasons)
+        readiness["market"] = "cn"
+        readiness["universeType"] = resolved_universe_selection.get("universe_type") or "default"
+        readiness["providerAuthority"] = "unavailable" if universe_blocked or snapshot_blocked else "observation_only"
+        readiness["freshness"] = freshness
+        readiness["sourceTier"] = source_tier
+        readiness["noAdviceBoundary"] = True
+        return readiness
+
+    def _build_scanner_context_readiness(
+        self,
+        diagnostics: Dict[str, Any],
+        run_id: int,
+        *,
+        market: Optional[str] = None,
+        universe_selection: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        cn_runtime_readiness = self._build_cn_scanner_runtime_readiness(
+            diagnostics,
+            run_id,
+            market=market,
+            universe_selection=universe_selection,
+        )
         inputs = self._resolve_scanner_context_inputs(diagnostics)
         explicit = inputs["explicit_readiness"]
         if explicit.get("readinessState"):
-            return explicit
+            return {
+                **dict(explicit),
+                **dict(cn_runtime_readiness or {}),
+            }
 
         market_context = inputs["market_context"]
         market_regime = inputs["market_regime"]
@@ -3314,7 +3494,13 @@ class MarketScannerService:
             "consumerActionBoundary": "no_advice",
             "debugRef": f"scanner:{run_id}:context",
         }
-        return build_research_readiness_v1(payload)
+        readiness = build_research_readiness_v1(payload)
+        if cn_runtime_readiness:
+            return {
+                **readiness,
+                **cn_runtime_readiness,
+            }
+        return readiness
 
     @staticmethod
     def _classify_scanner_context_state(
@@ -3569,11 +3755,17 @@ class MarketScannerService:
     def _build_scanner_context_frame(
         self,
         *,
+        market: str,
         run_id: int,
         diagnostics: Dict[str, Any],
         universe_selection: Dict[str, Any],
     ) -> Dict[str, Any]:
-        market_readiness = self._build_scanner_context_readiness(diagnostics, run_id)
+        market_readiness = self._build_scanner_context_readiness(
+            diagnostics,
+            run_id,
+            market=market,
+            universe_selection=universe_selection,
+        )
         macro_regime = self._build_scanner_macro_regime(diagnostics)
         liquidity_frame = self._build_scanner_liquidity_frame(diagnostics)
         theme_frame = self._build_scanner_theme_frame(diagnostics)
@@ -4463,6 +4655,7 @@ class MarketScannerService:
             "rejected_symbols": universe_selection["rejected_symbols"],
             "diagnostics": diagnostics if isinstance(diagnostics, dict) else {},
             "scannerContextFrame": self._build_scanner_context_frame(
+                market=run.market,
                 run_id=int(run.id),
                 diagnostics=diagnostics if isinstance(diagnostics, dict) else {},
                 universe_selection=universe_selection,

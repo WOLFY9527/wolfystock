@@ -31,3 +31,44 @@ def test_scanner_run_response_accepts_legacy_shortlist_without_diagnostics() -> 
     assert response.candidates == []
     assert response.scannerContextFrame == {}
     assert response.summary.universe_count == 0
+
+
+def test_scanner_run_response_accepts_additive_cn_blocked_scanner_context_frame() -> None:
+    response = ScannerRunDetailResponse(
+        id=2,
+        market="cn",
+        profile="cn_preopen_v1",
+        status="failed",
+        universe_name="cn_liquid",
+        shortlist_size=0,
+        universe_size=0,
+        preselected_size=0,
+        evaluated_size=0,
+        scannerContextFrame={
+            "marketReadiness": {
+                "contractVersion": "research_readiness_v1",
+                "researchReady": False,
+                "market": "cn",
+                "universeType": "default",
+                "readinessState": "blocked",
+                "blockingReasons": ["universe_source_unavailable"],
+                "missingEvidence": ["technical", "freshness"],
+                "providerAuthority": "unavailable",
+                "freshness": "unavailable",
+                "sourceTier": "unavailable",
+                "nextEvidenceNeeded": ["补充技术面证据"],
+                "noAdviceBoundary": True,
+            },
+            "universePolicy": {
+                "type": "default",
+                "label": "Profile default universe",
+                "reason": "scanner_profile_default_universe",
+            },
+            "noAdviceBoundary": True,
+        },
+    )
+
+    assert response.status == "failed"
+    assert response.scannerContextFrame["marketReadiness"]["readinessState"] == "blocked"
+    assert response.scannerContextFrame["marketReadiness"]["providerAuthority"] == "unavailable"
+    assert response.scannerContextFrame["universePolicy"]["type"] == "default"

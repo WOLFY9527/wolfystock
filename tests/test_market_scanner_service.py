@@ -1116,6 +1116,123 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertTrue(frame["macroRegime"]["blockers"])
         self.assertTrue(frame["liquidityFrame"]["blockers"])
 
+    def test_get_run_detail_projects_blocked_cn_universe_readiness(self) -> None:
+        detail = self.service.record_failed_run(
+            market="cn",
+            profile="cn_preopen_v1",
+            profile_label="A股盘前扫描 v1",
+            universe_name="cn_a_liquid_watchlist_v1",
+            trigger_mode="manual",
+            request_source="test",
+            watchlist_date="2026-06-03",
+            error_message="A 股股票 universe 不可用。",
+            diagnostics={
+                "reason_code": "universe_source_unavailable",
+                "universe_resolution": {
+                    "success": False,
+                    "source": None,
+                    "error_code": "universe_source_unavailable",
+                    "attempts": [
+                        {
+                            "fetcher": "local_universe_cache",
+                            "status": "failed",
+                            "reason_code": "local_universe_cache_missing",
+                        },
+                        {
+                            "fetcher": "AkshareFetcher",
+                            "status": "failed",
+                            "reason_code": "akshare_stock_list_failed",
+                        },
+                    ],
+                },
+                "snapshot_resolution": {},
+                "universe_selection": {"universe_type": "default"},
+            },
+            source_summary=(
+                "universe=unknown; snapshot=unknown; history=local_first; degraded=no; "
+                "universe_attempts=local_universe_cache:failed(local_universe_cache_missing),"
+                "AkshareFetcher:failed(akshare_stock_list_failed); snapshot_attempts=none"
+            ),
+            scope="user",
+        )
+
+        frame = detail["scannerContextFrame"]
+        readiness = frame["marketReadiness"]
+        self.assertEqual(detail["status"], "failed")
+        self.assertFalse(readiness["researchReady"])
+        self.assertEqual(readiness["market"], "cn")
+        self.assertEqual(readiness["universeType"], "default")
+        self.assertEqual(readiness["readinessState"], "blocked")
+        self.assertIn("universe_source_unavailable", readiness["blockedReasons"])
+        self.assertIn("local_universe_cache_missing", readiness["blockedReasons"])
+        self.assertIn("technical", readiness["missingEvidence"])
+        self.assertEqual(readiness["providerAuthority"], "unavailable")
+        self.assertEqual(readiness["sourceAuthority"], "unavailable")
+        self.assertEqual(readiness["freshness"], "unavailable")
+        self.assertEqual(readiness["sourceTier"], "unavailable")
+        self.assertTrue(readiness["noAdviceBoundary"])
+        self.assertEqual(frame["universePolicy"]["type"], "default")
+
+    def test_get_run_detail_projects_blocked_cn_snapshot_readiness(self) -> None:
+        detail = self.service.record_failed_run(
+            market="cn",
+            profile="cn_preopen_v1",
+            profile_label="A股盘前扫描 v1",
+            universe_name="cn_a_liquid_watchlist_v1",
+            trigger_mode="manual",
+            request_source="test",
+            watchlist_date="2026-06-03",
+            error_message="A 股全市场快照不可用。",
+            diagnostics={
+                "reason_code": "no_realtime_snapshot_available",
+                "universe_resolution": {
+                    "success": True,
+                    "source": "builtin_stock_mapping",
+                    "attempts": [
+                        {
+                            "fetcher": "builtin_stock_mapping",
+                            "status": "success",
+                            "rows": 300,
+                        }
+                    ],
+                },
+                "snapshot_resolution": {
+                    "success": False,
+                    "source": None,
+                    "error_code": "no_realtime_snapshot_available",
+                    "attempts": [
+                        {
+                            "fetcher": "AkshareFetcher",
+                            "status": "failed",
+                            "reason_code": "akshare_snapshot_fetch_failed",
+                        },
+                        {
+                            "fetcher": "EfinanceFetcher",
+                            "status": "failed",
+                            "reason_code": "efinance_snapshot_fetch_failed",
+                        },
+                    ],
+                },
+                "universe_selection": {"universe_type": "default"},
+            },
+            source_summary=(
+                "universe=builtin_stock_mapping; snapshot=unknown; history=local_first; degraded=no; "
+                "universe_attempts=builtin_stock_mapping:success; "
+                "snapshot_attempts=AkshareFetcher:failed(akshare_snapshot_fetch_failed),"
+                "EfinanceFetcher:failed(efinance_snapshot_fetch_failed)"
+            ),
+            scope="user",
+        )
+
+        readiness = detail["scannerContextFrame"]["marketReadiness"]
+        self.assertEqual(readiness["readinessState"], "blocked")
+        self.assertIn("no_realtime_snapshot_available", readiness["blockedReasons"])
+        self.assertIn("akshare_snapshot_fetch_failed", readiness["blockedReasons"])
+        self.assertIn("freshness", readiness["missingEvidence"])
+        self.assertEqual(readiness["providerAuthority"], "unavailable")
+        self.assertEqual(readiness["freshness"], "unavailable")
+        self.assertTrue(readiness["nextEvidenceNeeded"])
+
     def test_scanner_context_frame_does_not_mutate_shortlist_rank_or_score(self) -> None:
         shortlist = [
             self._candidate_payload("NVDA", "NVIDIA", 1, 91.2, "2026-06-02"),
@@ -2645,6 +2762,14 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertIn("degraded=yes", result["source_summary"])
         self.assertTrue(any("降级快照" in note for note in result["universe_notes"]))
         self.assertTrue(result["shortlist"])
+        readiness = result["scannerContextFrame"]["marketReadiness"]
+        self.assertFalse(readiness["researchReady"])
+        self.assertEqual(readiness["market"], "cn")
+        self.assertEqual(readiness["readinessState"], "observe_only")
+        self.assertIn("source_authority_not_score_grade", readiness["blockedReasons"])
+        self.assertEqual(readiness["providerAuthority"], "observation_only")
+        self.assertEqual(readiness["freshness"], "fallback")
+        self.assertEqual(readiness["sourceTier"], "fallback_static")
         for item in result["shortlist"]:
             self.assertLessEqual(float(item["score"]), 40.0)
             self.assertEqual(item["diagnostics"]["score_explainability"]["cap_reason"], "fallback_source")

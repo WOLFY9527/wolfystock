@@ -942,6 +942,61 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertEqual(ctx.exception.detail["error"], "not_found")
 
+    def test_get_market_scan_run_preserves_blocked_cn_scanner_context_frame(self) -> None:
+        service = MagicMock()
+        payload = _make_run_payload()
+        payload["status"] = "failed"
+        payload["shortlist"] = []
+        payload["selected"] = []
+        payload["failure_reason"] = "A 股全市场快照不可用。"
+        payload["scannerContextFrame"] = {
+            "marketReadiness": {
+                "contractVersion": "research_readiness_v1",
+                "researchReady": False,
+                "market": "cn",
+                "universeType": "default",
+                "readinessState": "blocked",
+                "verdictLabel": "研究结论受限",
+                "blockingReasons": [
+                    "no_realtime_snapshot_available",
+                    "akshare_snapshot_fetch_failed",
+                ],
+                "missingEvidence": ["technical", "freshness"],
+                "evidenceCoverage": {
+                    "scoreGradeCount": 0,
+                    "observationOnlyCount": 0,
+                    "missingCount": 2,
+                    "totalCount": 2,
+                },
+                "sourceAuthority": "unavailable",
+                "providerAuthority": "unavailable",
+                "freshnessFloor": "unknown",
+                "freshness": "unavailable",
+                "sourceTier": "unavailable",
+                "consumerActionBoundary": "no_advice",
+                "nextEvidenceNeeded": ["补充技术面证据", "补充新鲜度证据"],
+                "noAdviceBoundary": True,
+                "debugRef": "scanner:12:cn_runtime",
+            },
+            "universePolicy": {
+                "type": "default",
+                "label": "Profile default universe",
+                "reason": "scanner_profile_default_universe",
+            },
+            "noAdviceBoundary": True,
+        }
+        service.get_run_detail.return_value = payload
+
+        with patch("api.v1.endpoints.scanner.MarketScannerService", return_value=service):
+            response = get_market_scan_run(12, db_manager=MagicMock())
+
+        self.assertEqual(response.status, "failed")
+        self.assertEqual(response.failure_reason, "A 股全市场快照不可用。")
+        self.assertEqual(response.scannerContextFrame["marketReadiness"]["readinessState"], "blocked")
+        self.assertEqual(response.scannerContextFrame["marketReadiness"]["providerAuthority"], "unavailable")
+        self.assertEqual(response.scannerContextFrame["marketReadiness"]["freshness"], "unavailable")
+        self.assertTrue(response.scannerContextFrame["marketReadiness"]["noAdviceBoundary"])
+
     def test_get_today_watchlist_returns_404_when_missing(self) -> None:
         service = MagicMock()
         service.get_today_watchlist.return_value = None
