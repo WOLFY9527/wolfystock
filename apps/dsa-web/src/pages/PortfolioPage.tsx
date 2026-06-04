@@ -152,6 +152,7 @@ type EditingTrade = {
   price: string;
   tradeDate: string;
   currency: string;
+  currencyManuallyEdited: boolean;
   fee: string;
   tax: string;
   note: string;
@@ -1041,8 +1042,7 @@ function ManualTradeForm({
   copy,
   language,
   tradeForm,
-  tradeCurrencyManuallyEdited,
-  writableAccountBaseCurrency,
+  tradeCurrencyValue,
   writableAccountId,
   tradeSubmitting,
   tradeCurrencyHint,
@@ -1054,8 +1054,7 @@ function ManualTradeForm({
   copy: PortfolioCopy;
   language: PortfolioLanguage;
   tradeForm: TradeFormState;
-  tradeCurrencyManuallyEdited: boolean;
-  writableAccountBaseCurrency?: string;
+  tradeCurrencyValue: DisplayCurrency;
   writableAccountId?: number;
   tradeSubmitting: boolean;
   tradeCurrencyHint: string;
@@ -1081,9 +1080,6 @@ function ManualTradeForm({
               setTradeForm((prev) => ({
                 ...prev,
                 symbol,
-                currency: tradeCurrencyManuallyEdited
-                  ? prev.currency
-                  : inferSettlementCurrency(symbol, writableAccountBaseCurrency),
               }));
             }}
             required
@@ -1094,7 +1090,7 @@ function ManualTradeForm({
             label={copy.currency}
             labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
             className={PORTFOLIO_SELECT_CLASS}
-            value={tradeForm.currency}
+            value={tradeCurrencyValue}
             onChange={(value) => {
               setTradeCurrencyManuallyEdited(true);
               setTradeForm((prev) => ({ ...prev, currency: normalizePortfolioDisplayCurrency(value) }));
@@ -1437,7 +1433,6 @@ const PortfolioPage: React.FC = () => {
   const queryAccountId = selectedAccount === 'all' ? undefined : selectedAccount;
   const refreshViewKey = `${selectedAccount === 'all' ? 'all' : `account:${selectedAccount}`}:cost:${costMethod}`;
   const refreshContextRef = useRef<FxRefreshContext>({ viewKey: refreshViewKey, requestId: 0 });
-  const tradeEditCurrencyManuallyEditedRef = useRef(false);
   const activeAccounts = accounts.filter((item) => item.isActive !== false);
   const writableAccounts = activeAccounts;
   const hasAccounts = accounts.length > 0;
@@ -1454,9 +1449,11 @@ const PortfolioPage: React.FC = () => {
     : eventType === 'cash'
       ? cashEvents.length
       : corporateEvents.length;
-  const inferredTradeCurrency = inferSettlementCurrency(tradeForm.symbol, writableAccount?.baseCurrency);
+  const effectiveTradeCurrency = tradeCurrencyManuallyEdited
+    ? tradeForm.currency
+    : inferSettlementCurrency(tradeForm.symbol, writableAccount?.baseCurrency);
   const tradeCurrencyWarning = writableAccount?.baseCurrency
-    && tradeForm.currency !== normalizePortfolioDisplayCurrency(writableAccount.baseCurrency)
+    && effectiveTradeCurrency !== normalizePortfolioDisplayCurrency(writableAccount.baseCurrency)
     ? (language === 'zh'
       ? '标的结算货币与账户基准币种不同，将依赖汇率折算。'
       : 'The symbol settlement currency differs from the account base currency and will rely on FX conversion.')
@@ -1480,7 +1477,13 @@ const PortfolioPage: React.FC = () => {
   const manualLedgerDisclosure = language === 'zh'
     ? '手工记账入口'
     : 'Manual ledger';
-  const inferredEditTradeCurrency = inferSettlementCurrency(editingTrade?.symbol || '', editingAccount?.baseCurrency);
+  const effectiveEditTradeCurrency = editingTrade
+    ? (
+      editingTrade.currencyManuallyEdited
+        ? editingTrade.currency
+        : inferSettlementCurrency(editingTrade.symbol, editingAccount?.baseCurrency)
+    )
+    : 'CNY';
 
   useEffect(() => {
     savePortfolioDisplayCurrency(displayCurrency);
@@ -1750,26 +1753,6 @@ const PortfolioPage: React.FC = () => {
     }
   }, [writeBlocked]);
 
-  useEffect(() => {
-    if (!tradeCurrencyManuallyEdited) {
-      setTradeForm((prev) => ({ ...prev, currency: inferredTradeCurrency }));
-    }
-  }, [inferredTradeCurrency, tradeCurrencyManuallyEdited]);
-
-  useEffect(() => {
-    if (!editingTrade || tradeEditCurrencyManuallyEditedRef.current) {
-      return;
-    }
-    if (editingTrade.currency === inferredEditTradeCurrency) {
-      return;
-    }
-    setEditingTrade((prev) => (
-      prev
-        ? { ...prev, currency: inferredEditTradeCurrency }
-        : prev
-    ));
-  }, [editingTrade, inferredEditTradeCurrency]);
-
   const positionRows = useMemo<FlatPosition[]>(() => {
     if (!snapshot) return [];
     const rows: FlatPosition[] = [];
@@ -1810,7 +1793,7 @@ const PortfolioPage: React.FC = () => {
         price: Number(tradeForm.price),
         fee: Number(tradeForm.fee || 0),
         tax: Number(tradeForm.tax || 0),
-        currency: tradeForm.currency,
+        currency: effectiveTradeCurrency,
         tradeUid: tradeForm.tradeUid || undefined,
         note: tradeForm.note || undefined,
       });
@@ -1942,7 +1925,8 @@ const PortfolioPage: React.FC = () => {
 
   const openTradeEditor = (item: PortfolioTradeListItem) => {
     setOpenTradeActionMenuId(null);
-    tradeEditCurrencyManuallyEditedRef.current = false;
+    const tradeAccount = activeAccounts.find((account) => account.id === item.accountId);
+    const inferredCurrency = inferSettlementCurrency(item.symbol, tradeAccount?.baseCurrency);
     setEditingTrade({
       id: item.id,
       accountId: item.accountId,
@@ -1952,6 +1936,7 @@ const PortfolioPage: React.FC = () => {
       price: String(item.price),
       tradeDate: item.tradeDate,
       currency: item.currency,
+      currencyManuallyEdited: item.currency !== inferredCurrency,
       fee: String(item.fee ?? 0),
       tax: String(item.tax ?? 0),
       note: item.note || '',
@@ -1981,7 +1966,7 @@ const PortfolioPage: React.FC = () => {
       quantity: Number(editingTrade.quantity),
       price: Number(editingTrade.price),
       tradeDate: editingTrade.tradeDate,
-      currency: editingTrade.currency,
+      currency: effectiveEditTradeCurrency,
       fee: Number(editingTrade.fee || 0),
       tax: Number(editingTrade.tax || 0),
       note: editingTrade.note || undefined,
@@ -1992,7 +1977,6 @@ const PortfolioPage: React.FC = () => {
       await portfolioApi.updateTrade(editingTrade.id, payload);
       await refreshPortfolioData();
       setEditingTrade(null);
-      tradeEditCurrencyManuallyEditedRef.current = false;
       setTradeFeedback({ tone: 'success', text: updateTradeSuccessLabel });
     } catch (err) {
       setError(getParsedApiError(err));
@@ -3471,12 +3455,11 @@ const PortfolioPage: React.FC = () => {
                       copy={copy}
                       language={language}
                       tradeForm={tradeForm}
-                      tradeCurrencyManuallyEdited={tradeCurrencyManuallyEdited}
-                      writableAccountBaseCurrency={writableAccount?.baseCurrency}
+                      tradeCurrencyValue={effectiveTradeCurrency}
                       writableAccountId={writableAccountId}
                       tradeSubmitting={tradeSubmitting}
                       tradeCurrencyHint={tradeCurrencyHint}
-                      tradeCurrencyWarning={tradeCurrencyWarning}
+                    tradeCurrencyWarning={tradeCurrencyWarning}
                       setTradeForm={setTradeForm}
                       setTradeCurrencyManuallyEdited={setTradeCurrencyManuallyEdited}
                       onSubmit={handleTradeSubmit}
@@ -3652,7 +3635,6 @@ const PortfolioPage: React.FC = () => {
             return;
           }
           setEditingTrade(null);
-          tradeEditCurrencyManuallyEditedRef.current = false;
         }}
         title={editTradeTitle}
         width="max-w-[min(96vw,38rem)]"
@@ -3666,7 +3648,10 @@ const PortfolioPage: React.FC = () => {
                 labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                 className={PORTFOLIO_SELECT_CLASS}
                 value={String(editingTrade.accountId)}
-                onChange={(value) => setEditingTrade((prev) => (prev ? { ...prev, accountId: Number(value) } : prev))}
+                onChange={(value) => setEditingTrade((prev) => (prev ? {
+                  ...prev,
+                  accountId: Number(value),
+                } : prev))}
                 options={writableAccounts.map((account) => ({ value: String(account.id), label: account.name }))}
               />
               <Input
@@ -3679,9 +3664,6 @@ const PortfolioPage: React.FC = () => {
                     ? {
                       ...prev,
                       symbol: e.target.value,
-                      currency: tradeEditCurrencyManuallyEditedRef.current
-                        ? prev.currency
-                        : inferSettlementCurrency(e.target.value, editingAccount?.baseCurrency),
                     }
                     : prev
                 ))}
@@ -3730,10 +3712,13 @@ const PortfolioPage: React.FC = () => {
                 label={copy.currency}
                 labelClassName={PORTFOLIO_FIELD_LABEL_CLASS}
                 className={PORTFOLIO_SELECT_CLASS}
-                value={editingTrade.currency}
+                value={effectiveEditTradeCurrency}
                 onChange={(value) => {
-                  tradeEditCurrencyManuallyEditedRef.current = true;
-                  setEditingTrade((prev) => (prev ? { ...prev, currency: value } : prev));
+                  setEditingTrade((prev) => (prev ? {
+                    ...prev,
+                    currency: value,
+                    currencyManuallyEdited: true,
+                  } : prev));
                 }}
                 options={FX_CURRENCY_OPTIONS.map((currency) => ({ value: currency, label: currency }))}
               />
@@ -3772,7 +3757,6 @@ const PortfolioPage: React.FC = () => {
                 className={PORTFOLIO_TEXT_BUTTON_CLASS}
                 onClick={() => {
                   setEditingTrade(null);
-                  tradeEditCurrencyManuallyEditedRef.current = false;
                 }}
                 disabled={tradeEditSubmitting}
               >

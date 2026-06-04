@@ -888,6 +888,81 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('不构成投资建议');
   });
 
+  it('retargets scenario projection to the current visible holdings after account scope changes', async () => {
+    getAccounts.mockResolvedValue(makeAccounts([
+      { id: 1, name: 'Main', baseCurrency: 'CNY', market: 'us' },
+      { id: 2, name: 'HK Account', baseCurrency: 'HKD', market: 'hk' },
+    ]));
+    getSnapshot.mockImplementation(async ({ accountId }: { accountId?: number } = {}) => {
+      if (accountId === 2) {
+        const snapshot = makeSnapshot({
+          accountId: 2,
+          includePosition: true,
+          fxStale: false,
+          positionOverrides: {
+            symbol: '00700.HK',
+            market: 'hk',
+            currency: 'HKD',
+            valuationCurrency: 'HKD',
+            costBasisNative: 1800,
+            marketValueNative: 2000,
+            unrealizedPnlNative: 200,
+            displayMarketValue: 2000,
+            displayUnrealizedPnl: 200,
+            totalCost: 1800,
+            avgCost: 180,
+            lastPrice: 200,
+            marketValueBase: 2000,
+            unrealizedPnlBase: 200,
+            quantity: 10,
+            displayCurrency: 'HKD',
+          },
+        });
+        return {
+          ...snapshot,
+          accounts: [
+            {
+              ...snapshot.accounts[0],
+              accountId: 2,
+              accountName: 'HK Account',
+              market: 'hk',
+              baseCurrency: 'HKD',
+            },
+          ],
+        };
+      }
+      return makeSnapshot({ accountId, includePosition: true, fxStale: false });
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    fireEvent.change(screen.getByLabelText(translate('zh', 'portfolio.accountView')), { target: { value: '2' } });
+    await waitFor(() => expect(getSnapshot).toHaveBeenCalledWith({ accountId: 2, costMethod: 'fifo' }));
+
+    const disclosure = screen.getByTestId('portfolio-scenario-risk-disclosure');
+    fireEvent.click(within(disclosure).getByRole('button', { name: '展开 查看压力情景' }));
+
+    const visibleHoldingSelect = screen.getByLabelText('可见持仓') as HTMLSelectElement;
+    expect(visibleHoldingSelect).toHaveValue('00700.HK');
+
+    fireEvent.change(screen.getByLabelText('冲击幅度（%）'), { target: { value: '-5' } });
+    fireEvent.click(screen.getByRole('button', { name: '运行压力情景' }));
+
+    await waitFor(() => expect(projectScenarioRisk).toHaveBeenCalledTimes(1));
+    expect(projectScenarioRisk).toHaveBeenCalledWith(expect.objectContaining({
+      positions: [expect.objectContaining({ symbol: '00700.HK', currency: 'HKD' })],
+      scenarioShocks: [expect.objectContaining({
+        shocks: {
+          '00700.HK': {
+            shockPct: -5,
+          },
+        },
+      })],
+    }));
+  });
+
   it('translates delayed fallback prices into consumer-safe valuation language', async () => {
     getSnapshot.mockResolvedValue(makeSnapshot({
       includePosition: true,
@@ -2418,6 +2493,58 @@ describe('PortfolioPage FX refresh', () => {
     })));
     await waitFor(() => expect(getSnapshot).toHaveBeenCalledTimes(2));
     expect(await screen.findByText('持仓流水已更新 · 持仓已刷新')).toBeInTheDocument();
+  });
+
+  it('re-derives edit currency from the current symbol scope until the user overrides it', async () => {
+    getAccounts.mockResolvedValue(makeAccounts([
+      { id: 1, name: 'Main', baseCurrency: 'CNY', market: 'cn' },
+      { id: 2, name: 'HK Account', baseCurrency: 'HKD', market: 'hk' },
+    ]));
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true }));
+    listTrades.mockResolvedValue({
+      items: [
+        {
+          id: 7,
+          accountId: 1,
+          symbol: '',
+          market: 'cn',
+          tradeDate: '2026-03-18',
+          side: 'buy',
+          quantity: 1,
+          price: 100,
+          fee: 0,
+          tax: 0,
+          currency: 'CNY',
+          note: 'seed',
+          isActive: true,
+          voidedAt: null,
+          createdAt: '2026-03-18T00:00:00Z',
+          updatedAt: '2026-03-18T00:00:00Z',
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+
+    const dialog = await screen.findByRole('dialog');
+    const accountSelect = within(dialog).getByLabelText('账户') as HTMLSelectElement;
+    const currencySelect = within(dialog).getByLabelText(p('currency')) as HTMLSelectElement;
+
+    expect(currencySelect).toHaveValue('CNY');
+
+    fireEvent.change(accountSelect, { target: { value: '2' } });
+    expect(currencySelect).toHaveValue('HKD');
+
+    fireEvent.change(currencySelect, { target: { value: 'USD' } });
+    fireEvent.change(accountSelect, { target: { value: '1' } });
+    expect(currencySelect).toHaveValue('USD');
   });
 
   it('keeps the edit drawer open when trade update fails', async () => {

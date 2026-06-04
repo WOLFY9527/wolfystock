@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Input } from '../common/Input';
 import { PillBadge } from '../common/PillBadge';
 import { Select } from '../common/Select';
@@ -95,7 +95,7 @@ export function PortfolioScenarioRiskPanel({
   const isEnglish = language === 'en';
   const hasPositions = positions.length > 0;
   const [scenarioKind, setScenarioKind] = useState<ScenarioKind>('symbol');
-  const [selectedSymbol, setSelectedSymbol] = useState<string>(positions[0]?.symbol ?? '');
+  const [selectedSymbol, setSelectedSymbol] = useState('');
   const [mappingLabel, setMappingLabel] = useState('');
   const [shockPercent, setShockPercent] = useState('');
   const [shockError, setShockError] = useState<string | null>(null);
@@ -108,6 +108,9 @@ export function PortfolioScenarioRiskPanel({
     () => positions.map((position) => ({ value: position.symbol, label: position.symbol })),
     [positions],
   );
+  const effectiveSelectedSymbol = positions.some((position) => position.symbol === selectedSymbol)
+    ? selectedSymbol
+    : (positions[0]?.symbol ?? '');
   const scenarioResult = result?.scenarios?.[0] ?? null;
   const warningRows = [
     ...(result?.insufficientDataReasons ?? []),
@@ -120,12 +123,6 @@ export function PortfolioScenarioRiskPanel({
     result?.metadata?.noOrderPlacement ? (isEnglish ? 'No order placement' : '不触发任何下单') : null,
     result?.metadata?.notInvestmentAdvice ? (isEnglish ? 'Not investment advice' : '不构成投资建议') : null,
   ].filter(Boolean) as string[];
-
-  useEffect(() => {
-    if (!selectedSymbol && positions[0]?.symbol) {
-      setSelectedSymbol(positions[0].symbol);
-    }
-  }, [positions, selectedSymbol]);
 
   const handleRunScenario = async () => {
     setShockError(null);
@@ -144,12 +141,12 @@ export function PortfolioScenarioRiskPanel({
       return;
     }
 
-    if (!snapshotAsOf || !hasPositions || !selectedSymbol) {
+    if (!snapshotAsOf || !hasPositions || !effectiveSelectedSymbol) {
       setSubmitError(isEnglish ? 'Visible holdings are not ready for scenario projection.' : '当前可见持仓尚未准备好，暂时无法推演。');
       return;
     }
 
-    const targetLabel = scenarioKind === 'symbol' ? selectedSymbol : trimmedLabel;
+    const targetLabel = scenarioKind === 'symbol' ? effectiveSelectedSymbol : trimmedLabel;
     const payload: PortfolioScenarioRiskRequest = {
       asOf: snapshotAsOf,
       positions: toScenarioPositions(positions),
@@ -157,7 +154,7 @@ export function PortfolioScenarioRiskPanel({
         ? []
         : [
           {
-            symbol: selectedSymbol,
+            symbol: effectiveSelectedSymbol,
             label: targetLabel,
             labelType: scenarioKind,
             exposure: 1,
@@ -235,7 +232,7 @@ export function PortfolioScenarioRiskPanel({
               <Select
                 label={isEnglish ? 'Visible holding' : '可见持仓'}
                 labelClassName={FIELD_LABEL_CLASS}
-                value={selectedSymbol}
+                value={effectiveSelectedSymbol}
                 onChange={(value) => {
                   setSelectedSymbol(value);
                   setResult(null);
