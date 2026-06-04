@@ -762,6 +762,3 @@ const getSentimentHue = (score: number): string => {
 export const getSentimentColor = (score: number): string => {
   return `hsl(${getSentimentHue(score)})`;
 };
-
-export const getSentimentColorAlpha = (score: number, alpha: number): string =>
-  `hsl(${getSentimentHue(score)} / ${alpha})`;

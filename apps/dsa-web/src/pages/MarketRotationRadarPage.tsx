@@ -1,13 +1,13 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useReducer, useState } from 'react';
 import { Gauge, RefreshCcw, Search, SlidersHorizontal } from 'lucide-react';
-import { ApiErrorAlert } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
 import {
   ConsoleContextRail,
   DataWorkbenchFrame,
   DenseRows,
   WolfyCommandBar,
-} from '../components/linear';
+} from '../components/linear/LinearPrimitives';
 import { DataFreshnessBadge } from '../components/market-overview/marketOverviewPrimitives';
 import {
   TerminalButton,
@@ -37,6 +37,7 @@ import { cn } from '../utils/cn';
 import { decisionReadinessVariant, sanitizeMarketGuidanceCopy, type DecisionReadinessState, type DecisionReadinessSummary } from '../utils/marketIntelligenceGuidance';
 
 const TOP_THEME_LIMIT = 10;
+const DEFAULT_MARKET = 'US';
 const MARKET_OPTIONS = [
   { id: 'US', label: '美股' },
   { id: 'CN', label: 'A股' },
@@ -223,9 +224,11 @@ function formatGapLabel(value?: string | null): string {
 
 function themeDataGaps(theme: MarketRotationTheme): string[] {
   const gaps = Array.isArray(theme.dataGaps) ? theme.dataGaps : [];
-  return gaps
-    .map((gap) => String(gap || '').trim())
-    .filter((gap, index, array) => gap && array.indexOf(gap) === index);
+  return gaps.reduce<string[]>((acc, gap) => {
+    const g = String(gap || '').trim();
+    if (g && acc.indexOf(g) === -1) acc.push(g);
+    return acc;
+  }, []);
 }
 
 function consumerThemeSubtitle(theme: MarketRotationTheme): string {
@@ -443,9 +446,11 @@ function sanitizeRotationText(value?: string | null, fallback = '数据不足，
 }
 
 function sanitizeRotationNotes(notes?: string[]): string[] {
-  return (notes || [])
-    .map((note) => sanitizeRotationText(note, ''))
-    .filter((note, index, array) => Boolean(note) && array.indexOf(note) === index);
+  return (notes || []).reduce<string[]>((acc, note) => {
+    const n = sanitizeRotationText(note, '');
+    if (n && acc.indexOf(n) === -1) acc.push(n);
+    return acc;
+  }, []);
 }
 
 function isThemeStale(theme: DataStateFields): boolean {
@@ -457,7 +462,7 @@ function summaryTitle(items: MarketRotationSummaryItem[], fallback: string): str
 }
 
 function deriveTopThemes(themes: MarketRotationTheme[], limit = TOP_THEME_LIMIT): MarketRotationTheme[] {
-  return [...themes]
+  return themes.slice()
     .sort((a, b) => {
       if (b.rotationScore !== a.rotationScore) {
         return b.rotationScore - a.rotationScore;
@@ -610,7 +615,12 @@ function deriveMissingEvidence(
     !hasBreadthEvidence(summaryThemes) || tiers.confirmedLeaders.length === 0 ? '广度信息不足' : '',
     payload.isFallback ? '最近数据不足' : '',
     payload.isStale ? '最近数据不足' : '',
-    ...summaryThemes.flatMap((theme) => themeDataGaps(theme).slice(0, 2)).map(formatGapLabel),
+    ...summaryThemes.reduce<string[]>((acc, theme) => {
+      for (const gap of themeDataGaps(theme).slice(0, 2)) {
+        acc.push(formatGapLabel(gap));
+      }
+      return acc;
+    }, []),
   ];
   return uniqueReadinessItems(
     missing,
@@ -907,7 +917,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
 
       <div data-testid="rotation-radar-summary-band" data-terminal-primitive="panel" className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-3">
         {heroCards.map((card) => (
-          <div key={card.key} className="rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+          <div key={card.key} className="rounded-lg border border-white/[0.06] bg-black/10 p-3">
             <p className="text-[11px] font-medium text-white/48">{card.label}</p>
             <p className="mt-2 break-words text-sm font-semibold leading-5 text-white/84">{card.value}</p>
             <p className="mt-2 text-[11px] leading-5 text-white/58">{card.detail}</p>
@@ -915,7 +925,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
         ))}
       </div>
 
-      <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
+      <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/10 p-3">
         <p className="text-[11px] font-medium text-white/48">下一步</p>
         <p className="mt-2 text-[11px] leading-5 text-white/60">{conclusion.nextStep}</p>
       </div>
@@ -1008,28 +1018,33 @@ const CommandBar: React.FC<{
     leading={(
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase text-white/35">
-          <SlidersHorizontal className="h-3.5 w-3.5 text-cyan-200/70" aria-hidden="true" />
+          <SlidersHorizontal className="size-3.5 text-cyan-200/70" aria-hidden="true" />
           市场
         </div>
         <div className="flex min-w-0 gap-2 overflow-x-auto no-scrollbar">
-          {MARKET_OPTIONS.filter((market) => !supportedMarkets.length || supportedMarkets.includes(market.id)).map((market) => (
-            <TerminalButton
-              key={market.id}
-              type="button"
-              variant="compact"
-              data-testid={`rotation-market-tab-${market.id}`}
-              aria-pressed={selectedMarket === market.id}
-              className={cn(
-                'shrink-0',
-                selectedMarket === market.id
-                  ? 'border-cyan-200/24 bg-cyan-200/[0.08] text-cyan-50 hover:bg-cyan-200/[0.1] hover:text-cyan-50'
-                  : 'text-white/48 hover:border-white/10 hover:bg-white/[0.04] hover:text-white/75',
-              )}
-              onClick={() => onMarketChange(market.id)}
-            >
-              {market.label}
-            </TerminalButton>
-          ))}
+          {MARKET_OPTIONS.reduce<React.ReactNode[]>((acc, market) => {
+            if (!supportedMarkets.length || supportedMarkets.includes(market.id)) {
+              acc.push(
+                <TerminalButton
+                  key={market.id}
+                  type="button"
+                  variant="compact"
+                  data-testid={`rotation-market-tab-${market.id}`}
+                  aria-pressed={selectedMarket === market.id}
+                  className={cn(
+                    'shrink-0',
+                    selectedMarket === market.id
+                      ? 'border-cyan-200/24 bg-cyan-200/[0.08] text-cyan-50 hover:bg-cyan-200/[0.1] hover:text-cyan-50'
+                      : 'text-white/48 hover:border-white/10 hover:bg-white/[0.04] hover:text-white/75',
+                  )}
+                  onClick={() => onMarketChange(market.id)}
+                >
+                  {market.label}
+                </TerminalButton>,
+              );
+            }
+            return acc;
+          }, [])}
         </div>
       </div>
     )}
@@ -1041,24 +1056,25 @@ const CommandBar: React.FC<{
         </TerminalNestedBlock>
         <TerminalButton
           variant="compact"
-          className="h-10 w-10 rounded-xl px-0 py-0 text-white/50 disabled:cursor-wait disabled:text-white/30"
+          className="size-10 rounded-xl p-0 text-white/50 disabled:cursor-wait disabled:text-white/30"
           onClick={onRefresh}
           disabled={loading}
           aria-label="刷新主题轮动雷达"
         >
-          <RefreshCcw className={cn('h-4 w-4', loading ? 'animate-spin' : '')} aria-hidden="true" />
+          <RefreshCcw className={cn('size-4', loading ? 'animate-spin' : '')} aria-hidden="true" />
         </TerminalButton>
       </div>
     )}
   >
     <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:gap-2">
       <label className="relative min-w-0 flex-1">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" aria-hidden="true" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/35" aria-hidden="true" />
         <input
           className="h-10 w-full rounded-lg border border-white/10 bg-black/25 py-2 pl-9 pr-3 text-sm text-white/78 outline-none transition-all placeholder:text-white/30 focus:border-cyan-200/30 focus:bg-white/[0.035]"
           value={searchQuery}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="搜索主题、英文名或成员"
+          aria-label="搜索主题、英文名或成员"
         />
       </label>
       <div
@@ -1066,7 +1082,7 @@ const CommandBar: React.FC<{
         className="inline-flex min-h-8 shrink-0 items-center gap-2 rounded-md border border-white/[0.06] bg-white/[0.025] px-2.5 text-[11px] text-white/46"
       >
         <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase text-white/35">
-          <Gauge className="h-3.5 w-3.5 text-cyan-200/70" aria-hidden="true" />
+          <Gauge className="size-3.5 text-cyan-200/70" aria-hidden="true" />
           分类
         </div>
         <span>主题优先，行业/概念随结果展开</span>
@@ -1093,7 +1109,7 @@ const LeaderRow: React.FC<{
     data-testid={`rotation-radar-leader-row-${theme.id}`}
     onClick={onSelect}
     className={cn(
-      'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_5.5rem_6.25rem] items-center gap-2 px-3 py-3 text-left transition-colors',
+      'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_5.5rem_6.25rem] items-center gap-2 p-3 text-left transition-colors',
       selected ? 'bg-cyan-200/[0.06]' : 'hover:bg-white/[0.025]',
     )}
   >
@@ -1307,60 +1323,128 @@ const ThemeDetailPanel: React.FC<{
 const LoadingPanel: React.FC = () => (
   <TerminalPanel as="section" role="status" aria-label="正在读取主题轮动 / 相对强弱雷达">
     <div className="flex items-center gap-3 text-white/60">
-      <RefreshCcw className="h-4 w-4 animate-spin" aria-hidden="true" />
+      <RefreshCcw className="size-4 animate-spin" aria-hidden="true" />
       <span className="text-sm">正在读取主题轮动 / 相对强弱雷达...</span>
     </div>
   </TerminalPanel>
 );
 
-const MarketRotationRadarPage: React.FC = () => {
-  const [payload, setPayload] = useState<MarketRotationRadarResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<ParsedApiError | null>(null);
-  const [selectedMarket, setSelectedMarket] = useState('US');
-  const [selectedThemeId, setSelectedThemeId] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
+interface RadarPageState {
+  payload: MarketRotationRadarResponse | null;
+  loading: boolean;
+  error: ParsedApiError | null;
+  selectedMarket: string;
+  selectedThemeId: string;
+  searchQuery: string;
+}
 
-  const loadRadar = useCallback(async (market = selectedMarket) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const nextPayload = await marketRotationApi.getRotationRadar(market);
-      setPayload(nextPayload);
-      setSelectedThemeId(nextPayload.themes[0]?.id || '');
-      setSearchQuery('');
-    } catch (nextError) {
-      setError({ ...getParsedApiError(nextError), title: '读取主题轮动雷达失败' });
-    } finally {
-      setLoading(false);
+type RadarPageAction =
+  | { type: 'loadStarted' }
+  | { type: 'loadSucceeded'; payload: MarketRotationRadarResponse }
+  | { type: 'loadFailed'; error: ParsedApiError }
+  | { type: 'selectMarket'; market: string }
+  | { type: 'selectTheme'; themeId: string }
+  | { type: 'setSearchQuery'; searchQuery: string };
+
+const initialRadarPageState: RadarPageState = {
+  payload: null,
+  loading: true,
+  error: null,
+  selectedMarket: DEFAULT_MARKET,
+  selectedThemeId: '',
+  searchQuery: '',
+};
+
+function radarPageReducer(state: RadarPageState, action: RadarPageAction): RadarPageState {
+  switch (action.type) {
+    case 'loadStarted':
+      return {
+        ...state,
+        loading: true,
+        error: null,
+      };
+    case 'loadSucceeded':
+      return {
+        ...state,
+        payload: action.payload,
+        loading: false,
+        error: null,
+        selectedThemeId: action.payload.themes[0]?.id || '',
+        searchQuery: '',
+      };
+    case 'loadFailed':
+      return {
+        ...state,
+        loading: false,
+        error: action.error,
+      };
+    case 'selectMarket':
+      return {
+        ...state,
+        selectedMarket: action.market,
+      };
+    case 'selectTheme':
+      return {
+        ...state,
+        selectedThemeId: action.themeId,
+      };
+    case 'setSearchQuery':
+      return {
+        ...state,
+        searchQuery: action.searchQuery,
+      };
+    default:
+      return state;
+  }
+}
+
+const MarketRotationRadarPage: React.FC = () => {
+  const [state, dispatch] = useReducer(radarPageReducer, initialRadarPageState);
+
+  const loadRadar = async (market: string) => {
+    dispatch({ type: 'loadStarted' });
+    const response = await marketRotationApi.getRotationRadar(market)
+      .then((payload) => ({ payload, error: null as ParsedApiError | null }))
+      .catch((nextError) => ({
+        payload: null,
+        error: { ...getParsedApiError(nextError), title: '读取主题轮动雷达失败' },
+      }));
+    if (response.payload) {
+      dispatch({ type: 'loadSucceeded', payload: response.payload });
+      return;
     }
-  }, [selectedMarket]);
+    if (response.error) {
+      dispatch({ type: 'loadFailed', error: response.error });
+    }
+  };
 
   useEffect(() => {
-    void loadRadar(selectedMarket);
-  }, [loadRadar, selectedMarket]);
+    queueMicrotask(() => {
+      void loadRadar(DEFAULT_MARKET);
+    });
+  }, []);
 
-  const rotationTiers = useMemo(() => (payload ? deriveRotationTiers(payload) : null), [payload]);
-  const headlineThemes = useMemo(
-    () => (payload && rotationTiers ? derivePrimaryDisplayThemes(payload, rotationTiers) : []),
-    [payload, rotationTiers],
-  );
-  const filteredThemes = useMemo(
-    () => (payload?.themes || []).filter((theme) => matchesSearch(theme, searchQuery)),
-    [payload?.themes, searchQuery],
-  );
+  const handleMarketChange = (market: string) => {
+    if (market === state.selectedMarket) {
+      return;
+    }
+    dispatch({ type: 'selectMarket', market });
+    void loadRadar(market);
+  };
 
-  const selectedTheme = useMemo(
-    () => payload?.themes.find((theme) => theme.id === selectedThemeId) || payload?.themes[0],
-    [payload, selectedThemeId],
-  );
+  const handleRefresh = () => {
+    void loadRadar(state.selectedMarket);
+  };
+
+  const rotationTiers = state.payload ? deriveRotationTiers(state.payload) : null;
+  const headlineThemes = state.payload && rotationTiers ? derivePrimaryDisplayThemes(state.payload, rotationTiers) : [];
+  const filteredThemes = (state.payload?.themes || []).filter((theme) => matchesSearch(theme, state.searchQuery));
+
+  const selectedTheme = state.payload?.themes.find((theme) => theme.id === state.selectedThemeId) || state.payload?.themes[0];
   const libraryMode = rotationTiers?.libraryMode || false;
-  const rotationConclusion = useMemo(
-    () => (payload && rotationTiers ? deriveRotationConclusion(payload, rotationTiers) : null),
-    [payload, rotationTiers],
-  );
+  const rotationConclusion = state.payload && rotationTiers ? deriveRotationConclusion(state.payload, rotationTiers) : null;
   const primaryTierLabel = libraryMode ? '分类浏览' : rotationTiers?.confirmedLeaders.length ? '确认信号' : '观察信号';
-  const marketLabelText = marketLabel(payload?.market || selectedMarket);
+  const marketLabelText = marketLabel(state.payload?.market || state.selectedMarket);
 
   return (
     <div
@@ -1377,36 +1461,36 @@ const MarketRotationRadarPage: React.FC = () => {
           />
         </TerminalPanel>
 
-        {error ? (
+        {state.error ? (
           <TerminalPanel as="section">
-            <ApiErrorAlert error={error} />
+            <ApiErrorAlert error={state.error} />
           </TerminalPanel>
         ) : null}
 
-        {loading && !payload ? <LoadingPanel /> : null}
+        {state.loading && !state.payload ? <LoadingPanel /> : null}
 
-        {payload ? (
+        {state.payload ? (
           <>
             <CommandBar
-              selectedMarket={selectedMarket}
-              supportedMarkets={payload.supportedMarkets || ['US', 'CN', 'HK', 'CRYPTO']}
-              searchQuery={searchQuery}
-              onMarketChange={setSelectedMarket}
-              onSearchChange={setSearchQuery}
-              loading={loading}
-              freshness={payload.freshness}
-              onRefresh={() => void loadRadar()}
+              selectedMarket={state.selectedMarket}
+              supportedMarkets={state.payload.supportedMarkets || ['US', 'CN', 'HK', 'CRYPTO']}
+              searchQuery={state.searchQuery}
+              onMarketChange={handleMarketChange}
+              onSearchChange={(searchQuery) => dispatch({ type: 'setSearchQuery', searchQuery })}
+              loading={state.loading}
+              freshness={state.payload.freshness}
+              onRefresh={handleRefresh}
             />
 
-            <RotationGuidancePanel payload={payload} />
+            <RotationGuidancePanel payload={state.payload} />
 
             <TerminalGrid className="gap-4" data-workbench-split="8:4">
               <section className="min-w-0 space-y-4 xl:col-span-8" aria-label={libraryMode ? '分类浏览与观察线索' : primaryTierLabel}>
                 <DataWorkbenchFrame data-testid="rotation-radar-universe-list">
-                  <div className="border-b border-white/[0.05] px-3 py-3">
+                  <div className="border-b border-white/[0.05] p-3">
                     <TerminalSectionHeader
                       eyebrow="主题 / 分类"
-                      title={libraryMode ? `${filteredThemes.length}/${payload.themes.length} 个分类条目` : `${filteredThemes.length}/${payload.themes.length} 个条目，先看主题再看信号。`}
+                      title={libraryMode ? `${filteredThemes.length}/${state.payload.themes.length} 个分类条目` : `${filteredThemes.length}/${state.payload.themes.length} 个条目，先看主题再看信号。`}
                     />
                   </div>
                   <div className="max-h-80 overflow-y-auto no-scrollbar">
@@ -1418,7 +1502,7 @@ const MarketRotationRadarPage: React.FC = () => {
                             theme={theme}
                             marketLabelText={marketLabelText}
                             selected={selectedTheme?.id === theme.id}
-                            onSelect={() => setSelectedThemeId(theme.id)}
+                            onSelect={() => dispatch({ type: 'selectTheme', themeId: theme.id })}
                           />
                         ))}
                       </DenseRows>
@@ -1431,7 +1515,7 @@ const MarketRotationRadarPage: React.FC = () => {
                 </DataWorkbenchFrame>
 
                 <DataWorkbenchFrame data-testid="rotation-radar-leader-list">
-                  <div className="border-b border-white/[0.05] px-3 py-3">
+                  <div className="border-b border-white/[0.05] p-3">
                     <TerminalSectionHeader
                       eyebrow={primaryTierLabel}
                       title={headlineThemes.length
@@ -1451,7 +1535,7 @@ const MarketRotationRadarPage: React.FC = () => {
                           theme={theme}
                           marketLabelText={marketLabelText}
                           selected={selectedTheme?.id === theme.id}
-                          onSelect={() => setSelectedThemeId(theme.id)}
+                          onSelect={() => dispatch({ type: 'selectTheme', themeId: theme.id })}
                         />
                       ))}
                     </DenseRows>
@@ -1459,7 +1543,7 @@ const MarketRotationRadarPage: React.FC = () => {
                     <div className="p-3">
                       <TerminalEmptyState
                         data-testid="rotation-radar-insufficient-empty"
-                        className="min-h-[104px] items-start justify-start px-3 py-3 text-left text-sm text-white/52"
+                        className="min-h-[104px] items-start justify-start p-3 text-left text-sm text-white/52"
                       >
                         <span className="block font-semibold text-white/82">
                           {rotationConclusion?.title || '当前无法判断轮动方向'}

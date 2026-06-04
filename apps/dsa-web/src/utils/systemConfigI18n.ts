@@ -196,19 +196,3 @@ export function getFieldDescription(language: UiLanguage, key: string, fallback?
   }
   return fallback || '';
 }
-
-export function getCategoryTitleZh(category: SystemConfigCategory, fallback?: string): string {
-  return getCategoryTitle('zh', category, fallback);
-}
-
-export function getCategoryDescriptionZh(category: SystemConfigCategory, fallback?: string): string {
-  return getCategoryDescription('zh', category, fallback);
-}
-
-export function getFieldTitleZh(key: string, fallback?: string): string {
-  return getFieldTitle('zh', key, fallback);
-}
-
-export function getFieldDescriptionZh(key: string, fallback?: string): string {
-  return getFieldDescription('zh', key, fallback);
-}

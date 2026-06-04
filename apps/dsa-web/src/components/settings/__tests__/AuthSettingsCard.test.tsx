@@ -12,6 +12,10 @@ vi.mock('../../../hooks', () => ({
   useAuth: () => useAuthMock(),
 }));
 
+vi.mock('../../../hooks/useAuth', () => ({
+  useAuth: () => useAuthMock(),
+}));
+
 vi.mock('../../../api/auth', () => ({
   authApi: {
     updateSettings,

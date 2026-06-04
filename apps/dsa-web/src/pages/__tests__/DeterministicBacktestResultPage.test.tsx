@@ -23,6 +23,8 @@ const {
   compareRuleBacktestRuns: vi.fn(),
 }));
 
+const CHART_IMPORT_TIMEOUT = 5000;
+
 const { writeTextMock } = vi.hoisted(() => ({
   writeTextMock: vi.fn(),
 }));
@@ -592,7 +594,7 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getByTestId('deterministic-result-dashboard')).toBeInTheDocument();
     expect(screen.queryByText('结果指标')).not.toBeInTheDocument();
     expect(screen.queryByText('联动结果图表')).not.toBeInTheDocument();
-    expect(await screen.findByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
+    expect(await screen.findByTestId('deterministic-backtest-chart-workspace', undefined, { timeout: CHART_IMPORT_TIMEOUT })).toHaveAttribute('data-row-count', '3');
     expect(screen.getByRole('tab', { name: '概览' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.queryByText('日级审计 / 对账')).not.toBeInTheDocument();
     expect(screen.queryByText('交易 / 事件日志')).not.toBeInTheDocument();
@@ -604,9 +606,10 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getByTestId('deterministic-result-kpi-strip')).not.toHaveTextContent('{value}');
 
     fireEvent.click(screen.getByRole('tab', { name: '审计明细' }));
-    expect(await screen.findByTestId('deterministic-result-tab-panel-audit')).toBeInTheDocument();
+    const auditPanel = await screen.findByTestId('deterministic-result-tab-panel-audit');
+    expect(auditPanel).toBeInTheDocument();
     expect(screen.getByText('日级审计 / 对账')).toBeInTheDocument();
-    expect(screen.getByText('执行轨迹')).toBeInTheDocument();
+    expect(within(auditPanel).getByRole('heading', { name: '执行轨迹' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '关键节点' })).toHaveAttribute('aria-selected', 'true');
 
     fireEvent.click(screen.getByRole('tab', { name: '交易记录' }));
@@ -1464,7 +1467,7 @@ describe('DeterministicBacktestResultPage', () => {
       expect(screen.getByRole('heading', { name: '确定性回测结果 #123' })).toBeInTheDocument();
     });
     expect(screen.getByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '123');
-    expect(await screen.findByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
+    expect(await screen.findByTestId('deterministic-backtest-chart-workspace', undefined, { timeout: CHART_IMPORT_TIMEOUT })).toHaveAttribute('data-row-count', '3');
   }, 10000);
 
   it('supports side-by-side comparison from the history tab', async () => {

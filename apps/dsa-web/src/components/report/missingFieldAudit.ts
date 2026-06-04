@@ -247,8 +247,7 @@ export const collectMissingFieldEntriesFromMarkdown = (markdown: string): Missin
     if (trimmed.startsWith('|')) {
       const cells = trimmed
         .split('|')
-        .map((cell) => normalizeFieldLabel(cell))
-        .filter(Boolean);
+        .flatMap((cell) => { const n = normalizeFieldLabel(cell); return n ? [n] : []; });
 
       cells.forEach((cell, cellIndex) => {
         const reason = extractMissingReason(cell);
@@ -298,7 +297,7 @@ export const collectMissingFieldEntriesFromMarkdown = (markdown: string): Missin
   return dedupeMissingFieldEntries(entries);
 };
 
-export const dedupeMissingFieldEntries = (entries: MissingFieldEntry[]): MissingFieldEntry[] => {
+const dedupeMissingFieldEntries = (entries: MissingFieldEntry[]): MissingFieldEntry[] => {
   const deduped: MissingFieldEntry[] = [];
   const seen = new Set<string>();
 
@@ -331,9 +330,10 @@ export const buildMissingFieldAudit = (entries: MissingFieldEntry[]): MissingFie
 
   const consolidatedEntries: MissingFieldEntry[] = [];
   groupedByField.forEach((fieldEntries) => {
-    const category = fieldEntries
-      .map((entry) => entry.category)
-      .sort((a, b) => CATEGORY_PRIORITY[a] - CATEGORY_PRIORITY[b])[0] || 'other_missing';
+    const category = fieldEntries.reduce(
+      (min, entry) => (CATEGORY_PRIORITY[entry.category] < CATEGORY_PRIORITY[min] ? entry.category : min),
+      fieldEntries[0]?.category ?? 'other_missing',
+    );
     const prioritized = fieldEntries.find((entry) => entry.category === category) || fieldEntries[0];
 
     consolidatedEntries.push({

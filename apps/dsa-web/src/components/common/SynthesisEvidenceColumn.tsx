@@ -1,5 +1,5 @@
 import type React from 'react';
-import { TerminalDenseList } from '../terminal';
+import { TerminalDenseList } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
 
 export type SynthesisEvidenceItem = {
@@ -18,7 +18,7 @@ export const SynthesisEvidenceColumn: React.FC<{
 }> = ({ testId, title, emptyLabel, items, accentClassName = 'text-white/72' }) => (
   <section
     data-testid={testId}
-    className="min-w-0 rounded-xl border border-white/[0.06] bg-black/10 px-3 py-3"
+    className="min-w-0 rounded-xl border border-white/[0.06] bg-black/10 p-3"
   >
     <div className="flex min-w-0 items-center justify-between gap-2">
       <p className="truncate text-[10px] font-bold uppercase tracking-[0.22em] text-white/38">

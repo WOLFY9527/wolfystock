@@ -1,9 +1,11 @@
 import type React from 'react';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { getApiErrorMessage } from '../../api/error';
 import { stocksApi, type ExtractItem } from '../../api/stocks';
 import { SystemConfigConflictError } from '../../api/systemConfig';
-import { Badge, Button, SupportBanner, SupportPanel } from '../common';
+import { Badge } from '../common/Badge';
+import { Button } from '../common/Button';
+import { SupportBanner, SupportPanel } from '../common/SupportSurface';
 
 const IMG_EXT = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
 const IMG_MAX = 5 * 1024 * 1024; // 5MB
@@ -104,63 +106,55 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [pasteText, setPasteText] = useState('');
 
-  const parseCurrentList = useCallback(() => {
-    return stockListValue
-      .split(',')
-      .map((c) => c.trim())
-      .filter(Boolean);
-  }, [stockListValue]);
+  const parseCurrentList = () => {
+    return stockListValue.split(',').flatMap((c) => {
+      const trimmed = c.trim();
+      return trimmed ? [trimmed] : [];
+    });
+  };
 
-  const addItems = useCallback((newItems: ExtractItem[]) => {
+  const addItems = (newItems: ExtractItem[]) => {
     setItems((prev) => mergeItems(prev, newItems));
-  }, []);
+  };
 
-  const handleImageFile = useCallback(
-    async (file: File) => {
-      const ext = '.' + (file.name.split('.').pop() ?? '').toLowerCase();
-      if (!IMG_EXT.includes(ext)) {
-        setError('图片仅支持 JPG、PNG、WebP、GIF');
-        return;
-      }
-      if (file.size > IMG_MAX) {
-        setError('图片不超过 5MB');
-        return;
-      }
-      setError(null);
-      setIsLoading(true);
-      try {
-        const res = await stocksApi.extractFromImage(file);
-        addItems(res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })));
-      } catch (e) {
-        setError(getApiErrorMessage(e, '识别失败，请重试'));
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [addItems],
-  );
+  const handleImageFile = async (file: File) => {
+    const ext = '.' + (file.name.split('.').pop() ?? '').toLowerCase();
+    if (!IMG_EXT.includes(ext)) {
+      setError('图片仅支持 JPG、PNG、WebP、GIF');
+      return;
+    }
+    if (file.size > IMG_MAX) {
+      setError('图片不超过 5MB');
+      return;
+    }
+    setError(null);
+    setIsLoading(true);
+    try {
+      const res = await stocksApi.extractFromImage(file);
+      addItems(res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })));
+    } catch (e) {
+      setError(getApiErrorMessage(e, '识别失败，请重试'));
+    }
+    setIsLoading(false);
+  };
 
-  const handleDataFile = useCallback(
-    async (file: File) => {
-      if (file.size > FILE_MAX) {
-        setError('文件不超过 2MB');
-        return;
-      }
-      setError(null);
-      setIsLoading(true);
-      try {
-        const res = await stocksApi.parseImport(file);
-        addItems(res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })));
-      } catch (e) {
-        setError(getApiErrorMessage(e, '解析失败'));
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [addItems],
-  );
+  const handleDataFile = async (file: File) => {
+    if (file.size > FILE_MAX) {
+      setError('文件不超过 2MB');
+      return;
+    }
+    setError(null);
+    setIsLoading(true);
+    try {
+      const res = await stocksApi.parseImport(file);
+      addItems(res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })));
+    } catch (e) {
+      setError(getApiErrorMessage(e, '解析失败'));
+    }
+    setIsLoading(false);
+  };
 
-  const handlePasteParse = useCallback(() => {
+  const handlePasteParse = () => {
     const t = pasteText.trim();
     if (!t) return;
     if (new Blob([t]).size > TEXT_MAX) {
@@ -178,61 +172,54 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
       .catch((e) => {
         setError(getApiErrorMessage(e, '解析失败'));
       })
-      .finally(() => setIsLoading(false));
-  }, [pasteText, addItems]);
+      .then(() => {
+        setIsLoading(false);
+      });
+  };
 
-  const onDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragging(false);
-      if (disabled || isLoading) return;
-      const f = e.dataTransfer?.files?.[0];
-      if (!f) return;
-      const ext = '.' + (f.name.split('.').pop() ?? '').toLowerCase();
-      if (IMG_EXT.includes(ext)) void handleImageFile(f);
-      else void handleDataFile(f);
-    },
-    [disabled, isLoading, handleImageFile, handleDataFile],
-  );
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (disabled || isLoading) return;
+    const f = e.dataTransfer?.files?.[0];
+    if (!f) return;
+    const ext = '.' + (f.name.split('.').pop() ?? '').toLowerCase();
+    if (IMG_EXT.includes(ext)) void handleImageFile(f);
+    else void handleDataFile(f);
+  };
 
-  const onImageInput = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const f = e.target.files?.[0];
-      if (f) void handleImageFile(f);
-      e.target.value = '';
-    },
-    [handleImageFile],
-  );
+  const onImageInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) void handleImageFile(f);
+    e.target.value = '';
+  };
 
-  const onDataFileInput = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const f = e.target.files?.[0];
-      if (f) void handleDataFile(f);
-      e.target.value = '';
-    },
-    [handleDataFile],
-  );
+  const onDataFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) void handleDataFile(f);
+    e.target.value = '';
+  };
 
-  const toggleChecked = useCallback((id: string) => {
+  const toggleChecked = (id: string) => {
     setItems((prev) => prev.map((p) => (p.id === id && p.code ? { ...p, checked: !p.checked } : p)));
-  }, []);
+  };
 
-  const toggleAll = useCallback((checked: boolean) => {
+  const toggleAll = (checked: boolean) => {
     setItems((prev) => prev.map((p) => (p.code ? { ...p, checked } : p)));
-  }, []);
+  };
 
-  const removeItem = useCallback((id: string) => {
+  const removeItem = (id: string) => {
     setItems((prev) => prev.filter((p) => p.id !== id));
-  }, []);
+  };
 
-  const clearAll = useCallback(() => {
+  const clearAll = () => {
     setItems([]);
     setPasteText('');
     setError(null);
-  }, []);
+  };
 
-  const mergeToWatchlist = useCallback(async () => {
-    const toMerge = items.filter((i) => i.checked && i.code).map((i) => i.code!);
+  const mergeToWatchlist = async () => {
+    const toMerge = items.flatMap((i) => (i.checked && i.code ? [i.code] : []));
     if (toMerge.length === 0) return;
     const current = parseCurrentList();
     const merged = [...new Set([...current, ...toMerge])];
@@ -251,13 +238,20 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
       } else {
         setError(getApiErrorMessage(e, '合并保存失败'));
       }
-    } finally {
-      setIsMerging(false);
     }
-  }, [items, onMergeStockList, parseCurrentList]);
+    setIsMerging(false);
+  };
 
-  const validCount = items.filter((i) => i.code).length;
-  const checkedCount = items.filter((i) => i.checked && i.code).length;
+  const { validCount, checkedCount } = items.reduce<{ validCount: number; checkedCount: number }>(
+    (acc, i) => {
+      if (i.code) {
+        acc.validCount++;
+        if (i.checked) acc.checkedCount++;
+      }
+      return acc;
+    },
+    { validCount: 0, checkedCount: 0 },
+  );
 
   return (
     <div className="space-y-4">
@@ -281,18 +275,19 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
             <Button type="button" variant="settings-secondary" disabled={disabled || isLoading}>
               选择图片
             </Button>
-            <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif" className="hidden" onChange={onImageInput} disabled={disabled || isLoading} />
+            <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif" className="hidden" onChange={onImageInput} disabled={disabled || isLoading} aria-label="选择图片" />
           </label>
           <label className="cursor-pointer">
             <Button type="button" variant="settings-secondary" disabled={disabled || isLoading}>
               选择文件
             </Button>
-            <input type="file" accept=".csv,.xlsx,.txt" className="hidden" onChange={onDataFileInput} disabled={disabled || isLoading} />
+            <input type="file" accept=".csv,.xlsx,.txt" className="hidden" onChange={onDataFileInput} disabled={disabled || isLoading} aria-label="选择文件" />
           </label>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <textarea
             placeholder="或粘贴 CSV/Excel 复制的文本..."
+            aria-label="粘贴文本"
             className="input-surface settings-surface-strong settings-border-strong min-h-[72px] w-full rounded-xl border px-3 py-2 text-sm text-foreground shadow-soft-card transition-colors placeholder:text-muted-text focus:outline-none"
             value={pasteText}
             onChange={(e) => setPasteText(e.target.value)}
@@ -358,10 +353,11 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
                 >
                   <input
                     type="checkbox"
-                    className="settings-input-checkbox h-4 w-4 rounded border-border/70 bg-base"
+                    className="settings-input-checkbox size-4 rounded border-border/70 bg-base"
                     checked={it.checked}
                     onChange={() => toggleChecked(it.id)}
                     disabled={!it.code || disabled}
+                    aria-label={it.code || '解析失败'}
                   />
                   <span className={it.code ? 'font-medium text-foreground' : 'font-medium text-danger'}>
                     {it.code || '解析失败'}

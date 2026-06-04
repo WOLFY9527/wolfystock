@@ -1,5 +1,5 @@
 import type React from 'react';
-import { TerminalChip, TerminalDisclosure, TerminalSectionHeader } from '../terminal';
+import { TerminalChip, TerminalDisclosure, TerminalSectionHeader } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
 import type { OfficialMacroAuthorityDiagnosticsView } from './officialMacroAuthorityDiagnosticsData';
 

@@ -30,10 +30,10 @@ vi.mock('../../../api/backtest', () => ({
   },
 }));
 
-function renderDisclosure() {
+function renderDisclosure(runId = 99, code = 'ORCL') {
   return render(
     <UiLanguageProvider>
-      <BacktestSupportExportsDisclosure runId={99} code="ORCL" />
+      <BacktestSupportExportsDisclosure runId={runId} code={code} />
     </UiLanguageProvider>,
   );
 }
@@ -272,6 +272,42 @@ describe('BacktestSupportExportsDisclosure', () => {
     expect(previewText).not.toContain('proof');
     expect(previewText).not.toContain('validated');
     expect(previewText).not.toContain('recommended');
+  });
+
+  it('reloads support export state when the run changes', async () => {
+    getRuleBacktestSupportExportIndex.mockResolvedValue({
+      runId: 99,
+      status: 'completed',
+      exports: [
+        {
+          key: 'robustness_evidence_json',
+          available: true,
+          availabilityReason: 'ready',
+          format: 'json',
+          mediaType: 'application/json',
+          deliveryMode: 'api',
+          endpointPath: '/api/v1/backtest/rule/runs/99/robustness-evidence.json',
+          payloadClass: 'RuleBacktestRobustnessEvidenceExportResponse',
+        },
+      ],
+    });
+    getRuleBacktestRobustnessEvidenceJson.mockResolvedValue(makeRobustnessEvidencePayload());
+
+    const view = renderDisclosure();
+
+    fireEvent.click(screen.getByRole('button', { name: '展开 技术支持导出' }));
+
+    await waitFor(() => expect(getRuleBacktestSupportExportIndex).toHaveBeenCalledWith(99));
+    await waitFor(() => expect(getRuleBacktestRobustnessEvidenceJson).toHaveBeenCalledWith(99));
+
+    view.rerender(
+      <UiLanguageProvider>
+        <BacktestSupportExportsDisclosure runId={100} code="AAPL" />
+      </UiLanguageProvider>,
+    );
+
+    await waitFor(() => expect(getRuleBacktestSupportExportIndex).toHaveBeenCalledWith(100));
+    await waitFor(() => expect(getRuleBacktestRobustnessEvidenceJson).toHaveBeenCalledWith(100));
   });
 
   it('degrades gracefully when the robustness export lacks stored OOS diagnostic evidence', async () => {

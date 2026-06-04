@@ -2,7 +2,7 @@ import type React from 'react';
 import { useEffect, useId, useRef } from 'react';
 import { Lock } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { TerminalButton } from '../terminal';
+import { TerminalButton } from '../terminal/TerminalPrimitives';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../../utils/localeRouting';
 

@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Button } from '../common';
+import { Button } from '../common/Button';
 
 type ApiSourceCardProps = {
   testId: string;
@@ -34,11 +34,11 @@ export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
   kindLabel,
   validationBadge,
   isConfigured,
-  capabilities,
+  capabilities = [],
   impactLabel,
-  impactSurfaces,
-  impactCapabilities,
-  impactStates,
+  impactSurfaces = [],
+  impactCapabilities = [],
+  impactStates = [],
   impactEvidenceText,
   statusText,
   validationMessage,

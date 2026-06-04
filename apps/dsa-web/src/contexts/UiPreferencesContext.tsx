@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import type React from 'react';
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, use, useEffect, useState } from 'react';
 import {
   DEFAULT_MARKET_COLOR_CONVENTION,
   getMarketColorPalette,
@@ -168,7 +168,7 @@ export const UiPreferencesProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [marketColorConvention]);
 
-  const value = useMemo<UiPreferencesContextValue>(() => ({
+  const value: UiPreferencesContextValue = {
     fontSize,
     setFontSize: (size) => setFontSizeState(normalizeFontSize(size)),
     dataDensity,
@@ -179,7 +179,7 @@ export const UiPreferencesProvider: React.FC<{ children: React.ReactNode }> = ({
     setMarketColorConvention: (value) => {
       setMarketColorConventionState(normalizeMarketColorConvention(value));
     },
-  }), [dataDensity, fontSize, marketColorConvention, numberFormat]);
+  };
 
   return (
     <UiPreferencesContext.Provider value={value}>
@@ -189,5 +189,5 @@ export const UiPreferencesProvider: React.FC<{ children: React.ReactNode }> = ({
 };
 
 export function useUiPreferences(): UiPreferencesContextValue {
-  return useContext(UiPreferencesContext);
+  return use(UiPreferencesContext);
 }

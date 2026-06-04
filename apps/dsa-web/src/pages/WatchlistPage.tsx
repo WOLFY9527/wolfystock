@@ -15,13 +15,15 @@ import { backtestApi } from '../api/backtest';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { watchlistApi } from '../api/watchlist';
 import { ConsumerProtectedFrame, ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
-import { ApiErrorAlert, Input, Select } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Input } from '../components/common/Input';
+import { Select } from '../components/common/Select';
 import {
   ConsoleBoard,
   ConsoleContextRail,
   CompactFilterBar,
   DenseRows,
-} from '../components/linear';
+} from '../components/linear/LinearPrimitives';
 import {
   CompactEmptyRow,
   DenseCommandBar,
@@ -29,11 +31,13 @@ import {
   DenseSecondaryDisclosure,
   DenseStatusStrip,
   DenseTableShell,
+} from '../components/terminal/DenseWorkbenchPrimitives';
+import {
   TerminalButton,
   TerminalChip,
   TerminalNotice,
   TerminalPanel,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 import UserAlertsRailPanel from '../components/user-alerts/UserAlertsRailPanel';
 import LeveragedEtfMapper from '../components/watchlist/LeveragedEtfMapper';
 import { useI18n } from '../contexts/UiLanguageContext';

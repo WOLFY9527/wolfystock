@@ -1,7 +1,7 @@
 import type React from 'react';
-import { Suspense, lazy, useEffect, useMemo } from 'react';
-import { WorkspacePageHeader } from '../components/common';
-import { TerminalPageShell } from '../components/terminal';
+import { Suspense, lazy, useEffect } from 'react';
+import { WorkspacePageHeader } from '../components/common/WorkspacePageHeader';
+import { TerminalPageShell } from '../components/terminal/TerminalPrimitives';
 import { previewChartFixtures, previewReport } from '../dev/reportPreviewFixture';
 import { normalizeFrontendReportContract } from '../api/reportNormalizer';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -13,10 +13,7 @@ const LazyStandardReportPanel = lazy(async () => {
 
 const PreviewReportPage: React.FC = () => {
   const { t } = useI18n();
-  const normalizedPreviewReport = useMemo(
-    () => normalizeFrontendReportContract(previewReport),
-    [],
-  );
+  const normalizedPreviewReport = normalizeFrontendReportContract(previewReport);
 
   useEffect(() => {
     document.title = t('previewReport.documentTitle');
@@ -41,10 +38,10 @@ const PreviewReportPage: React.FC = () => {
             aria-busy="true"
             aria-live="polite"
             aria-label={t('previewReport.title')}
-            className="theme-panel-subtle rounded-[1.25rem] px-5 py-5 md:px-6"
+            className="theme-panel-subtle rounded-[1.25rem] p-5 md:px-6"
           >
             <div className="flex items-center gap-3">
-              <div className="home-spinner h-5 w-5 animate-spin border-2" />
+              <div className="home-spinner size-5 animate-spin border-2" />
               <div className="flex-1 space-y-2">
                 <p className="text-sm text-secondary-text">{t('app.loading')}</p>
                 <div className="h-3 w-32 rounded-full bg-white/10" />

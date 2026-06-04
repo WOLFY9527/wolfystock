@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { getParsedApiError } from '../../api/error';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 import type { ScannerCandidate } from '../../types/scanner';
@@ -65,35 +65,35 @@ export function useScannerBacktestLab({
 }) {
   const [backtestItemsBySymbol, setBacktestItemsBySymbol] = useState<Record<string, ScannerBacktestItem>>({});
   const [isBacktestBatchRunning, setIsBacktestBatchRunning] = useState(false);
-  const inFlightBacktestKeysRef = useRef<Set<string>>(new Set());
-  const completedBacktestKeysRef = useRef<Map<string, ScannerBacktestItem>>(new Map());
+  const inFlightBacktestKeysRef = useRef<Set<string> | null>(null);
+  const completedBacktestKeysRef = useRef<Map<string, ScannerBacktestItem> | null>(null);
   const runtimeRef = useRef<Promise<ScannerBacktestRuntime> | null>(null);
+  if (inFlightBacktestKeysRef.current === null) {
+    inFlightBacktestKeysRef.current = new Set();
+  }
+  if (completedBacktestKeysRef.current === null) {
+    completedBacktestKeysRef.current = new Map();
+  }
+  const inFlightBacktestKeys = inFlightBacktestKeysRef.current;
+  const completedBacktestKeys = completedBacktestKeysRef.current;
 
-  const backtestItems = useMemo(
-    () => Object.values(backtestItemsBySymbol).sort((left, right) => left.symbol.localeCompare(right.symbol)),
-    [backtestItemsBySymbol],
-  );
+  const backtestItems = Object.values(backtestItemsBySymbol).sort((left, right) => left.symbol.localeCompare(right.symbol));
 
-  const backtestCounts = useMemo<Record<ScannerBacktestBatchSource, number>>(() => ({
+  const backtestCounts: Record<ScannerBacktestBatchSource, number> = {
     official_selected: dedupeBacktestCandidates(batchCandidatesBySource.official_selected).length,
     preview_selected: dedupeBacktestCandidates(batchCandidatesBySource.preview_selected).length,
     top_5: dedupeBacktestCandidates(batchCandidatesBySource.top_5).length,
     current_filter: dedupeBacktestCandidates(batchCandidatesBySource.current_filter).length,
-  }), [
-    batchCandidatesBySource.current_filter,
-    batchCandidatesBySource.official_selected,
-    batchCandidatesBySource.preview_selected,
-    batchCandidatesBySource.top_5,
-  ]);
+  };
 
-  const getRuntime = useCallback(() => {
+  const getRuntime = () => {
     if (!runtimeRef.current) {
       runtimeRef.current = loadScannerBacktestRuntime();
     }
     return runtimeRef.current;
-  }, []);
+  };
 
-  const runScannerBacktests = useCallback(async (source: ScannerBacktestSource, candidates: ScannerCandidate[]) => {
+  const runScannerBacktests = async (source: ScannerBacktestSource, candidates: ScannerCandidate[]) => {
     const targetCandidates = dedupeBacktestCandidates(candidates);
     if (!targetCandidates.length) return;
     if (source !== 'manual' && isBacktestBatchRunning) return;
@@ -103,7 +103,7 @@ export function useScannerBacktestLab({
       const symbol = normalizeCandidateSymbol(candidate.symbol);
       if (!symbol) return;
       const key = getScannerBacktestKey(symbol);
-      const existing = completedBacktestKeysRef.current.get(key);
+      const existing = completedBacktestKeys.get(key);
       if (existing) {
         setBacktestItemsBySymbol((current) => ({
           ...current,
@@ -111,8 +111,8 @@ export function useScannerBacktestLab({
         }));
         return;
       }
-      if (inFlightBacktestKeysRef.current.has(key)) return;
-      inFlightBacktestKeysRef.current.add(key);
+      if (inFlightBacktestKeys.has(key)) return;
+      inFlightBacktestKeys.add(key);
       queue.push({ ...candidate, symbol });
       setBacktestItemsBySymbol((current) => ({
         ...current,
@@ -152,7 +152,7 @@ export function useScannerBacktestLab({
           waitForCompletion: true,
         });
         const item = mapRuleRunToScannerBacktestItem(response, response.status === 'failed' ? 'failed' : 'completed');
-        completedBacktestKeysRef.current.set(key, item);
+        completedBacktestKeys.set(key, item);
         setBacktestItemsBySymbol((current) => ({
           ...current,
           [symbol]: item,
@@ -167,31 +167,35 @@ export function useScannerBacktestLab({
           },
         }));
       } finally {
-        inFlightBacktestKeysRef.current.delete(key);
+        inFlightBacktestKeys.delete(key);
       }
     };
 
     if (source !== 'manual') setIsBacktestBatchRunning(true);
     try {
-      for (let index = 0; index < queue.length; index += SCANNER_BACKTEST_CONCURRENCY) {
-        await Promise.all(queue.slice(index, index + SCANNER_BACKTEST_CONCURRENCY).map(runOne));
-      }
+      const runBatch = async (startIndex: number): Promise<void> => {
+        if (startIndex >= queue.length) return;
+        await Promise.all(queue.slice(startIndex, startIndex + SCANNER_BACKTEST_CONCURRENCY).map(runOne));
+        await runBatch(startIndex + SCANNER_BACKTEST_CONCURRENCY);
+      };
+
+      await runBatch(0);
     } finally {
       if (source !== 'manual') setIsBacktestBatchRunning(false);
     }
-  }, [getRuntime, isBacktestBatchRunning, language]);
+  };
 
-  const handleBacktestCandidate = useCallback((candidate: ScannerCandidate) => {
+  const handleBacktestCandidate = (candidate: ScannerCandidate) => {
     void runScannerBacktests('manual', [candidate]);
-  }, [runScannerBacktests]);
+  };
 
-  const handleBacktestBatch = useCallback((source: ScannerBacktestBatchSource) => {
+  const handleBacktestBatch = (source: ScannerBacktestBatchSource) => {
     void runScannerBacktests(source, batchCandidatesBySource[source]);
-  }, [batchCandidatesBySource, runScannerBacktests]);
+  };
 
-  const getBacktestItem = useCallback((symbol?: string | null) => (
+  const getBacktestItem = (symbol?: string | null) => (
     backtestItemsBySymbol[normalizeCandidateSymbol(symbol) || '']
-  ), [backtestItemsBySymbol]);
+  );
 
   const backtestUnavailableLabel = language === 'en'
     ? 'Backtest handoff requires a candidate symbol.'

@@ -1,6 +1,9 @@
 import type { ParsedApiError } from '../../api/error';
-import { ApiErrorAlert, Drawer, Pagination, PillBadge } from '../common';
-import { TerminalEmptyState } from '../terminal';
+import { ApiErrorAlert } from '../common/ApiErrorAlert';
+import { Drawer } from '../common/Drawer';
+import { Pagination } from '../common/Pagination';
+import { PillBadge } from '../common/PillBadge';
+import { TerminalEmptyState } from '../terminal/TerminalPrimitives';
 
 type Language = 'zh' | 'en';
 type ChipVariant = 'success' | 'warning' | 'danger' | 'info' | 'history';

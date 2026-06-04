@@ -1,5 +1,9 @@
 import type React from 'react';
-import { Button, ConfirmDialog, Drawer, Input, Select } from '../common';
+import { Button } from '../common/Button';
+import { ConfirmDialog } from '../common/ConfirmDialog';
+import { Drawer } from '../common/Drawer';
+import { Input } from '../common/Input';
+import { Select } from '../common/Select';
 import { formatDateTime, formatDurationMs } from '../../utils/format';
 import type { BuiltinDataSourceEndpointCheck } from '../../types/systemConfig';
 import {
@@ -187,6 +191,191 @@ type DataSourceLibraryDrawerProps = {
   validationResult?: BuiltinDataSourceValidationResult;
 };
 
+type CustomDataSourceEditorPanelProps = {
+  draft: CustomDataSourceRecord;
+  entry: DataSourceLibraryEntry | null;
+  isSaving: boolean;
+  mode: DataSourceEditorMode;
+  onDeleteTargetChange: (value: string | null) => void;
+  onDraftChange: React.Dispatch<React.SetStateAction<CustomDataSourceRecord>>;
+  onSave: () => void;
+  t: TranslateFn;
+};
+
+const CustomDataSourceEditorPanel: React.FC<CustomDataSourceEditorPanelProps> = ({
+  draft,
+  entry,
+  isSaving,
+  mode,
+  onDeleteTargetChange,
+  onDraftChange,
+  onSave,
+  t,
+}) => (
+  <div className="space-y-3">
+    <div className={DRAWER_PANEL_CLASS}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            {mode === 'create'
+              ? t('settings.dataSourceEditorCreateTitle')
+              : t('settings.dataSourceEditorEditTitle')}
+          </p>
+          <p className="mt-1 text-xs text-secondary-text">{t('settings.dataSourceEditorDesc')}</p>
+        </div>
+        <span className={GHOST_TAG_CLASS}>
+          {draft.capabilities.length
+            ? t('settings.dataSourceConfiguredPending')
+            : t('settings.notConfigured')}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        {DATA_SOURCE_CUSTOM_SCHEMA_OPTIONS.map((option) => {
+          const active = draft.credentialSchema === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              className={active
+                ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-left shadow-[var(--glow-soft)]'
+                : 'rounded-[var(--theme-control-radius)] border border-border/60 bg-base/60 px-3 py-2 text-left'}
+              onClick={() => onDraftChange((prev) => ({
+                ...prev,
+                credentialSchema: option.value,
+                secret: option.value === 'key_secret' ? prev.secret : '',
+              }))}
+              disabled={isSaving}
+            >
+              <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
+              <p className="mt-1 text-xs text-secondary-text">{t(option.descriptionKey)}</p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+    <ImpactPanel draft={draft} entry={entry} t={t} />
+
+    <div className="space-y-3">
+      <Input
+        label={t('settings.dataSourceEditorName')}
+        value={draft.name}
+        onChange={(event) => onDraftChange((prev) => ({ ...prev, name: event.target.value }))}
+        disabled={isSaving}
+      />
+      <Input
+        type="password"
+        allowTogglePassword
+        iconType="key"
+        label={t('settings.dataSourceFieldApiKey')}
+        value={draft.credential}
+        onChange={(event) => onDraftChange((prev) => ({ ...prev, credential: event.target.value }))}
+        disabled={isSaving}
+        hint={t('settings.dataSourceEditorCredentialHint')}
+      />
+      {draft.credentialSchema === 'key_secret' ? (
+        <Input
+          type="password"
+          allowTogglePassword
+          iconType="key"
+          label={t('settings.dataSourceFieldSecretKey')}
+          value={draft.secret}
+          onChange={(event) => onDraftChange((prev) => ({ ...prev, secret: event.target.value }))}
+          disabled={isSaving}
+          hint={t('settings.dataSourceFieldSecretKeyHint')}
+        />
+      ) : null}
+      <details>
+        <summary className={DRAWER_ADVANCED_SUMMARY_CLASS}>
+          配置高级参数 (Advanced Settings) ▾
+        </summary>
+        <div className="mt-3 space-y-3">
+          <Input
+            label={t('settings.dataSourceEditorBaseUrl')}
+            value={draft.baseUrl}
+            onChange={(event) => onDraftChange((prev) => ({ ...prev, baseUrl: event.target.value }))}
+            disabled={isSaving}
+            hint={t('settings.dataSourceEditorBaseUrlHint')}
+            placeholder="https://example.com/v1"
+          />
+          <div>
+            <label htmlFor="ds-description" className={DRAWER_LABEL_CLASS}>{t('settings.dataSourceEditorDescription')}</label>
+            <textarea
+              id="ds-description"
+              aria-label={t('settings.dataSourceEditorDescription')}
+              value={draft.description}
+              onChange={(event) => onDraftChange((prev) => ({ ...prev, description: event.target.value }))}
+              disabled={isSaving}
+              className={DRAWER_TEXTAREA_CLASS}
+            />
+          </div>
+          <div>
+            <p className={DRAWER_LABEL_CLASS}>{t('settings.dataSourceEditorCapabilities')}</p>
+            <div className="flex flex-wrap gap-2">
+              {DATA_SOURCE_CAPABILITY_OPTIONS.map((capability) => {
+                const active = draft.capabilities.includes(capability);
+                return (
+                  <button
+                    key={capability}
+                    type="button"
+                    className={active
+                      ? 'rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-medium text-white'
+                      : 'rounded-lg border border-white/5 bg-white/[0.03] px-3 py-1.5 text-xs text-white/40 hover:bg-white/10'}
+                    onClick={() => onDraftChange((prev) => {
+                      const nextCapabilities = active
+                        ? prev.capabilities.filter((item) => item !== capability)
+                        : [...prev.capabilities, capability];
+                      return { ...prev, capabilities: nextCapabilities };
+                    })}
+                    disabled={isSaving}
+                  >
+                    {t(DATA_SOURCE_CAPABILITY_LABEL_KEYS[capability])}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-xs text-secondary-text">
+        {mode === 'create'
+          ? t('settings.dataSourceValidationAfterCreateHint')
+          : draft.validation?.status === 'failed'
+            ? draft.validation.message || t('settings.dataSourceValidationLocalFailed')
+            : draft.validation?.status === 'validated'
+              ? t('settings.dataSourceValidationLocalSuccess')
+              : t('settings.dataSourceValidationConfiguredOnly')}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        {mode !== 'create' && entry ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="danger-subtle"
+            onClick={() => onDeleteTargetChange(entry.key)}
+            disabled={isSaving}
+          >
+            {t('settings.dataSourceDeleteAction')}
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          size="sm"
+          variant="settings-primary"
+          onClick={onSave}
+          disabled={isSaving}
+        >
+          {mode === 'create'
+            ? t('settings.dataSourceEditorCreateAction')
+            : t('settings.dataSourceEditorSaveAction')}
+        </Button>
+      </div>
+    </div>
+  </div>
+);
+
 const DataSourceLibraryDrawer: React.FC<DataSourceLibraryDrawerProps> = ({
   adminLocked,
   isOpen,
@@ -359,166 +548,16 @@ const DataSourceLibraryDrawer: React.FC<DataSourceLibraryDrawerProps> = ({
           {validationResult ? renderValidationPanel(validationResult, language, t) : null}
         </div>
       ) : (
-        <div className="space-y-3">
-          <div className={DRAWER_PANEL_CLASS}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold text-foreground">
-                  {mode === 'create'
-                    ? t('settings.dataSourceEditorCreateTitle')
-                    : t('settings.dataSourceEditorEditTitle')}
-                </p>
-                <p className="mt-1 text-xs text-secondary-text">{t('settings.dataSourceEditorDesc')}</p>
-              </div>
-              <span className={GHOST_TAG_CLASS}>
-                {draft.capabilities.length
-                  ? t('settings.dataSourceConfiguredPending')
-                  : t('settings.notConfigured')}
-              </span>
-            </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
-              {DATA_SOURCE_CUSTOM_SCHEMA_OPTIONS.map((option) => {
-                const active = draft.credentialSchema === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={active
-                      ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-left shadow-[var(--glow-soft)]'
-                      : 'rounded-[var(--theme-control-radius)] border border-border/60 bg-base/60 px-3 py-2 text-left'}
-                    onClick={() => onDraftChange((prev) => ({
-                      ...prev,
-                      credentialSchema: option.value,
-                      secret: option.value === 'key_secret' ? prev.secret : '',
-                    }))}
-                    disabled={isSaving}
-                  >
-                    <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
-                    <p className="mt-1 text-xs text-secondary-text">{t(option.descriptionKey)}</p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <ImpactPanel draft={draft} entry={entry} t={t} />
-
-          <div className="space-y-3">
-            <Input
-              label={t('settings.dataSourceEditorName')}
-              value={draft.name}
-              onChange={(event) => onDraftChange((prev) => ({ ...prev, name: event.target.value }))}
-              disabled={isSaving}
-            />
-            <Input
-              type="password"
-              allowTogglePassword
-              iconType="key"
-              label={t('settings.dataSourceFieldApiKey')}
-              value={draft.credential}
-              onChange={(event) => onDraftChange((prev) => ({ ...prev, credential: event.target.value }))}
-              disabled={isSaving}
-              hint={t('settings.dataSourceEditorCredentialHint')}
-            />
-            {draft.credentialSchema === 'key_secret' ? (
-              <Input
-                type="password"
-                allowTogglePassword
-                iconType="key"
-                label={t('settings.dataSourceFieldSecretKey')}
-                value={draft.secret}
-                onChange={(event) => onDraftChange((prev) => ({ ...prev, secret: event.target.value }))}
-                disabled={isSaving}
-                hint={t('settings.dataSourceFieldSecretKeyHint')}
-              />
-            ) : null}
-            <details>
-              <summary className={DRAWER_ADVANCED_SUMMARY_CLASS}>
-                配置高级参数 (Advanced Settings) ▾
-              </summary>
-              <div className="mt-3 space-y-3">
-                <Input
-                  label={t('settings.dataSourceEditorBaseUrl')}
-                  value={draft.baseUrl}
-                  onChange={(event) => onDraftChange((prev) => ({ ...prev, baseUrl: event.target.value }))}
-                  disabled={isSaving}
-                  hint={t('settings.dataSourceEditorBaseUrlHint')}
-                  placeholder="https://example.com/v1"
-                />
-                <div>
-                  <label className={DRAWER_LABEL_CLASS}>{t('settings.dataSourceEditorDescription')}</label>
-                  <textarea
-                    value={draft.description}
-                    onChange={(event) => onDraftChange((prev) => ({ ...prev, description: event.target.value }))}
-                    disabled={isSaving}
-                    className={DRAWER_TEXTAREA_CLASS}
-                  />
-                </div>
-                <div>
-                  <p className={DRAWER_LABEL_CLASS}>{t('settings.dataSourceEditorCapabilities')}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {DATA_SOURCE_CAPABILITY_OPTIONS.map((capability) => {
-                      const active = draft.capabilities.includes(capability);
-                      return (
-                        <button
-                          key={capability}
-                          type="button"
-                          className={active
-                            ? 'rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-medium text-white'
-                            : 'rounded-lg border border-white/5 bg-white/[0.03] px-3 py-1.5 text-xs text-white/40 hover:bg-white/10'}
-                          onClick={() => onDraftChange((prev) => {
-                            const nextCapabilities = active
-                              ? prev.capabilities.filter((item) => item !== capability)
-                              : [...prev.capabilities, capability];
-                            return { ...prev, capabilities: nextCapabilities };
-                          })}
-                          disabled={isSaving}
-                        >
-                          {t(DATA_SOURCE_CAPABILITY_LABEL_KEYS[capability])}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </details>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-secondary-text">
-              {mode === 'create'
-                ? t('settings.dataSourceValidationAfterCreateHint')
-                : draft.validation?.status === 'failed'
-                  ? draft.validation.message || t('settings.dataSourceValidationLocalFailed')
-                  : draft.validation?.status === 'validated'
-                    ? t('settings.dataSourceValidationLocalSuccess')
-                    : t('settings.dataSourceValidationConfiguredOnly')}
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              {mode !== 'create' && entry ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="danger-subtle"
-                  onClick={() => onDeleteTargetChange(entry.key)}
-                  disabled={isSaving}
-                >
-                  {t('settings.dataSourceDeleteAction')}
-                </Button>
-              ) : null}
-              <Button
-                type="button"
-                size="sm"
-                variant="settings-primary"
-                onClick={onSave}
-                disabled={isSaving}
-              >
-                {mode === 'create'
-                  ? t('settings.dataSourceEditorCreateAction')
-                  : t('settings.dataSourceEditorSaveAction')}
-              </Button>
-            </div>
-          </div>
-        </div>
+        <CustomDataSourceEditorPanel
+          draft={draft}
+          entry={entry}
+          isSaving={isSaving}
+          mode={mode}
+          onDeleteTargetChange={onDeleteTargetChange}
+          onDraftChange={onDraftChange}
+          onSave={onSave}
+          t={t}
+        />
       )}
     </Drawer>
 

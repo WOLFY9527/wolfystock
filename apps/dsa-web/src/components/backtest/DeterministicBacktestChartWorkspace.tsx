@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts/core';
 import { BarChart, LineChart } from 'echarts/charts';
 import type { ComposeOption, ECharts, SetOptionOpts } from 'echarts/core';
@@ -98,20 +98,18 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
   const height = size.height;
   const rows = normalized.rows;
 
-  const metaStrip = useMemo(() => {
-    const benchmarkLabel = normalized.benchmarkMeta.showBenchmark
-      ? normalized.benchmarkMeta.benchmarkLabel
-      : (language === 'en' ? 'No benchmark' : '无基准');
-    return [
-      { label: language === 'en' ? 'Date window' : '回测区间', value: getDateRangeLabel(rows) },
-      { label: language === 'en' ? 'Initial capital' : '初始本金', value: formatCompactNumber(run.initialCapital, language) },
-      { label: language === 'en' ? 'Benchmark' : '基准模式', value: benchmarkLabel },
-      { label: language === 'en' ? 'Lookback' : '回看窗口', value: `${run.lookbackBars ?? '--'}` },
-      { label: language === 'en' ? 'Costs' : '交易成本', value: `${run.feeBps ?? 0} / ${run.slippageBps ?? 0} bps` },
-    ];
-  }, [language, normalized.benchmarkMeta, rows, run]);
+  const benchmarkLabel = normalized.benchmarkMeta.showBenchmark
+    ? normalized.benchmarkMeta.benchmarkLabel
+    : (language === 'en' ? 'No benchmark' : '无基准');
+  const metaStrip = [
+    { label: language === 'en' ? 'Date window' : '回测区间', value: getDateRangeLabel(rows) },
+    { label: language === 'en' ? 'Initial capital' : '初始本金', value: formatCompactNumber(run.initialCapital, language) },
+    { label: language === 'en' ? 'Benchmark' : '基准模式', value: benchmarkLabel },
+    { label: language === 'en' ? 'Lookback' : '回看窗口', value: `${run.lookbackBars ?? '--'}` },
+    { label: language === 'en' ? 'Costs' : '交易成本', value: `${run.feeBps ?? 0} / ${run.slippageBps ?? 0} bps` },
+  ];
 
-  const option = useMemo<EChartsOption>(() => {
+  const option: EChartsOption = (() => {
     const dates = rows.map((row) => row.date);
     const strategySeries = rows.map((row) => row.strategyCumReturn ?? null);
     const benchmarkSeries = rows.map((row) => row.benchmarkCumReturn ?? row.buyHoldCumReturn ?? null);
@@ -341,7 +339,7 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
         },
       ],
     };
-  }, [densityConfig.mode, language, rows]);
+  })();
 
   useEffect(() => {
     const host = containerRef.current;
@@ -411,10 +409,9 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
             </div>
           </div>
           <div className="backtest-void-workspace__chart-shell">
-            <div
+            <figure
               ref={containerRef}
               className="backtest-void-workspace__chart-canvas"
-              role="img"
               aria-label={ctw(language, 'cumulativeReturnChartAria')}
             />
           </div>

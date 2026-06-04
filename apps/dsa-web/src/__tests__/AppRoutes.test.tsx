@@ -64,17 +64,13 @@ vi.mock('../contexts/UiLanguageContext', async () => {
   };
 });
 
-vi.mock('../components/common', async () => {
-  const React = await vi.importActual<typeof import('react')>('react');
-  const actual = await vi.importActual<typeof import('../components/common')>('../components/common');
-  const router = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
-  return {
-    ...actual,
-    Shell: () => React.createElement('div', { 'data-testid': 'shell-frame' }, React.createElement(router.Outlet)),
-    BrandedLoadingScreen: () => null,
-    ApiErrorAlert: () => React.createElement('div', {}, 'api-error'),
-  };
-});
+vi.mock('../components/common/ApiErrorAlert', () => ({
+  ApiErrorAlert: () => <div>api-error</div>,
+}));
+
+vi.mock('../components/common/BrandedLoadingScreen', () => ({
+  BrandedLoadingScreen: () => null,
+}));
 
 vi.mock('../components/report/StandardReportPanel', async () => {
   previewReportPanelImportSpy();

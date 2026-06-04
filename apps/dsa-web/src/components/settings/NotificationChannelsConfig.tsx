@@ -1,6 +1,8 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
-import { Button, GlassCard, Input } from '../common';
+import { useState, type SetStateAction } from 'react';
+import { Button } from '../common/Button';
+import { GlassCard } from '../common/GlassCard';
+import { Input } from '../common/Input';
 import type { SystemConfigItem, SystemConfigUpdateItem } from '../../types/systemConfig';
 import { SettingsSectionCard } from './SettingsSectionCard';
 
@@ -134,7 +136,7 @@ const CHANNELS: NotificationChannelDefinition[] = [
 
 const isConfiguredValue = (value: string | undefined): boolean => Boolean(String(value || '').trim());
 
-export const NOTIFICATION_CHANNEL_KEYS = new Set(CHANNELS.flatMap((channel) => channel.fields.map((field) => field.key)));
+const NOTIFICATION_CHANNEL_KEYS = new Set(CHANNELS.flatMap((channel) => channel.fields.map((field) => field.key)));
 
 const ZH_CHANNEL_DESCRIPTIONS: Record<string, string> = {
   feishu: '飞书 Webhook 或应用机器人凭据。',
@@ -169,6 +171,17 @@ const ZH_FIELD_HINTS: Record<string, string> = {
   'Comma-separated URLs.': '多个地址用逗号分隔。',
 };
 
+const buildNotificationChannelDraft = (items: SystemConfigItem[]): Record<string, string> => {
+  const itemByKey = new Map(items.map((item) => [item.key, item]));
+  const next: Record<string, string> = {};
+  CHANNELS.forEach((channel) => {
+    channel.fields.forEach((field) => {
+      next[field.key] = String(itemByKey.get(field.key)?.value ?? '');
+    });
+  });
+  return next;
+};
+
 export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProps> = ({
   items,
   disabled,
@@ -176,22 +189,27 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
   language = 'en',
   onSaveItems,
 }) => {
-  const itemByKey = useMemo(() => new Map(items.map((item) => [item.key, item])), [items]);
-  const initialDraft = useMemo(() => {
-    const next: Record<string, string> = {};
-    CHANNELS.forEach((channel) => {
-      channel.fields.forEach((field) => {
-        next[field.key] = String(itemByKey.get(field.key)?.value ?? '');
-      });
+  const itemByKey = new Map(items.map((item) => [item.key, item]));
+  const draftSource = JSON.stringify([...NOTIFICATION_CHANNEL_KEYS].map((key) => [key, String(itemByKey.get(key)?.value ?? '')]));
+  const initialDraft = buildNotificationChannelDraft(items);
+  const [draftState, setDraftState] = useState(() => ({
+    source: draftSource,
+    value: initialDraft,
+  }));
+  const draft = draftState.source === draftSource ? draftState.value : initialDraft;
+  const setDraft = (updater: SetStateAction<Record<string, string>>) => {
+    setDraftState((previousState) => {
+      const baseValue = previousState.source === draftSource ? previousState.value : initialDraft;
+      const nextValue = typeof updater === 'function'
+        ? (updater as (previousValue: Record<string, string>) => Record<string, string>)(baseValue)
+        : updater;
+      return {
+        source: draftSource,
+        value: nextValue,
+      };
     });
-    return next;
-  }, [itemByKey]);
-  const [draft, setDraft] = useState<Record<string, string>>(initialDraft);
+  };
   const [savingChannelId, setSavingChannelId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDraft(initialDraft);
-  }, [initialDraft]);
 
   const setFieldValue = (key: string, value: string) => {
     setDraft((previous) => ({
@@ -322,6 +340,7 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
                           <label htmlFor={fieldId} className="theme-field-label mb-2 block">{fieldLabel(field)}</label>
                           <textarea
                             id={fieldId}
+                            aria-label={fieldLabel(field)}
                             className="input-surface input-focus-glow min-h-[84px] w-full resize-y rounded-xl border px-4 py-3 text-sm text-foreground transition-all placeholder:text-muted-text focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                             value={fieldValue}
                             disabled={disabled || isSaving}
@@ -339,7 +358,8 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
                           <input
                             id={fieldId}
                             type="checkbox"
-                            className="settings-input-checkbox h-4 w-4 rounded border-border/70 bg-base"
+                            aria-label={fieldLabel(field)}
+                            className="settings-input-checkbox size-4 rounded border-border/70 bg-base"
                             checked={checked}
                             disabled={disabled || isSaving}
                             onChange={(event) => setFieldValue(field.key, event.target.checked ? 'true' : 'false')}

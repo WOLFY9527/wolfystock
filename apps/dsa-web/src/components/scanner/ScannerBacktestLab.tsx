@@ -1,6 +1,6 @@
 import { LineChart, TestTubeDiagonal } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { TerminalChip } from '../terminal';
+import { TerminalChip } from '../terminal/TerminalPrimitives';
 import { buildLocalizedPath } from '../../utils/localeRouting';
 import type {
   ScannerBacktestBatchSource,
@@ -48,7 +48,7 @@ export function ScannerBacktestLab({
   return (
     <section data-testid="scanner-backtest-lab" className="grid gap-3 rounded-xl border border-white/5 bg-white/[0.015] p-3 text-xs">
       <div className="flex min-w-0 items-center gap-2">
-        <LineChart className="h-3.5 w-3.5 text-white/38" aria-hidden="true" />
+        <LineChart className="size-3.5 text-white/38" aria-hidden="true" />
         <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'en' ? 'Backtest Lab' : '回测实验室'}</h3>
       </div>
       <div className="grid gap-3 text-xs">
@@ -68,10 +68,10 @@ export function ScannerBacktestLab({
           ))}
         </div>
         <div className="flex max-w-full flex-wrap gap-1.5">
-          <ScannerActionButton label={language === 'en' ? 'Official selected' : '回测官方入选'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('official_selected')} disabled={isRunning || counts.official_selected === 0} variant="secondary" />
-          <ScannerActionButton label={language === 'en' ? 'Preview selected' : '回测预览入选'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('preview_selected')} disabled={isRunning || counts.preview_selected === 0} />
-          <ScannerActionButton label={language === 'en' ? 'Top 5' : '回测前 5 名'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('top_5')} disabled={isRunning || counts.top_5 === 0} />
-          <ScannerActionButton label={language === 'en' ? 'Filtered' : '回测当前筛选'} icon={<TestTubeDiagonal className="h-3.5 w-3.5" />} onClick={() => onRunBatch('current_filter')} disabled={isRunning || counts.current_filter === 0} />
+          <ScannerActionButton label={language === 'en' ? 'Official selected' : '回测官方入选'} icon={<TestTubeDiagonal className="size-3.5" />} onClick={() => onRunBatch('official_selected')} disabled={isRunning || counts.official_selected === 0} variant="secondary" />
+          <ScannerActionButton label={language === 'en' ? 'Preview selected' : '回测预览入选'} icon={<TestTubeDiagonal className="size-3.5" />} onClick={() => onRunBatch('preview_selected')} disabled={isRunning || counts.preview_selected === 0} />
+          <ScannerActionButton label={language === 'en' ? 'Top 5' : '回测前 5 名'} icon={<TestTubeDiagonal className="size-3.5" />} onClick={() => onRunBatch('top_5')} disabled={isRunning || counts.top_5 === 0} />
+          <ScannerActionButton label={language === 'en' ? 'Filtered' : '回测当前筛选'} icon={<TestTubeDiagonal className="size-3.5" />} onClick={() => onRunBatch('current_filter')} disabled={isRunning || counts.current_filter === 0} />
         </div>
         <div className="rounded-lg border border-white/5 bg-black/20 px-3 py-2 font-mono text-[11px] text-white/45">{statusText}</div>
         {items.length ? (
@@ -79,13 +79,13 @@ export function ScannerBacktestLab({
             <table className="min-w-[720px] w-full text-left text-[11px]">
               <thead className="border-b border-white/5 text-[10px] uppercase tracking-widest text-white/40">
                 <tr>
-                  <th className="px-2 py-2">{language === 'en' ? 'Symbol' : '代码'}</th>
-                  <th className="px-2 py-2">{language === 'en' ? 'Status' : '状态'}</th>
-                  <th className="px-2 py-2">{language === 'en' ? 'Return' : '收益'}</th>
-                  <th className="px-2 py-2">{language === 'en' ? 'Drawdown' : '回撤'}</th>
-                  <th className="px-2 py-2">{language === 'en' ? 'Sharpe' : '夏普'}</th>
-                  <th className="px-2 py-2">{language === 'en' ? 'Trades' : '交易'}</th>
-                  <th className="px-2 py-2">{language === 'en' ? 'Actions' : '操作'}</th>
+                  <th className="p-2">{language === 'en' ? 'Symbol' : '代码'}</th>
+                  <th className="p-2">{language === 'en' ? 'Status' : '状态'}</th>
+                  <th className="p-2">{language === 'en' ? 'Return' : '收益'}</th>
+                  <th className="p-2">{language === 'en' ? 'Drawdown' : '回撤'}</th>
+                  <th className="p-2">{language === 'en' ? 'Sharpe' : '夏普'}</th>
+                  <th className="p-2">{language === 'en' ? 'Trades' : '交易'}</th>
+                  <th className="p-2">{language === 'en' ? 'Actions' : '操作'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -93,13 +93,13 @@ export function ScannerBacktestLab({
                   const resultHref = item.resultId ? buildLocalizedPath(`/backtest/results/${item.resultId}`, language) : null;
                   return (
                     <tr key={item.symbol} className="border-b border-white/5 text-white/62">
-                      <td className="px-2 py-2 font-mono text-white">{item.symbol}</td>
-                      <td className="px-2 py-2">{item.status}</td>
-                      <td className="px-2 py-2 font-mono">{formatPercent(item.totalReturnPct)}</td>
-                      <td className="px-2 py-2 font-mono">{formatPercent(item.maxDrawdownPct)}</td>
-                      <td className="px-2 py-2 font-mono">{formatMetricNumber(item.sharpe)}</td>
-                      <td className="px-2 py-2 font-mono">{item.tradeCount ?? '--'}</td>
-                      <td className="px-2 py-2">
+                      <td className="p-2 font-mono text-white">{item.symbol}</td>
+                      <td className="p-2">{item.status}</td>
+                      <td className="p-2 font-mono">{formatPercent(item.totalReturnPct)}</td>
+                      <td className="p-2 font-mono">{formatPercent(item.maxDrawdownPct)}</td>
+                      <td className="p-2 font-mono">{formatMetricNumber(item.sharpe)}</td>
+                      <td className="p-2 font-mono">{item.tradeCount ?? '--'}</td>
+                      <td className="p-2">
                         <div className="flex gap-1.5">
                           {resultHref ? <Link className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white/70 hover:bg-white/10" to={resultHref}>{language === 'en' ? 'Report' : '查看报告'}</Link> : null}
                           <button type="button" className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white/70 hover:bg-white/10" onClick={() => onCopySymbol(item.symbol)}>{language === 'en' ? 'Copy' : '复制'}</button>

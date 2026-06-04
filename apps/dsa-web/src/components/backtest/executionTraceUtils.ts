@@ -111,7 +111,7 @@ export function getExecutionTraceSourceLabel(source?: string | null): string {
   return normalized;
 }
 
-export function buildExecutionTraceExportRows(run: RuleBacktestRunResponse): Array<Record<string, string>> {
+function buildExecutionTraceExportRows(run: RuleBacktestRunResponse): Array<Record<string, string>> {
   return getExecutionTraceRows(run).map((row) => {
     const exportRow: Record<string, string> = {};
     TRACE_EXPORT_COLUMNS.forEach(({ key, label }) => {

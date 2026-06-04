@@ -1,6 +1,6 @@
 import type React from 'react';
 import { ExternalLink } from 'lucide-react';
-import { TerminalChip } from '../terminal';
+import { TerminalChip } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
 import { resolveProductSetupSurface } from '../../utils/productSetupSurface';
 

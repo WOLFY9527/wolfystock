@@ -13,17 +13,17 @@ import {
 import { normalizeReportQuality } from '../api/reportNormalizer';
 import { stockEvidenceApi } from '../api/stockEvidence';
 import { withFallback } from '../api/withFallback';
-import {
-  DeepReportDrawer,
-  type SignalTone,
-} from '../components/home-bento';
+import { DeepReportDrawer } from '../components/home-bento/DeepReportDrawer';
+import type { SignalTone } from '../components/home-bento/theme';
 import type { HomeCandlestickChartContext } from '../components/home-bento/HomeCandlestickChart';
 import {
   CompactFilterBar,
   FixedRegionGrid,
   MetricStrip,
-} from '../components/linear';
-import { Button, ConfirmDialog, Drawer } from '../components/common';
+} from '../components/linear/LinearPrimitives';
+import { Button } from '../components/common/Button';
+import { ConfirmDialog } from '../components/common/ConfirmDialog';
+import { Drawer } from '../components/common/Drawer';
 import ConsumerEvidenceCoverageStrip from '../components/common/ConsumerEvidenceCoverageStrip';
 import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -49,7 +49,7 @@ import type {
 import type { PublicAnalysisPreviewResponse } from '../types/publicAnalysis';
 import type { ConsumerResearchReadinessView } from '../types/researchReadiness';
 import type { StockEvidenceFundamentalsSummary } from '../types/stockEvidence';
-import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores';
+import { purgeZombieDashboardStorage, useStockPoolStore } from '../stores/stockPoolStore';
 import {
   buildInstitutionalReportMarkdown,
   getCompanyDisplayName,

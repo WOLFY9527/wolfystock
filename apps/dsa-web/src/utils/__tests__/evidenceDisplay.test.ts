@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  normalizeAnyEvidence,
   normalizeBacktestReadiness,
   normalizeOptionsEvidence,
   normalizePortfolioRiskEvidence,
@@ -122,30 +121,6 @@ describe('evidenceDisplay', () => {
     expect(normalized.diagnostics).toBeUndefined();
   });
 
-  it('does not leak raw enum-like reason terms into user labels', () => {
-    const normalized = normalizeAnyEvidence('scanner', {
-      evidencePacket: {
-        userFacingLabels: [
-          'gap_fade_risk',
-          'provider_timeout',
-          'not_enough_history',
-          'fallback',
-          'dry-run',
-          'mock',
-          'fixture',
-          'MarketCache',
-          'raw',
-          'debug',
-          'schema',
-          'trace',
-        ],
-      },
-    });
-
-    const text = [normalized.displayLabel, ...normalized.limitationLabels].join(' ');
-    expect(text).not.toMatch(/gap_fade_risk|provider_timeout|not_enough_history|fallback|dry-run|mock|fixture|MarketCache|raw|debug|schema|trace/i);
-  });
-
   it('preserves reason codes and diagnostics in admin mode when requested', () => {
     const normalized = normalizeScannerEvidence({
       evidencePacket: {
@@ -162,21 +137,4 @@ describe('evidenceDisplay', () => {
     expect(normalized.diagnostics).toEqual({ trace: 'collapsed-admin-only' });
   });
 
-  it('returns safe unknown summaries for null and undefined payloads', () => {
-    expect(normalizeAnyEvidence('unknown', null)).toMatchObject({
-      engine: 'unknown',
-      posture: 'unknown',
-      displayLabel: '证据待确认',
-      limitationLabels: [],
-      adminReasonCodes: [],
-    });
-
-    expect(normalizeAnyEvidence('scanner', undefined)).toMatchObject({
-      engine: 'scanner',
-      posture: 'unknown',
-      displayLabel: '证据待确认',
-      limitationLabels: [],
-      adminReasonCodes: [],
-    });
-  });
 });

@@ -1,8 +1,9 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, Input } from '../components/common';
-import { SettingsAlert } from '../components/settings';
+import { Button } from '../components/common/Button';
+import { Input } from '../components/common/Input';
+import { SettingsAlert } from '../components/settings/SettingsAlert';
 import { authApi } from '../api/auth';
 import { getParsedApiError } from '../api/error';
 import { translate, type UiLanguage } from '../i18n/core';
@@ -19,18 +20,15 @@ const ResetPasswordPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const routeLanguage = parseLocaleFromPathname(window.location.pathname);
   const language: ResetLanguage = routeLanguage === 'en' ? 'en' : 'zh';
-  const loginPath = useMemo(
-    () => (routeLanguage ? buildLocalizedPath('/login', routeLanguage) : '/login'),
-    [routeLanguage],
-  );
-  const loginPathWithRedirect = useMemo(() => {
+  const loginPath = routeLanguage ? buildLocalizedPath('/login', routeLanguage) : '/login';
+  const loginPathWithRedirect = (() => {
     const redirect = searchParams.get('redirect');
     if (!redirect) {
       return loginPath;
     }
     const suffix = `?redirect=${encodeURIComponent(redirect)}`;
     return routeLanguage ? buildLocalizedPath(`/login${suffix}`, routeLanguage) : `/login${suffix}`;
-  }, [loginPath, routeLanguage, searchParams]);
+  })();
 
   const [identifier, setIdentifier] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -58,9 +56,8 @@ const ResetPasswordPage: React.FC = () => {
       setSuccess(response.message || resetCopy(language, 'successBody'));
     } catch (requestError: unknown) {
       setError(getParsedApiError(requestError).message || resetCopy(language, 'validationRequired'));
-    } finally {
-      setSubmitting(false);
     }
+    setSubmitting(false);
   };
 
   return (

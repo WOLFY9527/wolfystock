@@ -1,6 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import type React from 'react';
-import { Button, Checkbox, Disclosure } from '../../components/common';
+import { Button } from '../common/Button';
+import { Checkbox } from '../common/Checkbox';
+import { Disclosure } from '../common/Disclosure';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { translate } from '../../i18n/core';
 import {
@@ -60,7 +62,7 @@ export function formatDateTime(value?: string | null): string {
   return formatDateTimeValue(value);
 }
 
-export function toDateInputValue(value: Date): string {
+function toDateInputValue(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
@@ -323,7 +325,7 @@ export function getRuleRunStatusDescription(status?: string, language: BacktestL
   return description === `backtest.${key}` ? bt(language, 'ruleRunStatusDescription.default') : description;
 }
 
-export function getRuleRunStatusTone(status?: string): 'default' | 'success' | 'warning' | 'danger' | 'info' {
+function getRuleRunStatusTone(status?: string): 'default' | 'success' | 'warning' | 'danger' | 'info' {
   const normalized = String(status || '').trim().toLowerCase();
   if (normalized === 'completed') return 'success';
   if (normalized === 'failed') return 'danger';
@@ -422,11 +424,15 @@ export function describeHistoricalDataSource(meta: {
   };
 }
 
-function renderDirectionBadge(correct?: boolean | null, expected?: string | null, language: BacktestLanguage = 'zh') {
+const DirectionBadge: React.FC<{
+  correct?: boolean | null;
+  expected?: string | null;
+  language?: BacktestLanguage;
+}> = ({ correct, expected, language = 'zh' }) => {
   if (correct === true) return <span className="product-direction product-direction--positive">✓ {expected || bt(language, 'direction.matched')}</span>;
   if (correct === false) return <span className="product-direction product-direction--negative">✕ {expected || bt(language, 'direction.missed')}</span>;
   return <span className="product-direction">--</span>;
-}
+};
 
 export const SectionEyebrow: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span className="product-kicker">{children}</span>
@@ -448,15 +454,15 @@ export const MetricCard: React.FC<{
 export const SummaryStrip: React.FC<{
   items: Array<{ label: string; value: string; note?: string }>;
 }> = ({ items }) => (
-  <div className="summary-strip" role="list">
+  <ul className="summary-strip">
     {items.map((item) => (
-      <div key={item.label} className="summary-strip__item" role="listitem">
+      <li key={item.label} className="summary-strip__item">
         <p className="summary-strip__label">{item.label}</p>
         <p className="summary-strip__value">{item.value}</p>
         {item.note ? <p className="summary-strip__note">{item.note}</p> : null}
-      </div>
+      </li>
     ))}
-  </div>
+  </ul>
 );
 
 export const Banner: React.FC<{
@@ -480,18 +486,21 @@ export const AssumptionList: React.FC<{
   emptyText: string;
 }> = ({ assumptions, emptyText }) => {
   const { language } = useI18n();
-  const entries = Object.entries(assumptions || {})
-    .filter(([, value]) => value != null && value !== '')
-    .map(([key, value]) => ({
-      key,
-      label: (() => {
-        const label = bt(language, `assumptionLabels.${key}`);
-        return label === `backtest.assumptionLabels.${key}` ? key.replace(/_/g, ' ') : label;
-      })(),
-      value: typeof value === 'boolean'
-        ? (value ? bt(language, 'common.yes') : bt(language, 'common.no'))
-        : Array.isArray(value) ? value.join(', ') : String(value),
-    }));
+  const entries = Object.entries(assumptions || {}).reduce<Array<{ key: string; label: string; value: string }>>((acc, [key, value]) => {
+    if (value != null && value !== '') {
+      acc.push({
+        key,
+        label: (() => {
+          const label = bt(language, `assumptionLabels.${key}`);
+          return label === `backtest.assumptionLabels.${key}` ? key.replace(/_/g, ' ') : label;
+        })(),
+        value: typeof value === 'boolean'
+          ? (value ? bt(language, 'common.yes') : bt(language, 'common.no'))
+          : Array.isArray(value) ? value.join(', ') : String(value),
+      });
+    }
+    return acc;
+  }, []);
 
   if (entries.length === 0) {
     return <p className="product-empty-note">{emptyText}</p>;
@@ -595,7 +604,7 @@ export const HistoricalResultsTable: React.FC<{ rows: BacktestResultItem[] }> = 
               <td>{row.analysisDate || '--'}</td>
               <td className="product-table__mono">{row.code}</td>
               <td>{row.operationAdvice || '--'}</td>
-              <td>{renderDirectionBadge(row.directionCorrect, row.directionExpected, language)}</td>
+              <td><DirectionBadge correct={row.directionCorrect} expected={row.directionExpected} language={language} /></td>
               <td className="product-table__align-right">{pct(row.simulatedReturnPct)}</td>
               <td className="product-table__align-right">{pct(row.stockReturnPct)}</td>
               <td>{row.marketDataSources.length > 0 ? row.marketDataSources.join(', ') : '--'}</td>

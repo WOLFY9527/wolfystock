@@ -12,7 +12,7 @@ export function ScannerStrategySimulationPanelFallback({
       className="rounded-xl border border-white/5 bg-white/[0.015] p-3 text-xs"
     >
       <div className="flex min-w-0 items-center gap-2">
-        <LineChart className="h-3.5 w-3.5 text-white/38" aria-hidden="true" />
+        <LineChart className="size-3.5 text-white/38" aria-hidden="true" />
         <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">
           {language === 'en' ? 'Loading strategy experiment' : '正在加载策略实验'}
         </h3>

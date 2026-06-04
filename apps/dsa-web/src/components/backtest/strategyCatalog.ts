@@ -1,4 +1,4 @@
-import { POINT_AND_SHOOT_TEMPLATE_OPTIONS, type NormalStrategyTemplate } from './pointAndShootTemplateOptions';
+import type { NormalStrategyTemplate } from './pointAndShootTemplateOptions';
 
 export type BacktestLanguage = 'zh' | 'en';
 
@@ -23,6 +23,25 @@ export type StrategyCatalogEntry = {
   editorText: LocalizedText;
   defaultParameters: StrategyTemplateParameter[];
 };
+
+export const POINT_AND_SHOOT_TEMPLATE_IDS = [
+  'macd_crossover',
+  'moving_average_crossover',
+  'rsi_threshold',
+  'periodic_accumulation',
+  'bollinger_breakout',
+  'atr_breakout',
+  'obv_trend_confirmation',
+  'support_resistance_bounce',
+  'macd_rsi_combo',
+  'sma_bollinger_combo',
+  'trend_momentum_volume_mix',
+  'multi_indicator_trend_filter',
+  'bollinger_rsi_reversion_combo',
+  'triple_moving_average_trend_stack',
+  'support_resistance_macd_combo',
+  'vwap_volume_breakout_combo',
+] as const satisfies readonly NormalStrategyTemplate[];
 
 export const STRATEGY_CATEGORY_COPY: Record<
 StrategyTemplateCategoryId,
@@ -476,7 +495,7 @@ export const BUILT_IN_STRATEGY_CATALOG: StrategyCatalogEntry[] = [
   },
 ];
 
-const POINT_AND_SHOOT_TEMPLATE_SET = new Set<string>(POINT_AND_SHOOT_TEMPLATE_OPTIONS.map((template) => template.id));
+const POINT_AND_SHOOT_TEMPLATE_SET = new Set<string>(POINT_AND_SHOOT_TEMPLATE_IDS);
 
 export const POINT_AND_SHOOT_TEMPLATES = BUILT_IN_STRATEGY_CATALOG.filter(
   (template): template is StrategyCatalogEntry & { id: NormalStrategyTemplate } =>

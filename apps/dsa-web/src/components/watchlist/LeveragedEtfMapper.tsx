@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Calculator } from 'lucide-react';
-import { Input } from '../common';
+import { Input } from '../common/Input';
+import { DenseSecondaryDisclosure } from '../terminal/DenseWorkbenchPrimitives';
 import {
-  DenseSecondaryDisclosure,
   TerminalChip,
   TerminalNotice,
-} from '../terminal';
+} from '../terminal/TerminalPrimitives';
 import {
   calculateImpliedUnderlying,
   calculateLeveragedEtfEstimate,

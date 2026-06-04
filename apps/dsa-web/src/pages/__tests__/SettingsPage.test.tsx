@@ -142,6 +142,30 @@ vi.mock('../../hooks', () => ({
   useSystemConfig: () => useSystemConfigMock(),
 }));
 
+vi.mock('../../hooks/useAuth', () => ({
+  useAuth: () => useAuthMock(),
+}));
+
+vi.mock('../../hooks/useSystemConfig', async () => {
+  const React = await import('react');
+  return {
+    useSystemConfig: (initialActiveCategory?: string) => {
+      const state = useSystemConfigMock();
+      const [activeCategory, setMockActiveCategory] = React.useState(
+        initialActiveCategory || state.activeCategory,
+      );
+      return {
+        ...state,
+        activeCategory,
+        setActiveCategory: (category: string) => {
+          state.setActiveCategory(category);
+          setMockActiveCategory(category);
+        },
+      };
+    },
+  };
+});
+
 vi.mock('../../components/theme/ThemeProvider', () => ({
   useThemeStyle: () => ({
     themeStyle: 'spacex',
@@ -273,6 +297,26 @@ vi.mock('../../components/settings', () => ({
       {children}
     </section>
   ),
+}));
+
+vi.mock('../../components/settings/AuthSettingsCard', () => ({
+  AuthSettingsCard: () => <div>认证与登录保护</div>,
+}));
+
+vi.mock('../../components/settings/ChangePasswordCard', () => ({
+  ChangePasswordCard: () => <div>修改密码</div>,
+}));
+
+vi.mock('../../components/settings/IntelligentImport', () => ({
+  IntelligentImport: ({ onMergeStockList }: { onMergeStockList: (value: string) => void }) => (
+    <button type="button" onClick={() => onMergeStockList('SZ000001,SZ000002')}>
+      merge stock list
+    </button>
+  ),
+}));
+
+vi.mock('../../components/settings/SettingsField', () => ({
+  SettingsField: ({ item }: { item: { key: string } }) => <div>{item.key}</div>,
 }));
 
 const baseCategories = [

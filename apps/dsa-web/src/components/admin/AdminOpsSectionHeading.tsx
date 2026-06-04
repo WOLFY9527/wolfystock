@@ -1,5 +1,5 @@
 import type React from 'react';
-import { TerminalSectionHeader } from '../terminal';
+import { TerminalSectionHeader } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
 
 type AdminOpsSectionHeadingProps = {

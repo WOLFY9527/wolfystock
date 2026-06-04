@@ -1,5 +1,5 @@
 import type React from 'react';
-import { TerminalChip } from '../terminal';
+import { TerminalChip } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
 import type { ScannerTopDownContextView } from '../../api/researchReadiness';
 

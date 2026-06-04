@@ -11,7 +11,7 @@ const { navigate, useSearchParamsMock, useAuthMock } = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
 }));
 
-vi.mock('../../hooks', () => ({
+vi.mock('../../hooks/useAuth', () => ({
   useAuth: () => useAuthMock(),
 }));
 
@@ -71,6 +71,27 @@ describe('LoginPage', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
   });
 
+  it('re-enables submit controls after an unsuccessful login response', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login: vi.fn().mockResolvedValue({ success: false }),
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    renderPage();
+
+    const passwordInput = screen.getByLabelText(translate('zh', 'auth.login.passwordLabelLogin'));
+    const submitButton = screen.getByRole('button', { name: translate('zh', 'auth.login.submitLogin') });
+
+    fireEvent.change(passwordInput, { target: { value: 'passwd6' } });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(submitButton).not.toBeDisabled();
+    });
+  });
+
   it('enters create-account mode directly when requested by the route', () => {
     useSearchParamsMock.mockReturnValue([new URLSearchParams('mode=create&redirect=%2Fscanner')]);
     useAuthMock.mockReturnValue({
@@ -84,6 +105,32 @@ describe('LoginPage', () => {
 
     expect(screen.getByRole('heading', { name: translate('zh', 'auth.login.heroTitleCreate') })).toBeInTheDocument();
     expect(screen.getByLabelText(translate('zh', 'auth.login.usernameLabel'))).toBeInTheDocument();
+    expect(screen.getByLabelText(translate('zh', 'auth.login.displayNameLabel'))).toBeInTheDocument();
+  });
+
+  it('syncs create mode when search params change after mount', async () => {
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('')]);
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login: vi.fn(),
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    const { rerender } = renderPage();
+
+    expect(screen.getByRole('heading', { name: translate('zh', 'auth.login.heroTitleLogin') })).toBeInTheDocument();
+
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('mode=create')]);
+    rerender(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: translate('zh', 'auth.login.heroTitleCreate') })).toBeInTheDocument();
+    });
     expect(screen.getByLabelText(translate('zh', 'auth.login.displayNameLabel'))).toBeInTheDocument();
   });
 

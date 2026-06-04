@@ -1,7 +1,7 @@
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Copy, Download, Printer } from 'lucide-react';
-import { Drawer } from '../common';
+import { Drawer } from '../common/Drawer';
 import type {
   AnalysisReport,
   StandardReport,
@@ -15,6 +15,16 @@ import {
   getSymbolDisplay,
   readObjectField,
 } from '../../utils/homeReportIdentity';
+
+const REPORT_DATE_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
 
 type DashboardPayload = {
   ticker: string;
@@ -100,17 +110,15 @@ function getReportSource(report: AnalysisReport | null): StandardReport | undefi
 
 function listOrMissing(items?: Array<string | undefined | null>, fallback = '暂无明确记录'): string[] {
   const seen = new Set<string>();
-  const values = (items || [])
-    .map((item) => String(item || '').trim())
-    .filter(Boolean)
-    .filter((item) => {
-      const key = item.toLowerCase();
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    });
+  const values: string[] = [];
+  for (const raw of items || []) {
+    const item = String(raw || '').trim();
+    if (!item) continue;
+    const key = item.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    values.push(item);
+  }
   return values.length ? values : [fallback];
 }
 
@@ -140,15 +148,7 @@ function formatReportDateTime(value?: string): string {
   if (Number.isNaN(date.getTime())) {
     return text;
   }
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date);
+  return REPORT_DATE_FORMATTER.format(date);
 }
 
 function buildReportIdentity(report: AnalysisReport | null, dashboard?: DashboardPayload, override?: Partial<ReportIdentity>): ReportIdentity {
@@ -161,19 +161,17 @@ function buildReportIdentity(report: AnalysisReport | null, dashboard?: Dashboar
     || '';
   const dataSources = report?.decisionTrace?.dataSources || [];
   const providerSeen = new Set<string>();
-  const providers = dataSources
-    .map((source) => String(source.provider || source.name || '').trim())
-    .filter(Boolean)
-    .filter((provider) => {
-      const key = provider.toLowerCase();
-      if (providerSeen.has(key)) {
-        return false;
-      }
-      providerSeen.add(key);
-      return true;
-    })
-    .join(', ');
-  const statuses = dataSources.map((source) => source.status).filter(Boolean);
+  const providerParts: string[] = [];
+  for (const source of dataSources) {
+    const provider = String(source.provider || source.name || '').trim();
+    if (!provider) continue;
+    const key = provider.toLowerCase();
+    if (providerSeen.has(key)) continue;
+    providerSeen.add(key);
+    providerParts.push(provider);
+  }
+  const providers = providerParts.join(', ');
+  const statuses = dataSources.flatMap((source) => source.status ? [source.status] : []);
   const sourceStatus = statuses.length
     ? statuses.map((status) => {
       const normalized = String(status || '').trim().toLowerCase();
@@ -368,9 +366,9 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
   report,
 }) => {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
-  const sections = useMemo(() => buildFullReportSections(report, dashboard), [dashboard, report]);
-  const identity = useMemo(() => buildReportIdentity(report, dashboard), [dashboard, report]);
-  const markdown = useMemo(() => buildInstitutionalReportMarkdown(report), [report]);
+  const sections = buildFullReportSections(report, dashboard);
+  const identity = buildReportIdentity(report, dashboard);
+  const markdown = buildInstitutionalReportMarkdown(report);
   const summarySection = sections.find((section) => section.id === 'summary');
   const riskSection = sections.find((section) => section.id === 'risks');
   const observationSection = sections.find((section) => section.id === 'observation-plan');
@@ -388,15 +386,18 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
     || '--';
 
   const handleCopyReport = async () => {
-    try {
-      if (!navigator.clipboard?.writeText) {
-        throw new Error('clipboard_unavailable');
-      }
-      await navigator.clipboard.writeText(markdown);
-      setCopyState('copied');
-    } catch {
+    if (!navigator.clipboard?.writeText) {
       setCopyState('failed');
+      return;
     }
+    const copyError = await navigator.clipboard.writeText(markdown)
+      .then(() => null)
+      .catch((error) => error);
+    if (copyError) {
+      setCopyState('failed');
+      return;
+    }
+    setCopyState('copied');
   };
 
   const buildExportFileName = (extension: 'md'): string => {
@@ -481,7 +482,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
                 onClick={handleMarkdownExport}
                 className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
               >
-                <Download className="h-4 w-4" />
+                <Download className="size-4" />
                 导出 Markdown
               </button>
               <button
@@ -489,7 +490,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
                 onClick={handlePrintReport}
                 className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
               >
-                <Printer className="h-4 w-4" />
+                <Printer className="size-4" />
                 导出 PDF
               </button>
               <button
@@ -497,7 +498,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
                 className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm font-semibold text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
                 onClick={() => { void handleCopyReport(); }}
               >
-                <Copy className="h-4 w-4" />
+                <Copy className="size-4" />
                 {copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制报告'}
               </button>
             </div>
@@ -531,7 +532,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
               { label: '置信度', value: confidenceLine },
               { label: '关键风险', value: riskLine },
             ].map((item) => (
-              <div key={item.label} className="min-w-0 rounded-2xl border border-white/[0.06] bg-black/20 px-3 py-3">
+              <div key={item.label} className="min-w-0 rounded-2xl border border-white/[0.06] bg-black/20 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">{item.label}</p>
                 <p className="mt-1.5 break-words text-sm leading-6 text-white/76">{item.value}</p>
               </div>

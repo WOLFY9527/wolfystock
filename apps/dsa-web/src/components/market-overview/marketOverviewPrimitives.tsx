@@ -3,7 +3,7 @@ import { RefreshCcw } from 'lucide-react';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import type { MarketDataFreshness, MarketDataMeta, MarketOverviewItem, MarketOverviewPanel, MarketProviderHealthStatus } from '../../api/marketOverview';
 import { cn } from '../../utils/cn';
-import { TerminalPanel } from '../terminal';
+import { TerminalPanel } from '../terminal/TerminalPrimitives';
 import { formatMarketOverviewTimestamp } from './marketOverviewFormat';
 import {
   formatChangeSummary,
@@ -181,10 +181,14 @@ function compactMetaText(meta?: Partial<MarketDataMeta>): string {
 }
 
 function sanitizeConsumerDetails(details?: string[] | null): string[] {
-  return (details || [])
-    .map((detail) => String(detail || '').trim())
-    .filter((detail) => detail && !CONSUMER_UNSAFE_DETAIL_PATTERN.test(detail))
-    .slice(0, 2);
+  return (details || []).reduce<string[]>((acc, detail) => {
+    if (acc.length >= 2) return acc;
+    const normalized = String(detail || '').trim();
+    if (normalized && !CONSUMER_UNSAFE_DETAIL_PATTERN.test(normalized)) {
+      acc.push(normalized);
+    }
+    return acc;
+  }, []);
 }
 
 function metadataTitle(parts: string[], warning?: string | null, hoverDetails?: string[] | null): string | undefined {
@@ -201,7 +205,7 @@ function shouldShowInlineWarning(meta?: Partial<MarketDataMeta>): boolean {
   return false;
 }
 
-export const MarketOverviewSparkline: React.FC<{ values?: number[]; tone?: string; className?: string }> = ({
+const MarketOverviewSparkline: React.FC<{ values?: number[]; tone?: string; className?: string }> = ({
   values,
   tone = 'text-white/35',
   className,
@@ -244,7 +248,7 @@ export const MarketOverviewRefreshButton: React.FC<{
     disabled={refreshing}
     className="inline-flex h-[36px] w-[36px] items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/45 transition-all hover:bg-white/10 hover:text-white cursor-pointer disabled:cursor-wait disabled:text-white/45 sm:h-[32px] sm:w-[32px]"
   >
-    <RefreshCcw className={cn('h-4 w-4', refreshing ? 'animate-spin' : '')} aria-hidden="true" />
+    <RefreshCcw className={cn('size-4', refreshing ? 'animate-spin' : '')} aria-hidden="true" />
   </button>
 );
 
@@ -380,7 +384,7 @@ export const MarketOverviewDenseQuoteItem: React.FC<{
     <article
       data-testid="market-overview-dense-quote-item"
       data-quote-item-layout="compact-grid"
-      className="grid min-h-[44px] min-w-0 grid-cols-[minmax(96px,1fr)_minmax(104px,0.9fr)_76px_minmax(82px,max-content)_minmax(92px,max-content)] items-center gap-x-2 border-b border-white/[0.045] px-1.5 py-1.5 last:border-b-0 max-[720px]:grid-cols-[minmax(0,1fr)_76px_minmax(82px,max-content)] max-[720px]:gap-y-0.5"
+      className="grid min-h-[44px] min-w-0 grid-cols-[minmax(96px,1fr)_minmax(104px,0.9fr)_76px_minmax(82px,max-content)_minmax(92px,max-content)] items-center gap-x-2 border-b border-white/[0.045] p-1.5 last:border-b-0 max-[720px]:grid-cols-[minmax(0,1fr)_76px_minmax(82px,max-content)] max-[720px]:gap-y-0.5"
     >
       <div className="col-start-1 min-w-0 max-[720px]:row-start-1">
         <div className="flex min-w-0 items-center gap-2">

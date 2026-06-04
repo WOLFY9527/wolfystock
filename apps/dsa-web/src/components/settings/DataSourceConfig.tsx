@@ -1,5 +1,6 @@
 import type React from 'react';
-import { Button, GlassCard } from '../common';
+import { Button } from '../common/Button';
+import { GlassCard } from '../common/GlassCard';
 import { StatusBadge } from '../ui/StatusBadge';
 import { ApiSourceCard } from './ApiSourceCard';
 import { SettingsSectionCard } from './SettingsSectionCard';
@@ -75,7 +76,7 @@ const DATA_SOURCE_LIBRARY_GROUPS: Array<{
 
 const groupedDataSources = (sources: DataSourceLibraryEntry[]) => {
   const assigned = new Set<string>();
-  return DATA_SOURCE_LIBRARY_GROUPS.map((group) => {
+  return DATA_SOURCE_LIBRARY_GROUPS.reduce<Array<typeof DATA_SOURCE_LIBRARY_GROUPS[number] & { items: DataSourceLibraryEntry[] }>>((acc, group) => {
     const items = sources.filter((source) => {
       if (assigned.has(source.key) || !group.matches(source)) {
         return false;
@@ -83,8 +84,9 @@ const groupedDataSources = (sources: DataSourceLibraryEntry[]) => {
       assigned.add(source.key);
       return true;
     });
-    return { ...group, items };
-  }).filter((group) => group.items.length > 0);
+    if (items.length > 0) acc.push({ ...group, items });
+    return acc;
+  }, []);
 };
 
 function getValidationBadgeStatus(state: DataSourceValidationState): string {
@@ -101,14 +103,14 @@ function getValidationBadgeStatus(state: DataSourceValidationState): string {
 const StatusDot: React.FC<{ active: boolean }> = ({ active }) => (
   <span
     className={active
-      ? 'h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
-      : 'h-1.5 w-1.5 shrink-0 rounded-full bg-white/20'}
+      ? 'size-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
+      : 'size-1.5 shrink-0 rounded-full bg-white/20'}
     aria-hidden="true"
   />
 );
 
 const CoverageGapsPanel: React.FC<{ gaps: DataCoverageGapView[]; t: TranslateFn }> = ({ gaps, t }) => (
-  <GlassCard className="px-4 py-4">
+  <GlassCard className="p-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">
@@ -178,7 +180,7 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
           </GlassCard>
         ) : null}
         <CoverageGapsPanel gaps={coverageGaps} t={t} />
-      <GlassCard className="px-4 py-4">
+      <GlassCard className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">
@@ -243,7 +245,7 @@ const DataSourceConfig: React.FC<DataSourceConfigProps> = ({
         </div>
       </GlassCard>
 
-      <GlassCard className="px-4 py-4">
+      <GlassCard className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">

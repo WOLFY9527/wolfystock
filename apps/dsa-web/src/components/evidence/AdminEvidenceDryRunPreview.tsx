@@ -7,7 +7,7 @@ import {
   TerminalNotice,
   TerminalPanel,
   TerminalSectionHeader,
-} from '../terminal';
+} from '../terminal/TerminalPrimitives';
 import {
   ADMIN_EVIDENCE_DRY_RUN_PREVIEWS,
   type AdminEvidenceDryRunPreviewItem,

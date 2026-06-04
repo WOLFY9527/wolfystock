@@ -14,7 +14,8 @@ import {
   type MarketProviderOperationsSummary,
 } from '../api/marketProviderOperations';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert, Input } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Input } from '../components/common/Input';
 import { DataFreshnessBadge } from '../components/market-overview/marketOverviewPrimitives';
 import AdminDrillThroughStrip from '../components/admin/AdminDrillThroughStrip';
 import AdminOpsL0OverviewStrip, { type AdminOpsTrustState } from '../components/admin/AdminOpsL0OverviewStrip';
@@ -34,7 +35,7 @@ import {
   TerminalPageShell,
   TerminalPanel,
   TerminalSectionHeader,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 import type { MarketProviderHealthStatus } from '../api/marketOverview';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { cn } from '../utils/cn';

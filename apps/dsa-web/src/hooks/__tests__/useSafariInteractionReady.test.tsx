@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { act, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useSafariWarmActivation } from '../useSafariInteractionReady';
@@ -16,6 +17,22 @@ describe('useSafariWarmActivation', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+  it('returns a callback ref', () => {
+    let buttonRef: unknown;
+
+    function WarmActivationProbe() {
+      const { ref } = useSafariWarmActivation<HTMLButtonElement>(() => undefined);
+      useEffect(() => {
+        buttonRef = ref;
+      }, [ref]);
+      return null;
+    }
+
+    render(<WarmActivationProbe />);
+
+    expect(typeof buttonRef).toBe('function');
   });
 
   it('releases the warmup pointer listener after the warmup window', () => {

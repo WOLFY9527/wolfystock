@@ -21,7 +21,7 @@ import {
   type PanelState,
 } from '../components/market-overview/MarketOverviewWorkbench';
 import { ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
-import { TerminalPageHeading } from '../components/terminal';
+import { TerminalPageHeading } from '../components/terminal/TerminalPrimitives';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 

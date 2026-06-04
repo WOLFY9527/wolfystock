@@ -7,6 +7,8 @@ import type { RuleBacktestRunResponse } from '../../../types/backtest';
 import { DeterministicAuditTable, DeterministicBacktestResultView } from '../DeterministicBacktestResultView';
 import { normalizeDeterministicBacktestResult } from '../normalizeDeterministicBacktestResult';
 
+const CHART_IMPORT_TIMEOUT = 5000;
+
 function makeViewerRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBacktestRunResponse {
   const auditRows = Array.from({ length: 70 }, (_, index) => {
     const day = String(index + 1).padStart(2, '0');
@@ -118,8 +120,12 @@ describe('DeterministicBacktestResultView', () => {
 
     const resultView = screen.getByTestId('deterministic-backtest-result-view');
     const dashboard = screen.getByTestId('deterministic-result-dashboard');
-    const workspace = await screen.findByTestId('deterministic-backtest-chart-workspace');
-    const chartCanvas = await screen.findByLabelText(translate('zh', 'backtest.resultPage.chartWorkspace.cumulativeReturnChartAria'));
+    const workspace = await screen.findByTestId('deterministic-backtest-chart-workspace', undefined, { timeout: CHART_IMPORT_TIMEOUT });
+    const chartCanvas = await screen.findByLabelText(
+      translate('zh', 'backtest.resultPage.chartWorkspace.cumulativeReturnChartAria'),
+      undefined,
+      { timeout: CHART_IMPORT_TIMEOUT },
+    );
 
     expect(resultView).toHaveAttribute('data-row-count', '70');
     expect(resultView).toHaveAttribute('data-main-series-length', '70');
@@ -147,7 +153,7 @@ describe('DeterministicBacktestResultView', () => {
     render(<DeterministicBacktestResultView run={makeViewerRun()} />);
 
     const resultView = screen.getByTestId('deterministic-backtest-result-view');
-    const workspace = await screen.findByTestId('deterministic-backtest-chart-workspace');
+    const workspace = await screen.findByTestId('deterministic-backtest-chart-workspace', undefined, { timeout: CHART_IMPORT_TIMEOUT });
 
     expect(resultView).toHaveAttribute('data-density', 'comfortable');
     expect(workspace).toHaveAttribute('data-chart-engine', 'echarts');
@@ -161,7 +167,7 @@ describe('DeterministicBacktestResultView', () => {
   it('renders the new sidebar and meta strip workspace shell', async () => {
     render(<DeterministicBacktestResultView run={makeViewerRun()} />);
 
-    const workspace = await screen.findByTestId('deterministic-backtest-chart-workspace');
+    const workspace = await screen.findByTestId('deterministic-backtest-chart-workspace', undefined, { timeout: CHART_IMPORT_TIMEOUT });
     expect(screen.getByTestId('deterministic-chart-meta-strip')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /回测参数/ })).toBeInTheDocument();
     expect(screen.getByText('三图联动')).toBeInTheDocument();

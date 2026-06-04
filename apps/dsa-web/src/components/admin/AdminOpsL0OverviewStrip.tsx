@@ -1,5 +1,5 @@
 import type React from 'react';
-import { TerminalChip } from '../terminal';
+import { TerminalChip } from '../terminal/TerminalPrimitives';
 
 export type AdminOpsTrustState = 'healthy' | 'observe' | 'degraded' | 'blocked' | 'review_required' | 'unknown';
 

@@ -20,7 +20,8 @@ import {
 } from '../api/adminLogs';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Drawer } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Drawer } from '../components/common/Drawer';
 import {
   TerminalButton,
   TerminalChip,
@@ -33,7 +34,7 @@ import {
   TerminalPageShell,
   TerminalPanel,
   TerminalSectionHeader,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 import AdminDrillThroughStrip from '../components/admin/AdminDrillThroughStrip';
 import AdminOpsL0OverviewStrip, { type AdminOpsTrustState } from '../components/admin/AdminOpsL0OverviewStrip';
 import { getStatusLabel, normalizeStatus, type UnifiedStatus } from '../components/ui/StatusBadge.helpers';

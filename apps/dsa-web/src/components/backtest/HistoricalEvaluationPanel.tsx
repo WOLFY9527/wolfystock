@@ -1,7 +1,10 @@
 import type React from 'react';
 import { useState } from 'react';
 import { AnimatePresence, domAnimation, LazyMotion, m } from 'motion/react';
-import { ApiErrorAlert, Button, Card, Pagination } from '../../components/common';
+import { ApiErrorAlert } from '../common/ApiErrorAlert';
+import { Button } from '../common/Button';
+import { Card } from '../common/Card';
+import { Pagination } from '../common/Pagination';
 import type { ParsedApiError } from '../../api/error';
 import type {
   AssumptionMap,

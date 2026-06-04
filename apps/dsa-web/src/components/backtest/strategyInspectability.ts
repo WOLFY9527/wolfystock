@@ -18,7 +18,7 @@ export type RuleStrategySummaryRow = {
   value: string;
 };
 
-export function formatRuleStrategyFamily(strategyType: string, language: BacktestLanguage = 'zh'): string {
+function formatRuleStrategyFamily(strategyType: string, language: BacktestLanguage = 'zh'): string {
   if (strategyType === 'periodic_accumulation') return language === 'en' ? 'Periodic accumulation' : '区间定投';
   if (strategyType === 'moving_average_crossover') return language === 'en' ? 'Moving-average crossover' : '均线交叉';
   if (strategyType === 'macd_crossover') return language === 'en' ? 'MACD crossover' : 'MACD 交叉';

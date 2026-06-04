@@ -13,6 +13,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   isLoading?: boolean;
   loadingText?: string;
   glow?: boolean;
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
 const BUTTON_SIZE_STYLES = {
@@ -36,7 +37,7 @@ const BUTTON_VARIANT_STYLES = {
   'home-action-report': '',
 } as const;
 
-export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
+export const Button = ({
   children,
   variant = 'primary',
   size = 'md',
@@ -46,8 +47,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
   className = '',
   disabled,
   type = 'button',
+  ref,
   ...props
-}, ref) => {
+}: ButtonProps) => {
   const { t } = useI18n();
   const glowStyles = glow ? 'theme-accent-glow settings-glow-accent-hover' : '';
   const resolvedLoadingText = loadingText || (isLoading ? t('common.processing') : '');
@@ -80,7 +82,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
       {isLoading ? (
         <span className="flex items-center justify-center gap-2">
           <svg
-            className="h-4 w-4 animate-spin text-current"
+            className="size-4 animate-spin text-current"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
@@ -106,6 +108,4 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
       )}
     </button>
   );
-});
-
-Button.displayName = 'Button';
+};

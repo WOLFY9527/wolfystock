@@ -1,7 +1,8 @@
 import type React from 'react';
 import { ArrowRight, ShieldAlert } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Card, WorkspacePageHeader } from '../common';
+import { Card } from '../common/Card';
+import { WorkspacePageHeader } from '../common/WorkspacePageHeader';
 
 type ActionLink = {
   label: string;

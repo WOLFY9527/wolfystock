@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Input, PillBadge, Select } from '../common';
+import { Input } from '../common/Input';
+import { PillBadge } from '../common/PillBadge';
+import { Select } from '../common/Select';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import type {
   PortfolioScenarioRiskRequest,
@@ -11,7 +13,7 @@ import {
   TerminalEmptyState,
   TerminalNotice,
   TerminalPanel,
-} from '../terminal';
+} from '../terminal/TerminalPrimitives';
 
 type ScenarioKind = 'symbol' | 'index_proxy' | 'theme_proxy';
 

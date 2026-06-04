@@ -1,5 +1,6 @@
 import type React from 'react';
-import { Button, GlassCard } from '../common';
+import { Button } from '../common/Button';
+import { GlassCard } from '../common/GlassCard';
 import { SettingsSectionCard } from './SettingsSectionCard';
 
 type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
@@ -23,7 +24,7 @@ const SystemLogsConfig: React.FC<SystemLogsConfigProps> = ({
     title={t('settings.runtimeSummaryVisibilityTitle')}
     description={t('settings.runtimeSummaryVisibilityDesc')}
   >
-    <GlassCard className="px-4 py-4">
+    <GlassCard className="p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-foreground">

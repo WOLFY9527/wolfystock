@@ -19,7 +19,8 @@ import {
   type QuotaEnforcementMode,
 } from '../api/adminCost';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert, Select } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Select } from '../components/common/Select';
 import {
   TerminalButton,
   TerminalChip,
@@ -33,7 +34,7 @@ import {
   TerminalPageShell,
   TerminalPanel,
   TerminalSectionHeader,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 import AdminDrillThroughStrip from '../components/admin/AdminDrillThroughStrip';
 import AdminOpsL0OverviewStrip from '../components/admin/AdminOpsL0OverviewStrip';
 import AdminOpsSectionHeading from '../components/admin/AdminOpsSectionHeading';

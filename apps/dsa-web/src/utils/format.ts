@@ -24,6 +24,37 @@ type SignedFormatOptions = NumberFormatOptions & {
   showZeroSign?: boolean;
 };
 
+function dateTimeFormatCacheKey(locale: string, timeZone: string, opts: Intl.DateTimeFormatOptions): string {
+  return `${locale}|${timeZone}|${JSON.stringify(opts)}`;
+}
+
+function numberFormatCacheKey(locale: string, opts: Intl.NumberFormatOptions): string {
+  return `${locale}|${JSON.stringify(opts)}`;
+}
+
+const dateTimeFormatCache = new Map<string, Intl.DateTimeFormat>();
+const numberFormatCache = new Map<string, Intl.NumberFormat>();
+
+function getDateTimeFormat(locale: string, timeZone: string, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = dateTimeFormatCacheKey(locale, timeZone, opts);
+  let fmt = dateTimeFormatCache.get(key);
+  if (!fmt) {
+    fmt = Intl.DateTimeFormat(locale, { ...opts, timeZone });
+    dateTimeFormatCache.set(key, fmt);
+  }
+  return fmt;
+}
+
+function getNumberFormat(locale: string, opts: Intl.NumberFormatOptions): Intl.NumberFormat {
+  const key = numberFormatCacheKey(locale, opts);
+  let fmt = numberFormatCache.get(key);
+  if (!fmt) {
+    fmt = Intl.NumberFormat(locale, opts);
+    numberFormatCache.set(key, fmt);
+  }
+  return fmt;
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
@@ -55,25 +86,21 @@ function formatDateLike(
 ): string {
   const date = parseDate(value);
   if (!date) return MISSING_VALUE;
-  return new Intl.DateTimeFormat(options.locale || 'zh-CN', {
-    ...dateTimeFormatOptions,
-    timeZone: options.timeZone || 'Asia/Shanghai',
-  }).format(date);
+  const locale = options.locale || 'zh-CN';
+  const timeZone = options.timeZone || 'Asia/Shanghai';
+  return getDateTimeFormat(locale, timeZone, dateTimeFormatOptions).format(date);
 }
 
 function formatNumberLike(value: unknown, options: NumberFormatOptions, extra: Intl.NumberFormatOptions): string {
   const numeric = parseFiniteNumber(value);
   if (numeric == null) return MISSING_VALUE;
-  return new Intl.NumberFormat(options.locale || 'zh-CN', {
+  const locale = options.locale || 'zh-CN';
+  const opts: Intl.NumberFormatOptions = {
     ...extra,
     minimumFractionDigits: options.digits ?? extra.minimumFractionDigits ?? 0,
     maximumFractionDigits: options.digits ?? extra.maximumFractionDigits ?? 2,
-  }).format(numeric);
-}
-
-export function formatMissing(value?: unknown): string {
-  void value;
-  return MISSING_VALUE;
+  };
+  return getNumberFormat(locale, opts).format(numeric);
 }
 
 export const formatDateTime = (value?: unknown, options: DateFormatOptions = {}): string => formatDateLike(value, options, {
@@ -85,39 +112,18 @@ export const formatDateTime = (value?: unknown, options: DateFormatOptions = {})
   hour12: false,
 });
 
-export const formatDate = (value?: unknown, options: DateFormatOptions = {}): string => formatDateLike(value, options, {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
-
-export const formatTime = (value?: unknown, options: DateFormatOptions = {}): string => formatDateLike(value, options, {
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
-
 export const formatNumber = (value?: unknown, digits = 2, options: NumberFormatOptions = {}): string =>
   formatNumberLike(value, { ...options, digits }, {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
 
-export const formatCompactNumber = (value?: unknown, options: NumberFormatOptions = {}): string => {
-  const numeric = parseFiniteNumber(value);
-  if (numeric == null) return MISSING_VALUE;
-  return new Intl.NumberFormat(options.locale || 'zh-CN', {
-    notation: 'compact',
-    compactDisplay: 'short',
-    maximumFractionDigits: options.digits ?? 1,
-  }).format(numeric);
-};
-
 export const formatPercent = (value?: unknown, options: PercentFormatOptions = {}): string => {
   const numeric = parseFiniteNumber(value);
   if (numeric == null) return MISSING_VALUE;
   const percentValue = options.mode === 'ratio' ? numeric * 100 : numeric;
-  return new Intl.NumberFormat(options.locale || 'zh-CN', {
+  const locale = options.locale || 'zh-CN';
+  return getNumberFormat(locale, {
     minimumFractionDigits: options.digits ?? 1,
     maximumFractionDigits: options.digits ?? 1,
   }).format(percentValue) + '%';
@@ -131,18 +137,11 @@ export const formatSignedNumber = (value?: unknown, digits = 2, options: SignedF
   return `${sign}${formatNumber(Math.abs(numeric), digits, numberOptions)}`;
 };
 
-export const formatSignedPercent = (value?: unknown, options: PercentFormatOptions & { showZeroSign?: boolean } = {}): string => {
-  const numeric = parseFiniteNumber(value);
-  if (numeric == null) return MISSING_VALUE;
-  const { showZeroSign, ...percentOptions } = options;
-  const sign = numeric > 0 ? '+' : numeric < 0 ? '-' : showZeroSign ? '+' : '';
-  return `${sign}${formatPercent(Math.abs(numeric), percentOptions)}`;
-};
-
 export const formatCurrency = (value?: unknown, options: CurrencyFormatOptions = {}): string => {
   const numeric = parseFiniteNumber(value);
   if (numeric == null) return MISSING_VALUE;
-  return new Intl.NumberFormat(options.locale || 'zh-CN', {
+  const locale = options.locale || 'zh-CN';
+  return getNumberFormat(locale, {
     style: 'currency',
     currency: options.currency || 'USD',
     minimumFractionDigits: options.digits ?? 2,
@@ -166,30 +165,4 @@ export const toDateInputValue = (date: Date): string => {
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
   const day = `${date.getDate()}`.padStart(2, '0');
   return `${year}-${month}-${day}`;
-};
-
-/**
- * Returns the date N days ago as YYYY-MM-DD in Asia/Shanghai timezone.
- * Consistent with getTodayInShanghai() so both ends of the date range
- * are expressed in the same timezone as the backend.
- */
-export const getRecentStartDate = (days: number): string => {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(date);
-};
-
-/**
- * Returns today's date as YYYY-MM-DD in Asia/Shanghai timezone.
- * Use this instead of browser-local date to stay consistent with the backend,
- * which stores and filters timestamps in server local time (Asia/Shanghai).
- */
-export const getTodayInShanghai = (): string =>
-  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
-
-export const formatReportType = (value?: string): string => {
-  if (!value) return MISSING_VALUE;
-  if (value === 'simple') return '普通';
-  if (value === 'detailed') return '标准';
-  return value;
 };

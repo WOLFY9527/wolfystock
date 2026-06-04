@@ -172,17 +172,11 @@ near the conclusion; never hide uncertainty behind a green badge.
 
 ## Guided Help And Copy
 
-Use shared frontend help and education data instead of local prose copies:
-
-- `apps/dsa-web/src/data/glossaryTerms.ts`
-- `apps/dsa-web/src/components/help/`
-- `apps/dsa-web/src/data/domainEducation.ts`
-
-Use `GlossaryTerm` for repeated registry terms, `TermTooltip` for a one-off
-short definition, `HelpHint` for compact help beside labels, and disclosure or
-inline helper text for interpretation-critical content. Tooltips explain terms;
-they must not contain workflow steps, blocking warnings, raw diagnostics, or
-long policy copy.
+No shared glossary/help registry is currently active in `apps/dsa-web/src`.
+Keep user-facing explanations close to the owning surface and reuse existing
+disclosure or inline helper patterns for interpretation-critical content.
+Tooltips explain terms; they must not contain workflow steps, blocking
+warnings, raw diagnostics, or long policy copy.
 
 Visible glossary triggers should stay below 5 per desktop viewport and 3 per
 mobile viewport. Do not place tooltips on every table cell.

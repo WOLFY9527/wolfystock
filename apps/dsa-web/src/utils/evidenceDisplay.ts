@@ -313,7 +313,7 @@ function detectPosture(...values: unknown[]): NormalizedEvidencePosture {
 }
 
 function buildLimitationLabels(values: string[], options: NormalizeEvidenceOptions): string[] {
-  const mapped = unique(values.map((value) => mapKnownLabel(value)).filter((value): value is string => Boolean(value)));
+  const mapped = unique(values.flatMap((value) => { const v = mapKnownLabel(value); return v ? [v] : []; }));
   const maxLimitationLabels = options.maxLimitationLabels ?? mapped.length;
   return mapped.slice(0, maxLimitationLabels);
 }
@@ -522,27 +522,4 @@ export function normalizePortfolioRiskEvidence(payload: unknown, options: Normal
   const diagnostics = firstValue(combined, ['diagnostics', 'adminDiagnostics', 'admin_diagnostics']);
   const adminReasonCodes = collectStrings(cap?.reasonCodes, cap?.reason_codes);
   return baseSummary('portfolio_risk', posture, limitationLabels, combined, options, diagnostics, adminReasonCodes);
-}
-
-export function normalizeAnyEvidence(
-  engine: NormalizedEvidenceEngine,
-  payload: unknown,
-  options: NormalizeEvidenceOptions = {},
-): NormalizedEvidenceSummary {
-  switch (engine) {
-    case 'scanner':
-      return normalizeScannerEvidence(payload, options);
-    case 'rotation':
-      return normalizeRotationEvidence(payload, options);
-    case 'options':
-      return normalizeOptionsEvidence(payload, options);
-    case 'backtest':
-      return normalizeBacktestReadiness(payload, options);
-    case 'portfolio_risk':
-      return normalizePortfolioRiskEvidence(payload, options);
-    case 'analysis':
-      return baseSummary('analysis', 'unknown', [], payload, options);
-    default:
-      return baseSummary('unknown', 'unknown', [], payload, options);
-  }
 }

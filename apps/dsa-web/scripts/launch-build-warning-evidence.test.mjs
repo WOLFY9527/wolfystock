@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 function webPath(...segments) {
   const cwd = process.cwd();
-  const webRoot = cwd.endsWith('/apps/dsa-web') ? cwd : join(cwd, 'apps/dsa-web');
+  const normalizedCwd = cwd.replaceAll('\\', '/');
+  const webRoot = normalizedCwd.endsWith('/apps/dsa-web') ? cwd : join(cwd, 'apps/dsa-web');
   return join(webRoot, ...segments);
 }
 

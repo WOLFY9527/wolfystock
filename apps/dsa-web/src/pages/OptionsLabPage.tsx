@@ -29,7 +29,7 @@ import {
   DataWorkbenchFrame,
   DenseRows,
   WolfyShellSurface,
-} from '../components/linear';
+} from '../components/linear/LinearPrimitives';
 import {
   TerminalButton,
   TerminalChip,
@@ -38,7 +38,7 @@ import {
   TerminalPageHeading,
   TerminalPageShell,
   TerminalSectionHeader,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { cn } from '../utils/cn';
 import { normalizeOptionsEvidence } from '../utils/evidenceDisplay';
@@ -766,7 +766,7 @@ function heroSummaryLine(
   }
 
   if (observationStrategy) {
-    return `当前优先跟踪 ${strategyChineseLabel(observationStrategy)}，先复核最大亏损、盈亏平衡与可成交性。`;
+    return `当前优先跟踪 ${strategyChineseLabel(observationStrategy)}，先复核最大亏损、盈亏平衡与流动性边界。`;
   }
 
   return availability.explanation;
@@ -800,7 +800,7 @@ const ProductHero: React.FC<{
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className={labelClass}>决策实验室</p>
+            <p className={labelClass}>情景分析台</p>
             <Pill tone={availability.stateTone}>{availability.stateLabel}</Pill>
             <Pill tone={availability.confidenceTone}>{availability.confidenceLabel}</Pill>
           </div>
@@ -1027,7 +1027,7 @@ const StrategyComparisonPanel: React.FC<{
         </div>
       </SectionHeader>
       <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-        先看排序靠前的结构，再复核最大亏损、盈亏平衡与可成交性。
+        先看排序靠前的结构，再复核最大亏损、盈亏平衡与流动性边界。
       </p>
       {emptyMessage ? (
         <div className={cn(innerBlockClass, 'mt-5 border-dashed px-4 py-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>

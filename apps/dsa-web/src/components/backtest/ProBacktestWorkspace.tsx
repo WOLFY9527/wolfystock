@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   BookOpen,
   CheckCircle2,
@@ -11,7 +11,8 @@ import {
   Sparkles,
   XCircle,
 } from 'lucide-react';
-import { ApiErrorAlert, Drawer } from '../../components/common';
+import { ApiErrorAlert } from '../common/ApiErrorAlert';
+import { Drawer } from '../common/Drawer';
 import type { RuleBacktestHistoryItem, RuleBacktestParseResponse } from '../../types/backtest';
 import type { FlowProps, RuleWizardStep } from './DeterministicBacktestFlow';
 import { RULE_BACKTEST_PRESET_STORAGE_KEY } from './ruleBacktestP6';
@@ -41,6 +42,22 @@ type StepDefinition = {
   wizardStep: RuleWizardStep;
 };
 
+function getVisibleWorkspaceStep(currentStep: RuleWizardStep, activeStep: WorkspaceStep): WorkspaceStep {
+  if (currentStep === 'symbol') {
+    return 'assets';
+  }
+  if (currentStep === 'strategy') {
+    return 'strategy';
+  }
+  if (currentStep === 'run') {
+    return 'advanced';
+  }
+  if (currentStep === 'confirm') {
+    return activeStep === 'costs' ? 'costs' : 'orders';
+  }
+  return activeStep;
+}
+
 type ProBacktestWorkspaceProps = Omit<FlowProps, 'panelMode'> & {
   language: BacktestLanguage;
   monteCarloEnabled: boolean;
@@ -54,7 +71,7 @@ type ProBacktestWorkspaceProps = Omit<FlowProps, 'panelMode'> & {
 
 const ghostCardClass = 'bg-white/[0.02] border border-white/5 rounded-xl backdrop-blur-md transition-all hover:border-white/10';
 const fieldClass = 'w-full min-w-0 min-h-[42px] rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm leading-6 text-white outline-none transition-all focus:border-blue-500/50 focus:bg-white/[0.05]';
-const checkboxClass = 'h-4 w-4 shrink-0 rounded border border-white/15 bg-white/[0.03] text-blue-300 accent-blue-400 disabled:opacity-45';
+const checkboxClass = 'size-4 shrink-0 rounded border border-white/15 bg-white/[0.03] text-blue-300 accent-blue-400 disabled:opacity-45';
 const labelClass = 'text-[10px] font-bold uppercase tracking-widest text-white/40';
 const primaryButtonClass = 'inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all hover:from-blue-500 hover:to-purple-500 disabled:cursor-not-allowed disabled:opacity-45';
 const secondaryButtonClass = 'inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white/70 transition-all hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45';
@@ -122,9 +139,11 @@ function readRiskControls(parsed: RuleBacktestParseResponse | null) {
 function getParseWarnings(parsed: RuleBacktestParseResponse | null): string[] {
   const topLevel = Array.isArray(parsed?.parseWarnings) ? parsed.parseWarnings : [];
   const nested = Array.isArray(parsed?.parsedStrategy.parseWarnings) ? parsed?.parsedStrategy.parseWarnings : [];
-  return [...topLevel, ...nested]
-    .map((item) => String((item as Record<string, unknown>).message || '').trim())
-    .filter(Boolean);
+  return [...topLevel, ...nested].reduce<string[]>((acc, item) => {
+    const msg = String((item as Record<string, unknown>).message || '').trim();
+    if (msg) acc.push(msg);
+    return acc;
+  }, []);
 }
 
 function getAssumptionItems(parsed: RuleBacktestParseResponse | null, language: BacktestLanguage): string[] {
@@ -169,6 +188,51 @@ function statusClass(tone: StepStatusTone): string {
   if (tone === 'off') return 'border-white/10 bg-white/[0.02] text-white/38';
   return 'border-white/10 bg-white/[0.03] text-white/50';
 }
+
+const StepField: React.FC<{ label: string; control: React.ReactNode; className?: string }> = ({
+  label,
+  control,
+  className = '',
+}) => (
+  <label className={`flex min-w-0 flex-col gap-2 ${className}`}>
+    <span className={labelClass}>{label}</span>
+    {control}
+  </label>
+);
+
+const PlannedCapability: React.FC<{ title: string; description: string; testId?: string; language?: BacktestLanguage }> = ({
+  title,
+  description,
+  testId,
+  language = 'zh',
+}) => (
+  <div data-testid={testId} className={plannedCardClass}>
+    <div className="flex min-w-0 items-center justify-between gap-3">
+      <p className="truncate text-sm font-semibold text-white/78">{title}</p>
+      <span className="shrink-0 rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-100">
+        {language === 'en' ? 'Planned' : '计划中'}
+      </span>
+    </div>
+    <p className="mt-2 text-sm text-white/52">{description}</p>
+  </div>
+);
+
+const StepHeader: React.FC<{ step: StepDefinition; chips: string[]; language: BacktestLanguage }> = ({ step, chips, language }) => (
+  <div className="flex min-w-0 flex-col gap-3 border-b border-white/5 pb-4 md:flex-row md:items-start md:justify-between">
+    <div className="min-w-0">
+      <p className={labelClass}>{language === 'en' ? 'CURRENT STEP' : '当前步骤'}</p>
+      <h2 className="mt-2 truncate text-xl font-semibold text-white">{step.title}</h2>
+      <p className="mt-1 truncate text-sm text-white/48">{step.description}</p>
+    </div>
+    <div className="flex min-w-0 flex-wrap gap-2">
+      {chips.map((chip) => (
+        <span key={chip} className="max-w-[220px] truncate rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/52">
+          {chip}
+        </span>
+      ))}
+    </div>
+  </div>
+);
 
 const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   language,
@@ -237,26 +301,15 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   const riskRows = readRiskControls(parsedStrategy);
   const assumptionItems = getAssumptionItems(parsedStrategy, language);
   const strategyCatalogGroups = getStrategyCatalogGroups();
-  const activeCatalogGroup = useMemo(
-    () => strategyCatalogGroups.find((group) => group.id === catalogGroupId) || strategyCatalogGroups[0],
-    [catalogGroupId, strategyCatalogGroups],
-  );
+  const activeCatalogGroup = strategyCatalogGroups.find((group) => group.id === catalogGroupId) || strategyCatalogGroups[0];
   const latestHistory = historyItems[0] as RuleBacktestHistoryItem | undefined;
+  const visibleActiveStep = getVisibleWorkspaceStep(currentStep, activeStep);
 
   useEffect(() => {
     if (!catalogToast) return undefined;
     const timer = window.setTimeout(() => setCatalogToast(null), 3200);
     return () => window.clearTimeout(timer);
   }, [catalogToast]);
-
-  useEffect(() => {
-    if (currentStep === 'symbol') setActiveStep('assets');
-    if (currentStep === 'strategy') setActiveStep('strategy');
-    if (currentStep === 'confirm' && activeStep !== 'orders' && activeStep !== 'costs') setActiveStep('orders');
-    if (currentStep === 'run' && activeStep !== 'advanced') setActiveStep('advanced');
-  // Keep the current visible workspace stable when confirm/run is reached from a local step.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep]);
 
   const stepDefinitions: StepDefinition[] = [
     {
@@ -391,7 +444,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   };
 
   const renderStepButton = (step: StepDefinition, mobile = false) => {
-    const active = activeStep === step.id;
+    const active = visibleActiveStep === step.id;
     const status = stepStatuses[step.id];
     return (
       <button
@@ -420,63 +473,19 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
     );
   };
 
-  const renderField = (
-    label: string,
-    control: React.ReactNode,
-    className = '',
-  ) => (
-    <label className={`flex min-w-0 flex-col gap-2 ${className}`}>
-      <span className={labelClass}>{label}</span>
-      {control}
-    </label>
-  );
-
   const plannedCapabilityNote = language === 'en'
     ? 'Planned. Not wired into the current backtest run.'
     : '计划中，尚未接入当前回测执行。';
 
-  const renderPlannedCapability = (
-    title: string,
-    description: string,
-    testId?: string,
-  ) => (
-    <div data-testid={testId} className={plannedCardClass}>
-      <div className="flex min-w-0 items-center justify-between gap-3">
-        <p className="truncate text-sm font-semibold text-white/78">{title}</p>
-        <span className="shrink-0 rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-100">
-          {language === 'en' ? 'Planned' : '计划中'}
-        </span>
-      </div>
-      <p className="mt-2 text-sm text-white/52">{description}</p>
-    </div>
-  );
-
-  const renderStepHeader = (step: StepDefinition, chips: string[]) => (
-    <div className="flex min-w-0 flex-col gap-3 border-b border-white/5 pb-4 md:flex-row md:items-start md:justify-between">
-      <div className="min-w-0">
-        <p className={labelClass}>{language === 'en' ? 'CURRENT STEP' : '当前步骤'}</p>
-        <h2 className="mt-2 truncate text-xl font-semibold text-white">{step.title}</h2>
-        <p className="mt-1 truncate text-sm text-white/48">{step.description}</p>
-      </div>
-      <div className="flex min-w-0 flex-wrap gap-2">
-        {chips.map((chip) => (
-          <span key={chip} className="max-w-[220px] truncate rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/52">
-            {chip}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-
   const renderAssetsStep = () => (
     <section data-testid="pro-step-assets" className="flex min-w-0 flex-col gap-4">
-      {renderStepHeader(stepDefinitions[0], [
+      <StepHeader step={stepDefinitions[0]} language={language} chips={[
         code || '--',
         getBenchmarkModeLabel(benchmarkMode, code, benchmarkCode, language),
-      ])}
+      ]} />
       <div className={`${ghostCardClass} p-4 md:p-5`}>
         <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
-          {renderField(language === 'en' ? 'Ticker' : '标的代码', (
+          <StepField label={language === 'en' ? 'Ticker' : '标的代码'} control={(
             <input
               type="text"
               className={fieldClass}
@@ -486,8 +495,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               placeholder="ORCL / AAPL / 600519"
               aria-label={language === 'en' ? 'Ticker' : '标的代码'}
             />
-          ))}
-          {renderField(language === 'en' ? 'Benchmark' : '对比基准', (
+          )} />
+          <StepField label={language === 'en' ? 'Benchmark' : '对比基准'} control={(
             <select
               className={`${fieldClass} appearance-none pr-10 truncate`}
               value={benchmarkMode}
@@ -500,8 +509,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                 </option>
               ))}
             </select>
-          ))}
-          {benchmarkMode === 'custom_code' ? renderField(language === 'en' ? 'Custom benchmark code' : '自定义基准代码', (
+          )} />
+          {benchmarkMode === 'custom_code' ? <StepField label={language === 'en' ? 'Custom benchmark code' : '自定义基准代码'} control={(
             <input
               type="text"
               className={fieldClass}
@@ -510,8 +519,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               placeholder="QQQ / SPY / 000300"
               aria-label={language === 'en' ? 'Custom benchmark code' : '自定义基准代码'}
             />
-          ), 'md:col-span-2') : null}
-          {renderField(language === 'en' ? 'Start date' : '开始日期', (
+          )} className="md:col-span-2" /> : null}
+          <StepField label={language === 'en' ? 'Start date' : '开始日期'} control={(
             <input
               type="date"
               className={fieldClass}
@@ -519,8 +528,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               onChange={(event) => onStartDateChange(event.target.value)}
               aria-label={language === 'en' ? 'Start date' : '开始日期'}
             />
-          ))}
-          {renderField(language === 'en' ? 'End date' : '结束日期', (
+          )} />
+          <StepField label={language === 'en' ? 'End date' : '结束日期'} control={(
             <input
               type="date"
               className={fieldClass}
@@ -528,8 +537,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               onChange={(event) => onEndDateChange(event.target.value)}
               aria-label={language === 'en' ? 'End date' : '结束日期'}
             />
-          ))}
-          {renderField(language === 'en' ? 'Initial capital' : '初始资金', (
+          )} />
+          <StepField label={language === 'en' ? 'Initial capital' : '初始资金'} control={(
             <input
               type="number"
               className={`${fieldClass} font-mono`}
@@ -538,7 +547,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               onChange={(event) => onInitialCapitalChange(event.target.value)}
               aria-label={language === 'en' ? 'Initial capital' : '初始资金'}
             />
-          ), 'md:col-span-2')}
+          )} className="md:col-span-2" />
         </div>
       </div>
       <details className={`${ghostCardClass} p-4`}>
@@ -546,32 +555,33 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           {language === 'en' ? 'Advanced portfolio settings (planned)' : '高级组合设置（计划中）'}
         </summary>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {renderPlannedCapability(
-            language === 'en' ? 'Portfolio shell' : '组合壳层',
-            language === 'en'
+          <PlannedCapability
+            title={language === 'en' ? 'Portfolio shell' : '组合壳层'}
+            description={language === 'en'
               ? 'Multi-asset portfolio execution is not wired here. Current runs still execute one parsed strategy per symbol.'
-              : '多资产组合执行尚未在此接线，当前运行仍按单标的已解析策略执行。',
-            'pro-planned-portfolio-shell',
-          )}
-          {renderPlannedCapability(
-            language === 'en' ? 'Rebalance cadence' : '再平衡频率',
-            language === 'en'
+              : '多资产组合执行尚未在此接线，当前运行仍按单标的已解析策略执行。'}
+            testId="pro-planned-portfolio-shell"
+            language={language}
+          />
+          <PlannedCapability
+            title={language === 'en' ? 'Rebalance cadence' : '再平衡频率'}
+            description={language === 'en'
               ? 'Rebalance scheduling is shown as a future capability and does not alter the current run payload.'
-              : '再平衡调度仅作为后续能力预留，当前不会改写运行 payload。',
-            'pro-planned-rebalance',
-          )}
+              : '再平衡调度仅作为后续能力预留，当前不会改写运行 payload。'}
+            testId="pro-planned-rebalance"
+            language={language}
+          />
           <p className="md:col-span-2 text-xs text-white/42">{plannedCapabilityNote}</p>
         </div>
       </details>
     </section>
   );
 
-  const renderRulePreview = () => {
-    const entry = parsedStrategy?.summary?.entry || parsedStrategy?.parsedStrategy.summary?.entry || '--';
-    const exit = parsedStrategy?.summary?.exit || parsedStrategy?.parsedStrategy.summary?.exit || '--';
-    const strategy = parsedStrategy?.summary?.strategy || parsedStrategy?.coreIntentSummary || parsedStrategy?.parsedStrategy.coreIntentSummary || getFirstLine(strategyText) || '--';
-    const setupSource = getSetupSourceLabel(parsedStrategy, language);
-    return (
+  const rulePreviewEntry = parsedStrategy?.summary?.entry || parsedStrategy?.parsedStrategy.summary?.entry || '--';
+  const rulePreviewExit = parsedStrategy?.summary?.exit || parsedStrategy?.parsedStrategy.summary?.exit || '--';
+  const rulePreviewStrategy = parsedStrategy?.summary?.strategy || parsedStrategy?.coreIntentSummary || parsedStrategy?.parsedStrategy.coreIntentSummary || getFirstLine(strategyText) || '--';
+  const rulePreviewSetupSource = getSetupSourceLabel(parsedStrategy, language);
+  const rulePreview = (
       <div data-testid="pro-rule-preview" className={`${ghostCardClass} flex min-w-0 flex-col gap-4 p-4 md:p-5`}>
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
@@ -585,8 +595,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         <div data-testid="pro-parsed-summary" className="grid min-w-0 gap-3">
           <div className="rounded-lg border border-white/5 bg-black/20 p-3">
             <p className={labelClass}>{language === 'en' ? 'STRATEGY' : '策略'}</p>
-            <p className="mt-2 truncate text-sm text-white/72">{strategy}</p>
-            <p className="mt-1 text-xs text-white/38">{setupSource}</p>
+            <p className="mt-2 truncate text-sm text-white/72">{rulePreviewStrategy}</p>
+            <p className="mt-1 text-xs text-white/38">{rulePreviewSetupSource}</p>
           </div>
           <div className="rounded-lg border border-white/5 bg-black/20 p-3">
             <p className={labelClass}>{language === 'en' ? 'Executable spec' : '实际执行内容'}</p>
@@ -598,11 +608,11 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-lg border border-white/5 bg-black/20 p-3">
               <p className={labelClass}>{language === 'en' ? 'Buy rules' : '买入规则'}</p>
-              <p className="mt-2 text-sm text-white/72">{entry}</p>
+              <p className="mt-2 text-sm text-white/72">{rulePreviewEntry}</p>
             </div>
             <div className="rounded-lg border border-white/5 bg-black/20 p-3">
               <p className={labelClass}>{language === 'en' ? 'Sell rules' : '卖出规则'}</p>
-              <p className="mt-2 text-sm text-white/72">{exit}</p>
+              <p className="mt-2 text-sm text-white/72">{rulePreviewExit}</p>
             </div>
           </div>
           <div className="rounded-lg border border-white/5 bg-black/20 p-3">
@@ -645,18 +655,17 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           </div>
         ) : null}
       </div>
-    );
-  };
+  );
 
   const renderStrategyStep = () => (
     <section data-testid="pro-step-strategy" className="flex min-w-0 flex-col gap-4">
-      {renderStepHeader(stepDefinitions[1], [
+      <StepHeader step={stepDefinitions[1]} language={language} chips={[
         parseStale ? (language === 'en' ? 'stale' : '需要重新解析') : parsedStrategy ? (language === 'en' ? 'parsed' : '已解析') : (language === 'en' ? 'draft' : '草稿'),
         confirmed ? (language === 'en' ? 'confirmed' : '已确认') : (language === 'en' ? 'pending confirm' : '待确认'),
-      ])}
+      ]} />
       <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
         <div className={`${ghostCardClass} flex min-w-0 flex-col gap-4 p-4 md:p-5`}>
-          {renderField(language === 'en' ? 'Strategy text' : '策略文本', (
+          <StepField label={language === 'en' ? 'Strategy text' : '策略文本'} control={(
             <textarea
               value={strategyText}
               onChange={(event) => {
@@ -667,18 +676,18 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               className={`${fieldClass} min-h-[230px] resize-y leading-6`}
               aria-label={language === 'en' ? 'Strategy text' : '策略文本'}
             />
-          ))}
+          )} />
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <button type="button" className={secondaryButtonClass} onClick={() => setIsCatalogDrawerOpen(true)} data-testid="pro-open-template-drawer">
-              <PanelRightOpen className="h-4 w-4" />
+              <PanelRightOpen className="size-4" />
               {language === 'en' ? 'Templates' : '从模板库导入...'}
             </button>
             <button type="button" className={secondaryButtonClass} onClick={() => void handleParse()} disabled={isParsing || !strategyText.trim()}>
-              <Sparkles className="h-4 w-4" />
+              <Sparkles className="size-4" />
               {isParsing ? (language === 'en' ? 'Parsing...' : '解析中...') : (language === 'en' ? 'Parse strategy' : '解析策略')}
             </button>
             <button type="button" className={secondaryButtonClass} onClick={onReset}>
-              <RotateCw className="h-4 w-4" />
+              <RotateCw className="size-4" />
               {language === 'en' ? 'Reset' : '重置'}
             </button>
           </div>
@@ -700,10 +709,11 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           {parseError ? <ApiErrorAlert error={parseError} /> : null}
         </div>
         <div className="flex min-w-0 flex-col gap-4">
-          {renderRulePreview()}
+          {rulePreview}
           <label className="flex items-center gap-2.5 rounded-lg border border-white/5 bg-white/[0.02] p-3 text-sm text-white/70">
             <input
               type="checkbox"
+              aria-label={language === 'en' ? 'Confirm parse result' : '确认解析结果'}
               className={checkboxClass}
               checked={confirmed}
               disabled={!parsedStrategy || !parsedExecutable || parseStale}
@@ -733,12 +743,12 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
 
   const renderOrdersStep = () => (
     <section data-testid="pro-step-orders" className="flex min-w-0 flex-col gap-4">
-      {renderStepHeader(stepDefinitions[2], [
+      <StepHeader step={stepDefinitions[2]} language={language} chips={[
         language === 'en' ? 'parsed strategy execution' : '按解析策略执行',
         riskRows.length > 0
           ? `${language === 'en' ? 'parsed risk' : '解析风险'} ${riskRows.length}`
           : (language === 'en' ? 'local overrides planned' : '本地覆盖计划中'),
-      ])}
+      ]} />
       <div className={`${ghostCardClass} p-4 md:p-5`}>
         <div className="flex min-w-0 flex-wrap gap-2">
           <button
@@ -760,37 +770,41 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         </div>
         {ordersTab === 'routing' ? (
           <div className="mt-5 grid gap-3 md:grid-cols-2">
-            {renderPlannedCapability(
-              language === 'en' ? 'Execution routing override' : '执行路由覆盖（计划中）',
-              language === 'en'
+            <PlannedCapability
+              title={language === 'en' ? 'Execution routing override' : '执行路由覆盖（计划中）'}
+              description={language === 'en'
                 ? 'Event-driven routing, stop-loss routing, and take-profit routing are not wired into the current executor.'
-                : '事件驱动、止损路由、止盈路由尚未接入当前执行器。',
-              'pro-planned-routing-overrides',
-            )}
-            {renderPlannedCapability(
-              language === 'en' ? 'Trailing stop route' : '追踪止损路由（计划中）',
-              language === 'en'
+                : '事件驱动、止损路由、止盈路由尚未接入当前执行器。'}
+              testId="pro-planned-routing-overrides"
+              language={language}
+            />
+            <PlannedCapability
+              title={language === 'en' ? 'Trailing stop route' : '追踪止损路由（计划中）'}
+              description={language === 'en'
                 ? 'Trailing-stop route configuration is reserved for a future execution lane and does not trigger backend behavior today.'
-                : '追踪止损路由仅为后续执行通道预留，当前不会触发后端行为。',
-              'pro-planned-trailing-route',
-            )}
+                : '追踪止损路由仅为后续执行通道预留，当前不会触发后端行为。'}
+              testId="pro-planned-trailing-route"
+              language={language}
+            />
           </div>
         ) : (
           <div className="mt-5 grid gap-4">
-            {renderPlannedCapability(
-              language === 'en' ? 'Portfolio-level guard overrides' : '组合级风控覆盖（计划中）',
-              language === 'en'
+            <PlannedCapability
+              title={language === 'en' ? 'Portfolio-level guard overrides' : '组合级风控覆盖（计划中）'}
+              description={language === 'en'
                 ? 'Max position, exposure, drawdown, and per-trade risk limits are not wired into this run payload.'
-                : '最大仓位、敞口、回撤、单笔风险等组合级限制尚未接入当前运行 payload。',
-              'pro-planned-portfolio-guards',
-            )}
-            {renderPlannedCapability(
-              language === 'en' ? 'Concurrent holdings cap' : '最大同时持仓（计划中）',
-              language === 'en'
+                : '最大仓位、敞口、回撤、单笔风险等组合级限制尚未接入当前运行 payload。'}
+              testId="pro-planned-portfolio-guards"
+              language={language}
+            />
+            <PlannedCapability
+              title={language === 'en' ? 'Concurrent holdings cap' : '最大同时持仓（计划中）'}
+              description={language === 'en'
                 ? 'Concurrent-holdings caps remain a planned control and do not change the current backend execution.'
-                : '最大同时持仓仍为计划中控件，当前不会改变后端执行。',
-              'pro-planned-max-holdings',
-            )}
+                : '最大同时持仓仍为计划中控件，当前不会改变后端执行。'}
+              testId="pro-planned-max-holdings"
+              language={language}
+            />
           </div>
         )}
         <div data-testid="pro-risk-controls-summary" className="mt-4 rounded-lg border border-white/5 bg-black/20 p-3">
@@ -814,24 +828,24 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
 
   const renderCostsStep = () => (
     <section data-testid="pro-step-costs" className="flex min-w-0 flex-col gap-4">
-      {renderStepHeader(stepDefinitions[3], [
+      <StepHeader step={stepDefinitions[3]} language={language} chips={[
         `${language === 'en' ? 'fees' : '手续费'} ${feeBps || 0} BP`,
         `${language === 'en' ? 'slippage' : '滑点'} ${slippageBps || 0} BP`,
-      ])}
+      ]} />
       <div className={`${ghostCardClass} p-4 md:p-5`}>
         <div className="grid min-w-0 gap-4 md:grid-cols-2">
-          {renderField(language === 'en' ? 'Lookback window' : '回看范围', (
+          <StepField label={language === 'en' ? 'Lookback window' : '回看范围'} control={(
             <input type="number" min={10} max={5000} value={lookbackBars} onChange={(event) => onLookbackBarsChange(event.target.value)} className={fieldClass} aria-label={language === 'en' ? 'Lookback window' : '回看范围'} />
-          ))}
-          {renderField(language === 'en' ? 'Fees BP' : '手续费 BP', (
+          )} />
+          <StepField label={language === 'en' ? 'Fees BP' : '手续费 BP'} control={(
             <input type="number" min={0} max={500} value={feeBps} onChange={(event) => onFeeBpsChange(event.target.value)} className={fieldClass} aria-label={language === 'en' ? 'Fees BP' : '手续费 BP'} />
-          ))}
-          {renderField(language === 'en' ? 'Slippage BP' : '滑点 BP', (
+          )} />
+          <StepField label={language === 'en' ? 'Slippage BP' : '滑点 BP'} control={(
             <input type="number" min={0} max={500} value={slippageBps} onChange={(event) => onSlippageBpsChange(event.target.value)} className={fieldClass} aria-label={language === 'en' ? 'Slippage BP' : '滑点 BP'} />
-          ))}
-          {renderField(language === 'en' ? 'Benchmark override' : '基准覆盖', (
-            <input value={benchmarkCode} onChange={(event) => onBenchmarkCodeChange(event.target.value.toUpperCase())} placeholder="QQQ / SPY / 000300" className={fieldClass} />
-          ))}
+          )} />
+          <StepField label={language === 'en' ? 'Benchmark override' : '基准覆盖'} control={(
+            <input value={benchmarkCode} onChange={(event) => onBenchmarkCodeChange(event.target.value.toUpperCase())} placeholder="QQQ / SPY / 000300" className={fieldClass} aria-label={language === 'en' ? 'Benchmark override' : '基准覆盖'} />
+          )} />
         </div>
         <p className="mt-4 truncate text-xs text-white/38">{language === 'en' ? 'Compact cost assumptions only; full result attribution remains on the result route.' : '这里只保留紧凑成本假设；完整归因留在结果页。'}</p>
       </div>
@@ -840,14 +854,14 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
 
   const renderAdvancedStep = () => (
     <section data-testid="pro-step-advanced" className="flex min-w-0 flex-col gap-4">
-      {renderStepHeader(stepDefinitions[4], [
+      <StepHeader step={stepDefinitions[4]} language={language} chips={[
         advancedTab === 'optimization' ? (language === 'en' ? 'optimization' : '优化') : (language === 'en' ? 'robustness' : '稳健性'),
         advancedTab === 'optimization'
           ? (language === 'en' ? 'planned only' : '计划中')
           : robustnessEnabled
             ? (language === 'en' ? 'diagnostics enabled' : '诊断已启用')
             : (language === 'en' ? 'diagnostics optional' : '诊断可选'),
-      ])}
+      ]} />
       <div className={`${ghostCardClass} p-4 md:p-5`}>
         <div className="flex min-w-0 flex-wrap gap-2">
           <button type="button" onClick={() => setAdvancedTab('optimization')} className={advancedTab === 'optimization' ? activeChipButtonClass : chipButtonClass}>{language === 'en' ? 'Optimization' : '优化'}</button>
@@ -870,20 +884,22 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           </div>
           {advancedTab === 'optimization' ? (
             <>
-              {renderPlannedCapability(
-                language === 'en' ? 'Grid Search (planned)' : '网格搜索（计划中）',
-                language === 'en'
+              <PlannedCapability
+                title={language === 'en' ? 'Grid Search (planned)' : '网格搜索（计划中）'}
+                description={language === 'en'
                   ? 'Parameter sweeps are not wired into the current professional executor.'
-                  : '参数网格扫描尚未接入当前专业执行流。',
-                'pro-advanced-grid-search',
-              )}
-              {renderPlannedCapability(
-                language === 'en' ? 'Bayesian Search (planned)' : '贝叶斯搜索（计划中）',
-                language === 'en'
+                  : '参数网格扫描尚未接入当前专业执行流。'}
+                testId="pro-advanced-grid-search"
+                language={language}
+              />
+              <PlannedCapability
+                title={language === 'en' ? 'Bayesian Search (planned)' : '贝叶斯搜索（计划中）'}
+                description={language === 'en'
                   ? 'Bayesian optimization remains a future capability and does not trigger backend actions today.'
-                  : '贝叶斯优化仍为后续能力，当前不会触发后端动作。',
-                'pro-advanced-bayesian',
-              )}
+                  : '贝叶斯优化仍为后续能力，当前不会触发后端动作。'}
+                testId="pro-advanced-bayesian"
+                language={language}
+              />
             </>
           ) : (
             <>
@@ -936,7 +952,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                   </label>
                   {monteCarloEnabled ? (
                     <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
-                      {renderField(language === 'en' ? 'Simulation count' : '仿真次数', (
+                      <StepField label={language === 'en' ? 'Simulation count' : '仿真次数'} control={(
                         <input
                           type="number"
                           min={1}
@@ -950,7 +966,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                           aria-label={language === 'en' ? 'Monte Carlo simulation count' : 'Monte Carlo 仿真次数'}
                           data-testid="pro-robustness-simulation-count-input"
                         />
-                      ))}
+                      )} />
                       <div className="rounded-lg border border-white/5 bg-black/20 p-3 text-sm text-white/58">
                         <p className="font-semibold text-white/74">
                           {language === 'en' ? 'Diagnostic scope' : '诊断范围'}
@@ -1036,20 +1052,19 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
     </section>
   );
 
-  const activeStepDefinition = stepDefinitions.find((step) => step.id === activeStep) || stepDefinitions[0];
-  const renderActiveStep = () => {
-    if (activeStep === 'strategy') return renderStrategyStep();
-    if (activeStep === 'orders') return renderOrdersStep();
-    if (activeStep === 'costs') return renderCostsStep();
-    if (activeStep === 'advanced') return renderAdvancedStep();
-    return renderAssetsStep();
-  };
+  const activeStepDefinition = stepDefinitions.find((step) => step.id === visibleActiveStep) || stepDefinitions[0];
+  const activeStepContent = visibleActiveStep === 'strategy'
+    ? renderStrategyStep()
+    : visibleActiveStep === 'orders'
+      ? renderOrdersStep()
+      : visibleActiveStep === 'costs'
+        ? renderCostsStep()
+        : visibleActiveStep === 'advanced'
+          ? renderAdvancedStep()
+          : renderAssetsStep();
 
-  const renderExecutionRail = (mobile = false) => (
-    <aside
-      data-testid={mobile ? 'pro-mobile-execution-summary' : 'pro-execution-rail'}
-      className={`${ghostCardClass} ${mobile ? 'p-4' : 'lg:sticky lg:top-6 max-h-[calc(100vh-6rem)] overflow-y-auto no-scrollbar p-4'} flex min-w-0 flex-col gap-4`}
-    >
+  const createExecutionRailContent = (readinessTestId: string) => (
+    <>
       <div>
         <p className={labelClass}>{language === 'en' ? 'EXECUTION SUMMARY' : '执行摘要'}</p>
         <div className="mt-3 grid gap-2 text-xs">
@@ -1099,12 +1114,12 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           ))}
         </div>
       </div>
-      <div data-testid={mobile ? 'pro-mobile-execution-readiness' : 'pro-execution-readiness'}>
+      <div data-testid={readinessTestId}>
         <p className={labelClass}>{language === 'en' ? 'READINESS' : '就绪度'}</p>
         <div className="mt-3 grid gap-2">
           {readiness.map((item) => (
             <div key={item.key} className="flex items-center gap-2 text-xs text-white/60">
-              {item.ready ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" /> : <XCircle className="h-3.5 w-3.5 text-rose-300" />}
+              {item.ready ? <CheckCircle2 className="size-3.5 text-emerald-300" /> : <XCircle className="size-3.5 text-rose-300" />}
               <span>{item.label}</span>
             </div>
           ))}
@@ -1122,15 +1137,15 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             onClick={() => void handleRun()}
             disabled={!canRun || isSubmitting}
           >
-            <Play className="h-4 w-4" />
+            <Play className="size-4" />
             {isSubmitting ? (language === 'en' ? 'Opening result...' : '正在打开结果...') : (language === 'en' ? 'Execute backtest task' : '执行回测任务')}
           </button>
           <button type="button" className={secondaryButtonClass} onClick={() => goToStep(stepDefinitions[2])}>
-            <ShieldCheck className="h-4 w-4" />
+            <ShieldCheck className="size-4" />
             {language === 'en' ? 'Review risk' : '查看风控'}
           </button>
           <button type="button" className={secondaryButtonClass} onClick={() => goToStep(stepDefinitions[1])}>
-            <Sparkles className="h-4 w-4" />
+            <Sparkles className="size-4" />
             {language === 'en' ? 'Edit strategy' : '编辑策略'}
           </button>
         </div>
@@ -1151,10 +1166,65 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           </div>
         </div>
       ) : null}
+    </>
+  );
+  const desktopExecutionRail = (
+    <aside
+      data-testid="pro-execution-rail"
+      className={`${ghostCardClass} lg:sticky lg:top-6 max-h-[calc(100vh-6rem)] overflow-y-auto no-scrollbar p-4 flex min-w-0 flex-col gap-4`}
+    >
+      {createExecutionRailContent('pro-execution-readiness')}
+    </aside>
+  );
+  const mobileExecutionRail = (
+    <aside
+      data-testid="pro-mobile-execution-summary"
+      className={`${ghostCardClass} p-4 flex min-w-0 flex-col gap-4`}
+    >
+      {createExecutionRailContent('pro-mobile-execution-readiness')}
     </aside>
   );
 
-  const renderResultsDrawer = () => (
+  const presetDrawerRawPresets = (() => {
+    try {
+      return JSON.parse(window.localStorage.getItem(RULE_BACKTEST_PRESET_STORAGE_KEY) || '[]') as Array<Record<string, unknown>>;
+    } catch {
+      return [];
+    }
+  })();
+
+  const presetDrawerItems = presetDrawerRawPresets.length === 0 ? null : (
+    <div data-testid="backtest-setup-presets" className="grid gap-2 border-t border-white/5 pt-3">
+      <p className={labelClass}>{language === 'en' ? 'Preset shortcuts' : '快速预设'}</p>
+      {presetDrawerRawPresets.slice(0, 3).map((preset) => (
+        <button
+          key={String(preset.id || preset.name)}
+          type="button"
+          className={secondaryButtonClass}
+          onClick={() => {
+            if (typeof preset.code === 'string') onCodeChange(preset.code);
+            if (typeof preset.strategyText === 'string') onStrategyTextChange(preset.strategyText);
+            if (typeof preset.startDate === 'string') onStartDateChange(preset.startDate);
+            if (typeof preset.endDate === 'string') onEndDateChange(preset.endDate);
+            if (typeof preset.lookbackBars === 'string') onLookbackBarsChange(preset.lookbackBars);
+            if (typeof preset.initialCapital === 'string') onInitialCapitalChange(preset.initialCapital);
+            if (typeof preset.feeBps === 'string') onFeeBpsChange(preset.feeBps);
+            if (typeof preset.slippageBps === 'string') onSlippageBpsChange(preset.slippageBps);
+            if (typeof preset.benchmarkMode === 'string') onBenchmarkModeChange(preset.benchmarkMode as RuleBenchmarkMode);
+            if (typeof preset.benchmarkCode === 'string') onBenchmarkCodeChange(preset.benchmarkCode);
+            onToggleConfirmed(false);
+            setResultsOpen(false);
+            setActiveStep('assets');
+            onStepChange('symbol');
+          }}
+        >
+          {language === 'en' ? 'Apply' : '应用'}
+        </button>
+      ))}
+    </div>
+  );
+
+  const resultsDrawer = (
     <section data-testid="pro-results-history-drawer" className={`${ghostCardClass} p-4`}>
       <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
@@ -1167,11 +1237,11 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className={secondaryButtonClass} onClick={() => setResultsOpen((value) => !value)}>
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="size-4" />
             {resultsOpen ? (language === 'en' ? 'Collapse' : '收起') : (language === 'en' ? 'Expand result' : '展开结果')}
           </button>
           <button type="button" className={secondaryButtonClass} onClick={() => setResultsOpen(true)}>
-            <BookOpen className="h-4 w-4" />
+            <BookOpen className="size-4" />
             {language === 'en' ? 'History' : '历史记录'}
           </button>
         </div>
@@ -1204,51 +1274,10 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             {language === 'en' ? 'No saved deterministic runs yet.' : '当前还没有已保存的确定性回测。'}
           </div>
         )}
-        {renderPresetDrawerItems()}
+        {presetDrawerItems}
       </div>
     </section>
   );
-
-  const renderPresetDrawerItems = () => {
-    const rawPresets = (() => {
-      try {
-        return JSON.parse(window.localStorage.getItem(RULE_BACKTEST_PRESET_STORAGE_KEY) || '[]') as Array<Record<string, unknown>>;
-      } catch {
-        return [];
-      }
-    })();
-    if (rawPresets.length === 0) return null;
-    return (
-      <div data-testid="backtest-setup-presets" className="grid gap-2 border-t border-white/5 pt-3">
-        <p className={labelClass}>{language === 'en' ? 'Preset shortcuts' : '快速预设'}</p>
-        {rawPresets.slice(0, 3).map((preset) => (
-          <button
-            key={String(preset.id || preset.name)}
-            type="button"
-            className={secondaryButtonClass}
-            onClick={() => {
-              if (typeof preset.code === 'string') onCodeChange(preset.code);
-              if (typeof preset.strategyText === 'string') onStrategyTextChange(preset.strategyText);
-              if (typeof preset.startDate === 'string') onStartDateChange(preset.startDate);
-              if (typeof preset.endDate === 'string') onEndDateChange(preset.endDate);
-              if (typeof preset.lookbackBars === 'string') onLookbackBarsChange(preset.lookbackBars);
-              if (typeof preset.initialCapital === 'string') onInitialCapitalChange(preset.initialCapital);
-              if (typeof preset.feeBps === 'string') onFeeBpsChange(preset.feeBps);
-              if (typeof preset.slippageBps === 'string') onSlippageBpsChange(preset.slippageBps);
-              if (typeof preset.benchmarkMode === 'string') onBenchmarkModeChange(preset.benchmarkMode as RuleBenchmarkMode);
-              if (typeof preset.benchmarkCode === 'string') onBenchmarkCodeChange(preset.benchmarkCode);
-              onToggleConfirmed(false);
-              setResultsOpen(false);
-              setActiveStep('assets');
-              onStepChange('symbol');
-            }}
-          >
-            {language === 'en' ? 'Apply' : '应用'}
-          </button>
-        ))}
-      </div>
-    );
-  };
 
   return (
     <>
@@ -1298,20 +1327,20 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
 
           <main data-testid="pro-step-workspace" className={`${ghostCardClass} min-w-0 p-4 md:p-5`}>
             <AnimateStep activeStep={activeStepDefinition.id}>
-              {renderActiveStep()}
+              {activeStepContent}
             </AnimateStep>
           </main>
 
           <div className="hidden lg:block">
-            {renderExecutionRail(false)}
+            {desktopExecutionRail}
           </div>
         </div>
 
         <div className="lg:hidden">
-          {renderExecutionRail(true)}
+          {mobileExecutionRail}
         </div>
 
-        {renderResultsDrawer()}
+        {resultsDrawer}
 
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-black/90 px-4 py-3 backdrop-blur-xl lg:hidden">
           <button
@@ -1320,7 +1349,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             onClick={() => void handleRun()}
             disabled={!canRun || isSubmitting}
           >
-            <Play className="h-4 w-4" />
+            <Play className="size-4" />
             {language === 'en' ? 'Execute backtest task' : '执行回测任务'}
           </button>
         </div>

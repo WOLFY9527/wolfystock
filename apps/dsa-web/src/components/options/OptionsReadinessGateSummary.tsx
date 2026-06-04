@@ -1,6 +1,6 @@
 import type React from 'react';
-import { ConsoleDisclosure } from '../linear';
-import { TerminalChip } from '../terminal';
+import { ConsoleDisclosure } from '../linear/LinearPrimitives';
+import { TerminalChip } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
 import type { OptionsResearchReadiness } from '../../types/researchReadiness';
 

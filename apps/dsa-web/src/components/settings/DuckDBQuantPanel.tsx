@@ -1,6 +1,9 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Disclosure, GlassCard, Input } from '../common';
+import { useEffect, useState } from 'react';
+import { Button } from '../common/Button';
+import { Disclosure } from '../common/Disclosure';
+import { GlassCard } from '../common/GlassCard';
+import { Input } from '../common/Input';
 import { getApiErrorMessage } from '../../api/error';
 import {
   describeSettingsDuckDBDataMode,
@@ -33,14 +36,14 @@ const DEFAULT_LOOKBACK_DAYS = 5;
 const DEFAULT_BENCHMARK_SYMBOL_LIMIT = 2;
 const BUTTON_CLASS = 'rounded-lg px-3 py-1.5 text-xs';
 const CHIP_CLASS = 'inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-semibold';
-const PANEL_CLASS = 'rounded-xl border border-white/5 bg-black/20 px-3 py-3';
+const PANEL_CLASS = 'rounded-xl border border-white/5 bg-black/20 p-3';
 
 function parseSymbolInput(value: string): string[] {
   return Array.from(new Set(
-    value
-      .split(/[,\s]+/)
-      .map((item) => item.trim().toUpperCase())
-      .filter(Boolean),
+    value.split(/[,\s]+/).flatMap((item) => {
+      const symbol = item.trim().toUpperCase();
+      return symbol ? [symbol] : [];
+    }),
   )).slice(0, 5);
 }
 
@@ -81,7 +84,7 @@ function detailWithCompactPaths<T extends { databasePath?: string | null; parque
 }
 
 const MetricTile: React.FC<{ label: string; value: string; detail?: string }> = ({ label, value, detail }) => (
-  <div className="min-w-0 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-3">
+  <div className="min-w-0 rounded-xl border border-white/5 bg-white/[0.02] p-3">
     <p className="truncate text-[10px] font-semibold uppercase text-white/35">{label}</p>
     <p className="mt-2 truncate text-sm font-semibold text-white tabular-nums">{value}</p>
     {detail ? <p className="mt-1 truncate text-[11px] text-white/45">{detail}</p> : null}
@@ -119,7 +122,7 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
   const [busyAction, setBusyAction] = useState<ActionKey | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const explicitSymbols = useMemo(() => parseSymbolInput(symbolInput), [symbolInput]);
+  const explicitSymbols = parseSymbolInput(symbolInput);
   const enabled = health?.enabled ?? configEnabledState === 'enabled';
   const disabled = !enabled;
   const status = health?.status || coverage?.status || (configEnabledState === 'disabled' ? 'disabled' : 'unknown');
@@ -129,7 +132,7 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
   const noWriteLabel = disabled ? '未写入文件' : '写入需显式点击';
   const productionRuntimeChanged = comparison?.diagnostics?.productionRuntimeChanged === true;
 
-  const refreshReadOnly = useCallback(async () => {
+  const refreshReadOnly = async () => {
     setBusyAction('refresh');
     setMessage(null);
     try {
@@ -142,42 +145,47 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
       setMessage('健康与覆盖已刷新');
     } catch (error) {
       setMessage(`刷新失败：${getApiErrorMessage(error)}`);
-    } finally {
-      setBusyAction(null);
     }
-  }, []);
+    setBusyAction(null);
+  };
 
   useEffect(() => {
-    void refreshReadOnly();
-  }, [refreshReadOnly]);
+    void (async () => {
+      setBusyAction('refresh');
+      setMessage(null);
+      try {
+        const [nextHealth, nextCoverage] = await Promise.all([
+          quantApi.getDuckDBHealth(),
+          quantApi.getDuckDBCoverage(),
+        ]);
+        setHealth(nextHealth);
+        setCoverage(nextCoverage);
+        setMessage('健康与覆盖已刷新');
+      } catch (error) {
+        setMessage(`刷新失败：${getApiErrorMessage(error)}`);
+      }
+      setBusyAction(null);
+    })();
+  }, []);
 
-  const runAction = useCallback(async (action: Exclude<ActionKey, 'refresh'>) => {
+  const runAction = async (action: Exclude<ActionKey, 'refresh'>) => {
     setBusyAction(action);
     setMessage(null);
     try {
       if (action === 'init') {
         if (disabled) {
           setMessage('DuckDB 未启用，初始化已阻止');
-          return;
+        } else {
+          setInitResult(await quantApi.initDuckDB());
+          setMessage('初始化请求完成');
+          await refreshReadOnly();
         }
-        setInitResult(await quantApi.initDuckDB());
-        setMessage('初始化请求完成');
-        await refreshReadOnly();
-        return;
-      }
-
-      if (action === 'benchmark') {
+      } else if (action === 'benchmark') {
         setBenchmark(await quantApi.runDuckDBBenchmark({ symbolLimit: DEFAULT_BENCHMARK_SYMBOL_LIMIT }));
         setMessage('基准诊断完成');
-        return;
-      }
-
-      if (!explicitSymbols.length) {
+      } else if (!explicitSymbols.length) {
         setMessage('请输入 1-5 个明确标的');
-        return;
-      }
-
-      if (action === 'snapshot') {
+      } else if (action === 'snapshot') {
         setSnapshot(await quantApi.getDuckDBFactorSnapshot({
           symbols: explicitSymbols,
           lookbackDays: DEFAULT_LOOKBACK_DAYS,
@@ -207,13 +215,12 @@ const DuckDBQuantPanel: React.FC<DuckDBQuantPanelProps> = ({ configEnabledState 
       }
     } catch (error) {
       setMessage(`动作失败：${getApiErrorMessage(error)}`);
-    } finally {
-      setBusyAction(null);
     }
-  }, [disabled, explicitSymbols, refreshReadOnly]);
+    setBusyAction(null);
+  };
 
   return (
-    <GlassCard className="px-4 py-4" data-testid="duckdb-quant-panel">
+    <GlassCard className="p-4" data-testid="duckdb-quant-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase text-cyan-300">DuckDB 诊断</p>

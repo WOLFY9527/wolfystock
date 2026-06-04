@@ -83,13 +83,13 @@ function resolveViewportWidth(): number {
   return Math.max(window.innerWidth || 1440, 0);
 }
 
-export function resolveDeterministicResultDensityMode(viewportWidth: number): DeterministicResultDensityMode {
+function resolveDeterministicResultDensityMode(viewportWidth: number): DeterministicResultDensityMode {
   if (viewportWidth >= 1560) return 'comfortable';
   if (viewportWidth >= 1220) return 'compact';
   return 'dense';
 }
 
-export const DETERMINISTIC_RESULT_DENSITY: Record<DeterministicResultDensityMode, DeterministicResultDensityConfig> = {
+const DETERMINISTIC_RESULT_DENSITY: Record<DeterministicResultDensityMode, DeterministicResultDensityConfig> = {
   comfortable: {
     mode: 'comfortable',
     buttonSize: 'md',
@@ -314,7 +314,7 @@ export const DETERMINISTIC_RESULT_DENSITY: Record<DeterministicResultDensityMode
   },
 };
 
-export function getDeterministicResultDensity(viewportWidth: number): DeterministicResultDensityConfig {
+function getDeterministicResultDensity(viewportWidth: number): DeterministicResultDensityConfig {
   return DETERMINISTIC_RESULT_DENSITY[resolveDeterministicResultDensityMode(viewportWidth)];
 }
 
@@ -323,7 +323,6 @@ export function useDeterministicResultDensity(): DeterministicResultDensityConfi
 
   useEffect(() => {
     const handleResize = () => setViewportWidth(resolveViewportWidth());
-    handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);

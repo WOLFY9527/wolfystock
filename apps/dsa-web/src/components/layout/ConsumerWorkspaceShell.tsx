@@ -1,7 +1,7 @@
 import type React from 'react';
 import { AuthGuardOverlay } from '../auth/AuthGuardOverlay';
 import { cn } from '../../utils/cn';
-import { TerminalPageShell } from '../terminal';
+import { TerminalPageShell } from '../terminal/TerminalPrimitives';
 
 type ConsumerWorkspaceProps = React.HTMLAttributes<HTMLDivElement> & {
   children?: React.ReactNode;

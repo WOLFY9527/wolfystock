@@ -4,7 +4,8 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Button } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Button } from '../components/common/Button';
 import type { BacktestResultReportMode } from '../components/backtest/BacktestResultReport';
 import BacktestChartWorkspace, {
   type CoverageTrackItem,
@@ -69,8 +70,8 @@ import {
   KeyLevelStrip,
   ResearchConsoleShell,
   WolfyCommandBar,
-} from '../components/linear';
-import { TerminalPageShell } from '../components/terminal';
+} from '../components/linear/LinearPrimitives';
+import { TerminalPageShell } from '../components/terminal/TerminalPrimitives';
 import { StatusBadge } from '../components/ui/StatusBadge';
 
 const RULE_POLL_INTERVAL_MS = 1800;

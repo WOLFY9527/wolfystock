@@ -24,7 +24,7 @@ describe('Select', () => {
     );
 
     const select = screen.getByLabelText('Market');
-    expect(select).toHaveClass('select-surface', 'absolute', 'inset-0', 'z-10', 'h-full', 'w-full', 'opacity-0');
+    expect(select).toHaveClass('select-surface', 'absolute', 'inset-0', 'z-10', 'size-full', 'opacity-0');
 
     const overlay = select.closest('.select-field__control')?.querySelector('.select-field__overlay');
     expect(overlay).toHaveAttribute('aria-hidden', 'true');

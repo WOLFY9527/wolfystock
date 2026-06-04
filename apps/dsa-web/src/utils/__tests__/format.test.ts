@@ -5,8 +5,6 @@ import {
   formatDurationMs,
   formatNumber,
   formatPercent,
-  formatCompactNumber,
-  formatSignedPercent,
 } from '../format';
 
 describe('format utilities', () => {
@@ -24,19 +22,13 @@ describe('format utilities', () => {
     expect(formatDateTime('2026-04-30T00:00:00Z')).toBe('2026/04/30 08:00');
   });
 
-  it('formats regular numbers and compact numbers', () => {
+  it('formats regular numbers', () => {
     expect(formatNumber(1234.567)).toBe('1,234.57');
-    expect(formatCompactNumber(12345)).toBe('1.2万');
   });
 
   it('formats percent values in percent and ratio modes', () => {
     expect(formatPercent(12.3)).toBe('12.3%');
     expect(formatPercent(0.123, { mode: 'ratio' })).toBe('12.3%');
-  });
-
-  it('formats signed percent values with explicit signs', () => {
-    expect(formatSignedPercent(12.3)).toBe('+12.3%');
-    expect(formatSignedPercent(-12.3)).toBe('-12.3%');
   });
 
   it('formats currency values', () => {

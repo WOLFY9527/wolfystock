@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useCallback, useMemo, useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import type { MarketDataMeta, MarketOverviewItem, MarketOverviewPanel, MarketProviderHealthStatus } from '../../api/marketOverview';
 import type {
   CnShortSentimentResponse,
@@ -53,7 +53,7 @@ import {
   MarketOverviewRefreshButton,
 } from './marketOverviewPrimitives';
 import { ConsumerWorkspacePageShell } from '../layout/ConsumerWorkspaceShell';
-import { TerminalChip, TerminalGrid, TerminalPanel } from '../terminal';
+import { TerminalChip, TerminalGrid, TerminalPanel } from '../terminal/TerminalPrimitives';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
 import type { OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';
@@ -230,6 +230,19 @@ const DENSE_QUOTE_MODULES = new Set<MarketOverviewModuleId>([
   'cryptoRiskContext',
 ]);
 
+const MODULE_CARD_TEST_ID: Partial<Record<MarketOverviewModuleId, string>> = {
+  globalIndices: 'indices',
+  usIndices: 'indices',
+  cnHkIndices: 'cnIndices',
+  cryptoSnapshot: 'crypto',
+  cnSnapshot: 'cnIndices',
+  shortSentiment: 'cnShortSentiment',
+  macroRates: 'rates',
+  macroFxCommodities: 'fxCommodities',
+  usSentiment: 'sentiment',
+  cryptoSentiment: 'sentiment',
+};
+
 const US_BREADTH_AD_SYMBOLS = ['ADVANCERS', 'DECLINERS', 'UNCHANGED', 'ADVANCE_DECLINE_RATIO'];
 const US_BREADTH_HIGH_LOW_SYMBOLS = ['NEW_HIGHS', 'NEW_LOWS', 'HIGH_LOW_RATIO'];
 const US_BREADTH_ALL_SYMBOLS = [...US_BREADTH_AD_SYMBOLS, ...US_BREADTH_HIGH_LOW_SYMBOLS];
@@ -271,6 +284,16 @@ type UsBreadthTruthStripView = {
   summary: string;
   missingSummary: string | null;
 };
+
+const numberFormatCache = new Map<number, Intl.NumberFormat>();
+function getCachedNumberFormat(maximumFractionDigits: number): Intl.NumberFormat {
+  let fmt = numberFormatCache.get(maximumFractionDigits);
+  if (!fmt) {
+    fmt = Intl.NumberFormat('en-US', { maximumFractionDigits });
+    numberFormatCache.set(maximumFractionDigits, fmt);
+  }
+  return fmt;
+}
 
 function buildCategoryLayout(tab: MarketOverviewTab): MarketOverviewLayoutRow[] {
   const config = MARKET_OVERVIEW_TAB_CONFIG[tab];
@@ -826,9 +849,7 @@ function formatHeroValue(value: number | null | undefined): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return '待确认';
   }
-  return new Intl.NumberFormat('en-US', {
-    maximumFractionDigits: Math.abs(value) >= 100 ? 2 : 3,
-  }).format(value);
+  return getCachedNumberFormat(Math.abs(value) >= 100 ? 2 : 3).format(value);
 }
 
 function formatHeroChange(value: number | null | undefined): string {
@@ -913,7 +934,7 @@ function formatNumber(value: number | null | undefined, digits = 2): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return '-';
   }
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: digits }).format(value);
+  return getCachedNumberFormat(digits).format(value);
 }
 
 function formatPercent(value?: number | null): string {
@@ -2062,8 +2083,7 @@ export type MarketOverviewWorkbenchProps = {
   onRefreshPanel: (panelKey: PanelKey) => void;
 };
 
-export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = ({
-  heading,
+function useMarketOverviewWorkbenchModel({
   panels,
   loading,
   localSnapshotSavedAt,
@@ -2071,27 +2091,26 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
   refreshingPanel,
   cryptoRealtimeStatus,
   isCnShortSentimentBootstrapping,
-  showAdminDiagnostics = false,
   onRefreshPanel,
-}) => {
+}: Omit<MarketOverviewWorkbenchProps, 'heading' | 'showAdminDiagnostics'>) {
   const { language, t } = useI18n();
   const [activeCategory, setActiveCategory] = useState<MarketOverviewTab>('all');
   const [exportSummaryFeedback, setExportSummaryFeedback] = useState<string | null>(null);
 
-  const categoryTabs = useMemo<MarketOverviewCategoryTabView[]>(() => [
+  const categoryTabs: MarketOverviewCategoryTabView[] = [
     { key: 'all', label: t('marketOverviewPage.categories.all') },
     { key: 'us', label: t('marketOverviewPage.categories.us') },
     { key: 'cn', label: t('marketOverviewPage.categories.cn') },
     { key: 'global', label: t('marketOverviewPage.categories.macro') },
     { key: 'crypto', label: t('marketOverviewPage.categories.crypto') },
-  ], [t]);
+  ];
 
   const activeTabConfig = MARKET_OVERVIEW_TAB_CONFIG[activeCategory];
-  const heroAnchors = useMemo(() => buildHeroAnchors(panels, activeTabConfig.pulse), [activeTabConfig.pulse, panels]);
-  const dataQuality = useMemo(() => summarizeDataQuality(panels), [panels]);
-  const coverageSummary = useMemo(() => summarizeCardCoverage(panels, CATEGORY_CARDS[activeCategory]), [activeCategory, panels]);
+  const heroAnchors = buildHeroAnchors(panels, activeTabConfig.pulse);
+  const dataQuality = summarizeDataQuality(panels);
+  const coverageSummary = summarizeCardCoverage(panels, CATEGORY_CARDS[activeCategory]);
   const activeCategoryLabel = categoryTabs.find((tab) => tab.key === activeCategory)?.label || '';
-  const exportSummaryText = useMemo(() => buildMarketOverviewSummaryText({
+  const exportSummaryText = buildMarketOverviewSummaryText({
     activeCategoryLabel,
     coverageSummary,
     dataQuality,
@@ -2099,7 +2118,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     language,
     temperature: panels.temperature,
     briefing: panels.briefing,
-  }), [activeCategoryLabel, coverageSummary, dataQuality, heroAnchors, language, panels.briefing, panels.temperature]);
+  });
   const activeRows = CATEGORY_LAYOUT[activeCategory];
 
   const globalIndicesCard = (
@@ -2508,22 +2527,9 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     return Boolean(panel?.errorMessage || (panel?.items?.length || 0) > 0);
   };
 
-  const moduleCardTestId: Partial<Record<MarketOverviewModuleId, string>> = {
-    globalIndices: 'indices',
-    usIndices: 'indices',
-    cnHkIndices: 'cnIndices',
-    cryptoSnapshot: 'crypto',
-    cnSnapshot: 'cnIndices',
-    shortSentiment: 'cnShortSentiment',
-    macroRates: 'rates',
-    macroFxCommodities: 'fxCommodities',
-    usSentiment: 'sentiment',
-    cryptoSentiment: 'sentiment',
-  };
-
   const renderModule = (moduleId: MarketOverviewModuleId, rank: number, rail: WorkbenchRail = 'hero') => {
     const layoutMeta = MODULE_LAYOUT_META[moduleId];
-    const cardTestId = moduleCardTestId[moduleId] || moduleId;
+    const cardTestId = MODULE_CARD_TEST_ID[moduleId] || moduleId;
     return (
       <div
         key={moduleId}
@@ -2561,18 +2567,19 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     );
   };
 
-  const handleExportSummary = useCallback(async () => {
-    await navigator.clipboard.writeText(exportSummaryText);
-    setExportSummaryFeedback(language === 'en' ? 'Summary copied' : '已复制摘要');
-  }, [exportSummaryText, language]);
+  const handleExportSummary = () => {
+    void navigator.clipboard.writeText(exportSummaryText).then(() => {
+      setExportSummaryFeedback(language === 'en' ? 'Summary copied' : '已复制摘要');
+    });
+  };
 
-  const topLevelDataStatus = useMemo(() => summarizeTopLevelDataStatus({
+  const topLevelDataStatus = summarizeTopLevelDataStatus({
     activeCategory,
     panels,
     coverageSummary,
     loading,
     refreshingPanel,
-  }), [activeCategory, coverageSummary, loading, panels, refreshingPanel]);
+  });
   const marketDecision = buildMarketDecision({ activeCategory, panels, dataQuality, topLevelDataStatus });
   const decisionReliable = isTemperatureReliable(panels.temperature);
   const disabledLabel = temperatureDisabledStateLabel(panels.temperature);
@@ -2714,9 +2721,71 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
       coverage,
     };
   });
-  const heroRows = activeRows.filter((row) => row.tier === 'hero').map(renderPlannedRow).filter(Boolean) as React.ReactNode[];
-  const secondaryRows = activeRows.filter((row) => row.tier === 'secondary').map(renderPlannedRow).filter(Boolean) as React.ReactNode[];
-  const deepRows = activeRows.filter((row) => row.tier === 'deep').map(renderPlannedRow).filter(Boolean) as React.ReactNode[];
+  const heroRows = activeRows.reduce<React.ReactNode[]>((acc, row, index) => { if (row.tier === 'hero') { const node = renderPlannedRow(row, index); if (node) acc.push(node); } return acc; }, []);
+  const secondaryRows = activeRows.reduce<React.ReactNode[]>((acc, row, index) => { if (row.tier === 'secondary') { const node = renderPlannedRow(row, index); if (node) acc.push(node); } return acc; }, []);
+  const deepRows = activeRows.reduce<React.ReactNode[]>((acc, row, index) => { if (row.tier === 'deep') { const node = renderPlannedRow(row, index); if (node) acc.push(node); } return acc; }, []);
+
+  return {
+    language,
+    activeCategory,
+    categoryTabs,
+    setActiveCategory,
+    handleExportSummary,
+    exportLabel: exportSummaryFeedback || (language === 'en' ? 'Export' : '复制摘要'),
+    directionalSummaryView,
+    regimeSynthesisView,
+    regimeSummaryView,
+    marketDecision,
+    decisionReliable,
+    decisionSemanticsView,
+    dataStateView,
+    temperatureSummary,
+    briefingSummary,
+    officialMacroRecords,
+    heroAnchorViews,
+    showContextRail: activeTabConfig.rail.length > 0,
+    contextHighlights,
+    executiveGroups,
+    showExecutiveGroups: activeCategory === 'all',
+    heroRows,
+    secondaryRows,
+    deepRows,
+    showDeepSection: activeRows.some((row) => row.tier === 'deep') || activeCategory === 'all',
+  };
+}
+
+export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = ({
+  heading,
+  showAdminDiagnostics = false,
+  ...modelProps
+}) => {
+  const {
+    language,
+    activeCategory,
+    categoryTabs,
+    setActiveCategory,
+    handleExportSummary,
+    exportLabel,
+    directionalSummaryView,
+    regimeSynthesisView,
+    regimeSummaryView,
+    marketDecision,
+    decisionReliable,
+    decisionSemanticsView,
+    dataStateView,
+    temperatureSummary,
+    briefingSummary,
+    officialMacroRecords,
+    heroAnchorViews,
+    showContextRail,
+    contextHighlights,
+    executiveGroups,
+    showExecutiveGroups,
+    heroRows,
+    secondaryRows,
+    deepRows,
+    showDeepSection,
+  } = useMarketOverviewWorkbenchModel(modelProps);
 
   return (
     <div
@@ -2741,10 +2810,8 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
           categoryTabs={categoryTabs}
           activeCategory={activeCategory}
           onCategoryChange={setActiveCategory}
-          exportLabel={exportSummaryFeedback || (language === 'en' ? 'Export' : '复制摘要')}
-          onExportSummary={() => {
-            void handleExportSummary();
-          }}
+          exportLabel={exportLabel}
+          onExportSummary={handleExportSummary}
           heroAnchors={heroAnchorViews}
           showAdminDiagnostics={showAdminDiagnostics}
         />
@@ -2753,11 +2820,11 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
             heroRows={heroRows}
             secondaryRows={secondaryRows}
             deepRows={deepRows}
-            showDeepSection={activeRows.some((row) => row.tier === 'deep') || activeCategory === 'all'}
-            showContextRail={activeTabConfig.rail.length > 0}
+            showDeepSection={showDeepSection}
+            showContextRail={showContextRail}
             contextHighlights={contextHighlights}
             executiveGroups={executiveGroups}
-            showExecutiveGroups={activeCategory === 'all'}
+            showExecutiveGroups={showExecutiveGroups}
           />
         </Suspense>
       </ConsumerWorkspacePageShell>

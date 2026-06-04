@@ -1,6 +1,7 @@
 import type React from 'react';
-import { Suspense, lazy, useMemo } from 'react';
-import { Button, Card } from '../../components/common';
+import { Suspense, lazy } from 'react';
+import { Button } from '../common/Button';
+import { Card } from '../common/Card';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 import {
   getDeterministicResultDensityCssVars,
@@ -171,10 +172,7 @@ export const DeterministicBacktestResultView: React.FC<{
   const { language } = useI18n();
   const fallbackDensityConfig = useDeterministicResultDensity();
   const resolvedDensity = densityConfig ?? fallbackDensityConfig;
-  const normalized = useMemo(
-    () => providedNormalized ?? normalizeDeterministicBacktestResult(run, language),
-    [providedNormalized, run, language],
-  );
+  const normalized = providedNormalized ?? normalizeDeterministicBacktestResult(run, language);
   const { viewerMeta } = normalized;
   const workspaceKey = `${viewerMeta.runId}:${viewerMeta.rowCount}:${viewerMeta.firstDate ?? 'empty'}:${viewerMeta.lastDate ?? 'empty'}`;
 

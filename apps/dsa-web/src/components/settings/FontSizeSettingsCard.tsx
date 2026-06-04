@@ -10,7 +10,7 @@ export const FontSizeSettingsCard: React.FC = () => {
   const { fontSize, setFontSize } = useUiPreferences();
 
   return (
-    <div data-testid="font-size-card" className="grid gap-3 px-4 py-4 md:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)]">
+    <div data-testid="font-size-card" className="grid gap-3 p-4 md:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)]">
       <div className="min-w-0">
         <p className="text-sm font-medium text-[color:var(--wolfy-text-primary)]">{t('settings.fontSizeTitle')}</p>
         <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
@@ -18,7 +18,7 @@ export const FontSizeSettingsCard: React.FC = () => {
         </p>
       </div>
       <div className="min-w-0">
-        <div className="grid grid-cols-5 gap-2" role="group" aria-label={t('settings.fontSizeTitle')}>
+        <fieldset className="grid grid-cols-5 gap-2 border-0 p-0 m-0" aria-label={t('settings.fontSizeTitle')}>
           {OPTIONS.map((option) => (
             <button
               key={option}
@@ -35,7 +35,7 @@ export const FontSizeSettingsCard: React.FC = () => {
               {t(`settings.fontSize${option.toUpperCase()}`)}
             </button>
           ))}
-        </div>
+        </fieldset>
       </div>
     </div>
   );

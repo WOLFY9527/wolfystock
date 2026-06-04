@@ -18,6 +18,8 @@ function bt(language: 'zh' | 'en', key: string, vars?: Record<string, string | n
   return translate(language, `backtest.${key}`, vars);
 }
 
+const CHART_IMPORT_TIMEOUT = 5000;
+
 const {
   runBacktest,
   getResults,
@@ -1395,10 +1397,14 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-report-trade-table')).toBeInTheDocument();
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');
     expect(
-      within(screen.getByTestId('deterministic-result-page-hero')).getByText('已完成', { selector: '[data-status="success"]' }),
-    ).toHaveAttribute('data-status', 'success');
-    expect(await screen.findByTestId('deterministic-backtest-chart-workspace')).toBeInTheDocument();
-    expect(await screen.findByLabelText(bt('zh', 'resultPage.chartWorkspace.cumulativeReturnChartAria'))).toBeInTheDocument();
+      within(screen.getByTestId('deterministic-result-page-hero')).getAllByText('已完成', { selector: '[data-status="success"]' }).length,
+    ).toBeGreaterThan(0);
+    expect(await screen.findByTestId('deterministic-backtest-chart-workspace', undefined, { timeout: CHART_IMPORT_TIMEOUT })).toBeInTheDocument();
+    expect(await screen.findByLabelText(
+      bt('zh', 'resultPage.chartWorkspace.cumulativeReturnChartAria'),
+      undefined,
+      { timeout: CHART_IMPORT_TIMEOUT },
+    )).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.overview') })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.audit') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.trades') })).toBeInTheDocument();
@@ -1679,7 +1685,7 @@ describe('BacktestPage', () => {
       )),
     ).toBeInTheDocument();
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '123');
-    expect(await screen.findByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
+    expect(await screen.findByTestId('deterministic-backtest-chart-workspace', undefined, { timeout: CHART_IMPORT_TIMEOUT })).toHaveAttribute('data-row-count', '3');
   }, 10000);
 
   it('renders English canonical result-page copy on localized result routes', async () => {

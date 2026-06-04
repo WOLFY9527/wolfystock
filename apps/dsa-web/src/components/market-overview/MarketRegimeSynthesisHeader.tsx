@@ -1,5 +1,5 @@
 import type React from 'react';
-import { TerminalChip, TerminalPanel } from '../terminal';
+import { TerminalChip, TerminalPanel } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
 import { SynthesisEvidenceColumn, type SynthesisEvidenceItem } from '../common/SynthesisEvidenceColumn';
 

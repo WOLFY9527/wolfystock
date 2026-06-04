@@ -238,7 +238,10 @@ export type MarketDataReadinessResponse = {
 
 function normalizeReadinessSymbols(symbols?: string[] | string | null): string | undefined {
   if (Array.isArray(symbols)) {
-    const sanitized = symbols.map((symbol) => String(symbol || '').trim()).filter(Boolean);
+    const sanitized = symbols.flatMap((symbol) => {
+      const trimmed = String(symbol || '').trim();
+      return trimmed ? [trimmed] : [];
+    });
     return sanitized.length ? sanitized.join(',') : undefined;
   }
   if (typeof symbols !== 'string') {
@@ -246,8 +249,10 @@ function normalizeReadinessSymbols(symbols?: string[] | string | null): string |
   }
   const sanitized = symbols
     .split(',')
-    .map((symbol) => symbol.trim())
-    .filter(Boolean)
+    .flatMap((symbol) => {
+      const trimmed = symbol.trim();
+      return trimmed ? [trimmed] : [];
+    })
     .join(',');
   return sanitized || undefined;
 }

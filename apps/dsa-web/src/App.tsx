@@ -182,7 +182,7 @@ function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: bo
     };
 }
 
-export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const { language } = useI18n();
   const { isGuest } = useProductSurface();
@@ -208,7 +208,7 @@ export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = (
   return <ConsumerProtectedFrame moduleName={moduleName} />;
 };
 
-export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const { language } = useI18n();
   const { adminCapabilities, isAdminAccount, isGuest } = useProductSurface();
@@ -323,7 +323,7 @@ export const AppContent: React.FC = () => {
   if (loadError) {
     content = (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-base px-4">
-        <div className="theme-panel-glass w-full max-w-xl px-5 py-5">
+        <div className="theme-panel-glass w-full max-w-xl p-5">
           <ApiErrorAlert error={loadError} />
           <div className="mt-4 flex justify-end">
             <button

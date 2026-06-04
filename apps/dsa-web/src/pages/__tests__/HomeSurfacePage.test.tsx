@@ -10,9 +10,11 @@ import { UiPreferencesProvider } from '../../contexts/UiPreferencesContext';
 import { stocksApi } from '../../api/stocks';
 import { resolveHomeCandlestickTooltipPosition } from '../../components/home-bento/homeCandlestickChartUtils';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
-import { useStockPoolStore } from '../../stores';
+import { useStockPoolStore } from '../../stores/stockPoolStore';
 import { buildInstitutionalReportMarkdown, getCompanyWithTicker } from '../../utils/homeReportIdentity';
 import HomeSurfacePage from '../HomeSurfacePage';
+
+const CHART_IMPORT_TIMEOUT = 5000;
 
 const { useProductSurfaceMock } = vi.hoisted(() => ({
   useProductSurfaceMock: vi.fn(),
@@ -367,9 +369,10 @@ describe('HomeSurfacePage', () => {
           didTimeout: false,
           timeRemaining: () => 16,
         } as IdleDeadline);
+        await vi.dynamicImportSettled();
       });
 
-      expect(await screen.findByTestId('home-candlestick-chart-frame')).toBeInTheDocument();
+      expect(await screen.findByTestId('home-candlestick-chart-frame', undefined, { timeout: CHART_IMPORT_TIMEOUT })).toBeInTheDocument();
       expect(stocksApi.getHistory).toHaveBeenCalled();
     } finally {
       window.requestIdleCallback = originalRequestIdleCallback;
@@ -509,7 +512,7 @@ describe('HomeSurfacePage', () => {
     expect(within(targetMetric).getByText('$133.50')).toHaveClass('text-sm', 'font-semibold', 'text-emerald-400');
     expect(within(stopLossMetric).getByText('$117.40')).toHaveClass('text-sm', 'font-semibold', 'text-rose-400');
 
-    expect(chartWorkspace).toContainElement(await screen.findByTestId('home-candlestick-chart-frame'));
+    expect(chartWorkspace).toContainElement(await screen.findByTestId('home-candlestick-chart-frame', undefined, { timeout: CHART_IMPORT_TIMEOUT }));
     expect(primaryWorkspace.closest('[data-layout-zone="PrimaryWorkRegion"]')).toContainElement(chartWorkspace);
     expect(screen.getByTestId('home-bento-decision-support-grid')).toBeInTheDocument();
     expect(screen.getByText('技术结构')).toBeInTheDocument();

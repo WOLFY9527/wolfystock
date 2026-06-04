@@ -25,7 +25,10 @@ import {
   type AdminUserListResponse,
 } from '../api/adminUsers';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
-import { ApiErrorAlert, Checkbox, Input, Select } from '../components/common';
+import { ApiErrorAlert } from '../components/common/ApiErrorAlert';
+import { Checkbox } from '../components/common/Checkbox';
+import { Input } from '../components/common/Input';
+import { Select } from '../components/common/Select';
 import {
   TerminalButton,
   TerminalChip,
@@ -41,7 +44,7 @@ import {
   TerminalPageShell,
   TerminalPanel,
   TerminalSectionHeader,
-} from '../components/terminal';
+} from '../components/terminal/TerminalPrimitives';
 import AdminDrillThroughStrip from '../components/admin/AdminDrillThroughStrip';
 import AdminOpsL0OverviewStrip, { type AdminOpsTrustState } from '../components/admin/AdminOpsL0OverviewStrip';
 import { useI18n } from '../contexts/UiLanguageContext';
