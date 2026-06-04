@@ -1173,6 +1173,10 @@ describe('UserScannerPage', () => {
     const { container } = renderUserScannerPage();
 
     const row = await screen.findByTestId('scanner-result-row-NVDA');
+    const visualSummary = await screen.findByTestId('scanner-visual-evidence-summary');
+    expect(visualSummary).toHaveTextContent(/视觉证据|Visual evidence/);
+    expect(screen.getByTestId('scanner-visual-score-distribution')).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-visual-candidate-coverage')).toBeInTheDocument();
     expect(row).toHaveTextContent('证据不足');
     expect(row).toHaveTextContent('待补');
     expect(row).toHaveTextContent('基本面');
@@ -1423,10 +1427,11 @@ describe('UserScannerPage', () => {
 
     renderUserScannerPage();
 
-    const band = await screen.findByTestId('scanner-conclusion-band');
-    expect(band).toHaveTextContent('证据不足');
-    expect(band).toHaveTextContent('候选 0');
-    expect(band).toHaveTextContent('补齐行情或历史证据');
+    await waitFor(() => {
+      expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent('证据不足');
+      expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent('候选 0');
+      expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent('补齐行情或历史证据');
+    });
   });
 
   it('replaces actiony scanner labels with observation and risk-boundary copy', async () => {
@@ -2122,6 +2127,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const emptyState = await screen.findByTestId('scanner-workbench-empty-state');
+    expect(screen.getByTestId('scanner-empty-history-fallback')).toBeInTheDocument();
     expect(emptyState).toHaveTextContent(/本次无入选候选|尚未运行扫描/);
     expect(emptyState).toHaveTextContent(/切换候选视图到候选池或全部|先在顶部命令栏确认市场、范围、评估深度与候选上限/);
     expect(emptyState).toHaveTextContent(/查看淘汰与数据受限行|如需已有结果可打开历史记录/);

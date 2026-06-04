@@ -167,6 +167,20 @@ type ScannerWorkbenchEmptyState = {
   title: string;
   body: string;
 };
+type ScannerVisualSummaryBarSegment = {
+  key: string;
+  label: string;
+  count: number;
+  toneClassName: string;
+};
+type ScannerVisualEvidenceSummaryModel = {
+  totalRows: number;
+  scoreBands: ScannerVisualSummaryBarSegment[];
+  candidateCoverageSegments: ScannerVisualSummaryBarSegment[];
+  marketCoverageSegments: ScannerVisualSummaryBarSegment[];
+  candidateReadinessItems: ScannerLabeledValue[];
+  nextEvidenceLabel: string | null;
+};
 type ScannerValidationErrors = {
   run?: string;
   customSymbols?: string;
@@ -949,8 +963,8 @@ function buildScannerWorkbenchEmptyState({
     return {
       title: language === 'en' ? 'No scan has run yet' : '尚未运行扫描',
       body: language === 'en'
-        ? 'Use the top command bar to check market, universe, detailed review, and shortlist controls; open history for previous runs.'
-        : '先在顶部命令栏确认市场、范围、评估深度与候选上限；如需已有结果可打开历史记录。',
+        ? 'Use the top command bar to check market, universe, detailed review, and shortlist controls. Review shortlist, universe, and detailed review settings before retrying, or open history for previous runs.'
+        : '先在顶部命令栏确认市场、范围、评估深度与候选上限；也可再检查候选上限、范围与评估深度，可稍后重试或打开历史记录，如需已有结果可打开历史记录。',
     };
   }
 
@@ -997,6 +1011,184 @@ function buildScannerWorkbenchEmptyState({
     body: language === 'en'
       ? 'Switch the candidate view, inspect limited-data rows, or adjust market, universe, detailed review, and shortlist controls in the top command bar.'
       : '切换候选视图、查看数据受限行，或在顶部命令栏调整市场、范围、评估深度与候选上限。',
+  };
+}
+
+function buildVisualSummarySegments(
+  items: Array<{ key: string; label: string; count: number; toneClassName: string }>,
+): ScannerVisualSummaryBarSegment[] {
+  return items.filter((item) => item.count > 0);
+}
+
+function buildCoverageSegments(
+  coverage: {
+    availableCount?: number | null;
+    partialCount?: number | null;
+    observeOnlyCount?: number | null;
+    missingCount?: number | null;
+  } | null | undefined,
+  language: 'zh' | 'en',
+): ScannerVisualSummaryBarSegment[] {
+  if (!coverage) return [];
+  return buildVisualSummarySegments([
+    {
+      key: 'available',
+      label: language === 'en' ? 'Available' : '可用',
+      count: coverage.availableCount ?? 0,
+      toneClassName: 'bg-emerald-300/85',
+    },
+    {
+      key: 'partial',
+      label: language === 'en' ? 'Partial' : '部分',
+      count: coverage.partialCount ?? 0,
+      toneClassName: 'bg-sky-300/85',
+    },
+    {
+      key: 'observe_only',
+      label: language === 'en' ? 'Observe only' : '仅观察',
+      count: coverage.observeOnlyCount ?? 0,
+      toneClassName: 'bg-amber-300/85',
+    },
+    {
+      key: 'missing',
+      label: language === 'en' ? 'Missing' : '待补',
+      count: coverage.missingCount ?? 0,
+      toneClassName: 'bg-white/30',
+    },
+  ]);
+}
+
+function buildMarketCoverageSegments(
+  coverage: ResearchReadinessV1['evidenceCoverage'],
+  language: 'zh' | 'en',
+): ScannerVisualSummaryBarSegment[] {
+  if (!coverage) return [];
+  return buildVisualSummarySegments([
+    {
+      key: 'score_grade',
+      label: language === 'en' ? 'Score-grade' : '评分可用',
+      count: coverage.scoreGradeCount ?? 0,
+      toneClassName: 'bg-emerald-300/85',
+    },
+    {
+      key: 'observe_only',
+      label: language === 'en' ? 'Observe only' : '仅观察',
+      count: coverage.observationOnlyCount ?? 0,
+      toneClassName: 'bg-amber-300/85',
+    },
+    {
+      key: 'missing',
+      label: language === 'en' ? 'Missing' : '待补',
+      count: coverage.missingCount ?? 0,
+      toneClassName: 'bg-white/30',
+    },
+  ]);
+}
+
+function buildScannerVisualEvidenceSummary(
+  candidates: ScannerCandidateWithEvidence[],
+  diagnostics: ScannerCandidateDiagnostic[],
+  runDetail: ScannerRunDetail | null,
+  language: 'zh' | 'en',
+): ScannerVisualEvidenceSummaryModel | null {
+  if (!diagnostics.length) return null;
+
+  const scoreBands = {
+    strong: 0,
+    building: 0,
+    watch: 0,
+    limited: 0,
+  };
+  const candidateCoverage = {
+    availableCount: 0,
+    partialCount: 0,
+    observeOnlyCount: 0,
+    missingCount: 0,
+  };
+  const readinessStates = {
+    ready: 0,
+    observe_only: 0,
+    insufficient: 0,
+    blocked: 0,
+    waiting: 0,
+  };
+
+  diagnostics.forEach((candidate) => {
+    const score = candidate.score;
+    if (score == null || !Number.isFinite(score)) {
+      scoreBands.limited += 1;
+    } else if (score >= 80) {
+      scoreBands.strong += 1;
+    } else if (score >= 60) {
+      scoreBands.building += 1;
+    } else if (score >= 40) {
+      scoreBands.watch += 1;
+    } else {
+      scoreBands.limited += 1;
+    }
+  });
+
+  candidates.forEach((candidate) => {
+    const frameCoverage = candidate.candidateEvidenceFrame?.coverage;
+    if (frameCoverage) {
+      candidateCoverage.availableCount += frameCoverage.availableCount ?? 0;
+      candidateCoverage.partialCount += frameCoverage.partialCount ?? 0;
+      candidateCoverage.observeOnlyCount += frameCoverage.observeOnlyCount ?? 0;
+      candidateCoverage.missingCount += frameCoverage.missingCount ?? 0;
+    } else if (candidate.candidateResearchReadiness?.evidenceCoverage) {
+      candidateCoverage.availableCount += candidate.candidateResearchReadiness.evidenceCoverage.scoreGradeCount ?? 0;
+      candidateCoverage.observeOnlyCount += candidate.candidateResearchReadiness.evidenceCoverage.observationOnlyCount ?? 0;
+      candidateCoverage.missingCount += candidate.candidateResearchReadiness.evidenceCoverage.missingCount ?? 0;
+    }
+
+    const normalizedState = String(candidate.candidateResearchReadiness?.readinessState || '').trim().toLowerCase();
+    if (normalizedState === 'ready') readinessStates.ready += 1;
+    else if (normalizedState === 'observe_only') readinessStates.observe_only += 1;
+    else if (normalizedState === 'insufficient') readinessStates.insufficient += 1;
+    else if (normalizedState === 'blocked') readinessStates.blocked += 1;
+    else if (normalizedState === 'waiting') readinessStates.waiting += 1;
+  });
+
+  const candidateReadinessItems = [
+    readinessStates.ready ? { label: language === 'en' ? 'Ready' : '可研究', value: String(readinessStates.ready) } : null,
+    readinessStates.observe_only ? { label: language === 'en' ? 'Observe only' : '仅观察', value: String(readinessStates.observe_only) } : null,
+    readinessStates.insufficient ? { label: language === 'en' ? 'Insufficient' : '证据不足', value: String(readinessStates.insufficient) } : null,
+    readinessStates.blocked ? { label: language === 'en' ? 'Blocked' : '阻断', value: String(readinessStates.blocked) } : null,
+    readinessStates.waiting ? { label: language === 'en' ? 'Waiting' : '等待', value: String(readinessStates.waiting) } : null,
+  ].filter((item): item is ScannerLabeledValue => Boolean(item));
+
+  return {
+    totalRows: diagnostics.length,
+    scoreBands: buildVisualSummarySegments([
+      {
+        key: 'strong',
+        label: language === 'en' ? '80+' : '80+',
+        count: scoreBands.strong,
+        toneClassName: 'bg-emerald-300/85',
+      },
+      {
+        key: 'building',
+        label: language === 'en' ? '60-79' : '60-79',
+        count: scoreBands.building,
+        toneClassName: 'bg-sky-300/85',
+      },
+      {
+        key: 'watch',
+        label: language === 'en' ? '40-59' : '40-59',
+        count: scoreBands.watch,
+        toneClassName: 'bg-violet-300/85',
+      },
+      {
+        key: 'limited',
+        label: language === 'en' ? '<40 / n.a.' : '<40 / 无',
+        count: scoreBands.limited,
+        toneClassName: 'bg-white/30',
+      },
+    ]),
+    candidateCoverageSegments: buildCoverageSegments(candidateCoverage, language),
+    marketCoverageSegments: buildMarketCoverageSegments(runDetail?.scannerContextFrame?.marketReadiness?.evidenceCoverage, language),
+    candidateReadinessItems,
+    nextEvidenceLabel: runDetail?.scannerContextFrame?.marketReadiness?.nextEvidenceNeeded?.[0] || null,
   };
 }
 
@@ -1632,6 +1824,161 @@ function ScannerResultHistorySummary({
   );
 }
 
+function ScannerVisualSummaryBar({
+  segments,
+  testId,
+}: {
+  segments: ScannerVisualSummaryBarSegment[];
+  testId: string;
+}) {
+  const total = segments.reduce((sum, segment) => sum + segment.count, 0);
+  if (!total) {
+    return <div data-testid={testId} className="h-2 rounded-full bg-white/[0.05]" />;
+  }
+  return (
+    <div data-testid={testId} className="flex h-2 overflow-hidden rounded-full bg-white/[0.05]">
+      {segments.map((segment) => (
+        <span
+          key={segment.key}
+          className={segment.toneClassName}
+          style={{ width: `${(segment.count / total) * 100}%` }}
+          title={`${segment.label}: ${segment.count}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ScannerVisualEvidenceSummaryPanel({
+  model,
+  language,
+}: {
+  model: ScannerVisualEvidenceSummaryModel;
+  language: 'zh' | 'en';
+}) {
+  const sections = [
+    {
+      key: 'score',
+      title: language === 'en' ? 'Score distribution' : '评分分布',
+      testId: 'scanner-visual-score-distribution',
+      segments: model.scoreBands,
+    },
+    {
+      key: 'candidate-coverage',
+      title: language === 'en' ? 'Candidate evidence' : '候选证据覆盖',
+      testId: 'scanner-visual-candidate-coverage',
+      segments: model.candidateCoverageSegments,
+    },
+    {
+      key: 'market-coverage',
+      title: language === 'en' ? 'Market evidence' : '市场证据覆盖',
+      testId: 'scanner-visual-market-coverage',
+      segments: model.marketCoverageSegments,
+    },
+  ].filter((section) => section.segments.length > 0);
+
+  if (!sections.length && !model.candidateReadinessItems.length && !model.nextEvidenceLabel) {
+    return null;
+  }
+
+  return (
+    <TerminalPanel dense data-testid="scanner-visual-evidence-summary" className="mb-3 grid gap-3 p-3">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">
+            {language === 'en' ? 'Visual evidence' : '视觉证据'}
+          </h3>
+          <p className="mt-0.5 text-[11px] text-white/42">
+            {language === 'en'
+              ? `Compact view across ${model.totalRows} ranked rows without changing row order.`
+              : `基于 ${model.totalRows} 条候选的紧凑分布，不改变原有排序。`}
+          </p>
+        </div>
+        {model.candidateReadinessItems.length ? (
+          <div data-testid="scanner-visual-readiness-counts" className="flex min-w-0 flex-wrap gap-1.5">
+            {model.candidateReadinessItems.map((item) => (
+              <FieldChip key={`${item.label}-${item.value}`} label={item.label} value={item.value} />
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <div className="grid gap-3 lg:grid-cols-3">
+        {sections.map((section) => (
+          <div key={section.key} className="grid gap-2 rounded-xl border border-white/8 bg-white/[0.02] p-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">{section.title}</span>
+            </div>
+            <ScannerVisualSummaryBar segments={section.segments} testId={section.testId} />
+            <div className="flex min-w-0 flex-wrap gap-1.5 text-[10px] text-white/55">
+              {section.segments.map((segment) => (
+                <span key={segment.key} className="inline-flex items-center gap-1 rounded-md border border-white/8 bg-white/[0.03] px-1.5 py-0.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${segment.toneClassName}`} />
+                  <span>{segment.label}</span>
+                  <span className="font-mono text-white/78">{segment.count}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {model.nextEvidenceLabel ? (
+        <p data-testid="scanner-visual-next-evidence" className="text-xs leading-relaxed text-white/58">
+          <span className="text-white/40">{language === 'en' ? 'Next evidence:' : '下一步证据：'}</span>
+          {model.nextEvidenceLabel}
+        </p>
+      ) : null}
+    </TerminalPanel>
+  );
+}
+
+function ScannerHistoryFallbackPanel({
+  summaries,
+  emptyState,
+  language,
+}: {
+  summaries: ScannerRunSummary[];
+  emptyState: ScannerWorkbenchEmptyState;
+  language: 'zh' | 'en';
+}) {
+  return (
+    <TerminalPanel dense data-testid="scanner-empty-history-fallback" className="grid gap-3 p-3">
+      <div className="min-w-0">
+        <h3 className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">
+          {language === 'en' ? 'No candidate this run' : '本次暂无候选'}
+        </h3>
+        <p className="mt-0.5 text-[11px] text-white/42">
+          {language === 'en'
+            ? 'Use the latest run summary before changing scope or waiting for the next scan.'
+            : '先看最近一次扫描摘要，再决定调整范围或等待下一次扫描。'}
+        </p>
+      </div>
+      {summaries.length ? (
+        <div className="grid gap-2 xl:grid-cols-3">
+          {summaries.map((summary) => (
+            <TerminalNestedBlock key={summary.title} className="min-w-0 p-2.5" data-testid={`scanner-empty-summary-${summary.title}`}>
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <span className="truncate text-[10px] font-bold uppercase tracking-widest text-white/40">{summary.title}</span>
+                <TerminalChip variant="neutral" className="shrink-0 px-1.5 py-0.5 text-[10px] font-sans text-white/62">{summary.statusLabel}</TerminalChip>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-1.5 text-[11px] sm:grid-cols-3">
+                <FieldChip label="最佳候选" value={summary.bestCandidate} />
+                <FieldChip label="候选数量" value={String(summary.candidateCount)} />
+                <FieldChip label="淘汰数量" value={String(summary.rejectedCount)} />
+                <FieldChip label="失败数量" value={String(summary.failedCount)} />
+                <FieldChip label="数据状态" value={summary.dataStatusLabel} />
+                <FieldChip label="耗时" value={summary.durationLabel} />
+              </div>
+            </TerminalNestedBlock>
+          ))}
+        </div>
+      ) : null}
+      <CompactEmptyRow data-testid="scanner-workbench-empty-state" title={emptyState.title} className="m-0 min-h-[88px] px-3 py-2">
+        {emptyState.body}
+      </CompactEmptyRow>
+    </TerminalPanel>
+  );
+}
+
 function ScannerConclusionBand({
   model,
   scopeLabel,
@@ -2061,6 +2408,7 @@ const UserScannerPage: React.FC = () => {
   });
   const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setIsHistoryDrawerOpen(true));
   const shortlistCount = runDetail?.shortlist?.length ?? 0;
+  const currentSelectedCount = runDetail ? getRunSummaryCount(runDetail, 'selectedCount', shortlistCount) : 0;
   const generatedAt = runDetail?.completedAt || runDetail?.runAt || null;
   const runDisabled = isRunning;
   const generateThemeDisabled = isGeneratingTheme;
@@ -2312,6 +2660,21 @@ const UserScannerPage: React.FC = () => {
       runDetail,
     }),
     [candidateFilter, diagnosticCandidates, language, pageErrorSummary, runDetail],
+  );
+  const visibleHistorySummaries = useMemo(
+    () => [currentRunSummary, recentRunSummary, previousRunSummary]
+      .filter((item, index, array): item is ScannerRunSummary => Boolean(item) && array.findIndex((other) => other?.title === item?.title) === index),
+    [currentRunSummary, previousRunSummary, recentRunSummary],
+  );
+  const workbenchCandidatesWithEvidence = useMemo(
+    () => workbenchDiagnostics.map((candidate) => withCandidateEvidence(
+      shortlistCandidateBySymbol.get(normalizeCandidateSymbol(candidate.symbol)) || diagnosticToCandidate(candidate),
+    )),
+    [shortlistCandidateBySymbol, workbenchDiagnostics],
+  );
+  const visualEvidenceSummary = useMemo(
+    () => buildScannerVisualEvidenceSummary(workbenchCandidatesWithEvidence, workbenchDiagnostics, runDetail, language),
+    [language, runDetail, workbenchCandidatesWithEvidence, workbenchDiagnostics],
   );
   const handleAnalyzeCandidate = useCallback(async (candidate: ScannerCandidate) => {
     setPendingAnalyzeSymbol(candidate.symbol);
@@ -3210,87 +3573,98 @@ const UserScannerPage: React.FC = () => {
                       className={`grid min-h-0 flex-1 min-w-0 gap-3 px-2 py-2 ${showDetailRail ? 'xl:grid-cols-[minmax(820px,1fr)_minmax(320px,340px)]' : 'grid-cols-1'}`}
                     >
                       <div data-testid="scanner-primary-work-region" className="min-w-0">
-                        {workbenchDiagnostics.length ? (
-                          <div
-                            data-testid="scanner-ranked-list"
-                            className="overflow-x-auto overscroll-x-contain rounded-xl border border-white/5 bg-white/[0.02] [-webkit-overflow-scrolling:touch]"
-                            aria-label={language === 'en' ? 'Ranked scanner results' : '扫描排名结果'}
-                            tabIndex={0}
-                          >
-                            <div data-testid="scanner-result-table" className="contents md:block md:min-w-[1220px]">
-                              <div className="hidden items-center gap-3 border-b border-white/5 bg-black/[0.18] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/38 md:grid md:grid-cols-[64px_minmax(180px,1fr)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)_auto]">
-                                <span>{language === 'en' ? 'Rank' : '排名'}</span>
-                                <span>{language === 'en' ? 'Symbol / name' : '代码 / 名称'}</span>
-                                <span>{language === 'en' ? 'Score' : '评分'}</span>
-                                <span>{language === 'en' ? 'Status' : '状态'}</span>
-                                <span>{language === 'en' ? 'Why now' : '当前信号'}</span>
-                                <span>{language === 'en' ? 'Data quality' : '数据质量'}</span>
-                                <span>{language === 'en' ? 'Next / risk' : '下一步 / 风险'}</span>
-                                <span className="text-right">{language === 'en' ? 'Actions' : '操作'}</span>
-                              </div>
-                              <div data-testid="scanner-candidate-scroll-region" className="min-w-0 max-h-[min(52vh,34rem)] overflow-y-auto overscroll-y-contain no-scrollbar ui-scroll-y-quiet [-webkit-overflow-scrolling:touch]">
-                                {workbenchDiagnostics.map((candidate) => {
-                                  const activeRunDetail = runDetail;
-                                  if (!activeRunDetail) return null;
-                                  const sourceCandidate = shortlistCandidateBySymbol.get(normalizeCandidateSymbol(candidate.symbol)) || diagnosticToCandidate(candidate);
-                                  const sourceCandidateWithEvidence = withCandidateEvidence(sourceCandidate);
-                                  const candidateMarket = normalizeScannerMarket(activeRunDetail.market || market);
-                                  const candidateIdentity = getWatchlistIdentity(candidateMarket, candidate.symbol);
-                                  const isTracked = Boolean(candidateIdentity && trackedWatchlistIdentitySet.has(candidateIdentity));
-                                  const isTrackPending = pendingWatchlistIdentity === candidateIdentity;
-                                  const backtestItem = getBacktestItem(sourceCandidate.symbol);
-                                  const comparison = comparisonState.bySymbol.get(normalizeCandidateSymbol(candidate.symbol) || '');
-                                  return (
-                                    <ScannerCandidateDiagnosticRow
-                                      key={`ranked-${candidate.symbol}`}
-                                      candidate={candidate}
-                                      language={language}
-                                      isSelectedCandidate={normalizeCandidateSymbol(activeDetailDiagnostic?.symbol) === normalizeCandidateSymbol(candidate.symbol)}
-                                      isExpanded={false}
-                                      isMoreOpen={rowMoreSymbol === candidate.symbol}
-                                      displayName={sourceCandidate.companyName || sourceCandidate.name || candidate.name || candidate.symbol || '--'}
-                                      keyReason={isOfficialSelected(candidate) ? getKeyReason(sourceCandidate, runDetail, language) : formatFriendlyDiagnosticReason(candidate, language)}
-                                      previewLabel={previewDecisionLabel(candidate, previewThreshold, language)}
-                                      previewBadgeClassName={previewDecisionClass(candidate, previewThreshold)}
-                                      dataQualityLabel={formatCandidateDataQuality(candidate, language)}
-                                      watchSummary={formatWorkbenchWatchSummary(sourceCandidate, language)}
-                                      rangeSummary={formatWorkbenchRangeSummary(sourceCandidate, language)}
-                                      evidenceSummary={null}
-                                      candidateEvidenceFrame={sourceCandidateWithEvidence.candidateEvidenceFrame}
-                                      candidateResearchReadiness={sourceCandidateWithEvidence.candidateResearchReadiness}
-                                      candidateResearchSummaryFrame={sourceCandidateWithEvidence.candidateResearchSummaryFrame}
-                                      scoreLabel={candidate.score == null ? '--' : `${candidate.score}/100`}
-                                      trustSources={[stripScannerConsumerTrustSource(sourceCandidate), stripScannerConsumerTrustSource(candidate)]}
-                                      scoreDelta={formatScoreDelta(comparison?.scoreDelta ?? null)}
-                                      comparisonLabel={comparison?.label || null}
-                                      statusLabel={diagnosticStatusLabel(candidate.status, language)}
-                                      watchlistActionLabel={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
-                                      watchlistActionTitle={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
-                                      copyLabel={copiedKey === `candidate:${candidate.symbol}` ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制')}
-                                      exportLabel={language === 'en' ? 'Export' : '导出'}
-                                      isTracked={isTracked}
-                                      isTrackPending={isTrackPending}
-                                      isWatchlistAuthBlocked={watchlistAuthBlocked}
-                                      isAnalyzing={pendingAnalyzeSymbol === sourceCandidate.symbol}
-                                      backtestLabel={getBacktestActionLabel(backtestItem)}
-                                      backtestTitle={!normalizeCandidateSymbol(sourceCandidate.symbol) ? backtestUnavailableLabel : undefined}
-                                      backtestItem={backtestItem}
-                                      onSelect={() => setInspectorSymbol(sourceCandidate.symbol)}
-                                      onAnalyze={() => void handleAnalyzeCandidate(sourceCandidate)}
-                                      onBacktest={() => void handleBacktestCandidate(sourceCandidate)}
-                                      onTrack={() => void handleTrackCandidate(sourceCandidate)}
-                                      onCopy={() => void handleCopyText(sourceCandidate.symbol, `candidate:${candidate.symbol}`)}
-                                      onExport={() => handleExportRows(
-                                        [buildScannerExportRow(sourceCandidate, activeRunDetail, language)],
-                                        buildScannerExportFilename(activeRunDetail, `candidate-${candidate.symbol}`),
-                                      )}
-                                      onToggleMore={() => setRowMoreSymbol((current) => current === candidate.symbol ? null : candidate.symbol)}
-                                    />
-                                  );
-                                })}
+                        {currentSelectedCount === 0 && visibleHistorySummaries.length ? (
+                          <ScannerHistoryFallbackPanel
+                            summaries={visibleHistorySummaries}
+                            emptyState={workbenchEmptyState}
+                            language={language}
+                          />
+                        ) : workbenchDiagnostics.length ? (
+                          <>
+                            {visualEvidenceSummary ? (
+                              <ScannerVisualEvidenceSummaryPanel model={visualEvidenceSummary} language={language} />
+                            ) : null}
+                            <div
+                              data-testid="scanner-ranked-list"
+                              className="overflow-x-auto overscroll-x-contain rounded-xl border border-white/5 bg-white/[0.02] [-webkit-overflow-scrolling:touch]"
+                              aria-label={language === 'en' ? 'Ranked scanner results' : '扫描排名结果'}
+                              tabIndex={0}
+                            >
+                              <div data-testid="scanner-result-table" className="contents md:block md:min-w-[1220px]">
+                                <div className="hidden items-center gap-3 border-b border-white/5 bg-black/[0.18] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/38 md:grid md:grid-cols-[64px_minmax(180px,1fr)_92px_110px_minmax(220px,1.3fr)_minmax(150px,0.9fr)_minmax(190px,1fr)_auto]">
+                                  <span>{language === 'en' ? 'Rank' : '排名'}</span>
+                                  <span>{language === 'en' ? 'Symbol / name' : '代码 / 名称'}</span>
+                                  <span>{language === 'en' ? 'Score' : '评分'}</span>
+                                  <span>{language === 'en' ? 'Status' : '状态'}</span>
+                                  <span>{language === 'en' ? 'Why now' : '当前信号'}</span>
+                                  <span>{language === 'en' ? 'Data quality' : '数据质量'}</span>
+                                  <span>{language === 'en' ? 'Next / risk' : '下一步 / 风险'}</span>
+                                  <span className="text-right">{language === 'en' ? 'Actions' : '操作'}</span>
+                                </div>
+                                <div data-testid="scanner-candidate-scroll-region" className="min-w-0 max-h-[min(52vh,34rem)] overflow-y-auto overscroll-y-contain no-scrollbar ui-scroll-y-quiet [-webkit-overflow-scrolling:touch]">
+                                  {workbenchDiagnostics.map((candidate) => {
+                                    const activeRunDetail = runDetail;
+                                    if (!activeRunDetail) return null;
+                                    const sourceCandidate = shortlistCandidateBySymbol.get(normalizeCandidateSymbol(candidate.symbol)) || diagnosticToCandidate(candidate);
+                                    const sourceCandidateWithEvidence = withCandidateEvidence(sourceCandidate);
+                                    const candidateMarket = normalizeScannerMarket(activeRunDetail.market || market);
+                                    const candidateIdentity = getWatchlistIdentity(candidateMarket, candidate.symbol);
+                                    const isTracked = Boolean(candidateIdentity && trackedWatchlistIdentitySet.has(candidateIdentity));
+                                    const isTrackPending = pendingWatchlistIdentity === candidateIdentity;
+                                    const backtestItem = getBacktestItem(sourceCandidate.symbol);
+                                    const comparison = comparisonState.bySymbol.get(normalizeCandidateSymbol(candidate.symbol) || '');
+                                    return (
+                                      <ScannerCandidateDiagnosticRow
+                                        key={`ranked-${candidate.symbol}`}
+                                        candidate={candidate}
+                                        language={language}
+                                        isSelectedCandidate={normalizeCandidateSymbol(activeDetailDiagnostic?.symbol) === normalizeCandidateSymbol(candidate.symbol)}
+                                        isExpanded={false}
+                                        isMoreOpen={rowMoreSymbol === candidate.symbol}
+                                        displayName={sourceCandidate.companyName || sourceCandidate.name || candidate.name || candidate.symbol || '--'}
+                                        keyReason={isOfficialSelected(candidate) ? getKeyReason(sourceCandidate, runDetail, language) : formatFriendlyDiagnosticReason(candidate, language)}
+                                        previewLabel={previewDecisionLabel(candidate, previewThreshold, language)}
+                                        previewBadgeClassName={previewDecisionClass(candidate, previewThreshold)}
+                                        dataQualityLabel={formatCandidateDataQuality(candidate, language)}
+                                        watchSummary={formatWorkbenchWatchSummary(sourceCandidate, language)}
+                                        rangeSummary={formatWorkbenchRangeSummary(sourceCandidate, language)}
+                                        evidenceSummary={null}
+                                        candidateEvidenceFrame={sourceCandidateWithEvidence.candidateEvidenceFrame}
+                                        candidateResearchReadiness={sourceCandidateWithEvidence.candidateResearchReadiness}
+                                        candidateResearchSummaryFrame={sourceCandidateWithEvidence.candidateResearchSummaryFrame}
+                                        scoreLabel={candidate.score == null ? '--' : `${candidate.score}/100`}
+                                        trustSources={[stripScannerConsumerTrustSource(sourceCandidate), stripScannerConsumerTrustSource(candidate)]}
+                                        scoreDelta={formatScoreDelta(comparison?.scoreDelta ?? null)}
+                                        comparisonLabel={comparison?.label || null}
+                                        statusLabel={diagnosticStatusLabel(candidate.status, language)}
+                                        watchlistActionLabel={getWatchlistActionLabel(isTracked, isTrackPending, watchlistAuthBlocked, language)}
+                                        watchlistActionTitle={getWatchlistActionTitle(isTracked, watchlistAuthBlocked, language)}
+                                        copyLabel={copiedKey === `candidate:${candidate.symbol}` ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制')}
+                                        exportLabel={language === 'en' ? 'Export' : '导出'}
+                                        isTracked={isTracked}
+                                        isTrackPending={isTrackPending}
+                                        isWatchlistAuthBlocked={watchlistAuthBlocked}
+                                        isAnalyzing={pendingAnalyzeSymbol === sourceCandidate.symbol}
+                                        backtestLabel={getBacktestActionLabel(backtestItem)}
+                                        backtestTitle={!normalizeCandidateSymbol(sourceCandidate.symbol) ? backtestUnavailableLabel : undefined}
+                                        backtestItem={backtestItem}
+                                        onSelect={() => setInspectorSymbol(sourceCandidate.symbol)}
+                                        onAnalyze={() => void handleAnalyzeCandidate(sourceCandidate)}
+                                        onBacktest={() => void handleBacktestCandidate(sourceCandidate)}
+                                        onTrack={() => void handleTrackCandidate(sourceCandidate)}
+                                        onCopy={() => void handleCopyText(sourceCandidate.symbol, `candidate:${candidate.symbol}`)}
+                                        onExport={() => handleExportRows(
+                                          [buildScannerExportRow(sourceCandidate, activeRunDetail, language)],
+                                          buildScannerExportFilename(activeRunDetail, `candidate-${candidate.symbol}`),
+                                        )}
+                                        onToggleMore={() => setRowMoreSymbol((current) => current === candidate.symbol ? null : candidate.symbol)}
+                                      />
+                                    );
+                                  })}
+                                </div>
                               </div>
                             </div>
-                          </div>
+                          </>
                         ) : (
                           <CompactEmptyRow
                             data-testid="scanner-workbench-empty-state"
