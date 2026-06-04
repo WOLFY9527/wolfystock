@@ -372,6 +372,8 @@ export const AppContent: React.FC = () => {
             <Route path="/:locale/guest/scanner" element={<Navigate to="../scanner" replace />} />
             <Route path="/:locale/user/scanner" element={<Navigate to="../scanner" replace />} />
             <Route element={<Shell />}>
+              <Route path="/market" element={<Navigate to="/market-overview" replace />} />
+              <Route path="/admin" element={<Navigate to="/settings/system" replace />} />
               <Route path="/" element={<HomeSurfacePage />} />
               <Route path="/guest" element={guestHomeElement} />
               <Route path="/scanner" element={<ScannerSurfacePage />} />
@@ -399,6 +401,8 @@ export const AppContent: React.FC = () => {
               <Route path="*" element={<NotFoundPage />} />
             </Route>
             <Route path="/:locale" element={<Shell />}>
+              <Route path="market" element={<Navigate to="../market-overview" replace />} />
+              <Route path="admin" element={<Navigate to="../settings/system" replace />} />
               <Route index element={<HomeSurfacePage />} />
               <Route path="guest" element={guestHomeElement} />
               <Route path="scanner" element={<ScannerSurfacePage />} />

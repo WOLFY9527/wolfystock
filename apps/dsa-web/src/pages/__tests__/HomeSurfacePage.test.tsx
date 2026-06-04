@@ -714,6 +714,7 @@ describe('HomeSurfacePage', () => {
     renderSurface();
 
     await screen.findByText('Oracle Corporation');
+    expect(screen.getByTestId('home-research-session-origin')).toHaveTextContent('上次研究');
 
     const conclusionConsole = screen.getByTestId('home-research-conclusion-console');
     const judgmentGate = screen.getByTestId('home-research-judgment-gate');

@@ -343,6 +343,36 @@ describe('AppContent route flows', () => {
     },
   );
 
+  it('redirects /market to the market overview surface instead of silently falling back to Home', async () => {
+    renderAtWithLocationProbe('/market');
+
+    expect(await screen.findByText('auth-guard:Market Overview')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/market-overview'));
+    expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
+  });
+
+  it('redirects /admin to the protected system surface instead of silently falling back to Home', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: false,
+      isAdminMode: false,
+      adminCapabilities: noCapabilities,
+    });
+
+    renderAtWithLocationProbe('/admin');
+
+    expect(await screen.findByRole('heading', { name: 'This page requires an admin account' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/settings/system'));
+    expect(screen.queryByText('Home Workspace')).not.toBeInTheDocument();
+  });
+
   it('redirects legacy /chat guest access to the market overview surface', async () => {
     renderAtWithLocationProbe('/chat');
 

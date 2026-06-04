@@ -96,12 +96,12 @@ function sanitizeAccountDisplayName(
   const trimmed = rawDisplayName?.trim();
   if (!trimmed) {
     return options.isAdmin
-      ? (options.language === 'en' ? 'Admin account' : '管理员账户')
+      ? (options.language === 'en' ? 'Admin' : '管理员')
       : (options.language === 'en' ? 'Account' : '账户');
   }
 
   if (options.isAdmin && /bootstrap\s*admin/i.test(trimmed)) {
-    return options.language === 'en' ? 'Admin account' : '管理员账户';
+    return options.language === 'en' ? 'Admin' : '管理员';
   }
 
   return trimmed;

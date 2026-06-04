@@ -714,7 +714,38 @@ describe('Shell', () => {
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
     const accountEntry = await within(actionIsland).findByTestId('shell-account-center-entry');
-    expect(accountEntry).toHaveTextContent('管理员账户');
+    expect(accountEntry).toHaveTextContent('管理员');
+    expect(accountEntry).not.toHaveTextContent('管理员账户');
+    expect(accountEntry).not.toHaveTextContent('Bootstrap Admin...');
+  });
+
+  it('uses product-safe English labels for the admin entry and fallback account name', async () => {
+    languageState.value = 'en';
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      currentUser: {
+        ...fullCapabilityAdminUser,
+        displayName: 'Bootstrap Admin...',
+      },
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/en/settings']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const actionIsland = await screen.findByTestId('shell-header-utility-island');
+    expect(within(actionIsland).getByRole('button', { name: 'System' })).toBeInTheDocument();
+    const accountEntry = await within(actionIsland).findByTestId('shell-account-center-entry');
+    expect(accountEntry).toHaveTextContent('Admin');
+    expect(accountEntry).not.toHaveTextContent('Admin account');
     expect(accountEntry).not.toHaveTextContent('Bootstrap Admin...');
   });
 
@@ -754,13 +785,14 @@ describe('Shell', () => {
     );
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'language.toggle') })).toHaveTextContent('EN');
     expect(within(actionIsland).getByRole('link', { name: translate('zh', 'nav.settings') })).toBeInTheDocument();
-    const adminMenuButton = within(actionIsland).getByRole('button', { name: translate('zh', 'nav.independentConsole') });
+    const adminMenuButton = within(actionIsland).getByRole('button', { name: '系统' });
     expect(adminMenuButton).toBeInTheDocument();
     expect(within(actionIsland).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('button', { name: '控制台' })).not.toBeInTheDocument();
     fireEvent.click(adminMenuButton);
     expect(await screen.findByTestId('shell-admin-utility-menu')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.marketProviders') })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: translate('zh', 'adminNav.logs') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '系统日志' })).toBeInTheDocument();
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.logout') })).toBeInTheDocument();
     expect(actionIsland.querySelectorAll('[data-testid="shell-header-utility-divider"]')).toHaveLength(2);
   });

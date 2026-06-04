@@ -4850,6 +4850,23 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     () => buildConsumerResearchReadinessView(activeResearchReadiness, locale === 'en' ? 'en' : 'zh'),
     [activeResearchReadiness, locale],
   );
+  const sessionOriginLabel = useMemo(() => {
+    const restoredTicker = normalizeTickerQuery(selectedReport?.meta.stockCode)
+      || normalizeTickerQuery(recentHistoryItems[0]?.stockCode)
+      || null;
+    if (
+      isGuest
+      || !restoredTicker
+      || routeSymbol
+      || routeTaskId
+      || routeSource
+      || pendingAnalysisTicker
+      || (activeTicker && activeTicker !== restoredTicker)
+    ) {
+      return null;
+    }
+    return locale === 'en' ? 'Last research' : '上次研究';
+  }, [activeTicker, isGuest, locale, pendingAnalysisTicker, recentHistoryItems, routeSource, routeSymbol, routeTaskId, selectedReport?.meta.stockCode]);
   const activeEvidenceCoverageFrame = useMemo(
     () => extractAnalysisEvidenceCoverageFrame(activeTraceReport),
     [activeTraceReport],
@@ -5596,6 +5613,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                               </div>
                             )}
                             <div className="min-w-0 pt-1.5">
+                              {sessionOriginLabel ? (
+                                <span
+                                  data-testid="home-research-session-origin"
+                                  className="inline-flex items-center rounded-full border border-[color:var(--wolfy-border-subtle)] bg-white/[0.045] px-2.5 py-1 text-[10px] font-medium tracking-[0.08em] text-white/64"
+                                >
+                                  {sessionOriginLabel}
+                                </span>
+                              ) : null}
                               <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
                                 <h1 className="min-w-0 truncate text-[30px] font-medium tracking-[0] text-white md:text-[34px]">
                                   {readyCopy.decision.company}
@@ -5608,7 +5633,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                                 </span>
                               </div>
                               <p
-                                className="mt-2 text-[12px] leading-5 text-white/42"
+                                className={`text-[12px] leading-5 text-white/42${sessionOriginLabel ? ' mt-1.5' : ' mt-2'}`}
                                 data-testid="home-bento-decision-sector"
                               >
                                 {[resolveLinearSectorTrail(locale, readyCopy.decision.sector), readyCopy.sessionBadge, readyCopy.regimeBadge].filter(Boolean).join(' / ')}
