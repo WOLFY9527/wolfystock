@@ -1,4 +1,5 @@
 ## 2026-06-04
+- Scanner run/detail payloads now expose additive per-candidate `candidateResearchSummaryFrame` projections built only from existing evidence, readiness, rank/score, and top-down scanner context, without changing scanner ranking, selection, provider/runtime, cache, or advice boundaries.
 - Consumer web shell labels and auth-guard copy are now product-safe and consistently localized across zh/en, including clearer Market Overview navigation, localized liquidity/rotation labels, sanitized admin account naming in the masthead, and neutral sign-in-required protected-route messaging without auth or route behavior changes.
 
 ## 2026-06-03

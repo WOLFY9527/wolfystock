@@ -120,6 +120,25 @@ def test_scanner_run_response_accepts_additive_candidate_evidence_and_readiness_
                     "nextEvidenceNeeded": ["补充基本面证据"],
                     "debugRef": "scanner:candidate:NVDA",
                 },
+                "candidateResearchSummaryFrame": {
+                    "contractVersion": "scanner_candidate_research_summary_v1",
+                    "frameState": "insufficient",
+                    "symbol": "NVDA",
+                    "rank": 1,
+                    "scoreBand": "medium",
+                    "primaryResearchReason": "趋势与量能支持继续研究。",
+                    "evidenceHighlights": ["Technicals available", "Liquidity available"],
+                    "missingEvidence": ["fundamentals", "news", "catalyst"],
+                    "blockingReasons": ["missing_required_evidence"],
+                    "topDownContextRefs": [
+                        {"key": "marketReadiness", "state": "ready", "label": "Top-down market context available"}
+                    ],
+                    "sourceAuthority": "scoreGradeAllowed",
+                    "freshness": "delayed",
+                    "nextResearchStep": "补充基本面证据",
+                    "noAdviceBoundary": True,
+                    "debugRef": "scanner:candidate_summary:NVDA",
+                },
             }
         ],
         selected=[
@@ -138,12 +157,33 @@ def test_scanner_run_response_accepts_additive_candidate_evidence_and_readiness_
                     "contractVersion": "research_readiness_v1",
                     "readinessState": "insufficient",
                 },
+                "candidateResearchSummaryFrame": {
+                    "contractVersion": "scanner_candidate_research_summary_v1",
+                    "frameState": "insufficient",
+                    "symbol": "NVDA",
+                    "rank": 1,
+                    "scoreBand": "medium",
+                    "primaryResearchReason": "趋势与量能支持继续研究。",
+                    "evidenceHighlights": ["Technicals available", "Liquidity available"],
+                    "missingEvidence": ["fundamentals", "news", "catalyst"],
+                    "blockingReasons": ["missing_required_evidence"],
+                    "topDownContextRefs": [
+                        {"key": "marketReadiness", "state": "ready", "label": "Top-down market context available"}
+                    ],
+                    "sourceAuthority": "scoreGradeAllowed",
+                    "freshness": "delayed",
+                    "nextResearchStep": "补充基本面证据",
+                    "noAdviceBoundary": True,
+                    "debugRef": "scanner:candidate_summary:NVDA",
+                },
             }
         ],
     )
 
     assert response.shortlist[0].candidateEvidenceFrame["contractVersion"] == "scanner_candidate_evidence_v1"
     assert response.shortlist[0].candidateResearchReadiness["readinessState"] == "insufficient"
+    assert response.shortlist[0].candidateResearchSummaryFrame["contractVersion"] == "scanner_candidate_research_summary_v1"
+    assert response.shortlist[0].candidateResearchSummaryFrame["nextResearchStep"] == "补充基本面证据"
     assert response.selected[0].candidateEvidenceFrame["coverageState"] == "partial"
     assert [
         (item.symbol, item.rank, item.score, item.raw_score, item.final_score)

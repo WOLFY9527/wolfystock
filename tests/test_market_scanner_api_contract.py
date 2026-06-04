@@ -703,6 +703,26 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             "debugRef": "scanner:candidate:NVDA",
             "noAdviceBoundary": True,
         }
+        payload["shortlist"][0]["candidateResearchSummaryFrame"] = {
+            "contractVersion": "scanner_candidate_research_summary_v1",
+            "frameState": "insufficient",
+            "symbol": "NVDA",
+            "rank": 1,
+            "scoreBand": "medium",
+            "primaryResearchReason": "趋势与量能支持继续研究。",
+            "evidenceHighlights": ["Technicals available", "Liquidity available", "Trend structure available"],
+            "missingEvidence": ["fundamentals", "news", "catalyst"],
+            "blockingReasons": ["missing_required_evidence"],
+            "topDownContextRefs": [
+                {"key": "marketReadiness", "state": "ready", "label": "Top-down market context available"},
+                {"key": "themeFrame", "state": "supportive", "label": "Theme leadership supports the shortlist"},
+            ],
+            "sourceAuthority": "scoreGradeAllowed",
+            "freshness": "delayed",
+            "nextResearchStep": "补充基本面证据",
+            "noAdviceBoundary": True,
+            "debugRef": "scanner:candidate_summary:NVDA",
+        }
         service.run_manual_scan.return_value = payload
 
         request = ScannerRunRequest(
@@ -720,6 +740,11 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.shortlist[0].candidateEvidenceFrame["domains"]["technicals"]["state"], "available")
         self.assertEqual(response.shortlist[0].candidateResearchReadiness["readinessState"], "insufficient")
         self.assertIn("fundamentals", response.shortlist[0].candidateResearchReadiness["missingEvidence"])
+        self.assertEqual(
+            response.shortlist[0].candidateResearchSummaryFrame["contractVersion"],
+            "scanner_candidate_research_summary_v1",
+        )
+        self.assertEqual(response.shortlist[0].candidateResearchSummaryFrame["frameState"], "insufficient")
         serialized = response.model_dump()
         self.assertEqual(
             serialized["shortlist"][0]["candidateEvidenceFrame"]["coverage"]["missingCount"],
@@ -727,6 +752,10 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
         )
         self.assertEqual(
             serialized["shortlist"][0]["candidateResearchReadiness"]["nextEvidenceNeeded"][0],
+            "补充基本面证据",
+        )
+        self.assertEqual(
+            serialized["shortlist"][0]["candidateResearchSummaryFrame"]["nextResearchStep"],
             "补充基本面证据",
         )
 

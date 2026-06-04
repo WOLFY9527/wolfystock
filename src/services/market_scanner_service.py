@@ -30,6 +30,7 @@ from src.services.market_scanner_candidate_evidence import (
     build_scanner_candidate_evidence_frame,
     build_scanner_candidate_research_readiness,
 )
+from src.services.market_scanner_candidate_summary import build_scanner_candidate_research_summary_frame
 from src.services.data_source_router import CapabilityResolver, DataSourceRouteRequest, DataSourceRouter
 from src.services.scanner_ai_service import ScannerAiInterpretationService
 from src.services.scanner_evidence_packet import (
@@ -1869,6 +1870,12 @@ class MarketScannerService:
             run_id=saved_run.id,
             observed_at=run_started_at.isoformat(),
         )
+        scanner_context_frame = self._build_scanner_context_frame(
+            market=profile_config.market,
+            run_id=int(saved_run.id),
+            diagnostics=finalized_diagnostics,
+            universe_selection=public_universe_selection,
+        )
 
         response_shortlist = []
         for candidate in shortlist_list:
@@ -1882,7 +1889,12 @@ class MarketScannerService:
                 scope=scope,
                 owner_id=owner_id,
             )
+            candidate["scannerContextFrame"] = scanner_context_frame
             response_shortlist.append(self._public_candidate_dict(candidate))
+        self._attach_candidate_research_summaries(
+            response_shortlist,
+            scanner_context_frame=scanner_context_frame,
+        )
 
         return {
             "id": saved_run.id,
@@ -1908,12 +1920,7 @@ class MarketScannerService:
             "accepted_symbols_count": public_universe_selection["accepted_symbols_count"],
             "rejected_symbols": public_universe_selection["rejected_symbols"],
             "diagnostics": finalized_diagnostics,
-            "scannerContextFrame": self._build_scanner_context_frame(
-                market=profile_config.market,
-                run_id=int(saved_run.id),
-                diagnostics=finalized_diagnostics,
-                universe_selection=public_universe_selection,
-            ),
+            "scannerContextFrame": scanner_context_frame,
             "theme": theme_payload,
             "summary": summary_payload,
             "selected": response_shortlist,
@@ -4682,6 +4689,16 @@ class MarketScannerService:
             shortlist=shortlist,
             diagnostics=diagnostics if isinstance(diagnostics, dict) else {},
         )
+        scanner_context_frame = self._build_scanner_context_frame(
+            market=run.market,
+            run_id=int(run.id),
+            diagnostics=diagnostics if isinstance(diagnostics, dict) else {},
+            universe_selection=universe_selection,
+        )
+        self._attach_candidate_research_summaries(
+            shortlist,
+            scanner_context_frame=scanner_context_frame,
+        )
 
         return {
             "id": run.id,
@@ -4709,12 +4726,7 @@ class MarketScannerService:
             "accepted_symbols_count": universe_selection["accepted_symbols_count"],
             "rejected_symbols": universe_selection["rejected_symbols"],
             "diagnostics": diagnostics if isinstance(diagnostics, dict) else {},
-            "scannerContextFrame": self._build_scanner_context_frame(
-                market=run.market,
-                run_id=int(run.id),
-                diagnostics=diagnostics if isinstance(diagnostics, dict) else {},
-                universe_selection=universe_selection,
-            ),
+            "scannerContextFrame": scanner_context_frame,
             "notification": self._normalize_notification_result(diagnostics.get("notification")),
             "failure_reason": self._extract_failure_reason(diagnostics),
             "comparison_to_previous": self._build_watchlist_comparison(
@@ -7278,6 +7290,11 @@ class MarketScannerService:
             payload,
             candidate_evidence_frame=payload["candidateEvidenceFrame"],
         )
+        payload["candidateResearchSummaryFrame"] = build_scanner_candidate_research_summary_frame(
+            payload,
+            candidate_evidence_frame=payload["candidateEvidenceFrame"],
+            candidate_research_readiness=payload["candidateResearchReadiness"],
+        )
         return payload
 
     def _public_candidate_dict(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
@@ -7320,7 +7337,27 @@ class MarketScannerService:
             projection_source,
             candidate_evidence_frame=payload["candidateEvidenceFrame"],
         )
+        payload["candidateResearchSummaryFrame"] = build_scanner_candidate_research_summary_frame(
+            projection_source,
+            candidate_evidence_frame=payload["candidateEvidenceFrame"],
+            candidate_research_readiness=payload["candidateResearchReadiness"],
+            scanner_context_frame=candidate.get("scannerContextFrame"),
+        )
         return payload
+
+    @staticmethod
+    def _attach_candidate_research_summaries(
+        candidates: Sequence[Dict[str, Any]],
+        *,
+        scanner_context_frame: Mapping[str, Any] | None,
+    ) -> None:
+        for candidate in candidates:
+            candidate["candidateResearchSummaryFrame"] = build_scanner_candidate_research_summary_frame(
+                candidate,
+                candidate_evidence_frame=candidate.get("candidateEvidenceFrame"),
+                candidate_research_readiness=candidate.get("candidateResearchReadiness"),
+                scanner_context_frame=scanner_context_frame,
+            )
 
     def _attach_shortlist_evidence_packets(
         self,

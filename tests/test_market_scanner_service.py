@@ -2617,6 +2617,24 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertIn("fundamentals", nvda["candidateResearchReadiness"]["missingEvidence"])
         self.assertIn("news", nvda["candidateResearchReadiness"]["missingEvidence"])
         self.assertIn("catalyst", nvda["candidateResearchReadiness"]["missingEvidence"])
+        self.assertEqual(
+            nvda["candidateResearchSummaryFrame"]["contractVersion"],
+            "scanner_candidate_research_summary_v1",
+        )
+        self.assertEqual(nvda["candidateResearchSummaryFrame"]["symbol"], "NVDA")
+        self.assertEqual(nvda["candidateResearchSummaryFrame"]["rank"], 1)
+        self.assertEqual(nvda["candidateResearchSummaryFrame"]["frameState"], "insufficient")
+        self.assertEqual(nvda["candidateResearchSummaryFrame"]["scoreBand"], "limited")
+        self.assertEqual(nvda["candidateResearchSummaryFrame"]["sourceAuthority"], "observationOnly")
+        self.assertEqual(nvda["candidateResearchSummaryFrame"]["freshness"], "unknown")
+        self.assertIn("fundamentals", nvda["candidateResearchSummaryFrame"]["missingEvidence"])
+        self.assertIn("missing_required_evidence", nvda["candidateResearchSummaryFrame"]["blockingReasons"])
+        self.assertIn("freshness", nvda["candidateResearchSummaryFrame"]["missingEvidence"])
+        self.assertTrue(nvda["candidateResearchSummaryFrame"]["topDownContextRefs"])
+        self.assertEqual(
+            nvda["candidateResearchSummaryFrame"]["topDownContextRefs"][0]["key"],
+            "marketReadiness",
+        )
 
         pltr = candidate_map["PLTR"]
         self.assertEqual(pltr["candidateEvidenceFrame"]["coverageState"], "observe_only")
@@ -2624,6 +2642,13 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertTrue(pltr["candidateEvidenceFrame"]["domains"]["gapMomentum"]["observationOnly"])
         self.assertEqual(pltr["candidateResearchReadiness"]["sourceAuthority"], "observationOnly")
         self.assertIn("source_authority_not_score_grade", pltr["candidateResearchReadiness"]["blockingReasons"])
+        self.assertEqual(pltr["candidateResearchSummaryFrame"]["frameState"], "insufficient")
+        self.assertEqual(pltr["candidateResearchSummaryFrame"]["scoreBand"], "limited")
+        self.assertEqual(pltr["candidateResearchSummaryFrame"]["sourceAuthority"], "observationOnly")
+        self.assertIn(
+            "source_authority_not_score_grade",
+            pltr["candidateResearchSummaryFrame"]["blockingReasons"],
+        )
 
         detail = service.get_run_detail(result["id"])
         assert detail is not None
@@ -2649,6 +2674,11 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             detail["shortlist"][0]["candidateResearchReadiness"]["contractVersion"],
             "research_readiness_v1",
         )
+        self.assertEqual(
+            detail["shortlist"][0]["candidateResearchSummaryFrame"]["contractVersion"],
+            "scanner_candidate_research_summary_v1",
+        )
+        self.assertEqual(detail["shortlist"][0]["candidateResearchSummaryFrame"]["frameState"], "insufficient")
         self.assertEqual(len(data_manager.realtime_quote_calls), 3)
         self.assertEqual(set(data_manager.realtime_quote_calls), {"NVDA", "AAPL", "PLTR"})
 
