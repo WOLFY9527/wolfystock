@@ -131,11 +131,13 @@ describe('DeterministicBacktestResultView', () => {
     expect(resultView).toHaveAttribute('data-main-series-length', '70');
     expect(resultView).toHaveAttribute('data-daily-pnl-series-length', '70');
     expect(resultView).toHaveAttribute('data-position-series-length', '70');
-    expect(resultView).toHaveAttribute('data-kpi-count', '6');
+    expect(resultView).toHaveAttribute('data-kpi-count', '5');
     expect(resultView).toHaveAttribute('data-density', 'dense');
     expect(dashboard).toBeInTheDocument();
+    expect(screen.getByTestId('deterministic-result-risk-strip')).toBeInTheDocument();
     expect(screen.getByTestId('deterministic-result-chart-shell')).toBeInTheDocument();
-    expect(screen.getByText('三图联动')).toBeInTheDocument();
+    expect(screen.getByText('研究结果可视化')).toBeInTheDocument();
+    expect(screen.getByText('权益曲线 / 回撤 / 每日盈亏')).toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'backtest.resultPage.auditTable.title'))).not.toBeInTheDocument();
     expect(screen.queryByText(translate('zh', 'backtest.resultPage.tradeEventTable.title'))).not.toBeInTheDocument();
     expect(workspace).toHaveAttribute('data-row-count', '70');
@@ -170,7 +172,7 @@ describe('DeterministicBacktestResultView', () => {
     const workspace = await screen.findByTestId('deterministic-backtest-chart-workspace', undefined, { timeout: CHART_IMPORT_TIMEOUT });
     expect(screen.getByTestId('deterministic-chart-meta-strip')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /回测参数/ })).toBeInTheDocument();
-    expect(screen.getByText('三图联动')).toBeInTheDocument();
+    expect(screen.getByText('研究结果可视化')).toBeInTheDocument();
     expect(workspace).toHaveAttribute('data-chart-engine', 'echarts');
   });
 
@@ -231,8 +233,31 @@ describe('DeterministicBacktestResultView', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('Triple-linked charts')).toBeInTheDocument();
+    expect(screen.getByText('Research result visuals')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Parameters/ })).toBeInTheDocument();
-    expect(screen.getByText('Performance / Daily P&L / Volume')).toBeInTheDocument();
+    expect(screen.getByText('Equity / Drawdown / Daily P&L')).toBeInTheDocument();
+  });
+
+  it('renders a fail-closed empty state when the completed run has no displayable result rows', () => {
+    render(<DeterministicBacktestResultView run={makeViewerRun({
+      auditRows: [],
+      equityCurve: [],
+      dailyReturnSeries: [],
+      exposureCurve: [],
+      benchmarkCurve: [],
+      buyAndHoldCurve: [],
+      totalReturnPct: null,
+      annualizedReturnPct: null,
+      winRatePct: null,
+      maxDrawdownPct: null,
+      sharpeRatio: null,
+      finalEquity: null,
+      noResultMessage: translate('zh', 'backtest.resultPage.noEntrySignal'),
+    })} />);
+
+    expect(screen.getByTestId('deterministic-result-empty-state')).toBeInTheDocument();
+    expect(screen.getByText('暂无可视化结果')).toBeInTheDocument();
+    expect(screen.getByText('回测窗口内没有触发任何入场信号。')).toBeInTheDocument();
+    expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
   });
 });

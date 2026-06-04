@@ -11,6 +11,7 @@ import BacktestChartWorkspace, {
   type CoverageTrackItem,
   type RiskControlVisualRow,
 } from '../components/backtest/BacktestChartWorkspace';
+import { DeterministicBacktestResultView } from '../components/backtest/DeterministicBacktestResultView';
 import BacktestOverviewSummary, { type BacktestWalkForwardOverview } from '../components/backtest/BacktestOverviewSummary';
 import {
   getDeterministicResultDensityCssVars,
@@ -747,7 +748,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
     )
     : resultPage('benchmarkNotes.pending');
   const normalized = useMemo(
-    () => (run?.status === 'completed' ? normalizeDeterministicBacktestResult(run, language) : null),
+    () => (run ? normalizeDeterministicBacktestResult(run, language) : null),
     [run, language],
   );
   const scenarioPlans = useMemo<RuleScenarioPlan[]>(
@@ -1593,6 +1594,16 @@ const DeterministicBacktestResultPage: React.FC = () => {
           ) : null}
 
           {run?.status === 'completed' && normalized ? null : renderRunStatusSection()}
+
+          {run && normalized && run.status !== 'completed' ? (
+            <section className="backtest-display-section" data-testid="deterministic-result-page-pending-visualization">
+              <ConsoleBoard>
+                <div className="p-3 md:p-4">
+                  <DeterministicBacktestResultView run={run} normalized={normalized} densityConfig={density} />
+                </div>
+              </ConsoleBoard>
+            </section>
+          ) : null}
 
           {run?.status === 'completed' && normalized ? (
             <>

@@ -515,7 +515,10 @@ describe('DeterministicBacktestResultPage', () => {
     });
 
     expect(screen.getByText('页面正在自动跟踪状态')).toBeInTheDocument();
-    expect(screen.queryByTestId('deterministic-backtest-result-view')).not.toBeInTheDocument();
+    expect(screen.getByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+    expect(screen.getByTestId('deterministic-result-page-pending-visualization')).toBeInTheDocument();
+    expect(screen.getByTestId('deterministic-result-pending-state')).toBeInTheDocument();
+    expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1800);
@@ -1406,6 +1409,46 @@ describe('DeterministicBacktestResultPage', () => {
       expect(cancelRuleBacktestRun).toHaveBeenCalledWith(99);
     });
     expect(await screen.findByText('回测已取消')).toBeInTheDocument();
+  });
+
+  it('renders a fail-closed empty visualization when a completed run has no result rows', async () => {
+    const emptyRun = makeResultRun({
+      auditRows: [],
+      executionTrace: null,
+      equityCurve: [],
+      dailyReturnSeries: [],
+      exposureCurve: [],
+      benchmarkCurve: [],
+      buyAndHoldCurve: [],
+      trades: [],
+      totalReturnPct: null,
+      annualizedReturnPct: null,
+      benchmarkReturnPct: null,
+      excessReturnVsBenchmarkPct: null,
+      buyAndHoldReturnPct: null,
+      excessReturnVsBuyAndHoldPct: null,
+      winRatePct: null,
+      avgTradeReturnPct: null,
+      maxDrawdownPct: null,
+      finalEquity: null,
+      noResultReason: 'no_entry_signal',
+      noResultMessage: '回测窗口内没有触发任何入场信号。',
+    });
+
+    getRuleBacktestRun.mockResolvedValue(emptyRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [emptyRun],
+    });
+
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-result-empty-state')).toBeInTheDocument();
+    expect(screen.getByText('暂无可视化结果')).toBeInTheDocument();
+    expect(screen.getByText('回测窗口内没有触发任何入场信号。')).toBeInTheDocument();
+    expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
   });
 
   it('keeps historical navigation on the same result-page rendering path', async () => {

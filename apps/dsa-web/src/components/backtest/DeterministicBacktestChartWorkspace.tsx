@@ -73,8 +73,12 @@ function formatCompactNumber(value: number | null | undefined, language: Backtes
   return `${sign}${abs.toFixed(abs >= 100 ? 0 : 1)}`;
 }
 
-function getVolumeValue(row: DeterministicBacktestNormalizedRow): number {
-  return Math.abs(Number(row.shares ?? 0));
+function getEquityValue(row: DeterministicBacktestNormalizedRow): number | null {
+  if (typeof row.totalValue === 'number' && Number.isFinite(row.totalValue)) return row.totalValue;
+  if (typeof row.holdingsValue === 'number' && Number.isFinite(row.holdingsValue) && typeof row.cash === 'number' && Number.isFinite(row.cash)) {
+    return row.holdingsValue + row.cash;
+  }
+  return null;
 }
 
 function getDateRangeLabel(rows: DeterministicBacktestNormalizedRow[]): string {
@@ -111,26 +115,27 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
 
   const option: EChartsOption = (() => {
     const dates = rows.map((row) => row.date);
-    const strategySeries = rows.map((row) => row.strategyCumReturn ?? null);
-    const benchmarkSeries = rows.map((row) => row.benchmarkCumReturn ?? row.buyHoldCumReturn ?? null);
+    const equitySeries = rows.map((row) => getEquityValue(row));
+    const drawdownSeries = rows.map((row) => {
+      if (row.drawdownPct == null || Number.isNaN(row.drawdownPct)) return null;
+      return row.drawdownPct > 0 ? -row.drawdownPct : row.drawdownPct;
+    });
     const pnlSeries = rows.map((row) => row.dailyPnl ?? 0);
-    const volumeSeries = rows.map((row) => getVolumeValue(row));
     const startValue = Math.max(0, dates.length - Math.min(dates.length, densityConfig.mode === 'dense' ? 140 : 110));
     const tooltipLabels = {
       date: language === 'en' ? 'Date' : '日期',
-      strategy: language === 'en' ? 'Strategy return' : '策略收益',
-      benchmark: language === 'en' ? 'Benchmark return' : '基准收益',
+      equity: language === 'en' ? 'Equity' : '权益',
+      drawdown: language === 'en' ? 'Drawdown' : '回撤',
       pnl: language === 'en' ? 'Daily P&L' : '当日盈亏',
-      volume: language === 'en' ? 'Trade volume' : '买卖量',
     };
 
     return {
       animation: false,
       backgroundColor: 'transparent',
       grid: [
-        { left: 64, right: 20, top: 20, height: '50%' },
-        { left: 64, right: 20, top: '58%', height: '16%' },
-        { left: 64, right: 20, top: '79%', height: '15%' },
+        { left: 64, right: 20, top: 20, height: '42%' },
+        { left: 64, right: 20, top: '49%', height: '18%' },
+        { left: 64, right: 20, top: '73%', height: '18%' },
       ],
       tooltip: {
         trigger: 'axis',
@@ -164,18 +169,16 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
           const first = items[0] as { axisValue?: string } | undefined;
           const date = first?.axisValue ?? '--';
           const index = Math.max(0, dates.indexOf(date));
-          const strategy = strategySeries[index];
-          const benchmark = benchmarkSeries[index];
+          const equity = equitySeries[index];
+          const drawdown = drawdownSeries[index];
           const pnl = pnlSeries[index];
-          const volume = volumeSeries[index];
           return [
             `<div style="font-size:11px;color:rgba(255,255,255,0.58);margin-bottom:10px;">${tooltipLabels.date}</div>`,
             `<div style="font-size:15px;font-weight:600;margin-bottom:12px;">${date}</div>`,
             `<div style="display:grid;grid-template-columns:auto auto;gap:8px 18px;">`,
-            `<span style="color:rgba(255,255,255,0.64);">${tooltipLabels.strategy}</span><span style="text-align:right;color:#34d399;">${formatSignedPercent(strategy)}</span>`,
-            `<span style="color:rgba(255,255,255,0.64);">${tooltipLabels.benchmark}</span><span style="text-align:right;color:#9db4ff;">${formatSignedPercent(benchmark)}</span>`,
+            `<span style="color:rgba(255,255,255,0.64);">${tooltipLabels.equity}</span><span style="text-align:right;color:#7dd3fc;">${formatCompactNumber(equity, language)}</span>`,
+            `<span style="color:rgba(255,255,255,0.64);">${tooltipLabels.drawdown}</span><span style="text-align:right;color:#fb7185;">${formatSignedPercent(drawdown)}</span>`,
             `<span style="color:rgba(255,255,255,0.64);">${tooltipLabels.pnl}</span><span style="text-align:right;color:${(pnl ?? 0) >= 0 ? '#34d399' : '#fb7185'};">${formatSignedNumber(pnl)}</span>`,
-            `<span style="color:rgba(255,255,255,0.64);">${tooltipLabels.volume}</span><span style="text-align:right;color:#d7dde8;">${formatCompactNumber(volume, language)}</span>`,
             `</div>`,
           ].join('');
         },
@@ -239,7 +242,7 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
           axisTick: { show: false },
           axisLabel: {
             color: 'rgba(255,255,255,0.42)',
-            formatter: (value: number) => `${value.toFixed(0)}%`,
+            formatter: (value: number) => formatCompactNumber(value, language),
           },
           splitLine: { show: false },
         },
@@ -247,18 +250,19 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
           type: 'value',
           gridIndex: 1,
           scale: true,
+          max: 0,
           axisLine: { show: false },
           axisTick: { show: false },
           axisLabel: {
             color: 'rgba(255,255,255,0.35)',
-            formatter: (value: number) => formatCompactNumber(value, language),
+            formatter: (value: number) => `${value.toFixed(0)}%`,
           },
           splitLine: { show: false },
         },
         {
           type: 'value',
           gridIndex: 2,
-          min: 0,
+          scale: true,
           axisLine: { show: false },
           axisTick: { show: false },
           axisLabel: {
@@ -270,52 +274,52 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
       ],
       series: [
         {
-          name: tooltipLabels.strategy,
+          name: tooltipLabels.equity,
           type: 'line',
           xAxisIndex: 0,
           yAxisIndex: 0,
           smooth: 0.16,
           symbol: 'none',
-          data: strategySeries,
+          data: equitySeries,
           lineStyle: {
             width: 2.5,
-            color: '#34d399',
+            color: '#7dd3fc',
             shadowBlur: 12,
-            shadowColor: 'rgba(52,211,153,0.45)',
+            shadowColor: 'rgba(125,211,252,0.45)',
           },
           areaStyle: {
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: 'rgba(52,211,153,0.16)' },
-              { offset: 1, color: 'rgba(52,211,153,0.01)' },
+              { offset: 0, color: 'rgba(125,211,252,0.18)' },
+              { offset: 1, color: 'rgba(125,211,252,0.01)' },
             ]),
           },
         },
         {
-          name: tooltipLabels.benchmark,
+          name: tooltipLabels.drawdown,
           type: 'line',
-          xAxisIndex: 0,
-          yAxisIndex: 0,
+          xAxisIndex: 1,
+          yAxisIndex: 1,
           smooth: 0.16,
           symbol: 'none',
-          data: benchmarkSeries,
+          data: drawdownSeries,
           lineStyle: {
             width: 2,
-            color: '#8aa0c8',
+            color: '#fb7185',
             shadowBlur: 10,
-            shadowColor: 'rgba(138,160,200,0.24)',
+            shadowColor: 'rgba(251,113,133,0.24)',
           },
           areaStyle: {
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: 'rgba(138,160,200,0.09)' },
-              { offset: 1, color: 'rgba(138,160,200,0.01)' },
+              { offset: 0, color: 'rgba(251,113,133,0.14)' },
+              { offset: 1, color: 'rgba(251,113,133,0.01)' },
             ]),
           },
         },
         {
           name: tooltipLabels.pnl,
           type: 'bar',
-          xAxisIndex: 1,
-          yAxisIndex: 1,
+          xAxisIndex: 2,
+          yAxisIndex: 2,
           data: pnlSeries.map((value) => ({
             value,
             itemStyle: {
@@ -323,18 +327,6 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
               borderRadius: [4, 4, 0, 0],
             },
           })),
-          barWidth: '56%',
-        },
-        {
-          name: tooltipLabels.volume,
-          type: 'bar',
-          xAxisIndex: 2,
-          yAxisIndex: 2,
-          data: volumeSeries,
-          itemStyle: {
-            color: 'rgba(164,177,197,0.58)',
-            borderRadius: [4, 4, 0, 0],
-          },
           barWidth: '56%',
         },
       ],
@@ -362,9 +354,9 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
       className="backtest-void-workspace"
       data-testid="deterministic-backtest-chart-workspace"
       data-row-count={rows.length}
-      data-main-series-length={rows.filter((row) => row.strategyCumReturn != null).length}
+      data-main-series-length={rows.filter((row) => getEquityValue(row) != null).length}
       data-daily-pnl-series-length={rows.filter((row) => row.dailyPnl != null).length}
-      data-position-series-length={rows.filter((row) => row.position != null).length}
+      data-position-series-length={rows.filter((row) => row.drawdownPct != null).length}
       data-chart-engine="echarts"
     >
       <div className="backtest-void-workspace__meta" data-testid="deterministic-chart-meta-strip">
@@ -399,13 +391,13 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
         <div className="backtest-void-workspace__chart-card">
           <div className="backtest-void-workspace__chart-header">
             <div>
-              <p className="backtest-void-workspace__eyebrow">{language === 'en' ? 'Triple-linked charts' : '三图联动'}</p>
-              <h3>{language === 'en' ? 'Performance / Daily P&L / Volume' : '收益曲线 / 每日盈亏 / 买卖量'}</h3>
+              <p className="backtest-void-workspace__eyebrow">{language === 'en' ? 'Research result visuals' : '研究结果可视化'}</p>
+              <h3>{language === 'en' ? 'Equity / Drawdown / Daily P&L' : '权益曲线 / 回撤 / 每日盈亏'}</h3>
             </div>
             <div className="backtest-void-workspace__legend">
-              <span className="is-strategy">{language === 'en' ? 'Strategy' : '策略'}</span>
-              <span className="is-benchmark">{language === 'en' ? 'Benchmark' : '基准'}</span>
-              <span className="is-pnl">{language === 'en' ? 'P&L' : '盈亏'}</span>
+              <span className="is-strategy">{language === 'en' ? 'Equity' : '权益'}</span>
+              <span className="is-benchmark">{language === 'en' ? 'Drawdown' : '回撤'}</span>
+              <span className="is-pnl">{language === 'en' ? 'Daily P&L' : '日盈亏'}</span>
             </div>
           </div>
           <div className="backtest-void-workspace__chart-shell">

@@ -937,8 +937,8 @@ describe('BacktestPage', () => {
     expect(screen.getByLabelText('手续费 (bp)')).toBeInTheDocument();
     expect(screen.getByLabelText('策略模板')).toHaveClass('min-h-[44px]', 'leading-6');
     expect(screen.queryByLabelText('策略文本')).not.toBeInTheDocument();
-    expect(screen.getByText('模板仅用于研究模拟，不构成交易建议。')).toBeInTheDocument();
-    expect(screen.getByText('回测规则预览')).toBeInTheDocument();
+    expect(await screen.findByText('模板仅用于研究模拟，不构成交易建议。')).toBeInTheDocument();
+    expect(await screen.findByText('回测规则预览')).toBeInTheDocument();
     expect(screen.getByText('普通模式会先把模板整理为固定规则回测流程，再跳转到独立结果页。')).toBeInTheDocument();
     expect(screen.queryByText('编译预览')).not.toBeInTheDocument();
     expect(screen.queryByText('确定性规则链路')).not.toBeInTheDocument();
