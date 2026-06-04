@@ -726,6 +726,12 @@ function realFlowConfirmedFixture(): MarketRotationRadarResponse {
   return fixture;
 }
 
+async function waitForMarketUniverseToSettle(market: 'CN' | 'HK' | 'CRYPTO', expectedTheme: string) {
+  await waitFor(() => expect(marketRotationApi.getRotationRadar).toHaveBeenLastCalledWith(market));
+  await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+  expect(await screen.findByTestId('rotation-radar-universe-list')).toHaveTextContent(expectedTheme);
+}
+
 describe('MarketRotationRadarPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -910,7 +916,7 @@ describe('MarketRotationRadarPage', () => {
 
     await screen.findByTestId('market-rotation-radar-page');
     fireEvent.click(screen.getByTestId('rotation-market-tab-CN'));
-    await waitFor(() => expect(marketRotationApi.getRotationRadar).toHaveBeenLastCalledWith('CN'));
+    await waitForMarketUniverseToSettle('CN', 'AI算力');
 
     expect(screen.getByTestId('rotation-market-tab-CN')).toHaveAttribute('aria-pressed', 'true');
     expect(within(screen.getByTestId('rotation-radar-leader-list')).queryAllByTestId(/rotation-radar-leader-row-/)).toHaveLength(0);
@@ -922,11 +928,11 @@ describe('MarketRotationRadarPage', () => {
     expect(screen.getByTestId('rotation-theme-detail-panel')).toHaveTextContent('寒武纪');
 
     fireEvent.click(screen.getByTestId('rotation-market-tab-HK'));
-    await waitFor(() => expect(marketRotationApi.getRotationRadar).toHaveBeenLastCalledWith('HK'));
+    await waitForMarketUniverseToSettle('HK', '港股科技');
     expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('港股科技');
 
     fireEvent.click(screen.getByTestId('rotation-market-tab-CRYPTO'));
-    await waitFor(() => expect(marketRotationApi.getRotationRadar).toHaveBeenLastCalledWith('CRYPTO'));
+    await waitForMarketUniverseToSettle('CRYPTO', 'DeFi');
     expect(screen.getByTestId('rotation-radar-universe-list')).toHaveTextContent('DeFi');
   });
 
