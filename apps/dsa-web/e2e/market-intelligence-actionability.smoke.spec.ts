@@ -255,7 +255,13 @@ test.describe('market intelligence actionability browser smoke', () => {
 
     await expect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
     const strip = page.getByTestId('market-intelligence-actionability-strip');
+    const visualStrip = page.getByTestId('market-overview-visual-evidence-strip');
     await expect(strip).toBeVisible();
+    await expect(visualStrip).toBeVisible();
+    await expect(visualStrip).toContainText('核心图表证据');
+    await expect(page.getByTestId('market-overview-visual-card-core-trends')).toBeVisible();
+    await expect(page.getByTestId('market-overview-visual-card-risk-pressure')).toBeVisible();
+    await expect(page.getByTestId('market-overview-visual-card-flow-rotation')).toBeVisible();
     await expect(strip).toContainText('市场研判可用性');
     await expect(strip).toContainText('仅观察');
     await expect(strip).toContainText('低把握');
@@ -275,8 +281,11 @@ test.describe('market intelligence actionability browser smoke', () => {
     await expect(strip).toContainText('来源级别 观察级');
 
     const stripText = await strip.innerText();
+    const visualText = await visualStrip.innerText();
     expect(stripText).not.toMatch(forbiddenInternalPattern);
     expect(stripText).not.toMatch(forbiddenExecutionPattern);
+    expect(visualText).not.toMatch(forbiddenInternalPattern);
+    expect(visualText).not.toMatch(forbiddenExecutionPattern);
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 
@@ -287,7 +296,9 @@ test.describe('market intelligence actionability browser smoke', () => {
 
     await expect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
     const strip = page.getByTestId('market-intelligence-actionability-strip');
+    const visualStrip = page.getByTestId('market-overview-visual-evidence-strip');
     await expect(strip).toBeVisible();
+    await expect(visualStrip).toBeVisible();
     await expect(strip).toContainText('证据不足');
     await expect(strip).toContainText('把握不足');
     await expect(strip).toContainText('等待更高授权流动性证据');
@@ -306,8 +317,11 @@ test.describe('market intelligence actionability browser smoke', () => {
     await expect(strip).not.toContainText('可参考');
 
     const stripText = await strip.innerText();
+    const visualText = await visualStrip.innerText();
     expect(stripText).not.toMatch(forbiddenInternalPattern);
     expect(stripText).not.toMatch(forbiddenExecutionPattern);
+    expect(visualText).not.toMatch(forbiddenInternalPattern);
+    expect(visualText).not.toMatch(forbiddenExecutionPattern);
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 });

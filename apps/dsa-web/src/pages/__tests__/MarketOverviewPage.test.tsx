@@ -1838,6 +1838,10 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-market-monitor')).toBeInTheDocument();
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/市场状态/);
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/数据说明/);
+    expect(screen.getByTestId('market-overview-visual-evidence-strip')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-visual-card-core-trends')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-visual-card-risk-pressure')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-visual-card-flow-rotation')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-grid-loading')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-grid-loading')).toHaveAttribute('aria-busy', 'true');
     expect(screen.getByTestId('market-overview-grid-loading')).not.toHaveClass('bg-black');
@@ -1851,6 +1855,26 @@ describe('MarketOverviewPage', () => {
 
     expect(usTab).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('market-overview-export-summary')).toBeInTheDocument();
+  });
+
+  it('renders bounded visual evidence cards and fail-closed unavailable copy without internal leakage', () => {
+    renderMarketOverviewWorkbenchWithProps({
+      panels: {
+        ...localSnapshotPayload().payload,
+        volatility: undefined,
+        fundsFlow: undefined,
+        sectorRotation: undefined,
+        usBreadth: usBreadthUnavailablePanel(),
+      },
+    });
+
+    const strip = screen.getByTestId('market-overview-visual-evidence-strip');
+    expect(strip).toBeInTheDocument();
+    expect(strip).toHaveTextContent('核心图表证据');
+    expect(screen.getByTestId('market-overview-visual-card-core-trends-points')).toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-visual-card-risk-pressure-unavailable')).toHaveTextContent('风险压力图形证据缺失，当前保持观察。');
+    expect(screen.getByTestId('market-overview-visual-card-flow-rotation-unavailable')).toHaveTextContent('资金与轮动图形证据缺失，当前保持观察。');
+    expect(strip.textContent || '').not.toMatch(/raw|debug|provider|cache|router|env|trace|credential|broker|trade|order|sourceAuthority|contractVersion/i);
   });
 
   it('lazy loads technical diagnostics only after the admin disclosure opens', async () => {

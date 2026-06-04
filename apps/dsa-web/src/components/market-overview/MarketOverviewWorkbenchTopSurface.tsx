@@ -7,6 +7,7 @@ import {
 } from '../linear/LinearPrimitives';
 import { TerminalChip, TerminalDisclosure, TerminalNotice } from '../terminal/TerminalPrimitives';
 import { cn } from '../../utils/cn';
+import { MarketOverviewSparkline } from './marketOverviewPrimitives';
 import type { MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
 import type { OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';
 import { buildDataSourcesSetupHref, buildProviderOpsSetupHref } from '../../utils/productSetupSurface';
@@ -44,6 +45,24 @@ export type MarketOverviewHeroAnchorView = {
   valueText: string;
   changeText: string;
   changeToneClass: string;
+};
+
+export type MarketOverviewVisualEvidencePointView = {
+  key: string;
+  label: string;
+  valueText: string;
+  changeText: string;
+  toneClass: string;
+  sparkline: number[];
+};
+
+export type MarketOverviewVisualEvidenceCardView = {
+  id: string;
+  eyebrow: string;
+  title: string;
+  summary: string;
+  unavailableCopy?: string;
+  points: MarketOverviewVisualEvidencePointView[];
 };
 
 export type MarketOverviewDataStateStripView = {
@@ -164,6 +183,7 @@ type MarketOverviewWorkbenchTopSurfaceProps = {
   exportLabel: string;
   onExportSummary: () => void;
   heroAnchors: MarketOverviewHeroAnchorView[];
+  visualEvidenceCards: MarketOverviewVisualEvidenceCardView[];
   showAdminDiagnostics?: boolean;
 };
 
@@ -269,6 +289,81 @@ const CrossAssetHeroRibbon: React.FC<{ anchors: MarketOverviewHeroAnchorView[] }
       className: 'py-2.5',
     }))}
   />
+);
+
+const MarketOverviewVisualEvidenceStrip: React.FC<{
+  cards: MarketOverviewVisualEvidenceCardView[];
+}> = ({ cards }) => (
+  <section
+    data-testid="market-overview-visual-evidence-strip"
+    className="border-t border-[color:var(--wolfy-divider)] px-3 py-3 md:px-4"
+  >
+    <div className="mb-3 flex min-w-0 items-end justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/38">核心图表证据</p>
+        <p className="mt-1 text-sm text-white/56">只展示当前已有市场证据，不扩展结论边界。</p>
+      </div>
+      <TerminalChip variant="neutral" className="shrink-0">
+        仅观察
+      </TerminalChip>
+    </div>
+    <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-3">
+      {cards.map((card) => (
+        <article
+          key={card.id}
+          data-testid={`market-overview-visual-card-${card.id}`}
+          className="min-w-0 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-3"
+        >
+          <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-white/38">{card.eyebrow}</p>
+          <h3 className="mt-1 truncate text-sm font-semibold text-white/86">{card.title}</h3>
+          <p className="mt-1 text-[11px] leading-5 text-white/50">{card.summary}</p>
+          {card.points.length > 0 ? (
+            <div
+              data-testid={`market-overview-visual-card-${card.id}-points`}
+              className="mt-3 grid min-w-0 grid-cols-1 gap-2"
+            >
+              {card.points.map((point) => (
+                <div
+                  key={point.key}
+                  data-testid={`market-overview-visual-point-${point.key}`}
+                  className="grid min-w-0 grid-cols-[minmax(0,1fr)_88px] items-center gap-3 rounded-lg border border-white/[0.05] bg-black/10 px-2.5 py-2"
+                >
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center justify-between gap-3">
+                      <p className="truncate text-[11px] font-semibold text-white/76">{point.label}</p>
+                      <p className="shrink-0 font-mono text-[11px] text-white/50">{point.valueText}</p>
+                    </div>
+                    <div className="mt-1 flex min-w-0 items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <MarketOverviewSparkline values={point.sparkline} tone={point.toneClass} className="h-6" />
+                      </div>
+                      <p className={cn('shrink-0 font-mono text-[10px] font-semibold', point.toneClass)}>{point.changeText}</p>
+                    </div>
+                  </div>
+                  <div className="flex h-full items-center justify-end">
+                    <div className={cn('h-9 w-1.5 rounded-full bg-current opacity-80', point.toneClass)} aria-hidden="true" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div
+              data-testid={`market-overview-visual-card-${card.id}-unavailable`}
+              className="mt-3 rounded-lg border border-dashed border-white/[0.10] bg-white/[0.02] px-3 py-3"
+            >
+              <div className="flex items-center gap-2">
+                <div className="h-6 w-16 rounded bg-white/[0.05]" aria-hidden="true" />
+                <div className="h-6 flex-1 rounded bg-white/[0.04]" aria-hidden="true" />
+              </div>
+              <p className="mt-2 text-[11px] leading-5 text-white/46">
+                {card.unavailableCopy || '图形证据暂缺，当前保持观察。'}
+              </p>
+            </div>
+          )}
+        </article>
+      ))}
+    </div>
+  </section>
 );
 
 const MarketDecisionSemanticsList: React.FC<{
@@ -920,6 +1015,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
   exportLabel,
   onExportSummary,
   heroAnchors,
+  visualEvidenceCards,
   showAdminDiagnostics = false,
 }) => {
   return (
@@ -954,6 +1050,7 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
             <div data-market-research-flow="pulse" className="border-t border-[color:var(--wolfy-divider)]">
               <CrossAssetHeroRibbon anchors={heroAnchors} />
             </div>
+            <MarketOverviewVisualEvidenceStrip cards={visualEvidenceCards} />
           </div>
         </ConsoleBoard>
       </section>

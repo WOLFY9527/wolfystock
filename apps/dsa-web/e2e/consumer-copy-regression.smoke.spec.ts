@@ -910,7 +910,10 @@ appTest.describe('consumer copy regression smoke', () => {
       const shell = page.getByTestId('market-overview-shell');
       await appExpect(shell).toBeVisible({ timeout: 15_000 });
       const strip = page.getByTestId('market-intelligence-actionability-strip');
+      const visualStrip = page.getByTestId('market-overview-visual-evidence-strip');
       await appExpect(strip).toBeVisible();
+      await appExpect(visualStrip).toBeVisible();
+      await appExpect(visualStrip).toContainText('核心图表证据');
       await appExpect(strip).toContainText('市场研判可用性');
       await appExpect(strip).toContainText('仅观察');
       await appExpect(strip).toContainText('来源级别');
@@ -919,6 +922,7 @@ appTest.describe('consumer copy regression smoke', () => {
       await appExpect(shell).toContainText(/已使用最近一次可用数据|最近一次可用数据|更新中/);
       await strip.getByText('更多证据细节').click();
       await appExpect(strip).toContainText('来源级别 观察级');
+      await expectConsumerSafeSurface(visualStrip);
       await expectConsumerSafeSurface(shell);
       await baseExpect(consoleErrors).toEqual([]);
       await baseExpect(unhandledApiRoutes).toEqual([]);

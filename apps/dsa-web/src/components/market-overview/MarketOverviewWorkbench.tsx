@@ -42,6 +42,7 @@ import {
   type MarketOverviewHeroAnchorView,
   type MarketOverviewRegimeSummaryView,
   type MarketOverviewTemperatureSummaryView,
+  type MarketOverviewVisualEvidenceCardView,
 } from './MarketOverviewWorkbenchTopSurface';
 import type { MarketRegimeSynthesisEvidenceView, MarketRegimeSynthesisHeaderView } from './MarketRegimeSynthesisHeader';
 import { resolveMarketOverviewDisplayLabel } from './marketOverviewLabels';
@@ -843,6 +844,108 @@ function buildHeroAnchors(panels: PanelState, metricIds: MarketOverviewPulseMetr
       item: findMetricItem(panels, metricId) || missingMetricItem(metricId),
     };
   });
+}
+
+function canRenderVisualEvidencePoint(item?: MarketOverviewItem): item is MarketOverviewItem {
+  return Boolean(
+    item
+      && typeof item.value === 'number'
+      && Number.isFinite(item.value)
+      && Array.isArray(item.trend)
+      && item.trend.filter((value) => Number.isFinite(value)).length >= 2,
+  );
+}
+
+function buildVisualEvidencePoint(
+  item: MarketOverviewItem | undefined,
+  language: 'zh' | 'en',
+): MarketOverviewVisualEvidenceCardView['points'][number] | null {
+  if (!canRenderVisualEvidencePoint(item)) {
+    return null;
+  }
+  const display = resolveMarketOverviewDisplayLabel(item, language);
+  return {
+    key: item.symbol,
+    label: display.primary,
+    valueText: formatHeroValue(item.value),
+    changeText: formatHeroChange(item.changePct),
+    toneClass: heroToneClass(item),
+    sparkline: Array.isArray(item.trend) ? item.trend : [],
+  };
+}
+
+function firstVisualItems(
+  items: Array<MarketOverviewItem | undefined>,
+  language: 'zh' | 'en',
+  limit = 2,
+): MarketOverviewVisualEvidenceCardView['points'] {
+  return items
+    .map((item) => buildVisualEvidencePoint(item, language))
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    .slice(0, limit);
+}
+
+function buildVisualEvidenceCards(params: {
+  activeCategory: MarketOverviewTab;
+  panels: PanelState;
+  language: 'zh' | 'en';
+}): MarketOverviewVisualEvidenceCardView[] {
+  const { activeCategory, panels, language } = params;
+  const watchMetricIds = MARKET_OVERVIEW_SIGNAL_WATCH[activeCategory].slice(0, 2);
+  const corePoints = firstVisualItems(
+    [
+      ...watchMetricIds.map((metricId) => findMetricItem(panels, metricId)),
+      findMetricItem(panels, 'SPX'),
+      findMetricItem(panels, 'CSI300'),
+      findMetricItem(panels, 'BTC'),
+    ],
+    language,
+  );
+  const riskPoints = firstVisualItems(
+    [
+      findMetricItem(panels, 'VIX'),
+      findMetricItem(panels, 'US10Y'),
+      findMetricItem(panels, 'DXY'),
+    ],
+    language,
+  );
+  const flowCandidates = [
+    ...(panels.sectorRotation?.items || []),
+    ...(panels.fundsFlow?.items || []),
+    ...buildFilteredPanel(
+      panels.usBreadth,
+      'VisualSectorFlowPanel',
+      ['STRONGEST_SECTOR', 'WEAKEST_SECTOR', 'XLK', 'XLF', 'XLY', 'XLE', 'XLV', 'XLI', 'XLP', 'XLU'],
+    ).items,
+  ].filter((item, index, array) => array.findIndex((candidate) => candidate.symbol === item.symbol) === index);
+  const flowPoints = firstVisualItems(flowCandidates, language);
+
+  return [
+    {
+      id: 'core-trends',
+      eyebrow: '核心趋势',
+      title: activeCategory === 'cn' ? '核心指数迷你趋势' : activeCategory === 'crypto' ? '核心资产迷你趋势' : '核心市场迷你趋势',
+      summary: '只基于当前已加载点位展示短线轨迹，不扩展结论边界。',
+      unavailableCopy: '核心趋势图形证据缺失，当前保持观察。',
+      points: corePoints,
+    },
+    {
+      id: 'risk-pressure',
+      eyebrow: '风险压力',
+      title: 'VIX / 风险压力',
+      summary: '优先展示波动、利率与美元压力；缺失时不补推断。',
+      unavailableCopy: '风险压力图形证据缺失，当前保持观察。',
+      points: riskPoints,
+    },
+    {
+      id: 'flow-rotation',
+      eyebrow: '资金与轮动',
+      title: 'ETF / 行业 / 资金流',
+      summary: '仅展示现有资金与行业线索，避免将观察信号提升为判断。',
+      unavailableCopy: '资金与轮动图形证据缺失，当前保持观察。',
+      points: flowPoints,
+    },
+  ];
 }
 
 function formatHeroValue(value: number | null | undefined): string {
@@ -2724,6 +2827,11 @@ function useMarketOverviewWorkbenchModel({
   const heroRows = activeRows.reduce<React.ReactNode[]>((acc, row, index) => { if (row.tier === 'hero') { const node = renderPlannedRow(row, index); if (node) acc.push(node); } return acc; }, []);
   const secondaryRows = activeRows.reduce<React.ReactNode[]>((acc, row, index) => { if (row.tier === 'secondary') { const node = renderPlannedRow(row, index); if (node) acc.push(node); } return acc; }, []);
   const deepRows = activeRows.reduce<React.ReactNode[]>((acc, row, index) => { if (row.tier === 'deep') { const node = renderPlannedRow(row, index); if (node) acc.push(node); } return acc; }, []);
+  const visualEvidenceCards = buildVisualEvidenceCards({
+    activeCategory,
+    panels,
+    language,
+  });
 
   return {
     language,
@@ -2743,6 +2851,7 @@ function useMarketOverviewWorkbenchModel({
     briefingSummary,
     officialMacroRecords,
     heroAnchorViews,
+    visualEvidenceCards,
     showContextRail: activeTabConfig.rail.length > 0,
     contextHighlights,
     executiveGroups,
@@ -2777,6 +2886,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
     briefingSummary,
     officialMacroRecords,
     heroAnchorViews,
+    visualEvidenceCards,
     showContextRail,
     contextHighlights,
     executiveGroups,
@@ -2813,6 +2923,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
           exportLabel={exportLabel}
           onExportSummary={handleExportSummary}
           heroAnchors={heroAnchorViews}
+          visualEvidenceCards={visualEvidenceCards}
           showAdminDiagnostics={showAdminDiagnostics}
         />
         <Suspense fallback={<MarketOverviewWorkbenchGridFallback language={language} />}>
