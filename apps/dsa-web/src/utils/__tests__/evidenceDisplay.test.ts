@@ -121,6 +121,39 @@ describe('evidenceDisplay', () => {
     expect(normalized.diagnostics).toBeUndefined();
   });
 
+  it('does not leak raw enum-like reason terms into scanner user labels', () => {
+    const normalized = normalizeScannerEvidence({
+      evidencePacket: {
+        userFacingLabels: [
+          'gap_fade_risk',
+          'provider_timeout',
+          'not_enough_history',
+          'fallback',
+          'dry-run',
+          'mock',
+          'fixture',
+          'MarketCache',
+          'raw',
+          'debug',
+          'schema',
+          'trace',
+          'unknown_internal_reason_code',
+        ],
+      },
+    });
+
+    const text = [normalized.displayLabel, ...normalized.limitationLabels].join(' ');
+    expect(text).not.toMatch(/gap_fade_risk|provider_timeout|not_enough_history|fallback|dry-run|mock|fixture|MarketCache|raw|debug|schema|trace|unknown_internal_reason_code/i);
+    expect(normalized.limitationLabels).toEqual(expect.arrayContaining([
+      '高开回落风险',
+      '部分外部数据暂不可用',
+      '历史数据不足',
+      '备用数据',
+      '演示数据',
+      '数据不足，结论仅供观察',
+    ]));
+  });
+
   it('preserves reason codes and diagnostics in admin mode when requested', () => {
     const normalized = normalizeScannerEvidence({
       evidencePacket: {
@@ -135,6 +168,24 @@ describe('evidenceDisplay', () => {
 
     expect(normalized.adminReasonCodes).toEqual(['provider_timeout', 'not_enough_history']);
     expect(normalized.diagnostics).toEqual({ trace: 'collapsed-admin-only' });
+  });
+
+  it('returns safe unknown summaries for null and undefined payloads', () => {
+    expect(normalizeScannerEvidence(undefined)).toMatchObject({
+      engine: 'scanner',
+      posture: 'unknown',
+      displayLabel: '证据待确认',
+      limitationLabels: [],
+      adminReasonCodes: [],
+    });
+
+    expect(normalizeBacktestReadiness(null)).toMatchObject({
+      engine: 'backtest',
+      posture: 'unknown',
+      displayLabel: '证据待确认',
+      limitationLabels: [],
+      adminReasonCodes: [],
+    });
   });
 
 });
