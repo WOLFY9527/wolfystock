@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ReportMarkdown } from '../ReportMarkdown';
@@ -14,6 +14,18 @@ vi.mock('../../../api/history', () => ({
 vi.mock('../../common/Drawer', () => ({
   Drawer: ({ children }: { children: ReactNode }) => <div data-testid="drawer-shell">{children}</div>,
 }));
+
+const openTechnicalDetails = async (label: string) => {
+  const technicalDetails = await screen.findByTestId('report-technical-evidence-details');
+  fireEvent.click(within(technicalDetails).getByText(label));
+
+  const loading = screen.queryByTestId('report-technical-details-loading');
+  if (loading) {
+    await waitForElementToBeRemoved(loading, { timeout: 5000 });
+  }
+
+  await screen.findByTestId('report-technical-details-renderer', {}, { timeout: 5000 });
+};
 
 describe('ReportMarkdown', () => {
   it('renders coverage audit categories while preserving markdown content', async () => {
@@ -53,8 +65,7 @@ describe('ReportMarkdown', () => {
     expect(screen.getAllByText(/已接入但本次记录未返回/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/当前数据源未提供/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/当前市场\/会话不适用/).length).toBeGreaterThan(0);
-    const technicalDetails = screen.getByTestId('report-technical-evidence-details');
-    fireEvent.click(within(technicalDetails).getByText('技术细节'));
+    await openTechnicalDetails('技术细节');
     await waitFor(() => {
       expect(screen.getByText('决策摘要')).toBeInTheDocument();
     });
@@ -164,8 +175,7 @@ describe('ReportMarkdown', () => {
       />,
     );
 
-    const technicalDetails = await screen.findByTestId('report-technical-evidence-details');
-    fireEvent.click(within(technicalDetails).getByText('技术细节'));
+    await openTechnicalDetails('技术细节');
 
     await waitFor(() => {
       expect(screen.getByText('决策摘要')).toBeInTheDocument();

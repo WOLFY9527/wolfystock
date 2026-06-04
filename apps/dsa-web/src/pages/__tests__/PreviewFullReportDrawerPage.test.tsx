@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -9,6 +9,18 @@ import PreviewFullReportDrawerPage from '../PreviewFullReportDrawerPage';
 vi.mock('../../components/common/Drawer', () => ({
   Drawer: ({ children }: { children: ReactNode }) => <div data-testid="drawer-shell">{children}</div>,
 }));
+
+const openTechnicalDetails = async (label: string) => {
+  const technicalDetails = await screen.findByTestId('report-technical-evidence-details');
+  fireEvent.click(within(technicalDetails).getByText(label));
+
+  const loading = screen.queryByTestId('report-technical-details-loading');
+  if (loading) {
+    await waitForElementToBeRemoved(loading, { timeout: 5000 });
+  }
+
+  await screen.findByTestId('report-technical-details-renderer', {}, { timeout: 5000 });
+};
 
 describe('PreviewFullReportDrawerPage', () => {
   it('shows the route shell buttons on first paint', () => {
@@ -39,8 +51,7 @@ describe('PreviewFullReportDrawerPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'previewFullReport.openChinese') }));
 
-    let technicalDetails = await screen.findByTestId('report-technical-evidence-details');
-    fireEvent.click(within(technicalDetails).getByText('技术细节'));
+    await openTechnicalDetails('技术细节');
 
     await waitFor(() => {
       expect(screen.getByText('一、结论摘要')).toBeInTheDocument();
@@ -48,11 +59,11 @@ describe('PreviewFullReportDrawerPage', () => {
     expect(screen.getByRole('columnheader', { name: '字段' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    await waitForElementToBeRemoved(() => screen.queryByTestId('full-report-document-shell'));
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'previewFullReport.openEnglish') }));
 
-    technicalDetails = await screen.findByTestId('report-technical-evidence-details');
-    fireEvent.click(within(technicalDetails).getByText('Technical details'));
+    await openTechnicalDetails('Technical details');
 
     await waitFor(() => {
       expect(screen.getByText('1. Executive Summary')).toBeInTheDocument();
