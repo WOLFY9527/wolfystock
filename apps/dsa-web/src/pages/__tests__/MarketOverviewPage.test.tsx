@@ -807,6 +807,87 @@ const temperaturePayload = () => ({
   trustLevel: 'reliable',
   sourceTier: 'unofficial_public_api',
   conclusionAllowed: true,
+  marketActionabilityFrame: {
+    contractVersion: 'market_intelligence_actionability_v1',
+    verdict: 'observe_only',
+    confidence: {
+      value: 0.41,
+      label: 'low',
+      capReasons: ['observation_only'],
+    },
+    evidenceCoverage: {
+      scoreGradeCount: 2,
+      observationOnlyCount: 1,
+      missingCount: 0,
+      totalCount: 3,
+    },
+    missingEvidence: [],
+    regimeContext: {
+      primaryRegime: 'risk_on_liquidity_expansion',
+      liquidityImpulse: 'expanding_liquidity',
+      rotationPosture: 'leading',
+      contradictionCount: 1,
+      freshnessFloor: 'delayed',
+    },
+    sourceAuthority: 'observationOnly',
+    freshness: 'delayed',
+    noAdviceBoundary: true,
+    nextResearchStep: '继续确认流动性是否保持扩张',
+    debugRef: 'market:temperature:actionability',
+  },
+  marketIntelligenceEvidenceFrame: {
+    contractVersion: 'market_intelligence_evidence_v1',
+    frameState: 'observe_only',
+    evidenceCoverage: {
+      scoreGradeCount: 3,
+      observationOnlyCount: 2,
+      missingCount: 0,
+      totalCount: 5,
+    },
+    regimeEvidence: {
+      domain: 'macro',
+      state: 'score_grade',
+      freshness: 'delayed',
+      primaryRegime: 'risk_on_liquidity_expansion',
+      blockingReasons: [],
+    },
+    liquidityEvidence: {
+      domain: 'liquidity',
+      state: 'observation_only',
+      freshness: 'delayed',
+      likelyDestination: 'broad_equities',
+      blockingReasons: ['observation_only'],
+    },
+    rotationEvidence: {
+      domain: 'rotation',
+      state: 'observation_only',
+      freshness: 'delayed',
+      leadingThemeCount: 2,
+      blockingReasons: ['observation_only'],
+    },
+    breadthEvidence: {
+      domain: 'breadth',
+      state: 'score_grade',
+      freshness: 'delayed',
+      breadthValue: 1.7,
+      blockingReasons: [],
+    },
+    scannerContextEvidence: {
+      domain: 'scanner_context',
+      state: 'score_grade',
+      freshness: 'delayed',
+      readinessState: 'ready',
+      noAdviceBoundary: true,
+      blockingReasons: [],
+    },
+    missingEvidence: [],
+    blockingReasons: ['observation_only'],
+    sourceAuthority: 'observationOnly',
+    freshness: 'delayed',
+    nextEvidenceNeeded: [],
+    noAdviceBoundary: true,
+    debugRef: 'market:temperature:evidence',
+  },
   regimeSummary: regimeSummaryPayload(),
   marketRegimeSynthesis: regimeSynthesisPayload(),
   marketDecisionSemantics: marketDecisionSemanticsPayload(),
@@ -1147,6 +1228,83 @@ const unreliableTemperaturePayload = () => ({
   trustLevel: 'unavailable',
   sourceTier: 'static_fallback',
   conclusionAllowed: false,
+  marketActionabilityFrame: {
+    contractVersion: 'market_intelligence_actionability_v1',
+    verdict: 'insufficient',
+    confidence: {
+      value: 0.12,
+      label: 'insufficient',
+      capReasons: ['missing_required_evidence', 'fallback_evidence'],
+    },
+    evidenceCoverage: {
+      scoreGradeCount: 0,
+      observationOnlyCount: 0,
+      missingCount: 4,
+      totalCount: 3,
+    },
+    missingEvidence: ['macro', 'liquidity', 'technical', 'freshness'],
+    regimeContext: {
+      primaryRegime: 'data_insufficient',
+      liquidityImpulse: 'data_insufficient',
+      rotationPosture: 'unavailable',
+      contradictionCount: 0,
+      freshnessFloor: 'fallback',
+    },
+    sourceAuthority: 'unavailable',
+    freshness: 'fallback',
+    noAdviceBoundary: true,
+    nextResearchStep: '等待更高授权流动性证据',
+    debugRef: 'market:temperature:actionability',
+  },
+  marketIntelligenceEvidenceFrame: {
+    contractVersion: 'market_intelligence_evidence_v1',
+    frameState: 'insufficient',
+    evidenceCoverage: {
+      scoreGradeCount: 0,
+      observationOnlyCount: 0,
+      missingCount: 5,
+      totalCount: 5,
+    },
+    regimeEvidence: {
+      domain: 'macro',
+      state: 'missing',
+      freshness: 'fallback',
+      blockingReasons: ['missing_required_evidence'],
+    },
+    liquidityEvidence: {
+      domain: 'liquidity',
+      state: 'missing',
+      freshness: 'fallback',
+      blockingReasons: ['missing_required_evidence'],
+    },
+    rotationEvidence: {
+      domain: 'rotation',
+      state: 'missing',
+      freshness: 'fallback',
+      blockingReasons: ['missing_required_evidence'],
+    },
+    breadthEvidence: {
+      domain: 'breadth',
+      state: 'missing',
+      freshness: 'fallback',
+      blockingReasons: ['missing_required_evidence'],
+    },
+    scannerContextEvidence: {
+      domain: 'scanner_context',
+      state: 'missing',
+      freshness: 'fallback',
+      readinessState: 'insufficient',
+      noAdviceBoundary: true,
+      blockingReasons: ['missing_required_evidence'],
+    },
+    missingEvidence: ['macro', 'liquidity', 'rotation', 'scanner_context', 'freshness'],
+    blockingReasons: ['missing_required_evidence', 'fallback_evidence'],
+    sourceAuthority: 'unavailable',
+    freshness: 'fallback',
+    nextEvidenceNeeded: ['补充宏观证据', '补充流动性证据'],
+    noAdviceBoundary: true,
+    debugRef: 'market:temperature:evidence',
+  },
   marketDecisionSemantics: insufficientMarketDecisionSemanticsPayload(),
   marketRegimeSynthesis: {
     primaryRegime: 'data_insufficient',
@@ -1727,6 +1885,101 @@ describe('MarketOverviewPage', () => {
     expect(heading).toHaveClass('text-xl', 'md:text-2xl');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.queryByText(/开发者详情|debug|raw|schema|trace|provider_timeout|not_enough_history|MarketCache|generatedCandidates|failedCandidates|LLM Ledger|QUOTA PILOT/i)).not.toBeInTheDocument();
+  });
+
+  it('renders a compact market intelligence actionability strip for ready-ish frames without leaking raw terms or trading wording', async () => {
+    renderMarketOverviewWithLanguage('zh');
+
+    const strip = await screen.findByTestId('market-intelligence-actionability-strip');
+    expect(strip).toHaveTextContent('市场研判可用性');
+    expect(strip).toHaveTextContent('仅观察');
+    expect(strip).toHaveTextContent('低把握');
+    expect(strip).toHaveTextContent('仅供研究观察，不作为执行依据');
+    expect(strip).toHaveTextContent('继续确认流动性是否保持扩张');
+    expect(strip).toHaveTextContent('证据覆盖 3/5');
+    expect(strip).toHaveTextContent('宏观 可参考');
+    expect(strip).toHaveTextContent('流动性 仅观察');
+    expect(strip).toHaveTextContent('轮动 仅观察');
+    expect(strip).toHaveTextContent('宽度 可参考');
+    expect(strip).toHaveTextContent('扫描上下文 可参考');
+    expect(strip.textContent || '').not.toMatch(/buy|sell|order|trade|broker|下单|交易|买入|卖出|加仓|减仓|raw|debug|provider|cache|runtime|router|env|trace|credential/i);
+  });
+
+  it('fail closes the market intelligence actionability strip when evidence is missing or fallback degraded', async () => {
+    vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(unreliableTemperaturePayload());
+
+    renderMarketOverviewWithLanguage('zh');
+
+    const strip = await screen.findByTestId('market-intelligence-actionability-strip');
+    expect(strip).toHaveTextContent('证据不足');
+    expect(strip).toHaveTextContent('证据覆盖 0/5');
+    expect(strip).toHaveTextContent('缺口 5');
+    expect(strip).toHaveTextContent('等待更高授权流动性证据');
+    expect(strip).toHaveTextContent('宏观 待补');
+    expect(strip).toHaveTextContent('流动性 待补');
+    expect(strip).toHaveTextContent('轮动 待补');
+    expect(strip).toHaveTextContent('扫描上下文 待补');
+    expect(strip).not.toHaveTextContent('可参考');
+  });
+
+  it('shows stale or fallback evidence as downgraded instead of supportive in the market intelligence strip', async () => {
+    vi.mocked(marketApi.getTemperature).mockResolvedValueOnce({
+      ...temperaturePayload(),
+      marketActionabilityFrame: {
+        ...temperaturePayload().marketActionabilityFrame,
+        verdict: 'insufficient',
+        freshness: 'fallback',
+        confidence: {
+          value: 0.16,
+          label: 'insufficient',
+          capReasons: ['stale_evidence', 'fallback_evidence'],
+        },
+        missingEvidence: ['freshness'],
+      },
+      marketIntelligenceEvidenceFrame: {
+        ...temperaturePayload().marketIntelligenceEvidenceFrame,
+        frameState: 'insufficient',
+        freshness: 'fallback',
+        missingEvidence: ['freshness'],
+        blockingReasons: ['stale_evidence', 'fallback_evidence', 'observation_only'],
+        rotationEvidence: {
+          ...temperaturePayload().marketIntelligenceEvidenceFrame.rotationEvidence,
+          state: 'degraded',
+          freshness: 'fallback',
+          blockingReasons: ['fallback_evidence'],
+        },
+        scannerContextEvidence: {
+          ...temperaturePayload().marketIntelligenceEvidenceFrame.scannerContextEvidence,
+          state: 'degraded',
+          freshness: 'fallback',
+          blockingReasons: ['fallback_evidence'],
+        },
+      },
+    });
+
+    renderMarketOverviewWithLanguage('zh');
+
+    const strip = await screen.findByTestId('market-intelligence-actionability-strip');
+    expect(strip).toHaveTextContent('证据不足');
+    expect(strip).toHaveTextContent('新鲜度不足');
+    expect(strip).toHaveTextContent('轮动 已降级');
+    expect(strip).toHaveTextContent('扫描上下文 已降级');
+    expect(strip).not.toHaveTextContent('轮动 可参考');
+    expect(strip).not.toHaveTextContent('扫描上下文 可参考');
+  });
+
+  it('keeps old temperature payloads compatible by omitting the actionability strip when additive frames are absent', async () => {
+    vi.mocked(marketApi.getTemperature).mockResolvedValueOnce({
+      ...temperaturePayload(),
+      marketActionabilityFrame: undefined,
+      marketIntelligenceEvidenceFrame: undefined,
+    });
+
+    renderMarketOverviewWithLanguage('zh');
+
+    await screen.findByTestId('market-overview-workbench');
+    expect(screen.queryByTestId('market-intelligence-actionability-strip')).not.toBeInTheDocument();
+    expect(screen.getByTestId('market-overview-research-readiness-strip')).toBeInTheDocument();
   });
 
   it('exposes a distinct tab composition registry for market overview tabs', () => {

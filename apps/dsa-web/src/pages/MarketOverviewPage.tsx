@@ -14,6 +14,7 @@ import type {
 } from '../api/market';
 import { marketApi, normalizeMarketTemperatureResponse } from '../api/market';
 import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
+import MarketIntelligenceActionabilityStrip from '../components/market/MarketIntelligenceActionabilityStrip';
 import {
   MarketOverviewWorkbench,
   type CryptoRealtimeStatus,
@@ -918,6 +919,8 @@ const MarketOverviewPage = () => {
     ),
     [language, panels.temperature],
   );
+  const marketActionabilityFrame = panels.temperature.marketActionabilityFrame;
+  const marketIntelligenceEvidenceFrame = panels.temperature.marketIntelligenceEvidenceFrame;
 
   return (
     <ConsumerWorkspaceScope className="min-h-0 flex-1">
@@ -927,6 +930,14 @@ const MarketOverviewPage = () => {
         testId="market-overview-research-readiness-strip"
         className="mx-4 mt-4 shrink-0 md:mx-6"
       />
+      {marketActionabilityFrame && marketIntelligenceEvidenceFrame ? (
+        <MarketIntelligenceActionabilityStrip
+          actionability={marketActionabilityFrame}
+          evidence={marketIntelligenceEvidenceFrame}
+          testId="market-intelligence-actionability-strip"
+          className="mt-3"
+        />
+      ) : null}
       <MarketOverviewWorkbench
         heading={(
           <TerminalPageHeading

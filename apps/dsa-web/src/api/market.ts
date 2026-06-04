@@ -416,6 +416,85 @@ export type MarketDirectionReadiness = {
   notInvestmentAdvice: boolean;
 };
 
+export type MarketActionabilityVerdict = 'ready' | 'observe_only' | 'insufficient' | 'blocked' | 'waiting' | string;
+export type MarketActionabilityConfidenceLabel = 'high' | 'medium' | 'low' | 'insufficient' | string;
+export type MarketActionabilitySourceAuthority = 'scoreGradeAllowed' | 'observationOnly' | 'unavailable' | string;
+
+export type MarketActionabilityConfidence = {
+  value: number;
+  label: MarketActionabilityConfidenceLabel;
+  capReasons: string[];
+};
+
+export type MarketActionabilityCoverage = {
+  scoreGradeCount: number;
+  observationOnlyCount: number;
+  missingCount: number;
+  totalCount: number;
+};
+
+export type MarketActionabilityRegimeContext = {
+  primaryRegime: string;
+  liquidityImpulse: string;
+  rotationPosture: string;
+  contradictionCount: number;
+  freshnessFloor: string;
+};
+
+export type MarketActionabilityFrame = {
+  contractVersion?: string;
+  verdict: MarketActionabilityVerdict;
+  confidence: MarketActionabilityConfidence;
+  evidenceCoverage: MarketActionabilityCoverage;
+  missingEvidence: string[];
+  regimeContext: MarketActionabilityRegimeContext;
+  sourceAuthority: MarketActionabilitySourceAuthority;
+  freshness: string;
+  noAdviceBoundary: boolean;
+  nextResearchStep: string;
+  debugRef?: string;
+};
+
+export type MarketIntelligenceEvidenceState =
+  | 'score_grade'
+  | 'observation_only'
+  | 'degraded'
+  | 'missing'
+  | 'waiting'
+  | 'blocked'
+  | string;
+
+export type MarketIntelligenceEvidenceDomainFrame = {
+  domain: string;
+  state: MarketIntelligenceEvidenceState;
+  freshness: string;
+  blockingReasons: string[];
+  primaryRegime?: string;
+  likelyDestination?: string;
+  leadingThemeCount?: number;
+  breadthValue?: number | null;
+  readinessState?: string;
+  noAdviceBoundary?: boolean;
+};
+
+export type MarketIntelligenceEvidenceFrame = {
+  contractVersion?: string;
+  frameState: MarketActionabilityVerdict;
+  evidenceCoverage: MarketActionabilityCoverage;
+  regimeEvidence: MarketIntelligenceEvidenceDomainFrame;
+  liquidityEvidence: MarketIntelligenceEvidenceDomainFrame;
+  rotationEvidence: MarketIntelligenceEvidenceDomainFrame;
+  breadthEvidence: MarketIntelligenceEvidenceDomainFrame;
+  scannerContextEvidence: MarketIntelligenceEvidenceDomainFrame;
+  missingEvidence: string[];
+  blockingReasons: string[];
+  sourceAuthority: MarketActionabilitySourceAuthority;
+  freshness: string;
+  nextEvidenceNeeded: string[];
+  noAdviceBoundary: boolean;
+  debugRef?: string;
+};
+
 export type MarketDecisionSemantics = {
   version?: string;
   posture: string;
@@ -491,6 +570,8 @@ export type MarketTemperatureResponse = {
   degradationReasons?: string[];
   conclusionAllowed?: boolean;
   researchReadiness?: ResearchReadinessV1;
+  marketActionabilityFrame?: MarketActionabilityFrame;
+  marketIntelligenceEvidenceFrame?: MarketIntelligenceEvidenceFrame;
   regimeSummary?: MarketRegimeSummary;
   marketRegimeSynthesis?: MarketRegimeSynthesis;
   marketDecisionSemantics?: MarketDecisionSemantics;
@@ -631,6 +712,102 @@ function normalizeMarketDecisionSemantics(
   };
 }
 
+function normalizeMarketActionabilityCoverage(
+  coverage?: Partial<MarketActionabilityCoverage> | null,
+): MarketActionabilityCoverage {
+  return {
+    scoreGradeCount: typeof coverage?.scoreGradeCount === 'number' ? coverage.scoreGradeCount : 0,
+    observationOnlyCount: typeof coverage?.observationOnlyCount === 'number' ? coverage.observationOnlyCount : 0,
+    missingCount: typeof coverage?.missingCount === 'number' ? coverage.missingCount : 0,
+    totalCount: typeof coverage?.totalCount === 'number' ? coverage.totalCount : 0,
+  };
+}
+
+function normalizeMarketActionabilityConfidence(
+  confidence?: Partial<MarketActionabilityConfidence> | null,
+): MarketActionabilityConfidence {
+  return {
+    value: typeof confidence?.value === 'number' ? confidence.value : 0,
+    label: confidence?.label || 'insufficient',
+    capReasons: Array.isArray(confidence?.capReasons) ? confidence.capReasons.filter(Boolean) : [],
+  };
+}
+
+function normalizeMarketActionabilityRegimeContext(
+  regimeContext?: Partial<MarketActionabilityRegimeContext> | null,
+): MarketActionabilityRegimeContext {
+  return {
+    primaryRegime: regimeContext?.primaryRegime || 'data_insufficient',
+    liquidityImpulse: regimeContext?.liquidityImpulse || 'data_insufficient',
+    rotationPosture: regimeContext?.rotationPosture || 'unavailable',
+    contradictionCount: typeof regimeContext?.contradictionCount === 'number' ? regimeContext.contradictionCount : 0,
+    freshnessFloor: regimeContext?.freshnessFloor || 'unknown',
+  };
+}
+
+function normalizeMarketActionabilityFrame(
+  frame?: Partial<MarketActionabilityFrame> | null,
+): MarketActionabilityFrame | undefined {
+  if (!frame?.verdict) {
+    return undefined;
+  }
+  return {
+    contractVersion: frame.contractVersion,
+    verdict: frame.verdict,
+    confidence: normalizeMarketActionabilityConfidence(frame.confidence),
+    evidenceCoverage: normalizeMarketActionabilityCoverage(frame.evidenceCoverage),
+    missingEvidence: Array.isArray(frame.missingEvidence) ? frame.missingEvidence.filter(Boolean) : [],
+    regimeContext: normalizeMarketActionabilityRegimeContext(frame.regimeContext),
+    sourceAuthority: frame.sourceAuthority || 'unavailable',
+    freshness: frame.freshness || 'unknown',
+    noAdviceBoundary: frame.noAdviceBoundary !== false,
+    nextResearchStep: frame.nextResearchStep || '',
+    debugRef: frame.debugRef,
+  };
+}
+
+function normalizeMarketIntelligenceEvidenceDomainFrame(
+  frame?: Partial<MarketIntelligenceEvidenceDomainFrame> | null,
+): MarketIntelligenceEvidenceDomainFrame {
+  return {
+    domain: frame?.domain || 'unknown',
+    state: frame?.state || 'missing',
+    freshness: frame?.freshness || 'unknown',
+    blockingReasons: Array.isArray(frame?.blockingReasons) ? frame.blockingReasons.filter(Boolean) : [],
+    primaryRegime: frame?.primaryRegime,
+    likelyDestination: frame?.likelyDestination,
+    leadingThemeCount: typeof frame?.leadingThemeCount === 'number' ? frame.leadingThemeCount : undefined,
+    breadthValue: typeof frame?.breadthValue === 'number' ? frame.breadthValue : frame?.breadthValue === null ? null : undefined,
+    readinessState: frame?.readinessState,
+    noAdviceBoundary: typeof frame?.noAdviceBoundary === 'boolean' ? frame.noAdviceBoundary : undefined,
+  };
+}
+
+function normalizeMarketIntelligenceEvidenceFrame(
+  frame?: Partial<MarketIntelligenceEvidenceFrame> | null,
+): MarketIntelligenceEvidenceFrame | undefined {
+  if (!frame?.frameState) {
+    return undefined;
+  }
+  return {
+    contractVersion: frame.contractVersion,
+    frameState: frame.frameState,
+    evidenceCoverage: normalizeMarketActionabilityCoverage(frame.evidenceCoverage),
+    regimeEvidence: normalizeMarketIntelligenceEvidenceDomainFrame(frame.regimeEvidence),
+    liquidityEvidence: normalizeMarketIntelligenceEvidenceDomainFrame(frame.liquidityEvidence),
+    rotationEvidence: normalizeMarketIntelligenceEvidenceDomainFrame(frame.rotationEvidence),
+    breadthEvidence: normalizeMarketIntelligenceEvidenceDomainFrame(frame.breadthEvidence),
+    scannerContextEvidence: normalizeMarketIntelligenceEvidenceDomainFrame(frame.scannerContextEvidence),
+    missingEvidence: Array.isArray(frame.missingEvidence) ? frame.missingEvidence.filter(Boolean) : [],
+    blockingReasons: Array.isArray(frame.blockingReasons) ? frame.blockingReasons.filter(Boolean) : [],
+    sourceAuthority: frame.sourceAuthority || 'unavailable',
+    freshness: frame.freshness || 'unknown',
+    nextEvidenceNeeded: Array.isArray(frame.nextEvidenceNeeded) ? frame.nextEvidenceNeeded.filter(Boolean) : [],
+    noAdviceBoundary: frame.noAdviceBoundary !== false,
+    debugRef: frame.debugRef,
+  };
+}
+
 function normalizeMarketRegimeSummaryEntry(
   item?: Partial<MarketRegimeSummaryEntry> | null,
 ): MarketRegimeSummaryEntry | null {
@@ -738,6 +915,8 @@ export function normalizeMarketTemperatureResponse(
     degradationReasons: payload?.degradationReasons,
     conclusionAllowed,
     researchReadiness: payload?.researchReadiness,
+    marketActionabilityFrame: normalizeMarketActionabilityFrame(payload?.marketActionabilityFrame),
+    marketIntelligenceEvidenceFrame: normalizeMarketIntelligenceEvidenceFrame(payload?.marketIntelligenceEvidenceFrame),
     regimeSummary: normalizeMarketRegimeSummary(payload?.regimeSummary),
     marketRegimeSynthesis: normalizeMarketRegimeSynthesis(payload?.marketRegimeSynthesis),
     marketDecisionSemantics: normalizeMarketDecisionSemantics(payload?.marketDecisionSemantics),
