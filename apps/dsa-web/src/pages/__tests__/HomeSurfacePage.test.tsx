@@ -240,6 +240,10 @@ const HOME_FUNDAMENTALS_FORBIDDEN_COPY_PATTERN =
   /buy|sell|undervalued|overvalued|rawProviderPayload|adminDiagnostics|providerRoute|valuationOpinion/i;
 const HOME_EVIDENCE_COVERAGE_INTERNAL_COPY_PATTERN =
   /provider_timeout|sourceTier|sourceAuthority|fallbackOrProxy|router|cache|credential|providerRoute|partial_coverage|coverage_not_assembled/i;
+const HOME_EVIDENCE_PACKET_INTERNAL_COPY_PATTERN =
+  /provider_timeout|raw_payload|internal_router|router_env|cache_key|trace_id|credential|prompt|schema|provider|debug|admin/i;
+const HOME_EVIDENCE_PACKET_TRADING_COPY_PATTERN =
+  /buy now|sell now|trade now|order now|broker route|买入|卖出|下单|交易|经纪商/i;
 const defaultStockEvidenceResponse = {
   symbols: ['ORCL'],
   items: [
@@ -273,6 +277,38 @@ const defaultStockEvidenceResponse = {
   meta: {
     generatedAt: '2026-06-01T08:00:00Z',
     source: 'stock_evidence',
+  },
+};
+
+const orclPartialEvidencePacket = {
+  packetState: 'degraded',
+  priceHistory: { status: 'available', label: '近期日线齐备' },
+  technicals: { status: 'available', label: '均线与动量已整理' },
+  fundamentals: { status: 'degraded', label: '基本面待补 1 项' },
+  earnings: { status: 'pending', label: '财报窗口待补' },
+  news: { status: 'blocked', label: '外部事件证据暂不可用' },
+  catalysts: { status: 'degraded', label: '催化线索已保留 1 条' },
+  valuation: { status: 'available', label: '估值区间已整理' },
+  fundamentalsEarnings: {
+    normalizerState: 'insufficient',
+    missingEvidence: ['fundamentals'],
+    blockingReasons: ['fundamental_context_unavailable'],
+    evidenceLabels: ['TTM 收入', '营业利润率'],
+    internalRouter: 'must-not-render',
+    buyNow: 'must-not-render',
+  },
+  newsCatalysts: {
+    extractionState: 'blocked',
+    blockingReasons: ['provider_timeout'],
+    topNewsItems: [
+      { id: 'news-1', label: '云订单延续' },
+      { id: 'news-2', title: 'raw_payload must-not-render' },
+    ],
+    topCatalystItems: [
+      { id: 'cat-1', label: '下一次财报窗口' },
+      { id: 'cat-2', title: 'trade now must-not-render' },
+    ],
+    prompt: 'must-not-render',
   },
 };
 
@@ -1570,6 +1606,102 @@ describe('HomeSurfacePage', () => {
     expect(strip).toHaveTextContent('估值 不适用');
     expect(strip).toHaveTextContent('补充基本面证据');
     expect(strip.textContent).not.toMatch(HOME_EVIDENCE_COVERAGE_INTERNAL_COPY_PATTERN);
+  });
+
+  it('shows a compact home evidence packet strip for an ORCL-like partial packet', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      singleStockEvidencePacket: orclPartialEvidencePacket,
+    } as never);
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+
+    const strip = screen.getByTestId('home-evidence-packet-strip');
+    expect(strip).toHaveTextContent('证据包摘要');
+    expect(strip).toHaveTextContent('整体状态');
+    expect(strip).toHaveTextContent('降级');
+    expect(strip).toHaveTextContent('价格历史 可用');
+    expect(strip).toHaveTextContent('技术面 可用');
+    expect(strip).toHaveTextContent('基本面 降级');
+    expect(strip).toHaveTextContent('财报 待补');
+    expect(strip).toHaveTextContent('新闻 阻断');
+    expect(strip).toHaveTextContent('催化 降级');
+    expect(strip).toHaveTextContent('估值 可用');
+    expect(strip).toHaveTextContent('基本面/财报：2 项证据标签');
+    expect(strip).toHaveTextContent('新闻/催化：2 条新闻，2 条催化');
+    expect(strip).toHaveTextContent('仅供观察');
+    expect(strip).toHaveTextContent('不构成投资建议');
+    expect(strip.textContent).not.toMatch(HOME_EVIDENCE_PACKET_INTERNAL_COPY_PATTERN);
+    expect(strip.textContent).not.toMatch(HOME_EVIDENCE_PACKET_TRADING_COPY_PATTERN);
+  });
+
+  it('shows a missing fundamentals state when the packet lacks fundamental context', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      singleStockEvidencePacket: {
+        ...orclPartialEvidencePacket,
+        packetState: 'degraded',
+        fundamentals: { status: 'missing', label: '基本面关键字段缺失' },
+        fundamentalsEarnings: {
+          normalizerState: 'insufficient',
+          missingEvidence: ['fundamentals', 'earnings'],
+          blockingReasons: ['fundamental_context_unavailable'],
+          evidenceLabels: [],
+        },
+      },
+    } as never);
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+
+    const strip = screen.getByTestId('home-evidence-packet-strip');
+    expect(strip).toHaveTextContent('基本面 缺失');
+    expect(strip).toHaveTextContent('基本面/财报：数据不足');
+    expect(strip).not.toHaveTextContent('provider_timeout');
+  });
+
+  it('shows bounded news fallback copy when news items are empty', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      singleStockEvidencePacket: {
+        ...orclPartialEvidencePacket,
+        news: { status: 'missing', label: '新闻证据待补' },
+        catalysts: { status: 'degraded', label: '催化线索仅保留 1 条' },
+        newsCatalysts: {
+          extractionState: 'blocked',
+          blockingReasons: ['provider_timeout'],
+          topNewsItems: [],
+          topCatalystItems: [{ id: 'cat-1', label: '财报窗口' }],
+        },
+      },
+    } as never);
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+
+    const strip = screen.getByTestId('home-evidence-packet-strip');
+    expect(strip).toHaveTextContent('新闻 缺失');
+    expect(strip).toHaveTextContent('新闻/催化：新闻待补，1 条催化');
+    expect(strip.textContent).not.toMatch(HOME_EVIDENCE_PACKET_INTERNAL_COPY_PATTERN);
+  });
+
+  it('keeps Home additive-compatible when the evidence packet is absent', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      singleStockEvidencePacket: undefined,
+    } as never);
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+
+    expect(screen.getByTestId('home-research-readiness-strip')).toBeInTheDocument();
+    expect(screen.getByTestId('home-evidence-coverage-strip')).toBeInTheDocument();
+    expect(screen.queryByTestId('home-evidence-packet-strip')).not.toBeInTheDocument();
   });
 
   it('opens the decision trace fixture drawer in a narrow viewport', async () => {

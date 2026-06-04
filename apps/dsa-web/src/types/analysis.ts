@@ -43,6 +43,7 @@ export interface ReportMeta {
   dataQualityReport?: DataQualityReport;
   researchReadiness?: ResearchReadinessV1;
   evidenceCoverageFrame?: AnalysisEvidenceCoverageFrame;
+  singleStockEvidencePacket?: SingleStockEvidencePacket;
 }
 
 export type AnalysisEvidenceCoverageStatus =
@@ -77,6 +78,59 @@ export interface AnalysisEvidenceCoverageEntry {
 }
 
 export type AnalysisEvidenceCoverageFrame = Partial<Record<AnalysisEvidenceCoverageDomain, AnalysisEvidenceCoverageEntry>>;
+
+export type SingleStockEvidencePacketStatus =
+  | 'available'
+  | 'degraded'
+  | 'missing'
+  | 'blocked'
+  | 'pending'
+  | 'ready'
+  | 'insufficient'
+  | 'waiting'
+  | 'observe_only'
+  | string;
+
+export interface SingleStockEvidencePacketDomainEntry {
+  status?: SingleStockEvidencePacketStatus;
+  label?: string | null;
+}
+
+export interface SingleStockFundamentalsEarningsSummary {
+  normalizerState?: SingleStockEvidencePacketStatus;
+  missingEvidence?: string[];
+  blockingReasons?: string[];
+  evidenceLabels?: string[];
+}
+
+export interface SingleStockNewsCatalystsItem {
+  id?: string;
+  label?: string;
+  title?: string;
+  summary?: string;
+}
+
+export interface SingleStockNewsCatalystsSummary {
+  extractionState?: SingleStockEvidencePacketStatus;
+  blockingReasons?: string[];
+  topNewsItems?: SingleStockNewsCatalystsItem[];
+  topCatalystItems?: SingleStockNewsCatalystsItem[];
+}
+
+export interface SingleStockEvidencePacket {
+  packetState?: SingleStockEvidencePacketStatus;
+  priceHistory?: SingleStockEvidencePacketDomainEntry;
+  technicals?: SingleStockEvidencePacketDomainEntry;
+  fundamentals?: SingleStockEvidencePacketDomainEntry;
+  earnings?: SingleStockEvidencePacketDomainEntry;
+  news?: SingleStockEvidencePacketDomainEntry;
+  catalysts?: SingleStockEvidencePacketDomainEntry;
+  valuation?: SingleStockEvidencePacketDomainEntry;
+  fundamentalsEarnings?: SingleStockFundamentalsEarningsSummary;
+  newsCatalysts?: SingleStockNewsCatalystsSummary;
+  notInvestmentAdvice?: boolean;
+  observationOnly?: boolean;
+}
 
 /** Sentiment label */
 export type SentimentLabel =
@@ -355,6 +409,7 @@ export interface ReportDetails {
   analysisResult?: Record<string, unknown> & {
     researchReadiness?: ResearchReadinessV1;
     evidenceCoverageFrame?: AnalysisEvidenceCoverageFrame;
+    singleStockEvidencePacket?: SingleStockEvidencePacket;
   };
   rawAiResponse?: string | Record<string, unknown>;
   financialReport?: Record<string, unknown>;
@@ -550,6 +605,7 @@ export interface AnalysisReport {
   dataQualityReport?: DataQualityReport;
   researchReadiness?: ResearchReadinessV1;
   evidenceCoverageFrame?: AnalysisEvidenceCoverageFrame;
+  singleStockEvidencePacket?: SingleStockEvidencePacket;
   contractMeta?: FrontendReportContractMeta;
   reportQuality?: ReportQuality;
 }

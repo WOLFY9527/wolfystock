@@ -25,6 +25,7 @@ import { Button } from '../components/common/Button';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { Drawer } from '../components/common/Drawer';
 import ConsumerEvidenceCoverageStrip from '../components/common/ConsumerEvidenceCoverageStrip';
+import ConsumerEvidencePacketStrip from '../components/common/ConsumerEvidencePacketStrip';
 import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useUiPreferences } from '../contexts/UiPreferencesContext';
@@ -42,6 +43,7 @@ import type {
   DecisionTrace,
   HistoryItem,
   ReportQuality,
+  SingleStockEvidencePacket,
   StandardReport,
   StandardReportField,
   TaskProgressModule,
@@ -831,6 +833,26 @@ function getDataQualityReport(report: AnalysisReport | null): DataQualityReport 
     || (readObjectField(report, ['details', 'analysisResult', 'dataQualityReport']) as DataQualityReport | undefined);
 }
 
+function getSingleStockEvidencePacket(report: AnalysisReport | null): SingleStockEvidencePacket | undefined {
+  if (!report) return undefined;
+
+  const direct = report.singleStockEvidencePacket
+    || report.meta.singleStockEvidencePacket
+    || report.details?.analysisResult?.singleStockEvidencePacket
+    || (readObjectField(report, ['details', 'analysisResult', 'singleStockEvidencePacket']) as SingleStockEvidencePacket | undefined)
+    || (readObjectField(report, ['details', 'analysisResult', 'single_stock_evidence_packet']) as SingleStockEvidencePacket | undefined)
+    || (readObjectField(report, ['meta', 'singleStockEvidencePacket']) as SingleStockEvidencePacket | undefined)
+    || (readObjectField(report, ['meta', 'single_stock_evidence_packet']) as SingleStockEvidencePacket | undefined)
+    || (readObjectField(report, ['singleStockEvidencePacket']) as SingleStockEvidencePacket | undefined)
+    || (readObjectField(report, ['single_stock_evidence_packet']) as SingleStockEvidencePacket | undefined);
+
+  if (!direct || typeof direct !== 'object' || Array.isArray(direct)) {
+    return undefined;
+  }
+
+  return direct;
+}
+
 function dataQualityTierLabel(tier: string | undefined, locale: DashboardLocale): string {
   const normalized = String(tier || '').trim();
   const zh: Record<string, string> = {
@@ -1085,6 +1107,7 @@ function HomeConclusionFirstConsole({
   dataQualityReport,
   researchReadiness,
   evidenceCoverageFrame,
+  evidencePacket,
   decisionTrace,
   sourceSummary,
   stanceLabel,
@@ -1096,6 +1119,7 @@ function HomeConclusionFirstConsole({
   dataQualityReport?: DataQualityReport;
   researchReadiness: ConsumerResearchReadinessView;
   evidenceCoverageFrame: AnalysisEvidenceCoverageFrame | null;
+  evidencePacket?: SingleStockEvidencePacket | null;
   decisionTrace?: DecisionTrace;
   sourceSummary?: string;
   stanceLabel: string;
@@ -1164,6 +1188,13 @@ function HomeConclusionFirstConsole({
           locale={isEnglish ? 'en' : 'zh'}
           title={isEnglish ? 'Evidence coverage' : '证据覆盖'}
           testId="home-evidence-coverage-strip"
+          className="mb-4"
+        />
+        <ConsumerEvidencePacketStrip
+          packet={evidencePacket}
+          locale={isEnglish ? 'en' : 'zh'}
+          title={isEnglish ? 'Evidence packet' : '证据包摘要'}
+          testId="home-evidence-packet-strip"
           className="mb-4"
         />
 
@@ -4819,6 +4850,10 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     () => extractAnalysisEvidenceCoverageFrame(activeTraceReport),
     [activeTraceReport],
   );
+  const activeSingleStockEvidencePacket = useMemo(
+    () => getSingleStockEvidencePacket(activeTraceReport),
+    [activeTraceReport],
+  );
   const sourceSummary = useMemo(
     () => buildTraceSummary(activeDecisionTrace, activeReportQuality, locale),
     [activeDecisionTrace, activeReportQuality, locale],
@@ -5616,6 +5651,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                               dataQualityReport={activeDataQualityReport}
                               researchReadiness={activeResearchReadinessView}
                               evidenceCoverageFrame={activeEvidenceCoverageFrame}
+                              evidencePacket={activeSingleStockEvidencePacket}
                               decisionTrace={activeDecisionTrace}
                               sourceSummary={sourceSummary}
                               stanceLabel={stanceLabel}
