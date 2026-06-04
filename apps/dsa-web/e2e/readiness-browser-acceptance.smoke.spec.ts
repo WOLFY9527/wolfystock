@@ -1,13 +1,5 @@
 import { expect, type Page, type Route } from '@playwright/test';
 import { expect as appExpect, test as appTest } from './fixtures/appSmoke';
-import {
-  expectForbiddenTradingWordingAbsent,
-  expectNoHorizontalOverflow,
-  expectRootNonEmpty,
-  installProductAuthHarness,
-  openProductRouteWithHarness,
-  test as productTest,
-} from './fixtures/productAuth';
 
 const viewports = [
   { width: 1440, height: 1000 },
@@ -63,12 +55,32 @@ const signedInUser = {
   authEnabled: true,
 };
 
+type ProductRouteHarness = {
+  requests: {
+    count: (method: string, path: string) => number;
+  };
+};
+
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
   await route.fulfill({
     status,
     contentType: 'application/json',
     body: JSON.stringify(payload),
   });
+}
+
+async function expectNoHorizontalOverflow(page: Page) {
+  await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+}
+
+async function expectRootNonEmpty(page: Page) {
+  await expect.poll(async () => page.locator('#root').evaluate((root) => root.textContent?.trim().length ?? 0)).toBeGreaterThan(0);
+}
+
+async function expectForbiddenTradingWordingAbsent(page: Page) {
+  await expect(page.locator('body')).not.toContainText(
+    /买入按钮|下单|立即交易|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy|must buy|must sell|buy now|sell now|place order|you should buy|you should sell/i,
+  );
 }
 
 async function installSignedInHomeRoutes(page: Page) {
@@ -521,6 +533,392 @@ function buildScannerRunsPayload(itemOverrides: Record<string, unknown> = {}) {
   };
 }
 
+function createProductAuthStatus() {
+  return {
+    authEnabled: true,
+    loggedIn: true,
+    passwordSet: true,
+    passwordChangeable: true,
+    setupState: 'enabled',
+    currentUser: signedInUser,
+  };
+}
+
+function optionsSummary(symbol: string) {
+  return {
+    symbol,
+    market: 'us',
+    underlying: {
+      price: 52.34,
+      change_pct: 1.2,
+      source: 'playwright_fixture',
+      as_of: '2026-05-06T09:45:00-04:00',
+      freshness: 'mock',
+    },
+    options_availability: {
+      supported: true,
+      provider: 'playwright_fixture',
+      limitations: ['mocked_product_route_harness'],
+    },
+    metadata: {
+      read_only: true,
+      no_external_calls_in_tests: true,
+      limitations: ['mocked_playwright_product_auth'],
+      source_label: 'Playwright Fixture',
+      updated_at: '2026-05-06T09:45:00-04:00',
+    },
+  };
+}
+
+function optionsExpirations(symbol: string) {
+  return {
+    symbol,
+    expirations: [
+      {
+        date: '2026-06-19',
+        dte: 44,
+        type: 'monthly',
+        chain_available: true,
+        as_of: '2026-05-06T09:45:00-04:00',
+        source: 'playwright_fixture',
+        warnings: ['mocked_chain'],
+      },
+    ],
+    metadata: {
+      read_only: true,
+      no_external_calls_in_tests: true,
+      limitations: ['mocked_playwright_product_auth'],
+      source_label: 'Playwright Fixture',
+      updated_at: '2026-05-06T09:45:00-04:00',
+    },
+  };
+}
+
+function optionContract(symbol: string, side: 'call' | 'put', strike: number, mid: number) {
+  return {
+    contract_symbol: `${symbol}260619${side === 'call' ? 'C' : 'P'}${String(strike * 1000).padStart(8, '0')}`,
+    side,
+    strike,
+    bid: mid - 0.1,
+    ask: mid + 0.1,
+    mid,
+    volume: 500,
+    open_interest: 3000,
+    implied_volatility: 0.52,
+    delta: side === 'call' ? 0.42 : -0.36,
+    gamma: 0.04,
+    theta: -0.05,
+    vega: 0.11,
+    spread_pct: 4.6,
+    moneyness: strike === 55 ? 'atm' : 'otm',
+    liquidity_score: 82,
+    warnings: [],
+  };
+}
+
+function optionsChain(symbol: string) {
+  return {
+    symbol,
+    expiration: '2026-06-19',
+    underlying: {
+      price: 52.34,
+      change_pct: 1.2,
+      source: 'playwright_fixture',
+      as_of: '2026-05-06T09:45:00-04:00',
+      freshness: 'mock',
+    },
+    calls: [optionContract(symbol, 'call', 55, 4.23), optionContract(symbol, 'call', 60, 2.28)],
+    puts: [optionContract(symbol, 'put', 50, 2.42), optionContract(symbol, 'put', 45, 1.16)],
+    filters_applied: { min_open_interest: 100, max_spread_pct: 25 },
+    chain_as_of: '2026-05-06T09:45:00-04:00',
+    source: 'playwright_fixture',
+    limitations: ['mocked_chain'],
+    metadata: {
+      read_only: true,
+      no_external_calls_in_tests: true,
+      limitations: ['mocked_playwright_product_auth'],
+      source_label: 'Playwright Fixture',
+      updated_at: '2026-05-06T09:45:00-04:00',
+    },
+  };
+}
+
+function strategy(strategyType: string) {
+  return {
+    strategy_type: strategyType,
+    legs: [
+      {
+        action: 'buy',
+        side: strategyType.includes('put') ? 'put' : 'call',
+        contract_symbol: `TEM260619${strategyType.includes('put') ? 'P' : 'C'}00055000`,
+        expiration: '2026-06-19',
+        strike: 55,
+        mid: 4.23,
+        quantity: 1,
+      },
+    ],
+    net_debit: 423,
+    max_loss: 423,
+    max_gain: strategyType === 'long_call' ? null : 500,
+    breakeven: 59.23,
+    required_move_pct: 13.2,
+    payoff_at_target: 577,
+    risk_reward_ratio: 1.36,
+    liquidity_warnings: [],
+    iv_theta_notes: ['fixture_iv_only'],
+    suitability_notes: ['scenario_analysis_only'],
+    limitations: ['mocked_product_route_harness'],
+    no_advice_disclosure: 'Scenario analysis only; not personalized financial advice.',
+  };
+}
+
+function optionsScenarioFrame(symbol: string) {
+  return {
+    contractVersion: 'options-consumer-scenario-frame-v1',
+    frameState: 'insufficient',
+    underlying: { symbol },
+    strategyType: 'bull_call_spread',
+    expiration: '2026-06-19',
+    scenarioCoverage: 'strategy_compare_ready',
+    chainQuality: {
+      hasChain: true,
+      contractCount: 4,
+      callCount: 2,
+      putCount: 2,
+      freshness: 'mock',
+      sourceType: 'synthetic_fixture',
+      coverageState: 'strategy_compare_ready',
+    },
+    liquidityGate: 'manual_review',
+    ivGreeksGate: 'blocked',
+    spreadGate: 'manual_review',
+    payoffEvidence: {
+      targetPrice: 65,
+      payoffAtTarget: 577,
+      expectedMoveAbs: 5.2,
+      expectedMovePct: 9.9,
+      expectedMoveSource: 'straddle_mid',
+    },
+    riskEvidence: {
+      premiumAtRisk: 230,
+      maxLoss: 230,
+      maxGain: 500,
+      breakeven: 57.3,
+      requiredMovePct: 9.5,
+    },
+    assumptions: {
+      inputMode: 'decision',
+      direction: 'bullish',
+      targetPrice: 65,
+      targetDate: '2026-08-21',
+    },
+    missingEvidence: ['provider authority', 'iv greeks'],
+    nextEvidenceNeeded: [
+      '补充 provider authority 与 live chain 证据',
+      '补充 Greeks 与 IV 证据',
+      '补充 OI/成交量与更紧价差证据',
+    ],
+    noTradingBoundary: {
+      analyticalOnly: true,
+      noBrokerExecution: true,
+      noOrderPlacement: true,
+      noPortfolioMutation: true,
+      noTradingRecommendation: true,
+    },
+  };
+}
+
+function optionsStrategyComparison(symbol: string) {
+  return {
+    symbol,
+    underlying: {
+      price: 52.34,
+      change_pct: 1.2,
+      source: 'playwright_fixture',
+      as_of: '2026-05-06T09:45:00-04:00',
+      freshness: 'mock',
+    },
+    assumptions: { direction: 'bullish', target_price: 65, target_date: '2026-08-21' },
+    strategies: ['long_call', 'long_put', 'bull_call_spread', 'bear_put_spread'].map(strategy),
+    limitations: ['mocked_product_route_harness'],
+    metadata: {
+      read_only: true,
+      fixture_backed: true,
+      synthetic_data: true,
+      no_external_calls: true,
+      no_llm_calls: true,
+      no_order_placement: true,
+      no_broker_connection: true,
+      no_portfolio_mutation: true,
+      no_trading_recommendation: true,
+      strategy_engine: 'playwright_fixture',
+      force_refresh_ignored: true,
+    },
+    optionsConsumerScenarioFrame: optionsScenarioFrame(symbol),
+  };
+}
+
+function optionsDecision(symbol: string) {
+  return {
+    symbol,
+    strategy: 'bull_call_spread',
+    data_quality: {
+      data_quality_score: 62,
+      data_quality_tier: 'synthetic_demo_only',
+      source_type: 'playwright_fixture',
+      as_of_age_minutes: 0,
+      blocking_reasons: ['mocked_product_route_harness'],
+      warnings: ['provider_validation_required'],
+    },
+    liquidity: {
+      liquidity_score: 78,
+      spread_pct: 4.6,
+      liquidity_warnings: [],
+    },
+    iv_greeks: {
+      iv_readiness: 55,
+      iv_rank_status: 'unavailable',
+      warnings: ['fixture_iv_only'],
+      dte_bucket: '30_60',
+    },
+    expected_move: {
+      expected_move_abs: 5.2,
+      expected_move_pct: 9.9,
+      expected_move_source: 'straddle_mid',
+      expected_move_warnings: [],
+    },
+    optimizer: {
+      preferred_strategy_key: 'bull_call_spread',
+      optimizer_label: '数据不足，禁止判断',
+      alternatives: [
+        {
+          strategy_key: 'bull_call_spread',
+          data_quality_tier: 'synthetic_demo_only',
+          liquidity_score: 78,
+          breakeven_pressure: 42,
+          max_loss: 230,
+          max_gain: 500,
+          risk_reward_ratio: 2.17,
+          expected_move_alignment: 61,
+          iv_readiness: 55,
+          trade_quality_score: 48,
+          decision_label: '数据不足，禁止判断',
+          primary_reasons: ['mocked_product_route_harness'],
+          risk_warnings: ['provider_validation_required'],
+        },
+      ],
+      no_trade_reason: 'data_quality_not_decision_grade',
+    },
+    ranked_alternatives: [],
+    breakeven: {
+      breakeven: 57.3,
+      required_move_pct: 9.5,
+      breakeven_pressure: 42,
+    },
+    risk_reward: {
+      max_loss: 230,
+      max_gain: 500,
+      risk_reward_ratio: 2.17,
+      score: 58,
+    },
+    trade_quality_score: 48,
+    decision_label: '数据不足，禁止判断',
+    primary_reasons: ['mocked_product_route_harness'],
+    risk_warnings: ['provider_validation_required', 'synthetic_demo_only'],
+    better_alternative: {
+      strategy_type: 'bull_call_spread',
+      reason: 'Defined-risk structure remains easier to bound in mocked verification.',
+      max_loss: 230,
+      risk_reward_ratio: 2.17,
+    },
+    no_advice_disclosure: 'Scenario analysis only; not personalized financial advice.',
+    freshness: {
+      source: 'playwright_fixture',
+      freshness: 'mock',
+      as_of: '2026-05-06T09:45:00-04:00',
+    },
+    metadata: {
+      read_only: true,
+      fixture_backed: true,
+      synthetic_data: true,
+      no_external_calls: true,
+      no_order_placement: true,
+      no_broker_connection: true,
+      no_portfolio_mutation: true,
+      no_trading_recommendation: true,
+      strategy_engine: 'playwright_fixture',
+      force_refresh_ignored: true,
+    },
+    optionsConsumerScenarioFrame: optionsScenarioFrame(symbol),
+  };
+}
+
+function symbolFromOptionsPath(path: string) {
+  const match = path.match(/\/api\/v1\/options\/underlyings\/([^/]+)/);
+  return decodeURIComponent(match?.[1] || 'TEM').toUpperCase();
+}
+
+async function installOptionsProductHarness(page: Page): Promise<ProductRouteHarness> {
+  const calls: string[] = [];
+
+  await page.route('**/api/v1/**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const path = url.pathname;
+    const method = request.method();
+    calls.push(`${method} ${path}`);
+
+    if (method === 'GET' && path === '/api/v1/auth/status') {
+      return fulfillJson(route, createProductAuthStatus());
+    }
+    if (method === 'GET' && path === '/api/v1/auth/me') {
+      return fulfillJson(route, signedInUser);
+    }
+    if (method === 'GET' && path === '/api/v1/agent/status') {
+      return fulfillJson(route, { enabled: false });
+    }
+    if (method === 'GET' && path === '/api/v1/history') {
+      return fulfillJson(route, { total: 0, page: 1, limit: 20, items: [] });
+    }
+    if (method === 'GET' && path === '/api/v1/analysis/tasks') {
+      return fulfillJson(route, { tasks: [], total: 0 });
+    }
+    if (method === 'GET' && path.match(/^\/api\/v1\/options\/underlyings\/[^/]+\/summary$/)) {
+      return fulfillJson(route, optionsSummary(symbolFromOptionsPath(path)));
+    }
+    if (method === 'GET' && path.match(/^\/api\/v1\/options\/underlyings\/[^/]+\/expirations$/)) {
+      return fulfillJson(route, optionsExpirations(symbolFromOptionsPath(path)));
+    }
+    if (method === 'GET' && path.match(/^\/api\/v1\/options\/underlyings\/[^/]+\/chain$/)) {
+      return fulfillJson(route, optionsChain(symbolFromOptionsPath(path)));
+    }
+    if (method === 'POST' && path === '/api/v1/options/strategies/compare') {
+      const payload = request.postDataJSON() as { symbol?: string } | null;
+      return fulfillJson(route, optionsStrategyComparison((payload?.symbol || 'TEM').toUpperCase()));
+    }
+    if (method === 'POST' && path === '/api/v1/options/decision/evaluate') {
+      const payload = request.postDataJSON() as { symbol?: string } | null;
+      return fulfillJson(route, optionsDecision((payload?.symbol || 'TEM').toUpperCase()));
+    }
+
+    return fulfillJson(route, { error: `Unhandled options harness route: ${method} ${path}` }, 500);
+  });
+
+  return {
+    requests: {
+      count: (method: string, path: string) => calls.filter((entry) => entry === `${method} ${path}`).length,
+    },
+  };
+}
+
+async function openOptionsRouteWithHarness(page: Page, path: string) {
+  const harness = await installOptionsProductHarness(page);
+  await page.goto(path);
+  await page.waitForLoadState('domcontentloaded');
+  await expect(page).not.toHaveURL(/\/guest(?:$|[/?#])/);
+  return harness;
+}
+
 async function installScannerTopDownRoutes(page: Page) {
   const mixedRun = buildScannerRunDetailWithContext();
   const insufficientRun = buildScannerRunDetailWithContext({
@@ -757,6 +1155,7 @@ async function installOptionsReadinessSummaryRoute(page: Page) {
 
 appTest.describe('consumer research readiness browser acceptance', () => {
   appTest('Home readiness strip is visible and consumer-safe', async ({ page, consoleErrors, unhandledApiRoutes }) => {
+    await installSignedInHomeRoutes(page);
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       await openSignedInHome(page);
@@ -771,9 +1170,9 @@ appTest.describe('consumer research readiness browser acceptance', () => {
 
   appTest('Market Overview readiness strip is visible and consumer-safe', async ({ page, consoleErrors, unhandledApiRoutes }) => {
     appTest.setTimeout(45_000);
+    await installSignedInHomeRoutes(page);
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
-      await installSignedInHomeRoutes(page);
       await signIn(page, '/market-overview');
       await appExpect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
       await expectRootNonEmpty(page);
@@ -849,11 +1248,11 @@ appTest.describe('consumer research readiness browser acceptance', () => {
   });
 });
 
-productTest.describe('Options Lab readiness browser acceptance', () => {
-  productTest('readiness verdict is visible and consumer-safe', async ({ page, consoleErrors }) => {
+appTest.describe('Options Lab readiness browser acceptance', () => {
+  appTest('readiness verdict is visible and consumer-safe', async ({ page, consoleErrors, unhandledApiRoutes }) => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
-      await openProductRouteWithHarness(page, '/zh/options-lab');
+      await openOptionsRouteWithHarness(page, '/zh/options-lab');
       await expectRootNonEmpty(page);
       await expectNoHorizontalOverflow(page);
       await expectSafeReadinessStrip(page, 'options-lab-research-readiness-strip');
@@ -873,14 +1272,79 @@ productTest.describe('Options Lab readiness browser acceptance', () => {
       await appExpect(summary).not.toContainText(tradingPattern);
       await expectForbiddenTradingWordingAbsent(page);
       expect(consoleErrors).toEqual([]);
-      await page.unrouteAll({ behavior: 'ignoreErrors' });
+      expect(unhandledApiRoutes).toEqual([]);
     }
   });
 
-  productTest('gate summary labels are visible and sanitized when readiness gates are present', async ({ page, consoleErrors }) => {
+  appTest('scenario evidence workflow is visible, bounded, and sanitized', async ({ page, consoleErrors, unhandledApiRoutes }) => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
-      await installProductAuthHarness(page);
+      const harness = await openOptionsRouteWithHarness(page, '/zh/options-lab');
+      await expectRootNonEmpty(page);
+      await expectNoHorizontalOverflow(page);
+      await expectSafeReadinessStrip(page, 'options-lab-research-readiness-strip');
+
+      const summary = page.getByTestId('options-lab-readiness-gate-summary');
+      await appExpect(summary).toBeVisible({ timeout: 15_000 });
+      await appExpect(summary).toContainText('门控摘要');
+
+      const scenarioEvidence = page.getByTestId('options-lab-scenario-evidence');
+      await appExpect(scenarioEvidence).toBeVisible({ timeout: 15_000 });
+      await appExpect(scenarioEvidence).toContainText('情景证据');
+      await appExpect(scenarioEvidence).toContainText('先确认覆盖范围、链路质量与缺口');
+      await appExpect(scenarioEvidence).toContainText('证据状态');
+      await appExpect(scenarioEvidence).toContainText('证据不足');
+      await appExpect(scenarioEvidence).toContainText('情景覆盖');
+      await appExpect(scenarioEvidence).toContainText('策略比较覆盖');
+      await appExpect(scenarioEvidence).toContainText('链路质量');
+      await appExpect(scenarioEvidence).toContainText('链路已加载');
+      await appExpect(scenarioEvidence).toContainText('4 份合约');
+      await appExpect(scenarioEvidence).toContainText('Call 2 / Put 2');
+      await appExpect(scenarioEvidence).toContainText('演示/延迟');
+      await appExpect(scenarioEvidence).toContainText('流动性：人工复核');
+      await appExpect(scenarioEvidence).toContainText('IV / Greeks：已阻断');
+      await appExpect(scenarioEvidence).toContainText('价差：人工复核');
+      await appExpect(scenarioEvidence).toContainText('假设摘要');
+      await appExpect(scenarioEvidence).toContainText('当前来自判断回执');
+      await appExpect(scenarioEvidence).toContainText('方向：上涨情景');
+      await appExpect(scenarioEvidence).toContainText('目标价：$65.00');
+      await appExpect(scenarioEvidence).toContainText('目标日：2026-08-21');
+      await appExpect(scenarioEvidence).toContainText('收益证据');
+      await appExpect(scenarioEvidence).toContainText('预期波动：$5.20');
+      await appExpect(scenarioEvidence).toContainText('预期波动幅度：9.9%');
+      await appExpect(scenarioEvidence).toContainText('目标情景收益：$577.00');
+      await appExpect(scenarioEvidence).toContainText('波动来源：平值跨式中间价');
+      await appExpect(scenarioEvidence).toContainText('风险证据');
+      await appExpect(scenarioEvidence).toContainText('权利金风险：$230.00');
+      await appExpect(scenarioEvidence).toContainText('最大亏损：$230.00');
+      await appExpect(scenarioEvidence).toContainText('最大收益：$500.00');
+      await appExpect(scenarioEvidence).toContainText('盈亏平衡：$57.30');
+      await appExpect(scenarioEvidence).toContainText('缺失证据');
+      await appExpect(scenarioEvidence).toContainText('授权链路待补证');
+      await appExpect(scenarioEvidence).toContainText('波动率与敏感度待补证');
+      await appExpect(scenarioEvidence).toContainText('下一步补证');
+      await appExpect(scenarioEvidence).toContainText('补齐授权链路与实时链路证据');
+      await appExpect(scenarioEvidence).toContainText('补齐波动率与敏感度证据');
+      await appExpect(scenarioEvidence).toContainText('补齐成交深度与更紧价差证据');
+      await appExpect(scenarioEvidence).toContainText('只读边界');
+      await appExpect(scenarioEvidence).toContainText('仅观察');
+      await appExpect(scenarioEvidence).toContainText('不触发执行动作');
+      await appExpect(scenarioEvidence).toContainText('不改动现有持仓');
+      await appExpect(scenarioEvidence).toContainText('结论仅用于研究记录');
+      await appExpect(scenarioEvidence).not.toContainText(optionsGateSummaryLeakPattern);
+      await appExpect(scenarioEvidence).not.toContainText(tradingPattern);
+      await expectForbiddenTradingWordingAbsent(page);
+      expect(harness.requests.count('POST', '/api/v1/options/strategies/compare')).toBeGreaterThan(0);
+      expect(harness.requests.count('POST', '/api/v1/options/decision/evaluate')).toBeGreaterThan(0);
+      expect(consoleErrors).toEqual([]);
+      expect(unhandledApiRoutes).toEqual([]);
+    }
+  });
+
+  appTest('gate summary labels are visible and sanitized when readiness gates are present', async ({ page, consoleErrors, unhandledApiRoutes }) => {
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      await installOptionsProductHarness(page);
       await installOptionsReadinessSummaryRoute(page);
       await page.goto('/zh/options-lab');
       await page.waitForLoadState('domcontentloaded');
@@ -903,7 +1367,7 @@ productTest.describe('Options Lab readiness browser acceptance', () => {
       await appExpect(summary).not.toContainText(optionsGateSummaryLeakPattern);
       await appExpect(summary).not.toContainText(tradingPattern);
       expect(consoleErrors).toEqual([]);
-      await page.unrouteAll({ behavior: 'ignoreErrors' });
+      expect(unhandledApiRoutes).toEqual([]);
     }
   });
 });
