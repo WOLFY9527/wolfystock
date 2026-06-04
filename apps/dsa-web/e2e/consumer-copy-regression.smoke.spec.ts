@@ -608,19 +608,6 @@ async function installScannerContextRoutes(page: Page) {
   });
 }
 
-function createSignedInUser() {
-  return {
-    id: 'user-1',
-    username: 'wolfy-user',
-    displayName: 'Wolfy User',
-    role: 'user',
-    isAdmin: false,
-    isAuthenticated: true,
-    transitional: false,
-    authEnabled: true,
-  };
-}
-
 function optionsUnderlying() {
   return {
     price: 52.34,
@@ -674,23 +661,9 @@ function symbolFromPath(path: string) {
 }
 
 async function installOptionsRoutes(page: Page) {
-  const signedInUser = createSignedInUser();
   const calls: string[] = [];
 
-  await page.route('**/api/v1/auth/status**', async (route) => {
-    await fulfillJson(route, {
-      authEnabled: true,
-      loggedIn: true,
-      passwordSet: true,
-      passwordChangeable: true,
-      setupState: 'enabled',
-      currentUser: signedInUser,
-    });
-  });
-
-  await page.route('**/api/v1/auth/me**', async (route) => {
-    await fulfillJson(route, signedInUser);
-  });
+  await installSignedInSessionRoutes(page);
 
   await page.route('**/api/v1/options/**', async (route) => {
     const request = route.request();
@@ -901,8 +874,10 @@ async function installOptionsRoutes(page: Page) {
 }
 
 appTest.describe('consumer copy regression smoke', () => {
-  appTest('Home keeps citation, evidence, and no-advice copy consumer-safe', async ({ page, consoleErrors, unhandledApiRoutes }) => {
-    for (const viewport of viewports) {
+  for (const viewport of viewports) {
+    const viewportLabel = viewport.width >= 768 ? 'desktop' : 'mobile';
+
+    appTest(`Home keeps citation, evidence, and no-advice copy consumer-safe (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
       await page.setViewportSize(viewport);
       await installAuthenticatedHomeEvidenceRoutes(page);
       await openSignedInRoute(page, '/zh');
@@ -924,11 +899,9 @@ appTest.describe('consumer copy regression smoke', () => {
       await baseExpect(consoleErrors).toEqual([]);
       await baseExpect(unhandledApiRoutes).toEqual([]);
       await expectNoHorizontalOverflow(page);
-    }
-  });
+    });
 
-  appTest('Market Overview keeps translated source labels and research-only copy bounded', async ({ page, consoleErrors, unhandledApiRoutes }) => {
-    for (const viewport of viewports) {
+    appTest(`Market Overview keeps translated source labels and research-only copy bounded (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
       await page.setViewportSize(viewport);
       await installSignedInSessionRoutes(page);
       await installTemperatureOverride(page);
@@ -950,15 +923,12 @@ appTest.describe('consumer copy regression smoke', () => {
       await baseExpect(consoleErrors).toEqual([]);
       await baseExpect(unhandledApiRoutes).toEqual([]);
       await expectNoHorizontalOverflow(page);
-    }
-  });
+    });
 
-  appTest('Scanner keeps candidate research summary and market drivers wording consumer-safe', async ({ page, consoleErrors, unhandledApiRoutes }) => {
-    for (const viewport of viewports) {
+    appTest(`Scanner keeps candidate research summary and market drivers wording consumer-safe (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
       await page.setViewportSize(viewport);
       await installScannerContextRoutes(page);
-      await page.goto('/zh/scanner');
-      await page.waitForLoadState('domcontentloaded');
+      await openSignedInRoute(page, '/zh/scanner');
 
       const workspace = page.getByTestId('user-scanner-workspace');
       await appExpect(workspace).toBeVisible({ timeout: 15_000 });
@@ -979,14 +949,12 @@ appTest.describe('consumer copy regression smoke', () => {
       await baseExpect(consoleErrors).toEqual([]);
       await baseExpect(unhandledApiRoutes).toEqual([]);
       await expectNoHorizontalOverflow(page);
-    }
-  });
-  appTest('Options Lab keeps non-decision copy and read-only boundaries consumer-safe', async ({ page, consoleErrors, unhandledApiRoutes }) => {
-    for (const viewport of viewports) {
+    });
+
+    appTest(`Options Lab keeps non-decision copy and read-only boundaries consumer-safe (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
       await page.setViewportSize(viewport);
       const harness = await installOptionsRoutes(page);
-      await page.goto('/zh/options-lab');
-      await page.waitForLoadState('domcontentloaded');
+      await openSignedInRoute(page, '/zh/options-lab');
 
       const pageRoot = page.getByTestId('options-lab-page-root');
       await appExpect(pageRoot).toBeVisible({ timeout: 15_000 });
@@ -1006,6 +974,6 @@ appTest.describe('consumer copy regression smoke', () => {
       pwExpect(consoleErrors).toEqual([]);
       pwExpect(unhandledApiRoutes).toEqual([]);
       await expectNoHorizontalOverflow(page);
-    }
-  });
+    });
+  }
 });
