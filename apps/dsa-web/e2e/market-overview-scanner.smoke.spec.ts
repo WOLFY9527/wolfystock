@@ -49,6 +49,19 @@ async function installPartialTemperaturePayload(page: Page) {
   });
 }
 
+async function openMarketOverviewEvidenceDetails(page: Page) {
+  const disclosure = page.getByTestId('market-overview-evidence-disclosure');
+  await expect(disclosure).toBeVisible();
+  const toggle = disclosure.locator('button, [role="button"]').first();
+  await expect(toggle).toHaveCount(1);
+  await toggle.evaluate((element) => {
+    (element as HTMLButtonElement).click();
+  });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(disclosure).toContainText(/市场方向摘要|支持证据|反证 \/ 风险/);
+  return disclosure;
+}
+
 test.describe('scanner smoke', () => {
   test('scanner keeps controls visible without horizontal overflow', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -143,14 +156,15 @@ test.describe('scanner smoke', () => {
 
 test.describe('market overview smoke', () => {
   test('market overview keeps top metrics visible with no ghost vertical overflow', async ({ page }) => {
-    test.skip(true, 'Out of scope for scanner-only mobile hit-area task validation.');
     await page.setViewportSize({ width: 1440, height: 900 });
     await signIn(page, '/market-overview');
 
     await expect(page.getByTestId('market-overview-shell')).toBeVisible();
     await expect(page.getByTestId('market-overview-category-tabs')).toBeVisible();
     await expect(page.getByTestId('market-overview-hero-ribbon')).toBeVisible();
-    await expect(page.getByTestId('market-overview-status-strip')).toBeVisible();
+    await expect(page.getByTestId('market-decision-semantics-strip')).toBeVisible();
+    await expect(page.getByTestId('market-overview-decision-readiness')).toBeVisible();
+    await expect(page.getByTestId('market-decision-semantics-advice-boundary')).toBeVisible();
     await expect(page.getByTestId('market-overview-side-rail')).toBeVisible();
     await expect(page.getByTestId('market-overview-card-indices')).toBeVisible();
     await expect(page.getByTestId('market-overview-card-volatility')).toBeVisible();
@@ -158,9 +172,39 @@ test.describe('market overview smoke', () => {
 
     const viewport = page.viewportSize();
     expect(viewport).not.toBeNull();
-    const topStackBox = await page.getByTestId('market-overview-top-stack').boundingBox();
-    expect(topStackBox).not.toBeNull();
-    expect((topStackBox?.y ?? 0) + (topStackBox?.height ?? 0)).toBeLessThanOrEqual((viewport?.height ?? 0) - 8);
+    const criticalTopSurfaces = await Promise.all([
+      page.getByTestId('market-overview-decision-readiness').boundingBox(),
+      page.getByTestId('market-overview-category-tabs').boundingBox(),
+      page.getByTestId('market-overview-hero-ribbon').boundingBox(),
+    ]);
+    criticalTopSurfaces.forEach((box) => {
+      expect(box).not.toBeNull();
+      expect(box?.y ?? 0).toBeLessThan((viewport?.height ?? 0));
+      expect((box?.y ?? 0) + Math.min(box?.height ?? 0, 48)).toBeLessThanOrEqual((viewport?.height ?? 0) - 8);
+    });
+    await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    const shellLayout = await page.evaluate(() => {
+      const shell = document.querySelector('[data-testid="market-overview-shell"]') as HTMLElement | null;
+      const mainGrid = document.querySelector('[data-testid="market-overview-main-grid"]') as HTMLElement | null;
+      if (!shell || !mainGrid) {
+        return null;
+      }
+
+      return {
+        shellScrollHeight: shell.scrollHeight,
+        shellClientHeight: shell.clientHeight,
+        trailingGap: shell.scrollHeight - (mainGrid.offsetTop + mainGrid.offsetHeight),
+      };
+    });
+    expect(shellLayout).not.toBeNull();
+    expect(shellLayout?.shellScrollHeight ?? 0).toBeGreaterThanOrEqual(shellLayout?.shellClientHeight ?? 0);
+    expect(shellLayout?.trailingGap ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(96);
+
+    const evidenceDetails = await openMarketOverviewEvidenceDetails(page);
+    await expect(evidenceDetails).toContainText(/市场方向摘要/);
+    await expect(evidenceDetails).toContainText(/支持证据/);
+    await expect(evidenceDetails).toContainText(/反证 \/ 风险/);
 
     const rails = await Promise.all([
       page.getByTestId('market-overview-primary-rail').boundingBox(),
@@ -183,7 +227,6 @@ test.describe('market overview smoke', () => {
   });
 
   test('market overview degrades partial temperature payload without blanking', async ({ page }) => {
-    test.skip(true, 'Out of scope for scanner-only mobile hit-area task validation.');
     await installPartialTemperaturePayload(page);
 
     const viewports = [
@@ -201,9 +244,14 @@ test.describe('market overview smoke', () => {
       }
 
       await expect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByTestId('market-overview-temperature-summary')).toContainText(/数据不足/);
-      await expect(page.getByTestId('market-temperature-unreliable-summary')).toBeVisible();
-      await expect(page.getByTestId('market-decision-text')).toContainText(/数据不足|数据可用：存在延迟源/);
+      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText(/暂不形成方向结论|等待数据完成后再判断|仅观察/);
+      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText(/当前信号置信度较低，仅供观察。|部分数据暂不可用，当前评分已暂停。|数据更新中，稍后将自动刷新。/);
+      await expect(page.getByTestId('market-decision-semantics-advice-boundary')).toContainText(/暂不形成方向结论|等待数据完成后再判断/);
+      const evidenceDetails = await openMarketOverviewEvidenceDetails(page);
+      await expect(evidenceDetails).toContainText(/当前市场：证据不足|Current market: Evidence insufficient/);
+      await expect(evidenceDetails).toContainText(/不支持强方向判断/);
+      await expect(evidenceDetails).toContainText(/备用或代理证据偏多/);
+      await expect(evidenceDetails).not.toContainText('N/A');
       await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
       await expect(await page.locator('body').innerText()).not.toMatch(/raw|payload/i);
     }
