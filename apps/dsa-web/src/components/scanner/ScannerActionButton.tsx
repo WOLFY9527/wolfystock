@@ -21,7 +21,9 @@ export function ScannerActionButton({
   testId?: string;
 }) {
   const resolvedVariant = variant === 'primary' ? 'secondary' : variant;
-  const sizeClass = resolvedVariant === 'secondary' ? 'px-3 py-1.5 text-xs' : 'px-2.5 py-1 text-xs';
+  const sizeClass = resolvedVariant === 'secondary'
+    ? 'h-12 px-3 py-2 text-xs md:h-9 md:py-1.5'
+    : 'h-12 px-3 py-2 text-xs md:h-8 md:px-2.5 md:py-1';
 
   return (
     <TerminalButton

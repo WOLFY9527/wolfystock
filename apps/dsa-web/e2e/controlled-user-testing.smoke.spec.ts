@@ -40,6 +40,12 @@ const consumerSafeAllowedPhrases = [
   '不改动投资组合',
 ];
 
+async function expectMinTapHeight(locator: Locator, minHeight: number) {
+  const box = await locator.boundingBox();
+  appExpect(box).not.toBeNull();
+  appExpect(box?.height ?? 0).toBeGreaterThanOrEqual(minHeight);
+}
+
 async function expectConsumerSafeRegion(region: Locator) {
   await expectSurfaceTextSafe(region, {
     allowedPhrases: consumerSafeAllowedPhrases,
@@ -816,6 +822,10 @@ appTest.describe('controlled user testing smoke pack', () => {
     await appExpect(visualSummary).toBeVisible();
     await appExpect(candidate).toBeVisible();
     await appExpect(candidateEvidence).toBeVisible();
+    await expectMinTapHeight(page.getByTestId('scanner-run-button'), 40);
+    await expectMinTapHeight(page.getByRole('button', { name: /更多扫描操作|more scanner actions/i }), 40);
+    await expectMinTapHeight(candidate.getByRole('button', { name: /详情|detail/i }), 40);
+    await expectMinTapHeight(candidate.getByRole('button', { name: /更多|more/i }), 40);
     await appExpect(candidateEvidence).toContainText('仅观察');
     await appExpect(candidateEvidence).toContainText('待补 基本面 / 新闻催化');
     await appExpect(candidateEvidence).toContainText('技术面');

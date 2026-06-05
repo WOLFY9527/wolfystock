@@ -365,7 +365,7 @@ export function ScannerCandidateDetailPanel({
           </div>
         </BoardDetailSection>
       ) : null}
-      <div className="md:col-span-4 flex flex-wrap items-center gap-1.5 border-t border-white/8 py-2">
+      <div className="md:col-span-4 flex flex-wrap items-center gap-2 border-t border-white/8 py-2">
         <ActionButton
           label={isAnalyzing ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
           icon={<Play className="h-3.5 w-3.5" />}
@@ -822,7 +822,7 @@ export function ScannerCandidateDiagnosticRow({
               <ScannerScoreTrustStrip sources={resolvedTrustSources} language={language} className="pt-0.5" testId={`scanner-score-trust-mobile-${candidate.symbol}`} />
               {evidenceSummary ? <EvidenceChips summary={evidenceSummary} maxLabels={2} /> : null}
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-2">
               <ActionButton
                 label={language === 'en' ? 'Detail' : '详情'}
                 onClick={onSelect}
@@ -839,7 +839,7 @@ export function ScannerCandidateDiagnosticRow({
         </div>
       </div>
       {isMoreOpen ? (
-        <div data-testid={`scanner-candidate-row-more-${candidate.symbol}`} className="mt-1.5 flex flex-wrap gap-1.5 border-t border-white/8 pt-1.5">
+        <div data-testid={`scanner-candidate-row-more-${candidate.symbol}`} className="mt-1.5 flex flex-wrap gap-2 border-t border-white/8 pt-2">
           <ActionButton
             label={isAnalyzing ? (language === 'en' ? 'Analyzing...' : '分析中...') : (language === 'en' ? 'Analyze' : '分析')}
             onClick={onAnalyze}

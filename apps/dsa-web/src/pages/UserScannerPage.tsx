@@ -2879,7 +2879,7 @@ const UserScannerPage: React.FC = () => {
                     data-testid="scanner-command-bar"
                     className="bg-transparent px-2 py-2"
                   >
-                    <div className="grid min-w-0 grid-cols-2 gap-1 xl:grid-cols-[minmax(112px,0.55fr)_minmax(150px,0.72fr)_minmax(106px,0.45fr)_minmax(156px,0.72fr)_minmax(118px,0.5fr)_minmax(118px,0.5fr)_auto] xl:items-end">
+                    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(112px,0.55fr)_minmax(150px,0.72fr)_minmax(106px,0.45fr)_minmax(156px,0.72fr)_minmax(118px,0.5fr)_minmax(118px,0.5fr)_auto] xl:items-end [&_[data-testid='scanner-market-toggle']_button]:h-12 [&_[data-testid='scanner-market-toggle']_button]:px-3 [&_[data-testid='scanner-market-toggle']_button]:py-2 [&_[data-testid='scanner-scope-selector']_button]:h-12 [&_[data-testid='scanner-scope-selector']_button]:px-3 [&_[data-testid='scanner-scope-selector']_button]:py-2 md:[&_[data-testid='scanner-market-toggle']_button]:h-8 md:[&_[data-testid='scanner-market-toggle']_button]:py-1 md:[&_[data-testid='scanner-scope-selector']_button]:h-8 md:[&_[data-testid='scanner-scope-selector']_button]:py-1">
                       <PillTagGroup compact label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} variant="market" testId="scanner-market-toggle" />
                       <PillTagGroup compact label={t('scanner.profileLabel')} value={profile} onChange={setProfile} options={profileOptions} />
                       <PillTagGroup compact label={t('scanner.shortlistLabel')} value={shortlistSize} onChange={setShortlistSize} options={[{ value: '5', label: language === 'en' ? 'Top 5' : '前 5' }, { value: '8', label: language === 'en' ? 'Top 8' : '前 8' }, { value: '10', label: language === 'en' ? 'Top 10' : '前 10' }]} />
@@ -2907,7 +2907,7 @@ const UserScannerPage: React.FC = () => {
                         disabled={runDisabled}
                         aria-busy={isRunning}
                         data-testid="scanner-run-button"
-                        className="group col-span-2 h-8 w-full px-3 text-sm font-bold active:scale-95 disabled:pointer-events-none xl:col-span-1 xl:min-w-[132px]"
+                        className="group col-span-1 h-12 w-full px-3 py-2 text-sm font-bold active:scale-95 disabled:pointer-events-none sm:col-span-2 md:h-8 md:py-1 xl:col-span-1 xl:min-w-[132px]"
                         variant="primary"
                       >
                         <Play className="h-4 w-4 group-hover:animate-pulse" />
@@ -2922,7 +2922,7 @@ const UserScannerPage: React.FC = () => {
                         icon="more"
                       >
                         {scanScope === 'theme' ? (
-                          <div className="flex min-w-0 flex-col gap-1.5" data-testid="scanner-theme-control">
+                          <div className="flex min-w-0 flex-col gap-2" data-testid="scanner-theme-control">
                             <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">{language === 'en' ? 'Theme' : '主题'}</span>
                             <div className="select-field__control ui-control-shell group relative min-w-0 w-full max-w-full">
                               <select
@@ -2955,7 +2955,7 @@ const UserScannerPage: React.FC = () => {
                               </select>
                               <div
                                 aria-hidden="true"
-                                className={`select-field__overlay pointer-events-none flex h-full min-h-[2.25rem] w-full min-w-0 items-center rounded-lg border bg-black/40 px-2.5 py-1.5 text-xs text-white transition-all ${
+                                className={`select-field__overlay pointer-events-none flex h-12 w-full min-w-0 items-center rounded-lg border bg-black/40 px-3 py-2 text-sm text-white transition-all md:h-9 md:px-2.5 md:py-1.5 md:text-xs ${
                                   validationErrors.theme
                                     ? 'border-rose-500/50 text-rose-100'
                                     : 'border-white/8 group-focus-within:border-indigo-400/50'
@@ -2987,7 +2987,7 @@ const UserScannerPage: React.FC = () => {
                               <input
                                 data-testid="scanner-ai-theme-label-input"
                                 value={customThemeLabel}
-                                className="w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
+                                className="w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50 md:px-2.5 md:py-1.5 md:text-xs"
                                 onChange={(event) => setCustomThemeLabel(event.target.value)}
                                 aria-label={language === 'en' ? 'AI theme name' : 'AI 主题名称'}
                                 aria-invalid={Boolean(validationErrors.customThemeLabel)}
@@ -3010,7 +3010,7 @@ const UserScannerPage: React.FC = () => {
                                 maxLength={600}
                                 rows={3}
                                 placeholder={language === 'en' ? 'Stocks associated with White House policy, federal contracts, and government decisions.' : '例如：与白宫政策、联邦合同和政府决策相关的股票。'}
-                                className="w-full resize-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
+                                className="w-full resize-none rounded-lg border border-white/8 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50 md:px-2.5 md:py-1.5 md:text-xs"
                               />
                               {validationErrors.customThemePrompt ? (
                                 <p id="scanner-ai-theme-prompt-error" role="alert" className="text-[11px] leading-relaxed text-rose-100/82">
@@ -3020,7 +3020,7 @@ const UserScannerPage: React.FC = () => {
                               <input
                                 data-testid="scanner-ai-theme-manual-symbols-input"
                                 value={customThemeManualSymbols}
-                                className="w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
+                                className="w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50 md:px-2.5 md:py-1.5 md:text-xs"
                                 onChange={(event) => setCustomThemeManualSymbols(event.target.value)}
                                 aria-label={language === 'en' ? 'Manual symbol additions' : '手动补充股票代码'}
                                 aria-invalid={Boolean(validationErrors.customThemeManualSymbols)}
@@ -3039,7 +3039,7 @@ const UserScannerPage: React.FC = () => {
                                 disabled={generateThemeDisabled}
                                 onPointerUp={handleGenerateThemePointerUp}
                                 onClick={handleGenerateThemeClick}
-                                className="h-8 px-3 text-xs"
+                                className="h-12 px-3 py-2 text-sm md:h-8 md:py-1 md:text-xs"
                               >
                                 <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                                 <span>{isGeneratingTheme ? (language === 'en' ? 'Generating...' : '生成中...') : (language === 'en' ? 'Generate theme' : '生成主题')}</span>
@@ -3072,7 +3072,7 @@ const UserScannerPage: React.FC = () => {
                               aria-describedby={validationErrors.customSymbols ? 'scanner-custom-symbols-error' : undefined}
                               rows={3}
                               placeholder={language === 'en' ? 'MARA RIOT CLSK' : 'MARA RIOT CLSK'}
-                              className="w-full resize-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
+                              className="w-full resize-none rounded-lg border border-white/8 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50 md:px-2.5 md:py-1.5 md:text-xs"
                             />
                             <p className="text-[11px] text-white/45">
                               {language === 'en' ? `Parsed ${parsedCustomSymbols.length}` : `已解析 ${parsedCustomSymbols.length}`}
@@ -3094,11 +3094,11 @@ const UserScannerPage: React.FC = () => {
                   </DenseCommandBar>
 
                   <div data-testid="scanner-ranked-workbench" className="flex min-h-0 flex-1 min-w-0 flex-col border-t border-white/10">
-                    <div data-testid="scanner-primary-actions" className="flex shrink-0 flex-row flex-wrap items-center justify-between gap-2 px-2 py-2">
+                    <div data-testid="scanner-primary-actions" className="flex shrink-0 flex-row flex-wrap items-center justify-between gap-3 px-2 py-2">
                       <div className="flex min-w-0 flex-row flex-wrap items-center gap-2">
                         {runDetail && hasCandidateDiagnostics ? (
                           <div data-testid="scanner-compact-filter-bar" className="min-w-0">
-                            <div data-testid="scanner-candidate-filters" className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1 border-r border-white/10 pr-2" role="group" aria-label={language === 'en' ? 'Candidate view' : '候选视图'}>
+                            <div data-testid="scanner-candidate-filters" className="ui-scroll-x-quiet flex min-w-0 max-w-full gap-1.5 border-r border-white/10 pr-2 [&_button]:h-9 [&_button]:px-2.5 [&_button]:py-1.5 md:[&_button]:h-7 md:[&_button]:py-0.5" role="group" aria-label={language === 'en' ? 'Candidate view' : '候选视图'}>
                               {([
                                 ['selected', language === 'en' ? 'Selected' : '入选'],
                                 ['pool', language === 'en' ? 'Candidate pool' : '候选池'],
@@ -3122,7 +3122,7 @@ const UserScannerPage: React.FC = () => {
                             </div>
                           </div>
                         ) : null}
-                        <div data-testid="scanner-ranked-sortbar" className="flex flex-wrap items-center gap-1.5 text-xs text-white/42">
+                        <div data-testid="scanner-ranked-sortbar" className="flex flex-wrap items-center gap-1.5 text-xs text-white/42 [&_button]:h-9 [&_button]:px-2.5 [&_button]:py-1.5 md:[&_button]:h-7 md:[&_button]:py-0.5">
                           <span>{language === 'en' ? 'Sort by' : '排序'}</span>
                           {([
                             ['score', language === 'en' ? 'scanner score' : '扫描评分'],
@@ -3164,7 +3164,7 @@ const UserScannerPage: React.FC = () => {
                             variant="compact"
                             aria-expanded={isMoreActionsOpen}
                             aria-label={language === 'en' ? 'More scanner actions' : '更多扫描操作'}
-                            className="h-8 px-2.5 py-1 text-xs"
+                            className="h-12 px-3 py-2 text-sm md:h-8 md:px-2.5 md:py-1 md:text-xs"
                             onClick={() => setIsMoreActionsOpen((current) => !current)}
                           >
                             <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
