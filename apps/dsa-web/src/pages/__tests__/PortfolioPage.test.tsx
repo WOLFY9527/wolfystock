@@ -558,7 +558,9 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const workspace = screen.getByTestId('portfolio-workspace-grid');
-    expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-5', 'flex-1', 'min-w-0', 'min-h-0');
+    expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[var(--wolfy-consumer-shell-max,1880px)]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'gap-5', 'flex-1', 'min-w-0', 'min-h-0');
+    expect(workspace.parentElement).not.toHaveClass('max-w-[1600px]');
+    expect(workspace.parentElement?.parentElement).toHaveAttribute('data-workspace-width', 'near-full');
     expect(workspace).toHaveAttribute('data-terminal-primitive', 'grid');
     expect(workspace).toHaveClass('grid', 'grid-cols-1', 'xl:grid-cols-12', 'gap-6', 'items-start');
     expect(screen.getByTestId('portfolio-bento-page')).toHaveAttribute('data-bento-surface', 'true');
@@ -751,7 +753,9 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const workspace = screen.getByTestId('portfolio-workspace-grid');
-    expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex-1', 'min-w-0', 'min-h-0');
+    expect(workspace.parentElement).toHaveClass('w-full', 'max-w-[var(--wolfy-consumer-shell-max,1880px)]', 'mx-auto', 'px-4', 'xl:px-8', 'flex-1', 'min-w-0', 'min-h-0');
+    expect(workspace.parentElement).not.toHaveClass('max-w-[1600px]');
+    expect(workspace.parentElement?.parentElement).toHaveAttribute('data-workspace-width', 'near-full');
     expect(workspace).toHaveClass('grid', 'grid-cols-1', 'xl:grid-cols-12', 'gap-6', 'items-start');
     expect(screen.getByTestId('portfolio-bento-page').className).not.toMatch(/\bbg-(black|\[#050505\]|gray-|zinc-|slate-|neutral-)/);
     expect(screen.getByTestId('portfolio-account-status-strip')).toHaveClass('grid', 'xl:grid-cols-[minmax(0,1.6fr)_minmax(360px,1fr)]');

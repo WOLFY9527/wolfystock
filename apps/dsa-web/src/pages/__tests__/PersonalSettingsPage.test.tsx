@@ -135,7 +135,9 @@ describe('PersonalSettingsPage', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(container.querySelectorAll('main')).toHaveLength(0);
     expect(workspace).toHaveAttribute('data-terminal-primitive', 'page-shell');
-    expect(workspace).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'py-5', 'md:py-6');
+    expect(workspace).toHaveClass('w-full', 'max-w-[var(--wolfy-consumer-shell-max,1880px)]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'py-5', 'md:py-6');
+    expect(workspace).not.toHaveClass('max-w-[1600px]');
+    expect(workspace.parentElement).toHaveAttribute('data-workspace-width', 'near-full');
     expect(workspace).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'py-8');
     expect(workspace).not.toHaveClass('max-w-4xl');
     expect(settingsConsole).toBeInTheDocument();
@@ -240,7 +242,9 @@ describe('PersonalSettingsPage', () => {
     const saveButton = screen.getByRole('button', { name: zh('settings.personalNotificationSaveAction') });
     expect(container.querySelectorAll('main')).toHaveLength(0);
     expect(workspace).toHaveAttribute('data-terminal-primitive', 'page-shell');
-    expect(workspace).toHaveClass('w-full', 'max-w-[1600px]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'py-5', 'md:py-6');
+    expect(workspace).toHaveClass('w-full', 'max-w-[var(--wolfy-consumer-shell-max,1880px)]', 'mx-auto', 'px-4', 'xl:px-8', 'flex', 'flex-col', 'py-5', 'md:py-6');
+    expect(workspace).not.toHaveClass('max-w-[1600px]');
+    expect(workspace.parentElement).toHaveAttribute('data-workspace-width', 'near-full');
     expect(workspace).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'py-8');
     await waitFor(() => expect(getNotificationPreferences).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId('personal-settings-console')).toBeInTheDocument();

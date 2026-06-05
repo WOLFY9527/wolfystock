@@ -2242,12 +2242,13 @@ describe('MarketOverviewPage', () => {
       'flex-col',
       'gap-5',
       'mx-auto',
-      'max-w-[1600px]',
+      'max-w-[var(--wolfy-consumer-shell-max,1880px)]',
       'px-4',
       'xl:px-8',
       'py-5',
       'md:py-6',
     );
+    expect(workbench).not.toHaveClass('max-w-[1600px]');
     expect(workbench).not.toHaveClass('overflow-y-auto', 'overflow-x-auto', 'no-scrollbar', 'bg-[#030303]', 'bg-[#050505]');
     expect(workbench.className).not.toContain('bg-black');
     expect(shell.className).not.toContain('max-w-5xl');
