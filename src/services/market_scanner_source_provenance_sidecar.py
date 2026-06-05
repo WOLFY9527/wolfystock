@@ -320,9 +320,11 @@ def _build_domain_entry(
     candidate_research_summary_frame: Mapping[str, Any],
     scanner_context_frame: Mapping[str, Any],
 ) -> dict[str, Any]:
+    market_readiness = _mapping(scanner_context_frame.get("marketReadiness"))
     market = _first_text(
         candidate.get("market"),
         candidate_research_readiness.get("market"),
+        market_readiness.get("market"),
     ).lower()
     state = _domain_state(
         domain,

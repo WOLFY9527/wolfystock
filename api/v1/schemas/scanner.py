@@ -226,6 +226,7 @@ class ScannerCandidateResponse(BaseModel):
     candidateEvidenceFrame: Dict[str, Any] = Field(default_factory=dict)
     candidateResearchReadiness: Dict[str, Any] = Field(default_factory=dict)
     candidateResearchSummaryFrame: Dict[str, Any] = Field(default_factory=dict)
+    candidateSourceProvenanceFrame: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ScannerThemeDiagnosticsResponse(BaseModel):

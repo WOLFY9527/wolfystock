@@ -391,9 +391,39 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             "contractVersion": "research_readiness_v1",
             "readinessState": "insufficient",
         }
+        payload["shortlist"][0]["candidateSourceProvenanceFrame"] = {
+            "contractVersion": "source_provenance_v1",
+            "entryCount": 1,
+            "authorityTierCounts": {"unknown": 1},
+            "freshnessStateCounts": {"unknown": 1},
+            "evidenceDomainCounts": {"market_data": 1},
+            "fallbackOrProxyCount": 1,
+            "observationOnlyCount": 1,
+            "scoreContributionAllowedCount": 0,
+            "entries": [
+                {
+                    "contractVersion": "source_provenance_v1",
+                    "sourceId": "unknown_source",
+                    "sourceLabel": "未知来源",
+                    "evidenceDomain": "market_data",
+                    "authorityTier": "unknown",
+                    "freshnessState": "unknown",
+                    "sourceTier": "unknown",
+                    "fallbackOrProxy": True,
+                    "observationOnly": True,
+                    "scoreContributionAllowed": False,
+                    "limitations": ["unknown_source"],
+                    "nextEvidenceNeeded": ["verified_source_metadata"],
+                    "debugRef": "source-provenance:unknown",
+                }
+            ],
+        }
         payload["selected"][0]["candidateEvidenceFrame"] = copy.deepcopy(payload["shortlist"][0]["candidateEvidenceFrame"])
         payload["selected"][0]["candidateResearchReadiness"] = copy.deepcopy(
             payload["shortlist"][0]["candidateResearchReadiness"]
+        )
+        payload["selected"][0]["candidateSourceProvenanceFrame"] = copy.deepcopy(
+            payload["shortlist"][0]["candidateSourceProvenanceFrame"]
         )
         service.run_manual_scan.return_value = payload
 
@@ -417,6 +447,19 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             for item in response.selected
         ]
         self.assertEqual(selected_signature, shortlist_signature)
+        serialized = response.model_dump()
+        self.assertEqual(
+            [item["symbol"] for item in serialized["shortlist"]],
+            [item["symbol"] for item in payload["shortlist"]],
+        )
+        self.assertEqual(
+            serialized["shortlist"][0]["candidateSourceProvenanceFrame"]["scoreContributionAllowedCount"],
+            0,
+        )
+        self.assertEqual(
+            serialized["selected"][0]["candidateSourceProvenanceFrame"],
+            serialized["shortlist"][0]["candidateSourceProvenanceFrame"],
+        )
 
     def test_run_market_scan_preserves_additive_scanner_context_frame(self) -> None:
         service = MagicMock()
@@ -723,6 +766,33 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             "noAdviceBoundary": True,
             "debugRef": "scanner:candidate_summary:NVDA",
         }
+        payload["shortlist"][0]["candidateSourceProvenanceFrame"] = {
+            "contractVersion": "source_provenance_v1",
+            "entryCount": 1,
+            "authorityTierCounts": {"observation_only": 1},
+            "freshnessStateCounts": {"delayed": 1},
+            "evidenceDomainCounts": {"market_data": 1},
+            "fallbackOrProxyCount": 0,
+            "observationOnlyCount": 1,
+            "scoreContributionAllowedCount": 0,
+            "entries": [
+                {
+                    "contractVersion": "source_provenance_v1",
+                    "sourceId": "scanner_public_projection",
+                    "sourceLabel": "Scanner public projection",
+                    "evidenceDomain": "market_data",
+                    "authorityTier": "observation_only",
+                    "freshnessState": "delayed",
+                    "sourceTier": "stored_snapshot",
+                    "fallbackOrProxy": False,
+                    "observationOnly": True,
+                    "scoreContributionAllowed": False,
+                    "limitations": ["observation_only"],
+                    "nextEvidenceNeeded": ["score_grade_authority_source"],
+                    "debugRef": "source-provenance:scanner-public-projection",
+                }
+            ],
+        }
         service.run_manual_scan.return_value = payload
 
         request = ScannerRunRequest(
@@ -758,6 +828,15 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             serialized["shortlist"][0]["candidateResearchSummaryFrame"]["nextResearchStep"],
             "补充基本面证据",
         )
+        self.assertEqual(
+            serialized["shortlist"][0]["candidateSourceProvenanceFrame"]["contractVersion"],
+            "source_provenance_v1",
+        )
+        self.assertEqual(serialized["shortlist"][0]["candidateSourceProvenanceFrame"]["scoreContributionAllowedCount"], 0)
+        self.assertEqual([item["symbol"] for item in serialized["shortlist"]], ["NVDA", "AAPL"])
+        provenance_json = json.dumps(serialized["shortlist"][0]["candidateSourceProvenanceFrame"], ensure_ascii=False).lower()
+        for forbidden in ("token", "cookie", "session", "payload", "stack", "trace", "internal", "raw"):
+            self.assertNotIn(forbidden, provenance_json)
 
     def test_public_candidate_dict_adds_consumer_diagnostics_projection(self) -> None:
         service = object.__new__(MarketScannerService)

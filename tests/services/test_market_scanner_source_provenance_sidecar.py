@@ -271,6 +271,55 @@ def test_cn_observation_only_and_fallback_sources_fail_closed() -> None:
             assert "cn_observation_only" in entry["limitations"]
 
 
+def test_public_projection_can_derive_cn_observation_from_scanner_context_market() -> None:
+    summary = build_market_scanner_source_provenance_sidecar(
+        {
+            "symbol": "600001",
+            "diagnostics": {
+                "score_explainability": {
+                    "source_confidence": {
+                        "source": "cn_public_proxy",
+                        "sourceLabel": "CN public proxy",
+                        "sourceType": "public_proxy",
+                        "freshness": "delayed",
+                        "sourceAuthorityAllowed": False,
+                        "scoreContributionAllowed": False,
+                        "observationOnly": True,
+                    }
+                }
+            },
+        },
+        candidate_evidence_frame={
+            "domains": {
+                "priceHistory": {"state": "available", "observationOnly": True, "scoreGradeAllowed": False, "freshness": "delayed"},
+                "liquidity": {"state": "available", "observationOnly": True, "scoreGradeAllowed": False, "freshness": "delayed"},
+                "technicals": {"state": "available", "observationOnly": True, "scoreGradeAllowed": False, "freshness": "delayed"},
+                "fundamentals": {"state": "missing"},
+                "newsCatalyst": {"state": "missing"},
+                "theme": {"state": "missing"},
+            }
+        },
+        candidate_research_readiness={
+            "readinessState": "insufficient",
+            "sourceAuthority": "observationOnly",
+            "freshnessFloor": "delayed",
+            "nextEvidenceNeeded": ["补充来源授权证据"],
+        },
+        candidate_research_summary_frame={},
+        scanner_context_frame={
+            "marketReadiness": {
+                "market": "cn",
+                "readinessState": "observe_only",
+                "freshness": "delayed",
+            }
+        },
+    )
+
+    assert summary["scoreContributionAllowedCount"] == 0
+    assert summary["observationOnlyCount"] == len(SCANNER_SOURCE_PROVENANCE_DOMAIN_ORDER)
+    assert any("cn_observation_only" in entry["limitations"] for entry in summary["entries"])
+
+
 def test_blocked_scanner_context_forces_unavailable_top_down_entries() -> None:
     summary = build_market_scanner_source_provenance_sidecar(
         _us_candidate(),

@@ -139,6 +139,17 @@ def test_scanner_run_response_accepts_additive_candidate_evidence_and_readiness_
                     "noAdviceBoundary": True,
                     "debugRef": "scanner:candidate_summary:NVDA",
                 },
+                "candidateSourceProvenanceFrame": {
+                    "contractVersion": "source_provenance_v1",
+                    "entryCount": 1,
+                    "authorityTierCounts": {"unknown": 1},
+                    "freshnessStateCounts": {"unknown": 1},
+                    "evidenceDomainCounts": {"market_data": 1},
+                    "fallbackOrProxyCount": 1,
+                    "observationOnlyCount": 1,
+                    "scoreContributionAllowedCount": 0,
+                    "entries": [],
+                },
             }
         ],
         selected=[
@@ -184,6 +195,8 @@ def test_scanner_run_response_accepts_additive_candidate_evidence_and_readiness_
     assert response.shortlist[0].candidateResearchReadiness["readinessState"] == "insufficient"
     assert response.shortlist[0].candidateResearchSummaryFrame["contractVersion"] == "scanner_candidate_research_summary_v1"
     assert response.shortlist[0].candidateResearchSummaryFrame["nextResearchStep"] == "补充基本面证据"
+    assert response.shortlist[0].candidateSourceProvenanceFrame["contractVersion"] == "source_provenance_v1"
+    assert response.shortlist[0].candidateSourceProvenanceFrame["scoreContributionAllowedCount"] == 0
     assert response.selected[0].candidateEvidenceFrame["coverageState"] == "partial"
     assert [
         (item.symbol, item.rank, item.score, item.raw_score, item.final_score)

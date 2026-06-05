@@ -31,6 +31,7 @@ from src.services.market_scanner_candidate_evidence import (
     build_scanner_candidate_research_readiness,
 )
 from src.services.market_scanner_candidate_summary import build_scanner_candidate_research_summary_frame
+from src.services.market_scanner_source_provenance_sidecar import build_market_scanner_source_provenance_sidecar
 from src.services.data_source_router import CapabilityResolver, DataSourceRouteRequest, DataSourceRouter
 from src.services.scanner_ai_service import ScannerAiInterpretationService
 from src.services.scanner_evidence_packet import (
@@ -1892,6 +1893,10 @@ class MarketScannerService:
             candidate["scannerContextFrame"] = scanner_context_frame
             response_shortlist.append(self._public_candidate_dict(candidate))
         self._attach_candidate_research_summaries(
+            response_shortlist,
+            scanner_context_frame=scanner_context_frame,
+        )
+        self._attach_candidate_source_provenance_frames(
             response_shortlist,
             scanner_context_frame=scanner_context_frame,
         )
@@ -4699,6 +4704,10 @@ class MarketScannerService:
             shortlist,
             scanner_context_frame=scanner_context_frame,
         )
+        self._attach_candidate_source_provenance_frames(
+            shortlist,
+            scanner_context_frame=scanner_context_frame,
+        )
 
         return {
             "id": run.id,
@@ -7295,6 +7304,7 @@ class MarketScannerService:
             candidate_evidence_frame=payload["candidateEvidenceFrame"],
             candidate_research_readiness=payload["candidateResearchReadiness"],
         )
+        self._attach_candidate_source_provenance_frames([payload], scanner_context_frame=None)
         return payload
 
     def _public_candidate_dict(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
@@ -7343,6 +7353,10 @@ class MarketScannerService:
             candidate_research_readiness=payload["candidateResearchReadiness"],
             scanner_context_frame=candidate.get("scannerContextFrame"),
         )
+        self._attach_candidate_source_provenance_frames(
+            [payload],
+            scanner_context_frame=candidate.get("scannerContextFrame"),
+        )
         return payload
 
     @staticmethod
@@ -7356,6 +7370,21 @@ class MarketScannerService:
                 candidate,
                 candidate_evidence_frame=candidate.get("candidateEvidenceFrame"),
                 candidate_research_readiness=candidate.get("candidateResearchReadiness"),
+                scanner_context_frame=scanner_context_frame,
+            )
+
+    @staticmethod
+    def _attach_candidate_source_provenance_frames(
+        candidates: Sequence[Dict[str, Any]],
+        *,
+        scanner_context_frame: Mapping[str, Any] | None,
+    ) -> None:
+        for candidate in candidates:
+            candidate["candidateSourceProvenanceFrame"] = build_market_scanner_source_provenance_sidecar(
+                candidate,
+                candidate_evidence_frame=candidate.get("candidateEvidenceFrame"),
+                candidate_research_readiness=candidate.get("candidateResearchReadiness"),
+                candidate_research_summary_frame=candidate.get("candidateResearchSummaryFrame"),
                 scanner_context_frame=scanner_context_frame,
             )
 

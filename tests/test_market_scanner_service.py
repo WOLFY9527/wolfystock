@@ -906,6 +906,13 @@ class MarketScannerServiceTestCase(unittest.TestCase):
                 reverse=True,
             ),
         )
+        provenance = shortlist[0]["candidateSourceProvenanceFrame"]
+        self.assertEqual(provenance["contractVersion"], "source_provenance_v1")
+        self.assertEqual(json.loads(json.dumps(provenance, ensure_ascii=False, sort_keys=True)), provenance)
+        self.assertEqual(provenance["scoreContributionAllowedCount"], 0)
+        provenance_json = json.dumps(provenance, ensure_ascii=False).lower()
+        for forbidden in ("token", "cookie", "session", "payload", "stack", "trace", "internal", "raw"):
+            self.assertNotIn(forbidden, provenance_json)
 
         history = self.service.list_runs(market="cn", page=1, limit=10)
         self.assertEqual(history["total"], 1)
@@ -926,6 +933,12 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             ],
             shortlist_signature,
         )
+        self.assertEqual(
+            [item["symbol"] for item in detail["shortlist"]],
+            [item["symbol"] for item in shortlist],
+        )
+        self.assertIn("candidateSourceProvenanceFrame", detail["shortlist"][0])
+        self.assertEqual(detail["shortlist"][0]["candidateSourceProvenanceFrame"]["contractVersion"], "source_provenance_v1")
 
     def test_get_run_detail_adds_supportive_scanner_context_frame_for_us_runs(self) -> None:
         detail = self._record_context_run(
@@ -1623,6 +1636,17 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         history_by_id = {item["id"]: item for item in history["items"]}
         self.assertEqual(history_by_id[baseline["id"]]["top_symbols"], ["NVDA", "AAPL"])
         self.assertEqual(history_by_id[contextual["id"]]["top_symbols"], ["NVDA", "AAPL"])
+        self.assertIn("candidateSourceProvenanceFrame", contextual["shortlist"][0])
+        self.assertEqual(
+            json.loads(
+                json.dumps(
+                    contextual["shortlist"][0]["candidateSourceProvenanceFrame"],
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            ),
+            contextual["shortlist"][0]["candidateSourceProvenanceFrame"],
+        )
 
     def test_prepare_shortlist_sorts_by_score_then_symbol_and_assigns_rank_before_ai(self) -> None:
         ai_service = RecordingScannerAiService()
@@ -3416,6 +3440,9 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             observed_history_calls_before_detail = list(observed_service.data_manager.daily_history_calls)
 
             candidate = observed["shortlist"][0]
+            self.assertIn("candidateSourceProvenanceFrame", candidate)
+            self.assertEqual(candidate["candidateSourceProvenanceFrame"]["scoreContributionAllowedCount"], 0)
+            self.assertGreater(candidate["candidateSourceProvenanceFrame"]["observationOnlyCount"], 0)
             observation = candidate["diagnostics"].get("cn_provider_observation")
             self.assertIsInstance(observation, dict)
             self.assertTrue(observation["observationOnly"])
@@ -3654,11 +3681,18 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertTrue(observed_public["candidateEvidenceFrame"]["domains"]["theme"]["observationOnly"])
         self.assertEqual(observed_public["candidateResearchReadiness"]["sourceAuthority"], "observationOnly")
         self.assertEqual(observed_public["candidateResearchReadiness"]["readinessState"], "insufficient")
+        self.assertIn("candidateSourceProvenanceFrame", observed_public)
+        self.assertEqual(observed_public["candidateSourceProvenanceFrame"]["scoreContributionAllowedCount"], 0)
 
         self.assertEqual(blocked_public["candidateEvidenceFrame"]["coverageState"], "blocked")
         self.assertEqual(blocked_public["candidateEvidenceFrame"]["domains"]["priceHistory"]["state"], "missing")
         self.assertEqual(blocked_public["candidateEvidenceFrame"]["domains"]["liquidity"]["state"], "missing")
         self.assertEqual(blocked_public["candidateResearchReadiness"]["readinessState"], "blocked")
+        self.assertEqual(blocked_public["candidateSourceProvenanceFrame"]["scoreContributionAllowedCount"], 0)
+        self.assertEqual(
+            blocked_public["candidateSourceProvenanceFrame"]["observationOnlyCount"],
+            blocked_public["candidateSourceProvenanceFrame"]["entryCount"],
+        )
 
     def test_attach_cn_provider_observation_metadata_projects_unavailable_baostock_cache_without_mutating_score(self) -> None:
         service = MarketScannerService(
