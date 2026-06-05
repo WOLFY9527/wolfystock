@@ -1166,7 +1166,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-medium text-white/48">家族流向观察</p>
-              <p className="mt-2 text-[11px] leading-5 text-white/60">优先看家族级轮动方向，不改写头部排序。</p>
+              <p className="mt-2 text-[11px] leading-5 text-white/60">优先看家族级轮动方向，不把观察信号放大成强结论。</p>
             </div>
             <TerminalChip variant="neutral">摘要优先</TerminalChip>
           </div>

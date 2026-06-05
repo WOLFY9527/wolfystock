@@ -972,10 +972,10 @@ describe('LiquidityMonitorPage', () => {
     render(<LiquidityMonitorPage />);
 
     const signal = await screen.findByTestId('liquidity-capital-flow-signal');
-    expect(signal).toHaveTextContent('不会升级为交易或评分结论');
+    expect(signal).toHaveTextContent('不会升级为交易或主要判断结论');
     expect(signal).toHaveTextContent('资金流向观察');
     expect(signal).toHaveTextContent('仅观察');
-    expect(signal).toHaveTextContent('代理信号');
+    expect(signal).toHaveTextContent('观察线索');
     expect(signal).toHaveTextContent('资金净流入观察');
     expect(signal).toHaveTextContent('可能去向');
     expect(signal).toHaveTextContent('Growth Ai Software Semis');
@@ -1127,12 +1127,12 @@ describe('LiquidityMonitorPage', () => {
     await screen.findByRole('heading', { name: '流动性监测' });
     const details = await expandLiquidityDetails();
     const rowStrip = within(details).getByTestId('liquidity-breadth-truth-strip-row');
-    expect(rowStrip).toHaveTextContent('评分级证据');
+    expect(rowStrip).toHaveTextContent('可支撑判断');
     expect(rowStrip).toHaveTextContent('官方宽度');
     expect(rowStrip).toHaveTextContent('延迟');
     expect(rowStrip).toHaveTextContent('覆盖 7/7');
-    expect(rowStrip).toHaveTextContent('当前以官方宽度作为评分级宽度证据。');
-    expect(rowStrip).toHaveTextContent('来源：NYSE Official Breadth Cache');
+    expect(rowStrip).toHaveTextContent('当前以官方宽度支撑主要判断。');
+    expect(rowStrip).toHaveTextContent('依据：官方市场宽度快照');
     expect(rowStrip).not.toHaveTextContent('仅观察');
 
     const breadthRow = within(details).getAllByText('美国市场广度')[0]?.closest('tr');
@@ -1140,7 +1140,7 @@ describe('LiquidityMonitorPage', () => {
     fireEvent.click(breadthRow!);
 
     const detailStrip = within(details).getByTestId('liquidity-breadth-truth-strip-detail');
-    expect(detailStrip).toHaveTextContent('评分级证据');
+    expect(detailStrip).toHaveTextContent('可支撑判断');
     expect(detailStrip).toHaveTextContent('官方宽度');
     expect(detailStrip).toHaveTextContent('覆盖 7/7');
     expect(detailStrip.textContent || '').not.toMatch(/买入|卖出|加仓|减仓|buy|sell|recommend/i);
@@ -1159,11 +1159,11 @@ describe('LiquidityMonitorPage', () => {
     const details = await expandLiquidityDetails();
     const rowStrip = within(details).getByTestId('liquidity-breadth-truth-strip-row');
     expect(rowStrip).toHaveTextContent('仅观察');
-    expect(rowStrip).toHaveTextContent('代理宽度');
+    expect(rowStrip).toHaveTextContent('观察宽度');
     expect(rowStrip).toHaveTextContent('过期');
     expect(rowStrip).toHaveTextContent('覆盖 2/5');
-    expect(rowStrip).toHaveTextContent('当前仅展示代理宽度观察，不进入计分。');
-    expect(rowStrip).toHaveTextContent('来源：Yahoo Finance');
+    expect(rowStrip).toHaveTextContent('当前仅保留宽度观察，不支撑主要判断。');
+    expect(rowStrip).toHaveTextContent('依据：公开市场宽度观察快照');
     expect(rowStrip).toHaveTextContent('缺口：RSP/SPY、IWM/SPY、QQQ/SPY');
     expect(rowStrip).toHaveTextContent('限制：缺少官方/授权宽度主源；代表性样本，不等于全市场宽度');
 
@@ -1173,7 +1173,7 @@ describe('LiquidityMonitorPage', () => {
 
     const detailStrip = within(details).getByTestId('liquidity-breadth-truth-strip-detail');
     expect(detailStrip).toHaveTextContent('仅观察');
-    expect(detailStrip).toHaveTextContent('代理宽度');
+    expect(detailStrip).toHaveTextContent('观察宽度');
     expect(detailStrip).toHaveTextContent('过期');
     expect(detailStrip).toHaveTextContent('覆盖 2/5');
     expect(detailStrip.textContent || '').not.toMatch(/买入|卖出|加仓|减仓|buy|sell|recommend/i);

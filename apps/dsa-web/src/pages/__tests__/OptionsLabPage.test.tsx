@@ -1259,7 +1259,7 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     const decisionStrip = await screen.findByTestId('options-lab-decision-readiness-strip');
-    expect(decisionStrip).toHaveTextContent('通过基础门控');
+    expect(decisionStrip).toHaveTextContent('判断条件较完整');
     expect(decisionStrip).toHaveTextContent('仍需人工复核');
     expect(decisionStrip.textContent || '').not.toMatch(/买入|卖出|推荐/);
   });

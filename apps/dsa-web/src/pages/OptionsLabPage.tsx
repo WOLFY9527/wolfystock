@@ -278,7 +278,7 @@ type ReadinessChip = {
 
 function readinessDecisionChip(decision?: OptionsDecisionResponse | null): ReadinessChip {
   if (decision?.decisionGrade === true && decision?.gateDecision !== 'blocked') {
-    return { label: '通过基础门控', tone: 'good' };
+    return { label: '判断条件较完整', tone: 'good' };
   }
   if (isNonDecisionGrade(decision)) {
     return { label: '未达判断等级', tone: 'risk' };
@@ -305,7 +305,7 @@ function readinessDataChip(decision?: OptionsDecisionResponse | null): Readiness
     || decision?.decisionGrade === false;
   return restricted
     ? { label: '数据质量受限', tone: 'risk' }
-    : { label: '数据质量通过', tone: 'good' };
+    : { label: '数据质量较完整', tone: 'good' };
 }
 
 function readinessLiquidityChip(decision?: OptionsDecisionResponse | null): ReadinessChip {
@@ -322,7 +322,7 @@ function readinessLiquidityChip(decision?: OptionsDecisionResponse | null): Read
     || (typeof scoreValue === 'number' && scoreValue < 60);
   return restricted
     ? { label: '流动性受限', tone: 'warn' }
-    : { label: '流动性通过', tone: 'good' };
+    : { label: '流动性较完整', tone: 'good' };
 }
 
 function readinessReasonSummaries(decision?: OptionsDecisionResponse | null): string[] {
@@ -373,7 +373,7 @@ const ReadinessGateStrip: React.FC<{
 };
 
 function dataTierLabel(value?: string | null): string {
-  if (value === 'live_usable') return '数据门控通过';
+  if (value === 'live_usable') return '实时链路较完整';
   if (value === 'delayed_usable') return '行情延迟，可观察';
   if (value === 'synthetic_demo_only') return '演示/延迟数据';
   if (value === 'insufficient') return '数据不足';
@@ -381,7 +381,7 @@ function dataTierLabel(value?: string | null): string {
 }
 
 function freshnessLabel(value?: string | null): string {
-  if (value === 'live') return '数据标记：实时';
+  if (value === 'live') return '更新状态：实时链路';
   if (value === 'mock') return '演示/延迟数据';
   if (value === 'synthetic_delayed') return '演示/延迟数据';
   if (value === 'fixture') return '浏览器验证数据';
@@ -679,12 +679,12 @@ function consumerAvailabilitySummary(
 
   return {
     stateKey: tier === 'delayed_usable' ? 'PARTIAL' : 'AVAILABLE',
-    stateLabel: tier === 'delayed_usable' ? '等待数据确认' : '情景证据可用',
+    stateLabel: tier === 'delayed_usable' ? '等待数据确认' : '情景观察可继续',
     stateTone: tier === 'delayed_usable' ? 'warn' : 'good',
-    confidenceLabel: confidenceCap != null ? `有限置信度 ${confidenceCap}` : '置信度可用',
+    confidenceLabel: confidenceCap != null ? `有限置信度 ${confidenceCap}` : '置信度较完整',
     confidenceTone: confidenceCap != null ? 'warn' : 'good',
     freshnessLabel: freshness,
-    explanation: tier === 'delayed_usable' ? '已使用最近一次可用数据。' : '当前期权信号可用于只读情景观察。',
+    explanation: tier === 'delayed_usable' ? '已使用最近一次可用数据。' : '当前情景证据较完整，可继续做只读观察。',
   };
 }
 

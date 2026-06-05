@@ -775,7 +775,7 @@ function buildBreadthTruthStripView(indicator: LiquidityMonitorIndicator): Liqui
     || inputs.find((input) => input.sourceTier)?.sourceTier
     || evidence?.inputs.find((input) => input.sourceType)?.sourceType
     || null;
-  const sourceDetail = evidence?.sourceLabel
+  const rawSourceDetail = evidence?.sourceLabel
     || inputs.find((input) => input.sourceLabel)?.sourceLabel
     || null;
   const requiredCount = diagnostics?.requiredInputs.length || 0;
@@ -794,21 +794,21 @@ function buildBreadthTruthStripView(indicator: LiquidityMonitorIndicator): Liqui
     : sourceTier === 'authorized_licensed_feed'
       ? '授权宽度'
       : sourceTier === 'official_or_authorized_licensed_feed'
-        ? '官方/授权占位'
+        ? '官方/授权宽度'
         : proxyOnly || /proxy|unofficial/i.test(String(sourceTier || ''))
-          ? '代理宽度'
+          ? '观察宽度'
           : staleOrFallback || evidence?.isFallback || inputs.some((input) => input.isFallback)
-            ? '备用宽度'
+            ? '最近一次可用宽度'
             : sourceTier
               ? '宽度来源待核实'
               : '来源待确认';
   const stateLabel = scoreGrade
-    ? '评分级证据'
+    ? '可支撑判断'
     : indicator.status === 'unavailable'
       ? '证据不足'
       : proxyOnly || degraded
         ? '仅观察'
-        : '降级证据';
+        : '参考受限';
   const stateVariant = scoreGrade
     ? 'success'
     : indicator.status === 'unavailable'
@@ -828,10 +828,25 @@ function buildBreadthTruthStripView(indicator: LiquidityMonitorIndicator): Liqui
     ? `缺口：${missingInputs.map((value) => formatBreadthInputLabel(value)).join('、')}`
     : null;
   const summary = scoreGrade
-    ? `当前以${sourceLabel}作为评分级宽度证据。`
+    ? `当前以${sourceLabel}支撑主要判断。`
     : indicator.status === 'unavailable'
-      ? `当前宽度证据不足，仅展示来源状态与覆盖缺口。`
-      : `当前仅展示${sourceLabel}观察，不进入计分。`;
+      ? `当前宽度证据不足，仅展示当前覆盖与缺口。`
+      : sourceLabel === '观察宽度'
+        ? '当前仅保留宽度观察，不支撑主要判断。'
+        : `当前仅保留${sourceLabel}观察，不支撑主要判断。`;
+  const sourceDetail = scoreGrade
+    ? '官方市场宽度快照'
+    : proxyOnly
+      ? '公开市场宽度观察快照'
+      : staleOrFallback || evidence?.isFallback || inputs.some((input) => input.isFallback)
+        ? '最近一次可用宽度快照'
+        : sourceTier === 'authorized_licensed_feed'
+          ? '授权市场宽度快照'
+          : sourceTier === 'official_or_authorized_licensed_feed'
+            ? '官方/授权市场宽度快照'
+            : sourceLabel === '来源待确认'
+              ? rawSourceDetail
+              : `${sourceLabel}快照`;
 
   return {
     stateLabel,
@@ -871,7 +886,7 @@ const LiquidityBreadthTruthStrip: React.FC<{
       </div>
       <p className="mt-2 text-[11px] leading-5 text-white/68">{view.summary}</p>
       {view.sourceDetail ? (
-        <p className="mt-1 text-[11px] leading-5 text-white/52">来源：{view.sourceDetail}</p>
+        <p className="mt-1 text-[11px] leading-5 text-white/52">依据：{view.sourceDetail}</p>
       ) : null}
       {view.missingSummary ? (
         <p className="mt-1 text-[11px] leading-5 text-white/52">{view.missingSummary}</p>
@@ -1628,9 +1643,9 @@ const LiquiditySetupPath: React.FC<{ testId: string }> = ({ testId }) => (
   >
     <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold text-cyan-100/82">补齐阻塞判断的数据源</p>
+        <p className="text-[11px] font-semibold text-cyan-100/82">补齐阻塞判断的证据</p>
         <p className="mt-1 max-w-3xl text-[11px] leading-5 text-white/52">
-          优先核对提供方覆盖、授权来源、缓存时效和缺失输入；是否进入计分仍由现有来源门槛决定。
+          优先核对覆盖是否完整、更新时间与缺失项；是否进入判断仍以现有证据门槛为准。
         </p>
       </div>
       <div className="flex shrink-0 flex-wrap gap-2">
@@ -1638,13 +1653,13 @@ const LiquiditySetupPath: React.FC<{ testId: string }> = ({ testId }) => (
           className="inline-flex min-h-8 items-center rounded-md border border-white/[0.08] bg-white/[0.035] px-2.5 py-1 text-[11px] font-semibold text-white/72 transition-colors hover:border-cyan-200/25 hover:bg-white/[0.06] hover:text-white"
           href={buildProviderOpsSetupHref('liquidity_monitor')}
         >
-          查看提供方覆盖
+          查看覆盖状态
         </a>
         <a
           className="inline-flex min-h-8 items-center rounded-md border border-white/[0.08] bg-white/[0.035] px-2.5 py-1 text-[11px] font-semibold text-white/72 transition-colors hover:border-cyan-200/25 hover:bg-white/[0.06] hover:text-white"
           href={buildDataSourcesSetupHref('liquidity_monitor')}
         >
-          前往数据源设置
+          前往数据设置
         </a>
       </div>
     </div>
@@ -1711,12 +1726,12 @@ const CapitalFlowSignalPanel: React.FC<{
           <p className="text-[11px] font-medium text-white/48">资金流向观察</p>
           <p className="mt-1 text-sm font-semibold text-white/84">{capitalFlowRegimeLabel(signal)}</p>
           <p className="mt-1 text-[11px] leading-5 text-white/56">
-            仅观察代理信号，不代表真实资金流，也不会升级为交易或评分结论。
+            仅观察线索，不代表真实资金流，也不会升级为交易或主要判断结论。
           </p>
         </div>
         <div className="flex min-w-0 flex-wrap gap-1.5 lg:justify-end">
           <TerminalChip variant="info">仅观察</TerminalChip>
-          <TerminalChip variant="neutral">代理信号</TerminalChip>
+          <TerminalChip variant="neutral">观察线索</TerminalChip>
           {flagLabels.map((label) => (
             <TerminalChip key={label} variant="caution">{label}</TerminalChip>
           ))}
