@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WatchlistPage from '../WatchlistPage';
@@ -273,6 +273,14 @@ function makeUserAlertRule(overrides: Record<string, unknown> = {}) {
   };
 }
 
+async function flushPendingUiWork() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+    await vi.dynamicImportSettled();
+  });
+}
+
 describe('WatchlistPage', () => {
   beforeEach(() => {
     vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-05-01T12:00:00Z').getTime());
@@ -300,13 +308,7 @@ describe('WatchlistPage', () => {
     });
     runRuleBacktest.mockResolvedValue(makeRuleBacktestRun());
     analyzeAsync.mockResolvedValue({ taskId: 'task-1' });
-    listRules.mockResolvedValue({
-      contractVersion: 'user_alert_contract_v1',
-      deliveryMode: 'in_app',
-      inAppOnly: true,
-      ownerScoped: true,
-      items: [],
-    });
+    listRules.mockImplementation(() => new Promise(() => {}));
     createRule.mockResolvedValue(makeUserAlertRule());
     updateRule.mockResolvedValue(makeUserAlertRule());
     Object.defineProperty(navigator, 'clipboard', {
@@ -318,7 +320,9 @@ describe('WatchlistPage', () => {
     writeTextMock.mockResolvedValue(undefined);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    cleanup();
+    await flushPendingUiWork();
     vi.restoreAllMocks();
   });
 

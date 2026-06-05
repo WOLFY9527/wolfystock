@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { analysisApi } from '../../api/analysis';
@@ -76,6 +76,14 @@ function createDeferred<T>() {
     reject = rej;
   });
   return { promise, resolve, reject };
+}
+
+async function flushPendingUiWork() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+    await vi.dynamicImportSettled();
+  });
 }
 
 async function closeOpenDrawer() {
@@ -322,7 +330,14 @@ const orclPartialEvidencePacket = {
   },
 };
 
+const pendingPromise = () => new Promise<never>(() => {});
+
 describe('HomeSurfacePage', () => {
+  afterEach(async () => {
+    cleanup();
+    await flushPendingUiWork();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
@@ -343,12 +358,7 @@ describe('HomeSurfacePage', () => {
       exists: true,
       stockName: 'Tesla',
     });
-    vi.mocked(stocksApi.getHistory).mockResolvedValue({
-      stockCode: 'ORCL',
-      stockName: 'Oracle',
-      period: 'daily',
-      data: homeDailyCandles,
-    });
+    vi.mocked(stocksApi.getHistory).mockImplementation(pendingPromise);
     vi.mocked(analysisApi.analyzeAsync).mockResolvedValue({
       taskId: 'task-1',
       status: 'pending',
@@ -362,7 +372,7 @@ describe('HomeSurfacePage', () => {
       progress: 18,
       modules: [],
     });
-    vi.mocked(stockEvidenceApi.getStockEvidence).mockResolvedValue(defaultStockEvidenceResponse);
+    vi.mocked(stockEvidenceApi.getStockEvidence).mockImplementation(pendingPromise);
   });
 
   const renderSurface = (initialPath = '/') => render(
@@ -422,6 +432,12 @@ describe('HomeSurfacePage', () => {
 
   it('keeps an accessible chart placeholder visible before the deferred chart mount starts', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stocksApi.getHistory).mockResolvedValue({
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      period: 'daily',
+      data: homeDailyCandles,
+    });
     const originalRequestIdleCallback = window.requestIdleCallback;
     const originalCancelIdleCallback = window.cancelIdleCallback;
     let scheduledIdle: IdleRequestCallback | null = null;
@@ -461,6 +477,13 @@ describe('HomeSurfacePage', () => {
 
   it('renders the signed-in ResearchConsole route for authenticated users', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stocksApi.getHistory).mockResolvedValue({
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      period: 'daily',
+      data: homeDailyCandles,
+    });
+    vi.mocked(stockEvidenceApi.getStockEvidence).mockResolvedValue(defaultStockEvidenceResponse);
     renderSurface();
     expect(screen.getByTestId('home-research-chart-workspace')).toContainElement(screen.getByTestId('home-candlestick-chart-fallback'));
     await screen.findByText('Oracle Corporation');
@@ -688,6 +711,7 @@ describe('HomeSurfacePage', () => {
 
   it('renders a compact observation-only fundamentals summary from stock evidence for the current stock only', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stockEvidenceApi.getStockEvidence).mockResolvedValue(defaultStockEvidenceResponse);
 
     renderSurface();
 
@@ -753,6 +777,7 @@ describe('HomeSurfacePage', () => {
 
   it('renders a conclusion-first Home research console instead of the old score-led first screen', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stockEvidenceApi.getStockEvidence).mockResolvedValue(defaultStockEvidenceResponse);
 
     renderSurface();
 
@@ -3330,6 +3355,12 @@ describe('HomeSurfacePage', () => {
 
   it('renders real Home candlesticks from daily OHLC history and exposes hover OHLC values', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stocksApi.getHistory).mockResolvedValue({
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      period: 'daily',
+      data: homeDailyCandles,
+    });
     renderSurface();
 
     const chartFrame = await screen.findByTestId('home-candlestick-chart-frame');
@@ -3377,6 +3408,12 @@ describe('HomeSurfacePage', () => {
 
   it('keeps the Home chart rendered with mobile-safe context labels in a 390px viewport', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stocksApi.getHistory).mockResolvedValue({
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      period: 'daily',
+      data: homeDailyCandles,
+    });
     window.innerWidth = 390;
     window.innerHeight = 844;
     window.dispatchEvent(new Event('resize'));
@@ -3395,6 +3432,12 @@ describe('HomeSurfacePage', () => {
 
   it('renders timeframe controls, hides intraday controls, and aggregates 1W/1M from daily candles', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stocksApi.getHistory).mockResolvedValue({
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      period: 'daily',
+      data: homeDailyCandles,
+    });
     renderSurface();
 
     const chartRoot = await screen.findByTestId('home-linear-technical-chart');
@@ -3436,6 +3479,12 @@ describe('HomeSurfacePage', () => {
 
   it('toggles moving-average indicators without leaving the Home page', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stocksApi.getHistory).mockResolvedValue({
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      period: 'daily',
+      data: homeDailyCandles,
+    });
     renderSurface();
 
     const chartRoot = await screen.findByTestId('home-linear-technical-chart');
