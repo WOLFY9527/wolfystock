@@ -67,6 +67,7 @@ import { cn } from '../utils/cn';
 import { getToneColor } from '../utils/marketColors';
 import { createPublicAnalysisFallbackPreview } from '../utils/publicAnalysisFallback';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
+import { resolveHomeDashboardSelection } from './homeDashboardSelection';
 
 type DrawerMetric = {
   label: string;
@@ -5032,36 +5033,21 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     [activeTasks],
   );
   const selectedTicker = normalizeTickerQuery(selectedReport?.meta.stockCode);
-  const completedTaskReport = useMemo(() => {
-    if (routeTaskId) {
-      return activeTasks.find(
-        (task) => task.taskId === routeTaskId && task.status === 'completed' && task.result?.report,
-      )?.result?.report || null;
-    }
-    const taskTicker = pendingAnalysisTicker || activeTicker;
-    if (!taskTicker) {
-      return null;
-    }
-    return activeTasks.find(
-      (task) => normalizeTickerQuery(task.stockCode) === taskTicker && task.status === 'completed' && task.result?.report,
-    )?.result?.report || null;
-  }, [activeTasks, activeTicker, pendingAnalysisTicker, routeTaskId]);
-  const focusedTask = useMemo(() => {
-    if (routeTaskId) {
-      const matchedById = activeTasks.find((task) => task.taskId === routeTaskId);
-      if (matchedById) {
-        return matchedById;
-      }
-    }
-    const taskTicker = pendingAnalysisTicker || activeTicker;
-    if (taskTicker) {
-      const matched = activeTasks.find((task) => normalizeTickerQuery(task.stockCode) === taskTicker);
-      if (matched) {
-        return matched;
-      }
-    }
-    return activeTasks[0] || null;
-  }, [activeTasks, activeTicker, pendingAnalysisTicker, routeTaskId]);
+  const dashboardSelection = useMemo(
+    () => resolveHomeDashboardSelection({
+      activeTasks,
+      routeTaskId,
+      routeSymbol,
+      activeTicker,
+      pendingAnalysisTicker,
+      selectedReport,
+      recentHistoryItems,
+      defaultTicker: DEFAULT_HOME_TICKER,
+    }),
+    [activeTasks, activeTicker, pendingAnalysisTicker, recentHistoryItems, routeTaskId, routeSymbol, selectedReport],
+  );
+  const completedTaskReport = dashboardSelection.completedTaskReport;
+  const focusedTask = dashboardSelection.focusedTask;
   const isTaskAnalyzing = Boolean(
     (pendingAnalysisTicker || routeTaskId)
     && focusedTask
@@ -5081,44 +5067,19 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         : buildInPlacePlaceholderDashboard(locale, activeTicker);
     }
 
-    const effectiveTicker = routeSymbol || activeTicker || selectedTicker || normalizeTickerQuery(recentHistoryItems[0]?.stockCode) || DEFAULT_HOME_TICKER;
-
-    if (
-      completedTaskReport
-      && effectiveTicker
-      && normalizeTickerQuery(completedTaskReport.meta.stockCode) === effectiveTicker
-    ) {
-      return buildDashboardFromReport(locale, completedTaskReport);
+    if (dashboardSelection.dashboardReport) {
+      return buildDashboardFromReport(locale, dashboardSelection.dashboardReport);
     }
 
-    if (selectedReport && effectiveTicker && selectedTicker === effectiveTicker) {
-      return buildDashboardFromReport(locale, selectedReport);
-    }
-
-    if (pendingAnalysisTicker && effectiveTicker === pendingAnalysisTicker) {
-      return buildInPlacePlaceholderDashboard(locale, effectiveTicker);
-    }
-
-    return buildInPlacePlaceholderDashboard(locale, effectiveTicker);
-  }, [activeTicker, completedTaskReport, guestPreview, isGuest, locale, pendingAnalysisTicker, recentHistoryItems, routeSymbol, selectedReport, selectedTicker, traceFixtureReport]);
+    return buildInPlacePlaceholderDashboard(locale, dashboardSelection.effectiveTicker);
+  }, [activeTicker, dashboardSelection.dashboardReport, dashboardSelection.effectiveTicker, guestPreview, isGuest, locale, traceFixtureReport]);
   const activeTraceReport = useMemo<AnalysisReport | null>(() => {
     if (traceFixtureReport) {
       return traceFixtureReport;
     }
 
-    const effectiveTicker = routeSymbol || activeTicker || selectedTicker || null;
-    if (
-      completedTaskReport
-      && effectiveTicker
-      && normalizeTickerQuery(completedTaskReport.meta.stockCode) === effectiveTicker
-    ) {
-      return completedTaskReport;
-    }
-    if (selectedReport && (!effectiveTicker || selectedTicker === effectiveTicker)) {
-      return selectedReport;
-    }
-    return completedTaskReport || selectedReport || null;
-  }, [activeTicker, completedTaskReport, routeSymbol, selectedReport, selectedTicker, traceFixtureReport]);
+    return dashboardSelection.activeTraceReport;
+  }, [dashboardSelection.activeTraceReport, traceFixtureReport]);
   const copy = dashboardData;
   const standbyCopy = useMemo(() => (
     locale === 'en'
@@ -5185,6 +5146,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     if (isGuest) {
       return '';
     }
+    if (!traceFixtureReport) {
+      return dashboardSelection.activeEvidenceTicker;
+    }
     const candidate = normalizeTickerQuery(
       activeTraceReport?.meta.stockCode
       || routeSymbol
@@ -5193,12 +5157,15 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       || recentHistoryItems[0]?.stockCode,
     );
     return TICKER_FORMAT_RE.test(candidate) ? candidate : '';
-  }, [activeTicker, activeTraceReport?.meta.stockCode, isGuest, recentHistoryItems, routeSymbol, selectedTicker]);
+  }, [activeTicker, activeTraceReport?.meta.stockCode, dashboardSelection.activeEvidenceTicker, isGuest, recentHistoryItems, routeSymbol, selectedTicker, traceFixtureReport]);
   const reanalysisTicker = useMemo(() => {
+    if (!traceFixtureReport) {
+      return dashboardSelection.reanalysisTicker;
+    }
     const reportTicker = normalizeTickerQuery(activeTraceReport?.meta.stockCode);
     const candidate = reportTicker || (hasActiveTraceReport ? '' : normalizeTickerQuery(dashboardData.ticker));
     return TICKER_FORMAT_RE.test(candidate) ? candidate : '';
-  }, [activeTraceReport?.meta.stockCode, dashboardData.ticker, hasActiveTraceReport]);
+  }, [activeTraceReport?.meta.stockCode, dashboardData.ticker, dashboardSelection.reanalysisTicker, hasActiveTraceReport, traceFixtureReport]);
   const shouldRenderDashboardPanels = !isGuest || Boolean(guestPreview || pendingAnalysisTicker);
   const guestPaywall = isGuest ? <GuestPaywallOverlay locale={locale} registrationPath={registrationPath} /> : null;
   const deleteCopy = useMemo(() => ({
