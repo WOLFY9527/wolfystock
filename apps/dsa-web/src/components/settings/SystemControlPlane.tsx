@@ -156,7 +156,7 @@ const SystemPrioritySettings: React.FC<SystemPrioritySettingsProps> = ({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-white">安全与凭证</h3>
-            <p className="mt-1 text-xs leading-5 text-white/45">只展示凭证就绪状态；不显示密钥、token、Webhook 或未遮蔽原值。</p>
+            <p className="mt-1 text-xs leading-5 text-white/45">只展示凭证就绪状态；不显示密钥、访问凭证、Webhook 或未遮蔽原值。</p>
           </div>
           <span className={GHOST_TAG_CLASS}>敏感</span>
         </div>

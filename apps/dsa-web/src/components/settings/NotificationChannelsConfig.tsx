@@ -42,9 +42,9 @@ const CHANNELS: NotificationChannelDefinition[] = [
   {
     id: 'telegram',
     label: 'Telegram',
-    description: 'Bot token, target chat, and optional topic thread.',
+    description: 'Bot API Key, target chat, and optional topic thread.',
     fields: [
-      { key: 'TELEGRAM_BOT_TOKEN', label: 'Bot Token', kind: 'secret' },
+      { key: 'TELEGRAM_BOT_TOKEN', label: 'Bot API Key', kind: 'secret' },
       { key: 'TELEGRAM_CHAT_ID', label: 'Chat ID', kind: 'text' },
       { key: 'TELEGRAM_MESSAGE_THREAD_ID', label: 'Thread ID', kind: 'text', hint: 'Optional for forum topics.' },
     ],
@@ -71,19 +71,19 @@ const CHANNELS: NotificationChannelDefinition[] = [
   {
     id: 'discord',
     label: 'Discord',
-    description: 'Webhook or bot token delivery into a channel.',
+    description: 'Webhook or bot API Key delivery into a channel.',
     fields: [
       { key: 'DISCORD_WEBHOOK_URL', label: 'Webhook URL', kind: 'secret' },
-      { key: 'DISCORD_BOT_TOKEN', label: 'Bot Token', kind: 'secret' },
+      { key: 'DISCORD_BOT_TOKEN', label: 'Bot API Key', kind: 'secret' },
       { key: 'DISCORD_MAIN_CHANNEL_ID', label: 'Main Channel ID', kind: 'text' },
     ],
   },
   {
     id: 'slack',
     label: 'Slack',
-    description: 'Slack bot token or incoming webhook settings.',
+    description: 'Slack bot API Key or incoming webhook settings.',
     fields: [
-      { key: 'SLACK_BOT_TOKEN', label: 'Bot Token', kind: 'secret' },
+      { key: 'SLACK_BOT_TOKEN', label: 'Bot API Key', kind: 'secret' },
       { key: 'SLACK_CHANNEL_ID', label: 'Channel ID', kind: 'text' },
       { key: 'SLACK_WEBHOOK_URL', label: 'Webhook URL', kind: 'secret' },
     ],
@@ -99,19 +99,19 @@ const CHANNELS: NotificationChannelDefinition[] = [
   {
     id: 'pushplus',
     label: 'PushPlus',
-    description: 'PushPlus token and optional topic routing.',
+    description: 'PushPlus API Key and optional topic routing.',
     fields: [
-      { key: 'PUSHPLUS_TOKEN', label: 'Token', kind: 'secret' },
+      { key: 'PUSHPLUS_TOKEN', label: 'API Key', kind: 'secret' },
       { key: 'PUSHPLUS_TOPIC', label: 'Topic', kind: 'text' },
     ],
   },
   {
     id: 'pushover',
     label: 'Pushover',
-    description: 'Pushover user key and application token.',
+    description: 'Pushover user key and application API Key.',
     fields: [
       { key: 'PUSHOVER_USER_KEY', label: 'User Key', kind: 'secret' },
-      { key: 'PUSHOVER_API_TOKEN', label: 'API Token', kind: 'secret' },
+      { key: 'PUSHOVER_API_TOKEN', label: 'API Key', kind: 'secret' },
     ],
   },
   {
@@ -125,10 +125,10 @@ const CHANNELS: NotificationChannelDefinition[] = [
   {
     id: 'custom_webhook',
     label: 'Custom webhook',
-    description: 'Generic webhook endpoints and optional bearer token.',
+    description: 'Generic webhook endpoints and optional bearer credential.',
     fields: [
       { key: 'CUSTOM_WEBHOOK_URLS', label: 'Webhook URLs', kind: 'textarea', hint: 'Comma-separated URLs.' },
-      { key: 'CUSTOM_WEBHOOK_BEARER_TOKEN', label: 'Bearer Token', kind: 'secret' },
+      { key: 'CUSTOM_WEBHOOK_BEARER_TOKEN', label: 'Bearer Credential', kind: 'secret' },
       { key: 'WEBHOOK_VERIFY_SSL', label: 'Verify SSL', kind: 'switch' },
     ],
   },
@@ -140,27 +140,28 @@ const NOTIFICATION_CHANNEL_KEYS = new Set(CHANNELS.flatMap((channel) => channel.
 
 const ZH_CHANNEL_DESCRIPTIONS: Record<string, string> = {
   feishu: '飞书 Webhook 或应用机器人凭据。',
-  telegram: '机器人 Token、目标聊天和可选话题线程。',
+  telegram: '机器人访问凭证、目标聊天和可选话题线程。',
   dingtalk: '用于机器人投递的钉钉应用凭据。',
   email: 'SMTP 发件凭据和收件人路由。',
-  discord: '面向频道投递的 Webhook 或机器人 Token。',
-  slack: 'Slack 机器人 Token 或 incoming webhook 设置。',
+  discord: '面向频道投递的 Webhook 或机器人访问凭证。',
+  slack: 'Slack 机器人访问凭证或 incoming webhook 设置。',
   wechat: '企业微信机器人 Webhook。',
-  pushplus: 'PushPlus Token 与可选主题路由。',
-  pushover: 'Pushover 用户 Key 和应用 Token。',
+  pushplus: 'PushPlus 访问凭证与可选主题路由。',
+  pushover: 'Pushover 用户 Key 和应用 API Key。',
   serverchan: 'ServerChan 3 SendKey 投递。',
-  custom_webhook: '通用 Webhook 端点和可选 Bearer Token。',
+  custom_webhook: '通用 Webhook 端点和可选 Bearer 访问凭证。',
 };
 
 const ZH_FIELD_LABELS: Record<string, string> = {
   Sender: '发件人',
   'Password / App Code': '密码 / 应用码',
   Receivers: '收件人',
-  'Bot Token': '机器人 Token',
+  'Bot API Key': '机器人访问凭证',
   'Thread ID': '话题线程 ID',
   'Main Channel ID': '主频道 ID',
   'Channel ID': '频道 ID',
   'Webhook URLs': 'Webhook 地址',
+  'Bearer Credential': 'Bearer 访问凭证',
   'Verify SSL': '校验 SSL',
   'User Key': '用户 Key',
 };

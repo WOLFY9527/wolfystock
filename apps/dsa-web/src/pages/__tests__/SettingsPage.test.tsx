@@ -1327,7 +1327,9 @@ describe('SettingsPage', () => {
 
       const visibleText = defaultVisibleText(document.body);
       expect(visibleText).toContain('只展示凭证就绪状态');
+      expect(visibleText).toContain('不显示密钥、访问凭证、Webhook');
       expect(visibleText).toContain('需要深层诊断时再进入数据源详情显式触发');
+      expect(visibleText).not.toMatch(/\btoken\b/i);
       expect(visibleText).not.toContain('重置运行时缓存');
       expect(visibleText).not.toContain('执行工厂重置');
       expect(visibleText).not.toContain('测试连接');
@@ -2043,7 +2045,18 @@ describe('SettingsPage', () => {
     expect(await screen.findByRole('heading', { name: '通知通道' })).toBeInTheDocument();
     expect(screen.getAllByText('通知凭据在这里专用管理，并从原始系统设置中隐藏。').length).toBeGreaterThan(0);
 
+    const telegramCard = screen.getByTestId('notification-channel-card-telegram');
     const wechatCard = screen.getByTestId('notification-channel-card-wechat');
+    const pushplusCard = screen.getByTestId('notification-channel-card-pushplus');
+    const customWebhookCard = screen.getByTestId('notification-channel-card-custom_webhook');
+
+    expect(within(telegramCard).getByText('机器人访问凭证、目标聊天和可选话题线程。')).toBeInTheDocument();
+    expect(within(telegramCard).getByLabelText('机器人访问凭证')).toBeInTheDocument();
+    expect(within(telegramCard).queryByLabelText('机器人 Token')).not.toBeInTheDocument();
+    expect(within(pushplusCard).getByText('PushPlus 访问凭证与可选主题路由。')).toBeInTheDocument();
+    expect(within(pushplusCard).getByLabelText('API Key')).toBeInTheDocument();
+    expect(within(customWebhookCard).getByText('通用 Webhook 端点和可选 Bearer 访问凭证。')).toBeInTheDocument();
+    expect(within(customWebhookCard).getByLabelText('Bearer 访问凭证')).toBeInTheDocument();
     expect(within(wechatCard).getByText('已配置')).toBeInTheDocument();
     const webhookInput = within(wechatCard).getByLabelText('Webhook URL') as HTMLInputElement;
     expect(webhookInput.type).toBe('password');

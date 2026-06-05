@@ -6,7 +6,7 @@ const viewports = [
 ] as const;
 
 const forbiddenDefaultDisclosurePattern =
-  /provider route|cache router|raw config|Bootstrap Admin|\bdebug\b|\/api\/v1\/|DEFAULT_LLM_PROVIDER|SCHEDULE_ENABLED|DUCKDB_ENABLED/i;
+  /provider route|cache router|raw config|Bootstrap Admin|\bdebug\b|\btoken\b|\/api\/v1\/|DEFAULT_LLM_PROVIDER|SCHEDULE_ENABLED|DUCKDB_ENABLED/i;
 
 async function expectNoHorizontalOverflow(page: Parameters<typeof test>[0]['page']) {
   await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
@@ -55,6 +55,7 @@ test.describe('settings disclosure browser smoke', () => {
       await expect(page.getByRole('heading', { name: '运维总览' })).toBeVisible();
       await expect(page.getByText('当前已进入系统运维中心')).toBeVisible();
       await expect(page.getByText('技术细节：配置键、诊断摘要和环境上下文默认收起，仅供管理员排障时展开。')).toBeVisible();
+      await expect(page.getByText('只展示凭证就绪状态；不显示密钥、访问凭证、Webhook 或未遮蔽原值。')).toBeVisible();
       await expect(page.getByText('展开缓存维护与初始化动作')).toBeVisible();
       await expect(page.getByTestId('system-duckdb-disclosure').getByText('配置兼容摘要')).toBeVisible();
       await expect(page.getByRole('button', { name: /^收起 / })).toHaveCount(0);
