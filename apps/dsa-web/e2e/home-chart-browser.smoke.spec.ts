@@ -224,6 +224,14 @@ async function expectNoHorizontalOverflow(page: Page) {
     .toBeLessThanOrEqual(1);
 }
 
+async function expectMinimumHitArea(page: Page, testIds: string[], minimumHeight: number) {
+  for (const testId of testIds) {
+    await baseExpect
+      .poll(async () => page.getByTestId(testId).evaluate((node) => Math.round(node.getBoundingClientRect().height)))
+      .toBeGreaterThanOrEqual(minimumHeight);
+  }
+}
+
 test.describe('Home chart browser smoke', () => {
   test('renders the Home technical chart on desktop without blank state or unsafe copy', async ({ page, consoleErrors, unhandledApiRoutes }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -271,11 +279,15 @@ test.describe('Home chart browser smoke', () => {
     await expect(chartRoot).toBeVisible();
     await expect(chartFrame).toBeVisible();
     await expect(page.getByTestId('home-candlestick-echarts-node')).toBeVisible();
+    await expect(chartRoot.getByTestId('home-chart-timeframe-controls')).toBeVisible();
+    await expect(chartRoot.getByTestId('home-chart-indicator-controls')).toBeVisible();
     await expect(chartRoot.getByTestId('home-chart-context-price')).toContainText('价格');
     await expect(chartRoot.getByTestId('home-chart-context-volume')).toContainText('成交量');
     await expect(chartRoot.getByTestId('home-chart-range-hint')).toContainText('缩放');
     await expect(page.getByTestId('home-candlestick-chart-fallback')).toHaveCount(0);
     await expect(page.getByTestId('home-candlestick-unavailable')).toHaveCount(0);
+    await expectMinimumHitArea(page, ['home-chart-timeframe-1D', 'home-chart-timeframe-1W', 'home-chart-timeframe-1M'], 40);
+    await expectMinimumHitArea(page, ['home-chart-indicator-ma20', 'home-chart-indicator-ma60', 'home-chart-indicator-vwap'], 40);
 
     const regionText = await chartSection.innerText();
     expect(regionText).not.toMatch(homeChartLeakPattern);

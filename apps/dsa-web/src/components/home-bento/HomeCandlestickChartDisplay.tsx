@@ -55,14 +55,18 @@ export const HomeCandlestickChartTimeframeStrip: React.FC<HomeCandlestickChartTi
 }) => (
   <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
     <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <div className="flex items-center gap-0.5 rounded-full border border-[color:var(--wolfy-border-faint)] bg-white/[0.025] p-0.5">
+      <div
+        className="flex min-w-0 flex-wrap items-center gap-1 rounded-[18px] border border-[color:var(--wolfy-border-faint)] bg-white/[0.025] p-1 sm:gap-0.5 sm:rounded-full sm:p-0.5"
+        data-testid="home-chart-timeframe-controls"
+      >
         {controls.map((control) => (
           <button
             key={control.key}
             type="button"
             aria-pressed={control.pressed}
+            data-testid={`home-chart-timeframe-${control.key}`}
             className={cn(
-              'rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors',
+              'touch-manipulation min-h-[40px] rounded-full px-3.5 py-2 text-[11px] font-medium leading-none transition-colors sm:min-h-0 sm:px-2.5 sm:py-1 sm:text-[10px]',
               control.pressed
                 ? 'bg-[var(--wolfy-accent-soft)] text-white/86'
                 : 'text-white/42 hover:bg-white/[0.04] hover:text-white/72',
@@ -91,15 +95,16 @@ export const HomeCandlestickChartIndicatorChips: React.FC<HomeCandlestickChartIn
   vwapUnavailableLabel,
   onToggle,
 }) => (
-  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+  <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-1.5" data-testid="home-chart-indicator-controls">
     {chips.map((chip) => (
       <button
         key={chip.key}
         type="button"
         aria-pressed={chip.pressed}
         disabled={!chip.available}
+        data-testid={`home-chart-indicator-${chip.key}`}
         className={cn(
-          'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors',
+          'touch-manipulation inline-flex min-h-[40px] items-center gap-1.5 rounded-full border px-3.5 py-2 text-[11px] font-medium leading-none transition-colors sm:min-h-0 sm:px-2.5 sm:py-1 sm:text-[10px]',
           chip.pressed
             ? 'border-white/[0.12] bg-white/[0.07] text-white/84'
             : 'border-white/[0.05] bg-white/[0.012] text-white/46 hover:border-white/[0.09] hover:bg-white/[0.03] hover:text-white/70',
