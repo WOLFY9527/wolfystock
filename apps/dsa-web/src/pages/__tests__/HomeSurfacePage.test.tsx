@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { analysisApi } from '../../api/analysis';
@@ -82,6 +82,10 @@ async function closeOpenDrawer() {
   const dialog = await screen.findByRole('dialog');
   fireEvent.click(within(dialog).getByRole('button', { name: /关闭|Close/i }));
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+}
+
+async function waitForHistoryDrawerToClose() {
+  await waitForElementToBeRemoved(() => screen.queryByTestId('home-bento-history-drawer'));
 }
 
 const defaultHistoryReport = {
@@ -2440,6 +2444,7 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
     expect(await screen.findByTestId('home-bento-history-drawer')).toBeInTheDocument();
     fireEvent.click(await screen.findByTestId('home-bento-history-item-2'));
+    await waitForHistoryDrawerToClose();
 
     expect(await screen.findByTestId('home-bento-card-decision')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-card-strategy')).toBeInTheDocument();
@@ -2459,6 +2464,7 @@ describe('HomeSurfacePage', () => {
         stockName: 'Tesla',
       },
     });
+    await waitFor(() => expect(screen.getByTestId('home-bento-decision-ticker')).toHaveTextContent('TSLA'));
   });
 
   it('does not neutralize a successful saved report just because fallback diagnostics mention failed model attempts', async () => {
@@ -2901,6 +2907,7 @@ describe('HomeSurfacePage', () => {
 
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
     fireEvent.click(await screen.findByTestId('home-bento-history-item-2'));
+    await waitForHistoryDrawerToClose();
 
     expect(await screen.findByText('Tesla, Inc.')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-decision-insight-copy').textContent).toContain('Cached snapshot only.');
@@ -3030,17 +3037,19 @@ describe('HomeSurfacePage', () => {
     renderSurface();
     fireEvent.click(await screen.findByTestId('home-bento-history-drawer-trigger'));
     fireEvent.click(await screen.findByTestId('home-bento-history-item-2'));
+    await waitForHistoryDrawerToClose();
 
     expect(await screen.findByText('Tesla, Inc.')).toBeInTheDocument();
     expect(screen.getByTestId('home-bento-tech-signal-MACD')).toHaveTextContent('零轴下收敛');
 
     fireEvent.click(screen.getByTestId('home-bento-drawer-trigger-tech'));
-    expect(await screen.findByText('TSLA 技术下钻')).toBeInTheDocument();
+    const techDrawer = await screen.findByRole('dialog');
+    expect(within(techDrawer).getByText('TSLA 技术下钻')).toBeInTheDocument();
     expect(screen.getAllByText('零轴下收敛').length).toBeGreaterThan(1);
     expect(screen.getAllByText('零轴下方，空头动能衰减。').length).toBeGreaterThan(1);
     expect(screen.queryByText(/聚焦 MACD/)).not.toBeInTheDocument();
-    fireEvent.keyDown(document, { key: 'Escape' });
-    await new Promise((resolve) => window.setTimeout(resolve, 220));
+    fireEvent.keyDown(techDrawer, { key: 'Escape' });
+    await waitForElementToBeRemoved(techDrawer);
 
     fireEvent.click(screen.getByRole('button', { name: '完整报告' }));
     const report = await screen.findByTestId('home-bento-full-report-drawer');
