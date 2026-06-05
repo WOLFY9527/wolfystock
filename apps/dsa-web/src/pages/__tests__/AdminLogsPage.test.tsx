@@ -658,9 +658,9 @@ describe('AdminLogsPage', () => {
     expect(screen.getAllByText('先处理失败和数据源降级').length).toBeGreaterThan(0);
     expect(screen.getByTestId('admin-logs-filter-bar')).toBeInTheDocument();
     expect(await screen.findByTestId('admin-logs-health-summary')).toBeInTheDocument();
-    expect(await screen.findByTestId('admin-logs-operator-issue-rollup')).toHaveTextContent('Operator Issue Rollup');
-    expect(screen.getByTestId('admin-logs-operator-issue-rollup')).toHaveTextContent('Provider timeout');
-    expect(screen.getByTestId('admin-logs-operator-issue-rollup')).toHaveTextContent('check provider credentials');
+    expect(await screen.findByTestId('admin-logs-operator-issue-rollup')).toHaveTextContent('数据源健康摘要');
+    expect(screen.getByTestId('admin-logs-operator-issue-rollup')).toHaveTextContent('响应超时');
+    expect(screen.getByTestId('admin-logs-operator-issue-rollup')).toHaveTextContent('数据源配置与上游状态');
     expect(screen.getByTestId('admin-logs-operator-issue-rollup')).toHaveTextContent('evt-timeout-1');
     expect(screen.getByTestId('admin-logs-operator-issue-rollup')).not.toHaveTextContent('FRONTENDTOKEN');
     expect(screen.getByTestId('admin-logs-operator-issue-rollup')).not.toHaveTextContent('/Users/alice');
@@ -680,7 +680,7 @@ describe('AdminLogsPage', () => {
     expect(screen.getAllByText('降级').length).toBeGreaterThan(0);
     expect(screen.getByText('1 / 6')).toBeInTheDocument();
     expect(screen.getByText('finnhub')).toBeInTheDocument();
-    expect(screen.getAllByText('provider timeout token=***').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/数据源响应超时.*token=\*\*\*/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/FRONTENDSECRET|FRONTENDTOKEN/)).not.toBeInTheDocument();
     expect(screen.getByLabelText('搜索日志')).toBeInTheDocument();
     expect(screen.getByLabelText('状态筛选')).toBeInTheDocument();
@@ -689,15 +689,14 @@ describe('AdminLogsPage', () => {
     expect((await screen.findAllByText('TSLA')).length).toBeGreaterThan(0);
     expect(screen.getByText('操作者')).toBeInTheDocument();
     expect(screen.getByText('上下文')).toBeInTheDocument();
-    expect(screen.getByText('来源 / 供应商')).toBeInTheDocument();
+    expect(screen.getByText('来源 / 数据源')).toBeInTheDocument();
     expect(screen.getByText('原因')).toBeInTheDocument();
     expect(screen.queryByText('Trace')).not.toBeInTheDocument();
     expect(screen.getByText('状态 / 严重度')).toBeInTheDocument();
     expect(screen.queryByText('耗时')).not.toBeInTheDocument();
     expect(screen.getByText('alice')).toBeInTheDocument();
     expect(screen.getByText('newsapi')).toBeInTheDocument();
-    expect(screen.getByText('ProviderFallbackServed')).toBeInTheDocument();
-    const fallbackRowLabel = screen.getByText('ProviderFallbackServed');
+    const fallbackRowLabel = (await screen.findAllByText('备用链路激活')).find((item) => item.closest('[data-testid="business-event-row"]'));
     const fallbackRow = fallbackRowLabel.closest('[data-testid="business-event-row"]');
     expect(fallbackRow).not.toBeNull();
     expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill')).toHaveTextContent('降级');
@@ -713,16 +712,80 @@ describe('AdminLogsPage', () => {
     expect(screen.getByRole('button', { name: '上一页' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '下一页' })).toBeInTheDocument();
     expect(screen.queryByText('fetch_news')).not.toBeInTheDocument();
+    const operatorCopy = (screen.getByTestId('admin-logs-operator-issue-rollup').textContent || '').replace(/evt-[a-z0-9-]+/gi, '');
+    const businessCopy = screen.getByTestId('business-events-table-shell').textContent || '';
+    expect(operatorCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b/i);
+    expect(businessCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b/i);
     await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ since: '24h', limit: 20, offset: 0 })));
     await waitFor(() => expect(listDataMissingDrilldown).toHaveBeenCalledWith({ since: '24h', limit: 4 }));
     await waitFor(() => expect(listOperatorIssueRollup).toHaveBeenCalledWith({ since: '24h', limit: 6 }));
+  });
+
+  it('renders operator-safe labels for unavailable, timeout, fallback, stale, partial, and cache states', async () => {
+    listOperatorIssueRollup.mockResolvedValueOnce({
+      total: 2,
+      items: [
+        {
+          ...operatorIssueRollup[0],
+          issueTitle: 'provider unavailable · newsapi',
+          provider: 'newsapi',
+          source: 'cache',
+          reasonCode: 'provider_unavailable',
+          freshnessStatus: 'stale',
+          operatorGuidance: 'provider unavailable: fallback cache served.',
+        },
+        operatorIssueRollup[1],
+      ],
+    });
+    listDataMissingDrilldown.mockResolvedValueOnce({
+      total: 2,
+      items: [
+        {
+          ...dataMissingDrilldown[0],
+          symbol: 'MSFT',
+          freshnessStatus: 'stale',
+          stale: true,
+          partial: false,
+          fallbackUsed: false,
+          reasonCode: 'stale',
+        },
+        {
+          ...dataMissingDrilldown[0],
+          symbol: 'AMD',
+          freshnessStatus: 'partial',
+          stale: false,
+          partial: true,
+          fallbackUsed: false,
+          reasonCode: 'partial',
+        },
+      ],
+    });
+
+    render(<AdminLogsPage />);
+
+    const operatorSection = await screen.findByTestId('admin-logs-operator-issue-rollup');
+    const dataGapSection = screen.getByTestId('admin-logs-data-missing-section');
+    const businessTable = screen.getByTestId('business-events-table-shell');
+    const operatorCopy = (operatorSection.textContent || '').replace(/evt-[a-z0-9-]+/gi, '');
+    const dataGapCopy = dataGapSection.textContent || '';
+    const businessCopy = businessTable.textContent || '';
+    expect(operatorCopy).toContain('数据源健康摘要');
+    expect(operatorCopy).toContain('数据源不可用');
+    expect(operatorCopy).toContain('响应超时');
+    expect(operatorCopy).toContain('备用链路激活');
+    expect(operatorCopy).toContain('本地缓存');
+    expect(dataGapCopy).toContain('数据过期');
+    expect(dataGapCopy).toContain('部分数据');
+    expect(operatorCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b/i);
+    expect(dataGapCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b/i);
+    expect(businessCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b/i);
   });
 
   it('filters the existing logs table from an operator rollup issue', async () => {
     render(<AdminLogsPage />);
 
     const section = await screen.findByTestId('admin-logs-operator-issue-rollup');
-    const firstIssue = within(section).getByText('Provider timeout · finnhub').closest('[data-testid="operator-issue-row"]');
+    const firstIssue = within(section).getByText('数据源响应超时 · finnhub').closest('[data-testid="operator-issue-row"]');
     expect(firstIssue).not.toBeNull();
     fireEvent.click(within(firstIssue as HTMLElement).getByRole('button', { name: '筛选日志' }));
 
@@ -1039,7 +1102,7 @@ describe('AdminLogsPage', () => {
     expect(screen.getByText(/获取财务数据/)).toBeInTheDocument();
     expect(screen.getAllByText(/AI 分析/).length).toBeGreaterThan(0);
     expect(screen.getByText(/保存分析记录/)).toBeInTheDocument();
-    expect(screen.getAllByText('News API timeout after 3000ms token=***').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/News API .*响应超时.*token=\*\*\*/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/FRONTENDSECRET/)).not.toBeInTheDocument();
     expect(screen.queryByText(/FRONTENDTOKEN/)).not.toBeInTheDocument();
     expect(screen.getAllByText('主数据源已成功，无需调用备用源').length).toBeGreaterThan(0);
@@ -1055,7 +1118,7 @@ describe('AdminLogsPage', () => {
   it('shows degraded execution summary for successful fallback events and copies a sanitized debug summary', async () => {
     render(<AdminLogsPage />);
 
-    const row = await screen.findByText('ProviderFallbackServed');
+    const row = (await screen.findAllByText('备用链路激活')).find((item) => item.closest('[data-testid="business-event-row"]'));
     const rowContainer = row.closest('[data-testid="business-event-row"]');
     expect(rowContainer).not.toBeNull();
     fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
@@ -1093,7 +1156,7 @@ describe('AdminLogsPage', () => {
     fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
     expect(await screen.findByTestId('root-cause-section')).toHaveTextContent('该事件在步骤级 trace 记录前已失败');
     expect(screen.getByText('根因')).toBeInTheDocument();
-    expect(screen.getAllByText('provider timeout token=***').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/数据源响应超时.*token=\*\*\*/).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: '复制' }));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('trace-market-card-abcdef');
   });
@@ -1323,7 +1386,7 @@ describe('AdminLogsPage', () => {
 
     fireEvent.click(await screen.findByRole('tab', { name: '原始日志' }));
 
-    expect(await screen.findByText('ExternalSourceTimeout')).toBeInTheDocument();
+    expect(await screen.findByText('数据源响应超时')).toBeInTheDocument();
     expect(screen.getByLabelText('级别筛选')).toBeInTheDocument();
     expect(screen.getByTestId('raw-logs-table-shell')).toHaveClass('overflow-x-auto');
     await waitFor(() => expect(listSessions).toHaveBeenCalledWith(expect.objectContaining({ minLevel: 'WARNING' })));

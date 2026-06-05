@@ -443,7 +443,7 @@ function categoryLabel(value: string | null | undefined, locale: AdminLogsLangua
     system: { zh: '系统', en: 'system' },
     auth: { zh: '认证', en: 'auth' },
     market: { zh: '市场', en: 'market' },
-    cache: { zh: '缓存', en: 'cache' },
+    cache: { zh: '本地缓存', en: 'cache' },
     data_source: { zh: '数据源', en: 'data_source' },
     analysis: { zh: '分析', en: 'analysis' },
     scanner: { zh: '扫描器', en: 'scanner' },
@@ -483,6 +483,85 @@ function formatDateTime(value: unknown, locale: AdminLogsLanguage): string {
 
 function formatDuration(value: unknown): string {
   return formatDurationMs(value);
+}
+
+function operatorSafeZhText(value: string): string {
+  const raw = value.trim();
+  if (!raw) return raw;
+  const normalized = raw.toLowerCase().replace(/[\s-]+/g, '_');
+  const exactLabels: Record<string, string> = {
+    provider_issue_rollup: '数据源健康摘要',
+    provider_unavailable: '数据源不可用',
+    provider_down: '数据源不可用',
+    provider_unhealthy: '数据源不可用',
+    unavailable: '数据源不可用',
+    timeout: '响应超时',
+    request_timeout: '响应超时',
+    provider_timeout: '响应超时',
+    source_timeout: '响应超时',
+    timed_out: '响应超时',
+    fallback: '备用链路激活',
+    fallback_used: '备用链路激活',
+    fallback_served: '备用链路激活',
+    provider_fallback: '备用链路激活',
+    datasourcefallback: '备用链路激活',
+    datasourcefallbackserved: '备用链路激活',
+    switched_to_fallback: '备用链路激活',
+    stale: '数据过期',
+    partial: '部分数据',
+    partial_failure: '部分数据',
+    partial_success: '部分数据',
+    cache: '本地缓存',
+    cached: '本地缓存',
+    providerfallbackserved: '备用链路激活',
+    externalsourcetimeout: '数据源响应超时',
+    fallback_provider: '备用数据源',
+    primary_provider: '主数据源',
+  };
+  if (exactLabels[normalized]) return exactLabels[normalized];
+  return raw
+    .replace(/Provider Issue Rollup/gi, '数据源健康摘要')
+    .replace(/Primary provider failed,\s*fallback source served cached data/gi, '主数据源异常，已切换到备用链路并返回本地缓存数据')
+    .replace(/Primary provider timeout,\s*fallback source completed/gi, '主数据源响应超时，备用链路已完成')
+    .replace(/provider timeout:\s*check provider credentials and upstream status\./gi, '数据源响应超时：请检查数据源配置与上游状态。')
+    .replace(/Fallback served from .*$/gi, '备用链路激活')
+    .replace(/provider_fallback/gi, '备用链路激活')
+    .replace(/fallback_provider/gi, '备用数据源')
+    .replace(/primary_provider/gi, '主数据源')
+    .replace(/fallback served:\s*inspect configured primary provider without exposing .*$/gi, '备用链路激活：请检查已配置主数据源。')
+    .replace(/Primary provider unhealthy;\s*fallback used/gi, '主数据源不可用，备用链路激活')
+    .replace(/Fallback provider completed/gi, '备用链路已完成')
+    .replace(/Primary provider/gi, '主数据源')
+    .replace(/Fallback provider/gi, '备用数据源')
+    .replace(/provider unavailable/gi, '数据源不可用')
+    .replace(/provider unhealthy/gi, '数据源不可用')
+    .replace(/provider timeout/gi, '数据源响应超时')
+    .replace(/source timeout/gi, '数据源响应超时')
+    .replace(/request timeout/gi, '响应超时')
+    .replace(/timeout/gi, '响应超时')
+    .replace(/fallback used/gi, '备用链路激活')
+    .replace(/fallback served/gi, '备用链路激活')
+    .replace(/fallback completed/gi, '备用链路激活')
+    .replace(/fallback source/gi, '备用链路')
+    .replace(/fallback/gi, '备用链路激活')
+    .replace(/cached/gi, '本地缓存')
+    .replace(/\bcache\b/gi, '本地缓存')
+    .replace(/stale/gi, '数据过期')
+    .replace(/partial failure/gi, '部分数据')
+    .replace(/partial success/gi, '部分数据')
+    .replace(/partial/gi, '部分数据')
+    .replace(/ProviderFallbackServed/gi, '备用链路激活')
+    .replace(/ExternalSourceTimeout/gi, '数据源响应超时')
+    .replace(/\bprovider\b/gi, '数据源');
+}
+
+function renderOperatorSafeText(value: unknown, locale: AdminLogsLanguage, fallback = '--'): string {
+  const sanitized = sanitizeDisplayValue(value);
+  if (typeof sanitized === 'string' || typeof sanitized === 'number' || typeof sanitized === 'boolean') {
+    const raw = text(sanitized, fallback);
+    return locale === 'zh' ? operatorSafeZhText(raw) : raw;
+  }
+  return fallback;
 }
 
 function formatStorageBytes(value: unknown): string {
@@ -556,7 +635,7 @@ function incidentKindLabel(value: string | null | undefined, locale: AdminLogsLa
   const key = String(value || '').trim();
   const labels: Record<string, { zh: string; en: string }> = {
     data_quality: { zh: '数据质量', en: 'Data quality' },
-    provider_cache_circuit: { zh: 'Provider / 缓存 / 熔断', en: 'Provider / cache / circuit' },
+    provider_cache_circuit: { zh: '数据源 / 本地缓存 / 熔断', en: 'Provider / cache / circuit' },
     llm_cost: { zh: 'LLM / 成本', en: 'LLM / cost' },
     notification: { zh: '通知姿态', en: 'Notification posture' },
     evidence_posture: { zh: '证据姿态', en: 'Evidence posture' },
@@ -595,9 +674,9 @@ function dataMissingFreshnessLabel(value: string | null | undefined, locale: Adm
   const key = String(value || '').trim().toLowerCase();
   const labels: Record<string, { zh: string; en: string }> = {
     missing: { zh: '缺失', en: 'Missing' },
-    stale: { zh: '陈旧', en: 'Stale' },
-    fallback: { zh: '回退', en: 'Fallback' },
-    partial: { zh: '部分', en: 'Partial' },
+    stale: { zh: '数据过期', en: 'Stale' },
+    fallback: { zh: '备用链路激活', en: 'Fallback' },
+    partial: { zh: '部分数据', en: 'Partial' },
     fresh: { zh: '新鲜', en: 'Fresh' },
     unknown: { zh: '未确认', en: 'Unknown' },
   };
@@ -769,16 +848,26 @@ function friendlyRawStatusLabel(value: unknown, locale: AdminLogsLanguage): stri
   const normalized = raw.trim().toLowerCase().replace(/[-\s]+/g, '_');
   const labels: Record<string, string> = {
     unknown: '未确认',
-    provider_error: '服务商错误',
-    provider_down: '服务商不可用',
+    provider_error: '数据源错误',
+    provider_down: '数据源不可用',
+    provider_unhealthy: '数据源不可用',
+    provider_unavailable: '数据源不可用',
     source_error: '数据源错误',
-    request_timeout: '请求超时',
-    timeout: '超时',
-    unavailable: '不可用',
-    fallback: '已回退',
-    cache: '缓存',
+    request_timeout: '响应超时',
+    provider_timeout: '响应超时',
+    source_timeout: '响应超时',
+    timeout: '响应超时',
+    timed_out: '响应超时',
+    unavailable: '数据源不可用',
+    fallback: '备用链路激活',
+    fallback_used: '备用链路激活',
+    fallback_served: '备用链路激活',
+    cache: '本地缓存',
+    cached: '本地缓存',
+    stale: '数据过期',
+    partial: '部分数据',
   };
-  return labels[normalized] || raw;
+  return labels[normalized] || operatorSafeZhText(raw);
 }
 
 function compactHealthList(items: AdminLogHealthSummary['failuresByProvider'] | undefined, locale: AdminLogsLanguage): string {
@@ -1078,7 +1167,7 @@ function CallCard({
   const name = type === 'llm' ? text(item.model) : text(item.api || item.source);
   const status = normalizeStatus(String(item.status || ''));
   const reason = friendlyRawStatusLabel(item.reason || item.error || item.failureReason, locale);
-  const fallback = text(item.fallback || item.fallbackChain || item.retryFallback, '');
+  const fallback = renderOperatorSafeText(item.fallback || item.fallbackChain || item.retryFallback, locale, '');
   return (
     <AdminLogsTerminalSection
       title={`${type === 'llm' ? 'LLM' : 'API'} #${index + 1}`}
@@ -1102,7 +1191,7 @@ function CallCard({
           <p className="break-words">{locale === 'zh' ? '版本' : 'Version'}: <span className="text-foreground">{text(item.version)}</span></p>
         ) : null}
         <p className="break-words">{locale === 'zh' ? '失败原因' : 'Failure reason'}: <span className="text-foreground">{reason || '--'}</span></p>
-        <p className="break-words lg:col-span-2">{locale === 'zh' ? '回退情况' : 'Fallback'}: <span className="text-foreground">{fallback || '--'}</span></p>
+        <p className="break-words lg:col-span-2">{locale === 'zh' ? '备用链路激活' : 'Fallback'}: <span className="text-foreground">{fallback || '--'}</span></p>
       </div>
     </AdminLogsTerminalSection>
   );
@@ -1564,10 +1653,10 @@ const AdminLogsPage: React.FC = () => {
   const drawerOperationType = normalizeOperationType(readable);
   const businessTraceValue = businessDetail?.traceId || businessDetail?.requestId;
   const businessActorLabel = text(businessDetail?.actorLabel || businessDetail?.userId, locale === 'zh' ? '未记录' : 'Not recorded');
-  const businessContextLabel = text(businessDetail?.contextLabel || businessDetail?.symbol || businessDetail?.subject || businessDetail?.event, locale === 'zh' ? '未记录' : 'Not recorded');
-  const businessSourceLabel = text([businessDetail?.provider, businessDetail?.source].filter(Boolean).join(' / '), locale === 'zh' ? '未记录' : 'Not recorded');
+  const businessContextLabel = renderOperatorSafeText(businessDetail?.contextLabel || businessDetail?.symbol || businessDetail?.subject || businessDetail?.event, locale, locale === 'zh' ? '未记录' : 'Not recorded');
+  const businessSourceLabel = renderOperatorSafeText([businessDetail?.provider, businessDetail?.source].filter(Boolean).join(' / '), locale, locale === 'zh' ? '未记录' : 'Not recorded');
   const rawTraceValue = readable.traceId || readable.requestId || readable.actorRequestId || drawerDetail?.queryId;
-  const rawRootCause = text(readable.errorSummary || readable.topFailureReason || readable.eventMessage || readable.summaryParagraph, locale === 'zh' ? '原因未确认' : 'Reason unknown');
+  const rawRootCause = renderOperatorSafeText(readable.errorSummary || readable.topFailureReason || readable.eventMessage || readable.summaryParagraph, locale, locale === 'zh' ? '原因未确认' : 'Reason unknown');
   const rawActorRole = String(readable.actorRole || '').trim().toLowerCase();
   const incidentHooks = useMemo(() => {
     const hooks = incidentTimeline?.hooks || [];
@@ -1719,22 +1808,22 @@ const AdminLogsPage: React.FC = () => {
                 {
                   label: '查看数据源维护',
                   target: 'marketProviders',
-                  evidenceType: 'surface focus',
+                  evidenceType: '页面聚焦',
                   reason: '从症状回看数据源矩阵、来源缺口与就绪检查。',
                   params: { surface: 'market_overview' },
                 },
                 {
                   label: '查看熔断与配额',
                   target: 'providerCircuits',
-                  evidenceType: 'circuit window',
-                  reason: '继续核对 provider 熔断、配额和探测事件。',
+                  evidenceType: '熔断窗口',
+                  reason: '继续核对数据源熔断、配额和探测事件。',
                   params: { since: sinceFilter },
                 },
                 {
                   label: '查看成本观测',
                   target: 'cost',
-                  evidenceType: 'provider cost window',
-                  reason: '确认成本、缓存与重复调用是否同步异常。',
+                  evidenceType: '成本观察窗口',
+                  reason: '确认成本、本地缓存与重复调用是否同步异常。',
                   params: { area: 'provider', window: sinceFilter },
                 },
               ]}
@@ -2060,7 +2149,7 @@ const AdminLogsPage: React.FC = () => {
               valueClassName="truncate text-sm font-semibold tracking-normal"
             />
             <TerminalMetric
-              label={locale === 'zh' ? '供应商 / 原因' : 'Provider / reason'}
+              label={locale === 'zh' ? '数据源 / 原因' : 'Provider / reason'}
               value={compactHealthList(healthSummary.failuresByProvider, locale)}
               subvalue={compactHealthList(healthSummary.failuresByReason, locale)}
               valueClassName="truncate text-sm font-semibold tracking-normal"
@@ -2078,41 +2167,41 @@ const AdminLogsPage: React.FC = () => {
           <TerminalPanel as="section" data-testid="admin-logs-operator-issue-rollup" dense>
             <TerminalSectionHeader
               eyebrow={locale === 'zh' ? '运维问题' : 'OPERATOR ISSUES'}
-              title="Operator Issue Rollup"
+              title={locale === 'zh' ? '数据源健康摘要' : 'Operator Issue Rollup'}
               action={<TerminalChip variant="neutral">{countLabel(operatorIssueItems.length, 'issue', 'issues', '组问题', locale)}</TerminalChip>}
             />
             <TerminalNotice variant="neutral" className="mt-3">
               {locale === 'zh'
-                ? '只读聚合：仅使用现有 Admin Logs 行，按安全维度合并 provider unavailable、timeout、fallback、stale、partial 等重复问题。'
+                ? '只读聚合：仅使用现有 Admin Logs 行，按安全维度合并数据源不可用、响应超时、备用链路激活、数据过期、部分数据等重复问题。'
                 : 'Read-only aggregate from existing Admin Logs rows, grouped by safe provider/source/status/reason dimensions.'}
             </TerminalNotice>
             {isLoadingOperatorIssues ? (
               <p className="mt-3 text-sm text-muted-text">{t('adminLogs.loading')}</p>
             ) : operatorIssueItems.length === 0 ? (
               <TerminalEmptyState className="mt-3 min-h-[72px]" title={locale === 'zh' ? '当前窗口暂无运维问题聚合' : 'No operator issue rollup in this window'}>
-                {locale === 'zh' ? '没有观察到重复的 provider unavailable、timeout、fallback、stale 或 partial 降级问题。' : 'No repeated provider unavailable, timeout, fallback, stale, or partial degraded issue was observed.'}
+                {locale === 'zh' ? '没有观察到重复的数据源不可用、响应超时、备用链路激活、数据过期或部分数据问题。' : 'No repeated provider unavailable, timeout, fallback, stale, or partial degraded issue was observed.'}
               </TerminalEmptyState>
             ) : (
               <TerminalDenseList className="mt-3 gap-0 overflow-hidden rounded-xl border border-white/6 bg-black/15">
                 {operatorIssueItems.map((item) => {
-                  const title = safeOperatorText(item.issueTitle);
-                  const guidance = safeOperatorText(item.operatorGuidance, locale === 'zh' ? '检查相关配置与最近失败原因。' : 'Check related configuration and recent failure reasons.');
+                  const title = renderOperatorSafeText(item.issueTitle, locale);
+                  const guidance = renderOperatorSafeText(item.operatorGuidance, locale, locale === 'zh' ? '检查相关配置与最近失败原因。' : 'Check related configuration and recent failure reasons.');
                   const providerLine = [
                     item.provider,
                     item.source,
                     item.model,
                     item.channel,
-                  ].map((value) => safeOperatorText(value, '')).filter(Boolean).join(' · ');
+                  ].map((value) => renderOperatorSafeText(value, locale, '')).filter(Boolean).join(' · ');
                   const contextLine = [
                     ...(item.affectedSurfaces || []),
                     ...(item.affectedDomains || []),
-                  ].map((value) => safeOperatorText(value, '')).filter(Boolean).join(' · ');
+                  ].map((value) => renderOperatorSafeText(value, locale, '')).filter(Boolean).join(' · ');
                   const reasonLine = [
                     item.reasonCode,
                     item.eventType,
                     item.freshnessStatus,
                     item.status,
-                  ].map((value) => safeOperatorText(value, '')).filter(Boolean).join(' · ');
+                  ].map((value) => renderOperatorSafeText(value, locale, '')).filter(Boolean).join(' · ');
                   const sampleEventIds = (item.sampleEventIds || []).map((value) => safeOperatorText(value, '')).filter(Boolean).slice(0, 3);
                   return (
                     <div
@@ -2192,8 +2281,8 @@ const AdminLogsPage: React.FC = () => {
                       </div>
                       <div className="min-w-0">
                         <p className="truncate text-xs font-medium text-foreground">{incidentKindLabel('data_quality', locale)} · {text(item.missingDomain)}</p>
-                        <p className="mt-1 truncate text-[11px] text-muted-text" title={text([item.provider, item.source, item.reasonCode].filter(Boolean).join(' · '))}>
-                          {text([item.provider, item.source, item.reasonCode].filter(Boolean).join(' · '), locale === 'zh' ? '未记录' : 'Not recorded')}
+                        <p className="mt-1 truncate text-[11px] text-muted-text" title={renderOperatorSafeText([item.provider, item.source, item.reasonCode].filter(Boolean).join(' · '), locale)}>
+                          {renderOperatorSafeText([item.provider, item.source, item.reasonCode].filter(Boolean).join(' · '), locale, locale === 'zh' ? '未记录' : 'Not recorded')}
                         </p>
                       </div>
                       <div className="min-w-0 space-y-1">
@@ -2286,7 +2375,7 @@ const AdminLogsPage: React.FC = () => {
                     <div>{locale === 'zh' ? '原因' : 'Reason'}</div>
                     <div className="hidden xl:block">{locale === 'zh' ? '操作者' : 'Actor'}</div>
                     <div className="hidden xl:block">{locale === 'zh' ? '上下文' : 'Context'}</div>
-                    <div className="hidden xl:block">{locale === 'zh' ? '来源 / 供应商' : 'Source / Provider'}</div>
+                    <div className="hidden xl:block">{locale === 'zh' ? '来源 / 数据源' : 'Source / Provider'}</div>
                     <div>{locale === 'zh' ? '操作' : 'Action'}</div>
                   </div>
                   <div className="max-h-[min(34vh,21rem)] divide-y divide-white/6 overflow-y-auto no-scrollbar">
@@ -2295,12 +2384,12 @@ const AdminLogsPage: React.FC = () => {
                       const actorRole = actorBadgeLabel(item.actorType);
                       const actorType = actorBadgeDisplay(item.actorType, locale);
                       const actorSecondary = text(item.actorLabel || item.userId || item.requestId, locale === 'zh' ? '未记录' : 'Not recorded');
-                      const contextPrimary = text(item.contextLabel || item.symbol || item.subject || item.event, locale === 'zh' ? '未记录' : 'Not recorded');
+                      const contextPrimary = renderOperatorSafeText(item.contextLabel || item.symbol || item.subject || item.event, locale, locale === 'zh' ? '未记录' : 'Not recorded');
                       const contextSecondary = [item.market, item.route || item.endpoint, item.component || item.feature]
                         .map((value) => String(value || '').trim())
                         .filter(Boolean)
                         .join(' · ');
-                      const sourcePrimary = text(item.provider || item.source || item.category, locale === 'zh' ? '未记录' : 'Not recorded');
+                      const sourcePrimary = renderOperatorSafeText(item.provider || item.source || item.category, locale, locale === 'zh' ? '未记录' : 'Not recorded');
                       const sourceSecondary = [item.source && item.source !== item.provider ? item.source : null, item.category, item.type]
                         .map((value) => String(value || '').trim())
                         .filter(Boolean)
@@ -2315,8 +2404,8 @@ const AdminLogsPage: React.FC = () => {
                         <div key={item.id} data-testid="business-event-row" className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] items-center gap-3 px-3 py-2.5 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
                           <p className="truncate text-xs text-secondary-text" title={formatDateTime(item.startedAt, locale)}>{formatDateTime(item.startedAt, locale)}</p>
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-foreground" title={text(item.event || item.symbol)}>{text(item.event || item.symbol)}</p>
-                            <p className="mt-0.5 truncate text-[11px] text-muted-text" title={text(item.type)}>{text(item.eventType || item.type)}</p>
+                            <p className="truncate text-sm font-semibold text-foreground" title={renderOperatorSafeText(item.event || item.symbol, locale)}>{renderOperatorSafeText(item.event || item.symbol, locale)}</p>
+                            <p className="mt-0.5 truncate text-[11px] text-muted-text" title={renderOperatorSafeText(item.type, locale)}>{renderOperatorSafeText(item.eventType || item.type, locale)}</p>
                           </div>
                           <div className="min-w-0 space-y-1">
                             <StatusChip status={status} locale={locale} className="w-fit" />
@@ -2332,12 +2421,12 @@ const AdminLogsPage: React.FC = () => {
                           </div>
                           <div className="hidden min-w-0 xl:block">
                             <p className="truncate text-xs font-medium text-foreground" title={contextPrimary}>{contextPrimary}</p>
-                            <p className="mt-1 truncate text-[11px] text-muted-text" title={contextSecondary || text(item.summary)}>{contextSecondary || text(item.summary)}</p>
+                            <p className="mt-1 truncate text-[11px] text-muted-text" title={renderOperatorSafeText(contextSecondary || item.summary, locale)}>{renderOperatorSafeText(contextSecondary || item.summary, locale)}</p>
                             <p className="mt-0.5 truncate text-[11px] text-muted-text" title={text(traceValue)}>{traceValue ? `trace ${shortIdentifier(traceValue)}` : '--'}</p>
                           </div>
                           <div className="hidden min-w-0 xl:block">
                             <p className="truncate text-xs text-secondary-text" title={sourcePrimary}>{sourcePrimary}</p>
-                            <p className="mt-1 truncate text-[11px] text-muted-text" title={sourceSecondary}>{sourceSecondary || '--'}</p>
+                            <p className="mt-1 truncate text-[11px] text-muted-text" title={renderOperatorSafeText(sourceSecondary, locale)}>{renderOperatorSafeText(sourceSecondary, locale, '--')}</p>
                           </div>
                           <TerminalButton type="button" variant="compact" className="w-fit px-2.5 py-1 text-xs" onClick={() => void openBusinessDetail(item)}>
                             {t('adminLogs.viewDetails')}
@@ -2381,13 +2470,14 @@ const AdminLogsPage: React.FC = () => {
                     const summary = item.readableSummary || {};
                     const level = normalizeLogLevel(summary.logLevel);
                     const category = text(summary.logCategory, 'system');
-                    const eventName = text(summary.eventName || item.name || item.taskId, t('adminLogs.unavailable'));
-                    const message = text(summary.eventMessage || summary.topFailureReason || summary.summaryParagraph || summary.keyMetric, t('adminLogs.unavailable'));
+                    const eventName = renderOperatorSafeText(summary.eventName || item.name || item.taskId, locale, t('adminLogs.unavailable'));
+                    const message = renderOperatorSafeText(summary.eventMessage || summary.topFailureReason || summary.summaryParagraph || summary.keyMetric, locale, t('adminLogs.unavailable'));
                     const source = [summary.source, summary.requestId, summary.operationTarget || item.code]
                       .map((value) => String(value || '').trim())
                       .filter(Boolean)
                       .filter((value, index, values) => values.indexOf(value) === index)
-                      .join(' · ') || t('adminLogs.unavailable');
+                      .join(' · ');
+                    const sourceLabel = renderOperatorSafeText(source, locale, t('adminLogs.unavailable'));
                     return (
                       <div key={item.sessionId} data-testid="admin-log-row" className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] items-center gap-3 px-3 py-2.5">
                         <p className="truncate text-xs text-secondary-text">{formatDateTime(item.startedAt, locale)}</p>
@@ -2395,7 +2485,7 @@ const AdminLogsPage: React.FC = () => {
                         <TerminalChip variant="neutral" className="w-fit">{categoryLabel(category, locale)}</TerminalChip>
                         <p className="min-w-0 truncate text-sm font-semibold text-foreground">{eventName}</p>
                         <p className="min-w-0 truncate text-xs text-secondary-text" title={message}>{message}</p>
-                        <p className="min-w-0 truncate text-xs text-muted-text" title={source}>{source}</p>
+                        <p className="min-w-0 truncate text-xs text-muted-text" title={sourceLabel}>{sourceLabel}</p>
                         <TerminalButton type="button" variant="compact" className="w-fit px-2.5 py-1 text-xs" onClick={() => void openDetail(item)}>
                           {t('adminLogs.viewDetails')}
                         </TerminalButton>
@@ -2427,8 +2517,8 @@ const AdminLogsPage: React.FC = () => {
                     <StatusChip status={drawerStatus} locale={locale} />
                     <SeverityChip severity={businessSeverity} locale={locale} />
                   </div>
-                  <h2 className="break-words text-2xl font-semibold text-foreground">{text(businessDetail.event || businessDetail.symbol)}</h2>
-                  <p className="mt-2 text-sm text-secondary-text">{businessDetail.summary} · {categoryLabel(businessDetail.category, locale)} · {text(businessDetail.type)} · {formatDateTime(businessDetail.startedAt, locale)}</p>
+                  <h2 className="break-words text-2xl font-semibold text-foreground">{renderOperatorSafeText(businessDetail.event || businessDetail.symbol, locale)}</h2>
+                  <p className="mt-2 text-sm text-secondary-text">{renderOperatorSafeText(businessDetail.summary, locale)} · {categoryLabel(businessDetail.category, locale)} · {renderOperatorSafeText(businessDetail.type, locale)} · {formatDateTime(businessDetail.startedAt, locale)}</p>
                 </div>
                 <div className="grid gap-2 text-xs text-secondary-text">
                   <TerminalButton
@@ -2455,10 +2545,10 @@ const AdminLogsPage: React.FC = () => {
                     <p>{locale === 'zh' ? '原因' : 'Reason'}: <span className="text-foreground">{friendlyRawStatusLabel(businessDetail.reason || (locale === 'zh' ? '原因未确认' : 'Reason unknown'), locale)}</span></p>
                     <p>{locale === 'zh' ? '操作者' : 'Actor'}: <span className="text-foreground">{actorBadgeDisplay(businessDetail.actorType, locale)} · {businessActorLabel}</span></p>
                     <p>{locale === 'zh' ? '上下文' : 'Context'}: <span className="text-foreground">{businessContextLabel}</span></p>
-                    <p>{locale === 'zh' ? '来源 / 供应商' : 'Source / Provider'}: <span className="text-foreground">{businessSourceLabel}</span></p>
+                    <p>{locale === 'zh' ? '来源 / 数据源' : 'Source / Provider'}: <span className="text-foreground">{businessSourceLabel}</span></p>
                     <p>{locale === 'zh' ? '路由 / 端点' : 'Route / Endpoint'}: <span className="text-foreground">{text([businessDetail.route, businessDetail.endpoint].filter(Boolean).join(' / '), locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
                     <p>{locale === 'zh' ? '耗时' : 'Duration'}: <span className="text-foreground">{formatDuration(businessDetail.durationMs)}</span></p>
-                    <p className="md:col-span-2">{locale === 'zh' ? '错误摘要' : 'Error summary'}: <span className="text-foreground" title={text(businessDetail.errorSummary || businessDetail.rootCauseSummary)}>{text(businessDetail.errorSummary || businessDetail.rootCauseSummary, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
+                    <p className="md:col-span-2">{locale === 'zh' ? '错误摘要' : 'Error summary'}: <span className="text-foreground" title={renderOperatorSafeText(businessDetail.errorSummary || businessDetail.rootCauseSummary, locale)}>{renderOperatorSafeText(businessDetail.errorSummary || businessDetail.rootCauseSummary, locale, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
                     <p className="md:col-span-2">
                       {locale === 'zh' ? '请求 / trace id' : 'request/trace id'}: <span className="text-foreground">{text(businessTraceValue, locale === 'zh' ? '未记录' : 'Not recorded')}</span>
                       {businessTraceValue ? (
@@ -2493,7 +2583,7 @@ const AdminLogsPage: React.FC = () => {
                   <p>{locale === 'zh' ? '耗时' : 'Duration'}: <span className="text-foreground">{formatDuration(businessDetail.metadata?.durationMs ?? businessDetail.durationMs)}</span></p>
                   <p>{locale === 'zh' ? '数据失败 / 跳过' : 'Data failed / skipped'}: <span className="text-foreground">{text(businessDetail.metadata?.dataFailedCount ?? 0)} / {text(businessDetail.metadata?.skippedCount ?? businessDetail.skippedStepCount ?? 0)}</span></p>
                   <p>{locale === 'zh' ? 'Top 标的' : 'Top symbol'}: <span className="text-foreground">{text(businessDetail.metadata?.topSymbol)}</span></p>
-                  <p>{locale === 'zh' ? '数据源摘要' : 'Provider summary'}: <span className="text-foreground">{text(businessDetail.metadata?.sourceProviderSummary || businessDetail.source)}</span></p>
+                  <p>{locale === 'zh' ? '数据源摘要' : 'Provider summary'}: <span className="text-foreground">{renderOperatorSafeText(businessDetail.metadata?.sourceProviderSummary || businessDetail.source, locale)}</span></p>
                 </div>
               </TerminalPanel>
             ) : null}
@@ -2507,16 +2597,16 @@ const AdminLogsPage: React.FC = () => {
                 {businessSteps.length ? businessSteps.map((step: ExecutionStep, index: number) => {
                   const status = normalizeStatus(step.status);
                   return (
-                    <AdminLogsTerminalSection key={`${step.name}-${index}`} title={`${text(step.label || step.name)} · ${formatDuration(step.durationMs)}`} summary={[step.category, step.provider, step.model, step.endpoint || step.apiPath].map((value) => String(value || '').trim()).filter(Boolean).join(' · ') || '--'} defaultOpen={index === 0 || status === 'failed' || status === 'error' || status === 'skipped' || status === 'unknown'} className="bg-black/20 px-3 py-3 text-xs">
+                    <AdminLogsTerminalSection key={`${step.name}-${index}`} title={`${renderOperatorSafeText(step.label || step.name, locale)} · ${formatDuration(step.durationMs)}`} summary={renderOperatorSafeText([step.category, step.provider, step.model, step.endpoint || step.apiPath].map((value) => String(value || '').trim()).filter(Boolean).join(' · '), locale, '--')} defaultOpen={index === 0 || status === 'failed' || status === 'error' || status === 'skipped' || status === 'unknown'} className="bg-black/20 px-3 py-3 text-xs">
                       <div className="mb-3 flex justify-end">
                         <StatusChip status={status} locale={locale} />
                       </div>
                       <div className="mt-3 grid gap-2 text-secondary-text md:grid-cols-2">
                         <p>{locale === 'zh' ? '开始' : 'Started'}: <span className="text-foreground">{formatDateTime(step.startedAt, locale)}</span></p>
                         <p>{locale === 'zh' ? '结束' : 'Finished'}: <span className="text-foreground">{formatDateTime(step.finishedAt, locale)}</span></p>
-                        <p>{locale === 'zh' ? '原因' : 'Reason'}: <span className="text-foreground">{text(status === 'skipped' ? skippedReasonLabel(step.reason, locale) : step.reason)}</span></p>
+                        <p>{locale === 'zh' ? '原因' : 'Reason'}: <span className="text-foreground">{renderOperatorSafeText(status === 'skipped' ? skippedReasonLabel(step.reason, locale) : step.reason, locale)}</span></p>
                         <p>{locale === 'zh' ? '错误类型' : 'Error type'}: <span className="text-foreground">{text(step.errorType)}</span></p>
-                        <p className="md:col-span-2">{locale === 'zh' ? '消息' : 'Message'}: <span className="text-foreground">{text(sanitizeDisplayValue(status === 'skipped' ? (step.message || skippedReasonLabel(step.reason, locale)) : (step.errorMessage || step.message)))}</span></p>
+                        <p className="md:col-span-2">{locale === 'zh' ? '消息' : 'Message'}: <span className="text-foreground">{renderOperatorSafeText(status === 'skipped' ? (step.message || skippedReasonLabel(step.reason, locale)) : (step.errorMessage || step.message), locale)}</span></p>
                         <div className="md:col-span-2">
                           <p className="text-[10px] uppercase tracking-[0.18em] text-white/36">{locale === 'zh' ? '元数据' : 'metadata'}</p>
                           <JsonBlock value={step.metadata || {}} />
@@ -2570,7 +2660,7 @@ const AdminLogsPage: React.FC = () => {
                 <p className="text-secondary-text">{t('adminLogs.actor')}: <span className="text-foreground">{text(readable.actorDisplay || readable.actorUsername, 'admin')}</span></p>
                 <p className="text-secondary-text">{t('adminLogs.actorRole')}: <span className="text-foreground">{rawActorRole === 'admin' ? t('adminLogs.role.admin') : rawActorRole === 'user' ? t('adminLogs.role.user') : text(readable.actorRole, t('adminLogs.unavailable'))}</span></p>
                 <p className="text-secondary-text">{t('adminLogs.operationType')}: <span className="text-foreground">{text(operationDetail.operationType || readable.operationType || operationLabel(drawerOperationType, locale))}</span></p>
-                <p className="text-secondary-text">{t('adminLogs.keyMetric')}: <span className="text-foreground">{text(operationDetail.keyMetric || readable.keyMetric, t('adminLogs.unavailable'))}</span></p>
+                <p className="text-secondary-text">{t('adminLogs.keyMetric')}: <span className="text-foreground">{renderOperatorSafeText(operationDetail.keyMetric || readable.keyMetric, locale, t('adminLogs.unavailable'))}</span></p>
               </div>
             </TerminalPanel>
 
@@ -2580,8 +2670,8 @@ const AdminLogsPage: React.FC = () => {
                 <p>{locale === 'zh' ? '状态' : 'Status'}: <span className="text-foreground">{statusLabel(drawerStatus, locale)}</span></p>
                 <p>{locale === 'zh' ? '原因' : 'Reason'}: <span className="text-foreground">{friendlyRawStatusLabel(readable.reason || readable.topFailureReason || (locale === 'zh' ? '原因未确认' : 'Reason unknown'), locale)}</span></p>
                 <p>{locale === 'zh' ? '操作者' : 'Actor'}: <span className="text-foreground">{actorBadgeDisplay(readable.actorType || readable.actorRole, locale)} · {text(readable.actorDisplay || readable.actorUsername || readable.actorSessionId, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
-                <p>{locale === 'zh' ? '上下文' : 'Context'}: <span className="text-foreground">{text(readable.contextLabel || readable.operationTarget || drawerDetail.code || drawerDetail.name, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
-                <p>{locale === 'zh' ? '来源 / 供应商' : 'Source / Provider'}: <span className="text-foreground">{text([readable.provider, readable.source].filter(Boolean).join(' / '), locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
+                <p>{locale === 'zh' ? '上下文' : 'Context'}: <span className="text-foreground">{renderOperatorSafeText(readable.contextLabel || readable.operationTarget || drawerDetail.code || drawerDetail.name, locale, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
+                <p>{locale === 'zh' ? '来源 / 数据源' : 'Source / Provider'}: <span className="text-foreground">{renderOperatorSafeText([readable.provider, readable.source].filter(Boolean).join(' / '), locale, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
                 <p>{locale === 'zh' ? '路由 / 端点' : 'Route / Endpoint'}: <span className="text-foreground">{text(readable.endpoint, locale === 'zh' ? '未记录' : 'Not recorded')}</span></p>
                 <p>{locale === 'zh' ? '耗时' : 'Duration'}: <span className="text-foreground">{formatDuration(operationDetail.durationMs || drawerDetail.summary?.durationMs)}</span></p>
                 <p className="md:col-span-2">{locale === 'zh' ? '错误摘要' : 'Error summary'}: <span className="text-foreground" title={rawRootCause}>{rawRootCause}</span></p>
@@ -2604,10 +2694,10 @@ const AdminLogsPage: React.FC = () => {
               <TerminalPanel data-testid="system-operation-detail">
                 <TerminalSectionHeader title={locale === 'zh' ? '系统操作详情' : 'System operation details'} />
                 <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-                  <p className="text-secondary-text"><span>{locale === 'zh' ? '操作类型:' : 'Operation type:'}</span> <span className="text-foreground">{text(systemOperation.action || operationDetail.operationType || readable.operationType)}</span></p>
+                  <p className="text-secondary-text"><span>{locale === 'zh' ? '操作类型:' : 'Operation type:'}</span> <span className="text-foreground">{renderOperatorSafeText(systemOperation.action || operationDetail.operationType || readable.operationType, locale)}</span></p>
                   <p className="text-secondary-text"><span>{locale === 'zh' ? '操作用户:' : 'Operation user:'}</span> <span className="text-foreground">{text(systemOperation.actor || readable.actorDisplay || readable.actorUsername, 'admin')}</span></p>
                   <p className="text-secondary-text"><span>{locale === 'zh' ? '操作时间:' : 'Operation time:'}</span> <span className="text-foreground">{formatDateTime(systemOperation.time || drawerDetail.startedAt, locale)}</span></p>
-                  <p className="text-secondary-text"><span>{locale === 'zh' ? '执行结果:' : 'Result:'}</span> <span className="text-foreground">{text(systemOperation.status || operationDetail.finalResult || operationDetail.status || readable.operationStatus)}</span></p>
+                  <p className="text-secondary-text"><span>{locale === 'zh' ? '执行结果:' : 'Result:'}</span> <span className="text-foreground">{renderOperatorSafeText(systemOperation.status || operationDetail.finalResult || operationDetail.status || readable.operationStatus, locale)}</span></p>
                   <p className="text-secondary-text md:col-span-2"><span>{locale === 'zh' ? '失败原因:' : 'Failure reason:'}</span> <span className="text-foreground">{friendlyRawStatusLabel(systemOperation.reason || readable.topFailureReason || '--', locale)}</span></p>
                 </div>
               </TerminalPanel>
@@ -2634,7 +2724,7 @@ const AdminLogsPage: React.FC = () => {
                 <div className="mt-4 space-y-2">
                   {systemFallbacks.length ? systemFallbacks.map((item, index) => (
                     <TerminalNotice key={`${text(item.source)}-${index}`} variant="caution">
-                      {text(item.source)} · {text(item.message)}
+                      {renderOperatorSafeText(item.source, locale)} · {renderOperatorSafeText(item.message, locale)}
                     </TerminalNotice>
                   )) : <p className="text-sm text-muted-text">{locale === 'zh' ? '暂无系统回退。' : 'No system fallback recorded.'}</p>}
                 </div>
@@ -2642,7 +2732,7 @@ const AdminLogsPage: React.FC = () => {
               <TerminalPanel>
                 <TerminalSectionHeader title={locale === 'zh' ? '最终执行结果' : 'Final result'} />
                 <p className="mt-3 text-sm leading-6 text-secondary-text">
-                  {text(operationDetail.finalResult || readable.summaryParagraph || readable.topFailureReason || operationDetail.status || drawerDetail.overallStatus, t('adminLogs.unavailable'))}
+                  {renderOperatorSafeText(operationDetail.finalResult || readable.summaryParagraph || readable.topFailureReason || operationDetail.status || drawerDetail.overallStatus, locale, t('adminLogs.unavailable'))}
                 </p>
               </TerminalPanel>
             </section>
@@ -2654,7 +2744,7 @@ const AdminLogsPage: React.FC = () => {
                   return (
                     <TerminalNestedBlock key={`${text(item.label)}-${index}`} className="text-xs">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="font-medium text-foreground">{text(item.label)}</p>
+                        <p className="font-medium text-foreground">{renderOperatorSafeText(item.label, locale)}</p>
                         <StatusChip status={status} locale={locale} />
                       </div>
                       <p className="mt-1 text-muted-text">{text(item.timestamp)} · {text(item.category)}</p>
@@ -2671,7 +2761,7 @@ const AdminLogsPage: React.FC = () => {
                     <div className="flex flex-wrap items-center gap-2">
                       <AdminLogLevelPill value={event.level} locale={locale} className="w-fit font-semibold" />
                       <span className="text-secondary-text">{categoryLabel(event.category || event.phase, locale)}</span>
-                      <span className="text-foreground">{text(event.eventName || event.step)}</span>
+                      <span className="text-foreground">{renderOperatorSafeText(event.eventName || event.step, locale)}</span>
                     </div>
                     <JsonBlock value={event.detail || {}} />
                   </TerminalNestedBlock>
@@ -2683,8 +2773,8 @@ const AdminLogsPage: React.FC = () => {
               <div className="mt-4 space-y-2">
                 {diagnostics.length ? diagnostics.map((item, index) => (
                   <TerminalNotice key={`${text(item.source)}-${index}`} variant="danger">
-                    <p>{text(item.message)}</p>
-                    <p className="mt-1 text-muted-text">{text(item.source)} · {text(item.severity)}</p>
+                    <p>{renderOperatorSafeText(item.message, locale)}</p>
+                    <p className="mt-1 text-muted-text">{renderOperatorSafeText(item.source, locale)} · {text(item.severity)}</p>
                   </TerminalNotice>
                 )) : <p className="text-sm text-muted-text">{t('adminLogs.noDiagnostics')}</p>}
               </div>
@@ -2743,9 +2833,9 @@ const AdminLogsPage: React.FC = () => {
                         {incidentHookStatusLabel(hook.status, locale)}
                       </TerminalChip>
                     </div>
-                    <p className="mt-2 text-xs leading-5 text-secondary-text">{hook.summary}</p>
+                    <p className="mt-2 text-xs leading-5 text-secondary-text">{renderOperatorSafeText(hook.summary, locale)}</p>
                     <p className="mt-2 truncate text-[11px] text-muted-text">
-                      {text([hook.provider, hook.model, hook.channel, hook.reasonCode].filter(Boolean).join(' · '), locale === 'zh' ? '无附加线索' : 'No extra hint')}
+                      {renderOperatorSafeText([hook.provider, hook.model, hook.channel, hook.reasonCode].filter(Boolean).join(' · '), locale, locale === 'zh' ? '无附加线索' : 'No extra hint')}
                     </p>
                   </TerminalNestedBlock>
                 ))}
@@ -2773,14 +2863,14 @@ const AdminLogsPage: React.FC = () => {
                     </div>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate text-sm font-semibold text-foreground">{item.title}</p>
+                        <p className="truncate text-sm font-semibold text-foreground">{renderOperatorSafeText(item.title, locale)}</p>
                         <TerminalChip variant={incidentItemVariant(item)} className="w-fit font-semibold">
                           {item.severity === 'error' ? (locale === 'zh' ? '错误' : 'Error') : item.severity === 'warning' ? (locale === 'zh' ? '警告' : 'Warning') : statusLabel(normalizeStatus(item.status), locale)}
                         </TerminalChip>
                       </div>
-                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-secondary-text">{text(item.summary, locale === 'zh' ? '未附加摘要' : 'No summary attached')}</p>
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-secondary-text">{renderOperatorSafeText(item.summary, locale, locale === 'zh' ? '未附加摘要' : 'No summary attached')}</p>
                       <p className="mt-1 truncate text-[11px] text-muted-text">
-                        {text([item.phase, item.category, item.provider, item.model, item.channel, item.reasonCode].filter(Boolean).join(' · '), locale === 'zh' ? '无附加上下文' : 'No extra context')}
+                        {renderOperatorSafeText([item.phase, item.category, item.provider, item.model, item.channel, item.reasonCode].filter(Boolean).join(' · '), locale, locale === 'zh' ? '无附加上下文' : 'No extra context')}
                       </p>
                     </div>
                     <div className="flex items-start justify-start lg:justify-end">
