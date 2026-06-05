@@ -170,7 +170,7 @@ describe('DeterministicBacktestResultPage compare evidence', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     const currentRun = makeRun(99);
     const compareRun = makeRun(88, { totalReturnPct: 6, benchmarkReturnPct: 3 });
     getRuleBacktestRun.mockImplementation((id: number) => Promise.resolve(id === 88 ? compareRun : currentRun));

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
@@ -376,7 +376,8 @@ describe('DeterministicBacktestResultPage', () => {
   let originalClipboard: Navigator['clipboard'] | undefined;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.resetAllMocks();
     vi.useRealTimers();
     vi.stubGlobal('confirm', vi.fn(() => true));
     auditTablesImportGate.reset();
@@ -393,7 +394,9 @@ describe('DeterministicBacktestResultPage', () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
@@ -130,6 +130,22 @@ function renderBacktestRoutes(
       </UiLanguageProvider>
     </MemoryRouter>,
   );
+}
+
+async function flushPendingUiWork() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+    await vi.dynamicImportSettled();
+  });
+}
+
+async function clickAndFlush(target: HTMLElement) {
+  await act(async () => {
+    fireEvent.click(target);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
 }
 
 function makeRunResponse(overrides: Partial<BacktestRunResponse> = {}): BacktestRunResponse {
@@ -588,12 +604,12 @@ describe('BacktestPage', () => {
 
   async function parseDeterministicStrategy() {
     await openDeterministicStrategyInput();
-    fireEvent.click(within(screen.getByTestId('pro-step-strategy')).getByRole('button', { name: '解析策略' }));
+    await clickAndFlush(within(screen.getByTestId('pro-step-strategy')).getByRole('button', { name: '解析策略' }));
     expect(await screen.findByTestId('pro-rule-preview')).toBeInTheDocument();
   }
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     vi.useRealTimers();
     window.localStorage.removeItem(UI_LANGUAGE_STORAGE_KEY);
 
@@ -900,6 +916,7 @@ describe('BacktestPage', () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.useRealTimers();
   });
 
@@ -1078,14 +1095,17 @@ describe('BacktestPage', () => {
     renderBacktestRoutes();
 
     await openDeterministicStrategyInput();
-    fireEvent.click(screen.getByTestId('pro-open-template-drawer'));
+    await clickAndFlush(screen.getByTestId('pro-open-template-drawer'));
     expect(await screen.findByTestId('pro-strategy-catalog-drawer')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '进阶 / 扩展策略' }));
+    await clickAndFlush(screen.getByRole('button', { name: '进阶 / 扩展策略' }));
 
     const referenceTemplateCard = screen.getByText('简单动量').closest('article');
     expect(referenceTemplateCard).not.toBeNull();
 
-    fireEvent.click(within(referenceTemplateCard as HTMLElement).getByRole('button', { name: '载入参考模板' }));
+    await clickAndFlush(within(referenceTemplateCard as HTMLElement).getByRole('button', { name: '载入参考模板' }));
+    await waitFor(() => {
+      expect(screen.queryByTestId('pro-strategy-catalog-drawer')).not.toBeInTheDocument();
+    });
 
     expect(await screen.findByTestId('pro-strategy-catalog-toast')).toHaveTextContent('当前模板暂不支持直接运行，请在编辑器中修改后再执行');
     expect(screen.getByDisplayValue('近20日涨幅转正并创新高买入，跌破10日低点卖出')).toBeInTheDocument();
@@ -1095,13 +1115,17 @@ describe('BacktestPage', () => {
     renderBacktestRoutes();
 
     await openDeterministicStrategyInput();
-    fireEvent.click(screen.getByTestId('pro-open-template-drawer'));
+    await clickAndFlush(screen.getByTestId('pro-open-template-drawer'));
     expect(await screen.findByTestId('pro-strategy-catalog-drawer')).toBeInTheDocument();
 
     const executableTemplateCard = within(screen.getByTestId('pro-strategy-catalog')).getByText('MACD 金叉 / 死叉').closest('article');
     expect(executableTemplateCard).not.toBeNull();
 
-    fireEvent.click(within(executableTemplateCard as HTMLElement).getByRole('button', { name: '填入编辑器' }));
+    await clickAndFlush(within(executableTemplateCard as HTMLElement).getByRole('button', { name: '填入编辑器' }));
+    await flushPendingUiWork();
+    await waitFor(() => {
+      expect(screen.queryByTestId('pro-strategy-catalog-drawer')).not.toBeInTheDocument();
+    });
 
     expect(screen.queryByTestId('pro-strategy-catalog-toast')).not.toBeInTheDocument();
     expect(screen.getByDisplayValue('MACD 金叉买入，死叉卖出')).toBeInTheDocument();
@@ -1768,6 +1792,8 @@ describe('BacktestPage', () => {
   it('renders English shell copy on localized routes', async () => {
     window.history.replaceState(window.history.state, '', '/en/backtest');
     renderBacktestRoutes(['/en/backtest']);
+    await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
+    await flushPendingUiWork();
 
     expect(screen.getByRole('tablist', { name: bt('en', 'page.moduleTabsLabel') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('en', 'page.ruleTab') })).toBeInTheDocument();
