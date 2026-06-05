@@ -659,6 +659,12 @@ test.describe('Home and Scanner evidence browser smoke', () => {
       await openSignedInRoute(page, '/zh/scanner');
       await appExpect(page.getByTestId('user-scanner-workspace')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('scanner-result-row-NVDA')).toBeVisible({ timeout: 15_000 });
+      const workflow = page.getByTestId('scanner-workflow-summary');
+      await appExpect(workflow).toBeVisible({ timeout: 15_000 });
+      await appExpect(workflow).toContainText('先看市场驱动');
+      await appExpect(workflow).toContainText('当前候选 NVDA');
+      await appExpect(workflow).toContainText('来源确认：含评分级');
+      await appExpect(workflow).toContainText('查看排名主表');
       const strip = page.getByTestId('scanner-inline-candidate-evidence-NVDA');
       await appExpect(strip).toBeVisible({ timeout: 15_000 });
       await appExpect(strip).toContainText('仅观察');
@@ -675,6 +681,9 @@ test.describe('Home and Scanner evidence browser smoke', () => {
       await appExpect(strip).toContainText('来源依据');
       await appExpect(strip).not.toContainText(rawLeakPattern);
       await appExpect(strip).not.toContainText(tradingPattern);
+      const workflowBox = await workflow.boundingBox();
+      const rankedListBox = await page.getByTestId('scanner-ranked-list').boundingBox();
+      expect(workflowBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(rankedListBox?.y ?? Number.NEGATIVE_INFINITY);
       await expectNoHorizontalOverflow(page);
       expect(consoleErrors).toEqual([]);
       expect(unhandledApiRoutes).toEqual([]);

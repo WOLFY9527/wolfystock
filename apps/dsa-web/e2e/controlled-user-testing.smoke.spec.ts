@@ -1194,6 +1194,7 @@ appTest.describe('controlled user testing smoke pack', () => {
     const workspace = page.getByTestId('user-scanner-workspace');
     const readiness = page.getByTestId('scanner-research-readiness-strip');
     const topDown = page.getByTestId('scanner-top-down-context-strip');
+    const workflow = page.getByTestId('scanner-workflow-summary');
     const visualSummary = page.getByTestId('scanner-visual-evidence-summary');
     const candidate = page.getByTestId('scanner-result-row-NVDA');
     const candidateEvidence = page.getByTestId('scanner-inline-candidate-evidence-NVDA');
@@ -1205,6 +1206,11 @@ appTest.describe('controlled user testing smoke pack', () => {
     await appExpect(topDown).toContainText('市场：仅观察');
     await appExpect(topDown).toContainText('宏观：支持');
     await appExpect(topDown).toContainText('流动性：支持');
+    await appExpect(workflow).toBeVisible();
+    await appExpect(workflow).toContainText('先看市场驱动');
+    await appExpect(workflow).toContainText('当前候选 NVDA');
+    await appExpect(workflow).toContainText('来源确认：含评分级');
+    await appExpect(workflow).toContainText('查看排名主表');
     await appExpect(visualSummary).toBeVisible();
     await appExpect(candidate).toBeVisible();
     await appExpect(candidateEvidence).toBeVisible();
@@ -1218,8 +1224,12 @@ appTest.describe('controlled user testing smoke pack', () => {
 
     await expectConsumerSafeRegion(readiness);
     await expectConsumerSafeRegion(topDown);
+    await expectConsumerSafeRegion(workflow);
     await expectConsumerSafeRegion(visualSummary);
     await expectConsumerSafeRegion(candidateEvidence);
+    const workflowBox = await workflow.boundingBox();
+    const rankedListBox = await page.getByTestId('scanner-ranked-list').boundingBox();
+    appExpect(workflowBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(rankedListBox?.y ?? Number.NEGATIVE_INFINITY);
     await expectNoHorizontalOverflow(page);
     appExpect(consoleErrors).toEqual([]);
     appExpect(unhandledApiRoutes).toEqual([]);

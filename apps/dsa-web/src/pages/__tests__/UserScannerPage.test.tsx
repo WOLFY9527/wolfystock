@@ -1246,6 +1246,44 @@ describe('UserScannerPage', () => {
     expect(orderedSymbolsFromRows()).toEqual(['NVDA', 'AVGO', 'AMD']);
   });
 
+  it('surfaces a compact scanner workflow from market drivers to focus evidence before ranked rows', async () => {
+    const nvda = makeCandidate({ symbol: 'NVDA', rank: 1, score: 94 });
+    (nvda as ScannerCandidate & Record<string, unknown>).candidateEvidenceFrame = makeCandidateEvidenceFrame();
+    (nvda as ScannerCandidate & Record<string, unknown>).candidateResearchReadiness = makeCandidateResearchReadiness({
+      readinessState: 'observe_only',
+      verdictLabel: '仅观察',
+    });
+    (nvda as ScannerCandidate & Record<string, unknown>).candidateResearchSummaryFrame = makeCandidateResearchSummaryFrame();
+    (nvda as ScannerCandidate & Record<string, unknown>).candidateSourceProvenanceFrame = makeCandidateSourceProvenanceFrame();
+
+    getRun.mockResolvedValue(makeRunDetail({
+      shortlist: [
+        nvda,
+        makeCandidate({ symbol: 'AVGO', rank: 2, score: 88 }),
+        makeCandidate({ symbol: 'AMD', rank: 3, score: 76 }),
+      ],
+      selected: [nvda],
+      scannerContextFrame: makeScannerContextFrame(),
+    }));
+
+    renderUserScannerPage();
+
+    const topDown = await screen.findByTestId('scanner-top-down-context-strip');
+    const workflow = await screen.findByTestId('scanner-workflow-summary');
+    const rankedList = screen.getByTestId('scanner-ranked-list');
+
+    expect(workflow).toHaveTextContent(/先看市场驱动|Start with market drivers/);
+    expect(workflow).toHaveTextContent(/当前候选 NVDA|Focus candidate NVDA/);
+    expect(workflow).toHaveTextContent(/仅观察/);
+    expect(workflow).toHaveTextContent(/来源确认：含评分级/);
+    expect(workflow).toHaveTextContent(/查看排名主表|Review ranked rows/);
+    expect(workflow).toHaveTextContent(/94\/100/);
+    expectElementBefore(topDown, workflow);
+    expectElementBefore(workflow, rankedList);
+    expectElementBefore(screen.getByTestId('scanner-workflow-step-topdown'), screen.getByTestId('scanner-workflow-step-focus-candidate'));
+    expectElementBefore(screen.getByTestId('scanner-workflow-step-focus-candidate'), screen.getByTestId('scanner-workflow-step-ranked-rows'));
+  });
+
   it('renders candidate evidence coverage without changing row order or score labels', async () => {
     const nvda = makeCandidate({ symbol: 'NVDA', rank: 1, score: 94 });
     (nvda as ScannerCandidate & Record<string, unknown>).candidateEvidenceFrame = makeCandidateEvidenceFrame();
@@ -1670,7 +1708,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     await screen.findByTestId('scanner-run-button');
-    const candidateScrollRegion = screen.getByTestId('scanner-candidate-scroll-region');
+    const candidateScrollRegion = await screen.findByTestId('scanner-candidate-scroll-region');
 
     expect(screen.getByTestId('scanner-ranking-board-page')).not.toHaveClass('xl:overflow-hidden', 'xl:h-[calc(100vh-96px)]');
     expect(screen.getByTestId('user-scanner-workspace')).not.toHaveClass('h-full', 'overflow-hidden');

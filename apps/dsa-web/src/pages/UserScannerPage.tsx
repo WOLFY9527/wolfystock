@@ -2066,6 +2066,149 @@ function ScannerConclusionBand({
   );
 }
 
+function workflowToneVariant(
+  tone: 'neutral' | 'success' | 'caution' | 'danger' | 'info',
+): React.ComponentProps<typeof TerminalChip>['variant'] {
+  if (tone === 'success') return 'success';
+  if (tone === 'danger') return 'danger';
+  if (tone === 'caution') return 'caution';
+  if (tone === 'info') return 'info';
+  return 'neutral';
+}
+
+function ScannerWorkflowSummaryPanel({
+  contextSummary,
+  candidate,
+  diagnostic,
+  rankedRowCount,
+  selectedCount,
+  language,
+}: {
+  contextSummary: ReturnType<typeof buildScannerTopDownContextView> | null;
+  candidate: ScannerCandidate | null;
+  diagnostic: ScannerCandidateDiagnostic | null;
+  rankedRowCount: number;
+  selectedCount: number;
+  language: 'zh' | 'en';
+}) {
+  if (!candidate || !diagnostic) return null;
+
+  const candidateWithEvidence = withCandidateEvidence(candidate);
+  const scoreLabel = diagnostic.score != null && Number.isFinite(diagnostic.score) ? `${diagnostic.score}/100` : '--';
+  const rankLabel = diagnostic.rank ? `#${diagnostic.rank}` : '--';
+  const statusLabel = diagnosticStatusLabel(diagnostic.status, language);
+  const topDownTitle = language === 'en' ? 'Start with market drivers' : '先看市场驱动';
+  const focusTitle = language === 'en' ? `Focus candidate ${candidate.symbol || '--'}` : `当前候选 ${candidate.symbol || '--'}`;
+  const rankedRowsTitle = language === 'en' ? 'Review ranked rows' : '查看排名主表';
+  const workflowStepLabel = language === 'en' ? 'Step' : '步骤';
+  const rowCountLabel = language === 'en' ? 'Rows in view' : '当前行数';
+  const selectedCountLabel = language === 'en' ? 'Selected' : '入选';
+
+  return (
+    <TerminalPanel dense data-testid="scanner-workflow-summary" className="mb-3 grid gap-2.5 p-3">
+      <div className="min-w-0">
+        <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+          {language === 'en' ? 'Scanner workflow' : '扫描流程'}
+        </h3>
+        <p className="mt-0.5 text-[11px] text-white/46">
+          {language === 'en'
+            ? 'Read the market context first, confirm the current candidate evidence, then compare ranked rows.'
+            : '先确认市场上下文，再看当前候选证据，最后对比排名主表。'}
+        </p>
+      </div>
+      <div className="grid gap-2.5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)_minmax(0,0.9fr)]">
+        <TerminalNestedBlock data-testid="scanner-workflow-step-topdown" className="grid gap-2 p-2.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+              {workflowStepLabel} 1
+            </TerminalChip>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+              {topDownTitle}
+            </span>
+            {contextSummary ? (
+              <TerminalChip variant={workflowToneVariant(contextSummary.tone)}>
+                {contextSummary.postureLabel}
+              </TerminalChip>
+            ) : null}
+          </div>
+          <p className="text-xs leading-relaxed text-white/68">
+            {contextSummary?.summaryLine || (language === 'en'
+              ? 'Market context remains unavailable, so the scanner stays research-only.'
+              : '市场上下文暂不可用，因此当前扫描保持研究观察边界。')}
+          </p>
+          {contextSummary?.chips?.length ? (
+            <div className="flex min-w-0 flex-wrap gap-1.5">
+              {contextSummary.chips.slice(0, 4).map((chip) => (
+                <TerminalChip key={chip.key} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                  {chip.label}
+                </TerminalChip>
+              ))}
+            </div>
+          ) : null}
+        </TerminalNestedBlock>
+
+        <TerminalNestedBlock data-testid="scanner-workflow-step-focus-candidate" className="grid gap-2 p-2.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+              {workflowStepLabel} 2
+            </TerminalChip>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+              {focusTitle}
+            </span>
+          </div>
+          <div className="flex min-w-0 flex-wrap gap-1.5">
+            <FieldChip label={language === 'en' ? 'Score' : '评分'} value={scoreLabel} />
+            <FieldChip label={language === 'en' ? 'Rank' : '排名'} value={rankLabel} />
+            <FieldChip label={language === 'en' ? 'Status' : '状态'} value={statusLabel} />
+          </div>
+          {candidateWithEvidence.candidateResearchSummaryFrame ? (
+            <ScannerCandidateResearchSummary
+              frame={candidateWithEvidence.candidateResearchSummaryFrame}
+              language={language}
+              variant="row"
+              testId="scanner-workflow-candidate-summary"
+            />
+          ) : candidate.reasonSummary ? (
+            <p className="text-[11px] leading-relaxed text-white/58">
+              {candidate.reasonSummary}
+            </p>
+          ) : null}
+          {candidateWithEvidence.candidateEvidenceFrame || candidateWithEvidence.candidateResearchReadiness ? (
+            <ScannerCandidateEvidenceStrip
+              frame={candidateWithEvidence.candidateEvidenceFrame}
+              provenanceFrame={candidateWithEvidence.candidateSourceProvenanceFrame}
+              readiness={candidateWithEvidence.candidateResearchReadiness}
+              language={language}
+              variant="row"
+              testId="scanner-workflow-candidate-evidence"
+            />
+          ) : null}
+        </TerminalNestedBlock>
+
+        <TerminalNestedBlock data-testid="scanner-workflow-step-ranked-rows" className="grid gap-2 p-2.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <TerminalChip variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+              {workflowStepLabel} 3
+            </TerminalChip>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+              {rankedRowsTitle}
+            </span>
+          </div>
+          <p className="text-xs leading-relaxed text-white/64">
+            {language === 'en'
+              ? 'Keep the ranked table as the comparison surface, then open detailed notes only when a row needs follow-up.'
+              : '保持排名主表作为对比主面板，只有需要跟进某一行时再展开详细说明。'}
+          </p>
+          <div className="flex min-w-0 flex-wrap gap-1.5">
+            <FieldChip label={rowCountLabel} value={String(rankedRowCount)} />
+            <FieldChip label={selectedCountLabel} value={String(selectedCount)} />
+          </div>
+        </TerminalNestedBlock>
+      </div>
+    </TerminalPanel>
+  );
+}
+
 const UserScannerPage: React.FC = () => {
   const { isReady: isSafariReady, surfaceRef } = useSafariRenderReady();
   const shouldGuardA11y = shouldApplySafariA11yGuard();
@@ -3584,6 +3727,16 @@ const UserScannerPage: React.FC = () => {
                           />
                         ) : workbenchDiagnostics.length ? (
                           <>
+                            {activeDetailCandidate ? (
+                              <ScannerWorkflowSummaryPanel
+                                contextSummary={scannerTopDownContextView}
+                                candidate={activeDetailCandidate}
+                                diagnostic={activeDetailDiagnostic}
+                                rankedRowCount={workbenchDiagnostics.length}
+                                selectedCount={currentSelectedCount}
+                                language={language}
+                              />
+                            ) : null}
                             {visualEvidenceSummary ? (
                               <ScannerVisualEvidenceSummaryPanel model={visualEvidenceSummary} language={language} />
                             ) : null}
@@ -3687,25 +3840,6 @@ const UserScannerPage: React.FC = () => {
                           <div data-testid="scanner-inline-detail-panel" className="max-h-[min(72vh,42rem)] overflow-y-auto rounded-xl border border-white/5 bg-black/20 p-3 no-scrollbar ui-scroll-y-quiet">
                             <div data-testid={`scanner-candidate-detail-${activeDetailCandidate.symbol || 'unknown'}`} className="contents">
                               <div data-testid="scanner-candidate-inspector" className="contents">
-                                <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/48">
-                                  <span className="font-semibold text-white/72">{language === 'en' ? 'Focus candidate' : '当前候选'}</span>
-                                  <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 font-mono text-white/72">{activeDetailCandidate.symbol || '--'}</span>
-                                  {activeDetailDiagnostic ? (
-                                    <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5">
-                                      {diagnosticStatusLabel(activeDetailDiagnostic.status, language)}
-                                    </span>
-                                  ) : null}
-                                  {activeDetailDiagnostic ? (
-                                    <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 text-white/58">
-                                      {formatCandidateDataQuality(activeDetailDiagnostic, language)}
-                                    </span>
-                                  ) : null}
-                                </div>
-                                {activeDetailDiagnostic ? (
-                                  <p className="mb-2 text-xs text-white/58">
-                                    {language === 'en' ? 'Keep the ranked rows visible and use this rail for the current candidate only.' : '先保持主表可见，右侧只保留当前候选的关键信息。'}
-                                  </p>
-                                ) : null}
                                 {renderCandidateDetailPanel(
                                   activeDetailCandidate,
                                   activeDetailTracked,
@@ -3726,25 +3860,6 @@ const UserScannerPage: React.FC = () => {
                           <aside data-testid="scanner-detail-rail" className="sticky top-4 self-start max-h-[min(72vh,42rem)] overflow-y-auto rounded-xl border border-white/5 bg-black/20 p-3 no-scrollbar ui-scroll-y-quiet">
                             <div data-testid={`scanner-candidate-detail-${activeDetailCandidate.symbol || 'unknown'}`} className="contents">
                               <div data-testid="scanner-candidate-inspector" className="contents">
-                                <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-white/48">
-                                  <span className="font-semibold text-white/72">{language === 'en' ? 'Focus candidate' : '当前候选'}</span>
-                                  <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 font-mono text-white/72">{activeDetailCandidate.symbol || '--'}</span>
-                                  {activeDetailDiagnostic ? (
-                                    <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5">
-                                      {diagnosticStatusLabel(activeDetailDiagnostic.status, language)}
-                                    </span>
-                                  ) : null}
-                                  {activeDetailDiagnostic ? (
-                                    <span className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 text-white/58">
-                                      {formatCandidateDataQuality(activeDetailDiagnostic, language)}
-                                    </span>
-                                  ) : null}
-                                </div>
-                                {activeDetailDiagnostic ? (
-                                  <p className="mb-2 text-xs text-white/58">
-                                    {language === 'en' ? 'Keep the ranked rows visible and use this rail for the current candidate only.' : '先保持主表可见，右侧只保留当前候选的关键信息。'}
-                                  </p>
-                                ) : null}
                                 {renderCandidateDetailPanel(
                                   activeDetailCandidate,
                                   activeDetailTracked,
