@@ -1,143 +1,66 @@
-import type { Locator, Page, Route } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect as appExpect, test as appTest } from './fixtures/appSmoke';
+import {
+  expectNoHorizontalOverflow,
+  fulfillJson,
+  installSignedInSessionRoutes,
+  openSignedInRoute,
+} from './fixtures/authenticatedRouteSmoke';
+import {
+  buildHomeEvidencePacketShell,
+  buildHomeHistoryPayload,
+  buildHomeReportMeta,
+  buildHomeSingleStockEvidencePacketBase,
+  buildHomeSourceProvenanceFrame,
+  buildHomeStrategyBase,
+  buildScannerCandidateEvidenceFrame,
+  buildScannerCandidateResearchReadiness,
+  buildScannerCandidateSourceProvenanceFrame,
+  buildScannerContextFrameBase,
+  buildScannerNvdaCandidateBase,
+  buildScannerRunSummaryBase,
+  expectSurfaceTextSafe,
+} from './fixtures/smokeEvidence';
 
 const desktopViewport = { width: 1440, height: 1000 };
 const narrowViewport = { width: 390, height: 844 };
 const timestamp = '2026-06-04T09:00:00Z';
 
-const signedInUser = {
-  id: 'user-1',
-  username: 'wolfy-user',
-  displayName: 'Wolfy User',
-  role: 'user',
-  isAdmin: false,
-  isAuthenticated: true,
-  transitional: false,
-  authEnabled: true,
-};
-
 const forbiddenInternalPattern =
   /raw\s+(payload|response|schema|prompt|trace)|debug\s+(payload|response|schema|prompt|panel)|provider\s+(route|payload|response)|cache\s+router|stack\s+trace|traceback|internal\s+reasoning|sourceAuthority|providerRoute|api[_\s-]?key\s*[=:]|password\s*[=:]|session[_\s-]?id\s*[=:]|secret\s*[=:]|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]{12,}/i;
 const forbiddenExecutionPattern =
   /买入按钮|建议买入|建议卖出|立即交易|提交订单|连接券商|连接经纪商|真实下单|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy|must buy|must sell|buy now|sell now|place order|submit order|connect broker|broker CTA/i;
-
-async function fulfillJson(route: Route, payload: unknown, status = 200) {
-  await route.fulfill({
-    status,
-    contentType: 'application/json',
-    body: JSON.stringify(payload),
-  });
-}
-
-async function installSignedInSessionRoutes(page: Page) {
-  await page.route('**/api/v1/auth/status**', async (route) => {
-    await fulfillJson(route, {
-      authEnabled: true,
-      loggedIn: true,
-      passwordSet: true,
-      passwordChangeable: true,
-      setupState: 'enabled',
-      currentUser: signedInUser,
-    });
-  });
-
-  await page.route('**/api/v1/auth/me**', async (route) => {
-    await fulfillJson(route, signedInUser);
-  });
-}
-
-async function expectNoHorizontalOverflow(page: Page) {
-  await appExpect
-    .poll(async () => page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth)))
-    .toBeLessThanOrEqual(1);
-}
+const consumerSafeAllowedPhrases = [
+  '仅做只读情景分析，不构成交易或下单指令。',
+  '不构成交易/下单指令',
+  '不构成交易或下单指令',
+  '不构成买卖建议',
+  '不会提交订单',
+  '不连接经纪商',
+  '不改动投资组合',
+];
 
 async function expectConsumerSafeRegion(region: Locator) {
-  const text = (await region.innerText())
-    .replaceAll('仅做只读情景分析，不构成交易或下单指令。', '')
-    .replaceAll('不构成交易/下单指令', '')
-    .replaceAll('不构成交易或下单指令', '')
-    .replaceAll('不构成买卖建议', '')
-    .replaceAll('不会提交订单', '')
-    .replaceAll('不连接经纪商', '')
-    .replaceAll('不改动投资组合', '');
-  appExpect(text).not.toMatch(forbiddenInternalPattern);
-  appExpect(text).not.toMatch(forbiddenExecutionPattern);
-}
-
-function homeHistoryData() {
-  return [
-    { date: '2026-05-27', open: 120.0, high: 121.2, low: 119.4, close: 120.8, volume: 8100000, change_percent: 0.7 },
-    { date: '2026-05-28', open: 120.9, high: 122.4, low: 120.1, close: 121.7, volume: 7900000, change_percent: 0.74 },
-    { date: '2026-05-29', open: 121.8, high: 123.1, low: 121.0, close: 122.2, volume: 8400000, change_percent: 0.41 },
-    { date: '2026-05-30', open: 122.0, high: 123.6, low: 121.4, close: 123.1, volume: 8600000, change_percent: 0.74 },
-    { date: '2026-06-02', open: 123.2, high: 124.1, low: 122.7, close: 123.8, volume: 8050000, change_percent: 0.57 },
-  ];
+  await expectSurfaceTextSafe(region, {
+    allowedPhrases: consumerSafeAllowedPhrases,
+    forbiddenPatterns: [forbiddenInternalPattern, forbiddenExecutionPattern],
+  });
 }
 
 async function installHomeResearchRoutes(page: Page) {
   await installSignedInSessionRoutes(page);
 
   await page.route('**/api/v1/stocks/*/evidence**', async (route) => {
-    await fulfillJson(route, {
-      symbols: ['ORCL'],
-      items: [
-        {
-          symbol: 'ORCL',
-          market: 'US',
-          stock_evidence_packet: {
-            schema_version: 'stock_evidence_packet_v1',
-            not_investment_advice: true,
-            observation_only: true,
-          },
-        },
-      ],
-      meta: {
-        generated_at: timestamp,
-        source: 'read_only_evidence_v2',
-      },
-    });
+    await fulfillJson(route, buildHomeEvidencePacketShell(timestamp));
   });
 
   await page.route('**/api/v1/stocks/ORCL/history**', async (route) => {
-    await fulfillJson(route, {
-      stock_code: 'ORCL',
-      stock_name: 'Oracle',
-      period: 'daily',
-      source: 'fixture_history',
-      source_confidence: {
-        source: 'fixture_history',
-        source_label: '本地审核样例',
-        as_of: timestamp,
-        freshness: 'available',
-        is_fallback: false,
-        is_stale: false,
-        is_partial: false,
-        is_synthetic: false,
-        is_unavailable: false,
-        confidence_weight: 1,
-        coverage: 1,
-      },
-      data: homeHistoryData(),
-    });
+    await fulfillJson(route, buildHomeHistoryPayload(timestamp));
   });
 
   await page.route('**/api/v1/history/3**', async (route) => {
     await fulfillJson(route, {
-      meta: {
-        id: 3,
-        queryId: 'q3',
-        stockCode: 'ORCL',
-        stockName: 'Oracle',
-        companyName: 'Oracle Corporation',
-        reportType: 'detailed',
-        createdAt: '2026-04-27T08:00:00Z',
-        reportGeneratedAt: '2026-04-27T08:03:00Z',
-        currentPrice: 130.2,
-        changePct: -0.4,
-        modelUsed: 'fixture-model',
-        isTest: true,
-      },
+      meta: buildHomeReportMeta(),
       summary: {
         analysisSummary: 'Oracle is holding its post-earnings platform.',
         operationAdvice: '数据不足，结论仅供观察。',
@@ -145,11 +68,7 @@ async function installHomeResearchRoutes(page: Page) {
         sentimentScore: 78,
         sentimentLabel: 'Bullish',
       },
-      strategy: {
-        idealBuy: '121.80 - 124.60',
-        stopLoss: '117.40',
-        takeProfit: '133.50',
-      },
+      strategy: buildHomeStrategyBase(),
       details: {
         standardReport: {
           summaryPanel: {
@@ -175,27 +94,7 @@ async function installHomeResearchRoutes(page: Page) {
           ],
         },
         analysisResult: {
-          singleStockEvidencePacket: {
-            packetState: 'observe_only',
-            priceHistory: { status: 'available' },
-            technicals: { status: 'available' },
-            fundamentals: { status: 'degraded' },
-            earnings: { status: 'pending' },
-            news: { status: 'missing' },
-            catalysts: { status: 'blocked' },
-            valuation: { status: 'waiting' },
-            fundamentalsEarnings: {
-              normalizerState: 'insufficient',
-              missingEvidence: ['roe', 'pb'],
-              blockingReasons: ['partial_coverage'],
-              evidenceLabels: [],
-            },
-            newsCatalysts: {
-              topNewsItems: [{ headline: 'Oracle cloud backlog remains stable.' }],
-              topCatalystItems: [],
-              blockingReasons: ['provider_timeout'],
-            },
-          },
+          singleStockEvidencePacket: buildHomeSingleStockEvidencePacketBase(),
           researchReadiness: {
             contractVersion: 'research_readiness_v1',
             researchReady: false,
@@ -272,68 +171,7 @@ async function installHomeResearchRoutes(page: Page) {
         missingEvidence: ['fundamentals', 'news'],
         nextEvidenceNeeded: ['补充基本面证据', '补充新闻证据'],
       },
-      sourceProvenanceFrame: [
-        {
-          contractVersion: 'source_provenance_v1',
-          sourceId: 'polygon_us_grouped_daily',
-          sourceLabel: 'Polygon Grouped Daily',
-          evidenceDomain: 'market_data',
-          authorityTier: 'score_grade',
-          freshnessState: 'fresh',
-          sourceTier: 'authorized_feed',
-          fallbackOrProxy: false,
-          observationOnly: false,
-          scoreContributionAllowed: true,
-          limitations: [],
-          nextEvidenceNeeded: [],
-          debugRef: 'analysis:orcl-price',
-        },
-        {
-          contractVersion: 'source_provenance_v1',
-          sourceId: 'fmp',
-          sourceLabel: 'FMP',
-          evidenceDomain: 'fundamentals',
-          authorityTier: 'score_grade',
-          freshnessState: 'cached',
-          sourceTier: 'official_public',
-          fallbackOrProxy: false,
-          observationOnly: false,
-          scoreContributionAllowed: true,
-          limitations: [],
-          nextEvidenceNeeded: [],
-          debugRef: 'analysis:orcl-fundamentals',
-        },
-        {
-          contractVersion: 'source_provenance_v1',
-          sourceId: 'fallback_snapshot',
-          sourceLabel: 'Fallback snapshot',
-          evidenceDomain: 'news',
-          authorityTier: 'observation_only',
-          freshnessState: 'fallback',
-          sourceTier: 'fallback',
-          fallbackOrProxy: true,
-          observationOnly: true,
-          scoreContributionAllowed: false,
-          limitations: ['fallback_or_proxy_source', 'observation_only'],
-          nextEvidenceNeeded: ['authorized_primary_source'],
-          debugRef: 'analysis:orcl-news',
-        },
-        {
-          contractVersion: 'source_provenance_v1',
-          sourceId: 'unknown_source',
-          sourceLabel: '未知来源',
-          evidenceDomain: 'research',
-          authorityTier: 'unknown',
-          freshnessState: 'unknown',
-          sourceTier: 'unknown',
-          fallbackOrProxy: true,
-          observationOnly: true,
-          scoreContributionAllowed: false,
-          limitations: ['unknown_source'],
-          nextEvidenceNeeded: ['verified_source_metadata'],
-          debugRef: 'analysis:orcl-research',
-        },
-      ],
+      sourceProvenanceFrame: buildHomeSourceProvenanceFrame(),
     });
   });
 }
@@ -475,31 +313,11 @@ function scannerRunsPayload() {
     limit: 10,
     items: [
       {
-        id: 11,
-        market: 'cn',
-        profile: 'cn_preopen_v1',
-        profile_label: 'A-share Pre-open v1',
-        status: 'completed',
+        ...buildScannerRunSummaryBase(),
         run_at: timestamp,
         completed_at: timestamp,
         watchlist_date: '2026-06-04',
-        trigger_mode: 'manual',
-        universe_name: 'cn_a_liquid_watchlist_v1',
-        shortlist_size: 1,
-        universe_size: 320,
-        preselected_size: 72,
-        evaluated_size: 48,
-        source_summary: 'Mocked scanner payload',
         headline: 'Mock scanner shortlist for controlled user testing',
-        universe_type: 'theme',
-        theme_id: 'ai_semiconductors',
-        theme_label: 'AI 半导体',
-        requested_symbols_count: 0,
-        accepted_symbols_count: 0,
-        rejected_symbols: [],
-        top_symbols: ['NVDA'],
-        notification_status: 'not_attempted',
-        failure_reason: null,
       },
     ],
   };
@@ -507,171 +325,19 @@ function scannerRunsPayload() {
 
 function scannerRunDetailPayload() {
   return {
-    id: 11,
-    market: 'cn',
-    profile: 'cn_preopen_v1',
-    profile_label: 'A-share Pre-open v1',
-    status: 'completed',
+    ...buildScannerRunSummaryBase(),
     run_at: timestamp,
     completed_at: timestamp,
     watchlist_date: '2026-06-04',
-    trigger_mode: 'manual',
-    universe_name: 'cn_a_liquid_watchlist_v1',
-    shortlist_size: 1,
-    universe_size: 320,
-    preselected_size: 72,
-    evaluated_size: 48,
-    source_summary: 'Mocked scanner payload',
     headline: 'Mock scanner shortlist for controlled user testing',
-    universe_type: 'theme',
-    theme_id: 'ai_semiconductors',
-    theme_label: 'AI 半导体',
-    requested_symbols_count: 0,
-    accepted_symbols_count: 0,
-    rejected_symbols: [],
     shortlist: [
       {
-        symbol: 'NVDA',
-        name: 'NVIDIA',
-        company_name: 'NVIDIA Corp',
-        rank: 1,
-        score: 98,
-        quality_hint: 'Liquid and trend-aligned',
-        reason_summary: 'NVDA keeps relative strength and breadth support.',
-        reasons: ['NVDA is holding above the recent breakout range.'],
-        key_metrics: [
-          { label: 'Entry range', value: '100-102' },
-          { label: 'Target price', value: '112' },
-          { label: 'Stop loss', value: '96' },
-        ],
-        feature_signals: [
-          { label: 'Theme', value: 'AI infrastructure' },
-          { label: 'Momentum', value: 'Improving' },
-        ],
-        risk_notes: ['Crowded trade if volume stalls.'],
-        watch_context: [{ label: 'Plan', value: 'Wait for first controlled pullback.' }],
-        boards: ['semis'],
-        tags: [{ name: 'High conviction', description: 'Top-ranked mock setup.', tone: 'indigo' }],
-        appeared_in_recent_runs: 2,
-        last_trade_date: '2026-06-01',
+        ...buildScannerNvdaCandidateBase(),
         scan_timestamp: timestamp,
         diagnostics: {},
-        candidateEvidenceFrame: {
-          contractVersion: 'scanner_candidate_evidence_v1',
-          coverageState: 'observe_only',
-          domains: {
-            technicals: { state: 'available', observationOnly: false },
-            priceHistory: { state: 'available', observationOnly: false },
-            liquidity: { state: 'partial', observationOnly: true },
-            theme: { state: 'available', observationOnly: true },
-            fundamentals: { state: 'missing', observationOnly: true },
-            newsCatalyst: { state: 'missing', observationOnly: true },
-          },
-          coverage: {
-            availableCount: 2,
-            partialCount: 1,
-            observeOnlyCount: 4,
-            missingCount: 2,
-            totalCount: 6,
-          },
-          noAdviceBoundary: true,
-        },
-        candidateResearchReadiness: {
-          contractVersion: 'research_readiness_v1',
-          researchReady: false,
-          readinessState: 'observe_only',
-          verdictLabel: '仅观察',
-          blockingReasons: [],
-          missingEvidence: ['fundamentals', 'newsCatalyst'],
-          consumerActionBoundary: 'no_advice',
-          noAdviceBoundary: true,
-        },
-        candidateSourceProvenanceFrame: {
-          contractVersion: 'source_provenance_v1',
-          entryCount: 4,
-          authorityTierCounts: {
-            observation_only: 2,
-            score_grade: 1,
-            unknown: 1,
-          },
-          freshnessStateCounts: {
-            cached: 1,
-            fallback: 1,
-            fresh: 1,
-            unknown: 1,
-          },
-          evidenceDomainCounts: {
-            fundamentals: 1,
-            market_data: 1,
-            news: 1,
-            research: 1,
-          },
-          fallbackOrProxyCount: 2,
-          observationOnlyCount: 3,
-          scoreContributionAllowedCount: 1,
-          entries: [
-            {
-              contractVersion: 'source_provenance_v1',
-              sourceId: 'polygon_us_grouped_daily',
-              sourceLabel: 'Polygon Grouped Daily',
-              evidenceDomain: 'market_data',
-              authorityTier: 'score_grade',
-              freshnessState: 'fresh',
-              sourceTier: 'authorized_feed',
-              fallbackOrProxy: false,
-              observationOnly: false,
-              scoreContributionAllowed: true,
-              limitations: [],
-              nextEvidenceNeeded: [],
-              debugRef: 'scanner:nvda-price',
-            },
-            {
-              contractVersion: 'source_provenance_v1',
-              sourceId: 'fallback_snapshot',
-              sourceLabel: 'Fallback snapshot',
-              evidenceDomain: 'news',
-              authorityTier: 'observation_only',
-              freshnessState: 'fallback',
-              sourceTier: 'fallback',
-              fallbackOrProxy: true,
-              observationOnly: true,
-              scoreContributionAllowed: false,
-              limitations: ['fallback_or_proxy_source', 'observation_only'],
-              nextEvidenceNeeded: ['authorized_primary_source'],
-              debugRef: 'scanner:nvda-news',
-            },
-            {
-              contractVersion: 'source_provenance_v1',
-              sourceId: 'fmp',
-              sourceLabel: 'FMP',
-              evidenceDomain: 'fundamentals',
-              authorityTier: 'observation_only',
-              freshnessState: 'cached',
-              sourceTier: 'official_public',
-              fallbackOrProxy: false,
-              observationOnly: true,
-              scoreContributionAllowed: false,
-              limitations: ['observation_only'],
-              nextEvidenceNeeded: ['score_grade_authority_source'],
-              debugRef: 'scanner:nvda-fundamentals',
-            },
-            {
-              contractVersion: 'source_provenance_v1',
-              sourceId: 'unknown_source',
-              sourceLabel: '未知来源',
-              evidenceDomain: 'research',
-              authorityTier: 'unknown',
-              freshnessState: 'unknown',
-              sourceTier: 'unknown',
-              fallbackOrProxy: true,
-              observationOnly: true,
-              scoreContributionAllowed: false,
-              limitations: ['unknown_source'],
-              nextEvidenceNeeded: ['verified_source_metadata'],
-              debugRef: 'scanner:nvda-research',
-            },
-          ],
-        },
+        candidateEvidenceFrame: buildScannerCandidateEvidenceFrame(),
+        candidateResearchReadiness: buildScannerCandidateResearchReadiness(),
+        candidateSourceProvenanceFrame: buildScannerCandidateSourceProvenanceFrame(),
       },
     ],
     summary: {
@@ -680,68 +346,7 @@ function scannerRunDetailPayload() {
       data_failed_count: 0,
       error_count: 0,
     },
-    scanner_context_frame: {
-      market_readiness: {
-        contract_version: 'research_readiness_v1',
-        research_ready: false,
-        readiness_state: 'observe_only',
-        verdict_label: '仅观察',
-        blocking_reasons: [],
-        missing_evidence: [],
-        evidence_coverage: {
-          score_grade_count: 2,
-          observation_only_count: 1,
-          missing_count: 0,
-          total_count: 3,
-        },
-        source_authority: 'observationOnly',
-        freshness_floor: 'cached',
-        consumer_action_boundary: 'no_advice',
-        next_evidence_needed: ['继续结合市场与主题框架观察'],
-      },
-      macro_regime: {
-        state: 'supportive',
-        label: 'Supportive macro regime',
-        freshness: 'cached',
-        blockers: [],
-        observation_only: false,
-        source_authority_allowed: true,
-        score_contribution_allowed: true,
-      },
-      liquidity_frame: {
-        state: 'supportive',
-        label: 'Liquidity supports equity leadership',
-        freshness: 'cached',
-        blockers: [],
-        observation_only: false,
-        source_authority_allowed: true,
-        score_contribution_allowed: true,
-        proxy_only: false,
-      },
-      asset_class_bias: {
-        state: 'supportive',
-        label: 'Equities preferred',
-        blockers: [],
-        observation_only: false,
-      },
-      theme_frame: {
-        state: 'observe_only',
-        label: 'AI leadership is still observation-only',
-        freshness: 'cached',
-        blockers: [],
-        observation_only: true,
-        proxy_only: true,
-        themes: [
-          { id: 'ai', label: 'AI', observation_only: true, proxy_only: true },
-        ],
-      },
-      universe_policy: {
-        type: 'theme',
-        label: 'Theme universe',
-        blockers: [],
-      },
-      no_advice_boundary: true,
-    },
+    scanner_context_frame: buildScannerContextFrameBase(),
   };
 }
 
@@ -1128,8 +733,7 @@ appTest.describe('controlled user testing smoke pack', () => {
   appTest('Home: user can read research evidence, provenance/trust boundary, and technical chart', async ({ page, consoleErrors, unhandledApiRoutes }) => {
     await page.setViewportSize(desktopViewport);
     await installHomeResearchRoutes(page);
-    await page.goto('/zh');
-    await page.waitForLoadState('domcontentloaded');
+    await openSignedInRoute(page, '/zh');
 
     const dashboard = page.getByTestId('home-bento-dashboard');
     await appExpect(dashboard).toBeVisible({ timeout: 15_000 });
@@ -1158,8 +762,7 @@ appTest.describe('controlled user testing smoke pack', () => {
   appTest('Market Overview: user can read actionability/readiness and visual evidence strip', async ({ page, consoleErrors, unhandledApiRoutes }) => {
     await page.setViewportSize(desktopViewport);
     await installMarketActionabilityRoute(page);
-    await page.goto('/zh/market-overview');
-    await page.waitForLoadState('domcontentloaded');
+    await openSignedInRoute(page, '/zh/market-overview');
 
     const shell = page.getByTestId('market-overview-shell');
     const readiness = page.getByTestId('market-overview-research-readiness-strip');
@@ -1188,8 +791,7 @@ appTest.describe('controlled user testing smoke pack', () => {
   appTest('Scanner: user can follow top-down context into a candidate evidence summary on a narrow viewport', async ({ page, consoleErrors, unhandledApiRoutes }) => {
     await page.setViewportSize(narrowViewport);
     await installScannerControlledRoutes(page);
-    await page.goto('/zh/scanner');
-    await page.waitForLoadState('domcontentloaded');
+    await openSignedInRoute(page, '/zh/scanner');
 
     const workspace = page.getByTestId('user-scanner-workspace');
     const readiness = page.getByTestId('scanner-research-readiness-strip');
@@ -1238,8 +840,7 @@ appTest.describe('controlled user testing smoke pack', () => {
   appTest('Backtest: user can open a deterministic result and inspect research simulation visuals', async ({ page, consoleErrors, unhandledApiRoutes }) => {
     await page.setViewportSize(desktopViewport);
     await installSignedInSessionRoutes(page);
-    await page.goto('/zh/backtest/results/34');
-    await page.waitForLoadState('domcontentloaded');
+    await openSignedInRoute(page, '/zh/backtest/results/34');
 
     const pageRoot = page.getByTestId('deterministic-backtest-result-page');
     await appExpect(pageRoot).toBeVisible({ timeout: 15_000 });
@@ -1263,8 +864,7 @@ appTest.describe('controlled user testing smoke pack', () => {
   appTest('Options Lab: user can inspect readiness, scenario evidence, payoff/IV visuals, and no-execution boundary', async ({ page, consoleErrors, unhandledApiRoutes }) => {
     await page.setViewportSize(narrowViewport);
     const harness = await installOptionsControlledRoutes(page);
-    await page.goto('/zh/options-lab');
-    await page.waitForLoadState('domcontentloaded');
+    await openSignedInRoute(page, '/zh/options-lab');
 
     const pageRoot = page.getByTestId('options-lab-page-root');
     const readiness = page.getByTestId('options-lab-research-readiness-strip');
