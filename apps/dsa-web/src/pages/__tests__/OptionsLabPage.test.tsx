@@ -507,6 +507,10 @@ function renderPage() {
   );
 }
 
+async function expectContractSymbolVisible(symbol: string) {
+  expect((await screen.findAllByText(symbol)).length).toBeGreaterThan(0);
+}
+
 describe('OptionsLabPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1766,7 +1770,7 @@ describe('OptionsLabPage', () => {
 
     renderPage();
 
-    await screen.findByText('TEM260619C00055000');
+    await expectContractSymbolVisible('TEM260619C00055000');
 
     vi.mocked(optionsLabApi.compareStrategies).mockClear();
     vi.mocked(optionsLabApi.evaluateDecision).mockClear();
@@ -1859,7 +1863,7 @@ describe('OptionsLabPage', () => {
     await waitFor(() => {
       expect(within(section).getByText('策略对比暂不可用。请稍后重试或调整假设。')).toBeInTheDocument();
     });
-    expect(screen.getByText('TEM260619C00055000')).toBeInTheDocument();
+    await expectContractSymbolVisible('TEM260619C00055000');
   });
 
   it('keeps the page visible when compare returns incomplete strategy fields', async () => {
@@ -1910,7 +1914,7 @@ describe('OptionsLabPage', () => {
     await waitFor(() => {
       expect(within(section).getByText('策略对比暂不可用。请稍后重试或调整假设。')).toBeInTheDocument();
     });
-    expect(screen.getByText('TEM260619C00055000')).toBeInTheDocument();
+    await expectContractSymbolVisible('TEM260619C00055000');
   });
 
   it.each([401, 403])('keeps the base page usable when compare returns %s', async (status) => {
@@ -1945,7 +1949,7 @@ describe('OptionsLabPage', () => {
       await waitFor(() => {
         expect(within(section).getByText('策略对比暂不可用。请稍后重试或调整假设。')).toBeInTheDocument();
       });
-      expect(screen.getByText('TEM260619C00055000')).toBeInTheDocument();
+      expect((await screen.findAllByText('TEM260619C00055000')).length).toBeGreaterThan(0);
     } finally {
       timeoutSpy.mockRestore();
     }
@@ -1980,7 +1984,7 @@ describe('OptionsLabPage', () => {
   it('keeps data readiness user-facing without developer details', async () => {
     renderPage();
 
-    expect(await screen.findByText('TEM260619C00055000')).toBeInTheDocument();
+    await expectContractSymbolVisible('TEM260619C00055000');
     [
       'options-lab-developer-details',
       'options-lab-strategy-developer-details',
@@ -2034,7 +2038,7 @@ describe('OptionsLabPage', () => {
   it('does not expose raw provider payloads, secrets, rejected recommendation wording, or order CTAs', async () => {
     renderPage();
 
-    await screen.findByText('TEM260619C00055000');
+    await expectContractSymbolVisible('TEM260619C00055000');
     const domText = document.body.textContent || '';
     [
       'raw_provider_payload',
@@ -2103,7 +2107,7 @@ describe('OptionsLabPage', () => {
   it('uses ghost materials instead of local solid black slabs for major panels', async () => {
     renderPage();
 
-    await screen.findByText('TEM260619C00055000');
+    await expectContractSymbolVisible('TEM260619C00055000');
     [
       'options-lab-product-hero',
       'options-lab-decision-engine',
@@ -2210,12 +2214,38 @@ describe('OptionsLabPage', () => {
     expect(document.body.textContent || '').not.toContain('TypeError');
   });
 
-  it('renders calls and puts in separate dense tables with mocked chain data', async () => {
+  it('renders desktop chain tables and mobile chain cards from the same mocked chain data', async () => {
     renderPage();
 
     const callsTable = await screen.findByTestId('options-lab-calls-table');
     const putsTable = screen.getByTestId('options-lab-puts-table');
-    expect(within(callsTable).getByText('TEM260619C00055000')).toBeInTheDocument();
-    expect(within(putsTable).getByText('TEM260619P00050000')).toBeInTheDocument();
+    const callsDesktopTable = within(callsTable).getByTestId('options-lab-calls-table-desktop-table');
+    const putsDesktopTable = within(putsTable).getByTestId('options-lab-puts-table-desktop-table');
+    const callsMobileList = within(callsTable).getByTestId('options-lab-calls-table-mobile-list');
+    const putsMobileList = within(putsTable).getByTestId('options-lab-puts-table-mobile-list');
+
+    expect(within(callsDesktopTable).getByText('TEM260619C00055000')).toBeInTheDocument();
+    expect(within(putsDesktopTable).getByText('TEM260619P00050000')).toBeInTheDocument();
+
+    const callCard = within(callsMobileList).getByTestId('options-lab-calls-table-mobile-card-TEM260619C00055000');
+    const putCard = within(putsMobileList).getByTestId('options-lab-puts-table-mobile-card-TEM260619P00050000');
+    expect(callCard).toHaveTextContent('TEM260619C00055000');
+    expect(callCard).toHaveTextContent('行权价');
+    expect(callCard).toHaveTextContent('$55.00');
+    expect(callCard).toHaveTextContent('中间价');
+    expect(callCard).toHaveTextContent('$4.23');
+    expect(callCard).toHaveTextContent('买价 / 卖价');
+    expect(callCard).toHaveTextContent('$4.10 / $4.35');
+    expect(callCard).toHaveTextContent('IV');
+    expect(callCard).toHaveTextContent('54.0%');
+    expect(callCard).toHaveTextContent('Delta');
+    expect(callCard).toHaveTextContent('0.42');
+    expect(callCard).toHaveTextContent('Theta');
+    expect(callCard).toHaveTextContent('-0.05');
+
+    expect(putCard).toHaveTextContent('TEM260619P00050000');
+    expect(putCard).toHaveTextContent('$50.00');
+    expect(putCard).toHaveTextContent('$3.35');
+    expect(putCard).toHaveTextContent('$3.20 / $3.50');
   });
 });

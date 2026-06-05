@@ -1510,6 +1510,18 @@ const DecisionSummaryStrip: React.FC<{ items: SummaryStripItem[] }> = ({ items }
   </section>
 );
 
+const ChainMetric: React.FC<{ label: string; value: string; className?: string }> = ({ label, value, className }) => (
+  <div
+    className={cn(
+      'min-w-0 rounded-md border border-[color:var(--wolfy-divider)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_82%,transparent)] px-2.5 py-2',
+      className,
+    )}
+  >
+    <p className={labelClass}>{label}</p>
+    <p className="mt-1 break-words font-mono text-xs text-[color:var(--wolfy-text-primary)]">{value}</p>
+  </div>
+);
+
 const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId: string; className?: string }> = ({ title, contracts, testId, className }) => (
   <section className={cn('min-h-[280px] min-w-0', className)} data-testid="options-lab-chain-panel">
     <div className="mb-3">
@@ -1521,8 +1533,63 @@ const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId:
       </TerminalEmptyState>
     ) : (
       <DataWorkbenchFrame data-testid={testId}>
-        <div className="max-h-[22rem] overflow-auto no-scrollbar">
-          <table className="w-full min-w-[720px] border-separate border-spacing-y-1 text-left">
+        <div className="max-h-[22rem] overflow-y-auto no-scrollbar md:hidden">
+          <div className="grid gap-2" data-testid={`${testId}-mobile-list`}>
+            {contracts.map((contract) => {
+              const greekMetrics = [
+                { label: 'Delta', value: number(contract.delta, 2) },
+                { label: 'Theta', value: number(contract.theta, 2), className: 'text-amber-200' },
+                { label: 'Gamma', value: number(contract.gamma, 3) },
+                { label: 'Vega', value: number(contract.vega, 2) },
+                { label: 'Rho', value: number(contract.rho, 2) },
+              ].filter((metric) => metric.value !== '--');
+
+              return (
+                <article
+                  key={contract.contractSymbol}
+                  data-testid={`${testId}-mobile-card-${contract.contractSymbol}`}
+                  className="min-w-0 rounded-md border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-3 text-xs text-[color:var(--wolfy-text-secondary)]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className={labelClass}>合约</p>
+                      <p className="mt-1 break-all font-mono text-xs text-[color:var(--wolfy-text-primary)]">{contract.contractSymbol}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className={labelClass}>流动性</p>
+                      <div className="mt-1">
+                        <Pill tone={(contract.liquidityScore || 0) >= 75 ? 'good' : 'warn'}>
+                          {number(contract.liquidityScore)}
+                        </Pill>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid min-w-0 grid-cols-2 gap-2">
+                    <ChainMetric label="行权价" value={money(contract.strike)} />
+                    <ChainMetric label="中间价" value={money(contract.mid)} />
+                    <ChainMetric label="买价 / 卖价" value={`${money(contract.bid)} / ${money(contract.ask)}`} className="col-span-2" />
+                    <ChainMetric label="IV" value={ratio(contract.impliedVolatility)} />
+                    <ChainMetric label="OI / 成交量" value={`${number(contract.openInterest)} / ${number(contract.volume)}`} />
+                    {greekMetrics.length ? (
+                      greekMetrics.map((metric) => (
+                        <ChainMetric
+                          key={`${contract.contractSymbol}-${metric.label}`}
+                          label={metric.label}
+                          value={metric.value}
+                          className={metric.className}
+                        />
+                      ))
+                    ) : (
+                      <ChainMetric label="Greeks" value="--" className="col-span-2" />
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+        <div className="hidden max-h-[22rem] overflow-auto no-scrollbar md:block">
+          <table data-testid={`${testId}-desktop-table`} className="w-full min-w-[720px] border-separate border-spacing-y-1 text-left">
             <thead className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
               <tr>
                 <th className="px-3 py-2">合约</th>
