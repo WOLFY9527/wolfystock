@@ -946,12 +946,12 @@ const StrategyPayoffVisual: React.FC<{
     );
   }
 
-  const width = 520;
+  const width = 420;
   const height = 220;
-  const paddingLeft = 44;
-  const paddingRight = 16;
+  const paddingLeft = 36;
+  const paddingRight = 14;
   const paddingTop = 16;
-  const paddingBottom = 30;
+  const paddingBottom = 28;
   const plotWidth = width - paddingLeft - paddingRight;
   const plotHeight = height - paddingTop - paddingBottom;
   const zeroY = paddingTop + (plotHeight - scaleValue(0, model.minPayoff, model.maxPayoff, plotHeight));
@@ -967,66 +967,68 @@ const StrategyPayoffVisual: React.FC<{
   return (
     <div data-testid="options-lab-payoff-visual" className="grid gap-3">
       <DataWorkbenchFrame>
-        <div className="min-w-[28rem] p-4">
-          <svg
-            viewBox={`0 0 ${width} ${height}`}
-            role="img"
-            aria-label={`到期收益示意，${strategyChineseLabel(strategy.strategyType)}`}
-            className="h-auto w-full"
-          >
-            {[0.25, 0.5, 0.75].map((ratioValue) => {
-              const y = paddingTop + plotHeight * ratioValue;
-              return (
-                <line
-                  key={ratioValue}
-                  x1={paddingLeft}
-                  y1={y}
-                  x2={width - paddingRight}
-                  y2={y}
-                  stroke="rgba(148, 163, 184, 0.14)"
-                  strokeDasharray="4 6"
-                />
-              );
-            })}
-            <line x1={paddingLeft} y1={zeroY} x2={width - paddingRight} y2={zeroY} stroke="rgba(226,232,240,0.28)" />
-            <path d={path} fill="none" stroke="rgba(129,140,248,0.95)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-            {model.points.map((point) => {
-              const x = paddingLeft + scaleValue(point.price, model.minPrice, model.maxPrice, plotWidth);
-              const y = paddingTop + (plotHeight - scaleValue(point.payoff, model.minPayoff, model.maxPayoff, plotHeight));
-              const fill = point.tone === 'target'
-                ? 'rgba(52, 211, 153, 0.95)'
-                : point.tone === 'boundary'
-                  ? 'rgba(251, 191, 36, 0.9)'
-                  : 'rgba(226, 232, 240, 0.9)';
-              return (
-                <g key={`${point.price}-${point.payoff}-${point.label || 'point'}`}>
-                  <circle cx={x} cy={y} r="4.5" fill={fill} />
-                  {point.label ? (
-                    <text
-                      x={x}
-                      y={y - 10}
-                      textAnchor="middle"
-                      fill="rgba(226,232,240,0.78)"
-                      fontSize="10"
-                    >
-                      {point.label}
+        <div className="overflow-x-auto overscroll-x-contain">
+          <div className="min-w-[20rem] p-3 sm:min-w-[26rem] sm:p-4">
+            <svg
+              viewBox={`0 0 ${width} ${height}`}
+              role="img"
+              aria-label={`到期收益示意，${strategyChineseLabel(strategy.strategyType)}`}
+              className="h-auto w-full"
+            >
+              {[0.25, 0.5, 0.75].map((ratioValue) => {
+                const y = paddingTop + plotHeight * ratioValue;
+                return (
+                  <line
+                    key={ratioValue}
+                    x1={paddingLeft}
+                    y1={y}
+                    x2={width - paddingRight}
+                    y2={y}
+                    stroke="rgba(148, 163, 184, 0.14)"
+                    strokeDasharray="4 6"
+                  />
+                );
+              })}
+              <line x1={paddingLeft} y1={zeroY} x2={width - paddingRight} y2={zeroY} stroke="rgba(226,232,240,0.28)" />
+              <path d={path} fill="none" stroke="rgba(129,140,248,0.95)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+              {model.points.map((point) => {
+                const x = paddingLeft + scaleValue(point.price, model.minPrice, model.maxPrice, plotWidth);
+                const y = paddingTop + (plotHeight - scaleValue(point.payoff, model.minPayoff, model.maxPayoff, plotHeight));
+                const fill = point.tone === 'target'
+                  ? 'rgba(52, 211, 153, 0.95)'
+                  : point.tone === 'boundary'
+                    ? 'rgba(251, 191, 36, 0.9)'
+                    : 'rgba(226, 232, 240, 0.9)';
+                return (
+                  <g key={`${point.price}-${point.payoff}-${point.label || 'point'}`}>
+                    <circle cx={x} cy={y} r="4.5" fill={fill} />
+                    {point.label ? (
+                      <text
+                        x={x}
+                        y={y - 10}
+                        textAnchor="middle"
+                        fill="rgba(226,232,240,0.78)"
+                        fontSize="10"
+                      >
+                        {point.label}
+                      </text>
+                    ) : null}
+                  </g>
+                );
+              })}
+              {tickPrices.map((price) => {
+                const x = paddingLeft + scaleValue(price, model.minPrice, model.maxPrice, plotWidth);
+                return (
+                  <g key={price}>
+                    <line x1={x} y1={paddingTop + plotHeight} x2={x} y2={paddingTop + plotHeight + 5} stroke="rgba(226,232,240,0.32)" />
+                    <text x={x} y={height - 6} textAnchor="middle" fill="rgba(148,163,184,0.78)" fontSize="10">
+                      {axisPrice(price)}
                     </text>
-                  ) : null}
-                </g>
-              );
-            })}
-            {tickPrices.map((price) => {
-              const x = paddingLeft + scaleValue(price, model.minPrice, model.maxPrice, plotWidth);
-              return (
-                <g key={price}>
-                  <line x1={x} y1={paddingTop + plotHeight} x2={x} y2={paddingTop + plotHeight + 5} stroke="rgba(226,232,240,0.32)" />
-                  <text x={x} y={height - 6} textAnchor="middle" fill="rgba(148,163,184,0.78)" fontSize="10">
-                    {axisPrice(price)}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
         </div>
       </DataWorkbenchFrame>
       <div className="grid gap-2 sm:grid-cols-3">
@@ -1060,12 +1062,12 @@ const IvSmileVisual: React.FC<{ chain: OptionsChainResponse | null }> = ({ chain
     );
   }
 
-  const width = 520;
+  const width = 420;
   const height = 220;
-  const paddingLeft = 44;
-  const paddingRight = 18;
+  const paddingLeft = 36;
+  const paddingRight = 16;
   const paddingTop = 16;
-  const paddingBottom = 30;
+  const paddingBottom = 28;
   const plotWidth = width - paddingLeft - paddingRight;
   const plotHeight = height - paddingTop - paddingBottom;
   const callPoints = model.points.filter((point) => point.side === 'call');
@@ -1079,51 +1081,53 @@ const IvSmileVisual: React.FC<{ chain: OptionsChainResponse | null }> = ({ chain
   return (
     <div data-testid="options-lab-iv-visual" className="grid gap-3">
       <DataWorkbenchFrame>
-        <div className="min-w-[28rem] p-4">
-          <svg
-            viewBox={`0 0 ${width} ${height}`}
-            role="img"
-            aria-label="IV 与行权价示意"
-            className="h-auto w-full"
-          >
-            {[0.25, 0.5, 0.75].map((ratioValue) => {
-              const y = paddingTop + plotHeight * ratioValue;
-              return (
-                <line
-                  key={ratioValue}
-                  x1={paddingLeft}
-                  y1={y}
-                  x2={width - paddingRight}
-                  y2={y}
-                  stroke="rgba(148, 163, 184, 0.14)"
-                  strokeDasharray="4 6"
-                />
-              );
-            })}
-            {callPoints.length > 1 ? (
-              <path d={buildPath(callPoints)} fill="none" stroke="rgba(96, 165, 250, 0.92)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-            ) : null}
-            {putPoints.length > 1 ? (
-              <path d={buildPath(putPoints)} fill="none" stroke="rgba(248, 113, 113, 0.92)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-            ) : null}
-            {model.points.map((point) => {
-              const x = paddingLeft + scaleValue(point.strike, model.minStrike, model.maxStrike, plotWidth);
-              const y = paddingTop + (plotHeight - scaleValue(point.iv, model.minIv, model.maxIv, plotHeight));
-              const fill = point.side === 'call' ? 'rgba(96, 165, 250, 0.95)' : 'rgba(248, 113, 113, 0.95)';
-              return <circle key={point.contractSymbol} cx={x} cy={y} r="4" fill={fill} />;
-            })}
-            {[model.minStrike, model.maxStrike].map((strike) => {
-              const x = paddingLeft + scaleValue(strike, model.minStrike, model.maxStrike, plotWidth);
-              return (
-                <g key={strike}>
-                  <line x1={x} y1={paddingTop + plotHeight} x2={x} y2={paddingTop + plotHeight + 5} stroke="rgba(226,232,240,0.32)" />
-                  <text x={x} y={height - 6} textAnchor="middle" fill="rgba(148,163,184,0.78)" fontSize="10">
-                    {axisPrice(strike)}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
+        <div className="overflow-x-auto overscroll-x-contain">
+          <div className="min-w-[20rem] p-3 sm:min-w-[26rem] sm:p-4">
+            <svg
+              viewBox={`0 0 ${width} ${height}`}
+              role="img"
+              aria-label="IV 与行权价示意"
+              className="h-auto w-full"
+            >
+              {[0.25, 0.5, 0.75].map((ratioValue) => {
+                const y = paddingTop + plotHeight * ratioValue;
+                return (
+                  <line
+                    key={ratioValue}
+                    x1={paddingLeft}
+                    y1={y}
+                    x2={width - paddingRight}
+                    y2={y}
+                    stroke="rgba(148, 163, 184, 0.14)"
+                    strokeDasharray="4 6"
+                  />
+                );
+              })}
+              {callPoints.length > 1 ? (
+                <path d={buildPath(callPoints)} fill="none" stroke="rgba(96, 165, 250, 0.92)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+              ) : null}
+              {putPoints.length > 1 ? (
+                <path d={buildPath(putPoints)} fill="none" stroke="rgba(248, 113, 113, 0.92)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+              ) : null}
+              {model.points.map((point) => {
+                const x = paddingLeft + scaleValue(point.strike, model.minStrike, model.maxStrike, plotWidth);
+                const y = paddingTop + (plotHeight - scaleValue(point.iv, model.minIv, model.maxIv, plotHeight));
+                const fill = point.side === 'call' ? 'rgba(96, 165, 250, 0.95)' : 'rgba(248, 113, 113, 0.95)';
+                return <circle key={point.contractSymbol} cx={x} cy={y} r="4" fill={fill} />;
+              })}
+              {[model.minStrike, model.maxStrike].map((strike) => {
+                const x = paddingLeft + scaleValue(strike, model.minStrike, model.maxStrike, plotWidth);
+                return (
+                  <g key={strike}>
+                    <line x1={x} y1={paddingTop + plotHeight} x2={x} y2={paddingTop + plotHeight + 5} stroke="rgba(226,232,240,0.32)" />
+                    <text x={x} y={height - 6} textAnchor="middle" fill="rgba(148,163,184,0.78)" fontSize="10">
+                      {axisPrice(strike)}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
         </div>
       </DataWorkbenchFrame>
       <div className="grid gap-2 sm:grid-cols-3">

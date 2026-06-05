@@ -110,9 +110,120 @@ type StressScenarioDetail = {
 };
 
 type ResultPageTabKey = 'overview' | 'audit' | 'trades' | 'parameters' | 'history';
+type ResultTabMobileDigest = {
+  title: string;
+  body: string;
+  items: Array<{ label: string; value: string }>;
+};
 
 const RESULT_PAGE_TAB_KEYS: ResultPageTabKey[] = ['overview', 'audit', 'trades', 'parameters', 'history'];
 const BacktestAuditTables = lazy(() => import('../components/backtest/BacktestAuditTables'));
+const RESULT_PAGE_MOBILE_CONTAINMENT_STYLES = `
+  @media (max-width: 640px) {
+    [data-testid="deterministic-backtest-result-page"] .backtest-result-page__tabs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.5rem;
+    }
+
+    [data-testid="deterministic-backtest-result-page"] .backtest-result-page__tabs .backtest-mode-toggle__button {
+      width: 100%;
+      min-height: 44px !important;
+      justify-content: center;
+    }
+
+    [data-testid="deterministic-backtest-result-page"] .backtest-result-page__mobile-containment [data-testid="backtest-report-detail-tabs"] {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.5rem;
+      overflow: visible;
+      border: 0;
+      padding: 0;
+      background: transparent;
+    }
+
+    [data-testid="deterministic-backtest-result-page"] .backtest-result-page__mobile-containment [data-testid="backtest-report-detail-tabs"] > * {
+      width: 100%;
+      min-height: 44px;
+      justify-content: center;
+    }
+
+    [data-testid="deterministic-backtest-result-page"] .backtest-result-page__mobile-containment .product-table-shell,
+    [data-testid="deterministic-backtest-result-page"] .backtest-result-page__mobile-containment [data-testid="backtest-report-trade-table"],
+    [data-testid="deterministic-backtest-result-page"] .backtest-result-page__mobile-containment [data-testid="backtest-report-ledger-table"] {
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      border-radius: 1rem;
+    }
+
+    [data-testid="deterministic-backtest-result-page"] .backtest-result-page__mobile-containment .product-table-shell table,
+    [data-testid="deterministic-backtest-result-page"] .backtest-result-page__mobile-containment [data-testid="backtest-report-trade-table"] table,
+    [data-testid="deterministic-backtest-result-page"] .backtest-result-page__mobile-containment [data-testid="backtest-report-ledger-table"] table {
+      min-width: max-content;
+    }
+  }
+`;
+
+function buildResultTabMobileDigest(
+  activeTab: ResultPageTabKey,
+  language: UiLanguage,
+  run: RuleBacktestRunResponse,
+  normalized: ReturnType<typeof normalizeDeterministicBacktestResult>,
+): ResultTabMobileDigest | null {
+  if (activeTab === 'audit') {
+    return {
+      title: language === 'en' ? 'Mobile reading order' : '窄屏阅读顺序',
+      body: language === 'en'
+        ? 'Review the drawdown summary first, then use the contained table to inspect daily price, position, and P&L fields.'
+        : '先看回撤归因与摘要，再在局部表格中横向核对单日价格、仓位与日度盈亏字段。',
+      items: [
+        {
+          label: language === 'en' ? 'Audit rows' : '审计行数',
+          value: formatNumber(normalized.rows.length, 0),
+        },
+        {
+          label: language === 'en' ? 'Simulated trades' : '模拟交易',
+          value: formatNumber(run.tradeCount ?? normalized.tradeEvents.length, 0),
+        },
+        {
+          label: language === 'en' ? 'Max DD' : '最大回撤',
+          value: pct(
+            normalized.metrics.maxDrawdownPct == null
+              ? null
+              : normalized.metrics.maxDrawdownPct > 0
+                ? -normalized.metrics.maxDrawdownPct
+                : normalized.metrics.maxDrawdownPct,
+          ),
+        },
+      ],
+    };
+  }
+
+  if (activeTab === 'trades') {
+    return {
+      title: language === 'en' ? 'Mobile trade digest' : '窄屏交易速读',
+      body: language === 'en'
+        ? 'Use the digest for primary interpretation, then inspect the contained trade table for signal source, fill price, and return details.'
+        : '先看成交次数、胜率与持有期，再在局部表格中横向查看信号来源、成交价与收益细节。',
+      items: [
+        {
+          label: language === 'en' ? 'Trade events' : '交易事件',
+          value: formatNumber(normalized.tradeEvents.length, 0),
+        },
+        {
+          label: language === 'en' ? 'Win rate' : '胜率',
+          value: pct(run.winRatePct),
+        },
+        {
+          label: language === 'en' ? 'Avg hold (days)' : '平均持有天数',
+          value: formatNumber(run.avgHoldingDays, run.avgHoldingDays && run.avgHoldingDays % 1 !== 0 ? 1 : 0),
+        },
+      ],
+    };
+  }
+
+  return null;
+}
 
 function formatWarningText(warning: Record<string, unknown>, index: number): string {
   const preferred = warning.message
@@ -1195,88 +1306,114 @@ const DeterministicBacktestResultPage: React.FC = () => {
     }
 
     const activeTabLabel = backtestCopy(`resultPage.tabs.${activeTab}`);
+    const mobileDigest = buildResultTabMobileDigest(activeTab, language, run, normalized);
 
     return (
-      <Suspense
-        fallback={(
+      <div className="backtest-result-page__mobile-containment min-w-0">
+        {mobileDigest ? (
           <section
-            className="backtest-display-section"
-            data-testid="deterministic-result-tab-lazy-fallback"
-            role="status"
-            aria-live="polite"
+            className="mb-4 rounded-[20px] border border-white/8 bg-white/[0.03] p-4 backdrop-blur-sm md:hidden"
+            data-testid="deterministic-result-mobile-digest"
+            data-digest-tab={activeTab}
           >
-            <div className="rounded-[16px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-md">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
-                    WolfyStock
-                  </p>
-                  <p className="truncate text-sm text-white/78">{activeTabLabel}</p>
-                </div>
-                <span
-                  className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
-                  aria-hidden="true"
-                />
+            <div className="flex flex-col gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/38">WolfyStock</p>
+                <h2 className="mt-2 text-sm font-semibold text-white">{mobileDigest.title}</h2>
+                <p className="mt-2 text-xs leading-5 text-white/62">{mobileDigest.body}</p>
               </div>
-              <p className="mt-2 text-xs text-white/45">正在加载该分区的回测明细。</p>
+              <div className="grid gap-2 xs:grid-cols-3">
+                {mobileDigest.items.map((item) => (
+                  <div key={item.label} className="rounded-2xl border border-white/8 bg-black/15 px-3 py-2.5">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{item.label}</p>
+                    <p className="mt-1 text-sm font-medium text-white">{item.value}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
-        )}
-      >
-        <BacktestAuditTables
-          activeTab={activeTab}
-          resultPage={resultPage}
-          backtestCopy={backtestCopy}
-          language={language}
-          run={run}
-          normalized={normalized}
-          selectedBenchmarkLabel={selectedBenchmarkLabel}
-          buyAndHoldLabel={buyAndHoldLabel}
-          benchmarkStatusNote={benchmarkStatusNote}
-          hasRobustnessAnalysis={hasRobustnessAnalysis}
-          robustnessAnalysisStateLabel={getRobustnessStateLabel(getObjectField(robustnessAnalysis, 'state'), language)}
-          robustnessLensRows={robustnessLensRows}
-          riskControlRows={riskControlRows}
-          activeRobustnessKey={activeRobustnessKey}
-          activeRiskControlKey={activeRiskControlKey}
-          walkForwardWindowCount={formatNumber(getObjectField(walkForward, 'windowCount') as number | null | undefined, 0)}
-          monteCarloSimulationCount={formatNumber(getObjectField(monteCarlo, 'simulationCount') as number | null | undefined, 0)}
-          stressScenarioCount={formatNumber(getObjectField(stressTests, 'scenarioCount') as number | null | undefined, 0)}
-          walkForwardMeanReturn={pct(getObjectField(walkForwardAggregate, 'meanTotalReturnPct') as number | null | undefined)}
-          monteCarloMedianReturn={pct(getObjectField(monteCarloAggregate, 'medianTotalReturnPct') as number | null | undefined)}
-          worstScenarioLabel={worstScenarioLabel}
-          monteCarloDetailRows={monteCarloDetailRows}
-          monteCarloDetailEmptyText={monteCarloDetailEmptyText}
-          stressScenarioRows={stressScenarioRows}
-          stressScenarioDetailEmptyText={stressScenarioDetailEmptyText}
-          strategySummaryRows={strategySummaryRows}
-          parsedSummaryEntries={parsedSummaryEntries}
-          strategyWarningEntries={strategyWarningEntries}
-          comparisonItems={comparisonItems}
-          compareRunIds={compareRunIds}
-          historyItems={historyItems}
-          historyError={historyError}
-          compareError={compareError}
-          isLoadingHistory={isLoadingHistory}
-          isLoadingCompareRuns={isLoadingCompareRuns}
-          onRefreshHistory={() => void fetchHistory(run.code)}
-          onOpenCompareWorkbench={handleOpenCompareWorkbench}
-          onClearComparison={() => setCompareRunIds([])}
-          onOpenHistoryRun={handleOpenHistoryRun}
-          onToggleCompareRun={handleToggleCompareRun}
-          scenarioPlans={scenarioPlans}
-          selectedScenarioPlanId={selectedScenarioPlanId}
-          onSelectScenarioPlanId={setSelectedScenarioPlanId}
-          onRunScenarioPlan={handleRunScenarioPlan}
-          isSubmittingScenarioRuns={isSubmittingScenarioRuns}
-          scenarioRuns={scenarioRuns}
-          scenarioError={scenarioError}
-          scenarioComparisonItems={scenarioComparisonItems}
-          availablePresets={availablePresets}
-          onSavePreset={handleSavePreset}
-          onOpenScenarioRun={(runId) => navigate(`/backtest/results/${runId}`)}
-        />
-      </Suspense>
+        ) : null}
+        <Suspense
+          fallback={(
+            <section
+              className="backtest-display-section"
+              data-testid="deterministic-result-tab-lazy-fallback"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="rounded-[16px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-md">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
+                      WolfyStock
+                    </p>
+                    <p className="truncate text-sm text-white/78">{activeTabLabel}</p>
+                  </div>
+                  <span
+                    className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-300/70 shadow-[0_0_12px_rgba(103,232,249,0.42)] animate-pulse"
+                    aria-hidden="true"
+                  />
+                </div>
+                <p className="mt-2 text-xs text-white/45">正在加载该分区的回测明细。</p>
+              </div>
+            </section>
+          )}
+        >
+          <BacktestAuditTables
+            activeTab={activeTab}
+            resultPage={resultPage}
+            backtestCopy={backtestCopy}
+            language={language}
+            run={run}
+            normalized={normalized}
+            selectedBenchmarkLabel={selectedBenchmarkLabel}
+            buyAndHoldLabel={buyAndHoldLabel}
+            benchmarkStatusNote={benchmarkStatusNote}
+            hasRobustnessAnalysis={hasRobustnessAnalysis}
+            robustnessAnalysisStateLabel={getRobustnessStateLabel(getObjectField(robustnessAnalysis, 'state'), language)}
+            robustnessLensRows={robustnessLensRows}
+            riskControlRows={riskControlRows}
+            activeRobustnessKey={activeRobustnessKey}
+            activeRiskControlKey={activeRiskControlKey}
+            walkForwardWindowCount={formatNumber(getObjectField(walkForward, 'windowCount') as number | null | undefined, 0)}
+            monteCarloSimulationCount={formatNumber(getObjectField(monteCarlo, 'simulationCount') as number | null | undefined, 0)}
+            stressScenarioCount={formatNumber(getObjectField(stressTests, 'scenarioCount') as number | null | undefined, 0)}
+            walkForwardMeanReturn={pct(getObjectField(walkForwardAggregate, 'meanTotalReturnPct') as number | null | undefined)}
+            monteCarloMedianReturn={pct(getObjectField(monteCarloAggregate, 'medianTotalReturnPct') as number | null | undefined)}
+            worstScenarioLabel={worstScenarioLabel}
+            monteCarloDetailRows={monteCarloDetailRows}
+            monteCarloDetailEmptyText={monteCarloDetailEmptyText}
+            stressScenarioRows={stressScenarioRows}
+            stressScenarioDetailEmptyText={stressScenarioDetailEmptyText}
+            strategySummaryRows={strategySummaryRows}
+            parsedSummaryEntries={parsedSummaryEntries}
+            strategyWarningEntries={strategyWarningEntries}
+            comparisonItems={comparisonItems}
+            compareRunIds={compareRunIds}
+            historyItems={historyItems}
+            historyError={historyError}
+            compareError={compareError}
+            isLoadingHistory={isLoadingHistory}
+            isLoadingCompareRuns={isLoadingCompareRuns}
+            onRefreshHistory={() => void fetchHistory(run.code)}
+            onOpenCompareWorkbench={handleOpenCompareWorkbench}
+            onClearComparison={() => setCompareRunIds([])}
+            onOpenHistoryRun={handleOpenHistoryRun}
+            onToggleCompareRun={handleToggleCompareRun}
+            scenarioPlans={scenarioPlans}
+            selectedScenarioPlanId={selectedScenarioPlanId}
+            onSelectScenarioPlanId={setSelectedScenarioPlanId}
+            onRunScenarioPlan={handleRunScenarioPlan}
+            isSubmittingScenarioRuns={isSubmittingScenarioRuns}
+            scenarioRuns={scenarioRuns}
+            scenarioError={scenarioError}
+            scenarioComparisonItems={scenarioComparisonItems}
+            availablePresets={availablePresets}
+            onSavePreset={handleSavePreset}
+            onOpenScenarioRun={(runId) => navigate(`/backtest/results/${runId}`)}
+          />
+        </Suspense>
+      </div>
     );
   };
 
@@ -1459,7 +1596,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
               }))}
             />
             <div className="p-3 md:p-4">
-              <Suspense
+              <div className="backtest-result-page__mobile-containment min-w-0">
+                <Suspense
                 fallback={(
                   <section
                     className="backtest-display-section"
@@ -1504,29 +1642,30 @@ const DeterministicBacktestResultPage: React.FC = () => {
                     </div>
                   </section>
                 )}
-              >
-                <BacktestResultReport
-                  run={run}
-                  mode={resultMode}
-                  normalized={normalized}
-                  densityConfig={density}
-                  parameterStabilityEvidence={parameterStabilityEvidence}
-                  chartNode={(
-                    <BacktestChartWorkspace
-                      run={run}
-                      normalized={normalized}
-                      densityConfig={density}
-                      hasRobustnessAnalysis={hasRobustnessAnalysis}
-                      robustnessLensRows={robustnessLensRows}
-                      riskControlRows={riskControlRows}
-                      activeRobustnessKey={activeRobustnessKey}
-                      activeRiskControlKey={activeRiskControlKey}
-                      onActiveRobustnessChange={setActiveRobustnessKey}
-                      onActiveRiskControlChange={setActiveRiskControlKey}
-                    />
-                  )}
-                />
-              </Suspense>
+                >
+                  <BacktestResultReport
+                    run={run}
+                    mode={resultMode}
+                    normalized={normalized}
+                    densityConfig={density}
+                    parameterStabilityEvidence={parameterStabilityEvidence}
+                    chartNode={(
+                      <BacktestChartWorkspace
+                        run={run}
+                        normalized={normalized}
+                        densityConfig={density}
+                        hasRobustnessAnalysis={hasRobustnessAnalysis}
+                        robustnessLensRows={robustnessLensRows}
+                        riskControlRows={riskControlRows}
+                        activeRobustnessKey={activeRobustnessKey}
+                        activeRiskControlKey={activeRiskControlKey}
+                        onActiveRobustnessChange={setActiveRobustnessKey}
+                        onActiveRiskControlChange={setActiveRiskControlKey}
+                      />
+                    )}
+                  />
+                </Suspense>
+              </div>
             </div>
           </ConsoleBoard>
         </ResearchConsoleShell>
@@ -1542,6 +1681,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
         data-density={density.mode}
         style={getDeterministicResultDensityCssVars(density)}
       >
+        <style>{RESULT_PAGE_MOBILE_CONTAINMENT_STYLES}</style>
         <div className="backtest-result-page flex min-h-0 min-w-0 flex-col">
           {run?.status === 'completed' && normalized ? renderCompletedConsole() : (
             <section className="backtest-result-page__hero" data-testid="deterministic-result-page-hero">
@@ -1598,7 +1738,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
           {run && normalized && run.status !== 'completed' ? (
             <section className="backtest-display-section" data-testid="deterministic-result-page-pending-visualization">
               <ConsoleBoard>
-                <div className="p-3 md:p-4">
+                <div className="backtest-result-page__mobile-containment p-3 md:p-4">
                   <DeterministicBacktestResultView run={run} normalized={normalized} densityConfig={density} />
                 </div>
               </ConsoleBoard>

@@ -1423,6 +1423,18 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.trades') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.parameters') })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.history') })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.audit') }));
+    const auditDigest = await screen.findByTestId('deterministic-result-mobile-digest');
+    expect(auditDigest).toHaveAttribute('data-digest-tab', 'audit');
+    expect(auditDigest).toHaveTextContent('窄屏阅读顺序');
+    expect(auditDigest).toHaveTextContent('审计行数');
+
+    fireEvent.click(screen.getByRole('tab', { name: bt('zh', 'resultPage.tabs.trades') }));
+    const tradeDigest = await screen.findByTestId('deterministic-result-mobile-digest');
+    expect(tradeDigest).toHaveAttribute('data-digest-tab', 'trades');
+    expect(tradeDigest).toHaveTextContent('窄屏交易速读');
+    expect(tradeDigest).toHaveTextContent('交易事件');
   }, 10000);
 
   it('launches point-and-shoot normal mode into the shared simple result report', async () => {
