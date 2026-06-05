@@ -1296,15 +1296,23 @@ describe('UserScannerPage', () => {
         makeCandidate({ symbol: 'AMD', rank: 3, score: 76 }),
       ],
       selected: [nvda],
+      scannerContextFrame: makeScannerContextFrame(),
     }));
 
     const { container } = renderUserScannerPage();
 
     const row = await screen.findByTestId('scanner-result-row-NVDA');
     const visualSummary = await screen.findByTestId('scanner-visual-evidence-summary');
+    const candidateCoverage = screen.getByTestId('scanner-visual-candidate-coverage');
+    const marketCoverage = screen.getByTestId('scanner-visual-market-coverage');
     expect(visualSummary).toHaveTextContent(/视觉证据|Visual evidence/);
     expect(screen.getByTestId('scanner-visual-score-distribution')).toBeInTheDocument();
-    expect(screen.getByTestId('scanner-visual-candidate-coverage')).toBeInTheDocument();
+    expect(candidateCoverage).toBeInTheDocument();
+    expect(candidateCoverage.querySelector('.bg-blue-300\\/85')).toBeTruthy();
+    expect(candidateCoverage.querySelector('.bg-amber-300\\/85')).toBeNull();
+    expect(marketCoverage).toBeInTheDocument();
+    expect(marketCoverage.querySelector('.bg-blue-300\\/85')).toBeTruthy();
+    expect(marketCoverage.querySelector('.bg-amber-300\\/85')).toBeNull();
     expect(row).toHaveTextContent('证据不足');
     expect(row).toHaveTextContent('待补');
     expect(row).toHaveTextContent('基本面');

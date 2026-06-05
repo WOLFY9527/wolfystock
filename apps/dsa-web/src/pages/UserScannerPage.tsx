@@ -1053,7 +1053,7 @@ function buildCoverageSegments(
       key: 'observe_only',
       label: language === 'en' ? 'Observe only' : '仅观察',
       count: coverage.observeOnlyCount ?? 0,
-      toneClassName: 'bg-amber-300/85',
+      toneClassName: 'bg-blue-300/85',
     },
     {
       key: 'missing',
@@ -1080,7 +1080,7 @@ function buildMarketCoverageSegments(
       key: 'observe_only',
       label: language === 'en' ? 'Observe only' : '仅观察',
       count: coverage.observationOnlyCount ?? 0,
-      toneClassName: 'bg-amber-300/85',
+      toneClassName: 'bg-blue-300/85',
     },
     {
       key: 'missing',
