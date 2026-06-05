@@ -92,6 +92,12 @@ async function closeOpenDrawer() {
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 }
 
+async function closeOpenDrawerWithEscape() {
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.keyDown(document, { key: 'Escape' });
+  await waitForElementToBeRemoved(dialog);
+}
+
 async function waitForHistoryDrawerToClose() {
   await waitForElementToBeRemoved(() => screen.queryByTestId('home-bento-history-drawer'));
 }
@@ -3108,8 +3114,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getAllByText('零轴下收敛').length).toBeGreaterThan(1);
     expect(screen.getAllByText('零轴下方，空头动能衰减。').length).toBeGreaterThan(1);
     expect(screen.queryByText(/聚焦 MACD/)).not.toBeInTheDocument();
-    fireEvent.keyDown(techDrawer, { key: 'Escape' });
-    await waitForElementToBeRemoved(techDrawer);
+    await closeOpenDrawerWithEscape();
 
     fireEvent.click(screen.getByRole('button', { name: '完整报告' }));
     const report = await screen.findByTestId('home-bento-full-report-drawer');
