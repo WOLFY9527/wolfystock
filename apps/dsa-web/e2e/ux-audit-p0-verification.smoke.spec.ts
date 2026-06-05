@@ -1,10 +1,12 @@
 import { expect as baseExpect, type Page, type Route } from '@playwright/test';
 import { expect as adminExpect, expectNoHorizontalOverflow as expectNoAdminHorizontalOverflow, expectNoRawSecretLikeText, installAdminAuthHarness, openAdminRouteWithHarness, test as adminTest } from './fixtures/adminAuth';
 import { expect as appExpect, test as appTest } from './fixtures/appSmoke';
+import { installUxDensityAuthenticatedSession, installUxDensityPublicMocks } from './fixtures/uxDensity';
 
 const desktopViewport = { width: 1440, height: 1000 };
 const serverErrorShellPattern = /服务器暂时不可用|上游模型暂时不可用|Something went wrong|Server unavailable|Request timed out|请求超时/i;
 const rawLeakagePattern = /raw\s+(payload|response|schema|prompt|trace)|debug\s+(payload|response|schema|panel)|provider\s+payload|provider\s+route|token\s*[=:]|session[_\s-]?id\s*[=:]|cookie\s*[=:]|secret\s*[=:]|bearer\s+[a-z0-9._-]+/i;
+const consumerAuthorityLeakPattern = /\b(provider|cache|raw|debug|router|env|token|payload|credential)\b/i;
 const guestLandingForbiddenTradingPattern = /buy now|sell now|place order|submit order|connect broker|broker CTA|guaranteed|必买|稳赚|保证收益|立即交易|提交订单|连接经纪商/i;
 const adminLogsEnglishDegradedPattern = /Provider Issue Rollup|provider unavailable|fallback|stale|timeout|partial|raw English cache/i;
 
@@ -71,6 +73,10 @@ async function expectNoGenericServerErrorShell(page: Page) {
 
 async function expectNoVisibleRawLeakage(page: Page) {
   await baseExpect(await readBodyText(page)).not.toMatch(rawLeakagePattern);
+}
+
+async function expectNoDefaultVisibleAuthorityLeakage(page: Page) {
+  await baseExpect(await readBodyText(page)).not.toMatch(consumerAuthorityLeakPattern);
 }
 
 async function expectRootNonEmpty(page: Page) {
@@ -786,6 +792,56 @@ appTest.describe('UX audit P0 route smoke', () => {
       await appExpect(alias.ready()).toBeVisible({ timeout: 15_000 });
       await expectNoGenericServerErrorShell(page);
       await expectNoVisibleRawLeakage(page);
+    }
+  });
+
+  appTest('Liquidity Monitor and Rotation Radar keep consumer-safe authority boundary copy on canonical routes', async ({ page }) => {
+    const routeChecks = [
+      {
+        path: '/zh/market/liquidity-monitor',
+        ready: () => page.getByTestId('liquidity-monitor-guidance-panel'),
+        boundaryTitle: page.getByTestId('liquidity-monitor-consumer-details'),
+        expandButton: () => page.getByRole('button', { name: '展开 数据说明与限制' }),
+        expandedCopy: [
+          '数据说明与限制',
+          '本页把流动性作为研究背景展示；当关键信号缺失、延迟或暂不可用时，状态会自动降级。',
+        ],
+      },
+      {
+        path: '/zh/market/rotation-radar',
+        ready: () => page.getByTestId('market-rotation-radar-page'),
+        boundaryTitle: page.getByTestId('rotation-radar-mechanics-details'),
+        expandButton: () => page.getByRole('button', { name: '展开 查看轮动说明' }),
+        expandedCopy: [
+          '查看轮动说明',
+          '当前主题/行业/概念主要依赖相对强弱、观察项或局部样本，尚不能证明扩散与连续性同时成立。',
+        ],
+      },
+    ] as const;
+
+    await page.setViewportSize(desktopViewport);
+
+    for (const routeCheck of routeChecks) {
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+      await installUxDensityAuthenticatedSession(page);
+      await installUxDensityPublicMocks(page);
+      await page.goto(routeCheck.path);
+      await page.waitForLoadState('domcontentloaded');
+
+      await appExpect(routeCheck.ready()).toBeVisible({ timeout: 15_000 });
+      await appExpect(routeCheck.boundaryTitle).toBeVisible();
+      for (const copy of routeCheck.visibleCopy || []) {
+        await appExpect(page.locator('body')).toContainText(copy);
+      }
+      await expectNoGenericServerErrorShell(page);
+      await expectNoVisibleRawLeakage(page);
+      await expectNoDefaultVisibleAuthorityLeakage(page);
+      await expectNoHorizontalOverflow(page);
+
+      await routeCheck.expandButton().click();
+      for (const copy of routeCheck.expandedCopy) {
+        await appExpect(page.locator('body')).toContainText(copy);
+      }
     }
   });
 
