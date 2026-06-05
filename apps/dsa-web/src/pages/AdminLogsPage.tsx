@@ -2375,7 +2375,7 @@ const AdminLogsPage: React.FC = () => {
                   : t('adminLogs.noSessionsBody')}
               </TerminalEmptyState>
             ) : (
-              <TerminalDenseList data-testid="business-events-table-shell" className="mt-3 gap-0 overflow-x-auto overflow-y-hidden no-scrollbar rounded-xl border border-white/6 bg-black/15">
+              <TerminalDenseList data-testid="business-events-table-shell" className="-mx-4 mt-3 gap-0 overflow-x-auto overflow-y-hidden overscroll-x-contain px-4 no-scrollbar rounded-xl border border-white/6 bg-black/15 sm:mx-0 sm:px-0">
                 <div data-testid="business-events-table-inner" className="min-w-[44rem]">
                   <div className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
                     <div>{locale === 'zh' ? '时间' : 'Time'}</div>
@@ -2463,7 +2463,7 @@ const AdminLogsPage: React.FC = () => {
               {t('adminLogs.noSessionsBody')}
             </TerminalEmptyState>
           ) : (
-            <TerminalDenseTable data-testid="raw-logs-table-shell" className="mt-3 border-white/6 bg-black/15">
+            <TerminalDenseTable data-testid="raw-logs-table-shell" className="-mx-4 mt-3 overflow-x-auto overscroll-x-contain px-4 border-white/6 bg-black/15 sm:mx-0 sm:px-0">
               <div className="min-w-[880px]">
                 <div className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
                   <div>{locale === 'zh' ? '时间' : 'Time'}</div>

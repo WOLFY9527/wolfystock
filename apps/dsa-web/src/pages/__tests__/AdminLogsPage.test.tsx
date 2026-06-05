@@ -1455,7 +1455,7 @@ describe('AdminLogsPage', () => {
 
     expect(await screen.findByText('数据源响应超时')).toBeInTheDocument();
     expect(screen.getByLabelText('级别筛选')).toBeInTheDocument();
-    expect(screen.getByTestId('raw-logs-table-shell')).toHaveClass('overflow-x-auto');
+    expect(screen.getByTestId('raw-logs-table-shell')).toHaveClass('overflow-x-auto', 'overscroll-x-contain', '-mx-4', 'px-4', 'sm:mx-0', 'sm:px-0');
     await waitFor(() => expect(listSessions).toHaveBeenCalledWith(expect.objectContaining({ minLevel: 'WARNING' })));
   });
 
@@ -1463,8 +1463,27 @@ describe('AdminLogsPage', () => {
     render(<AdminLogsPage />);
 
     const shell = await screen.findByTestId('business-events-table-shell');
-    expect(shell).toHaveClass('overflow-x-auto');
+    expect(shell).toHaveClass('overflow-x-auto', 'overscroll-x-contain', '-mx-4', 'px-4', 'sm:mx-0', 'sm:px-0');
     expect(screen.getByTestId('business-events-table-inner')).toHaveClass('min-w-[44rem]');
+  });
+
+  it('keeps page-level overflow hidden while mobile tables scroll locally at 390px', async () => {
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
+
+    render(<AdminLogsPage />);
+
+    const workspace = screen.getByTestId('admin-logs-workspace');
+    const businessShell = await screen.findByTestId('business-events-table-shell');
+
+    expect(workspace).toHaveClass('w-full', 'min-w-0', 'overflow-x-hidden');
+    expect(businessShell).toHaveClass('overflow-x-auto', 'overscroll-x-contain', '-mx-4', 'px-4');
+    expect(screen.getByTestId('business-events-table-inner')).toHaveClass('min-w-[44rem]');
+
+    fireEvent.click(screen.getByRole('tab', { name: '原始日志' }));
+
+    const rawShell = await screen.findByTestId('raw-logs-table-shell');
+    expect(rawShell).toHaveClass('overflow-x-auto', 'overscroll-x-contain', '-mx-4', 'px-4');
+    expect(rawShell).toHaveTextContent('数据源响应超时');
   });
 
   it('renders English page-local copy on English routes', async () => {
