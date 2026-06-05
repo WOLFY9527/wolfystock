@@ -2279,6 +2279,9 @@ const PortfolioPage: React.FC = () => {
   const emptyRecentActivityLabel = language === 'zh' ? '暂无历史记录' : 'No history yet';
   const viewFullHistoryLabel = language === 'zh' ? '查看全部历史' : 'View full history';
   const hideFullHistoryLabel = language === 'zh' ? '收起完整历史' : 'Hide full history';
+  const portfolioEmptyStateGuidance = language === 'zh'
+    ? '持仓列表为空，添加你的第一只股票开始追踪。'
+    : 'Your holdings list is empty. Add your first stock to start tracking.';
   const formatConvertedDisplay = (value: number, nativeCurrency: string) => {
     if (nativeCurrency === displayCurrency) {
       return null;
@@ -3091,7 +3094,7 @@ const PortfolioPage: React.FC = () => {
                           action={hasHistory ? <TerminalChip variant="caution" className="shrink-0">{noHoldingsHistoryNote}</TerminalChip> : undefined}
                           className="min-h-[72px]"
                         >
-                          {compactNoHoldingText}
+                          {portfolioEmptyStateGuidance}
                         </TerminalEmptyState>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={() => openManualLedger('trade', 'stock')}>

@@ -998,8 +998,8 @@ function buildScannerWorkbenchEmptyState({
     return {
       title: language === 'en' ? 'No selected candidates' : '本次无入选候选',
       body: language === 'en'
-        ? 'Switch the candidate view to Candidate pool or All to inspect rejected and limited-data rows, or adjust shortlist, universe, and detailed review controls in the top command bar.'
-        : '切换候选视图到候选池或全部，查看淘汰与数据受限行；也可在顶部命令栏调整候选上限、范围或评估深度。',
+        ? 'No candidates match the current filter. Try widening the filter.'
+        : '当前筛选条件下无可用候选，尝试扩大筛选范围。',
     };
   }
 

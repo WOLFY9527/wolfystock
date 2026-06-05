@@ -2289,12 +2289,13 @@ describe('UserScannerPage', () => {
 
     renderUserScannerPage();
 
-    const emptyState = await screen.findByTestId('scanner-workbench-empty-state');
+    await waitFor(() => {
+      expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('当前筛选条件下无可用候选，尝试扩大筛选范围。');
+    });
+    const emptyState = screen.getByTestId('scanner-workbench-empty-state');
     expect(screen.getByTestId('scanner-empty-history-fallback')).toBeInTheDocument();
-    expect(emptyState).toHaveTextContent(/本次无入选候选|尚未运行扫描/);
-    expect(emptyState).toHaveTextContent(/切换候选视图到候选池或全部|先在顶部命令栏确认市场、范围、评估深度与候选上限/);
-    expect(emptyState).toHaveTextContent(/查看淘汰与数据受限行|如需已有结果可打开历史记录/);
-    expect(emptyState).toHaveTextContent(/顶部命令栏.*候选上限.*范围.*评估深度/);
+    expect(emptyState).toHaveTextContent('本次无入选候选');
+    expect(emptyState).not.toHaveTextContent(/买入|卖出|下单|交易|券商|broker|provider|cache/i);
     expect(screen.getByTestId('scanner-candidate-filters')).toBeInTheDocument();
     expect(screen.getByTestId('scanner-ranked-sortbar')).toBeInTheDocument();
     expect(screen.getByTestId('scanner-more-actions')).toBeInTheDocument();

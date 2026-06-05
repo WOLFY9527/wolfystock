@@ -1606,8 +1606,8 @@ describe('WatchlistPage', () => {
     expect(primaryWorkRegion).toContainElement(emptyState);
     expect(emptyState).toHaveClass('min-h-[72px]', 'rounded-none', 'border-x-0', 'border-t');
     expect(within(emptyState).getByText('还没有观察标的')).toBeInTheDocument();
-    expect(emptyState).toHaveTextContent('先从扫描器加入候选，也可以在扫描器手动补充代码。');
-    expect(emptyState).toHaveTextContent('加入后回到这里查看候选证据与状态。');
+    expect(emptyState).toHaveTextContent('观察列表为空，搜索股票并添加到关注列表。');
+    expect(emptyState).toHaveTextContent('添加后可在这里查看候选证据与状态。');
     expect(emptyState).not.toHaveTextContent(/数据不足，禁止判断|买入|卖出|下单|交易|券商|broker/i);
     fireEvent.click(within(emptyState).getByRole('button', { name: /打开扫描器/ }));
     expect(screen.getByText('scanner')).toBeInTheDocument();

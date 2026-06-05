@@ -718,7 +718,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(workflowColumn).toHaveClass('min-w-0');
     expect(startCard).not.toHaveClass('xl:min-h-[300px]', 'min-h-[520px]');
     expect(within(startCard).getByText('暂无持仓')).toBeInTheDocument();
-    expect(within(startCard).getByText('先创建或选择账户，再添加第一笔持仓或导入历史记录。')).toBeInTheDocument();
+    expect(within(startCard).getByText('持仓列表为空，添加你的第一只股票开始追踪。')).toBeInTheDocument();
     expect(within(startCard).getByText('历史记录存在，当前无持仓')).toBeInTheDocument();
     expect(within(startCard).queryByText('活跃账户')).not.toBeInTheDocument();
     expect(within(startCard).queryByText('可写账户')).not.toBeInTheDocument();
@@ -764,7 +764,7 @@ describe('PortfolioPage FX refresh', () => {
     const startCard = screen.getByTestId('portfolio-start-card');
     expect(startCard).toHaveAttribute('data-terminal-primitive', 'empty-state');
     expect(startCard).toHaveClass('min-h-[72px]');
-    expect(startCard).toHaveTextContent('先创建或选择账户，再添加第一笔持仓或导入历史记录。');
+    expect(startCard).toHaveTextContent('持仓列表为空，添加你的第一只股票开始追踪。');
     expect(screen.getByTestId('portfolio-empty-workflow-column')).toHaveTextContent('完成后可在右侧查看风险与数据说明。');
     expect(screen.getByTestId('portfolio-empty-workflow-column')).not.toHaveTextContent(/数据不足，禁止判断|买入|卖出|下单|券商|broker/i);
     expect(startCard).not.toHaveClass('min-h-[300px]', 'min-h-[520px]', 'xl:min-h-[300px]');
