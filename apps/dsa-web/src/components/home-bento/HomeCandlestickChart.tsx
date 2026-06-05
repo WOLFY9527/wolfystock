@@ -136,6 +136,20 @@ const DEFAULT_INDICATORS: Record<HomeIndicatorKey, boolean> = {
   vwap: false,
 };
 
+type ChartInteractionState = {
+  ticker: string;
+  activeTimeframe: HomeTimeframeKey;
+  hoveredIndex: number | null;
+  indicatorVisibility: Record<HomeIndicatorKey, boolean>;
+};
+
+const buildDefaultInteractionState = (ticker: string): ChartInteractionState => ({
+  ticker,
+  activeTimeframe: '1D',
+  hoveredIndex: null,
+  indicatorVisibility: DEFAULT_INDICATORS,
+});
+
 const HOME_CHART_GRID_SAFE_MARGIN = {
   left: '2%',
   right: '5%',
@@ -462,9 +476,7 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
   const [dailyCandles, setDailyCandles] = useState<CandlePointBase[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle');
   const [historyMeta, setHistoryMeta] = useState<HomeHistoryAvailabilityMeta | null>(null);
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [activeTimeframe, setActiveTimeframe] = useState<HomeTimeframeKey>('1D');
-  const [indicatorVisibility, setIndicatorVisibility] = useState<Record<HomeIndicatorKey, boolean>>(DEFAULT_INDICATORS);
+  const [interactionState, setInteractionState] = useState<ChartInteractionState>(() => buildDefaultInteractionState(ticker));
 
   useEffect(() => {
     let cancelled = false;
@@ -520,13 +532,10 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
     };
   }, [isLocked, ticker]);
 
-  const [prevTicker, setPrevTicker] = useState(ticker);
-  if (prevTicker !== ticker) {
-    setPrevTicker(ticker);
-    setActiveTimeframe('1D');
-    setHoveredIndex(null);
-    setIndicatorVisibility(DEFAULT_INDICATORS);
-  }
+  const effectiveInteractionState = interactionState.ticker === ticker
+    ? interactionState
+    : buildDefaultInteractionState(ticker);
+  const { activeTimeframe, hoveredIndex, indicatorVisibility } = effectiveInteractionState;
 
   const aggregatedCandles = aggregateCandles(dailyCandles, activeTimeframe);
   const candles = withIndicators(aggregatedCandles);
@@ -812,22 +821,40 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
     const rect = event.currentTarget.getBoundingClientRect();
     const width = rect.width || 1;
     const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / width));
-    setHoveredIndex(Math.round(ratio * (candles.length - 1)));
+    setInteractionState((current) => {
+      const base = current.ticker === ticker ? current : buildDefaultInteractionState(ticker);
+      return {
+        ...base,
+        hoveredIndex: Math.round(ratio * (candles.length - 1)),
+      };
+    });
   };
 
   const handleTimeframeChange = (nextTimeframe: HomeTimeframeKey) => {
-    setActiveTimeframe(nextTimeframe);
-    setHoveredIndex(null);
+    setInteractionState((current) => {
+      const base = current.ticker === ticker ? current : buildDefaultInteractionState(ticker);
+      return {
+        ...base,
+        activeTimeframe: nextTimeframe,
+        hoveredIndex: null,
+      };
+    });
   };
 
   const handleIndicatorToggle = (key: HomeIndicatorKey) => {
     if (!indicatorEnabledState[key]) {
       return;
     }
-    setIndicatorVisibility((current) => ({
-      ...current,
-      [key]: !current[key],
-    }));
+    setInteractionState((current) => {
+      const base = current.ticker === ticker ? current : buildDefaultInteractionState(ticker);
+      return {
+        ...base,
+        indicatorVisibility: {
+          ...base.indicatorVisibility,
+          [key]: !base.indicatorVisibility[key],
+        },
+      };
+    });
   };
 
   const hoveredCandle = hoveredIndex != null ? candles[hoveredIndex] : null;
@@ -968,7 +995,15 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           className="relative h-[304px] min-w-0 max-w-full overflow-visible sm:h-[336px] xl:h-[360px]"
           data-testid="home-candlestick-chart-frame"
           onMouseMove={handleMouseMove}
-          onMouseLeave={() => setHoveredIndex(null)}
+          onMouseLeave={() => {
+            setInteractionState((current) => {
+              const base = current.ticker === ticker ? current : buildDefaultInteractionState(ticker);
+              return {
+                ...base,
+                hoveredIndex: null,
+              };
+            });
+          }}
         >
           <figure
             ref={chartNodeRef}

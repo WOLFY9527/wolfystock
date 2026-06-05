@@ -3162,6 +3162,24 @@ describe('UserScannerPage', () => {
     expect(createTheme).not.toHaveBeenCalled();
   });
 
+  it('keeps Scanner primary controls accessible while exposing labeled AI theme and symbol inputs', async () => {
+    renderUserScannerPage();
+
+    expect(screen.getByRole('button', { name: /启动扫描|运行扫描|Run scanner/i })).toBeInTheDocument();
+    expect(screen.getByTestId('scanner-history-trigger')).toBeInTheDocument();
+
+    fireEvent.click(within(screen.getByTestId('scanner-scope-selector')).getByRole('button', { name: /主题标的池|Theme universe/i }));
+    await openAdvancedControls();
+
+    expect(screen.getByRole('textbox', { name: /AI 主题名称|AI theme name/i })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /AI 主题筛选条件|AI theme criteria/i })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /手动补充股票代码|Manual symbol additions/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Generate theme|生成主题/i })).toBeInTheDocument();
+
+    fireEvent.click(within(screen.getByTestId('scanner-scope-selector')).getByRole('button', { name: /自定义标的|Custom symbols/i }));
+    expect(screen.getByRole('textbox', { name: /自定义扫描标的|Custom scanner symbols/i })).toBeInTheDocument();
+  });
+
   it('shows disabled unconfigured themes and sends custom symbol universes', async () => {
     runScan.mockResolvedValueOnce(makeRunDetail({
       universeType: 'symbols',

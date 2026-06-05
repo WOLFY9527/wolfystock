@@ -5679,6 +5679,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
               type="text"
               className="h-full min-h-10 min-w-0 flex-1 bg-transparent pl-11 pr-4 text-sm leading-none text-white caret-[#93C5FD] outline-none [appearance:textfield] placeholder:text-white/30"
               value={searchQuery}
+              aria-label={locale === 'en' ? 'Search ticker' : '搜索股票代码'}
               onChange={(event) => {
                 setSearchQuery(event.target.value);
               }}

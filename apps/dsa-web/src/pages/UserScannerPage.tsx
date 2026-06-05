@@ -2545,13 +2545,25 @@ const UserScannerPage: React.FC = () => {
     () => new Set(watchlistItems.map((item) => getWatchlistIdentity(item.market, item.symbol))),
     [watchlistItems],
   );
-  const runScannerButton = useSafariWarmActivation<HTMLButtonElement>(() => {
+  const {
+    ref: runScannerButtonRef,
+    onClick: handleRunScannerClick,
+    onPointerUp: handleRunScannerPointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(() => {
     void handleRun();
   });
-  const generateThemeButton = useSafariWarmActivation<HTMLButtonElement>(() => {
+  const {
+    ref: generateThemeButtonRef,
+    onClick: handleGenerateThemeClick,
+    onPointerUp: handleGenerateThemePointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(() => {
     void handleGenerateTheme();
   });
-  const openHistoryDrawerButton = useSafariWarmActivation<HTMLButtonElement>(() => setIsHistoryDrawerOpen(true));
+  const {
+    ref: openHistoryDrawerButtonRef,
+    onClick: handleOpenHistoryDrawerClick,
+    onPointerUp: handleOpenHistoryDrawerPointerUp,
+  } = useSafariWarmActivation<HTMLButtonElement>(() => setIsHistoryDrawerOpen(true));
   const shortlistCount = runDetail?.shortlist?.length ?? 0;
   const currentSelectedCount = runDetail ? getRunSummaryCount(runDetail, 'selectedCount', shortlistCount) : 0;
   const generatedAt = runDetail?.completedAt || runDetail?.runAt || null;
@@ -3296,12 +3308,12 @@ const UserScannerPage: React.FC = () => {
                 title={language === 'en' ? 'Scanner' : '扫描器'}
                 action={(
                   <TerminalButton
-                    ref={openHistoryDrawerButton.ref}
+                    ref={openHistoryDrawerButtonRef}
                     type="button"
                     variant="secondary"
                     data-testid="scanner-history-trigger"
-                    onClick={openHistoryDrawerButton.onClick}
-                    onPointerUp={openHistoryDrawerButton.onPointerUp}
+                    onClick={handleOpenHistoryDrawerClick}
+                    onPointerUp={handleOpenHistoryDrawerPointerUp}
                     className="h-9 px-3 text-xs"
                   >
                     <History className="h-3.5 w-3.5" aria-hidden="true" />
@@ -3395,10 +3407,10 @@ const UserScannerPage: React.FC = () => {
                         <PillTagGroup compact label={t('scanner.detailLabel')} value={detailLimit} onChange={setDetailLimit} options={detailOptions} />
                       </div>
                       <TerminalButton
-                        ref={runScannerButton.ref}
+                        ref={runScannerButtonRef}
                         type="button"
-                        onClick={runScannerButton.onClick}
-                        onPointerUp={runScannerButton.onPointerUp}
+                        onClick={handleRunScannerClick}
+                        onPointerUp={handleRunScannerPointerUp}
                         disabled={runDisabled}
                         aria-busy={isRunning}
                         data-testid="scanner-run-button"
@@ -3484,6 +3496,7 @@ const UserScannerPage: React.FC = () => {
                                 value={customThemeLabel}
                                 className="w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
                                 onChange={(event) => setCustomThemeLabel(event.target.value)}
+                                aria-label={language === 'en' ? 'AI theme name' : 'AI 主题名称'}
                                 aria-invalid={Boolean(validationErrors.customThemeLabel)}
                                 aria-describedby={validationErrors.customThemeLabel ? 'scanner-ai-theme-label-error' : undefined}
                                 maxLength={80}
@@ -3498,6 +3511,7 @@ const UserScannerPage: React.FC = () => {
                                 data-testid="scanner-ai-theme-prompt-input"
                                 value={customThemePrompt}
                                 onChange={(event) => setCustomThemePrompt(event.target.value)}
+                                aria-label={language === 'en' ? 'AI theme criteria' : 'AI 主题筛选条件'}
                                 aria-invalid={Boolean(validationErrors.customThemePrompt)}
                                 aria-describedby={validationErrors.customThemePrompt ? 'scanner-ai-theme-prompt-error' : undefined}
                                 maxLength={600}
@@ -3515,6 +3529,7 @@ const UserScannerPage: React.FC = () => {
                                 value={customThemeManualSymbols}
                                 className="w-full appearance-none rounded-lg border border-white/8 bg-black/40 px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/20 focus:border-indigo-400/50"
                                 onChange={(event) => setCustomThemeManualSymbols(event.target.value)}
+                                aria-label={language === 'en' ? 'Manual symbol additions' : '手动补充股票代码'}
                                 aria-invalid={Boolean(validationErrors.customThemeManualSymbols)}
                                 aria-describedby={validationErrors.customThemeManualSymbols ? 'scanner-ai-theme-manual-symbols-error' : undefined}
                                 placeholder={language === 'en' ? 'Optional: add symbols, e.g. NVDA PLTR' : '可选：手动补充代码，例如 NVDA PLTR'}
@@ -3525,12 +3540,12 @@ const UserScannerPage: React.FC = () => {
                                 </p>
                               ) : null}
                               <TerminalButton
-                                ref={generateThemeButton.ref}
+                                ref={generateThemeButtonRef}
                                 type="button"
                                 variant="secondary"
                                 disabled={generateThemeDisabled}
-                                onPointerUp={generateThemeButton.onPointerUp}
-                                onClick={generateThemeButton.onClick}
+                                onPointerUp={handleGenerateThemePointerUp}
+                                onClick={handleGenerateThemeClick}
                                 className="h-8 px-3 text-xs"
                               >
                                 <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
@@ -3559,6 +3574,7 @@ const UserScannerPage: React.FC = () => {
                               data-testid="scanner-custom-symbols-input"
                               value={customSymbols}
                               onChange={(event) => setCustomSymbols(event.target.value)}
+                              aria-label={language === 'en' ? 'Custom scanner symbols' : '自定义扫描标的'}
                               aria-invalid={Boolean(validationErrors.customSymbols)}
                               aria-describedby={validationErrors.customSymbols ? 'scanner-custom-symbols-error' : undefined}
                               rows={3}

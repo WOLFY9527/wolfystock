@@ -2277,6 +2277,7 @@ describe('HomeSurfacePage', () => {
     renderSurface();
     expect(screen.queryByText('WolfyStock Command Center')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Search ticker' })).toBeInTheDocument();
     expect((await screen.findAllByText('Current conclusion')).length).toBeGreaterThan(0);
     expect(screen.getByTestId('home-bento-omnibar-input')).toHaveAttribute('placeholder', 'Enter a ticker to wake the AI (for example ORCL)...');
     expect(screen.getByText('Technical Structure')).toBeInTheDocument();
