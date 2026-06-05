@@ -373,6 +373,80 @@ describe('AppContent route flows', () => {
     expect(screen.queryByText('Home Workspace')).not.toBeInTheDocument();
   });
 
+  it.each([
+    ['/admin/system', '/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
+    ['/admin/providers', '/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
+    ['/admin/evidence', '/admin/evidence-workflow', { ...noCapabilities, canReadOpsLogs: true }, 'admin-evidence-workflow-page'],
+    ['/admin/costs', '/admin/cost-observability', { ...noCapabilities, canReadCostObservability: true }, 'admin-cost-observability-page'],
+    ['/admin/ai', '/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
+    ['/zh/admin/system', '/zh/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
+    ['/zh/admin/providers', '/zh/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
+    ['/zh/admin/evidence', '/zh/admin/evidence-workflow', { ...noCapabilities, canReadOpsLogs: true }, 'admin-evidence-workflow-page'],
+    ['/zh/admin/costs', '/zh/admin/cost-observability', { ...noCapabilities, canReadCostObservability: true }, 'admin-cost-observability-page'],
+    ['/zh/admin/ai', '/zh/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
+    ['/en/admin/system', '/en/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
+    ['/en/admin/providers', '/en/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
+    ['/en/admin/evidence', '/en/admin/evidence-workflow', { ...noCapabilities, canReadOpsLogs: true }, 'admin-evidence-workflow-page'],
+    ['/en/admin/costs', '/en/admin/cost-observability', { ...noCapabilities, canReadCostObservability: true }, 'admin-cost-observability-page'],
+    ['/en/admin/ai', '/en/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
+  ])(
+    'redirects legacy admin alias %s to canonical route %s',
+    async (path, expectedPath, adminCapabilities, pageText) => {
+      mockSignedInAdminWithCapabilities(adminCapabilities);
+
+      renderAtWithLocationProbe(path);
+
+      await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+      expect(await screen.findByText(pageText)).toBeInTheDocument();
+      expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ['/zh/admin/system', '/zh/guest', '游客预览模式'],
+    ['/zh/admin/providers', '/zh/guest', '游客预览模式'],
+    ['/zh/admin/evidence', '/zh/guest', '游客预览模式'],
+    ['/zh/admin/costs', '/zh/guest', '游客预览模式'],
+    ['/zh/admin/ai', '/zh/guest', '游客预览模式'],
+    ['/en/admin/system', '/en/guest', 'Guest Preview Mode'],
+    ['/en/admin/providers', '/en/guest', 'Guest Preview Mode'],
+    ['/en/admin/evidence', '/en/guest', 'Guest Preview Mode'],
+    ['/en/admin/costs', '/en/guest', 'Guest Preview Mode'],
+    ['/en/admin/ai', '/en/guest', 'Guest Preview Mode'],
+  ])('keeps guest handling unchanged for admin alias %s', async (path, expectedPath, guestText) => {
+    renderAtWithLocationProbe(path);
+
+    expect(await screen.findByText(guestText)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+  });
+
+  it.each([
+    ['/zh/admin/system', '/zh/settings/system', '这个页面需要管理员账户'],
+    ['/zh/admin/providers', '/zh/admin/market-providers', '这个市场数据源运维页面需要管理员账户'],
+    ['/zh/admin/evidence', '/zh/admin/evidence-workflow', '这个证据工作流页面需要管理员账户'],
+    ['/zh/admin/costs', '/zh/admin/cost-observability', '这个成本观测页面需要管理员账户'],
+    ['/zh/admin/ai', '/zh/settings/system', '这个页面需要管理员账户'],
+  ])('keeps non-admin account gating unchanged for admin alias %s', async (path, expectedPath, heading) => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: false,
+      isAdminMode: false,
+      adminCapabilities: noCapabilities,
+    });
+
+    renderAtWithLocationProbe(path);
+
+    expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+  });
+
   it('redirects legacy /chat guest access to the market overview surface', async () => {
     renderAtWithLocationProbe('/chat');
 

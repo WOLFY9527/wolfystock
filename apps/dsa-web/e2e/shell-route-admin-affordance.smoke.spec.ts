@@ -1,6 +1,6 @@
 import type { Page, Route } from '@playwright/test';
 import { expect as appExpect, test as appTest } from './fixtures/appSmoke';
-import { expect as adminExpect, expectNoHorizontalOverflow as expectNoAdminHorizontalOverflow, expectNoRawSecretLikeText, openAdminRouteWithHarness, test as adminTest } from './fixtures/adminAuth';
+import { expect as adminExpect, expectNoHorizontalOverflow as expectNoAdminHorizontalOverflow, expectNoRawSecretLikeText, installAdminAuthHarness, openAdminRouteWithHarness, test as adminTest } from './fixtures/adminAuth';
 
 const viewports = [
   { width: 1440, height: 1000 },
@@ -16,6 +16,146 @@ async function fulfillJson(route: Route, payload: unknown, status = 200) {
     contentType: 'application/json',
     body: JSON.stringify(payload),
   });
+}
+
+function marketProviderOperationsPayload() {
+  return {
+    generated_at: '2026-06-05T00:00:00Z',
+    window: { key: '24h', since: '24h' },
+    summary: {
+      total_items: 1,
+      live_count: 1,
+      cache_count: 0,
+      stale_count: 0,
+      fallback_count: 0,
+      partial_count: 0,
+      unavailable_count: 0,
+      error_count: 0,
+      refreshing_count: 0,
+      event_count: 0,
+      failure_count: 0,
+      fallback_event_count: 0,
+      stale_event_count: 0,
+      slow_event_count: 0,
+    },
+    items: [
+      {
+        provider: 'sina',
+        source_label: '新浪财经',
+        source_type: 'public_api',
+        domain: 'equity_index',
+        endpoint: '/api/v1/market/cn-indices',
+        card: 'ChinaIndicesCard',
+        cache_key: 'cn_indices',
+        status: 'live',
+        freshness: 'live',
+        as_of: '2026-06-05T00:00:00Z',
+        updated_at: '2026-06-05T00:00:00Z',
+        last_successful_at: '2026-06-05T00:00:00Z',
+        last_known_good_age_minutes: 2,
+        latency_ms: 128,
+        is_fallback: false,
+        is_stale: false,
+        is_refreshing: false,
+        is_from_snapshot: false,
+        fallback_used: false,
+        warning: null,
+        error_summary: null,
+        admin_log_drill_through: { label: '查看 Admin Logs', route: '/zh/admin/logs', query: { since: '24h', provider: 'sina' } },
+      },
+    ],
+    event_rollups: [],
+    cache_states: [],
+    limitations: [],
+    admin_log_drill_through: { label: '查看 Admin Logs', route: '/zh/admin/logs', query: { since: '24h' } },
+    metadata: { source: 'mocked_playwright', read_only: true, external_provider_calls: false, cache_mutation: false },
+  };
+}
+
+function providerOperationsMatrixPayload() {
+  return {
+    generated_at: '2026-06-05T00:00:00Z',
+    diagnostic_only: true,
+    rows: [
+      {
+        provider_id: 'market_fixture',
+        provider_name: 'Market fixture',
+        source_label: 'Local audit fixture',
+        provider_category: 'market',
+        source_type: 'admin_fixture',
+        source_tier: 'local',
+        trust_level: 'operator_check',
+        freshness_expectation: 'same_day',
+        runtime_state: 'ready',
+        credential_state: 'not_required',
+        dependency_state: 'ready',
+        enabled_by_default: true,
+        observation_only: false,
+        score_contribution_allowed: true,
+        source_authority_allowed: true,
+        score_eligible: true,
+        inert_metadata_only: false,
+        paid_data_likely_required: false,
+        key_required: false,
+        no_default_live_http_calls: true,
+        cache_required: false,
+        supported_capabilities: ['market_overview'],
+        affected_surfaces: ['Market Overview'],
+        product_affected_surfaces: ['Market Overview'],
+        router_reason_codes: [],
+        reason_codes: [],
+        fulfilled_metrics: ['readiness'],
+        missing_metrics: [],
+        authority_basis: 'Local audit fixture for route alias smoke.',
+        universe: 'US',
+        coverage_count: 1,
+        diagnostic_only: true,
+      },
+    ],
+    summary: {
+      total_rows: 1,
+      observation_only_rows: 0,
+      inert_metadata_only_rows: 0,
+      missing_provider_rows: 0,
+      score_eligible_rows: 1,
+      paid_data_likely_required_rows: 0,
+    },
+    metadata: {
+      source: 'local_audit_fixture',
+      read_only: true,
+      diagnostic_only: true,
+      external_provider_calls: false,
+      network_calls_enabled: false,
+      cache_mutation: false,
+      secret_values_included: false,
+      raw_provider_payloads_included: false,
+      readiness_status: 'ready',
+      row_count: 1,
+    },
+  };
+}
+
+function marketDataReadinessPayload() {
+  return {
+    readiness_status: 'ready',
+    diagnostic_only: true,
+    provider_runtime_called: false,
+    network_calls_enabled: false,
+    representative_symbols: ['ORCL'],
+    checks: [
+      {
+        id: 'market_fixture_ready',
+        status: 'ready',
+        severity: 'info',
+        user_facing_message: '本地审核样例已覆盖市场数据读取。',
+        remediation_hint: null,
+        affects_surfaces: ['Market Overview'],
+        product_affected_surfaces: ['Market Overview'],
+        secret_configured: false,
+        details: { read_only: true },
+      },
+    ],
+  };
 }
 
 async function installSignedInProductSession(page: Page) {
@@ -133,11 +273,10 @@ async function expectGuestAdminGate(page: Page) {
 
 async function expectAdminRedirectSurface(page: Page, isMobile: boolean) {
   await adminExpect(page).toHaveURL(/\/zh\/settings\/system$/);
-  await adminExpect(page.getByTestId('settings-bento-page')).toBeAttached();
+  await adminExpect(page.getByTestId('system-settings-page')).toBeVisible({ timeout: 15_000 });
   await adminExpect(page.getByRole('heading', { name: '系统设置' })).toBeVisible({ timeout: 15_000 });
-  await adminExpect(page.getByTestId('system-health-summary')).toBeVisible();
-  await adminExpect(page.getByTestId('duckdb-quant-panel')).toBeAttached();
-  await adminExpect(page.getByText('当前已进入全局系统控制面')).toBeVisible();
+  await adminExpect(page.getByRole('button', { name: 'AI 模型' })).toBeVisible();
+  await adminExpect(page.getByRole('button', { name: '数据源' })).toBeVisible();
   await expectNoAdminHorizontalOverflow(page);
   await expectNoRawSecretLikeText(page);
 
@@ -164,6 +303,20 @@ async function expectAdminRedirectSurface(page: Page, isMobile: boolean) {
     await adminExpect(adminMenu).toContainText('日志');
     await expectNoForbiddenAffordanceText(await adminMenu.innerText());
   }
+}
+
+async function expectAdminAliasTarget(page: Page, targetPattern: RegExp, visibleTestId: string) {
+  await adminExpect(page).toHaveURL(targetPattern);
+  await adminExpect(page.getByTestId(visibleTestId)).toBeVisible({ timeout: 15_000 });
+  await expectNoAdminHorizontalOverflow(page);
+  await expectNoRawSecretLikeText(page);
+  await expectNoForbiddenAffordanceText(await readVisibleText(page));
+}
+
+async function installProviderOpsMocks(page: Page) {
+  await page.route('**/api/v1/admin/providers/operations-matrix', (route) => fulfillJson(route, providerOperationsMatrixPayload()));
+  await page.route('**/api/v1/market/data-readiness**', (route) => fulfillJson(route, marketDataReadinessPayload()));
+  await page.route('**/api/v1/admin/market-providers/operations**', (route) => fulfillJson(route, marketProviderOperationsPayload()));
 }
 
 appTest.describe('shell route clarity smoke', () => {
@@ -197,6 +350,29 @@ adminTest.describe('admin redirect affordance smoke', () => {
       await page.setViewportSize(viewport);
       await openAdminRouteWithHarness(page, '/zh/admin', { displayName: 'Bootstrap Admin' });
       await expectAdminRedirectSurface(page, viewport.width < 768);
+    }
+  });
+
+  adminTest('redirects UX-audited admin short routes to canonical admin surfaces without leakage', async ({ page }) => {
+    const aliases = [
+      { path: '/zh/admin/system', url: /\/zh\/settings\/system$/, testId: 'system-settings-page' },
+      { path: '/zh/admin/providers', url: /\/zh\/admin\/market-providers$/, testId: 'market-provider-operations-page' },
+      { path: '/zh/admin/evidence', url: /\/zh\/admin\/evidence-workflow$/, testId: 'admin-evidence-workflow-page' },
+      { path: '/zh/admin/costs', url: /\/zh\/admin\/cost-observability$/, testId: 'admin-cost-observability-page' },
+      { path: '/zh/admin/ai', url: /\/zh\/settings\/system$/, testId: 'system-settings-page' },
+    ] as const;
+
+    for (const viewport of viewports) {
+      for (const alias of aliases) {
+        await page.unrouteAll({ behavior: 'ignoreErrors' });
+        await page.setViewportSize(viewport);
+        await installAdminAuthHarness(page, { displayName: 'Bootstrap Admin' });
+        await installProviderOpsMocks(page);
+        await page.goto(alias.path);
+        await page.waitForLoadState('domcontentloaded');
+        await adminExpect(page).not.toHaveURL(/\/guest(?:$|[/?#])/);
+        await expectAdminAliasTarget(page, alias.url, alias.testId);
+      }
     }
   });
 });

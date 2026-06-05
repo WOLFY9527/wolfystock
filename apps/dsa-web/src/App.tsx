@@ -263,6 +263,16 @@ export const AppContent: React.FC = () => {
   const isGuestRestrictedPath = (
     routePathname === '/settings'
     || routePathname.startsWith('/settings/')
+    || routePathname === '/admin/system'
+    || routePathname.startsWith('/admin/system/')
+    || routePathname === '/admin/providers'
+    || routePathname.startsWith('/admin/providers/')
+    || routePathname === '/admin/evidence'
+    || routePathname.startsWith('/admin/evidence/')
+    || routePathname === '/admin/costs'
+    || routePathname.startsWith('/admin/costs/')
+    || routePathname === '/admin/ai'
+    || routePathname.startsWith('/admin/ai/')
     || routePathname === '/admin/logs'
     || routePathname.startsWith('/admin/logs/')
     || routePathname === '/admin/evidence-workflow'
@@ -372,11 +382,16 @@ export const AppContent: React.FC = () => {
             <Route path="/:locale/guest/scanner" element={<Navigate to="../scanner" replace />} />
             <Route path="/:locale/user/scanner" element={<Navigate to="../scanner" replace />} />
             <Route element={<Shell />}>
-              <Route path="/market" element={<Navigate to="/market-overview" replace />} />
-              <Route path="/admin" element={<Navigate to="/settings/system" replace />} />
-              <Route path="/liquidity" element={<Navigate to="/market/liquidity-monitor" replace />} />
-              <Route path="/rotation" element={<Navigate to="/market/rotation-radar" replace />} />
-              <Route path="/options" element={<Navigate to="/options-lab" replace />} />
+            <Route path="/market" element={<Navigate to="/market-overview" replace />} />
+            <Route path="/admin" element={<Navigate to="/settings/system" replace />} />
+            <Route path="/admin/system" element={<Navigate to="/settings/system" replace />} />
+            <Route path="/admin/providers" element={<Navigate to="/admin/market-providers" replace />} />
+            <Route path="/admin/evidence" element={<Navigate to="/admin/evidence-workflow" replace />} />
+            <Route path="/admin/costs" element={<Navigate to="/admin/cost-observability" replace />} />
+            <Route path="/admin/ai" element={<Navigate to="/settings/system" replace />} />
+            <Route path="/liquidity" element={<Navigate to="/market/liquidity-monitor" replace />} />
+            <Route path="/rotation" element={<Navigate to="/market/rotation-radar" replace />} />
+            <Route path="/options" element={<Navigate to="/options-lab" replace />} />
               <Route path="/" element={<HomeSurfacePage />} />
               <Route path="/guest" element={guestHomeElement} />
               <Route path="/scanner" element={<ScannerSurfacePage />} />
@@ -406,6 +421,11 @@ export const AppContent: React.FC = () => {
             <Route path="/:locale" element={<Shell />}>
               <Route path="market" element={<Navigate to="../market-overview" replace />} />
               <Route path="admin" element={<Navigate to="../settings/system" replace />} />
+              <Route path="admin/system" element={<Navigate to="../settings/system" replace />} />
+              <Route path="admin/providers" element={<Navigate to="../admin/market-providers" replace />} />
+              <Route path="admin/evidence" element={<Navigate to="../admin/evidence-workflow" replace />} />
+              <Route path="admin/costs" element={<Navigate to="../admin/cost-observability" replace />} />
+              <Route path="admin/ai" element={<Navigate to="../settings/system" replace />} />
               <Route path="liquidity" element={<Navigate to="../market/liquidity-monitor" replace />} />
               <Route path="rotation" element={<Navigate to="../market/rotation-radar" replace />} />
               <Route path="options" element={<Navigate to="../options-lab" replace />} />
