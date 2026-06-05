@@ -6,6 +6,7 @@ import {
   type MockAdminUserOptions,
 } from '../../src/test-utils/adminAuthHarness';
 import type { CurrentUser } from '../../src/api/auth';
+import { installExternalStylesheetStubs } from './externalStyles';
 
 type AdminAuthFixtures = {
   consoleErrors: string[];
@@ -723,6 +724,7 @@ export const test = base.extend<AdminAuthFixtures>({
   consoleErrors: [async ({ page }, use) => {
     const consoleErrors: string[] = [];
 
+    const cleanupExternalStylesheetStubs = await installExternalStylesheetStubs(page);
     page.on('console', (message) => {
       if (message.type() === 'error' && !message.text().includes('favicon.ico')) {
         consoleErrors.push(message.text());
@@ -733,6 +735,7 @@ export const test = base.extend<AdminAuthFixtures>({
     });
 
     await use(consoleErrors);
+    await cleanupExternalStylesheetStubs();
 
     expect(consoleErrors).toEqual([]);
   }, { auto: true }],

@@ -1335,6 +1335,21 @@ const BacktestPage: React.FC = () => {
       </button>
     </div>
   );
+  const researchBoundaryTitle = language === 'en' ? 'Research-only boundary' : '研究边界';
+  const researchBoundaryItems = language === 'en'
+    ? [
+        'This tool is for backtest analysis and learning research only.',
+        'It does not constitute investment advice.',
+        'Past performance does not represent future returns.',
+      ]
+    : [
+        '本工具仅用于回测分析与学习研究',
+        '不构成投资建议',
+        '过往表现不代表未来收益',
+      ];
+  const researchBoundaryEventNote = language === 'en'
+    ? 'Buy/sell labels on this page describe historical rule events only. They do not place orders, connect to a broker, or change portfolio holdings.'
+    : '页面中的买入/卖出仅表示历史规则事件，不会提交订单、不会连接券商或改动组合持仓。';
 
   return (
     <div
@@ -1368,6 +1383,32 @@ const BacktestPage: React.FC = () => {
             </nav>
           </div>
         </div>
+        <section
+          data-testid="backtest-research-boundary"
+          aria-label={researchBoundaryTitle}
+          className="w-full rounded-[24px] border border-amber-300/15 bg-amber-300/[0.07] px-4 py-4 text-sm text-amber-50 backdrop-blur-sm"
+        >
+          <div className="flex min-w-0 flex-col gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-100/75">
+                {researchBoundaryTitle}
+              </span>
+            </div>
+            <ul className="grid gap-2 md:grid-cols-3">
+              {researchBoundaryItems.map((item) => (
+                <li
+                  key={item}
+                  className="rounded-2xl border border-amber-50/10 bg-black/10 px-3 py-2 leading-6 text-amber-50/95"
+                >
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <p className="leading-6 text-amber-50/78">
+              {researchBoundaryEventNote}
+            </p>
+          </div>
+        </section>
 
         <main
           data-testid="backtest-v1-page"

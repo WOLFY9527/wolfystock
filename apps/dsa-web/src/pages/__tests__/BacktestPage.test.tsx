@@ -937,6 +937,12 @@ describe('BacktestPage', () => {
     expect(screen.getByLabelText('手续费 (bp)')).toBeInTheDocument();
     expect(screen.getByLabelText('策略模板')).toHaveClass('min-h-[44px]', 'leading-6');
     expect(screen.queryByLabelText('策略文本')).not.toBeInTheDocument();
+    const researchBoundary = screen.getByTestId('backtest-research-boundary');
+    expect(researchBoundary).toHaveTextContent('本工具仅用于回测分析与学习研究');
+    expect(researchBoundary).toHaveTextContent('不构成投资建议');
+    expect(researchBoundary).toHaveTextContent('过往表现不代表未来收益');
+    expect(researchBoundary).toHaveTextContent('页面中的买入/卖出仅表示历史规则事件，不会提交订单、不会连接券商或改动组合持仓');
+    expect(pageShell).not.toHaveTextContent(/立即交易|连接经纪商|真实下单|AI recommends you buy|must buy|must sell|buy now|sell now|place order|submit order|connect broker/i);
     expect(await screen.findByText('模板仅用于研究模拟，不构成交易建议。')).toBeInTheDocument();
     expect(await screen.findByText('回测规则预览')).toBeInTheDocument();
     expect(screen.getByText('普通模式会先把模板整理为固定规则回测流程，再跳转到独立结果页。')).toBeInTheDocument();

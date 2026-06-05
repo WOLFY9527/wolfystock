@@ -1,4 +1,5 @@
 import { expect, test as base, type Page, type Route } from '@playwright/test';
+import { installExternalStylesheetStubs } from './externalStyles';
 
 type AppSmokeFixtures = {
   consoleErrors: string[];
@@ -1443,6 +1444,7 @@ export const test = base.extend<AppSmokeFixtures>({
   consoleErrors: [async ({ page }, use) => {
     const consoleErrors: string[] = [];
 
+    const cleanupExternalStylesheetStubs = await installExternalStylesheetStubs(page);
     page.on('console', (message) => {
       if (message.type() === 'error' && !message.text().includes('favicon.ico')) {
         consoleErrors.push(message.text());
@@ -1453,6 +1455,7 @@ export const test = base.extend<AppSmokeFixtures>({
     });
 
     await use(consoleErrors);
+    await cleanupExternalStylesheetStubs();
 
     expect(consoleErrors).toEqual([]);
   }, { auto: true }],

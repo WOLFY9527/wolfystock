@@ -811,7 +811,11 @@ appTest.describe('UX audit P0 route smoke', () => {
     const signedInRoutes = [
       { path: '/zh/market-overview', ready: () => page.getByTestId('market-overview-shell') },
       { path: '/zh/scanner', ready: () => page.getByTestId('user-scanner-workspace') },
-      { path: '/zh/backtest', ready: () => page.getByTestId('backtest-bento-page') },
+      {
+        path: '/zh/backtest',
+        ready: () => page.getByTestId('backtest-bento-page'),
+        boundary: () => page.getByTestId('backtest-research-boundary'),
+      },
     ] as const;
 
     await page.setViewportSize(desktopViewport);
@@ -822,6 +826,11 @@ appTest.describe('UX audit P0 route smoke', () => {
       await page.goto(route.path);
       await page.waitForLoadState('domcontentloaded');
       await appExpect(route.ready()).toBeVisible({ timeout: 15_000 });
+      if ('boundary' in route) {
+        await appExpect(route.boundary()).toContainText('本工具仅用于回测分析与学习研究');
+        await appExpect(route.boundary()).toContainText('不构成投资建议');
+        await appExpect(route.boundary()).toContainText('过往表现不代表未来收益');
+      }
       await expectNoGenericServerErrorShell(page);
       await expectNoVisibleRawLeakage(page);
     }
