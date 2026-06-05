@@ -3541,6 +3541,29 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByText('VWAP 暂不可用')).toBeInTheDocument();
   });
 
+  it('shows the consumer-safe unavailable panel when candles have no reliable volume support', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(stocksApi.getHistory).mockResolvedValue({
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      period: 'daily',
+      data: homeDailyCandles.map((item) => ({ ...item, volume: 0 })),
+    });
+
+    renderSurface();
+
+    const chartRoot = await screen.findByTestId('home-linear-technical-chart');
+    const unavailable = await screen.findByTestId('home-candlestick-unavailable');
+
+    expect(chartRoot).toHaveAttribute('data-vwap-available', 'false');
+    expect(unavailable).toHaveTextContent('缺少可靠成交量，图表暂不可用。');
+    expect(unavailable).toHaveTextContent('请在成交量历史可用后重试。');
+    expect(unavailable).toHaveTextContent('当前周期 1D');
+    expect(unavailable).not.toHaveTextContent(HOME_CHART_UNAVAILABLE_INTERNAL_COPY_PATTERN);
+    expect(screen.queryByTestId('home-candlestick-chart-frame')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-candlestick-echarts-node')).not.toBeInTheDocument();
+  });
+
   it('updates pending analysis cards in place when completed task payload only exposes snake_case standard_report', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(historyApi.getList).mockResolvedValue({

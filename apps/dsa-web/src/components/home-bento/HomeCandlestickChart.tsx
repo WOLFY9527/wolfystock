@@ -24,6 +24,12 @@ import {
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { useElementSize } from '../../hooks/useElementSize';
 import { cn } from '../../utils/cn';
+import {
+  HomeCandlestickChartContextBadges,
+  HomeCandlestickChartIndicatorChips,
+  HomeCandlestickChartTimeframeStrip,
+  HomeCandlestickChartUnavailablePanel,
+} from './HomeCandlestickChartDisplay';
 import { resolveHomeCandlestickTooltipPosition } from './homeCandlestickChartUtils';
 
 echarts.use([
@@ -860,6 +866,26 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
   const hoveredCandle = hoveredIndex != null ? candles[hoveredIndex] : null;
   const enabledIndicatorLabels = enabledIndicators.map((item) => item.label).join(',');
   const maStructure = getMaStructure(candles, language === 'en' ? 'en' : 'zh');
+  const timeframeControls = TIMEFRAME_OPTIONS.map((optionItem) => ({
+    ...optionItem,
+    pressed: activeTimeframe === optionItem.key,
+    disabled: status !== 'ready',
+  }));
+  const indicatorChips = INDICATOR_CONFIGS.map(({ key, label, color }) => ({
+    key,
+    label,
+    color,
+    pressed: indicatorVisibility[key] && indicatorEnabledState[key],
+    available: indicatorEnabledState[key],
+    title: key === 'ma60' && !indicatorEnabledState[key]
+      ? (language === 'en' ? 'MA60 needs more history' : 'MA60 需要更多历史 K 线')
+      : key === 'vwap' && !indicatorEnabledState[key]
+        ? (language === 'en' ? 'VWAP needs reliable volume' : 'VWAP 需要可靠成交量')
+        : label,
+  }));
+  const priceContextLabel = language === 'en' ? `Price ${formatPrice(latestCandle?.close)}` : `价格 ${formatPrice(latestCandle?.close)}`;
+  const volumeContextLabel = language === 'en' ? `Volume ${formatVolume(latestCandle?.volume)}` : `成交量 ${formatVolume(latestCandle?.volume)}`;
+  const rangeHintLabel = language === 'en' ? 'Zoom to inspect range' : '缩放查看区间';
   const chartUnavailableTitle = status === 'loading'
     ? (language === 'en' ? 'Loading candles...' : '正在加载 K 线...')
     : unavailableState.title;
@@ -901,93 +927,27 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
       data-tooltip-bounds="viewport"
     >
       <div className="mb-2.5 flex min-w-0 flex-col gap-2.5">
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <div className="flex items-center gap-0.5 rounded-full border border-[color:var(--wolfy-border-faint)] bg-white/[0.025] p-0.5">
-              {TIMEFRAME_OPTIONS.map((optionItem) => (
-                <button
-                  key={optionItem.key}
-                  type="button"
-                  aria-pressed={activeTimeframe === optionItem.key}
-                  className={cn(
-                    'rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors',
-                    activeTimeframe === optionItem.key
-                      ? 'bg-[var(--wolfy-accent-soft)] text-white/86'
-                      : 'text-white/42 hover:bg-white/[0.04] hover:text-white/72',
-                  )}
-                  onClick={() => handleTimeframeChange(optionItem.key)}
-                  disabled={status !== 'ready'}
-                  title={optionItem.description}
-                >
-                  {optionItem.label}
-                </button>
-              ))}
-            </div>
-            <span className="hidden text-[10px] text-white/30 sm:inline">{ticker}</span>
-            {sourceHint ? (
-              <span className="text-[10px] text-white/30">{sourceHint}</span>
-            ) : null}
-          </div>
-          {maStructure ? (
-            <span className="text-[10px] text-white/30">{maStructure}</span>
-          ) : null}
-        </div>
+        <HomeCandlestickChartTimeframeStrip
+          controls={timeframeControls}
+          ticker={ticker}
+          sourceHint={sourceHint}
+          maStructure={maStructure}
+          onSelect={(key) => handleTimeframeChange(key as HomeTimeframeKey)}
+        />
 
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          {INDICATOR_CONFIGS.map(({ key, label, color }) => {
-            const available = indicatorEnabledState[key];
-            const pressed = indicatorVisibility[key] && available;
-            const title = key === 'ma60' && !available
-              ? (language === 'en' ? 'MA60 needs more history' : 'MA60 需要更多历史 K 线')
-              : key === 'vwap' && !available
-                ? (language === 'en' ? 'VWAP needs reliable volume' : 'VWAP 需要可靠成交量')
-                : label;
-            return (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={pressed}
-                disabled={!available}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors',
-                  pressed
-                    ? 'border-white/[0.12] bg-white/[0.07] text-white/84'
-                    : 'border-white/[0.05] bg-white/[0.012] text-white/46 hover:border-white/[0.09] hover:bg-white/[0.03] hover:text-white/70',
-                  !available ? 'cursor-not-allowed opacity-40 hover:border-white/[0.05] hover:bg-white/[0.012] hover:text-white/46' : '',
-                )}
-                onClick={() => handleIndicatorToggle(key)}
-                title={title}
-              >
-                <span className="inline-block size-1.5 rounded-full" style={{ backgroundColor: color }} />
-                <span>{label}</span>
-              </button>
-            );
-          })}
-          {!indicatorEnabledState.vwap && vwapStatus.zeroHeavy ? (
-            <span className="text-[10px] text-white/30">{language === 'en' ? 'VWAP unavailable' : 'VWAP 暂不可用'}</span>
-          ) : null}
-        </div>
+        <HomeCandlestickChartIndicatorChips
+          chips={indicatorChips}
+          vwapUnavailableLabel={!indicatorEnabledState.vwap && vwapStatus.zeroHeavy
+            ? (language === 'en' ? 'VWAP unavailable' : 'VWAP 暂不可用')
+            : null}
+          onToggle={(key) => handleIndicatorToggle(key as HomeIndicatorKey)}
+        />
 
-        <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] text-white/36">
-          <span
-            className="inline-flex min-h-6 items-center rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5"
-            data-testid="home-chart-context-price"
-          >
-            {language === 'en' ? `Price ${formatPrice(latestCandle?.close)}` : `价格 ${formatPrice(latestCandle?.close)}`}
-          </span>
-          <span
-            className="inline-flex min-h-6 items-center rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5"
-            data-testid="home-chart-context-volume"
-          >
-            {language === 'en' ? `Volume ${formatVolume(latestCandle?.volume)}` : `成交量 ${formatVolume(latestCandle?.volume)}`}
-          </span>
-          <span
-            className="inline-flex min-h-6 items-center rounded-full border border-white/[0.05] bg-white/[0.015] px-2.5"
-            data-testid="home-chart-range-hint"
-          >
-            {language === 'en' ? 'Zoom to inspect range' : '缩放查看区间'}
-          </span>
-        </div>
+        <HomeCandlestickChartContextBadges
+          priceLabel={priceContextLabel}
+          volumeLabel={volumeContextLabel}
+          rangeHintLabel={rangeHintLabel}
+        />
       </div>
 
       {hasRenderableChart ? (
@@ -1043,32 +1003,13 @@ export const HomeCandlestickChart: React.FC<HomeCandlestickChartProps> = ({
           ) : null}
         </div>
       ) : (
-        <div
-          className={cn(
-            'relative flex h-[224px] min-w-0 max-w-full flex-col justify-center overflow-hidden rounded-[12px] border border-[color:var(--wolfy-border-faint)] bg-[linear-gradient(180deg,rgba(17,22,38,0.92),rgba(13,18,32,0.98))] px-5 text-left sm:h-[236px] xl:h-[248px]',
-            status === 'loading' ? 'text-white/46' : 'text-white/42',
-          )}
-          data-testid="home-candlestick-unavailable"
-        >
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-5 top-5 h-px bg-gradient-to-r from-transparent via-white/14 to-transparent"
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-white/48">
-              {chartUnavailableStatus}
-            </span>
-            <span className="text-[10px] uppercase tracking-[0.16em] text-white/24">{chartUnavailableTimeframe}</span>
-          </div>
-          <div className="mt-4 max-w-sm">
-            <p className="text-sm font-semibold text-white/72">{chartUnavailableTitle}</p>
-            {chartUnavailableBody ? (
-              <p className="mt-2 text-xs leading-5 text-white/36">
-                {chartUnavailableBody}
-              </p>
-            ) : null}
-          </div>
-        </div>
+        <HomeCandlestickChartUnavailablePanel
+          statusLabel={chartUnavailableStatus}
+          timeframeLabel={chartUnavailableTimeframe}
+          title={chartUnavailableTitle}
+          body={chartUnavailableBody}
+          isLoading={status === 'loading'}
+        />
       )}
     </div>
   );
