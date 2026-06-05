@@ -483,6 +483,7 @@ const SystemControlPlane: React.FC<SystemControlPlaneProps> = ({
                       type="button"
                       size="sm"
                       variant="danger-subtle"
+                      data-system-settings-reset-action="factory_reset"
                       onClick={() => onSetAdminActionDialog('factory_reset')}
                       disabled={isRunningAdminAction}
                     >

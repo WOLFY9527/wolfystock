@@ -1,4 +1,4 @@
-import { Suspense, lazy, type FC } from 'react';
+import { Suspense, lazy, type FC, type MouseEvent as ReactMouseEvent, useRef, useState } from 'react';
 import {
   TerminalChip,
   TerminalMetric,
@@ -6,8 +6,11 @@ import {
   TerminalPageShell,
 } from '../components/terminal/TerminalPrimitives';
 import AdminOpsL0OverviewStrip from '../components/admin/AdminOpsL0OverviewStrip';
+import { ConfirmDialog } from '../components/common/ConfirmDialog';
 
 const SettingsPage = lazy(() => import('./SettingsPage'));
+
+const FACTORY_RESET_ACTION_SELECTOR = '[data-system-settings-reset-action="factory_reset"]';
 
 const SYSTEM_SETTINGS_OVERVIEW = [
   {
@@ -50,10 +53,67 @@ const settingsConsoleFallback = (
 );
 
 const SystemSettingsPage: FC = () => {
+  const [isFactoryResetConfirmOpen, setIsFactoryResetConfirmOpen] = useState(false);
+  const pendingFactoryResetButtonRef = useRef<HTMLButtonElement | null>(null);
+  const bypassFactoryResetInterceptRef = useRef(false);
+  const isEnglish = typeof window !== 'undefined' && /^\/en(?:\/|$)/.test(window.location.pathname);
+  const factoryResetDialogCopy = isEnglish
+    ? {
+      title: 'Confirm system settings reset',
+      message: 'This action may reset system-level settings and clear sessions, analysis/chat history, scanner/backtest/portfolio usage data, and notification targets related to system initialization. It may be difficult to undo.',
+      cancel: 'Cancel',
+      confirm: 'Confirm reset',
+    }
+    : {
+      title: '确认重置系统设置',
+      message: '该操作可能重置系统级设置，并清理与系统初始化相关的会话、分析与聊天历史、扫描/回测/持仓使用数据以及通知目标；执行后较难撤销。',
+      cancel: '取消',
+      confirm: '确认重置',
+    };
+
+  const handleFactoryResetActionCapture = (event: ReactMouseEvent<HTMLElement>) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    const resetButton = target.closest(FACTORY_RESET_ACTION_SELECTOR) as HTMLButtonElement | null;
+    if (!resetButton) {
+      return;
+    }
+
+    if (bypassFactoryResetInterceptRef.current) {
+      bypassFactoryResetInterceptRef.current = false;
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    pendingFactoryResetButtonRef.current = resetButton;
+    setIsFactoryResetConfirmOpen(true);
+  };
+
+  const handleCancelFactoryResetConfirm = () => {
+    pendingFactoryResetButtonRef.current = null;
+    setIsFactoryResetConfirmOpen(false);
+  };
+
+  const handleConfirmFactoryReset = () => {
+    const resetButton = pendingFactoryResetButtonRef.current;
+    pendingFactoryResetButtonRef.current = null;
+    setIsFactoryResetConfirmOpen(false);
+    if (!resetButton) {
+      return;
+    }
+    bypassFactoryResetInterceptRef.current = true;
+    resetButton.click();
+  };
+
   return (
     <TerminalPageShell
       data-testid="system-settings-page"
       className="min-h-0 flex-1 overflow-x-hidden py-5 text-white md:py-6"
+      onClickCapture={handleFactoryResetActionCapture}
     >
       <div data-testid="system-settings-shell-header" className="flex min-w-0 flex-col gap-4">
         <TerminalPageHeading
@@ -96,6 +156,16 @@ const SystemSettingsPage: FC = () => {
           <SettingsPage />
         </Suspense>
       </div>
+      <ConfirmDialog
+        isOpen={isFactoryResetConfirmOpen}
+        title={factoryResetDialogCopy.title}
+        message={factoryResetDialogCopy.message}
+        confirmText={factoryResetDialogCopy.confirm}
+        cancelText={factoryResetDialogCopy.cancel}
+        isDanger
+        onConfirm={handleConfirmFactoryReset}
+        onCancel={handleCancelFactoryResetConfirm}
+      />
     </TerminalPageShell>
   );
 };
