@@ -36,6 +36,7 @@ vi.mock('../SettingsPage', async () => {
 describe('SystemSettingsPage', () => {
   beforeEach(() => {
     mockLegacyFactoryResetTrigger.mockReset();
+    window.history.pushState({}, '', '/settings/system');
   });
 
   it('renders the system settings surface through the lazy console boundary without duplicating route-local shell width or background slabs', async () => {
@@ -50,14 +51,20 @@ describe('SystemSettingsPage', () => {
     const overviewStrip = screen.getByTestId('system-settings-l0-overview-strip');
 
     expect(screen.getByRole('heading', { name: '系统设置' })).toBeInTheDocument();
+    expect(screen.getByText('管理员默认落点')).toBeInTheDocument();
+    expect(
+      screen.getByText('这里是管理员进入系统配置与控制事项的默认落点，不是缺失的独立仪表盘。请先确认全局风险、待处理配置和安全下一步，再进入下方运维中心。'),
+    ).toBeInTheDocument();
     expect(within(overviewStrip).getByText('信任状态')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('影响范围')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('建议动作')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('证据参考')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('最近更新')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('系统运维中心 / 下方摘要')).toBeInTheDocument();
-    expect(screen.getByText(/深层配置、原始字段和危险系统动作留在下方运维中心/)).toBeInTheDocument();
+    expect(screen.getByText('凭证、调度、系统状态与高风险操作仍需结合运维中心快照确认。')).toBeInTheDocument();
+    expect(screen.getByText('详细配置项保留在下方运维中心。')).toBeInTheDocument();
     expect(screen.queryByText(/control plane/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/token|debug|provider|cache|env|router/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('system-settings-loading')).toHaveAttribute('aria-busy', 'true');
     expect(await screen.findByText('settings-page-core')).toBeInTheDocument();
     expect(pageRoot).toHaveAttribute('data-terminal-primitive', 'page-shell');
@@ -69,6 +76,26 @@ describe('SystemSettingsPage', () => {
     expect(shellHeader.className).not.toContain('md:px-6');
     expect(shellHeader.className).not.toContain('xl:px-8');
     expect(shellHeader.className).not.toContain('bg-[#050505]');
+  });
+
+  it('shows localized admin-landing copy on the english system settings route', async () => {
+    window.history.pushState({}, '', '/en/settings/system');
+
+    render(
+      <MemoryRouter initialEntries={['/en/settings/system']}>
+        <SystemSettingsPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'System Settings' })).toBeInTheDocument();
+    expect(screen.getByText('Default admin landing')).toBeInTheDocument();
+    expect(
+      screen.getByText('This page is the default landing for admin settings and control work, not a missing standalone dashboard. Review overall risk, pending setup, and safe next steps before opening the control center below.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('System control center / summary below')).toBeInTheDocument();
+    expect(screen.queryByText(/token|debug|provider|cache|env|router/i)).not.toBeInTheDocument();
+
+    expect(await screen.findByText('settings-page-core')).toBeInTheDocument();
   });
 
   it('opens a reset confirmation layer before the legacy factory-reset path, cancels safely, and only forwards once on confirm', async () => {
