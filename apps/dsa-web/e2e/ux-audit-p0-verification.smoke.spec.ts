@@ -814,6 +814,49 @@ appTest.describe('UX audit P0 route smoke', () => {
     baseExpect(await readBodyText(page)).not.toMatch(/数据源运维|系统设置|Provider 熔断诊断/i);
   });
 
+  appTest('guest canonical admin entries redirect to guest preview without leaking admin content', async ({ page }) => {
+    const canonicalAdminEntries = [
+      { path: '/zh/settings/system', forbidden: /系统设置|数据源运维|通知中心/i },
+      { path: '/zh/admin/logs', forbidden: /管理员日志|数据源健康摘要|Provider Issue Rollup/i },
+      { path: '/zh/admin/users/user-123/activity', forbidden: /用户支持与治理|活动类型筛选|不可查看用户活动/i },
+    ] as const;
+
+    await page.setViewportSize(desktopViewport);
+
+    for (const entry of canonicalAdminEntries) {
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+      await installGuestAppSmokeSession(page);
+      await page.goto(entry.path);
+      await page.waitForLoadState('domcontentloaded');
+
+      await expectGuestPreviewSurface(page);
+      baseExpect(await readBodyText(page)).not.toMatch(entry.forbidden);
+    }
+  });
+
+  appTest('representative protected consumer routes keep same-route guest overlay behavior', async ({ page }) => {
+    const protectedRoutes = [
+      { path: '/zh/watchlist', expectedUrl: /\/zh\/watchlist$/, hiddenCopy: /先从扫描器加入候选，也可以在扫描器手动补充代码/i },
+      { path: '/zh/scanner', expectedUrl: /\/zh\/scanner$/, hiddenCopy: /Mock scanner shortlist|NVIDIA|AI 半导体/i },
+      { path: '/zh/backtest/results/34', expectedUrl: /\/zh\/backtest\/results\/34$/, hiddenCopy: /Fixture analytical backtest completed|回测结果|绩效表现/i },
+    ] as const;
+
+    await page.setViewportSize(desktopViewport);
+
+    for (const route of protectedRoutes) {
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+      await installGuestAppSmokeSession(page);
+      await page.goto(route.path);
+      await page.waitForLoadState('domcontentloaded');
+
+      await appExpect(page).toHaveURL(route.expectedUrl);
+      await appExpect(page.getByTestId('auth-guard-overlay')).toBeVisible({ timeout: 15_000 });
+      baseExpect(await readBodyText(page)).not.toMatch(route.hiddenCopy);
+      await expectNoVisibleRawLeakage(page);
+      await expectNoGenericServerErrorShell(page);
+    }
+  });
+
   appTest('market overview, scanner, and backtest do not show a generic server-error shell under the mock harness', async ({ page }) => {
     const signedInRoutes = [
       { path: '/zh/market-overview', ready: () => page.getByTestId('market-overview-shell') },
@@ -949,5 +992,24 @@ adminTest.describe('UX audit P0 admin smoke', () => {
     await adminExpect(page.getByRole('heading', { name: '确认重置系统设置' })).toBeVisible();
     baseExpect(harness.requests.wasFetched('POST', '/api/v1/system/actions/factory-reset')).toBe(false);
     await expectNoRawSecretLikeText(page);
+  });
+
+  adminTest('user activity route denies nested admin access without the activity capability', async ({ page }) => {
+    await page.setViewportSize(desktopViewport);
+
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    const deniedHarness = await installAdminAuthHarness(page, {
+      capabilities: ['users:read'],
+      displayName: 'Scoped Admin',
+    });
+    await page.goto('/zh/admin/users/user-123/activity');
+    await page.waitForLoadState('domcontentloaded');
+
+    await adminExpect(page).toHaveURL(/\/zh\/admin\/users\/user-123\/activity$/);
+    await adminExpect(page.getByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeVisible({ timeout: 15_000 });
+    baseExpect(deniedHarness.requests.count('GET', '/api/v1/admin/users/user-123/activity')).toBe(0);
+    baseExpect(deniedHarness.requests.count('GET', '/api/v1/admin/users/user-123')).toBe(0);
+    await expectNoRawSecretLikeText(page);
+    await expectNoGenericServerErrorShell(page);
   });
 });
