@@ -37,6 +37,7 @@ from src.services.home_llm_evidence_input import build_home_llm_evidence_input_v
 from src.services.home_report_evidence_citations import (
     build_home_report_evidence_citation_frame_v1,
 )
+from src.services.home_source_provenance_sidecar import build_home_source_provenance_sidecar_v1
 
 logger = logging.getLogger(__name__)
 
@@ -717,6 +718,12 @@ class AnalysisService:
             if isinstance(dashboard.get("structured_analysis"), dict)
             else {}
         )
+        runtime = (
+            getattr(result, "runtime_execution", None)
+            if isinstance(getattr(result, "runtime_execution", None), dict)
+            else {}
+        )
+        runtime_data = runtime.get("data") if isinstance(runtime.get("data"), dict) else {}
         decision_panel = _nested_get(dashboard, "battle_plan", "sniper_points") or {}
         trend_status = _nested_get(dashboard, "data_perspective", "trend_status") or {}
         technical_indicators = _nested_get(dashboard, "data_perspective", "technical_indicators") or {}
@@ -810,10 +817,22 @@ class AnalysisService:
             single_stock_evidence_packet=single_stock_evidence_packet,
             query_id=query_id,
         )
+        source_provenance_frame = self._build_home_source_provenance_frame(
+            research_readiness=research_readiness,
+            evidence_coverage_frame=evidence_coverage_frame,
+            single_stock_evidence_packet=single_stock_evidence_packet,
+            evidence_citation_frame=evidence_citation_frame,
+            source_metadata_by_domain=self._build_home_source_metadata_by_domain(
+                structured_analysis=structured_analysis,
+                runtime_data=runtime_data,
+            ),
+            query_id=query_id,
+        )
         analysis_result["researchReadiness"] = research_readiness
         analysis_result["evidenceCoverageFrame"] = evidence_coverage_frame
         analysis_result["singleStockEvidencePacket"] = single_stock_evidence_packet
         analysis_result["evidenceCitationFrame"] = evidence_citation_frame
+        analysis_result["sourceProvenanceFrame"] = source_provenance_frame
         decision_trace = self._build_decision_trace(
             result,
             query_id=query_id,
@@ -838,6 +857,7 @@ class AnalysisService:
                 "evidenceCoverageFrame": evidence_coverage_frame,
                 "singleStockEvidencePacket": single_stock_evidence_packet,
                 "evidenceCitationFrame": evidence_citation_frame,
+                "sourceProvenanceFrame": source_provenance_frame,
             },
             "summary": {
                 "analysis_summary": result.analysis_summary,
@@ -871,9 +891,11 @@ class AnalysisService:
             "evidenceCoverageFrame": evidence_coverage_frame,
             "singleStockEvidencePacket": single_stock_evidence_packet,
             "evidenceCitationFrame": evidence_citation_frame,
+            "sourceProvenanceFrame": source_provenance_frame,
         }
         payload["meta"]["researchReadiness"] = research_readiness
         payload["meta"]["evidenceCitationFrame"] = evidence_citation_frame
+        payload["meta"]["sourceProvenanceFrame"] = source_provenance_frame
         if data_quality_report:
             payload["dataQualityReport"] = data_quality_report
             payload["meta"]["dataQualityReport"] = data_quality_report
@@ -1011,6 +1033,151 @@ class AnalysisService:
         home_llm_evidence_input = build_home_llm_evidence_input_v1(packet_payload)
         packet_payload["homeLlmEvidenceInput"] = home_llm_evidence_input
         return build_home_report_evidence_citation_frame_v1(packet_payload)
+
+    def _build_home_source_provenance_frame(
+        self,
+        *,
+        research_readiness: Dict[str, Any],
+        evidence_coverage_frame: Dict[str, Any],
+        single_stock_evidence_packet: Dict[str, Any],
+        evidence_citation_frame: Dict[str, Any],
+        source_metadata_by_domain: Dict[str, Dict[str, Any]],
+        query_id: str,
+    ) -> List[Dict[str, Any]]:
+        return build_home_source_provenance_sidecar_v1(
+            {
+                "singleStockEvidencePacket": single_stock_evidence_packet,
+                "evidenceCitationFrame": evidence_citation_frame,
+                "evidenceCoverageFrame": evidence_coverage_frame,
+                "researchReadiness": research_readiness,
+                "sourceMetadataByDomain": source_metadata_by_domain,
+                "debugRef": f"analysis:{query_id}",
+            }
+        )
+
+    @staticmethod
+    def _build_home_source_metadata_by_domain(
+        *,
+        structured_analysis: Dict[str, Any],
+        runtime_data: Dict[str, Any],
+    ) -> Dict[str, Dict[str, Any]]:
+        market_runtime = _runtime_field(
+            _first_present(
+                runtime_data.get("market"),
+                runtime_data.get("quote"),
+                runtime_data.get("technical"),
+                runtime_data.get("technicals"),
+            )
+        )
+        source_blocks = {
+            "priceHistory": (
+                market_runtime,
+                _runtime_field(structured_analysis.get("realtime_context")),
+                _runtime_field(structured_analysis.get("technicals")),
+            ),
+            "technicals": (
+                _runtime_field(structured_analysis.get("technicals")),
+                market_runtime,
+                _runtime_field(structured_analysis.get("realtime_context")),
+            ),
+            "fundamentals": (
+                _runtime_field(structured_analysis.get("fundamentals")),
+                _runtime_field(runtime_data.get("fundamentals")),
+            ),
+            "earnings": (
+                _runtime_field(structured_analysis.get("earnings_analysis")),
+                _runtime_field(structured_analysis.get("fundamentals")),
+                _runtime_field(runtime_data.get("fundamentals")),
+            ),
+            "filings": (
+                _runtime_field(structured_analysis.get("filings")),
+            ),
+            "news": (
+                _runtime_field(structured_analysis.get("sentiment_analysis")),
+                _runtime_field(runtime_data.get("news")),
+            ),
+            "catalysts": (
+                _runtime_field(structured_analysis.get("catalyst")),
+                _runtime_field(structured_analysis.get("sentiment_analysis")),
+                _runtime_field(runtime_data.get("news")),
+            ),
+            "sentiment": (
+                _runtime_field(structured_analysis.get("sentiment_analysis")),
+                _runtime_field(runtime_data.get("sentiment")),
+            ),
+            "valuation": (
+                _runtime_field(structured_analysis.get("fundamentals")),
+                _runtime_field(runtime_data.get("fundamentals")),
+            ),
+            "sectorTheme": (
+                _runtime_field(structured_analysis.get("market_context")),
+            ),
+            "macroLiquidity": (
+                _runtime_field(structured_analysis.get("market_context")),
+            ),
+        }
+        return {
+            domain: metadata
+            for domain, blocks in source_blocks.items()
+            if (metadata := AnalysisService._source_metadata_from_blocks(blocks))
+        }
+
+    @staticmethod
+    def _source_metadata_from_blocks(blocks: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+        normalized_blocks = [block for block in blocks if isinstance(block, dict) and block]
+        source_id = _first_present(
+            *(
+                _first_present(
+                    block.get("sourceId"),
+                    block.get("source_id"),
+                    block.get("source"),
+                    _nested_get(block, "field_sources", "quarterly_series"),
+                )
+                for block in normalized_blocks
+            )
+        )
+        if source_id is None:
+            return {}
+        source_tier = _coverage_source_tier(*normalized_blocks)
+        authority = _first_present(
+            *(
+                _first_present(
+                    block.get("providerAuthority"),
+                    block.get("sourceAuthority"),
+                    block.get("trustLevel"),
+                )
+                for block in normalized_blocks
+            )
+        )
+        if authority is None:
+            authority = _coverage_source_authority(*normalized_blocks)
+        if authority == "unavailable" and any(block.get("scoreContributionAllowed") is True for block in normalized_blocks):
+            authority = "scoreGradeAllowed"
+        freshness = _coverage_freshness(*normalized_blocks)
+        fallback_or_proxy = _coverage_fallback_or_proxy(*normalized_blocks)
+        score_allowed = any(block.get("scoreContributionAllowed") is True for block in normalized_blocks)
+        if authority == "scoreGradeAllowed" and freshness in {"fresh", "cached"} and not fallback_or_proxy:
+            score_allowed = True
+        return {
+            "sourceId": source_id,
+            "sourceLabel": _first_present(
+                *(
+                    _first_present(
+                        block.get("sourceLabel"),
+                        block.get("source_label"),
+                        block.get("label"),
+                        block.get("source"),
+                    )
+                    for block in normalized_blocks
+                )
+            ),
+            "sourceTier": source_tier,
+            "providerAuthority": authority,
+            "freshness": freshness,
+            "fallbackOrProxy": fallback_or_proxy,
+            "observationOnly": authority != "scoreGradeAllowed",
+            "scoreContributionAllowed": score_allowed,
+        }
 
     def _build_home_evidence_coverage_frame(
         self,
@@ -1741,6 +1908,8 @@ class AnalysisService:
             response["singleStockEvidencePacket"] = report["singleStockEvidencePacket"]
         if isinstance(report.get("evidenceCitationFrame"), dict):
             response["evidenceCitationFrame"] = report["evidenceCitationFrame"]
+        if isinstance(report.get("sourceProvenanceFrame"), list):
+            response["sourceProvenanceFrame"] = report["sourceProvenanceFrame"]
         return response
 
     @staticmethod

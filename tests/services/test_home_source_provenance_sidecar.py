@@ -460,7 +460,7 @@ def test_json_output_stays_stable_with_fixed_domain_order() -> None:
     )
 
 
-def test_helper_has_no_runtime_integration_references() -> None:
+def test_helper_runtime_integration_is_limited_to_home_response_assembly() -> None:
     result = subprocess.run(
         ["rg", "-n", "build_home_source_provenance_sidecar_v1|home_source_provenance_sidecar"],
         cwd=REPO_ROOT,
@@ -471,8 +471,10 @@ def test_helper_has_no_runtime_integration_references() -> None:
     lines = [line for line in result.stdout.splitlines() if line.strip()]
 
     assert lines
+    assert any(line.startswith("src/services/analysis_service.py:") for line in lines)
     assert all(
         line.startswith("src/services/home_source_provenance_sidecar.py:")
+        or line.startswith("src/services/analysis_service.py:")
         or line.startswith("tests/services/test_home_source_provenance_sidecar.py:")
         for line in lines
     )

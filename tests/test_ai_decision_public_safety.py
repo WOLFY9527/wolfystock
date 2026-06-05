@@ -497,6 +497,126 @@ def test_evidence_citation_frame_redacts_internal_metadata_and_trade_language() 
     assert "trade now" not in serialized
 
 
+def test_source_provenance_frame_redacts_internal_metadata_and_trade_language() -> None:
+    result = _safe_result(
+        dashboard={
+            "battle_plan": {
+                "sniper_points": {
+                    "ideal_buy": "Observe support",
+                    "stop_loss": "Risk invalidates below 179",
+                    "take_profit": "Resistance near 195-198",
+                }
+            },
+            "structured_analysis": {
+                "fundamentals": {
+                    "status": "missing",
+                    "source": None,
+                    "freshness": "unknown",
+                    "normalized": {},
+                },
+                "earnings_analysis": {
+                    "status": "missing",
+                    "source": None,
+                    "freshness": "unknown",
+                    "quarterly_series": [],
+                    "summary_flags": ["earnings_data_unavailable"],
+                },
+                "technicals": {
+                    "status": "ok",
+                    "source": "polygon_us_grouped_daily",
+                    "sourceTier": "score_grade",
+                    "freshness": "fresh",
+                    "sourceAuthorityAllowed": True,
+                    "scoreContributionAllowed": True,
+                },
+                "realtime_context": {
+                    "price": 188.2,
+                    "source": "polygon_us_grouped_daily",
+                    "freshness": "fresh",
+                },
+                "sentiment_analysis": {
+                    "status": "partial",
+                    "source": "tavily",
+                    "sourceTier": "observation_only",
+                    "providerAuthority": "observationOnly",
+                    "freshness": "delayed",
+                    "classified_items": [],
+                    "raw_payload": {"authorization": "Bearer hidden"},
+                    "article_body": "Full article body should stay private.",
+                    "prompt": "submit order on breakout",
+                },
+                "catalyst": {
+                    "status": "missing",
+                    "source": None,
+                    "classified_items": [],
+                    "summary_text": "trade now on momentum",
+                },
+                "data_quality_report": {
+                    "dataQualityTier": "analysis_grade",
+                    "requiredAvailable": True,
+                    "confidenceCap": 68,
+                    "missingRequiredDomains": ["fundamentals", "earnings", "news"],
+                    "importantDomainsMissing": ["valuation", "catalyst_news_event"],
+                    "reasonCodes": ["fundamental_context_unavailable", "provider_timeout"],
+                    "stanceGuardrail": "observe_only",
+                },
+            },
+        },
+        runtime_execution={
+            "ai": {"provider": "openai", "model": "openai/gpt-4o-mini"},
+            "data": {
+                "market": {"status": "ok", "source": "polygon_us_grouped_daily", "freshness": "fresh"},
+                "fundamentals": {"status": "missing", "source": None, "freshness": "unknown"},
+                "news": {
+                    "status": "timeout",
+                    "source": None,
+                    "freshness": "unknown",
+                    "error": "provider_timeout after 8s Authorization: Bearer hidden",
+                    "final_reason": "cache_router token=hidden",
+                    "router_debug": "news_router>provider_a",
+                },
+                "sentiment": {
+                    "status": "fallback",
+                    "source": "fallback_cache",
+                    "freshness": "fallback",
+                    "final_reason": "traceback token=hidden",
+                },
+            },
+            "data_quality_report": {
+                "dataQualityTier": "analysis_grade",
+                "requiredAvailable": True,
+                "confidenceCap": 68,
+                "missingRequiredDomains": ["fundamentals", "earnings", "news"],
+                "importantDomainsMissing": ["valuation", "catalyst_news_event"],
+                "reasonCodes": ["fundamental_context_unavailable", "provider_timeout"],
+                "stanceGuardrail": "observe_only",
+            },
+            "steps": [],
+        },
+    )
+
+    response = AnalysisService()._build_analysis_response(
+        result,
+        query_id="q-source-provenance-safety",
+        report_type="detailed",
+    )
+    frame = response["sourceProvenanceFrame"]
+    serialized = json.dumps(frame, ensure_ascii=False).lower()
+
+    assert response["report"]["sourceProvenanceFrame"] == frame
+    assert response["report"]["meta"]["sourceProvenanceFrame"] == frame
+    assert response["report"]["details"]["analysis_result"]["sourceProvenanceFrame"] == frame
+    _assert_no_forbidden_directives(frame)
+    _assert_no_raw_output_terms(frame)
+    assert "authorization" not in serialized
+    assert "bearer" not in serialized
+    assert "cache_router" not in serialized
+    assert "traceback" not in serialized
+    assert "article body" not in serialized
+    assert "submit order" not in serialized
+    assert "trade now" not in serialized
+
+
 def test_decision_trace_redacts_sensitive_provider_metadata_and_debug_text() -> None:
     result = _safe_result(
         dashboard={

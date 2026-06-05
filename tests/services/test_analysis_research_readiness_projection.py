@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from src.analyzer import AnalysisResult
@@ -1193,6 +1194,126 @@ def test_home_analysis_response_adds_evidence_citation_frame_across_public_paylo
     }
 
 
+def test_home_analysis_response_adds_source_provenance_frame_across_public_payloads() -> None:
+    result = _result_with_quality(
+        runtime_data={
+            "market": {
+                "status": "ok",
+                "truth": "actual",
+                "source": "polygon_us_grouped_daily",
+                "freshness": "fresh",
+                "sourceTier": "score_grade",
+                "providerAuthority": "scoreGradeAllowed",
+            },
+            "fundamentals": {
+                "status": "ok",
+                "truth": "actual",
+                "source": "fmp",
+                "freshness": "fresh",
+                "sourceTier": "score_grade",
+                "providerAuthority": "scoreGradeAllowed",
+            },
+            "news": {
+                "status": "ok",
+                "truth": "actual",
+                "source": "gnews",
+                "freshness": "fresh",
+                "sourceTier": "observation_only",
+                "providerAuthority": "observationOnly",
+            },
+            "sentiment": {
+                "status": "ok",
+                "truth": "actual",
+                "source": "finnhub",
+                "freshness": "fresh",
+                "sourceTier": "observation_only",
+                "providerAuthority": "observationOnly",
+            },
+        },
+        structured_overrides={
+            "fundamentals": {
+                "status": "ok",
+                "source": "fmp",
+                "sourceType": "official_public",
+                "sourceTier": "score_grade",
+                "trustLevel": "score_grade",
+                "freshness": "fresh",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "normalized": {"marketCap": 3010000000000, "trailingPE": 24.8},
+            },
+            "earnings_analysis": {
+                "status": "ok",
+                "source": "fmp_income_statement",
+                "field_sources": {"quarterly_series": "fmp_income_statement"},
+                "summary_flags": ["quarterly_series_available"],
+                "narrative_insights": ["盈利趋势稳定。"],
+                "sourceTier": "score_grade",
+                "freshness": "fresh",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "quarterly_series": [{"quarter": "2026Q1", "revenue": 90340000000}],
+            },
+            "sentiment_analysis": {
+                "status": "ok",
+                "source": "finnhub",
+                "sourceType": "official_public",
+                "sourceTier": "observation_only",
+                "trustLevel": "observation_only",
+                "freshness": "fresh",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": False,
+                "classified_items": [{"id": "news-earnings", "title": "Apple beats earnings", "source": "finnhub"}],
+            },
+            "catalyst": {
+                "status": "ok",
+                "source": "gnews",
+                "sourceType": "official_public",
+                "sourceTier": "observation_only",
+                "trustLevel": "observation_only",
+                "freshness": "fresh",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": False,
+                "classified_items": [{"id": "cat-guidance", "headline": "Apple raises guidance", "source": "gnews"}],
+            },
+        },
+    )
+
+    response = _report_for(result)
+    frame = response["sourceProvenanceFrame"]
+    report = response["report"]
+
+    assert report["sourceProvenanceFrame"] == frame
+    assert report["meta"]["sourceProvenanceFrame"] == frame
+    assert report["details"]["analysis_result"]["sourceProvenanceFrame"] == frame
+    assert frame == response["sourceProvenanceFrame"]
+    assert frame == json.loads(json.dumps(frame, ensure_ascii=False))
+    assert [entry["evidenceDomain"] for entry in frame] == [
+        "priceHistory",
+        "technicals",
+        "fundamentals",
+        "earnings",
+        "filings",
+        "news",
+        "catalysts",
+        "sentiment",
+        "valuation",
+        "sectorTheme",
+        "macroLiquidity",
+    ]
+    by_domain = {entry["evidenceDomain"]: entry for entry in frame}
+    assert by_domain["priceHistory"]["contractVersion"] == "source_provenance_v1"
+    assert by_domain["priceHistory"]["sourceId"] == "polygon_us_grouped_daily"
+    assert by_domain["priceHistory"]["scoreContributionAllowed"] is True
+    assert by_domain["fundamentals"]["sourceId"] == "fmp"
+    assert by_domain["fundamentals"]["scoreContributionAllowed"] is True
+    assert by_domain["news"]["observationOnly"] is True
+    assert by_domain["news"]["scoreContributionAllowed"] is False
+    assert response["singleStockEvidencePacket"]["domains"]["fundamentals"]["status"] == "available"
+    assert response["evidenceCitationFrame"]["frameState"] == "ready"
+    assert response["researchReadiness"]["consumerActionBoundary"] == "no_advice"
+
+
 def test_home_evidence_citation_frame_preserves_orcl_like_partial_without_raw_leakage() -> None:
     result = _result_with_quality(
         code="ORCL",
@@ -1307,6 +1428,127 @@ def test_home_evidence_citation_frame_preserves_orcl_like_partial_without_raw_le
     assert "sell now" not in serialized
     assert "submit order" not in serialized
     assert "trade now" not in serialized
+
+
+def test_home_source_provenance_frame_preserves_orcl_like_partial_fail_closed_without_raw_leakage() -> None:
+    result = _result_with_quality(
+        code="ORCL",
+        data_quality_report={
+            "dataQualityTier": "analysis_grade",
+            "requiredAvailable": True,
+            "confidenceCap": 70,
+            "missingRequiredDomains": ["fundamentals", "earnings", "news", "catalyst_news_event"],
+            "importantDomainsMissing": ["valuation", "sentiment"],
+            "scoreSuppressed": False,
+            "stanceGuardrail": "observe_only",
+            "reasonCodes": ["fundamental_context_unavailable", "provider_timeout", "fallback_proxy_evidence"],
+        },
+        structured_overrides={
+            "fundamentals": {
+                "status": "missing",
+                "source": None,
+                "freshness": "unknown",
+                "normalized": {},
+            },
+            "earnings_analysis": {
+                "status": "missing",
+                "source": None,
+                "freshness": "unknown",
+                "quarterly_series": [],
+                "summary_flags": ["earnings_data_unavailable"],
+            },
+            "fundamental_context": {
+                "status": "market not supported",
+                "market": "us",
+                "reason": "fundamental_context unavailable",
+            },
+            "sentiment_analysis": {
+                "status": "partial",
+                "source": "tavily",
+                "sourceTier": "observation_only",
+                "providerAuthority": "observationOnly",
+                "freshness": "delayed",
+                "classified_items": [],
+                "raw_payload": {"headline": "do not leak"},
+                "stack_trace": "Traceback: secret",
+                "article_body": "Full article body should not leak into packet output.",
+                "prompt": "buy now before the market opens",
+            },
+            "catalyst": {
+                "status": "missing",
+                "source": None,
+                "freshness": "unknown",
+                "classified_items": [],
+            },
+        },
+        runtime_data={
+            "market": {
+                "status": "ok",
+                "truth": "actual",
+                "source": "polygon_us_grouped_daily",
+                "fallback_occurred": False,
+                "freshness": "fresh",
+            },
+            "fundamentals": {
+                "status": "missing",
+                "truth": "unavailable",
+                "source": None,
+                "fallback_occurred": False,
+                "freshness": "unknown",
+            },
+            "news": {
+                "status": "timeout",
+                "truth": "unavailable",
+                "source": None,
+                "fallback_occurred": False,
+                "freshness": "unknown",
+                "error": "provider_timeout after 8s Authorization: Bearer secret",
+                "final_reason": "finnhub timeout via cache_router token=secret",
+                "router_debug": "news_router>provider_a",
+            },
+            "sentiment": {
+                "status": "fallback",
+                "truth": "unavailable",
+                "source": "fallback_cache",
+                "fallback_occurred": True,
+                "freshness": "fallback",
+                "final_reason": "traceback token=secret-value",
+            },
+        },
+        score=72,
+    )
+
+    response = _report_for(result)
+    frame = response["sourceProvenanceFrame"]
+    by_domain = {entry["evidenceDomain"]: entry for entry in frame}
+    serialized = json.dumps(frame, ensure_ascii=False).lower()
+
+    assert response["report"]["sourceProvenanceFrame"] == frame
+    assert response["report"]["meta"]["sourceProvenanceFrame"] == frame
+    assert response["report"]["details"]["analysis_result"]["sourceProvenanceFrame"] == frame
+    assert by_domain["fundamentals"]["sourceId"] == "unknown_source"
+    assert by_domain["fundamentals"]["freshnessState"] == "unknown"
+    assert by_domain["fundamentals"]["scoreContributionAllowed"] is False
+    assert "fundamental_context_unavailable" in by_domain["fundamentals"]["limitations"]
+    assert by_domain["news"]["sourceId"] == "unknown_source"
+    assert by_domain["news"]["scoreContributionAllowed"] is False
+    assert "provider_timeout" in by_domain["news"]["limitations"]
+    assert by_domain["sentiment"]["fallbackOrProxy"] is True
+    assert by_domain["sentiment"]["scoreContributionAllowed"] is False
+    for forbidden in (
+        "authorization",
+        "bearer",
+        "cache_router",
+        "traceback",
+        "secret-value",
+        "article body",
+        "prompt:",
+        "buy now",
+        "sell now",
+        "submit order",
+        "trade now",
+    ):
+        assert forbidden not in serialized
 
 
 def test_home_evidence_citation_frame_fails_closed_for_unsupported_hk_fundamental_context() -> None:
