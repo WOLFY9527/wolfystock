@@ -1050,6 +1050,29 @@ adminTest.describe('UX audit P0 admin smoke', () => {
     await expectNoRawSecretLikeText(page);
   });
 
+  adminTest('system settings header reset requires an explicit confirmation step', async ({ page }) => {
+    await page.setViewportSize(desktopViewport);
+    const harness = await openAdminRouteWithHarness(page, '/zh/settings/system');
+    const headerResetButton = page.getByTestId('settings-main-content').getByRole('button', { name: '重置', exact: true });
+
+    await adminExpect(page.getByTestId('system-settings-page')).toBeVisible({ timeout: 15_000 });
+
+    await headerResetButton.click();
+    await adminExpect(page.getByRole('heading', { name: '确认重置？' })).toBeVisible();
+    await adminExpect(page.getByText('所有未保存更改将丢失。')).toBeVisible();
+    await page.getByRole('button', { name: '取消' }).last().click();
+
+    baseExpect(harness.requests.wasFetched('PUT', '/api/v1/system/config')).toBe(false);
+
+    await headerResetButton.click();
+    await page.getByRole('button', { name: '确认重置' }).click();
+
+    await adminExpect(page.getByRole('button', { name: /^保存配置$/ })).toBeVisible();
+    baseExpect(harness.requests.wasFetched('PUT', '/api/v1/system/config')).toBe(false);
+    await adminExpect(page.getByTestId('system-settings-page')).toBeVisible();
+    await expectNoRawSecretLikeText(page);
+  });
+
   adminTest('user activity route denies nested admin access without the activity capability', async ({ page }) => {
     await page.setViewportSize(desktopViewport);
 

@@ -3,16 +3,27 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SystemSettingsPage from '../SystemSettingsPage';
 
+const mockDraftResetTrigger = vi.fn();
 const mockLegacyFactoryResetTrigger = vi.fn();
 
 vi.mock('../SettingsPage', async () => {
   const React = await import('react');
   const MockSettingsPage = () => {
+    const [draftResetOpened, setDraftResetOpened] = React.useState(false);
     const [legacyConfirmOpened, setLegacyConfirmOpened] = React.useState(false);
 
     return (
       <div>
         <div>settings-page-core</div>
+        <button
+          type="button"
+          onClick={() => {
+            mockDraftResetTrigger();
+            setDraftResetOpened(true);
+          }}
+        >
+          重置
+        </button>
         <button
           type="button"
           data-system-settings-reset-action="factory_reset"
@@ -23,6 +34,7 @@ vi.mock('../SettingsPage', async () => {
         >
           执行工厂重置
         </button>
+        {draftResetOpened ? <div>draft-reset-path-opened</div> : null}
         {legacyConfirmOpened ? <div>legacy-factory-reset-path-opened</div> : null}
       </div>
     );
@@ -35,6 +47,7 @@ vi.mock('../SettingsPage', async () => {
 
 describe('SystemSettingsPage', () => {
   beforeEach(() => {
+    mockDraftResetTrigger.mockReset();
     mockLegacyFactoryResetTrigger.mockReset();
     window.history.pushState({}, '', '/settings/system');
   });
@@ -98,7 +111,7 @@ describe('SystemSettingsPage', () => {
     expect(await screen.findByText('settings-page-core')).toBeInTheDocument();
   });
 
-  it('opens a reset confirmation layer before the legacy factory-reset path, cancels safely, and only forwards once on confirm', async () => {
+  it('clicking reset opens an explicit confirmation dialog before the draft reset executes', async () => {
     render(
       <MemoryRouter initialEntries={['/zh/settings/system']}>
         <SystemSettingsPage />
@@ -107,12 +120,69 @@ describe('SystemSettingsPage', () => {
 
     await screen.findByText('settings-page-core');
 
+    fireEvent.click(screen.getByRole('button', { name: '重置' }));
+
+    expect(await screen.findByRole('heading', { name: '确认重置？' })).toBeInTheDocument();
+    expect(screen.getByText('所有未保存更改将丢失。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '确认重置' })).toBeInTheDocument();
+    expect(mockDraftResetTrigger).not.toHaveBeenCalled();
+    expect(screen.queryByText('draft-reset-path-opened')).not.toBeInTheDocument();
+  });
+
+  it('cancel does not execute the reset path', async () => {
+    render(
+      <MemoryRouter initialEntries={['/zh/settings/system']}>
+        <SystemSettingsPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('settings-page-core');
+
+    fireEvent.click(screen.getByRole('button', { name: '重置' }));
+    const cancelButtons = await screen.findAllByRole('button', { name: '取消' });
+    fireEvent.click(cancelButtons.at(-1)!);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: '确认重置？' })).not.toBeInTheDocument();
+    });
+    expect(mockDraftResetTrigger).not.toHaveBeenCalled();
+    expect(screen.queryByText('draft-reset-path-opened')).not.toBeInTheDocument();
+  });
+
+  it('confirm executes the existing draft reset path exactly once', async () => {
+    render(
+      <MemoryRouter initialEntries={['/zh/settings/system']}>
+        <SystemSettingsPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('settings-page-core');
+
+    fireEvent.click(screen.getByRole('button', { name: '重置' }));
+    fireEvent.click(await screen.findByRole('button', { name: '确认重置' }));
+
+    await waitFor(() => {
+      expect(mockDraftResetTrigger).toHaveBeenCalledTimes(1);
+    });
+    expect(await screen.findByText('draft-reset-path-opened')).toBeInTheDocument();
+  });
+
+  it('keeps default-visible copy token/internal-safe while preserving the factory reset confirmation gate', async () => {
+    render(
+      <MemoryRouter initialEntries={['/zh/settings/system']}>
+        <SystemSettingsPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('settings-page-core');
+    expect(screen.queryByText(/token|internal|debug|provider|cache|env|router|payload|credential/i)).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: '执行工厂重置' }));
 
-    expect(await screen.findByRole('heading', { name: '确认重置系统设置' })).toBeInTheDocument();
-    expect(screen.getByText('该操作可能重置系统级设置，并清理与系统初始化相关的会话、分析与聊天历史、扫描/回测/持仓使用数据以及通知目标；执行后较难撤销。')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '确认重置系统设置？' })).toBeInTheDocument();
+    expect(screen.getByText('所有未保存更改将丢失，系统初始化仍会进入现有确认步骤。')).toBeInTheDocument();
     const cancelButtons = screen.getAllByRole('button', { name: '取消' });
-    const confirmResetButton = screen.getByRole('button', { name: '确认重置' });
+    const confirmResetButton = screen.getByRole('button', { name: '继续' });
     expect(cancelButtons.at(-1)).toBeInTheDocument();
     expect(confirmResetButton).toBeInTheDocument();
     expect(mockLegacyFactoryResetTrigger).not.toHaveBeenCalled();
@@ -121,12 +191,12 @@ describe('SystemSettingsPage', () => {
     fireEvent.click(cancelButtons.at(-1)!);
 
     await waitFor(() => {
-      expect(screen.queryByRole('heading', { name: '确认重置系统设置' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: '确认重置系统设置？' })).not.toBeInTheDocument();
     });
     expect(mockLegacyFactoryResetTrigger).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: '执行工厂重置' }));
-    fireEvent.click(await screen.findByRole('button', { name: '确认重置' }));
+    fireEvent.click(await screen.findByRole('button', { name: '继续' }));
 
     await waitFor(() => {
       expect(mockLegacyFactoryResetTrigger).toHaveBeenCalledTimes(1);

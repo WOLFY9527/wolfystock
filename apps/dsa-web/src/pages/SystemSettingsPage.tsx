@@ -11,11 +11,16 @@ import { ConfirmDialog } from '../components/common/ConfirmDialog';
 const SettingsPage = lazy(() => import('./SettingsPage'));
 
 const FACTORY_RESET_ACTION_SELECTOR = '[data-system-settings-reset-action="factory_reset"]';
+type ResetIntent = 'draft_reset' | 'factory_reset';
+
+function normalizeButtonText(value: string | null | undefined): string {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
 
 const SystemSettingsPage: FC = () => {
-  const [isFactoryResetConfirmOpen, setIsFactoryResetConfirmOpen] = useState(false);
-  const pendingFactoryResetButtonRef = useRef<HTMLButtonElement | null>(null);
-  const bypassFactoryResetInterceptRef = useRef(false);
+  const [pendingResetIntent, setPendingResetIntent] = useState<ResetIntent | null>(null);
+  const pendingResetButtonRef = useRef<HTMLButtonElement | null>(null);
+  const bypassResetInterceptRef = useRef(false);
   const isEnglish = typeof window !== 'undefined' && /^\/en(?:\/|$)/.test(window.location.pathname);
   const pageCopy = isEnglish
     ? {
@@ -23,6 +28,7 @@ const SystemSettingsPage: FC = () => {
       title: 'System Settings',
       adminLandingChip: 'Default admin landing',
       confirmChip: 'Changes require confirmation',
+      resetButtonLabel: 'Reset',
       description:
         'This page is the default landing for admin settings and control work, not a missing standalone dashboard. Review overall risk, pending setup, and safe next steps before opening the control center below.',
       overview: [
@@ -54,6 +60,7 @@ const SystemSettingsPage: FC = () => {
       title: '系统设置',
       adminLandingChip: '管理员默认落点',
       confirmChip: '变更需保存确认',
+      resetButtonLabel: '重置',
       description:
         '这里是管理员进入系统配置与控制事项的默认落点，不是缺失的独立仪表盘。请先确认全局风险、待处理配置和安全下一步，再进入下方运维中心。',
       overview: [
@@ -80,63 +87,94 @@ const SystemSettingsPage: FC = () => {
       loadingTitle: '正在加载系统运维中心',
       loadingBody: '外层风险总览已就绪，最新快照与配置工作区正在下方加载。',
     };
-  const factoryResetDialogCopy = isEnglish
+  const resetDialogCopy = isEnglish
     ? {
-      title: 'Confirm system settings reset',
-      message: 'This action may reset system-level settings and clear sessions, analysis/chat history, scanner/backtest/portfolio usage data, and notification targets related to system initialization. It may be difficult to undo.',
-      cancel: 'Cancel',
-      confirm: 'Confirm reset',
+      draft_reset: {
+        title: 'Confirm reset?',
+        message: 'All unsaved changes will be lost.',
+        cancel: 'Cancel',
+        confirm: 'Confirm reset',
+      },
+      factory_reset: {
+        title: 'Confirm system settings reset?',
+        message: 'All unsaved changes will be lost. System initialization will still require the existing confirmation step.',
+        cancel: 'Cancel',
+        confirm: 'Continue',
+      },
     }
     : {
-      title: '确认重置系统设置',
-      message: '该操作可能重置系统级设置，并清理与系统初始化相关的会话、分析与聊天历史、扫描/回测/持仓使用数据以及通知目标；执行后较难撤销。',
-      cancel: '取消',
-      confirm: '确认重置',
+      draft_reset: {
+        title: '确认重置？',
+        message: '所有未保存更改将丢失。',
+        cancel: '取消',
+        confirm: '确认重置',
+      },
+      factory_reset: {
+        title: '确认重置系统设置？',
+        message: '所有未保存更改将丢失，系统初始化仍会进入现有确认步骤。',
+        cancel: '取消',
+        confirm: '继续',
+      },
     };
 
-  const handleFactoryResetActionCapture = (event: ReactMouseEvent<HTMLElement>) => {
+  const handleResetActionCapture = (event: ReactMouseEvent<HTMLElement>) => {
     const target = event.target;
     if (!(target instanceof Element)) {
       return;
     }
 
-    const resetButton = target.closest(FACTORY_RESET_ACTION_SELECTOR) as HTMLButtonElement | null;
+    if (bypassResetInterceptRef.current) {
+      bypassResetInterceptRef.current = false;
+      return;
+    }
+
+    const factoryResetButton = target.closest(FACTORY_RESET_ACTION_SELECTOR) as HTMLButtonElement | null;
+    if (factoryResetButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      pendingResetButtonRef.current = factoryResetButton;
+      setPendingResetIntent('factory_reset');
+      return;
+    }
+
+    const resetButton = target.closest('button') as HTMLButtonElement | null;
     if (!resetButton) {
       return;
     }
 
-    if (bypassFactoryResetInterceptRef.current) {
-      bypassFactoryResetInterceptRef.current = false;
+    if (normalizeButtonText(resetButton.textContent) !== pageCopy.resetButtonLabel) {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
-    pendingFactoryResetButtonRef.current = resetButton;
-    setIsFactoryResetConfirmOpen(true);
+    pendingResetButtonRef.current = resetButton;
+    setPendingResetIntent('draft_reset');
   };
 
-  const handleCancelFactoryResetConfirm = () => {
-    pendingFactoryResetButtonRef.current = null;
-    setIsFactoryResetConfirmOpen(false);
+  const handleCancelResetConfirm = () => {
+    pendingResetButtonRef.current = null;
+    setPendingResetIntent(null);
   };
 
-  const handleConfirmFactoryReset = () => {
-    const resetButton = pendingFactoryResetButtonRef.current;
-    pendingFactoryResetButtonRef.current = null;
-    setIsFactoryResetConfirmOpen(false);
+  const handleConfirmReset = () => {
+    const resetButton = pendingResetButtonRef.current;
+    pendingResetButtonRef.current = null;
+    setPendingResetIntent(null);
     if (!resetButton) {
       return;
     }
-    bypassFactoryResetInterceptRef.current = true;
+    bypassResetInterceptRef.current = true;
     resetButton.click();
   };
+
+  const activeDialogCopy = resetDialogCopy[pendingResetIntent ?? 'draft_reset'];
 
   return (
     <TerminalPageShell
       data-testid="system-settings-page"
       className="min-h-0 flex-1 overflow-x-hidden py-5 text-white md:py-6"
-      onClickCapture={handleFactoryResetActionCapture}
+      onClickCapture={handleResetActionCapture}
     >
       <div data-testid="system-settings-shell-header" className="flex min-w-0 flex-col gap-4">
         <TerminalPageHeading
@@ -203,14 +241,14 @@ const SystemSettingsPage: FC = () => {
         </Suspense>
       </div>
       <ConfirmDialog
-        isOpen={isFactoryResetConfirmOpen}
-        title={factoryResetDialogCopy.title}
-        message={factoryResetDialogCopy.message}
-        confirmText={factoryResetDialogCopy.confirm}
-        cancelText={factoryResetDialogCopy.cancel}
+        isOpen={pendingResetIntent !== null}
+        title={activeDialogCopy.title}
+        message={activeDialogCopy.message}
+        confirmText={activeDialogCopy.confirm}
+        cancelText={activeDialogCopy.cancel}
         isDanger
-        onConfirm={handleConfirmFactoryReset}
-        onCancel={handleCancelFactoryResetConfirm}
+        onConfirm={handleConfirmReset}
+        onCancel={handleCancelResetConfirm}
       />
     </TerminalPageShell>
   );
