@@ -443,7 +443,7 @@ function categoryLabel(value: string | null | undefined, locale: AdminLogsLangua
     system: { zh: '系统', en: 'system' },
     auth: { zh: '认证', en: 'auth' },
     market: { zh: '市场', en: 'market' },
-    cache: { zh: '本地缓存', en: 'cache' },
+    cache: { zh: '本地存储响应', en: 'cache' },
     data_source: { zh: '数据源', en: 'data_source' },
     analysis: { zh: '分析', en: 'analysis' },
     scanner: { zh: '扫描器', en: 'scanner' },
@@ -511,8 +511,11 @@ function operatorSafeZhText(value: string): string {
     partial: '部分数据',
     partial_failure: '部分数据',
     partial_success: '部分数据',
-    cache: '本地缓存',
-    cached: '本地缓存',
+    cache: '本地存储响应',
+    cached: '本地存储响应',
+    computed: '计算结论',
+    mixed: '混合来源',
+    ratescard: '汇率模块',
     providerfallbackserved: '备用链路激活',
     externalsourcetimeout: '数据源响应超时',
     fallback_provider: '备用数据源',
@@ -521,7 +524,7 @@ function operatorSafeZhText(value: string): string {
   if (exactLabels[normalized]) return exactLabels[normalized];
   return raw
     .replace(/Provider Issue Rollup/gi, '数据源健康摘要')
-    .replace(/Primary provider failed,\s*fallback source served cached data/gi, '主数据源异常，已切换到备用链路并返回本地缓存数据')
+    .replace(/Primary provider failed,\s*fallback source served cached data/gi, '主数据源异常，已切换到备用链路并返回本地存储响应数据')
     .replace(/Primary provider timeout,\s*fallback source completed/gi, '主数据源响应超时，备用链路已完成')
     .replace(/provider timeout:\s*check provider credentials and upstream status\./gi, '数据源响应超时：请检查数据源配置与上游状态。')
     .replace(/Fallback served from .*$/gi, '备用链路激活')
@@ -544,8 +547,11 @@ function operatorSafeZhText(value: string): string {
     .replace(/fallback completed/gi, '备用链路激活')
     .replace(/fallback source/gi, '备用链路')
     .replace(/fallback/gi, '备用链路激活')
-    .replace(/cached/gi, '本地缓存')
-    .replace(/\bcache\b/gi, '本地缓存')
+    .replace(/RatesCard/gi, '汇率模块')
+    .replace(/\bcomputed\b/gi, '计算结论')
+    .replace(/\bmixed\b/gi, '混合来源')
+    .replace(/cached/gi, '本地存储响应')
+    .replace(/\bcache\b/gi, '本地存储响应')
     .replace(/stale/gi, '数据过期')
     .replace(/partial failure/gi, '部分数据')
     .replace(/partial success/gi, '部分数据')
@@ -635,7 +641,7 @@ function incidentKindLabel(value: string | null | undefined, locale: AdminLogsLa
   const key = String(value || '').trim();
   const labels: Record<string, { zh: string; en: string }> = {
     data_quality: { zh: '数据质量', en: 'Data quality' },
-    provider_cache_circuit: { zh: '数据源 / 本地缓存 / 熔断', en: 'Provider / cache / circuit' },
+    provider_cache_circuit: { zh: '数据源 / 本地存储响应 / 熔断', en: 'Provider / cache / circuit' },
     llm_cost: { zh: 'LLM / 成本', en: 'LLM / cost' },
     notification: { zh: '通知姿态', en: 'Notification posture' },
     evidence_posture: { zh: '证据姿态', en: 'Evidence posture' },
@@ -862,8 +868,11 @@ function friendlyRawStatusLabel(value: unknown, locale: AdminLogsLanguage): stri
     fallback: '备用链路激活',
     fallback_used: '备用链路激活',
     fallback_served: '备用链路激活',
-    cache: '本地缓存',
-    cached: '本地缓存',
+    cache: '本地存储响应',
+    cached: '本地存储响应',
+    computed: '计算结论',
+    mixed: '混合来源',
+    ratescard: '汇率模块',
     stale: '数据过期',
     partial: '部分数据',
   };
@@ -1823,7 +1832,7 @@ const AdminLogsPage: React.FC = () => {
                   label: '查看成本观测',
                   target: 'cost',
                   evidenceType: '成本观察窗口',
-                  reason: '确认成本、本地缓存与重复调用是否同步异常。',
+                  reason: '确认成本、本地存储响应与重复调用是否同步异常。',
                   params: { area: 'provider', window: sinceFilter },
                 },
               ]}

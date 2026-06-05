@@ -721,9 +721,54 @@ describe('AdminLogsPage', () => {
     await waitFor(() => expect(listOperatorIssueRollup).toHaveBeenCalledWith({ since: '24h', limit: 6 }));
   });
 
-  it('renders operator-safe labels for unavailable, timeout, fallback, stale, partial, and cache states', async () => {
+  it('renders operator-safe labels for unavailable, timeout, fallback, stale, partial, cache, computed, RatesCard, and mixed states', async () => {
+    listBusinessEvents.mockResolvedValueOnce({
+      total: businessEvents.length + 1,
+      limit: 20,
+      offset: 0,
+      hasMore: false,
+      items: [
+        {
+          id: 'rates-card-computed',
+          event: 'RatesCard',
+          category: 'cache',
+          type: 'computed',
+          eventType: 'computed',
+          status: 'partial',
+          summary: 'RatesCard computed from mixed cache sources',
+          subject: 'RatesCard',
+          component: 'RatesCard',
+          contextLabel: 'RatesCard',
+          provider: 'computed',
+          source: 'mixed',
+          reason: 'cache',
+          startedAt: '2026-04-30T13:30:00Z',
+          durationMs: 120,
+          stepCount: 1,
+          successStepCount: 0,
+          failedStepCount: 0,
+          skippedStepCount: 0,
+          unknownStepCount: 1,
+        },
+        ...businessEvents,
+      ],
+      healthSummary: {
+        totalEvents: businessEvents.length + 1,
+        failedEvents: 1,
+        warningEvents: 2,
+        slowEvents: 1,
+        failureRate: 0.2,
+        status: 'degraded',
+        failuresByCategory: [{ key: 'data_source', label: 'data_source', count: 1 }],
+        failuresByProvider: [{ key: 'finnhub', label: 'finnhub', count: 1 }],
+        failuresByReason: [{ key: 'timeout', label: 'timeout', count: 2 }],
+        actorBreakdown: [{ key: 'user', label: 'user', count: 2 }],
+        topRecentErrors: [],
+        latestCriticalError: null,
+      },
+    });
     listOperatorIssueRollup.mockResolvedValueOnce({
-      total: 2,
+      total: 3,
       items: [
         {
           ...operatorIssueRollup[0],
@@ -733,6 +778,21 @@ describe('AdminLogsPage', () => {
           reasonCode: 'provider_unavailable',
           freshnessStatus: 'stale',
           operatorGuidance: 'provider unavailable: fallback cache served.',
+        },
+        {
+          ...operatorIssueRollup[0],
+          issueId: 'rates-card-computed-mixed',
+          issueClass: 'computed',
+          issueTitle: 'RatesCard computed mixed cache',
+          affectedSurfaces: ['RatesCard'],
+          affectedDomains: ['mixed'],
+          provider: 'computed',
+          source: 'mixed',
+          reasonCode: 'cache',
+          eventType: 'computed',
+          freshnessStatus: 'mixed',
+          status: 'mixed',
+          operatorGuidance: 'RatesCard computed from mixed cache inputs.',
         },
         operatorIssueRollup[1],
       ],
@@ -773,12 +833,19 @@ describe('AdminLogsPage', () => {
     expect(operatorCopy).toContain('数据源不可用');
     expect(operatorCopy).toContain('响应超时');
     expect(operatorCopy).toContain('备用链路激活');
-    expect(operatorCopy).toContain('本地缓存');
+    expect(operatorCopy).toContain('本地存储响应');
+    expect(operatorCopy).toContain('计算结论');
+    expect(operatorCopy).toContain('汇率模块');
+    expect(operatorCopy).toContain('混合来源');
     expect(dataGapCopy).toContain('数据过期');
     expect(dataGapCopy).toContain('部分数据');
-    expect(operatorCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b/i);
-    expect(dataGapCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b/i);
-    expect(businessCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b/i);
+    expect(businessCopy).toContain('本地存储响应');
+    expect(businessCopy).toContain('计算结论');
+    expect(businessCopy).toContain('汇率模块');
+    expect(businessCopy).toContain('混合来源');
+    expect(operatorCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b|\bcomputed\b|RatesCard|\bmixed\b/i);
+    expect(dataGapCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b|\bcomputed\b|RatesCard|\bmixed\b/i);
+    expect(businessCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b|\bcomputed\b|RatesCard|\bmixed\b/i);
   });
 
   it('filters the existing logs table from an operator rollup issue', async () => {
