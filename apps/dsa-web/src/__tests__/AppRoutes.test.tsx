@@ -403,6 +403,79 @@ describe('AppContent route flows', () => {
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/en/market-overview'));
   });
 
+  it.each([
+    ['/options', '/options-lab', 'auth-guard:Options Lab'],
+    ['/zh/options', '/zh/options-lab', 'auth-guard:期权实验室'],
+    ['/en/options', '/en/options-lab', 'auth-guard:Options Lab'],
+  ])(
+    'redirects %s to the canonical protected Options Lab surface without changing guest gating',
+    async (path, expectedPath, expectedGateText) => {
+      renderAtWithLocationProbe(path);
+
+      expect(await screen.findByText(expectedGateText)).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+      expect(screen.queryByText('options-lab-page')).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ['/liquidity', '/market/liquidity-monitor'],
+    ['/zh/liquidity', '/zh/market/liquidity-monitor'],
+    ['/en/liquidity', '/en/market/liquidity-monitor'],
+  ])(
+    'redirects %s to the canonical Liquidity Monitor surface',
+    async (path, expectedPath) => {
+      renderAtWithLocationProbe(path);
+
+      expect(await screen.findByText('liquidity-monitor-page')).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+      expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ['/rotation', '/market/rotation-radar'],
+    ['/zh/rotation', '/zh/market/rotation-radar'],
+    ['/en/rotation', '/en/market/rotation-radar'],
+  ])(
+    'redirects %s to the canonical Rotation Radar surface',
+    async (path, expectedPath) => {
+      renderAtWithLocationProbe(path);
+
+      expect(await screen.findByText('market-rotation-radar-page')).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+      expect(screen.queryByText('not-found-page')).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ['/options-lab', 'options-lab-page'],
+    ['/market/liquidity-monitor', 'liquidity-monitor-page'],
+    ['/market/rotation-radar', 'market-rotation-radar-page'],
+  ])(
+    'keeps the canonical route %s working for a signed-in user',
+    async (path, expectedText) => {
+      useAuthMock.mockReturnValue({
+        authEnabled: true,
+        loggedIn: true,
+        isLoading: false,
+        loadError: null,
+        refreshStatus: vi.fn(),
+      });
+      useProductSurfaceMock.mockReturnValue({
+        isGuest: false,
+        isAdmin: false,
+        isAdminMode: false,
+        adminCapabilities: noCapabilities,
+      });
+
+      renderAtWithLocationProbe(path);
+
+      expect(await screen.findByText(expectedText)).toBeInTheDocument();
+      expect(screen.getByTestId('location-path')).toHaveTextContent(path);
+    },
+  );
+
   it.each(['/prototype/scanner-board', '/zh/prototype/scanner-board'])(
     'falls through to NotFound for the removed scanner board prototype route at %s',
     async (path) => {

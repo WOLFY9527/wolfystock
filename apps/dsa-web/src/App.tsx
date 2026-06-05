@@ -374,6 +374,9 @@ export const AppContent: React.FC = () => {
             <Route element={<Shell />}>
               <Route path="/market" element={<Navigate to="/market-overview" replace />} />
               <Route path="/admin" element={<Navigate to="/settings/system" replace />} />
+              <Route path="/liquidity" element={<Navigate to="/market/liquidity-monitor" replace />} />
+              <Route path="/rotation" element={<Navigate to="/market/rotation-radar" replace />} />
+              <Route path="/options" element={<Navigate to="/options-lab" replace />} />
               <Route path="/" element={<HomeSurfacePage />} />
               <Route path="/guest" element={guestHomeElement} />
               <Route path="/scanner" element={<ScannerSurfacePage />} />
@@ -403,6 +406,9 @@ export const AppContent: React.FC = () => {
             <Route path="/:locale" element={<Shell />}>
               <Route path="market" element={<Navigate to="../market-overview" replace />} />
               <Route path="admin" element={<Navigate to="../settings/system" replace />} />
+              <Route path="liquidity" element={<Navigate to="../market/liquidity-monitor" replace />} />
+              <Route path="rotation" element={<Navigate to="../market/rotation-radar" replace />} />
+              <Route path="options" element={<Navigate to="../options-lab" replace />} />
               <Route index element={<HomeSurfacePage />} />
               <Route path="guest" element={guestHomeElement} />
               <Route path="scanner" element={<ScannerSurfacePage />} />
