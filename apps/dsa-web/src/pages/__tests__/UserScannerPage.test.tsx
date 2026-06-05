@@ -665,6 +665,96 @@ function makeCandidateResearchSummaryFrame(overrides: Record<string, unknown> = 
   };
 }
 
+function makeCandidateSourceProvenanceFrame(overrides: Record<string, unknown> = {}) {
+  return {
+    contractVersion: 'source_provenance_v1',
+    entryCount: 4,
+    authorityTierCounts: {
+      observation_only: 2,
+      score_grade: 1,
+      unknown: 1,
+    },
+    freshnessStateCounts: {
+      cached: 1,
+      fallback: 1,
+      fresh: 1,
+      unknown: 1,
+    },
+    evidenceDomainCounts: {
+      fundamentals: 1,
+      market_data: 1,
+      news: 1,
+      research: 1,
+    },
+    fallbackOrProxyCount: 2,
+    observationOnlyCount: 3,
+    scoreContributionAllowedCount: 1,
+    entries: [
+      {
+        contractVersion: 'source_provenance_v1',
+        sourceId: 'polygon_us_grouped_daily',
+        sourceLabel: 'Polygon Grouped Daily',
+        evidenceDomain: 'market_data',
+        authorityTier: 'score_grade',
+        freshnessState: 'fresh',
+        sourceTier: 'authorized_feed',
+        fallbackOrProxy: false,
+        observationOnly: false,
+        scoreContributionAllowed: true,
+        limitations: [],
+        nextEvidenceNeeded: [],
+        debugRef: 'scanner:nvda-price',
+      },
+      {
+        contractVersion: 'source_provenance_v1',
+        sourceId: 'fallback_snapshot',
+        sourceLabel: 'Fallback snapshot',
+        evidenceDomain: 'news',
+        authorityTier: 'observation_only',
+        freshnessState: 'fallback',
+        sourceTier: 'fallback',
+        fallbackOrProxy: true,
+        observationOnly: true,
+        scoreContributionAllowed: false,
+        limitations: ['fallback_or_proxy_source', 'observation_only'],
+        nextEvidenceNeeded: ['authorized_primary_source'],
+        debugRef: 'scanner:nvda-news',
+      },
+      {
+        contractVersion: 'source_provenance_v1',
+        sourceId: 'fmp',
+        sourceLabel: 'FMP',
+        evidenceDomain: 'fundamentals',
+        authorityTier: 'observation_only',
+        freshnessState: 'cached',
+        sourceTier: 'official_public',
+        fallbackOrProxy: false,
+        observationOnly: true,
+        scoreContributionAllowed: false,
+        limitations: ['observation_only'],
+        nextEvidenceNeeded: ['score_grade_authority_source'],
+        debugRef: 'scanner:nvda-fundamentals',
+      },
+      {
+        contractVersion: 'source_provenance_v1',
+        sourceId: 'unknown_source',
+        sourceLabel: '未知来源',
+        evidenceDomain: 'research',
+        authorityTier: 'unknown',
+        freshnessState: 'unknown',
+        sourceTier: 'unknown',
+        fallbackOrProxy: true,
+        observationOnly: true,
+        scoreContributionAllowed: false,
+        limitations: ['unknown_source'],
+        nextEvidenceNeeded: ['verified_source_metadata'],
+        debugRef: 'scanner:nvda-research',
+      },
+    ],
+    ...overrides,
+  };
+}
+
 function makeHistoryItem(overrides: Partial<ScannerRunHistoryItem> = {}): ScannerRunHistoryItem {
   return {
     id: 11,
@@ -1241,6 +1331,41 @@ describe('UserScannerPage', () => {
     expect(detail).toHaveTextContent('延迟更新');
     expect(detail).toHaveTextContent('先补充基本面与新闻催化');
     expect(detail).not.toHaveTextContent(/debugRef|source_authority_router_rejected|missing_required_evidence|Top-down market context available/i);
+
+    expect(within(row).getAllByText('94/100').length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId('scanner-result-row-AVGO')).getAllByText('88/100').length).toBeGreaterThan(0);
+    expect(orderedSymbolsFromRows()).toEqual(['NVDA', 'AVGO', 'AMD']);
+    expect(container).not.toHaveTextContent(/买入|卖出|下单|trade|broker|order/i);
+    expectNoRawI18nKeys(container);
+  });
+
+  it('renders candidate provenance additively inside evidence areas without changing row order or score labels', async () => {
+    const nvda = makeCandidate({ symbol: 'NVDA', rank: 1, score: 94 });
+    (nvda as ScannerCandidate & Record<string, unknown>).candidateEvidenceFrame = makeCandidateEvidenceFrame();
+    (nvda as ScannerCandidate & Record<string, unknown>).candidateResearchReadiness = makeCandidateResearchReadiness();
+    (nvda as ScannerCandidate & Record<string, unknown>).candidateSourceProvenanceFrame = makeCandidateSourceProvenanceFrame();
+
+    getRun.mockResolvedValue(makeRunDetail({
+      shortlist: [
+        nvda,
+        makeCandidate({ symbol: 'AVGO', rank: 2, score: 88 }),
+        makeCandidate({ symbol: 'AMD', rank: 3, score: 76 }),
+      ],
+      selected: [nvda],
+    }));
+
+    const { container } = renderUserScannerPage();
+
+    const row = await screen.findByTestId('scanner-result-row-NVDA');
+    expect(row).toHaveTextContent('来源确认：含评分级');
+    expect(row).toHaveTextContent('时效：含回退');
+    expect(row).toHaveTextContent('观察级 3 项');
+
+    const detail = screen.getAllByTestId('scanner-result-detail-NVDA')[0];
+    expect(detail).toHaveTextContent('来源依据');
+    expect(detail).toHaveTextContent('回退/代理 2 项');
+    expect(detail).toHaveTextContent('待核验 1 项');
+    expect(detail).not.toHaveTextContent(/debugRef|sourceId|provider|router|cache|trace|internal|raw/i);
 
     expect(within(row).getAllByText('94/100').length).toBeGreaterThan(0);
     expect(within(screen.getByTestId('scanner-result-row-AVGO')).getAllByText('88/100').length).toBeGreaterThan(0);

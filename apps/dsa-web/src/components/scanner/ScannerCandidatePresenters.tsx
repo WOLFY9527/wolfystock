@@ -17,6 +17,7 @@ import {
 import ScannerCandidateResearchSummary, {
   type ScannerCandidateResearchSummaryFrame,
 } from './ScannerCandidateResearchSummary';
+import type { SourceProvenanceSummary } from '../../types/analysis';
 import type { NormalizedEvidenceSummary } from '../../utils/evidenceDisplay';
 import type { ResearchReadinessV1 } from '../../types/researchReadiness';
 import type {
@@ -47,6 +48,7 @@ type ScannerCandidateWithEvidence = ScannerCandidate & {
   candidateEvidenceFrame?: CandidateEvidenceFrame | null;
   candidateResearchReadiness?: ResearchReadinessV1 | null;
   candidateResearchSummaryFrame?: ScannerCandidateResearchSummaryFrame | null;
+  candidateSourceProvenanceFrame?: SourceProvenanceSummary | null;
 };
 
 function asScannerCandidateWithEvidence(candidate: ScannerCandidate): ScannerCandidateWithEvidence {
@@ -346,6 +348,7 @@ export function ScannerCandidateDetailPanel({
         <BoardDetailSection title={language === 'en' ? 'Evidence coverage' : '证据覆盖'}>
           <ScannerCandidateEvidenceStrip
             frame={candidateWithEvidence.candidateEvidenceFrame}
+            provenanceFrame={candidateWithEvidence.candidateSourceProvenanceFrame}
             readiness={candidateWithEvidence.candidateResearchReadiness}
             language={language}
             variant="detail"
@@ -616,6 +619,7 @@ export function ScannerCandidateDiagnosticRow({
   candidateEvidenceFrame,
   candidateResearchReadiness,
   candidateResearchSummaryFrame,
+  candidateSourceProvenanceFrame,
   scoreLabel,
   scoreDelta,
   comparisonLabel,
@@ -657,6 +661,7 @@ export function ScannerCandidateDiagnosticRow({
   candidateEvidenceFrame?: CandidateEvidenceFrame | null;
   candidateResearchReadiness?: ResearchReadinessV1 | null;
   candidateResearchSummaryFrame?: ScannerCandidateResearchSummaryFrame | null;
+  candidateSourceProvenanceFrame?: SourceProvenanceSummary | null;
   scoreLabel: string;
   scoreDelta?: string | null;
   comparisonLabel?: string | null;
@@ -745,6 +750,7 @@ export function ScannerCandidateDiagnosticRow({
               {candidateEvidenceFrame || candidateResearchReadiness ? (
                 <ScannerCandidateEvidenceStrip
                   frame={candidateEvidenceFrame}
+                  provenanceFrame={candidateSourceProvenanceFrame}
                   readiness={candidateResearchReadiness}
                   language={language}
                   variant="row"
@@ -804,6 +810,7 @@ export function ScannerCandidateDiagnosticRow({
               {candidateEvidenceFrame || candidateResearchReadiness ? (
                 <ScannerCandidateEvidenceStrip
                   frame={candidateEvidenceFrame}
+                  provenanceFrame={candidateSourceProvenanceFrame}
                   readiness={candidateResearchReadiness}
                   language={language}
                   variant="row"

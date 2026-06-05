@@ -9,6 +9,8 @@ import type {
   AnalysisReport,
   DataQualityReport,
   ReportMeta,
+  SourceProvenanceEntry,
+  SourceProvenanceSummary,
 } from '../types/analysis';
 import type { MarketDirectionReadiness, MarketTemperatureResponse } from './market';
 import type { OptionsDecisionResponse } from './optionsLab';
@@ -461,6 +463,11 @@ const ANALYSIS_EVIDENCE_CITATION_DOMAINS: AnalysisEvidenceCitationDomain[] = [
 
 const ANALYSIS_EVIDENCE_CITATION_STATUSES = new Set(['available', 'degraded', 'missing', 'blocked', 'pending']);
 const ANALYSIS_EVIDENCE_CITATION_FORBIDDEN_TEXT = /provider|authority|freshness|debug|analysis:|router|cache|credential|token|prompt|request[\s_-]*body|raw[\s_-]*payload|article[\s_-]*body|sourceid|source_id|internal|env/i;
+const SOURCE_PROVENANCE_AUTHORITY_TIERS = new Set(['score_grade', 'trusted_public', 'stored_snapshot', 'observation_only', 'fixture', 'unknown']);
+const SOURCE_PROVENANCE_FRESHNESS_STATES = new Set(['fresh', 'cached', 'delayed', 'partial', 'stale', 'fallback', 'synthetic', 'unavailable', 'unknown']);
+const SOURCE_PROVENANCE_SOURCE_TIERS = new Set(['authorized_feed', 'official_public', 'proxy', 'stored_snapshot', 'fallback', 'fixture', 'unknown']);
+const SOURCE_PROVENANCE_EVIDENCE_DOMAINS = new Set(['general', 'market_data', 'fundamentals', 'macro', 'news', 'research', 'derivatives', 'portfolio']);
+const SOURCE_PROVENANCE_FORBIDDEN_TEXT = /provider|router|cache|credential|token|prompt|request[\s_-]*body|raw[\s_-]*payload|article[\s_-]*body|internal|env|trace|stack|debug/i;
 
 function readEvidenceCoverageEntry(value: unknown): AnalysisEvidenceCoverageEntry | null {
   if (!isRecord(value)) return null;
@@ -563,6 +570,112 @@ function readEvidenceCitationFrame(value: unknown): AnalysisEvidenceCitationFram
   };
 }
 
+function normalizeSourceProvenanceChoice(
+  value: unknown,
+  allowed: Set<string>,
+  fallback: string,
+): string {
+  const normalized = typeof value === 'string'
+    ? value.trim().toLowerCase().replace(/[\s-]+/g, '_')
+    : '';
+  return allowed.has(normalized) ? normalized : fallback;
+}
+
+function readNonNegativeNumber(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
+  return Math.floor(value);
+}
+
+function readSourceProvenanceText(value: unknown, fallback = ''): string {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text || SOURCE_PROVENANCE_FORBIDDEN_TEXT.test(text)) {
+    return fallback;
+  }
+  return text;
+}
+
+function readSourceProvenanceCodeList(value: unknown): string[] {
+  return asStringArray(value).filter((item) => !SOURCE_PROVENANCE_FORBIDDEN_TEXT.test(item));
+}
+
+function readSourceProvenanceCountMap(value: unknown): Record<string, number> | null {
+  if (!isRecord(value)) return null;
+  const entries = Object.entries(value).reduce<Record<string, number>>((acc, [key, raw]) => {
+    const count = readNonNegativeNumber(raw);
+    if (count == null) return acc;
+    acc[key] = count;
+    return acc;
+  }, {});
+  return Object.keys(entries).length ? entries : null;
+}
+
+function readSourceProvenanceEntry(value: unknown): SourceProvenanceEntry | null {
+  if (!isRecord(value)) return null;
+  const evidenceDomain = normalizeSourceProvenanceChoice(value.evidenceDomain, SOURCE_PROVENANCE_EVIDENCE_DOMAINS, 'general');
+  return {
+    contractVersion: typeof value.contractVersion === 'string' ? value.contractVersion : null,
+    sourceId: readSourceProvenanceText(value.sourceId, 'unknown_source') || 'unknown_source',
+    sourceLabel: readSourceProvenanceText(value.sourceLabel, '未知来源') || '未知来源',
+    evidenceDomain,
+    authorityTier: normalizeSourceProvenanceChoice(value.authorityTier, SOURCE_PROVENANCE_AUTHORITY_TIERS, 'unknown'),
+    freshnessState: normalizeSourceProvenanceChoice(value.freshnessState, SOURCE_PROVENANCE_FRESHNESS_STATES, 'unknown'),
+    sourceTier: normalizeSourceProvenanceChoice(value.sourceTier, SOURCE_PROVENANCE_SOURCE_TIERS, 'unknown'),
+    fallbackOrProxy: value.fallbackOrProxy === true,
+    observationOnly: value.observationOnly === true,
+    scoreContributionAllowed: value.scoreContributionAllowed === true,
+    limitations: readSourceProvenanceCodeList(value.limitations),
+    nextEvidenceNeeded: readSourceProvenanceCodeList(value.nextEvidenceNeeded),
+  };
+}
+
+function readSourceProvenanceEntries(value: unknown): SourceProvenanceEntry[] | null {
+  if (!Array.isArray(value)) return null;
+  const entries = value.map(readSourceProvenanceEntry).filter((item): item is SourceProvenanceEntry => Boolean(item));
+  return entries.length ? entries : null;
+}
+
+export function readSourceProvenanceSummary(value: unknown): SourceProvenanceSummary | null {
+  if (!isRecord(value)) return null;
+
+  const entries = readSourceProvenanceEntries(value.entries);
+  const derivedEntryCount = entries?.length ?? 0;
+  const entryCount = readNonNegativeNumber(value.entryCount) ?? derivedEntryCount;
+  const authorityTierCounts = readSourceProvenanceCountMap(value.authorityTierCounts);
+  const freshnessStateCounts = readSourceProvenanceCountMap(value.freshnessStateCounts);
+  const evidenceDomainCounts = readSourceProvenanceCountMap(value.evidenceDomainCounts);
+  const fallbackOrProxyCount = readNonNegativeNumber(value.fallbackOrProxyCount)
+    ?? (entries ? entries.filter((item) => item.fallbackOrProxy === true).length : 0);
+  const observationOnlyCount = readNonNegativeNumber(value.observationOnlyCount)
+    ?? (entries ? entries.filter((item) => item.observationOnly === true).length : 0);
+  const scoreContributionAllowedCount = readNonNegativeNumber(value.scoreContributionAllowedCount)
+    ?? (entries ? entries.filter((item) => item.scoreContributionAllowed === true).length : 0);
+
+  if (
+    entryCount === 0
+    && !entries?.length
+    && !authorityTierCounts
+    && !freshnessStateCounts
+    && !evidenceDomainCounts
+    && fallbackOrProxyCount === 0
+    && observationOnlyCount === 0
+    && scoreContributionAllowedCount === 0
+  ) {
+    return null;
+  }
+
+  return {
+    contractVersion: typeof value.contractVersion === 'string' ? value.contractVersion : null,
+    entryCount,
+    authorityTierCounts,
+    freshnessStateCounts,
+    evidenceDomainCounts,
+    fallbackOrProxyCount,
+    observationOnlyCount,
+    scoreContributionAllowedCount,
+    entries,
+  };
+}
+
 export function extractAnalysisResearchReadiness(report: AnalysisReport | null | undefined): ResearchReadinessV1 | null {
   const direct = readNestedResearchReadiness((report as AnalysisReport & { researchReadiness?: unknown } | null)?.researchReadiness);
   if (direct) return direct;
@@ -601,6 +714,20 @@ export function extractAnalysisEvidenceCitationFrame(
 
   const details = report?.details as { analysisResult?: UnknownRecord } | undefined;
   return readEvidenceCitationFrame(details?.analysisResult?.evidenceCitationFrame);
+}
+
+export function extractAnalysisSourceProvenanceFrame(
+  report: AnalysisReport | null | undefined,
+): SourceProvenanceEntry[] | null {
+  const direct = readSourceProvenanceEntries((report as AnalysisReport & { sourceProvenanceFrame?: unknown } | null)?.sourceProvenanceFrame);
+  if (direct) return direct;
+
+  const meta = report?.meta as ReportMeta & { sourceProvenanceFrame?: unknown } | undefined;
+  const metaFrame = readSourceProvenanceEntries(meta?.sourceProvenanceFrame);
+  if (metaFrame) return metaFrame;
+
+  const details = report?.details as { analysisResult?: UnknownRecord } | undefined;
+  return readSourceProvenanceEntries(details?.analysisResult?.sourceProvenanceFrame);
 }
 
 function inferEvidenceFromDataQuality(report: DataQualityReport | undefined): string[] {

@@ -213,6 +213,68 @@ async function installHomeEvidenceOverrides(page: Page) {
         },
         valuation: { status: 'not_applicable', missingReasons: [], nextEvidenceNeeded: [] },
       },
+      sourceProvenanceFrame: [
+        {
+          contractVersion: 'source_provenance_v1',
+          sourceId: 'polygon_us_grouped_daily',
+          sourceLabel: 'Polygon Grouped Daily',
+          evidenceDomain: 'market_data',
+          authorityTier: 'score_grade',
+          freshnessState: 'fresh',
+          sourceTier: 'authorized_feed',
+          fallbackOrProxy: false,
+          observationOnly: false,
+          scoreContributionAllowed: true,
+          limitations: [],
+          nextEvidenceNeeded: [],
+          debugRef: 'analysis:orcl-price',
+        },
+        {
+          contractVersion: 'source_provenance_v1',
+          sourceId: 'fmp',
+          sourceLabel: 'FMP',
+          evidenceDomain: 'fundamentals',
+          authorityTier: 'score_grade',
+          freshnessState: 'cached',
+          sourceTier: 'official_public',
+          fallbackOrProxy: false,
+          observationOnly: false,
+          scoreContributionAllowed: true,
+          limitations: [],
+          nextEvidenceNeeded: [],
+          debugRef: 'analysis:orcl-fundamentals',
+        },
+        {
+          contractVersion: 'source_provenance_v1',
+          sourceId: 'fallback_snapshot',
+          sourceLabel: 'Fallback snapshot',
+          evidenceDomain: 'news',
+          authorityTier: 'observation_only',
+          freshnessState: 'fallback',
+          sourceTier: 'fallback',
+          fallbackOrProxy: true,
+          observationOnly: true,
+          scoreContributionAllowed: false,
+          limitations: ['fallback_or_proxy_source', 'observation_only'],
+          nextEvidenceNeeded: ['authorized_primary_source'],
+          debugRef: 'analysis:orcl-news',
+        },
+        {
+          contractVersion: 'source_provenance_v1',
+          sourceId: 'unknown_source',
+          sourceLabel: '未知来源',
+          evidenceDomain: 'research',
+          authorityTier: 'unknown',
+          freshnessState: 'unknown',
+          sourceTier: 'unknown',
+          fallbackOrProxy: true,
+          observationOnly: true,
+          scoreContributionAllowed: false,
+          limitations: ['unknown_source'],
+          nextEvidenceNeeded: ['verified_source_metadata'],
+          debugRef: 'analysis:orcl-research',
+        },
+      ],
     });
   });
 }
@@ -375,6 +437,92 @@ async function installScannerEvidenceOverrides(page: Page) {
             consumerActionBoundary: 'no_advice',
             noAdviceBoundary: true,
           },
+          candidateSourceProvenanceFrame: {
+            contractVersion: 'source_provenance_v1',
+            entryCount: 4,
+            authorityTierCounts: {
+              observation_only: 2,
+              score_grade: 1,
+              unknown: 1,
+            },
+            freshnessStateCounts: {
+              cached: 1,
+              fallback: 1,
+              fresh: 1,
+              unknown: 1,
+            },
+            evidenceDomainCounts: {
+              fundamentals: 1,
+              market_data: 1,
+              news: 1,
+              research: 1,
+            },
+            fallbackOrProxyCount: 2,
+            observationOnlyCount: 3,
+            scoreContributionAllowedCount: 1,
+            entries: [
+              {
+                contractVersion: 'source_provenance_v1',
+                sourceId: 'polygon_us_grouped_daily',
+                sourceLabel: 'Polygon Grouped Daily',
+                evidenceDomain: 'market_data',
+                authorityTier: 'score_grade',
+                freshnessState: 'fresh',
+                sourceTier: 'authorized_feed',
+                fallbackOrProxy: false,
+                observationOnly: false,
+                scoreContributionAllowed: true,
+                limitations: [],
+                nextEvidenceNeeded: [],
+                debugRef: 'scanner:nvda-price',
+              },
+              {
+                contractVersion: 'source_provenance_v1',
+                sourceId: 'fallback_snapshot',
+                sourceLabel: 'Fallback snapshot',
+                evidenceDomain: 'news',
+                authorityTier: 'observation_only',
+                freshnessState: 'fallback',
+                sourceTier: 'fallback',
+                fallbackOrProxy: true,
+                observationOnly: true,
+                scoreContributionAllowed: false,
+                limitations: ['fallback_or_proxy_source', 'observation_only'],
+                nextEvidenceNeeded: ['authorized_primary_source'],
+                debugRef: 'scanner:nvda-news',
+              },
+              {
+                contractVersion: 'source_provenance_v1',
+                sourceId: 'fmp',
+                sourceLabel: 'FMP',
+                evidenceDomain: 'fundamentals',
+                authorityTier: 'observation_only',
+                freshnessState: 'cached',
+                sourceTier: 'official_public',
+                fallbackOrProxy: false,
+                observationOnly: true,
+                scoreContributionAllowed: false,
+                limitations: ['observation_only'],
+                nextEvidenceNeeded: ['score_grade_authority_source'],
+                debugRef: 'scanner:nvda-fundamentals',
+              },
+              {
+                contractVersion: 'source_provenance_v1',
+                sourceId: 'unknown_source',
+                sourceLabel: '未知来源',
+                evidenceDomain: 'research',
+                authorityTier: 'unknown',
+                freshnessState: 'unknown',
+                sourceTier: 'unknown',
+                fallbackOrProxy: true,
+                observationOnly: true,
+                scoreContributionAllowed: false,
+                limitations: ['unknown_source'],
+                nextEvidenceNeeded: ['verified_source_metadata'],
+                debugRef: 'scanner:nvda-research',
+              },
+            ],
+          },
         },
       ],
       summary: {
@@ -485,6 +633,14 @@ test.describe('Home and Scanner evidence browser smoke', () => {
       await appExpect(strip).toContainText('仅供观察，不构成投资建议');
       await appExpect(strip).not.toContainText(rawLeakPattern);
       await appExpect(strip).not.toContainText(tradingPattern);
+      const provenance = page.getByTestId('home-provenance-strip');
+      await appExpect(provenance).toBeVisible({ timeout: 15_000 });
+      await appExpect(provenance).toContainText('来源依据');
+      await appExpect(provenance).toContainText('来源确认：含评分级');
+      await appExpect(provenance).toContainText('回退/代理 2 项');
+      await appExpect(provenance).toContainText('待核验 1 项');
+      await appExpect(provenance).not.toContainText(rawLeakPattern);
+      await appExpect(provenance).not.toContainText(tradingPattern);
       await expectNoHorizontalOverflow(page);
       expect(consoleErrors).toEqual([]);
       expect(unhandledApiRoutes).toEqual([]);
@@ -514,6 +670,9 @@ test.describe('Home and Scanner evidence browser smoke', () => {
       await appExpect(strip).toContainText('主题');
       await appExpect(strip).toContainText('基本面');
       await appExpect(strip).toContainText('新闻催化');
+      await appExpect(strip).toContainText('来源确认：含评分级');
+      await appExpect(strip).toContainText('观察级 3 项');
+      await appExpect(strip).toContainText('来源依据');
       await appExpect(strip).not.toContainText(rawLeakPattern);
       await appExpect(strip).not.toContainText(tradingPattern);
       await expectNoHorizontalOverflow(page);

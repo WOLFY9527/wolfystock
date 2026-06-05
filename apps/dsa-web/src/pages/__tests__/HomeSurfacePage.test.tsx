@@ -246,6 +246,8 @@ const HOME_EVIDENCE_CITATION_INTERNAL_COPY_PATTERN =
   /provider|authority|freshness|debugRef|analysis:|router|cache|credential|token|prompt|request body|raw payload|article body|sourceId|internal/i;
 const HOME_EVIDENCE_PACKET_TRADING_COPY_PATTERN =
   /buy now|sell now|trade now|order now|broker route|买入|卖出|下单|交易|经纪商|小仓试错|第二笔|建仓|加仓|减仓|probe size|start light|add only/i;
+const HOME_PROVENANCE_INTERNAL_COPY_PATTERN =
+  /provider|router|cache|credential|token|prompt|request body|raw payload|article body|sourceId|debugRef|internal|trace|stack|env/i;
 const defaultStockEvidenceResponse = {
   symbols: ['ORCL'],
   items: [
@@ -1702,6 +1704,103 @@ describe('HomeSurfacePage', () => {
     expect(strip).toHaveTextContent('不构成投资建议');
     expect(strip.textContent).not.toMatch(HOME_EVIDENCE_PACKET_INTERNAL_COPY_PATTERN);
     expect(strip.textContent).not.toMatch(HOME_EVIDENCE_PACKET_TRADING_COPY_PATTERN);
+  });
+
+  it('shows a compact home provenance strip from sourceProvenanceFrame near the evidence area', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      sourceProvenanceFrame: [
+        {
+          contractVersion: 'source_provenance_v1',
+          sourceId: 'polygon_us_grouped_daily',
+          sourceLabel: 'Polygon Grouped Daily',
+          evidenceDomain: 'market_data',
+          authorityTier: 'score_grade',
+          freshnessState: 'fresh',
+          sourceTier: 'authorized_feed',
+          fallbackOrProxy: false,
+          observationOnly: false,
+          scoreContributionAllowed: true,
+          limitations: [],
+          nextEvidenceNeeded: [],
+          debugRef: 'analysis:orcl-price',
+        },
+        {
+          contractVersion: 'source_provenance_v1',
+          sourceId: 'fmp',
+          sourceLabel: 'FMP',
+          evidenceDomain: 'fundamentals',
+          authorityTier: 'score_grade',
+          freshnessState: 'cached',
+          sourceTier: 'official_public',
+          fallbackOrProxy: false,
+          observationOnly: false,
+          scoreContributionAllowed: true,
+          limitations: [],
+          nextEvidenceNeeded: [],
+          debugRef: 'analysis:orcl-fundamentals',
+        },
+        {
+          contractVersion: 'source_provenance_v1',
+          sourceId: 'fallback_snapshot',
+          sourceLabel: 'Fallback snapshot',
+          evidenceDomain: 'news',
+          authorityTier: 'observation_only',
+          freshnessState: 'fallback',
+          sourceTier: 'fallback',
+          fallbackOrProxy: true,
+          observationOnly: true,
+          scoreContributionAllowed: false,
+          limitations: ['fallback_or_proxy_source', 'observation_only'],
+          nextEvidenceNeeded: ['authorized_primary_source'],
+          debugRef: 'analysis:orcl-news',
+        },
+        {
+          contractVersion: 'source_provenance_v1',
+          sourceId: 'unknown_source',
+          sourceLabel: '未知来源',
+          evidenceDomain: 'research',
+          authorityTier: 'unknown',
+          freshnessState: 'unknown',
+          sourceTier: 'unknown',
+          fallbackOrProxy: true,
+          observationOnly: true,
+          scoreContributionAllowed: false,
+          limitations: ['unknown_source'],
+          nextEvidenceNeeded: ['verified_source_metadata'],
+          debugRef: 'analysis:orcl-research',
+        },
+      ],
+    } as never);
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+
+    const strip = screen.getByTestId('home-provenance-strip');
+    expect(strip).toHaveTextContent('来源依据');
+    expect(strip).toHaveTextContent('来源确认：含评分级');
+    expect(strip).toHaveTextContent('时效：含回退');
+    expect(strip).toHaveTextContent('观察级 2 项');
+    expect(strip).toHaveTextContent('回退/代理 2 项');
+    expect(strip).toHaveTextContent('待核验 1 项');
+    expect(strip.textContent).not.toMatch(HOME_PROVENANCE_INTERNAL_COPY_PATTERN);
+    expect(strip.textContent).not.toMatch(HOME_EVIDENCE_PACKET_TRADING_COPY_PATTERN);
+  });
+
+  it('fails closed when Home sourceProvenanceFrame is absent', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      sourceProvenanceFrame: undefined,
+    } as never);
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+
+    expect(screen.queryByTestId('home-provenance-strip')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-evidence-coverage-strip')).toBeInTheDocument();
+    expect(screen.getByTestId('home-research-trust-strip')).toBeInTheDocument();
   });
 
   it('shows a missing fundamentals state when the packet lacks fundamental context', async () => {

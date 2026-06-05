@@ -1,4 +1,6 @@
 import { TerminalChip } from '../terminal/TerminalPrimitives';
+import { readSourceProvenanceSummary } from '../../api/researchReadiness';
+import type { SourceProvenanceSummary } from '../../types/analysis';
 import type {
   ResearchReadinessState,
   ResearchReadinessV1,
@@ -93,6 +95,53 @@ function localizedDomainLabel(code: string, language: 'zh' | 'en'): string {
   return DOMAIN_LABELS[code]?.[language] || code;
 }
 
+function summarizeProvenanceMissingCount(frame: SourceProvenanceSummary | null): number {
+  if (!frame?.entries?.length) return 0;
+  return frame.entries.filter((entry) => (
+    entry.sourceId === 'unknown_source'
+    || entry.authorityTier === 'unknown'
+    || entry.freshnessState === 'unknown'
+    || entry.freshnessState === 'unavailable'
+    || entry.limitations?.includes('unknown_source')
+  )).length;
+}
+
+function sourceProvenanceAuthorityLabel(frame: SourceProvenanceSummary | null, language: 'zh' | 'en'): string {
+  const scoreCount = frame?.scoreContributionAllowedCount ?? 0;
+  const observationOnlyCount = frame?.observationOnlyCount ?? 0;
+  if (scoreCount > 0) return language === 'en' ? 'Source confirmation: includes score-grade' : '来源确认：含评分级';
+  if (observationOnlyCount > 0) return language === 'en' ? 'Source confirmation: observe-only' : '来源确认：仅观察级';
+  return language === 'en' ? 'Source confirmation: pending' : '来源确认：待确认';
+}
+
+function sourceProvenanceFreshnessLabel(frame: SourceProvenanceSummary | null, language: 'zh' | 'en'): string {
+  const freshness = frame?.freshnessStateCounts || {};
+  if ((freshness.fallback || 0) > 0) return language === 'en' ? 'Freshness: includes fallback' : '时效：含回退';
+  if ((freshness.stale || 0) > 0) return language === 'en' ? 'Freshness: includes stale' : '时效：含过期';
+  if ((freshness.delayed || 0) > 0) return language === 'en' ? 'Freshness: includes delay' : '时效：含延迟';
+  if ((freshness.cached || 0) > 0) return language === 'en' ? 'Freshness: cached' : '时效：缓存';
+  if ((freshness.fresh || 0) > 0) return language === 'en' ? 'Freshness: fresh' : '时效：新鲜';
+  return language === 'en' ? 'Freshness: pending' : '时效：待确认';
+}
+
+function sourceProvenanceChips(frame: SourceProvenanceSummary | null, language: 'zh' | 'en'): string[] {
+  if (!frame) return [];
+  const missingCount = summarizeProvenanceMissingCount(frame);
+  return [
+    sourceProvenanceAuthorityLabel(frame, language),
+    sourceProvenanceFreshnessLabel(frame, language),
+    language === 'en'
+      ? `Observe-only ${frame.observationOnlyCount ?? 0}`
+      : `观察级 ${frame.observationOnlyCount ?? 0} 项`,
+    language === 'en'
+      ? `Fallback / proxy ${frame.fallbackOrProxyCount ?? 0}`
+      : `回退/代理 ${frame.fallbackOrProxyCount ?? 0} 项`,
+    language === 'en'
+      ? `Awaiting verification ${missingCount}`
+      : `待核验 ${missingCount} 项`,
+  ];
+}
+
 function summarizeMissingEvidence(
   readiness: ResearchReadinessV1 | null | undefined,
   language: 'zh' | 'en',
@@ -110,12 +159,14 @@ function summarizeMissingEvidence(
 
 export function ScannerCandidateEvidenceStrip({
   frame,
+  provenanceFrame,
   readiness,
   language,
   variant = 'row',
   testId,
 }: {
   frame?: CandidateEvidenceFrame | null;
+  provenanceFrame?: SourceProvenanceSummary | Record<string, unknown> | null;
   readiness?: ResearchReadinessV1 | null;
   language: 'zh' | 'en';
   variant?: CandidateEvidenceVariant;
@@ -141,6 +192,8 @@ export function ScannerCandidateEvidenceStrip({
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
   const summary = summarizeMissingEvidence(readiness, language);
+  const normalizedProvenance = readSourceProvenanceSummary(provenanceFrame);
+  const provenanceLabels = sourceProvenanceChips(normalizedProvenance, language);
   if (!readiness && !orderedDomains.length) return null;
 
   if (variant === 'row') {
@@ -154,6 +207,11 @@ export function ScannerCandidateEvidenceStrip({
             {summary}
           </span>
         ) : null}
+        {provenanceLabels.slice(0, 3).map((label) => (
+          <span key={label} className="truncate text-[10px] text-white/46" title={label}>
+            {label}
+          </span>
+        ))}
       </div>
     );
   }
@@ -176,6 +234,20 @@ export function ScannerCandidateEvidenceStrip({
           </TerminalChip>
         ))}
       </div>
+      {provenanceLabels.length ? (
+        <div className="space-y-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">
+            {language === 'en' ? 'Source context' : '来源依据'}
+          </p>
+          <div className="flex min-w-0 flex-wrap gap-1.5">
+            {provenanceLabels.map((label) => (
+              <TerminalChip key={label} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
+                {label}
+              </TerminalChip>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

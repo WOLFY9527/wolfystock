@@ -120,6 +120,75 @@ export interface AnalysisEvidenceCitationFrame {
   noAdviceBoundary?: boolean;
 }
 
+export type SourceProvenanceAuthorityTier =
+  | 'score_grade'
+  | 'trusted_public'
+  | 'stored_snapshot'
+  | 'observation_only'
+  | 'fixture'
+  | 'unknown'
+  | string;
+
+export type SourceProvenanceFreshnessState =
+  | 'fresh'
+  | 'cached'
+  | 'delayed'
+  | 'partial'
+  | 'stale'
+  | 'fallback'
+  | 'synthetic'
+  | 'unavailable'
+  | 'unknown'
+  | string;
+
+export type SourceProvenanceSourceTier =
+  | 'authorized_feed'
+  | 'official_public'
+  | 'proxy'
+  | 'stored_snapshot'
+  | 'fallback'
+  | 'fixture'
+  | 'unknown'
+  | string;
+
+export type SourceProvenanceEvidenceDomain =
+  | 'general'
+  | 'market_data'
+  | 'fundamentals'
+  | 'macro'
+  | 'news'
+  | 'research'
+  | 'derivatives'
+  | 'portfolio'
+  | string;
+
+export interface SourceProvenanceEntry {
+  contractVersion?: string | null;
+  sourceId?: string | null;
+  sourceLabel?: string | null;
+  evidenceDomain?: SourceProvenanceEvidenceDomain | null;
+  authorityTier?: SourceProvenanceAuthorityTier | null;
+  freshnessState?: SourceProvenanceFreshnessState | null;
+  sourceTier?: SourceProvenanceSourceTier | null;
+  fallbackOrProxy?: boolean | null;
+  observationOnly?: boolean | null;
+  scoreContributionAllowed?: boolean | null;
+  limitations?: string[] | null;
+  nextEvidenceNeeded?: string[] | null;
+}
+
+export interface SourceProvenanceSummary {
+  contractVersion?: string | null;
+  entryCount?: number | null;
+  authorityTierCounts?: Record<string, number> | null;
+  freshnessStateCounts?: Record<string, number> | null;
+  evidenceDomainCounts?: Record<string, number> | null;
+  fallbackOrProxyCount?: number | null;
+  observationOnlyCount?: number | null;
+  scoreContributionAllowedCount?: number | null;
+  entries?: SourceProvenanceEntry[] | null;
+}
+
 export type SingleStockEvidencePacketStatus =
   | 'available'
   | 'degraded'

@@ -9,6 +9,7 @@ import {
   extractAnalysisEvidenceCitationFrame,
   extractAnalysisEvidenceCoverageFrame,
   extractAnalysisResearchReadiness,
+  extractAnalysisSourceProvenanceFrame,
   inferAnalysisResearchReadiness,
 } from '../api/researchReadiness';
 import { normalizeReportQuality } from '../api/reportNormalizer';
@@ -46,6 +47,7 @@ import type {
   HistoryItem,
   ReportQuality,
   SingleStockEvidencePacket,
+  SourceProvenanceEntry,
   StandardReport,
   StandardReportField,
   TaskProgressModule,
@@ -1240,6 +1242,142 @@ function HomeEvidenceCitationSummary({
   );
 }
 
+function summarizeHomeSourceProvenance(entries: SourceProvenanceEntry[]) {
+  const entryCount = entries.length;
+  const scoreContributionAllowedCount = entries.filter((item) => item.scoreContributionAllowed === true).length;
+  const observationOnlyCount = entries.filter((item) => item.observationOnly === true).length;
+  const fallbackOrProxyCount = entries.filter((item) => item.fallbackOrProxy === true).length;
+  const missingCount = entries.filter((item) => (
+    item.sourceId === 'unknown_source'
+    || item.authorityTier === 'unknown'
+    || item.freshnessState === 'unknown'
+    || item.freshnessState === 'unavailable'
+    || item.limitations?.includes('unknown_source')
+  )).length;
+
+  const freshnessState = entries.some((item) => item.freshnessState === 'fallback')
+    ? 'fallback'
+    : entries.some((item) => item.freshnessState === 'stale')
+      ? 'stale'
+      : entries.some((item) => item.freshnessState === 'delayed')
+        ? 'delayed'
+        : entries.some((item) => item.freshnessState === 'cached')
+          ? 'cached'
+          : entries.some((item) => item.freshnessState === 'fresh')
+            ? 'fresh'
+            : 'unknown';
+
+  return {
+    entryCount,
+    scoreContributionAllowedCount,
+    observationOnlyCount,
+    fallbackOrProxyCount,
+    missingCount,
+    freshnessState,
+  };
+}
+
+function homeSourceProvenanceAuthorityLabel(
+  locale: DashboardLocale,
+  scoreContributionAllowedCount: number,
+  observationOnlyCount: number,
+) {
+  const isEnglish = locale === 'en';
+  if (scoreContributionAllowedCount > 0) {
+    return isEnglish ? 'Source confirmation: includes score-grade' : '来源确认：含评分级';
+  }
+  if (observationOnlyCount > 0) {
+    return isEnglish ? 'Source confirmation: observe-only' : '来源确认：仅观察级';
+  }
+  return isEnglish ? 'Source confirmation: pending' : '来源确认：待确认';
+}
+
+function homeSourceProvenanceFreshnessLabel(locale: DashboardLocale, freshnessState: string) {
+  const isEnglish = locale === 'en';
+  if (freshnessState === 'fallback') return isEnglish ? 'Freshness: includes fallback' : '时效：含回退';
+  if (freshnessState === 'stale') return isEnglish ? 'Freshness: includes stale' : '时效：含过期';
+  if (freshnessState === 'delayed') return isEnglish ? 'Freshness: includes delay' : '时效：含延迟';
+  if (freshnessState === 'cached') return isEnglish ? 'Freshness: cached' : '时效：缓存';
+  if (freshnessState === 'fresh') return isEnglish ? 'Freshness: fresh' : '时效：新鲜';
+  return isEnglish ? 'Freshness: pending' : '时效：待确认';
+}
+
+function homeSourceProvenanceSummaryLine(
+  locale: DashboardLocale,
+  summary: ReturnType<typeof summarizeHomeSourceProvenance>,
+) {
+  const isEnglish = locale === 'en';
+  if (summary.missingCount > 0 || summary.observationOnlyCount === summary.entryCount) {
+    return isEnglish
+      ? 'Source context stays explanatory only until more provenance is verified.'
+      : '当前来源上下文仍以说明性展示为主，待更多来源完成核验。';
+  }
+  if (summary.fallbackOrProxyCount > 0) {
+    return isEnglish
+      ? 'Some source context still relies on the latest available fallback path.'
+      : '当前部分来源仍依赖最近一次可用的回退路径。';
+  }
+  return isEnglish
+    ? 'Source context is available for bounded trust review.'
+    : '当前来源上下文可作为有限的信任参考。';
+}
+
+function HomeSourceProvenanceStrip({
+  locale,
+  entries,
+}: {
+  locale: DashboardLocale;
+  entries: SourceProvenanceEntry[] | null;
+}) {
+  if (!entries?.length) {
+    return null;
+  }
+
+  const isEnglish = locale === 'en';
+  const summary = summarizeHomeSourceProvenance(entries);
+  const authorityLabel = homeSourceProvenanceAuthorityLabel(
+    locale,
+    summary.scoreContributionAllowedCount,
+    summary.observationOnlyCount,
+  );
+  const freshnessLabel = homeSourceProvenanceFreshnessLabel(locale, summary.freshnessState);
+
+  return (
+    <section
+      className="min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-white/[0.025] px-4 py-3.5"
+      data-testid="home-provenance-strip"
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <p className="text-[11px] font-semibold tracking-[0] text-white/52">
+          {isEnglish ? 'Source context' : '来源依据'}
+        </p>
+        <TraceBadge tone={summary.missingCount > 0 ? 'warning' : summary.scoreContributionAllowedCount > 0 ? 'used' : 'neutral'}>
+          {isEnglish ? 'Read-only trust context' : '只读信任上下文'}
+        </TraceBadge>
+      </div>
+      <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+        {[
+          authorityLabel,
+          freshnessLabel,
+          isEnglish ? `Observe-only ${summary.observationOnlyCount}` : `观察级 ${summary.observationOnlyCount} 项`,
+          isEnglish ? `Fallback / proxy ${summary.fallbackOrProxyCount}` : `回退/代理 ${summary.fallbackOrProxyCount} 项`,
+          isEnglish ? `Awaiting verification ${summary.missingCount}` : `待核验 ${summary.missingCount} 项`,
+        ].map((label) => (
+          <span
+            key={label}
+            className="inline-flex min-h-8 items-center rounded-full border border-white/[0.07] bg-white/[0.03] px-3 text-xs font-medium text-white/68"
+          >
+            {label}
+          </span>
+        ))}
+      </div>
+      <p className="mt-3 min-w-0 break-words text-xs leading-5 text-white/56">
+        {homeSourceProvenanceSummaryLine(locale, summary)}
+      </p>
+    </section>
+  );
+}
+
 function HomeConclusionFirstConsole({
   locale,
   dashboard,
@@ -1248,6 +1386,7 @@ function HomeConclusionFirstConsole({
   evidenceCoverageFrame,
   evidenceCitationFrame,
   evidencePacket,
+  sourceProvenanceEntries,
   decisionTrace,
   sourceSummary,
   stanceLabel,
@@ -1261,6 +1400,7 @@ function HomeConclusionFirstConsole({
   evidenceCoverageFrame: AnalysisEvidenceCoverageFrame | null;
   evidenceCitationFrame: AnalysisEvidenceCitationFrame | null;
   evidencePacket?: SingleStockEvidencePacket | null;
+  sourceProvenanceEntries: SourceProvenanceEntry[] | null;
   decisionTrace?: DecisionTrace;
   sourceSummary?: string;
   stanceLabel: string;
@@ -1338,6 +1478,11 @@ function HomeConclusionFirstConsole({
           testId="home-evidence-packet-strip"
           className="mb-4"
         />
+        {sourceProvenanceEntries ? (
+          <div className="mb-4">
+            <HomeSourceProvenanceStrip locale={locale} entries={sourceProvenanceEntries} />
+          </div>
+        ) : null}
         {evidenceCitationFrame ? (
           <div className="mb-4">
             <HomeEvidenceCitationSummary locale={locale} frame={evidenceCitationFrame} />
@@ -5023,6 +5168,10 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     () => extractAnalysisEvidenceCitationFrame(activeTraceReport),
     [activeTraceReport],
   );
+  const activeSourceProvenanceFrame = useMemo(
+    () => extractAnalysisSourceProvenanceFrame(activeTraceReport),
+    [activeTraceReport],
+  );
   const activeSingleStockEvidencePacket = useMemo(
     () => getSingleStockEvidencePacket(activeTraceReport),
     [activeTraceReport],
@@ -5834,6 +5983,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                               evidenceCoverageFrame={activeEvidenceCoverageFrame}
                               evidenceCitationFrame={activeEvidenceCitationFrame}
                               evidencePacket={activeSingleStockEvidencePacket}
+                              sourceProvenanceEntries={activeSourceProvenanceFrame}
                               decisionTrace={activeDecisionTrace}
                               sourceSummary={sourceSummary}
                               stanceLabel={stanceLabel}

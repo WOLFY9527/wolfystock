@@ -70,6 +70,7 @@ import {
   useSafariRenderReady,
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
+import type { SourceProvenanceSummary } from '../types/analysis';
 import type {
   ScannerCandidate,
   ScannerCandidateDiagnostic,
@@ -194,6 +195,7 @@ type ScannerCandidateWithEvidence = ScannerCandidate & {
   candidateEvidenceFrame?: CandidateEvidenceFrame | null;
   candidateResearchReadiness?: ResearchReadinessV1 | null;
   candidateResearchSummaryFrame?: ScannerCandidateResearchSummaryFrame | null;
+  candidateSourceProvenanceFrame?: SourceProvenanceSummary | null;
 };
 
 function normalizeCandidateSymbol(symbol?: string | null): string | null {
@@ -2963,6 +2965,7 @@ const UserScannerPage: React.FC = () => {
             </p>
             <ScannerCandidateEvidenceStrip
               frame={candidateWithEvidence.candidateEvidenceFrame}
+              provenanceFrame={candidateWithEvidence.candidateSourceProvenanceFrame}
               readiness={candidateWithEvidence.candidateResearchReadiness}
               language={language}
               variant="detail"
@@ -3632,6 +3635,7 @@ const UserScannerPage: React.FC = () => {
                                         candidateEvidenceFrame={sourceCandidateWithEvidence.candidateEvidenceFrame}
                                         candidateResearchReadiness={sourceCandidateWithEvidence.candidateResearchReadiness}
                                         candidateResearchSummaryFrame={sourceCandidateWithEvidence.candidateResearchSummaryFrame}
+                                        candidateSourceProvenanceFrame={sourceCandidateWithEvidence.candidateSourceProvenanceFrame}
                                         scoreLabel={candidate.score == null ? '--' : `${candidate.score}/100`}
                                         trustSources={[stripScannerConsumerTrustSource(sourceCandidate), stripScannerConsumerTrustSource(candidate)]}
                                         scoreDelta={formatScoreDelta(comparison?.scoreDelta ?? null)}
