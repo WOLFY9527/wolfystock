@@ -252,6 +252,8 @@ const HOME_EVIDENCE_PACKET_TRADING_COPY_PATTERN =
   /buy now|sell now|trade now|order now|broker route|买入|卖出|下单|交易|经纪商|小仓试错|第二笔|建仓|加仓|减仓|probe size|start light|add only/i;
 const HOME_PROVENANCE_INTERNAL_COPY_PATTERN =
   /provider|router|cache|credential|token|prompt|request body|raw payload|article body|sourceId|debugRef|internal|trace|stack|env/i;
+const GUEST_HOME_FORBIDDEN_COPY_PATTERN =
+  /provider|cache|debug|schema|raw payload|token|session[_\s-]?id|secret|buy now|sell now|trade now|order now|connect broker|broker CTA|guaranteed|必买|稳赚|保证收益|立即交易|提交订单|连接经纪商/i;
 const defaultStockEvidenceResponse = {
   symbols: ['ORCL'],
   items: [
@@ -376,13 +378,46 @@ describe('HomeSurfacePage', () => {
   it('renders the guest homepage when the current surface role is guest', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
     renderSurface();
+    const guestSurface = screen.getByTestId('guest-home-clean-search');
     expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
-    expect(screen.getByTestId('guest-home-clean-search')).toBeInTheDocument();
+    expect(guestSurface).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'WolfyStock 研究控制台' })).toBeInTheDocument();
     expect(screen.getByTestId('guest-home-command-surface')).toBeInTheDocument();
     expect(screen.getByTestId('guest-home-capability-strip')).toBeInTheDocument();
+    expect(screen.getByText('WolfyStock 是面向独立研究者与自驱投资者的股票研究工作区。你可以先查看单个标的预览，登录后再保存报告、回看历史，并继续进入组合或扫描工作台。')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-capability-strip')).toHaveTextContent('登录后继续');
+    expect(screen.getByTestId('guest-home-capability-strip')).toHaveTextContent('保存报告');
+    expect(screen.getByTestId('guest-home-capability-strip')).toHaveTextContent('回看历史');
+    expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/login?mode=create&redirect=%2F');
     expect(screen.getByTestId('guest-home-trust-strip')).toHaveTextContent('不等于买卖建议');
-    expect(screen.getByTestId('guest-home-clean-search')).not.toHaveTextContent('WolfyStock 分析面板');
+    expect(screen.getByTestId('guest-home-preview-strip')).toHaveTextContent('登录后下一步');
+    expect(screen.getByTestId('guest-home-preview-strip')).toHaveTextContent('回到上次研究现场');
+    expect(guestSurface).not.toHaveTextContent('WolfyStock 分析面板');
+    expect(guestSurface.textContent).not.toMatch(GUEST_HOME_FORBIDDEN_COPY_PATTERN);
+  });
+
+  it('keeps the English guest value proposition and sign-in next step visible', () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    const originalPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.history.replaceState(window.history.state, '', '/en');
+
+    try {
+      renderSurface('/en');
+
+      const guestSurface = screen.getByTestId('guest-home-clean-search');
+      expect(screen.getByRole('heading', { name: 'WolfyStock Research Console' })).toBeInTheDocument();
+      expect(screen.getByText('WolfyStock is a stock research workspace for self-directed investors and research-oriented users. Start with one ticker preview now, then sign in to save reports, reopen history, and continue into portfolio or scanner workflows.')).toBeInTheDocument();
+      expect(screen.getByTestId('guest-home-capability-strip')).toHaveTextContent('Continue after sign-in');
+      expect(screen.getByTestId('guest-home-capability-strip')).toHaveTextContent('Saved reports');
+      expect(screen.getByTestId('guest-home-capability-strip')).toHaveTextContent('Saved history');
+      expect(screen.getByTestId('guest-home-preview-strip')).toHaveTextContent('What happens after sign-in');
+      expect(screen.getByTestId('guest-home-preview-strip')).toHaveTextContent('reopen the last research context');
+      expect(screen.getByTestId('guest-home-trust-strip')).toHaveTextContent('not a trading instruction');
+      expect(screen.getByRole('link', { name: 'Create free account' })).toHaveAttribute('href', '/login?mode=create&redirect=%2F');
+      expect(guestSurface.textContent).not.toMatch(GUEST_HOME_FORBIDDEN_COPY_PATTERN);
+    } finally {
+      window.history.replaceState(window.history.state, '', originalPath);
+    }
   });
 
   it('keeps an accessible chart placeholder visible before the deferred chart mount starts', async () => {

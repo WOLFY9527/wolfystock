@@ -5,6 +5,7 @@ import { expect as appExpect, test as appTest } from './fixtures/appSmoke';
 const desktopViewport = { width: 1440, height: 1000 };
 const serverErrorShellPattern = /服务器暂时不可用|上游模型暂时不可用|Something went wrong|Server unavailable|Request timed out|请求超时/i;
 const rawLeakagePattern = /raw\s+(payload|response|schema|prompt|trace)|debug\s+(payload|response|schema|panel)|provider\s+payload|provider\s+route|token\s*[=:]|session[_\s-]?id\s*[=:]|cookie\s*[=:]|secret\s*[=:]|bearer\s+[a-z0-9._-]+/i;
+const guestLandingForbiddenTradingPattern = /buy now|sell now|place order|submit order|connect broker|broker CTA|guaranteed|必买|稳赚|保证收益|立即交易|提交订单|连接经纪商/i;
 const adminLogsEnglishDegradedPattern = /Provider Issue Rollup|provider unavailable|fallback|stale|timeout|partial|raw English cache/i;
 
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
@@ -82,11 +83,17 @@ async function expectNoHorizontalOverflow(page: Page) {
 
 async function expectGuestPreviewSurface(page: Page) {
   await appExpect(page).toHaveURL(/\/(zh|en)?\/guest$/);
-  await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible({ timeout: 15_000 });
+  const guestSurface = page.getByTestId('guest-home-clean-search');
+  await appExpect(guestSurface).toBeVisible({ timeout: 15_000 });
   await appExpect(page.getByTestId('guest-home-command-surface')).toBeVisible();
   await appExpect(page.getByTestId('guest-home-command-workflow')).toContainText(/搜索|Search/);
+  await appExpect(guestSurface).toContainText(/股票研究工作区|stock research workspace/i);
+  await appExpect(page.getByTestId('guest-home-capability-strip')).toContainText(/登录后继续|Continue after sign-in/);
+  await appExpect(page.getByTestId('guest-home-preview-strip')).toContainText(/登录后下一步|What happens after sign-in/);
+  await appExpect(page.getByTestId('guest-home-registration-link')).toBeVisible();
   await expectNoGenericServerErrorShell(page);
   await expectNoVisibleRawLeakage(page);
+  await baseExpect(await guestSurface.innerText()).not.toMatch(guestLandingForbiddenTradingPattern);
 }
 
 async function installLiquidityMonitorMock(page: Page) {
