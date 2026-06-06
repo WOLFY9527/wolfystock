@@ -187,7 +187,7 @@ Next candidates:
 
 ## Batch 4: Scanner And Home Formatter Hoist
 
-Status: validated locally, ready for immediate checkpoint commit and push.
+Status: committed and pushed as checkpoint `a829b39e`.
 
 Files changed:
 
@@ -229,9 +229,53 @@ Next candidates:
 - Consider remaining display-only manual memoization in files where callbacks are not `useEffect` dependencies.
 - Remaining high-count findings are increasingly state/effect flow, giant component, and reducer suggestions; many require semantic caution or broader refactor boundaries.
 
+## Batch 5: Backtest Shared Dead Export Removal
+
+Status: included in the checkpoint commit for this batch after local validation.
+
+Files changed:
+
+- `apps/dsa-web/src/components/backtest/shared.tsx`
+
+Changes:
+
+- Removed dead exported backtest display helpers and table/card components after repository-wide import search found no source or test consumers.
+- Removed only unreachable display code; backtest math, fills, costs, metrics, stored semantics, and rendered active paths were not changed.
+
+Diagnostics after batch:
+
+- Score: `61`
+- Total diagnostics: `508`
+- Errors: `112`
+- Warnings: `396`
+- Affected files: `43`
+- Reduced total diagnostics from previous checkpoint: `9`
+- Reduced total diagnostics from baseline: `59`
+- Reduced by rule from previous checkpoint:
+  - `unused-export`: `16 -> 7` (`-9`)
+- React Doctor diff for changed file:
+  - `src/components/backtest/shared.tsx`: `9 -> 0` (`-9`)
+
+Validations run:
+
+- `git diff --check` -> pass
+- `./scripts/release_secret_scan.sh` -> pass
+- `npm --prefix apps/dsa-web run test -- 'src/pages/__tests__/BacktestPage.test.tsx' 'src/pages/__tests__/DeterministicBacktestResultPage.test.tsx' 'src/pages/__tests__/RuleBacktestComparePage.test.tsx' --no-file-parallelism` -> pass, `64` tests
+- `npm --prefix apps/dsa-web run lint` -> pass
+- `npm --prefix apps/dsa-web run build` -> pass with existing Vite chunk-size warning
+- `npx react-doctor@latest --json --json-compact --yes --no-score` -> remaining diagnostics expected, totals above
+- `npx react-doctor@latest --score --yes` -> `61`
+
+Next candidates:
+
+- Remaining `unused-export` in scanner presenters and small hooks/components; remove only if repository-wide search proves no source or test consumers, and focused tests cover the importing page.
+- Low-risk accessibility semantics such as tag/role equivalence can be considered only when visible layout and route behavior remain unchanged and focused tests cover the route.
+- Manual memoization remains mostly blocked where callbacks are effect dependencies or child identity contracts in non-compiler tests.
+- State/effect/reducer/giant-component findings remain blocker-prone without narrower behavioral coverage.
+
 ## Protected Domain Confirmation
 
-No changes in Batch 1 to:
+No changes in Batches 1 through 5 to:
 
 - backend/API/provider/cache/runtime/auth/package/lockfile/config/CI
 - provider order, fallback, deadlines, cache semantics, payload shapes

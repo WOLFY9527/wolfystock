@@ -19,7 +19,6 @@ import type {
   RuleBacktestHistoryItem,
   RuleBacktestParseResponse,
   RuleBacktestRunResponse,
-  RuleBacktestTradeItem,
 } from '../../types/backtest';
 
 const TERMINAL_RULE_STATUSES = new Set(['completed', 'failed', 'cancelled']);
@@ -227,14 +226,6 @@ export function getPeriodicNumber(source: Record<string, unknown> | undefined, k
   return getSetupNumber(source, key);
 }
 
-export function formatDraftOrder(source: Record<string, unknown> | undefined): string {
-  return formatDraftOrderLabel(source, 'zh');
-}
-
-export function formatCashPolicy(source: Record<string, unknown> | undefined): string {
-  return formatCashPolicyLabel(source, 'zh');
-}
-
 export function formatDraftOrderLabel(source: Record<string, unknown> | undefined, language: BacktestLanguage = 'zh'): string {
   const orderMode = String(getStrategySpecValue(source, ['entry', 'order', 'mode']) || getSetupString(source, 'order_mode'));
   if (orderMode === 'fixed_amount') {
@@ -288,28 +279,6 @@ export function buildPeriodicAssumptionLabels(
   return items;
 }
 
-export function formatExecutionPriceBasis(source: Record<string, unknown> | undefined): string {
-  return formatExecutionPriceBasisLabel(source, 'zh');
-}
-
-export function formatExitPolicy(source: Record<string, unknown> | undefined): string {
-  return formatExitPolicyLabel(source, 'zh');
-}
-
-export function buildPeriodicAssumptions(source: Record<string, unknown> | undefined): string[] {
-  return buildPeriodicAssumptionLabels(source, 'zh');
-}
-
-function formatIndicatorEntries(snapshot?: Record<string, unknown>): Array<{ key: string; value: string }> {
-  return Object.entries(snapshot || {})
-    .filter(([, value]) => value != null)
-    .slice(0, 6)
-    .map(([key, value]) => ({
-      key,
-      value: typeof value === 'number' ? value.toFixed(2) : String(value),
-    }));
-}
-
 export function isRuleRunTerminal(status?: string): boolean {
   return TERMINAL_RULE_STATUSES.has(String(status || '').trim().toLowerCase());
 }
@@ -333,18 +302,6 @@ function getRuleRunStatusTone(status?: string): 'default' | 'success' | 'warning
   if (normalized === 'cancelled') return 'warning';
   if (normalized === 'running' || normalized === 'queued' || normalized === 'parsing') return 'warning';
   return 'default';
-}
-
-export function getHistoricalStatusBadge(status?: string) {
-  const normalized = status || 'completed';
-  const label = getHistoricalStatusText(normalized);
-  return <StatusBadge status={normalized} label={label} variant="soft" size="sm" />;
-}
-
-export function getRuleStatusBadge(status?: string) {
-  const normalized = status || 'queued';
-  const label = getRuleStatusText(normalized);
-  return <StatusBadge status={normalized} label={label} variant="soft" size="sm" />;
 }
 
 export function getRuleRunStatusLabel(status?: string, language: BacktestLanguage = 'zh'): string {
@@ -436,19 +393,6 @@ const DirectionBadge: React.FC<{
 
 export const SectionEyebrow: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span className="product-kicker">{children}</span>
-);
-
-export const MetricCard: React.FC<{
-  label: string;
-  value: string;
-  tone?: 'default' | 'positive' | 'negative' | 'accent';
-  note?: string;
-}> = ({ label, value, tone = 'default', note }) => (
-  <div className={`metric-card metric-card--${tone}`}>
-    <p className="metric-card__label">{label}</p>
-    <p className="metric-card__value">{value}</p>
-    {note ? <p className="metric-card__note">{note}</p> : null}
-  </div>
 );
 
 export const SummaryStrip: React.FC<{
@@ -659,92 +603,6 @@ export const HistoricalRunsTable: React.FC<{
               </td>
             </tr>
           ))}
-        </tbody>
-      </table>
-    </div>
-  );
-};
-
-export const RuleBacktestTradeTable: React.FC<{ trades: RuleBacktestTradeItem[] }> = ({ trades }) => {
-  const { language } = useI18n();
-  if (trades.length === 0) {
-    return <div className="product-empty-state">{bt(language, 'tables.noTradeDetail')}</div>;
-  }
-
-  return (
-    <div className="product-table-shell">
-      <table className="product-table product-table--wide">
-        <thead>
-          <tr>
-            <th>{bt(language, 'tables.signalAndFills')}</th>
-            <th>{bt(language, 'tables.entryTrigger')}</th>
-            <th>{bt(language, 'tables.exitTrigger')}</th>
-            <th>{bt(language, 'tables.indicatorSnapshot')}</th>
-            <th className="product-table__align-right">{bt(language, 'tables.return')}</th>
-            <th className="product-table__align-right">{bt(language, 'tables.holding')}</th>
-            <th>{bt(language, 'tables.executionAudit')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {trades.map((trade, index) => {
-            const entryIndicators = formatIndicatorEntries(trade.entryIndicators);
-            const exitIndicators = formatIndicatorEntries(trade.exitIndicators);
-            return (
-              <tr key={`${trade.code}-${trade.tradeIndex ?? index}`}>
-                <td>
-                  <div className="product-table__stack">
-                    <span className="product-table__mono">{trade.entrySignalDate || trade.entryDate || '--'} → {trade.exitSignalDate || trade.exitDate || '--'}</span>
-                    <span>{trade.entryDate || '--'} @ {formatNumber(trade.entryPrice)}</span>
-                    <span>{trade.exitDate || '--'} @ {formatNumber(trade.exitPrice)}</span>
-                  </div>
-                </td>
-                <td>{trade.entryTrigger || trade.entrySignal || '--'}</td>
-                <td>{trade.exitTrigger || trade.exitSignal || '--'}</td>
-                <td>
-                  <div className="indicator-stack">
-                    {entryIndicators.length > 0 ? (
-                      <div>
-                        <p className="metric-card__label">{bt(language, 'tables.entry')}</p>
-                        <div className="product-chip-list product-chip-list--tight">
-                          {entryIndicators.map((item) => (
-                            <span key={`entry-${item.key}`} className="product-chip">
-                              {item.key}: {item.value}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                    {exitIndicators.length > 0 ? (
-                      <div>
-                        <p className="metric-card__label">{bt(language, 'tables.exit')}</p>
-                        <div className="product-chip-list product-chip-list--tight">
-                          {exitIndicators.map((item) => (
-                            <span key={`exit-${item.key}`} className="product-chip">
-                              {item.key}: {item.value}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                </td>
-                <td className="product-table__align-right">{pct(trade.returnPct)}</td>
-                <td className="product-table__align-right">
-                  <div className="product-table__stack">
-                    <span>{trade.holdingBars ?? trade.holdingDays ?? '--'} bars</span>
-                    <span>{trade.holdingCalendarDays ?? '--'} {bt(language, 'common.days')}</span>
-                  </div>
-                </td>
-                <td>
-                  <div className="product-table__stack">
-                    <span>{bt(language, 'tables.signalPriceBasis')}: {trade.signalPriceBasis || '--'}</span>
-                    <span>{bt(language, 'tables.fillPriceBasis')}: {trade.priceBasis || '--'}</span>
-                    <span>{bt(language, 'tables.feeSlippage')}: {formatNumber(trade.feeBps, 1)}bp / {formatNumber(trade.slippageBps, 1)}bp</span>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
         </tbody>
       </table>
     </div>
