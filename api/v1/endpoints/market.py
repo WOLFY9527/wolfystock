@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 
 from api.deps import CurrentUser, get_optional_current_user
 from api.v1.schemas.market_rotation import MarketRotationRadarResponse
+from api.v1.schemas.market_temperature import MarketTemperatureConsumedSubsetResponse
 from src.services.cn_provider_health_service import CNProviderHealthService
 from src.services.crypto_realtime_service import get_crypto_realtime_service
 from src.services.market_data_readiness_diagnostics import build_market_data_readiness_diagnostics
@@ -160,7 +161,12 @@ def get_fx_commodities(current_user: Optional[CurrentUser] = Depends(get_optiona
     return MarketOverviewService().get_fx_commodities(actor=_actor(current_user))
 
 
-@router.get("/temperature", summary="Get computed market temperature scores")
+@router.get(
+    "/temperature",
+    response_model=MarketTemperatureConsumedSubsetResponse,
+    response_model_exclude_unset=True,
+    summary="Get computed market temperature scores",
+)
 def get_temperature(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
     return MarketOverviewService().get_market_temperature(actor=_actor(current_user))
 

@@ -389,6 +389,14 @@ def _market_temperature_api_payload(service: MarketOverviewService, inputs: dict
     return response.json()
 
 
+def _market_temperature_service_payload(service: MarketOverviewService, inputs: dict) -> dict:
+    with (
+        patch.object(service, "_build_market_temperature_inputs", return_value=inputs),
+        patch.object(service, "_cached_payload", side_effect=lambda _cache_key, fetcher, _fallback_factory: fetcher()),
+    ):
+        return service.get_market_temperature()
+
+
 def _collect_nested_mapping_keys(value: object) -> set[str]:
     keys: set[str] = set()
     if isinstance(value, dict):
@@ -671,6 +679,68 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         for key in historical_extra_keys:
             self.assertIn(key, serialized)
             self.assertEqual(serialized[key], payload[key])
+
+    def test_market_temperature_route_response_model_preserves_consumed_subset_and_historical_extras(self) -> None:
+        service_payload = _market_temperature_service_payload(
+            MarketOverviewService(),
+            _decision_semantics_ready_temperature_inputs(),
+        )
+        app = FastAPI()
+        app.include_router(market.router, prefix="/api/v1/market")
+        app.dependency_overrides[get_optional_current_user] = lambda: None
+
+        route = next(
+            route
+            for route in app.routes
+            if getattr(route, "path", None) == "/api/v1/market/temperature"
+        )
+        self.assertIs(route.response_model, MarketTemperatureConsumedSubsetResponse)
+
+        route_service = MagicMock()
+        route_service.get_market_temperature.return_value = copy.deepcopy(service_payload)
+        with patch("api.v1.endpoints.market.MarketOverviewService", return_value=route_service):
+            response = TestClient(app).get("/api/v1/market/temperature")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        consumed_subset_fields = {
+            "source",
+            "updatedAt",
+            "freshness",
+            "isFallback",
+            "isStale",
+            "isPartial",
+            "temperatureAvailable",
+            "conclusionAllowed",
+            "researchReadiness",
+            "marketActionabilityFrame",
+            "marketIntelligenceEvidenceFrame",
+            "regimeSummary",
+            "providerHealth",
+            "evidenceSnapshot",
+        }
+        historical_extra_keys = {
+            "scores",
+            "marketRegimeSynthesis",
+            "marketDecisionSemantics",
+            "sourceLabel",
+            "sourceType",
+            "asOf",
+            "delayMinutes",
+            "fallbackUsed",
+            "confidence",
+            "isReliable",
+        }
+
+        self.assertTrue(consumed_subset_fields.issubset(payload.keys()))
+        self.assertTrue(historical_extra_keys.issubset(payload.keys()))
+        self.assertEqual(set(payload.keys()), set(service_payload.keys()))
+        self.assertEqual(payload, service_payload)
+        self.assertEqual(set(payload["providerHealth"].keys()), set(service_payload["providerHealth"].keys()))
+        self.assertEqual(payload["providerHealth"], service_payload["providerHealth"])
+        self.assertEqual(set(payload["evidenceSnapshot"].keys()), set(service_payload["evidenceSnapshot"].keys()))
+        self.assertEqual(payload["evidenceSnapshot"], service_payload["evidenceSnapshot"])
 
     def test_market_temperature_research_readiness_degraded_no_conclusion_is_not_ready(self) -> None:
         service = MarketOverviewService()
