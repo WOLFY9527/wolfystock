@@ -6,7 +6,7 @@ const viewports = [
 ] as const;
 
 const forbiddenDefaultDisclosurePattern =
-  /provider route|cache router|raw config|Bootstrap Admin|\bdebug\b|\btoken\b|\/api\/v1\/|DEFAULT_LLM_PROVIDER|SCHEDULE_ENABLED|DUCKDB_ENABLED/i;
+  /Bootstrap Admin|bootstrap admin|\bdebug\b|\bprovider\b|\bcache\b|\braw\b|\brouter\b|\benv\b|\btoken\b|\bpayload\b|\bcredential\b|\/api\/v1\/|DEFAULT_LLM_PROVIDER|SCHEDULE_ENABLED|DUCKDB_ENABLED/i;
 
 async function expectNoHorizontalOverflow(page: Parameters<typeof test>[0]['page']) {
   await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
@@ -49,7 +49,7 @@ test.describe('settings disclosure browser smoke', () => {
 
       await expect(page).toHaveURL(/\/zh\/settings\/system$/);
       await expect(page.getByRole('heading', { name: '系统设置' })).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByText('系统风险总览')).toBeVisible();
+      await expect(page.getByTestId('system-settings-l0-overview-strip')).toBeVisible();
       await expect(page.getByRole('heading', { name: '数据源状态' })).toBeVisible();
       await expect(page.getByRole('button', { name: 'AI 模型' })).toBeVisible();
       await expect(page.getByRole('heading', { name: '运维总览' })).toBeVisible();

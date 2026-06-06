@@ -5,6 +5,8 @@ import SystemSettingsPage from '../SystemSettingsPage';
 
 const mockDraftResetTrigger = vi.fn();
 const mockLegacyFactoryResetTrigger = vi.fn();
+const defaultVisibleInternalCopyPattern =
+  /Bootstrap Admin|bootstrap admin|internal|debug|provider|cache|raw|router|env|token|payload|credential/i;
 
 vi.mock('../SettingsPage', async () => {
   const React = await import('react');
@@ -77,7 +79,7 @@ describe('SystemSettingsPage', () => {
     expect(screen.getByText('凭证、调度、系统状态与高风险操作仍需结合运维中心快照确认。')).toBeInTheDocument();
     expect(screen.getByText('详细配置项保留在下方运维中心。')).toBeInTheDocument();
     expect(screen.queryByText(/control plane/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/token|debug|provider|cache|env|router/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(defaultVisibleInternalCopyPattern)).not.toBeInTheDocument();
     expect(screen.getByTestId('system-settings-loading')).toHaveAttribute('aria-busy', 'true');
     expect(await screen.findByText('settings-page-core')).toBeInTheDocument();
     expect(pageRoot).toHaveAttribute('data-terminal-primitive', 'page-shell');
@@ -106,7 +108,9 @@ describe('SystemSettingsPage', () => {
       screen.getByText('This page is the default landing for admin settings and control work, not a missing standalone dashboard. Review overall risk, pending setup, and safe next steps before opening the control center below.'),
     ).toBeInTheDocument();
     expect(screen.getByText('System control center / summary below')).toBeInTheDocument();
-    expect(screen.queryByText(/token|debug|provider|cache|env|router/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Access readiness, schedules, system state, risky actions')).toBeInTheDocument();
+    expect(screen.getByText('Access readiness, schedules, system state, and risky actions still need confirmation from the control center snapshot.')).toBeInTheDocument();
+    expect(screen.queryByText(defaultVisibleInternalCopyPattern)).not.toBeInTheDocument();
 
     expect(await screen.findByText('settings-page-core')).toBeInTheDocument();
   });
@@ -175,7 +179,7 @@ describe('SystemSettingsPage', () => {
     );
 
     await screen.findByText('settings-page-core');
-    expect(screen.queryByText(/token|internal|debug|provider|cache|env|router|payload|credential/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(defaultVisibleInternalCopyPattern)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '执行工厂重置' }));
 

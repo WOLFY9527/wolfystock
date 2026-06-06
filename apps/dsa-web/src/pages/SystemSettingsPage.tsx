@@ -35,11 +35,11 @@ const SystemSettingsPage: FC = () => {
         {
           label: 'Current status',
           value: 'Waiting for the latest snapshot',
-          note: 'The control center below loads system health, config domains, and credential summaries.',
+          note: 'The control center below loads system health, config domains, and access-readiness summaries.',
         },
         {
           label: 'Watch items',
-          value: 'Credentials, schedules, system state, risky actions',
+          value: 'Access readiness, schedules, system state, risky actions',
           note: 'Risky actions stay in secondary areas and still require confirmation.',
         },
         {
@@ -48,7 +48,7 @@ const SystemSettingsPage: FC = () => {
           note: 'Detailed settings stay inside the control center below.',
         },
       ],
-      l0Impact: 'Credentials, schedules, system state, and risky actions still need confirmation from the control center snapshot.',
+      l0Impact: 'Access readiness, schedules, system state, and risky actions still need confirmation from the control center snapshot.',
       l0RecommendedAction: 'Review the system summary first, then open the relevant settings domain.',
       l0EvidenceRef: 'System control center / summary below',
       l0LastUpdated: 'Updates after the snapshot loads',
