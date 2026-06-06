@@ -239,6 +239,16 @@ bash scripts/release_secret_scan.sh
 
 Run TypeScript separately only when shared interfaces/routes/types changed or build is insufficient.
 
+Windows frontend / React Doctor parity:
+
+```text
+- Blocking: git diff --check, release_secret_scan.sh, lint, build.
+- React Doctor JSON is advisory when it returns non-zero but still emits parseable diagnostics with ok:true and lint/build/tests pass.
+- React Doctor score is advisory unless the task explicitly makes score blocking.
+- If Git Bash reports shasum: command not found, use a temporary non-repo PATH shim or fix the local environment; do not edit repo scripts.
+- Do not open source fixes for browser/tooling/auth/runtime measurement noise unless a clean route/viewport evidence pass reproduces the issue.
+```
+
 ### Docs-only
 
 ```bash
