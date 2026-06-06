@@ -159,8 +159,10 @@ function investorSignalReasonLabels(signal?: InvestorSignalContract | null, lang
   const codes = Array.isArray(signal?.reasonCodes) ? signal.reasonCodes : [];
   return uniqueInvestorSignalLabels(
     codes
-      .map((code) => formatInvestorSignalCodeLabel(String(code || ''), language, INVESTOR_SIGNAL_REASON_LABELS_ZH, INVESTOR_SIGNAL_REASON_LABELS_EN))
-      .filter(Boolean),
+      .flatMap((code) => {
+        const label = formatInvestorSignalCodeLabel(String(code || ''), language, INVESTOR_SIGNAL_REASON_LABELS_ZH, INVESTOR_SIGNAL_REASON_LABELS_EN);
+        return label ? [label] : [];
+      }),
   ).slice(0, 3);
 }
 
@@ -168,8 +170,10 @@ function investorSignalContradictionLabels(signal?: InvestorSignalContract | nul
   const codes = Array.isArray(signal?.contradictionCodes) ? signal.contradictionCodes : [];
   return uniqueInvestorSignalLabels(
     codes
-      .map((code) => formatInvestorSignalCodeLabel(String(code || ''), language, INVESTOR_SIGNAL_CONTRADICTION_LABELS_ZH, INVESTOR_SIGNAL_CONTRADICTION_LABELS_EN))
-      .filter(Boolean),
+      .flatMap((code) => {
+        const label = formatInvestorSignalCodeLabel(String(code || ''), language, INVESTOR_SIGNAL_CONTRADICTION_LABELS_ZH, INVESTOR_SIGNAL_CONTRADICTION_LABELS_EN);
+        return label ? [label] : [];
+      }),
   ).slice(0, 3);
 }
 

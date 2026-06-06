@@ -234,10 +234,22 @@ export function ScannerCandidateResearchSummary({
 }) {
   if (!frame) return null;
 
-  const evidenceHighlights = Array.from(new Set((frame.evidenceHighlights || []).map((item) => localizeHighlight(item, language)).filter(Boolean)));
-  const missingEvidence = Array.from(new Set((frame.missingEvidence || []).map((item) => localizeDomain(item, language)).filter(Boolean)));
-  const blockingReasons = Array.from(new Set((frame.blockingReasons || []).map((item) => localizeBlockingReason(item, language)).filter(Boolean)));
-  const topDownRefs = Array.from(new Set((frame.topDownContextRefs || []).map((item) => topDownChipLabel(item, language)).filter(Boolean)));
+  const evidenceHighlights = Array.from(new Set((frame.evidenceHighlights || []).flatMap((item) => {
+    const label = localizeHighlight(item, language);
+    return label ? [label] : [];
+  })));
+  const missingEvidence = Array.from(new Set((frame.missingEvidence || []).flatMap((item) => {
+    const label = localizeDomain(item, language);
+    return label ? [label] : [];
+  })));
+  const blockingReasons = Array.from(new Set((frame.blockingReasons || []).flatMap((item) => {
+    const label = localizeBlockingReason(item, language);
+    return label ? [label] : [];
+  })));
+  const topDownRefs = Array.from(new Set((frame.topDownContextRefs || []).flatMap((item) => {
+    const label = topDownChipLabel(item, language);
+    return label ? [label] : [];
+  })));
   const primaryReason = localizedPrimaryReason(frame, language);
   const nextStep = localizedNextStep(frame, language);
   const sourceAuthority = localizeSourceAuthority(frame.sourceAuthority, language);

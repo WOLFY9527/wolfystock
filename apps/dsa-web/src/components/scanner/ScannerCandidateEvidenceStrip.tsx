@@ -148,8 +148,10 @@ function summarizeMissingEvidence(
 ): string | null {
   const missing = Array.from(new Set(
     (readiness?.missingEvidence || [])
-      .map((item) => localizedDomainLabel(item, language))
-      .filter(Boolean),
+      .flatMap((item) => {
+        const label = localizedDomainLabel(item, language);
+        return label ? [label] : [];
+      }),
   ));
   if (!missing.length) return null;
   return language === 'en'

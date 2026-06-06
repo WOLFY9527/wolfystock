@@ -1336,16 +1336,19 @@ function buildConsumerCoverageSegments(
   const proportionalPool = Math.max(100 - reserved, 0);
   const proportionalTotal = rawSegments.reduce((sum, segment) => sum + Math.max(segment.count, 0), 0);
 
-  return rawSegments.map((segment) => {
+  return rawSegments.reduce<ConsumerLiquidityCoverageSegment[]>((segments, segment) => {
     const proportionalWidth = proportionalTotal > 0
       ? (Math.max(segment.count, 0) / proportionalTotal) * proportionalPool
       : 0;
     const widthPct = segment.count > 0 ? clampPercent(proportionalWidth + 8) : 0;
-    return {
-      ...segment,
-      widthPct,
-    };
-  }).filter((segment) => segment.count > 0);
+    if (segment.count > 0) {
+      segments.push({
+        ...segment,
+        widthPct,
+      });
+    }
+    return segments;
+  }, []);
 }
 
 function buildConsumerVisualDrivers(

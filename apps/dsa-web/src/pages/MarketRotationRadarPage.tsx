@@ -365,10 +365,16 @@ function extractThemeFlowLeadershipEvidence(signal?: MarketRotationTheme['themeF
 
 function themeFlowReasonLabels(signal?: MarketRotationTheme['themeFlowSignal'] | null): string[] {
   const codes = Array.isArray(signal?.reasonCodes) ? signal.reasonCodes : [];
-  return codes
-    .map((code) => THEME_FLOW_REASON_LABELS[String(code || '').trim()] || '')
-    .filter((label, index, array) => Boolean(label) && array.indexOf(label) === index)
-    .slice(0, 3);
+  const labels: string[] = [];
+  const seen = new Set<string>();
+  for (const code of codes) {
+    const label = THEME_FLOW_REASON_LABELS[String(code || '').trim()] || '';
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    labels.push(label);
+    if (labels.length === 3) break;
+  }
+  return labels;
 }
 
 function themeFlowEvidenceLines(signal?: MarketRotationTheme['themeFlowSignal'] | null): string[] {

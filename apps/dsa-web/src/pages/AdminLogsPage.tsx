@@ -2200,18 +2200,30 @@ const AdminLogsPage: React.FC = () => {
                     item.source,
                     item.model,
                     item.channel,
-                  ].map((value) => renderOperatorSafeText(value, locale, '')).filter(Boolean).join(' · ');
+                  ].flatMap((value) => {
+                    const label = renderOperatorSafeText(value, locale, '');
+                    return label ? [label] : [];
+                  }).join(' · ');
                   const contextLine = [
                     ...(item.affectedSurfaces || []),
                     ...(item.affectedDomains || []),
-                  ].map((value) => renderOperatorSafeText(value, locale, '')).filter(Boolean).join(' · ');
+                  ].flatMap((value) => {
+                    const label = renderOperatorSafeText(value, locale, '');
+                    return label ? [label] : [];
+                  }).join(' · ');
                   const reasonLine = [
                     item.reasonCode,
                     item.eventType,
                     item.freshnessStatus,
                     item.status,
-                  ].map((value) => renderOperatorSafeText(value, locale, '')).filter(Boolean).join(' · ');
-                  const sampleEventIds = (item.sampleEventIds || []).map((value) => safeOperatorText(value, '')).filter(Boolean).slice(0, 3);
+                  ].flatMap((value) => {
+                    const label = renderOperatorSafeText(value, locale, '');
+                    return label ? [label] : [];
+                  }).join(' · ');
+                  const sampleEventIds = (item.sampleEventIds || []).flatMap((value) => {
+                    const label = safeOperatorText(value, '');
+                    return label ? [label] : [];
+                  }).slice(0, 3);
                   return (
                     <div
                       key={item.issueId}
