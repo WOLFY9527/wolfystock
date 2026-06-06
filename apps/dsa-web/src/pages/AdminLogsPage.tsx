@@ -1206,6 +1206,22 @@ function CallCard({
   );
 }
 
+function buildStableListKeys<T>(
+  items: readonly T[],
+  getSignature: (item: T) => string,
+): Array<{ item: T; key: string }> {
+  const counts = new Map<string, number>();
+  return items.map((item) => {
+    const signature = getSignature(item) || 'item';
+    const seen = counts.get(signature) || 0;
+    counts.set(signature, seen + 1);
+    return {
+      item,
+      key: seen === 0 ? signature : `${signature}::${seen + 1}`,
+    };
+  });
+}
+
 function downloadLogJson(detail: ExecutionLogSessionDetail): void {
   const blob = new Blob([JSON.stringify(sanitizeDisplayValue(detail), null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -1669,12 +1685,39 @@ const AdminLogsPage: React.FC = () => {
   const rawActorRole = String(readable.actorRole || '').trim().toLowerCase();
   const incidentHooks = useMemo(() => {
     const hooks = incidentTimeline?.hooks || [];
-    return [...hooks].sort((left, right) => {
+    return hooks.slice().sort((left: AdminIncidentTimelineHook, right: AdminIncidentTimelineHook) => {
       const leftIndex = INCIDENT_KIND_ORDER.indexOf(left.kind as (typeof INCIDENT_KIND_ORDER)[number]);
       const rightIndex = INCIDENT_KIND_ORDER.indexOf(right.kind as (typeof INCIDENT_KIND_ORDER)[number]);
       return (leftIndex === -1 ? 99 : leftIndex) - (rightIndex === -1 ? 99 : rightIndex);
     });
   }, [incidentTimeline]);
+  const aiCallEntries = buildStableListKeys(aiCalls, (item) => [
+    text(item.model),
+    text(item.version),
+    text(item.status),
+    text(item.reason || item.error || item.failureReason),
+  ].join('::'));
+  const dataSourceCallEntries = buildStableListKeys(dataSourceCalls, (item) => [
+    text(item.api || item.source),
+    text(item.status),
+    text(item.reason || item.error || item.failureReason),
+    text(item.fallback || item.fallbackChain || item.retryFallback),
+  ].join('::'));
+  const systemFallbackEntries = buildStableListKeys(systemFallbacks, (item) => [
+    text(item.source),
+    text(item.message),
+  ].join('::'));
+  const timelineEntries = buildStableListKeys(timeline, (item) => [
+    text(item.label),
+    text(item.timestamp),
+    text(item.category),
+    text(item.status),
+  ].join('::'));
+  const diagnosticEntries = buildStableListKeys(diagnostics, (item) => [
+    text(item.source),
+    text(item.message),
+    text(item.severity),
+  ].join('::'));
   const canOpenBusinessIncident = Boolean(businessDetail && buildIncidentLookupFromBusinessEvent(businessDetail));
   const canOpenRawIncident = Boolean(drawerDetail && buildIncidentLookupFromSession(drawerDetail));
   const computedSummary = useMemo(() => {
@@ -2726,16 +2769,16 @@ const AdminLogsPage: React.FC = () => {
 
             <AdminLogsTerminalSection title={locale === 'zh' ? 'LLM 调用链' : 'LLM call chain'} defaultOpen={false} className="px-5 py-4">
               <div className="mt-4 space-y-3">
-                {aiCalls.length ? aiCalls.map((item, index) => (
-                  <CallCard key={`${text(item.model)}-${index}`} item={item} index={index} type="llm" locale={locale} />
+                {aiCallEntries.length ? aiCallEntries.map(({ item, key }, index) => (
+                  <CallCard key={key} item={item} index={index} type="llm" locale={locale} />
                 )) : <p className="text-sm text-muted-text">{t('adminLogs.emptyOperationTable')}</p>}
               </div>
             </AdminLogsTerminalSection>
 
             <AdminLogsTerminalSection title={locale === 'zh' ? '数据源调用' : 'Data source calls'} defaultOpen={false} className="px-5 py-4">
               <div className="mt-4 space-y-3">
-                {dataSourceCalls.length ? dataSourceCalls.map((item, index) => (
-                  <CallCard key={`${text(item.api || item.source)}-${index}`} item={item} index={index} type="data" locale={locale} />
+                {dataSourceCallEntries.length ? dataSourceCallEntries.map(({ item, key }, index) => (
+                  <CallCard key={key} item={item} index={index} type="data" locale={locale} />
                 )) : <p className="text-sm text-muted-text">{t('adminLogs.emptyOperationTable')}</p>}
               </div>
             </AdminLogsTerminalSection>
@@ -2743,8 +2786,8 @@ const AdminLogsPage: React.FC = () => {
             <section className="grid gap-4 xl:grid-cols-2">
               <AdminLogsTerminalSection title={locale === 'zh' ? '系统回退记录' : 'System fallback records'} defaultOpen={false} className="px-5 py-4">
                 <div className="mt-4 space-y-2">
-                  {systemFallbacks.length ? systemFallbacks.map((item, index) => (
-                    <TerminalNotice key={`${text(item.source)}-${index}`} variant="caution">
+                  {systemFallbackEntries.length ? systemFallbackEntries.map(({ item, key }) => (
+                    <TerminalNotice key={key} variant="caution">
                       {operatorSafeText(item.source, locale)} · {operatorSafeText(item.message, locale)}
                     </TerminalNotice>
                   )) : <p className="text-sm text-muted-text">{locale === 'zh' ? '暂无系统回退。' : 'No system fallback recorded.'}</p>}
@@ -2760,10 +2803,10 @@ const AdminLogsPage: React.FC = () => {
 
             <AdminLogsTerminalSection title={t('adminLogs.operationTimelineTitle')} defaultOpen={false} className="px-5 py-4">
               <div className="mt-4 space-y-2">
-                {timeline.length ? timeline.map((item, index) => {
+                {timelineEntries.length ? timelineEntries.map(({ item, key }) => {
                   const status = normalizeStatus(String(item.status || ''));
                   return (
-                    <TerminalNestedBlock key={`${text(item.label)}-${index}`} className="text-xs">
+                    <TerminalNestedBlock key={key} className="text-xs">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="font-medium text-foreground">{operatorSafeText(item.label, locale)}</p>
                         <StatusChip status={status} locale={locale} />
@@ -2792,8 +2835,8 @@ const AdminLogsPage: React.FC = () => {
 
             <AdminLogsTerminalSection title={t('adminLogs.diagnosticsTitle')} defaultOpen={false} className="border-rose-400/15 bg-rose-500/[0.025] px-5 py-4">
               <div className="mt-4 space-y-2">
-                {diagnostics.length ? diagnostics.map((item, index) => (
-                  <TerminalNotice key={`${text(item.source)}-${index}`} variant="danger">
+                {diagnosticEntries.length ? diagnosticEntries.map(({ item, key }) => (
+                  <TerminalNotice key={key} variant="danger">
                     <p>{operatorSafeText(item.message, locale)}</p>
                     <p className="mt-1 text-muted-text">{operatorSafeText(item.source, locale)} · {text(item.severity)}</p>
                   </TerminalNotice>
