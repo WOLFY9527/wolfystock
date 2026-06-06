@@ -1,12 +1,14 @@
 import type { AxiosResponse } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { post } = vi.hoisted(() => ({
+const { get, post } = vi.hoisted(() => ({
+  get: vi.fn(),
   post: vi.fn(),
 }));
 
 vi.mock('../index', () => ({
   default: {
+    get,
     post,
   },
 }));
@@ -38,6 +40,178 @@ function walkKeys(value: unknown): string[] {
 describe('portfolioApi scenario risk adapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('camel-cases snapshot pricing and evidence metadata without clipping raw boundary fields', async () => {
+    const { portfolioApi } = await import('../portfolio');
+
+    get.mockResolvedValueOnce({
+      data: {
+        as_of: '2026-03-19',
+        cost_method: 'fifo',
+        currency: 'CNY',
+        total_cash: 1000,
+        total_market_value: 2000,
+        total_equity: 3000,
+        realized_pnl: 0,
+        unrealized_pnl: 120,
+        fee_total: 0,
+        tax_total: 0,
+        fx_stale: true,
+        fx_freshness_state: 'missing',
+        valuation_lineage_state: 'price_fallback',
+        confidence_cap: {
+          value: 55,
+          reason_codes: ['fx_fallback_1_to_1', 'price_fallback', 'provider_timeout'],
+        },
+        fx_rates: [
+          {
+            from_currency: 'USD',
+            to_currency: 'CNY',
+            rate: null,
+            rate_date: null,
+            source: 'missing',
+            is_stale: true,
+            updated_at: null,
+            source_direction: 'fallback_1_to_1',
+          },
+        ],
+        portfolio_risk_evidence: {
+          limitation_labels: ['FX 汇率缺失'],
+          source_refs: [
+            { id: 'fx-source-1', provider: 'provider-a', source_class: 'cache_snapshot' },
+          ],
+          admin_diagnostics: {
+            provider: 'provider-a',
+            cache_layer: 'portfolio_fx_cache',
+            runtime_state: 'stale_refresh',
+            debug_trace: 'collapsed',
+          },
+        },
+        accounts: [
+          {
+            account_id: 1,
+            account_name: 'Main',
+            broker: 'Demo',
+            market: 'us',
+            base_currency: 'CNY',
+            as_of: '2026-03-19',
+            cost_method: 'fifo',
+            total_cash: 1000,
+            total_market_value: 2000,
+            total_equity: 3000,
+            realized_pnl: 0,
+            unrealized_pnl: 120,
+            fee_total: 0,
+            tax_total: 0,
+            fx_stale: true,
+            positions: [
+              {
+                symbol: 'AAPL',
+                market: 'us',
+                currency: 'USD',
+                quantity: 10,
+                avg_cost: 150,
+                total_cost: 1500,
+                last_price: 160,
+                market_value_base: 1600,
+                unrealized_pnl_base: 100,
+                valuation_currency: 'USD',
+                cost_basis_native: 1500,
+                market_value_native: 1600,
+                unrealized_pnl_native: 100,
+                display_market_value: 1600,
+                display_unrealized_pnl: 100,
+                display_currency: 'USD',
+                display_fx_status: 'live',
+                price_source: 'daily_close_quote',
+                price_source_label: 'Daily close quote',
+                price_as_of: '2026-03-19',
+                is_price_fallback: true,
+                price_fallback_reason: 'current_quote_unavailable',
+                valuation_confidence: 0.55,
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const payload = await portfolioApi.getSnapshot({ accountId: 1, costMethod: 'fifo' });
+
+    expect(get).toHaveBeenCalledWith('/api/v1/portfolio/snapshot', {
+      params: {
+        account_id: 1,
+        cost_method: 'fifo',
+      },
+    });
+
+    expect(payload.valuationLineageState).toBe('price_fallback');
+    expect(payload.fxFreshnessState).toBe('missing');
+    expect(payload.confidenceCap).toEqual({
+      value: 55,
+      reasonCodes: ['fx_fallback_1_to_1', 'price_fallback', 'provider_timeout'],
+    });
+    expect(payload.portfolioRiskEvidence).toMatchObject({
+      limitationLabels: ['FX 汇率缺失'],
+      sourceRefs: [
+        { id: 'fx-source-1', provider: 'provider-a', sourceClass: 'cache_snapshot' },
+      ],
+      adminDiagnostics: {
+        provider: 'provider-a',
+        cacheLayer: 'portfolio_fx_cache',
+        runtimeState: 'stale_refresh',
+        debugTrace: 'collapsed',
+      },
+    });
+    expect(payload.fxRates?.[0]).toEqual({
+      fromCurrency: 'USD',
+      toCurrency: 'CNY',
+      rate: null,
+      rateDate: null,
+      source: 'missing',
+      isStale: true,
+      updatedAt: null,
+      sourceDirection: 'fallback_1_to_1',
+    });
+    expect(payload.accounts[0].positions[0]).toMatchObject({
+      priceSource: 'daily_close_quote',
+      priceSourceLabel: 'Daily close quote',
+      priceAsOf: '2026-03-19',
+      isPriceFallback: true,
+      priceFallbackReason: 'current_quote_unavailable',
+      displayFxStatus: 'live',
+      valuationConfidence: 0.55,
+    });
+
+    const keys = new Set(walkKeys(payload));
+    for (const forbiddenKey of [
+      'as_of',
+      'cost_method',
+      'fx_stale',
+      'fx_freshness_state',
+      'valuation_lineage_state',
+      'reason_codes',
+      'source_refs',
+      'admin_diagnostics',
+      'cache_layer',
+      'runtime_state',
+      'debug_trace',
+      'price_source',
+      'price_source_label',
+      'price_as_of',
+      'is_price_fallback',
+      'price_fallback_reason',
+      'display_fx_status',
+      'from_currency',
+      'to_currency',
+      'rate_date',
+      'is_stale',
+      'updated_at',
+      'source_direction',
+    ]) {
+      expect(keys.has(forbiddenKey)).toBe(false);
+    }
   });
 
   it('posts only caller-supplied scenario risk fields with canonical camelCase payload', async () => {

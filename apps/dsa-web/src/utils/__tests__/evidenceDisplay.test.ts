@@ -121,6 +121,49 @@ describe('evidenceDisplay', () => {
     expect(normalized.diagnostics).toBeUndefined();
   });
 
+  it('keeps portfolio source refs and raw diagnostics off the default consumer evidence surface', () => {
+    const normalized = normalizePortfolioRiskEvidence({
+      fxFreshnessState: 'missing',
+      holdingsLineageState: 'holdings_lineage_missing',
+      cashLedgerCompletenessState: 'cash_ledger_incomplete',
+      sourceAuthorityState: 'observation_only',
+      confidenceCap: {
+        value: 55,
+        reasonCodes: ['fx_fallback_1_to_1', 'price_fallback', 'provider_timeout'],
+        limitation_labels: ['仅供风险观察', 'price_fallback'],
+      },
+      portfolioRiskEvidence: {
+        limitationLabels: ['FX 汇率缺失', 'sourceRefs', 'provider_cache_runtime_debug'],
+        sourceRefs: [
+          { id: 's1', provider: 'provider-a' },
+          { id: 's2', provider: 'provider-b' },
+        ],
+        adminDiagnostics: {
+          provider: 'provider-a',
+          cache: 'portfolio_fx_cache',
+          runtime: 'stale_refresh',
+          debug: true,
+        },
+      },
+    });
+
+    const text = [normalized.displayLabel, ...normalized.limitationLabels].join(' ');
+    expect(normalized.engine).toBe('portfolio_risk');
+    expect(normalized.confidenceCap).toBe(55);
+    expect(normalized.sourceRefCount).toBe(2);
+    expect(normalized.limitationLabels).toEqual(expect.arrayContaining([
+      '仅供风险观察',
+      'FX 汇率缺失',
+      '持仓来源待核验',
+      '现金流水不完整',
+      '部分外部数据暂不可用',
+      '备用数据',
+    ]));
+    expect(text).not.toMatch(/sourceRefs|provider|cache|runtime|debug|fx_fallback_1_to_1|price_fallback|reasonCodes/i);
+    expect(normalized.adminReasonCodes).toEqual([]);
+    expect(normalized.diagnostics).toBeUndefined();
+  });
+
   it('does not leak raw enum-like reason terms into scanner user labels', () => {
     const normalized = normalizeScannerEvidence({
       evidencePacket: {

@@ -1428,6 +1428,59 @@ describe('PortfolioPage FX refresh', () => {
     );
   });
 
+  it('shows unavailable FX copy without surfacing raw evidence metadata in the default portfolio UI', async () => {
+    const snapshot = makeSnapshot({
+      includePosition: true,
+      fxStale: true,
+      fxRates: [
+        {
+          fromCurrency: 'USD',
+          toCurrency: 'CNY',
+          rate: null,
+          rateDate: null,
+          source: 'missing',
+          isStale: true,
+          updatedAt: null,
+          sourceDirection: 'fallback_1_to_1',
+        },
+      ],
+    }) as ReturnType<typeof makeSnapshot> & Record<string, unknown>;
+    snapshot.fxFreshnessState = 'missing';
+    snapshot.valuationLineageState = 'fx_fallback_1_to_1';
+    snapshot.confidenceCap = {
+      value: 55,
+      reasonCodes: ['fx_fallback_1_to_1', 'price_fallback', 'provider_timeout'],
+      limitation_labels: ['仅供风险观察'],
+    };
+    snapshot.portfolioRiskEvidence = {
+      limitationLabels: ['FX 汇率缺失', 'sourceRefs', 'provider cache runtime debug'],
+      sourceRefs: [
+        { id: 'fx-source-1', provider: 'provider-a', sourceClass: 'cache_snapshot' },
+      ],
+      adminDiagnostics: {
+        provider: 'provider-a',
+        cache: 'portfolio_fx_cache',
+        runtime: 'stale_refresh',
+        debug: true,
+      },
+    };
+    getSnapshot.mockResolvedValue(snapshot);
+
+    const { container } = render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+    openPortfolioDataNotes();
+    fireEvent.click(getLeftTabButton('汇率'));
+
+    expect(screen.getByTestId('portfolio-consumer-data-notice')).toHaveTextContent('部分汇率数据暂不可用，估值已暂停更新。');
+    expect(screen.getByTestId('portfolio-valuation-panel')).toHaveTextContent('折算暂不可用');
+    expect(screen.getByTestId('portfolio-risk-trust-strip')).toHaveTextContent('汇率暂不可用');
+    expect(screen.getByTestId('portfolio-fx-panel')).toHaveTextContent('汇率待确认');
+    expect(container.textContent || '').not.toMatch(
+      /sourceRefs|source_refs|reasonCodes|reason_codes|provider|cache|runtime|debug|fx_fallback_1_to_1|price_fallback/i,
+    );
+  });
+
   it('keeps native exposure visible when FX conversion is unavailable', async () => {
     getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: true }));
 
