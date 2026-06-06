@@ -242,7 +242,9 @@ function getLatestIntelligenceTime(item: WatchlistItem): string | null {
     item.lastScoredAt,
     item.updatedAt,
   ].filter(Boolean) as string[];
-  return values.sort((left, right) => getTime(right) - getTime(left))[0] || null;
+  return values.reduce<string | null>((latest, value) => (
+    !latest || getTime(value) > getTime(latest) ? value : latest
+  ), null);
 }
 
 function formatFreshness(value?: string | null): string {
@@ -504,11 +506,15 @@ function buildWatchlistInvestorSignalView(
   const stateLabel = formatInvestorSignalState(signal, language);
   const explanation = normalizeText(signal.explanation);
   const reasonCodes = (signal.reasonCodes || [])
-    .map((code) => formatInvestorSignalReason(code, language))
-    .filter(Boolean);
+    .flatMap((code) => {
+      const label = formatInvestorSignalReason(code, language);
+      return label ? [label] : [];
+    });
   const contradictionCodes = (signal.contradictionCodes || [])
-    .map((code) => formatInvestorSignalContradiction(code, language))
-    .filter(Boolean);
+    .flatMap((code) => {
+      const label = formatInvestorSignalContradiction(code, language);
+      return label ? [label] : [];
+    });
   if (!confidenceLabel && !freshnessLabel && !stateLabel && !explanation && reasonCodes.length === 0 && contradictionCodes.length === 0) {
     return null;
   }
@@ -568,8 +574,10 @@ function buildWatchlistCatalystExposureView(
       ].filter(Boolean))),
       reasonLabels: Array.from(new Set(
         (item.reasonCodes || [])
-          .map((code) => formatCatalystExposureLabel(code, language))
-          .filter(Boolean),
+          .flatMap((code) => {
+            const label = formatCatalystExposureLabel(code, language);
+            return label ? [label] : [];
+          }),
       )),
       metadata: buildCatalystExposureMetadata(item, language),
     }));
@@ -612,9 +620,12 @@ function buildWatchlistConclusion(items: WatchlistItem[], language: 'zh' | 'en')
     }
   });
 
-  const topItem = [...items]
-    .filter((item) => getTrustState(item) === 'fresh' && getScannerScore(item) !== null)
-    .sort((left, right) => (getScannerScore(right) ?? Number.NEGATIVE_INFINITY) - (getScannerScore(left) ?? Number.NEGATIVE_INFINITY))[0] || null;
+  const topItem = items.reduce<WatchlistItem | null>((best, item) => {
+    const score = getScannerScore(item);
+    if (getTrustState(item) !== 'fresh' || score === null) return best;
+    if (!best) return item;
+    return score > (getScannerScore(best) ?? Number.NEGATIVE_INFINITY) ? item : best;
+  }, null);
   if (!items.length) {
     return {
       title: language === 'en' ? 'Needs watch items' : '需要观察标的',
@@ -1161,7 +1172,10 @@ const WatchlistPage: React.FC = () => {
   }, [isGuest]);
 
   const marketOptions = useMemo(() => {
-    const markets = Array.from(new Set(items.map((item) => normalizeText(item.market).toLowerCase()).filter(Boolean))).sort();
+    const markets = Array.from(new Set(items.flatMap((item) => {
+      const market = normalizeText(item.market).toLowerCase();
+      return market ? [market] : [];
+    }))).sort();
     return [
       { value: 'all', label: copy.all },
       ...markets.map((market) => ({ value: market, label: formatMarket(market) })),
@@ -1169,7 +1183,10 @@ const WatchlistPage: React.FC = () => {
   }, [copy.all, items]);
 
   const sourceOptions = useMemo(() => {
-    const sources = Array.from(new Set(items.map((item) => normalizeText(item.source).toLowerCase()).filter(Boolean))).sort();
+    const sources = Array.from(new Set(items.flatMap((item) => {
+      const source = normalizeText(item.source).toLowerCase();
+      return source ? [source] : [];
+    }))).sort();
     return [
       { value: 'all', label: copy.all },
       ...sources.map((source) => ({ value: source, label: formatWatchlistOrigin(source, language) })),
@@ -1189,9 +1206,15 @@ const WatchlistPage: React.FC = () => {
   }, [copy.all, copy.themePrefix, copy.universePrefix, items]);
 
   const summary = useMemo(() => {
-    const markets = new Set(items.map((item) => normalizeText(item.market).toLowerCase()).filter(Boolean));
+    const markets = new Set(items.flatMap((item) => {
+      const market = normalizeText(item.market).toLowerCase();
+      return market ? [market] : [];
+    }));
     const scannerSourced = items.filter((item) => normalizeText(item.source).toLowerCase() === 'scanner').length;
-    const latestTime = items.map(getLatestIntelligenceTime).filter(Boolean).sort((left, right) => getTime(right) - getTime(left))[0] || null;
+    const latestTime = items.reduce<string | null>((latest, item) => {
+      const value = getLatestIntelligenceTime(item);
+      return value && (!latest || getTime(value) > getTime(latest)) ? value : latest;
+    }, null);
     return {
       total: items.length,
       markets: markets.size,
@@ -1380,13 +1403,16 @@ const WatchlistPage: React.FC = () => {
     try {
       const response = await watchlistApi.refreshScores(targetItems ? {
         force: true,
-        symbols: targets.map((item) => item.symbol).filter(Boolean),
+        symbols: targets.flatMap((item) => (item.symbol ? [item.symbol] : [])),
       } : { force: true });
       const listResponse = await watchlistApi.listWatchlistItems();
       const failures = Object.fromEntries(
         (response.results || [])
-          .filter((result) => normalizeText(result.status).toLowerCase() === 'failed')
-          .map((result) => [result.symbol, sanitizeFailureReason(result.message || '', '扫描失败')]),
+          .flatMap((result) => (
+            normalizeText(result.status).toLowerCase() === 'failed'
+              ? [[result.symbol, sanitizeFailureReason(result.message || '', '扫描失败')]]
+              : []
+          )),
       );
       setItems(listResponse.items || []);
       setBatchFailures(failures);

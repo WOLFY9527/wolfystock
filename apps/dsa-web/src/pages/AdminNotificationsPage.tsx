@@ -116,7 +116,10 @@ function formatDeliveryError(
   }
 
   const troubleshooting = Array.isArray(diagnostics?.troubleshooting)
-    ? diagnostics.troubleshooting.map((item) => String(item)).filter(Boolean)
+    ? diagnostics.troubleshooting.flatMap((item) => {
+      const message = String(item);
+      return message ? [message] : [];
+    })
     : [];
 
   if (isSslDeliveryError(rawMessage, code)) {
@@ -379,8 +382,10 @@ const AdminNotificationsPage: React.FC = () => {
       severityMin: draft.severityMin,
       eventTypes: draft.eventTypesText
         .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean),
+        .flatMap((item) => {
+          const eventType = item.trim();
+          return eventType ? [eventType] : [];
+        }),
       config,
     };
   }, [draft]);
