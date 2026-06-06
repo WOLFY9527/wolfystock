@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Activity, ExternalLink } from 'lucide-react';
 import { marketApi, type MarketDataReadinessCheck, type MarketDataReadinessResponse } from '../api/market';
 import {
@@ -233,12 +233,6 @@ function surfaceLabel(surface: string): string {
   }[surface] || surface.replace(/_/g, ' ');
 }
 
-function uniqueLabels(values: Array<string | null | undefined>): string[] {
-  return values
-    .map((value) => String(value || '').trim())
-    .filter((value, index, list) => Boolean(value) && list.indexOf(value) === index);
-}
-
 function formatReadableList(values: string[], empty = '暂无可展示项'): string {
   if (!values.length) return empty;
   const visible = values.slice(0, 3);
@@ -314,23 +308,52 @@ function buildProviderOpsTopSummary(
   rows: ProviderOperationsMatrixRow[],
   checks: MarketDataReadinessCheck[],
 ): ProviderOpsTopSummaryData {
-  const availableSources = uniqueLabels([
-    ...items.filter(operationItemIsAvailable).map(providerLabel),
-    ...rows.filter(matrixRowIsPrimaryAvailable).map(sourceGapName),
-  ]);
-  const missingSources = uniqueLabels([
-    ...rows.filter(matrixRowHasMissingSetup).map(sourceGapName),
-    ...checks.filter(shouldIncludeChecklistReadinessCheck).map(readinessCheckName),
-  ]);
-  const diagnosticSources = uniqueLabels(
-    rows
-      .filter(matrixRowIsDiagnosticOnly)
-      .map(sourceGapName),
-  );
-  const affectedSurfaces = uniqueLabels([
-    ...rows.flatMap(resolveChecklistMatrixSurfaces),
-    ...checks.flatMap(resolveChecklistReadinessSurfaces),
-  ]).filter((surface) => surface !== PROVIDER_OPS_DIAGNOSTIC_SURFACE);
+  const availableSources: string[] = [];
+  const availableSourceSet = new Set<string>();
+  const missingSources: string[] = [];
+  const missingSourceSet = new Set<string>();
+  const diagnosticSources: string[] = [];
+  const diagnosticSourceSet = new Set<string>();
+  const affectedSurfaces: string[] = [];
+  const affectedSurfaceSet = new Set<string>();
+
+  const pushUniqueValue = (list: string[], seen: Set<string>, value: string): void => {
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    list.push(value);
+  };
+
+  for (const item of items) {
+    if (operationItemIsAvailable(item)) {
+      pushUniqueValue(availableSources, availableSourceSet, providerLabel(item));
+    }
+  }
+
+  for (const row of rows) {
+    if (matrixRowIsPrimaryAvailable(row)) {
+      pushUniqueValue(availableSources, availableSourceSet, sourceGapName(row));
+    }
+    if (matrixRowHasMissingSetup(row)) {
+      pushUniqueValue(missingSources, missingSourceSet, sourceGapName(row));
+    }
+    if (matrixRowIsDiagnosticOnly(row)) {
+      pushUniqueValue(diagnosticSources, diagnosticSourceSet, sourceGapName(row));
+    }
+    for (const surface of resolveChecklistMatrixSurfaces(row)) {
+      if (surface === PROVIDER_OPS_DIAGNOSTIC_SURFACE) continue;
+      pushUniqueValue(affectedSurfaces, affectedSurfaceSet, surface);
+    }
+  }
+
+  for (const check of checks) {
+    if (shouldIncludeChecklistReadinessCheck(check)) {
+      pushUniqueValue(missingSources, missingSourceSet, readinessCheckName(check));
+    }
+    for (const surface of resolveChecklistReadinessSurfaces(check)) {
+      if (surface === PROVIDER_OPS_DIAGNOSTIC_SURFACE) continue;
+      pushUniqueValue(affectedSurfaces, affectedSurfaceSet, surface);
+    }
+  }
 
   return {
     availableSources,
@@ -350,12 +373,23 @@ function summarizeReadinessFacts(check: MarketDataReadinessCheck): string[] {
   }
 
   const facts: string[] = [];
-  const envKeys = Array.isArray(details.envKeys) ? details.envKeys.map((key) => String(key)).filter(Boolean) : [];
+  const collectStringValues = (values: unknown): string[] => {
+    if (!Array.isArray(values)) return [];
+    const normalizedValues: string[] = [];
+    for (const value of values) {
+      const normalized = String(value ?? '').trim();
+      if (!normalized) continue;
+      normalizedValues.push(normalized);
+    }
+    return normalizedValues;
+  };
+
+  const envKeys = collectStringValues(details.envKeys);
   const envKey = typeof details.envKey === 'string' ? details.envKey.trim() : '';
-  const availableModules = Array.isArray(details.availableModules) ? details.availableModules.map((name) => String(name)).filter(Boolean) : [];
-  const missingModules = Array.isArray(details.missingModules) ? details.missingModules.map((name) => String(name)).filter(Boolean) : [];
-  const representativeSymbols = Array.isArray(details.representativeSymbols) ? details.representativeSymbols.map((symbol) => String(symbol)).filter(Boolean) : [];
-  const missingSymbols = Array.isArray(details.missingSymbols) ? details.missingSymbols.map((symbol) => String(symbol)).filter(Boolean) : [];
+  const availableModules = collectStringValues(details.availableModules);
+  const missingModules = collectStringValues(details.missingModules);
+  const representativeSymbols = collectStringValues(details.representativeSymbols);
+  const missingSymbols = collectStringValues(details.missingSymbols);
   const existingCount = typeof details.existingCount === 'number' ? details.existingCount : null;
 
   if (envKeys.length) {
@@ -460,12 +494,23 @@ function matrixCacheRequired(row: ProviderOperationsMatrixRow): boolean {
 }
 
 function matrixReasonCodes(row: ProviderOperationsMatrixRow): string[] {
-  const reasons = [
-    ...(row.routerReasonCodes || []),
-    ...(row.reasonCodes || []),
-    row.missingProviderReason || null,
-    row.degradationReason || null,
-  ].filter((value, index, list): value is string => Boolean(value) && list.indexOf(value) === index);
+  const reasons: string[] = [];
+  const seen = new Set<string>();
+  const pushReason = (value: string | null | undefined): void => {
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    reasons.push(value);
+  };
+
+  for (const value of row.routerReasonCodes || []) {
+    pushReason(value);
+  }
+  for (const value of row.reasonCodes || []) {
+    pushReason(value);
+  }
+  pushReason(row.missingProviderReason);
+  pushReason(row.degradationReason);
+
   return reasons.slice(0, 4);
 }
 
@@ -565,30 +610,36 @@ const READINESS_DIAGNOSTIC_GROUPS: Array<{
 ];
 
 function capabilityHaystack(row: ProviderOperationsMatrixRow): string[] {
-  return [
-    row.providerId,
-    row.providerName,
-    row.providerCategory,
-    row.sourceType,
-    row.sourceTier,
-    row.trustLevel,
-    row.runtimeState,
-    row.credentialState,
-    row.dependencyState,
-    row.authorityBasis,
-    row.universe,
-    row.missingProviderReason,
-    row.degradationReason,
-    ...(row.supportedCapabilities || []),
-    ...(row.affectedSurfaces || []),
-    ...(row.routerReasonCodes || []),
-    ...(row.reasonCodes || []),
-    ...(row.fulfilledMetrics || []),
-    ...(row.missingMetrics || []),
-    ...(row.requiredSourceTiers || []),
-  ]
-    .map((value) => String(value || '').trim().toLowerCase())
-    .filter(Boolean);
+  const values: string[] = [];
+  const pushNormalized = (value: unknown): void => {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) return;
+    values.push(normalized);
+  };
+
+  pushNormalized(row.providerId);
+  pushNormalized(row.providerName);
+  pushNormalized(row.providerCategory);
+  pushNormalized(row.sourceType);
+  pushNormalized(row.sourceTier);
+  pushNormalized(row.trustLevel);
+  pushNormalized(row.runtimeState);
+  pushNormalized(row.credentialState);
+  pushNormalized(row.dependencyState);
+  pushNormalized(row.authorityBasis);
+  pushNormalized(row.universe);
+  pushNormalized(row.missingProviderReason);
+  pushNormalized(row.degradationReason);
+
+  for (const value of row.supportedCapabilities || []) pushNormalized(value);
+  for (const value of row.affectedSurfaces || []) pushNormalized(value);
+  for (const value of row.routerReasonCodes || []) pushNormalized(value);
+  for (const value of row.reasonCodes || []) pushNormalized(value);
+  for (const value of row.fulfilledMetrics || []) pushNormalized(value);
+  for (const value of row.missingMetrics || []) pushNormalized(value);
+  for (const value of row.requiredSourceTiers || []) pushNormalized(value);
+
+  return values;
 }
 
 function sourceGapCurrentState(row: ProviderOperationsMatrixRow): string {
@@ -662,10 +713,14 @@ function sourceGapBadges(row: ProviderOperationsMatrixRow): Array<{ label: strin
 }
 
 function sourceGapRowsForCapability(rows: ProviderOperationsMatrixRow[], capability: SourceGapCapability): ProviderOperationsMatrixRow[] {
-  return rows
-    .filter((row) => capability.match(row))
-    .filter((row) => sourceGapBlocksScoreGrade(row) || row.sourceType === 'missing' || row.inertMetadataOnly)
-    .slice(0, 3);
+  const matches: ProviderOperationsMatrixRow[] = [];
+  for (const row of rows) {
+    if (!capability.match(row)) continue;
+    if (!sourceGapBlocksScoreGrade(row) && row.sourceType !== 'missing' && !row.inertMetadataOnly) continue;
+    matches.push(row);
+    if (matches.length >= 3) break;
+  }
+  return matches;
 }
 
 function sourceGapName(row: ProviderOperationsMatrixRow): string {
@@ -690,9 +745,14 @@ function checklistSurfaceLabel(surface: string): string | null {
 }
 
 function resolveChecklistSurfaces(surfaces: string[] | undefined): string[] {
-  const labels = (surfaces || [])
-    .map((surface) => checklistSurfaceLabel(surface))
-    .filter((surface, index, list): surface is string => Boolean(surface) && list.indexOf(surface) === index);
+  const labels: string[] = [];
+  const seen = new Set<string>();
+  for (const surface of surfaces || []) {
+    const label = checklistSurfaceLabel(surface);
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    labels.push(label);
+  }
   return labels.length ? labels : [PROVIDER_OPS_DIAGNOSTIC_SURFACE];
 }
 
@@ -892,39 +952,37 @@ function buildSetupChecklistEntries(
 ): SetupChecklistEntry[] {
   const entries: SetupChecklistEntry[] = [];
 
-  rows
-    .filter(shouldIncludeChecklistMatrixRow)
-    .forEach((row) => {
-      const copy = checklistCopyForMatrixRow(row);
-      const badges = checklistBadgesForMatrixRow(row);
-      resolveChecklistMatrixSurfaces(row).forEach((surface) => {
-        entries.push({
-          key: `matrix:${row.providerId}:${surface}`,
-          surface,
-          title: copy.title,
-          whyItMatters: copy.whyItMatters,
-          safeNextStep: copy.safeNextStep,
-          badges,
-        });
+  for (const row of rows) {
+    if (!shouldIncludeChecklistMatrixRow(row)) continue;
+    const copy = checklistCopyForMatrixRow(row);
+    const badges = checklistBadgesForMatrixRow(row);
+    for (const surface of resolveChecklistMatrixSurfaces(row)) {
+      entries.push({
+        key: `matrix:${row.providerId}:${surface}`,
+        surface,
+        title: copy.title,
+        whyItMatters: copy.whyItMatters,
+        safeNextStep: copy.safeNextStep,
+        badges,
       });
-    });
+    }
+  }
 
-  checks
-    .filter(shouldIncludeChecklistReadinessCheck)
-    .forEach((check) => {
-      const copy = checklistCopyForReadinessCheck(check);
-      const badges = checklistBadgesForReadinessCheck(check);
-      resolveChecklistReadinessSurfaces(check).forEach((surface) => {
-        entries.push({
-          key: `readiness:${check.id}:${surface}`,
-          surface,
-          title: copy.title,
-          whyItMatters: copy.whyItMatters,
-          safeNextStep: copy.safeNextStep,
-          badges,
-        });
+  for (const check of checks) {
+    if (!shouldIncludeChecklistReadinessCheck(check)) continue;
+    const copy = checklistCopyForReadinessCheck(check);
+    const badges = checklistBadgesForReadinessCheck(check);
+    for (const surface of resolveChecklistReadinessSurfaces(check)) {
+      entries.push({
+        key: `readiness:${check.id}:${surface}`,
+        surface,
+        title: copy.title,
+        whyItMatters: copy.whyItMatters,
+        safeNextStep: copy.safeNextStep,
+        badges,
       });
-    });
+    }
+  }
 
   return entries;
 }
@@ -1044,17 +1102,25 @@ const TickflowEntitlementRow: React.FC<{ projection: TickflowProjection }> = ({ 
 
 function selectPreferredProvider(items: MarketProviderOperationItem[]): MarketProviderOperationItem | null {
   if (!items.length) return null;
-  return [...items].sort((left, right) => {
-    const leftScore = Number(Boolean(left.errorSummary)) * 10
-      + Number(Boolean(left.isFallback || left.fallbackUsed)) * 6
-      + Number(Boolean(left.isStale)) * 4
-      + Number(Boolean(left.isRefreshing)) * 2;
-    const rightScore = Number(Boolean(right.errorSummary)) * 10
-      + Number(Boolean(right.isFallback || right.fallbackUsed)) * 6
-      + Number(Boolean(right.isStale)) * 4
-      + Number(Boolean(right.isRefreshing)) * 2;
-    return rightScore - leftScore;
-  })[0];
+  const providerScore = (item: MarketProviderOperationItem): number => (
+    Number(Boolean(item.errorSummary)) * 10
+    + Number(Boolean(item.isFallback || item.fallbackUsed)) * 6
+    + Number(Boolean(item.isStale)) * 4
+    + Number(Boolean(item.isRefreshing)) * 2
+  );
+
+  let preferred = items[0];
+  let preferredScore = providerScore(preferred);
+
+  for (let index = 1; index < items.length; index += 1) {
+    const candidate = items[index];
+    const candidateScore = providerScore(candidate);
+    if (candidateScore <= preferredScore) continue;
+    preferred = candidate;
+    preferredScore = candidateScore;
+  }
+
+  return preferred;
 }
 
 const DrillLink: React.FC<{ drill?: AdminLogDrillThrough; className?: string }> = ({ drill, className }) => {
@@ -1235,22 +1301,17 @@ const ProviderSetupChecklistPanel: React.FC<{
   isLoading: boolean;
   surfaceFocus: ProductSetupSurface | null;
 }> = ({ rows, checks, isLoading, surfaceFocus }) => {
-  const entries = useMemo(() => buildSetupChecklistEntries(rows, checks), [rows, checks]);
-  const visibleEntries = useMemo(
-    () => surfaceFocus ? entries.filter((entry) => entry.surface === surfaceFocus.label) : entries,
-    [entries, surfaceFocus],
-  );
-  const groups = useMemo(
-    () => CHECKLIST_SURFACE_ORDER
-      .map((surface) => ({
-        surface,
-        items: visibleEntries
-          .filter((entry) => entry.surface === surface)
-          .sort((left, right) => left.title.localeCompare(right.title)),
-      }))
-      .filter((group) => group.items.length > 0),
-    [visibleEntries],
-  );
+  const entries = buildSetupChecklistEntries(rows, checks);
+  const visibleEntries = surfaceFocus ? entries.filter((entry) => entry.surface === surfaceFocus.label) : entries;
+  const groups: Array<{ surface: string; items: SetupChecklistEntry[] }> = [];
+
+  for (const surface of CHECKLIST_SURFACE_ORDER) {
+    const items = visibleEntries
+      .filter((entry) => entry.surface === surface)
+      .sort((left, right) => left.title.localeCompare(right.title));
+    if (!items.length) continue;
+    groups.push({ surface, items });
+  }
 
   return (
     <TerminalNestedBlock data-testid="market-provider-setup-checklist" className="mt-4 bg-black/10 px-3 py-3">
@@ -1727,16 +1788,14 @@ const MarketDataReadinessPanel: React.FC<{
   onSymbolSubmit: () => void;
 }> = ({ data, isLoading, error, symbolInput, onSymbolInputChange, onSymbolSubmit }) => {
   const checks = data?.checks ?? EMPTY_READINESS_CHECKS;
-  const groupedChecks = useMemo(() => {
-    return READINESS_DIAGNOSTIC_GROUPS
-      .map((group) => ({
-        ...group,
-        items: checks
-          .filter((check) => readinessDiagnosticGroupId(check) === group.id)
-          .sort((left, right) => left.severity.localeCompare(right.severity) || left.status.localeCompare(right.status) || readinessCheckName(left).localeCompare(readinessCheckName(right))),
-      }))
-      .filter((group) => group.items.length > 0);
-  }, [checks]);
+  const groupedChecks: Array<(typeof READINESS_DIAGNOSTIC_GROUPS)[number] & { items: MarketDataReadinessCheck[] }> = [];
+  for (const group of READINESS_DIAGNOSTIC_GROUPS) {
+    const items = checks
+      .filter((check) => readinessDiagnosticGroupId(check) === group.id)
+      .sort((left, right) => left.severity.localeCompare(right.severity) || left.status.localeCompare(right.status) || readinessCheckName(left).localeCompare(readinessCheckName(right)));
+    if (!items.length) continue;
+    groupedChecks.push({ ...group, items });
+  }
 
   return (
     <TerminalPanel as="section" className="col-span-12">
@@ -1977,57 +2036,42 @@ const MarketProviderOperationsPage: React.FC = () => {
   const readinessChecks = readiness?.checks ?? EMPTY_READINESS_CHECKS;
   const cacheStates = response?.cacheStates ?? EMPTY_PROVIDER_CACHE_STATES;
   const eventRollups = response?.eventRollups ?? EMPTY_PROVIDER_EVENT_ROLLUPS;
-  const summary = useMemo(() => normalizeSummary(response?.summary ?? SUMMARY_DEFAULTS), [response?.summary]);
+  const summary = normalizeSummary(response?.summary ?? SUMMARY_DEFAULTS);
   const degradedCount = summary.fallbackCount + summary.partialCount + summary.unavailableCount + summary.errorCount + summary.failureCount;
-  const preferredProvider = useMemo(() => selectPreferredProvider(items), [items]);
+  const preferredProvider = selectPreferredProvider(items);
 
-  const effectiveSelectedProviderKey = useMemo(() => {
-    if (!items.length) {
-      return null;
-    }
-    if (selectedProviderKey && items.some((item) => providerKey(item) === selectedProviderKey)) {
-      return selectedProviderKey;
-    }
-    return providerKey(preferredProvider || items[0]);
-  }, [items, preferredProvider, selectedProviderKey]);
+  const effectiveSelectedProviderKey = !items.length
+    ? null
+    : (selectedProviderKey && items.some((item) => providerKey(item) === selectedProviderKey))
+      ? selectedProviderKey
+      : providerKey(preferredProvider || items[0]);
 
-  const selectedItem = useMemo(
-    () => items.find((item) => providerKey(item) === effectiveSelectedProviderKey) || preferredProvider || null,
-    [effectiveSelectedProviderKey, items, preferredProvider],
-  );
+  const selectedItem = items.find((item) => providerKey(item) === effectiveSelectedProviderKey) || preferredProvider || null;
 
-  const topException = useMemo(() => {
-    const withReason = eventRollups.find((rollup) => rollup.topReasons.length) || null;
-    if (withReason) return sanitizeOperatorText(withReason.topReasons[0]);
-    const withItemError = items.find((item) => item.errorSummary || item.warning) || null;
-    return withItemError ? lastFailureLabel(withItemError) : '暂无数据';
-  }, [eventRollups, items]);
+  const withReason = eventRollups.find((rollup) => rollup.topReasons.length) || null;
+  const withItemError = items.find((item) => item.errorSummary || item.warning) || null;
+  const topException = withReason ? sanitizeOperatorText(withReason.topReasons[0]) : withItemError ? lastFailureLabel(withItemError) : '暂无数据';
 
-  const operatorMetrics = useMemo(() => {
-    const totalItems = summary.totalItems || items.length;
-    const healthValue = totalItems > 0 ? `${formatNumber(summary.liveCount, 0)}/${formatNumber(totalItems, 0)} 实时` : '暂无数据';
-    const circuitValue = totalItems > 0 ? (degradedCount > 0 ? `${formatNumber(degradedCount, 0)} 降级` : '正常') : '待统计';
-    const cacheValue = cacheStates.length > 0
-      ? cacheStates.some((state) => state.isRefreshing)
-        ? '刷新中'
-        : cacheStates.some((state) => state.isFresh === false)
-          ? `${formatNumber(cacheStates.filter((state) => state.isFresh === false).length, 0)} 过期`
-          : `${formatNumber(cacheStates.length, 0)} 正常`
-      : '待统计';
+  const totalItems = summary.totalItems || items.length;
+  const healthValue = totalItems > 0 ? `${formatNumber(summary.liveCount, 0)}/${formatNumber(totalItems, 0)} 实时` : '暂无数据';
+  const circuitValue = totalItems > 0 ? (degradedCount > 0 ? `${formatNumber(degradedCount, 0)} 降级` : '正常') : '待统计';
+  const cacheValue = cacheStates.length > 0
+    ? cacheStates.some((state) => state.isRefreshing)
+      ? '刷新中'
+      : cacheStates.some((state) => state.isFresh === false)
+        ? `${formatNumber(cacheStates.filter((state) => state.isFresh === false).length, 0)} 过期`
+        : `${formatNumber(cacheStates.length, 0)} 正常`
+    : '待统计';
 
-    return [
-      { label: '数据源健康', value: healthValue, subvalue: totalItems > 0 ? `共 ${formatNumber(totalItems, 0)} 个数据源` : '暂无 provider 快照' },
-      { label: '熔断状态', value: circuitValue, subvalue: degradedCount > 0 ? '优先核对降级与失败路径' : '当前未见降级聚合' },
-      { label: '失败率', value: safeRatio(summary.failureCount, summary.eventCount), subvalue: summary.eventCount > 0 ? `事件 ${formatNumber(summary.eventCount, 0)}` : '待统计' },
-      { label: '缓存状态', value: cacheValue, subvalue: cacheStates.length > 0 ? `快照 ${formatNumber(cacheStates.length, 0)}` : '暂无缓存快照' },
-      { label: '最近异常', value: topException, subvalue: eventRollups.length > 0 ? '保留异常可见性，但不暴露敏感内容' : '窗口内暂无异常' },
-    ];
-  }, [cacheStates, degradedCount, eventRollups.length, items.length, summary, topException]);
+  const operatorMetrics = [
+    { label: '数据源健康', value: healthValue, subvalue: totalItems > 0 ? `共 ${formatNumber(totalItems, 0)} 个数据源` : '暂无 provider 快照' },
+    { label: '熔断状态', value: circuitValue, subvalue: degradedCount > 0 ? '优先核对降级与失败路径' : '当前未见降级聚合' },
+    { label: '失败率', value: safeRatio(summary.failureCount, summary.eventCount), subvalue: summary.eventCount > 0 ? `事件 ${formatNumber(summary.eventCount, 0)}` : '待统计' },
+    { label: '缓存状态', value: cacheValue, subvalue: cacheStates.length > 0 ? `快照 ${formatNumber(cacheStates.length, 0)}` : '暂无缓存快照' },
+    { label: '最近异常', value: topException, subvalue: eventRollups.length > 0 ? '保留异常可见性，但不暴露敏感内容' : '窗口内暂无异常' },
+  ];
 
-  const topSummary = useMemo(
-    () => buildProviderOpsTopSummary(items, matrixRows, readinessChecks),
-    [items, matrixRows, readinessChecks],
-  );
+  const topSummary = buildProviderOpsTopSummary(items, matrixRows, readinessChecks);
   const l0TrustState: AdminOpsTrustState = error && !response
     ? 'blocked'
     : isLoading && !response
