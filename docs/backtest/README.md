@@ -59,3 +59,31 @@ public-safety wording.
 - Backtest UI and docs must not imply broker/order execution.
 - Backtest calculations and stored result semantics are protected runtime
   behavior.
+
+## Research Validation Capability Matrix
+
+Use this matrix before opening any backtest research-validation task. It is a
+boundary map for existing scaffolds, not a feature roadmap.
+
+| Lane | Current status | Existing boundary | Future-work instruction |
+| --- | --- | --- | --- |
+| Walk-forward / out-of-sample validation | Diagnostic/readback-only | Runtime walk-forward replays the same parsed strategy across rolling windows; stored OOS/parameter readiness exports are diagnostic and do not claim validated model selection. | Do not add a parallel OOS adapter. Reuse current robustness/OOS readiness surfaces unless a later contract explicitly approves real optimizer training and OOS selection. |
+| Parameter stability / heatmaps | Diagnostic/readback-only | Compare payloads expose `heatmap_projection` and `parameter_stability_evidence`; helper logic can aggregate caller-supplied results but does not execute grid searches or promote winners. | Do not add a parallel heatmap or parameter-stability namespace. Treat current heatmaps as stored compare projections, not training output. |
+| Transaction cost and slippage modeling | Implemented with bounded assumptions; richer modeling deferred | The deterministic rule engine supports bounded per-side `fee_bps` and `slippage_bps`; cost/capacity helpers are additive diagnostics and are not default runtime math. | Do not add a duplicate execution-cost model. Any execution-realism expansion needs a versioned execution model and fixture plan first. |
+| Stress / Monte Carlo | Diagnostic/readback-only | Robustness reruns and stored-first support exports cover stress and Monte Carlo evidence when available; exports do not rerun calculations. | Do not add duplicate robustness exports. Keep provider-backed replay, calibration, liquidity tails, and regime-tail modeling deferred. |
+| Portfolio / multi-asset rebalancing | Not supported | Universe jobs are sequential single-symbol research wrappers over the existing rule engine. They are not portfolio allocation, rebalancing, or multi-asset ledger backtests. | Do not treat universe jobs as portfolio rebalancing. Portfolio and multi-asset allocation remain deferred. |
+| Performance / regime attribution | Implemented core metrics; regime attribution diagnostic/readback-only | Core return/risk metrics exist. Regime attribution surfaces are stored-first readiness/gap projections and do not prove daily PnL causality. | Keep attribution diagnostic until a source, as-of join, benchmark, and PnL allocation contract is approved. |
+| Current test/protected-boundary status | Protected | Existing tests cover golden compute behavior, execution-model metadata, stored-first exports, API/readback contracts, universe local-only behavior, and no-trading language. | Future prompts must preserve backtest calculations, fills, costs, metrics, stored result semantics, no-advice copy, and protected readback authority. |
+
+## Duplicate-Feature Warnings
+
+- Do not add parallel OOS, walk-forward, or OOS-readiness abstractions.
+- Do not add parallel heatmap or parameter-stability abstractions.
+- Do not add duplicate robustness, support-export, or readback export surfaces.
+- Do not add a duplicate execution-cost model beside the existing bounded
+  fee/slippage assumptions and diagnostic cost/capacity helper.
+- Do not treat universe jobs as portfolio allocation or rebalancing.
+- Do not merge legacy historical evaluation and deterministic rule backtest
+  abstractions; they remain separate contract lanes.
+- Defer live trading integration, broker connectivity, order placement, and
+  full event-driven backtesting until a later approved contract scopes them.
