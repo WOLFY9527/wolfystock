@@ -96,7 +96,7 @@ Next candidates:
 
 ## Batch 2: Small Display Derivation Cleanup
 
-Status: validated locally, ready for immediate checkpoint commit and push.
+Status: committed and pushed as checkpoint `fdd3c756`.
 
 Files changed:
 
@@ -138,6 +138,52 @@ Next candidates:
 - Continue with small pure derivations: `dataSourceLibraryShared.ts` `Set` lookup, remaining `js-hoist-intl`, and immutable sort/copy fixes.
 - Avoid `AdminLogsPage.tsx` manual `useCallback` cleanup for now because several callbacks are `useEffect` dependencies; direct removal can change behavior in non-compiler test environments.
 - Defer state/effect flow findings unless focused tests cover the exact flow and the change is narrowly mechanical.
+
+## Batch 3: Watchlist Date Formatter Hoist
+
+Status: validated locally, ready for immediate checkpoint commit and push.
+
+Files changed:
+
+- `apps/dsa-web/src/pages/WatchlistPage.tsx`
+
+Changes:
+
+- Hoisted language-specific watchlist date-time formatters to module scope.
+- Reverted an attempted `dataSourceLibraryShared.ts` alias lookup cleanup before checkpoint because it did not reduce React Doctor diagnostics.
+
+Diagnostics after batch:
+
+- Score: `61`
+- Total diagnostics: `520`
+- Errors: `112`
+- Warnings: `408`
+- Affected files: `44`
+- Reduced total diagnostics from previous checkpoint: `1`
+- Reduced total diagnostics from baseline: `47`
+- Reduced by rule from previous checkpoint:
+  - `js-hoist-intl`: `4 -> 3` (`-1`)
+- React Doctor diff for changed file: `0` diagnostics.
+
+Validations run:
+
+- `git diff --check` -> pass
+- `./scripts/release_secret_scan.sh` -> pass
+- `npm --prefix apps/dsa-web run test -- 'src/pages/__tests__/WatchlistPage.test.tsx' --no-file-parallelism` -> pass, `47` tests
+- `npm --prefix apps/dsa-web run lint` -> pass
+- `npm --prefix apps/dsa-web run build` -> pass with existing Vite chunk-size warning
+- `npx react-doctor@latest --json --json-compact --yes --no-score` -> remaining diagnostics expected, totals above
+- `npx react-doctor@latest --score --yes` -> `61`
+
+Validation note:
+
+- An earlier concurrent gate run of `npm --prefix apps/dsa-web run test -- 'src/components/settings/__tests__/dataSourceLibraryShared.test.ts' 'src/pages/__tests__/WatchlistPage.test.tsx'` failed 2 Watchlist assertions while lint/build/React Doctor were running in parallel. The same focused command immediately passed `52` tests when rerun, and the Watchlist file passed `47` tests with `--no-file-parallelism`. Treated as a resource/timing flake, not a product-code failure.
+
+Next candidates:
+
+- Remaining `js-hoist-intl`: `HomeBentoDashboardPage.tsx` and carefully bounded `UserScannerPage.tsx` formatter helpers.
+- Remaining immutable sort/copy: evaluate `OptionsLabPage.tsx` first; avoid scanner ranking/filtering/cap semantics unless the line is purely display-local and tests prove parity.
+- Manual memoization: continue only where removing memo does not affect function identity used by effects or child memo contracts in Vitest/non-compiler paths.
 
 ## Protected Domain Confirmation
 

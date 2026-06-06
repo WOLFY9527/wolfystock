@@ -133,16 +133,26 @@ function formatWatchlistOrigin(value?: string | null, language: 'zh' | 'en' = 'z
   return language === 'en' ? 'Watch item' : '观察标的';
 }
 
-function formatDateTime(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
-  if (!value) return '--';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
+const WATCHLIST_DATE_TIME_FORMATTERS = {
+  en: new Intl.DateTimeFormat('en-US', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(date);
+  }),
+  zh: new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }),
+} as const;
+
+function formatDateTime(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  if (!value) return '--';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return WATCHLIST_DATE_TIME_FORMATTERS[language].format(date);
 }
 
 function titleCaseFromSnake(value?: string | null): string {
