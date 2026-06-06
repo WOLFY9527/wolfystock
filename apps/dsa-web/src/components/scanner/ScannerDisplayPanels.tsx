@@ -136,14 +136,12 @@ export function PillTagGroup({
   const isMarketGroup = variant === 'market';
 
   return (
-    <div className={compact ? 'flex min-w-0 flex-col gap-1 md:flex-row md:items-center md:gap-2' : 'flex min-w-0 flex-col gap-1.5'}>
-      <span className={compact ? 'shrink-0 text-[10px] uppercase tracking-[0.16em] text-white/40' : 'text-[10px] uppercase tracking-[0.16em] text-white/40'}>{label}</span>
+    <fieldset className={compact ? 'flex min-w-0 flex-col gap-1 md:flex-row md:items-center md:gap-2' : 'flex min-w-0 flex-col gap-1.5'}>
+      <legend className={compact ? 'shrink-0 text-[10px] uppercase tracking-[0.16em] text-white/40' : 'text-[10px] uppercase tracking-[0.16em] text-white/40'}>{label}</legend>
       <div
         className={isMarketGroup
           ? 'ui-scroll-x-quiet flex min-w-0 max-w-full rounded-xl border border-white/5 bg-black/40 p-1'
           : 'flex min-w-0 flex-wrap gap-1.5'}
-        role="group"
-        aria-label={label}
         data-testid={testId}
       >
         {options.map((option) => {
@@ -167,7 +165,7 @@ export function PillTagGroup({
           );
         })}
       </div>
-    </div>
+    </fieldset>
   );
 }
 

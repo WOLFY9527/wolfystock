@@ -61,7 +61,7 @@ const GlobalLoader: React.FC<GlobalLoaderProps> = ({ fading = false }) => {
       <div
         className="absolute inset-[-40px] bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:40px_40px]"
         style={{
-          animation: 'quant-grid-rise 14s linear infinite',
+          animation: 'quant-grid-rise 900ms linear infinite',
           maskImage: 'radial-gradient(circle, black 40%, transparent 80%)',
           WebkitMaskImage: 'radial-gradient(circle, black 40%, transparent 80%)',
         }}

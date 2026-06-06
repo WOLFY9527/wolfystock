@@ -233,13 +233,18 @@ export const NotificationChannelsConfig: React.FC<NotificationChannelsConfigProp
     }
 
     setSavingChannelId(channel.id);
+    let saveError: unknown;
     try {
       await onSaveItems(
         changedItems,
         language === 'zh' ? `${channel.label} 通知通道已保存` : `${channel.label} notification channel saved`,
       );
-    } finally {
-      setSavingChannelId(null);
+    } catch (error) {
+      saveError = error;
+    }
+    setSavingChannelId(null);
+    if (saveError) {
+      throw saveError;
     }
   };
 

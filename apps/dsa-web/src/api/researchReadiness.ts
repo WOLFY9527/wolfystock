@@ -85,9 +85,11 @@ function isRecord(value: unknown): value is UnknownRecord {
 
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => (typeof item === 'string' ? item.trim() : ''))
-    .filter(Boolean);
+  return value.flatMap((item) => {
+    if (typeof item !== 'string') return [];
+    const text = item.trim();
+    return text ? [text] : [];
+  });
 }
 
 function uniqueStrings(values: Array<string | null | undefined>): string[] {

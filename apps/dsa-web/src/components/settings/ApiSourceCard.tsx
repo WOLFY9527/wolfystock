@@ -27,6 +27,7 @@ type ApiSourceCardProps = {
 
 const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/10 text-xs transition-colors';
 const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
+const EMPTY_TEXT_LIST: string[] = [];
 
 export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
   testId,
@@ -34,11 +35,11 @@ export const ApiSourceCard: React.FC<ApiSourceCardProps> = ({
   kindLabel,
   validationBadge,
   isConfigured,
-  capabilities = [],
+  capabilities = EMPTY_TEXT_LIST,
   impactLabel,
-  impactSurfaces = [],
-  impactCapabilities = [],
-  impactStates = [],
+  impactSurfaces = EMPTY_TEXT_LIST,
+  impactCapabilities = EMPTY_TEXT_LIST,
+  impactStates = EMPTY_TEXT_LIST,
   impactEvidenceText,
   statusText,
   validationMessage,

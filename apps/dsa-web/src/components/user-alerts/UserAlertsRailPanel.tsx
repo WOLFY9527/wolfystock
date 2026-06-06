@@ -38,6 +38,32 @@ const INITIAL_FORM: FormState = {
   note: '',
 };
 
+const THRESHOLD_FORMATTERS = {
+  integer: {
+    zh: new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 }),
+    en: new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }),
+  },
+  decimal: {
+    zh: new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    en: new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+  },
+} as const;
+
+const RULE_DATE_FORMATTERS = {
+  zh: new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }),
+  en: new Intl.DateTimeFormat('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }),
+} as const;
+
 const zhCopy = {
   title: '站内提醒',
   summary: '仅当前标的 · 默认收起',
@@ -95,10 +121,7 @@ const enCopy: typeof zhCopy = {
 };
 
 function formatRuleThreshold(direction: UserAlertDirection, thresholdPrice: number, language: 'zh' | 'en'): string {
-  const formatter = new Intl.NumberFormat(language === 'en' ? 'en-US' : 'zh-CN', {
-    minimumFractionDigits: thresholdPrice % 1 === 0 ? 0 : 2,
-    maximumFractionDigits: 2,
-  });
+  const formatter = THRESHOLD_FORMATTERS[thresholdPrice % 1 === 0 ? 'integer' : 'decimal'][language];
   const prefix = direction === 'above'
     ? (language === 'en' ? 'Above' : '高于')
     : (language === 'en' ? 'Below' : '低于');
@@ -109,12 +132,7 @@ function formatRuleDate(value?: string | null, language: 'zh' | 'en' = 'zh'): st
   if (!value) return '--';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(parsed);
+  return RULE_DATE_FORMATTERS[language].format(parsed);
 }
 
 function normalizeRules(symbol: string, items: UserAlertRule[]): UserAlertRule[] {
