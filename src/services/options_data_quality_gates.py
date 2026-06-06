@@ -41,6 +41,7 @@ _PROVIDER_AUTHORITY_LABELS = {
     "provider_decision_authority_not_granted": "provider 未显式授予决策级权限",
 }
 _PROVIDER_LIVE_EVIDENCE_LABELS = {
+    "provider_live_evidence_missing": "缺少 provider live evidence",
     "live_evidence_live_disabled": "live provider 未启用",
     "live_evidence_fixture_blocked": "fixture 数据不能进入 live evidence ready",
     "live_evidence_synthetic_blocked": "synthetic 数据不能进入 live evidence ready",
@@ -875,8 +876,22 @@ def build_options_provider_live_evidence_from_snapshot(
     )
 
 
-def _provider_live_evidence_issues(provider_live_evidence: Mapping[str, Any] | None) -> list[OptionsGateIssue]:
+def _provider_live_evidence_issues(
+    provider_live_evidence: Mapping[str, Any] | None,
+    *,
+    required: bool = False,
+) -> list[OptionsGateIssue]:
     data = _coerce_mapping(provider_live_evidence)
+    if required and not data:
+        return [
+            _issue(
+                code="provider_live_evidence_missing",
+                category="provider_live_evidence",
+                status=OptionsGateStatus.BLOCKED,
+                label=_PROVIDER_LIVE_EVIDENCE_LABELS["provider_live_evidence_missing"],
+            )
+        ]
+
     reason_codes = data.get("reasonCodes") if data else []
     issues: list[OptionsGateIssue] = []
     for code in _dedupe_reason_codes(list(reason_codes or [])):
@@ -1363,10 +1378,13 @@ def evaluate_options_data_quality_gates(
     )
     liquidity_gates = _bucket_from_leg_diagnostics(liquidity_issues, leg_diagnostics)
     provider_authority_issues = _provider_authority_issues(provider_authority)
-    provider_live_evidence_issues = _provider_live_evidence_issues(provider_live_evidence)
     gate_decision, decision_grade = _strategy_gate_decision(
         data_quality_gates.status,
         liquidity_gates.status,
+    )
+    provider_live_evidence_issues = _provider_live_evidence_issues(
+        provider_live_evidence,
+        required=decision_grade and not provider_authority_issues,
     )
     if provider_authority_issues or provider_live_evidence_issues:
         gate_decision = "数据不足，禁止判断"

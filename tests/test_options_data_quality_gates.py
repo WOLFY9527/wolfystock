@@ -214,6 +214,7 @@ def test_required_event_calendar_present_satisfies_event_requirement() -> None:
         _clear_gate_contract(),
         requires_event_calendar=True,
         event_calendar={"events": [{"date": "2026-06-01", "type": "earnings"}]},
+        provider_live_evidence=_complete_live_evidence(requires_event_calendar=True),
     )
 
     assert diagnostics.decision_grade is True
@@ -230,6 +231,19 @@ def test_otherwise_clean_live_shaped_contract_without_provider_authority_fails_c
     assert diagnostics.decision_grade is False
     assert diagnostics.fail_closed_reason_codes == ["provider_authority_missing"]
     assert _issue_codes(diagnostics) == {"provider_authority_missing"}
+    assert diagnostics.data_quality_gates.status == "clear"
+    assert diagnostics.data_quality_gates.decision_grade is True
+    assert diagnostics.liquidity_gates.status == "clear"
+    assert diagnostics.liquidity_gates.decision_grade is True
+
+
+def test_decision_grade_authority_without_provider_live_evidence_fails_closed() -> None:
+    diagnostics = _evaluate_single_contract(_clear_gate_contract())
+
+    assert diagnostics.gate_decision == "数据不足，禁止判断"
+    assert diagnostics.decision_grade is False
+    assert diagnostics.fail_closed_reason_codes == ["provider_live_evidence_missing"]
+    assert _issue_codes(diagnostics) == {"provider_live_evidence_missing"}
     assert diagnostics.data_quality_gates.status == "clear"
     assert diagnostics.data_quality_gates.decision_grade is True
     assert diagnostics.liquidity_gates.status == "clear"
@@ -347,6 +361,7 @@ def test_internal_policy_keeps_current_provider_ids_below_decision_grade() -> No
         assert provider_authority["authorityTier"] == "live_observation_only"
         assert diagnostics.decision_grade is False
         assert "provider_authority_tier_observation_only" in diagnostics.fail_closed_reason_codes
+        assert "provider_live_evidence_missing" not in diagnostics.fail_closed_reason_codes
         assert diagnostics.data_quality_gates.status == "clear"
         assert diagnostics.liquidity_gates.status == "clear"
 
