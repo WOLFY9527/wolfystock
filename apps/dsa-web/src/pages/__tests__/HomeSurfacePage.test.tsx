@@ -395,19 +395,27 @@ describe('HomeSurfacePage', () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
     renderSurface();
     const guestSurface = screen.getByTestId('guest-home-clean-search');
+    const guestCommandSurface = screen.getByTestId('guest-home-command-surface');
+    const guestCapabilityStrip = screen.getByTestId('guest-home-capability-strip');
+    const guestTrustStrip = screen.getByTestId('guest-home-trust-strip');
+    const guestPreviewStrip = screen.getByTestId('guest-home-preview-strip');
     expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
     expect(guestSurface).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'WolfyStock 研究控制台' })).toBeInTheDocument();
-    expect(screen.getByTestId('guest-home-command-surface')).toBeInTheDocument();
-    expect(screen.getByTestId('guest-home-capability-strip')).toBeInTheDocument();
+    expect(guestCommandSurface).toBeInTheDocument();
+    expect(guestCommandSurface).toHaveClass('rounded-[12px]');
+    expect(guestCapabilityStrip).toBeInTheDocument();
+    expect(guestCapabilityStrip).toHaveClass('rounded-[10px]', 'bg-[var(--wolfy-surface-input)]');
     expect(screen.getByText('WolfyStock 是面向独立研究者与自驱投资者的股票研究工作区。你可以先查看单个标的预览，登录后再保存报告、回看历史，并继续进入组合或扫描工作台。')).toBeInTheDocument();
-    expect(screen.getByTestId('guest-home-capability-strip')).toHaveTextContent('登录后继续');
-    expect(screen.getByTestId('guest-home-capability-strip')).toHaveTextContent('保存报告');
-    expect(screen.getByTestId('guest-home-capability-strip')).toHaveTextContent('回看历史');
+    expect(guestCapabilityStrip).toHaveTextContent('登录后继续');
+    expect(guestCapabilityStrip).toHaveTextContent('保存报告');
+    expect(guestCapabilityStrip).toHaveTextContent('回看历史');
     expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/login?mode=create&redirect=%2F');
-    expect(screen.getByTestId('guest-home-trust-strip')).toHaveTextContent('不等于买卖建议');
-    expect(screen.getByTestId('guest-home-preview-strip')).toHaveTextContent('登录后下一步');
-    expect(screen.getByTestId('guest-home-preview-strip')).toHaveTextContent('回到上次研究现场');
+    expect(guestTrustStrip).toHaveClass('rounded-[12px]');
+    expect(guestTrustStrip).toHaveTextContent('不等于买卖建议');
+    expect(guestPreviewStrip).toHaveClass('rounded-[12px]');
+    expect(guestPreviewStrip).toHaveTextContent('登录后下一步');
+    expect(guestPreviewStrip).toHaveTextContent('回到上次研究现场');
     expect(guestSurface).not.toHaveTextContent('WolfyStock 分析面板');
     expect(guestSurface.textContent).not.toMatch(GUEST_HOME_FORBIDDEN_COPY_PATTERN);
   });
@@ -517,7 +525,7 @@ describe('HomeSurfacePage', () => {
     expect(root.getAttribute('style') || '').not.toContain('radial-gradient');
     expect(main).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'min-h-0');
     expect(main.firstElementChild).toBe(stage);
-    expect(stage).toHaveClass('home-research-stage', 'mx-auto', 'w-full', 'max-w-[1880px]', 'min-w-0', 'px-3', '2xl:px-8');
+    expect(stage).toHaveClass('home-research-stage', 'mx-auto', 'w-full', 'max-w-[1880px]', 'min-w-0', 'gap-4', 'px-3', '2xl:px-8');
     expect(stage).not.toHaveClass('lg:w-[96vw]', 'lg:max-w-[1840px]');
     expect(stage.contains(commandBar)).toBe(true);
     expect(stage.contains(researchConsole)).toBe(true);
@@ -552,7 +560,7 @@ describe('HomeSurfacePage', () => {
     expect(board).toHaveAttribute('data-linear-primitive', 'console-board');
     expect(board).toHaveAttribute('data-surface-system', 'reflect-linear-console');
     expect(board).toHaveClass('relative', 'z-10', 'overflow-visible');
-    expect(screen.getByTestId('home-research-board').firstElementChild).toHaveClass('home-research-fixed-grid', 'w-full', 'min-w-0');
+    expect(screen.getByTestId('home-research-board').firstElementChild).toHaveClass('home-research-fixed-grid', 'w-full', 'min-w-0', 'gap-4');
     expect(rail).toHaveAttribute('data-linear-primitive', 'context-rail');
     expect(rail).toHaveAttribute('data-layout-zone', 'ContextRail');
     expect(rail).toHaveClass('home-research-context-rail', 'bg-transparent', 'divide-y-0', 'lg:border-l-0');
@@ -606,7 +614,8 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-research-company-mark')).toHaveAttribute('data-company-mark', 'oracle-logo');
     expect(screen.getByTestId('home-research-company-mark')).toHaveClass('h-[72px]', 'w-[72px]', 'rounded-[14px]');
     expect(screen.queryByTestId('home-bento-decision-hero-row')).not.toBeInTheDocument();
-    expect(conclusionConsole).toHaveClass('home-research-conclusion-console', 'rounded-[8px]', 'border');
+    expect(headerStrip).toHaveClass('rounded-[10px]');
+    expect(conclusionConsole).toHaveClass('home-research-conclusion-console', 'rounded-[10px]', 'border');
 
     expect(keyLevels).toHaveAttribute('data-linear-primitive', 'key-level-strip');
     expect(keyLevels).toHaveClass('rounded-[12px]', 'border', 'border-[color:var(--wolfy-divider)]');
@@ -661,10 +670,14 @@ describe('HomeSurfacePage', () => {
       .map((node) => node.getAttribute('data-rail-section'));
     expect(railSections).toEqual(['current-action', 'fundamentals-summary', 'main-risk', 'next-step']);
     expect(rail.querySelectorAll('.home-research-rail-card')).toHaveLength(4);
+    rail.querySelectorAll('.home-research-rail-card').forEach((node) => {
+      expect(node).toHaveClass('rounded-[10px]');
+    });
     expect(rail.querySelector('[class*="bg-black"]')).toBeNull();
 
     expect(secondaryDeck).toContainElement(catalysts);
     expect(catalysts).toHaveAttribute('data-visual-role', 'attached-event-deck');
+    expect(secondaryDeck).toHaveClass('rounded-[12px]');
     expect(within(catalysts).getByText('近期催化剂 / 事件')).toBeInTheDocument();
     expect(screen.getByTestId('home-linear-events-evidence-note')).toHaveTextContent('事件证据');
     expect(eventTable).not.toHaveTextContent('类型');

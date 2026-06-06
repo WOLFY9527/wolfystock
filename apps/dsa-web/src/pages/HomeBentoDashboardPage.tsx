@@ -101,6 +101,18 @@ type HomeBentoDashboardPageProps = {
   isGuest?: boolean;
 };
 
+const HOME_LOCAL_SURFACE_PANEL_CLASS = 'min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)]';
+const HOME_LOCAL_INSET_PANEL_CLASS = 'min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)]';
+const HOME_LOCAL_RAIL_CARD_CLASS =
+  'home-research-rail-card min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-3.5 md:px-5 md:py-4';
+const HOME_LOCAL_STAGE_CLASS =
+  'home-research-stage mx-auto flex w-full max-w-[1880px] min-w-0 flex-col gap-4 px-3 py-3 sm:px-4 xl:px-6 2xl:px-8';
+const HOME_LOCAL_FIXED_GRID_CLASS = 'home-research-fixed-grid w-full min-w-0 gap-4 overflow-visible';
+const HOME_LOCAL_HEADER_STRIP_CLASS =
+  'mb-4 min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-4 md:px-5';
+const HOME_LOCAL_SECONDARY_DECK_CLASS =
+  'home-research-secondary-deck mt-4 min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-3 md:px-5 md:py-3';
+
 const LazyFullDecisionReportDrawer = lazy(() => import('../components/home-bento/FullDecisionReportDrawer'));
 const LazyHomeCandlestickChart = lazy(() =>
   import('../components/home-bento/HomeCandlestickChart').then((module) => ({
@@ -1435,7 +1447,7 @@ function HomeConclusionFirstConsole({
 
   return (
     <section
-      className="home-research-conclusion-console min-w-0 overflow-hidden rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[linear-gradient(135deg,rgba(16,24,38,0.96),rgba(18,28,42,0.88)_48%,rgba(34,38,38,0.92))]"
+      className="home-research-conclusion-console min-w-0 overflow-hidden rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[linear-gradient(135deg,rgba(16,24,38,0.96),rgba(18,28,42,0.88)_48%,rgba(34,38,38,0.92))]"
       data-testid="home-research-conclusion-console"
       data-first-screen-priority="conclusion-first"
       data-visual-role="conclusion-research-console"
@@ -1513,7 +1525,7 @@ function HomeConclusionFirstConsole({
           </div>
         </div>
 
-        <div className="mt-5 grid min-w-0 gap-0 overflow-hidden rounded-[8px] border border-white/[0.07] md:grid-cols-3">
+        <div className="mt-5 grid min-w-0 gap-0 overflow-hidden rounded-[10px] border border-white/[0.07] md:grid-cols-3">
           <div className="min-w-0 border-b border-white/[0.07] px-4 py-3 md:border-b-0 md:border-r" data-testid="home-research-support-factors">
             <p className="text-[11px] font-semibold tracking-[0] text-white/42">{isEnglish ? 'Key support factors' : '关键支撑因素'}</p>
             <p className="mt-2 break-words text-xs font-semibold leading-[1.55] text-white/76">{supportCopy}</p>
@@ -1982,7 +1994,7 @@ function LinearTechnicalStructure({
       </div>
       <div
         className={cn(
-          'grid min-w-0 overflow-hidden rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-inset)]',
+          'grid min-w-0 overflow-hidden rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-inset)]',
           isGuest ? 'pointer-events-none opacity-80' : '',
         )}
         data-testid="home-research-chart-workspace"
@@ -2101,9 +2113,9 @@ function LinearObservationPanel({
   );
 
   return (
-    <div className="home-research-rail-body relative flex min-w-0 flex-col gap-3 px-0 py-0">
+    <div className="home-research-rail-body relative flex min-w-0 flex-col gap-4 px-0 py-0">
       <section
-        className="home-research-rail-card min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-5 py-4"
+        className={HOME_LOCAL_RAIL_CARD_CLASS}
         data-testid="home-bento-card-strategy"
         data-research-card="research-actions"
         data-rail-section="current-action"
@@ -2134,7 +2146,7 @@ function LinearObservationPanel({
       />
 
       <section
-        className="home-research-rail-card min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-5 py-4"
+        className={HOME_LOCAL_RAIL_CARD_CLASS}
         data-testid="home-bento-card-fundamentals"
         data-research-card="risk-boundary"
         data-rail-section="main-risk"
@@ -2147,7 +2159,7 @@ function LinearObservationPanel({
         </p>
       </section>
       <section
-        className="home-research-rail-card min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-5 py-4"
+        className={HOME_LOCAL_RAIL_CARD_CLASS}
         data-testid="home-linear-quant-snapshot"
         data-research-card="next-step"
         data-rail-section="next-step"
@@ -2316,7 +2328,7 @@ function HomeFundamentalsSummaryBlock({
 
   return (
     <section
-      className="home-research-rail-card min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-5 py-4"
+      className={HOME_LOCAL_RAIL_CARD_CLASS}
       data-testid="home-stock-fundamentals-summary"
       data-research-card="fundamentals-summary"
       data-rail-section="fundamentals-summary"
@@ -2354,7 +2366,7 @@ function HomeFundamentalsSummaryBlock({
           {metrics.map((metric) => (
             <div
               key={metric.key}
-              className="min-w-0 rounded-[8px] border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
+              className="min-w-0 rounded-[10px] border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
               data-testid={`home-stock-fundamentals-metric-${metric.key}`}
             >
               <p className="truncate text-[10px] uppercase tracking-[0.12em] text-white/38">{metric.label}</p>
@@ -2363,7 +2375,7 @@ function HomeFundamentalsSummaryBlock({
           ))}
         </div>
       ) : (
-        <div className="mt-3 rounded-[8px] border border-dashed border-white/[0.08] bg-white/[0.02] px-3 py-3">
+        <div className="mt-3 rounded-[10px] border border-dashed border-white/[0.08] bg-white/[0.02] px-3 py-3">
           <p className="text-xs font-medium text-white/76">{isEnglish ? 'Insufficient data' : '数据不足'}</p>
           <p className="mt-1 text-xs leading-[1.65] text-white/56">
             {isEnglish ? 'Wait for more stable fields before using fundamentals as supporting context.' : '等待更多稳定字段后，再把基本面作为辅助观察材料。'}
@@ -5606,7 +5618,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         <CompactFilterBar
           data-testid="home-research-command-bar"
           data-surface-system="reflect-linear-console"
-          className="home-research-command-bar min-h-12 items-stretch gap-2 rounded-xl bg-[var(--wolfy-surface-input)] px-2.5 py-2 sm:flex-nowrap"
+          className="home-research-command-bar min-h-12 items-stretch gap-2.5 rounded-xl bg-[var(--wolfy-surface-input)] px-3 py-2.5 sm:flex-nowrap"
           trailing={(
             <>
               <button
@@ -5693,9 +5705,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
             className="mx-auto flex w-full max-w-[1880px] flex-1 min-w-0 flex-col px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
             data-testid="guest-home-clean-search"
           >
-            <div className="flex w-full min-w-0 flex-col gap-3" data-testid="guest-home-first-screen-stack">
+            <div className="flex w-full min-w-0 flex-col gap-4" data-testid="guest-home-first-screen-stack">
               <section
-                className="min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-4 sm:px-5 sm:py-5"
+                className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5 sm:py-5')}
                 data-testid="guest-home-command-surface"
                 data-layout-zone="RouteConsole"
                 data-visual-role="guest-command-console"
@@ -5713,7 +5725,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     </p>
                   </div>
                   <div
-                    className="grid min-w-0 grid-cols-2 overflow-hidden rounded-[8px] border border-white/[0.06] text-[11px] sm:grid-cols-4 xl:max-w-[21rem]"
+                    className="grid min-w-0 grid-cols-2 overflow-hidden rounded-[10px] border border-white/[0.06] text-[11px] sm:grid-cols-4 xl:max-w-[21rem]"
                     data-testid="guest-home-command-workflow"
                   >
                     {guestCommandConsoleCopy.workflow.map((item, index) => (
@@ -5725,7 +5737,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   </div>
                 </div>
 
-                <div className="mt-4 grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_17rem]">
+                <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
                   <div className="min-w-0">
                     <div className="mb-2 flex min-w-0 flex-wrap items-center justify-between gap-2">
                       <p className="text-[11px] font-medium text-white/40">{guestCommandConsoleCopy.commandLabel}</p>
@@ -5734,7 +5746,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                     {omnibarModule}
                   </div>
                   <aside
-                    className="min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] px-4 py-3"
+                    className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'px-4 py-4')}
                     data-testid="guest-home-capability-strip"
                   >
                     <p className="text-[11px] font-medium text-white/40">{guestCommandConsoleCopy.unlockTitle}</p>
@@ -5759,9 +5771,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                 </div>
               </section>
 
-              <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+              <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
                 <section
-                  className="min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-3.5 sm:px-5"
+                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5')}
                   data-testid="guest-home-trust-strip"
                 >
                   <p className="text-[11px] font-medium text-white/40">{guestCommandConsoleCopy.trustTitle}</p>
@@ -5770,7 +5782,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   </p>
                 </section>
                 <section
-                  className="min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-3.5 sm:px-5"
+                  className={cn(HOME_LOCAL_SURFACE_PANEL_CLASS, 'px-4 py-4 sm:px-5')}
                   data-testid="guest-home-preview-strip"
                 >
                   <p className="text-[11px] font-medium text-white/40">{guestCommandConsoleCopy.previewTitle}</p>
@@ -5821,7 +5833,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
           );
           return (
             <div
-              className="home-research-stage mx-auto flex w-full max-w-[1880px] min-w-0 flex-col gap-2.5 px-3 py-3 sm:px-4 xl:px-6 2xl:px-8"
+              className={HOME_LOCAL_STAGE_CLASS}
               data-testid="home-research-stage"
             >
               {omnibarModule}
@@ -5841,18 +5853,18 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   data-testid="home-research-board"
                 >
                 <FixedRegionGrid
-                  className="home-research-fixed-grid w-full min-w-0 gap-3 overflow-visible"
+                  className={HOME_LOCAL_FIXED_GRID_CLASS}
                   data-surface-system="reflect-linear-console"
                   rail={contextRailContent}
                   railTestId="home-research-context-rail"
                   railWidth="lg"
-                  primaryClassName="lg:pr-3"
+                  primaryClassName="lg:pr-4"
                   railClassName="home-research-context-rail divide-y-0 self-start overflow-visible bg-transparent lg:border-l-0"
                   primary={(
                     <>
                     {!isHomeAnalyzing ? (
                       <div
-                        className="mb-2.5 min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-5 py-4"
+                        className={HOME_LOCAL_HEADER_STRIP_CLASS}
                         data-layout-zone="HeaderStrip"
                         data-testid="home-research-header-strip"
                       >
@@ -5965,7 +5977,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           </div>
                         </div>
                         {!isHomeAnalyzing ? (
-                          <div className="mt-3 px-0" data-testid="home-research-chart-section">
+                          <div className="mt-4 px-0" data-testid="home-research-chart-section">
                               <LinearTechnicalStructure
                                 locale={locale}
                                 ticker={readyCopy.ticker}
@@ -5983,7 +5995,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                         ) : null}
                         {!isHomeAnalyzing ? (
                           <div
-                            className="home-research-secondary-deck mt-3 min-w-0 rounded-[14px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-2.5 md:px-5 md:py-2.5"
+                            className={HOME_LOCAL_SECONDARY_DECK_CLASS}
                             data-testid="home-research-secondary-deck"
                             data-linear-primitive="secondary-deck"
                             data-layout-zone="SecondaryDeck"
