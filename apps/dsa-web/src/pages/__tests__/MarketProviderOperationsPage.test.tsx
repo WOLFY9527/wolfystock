@@ -555,6 +555,7 @@ describe('MarketProviderOperationsPage', () => {
 
     render(<MarketProviderOperationsPage />);
 
+    expect(document.title).toBe('数据源运维 - WolfyStock');
     expect(screen.getByText('数据源维护路线图')).toBeInTheDocument();
     expect(screen.getByText('正在读取数据源维护快照')).toBeInTheDocument();
   });

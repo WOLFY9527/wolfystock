@@ -306,6 +306,7 @@ describe('AdminUsersPage', () => {
     expect(within(overviewStrip).getByText('证据参考')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('最近更新')).toBeInTheDocument();
     expect(screen.getByText('用户支持与治理')).toBeInTheDocument();
+    expect(document.title).toBe('用户治理 - WolfyStock');
     expect(document.body).not.toHaveTextContent('WolfyStock 用户治理终端');
     expect(screen.getAllByRole('heading', { name: '用户目录' }).length).toBeGreaterThan(0);
     expect((await screen.findAllByText('Alice')).length).toBeGreaterThan(0);
