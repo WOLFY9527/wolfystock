@@ -777,18 +777,40 @@ function buildQualityStatusSummary(quality: ReportQuality, locale: DashboardLoca
   ].join(' · ');
 }
 
+function collectTraceDataSourceLabels(
+  dataSources: DecisionTrace['dataSources'] | undefined,
+  locale: DashboardLocale,
+  includeStatus: (status: string) => boolean,
+  mapLabel?: (label: string, status: string) => string,
+  limit = 4,
+): string[] {
+  const labels: string[] = [];
+  const seen = new Set<string>();
+  for (const item of dataSources || []) {
+    const status = String(item.status || '').trim().toLowerCase();
+    if (!includeStatus(status)) continue;
+    const baseLabel = traceDataSourceLabel(item.name, locale);
+    if (!baseLabel) continue;
+    const nextLabel = mapLabel ? mapLabel(baseLabel, status) : baseLabel;
+    if (!nextLabel || seen.has(nextLabel)) continue;
+    seen.add(nextLabel);
+    labels.push(nextLabel);
+    if (labels.length >= limit) break;
+  }
+  return labels;
+}
+
 function buildTraceSummary(trace: DecisionTrace | undefined, quality: ReportQuality | undefined, locale: DashboardLocale): string {
   const isEnglish = locale === 'en';
   const qualitySummary = quality ? buildQualityStatusSummary(quality, locale) : '';
   if (!trace) {
     return qualitySummary || (isEnglish ? 'Source: unavailable' : '来源：未附');
   }
-  const provenance = Array.from(new Set(
-    (trace.dataSources || [])
-      .filter((source) => !['missing', 'unknown'].includes(String(source.status || '').trim().toLowerCase()))
-      .map((source) => traceDataSourceLabel(source.name, locale))
-      .filter(Boolean),
-  )).slice(0, 4);
+  const provenance = collectTraceDataSourceLabels(
+    trace.dataSources,
+    locale,
+    (status) => !['missing', 'unknown'].includes(status),
+  );
   const sourceCount = trace.dataSources?.length || 0;
   const usedCount = (trace.dataSources || []).filter((source) => String(source.status || '').toLowerCase() === 'used').length;
   const conflictCount = trace.conflicts?.length || 0;
@@ -1021,19 +1043,48 @@ function buildDataQualityPreview(report: DataQualityReport, locale: DashboardLoc
 }
 
 function uniqueCompactLabels(values: Array<string | undefined | null>, limit = 4): string[] {
-  return Array.from(new Set(values.map((item) => String(item || '').trim()).filter(Boolean))).slice(0, limit);
+  const labels: string[] = [];
+  const seen = new Set<string>();
+  for (const item of values) {
+    const value = String(item || '').trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    labels.push(value);
+    if (labels.length >= limit) break;
+  }
+  return labels;
+}
+
+function collectBullishSignalLabels(signals: DashboardPayload['tech']['signals'], limit: number): string[] {
+  const labels: string[] = [];
+  const seen = new Set<string>();
+  for (const signal of signals) {
+    const signalText = `${signal.label} ${signal.value} ${signal.details || ''}`;
+    if (signal.tone !== 'bullish' && !/偏强|多头|上方|突破|扩张|bull|above|constructive|strong|expand/i.test(signalText)) {
+      continue;
+    }
+    const label = String(signal.label || '').trim();
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    labels.push(label);
+    if (labels.length >= limit) break;
+  }
+  return labels;
 }
 
 function buildAvailableDataCopy(report: DataQualityReport | undefined, trace: DecisionTrace | undefined, locale: DashboardLocale): string {
   const isEnglish = locale === 'en';
-  const traceSources = (trace?.dataSources || [])
-    .filter((item) => ['used', 'fallback'].includes(String(item.status || '').trim().toLowerCase()))
-    .map((item) => {
-      const label = userFacingDataSourceLabel(item.name, locale);
-      return String(item.status || '').trim().toLowerCase() === 'fallback'
+  const traceSources: string[] = [];
+  for (const item of trace?.dataSources || []) {
+    const status = String(item.status || '').trim().toLowerCase();
+    if (!['used', 'fallback'].includes(status)) continue;
+    const label = userFacingDataSourceLabel(item.name, locale);
+    traceSources.push(
+      status === 'fallback'
         ? (isEnglish ? `${label} fallback` : `${label}（备用数据）`)
-        : label;
-    });
+        : label,
+    );
+  }
   const completedSources = (report?.completedSources || []).map((item) => userFacingDataSourceLabel(item, locale));
   const available = uniqueCompactLabels([...traceSources, ...completedSources], 4);
   return available.length ? available.join(isEnglish ? ' / ' : '、') : (isEnglish ? 'No confirmed source yet' : '暂无已确认可用数据');
@@ -1105,12 +1156,7 @@ function buildResearchFrameworkRows(
   const positiveTechnical = hasPositiveTechnicalEvidence(dashboard);
   const hasGaps = dataQualityReport ? hasDataQualityGaps(dataQualityReport) : true;
   const stanceLabel = resolveLinearStanceLabel(locale, dashboard.decision.signalLabel, dashboard.decision.signalTone);
-  const supportSignals = uniqueCompactLabels(
-    dashboard.tech.signals
-      .filter((signal) => signal.tone === 'bullish' || /偏强|多头|上方|突破|扩张|bull|above|constructive|strong|expand/i.test(`${signal.label} ${signal.value} ${signal.details || ''}`))
-      .map((signal) => signal.label),
-    2,
-  );
+  const supportSignals = collectBullishSignalLabels(dashboard.tech.signals, 2);
   const missingCopy = buildMissingDataCopy(dataQualityReport, locale);
   const hasMissingCopy = !/(暂无突出缺口|No prominent gap)/i.test(missingCopy);
 
@@ -1167,12 +1213,7 @@ function resolveJudgmentGateCopy(
 
 function buildSupportFactorCopy(locale: DashboardLocale, dashboard: DashboardPayload): string {
   const isEnglish = locale === 'en';
-  const supportSignals = uniqueCompactLabels(
-    dashboard.tech.signals
-      .filter((signal) => signal.tone === 'bullish' || /偏强|多头|上方|突破|扩张|bull|above|constructive|strong|expand/i.test(`${signal.label} ${signal.value} ${signal.details || ''}`))
-      .map((signal) => signal.label),
-    3,
-  );
+  const supportSignals = collectBullishSignalLabels(dashboard.tech.signals, 3);
   if (supportSignals.length) {
     return isEnglish
       ? `${supportSignals.join(' / ')} support the technical evidence.`
@@ -1625,12 +1666,11 @@ function DecisionSourceDetailsPanel({
   const quickDecisionText = report?.requiredAvailable === false
     ? (isEnglish ? 'Key data: limited' : '关键数据：受限')
     : (isEnglish ? 'Key data: usable' : '关键数据：可用');
-  const sourceEntries = Array.from(new Set(
-    (trace?.dataSources || [])
-      .filter((item) => !['missing', 'unknown'].includes(String(item.status || '').trim().toLowerCase()))
-      .map((item) => traceDataSourceLabel(item.name, locale))
-      .filter(Boolean),
-  )).slice(0, 4);
+  const sourceEntries = collectTraceDataSourceLabels(
+    trace?.dataSources,
+    locale,
+    (status) => !['missing', 'unknown'].includes(status),
+  );
   const missingCritical = !report
     ? (isEnglish ? 'No structured quality report' : '暂无结构化质量报告')
     : report.requiredAvailable === false
@@ -1642,12 +1682,11 @@ function DecisionSourceDetailsPanel({
   ])).map((item) => dataQualityFieldLabel(item, locale)).slice(0, 6) : [];
   const enrichmentGaps = report ? summarizeEnrichmentGaps(report) : [];
   const enrichmentReasons = report ? summarizeEnrichmentReasons(report).map((item) => dataQualityReasonLabel(item, locale)) : [];
-  const degradedSources = Array.from(new Set(
-    (trace?.dataSources || [])
-      .filter((item) => ['fallback', 'stale'].includes(String(item.status || '').trim().toLowerCase()))
-      .map((item) => traceDataSourceLabel(item.name, locale))
-      .filter(Boolean),
-  )).slice(0, 4);
+  const degradedSources = collectTraceDataSourceLabels(
+    trace?.dataSources,
+    locale,
+    (status) => ['fallback', 'stale'].includes(status),
+  );
   const sourceText = sourceEntries.length
     ? sourceEntries.join(' / ')
     : sourceSummary || (isEnglish ? 'No source summary yet' : '暂无来源摘要');
@@ -2401,7 +2440,7 @@ function LinearEventsStrip({
 }) {
   const isEnglish = locale === 'en';
   const events = buildHomeCatalystEvents(report, locale);
-  const placeholderRows = Array.from({ length: 3 }, (_, index) => index);
+  const placeholderRows = ['primary', 'secondary', 'tertiary'] as const;
   const pendingText = pendingDataText(locale);
 
   return (
@@ -2454,9 +2493,9 @@ function LinearEventsStrip({
           </div>
         )) : (
           <div data-testid="home-linear-events-empty">
-            {placeholderRows.map((index) => (
+            {placeholderRows.map((slot, index) => (
               <div
-                key={`home-event-placeholder-${index}`}
+                key={`home-event-placeholder-${slot}`}
                 className="home-research-event-row flex min-w-0 items-start justify-between gap-3 border-b border-[color:var(--wolfy-divider)] py-3 text-[color:var(--wolfy-text-muted)] last:border-b-0"
                 data-testid={`home-linear-event-placeholder-row-${index}`}
               >
@@ -2878,7 +2917,13 @@ function resolveInsightBody(
   candidates: Array<string | undefined>,
   technicalFields?: StandardReportField[],
 ): string {
-  const normalizedCandidates = candidates.map((value) => String(value || '').trim()).filter(Boolean);
+  const normalizedCandidates: string[] = [];
+  for (const value of candidates) {
+    const normalizedValue = String(value || '').trim();
+    if (normalizedValue) {
+      normalizedCandidates.push(normalizedValue);
+    }
+  }
   const primary = normalizedCandidates.find((value) => value !== EMPTY_FIELD_VALUE && !isGenericInsightText(value));
   if (!primary) {
     return buildTechnicalInsightFallback(locale, tone, technicalFields);
@@ -3565,7 +3610,14 @@ function readHomePriceContextHint(report: HomePriceContextReport, stockCode: str
     readObjectField(standardReport, ['summaryPanel', 'priceContextNote']),
     readObjectField(standardReport, ['market', 'currency']),
   ];
-  return values.map((value) => String(value || '').trim()).filter(Boolean).join(' ');
+  const labels: string[] = [];
+  for (const value of values) {
+    const label = String(value || '').trim();
+    if (label) {
+      labels.push(label);
+    }
+  }
+  return labels.join(' ');
 }
 
 function resolveHomePriceDisplayContext(report: HomePriceContextReport, stockCode: string): HomePriceDisplayContext {
@@ -3634,10 +3686,13 @@ function formatHomePriceLevelValue(
   }
 
   const isRange = matches.length > 1 || /[-~至到–—]/.test(priceSegment);
-  const numbers = matches
-    .slice(0, isRange ? 2 : 1)
-    .map((item) => Number.parseFloat(item.replace(/,/g, '')))
-    .filter((item) => Number.isFinite(item));
+  const numbers: number[] = [];
+  for (const item of matches.slice(0, isRange ? 2 : 1)) {
+    const numericValue = Number.parseFloat(item.replace(/,/g, ''));
+    if (Number.isFinite(numericValue)) {
+      numbers.push(numericValue);
+    }
+  }
   if (!numbers.length) {
     return value;
   }
@@ -3906,10 +3961,16 @@ function localizeNarrativeText(locale: DashboardLocale, raw: string | undefined,
 }
 
 function findStandardField(fields: StandardReportField[] | undefined, aliases: string[]): StandardReportField | undefined {
-  return aliases
-    .map((alias) => normalizeDetailKey(alias))
-    .flatMap((aliasKey) => (fields || []).filter((field) => normalizeDetailKey(field.label).includes(aliasKey) || aliasKey.includes(normalizeDetailKey(field.label))))
-    .find((field) => field?.label);
+  for (const alias of aliases) {
+    const aliasKey = normalizeDetailKey(alias);
+    for (const field of fields || []) {
+      const fieldKey = normalizeDetailKey(field.label);
+      if (fieldKey.includes(aliasKey) || aliasKey.includes(fieldKey)) {
+        return field;
+      }
+    }
+  }
+  return undefined;
 }
 
 function findFieldNumber(fields: StandardReportField[] | undefined, label: string): number | null {

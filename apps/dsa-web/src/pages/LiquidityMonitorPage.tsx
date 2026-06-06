@@ -1765,9 +1765,16 @@ const CapitalFlowSignalPanel: React.FC<{
 
       {visiblePressureRows.length ? (
         <div className="mt-3 grid gap-2">
-          {visiblePressureRows.map((item, index) => (
+          {visiblePressureRows.map((item) => (
             <div
-              key={`${item.asset || 'asset'}-${index}`}
+              key={[
+                item.asset || 'asset',
+                item.pressure || 'unknown',
+                item.freshness || 'unspecified',
+                item.isFallback ? 'fallback' : '',
+                item.isStale ? 'stale' : '',
+                item.isPartial ? 'partial' : '',
+              ].join('|')}
               className="flex min-w-0 flex-col gap-2 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between"
             >
               <div className="min-w-0">
@@ -1796,9 +1803,16 @@ const CapitalFlowSignalPanel: React.FC<{
             {pressureRows.length ? (
               <div className="grid gap-2">
                 <p className="text-[11px] font-medium text-white/48">来源资产压力</p>
-                {pressureRows.map((item, index) => (
+                {pressureRows.map((item) => (
                   <div
-                    key={`${item.asset || 'detail-asset'}-${index}`}
+                    key={[
+                      item.asset || 'detail-asset',
+                      item.pressure || 'unknown',
+                      item.freshness || 'unspecified',
+                      item.isFallback ? 'fallback' : '',
+                      item.isStale ? 'stale' : '',
+                      item.isPartial ? 'partial' : '',
+                    ].join('|')}
                     className="flex min-w-0 flex-col gap-2 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2 lg:flex-row lg:items-center lg:justify-between"
                   >
                     <div className="min-w-0">
