@@ -1132,6 +1132,16 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
       });
     }
 
+    if (method === 'GET' && path === '/api/v1/user-alerts/rules') {
+      return fulfillJson(route, {
+        contract_version: 'user_alert_contract_v1',
+        delivery_mode: 'in_app',
+        in_app_only: true,
+        owner_scoped: true,
+        items: [],
+      });
+    }
+
     if (method === 'POST' && path === '/api/v1/watchlist/items') {
       return fulfillJson(route, {
         id: 2001,
