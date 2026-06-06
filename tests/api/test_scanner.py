@@ -223,6 +223,7 @@ def test_scanner_run_response_locks_score_explainability_metadata_without_score_
         universe_size=5,
         preselected_size=5,
         evaluated_size=5,
+        summary={"limited_by_result_cap": True},
         shortlist=[
             {
                 "symbol": "600001",
@@ -330,6 +331,7 @@ def test_scanner_run_response_locks_score_explainability_metadata_without_score_
     )
 
     serialized = response.model_dump()
+    assert serialized["summary"]["limited_by_result_cap"] is True
     assert [(item["symbol"], item["rank"], item["score"]) for item in serialized["shortlist"]] == [
         ("600001", 1, 40.0),
         ("600002", 2, 39.0),

@@ -156,6 +156,9 @@ describe('scannerApi investor signal normalization', () => {
         accepted_symbols_count: 0,
         rejected_symbols: [],
         diagnostics: {},
+        summary: {
+          limited_by_result_cap: true,
+        },
         notification: {
           attempted: false,
           status: 'skipped',
@@ -327,6 +330,7 @@ describe('scannerApi investor signal normalization', () => {
       ['600001', 1, 40],
       ['600002', 2, 39],
     ]);
+    expect(payload.summary?.limitedByResultCap).toBe(true);
     expect(explainability?.rawScore).toBe(81.6);
     expect(explainability?.finalScore).toBe(40);
     expect(explainability?.scoreDelta).toBe(-41.6);
