@@ -1182,8 +1182,12 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
                 const signal = item.themeFlowSignal;
                 const familyName = String(item.familyName || item.familyId || `家族 ${index + 1}`).trim();
                 const reasonLabels = themeFlowReasonLabels(signal);
+                const familyKey = item.familyId
+                  || item.themeIds?.join('|')
+                  || item.leaderThemeIds?.join('|')
+                  || familyName;
                 return (
-                  <div key={`${item.familyId || familyName}-${index}`} className="px-3 py-3">
+                  <div key={familyKey} className="px-3 py-3">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <p className="min-w-0 text-sm font-semibold text-white/84">{familyName}</p>
                       <TerminalChip variant={themeFlowChipVariant(signal?.themeFlowState)}>

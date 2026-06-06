@@ -130,12 +130,12 @@ function unique(items: Array<string | null | undefined>): string[] {
   return values;
 }
 
-function renderMissingEvidence(items: string[]): string {
+function formatMissingEvidenceList(items: string[]): string {
   const labels = unique(items.map((item) => MISSING_EVIDENCE_LABELS[item] || '待补证据'));
   return labels.length ? labels.join(' / ') : '暂无';
 }
 
-function renderBlockingReasons(items: string[]): string {
+function formatBlockingReasonList(items: string[]): string {
   const labels = unique(items.map((item) => BLOCKING_REASON_LABELS[item] || '当前仅能观察'));
   return labels.length ? labels.join(' / ') : '暂无';
 }
@@ -224,8 +224,8 @@ const MarketIntelligenceActionabilityStrip: React.FC<MarketIntelligenceActionabi
             <p>新鲜度 {freshnessLabel(evidence.freshness)}</p>
             <p>来源级别 {sourceAuthorityLabel(evidence.sourceAuthority)}</p>
             <p>下一步 {evidence.nextEvidenceNeeded[0] || actionability.nextResearchStep || '继续观察证据更新'}</p>
-            <p className="md:col-span-2">待补证据 {renderMissingEvidence(evidence.missingEvidence)}</p>
-            <p className="md:col-span-2">限制因素 {renderBlockingReasons(evidence.blockingReasons)}</p>
+            <p className="md:col-span-2">待补证据 {formatMissingEvidenceList(evidence.missingEvidence)}</p>
+            <p className="md:col-span-2">限制因素 {formatBlockingReasonList(evidence.blockingReasons)}</p>
           </div>
         </details>
       </div>
