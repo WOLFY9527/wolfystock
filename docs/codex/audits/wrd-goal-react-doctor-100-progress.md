@@ -372,7 +372,7 @@ Next candidates:
 
 ## Batch 8: Scanner Helper Iteration Cleanup
 
-Status: included in the checkpoint commit for this batch after local validation.
+Status: committed and pushed as checkpoint `ca9e6eb0`.
 
 Files changed:
 
@@ -415,9 +415,52 @@ Next candidates:
 - Remaining `js-set-map-lookups` in Home/Data Source need separate proof; a previous data-source Set attempt did not reduce diagnostics.
 - Remaining safe work is increasingly sparse; most high-count findings are state/effect/reducer/manual memoization changes with behavior risk.
 
+## Batch 9: Admin Cost Empty Counter Direct Derivation
+
+Status: included in the checkpoint commit for this batch after local validation.
+
+Files changed:
+
+- `apps/dsa-web/src/pages/AdminCostObservabilityPage.tsx`
+
+Changes:
+
+- Removed a redundant render-local `useMemo` for the empty-counter boolean.
+- Kept admin cost data fetching, duplicate summary payload handling, ledger/risk math, and route behavior unchanged.
+
+Diagnostics after batch:
+
+- Score: `61`
+- Total diagnostics: `490`
+- Errors: `112`
+- Warnings: `378`
+- Affected files: `41`
+- Reduced total diagnostics from previous checkpoint: `1`
+- Reduced total diagnostics from baseline: `77`
+- Reduced by rule from previous checkpoint:
+  - `react-compiler-no-manual-memoization`: `192 -> 191` (`-1`)
+- React Doctor diff for changed file:
+  - `src/pages/AdminCostObservabilityPage.tsx`: `2 -> 1` (`-1`)
+
+Validations run:
+
+- `git diff --check` -> pass
+- `./scripts/release_secret_scan.sh` -> pass
+- `npm --prefix apps/dsa-web run test -- 'src/pages/__tests__/AdminCostObservabilityPage.test.tsx' --no-file-parallelism` -> pass, `25` tests
+- `npm --prefix apps/dsa-web run lint` -> pass
+- `npm --prefix apps/dsa-web run build` -> pass with existing Vite chunk-size warning
+- `npx react-doctor@latest --json --json-compact --yes --no-score` -> remaining diagnostics expected, totals above
+- `npx react-doctor@latest --score --yes` -> `61`
+
+Next candidates:
+
+- Remaining single manual memoization findings are either auth/config/load-effect boundaries or draft-state source objects; defer without stronger behavioral coverage.
+- `HomeBentoDashboardPage.tsx` `js-set-map-lookups` appears to be string substring matching, not a Set-compatible array lookup.
+- Remaining score gains likely require unsafe state/effect/manual memo changes or broader component decomposition.
+
 ## Protected Domain Confirmation
 
-No changes in Batches 1 through 8 to:
+No changes in Batches 1 through 9 to:
 
 - backend/API/provider/cache/runtime/auth/package/lockfile/config/CI
 - provider order, fallback, deadlines, cache semantics, payload shapes
