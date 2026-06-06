@@ -123,6 +123,167 @@ describe('stockEvidenceApi', () => {
     }
   });
 
+  it('preserves stock evidence item metadata blocks as opaque records', async () => {
+    const { normalizeStockEvidenceResponse } = await import('../stockEvidence');
+
+    const payload = normalizeStockEvidenceResponse({
+      symbols: ['AAPL', 'MSFT'],
+      items: [
+        {
+          symbol: 'AAPL',
+          market: 'US',
+          quote: {
+            source: 'read_only_quote_diagnostic',
+            freshness: 'unavailable',
+            as_of: '2026-06-02T00:00:00Z',
+            is_fallback: false,
+            is_stale: true,
+            is_partial: true,
+            is_synthetic: false,
+            is_unavailable: true,
+            source_confidence: {
+              source_label: 'read-only evidence',
+              confidence_weight: 0,
+              degradation_reason: 'read_only_fetch_disabled',
+            },
+          },
+          technical: {
+            source: 'technical_snapshot',
+            freshness: 'stale',
+            is_fallback: true,
+            is_stale: true,
+            is_partial: false,
+            is_synthetic: false,
+            is_unavailable: false,
+            source_confidence: {
+              source_label: 'technical snapshot',
+              confidence_weight: 0.4,
+            },
+          },
+          fundamental: {
+            source: 'fundamentals_digest',
+            freshness: 'partial',
+            is_fallback: false,
+            is_stale: false,
+            is_partial: true,
+            is_synthetic: false,
+            is_unavailable: false,
+            source_confidence: {
+              source_label: 'fundamentals digest',
+              coverage: 'partial',
+            },
+          },
+          news: {
+            source: 'news_digest',
+            freshness: 'fresh',
+            is_fallback: false,
+            is_stale: false,
+            is_partial: false,
+            is_synthetic: false,
+            is_unavailable: false,
+            source_confidence: {
+              source_label: 'news digest',
+              confidence_weight: 0.7,
+            },
+          },
+          sec_filing_evidence: {
+            source: 'sec_filing_snapshot',
+            freshness: 'recent',
+            is_fallback: false,
+            is_stale: false,
+            is_partial: false,
+            is_synthetic: true,
+            is_unavailable: false,
+            source_confidence: {
+              source_label: 'SEC filing snapshot',
+              cap_reason: 'opaque_transport_only',
+            },
+          },
+        },
+        {
+          symbol: 'MSFT',
+          quote: null,
+          technical: ['invalid'],
+        },
+      ],
+    });
+
+    const item = payload.items[0];
+
+    expect(item.quote).toEqual({
+      source: 'read_only_quote_diagnostic',
+      freshness: 'unavailable',
+      asOf: '2026-06-02T00:00:00Z',
+      isFallback: false,
+      isStale: true,
+      isPartial: true,
+      isSynthetic: false,
+      isUnavailable: true,
+      sourceConfidence: {
+        sourceLabel: 'read-only evidence',
+        confidenceWeight: 0,
+        degradationReason: 'read_only_fetch_disabled',
+      },
+    });
+    expect(item.technical).toEqual({
+      source: 'technical_snapshot',
+      freshness: 'stale',
+      isFallback: true,
+      isStale: true,
+      isPartial: false,
+      isSynthetic: false,
+      isUnavailable: false,
+      sourceConfidence: {
+        sourceLabel: 'technical snapshot',
+        confidenceWeight: 0.4,
+      },
+    });
+    expect(item.fundamental).toEqual({
+      source: 'fundamentals_digest',
+      freshness: 'partial',
+      isFallback: false,
+      isStale: false,
+      isPartial: true,
+      isSynthetic: false,
+      isUnavailable: false,
+      sourceConfidence: {
+        sourceLabel: 'fundamentals digest',
+        coverage: 'partial',
+      },
+    });
+    expect(item.news).toEqual({
+      source: 'news_digest',
+      freshness: 'fresh',
+      isFallback: false,
+      isStale: false,
+      isPartial: false,
+      isSynthetic: false,
+      isUnavailable: false,
+      sourceConfidence: {
+        sourceLabel: 'news digest',
+        confidenceWeight: 0.7,
+      },
+    });
+    expect(item.secFilingEvidence).toEqual({
+      source: 'sec_filing_snapshot',
+      freshness: 'recent',
+      isFallback: false,
+      isStale: false,
+      isPartial: false,
+      isSynthetic: true,
+      isUnavailable: false,
+      sourceConfidence: {
+        sourceLabel: 'SEC filing snapshot',
+        capReason: 'opaque_transport_only',
+      },
+    });
+    expect(payload.items[1].quote).toBeNull();
+    expect(payload.items[1].technical).toBeUndefined();
+    expect(payload.items[1].fundamental).toBeUndefined();
+    expect(payload.items[1].news).toBeUndefined();
+    expect(payload.items[1].secFilingEvidence).toBeUndefined();
+  });
+
   it('keeps fundamentalsSummary absent when the packet does not include it', async () => {
     const { stockEvidenceApi } = await import('../stockEvidence');
 
