@@ -1,6 +1,6 @@
 import React from 'react';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MarketRotationRadarPage from '../MarketRotationRadarPage';
 import { marketRotationApi } from '../../api/marketRotation';
@@ -762,6 +762,7 @@ describe('MarketRotationRadarPage', () => {
     const page = await screen.findByTestId('market-rotation-radar-page');
     const controls = await screen.findByTestId('rotation-radar-mode-controls');
     expect(page).toHaveTextContent('主题轮动雷达');
+    expect(screen.queryByTestId('rotation-radar-loading-fallback')).not.toBeInTheDocument();
     expect(controls).toHaveAttribute('data-linear-primitive', 'command-bar');
     expect(screen.getByTestId('rotation-market-tab-US')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByPlaceholderText('搜索主题、英文名或成员')).toBeInTheDocument();
@@ -841,6 +842,39 @@ describe('MarketRotationRadarPage', () => {
     expect(bodyText).not.toMatch(consumerDiagnosticLeakPattern);
     expect(bodyText).not.toMatch(forbiddenTradingActionPattern);
     expect(bodyText).not.toMatch(/\bDetails\b/i);
+  });
+
+  it('shows a bounded user-visible fallback while the route request remains unresolved', async () => {
+    vi.useFakeTimers();
+    vi.mocked(marketRotationApi.getRotationRadar).mockImplementationOnce(
+      () => new Promise<MarketRotationRadarResponse>(() => {}),
+    );
+
+    render(<MarketRotationRadarPage />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('正在读取主题轮动 / 相对强弱雷达');
+    expect(screen.queryByTestId('rotation-radar-loading-fallback')).not.toBeInTheDocument();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await vi.runAllTicks();
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+
+    const fallback = screen.getByTestId('rotation-radar-loading-fallback');
+    expect(fallback).toHaveTextContent('轮动数据暂未返回');
+    expect(fallback).toHaveTextContent('可稍后重试');
+    expect(fallback).toHaveTextContent('当前不会生成临时结论');
+    expect(fallback).toHaveTextContent('重新读取');
+    expect(screen.queryByTestId('rotation-radar-guidance')).not.toBeInTheDocument();
+
+    const bodyText = document.body.textContent || '';
+    expect(bodyText).not.toMatch(rawI18nKeyPattern);
+    expect(bodyText).not.toMatch(consumerDiagnosticLeakPattern);
+    expect(bodyText).not.toMatch(forbiddenTradingActionPattern);
   });
 
   it('falls back to consumer evidence family rollup when summary family data is absent', async () => {
@@ -1016,15 +1050,22 @@ describe('MarketRotationRadarPage', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('正在读取主题轮动 / 相对强弱雷达');
 
-    await vi.runAllTicks();
-
-    await vi.advanceTimersByTimeAsync(12_000);
-    await vi.runAllTicks();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await vi.runAllTicks();
+      await vi.advanceTimersByTimeAsync(12_000);
+      await vi.runAllTicks();
+      await Promise.resolve();
+    });
 
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('主题轮动暂时不可用');
     expect(alert).toHaveTextContent('页面未在预期时间内完成读取，当前无法判断轮动方向。请稍后刷新重试。');
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('rotation-radar-loading-fallback')).not.toBeInTheDocument();
     expect(screen.queryByTestId('rotation-radar-guidance')).not.toBeInTheDocument();
     expect(alert.textContent || '').not.toMatch(forbiddenTradingActionPattern);
     expect(alert.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);

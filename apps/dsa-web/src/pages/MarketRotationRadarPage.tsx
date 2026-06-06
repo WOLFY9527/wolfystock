@@ -38,6 +38,7 @@ import { decisionReadinessVariant, sanitizeMarketGuidanceCopy, type DecisionRead
 
 const TOP_THEME_LIMIT = 10;
 const DEFAULT_MARKET = 'US';
+const ROTATION_RADAR_LOADING_FALLBACK_MS = 5000;
 const ROTATION_RADAR_ROUTE_TIMEOUT_MS = 12000;
 const MARKET_OPTIONS = [
   { id: 'US', label: '美股' },
@@ -1558,12 +1559,31 @@ const ThemeDetailPanel: React.FC<{
   );
 };
 
-const LoadingPanel: React.FC = () => (
+const LoadingPanel: React.FC<{ showFallback: boolean; onRefresh: () => void }> = ({ showFallback, onRefresh }) => (
   <TerminalPanel as="section" role="status" aria-label="正在读取主题轮动 / 相对强弱雷达">
     <div className="flex items-center gap-3 text-white/60">
       <RefreshCcw className="size-4 animate-spin" aria-hidden="true" />
       <span className="text-sm">正在读取主题轮动 / 相对强弱雷达...</span>
     </div>
+    {showFallback ? (
+      <TerminalNestedBlock
+        data-testid="rotation-radar-loading-fallback"
+        className="mt-4 border-amber-300/20 bg-amber-300/[0.04] p-3 text-sm"
+      >
+        <div className="font-semibold text-amber-100">轮动数据暂未返回</div>
+        <p className="mt-2 leading-5 text-white/62">
+          可稍后重试；当前不会生成临时结论，也不会补写任何轮动方向。
+        </p>
+        <TerminalButton
+          variant="compact"
+          className="mt-3 border-amber-200/25 text-amber-100 hover:border-amber-100/40 hover:text-amber-50"
+          onClick={onRefresh}
+        >
+          <RefreshCcw className="size-3.5" aria-hidden="true" />
+          重新读取
+        </TerminalButton>
+      </TerminalNestedBlock>
+    ) : null}
   </TerminalPanel>
 );
 
@@ -1578,6 +1598,7 @@ function createRotationRadarTimeoutError(): ParsedApiError {
 interface RadarPageState {
   payload: MarketRotationRadarResponse | null;
   loading: boolean;
+  loadingRequestId: number;
   error: ParsedApiError | null;
   selectedMarket: string;
   selectedThemeId: string;
@@ -1585,7 +1606,7 @@ interface RadarPageState {
 }
 
 type RadarPageAction =
-  | { type: 'loadStarted' }
+  | { type: 'loadStarted'; requestId: number }
   | { type: 'loadSucceeded'; payload: MarketRotationRadarResponse }
   | { type: 'loadFailed'; error: ParsedApiError }
   | { type: 'selectMarket'; market: string }
@@ -1595,6 +1616,7 @@ type RadarPageAction =
 const initialRadarPageState: RadarPageState = {
   payload: null,
   loading: true,
+  loadingRequestId: 0,
   error: null,
   selectedMarket: DEFAULT_MARKET,
   selectedThemeId: '',
@@ -1608,6 +1630,7 @@ function radarPageReducer(state: RadarPageState, action: RadarPageAction): Radar
         ...state,
         payload: null,
         loading: true,
+        loadingRequestId: action.requestId,
         error: null,
         selectedThemeId: '',
       };
@@ -1648,12 +1671,13 @@ function radarPageReducer(state: RadarPageState, action: RadarPageAction): Radar
 
 const MarketRotationRadarPage: React.FC = () => {
   const [state, dispatch] = useReducer(radarPageReducer, initialRadarPageState);
+  const [showLoadingFallback, setShowLoadingFallback] = useState(false);
   const activeRequestIdRef = useRef(0);
 
   const loadRadar = async (market: string) => {
     const requestId = activeRequestIdRef.current + 1;
     activeRequestIdRef.current = requestId;
-    dispatch({ type: 'loadStarted' });
+    dispatch({ type: 'loadStarted', requestId });
     let timeoutHandle: number | undefined;
     try {
       const payload = await Promise.race<MarketRotationRadarResponse>([
@@ -1694,6 +1718,20 @@ const MarketRotationRadarPage: React.FC = () => {
       activeRequestIdRef.current += 1;
     };
   }, []);
+
+  useEffect(() => {
+    if (!state.loading || state.payload) {
+      setShowLoadingFallback(false);
+      return undefined;
+    }
+    setShowLoadingFallback(false);
+    const fallbackHandle = window.setTimeout(() => {
+      setShowLoadingFallback(true);
+    }, ROTATION_RADAR_LOADING_FALLBACK_MS);
+    return () => {
+      window.clearTimeout(fallbackHandle);
+    };
+  }, [state.loading, state.loadingRequestId, state.payload]);
 
   const handleMarketChange = (market: string) => {
     if (market === state.selectedMarket) {
@@ -1746,7 +1784,9 @@ const MarketRotationRadarPage: React.FC = () => {
           </TerminalPanel>
         ) : null}
 
-        {state.loading && !state.payload ? <LoadingPanel /> : null}
+        {state.loading && !state.payload ? (
+          <LoadingPanel showFallback={showLoadingFallback} onRefresh={handleRefresh} />
+        ) : null}
 
         {state.payload ? (
           <>
