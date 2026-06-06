@@ -329,7 +329,7 @@ Next candidates:
 
 ## Batch 7: Deterministic Backtest Display Iteration Cleanup
 
-Status: included in the checkpoint commit for this batch after local validation.
+Status: committed and pushed as checkpoint `9f498db0`.
 
 Files changed:
 
@@ -370,9 +370,54 @@ Next candidates:
 - Accessibility warnings require care because several flagged elements are scroll containers or filter groups where React Doctor's suggested semantic replacement may not preserve intended keyboard behavior.
 - Remaining deterministic page findings are mostly state/effect flow, giant component, and manual memoization tied to callback identity; defer without narrower behavior coverage.
 
+## Batch 8: Scanner Helper Iteration Cleanup
+
+Status: included in the checkpoint commit for this batch after local validation.
+
+Files changed:
+
+- `apps/dsa-web/src/pages/UserScannerPage.tsx`
+
+Changes:
+
+- Replaced scanner helper `map().filter(Boolean)` and display-count derivations with `flatMap()` or single-pass `reduce()` equivalents.
+- Touched input/string normalization, notes de-duplication, symbol token counting, and rejection bucket display counts only.
+- Explicitly skipped preview threshold and sort/ranking findings because they are closer to scanner selection/ranking semantics.
+
+Diagnostics after batch:
+
+- Score: `61`
+- Total diagnostics: `491`
+- Errors: `112`
+- Warnings: `379`
+- Affected files: `41`
+- Reduced total diagnostics from previous checkpoint: `7`
+- Reduced total diagnostics from baseline: `76`
+- Reduced by rule from previous checkpoint:
+  - `js-flatmap-filter`: `4 -> 0` (`-4`)
+  - `js-combine-iterations`: `4 -> 1` (`-3`)
+- React Doctor diff for changed file:
+  - `src/pages/UserScannerPage.tsx`: `103 -> 96` (`-7`)
+
+Validations run:
+
+- `git diff --check` -> pass
+- `./scripts/release_secret_scan.sh` -> pass
+- `npm --prefix apps/dsa-web run test -- 'src/pages/__tests__/UserScannerPage.test.tsx' --no-file-parallelism` -> pass, `88` tests
+- `npm --prefix apps/dsa-web run lint` -> pass
+- `npm --prefix apps/dsa-web run build` -> pass with existing Vite chunk-size warning
+- `npx react-doctor@latest --json --json-compact --yes --no-score` -> remaining diagnostics expected, totals above
+- `npx react-doctor@latest --score --yes` -> `61`
+
+Next candidates:
+
+- The remaining `UserScannerPage.tsx` `js-combine-iterations` at preview threshold and `js-tosorted-immutable` are deferred because they sit on scanner threshold/ranking flow.
+- Remaining `js-set-map-lookups` in Home/Data Source need separate proof; a previous data-source Set attempt did not reduce diagnostics.
+- Remaining safe work is increasingly sparse; most high-count findings are state/effect/reducer/manual memoization changes with behavior risk.
+
 ## Protected Domain Confirmation
 
-No changes in Batches 1 through 7 to:
+No changes in Batches 1 through 8 to:
 
 - backend/API/provider/cache/runtime/auth/package/lockfile/config/CI
 - provider order, fallback, deadlines, cache semantics, payload shapes

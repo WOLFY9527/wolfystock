@@ -323,9 +323,10 @@ function getNestedStringArray(parent: Record<string, unknown> | null, ...keys: s
   for (const key of keys) {
     const value = parent?.[key];
     if (Array.isArray(value)) {
-      return value
-        .map((item) => (typeof item === 'string' ? item.trim() : ''))
-        .filter(Boolean);
+      return value.flatMap((item) => {
+        const normalized = typeof item === 'string' ? item.trim() : '';
+        return normalized ? [normalized] : [];
+      });
     }
   }
   return [];
@@ -542,10 +543,16 @@ function sanitizeScannerUserText(value: string | null | undefined, language: 'zh
 }
 
 function sanitizeScannerNotes(notes: Array<string | null | undefined>, language: 'zh' | 'en'): string[] {
-  return notes
-    .filter((item): item is string => Boolean(String(item || '').trim()))
-    .map((item) => sanitizeScannerUserText(item, language, ''))
-    .filter((item, index, array) => Boolean(item) && array.indexOf(item) === index);
+  return notes.reduce<string[]>((items, item) => {
+    if (!String(item || '').trim()) {
+      return items;
+    }
+    const sanitized = sanitizeScannerUserText(item, language, '');
+    if (sanitized && !items.includes(sanitized)) {
+      items.push(sanitized);
+    }
+    return items;
+  }, []);
 }
 
 function sanitizeScannerFieldLabel(label: string, language: 'zh' | 'en'): string {
@@ -1308,17 +1315,22 @@ function normalizeRejectionBucket(candidate: ScannerCandidateDiagnostic): Reject
 }
 
 function buildRejectionBuckets(candidates: ScannerCandidateDiagnostic[], language: 'zh' | 'en'): ScannerLabeledValue[] {
-  const counts = new Map<RejectionBucketKey, number>();
-  candidates
-    .filter((candidate) => candidate.status !== 'selected')
-    .forEach((candidate) => {
-      const bucket = normalizeRejectionBucket(candidate);
-      counts.set(bucket, (counts.get(bucket) || 0) + 1);
-    });
+  const counts = candidates.reduce<Map<RejectionBucketKey, number>>((bucketCounts, candidate) => {
+    if (candidate.status === 'selected') {
+      return bucketCounts;
+    }
+    const bucket = normalizeRejectionBucket(candidate);
+    bucketCounts.set(bucket, (bucketCounts.get(bucket) || 0) + 1);
+    return bucketCounts;
+  }, new Map<RejectionBucketKey, number>());
   const order: RejectionBucketKey[] = ['trend', 'momentum', 'liquidity', 'risk', 'data', 'score', 'other'];
-  return order
-    .map((key) => ({ label: rejectionBucketLabel(key, language), value: String(counts.get(key) || 0) }))
-    .filter((item) => item.value !== '0');
+  return order.reduce<ScannerLabeledValue[]>((items, key) => {
+    const count = counts.get(key) || 0;
+    if (count > 0) {
+      items.push({ label: rejectionBucketLabel(key, language), value: String(count) });
+    }
+    return items;
+  }, []);
 }
 
 function diagnosticToCandidate(candidate: ScannerCandidateDiagnostic): ScannerCandidate {
@@ -1546,14 +1558,16 @@ function parseCustomSymbols(value: string): string[] {
     new Set(
       value
         .split(/[\s,，;；]+/)
-        .map((symbol) => symbol.trim().toUpperCase())
-        .filter(Boolean),
+        .flatMap((symbol) => {
+          const normalized = symbol.trim().toUpperCase();
+          return normalized ? [normalized] : [];
+        }),
     ),
   );
 }
 
 function getSymbolTokenCount(value: string): number {
-  return value.split(/[\s,，;；]+/).map((symbol) => symbol.trim()).filter(Boolean).length;
+  return value.split(/[\s,，;；]+/).reduce((count, symbol) => count + (symbol.trim() ? 1 : 0), 0);
 }
 
 function getThemeLabel(theme: ScannerTheme, language: 'zh' | 'en'): string {
@@ -1585,9 +1599,10 @@ function hasOutcome(outcome?: ScannerCandidateOutcome | null): boolean {
 function dedupeTickerSymbols(symbols: string[]): string[] {
   return Array.from(
     new Set(
-      symbols
-        .map((symbol) => symbol.trim())
-        .filter(Boolean),
+      symbols.flatMap((symbol) => {
+        const normalized = symbol.trim();
+        return normalized ? [normalized] : [];
+      }),
     ),
   );
 }
