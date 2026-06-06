@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from api.deps import get_optional_current_user
 from api.v1.endpoints import market
 from api.v1.endpoints import market_overview
+from api.v1.schemas.market_temperature import MarketTemperatureConsumedSubsetResponse
 from src.services.market_overview_service import (
     MarketOverviewService,
     classify_market_payload_reliability,
@@ -595,6 +596,81 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
                 "conclusionAllowed",
             }.issubset(payload.keys())
         )
+
+    def test_market_temperature_consumed_subset_schema_locks_api_payload_and_preserves_extra_fields(self) -> None:
+        service = MarketOverviewService()
+
+        payload = _market_temperature_api_payload(service, _decision_semantics_ready_temperature_inputs())
+        dto = MarketTemperatureConsumedSubsetResponse.model_validate(payload)
+        serialized = dto.model_dump()
+
+        locked_top_level_keys = {
+            "source",
+            "updatedAt",
+            "freshness",
+            "isFallback",
+            "isStale",
+            "isPartial",
+            "temperatureAvailable",
+            "conclusionAllowed",
+            "researchReadiness",
+            "marketActionabilityFrame",
+            "marketIntelligenceEvidenceFrame",
+            "regimeSummary",
+            "providerHealth",
+            "evidenceSnapshot",
+        }
+        self.assertTrue(locked_top_level_keys.issubset(serialized.keys()))
+        for key in (
+            "source",
+            "updatedAt",
+            "freshness",
+            "isFallback",
+            "isStale",
+            "isPartial",
+            "temperatureAvailable",
+            "conclusionAllowed",
+        ):
+            self.assertEqual(serialized[key], payload[key])
+
+        self.assertIsInstance(serialized["researchReadiness"], dict)
+        self.assertIsInstance(serialized["marketActionabilityFrame"], dict)
+        self.assertIsInstance(serialized["marketIntelligenceEvidenceFrame"], dict)
+        self.assertIsInstance(serialized["regimeSummary"], dict)
+
+        provider_health = serialized["providerHealth"]
+        self.assertEqual(provider_health["provider"], payload["providerHealth"]["provider"])
+        self.assertEqual(provider_health["status"], payload["providerHealth"]["status"])
+        self.assertIsInstance(provider_health["isFallback"], bool)
+        self.assertIsInstance(provider_health["isStale"], bool)
+        self.assertIsInstance(provider_health["isRefreshing"], bool)
+
+        evidence_snapshot = serialized["evidenceSnapshot"]
+        self.assertEqual(evidence_snapshot["contractVersion"], payload["evidenceSnapshot"]["contractVersion"])
+        self.assertEqual(evidence_snapshot["source"], payload["evidenceSnapshot"]["source"])
+        self.assertEqual(evidence_snapshot["freshness"], payload["evidenceSnapshot"]["freshness"])
+        self.assertIsInstance(evidence_snapshot["isFallback"], bool)
+        self.assertIsInstance(evidence_snapshot["isStale"], bool)
+        self.assertIsInstance(evidence_snapshot["isPartial"], bool)
+        self.assertGreaterEqual(evidence_snapshot["confidenceWeight"], 0)
+        self.assertLessEqual(evidence_snapshot["confidenceWeight"], 1)
+
+        historical_extra_keys = {
+            "scores",
+            "marketRegimeSynthesis",
+            "marketDecisionSemantics",
+            "sourceLabel",
+            "sourceType",
+            "asOf",
+            "delayMinutes",
+            "fallbackUsed",
+            "confidence",
+            "isReliable",
+        }
+        self.assertTrue(historical_extra_keys.issubset(payload.keys()))
+        for key in historical_extra_keys:
+            self.assertIn(key, serialized)
+            self.assertEqual(serialized[key], payload[key])
 
     def test_market_temperature_research_readiness_degraded_no_conclusion_is_not_ready(self) -> None:
         service = MarketOverviewService()
