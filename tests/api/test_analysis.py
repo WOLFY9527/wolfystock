@@ -324,18 +324,41 @@ def test_sync_analysis_api_preserves_home_evidence_packet_contract(client) -> No
     payload = response.json()
     report = payload["report"]
     packet = report["singleStockEvidencePacket"]
+    citation_frame = report["evidenceCitationFrame"]
+    provenance_frame = report["sourceProvenanceFrame"]
 
     assert report["researchReadiness"] == service_report["researchReadiness"]
     assert report["evidenceCoverageFrame"] == service_report["evidenceCoverageFrame"]
     assert report["singleStockEvidencePacket"] == service_report["singleStockEvidencePacket"]
+    assert report["evidenceCitationFrame"] == service_report["evidenceCitationFrame"]
+    assert report["sourceProvenanceFrame"] == service_report["sourceProvenanceFrame"]
     assert report["meta"]["researchReadiness"] == report["researchReadiness"]
     assert report["meta"]["evidenceCoverageFrame"] == report["evidenceCoverageFrame"]
     assert report["meta"]["singleStockEvidencePacket"] == packet
+    assert report["meta"]["evidenceCitationFrame"] == citation_frame
+    assert report["meta"]["sourceProvenanceFrame"] == provenance_frame
     assert report["details"]["analysis_result"]["researchReadiness"] == report["researchReadiness"]
     assert report["details"]["analysis_result"]["evidenceCoverageFrame"] == report["evidenceCoverageFrame"]
     assert report["details"]["analysis_result"]["singleStockEvidencePacket"] == packet
+    assert report["details"]["analysis_result"]["evidenceCitationFrame"] == citation_frame
+    assert report["details"]["analysis_result"]["sourceProvenanceFrame"] == provenance_frame
     assert packet["contractVersion"] == "single_stock_evidence_packet_v1"
     assert packet["fundamentalsEarnings"]["normalizerState"] == "ready"
     assert packet["newsCatalysts"]["extractionState"] == "ready"
     assert packet["newsCatalysts"]["topNewsItems"][0]["id"] == "news-earnings"
     assert packet["newsCatalysts"]["topCatalystItems"][0]["id"] == "cat-guidance"
+    assert citation_frame["contractVersion"] == "home_report_evidence_citation_frame_v1"
+    assert citation_frame["noAdviceBoundary"] is True
+    assert [entry["evidenceDomain"] for entry in provenance_frame] == [
+        "priceHistory",
+        "technicals",
+        "fundamentals",
+        "earnings",
+        "filings",
+        "news",
+        "catalysts",
+        "sentiment",
+        "valuation",
+        "sectorTheme",
+        "macroLiquidity",
+    ]

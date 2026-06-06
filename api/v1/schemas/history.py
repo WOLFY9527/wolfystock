@@ -13,6 +13,20 @@ from typing import Optional, List, Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from api.v1.schemas.home_evidence import (
+    HOME_ANALYSIS_CONSUMED_EVIDENCE_FIELDS,
+    HomeEvidenceCitationFrame,
+    HomeEvidenceCoverageFrame,
+    HomeResearchReadiness,
+    HomeSingleStockEvidencePacket,
+    HomeSourceProvenanceFrame,
+    validate_home_evidence_field,
+)
+
+
+def _exclude_none(value: Any) -> bool:
+    return value is None
+
 
 class HistoryItem(BaseModel):
     """历史记录摘要（列表展示用）"""
@@ -142,9 +156,19 @@ class ReportMeta(BaseModel):
     current_price: Optional[float] = Field(None, description="分析时股价")
     change_pct: Optional[float] = Field(None, description="分析时涨跌幅(%)")
     model_used: Optional[str] = Field(None, description="分析使用的 LLM 模型")
-    researchReadiness: Optional[Any] = Field(None, description="研究就绪度投影（可选）")
-    evidenceCoverageFrame: Optional[Any] = Field(None, description="证据覆盖框架（可选）")
-    singleStockEvidencePacket: Optional[Any] = Field(None, description="单票证据包（可选）")
+    researchReadiness: Optional[HomeResearchReadiness] = Field(None, description="研究就绪度投影（可选）")
+    evidenceCoverageFrame: Optional[HomeEvidenceCoverageFrame] = Field(None, description="证据覆盖框架（可选）")
+    singleStockEvidencePacket: Optional[HomeSingleStockEvidencePacket] = Field(None, description="单票证据包（可选）")
+    evidenceCitationFrame: Optional[HomeEvidenceCitationFrame] = Field(
+        None,
+        description="Home 证据引用框架（可选）",
+        exclude_if=_exclude_none,
+    )
+    sourceProvenanceFrame: Optional[HomeSourceProvenanceFrame] = Field(
+        None,
+        description="Home 来源溯源框架（可选）",
+        exclude_if=_exclude_none,
+    )
 
 
 class ReportSummary(BaseModel):
@@ -233,9 +257,19 @@ class AnalysisReport(BaseModel):
     decision_trace: Optional[Any] = Field(None, description="决策溯源元数据（可选）")
     data_quality_report: Optional[Any] = Field(None, description="决策关键数据质量报告（可选）")
     report_quality: Optional[Any] = Field(None, description="报告完整性/溯源状态摘要（可选）")
-    researchReadiness: Optional[Any] = Field(None, description="研究就绪度投影（可选）")
-    evidenceCoverageFrame: Optional[Any] = Field(None, description="证据覆盖框架（可选）")
-    singleStockEvidencePacket: Optional[Any] = Field(None, description="单票证据包（可选）")
+    researchReadiness: Optional[HomeResearchReadiness] = Field(None, description="研究就绪度投影（可选）")
+    evidenceCoverageFrame: Optional[HomeEvidenceCoverageFrame] = Field(None, description="证据覆盖框架（可选）")
+    singleStockEvidencePacket: Optional[HomeSingleStockEvidencePacket] = Field(None, description="单票证据包（可选）")
+    evidenceCitationFrame: Optional[HomeEvidenceCitationFrame] = Field(
+        None,
+        description="Home 证据引用框架（可选）",
+        exclude_if=_exclude_none,
+    )
+    sourceProvenanceFrame: Optional[HomeSourceProvenanceFrame] = Field(
+        None,
+        description="Home 来源溯源框架（可选）",
+        exclude_if=_exclude_none,
+    )
 
     @model_validator(mode="after")
     def _hydrate_home_evidence_contracts(self) -> "AnalysisReport":
@@ -248,20 +282,17 @@ class AnalysisReport(BaseModel):
         if not isinstance(analysis_result, dict):
             return self
 
-        if self.researchReadiness is None and isinstance(analysis_result.get("researchReadiness"), dict):
-            self.researchReadiness = analysis_result["researchReadiness"]
-        if self.evidenceCoverageFrame is None and isinstance(analysis_result.get("evidenceCoverageFrame"), dict):
-            self.evidenceCoverageFrame = analysis_result["evidenceCoverageFrame"]
-        if self.singleStockEvidencePacket is None and isinstance(analysis_result.get("singleStockEvidencePacket"), dict):
-            self.singleStockEvidencePacket = analysis_result["singleStockEvidencePacket"]
+        for field_name in HOME_ANALYSIS_CONSUMED_EVIDENCE_FIELDS:
+            if getattr(self, field_name) is not None:
+                continue
+            candidate = analysis_result.get(field_name)
+            if candidate is not None:
+                setattr(self, field_name, validate_home_evidence_field(field_name, candidate))
 
         if isinstance(self.meta, ReportMeta):
-            if self.meta.researchReadiness is None:
-                self.meta.researchReadiness = self.researchReadiness
-            if self.meta.evidenceCoverageFrame is None:
-                self.meta.evidenceCoverageFrame = self.evidenceCoverageFrame
-            if self.meta.singleStockEvidencePacket is None:
-                self.meta.singleStockEvidencePacket = self.singleStockEvidencePacket
+            for field_name in HOME_ANALYSIS_CONSUMED_EVIDENCE_FIELDS:
+                if getattr(self.meta, field_name) is None:
+                    setattr(self.meta, field_name, getattr(self, field_name))
 
         return self
 

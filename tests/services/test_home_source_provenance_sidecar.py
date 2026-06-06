@@ -468,7 +468,11 @@ def test_helper_runtime_integration_is_limited_to_home_response_assembly() -> No
         capture_output=True,
         text=True,
     )
-    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    lines = [
+        line
+        for line in result.stdout.splitlines()
+        if line.strip() and not line.startswith("docs/")
+    ]
 
     assert lines
     assert any(line.startswith("src/services/analysis_service.py:") for line in lines)

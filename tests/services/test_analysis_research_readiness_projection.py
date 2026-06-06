@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from api.v1.schemas.history import AnalysisReport, ReportDetails, ReportMeta, ReportSummary
 from src.analyzer import AnalysisResult
 from src.services.analysis_service import AnalysisService
 
@@ -126,6 +127,109 @@ def _result_with_quality(
 
 def _report_for(result: AnalysisResult) -> dict[str, Any]:
     return AnalysisService()._build_analysis_response(result, query_id="query-123")
+
+
+def test_home_analysis_consumed_evidence_schema_preserves_sidecars_and_extra_fields() -> None:
+    analysis_result = {
+        "researchReadiness": {
+            "researchReady": False,
+            "readinessState": "observe_only",
+            "missingEvidence": ["news"],
+            "blockingReasons": ["provider_timeout"],
+            "sourceAuthority": "observationOnly",
+            "consumerActionBoundary": "no_advice",
+            "historicalReadinessNote": "kept",
+        },
+        "evidenceCoverageFrame": {
+            "news": {
+                "status": "blocked",
+                "fallbackOrProxy": True,
+                "missingReasons": ["provider_timeout"],
+                "nextEvidenceNeeded": ["news"],
+                "historicalCoverageNote": "kept",
+            }
+        },
+        "singleStockEvidencePacket": {
+            "contractVersion": "single_stock_evidence_packet_v1",
+            "symbol": "AAPL",
+            "market": "us",
+            "packetState": "degraded",
+            "domains": {
+                "news": {
+                    "status": "blocked",
+                    "sourceTier": "observation_only",
+                    "providerAuthority": "observationOnly",
+                    "freshness": "fallback",
+                    "fallbackOrProxy": True,
+                    "historicalDomainNote": "kept",
+                }
+            },
+            "sourceSummary": {"news": {"status": "blocked", "historicalSummaryNote": "kept"}},
+            "historicalPacketNote": "kept",
+        },
+        "evidenceCitationFrame": {
+            "contractVersion": "home_report_evidence_citation_frame_v1",
+            "frameState": "blocked",
+            "symbol": "AAPL",
+            "market": "us",
+            "missingEvidence": ["news"],
+            "blockingReasons": ["provider_timeout"],
+            "noAdviceBoundary": True,
+            "citedEvidence": [],
+            "domainCoverage": [
+                {
+                    "domain": "news",
+                    "status": "blocked",
+                    "authorityLabel": "observationOnly",
+                    "freshnessLabel": "fallback",
+                    "historicalCitationCoverageNote": "kept",
+                }
+            ],
+            "nextEvidenceNeeded": ["news"],
+            "historicalCitationNote": "kept",
+        },
+        "sourceProvenanceFrame": [
+            {
+                "contractVersion": "source_provenance_v1",
+                "sourceId": "unknown_source",
+                "sourceLabel": "Unknown source",
+                "evidenceDomain": "news",
+                "authorityTier": "observationOnly",
+                "freshnessState": "fallback",
+                "sourceTier": "observation_only",
+                "fallbackOrProxy": True,
+                "observationOnly": True,
+                "scoreContributionAllowed": False,
+                "limitations": ["provider_timeout"],
+                "nextEvidenceNeeded": ["news"],
+                "debugRef": "analysis:test",
+                "historicalProvenanceNote": "kept",
+            }
+        ],
+    }
+
+    report = AnalysisReport(
+        meta=ReportMeta(query_id="query-123", stock_code="AAPL"),
+        summary=ReportSummary(analysis_summary="Observation only."),
+        details=ReportDetails(raw_result={"analysis_result": analysis_result}),
+    )
+    dumped = report.model_dump()
+
+    for field in (
+        "researchReadiness",
+        "evidenceCoverageFrame",
+        "singleStockEvidencePacket",
+        "evidenceCitationFrame",
+        "sourceProvenanceFrame",
+    ):
+        assert dumped[field] == analysis_result[field]
+        assert dumped["meta"][field] == analysis_result[field]
+        assert dumped["details"]["analysis_result"][field] == analysis_result[field]
+    assert dumped["researchReadiness"]["historicalReadinessNote"] == "kept"
+    assert dumped["evidenceCoverageFrame"]["news"]["historicalCoverageNote"] == "kept"
+    assert dumped["singleStockEvidencePacket"]["domains"]["news"]["historicalDomainNote"] == "kept"
+    assert dumped["evidenceCitationFrame"]["domainCoverage"][0]["historicalCitationCoverageNote"] == "kept"
+    assert dumped["sourceProvenanceFrame"][0]["historicalProvenanceNote"] == "kept"
 
 
 def test_home_analysis_response_adds_research_readiness_ready_path() -> None:
