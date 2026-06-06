@@ -160,6 +160,75 @@ provider names, reason trees, JSON, or maintainer action items.
 - Candidate unavailability or paused scoring should appear as product-state
   language rather than diagnostic exclusion language.
 
+#### Scanner Explainability IA Addendum
+
+This addendum defines the future consumer-facing information architecture for
+Scanner explainability metadata. It is an IA/copy contract only. It does not
+authorize UI implementation, score-cap math changes, ranking changes,
+filtering changes, or any change to Scanner degraded/default semantics.
+
+Default-visible consumer summary rules:
+
+- Keep the row-level summary bounded to consumer-safe status, confidence,
+  freshness, and one short explanation sentence.
+- Use consumer-safe inputs first: `consumerDiagnostics`,
+  `candidateEvidenceFrame`, `candidateResearchReadiness`,
+  `candidateResearchSummaryFrame`, and `candidateSourceProvenanceFrame`.
+- Treat `score` as the current ranked result. If a score limit needs
+  explanation, describe only the user-facing limitation, not the raw cap
+  mechanics, raw delta fields, or ranking internals.
+- Default-visible copy must stay observational: low confidence, latest
+  available data, partial coverage, research-only, or temporarily unavailable.
+
+Row-level explainability disclosure rules:
+
+- Row default stays compact. Expanded disclosure may explain evidence coverage,
+  research readiness, research summary, freshness context, and bounded source
+  context after localization.
+- Disclosure may describe stale, fallback, partial, delayed, or limited
+  confidence states only as product-readability constraints.
+- Disclosure must not imply provider authority, source superiority, ranking
+  override, or investment advice.
+- Any future badge, chip, drawer, or disclosure UI is deferred until the
+  implementation task reconfirms the supporting tests, types, and API
+  contracts still preserve the required fields.
+
+Admin/internal-only metadata boundaries:
+
+- Keep raw diagnostics, provider observation, admin reason codes, provider
+  identity, source-authority flags, trust-tier fields, debug references, cache
+  state, and runtime traces out of consumer-default UI and consumer
+  disclosures.
+- Admin/internal-only data may inform backstage tooling, but it must not be
+  re-labeled into consumer trust badges.
+
+Source/freshness/fallback/stale/partial display constraints:
+
+- Consumers may see coarse freshness and availability states, plus last updated
+  context where the route already supports it.
+- Use bounded product language such as `已使用最近一次可用数据`,
+  `部分数据暂不可用`, `数据更新中`, or `当前信号置信度较低，仅供观察`.
+- Do not expose raw fallback mode names, provider names, source class names,
+  cache/runtime terms, or backend field labels.
+- Do not turn stale/partial/fallback flags into hidden provider rankings or
+  source-authority claims.
+
+Score-cap explanation boundaries:
+
+- Consumer copy may explain that the current score should be read with limited
+  confidence or reduced comparability.
+- Consumer copy must not expose raw score-cap/debug fields or describe the cap
+  as a change to selection, ranking, sorting, filtering, or shortlist order.
+- Future implementations must preserve existing score/ranking/filtering/cap
+  semantics exactly as they are today.
+
+Copy rules:
+
+- Avoid raw provider, debug, cache, runtime, schema, or reason-code language.
+- Prefer one short sentence over stacked badges or diagnostic lists.
+- Keep wording product-safe and observation-only. Do not infer data authority,
+  provider quality, or trade recommendation from explainability metadata.
+
 ### Watchlist
 
 - Show item-level freshness and confidence.
