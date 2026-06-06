@@ -14,10 +14,12 @@ import sys
 import pytest
 
 from src.contracts.source_confidence import (
+    PROVIDER_SOURCE_READINESS_CONTRACT_VERSION,
     ProviderCapabilityContract,
     ProviderCapabilitySupportContract,
     ProviderDryRunProbeContract,
     ProviderFitMetadataContract,
+    ProviderSourceReadinessContract,
     SCORE_GRADE_BLOCKED_SOURCE_TYPES,
     SCORE_GRADE_TRUST_LEVELS,
     ScoreGradeSourceAuthorityResult,
@@ -26,6 +28,7 @@ from src.contracts.source_confidence import (
     coerce_provider_capability_support_contract,
     coerce_provider_dry_run_probe_contract,
     coerce_provider_fit_metadata_contract,
+    build_provider_source_readiness_contract,
     coerce_source_confidence_contract,
     evaluate_score_grade_source_authority,
     validate_source_confidence_contract,
@@ -641,6 +644,205 @@ def test_provider_capability_support_contract_projects_license_gated_missing_pro
     }
 
 
+def test_provider_source_readiness_contract_projects_ready_observation_sidecar_without_runtime_flags() -> None:
+    contract = build_provider_source_readiness_contract(
+        {
+            "providerId": "official.quote_provider",
+            "capability": "quote",
+            "sourceType": "score_grade",
+            "sourceTier": "score_grade",
+            "trustLevel": "score_grade_when_configured",
+            "freshnessExpectation": "intraday_or_better",
+            "scoreContributionAllowed": True,
+        },
+        {
+            "source": "official_quote",
+            "sourceLabel": "Official Quote",
+            "freshness": "fresh",
+            "confidenceWeight": 0.91,
+            "coverage": 1.0,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+        },
+    )
+
+    assert isinstance(contract, ProviderSourceReadinessContract)
+    assert contract.to_dict() == {
+        "contractVersion": PROVIDER_SOURCE_READINESS_CONTRACT_VERSION,
+        "diagnosticOnly": True,
+        "observationOnly": True,
+        "authorityGrant": False,
+        "scoreContributionAllowed": False,
+        "providerRuntimeCalled": False,
+        "networkCallsEnabled": False,
+        "marketCacheMutation": False,
+        "providerId": "official.quote_provider",
+        "capability": "quote",
+        "source": "official_quote",
+        "sourceLabel": "Official Quote",
+        "sourceType": "score_grade",
+        "sourceTier": "score_grade",
+        "trustLevel": "score_grade_when_configured",
+        "freshnessExpectation": "intraday_or_better",
+        "observedFreshness": "fresh",
+        "effectiveFreshness": "fresh",
+        "confidenceWeight": 0.91,
+        "coverage": 1.0,
+        "readinessState": "ready_for_observation",
+        "reasonCodes": [],
+        "capReason": None,
+        "degradationReason": None,
+    }
+
+
+@pytest.mark.parametrize(
+    ("updates", "expected_state", "expected_freshness", "expected_cap", "expected_reason"),
+    [
+        ({"isFallback": True}, "blocked_fallback_source", "fallback", 0.4, "fallback_source"),
+        ({"isStale": True}, "blocked_stale_source", "stale", 0.6, "stale_source"),
+        ({"isPartial": True}, "blocked_partial_coverage", "partial", 0.7, "partial_coverage"),
+        ({"isSynthetic": True}, "blocked_synthetic_source", "synthetic", 0.2, "synthetic_source"),
+        ({"isUnavailable": True}, "blocked_unavailable_source", "unavailable", 0.0, "unavailable_source"),
+    ],
+)
+def test_provider_source_readiness_contract_blocks_degraded_sources(
+    updates: dict[str, object],
+    expected_state: str,
+    expected_freshness: str,
+    expected_cap: float,
+    expected_reason: str,
+) -> None:
+    source_confidence: dict[str, object] = {
+        "source": "official_quote",
+        "sourceLabel": "Official Quote",
+        "freshness": "live",
+        "confidenceWeight": 1.0,
+        "coverage": 1.0,
+        "sourceAuthorityAllowed": True,
+        "scoreContributionAllowed": True,
+    }
+    source_confidence.update(updates)
+
+    contract = build_provider_source_readiness_contract(
+        {
+            "providerId": "official.quote_provider",
+            "capability": "quote",
+            "sourceType": "score_grade",
+            "sourceTier": "score_grade",
+            "trustLevel": "score_grade_when_configured",
+            "freshnessExpectation": "intraday_or_better",
+        },
+        source_confidence,
+    )
+    payload = contract.to_dict()
+
+    assert payload["readinessState"] == expected_state
+    assert payload["observedFreshness"] == "live"
+    assert payload["effectiveFreshness"] == expected_freshness
+    assert payload["effectiveFreshness"] not in {"live", "fresh"}
+    assert payload["confidenceWeight"] <= expected_cap
+    assert payload["scoreContributionAllowed"] is False
+    assert payload["authorityGrant"] is False
+    assert expected_reason in payload["reasonCodes"]
+    assert "score_grade_source_authority_allowed" not in payload["reasonCodes"]
+
+
+def test_provider_source_readiness_contract_fails_closed_for_missing_capability_metadata() -> None:
+    contract = build_provider_source_readiness_contract(
+        {},
+        {
+            "source": "official_quote",
+            "sourceLabel": "Official Quote",
+            "freshness": "fresh",
+            "confidenceWeight": 0.9,
+            "coverage": 1.0,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+        },
+    )
+    payload = contract.to_dict()
+
+    assert payload["readinessState"] == "blocked_missing_capability_metadata"
+    assert payload["observedFreshness"] == "fresh"
+    assert payload["effectiveFreshness"] == "unknown"
+    assert payload["confidenceWeight"] == 0.0
+    assert payload["capReason"] == "missing_capability_metadata"
+    assert "missing_capability_metadata" in payload["reasonCodes"]
+    assert payload["providerRuntimeCalled"] is False
+    assert payload["networkCallsEnabled"] is False
+    assert payload["marketCacheMutation"] is False
+
+
+def test_provider_source_readiness_contract_fails_closed_for_missing_source_confidence() -> None:
+    contract = build_provider_source_readiness_contract(
+        {
+            "providerId": "official.quote_provider",
+            "capability": "quote",
+            "sourceType": "score_grade",
+            "sourceTier": "score_grade",
+            "trustLevel": "score_grade_when_configured",
+            "freshnessExpectation": "intraday_or_better",
+        },
+        {},
+    )
+    payload = contract.to_dict()
+
+    assert payload["readinessState"] == "blocked_missing_source_confidence"
+    assert payload["observedFreshness"] == "unknown"
+    assert payload["effectiveFreshness"] == "unknown"
+    assert payload["coverage"] == 0.0
+    assert payload["capReason"] == "missing_source_confidence"
+    assert "missing_source_confidence" in payload["reasonCodes"]
+
+
+@pytest.mark.parametrize(
+    ("source_updates", "expected_state", "expected_reason"),
+    [
+        (
+            {"sourceAuthorityAllowed": False, "scoreContributionAllowed": True},
+            "blocked_source_authority",
+            "source_authority_not_allowed",
+        ),
+        (
+            {"sourceAuthorityAllowed": True, "scoreContributionAllowed": False},
+            "blocked_score_contribution",
+            "score_contribution_not_allowed",
+        ),
+    ],
+)
+def test_provider_source_readiness_contract_fails_closed_for_non_authority_or_non_scoring_inputs(
+    source_updates: dict[str, object],
+    expected_state: str,
+    expected_reason: str,
+) -> None:
+    source_confidence: dict[str, object] = {
+        "source": "official_quote",
+        "sourceLabel": "Official Quote",
+        "freshness": "cached",
+        "confidenceWeight": 0.8,
+        "coverage": 1.0,
+    }
+    source_confidence.update(source_updates)
+
+    contract = build_provider_source_readiness_contract(
+        {
+            "providerId": "official.quote_provider",
+            "capability": "quote",
+            "sourceType": "score_grade",
+            "sourceTier": "score_grade",
+            "trustLevel": "score_grade_when_configured",
+            "freshnessExpectation": "intraday_or_better",
+        },
+        source_confidence,
+    )
+    payload = contract.to_dict()
+
+    assert payload["readinessState"] == expected_state
+    assert payload["scoreContributionAllowed"] is False
+    assert payload["authorityGrant"] is False
+    assert expected_reason in payload["reasonCodes"]
+
+
 def test_authorized_index_futures_metadata_contracts_remain_observation_only_and_non_scoring() -> None:
     from src.services.provider_capability_matrix import (
         get_provider_capability_support_contract,
@@ -884,13 +1086,19 @@ import src.contracts.source_confidence
 
 blocked = [
     "data_provider",
+    "data_provider.base",
+    "src.services.analysis_provider_planner",
+    "src.services.provider_plan_advisor",
+    "src.services.data_source_router",
     "src.services.market_cache",
+    "src.services.market_provider_operations_service",
     "src.services.market_overview_service",
     "src.services.market_rotation_radar_service",
     "src.services.liquidity_monitor_service",
     "src.services.market_scanner_service",
     "src.services.portfolio_service",
     "api.v1.endpoints",
+    "config",
     "requests",
     "httpx",
     "pandas",

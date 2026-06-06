@@ -2,6 +2,8 @@
 """Future-facing source-confidence contract boundary."""
 
 from src.services.source_confidence_contract import (
+    PROVIDER_SOURCE_READINESS_CONTRACT_VERSION,
+    PROVIDER_SOURCE_READINESS_STATES,
     SOURCE_CONFIDENCE_CONTRACT_VERSION,
     SCORE_GRADE_BLOCKED_SOURCE_TYPES,
     SCORE_GRADE_TRUST_LEVELS,
@@ -10,6 +12,7 @@ from src.services.source_confidence_contract import (
     ProviderDryRunProbeContract,
     ProviderFitMetadataContract,
     ProviderCapabilitySupportContract,
+    ProviderSourceReadinessContract,
     ScoreGradeSourceAuthorityResult,
     SourceConfidenceContract,
     SourceConfidenceValidationIssue,
@@ -21,6 +24,7 @@ from src.services.source_confidence_contract import (
     coerce_provider_dry_run_probe_contract,
     coerce_provider_fit_metadata_contract,
     coerce_provider_capability_support_contract,
+    build_provider_source_readiness_contract,
     coerce_source_confidence_contract,
     evaluate_score_grade_source_authority,
     validate_source_confidence_contract,
@@ -37,6 +41,8 @@ from src.services.market_intelligence_trust_gate import (
 
 __all__ = [
     "MARKET_INTELLIGENCE_TRUST_GATE_VERSION",
+    "PROVIDER_SOURCE_READINESS_CONTRACT_VERSION",
+    "PROVIDER_SOURCE_READINESS_STATES",
     "SOURCE_CONFIDENCE_CONTRACT_VERSION",
     "SCORE_GRADE_BLOCKED_SOURCE_TYPES",
     "SCORE_GRADE_TRUST_LEVELS",
@@ -48,6 +54,7 @@ __all__ = [
     "ProviderDryRunProbeContract",
     "ProviderFitMetadataContract",
     "ProviderCapabilitySupportContract",
+    "ProviderSourceReadinessContract",
     "ScoreGradeSourceAuthorityResult",
     "SourceConfidenceContract",
     "SourceConfidenceValidationIssue",
@@ -59,6 +66,7 @@ __all__ = [
     "coerce_provider_dry_run_probe_contract",
     "coerce_provider_fit_metadata_contract",
     "coerce_provider_capability_support_contract",
+    "build_provider_source_readiness_contract",
     "coerce_source_confidence_contract",
     "evaluate_score_grade_source_authority",
     "evaluate_market_intelligence_trust",

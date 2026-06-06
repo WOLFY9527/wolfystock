@@ -14,7 +14,22 @@ from typing import Any, Mapping, Protocol
 
 
 SOURCE_CONFIDENCE_CONTRACT_VERSION = "source_confidence_contract_v1"
+PROVIDER_SOURCE_READINESS_CONTRACT_VERSION = "provider_source_readiness_contract_v1"
 STRONG_FRESHNESS_VALUES = {"fresh", "live"}
+PROVIDER_SOURCE_READINESS_STATES = frozenset(
+    {
+        "ready_for_observation",
+        "blocked_missing_capability_metadata",
+        "blocked_missing_source_confidence",
+        "blocked_unavailable_source",
+        "blocked_synthetic_source",
+        "blocked_fallback_source",
+        "blocked_stale_source",
+        "blocked_partial_coverage",
+        "blocked_source_authority",
+        "blocked_score_contribution",
+    }
+)
 SCORE_GRADE_BLOCKED_SOURCE_TYPES = frozenset(
     {
         "public_proxy",
@@ -422,6 +437,62 @@ class ProviderDryRunProbeContract:
 
 
 @dataclass(frozen=True, slots=True)
+class ProviderSourceReadinessContract:
+    provider_id: str
+    capability: str | None
+    source: str
+    source_label: str
+    source_type: str | None
+    source_tier: str | None
+    trust_level: str | None
+    freshness_expectation: str | None
+    observed_freshness: SourceFreshness
+    effective_freshness: SourceFreshness
+    confidence_weight: float
+    coverage: float | None
+    readiness_state: str
+    reason_codes: tuple[str, ...] = ()
+    cap_reason: str | None = None
+    degradation_reason: str | None = None
+    contract_version: str = PROVIDER_SOURCE_READINESS_CONTRACT_VERSION
+    diagnostic_only: bool = True
+    observation_only: bool = True
+    authority_grant: bool = False
+    score_contribution_allowed: bool = False
+    provider_runtime_called: bool = False
+    network_calls_enabled: bool = False
+    market_cache_mutation: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "contractVersion": self.contract_version,
+            "diagnosticOnly": self.diagnostic_only,
+            "observationOnly": self.observation_only,
+            "authorityGrant": self.authority_grant,
+            "scoreContributionAllowed": self.score_contribution_allowed,
+            "providerRuntimeCalled": self.provider_runtime_called,
+            "networkCallsEnabled": self.network_calls_enabled,
+            "marketCacheMutation": self.market_cache_mutation,
+            "providerId": self.provider_id,
+            "capability": self.capability,
+            "source": self.source,
+            "sourceLabel": self.source_label,
+            "sourceType": self.source_type,
+            "sourceTier": self.source_tier,
+            "trustLevel": self.trust_level,
+            "freshnessExpectation": self.freshness_expectation,
+            "observedFreshness": self.observed_freshness.value,
+            "effectiveFreshness": self.effective_freshness.value,
+            "confidenceWeight": self.confidence_weight,
+            "coverage": self.coverage,
+            "readinessState": self.readiness_state,
+            "reasonCodes": list(self.reason_codes),
+            "capReason": self.cap_reason,
+            "degradationReason": self.degradation_reason,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class SourceConfidenceValidationIssue:
     code: str
     message: str
@@ -498,6 +569,108 @@ def coerce_provider_dry_run_probe_contract(
         value
         if isinstance(value, ProviderDryRunProbeContract)
         else ProviderDryRunProbeContract.from_dict(value)
+    )
+
+
+def build_provider_source_readiness_contract(
+    provider_capability_metadata: ProviderCapabilitySupportContract | Mapping[str, Any],
+    source_confidence_metadata: SourceConfidenceContract | Mapping[str, Any],
+) -> ProviderSourceReadinessContract:
+    """Join caller-provided capability and source-confidence metadata.
+
+    This bridge is intentionally inert: it does not import providers, call
+    services, read config, mutate cache, or grant scoring/source authority.
+    """
+
+    capability = coerce_provider_capability_support_contract(provider_capability_metadata)
+    source_confidence = coerce_source_confidence_contract(source_confidence_metadata)
+    observed_freshness = _coerce_freshness(_metadata_get(source_confidence_metadata, "freshness"))
+    effective_freshness = source_confidence.freshness
+    confidence_weight = source_confidence.confidence_weight
+    coverage = source_confidence.coverage
+    cap_reason = source_confidence.cap_reason
+    degradation_reason = source_confidence.degradation_reason
+
+    capability_missing = _provider_source_readiness_capability_missing(capability)
+    source_missing = (
+        not source_confidence.source
+        or not source_confidence.source_label
+        or observed_freshness is SourceFreshness.UNKNOWN
+    )
+
+    reason_codes: list[str] = []
+    if capability_missing:
+        reason_codes.append("missing_capability_metadata")
+        effective_freshness = SourceFreshness.UNKNOWN
+        confidence_weight = 0.0
+        cap_reason = cap_reason or "missing_capability_metadata"
+        degradation_reason = degradation_reason or "missing_capability_metadata"
+    if source_missing:
+        reason_codes.append("missing_source_confidence")
+        effective_freshness = SourceFreshness.UNKNOWN
+        confidence_weight = 0.0
+        coverage = 0.0
+        cap_reason = cap_reason or "missing_source_confidence"
+        degradation_reason = degradation_reason or "missing_source_confidence"
+
+    source_authority_allowed = _bool(
+        _metadata_get(source_confidence_metadata, "source_authority_allowed", "sourceAuthorityAllowed")
+    )
+    score_contribution_value = _metadata_get(
+        source_confidence_metadata,
+        "score_contribution_allowed",
+        "scoreContributionAllowed",
+    )
+    if score_contribution_value is None:
+        score_contribution_value = _metadata_get(
+            provider_capability_metadata,
+            "score_contribution_allowed",
+            "scoreContributionAllowed",
+        )
+    score_contribution_input_allowed = _bool(score_contribution_value)
+
+    authority_result = evaluate_score_grade_source_authority(
+        source_type=capability.source_type,
+        source_tier=capability.source_tier,
+        trust_level=capability.trust_level,
+        freshness=effective_freshness,
+        is_fallback=source_confidence.is_fallback,
+        is_stale=source_confidence.is_stale,
+        is_synthetic=source_confidence.is_synthetic,
+        is_unavailable=source_confidence.is_unavailable,
+        score_contribution_allowed=score_contribution_input_allowed,
+        source_authority_allowed=source_authority_allowed,
+    )
+    authority_reason_codes = [
+        reason
+        for reason in authority_result.reason_codes
+        if reason != _SCORE_GRADE_AUTHORITY_ALLOWED_REASON
+    ]
+    reason_codes.extend(authority_reason_codes)
+    readiness_state = _provider_source_readiness_state(
+        capability_missing=capability_missing,
+        source_missing=source_missing,
+        effective_freshness=effective_freshness,
+        authority_reason_codes=authority_reason_codes,
+    )
+
+    return ProviderSourceReadinessContract(
+        provider_id=capability.provider_id,
+        capability=capability.capability or None,
+        source=source_confidence.source,
+        source_label=source_confidence.source_label,
+        source_type=capability.source_type or None,
+        source_tier=capability.source_tier or None,
+        trust_level=capability.trust_level or None,
+        freshness_expectation=capability.freshness_expectation or None,
+        observed_freshness=observed_freshness,
+        effective_freshness=effective_freshness,
+        confidence_weight=_bounded_float(confidence_weight, default=0.0),
+        coverage=_optional_bounded_float(coverage),
+        readiness_state=readiness_state,
+        reason_codes=_stable_reason_codes(reason_codes),
+        cap_reason=cap_reason,
+        degradation_reason=degradation_reason,
     )
 
 
@@ -694,6 +867,32 @@ def _get(payload: Mapping[str, Any], *keys: str) -> Any:
     return None
 
 
+def _metadata_get(value: Any, *keys: str) -> Any:
+    if isinstance(value, Mapping):
+        return _get(value, *keys)
+    for key in keys:
+        if hasattr(value, key):
+            return getattr(value, key)
+        snake_key = _camel_to_snake(key)
+        if hasattr(value, snake_key):
+            return getattr(value, snake_key)
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        return _get(to_dict(), *keys)
+    return None
+
+
+def _camel_to_snake(value: str) -> str:
+    chars: list[str] = []
+    for char in value:
+        if char.isupper():
+            chars.append("_")
+            chars.append(char.lower())
+        else:
+            chars.append(char)
+    return "".join(chars).lstrip("_")
+
+
 def _text(value: Any) -> str:
     return str(value or "").strip()
 
@@ -821,8 +1020,68 @@ def _degradation_cap(flags: Mapping[str, bool]) -> tuple[SourceFreshness, float,
     return None
 
 
+def _provider_source_readiness_capability_missing(
+    capability: ProviderCapabilitySupportContract,
+) -> bool:
+    return (
+        not capability.provider_id
+        or not capability.capability
+        or not capability.source_type
+        or capability.source_type == "missing"
+        or not capability.source_tier
+        or not capability.trust_level
+        or not capability.freshness_expectation
+        or bool(capability.missing_provider_reason)
+    )
+
+
+def _provider_source_readiness_state(
+    *,
+    capability_missing: bool,
+    source_missing: bool,
+    effective_freshness: SourceFreshness,
+    authority_reason_codes: list[str],
+) -> str:
+    if capability_missing:
+        return "blocked_missing_capability_metadata"
+    if source_missing:
+        return "blocked_missing_source_confidence"
+    if effective_freshness is SourceFreshness.UNAVAILABLE:
+        return "blocked_unavailable_source"
+    if effective_freshness is SourceFreshness.SYNTHETIC:
+        return "blocked_synthetic_source"
+    if effective_freshness is SourceFreshness.FALLBACK:
+        return "blocked_fallback_source"
+    if effective_freshness is SourceFreshness.STALE:
+        return "blocked_stale_source"
+    if effective_freshness is SourceFreshness.PARTIAL:
+        return "blocked_partial_coverage"
+    if any(reason in _SOURCE_AUTHORITY_BLOCKING_REASON_CODES for reason in authority_reason_codes):
+        return "blocked_source_authority"
+    if "score_contribution_not_allowed" in authority_reason_codes:
+        return "blocked_score_contribution"
+    return "ready_for_observation"
+
+
+_SOURCE_AUTHORITY_BLOCKING_REASON_CODES = frozenset(
+    {
+        "missing_source_type",
+        "blocked_source_type",
+        "source_type_not_allowed",
+        "missing_source_tier",
+        "blocked_source_tier",
+        "source_tier_not_allowed",
+        "missing_trust_level",
+        "trust_level_not_allowed",
+        "source_authority_not_allowed",
+    }
+)
+
+
 __all__ = [
     "SOURCE_CONFIDENCE_CONTRACT_VERSION",
+    "PROVIDER_SOURCE_READINESS_CONTRACT_VERSION",
+    "PROVIDER_SOURCE_READINESS_STATES",
     "SCORE_GRADE_BLOCKED_SOURCE_TYPES",
     "SCORE_GRADE_TRUST_LEVELS",
     "STRONG_FRESHNESS_VALUES",
@@ -830,6 +1089,7 @@ __all__ = [
     "ProviderDryRunProbeContract",
     "ProviderFitMetadataContract",
     "ProviderCapabilitySupportContract",
+    "ProviderSourceReadinessContract",
     "ScoreGradeSourceAuthorityResult",
     "SourceConfidenceContract",
     "SourceConfidenceValidationIssue",
@@ -842,6 +1102,7 @@ __all__ = [
     "coerce_provider_fit_metadata_contract",
     "coerce_provider_capability_support_contract",
     "coerce_source_confidence_contract",
+    "build_provider_source_readiness_contract",
     "evaluate_score_grade_source_authority",
     "validate_source_confidence_contract",
 ]
