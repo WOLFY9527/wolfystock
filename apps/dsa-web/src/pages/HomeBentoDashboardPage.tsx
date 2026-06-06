@@ -1077,7 +1077,7 @@ function buildAvailableDataCopy(report: DataQualityReport | undefined, trace: De
   const traceSources: string[] = [];
   for (const item of trace?.dataSources || []) {
     const status = String(item.status || '').trim().toLowerCase();
-    if (!['used', 'fallback'].includes(status)) continue;
+    if (status !== 'used' && status !== 'fallback') continue;
     const label = userFacingDataSourceLabel(item.name, locale);
     traceSources.push(
       status === 'fallback'
@@ -3965,7 +3965,7 @@ function findStandardField(fields: StandardReportField[] | undefined, aliases: s
     const aliasKey = normalizeDetailKey(alias);
     for (const field of fields || []) {
       const fieldKey = normalizeDetailKey(field.label);
-      if (fieldKey.includes(aliasKey) || aliasKey.includes(fieldKey)) {
+      if (fieldKey.indexOf(aliasKey) !== -1 || aliasKey.indexOf(fieldKey) !== -1) {
         return field;
       }
     }
