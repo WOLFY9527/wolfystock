@@ -9,9 +9,9 @@
 2. 定义历史 K 线数据模型
 """
 
-from typing import Any, Dict, Optional, List
+from typing import Annotated, Any, Dict, Optional, List
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema
 
 
 class StockQuote(BaseModel):
@@ -257,6 +257,44 @@ class StockEvidencePacketResponse(BaseModel):
     )
 
 
+_STOCK_EVIDENCE_ITEM_METADATA_SCHEMA = {
+    "type": "object",
+    "additionalProperties": True,
+    "properties": {
+        "status": {"type": "string"},
+        "provider": {"type": "string"},
+        "providerId": {"type": "string"},
+        "providerName": {"type": "string"},
+        "source": {"type": "string"},
+        "sourceType": {"type": "string"},
+        "sourceTier": {"type": "string"},
+        "trustLevel": {"type": "string"},
+        "freshness": {"type": "string"},
+        "updatedAt": {"type": "string"},
+        "asOf": {"type": "string"},
+        "degradationReason": {"type": "string"},
+        "isFallback": {"type": "boolean"},
+        "isStale": {"type": "boolean"},
+        "isPartial": {"type": "boolean"},
+        "isSynthetic": {"type": "boolean"},
+        "isUnavailable": {"type": "boolean"},
+        "sourceConfidence": {"type": "object", "additionalProperties": True},
+        "observationOnly": {"type": "boolean"},
+        "scoreContributionAllowed": {"type": "boolean"},
+        "sourceAuthorityAllowed": {"type": "boolean"},
+        "rawPayloadStored": {"type": "boolean"},
+        "missingFields": {"type": "array", "items": {"type": "string"}},
+        "freshnessExpectation": {"type": "string"},
+        "records": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
+    },
+}
+
+StockEvidenceItemMetadataDict = Annotated[
+    Dict[str, Any],
+    WithJsonSchema(_STOCK_EVIDENCE_ITEM_METADATA_SCHEMA),
+]
+
+
 class StockEvidenceItemResponse(BaseModel):
     """单股票证据响应项。"""
 
@@ -264,11 +302,11 @@ class StockEvidenceItemResponse(BaseModel):
 
     symbol: str = Field(..., description="股票代码")
     market: Optional[str] = Field(None, description="市场代码")
-    quote: Optional[Dict[str, Any]] = Field(None, description="行情侧证据")
-    technical: Optional[Dict[str, Any]] = Field(None, description="技术面证据")
-    fundamental: Optional[Dict[str, Any]] = Field(None, description="基本面证据")
-    news: Optional[Dict[str, Any]] = Field(None, description="新闻证据")
-    sec_filing_evidence: Optional[Dict[str, Any]] = Field(
+    quote: Optional[StockEvidenceItemMetadataDict] = Field(None, description="行情侧证据")
+    technical: Optional[StockEvidenceItemMetadataDict] = Field(None, description="技术面证据")
+    fundamental: Optional[StockEvidenceItemMetadataDict] = Field(None, description="基本面证据")
+    news: Optional[StockEvidenceItemMetadataDict] = Field(None, description="新闻证据")
+    sec_filing_evidence: Optional[StockEvidenceItemMetadataDict] = Field(
         None,
         alias="secFilingEvidence",
         description="SEC filing 侧证据",
