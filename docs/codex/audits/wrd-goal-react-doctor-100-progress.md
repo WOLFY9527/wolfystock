@@ -460,7 +460,7 @@ Next candidates:
 
 ## Batch 10: Home Skeleton Stable Default
 
-Status: included in the checkpoint commit for this batch after local validation.
+Status: committed and pushed as checkpoint `b7dc5ef0`.
 
 Files changed:
 
@@ -499,6 +499,37 @@ Next candidates:
 
 - Stop unless explicitly re-scoped: remaining findings require forbidden domains, unsafe semantic changes, or broader state/effect/component decomposition.
 - If re-scoped later, start with tests for a single route and explicitly allow the relevant state/effect or accessibility semantic contract.
+
+## Stop Manifest
+
+Latest pushed checkpoint before stopping: `b7dc5ef0`.
+
+Final React Doctor state:
+
+- Score: `61`
+- Total diagnostics: `489`
+- Errors: `112`
+- Warnings: `377`
+- Affected files: `41`
+- Reduced total diagnostics from baseline: `78`
+
+Remaining blocker groups:
+
+- State/effect/action-flow findings: `180` diagnostics across `set-state-in-effect`, `no-event-handler`, chained/cascading state, derived state, prop-state sync, reducer suggestions, and related render flow rules. These require behavior rewrites or route-specific state-flow tests before safe changes.
+- Manual memoization findings: `196` diagnostics across `react-compiler-no-manual-memoization` and `preserve-manual-memoization`. The remaining callbacks/memos are largely tied to `useEffect` dependencies, draft-state source objects, child identity contracts, or non-compiler runtime behavior; deleting them mechanically is unsafe.
+- Component decomposition findings: `34` diagnostics across giant components, many boolean props, render-in-render, dialog/focus-trap, and pure-function hoist rules. These require broader component/API reshaping and visible/accessibility behavior review.
+- Forbidden or protected scope:
+  - `package.json` unused dependency is blocked by package/lockfile scope.
+  - `src/api/error.ts`, `src/contexts/AuthContext.tsx`, `src/components/auth/AuthGuardOverlay.tsx`, and `src/hooks/useSystemConfig.ts` touch API/auth/config/runtime boundaries.
+  - `src/types/portfolio.contract.ts` and portfolio diagnostics are blocked by portfolio contract/accounting/risk boundaries.
+  - Remaining scanner threshold/ranking/sort findings are blocked by scanner score/ranking/filtering/cap semantics.
+  - Remaining options async/sort findings are blocked by options payoff/scoring/strategy/optimizer/no-advice semantics.
+  - Remaining backtest default export/state-flow findings require larger backtest component reshaping and are blocked by backtest protected semantics without stronger coverage.
+- Tool suggestions that are unsafe or incompatible as-is:
+  - `Array.prototype.toSorted()` suggestions require ES2023 library support while `tsconfig.app.json` targets `ES2022`.
+  - `ReportPriceChart` passive listener suggestions are unsafe because the wheel/touch handlers intentionally call `preventDefault()`.
+  - `HomeBentoDashboardPage.tsx` `js-set-map-lookups` flags string substring matching, not a Set-compatible array lookup.
+  - Accessibility tag suggestions for Home output/address and scroll-container `tabIndex` need explicit semantic design and tests before changes.
 
 ## Protected Domain Confirmation
 
