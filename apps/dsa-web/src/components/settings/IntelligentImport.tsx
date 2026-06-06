@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useState } from 'react';
+import { useReducer } from 'react';
 import { getApiErrorMessage } from '../../api/error';
 import { stocksApi, type ExtractItem } from '../../api/stocks';
 import { SystemConfigConflictError } from '../../api/systemConfig';
@@ -19,6 +19,92 @@ interface IntelligentImportProps {
 }
 
 type ItemWithChecked = ExtractItem & { id: string; checked: boolean };
+
+type ImportState = {
+  items: ItemWithChecked[];
+  isLoading: boolean;
+  isMerging: boolean;
+  error: string | null;
+  isDragging: boolean;
+  pasteText: string;
+};
+
+type ImportAction =
+  | { type: 'setPasteText'; value: string }
+  | { type: 'setDragging'; value: boolean }
+  | { type: 'validationError'; message: string }
+  | { type: 'loadStarted' }
+  | { type: 'loadSucceeded'; items: ExtractItem[] }
+  | { type: 'loadFailed'; message: string }
+  | { type: 'pasteLoadSucceeded'; items: ExtractItem[] }
+  | { type: 'mergeStarted' }
+  | { type: 'mergeSucceeded' }
+  | { type: 'mergeFailed'; message: string }
+  | { type: 'toggleChecked'; id: string }
+  | { type: 'toggleAll'; checked: boolean }
+  | { type: 'removeItem'; id: string }
+  | { type: 'clearAll' };
+
+const INITIAL_IMPORT_STATE: ImportState = {
+  items: [],
+  isLoading: false,
+  isMerging: false,
+  error: null,
+  isDragging: false,
+  pasteText: '',
+};
+
+function importReducer(state: ImportState, action: ImportAction): ImportState {
+  switch (action.type) {
+    case 'setPasteText':
+      return { ...state, pasteText: action.value };
+    case 'setDragging':
+      return { ...state, isDragging: action.value };
+    case 'validationError':
+      return { ...state, error: action.message };
+    case 'loadStarted':
+      return { ...state, error: null, isLoading: true };
+    case 'loadSucceeded':
+      return {
+        ...state,
+        items: mergeItems(state.items, action.items),
+        isLoading: false,
+      };
+    case 'loadFailed':
+      return { ...state, error: action.message, isLoading: false };
+    case 'pasteLoadSucceeded':
+      return {
+        ...state,
+        items: mergeItems(state.items, action.items),
+        pasteText: '',
+        isLoading: false,
+      };
+    case 'mergeStarted':
+      return { ...state, error: null, isMerging: true };
+    case 'mergeSucceeded':
+      return { ...state, items: [], pasteText: '', isMerging: false };
+    case 'mergeFailed':
+      return { ...state, error: action.message, isMerging: false };
+    case 'toggleChecked':
+      return {
+        ...state,
+        items: state.items.map((item) => (
+          item.id === action.id && item.code ? { ...item, checked: !item.checked } : item
+        )),
+      };
+    case 'toggleAll':
+      return {
+        ...state,
+        items: state.items.map((item) => (item.code ? { ...item, checked: action.checked } : item)),
+      };
+    case 'removeItem':
+      return { ...state, items: state.items.filter((item) => item.id !== action.id) };
+    case 'clearAll':
+      return { ...state, items: [], pasteText: '', error: null };
+    default:
+      return state;
+  }
+}
 
 function getConfidenceMeta(confidence: 'high' | 'medium' | 'low') {
   if (confidence === 'high') {
@@ -99,12 +185,15 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
   onMergeStockList,
   disabled,
 }) => {
-  const [items, setItems] = useState<ItemWithChecked[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isMerging, setIsMerging] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [pasteText, setPasteText] = useState('');
+  const [state, dispatch] = useReducer(importReducer, INITIAL_IMPORT_STATE);
+  const {
+    items,
+    isLoading,
+    isMerging,
+    error,
+    isDragging,
+    pasteText,
+  } = state;
 
   const parseCurrentList = () => {
     return stockListValue.split(',').flatMap((c) => {
@@ -113,73 +202,60 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
     });
   };
 
-  const addItems = (newItems: ExtractItem[]) => {
-    setItems((prev) => mergeItems(prev, newItems));
-  };
-
   const handleImageFile = async (file: File) => {
     const ext = '.' + (file.name.split('.').pop() ?? '').toLowerCase();
     if (!IMG_EXT.includes(ext)) {
-      setError('图片仅支持 JPG、PNG、WebP、GIF');
+      dispatch({ type: 'validationError', message: '图片仅支持 JPG、PNG、WebP、GIF' });
       return;
     }
     if (file.size > IMG_MAX) {
-      setError('图片不超过 5MB');
+      dispatch({ type: 'validationError', message: '图片不超过 5MB' });
       return;
     }
-    setError(null);
-    setIsLoading(true);
+    dispatch({ type: 'loadStarted' });
     try {
       const res = await stocksApi.extractFromImage(file);
-      addItems(res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })));
+      dispatch({ type: 'loadSucceeded', items: res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })) });
     } catch (e) {
-      setError(getApiErrorMessage(e, '识别失败，请重试'));
+      dispatch({ type: 'loadFailed', message: getApiErrorMessage(e, '识别失败，请重试') });
     }
-    setIsLoading(false);
   };
 
   const handleDataFile = async (file: File) => {
     if (file.size > FILE_MAX) {
-      setError('文件不超过 2MB');
+      dispatch({ type: 'validationError', message: '文件不超过 2MB' });
       return;
     }
-    setError(null);
-    setIsLoading(true);
+    dispatch({ type: 'loadStarted' });
     try {
       const res = await stocksApi.parseImport(file);
-      addItems(res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })));
+      dispatch({ type: 'loadSucceeded', items: res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })) });
     } catch (e) {
-      setError(getApiErrorMessage(e, '解析失败'));
+      dispatch({ type: 'loadFailed', message: getApiErrorMessage(e, '解析失败') });
     }
-    setIsLoading(false);
   };
 
   const handlePasteParse = () => {
     const t = pasteText.trim();
     if (!t) return;
     if (new Blob([t]).size > TEXT_MAX) {
-      setError('粘贴文本不超过 100KB');
+      dispatch({ type: 'validationError', message: '粘贴文本不超过 100KB' });
       return;
     }
-    setError(null);
-    setIsLoading(true);
+    dispatch({ type: 'loadStarted' });
     stocksApi
       .parseImport(undefined, t)
       .then((res) => {
-        addItems(res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })));
-        setPasteText('');
+        dispatch({ type: 'pasteLoadSucceeded', items: res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })) });
       })
       .catch((e) => {
-        setError(getApiErrorMessage(e, '解析失败'));
-      })
-      .then(() => {
-        setIsLoading(false);
+        dispatch({ type: 'loadFailed', message: getApiErrorMessage(e, '解析失败') });
       });
   };
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(false);
+    dispatch({ type: 'setDragging', value: false });
     if (disabled || isLoading) return;
     const f = e.dataTransfer?.files?.[0];
     if (!f) return;
@@ -201,21 +277,19 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
   };
 
   const toggleChecked = (id: string) => {
-    setItems((prev) => prev.map((p) => (p.id === id && p.code ? { ...p, checked: !p.checked } : p)));
+    dispatch({ type: 'toggleChecked', id });
   };
 
   const toggleAll = (checked: boolean) => {
-    setItems((prev) => prev.map((p) => (p.code ? { ...p, checked } : p)));
+    dispatch({ type: 'toggleAll', checked });
   };
 
   const removeItem = (id: string) => {
-    setItems((prev) => prev.filter((p) => p.id !== id));
+    dispatch({ type: 'removeItem', id });
   };
 
   const clearAll = () => {
-    setItems([]);
-    setPasteText('');
-    setError(null);
+    dispatch({ type: 'clearAll' });
   };
 
   const mergeToWatchlist = async () => {
@@ -225,21 +299,18 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
     const merged = [...new Set([...current, ...toMerge])];
     const value = merged.join(',');
 
-    setIsMerging(true);
-    setError(null);
+    dispatch({ type: 'mergeStarted' });
     try {
       await onMergeStockList(value);
-      setItems([]);
-      setPasteText('');
+      dispatch({ type: 'mergeSucceeded' });
     } catch (e) {
       if (e instanceof SystemConfigConflictError) {
         await onMergeStockList(value);
-        setError('配置已更新，请再次点击「合并到自选股」');
+        dispatch({ type: 'mergeFailed', message: '配置已更新，请再次点击「合并到自选股」' });
       } else {
-        setError(getApiErrorMessage(e, '合并保存失败'));
+        dispatch({ type: 'mergeFailed', message: getApiErrorMessage(e, '合并保存失败') });
       }
     }
-    setIsMerging(false);
   };
 
   const { validCount, checkedCount } = items.reduce<{ validCount: number; checkedCount: number }>(
@@ -264,8 +335,8 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
 
       <div
         onDrop={onDrop}
-        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-        onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
+        onDragOver={(e) => { e.preventDefault(); dispatch({ type: 'setDragging', value: true }); }}
+        onDragLeave={(e) => { e.preventDefault(); dispatch({ type: 'setDragging', value: false }); }}
         className={`flex min-h-[96px] flex-col gap-4 rounded-xl border border-dashed  p-4 transition-colors ${
           isDragging ? 'settings-drag-active' : 'settings-border-overlay settings-surface-overlay'
         } ${disabled || isLoading ? 'cursor-not-allowed opacity-60' : ''}`}
@@ -290,7 +361,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
             aria-label="粘贴文本"
             className="input-surface settings-surface-strong settings-border-strong min-h-[72px] w-full rounded-xl border px-3 py-2 text-sm text-foreground shadow-soft-card transition-colors placeholder:text-muted-text focus:outline-none"
             value={pasteText}
-            onChange={(e) => setPasteText(e.target.value)}
+            onChange={(e) => dispatch({ type: 'setPasteText', value: e.target.value })}
             disabled={disabled || isLoading}
           />
           <Button

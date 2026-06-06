@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useState, type SetStateAction } from 'react';
+import { useReducer, useState, type SetStateAction } from 'react';
 import { authApi } from '../../api/auth';
 import { getParsedApiError, isParsedApiError, type ParsedApiError } from '../../api/error';
 import { useI18n } from '../../contexts/UiLanguageContext';
@@ -23,6 +23,71 @@ function createNextModeLabel(
     return t('settings.authTurnOn');
   }
   return authEnabled ? t('settings.authKeepOn') : t('settings.authKeepOff');
+}
+
+type AuthFormState = {
+  currentPassword: string;
+  password: string;
+  passwordConfirm: string;
+  isSubmitting: boolean;
+  error: string | ParsedApiError | null;
+  successMessage: string | null;
+};
+
+type AuthFormAction =
+  | { type: 'setCurrentPassword'; value: string }
+  | { type: 'setPassword'; value: string }
+  | { type: 'setPasswordConfirm'; value: string }
+  | { type: 'setError'; error: string | ParsedApiError | null }
+  | { type: 'submitStarted' }
+  | { type: 'submitSucceeded'; message: string }
+  | { type: 'submitFailed'; error: ParsedApiError }
+  | { type: 'clearMessagesAndResetForm' };
+
+const INITIAL_AUTH_FORM_STATE: AuthFormState = {
+  currentPassword: '',
+  password: '',
+  passwordConfirm: '',
+  isSubmitting: false,
+  error: null,
+  successMessage: null,
+};
+
+function resetAuthFormFields(state: AuthFormState): AuthFormState {
+  return {
+    ...state,
+    currentPassword: '',
+    password: '',
+    passwordConfirm: '',
+  };
+}
+
+function authFormReducer(state: AuthFormState, action: AuthFormAction): AuthFormState {
+  switch (action.type) {
+    case 'setCurrentPassword':
+      return { ...state, currentPassword: action.value };
+    case 'setPassword':
+      return { ...state, password: action.value };
+    case 'setPasswordConfirm':
+      return { ...state, passwordConfirm: action.value };
+    case 'setError':
+      return { ...state, error: action.error };
+    case 'submitStarted':
+      return { ...state, isSubmitting: true, error: null, successMessage: null };
+    case 'submitSucceeded':
+      return resetAuthFormFields({
+        ...state,
+        isSubmitting: false,
+        error: null,
+        successMessage: action.message,
+      });
+    case 'submitFailed':
+      return { ...state, isSubmitting: false, error: action.error };
+    case 'clearMessagesAndResetForm':
+      return resetAuthFormFields({ ...state, error: null, successMessage: null });
+    default:
+      return state;
+  }
 }
 
 export const AuthSettingsCard: React.FC = () => {
@@ -50,40 +115,35 @@ export const AuthSettingsCard: React.FC = () => {
       };
     });
   };
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [password, setPassword] = useState('');
-  const [passwordConfirm, setPasswordConfirm] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | ParsedApiError | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [formState, dispatchForm] = useReducer(authFormReducer, INITIAL_AUTH_FORM_STATE);
+  const {
+    currentPassword,
+    password,
+    passwordConfirm,
+    isSubmitting,
+    error,
+    successMessage,
+  } = formState;
 
   const isDirty = desiredEnabled !== authEnabled || currentPassword || password || passwordConfirm;
   const targetActionLabel = createNextModeLabel(authEnabled, desiredEnabled, t);
 
-  const resetForm = () => {
-    setCurrentPassword('');
-    setPassword('');
-    setPasswordConfirm('');
-  };
-
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    setError(null);
-    setSuccessMessage(null);
 
     // Initial setup validation
     if (setupState === 'no_password' && desiredEnabled) {
       if (!password) {
-        setError(t('settings.authErrorPasswordRequired'));
+        dispatchForm({ type: 'setError', error: t('settings.authErrorPasswordRequired') });
         return;
       }
       if (password !== passwordConfirm) {
-        setError(t('settings.authErrorPasswordMismatch'));
+        dispatchForm({ type: 'setError', error: t('settings.authErrorPasswordMismatch') });
         return;
       }
     }
 
-    setIsSubmitting(true);
+    dispatchForm({ type: 'submitStarted' });
     try {
       await authApi.updateSettings(
         desiredEnabled,
@@ -92,12 +152,13 @@ export const AuthSettingsCard: React.FC = () => {
         currentPassword.trim() || undefined,
       );
       await refreshStatus();
-      setSuccessMessage(desiredEnabled ? t('settings.authUpdateSuccess') : t('settings.authDisabledSuccess'));
-      resetForm();
+      dispatchForm({
+        type: 'submitSucceeded',
+        message: desiredEnabled ? t('settings.authUpdateSuccess') : t('settings.authDisabledSuccess'),
+      });
     } catch (err: unknown) {
-      setError(getParsedApiError(err));
+      dispatchForm({ type: 'submitFailed', error: getParsedApiError(err) });
     }
-    setIsSubmitting(false);
   };
 
   return (
@@ -138,7 +199,7 @@ export const AuthSettingsCard: React.FC = () => {
                   allowTogglePassword
                   iconType="password"
                   value={currentPassword}
-                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  onChange={(event) => dispatchForm({ type: 'setCurrentPassword', value: event.target.value })}
                   autoComplete="current-password"
                   disabled={isSubmitting}
                   placeholder={t('settings.authCurrentPasswordPlaceholder')}
@@ -156,7 +217,7 @@ export const AuthSettingsCard: React.FC = () => {
                     allowTogglePassword
                     iconType="password"
                     value={password}
-                    onChange={(event) => setPassword(event.target.value)}
+                    onChange={(event) => dispatchForm({ type: 'setPassword', value: event.target.value })}
                     autoComplete="new-password"
                     disabled={isSubmitting}
                     placeholder={t('settings.authNewPasswordPlaceholder')}
@@ -169,7 +230,7 @@ export const AuthSettingsCard: React.FC = () => {
                     allowTogglePassword
                     iconType="password"
                     value={passwordConfirm}
-                    onChange={(event) => setPasswordConfirm(event.target.value)}
+                    onChange={(event) => dispatchForm({ type: 'setPasswordConfirm', value: event.target.value })}
                     autoComplete="new-password"
                     disabled={isSubmitting}
                     placeholder={t('settings.authConfirmPasswordPlaceholder')}
@@ -205,9 +266,7 @@ export const AuthSettingsCard: React.FC = () => {
             variant="settings-secondary"
             onClick={() => {
               setDesiredEnabled(authEnabled);
-              setError(null);
-              setSuccessMessage(null);
-              resetForm();
+              dispatchForm({ type: 'clearMessagesAndResetForm' });
             }}
             disabled={isSubmitting || !isDirty}
           >

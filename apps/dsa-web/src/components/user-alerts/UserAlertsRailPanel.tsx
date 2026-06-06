@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useReducer, type FormEvent } from 'react';
 import { Checkbox } from '../common/Checkbox';
 import { Input } from '../common/Input';
 import { Select } from '../common/Select';
@@ -31,11 +31,48 @@ type FormState = {
   note: string;
 };
 
+type PanelState = {
+  rules: UserAlertRule[];
+  loading: boolean;
+  loadError: string | null;
+  submitError: string | null;
+  thresholdError: string | null;
+  saving: boolean;
+  formOpen: boolean;
+  editingRuleId: number | null;
+  form: FormState;
+};
+
+type PanelAction =
+  | { type: 'load_success'; rules: UserAlertRule[] }
+  | { type: 'load_error'; message: string }
+  | { type: 'open_create' }
+  | { type: 'open_edit'; rule: UserAlertRule }
+  | { type: 'close_form' }
+  | { type: 'update_form'; form: Partial<FormState> }
+  | { type: 'threshold_error'; message: string }
+  | { type: 'submit_start' }
+  | { type: 'submit_error'; message: string }
+  | { type: 'rule_created'; rule: UserAlertRule }
+  | { type: 'rule_updated'; rule: UserAlertRule };
+
 const INITIAL_FORM: FormState = {
   direction: 'above',
   thresholdPrice: '',
   enabled: true,
   note: '',
+};
+
+const INITIAL_PANEL_STATE: PanelState = {
+  rules: [],
+  loading: true,
+  loadError: null,
+  submitError: null,
+  thresholdError: null,
+  saving: false,
+  formOpen: false,
+  editingRuleId: null,
+  form: INITIAL_FORM,
 };
 
 const THRESHOLD_FORMATTERS = {
@@ -139,45 +176,118 @@ function normalizeRules(symbol: string, items: UserAlertRule[]): UserAlertRule[]
   return items.filter((rule) => rule.ruleType === 'watchlist_price_threshold' && rule.symbol === symbol);
 }
 
+function closeFormState(state: PanelState): PanelState {
+  return {
+    ...state,
+    formOpen: false,
+    editingRuleId: null,
+    thresholdError: null,
+    submitError: null,
+    form: INITIAL_FORM,
+  };
+}
+
+function panelReducer(state: PanelState, action: PanelAction): PanelState {
+  switch (action.type) {
+    case 'load_success':
+      return { ...state, rules: action.rules, loading: false };
+    case 'load_error':
+      return { ...state, rules: [], loading: false, loadError: action.message };
+    case 'open_create':
+      return {
+        ...state,
+        editingRuleId: null,
+        form: INITIAL_FORM,
+        thresholdError: null,
+        submitError: null,
+        formOpen: true,
+      };
+    case 'open_edit':
+      return {
+        ...state,
+        editingRuleId: action.rule.id,
+        form: {
+          direction: action.rule.direction,
+          thresholdPrice: String(action.rule.thresholdPrice),
+          enabled: action.rule.enabled,
+          note: action.rule.note ?? '',
+        },
+        thresholdError: null,
+        submitError: null,
+        formOpen: true,
+      };
+    case 'close_form':
+      return closeFormState(state);
+    case 'update_form':
+      return {
+        ...state,
+        thresholdError: Object.prototype.hasOwnProperty.call(action.form, 'thresholdPrice') ? null : state.thresholdError,
+        form: { ...state.form, ...action.form },
+      };
+    case 'threshold_error':
+      return { ...state, thresholdError: action.message };
+    case 'submit_start':
+      return { ...state, saving: true, thresholdError: null, submitError: null };
+    case 'submit_error':
+      return { ...state, saving: false, submitError: action.message };
+    case 'rule_created':
+      return {
+        ...closeFormState(state),
+        saving: false,
+        rules: [action.rule, ...state.rules.filter((rule) => rule.id !== action.rule.id)],
+      };
+    case 'rule_updated':
+      return {
+        ...closeFormState(state),
+        saving: false,
+        rules: state.rules.map((rule) => (rule.id === action.rule.id ? action.rule : rule)),
+      };
+    default:
+      return state;
+  }
+}
+
 export default function UserAlertsRailPanel({
   symbol,
   language = 'zh',
 }: UserAlertsRailPanelProps) {
+  return (
+    <UserAlertsRailPanelContent
+      key={`${symbol}:${language}`}
+      symbol={symbol}
+      language={language}
+    />
+  );
+}
+
+function UserAlertsRailPanelContent({
+  symbol,
+  language,
+}: Required<UserAlertsRailPanelProps>) {
   const copy = language === 'en' ? enCopy : zhCopy;
-  const [rules, setRules] = useState<UserAlertRule[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [thresholdError, setThresholdError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingRuleId, setEditingRuleId] = useState<number | null>(null);
-  const [form, setForm] = useState<FormState>(INITIAL_FORM);
+  const [state, dispatch] = useReducer(panelReducer, INITIAL_PANEL_STATE);
+  const {
+    rules,
+    loading,
+    loadError,
+    submitError,
+    thresholdError,
+    saving,
+    formOpen,
+    editingRuleId,
+    form,
+  } = state;
 
   useEffect(() => {
     let cancelled = false;
 
-    setLoading(true);
-    setLoadError(null);
-    setSubmitError(null);
-    setThresholdError(null);
-    setFormOpen(false);
-    setEditingRuleId(null);
-    setForm(INITIAL_FORM);
-
     void userAlertsApi.listRules()
       .then((response) => {
         if (cancelled) return;
-        setRules(normalizeRules(symbol, response.items));
-      })
-      .catch(() => {
+        dispatch({ type: 'load_success', rules: normalizeRules(symbol, response.items) });
+      }, () => {
         if (cancelled) return;
-        setLoadError(copy.loadError);
-        setRules([]);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
+        dispatch({ type: 'load_error', message: copy.loadError });
       });
 
     return () => {
@@ -186,32 +296,15 @@ export default function UserAlertsRailPanel({
   }, [copy.loadError, symbol]);
 
   function openCreateForm() {
-    setEditingRuleId(null);
-    setForm(INITIAL_FORM);
-    setThresholdError(null);
-    setSubmitError(null);
-    setFormOpen(true);
+    dispatch({ type: 'open_create' });
   }
 
   function openEditForm(rule: UserAlertRule) {
-    setEditingRuleId(rule.id);
-    setForm({
-      direction: rule.direction,
-      thresholdPrice: String(rule.thresholdPrice),
-      enabled: rule.enabled,
-      note: rule.note ?? '',
-    });
-    setThresholdError(null);
-    setSubmitError(null);
-    setFormOpen(true);
+    dispatch({ type: 'open_edit', rule });
   }
 
   function closeForm() {
-    setFormOpen(false);
-    setEditingRuleId(null);
-    setThresholdError(null);
-    setSubmitError(null);
-    setForm(INITIAL_FORM);
+    dispatch({ type: 'close_form' });
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -219,13 +312,11 @@ export default function UserAlertsRailPanel({
 
     const parsedThreshold = Number(form.thresholdPrice.trim());
     if (!Number.isFinite(parsedThreshold) || parsedThreshold <= 0) {
-      setThresholdError(copy.invalidThreshold);
+      dispatch({ type: 'threshold_error', message: copy.invalidThreshold });
       return;
     }
 
-    setSaving(true);
-    setThresholdError(null);
-    setSubmitError(null);
+    dispatch({ type: 'submit_start' });
 
     const trimmedNote = form.note.trim();
 
@@ -239,7 +330,7 @@ export default function UserAlertsRailPanel({
           note: trimmedNote ? trimmedNote : null,
         };
         const created = await userAlertsApi.createRule(payload);
-        setRules((current) => [created, ...current.filter((rule) => rule.id !== created.id)]);
+        dispatch({ type: 'rule_created', rule: created });
       } else {
         const payload: UserAlertRuleUpdateRequest = {
           direction: form.direction,
@@ -248,14 +339,10 @@ export default function UserAlertsRailPanel({
           note: trimmedNote ? trimmedNote : null,
         };
         const updated = await userAlertsApi.updateRule(editingRuleId, payload);
-        setRules((current) => current.map((rule) => (rule.id === updated.id ? updated : rule)));
+        dispatch({ type: 'rule_updated', rule: updated });
       }
-
-      closeForm();
     } catch {
-      setSubmitError(copy.submitError);
-    } finally {
-      setSaving(false);
+      dispatch({ type: 'submit_error', message: copy.submitError });
     }
   }
 
@@ -346,7 +433,7 @@ export default function UserAlertsRailPanel({
                     label={copy.direction}
                     value={form.direction}
                     onChange={(value) => {
-                      setForm((current) => ({ ...current, direction: value as UserAlertDirection }));
+                      dispatch({ type: 'update_form', form: { direction: value as UserAlertDirection } });
                     }}
                     options={[
                       { value: 'above', label: copy.above },
@@ -359,10 +446,7 @@ export default function UserAlertsRailPanel({
                     value={form.thresholdPrice}
                     error={thresholdError ?? undefined}
                     onChange={(event) => {
-                      setForm((current) => ({ ...current, thresholdPrice: event.target.value }));
-                      if (thresholdError) {
-                        setThresholdError(null);
-                      }
+                      dispatch({ type: 'update_form', form: { thresholdPrice: event.target.value } });
                     }}
                   />
                 </div>
@@ -370,7 +454,7 @@ export default function UserAlertsRailPanel({
                   label={copy.enabled}
                   checked={form.enabled}
                   onChange={(event) => {
-                    setForm((current) => ({ ...current, enabled: event.target.checked }));
+                    dispatch({ type: 'update_form', form: { enabled: event.target.checked } });
                   }}
                 />
                 <Input
@@ -378,7 +462,7 @@ export default function UserAlertsRailPanel({
                   value={form.note}
                   hint={copy.noteHint}
                   onChange={(event) => {
-                    setForm((current) => ({ ...current, note: event.target.value }));
+                    dispatch({ type: 'update_form', form: { note: event.target.value } });
                   }}
                 />
                 {submitError ? <TerminalNotice variant="caution">{submitError}</TerminalNotice> : null}

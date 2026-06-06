@@ -18,6 +18,7 @@ const CONTROL_GHOST_BUTTON_CLASS = 'px-3 py-1.5 rounded-lg bg-white/[0.03] borde
 const GHOST_TAG_CLASS = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold bg-white/5 text-white/40 border border-white/5';
 const DRAWER_LABEL_CLASS = 'text-[10px] uppercase tracking-widest text-white/40 mb-1.5 font-bold block';
 const DRAWER_ADVANCED_SUMMARY_CLASS = 'mt-4 flex cursor-pointer list-none items-center gap-1.5 border-t border-white/5 pt-4 text-xs text-white/30 transition-colors hover:text-white [&::-webkit-details-marker]:hidden';
+const MULTI_API_KEY_SEPARATOR = /,/;
 
 const resolveDraftStateValue = <T,>(
   draftState: DraftState<T>,
@@ -253,20 +254,7 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
 
   return (
     <div className="mb-2 overflow-hidden rounded-xl border settings-border settings-surface shadow-soft-card transition-all hover:settings-surface-hover">
-      <div
-        className="flex cursor-pointer select-none items-center gap-2.5 px-4 py-3 transition-colors hover:settings-surface-hover"
-        onClick={() => onToggleExpand(index)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onToggleExpand(index);
-          }
-        }}
-        role="button"
-        tabIndex={0}
-      >
-        <span className={`w-4 shrink-0 text-[11px] text-muted-text transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</span>
-
+      <div className="flex select-none items-center gap-2.5 px-4 py-3 transition-colors hover:settings-surface-hover">
         <input
           type="checkbox"
           checked={channel.enabled}
@@ -277,33 +265,40 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
           onChange={(e) => onUpdate(index, 'enabled', e.target.checked)}
         />
 
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-semibold text-foreground">{displayName}</span>
-            <Badge variant="info" className="hidden sm:inline-flex">
-              {channel.protocol}
-            </Badge>
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2.5 border-0 bg-transparent p-0 text-left"
+          onClick={() => onToggleExpand(index)}
+        >
+          <span className={`w-4 shrink-0 text-[11px] text-muted-text transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm font-semibold text-foreground">{displayName}</span>
+              <Badge variant="info" className="hidden sm:inline-flex">
+                {channel.protocol}
+              </Badge>
+            </div>
+            <p className="mt-0.5 truncate text-[11px] text-secondary-text">
+              {modelCount > 0 ? t('settings.llmEditor.statusModelCount', { count: modelCount }) : t('settings.llmEditor.statusModelEmpty')}
+            </p>
           </div>
-          <p className="mt-0.5 truncate text-[11px] text-secondary-text">
-            {modelCount > 0 ? t('settings.llmEditor.statusModelCount', { count: modelCount }) : t('settings.llmEditor.statusModelEmpty')}
-          </p>
-        </div>
 
-        <span className="flex shrink-0 items-center gap-2">
-          {testState?.status === 'success' ? <span className="size-2 rounded-full bg-[var(--accent-positive)]" title={t('settings.llmEditor.statusSuccess')} /> : null}
-          {testState?.status === 'error' ? <span className="size-2 rounded-full bg-[var(--accent-danger)]" title={t('settings.llmEditor.statusError')} /> : null}
-          {testState?.status === 'loading' ? <span className="size-2 rounded-full bg-[var(--accent-warning)] animate-pulse" title={t('settings.llmEditor.statusLoading')} /> : null}
-          {!hasKey && channel.protocol !== 'ollama' ? <Badge variant="warning">{t('settings.llmEditor.statusMissingKey')}</Badge> : null}
-          {testState?.status !== 'idle' ? (
-            <Badge variant={statusVariant}>
-              {testState?.status === 'success'
-                ? t('settings.llmEditor.statusSuccess')
-                : testState?.status === 'error'
-                  ? t('settings.llmEditor.statusError')
-                  : t('settings.llmEditor.statusLoading')}
-            </Badge>
-          ) : null}
-        </span>
+          <span className="flex shrink-0 items-center gap-2">
+            {testState?.status === 'success' ? <span className="size-2 rounded-full bg-[var(--accent-positive)]" title={t('settings.llmEditor.statusSuccess')} /> : null}
+            {testState?.status === 'error' ? <span className="size-2 rounded-full bg-[var(--accent-danger)]" title={t('settings.llmEditor.statusError')} /> : null}
+            {testState?.status === 'loading' ? <span className="size-2 rounded-full bg-[var(--accent-warning)] animate-pulse" title={t('settings.llmEditor.statusLoading')} /> : null}
+            {!hasKey && channel.protocol !== 'ollama' ? <Badge variant="warning">{t('settings.llmEditor.statusMissingKey')}</Badge> : null}
+            {testState?.status !== 'idle' ? (
+              <Badge variant={statusVariant}>
+                {testState?.status === 'success'
+                  ? t('settings.llmEditor.statusSuccess')
+                  : testState?.status === 'error'
+                    ? t('settings.llmEditor.statusError')
+                    : t('settings.llmEditor.statusLoading')}
+              </Badge>
+            ) : null}
+          </span>
+        </button>
 
         <Button
           type="button"
@@ -680,7 +675,7 @@ function channelsToUpdateItems(
 
   for (const channel of channels) {
     const prefix = `LLM_${channel.name.toUpperCase()}`;
-    const isMultiKey = channel.apiKey.includes(',');
+    const isMultiKey = MULTI_API_KEY_SEPARATOR.test(channel.apiKey);
     updates.push({ key: `${prefix}_PROTOCOL`, value: channel.protocol });
     updates.push({ key: `${prefix}_BASE_URL`, value: channel.baseUrl });
     updates.push({ key: `${prefix}_ENABLED`, value: channel.enabled ? 'true' : 'false' });
