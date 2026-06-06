@@ -357,14 +357,18 @@ function getRiskControlVisualRows(
     },
   ];
 
-  return controls
-    .filter((item) => typeof item.value === 'number' && Number.isFinite(item.value))
-    .map((item) => ({
+  return controls.reduce<RiskControlVisualRow[]>((rows, item) => {
+    if (typeof item.value !== 'number' || !Number.isFinite(item.value)) {
+      return rows;
+    }
+    rows.push({
       key: item.key,
       label: item.label,
       value: Number(item.value),
       valueLabel: formatPercent(Number(item.value), { digits: 2 }),
-    }));
+    });
+    return rows;
+  }, []);
 }
 
 function downloadTextFile(filename: string, content: string, mimeType: string): void {
@@ -930,15 +934,19 @@ const DeterministicBacktestResultPage: React.FC = () => {
       benchmarkLabel: selectedBenchmarkLabel,
     })
     : resultPage('headerDescriptionEmpty');
-  const parsedSummaryEntries = Object.entries(run?.parsedStrategy?.summary || {})
-    .filter(([, value]) => typeof value === 'string' && value.trim())
-    .map(([key, value]) => ({
+  const parsedSummaryEntries = Object.entries(run?.parsedStrategy?.summary || {}).reduce<Array<{ label: string; value: string }>>((entries, [key, value]) => {
+    if (typeof value !== 'string' || !value.trim()) {
+      return entries;
+    }
+    entries.push({
       label: key
         .replaceAll(/([a-z])([A-Z])/g, '$1 $2')
         .replaceAll('_', ' ')
         .trim(),
       value: String(value),
-    }));
+    });
+    return entries;
+  }, []);
   const strategySummaryRows = useMemo(
     () => (run
       ? buildRuleStrategySummaryRows(run.parsedStrategy, run.code, run.startDate || '', run.endDate || '', undefined, language)

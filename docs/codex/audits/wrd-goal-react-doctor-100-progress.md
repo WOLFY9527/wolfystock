@@ -275,7 +275,7 @@ Next candidates:
 
 ## Batch 6: Frontend Presenter Dead Export Cleanup
 
-Status: included in the checkpoint commit for this batch after local validation.
+Status: committed and pushed as checkpoint `58246031`.
 
 Files changed:
 
@@ -327,9 +327,52 @@ Next candidates:
 - Remaining scanner presenter findings are on active components and require accessibility/prop-contract changes; evaluate separately with route tests before touching.
 - Manual memoization remains mostly unsafe where callbacks are `useEffect` dependencies or non-compiler tests depend on stable identity.
 
+## Batch 7: Deterministic Backtest Display Iteration Cleanup
+
+Status: included in the checkpoint commit for this batch after local validation.
+
+Files changed:
+
+- `apps/dsa-web/src/pages/DeterministicBacktestResultPage.tsx`
+
+Changes:
+
+- Replaced two display-only `filter().map()` derivations with single-pass `reduce()` derivations.
+- Touched risk-control visual rows and parsed-strategy summary labels only; backtest math, fills, costs, metrics, stored semantics, and result payload handling were not changed.
+
+Diagnostics after batch:
+
+- Score: `61`
+- Total diagnostics: `498`
+- Errors: `112`
+- Warnings: `386`
+- Affected files: `41`
+- Reduced total diagnostics from previous checkpoint: `2`
+- Reduced total diagnostics from baseline: `69`
+- Reduced by rule from previous checkpoint:
+  - `js-combine-iterations`: `6 -> 4` (`-2`)
+- React Doctor diff for changed file:
+  - `src/pages/DeterministicBacktestResultPage.tsx`: `75 -> 73` (`-2`)
+
+Validations run:
+
+- `git diff --check` -> pass
+- `./scripts/release_secret_scan.sh` -> pass
+- `npm --prefix apps/dsa-web run test -- 'src/pages/__tests__/DeterministicBacktestResultPage.test.tsx' 'src/pages/tests/DeterministicBacktestResultPage.test.tsx' --no-file-parallelism` -> pass, `28` tests
+- `npm --prefix apps/dsa-web run lint` -> pass
+- `npm --prefix apps/dsa-web run build` -> pass with existing Vite chunk-size warning
+- `npx react-doctor@latest --json --json-compact --yes --no-score` -> remaining diagnostics expected, totals above
+- `npx react-doctor@latest --score --yes` -> `61`
+
+Next candidates:
+
+- `UserScannerPage.tsx` has remaining array-iteration findings, but several are near scanner candidate/ranking derivations; only display-only transformations should be considered.
+- Accessibility warnings require care because several flagged elements are scroll containers or filter groups where React Doctor's suggested semantic replacement may not preserve intended keyboard behavior.
+- Remaining deterministic page findings are mostly state/effect flow, giant component, and manual memoization tied to callback identity; defer without narrower behavior coverage.
+
 ## Protected Domain Confirmation
 
-No changes in Batches 1 through 6 to:
+No changes in Batches 1 through 7 to:
 
 - backend/API/provider/cache/runtime/auth/package/lockfile/config/CI
 - provider order, fallback, deadlines, cache semantics, payload shapes
