@@ -417,7 +417,7 @@ Next candidates:
 
 ## Batch 9: Admin Cost Empty Counter Direct Derivation
 
-Status: included in the checkpoint commit for this batch after local validation.
+Status: committed and pushed as checkpoint `4f180562`.
 
 Files changed:
 
@@ -458,9 +458,51 @@ Next candidates:
 - `HomeBentoDashboardPage.tsx` `js-set-map-lookups` appears to be string substring matching, not a Set-compatible array lookup.
 - Remaining score gains likely require unsafe state/effect/manual memo changes or broader component decomposition.
 
+## Batch 10: Home Skeleton Stable Default
+
+Status: included in the checkpoint commit for this batch after local validation.
+
+Files changed:
+
+- `apps/dsa-web/src/pages/HomeBentoDashboardPage.tsx`
+
+Changes:
+
+- Moved the `InPlaceDecisionSkeleton` empty `progressModules` default to a module-scope constant.
+- Kept Home dashboard route behavior, visible copy, layout, and selection logic unchanged.
+
+Diagnostics after batch:
+
+- Score: `61`
+- Total diagnostics: `489`
+- Errors: `112`
+- Warnings: `377`
+- Affected files: `41`
+- Reduced total diagnostics from previous checkpoint: `1`
+- Reduced total diagnostics from baseline: `78`
+- Reduced by rule from previous checkpoint:
+  - `rerender-memo-with-default-value`: `1 -> 0` (`-1`)
+- React Doctor diff for changed file:
+  - `src/pages/HomeBentoDashboardPage.tsx`: `79 -> 78` (`-1`)
+
+Validations run:
+
+- `git diff --check` -> pass
+- `./scripts/release_secret_scan.sh` -> pass
+- `npm --prefix apps/dsa-web run test -- 'src/pages/__tests__/HomeSurfacePage.test.tsx' --no-file-parallelism` -> pass, `75` tests
+- `npm --prefix apps/dsa-web run lint` -> pass
+- `npm --prefix apps/dsa-web run build` -> pass with existing Vite chunk-size warning
+- `npx react-doctor@latest --json --json-compact --yes --no-score` -> remaining diagnostics expected, totals above
+- `npx react-doctor@latest --score --yes` -> `61`
+
+Next candidates:
+
+- Stop unless explicitly re-scoped: remaining findings require forbidden domains, unsafe semantic changes, or broader state/effect/component decomposition.
+- If re-scoped later, start with tests for a single route and explicitly allow the relevant state/effect or accessibility semantic contract.
+
 ## Protected Domain Confirmation
 
-No changes in Batches 1 through 9 to:
+No changes in Batches 1 through 10 to:
 
 - backend/API/provider/cache/runtime/auth/package/lockfile/config/CI
 - provider order, fallback, deadlines, cache semantics, payload shapes

@@ -4844,10 +4844,12 @@ function buildTimelineLeadCopy(locale: DashboardLocale, activeDetail?: string, m
   return locale === 'en' ? 'Wolfy AI is advancing through staged checks.' : 'Wolfy AI 正在按阶段推进分析。';
 }
 
+const EMPTY_TASK_PROGRESS_MODULES: TaskProgressModule[] = [];
+
 function InPlaceDecisionSkeleton({
   locale,
   ticker,
-  progressModules = [],
+  progressModules = EMPTY_TASK_PROGRESS_MODULES,
   message,
   progress,
 }: {
