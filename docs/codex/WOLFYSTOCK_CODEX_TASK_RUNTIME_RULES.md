@@ -263,3 +263,17 @@ bash scripts/release_secret_scan.sh
 ```
 
 Use full `./scripts/ci_gate.sh` for release/landing or high-risk backend runtime changes, not as a default for every narrow task.
+
+### Backend provider/cache/runtime protected writes
+
+Use this compact command reference for bounded protected writes:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile <changed_python_files> <coupled_provider_cache_runtime_files>
+PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider <focused_tests_from_matrix>
+git diff --check
+./scripts/release_secret_scan.sh
+git status --short --branch
+```
+
+Escalate to `./scripts/ci_gate.sh` before commit/push if the write changes provider order/fallback/deadline behavior, MarketCache TTL/SWR/cold-start/background refresh semantics, shared router/planner behavior, API shape, or focused coverage is missing/unclear.
