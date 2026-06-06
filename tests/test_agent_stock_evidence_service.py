@@ -42,7 +42,45 @@ def test_stock_evidence_base_fields_are_preserved_with_packet_without_sec_sideca
     assert payload["items"][0]["quote"] == {
         "status": "unknown",
         "provider": "realtime_quote",
+        "source": "realtime_quote",
+        "sourceType": "missing",
+        "freshness": "unavailable",
+        "degradationReason": "unavailable_source",
+        "isFallback": False,
+        "isStale": False,
+        "isPartial": False,
+        "isSynthetic": False,
+        "isUnavailable": True,
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "sourceAuthorityAllowed": False,
+        "rawPayloadStored": False,
+        "sourceConfidence": {
+            "source": "realtime_quote",
+            "sourceLabel": "realtime_quote",
+            "asOf": None,
+            "freshness": "unavailable",
+            "isFallback": False,
+            "isStale": False,
+            "isPartial": False,
+            "isSynthetic": False,
+            "isUnavailable": True,
+            "confidenceWeight": 0.0,
+            "coverage": 0.0,
+            "degradationReason": "unavailable_source",
+            "capReason": "unavailable_source",
+        },
     }
+    for deferred_key in (
+        "providerId",
+        "sourceTier",
+        "trustLevel",
+        "freshnessExpectation",
+        "readinessState",
+        "authorityGrant",
+    ):
+        assert deferred_key not in payload["items"][0]["quote"]
+        assert deferred_key not in payload["items"][0]["quote"]["sourceConfidence"]
     assert payload["items"][0]["technical"] == {
         "status": "missing",
         "provider": "stock_daily",
@@ -191,7 +229,48 @@ def test_stock_evidence_omits_packet_when_projector_fails_without_breaking_paylo
         payload = service.get_stock_evidence(["AAPL"])
 
     item = payload["items"][0]
-    assert item["quote"] == {"status": "unknown", "provider": "realtime_quote"}
+    assert item["quote"] == {
+        "status": "unknown",
+        "provider": "realtime_quote",
+        "source": "realtime_quote",
+        "sourceType": "missing",
+        "freshness": "unavailable",
+        "degradationReason": "unavailable_source",
+        "isFallback": False,
+        "isStale": False,
+        "isPartial": False,
+        "isSynthetic": False,
+        "isUnavailable": True,
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "sourceAuthorityAllowed": False,
+        "rawPayloadStored": False,
+        "sourceConfidence": {
+            "source": "realtime_quote",
+            "sourceLabel": "realtime_quote",
+            "asOf": None,
+            "freshness": "unavailable",
+            "isFallback": False,
+            "isStale": False,
+            "isPartial": False,
+            "isSynthetic": False,
+            "isUnavailable": True,
+            "confidenceWeight": 0.0,
+            "coverage": 0.0,
+            "degradationReason": "unavailable_source",
+            "capReason": "unavailable_source",
+        },
+    }
+    for deferred_key in (
+        "providerId",
+        "sourceTier",
+        "trustLevel",
+        "freshnessExpectation",
+        "readinessState",
+        "authorityGrant",
+    ):
+        assert deferred_key not in item["quote"]
+        assert deferred_key not in item["quote"]["sourceConfidence"]
     assert item["technical"] == {"status": "missing", "provider": "stock_daily"}
     assert item["fundamental"]["status"] == "missing"
     assert item["news"] == {"status": "unknown", "latestHeadline": None, "provider": None}
@@ -338,7 +417,48 @@ def test_stock_evidence_degrades_sec_sidecar_that_attempts_scoring_or_quote_auth
     )
 
     item = payload["items"][0]
-    assert item["quote"] == {"status": "unknown", "provider": "realtime_quote"}
+    assert item["quote"] == {
+        "status": "unknown",
+        "provider": "realtime_quote",
+        "source": "realtime_quote",
+        "sourceType": "missing",
+        "freshness": "unavailable",
+        "degradationReason": "unavailable_source",
+        "isFallback": False,
+        "isStale": False,
+        "isPartial": False,
+        "isSynthetic": False,
+        "isUnavailable": True,
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "sourceAuthorityAllowed": False,
+        "rawPayloadStored": False,
+        "sourceConfidence": {
+            "source": "realtime_quote",
+            "sourceLabel": "realtime_quote",
+            "asOf": None,
+            "freshness": "unavailable",
+            "isFallback": False,
+            "isStale": False,
+            "isPartial": False,
+            "isSynthetic": False,
+            "isUnavailable": True,
+            "confidenceWeight": 0.0,
+            "coverage": 0.0,
+            "degradationReason": "unavailable_source",
+            "capReason": "unavailable_source",
+        },
+    }
+    for deferred_key in (
+        "providerId",
+        "sourceTier",
+        "trustLevel",
+        "freshnessExpectation",
+        "readinessState",
+        "authorityGrant",
+    ):
+        assert deferred_key not in item["quote"]
+        assert deferred_key not in item["quote"]["sourceConfidence"]
     assert item["fundamental"]["provider"] == "realtime_quote"
     assert item["secFilingEvidence"] == {
         "status": "rejected",
@@ -402,7 +522,46 @@ def test_service_packet_keeps_quote_provenance_but_blocks_live_claim_without_fre
         "currency": "USD",
         "provider": "alpaca",
         "updatedAt": "2026-05-13T08:30:00Z",
+        "source": "alpaca",
+        "sourceType": "local_or_reported",
+        "freshness": "unknown",
+        "asOf": "2026-05-13T08:30:00Z",
+        "degradationReason": "freshness_not_proven",
+        "isFallback": False,
+        "isStale": False,
+        "isPartial": False,
+        "isSynthetic": False,
+        "isUnavailable": False,
+        "observationOnly": True,
+        "scoreContributionAllowed": False,
+        "sourceAuthorityAllowed": False,
+        "rawPayloadStored": False,
+        "sourceConfidence": {
+            "source": "alpaca",
+            "sourceLabel": "alpaca",
+            "asOf": "2026-05-13T08:30:00Z",
+            "freshness": "unknown",
+            "isFallback": False,
+            "isStale": False,
+            "isPartial": False,
+            "isSynthetic": False,
+            "isUnavailable": False,
+            "confidenceWeight": 0.3,
+            "coverage": 1.0,
+            "degradationReason": "freshness_not_proven",
+            "capReason": "freshness_not_proven",
+        },
     }
+    for deferred_key in (
+        "providerId",
+        "sourceTier",
+        "trustLevel",
+        "freshnessExpectation",
+        "readinessState",
+        "authorityGrant",
+    ):
+        assert deferred_key not in item["quote"]
+        assert deferred_key not in item["quote"]["sourceConfidence"]
     assert quote_ref["status"] == "available"
     assert quote_ref["provider"] == "alpaca"
     assert quote_ref["asOf"] == "2026-05-13T08:30:00Z"
