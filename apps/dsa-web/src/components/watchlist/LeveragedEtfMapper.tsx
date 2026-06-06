@@ -209,9 +209,9 @@ export default function LeveragedEtfMapper({
       ['etfEntry', copy.etfEntry],
       ['etfStop', copy.etfStop],
       ['etfTakeProfit', copy.etfTakeProfit],
-    ] as const).map(([key, label]) => {
+    ] as const).flatMap(([key, label]) => {
       const parsed = parseNumeric(fields[key]);
-      return {
+      const mark = {
         key,
         label,
         value: canCalculate && parsed !== null
@@ -223,7 +223,8 @@ export default function LeveragedEtfMapper({
             })
           : null,
       };
-    }).filter((item) => item.value !== null || hasValue(fields[item.key]));
+      return mark.value !== null || hasValue(fields[mark.key]) ? [mark] : [];
+    });
 
     return {
       errors,
