@@ -51,7 +51,7 @@ Deferred or blocker-prone:
 
 ## Batch 1: Backtest Report Display Cleanup
 
-Status: validated locally, ready for immediate checkpoint commit and push.
+Status: committed and pushed as checkpoint `7e28214f`.
 
 Files changed:
 
@@ -93,6 +93,51 @@ Next candidates:
 - `HomeBentoDashboardPage.tsx`: many memo/state diagnostics; start only with manual memoization or pure display derivations, defer prop/state adjustment unless tests clearly cover it.
 - `DeterministicBacktestResultPage.tsx`: manual memoization and array cleanup are candidates; avoid backtest math/fills/costs/metrics/stored semantics.
 - Unused exports in frontend display/shared components can be considered after focused import search.
+
+## Batch 2: Small Display Derivation Cleanup
+
+Status: validated locally, ready for immediate checkpoint commit and push.
+
+Files changed:
+
+- `apps/dsa-web/src/components/portfolio/PortfolioScenarioRiskPanel.tsx`
+- `apps/dsa-web/src/components/watchlist/LeveragedEtfMapper.tsx`
+
+Changes:
+
+- Hoisted portfolio scenario number formatters to module scope.
+- Removed a redundant `useMemo` for portfolio scenario symbol options.
+- Replaced the leveraged ETF mapper `useMemo` with a file-local pure result builder.
+
+Diagnostics after batch:
+
+- Score: `61`
+- Total diagnostics: `521`
+- Errors: `112`
+- Warnings: `409`
+- Affected files: `44`
+- Reduced total diagnostics from previous checkpoint: `5`
+- Reduced total diagnostics from baseline: `46`
+- Reduced by rule from previous checkpoint:
+  - `js-hoist-intl`: `7 -> 4` (`-3`)
+  - `react-compiler-no-manual-memoization`: `194 -> 192` (`-2`)
+- React Doctor diff for changed files: `0` diagnostics.
+
+Validations run:
+
+- `git diff --check` -> pass
+- `./scripts/release_secret_scan.sh` -> pass
+- `npm --prefix apps/dsa-web run test -- 'src/components/portfolio/__tests__/PortfolioScenarioRiskPanel.test.tsx' 'src/components/watchlist/__tests__/LeveragedEtfMapper.test.tsx'` -> pass, `7` tests
+- `npm --prefix apps/dsa-web run lint` -> pass
+- `npm --prefix apps/dsa-web run build` -> pass with existing Vite chunk-size warning
+- `npx react-doctor@latest --json --json-compact --yes --no-score` -> remaining diagnostics expected, totals above
+- `npx react-doctor@latest --score --yes` -> `61`
+
+Next candidates:
+
+- Continue with small pure derivations: `dataSourceLibraryShared.ts` `Set` lookup, remaining `js-hoist-intl`, and immutable sort/copy fixes.
+- Avoid `AdminLogsPage.tsx` manual `useCallback` cleanup for now because several callbacks are `useEffect` dependencies; direct removal can change behavior in non-compiler test environments.
+- Defer state/effect flow findings unless focused tests cover the exact flow and the change is narrowly mechanical.
 
 ## Protected Domain Confirmation
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Input } from '../common/Input';
 import { PillBadge } from '../common/PillBadge';
 import { Select } from '../common/Select';
@@ -34,30 +34,33 @@ interface PortfolioScenarioRiskPanelProps {
 const FIELD_LABEL_CLASS = '!mb-1 text-[11px] font-medium tracking-normal text-white/55';
 const INPUT_CLASS = 'h-10 rounded-lg border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-white placeholder:text-white/20 outline-none focus:border-emerald-500/50';
 const SELECT_CLASS = 'min-w-0';
+const SIGNED_AMOUNT_FORMATTER = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  signDisplay: 'always',
+});
+const PERCENT_FORMATTER = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 1,
+});
+const DECIMAL_FORMATTER = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
 
 function formatSignedAmount(value?: number | null): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-    signDisplay: 'always',
-  }).format(value);
+  return SIGNED_AMOUNT_FORMATTER.format(value);
 }
 
 function formatPercent(value?: number | null): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
-  return `${new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 1,
-  }).format(value)}%`;
+  return `${PERCENT_FORMATTER.format(value)}%`;
 }
 
 function formatDecimal(value?: number | null): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return DECIMAL_FORMATTER.format(value);
 }
 
 function buildScenarioName(kind: ScenarioKind, target: string, shockPercentRaw: string): string {
@@ -104,10 +107,7 @@ export function PortfolioScenarioRiskPanel({
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<PortfolioScenarioRiskResponse | null>(null);
 
-  const symbolOptions = useMemo(
-    () => positions.map((position) => ({ value: position.symbol, label: position.symbol })),
-    [positions],
-  );
+  const symbolOptions = positions.map((position) => ({ value: position.symbol, label: position.symbol }));
   const effectiveSelectedSymbol = positions.some((position) => position.symbol === selectedSymbol)
     ? selectedSymbol
     : (positions[0]?.symbol ?? '');

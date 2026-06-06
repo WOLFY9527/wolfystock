@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Calculator } from 'lucide-react';
 import { Input } from '../common/Input';
 import { DenseSecondaryDisclosure } from '../terminal/DenseWorkbenchPrimitives';
@@ -134,6 +134,94 @@ function hasValue(value: string): boolean {
   return value.trim().length > 0;
 }
 
+function buildMapperResult(fields: NumericFields, copy: typeof zhCopy, language: 'zh' | 'en') {
+  const requested = hasValue(fields.underlyingTarget)
+    || hasValue(fields.etfTarget)
+    || hasValue(fields.etfEntry)
+    || hasValue(fields.etfStop)
+    || hasValue(fields.etfTakeProfit);
+  const errors: FieldErrors = {};
+
+  if (requested) {
+    const leverageError = fieldError(language === 'zh' ? '杠杆倍数' : 'Leverage', fields.leverage, true, true);
+    const underlyingReferenceError = fieldError(copy.underlyingReference, fields.underlyingReference, true);
+    const etfReferenceError = fieldError(copy.etfReference, fields.etfReference, true);
+    if (leverageError) errors.leverage = leverageError;
+    if (underlyingReferenceError) errors.underlyingReference = underlyingReferenceError;
+    if (etfReferenceError) errors.etfReference = etfReferenceError;
+  }
+
+  ([
+    ['underlyingTarget', copy.underlyingTarget],
+    ['etfTarget', copy.etfTarget],
+    ['etfEntry', copy.etfEntry],
+    ['etfStop', copy.etfStop],
+    ['etfTakeProfit', copy.etfTakeProfit],
+  ] as const).forEach(([key, label]) => {
+    const error = fieldError(label, fields[key], false);
+    if (error) errors[key] = error;
+  });
+
+  const hasErrors = Object.keys(errors).length > 0;
+  const leverage = parseNumeric(fields.leverage);
+  const underlyingReference = parseNumeric(fields.underlyingReference);
+  const etfReference = parseNumeric(fields.etfReference);
+  const underlyingTarget = parseNumeric(fields.underlyingTarget);
+  const etfTarget = parseNumeric(fields.etfTarget);
+
+  const canCalculate = requested
+    && !hasErrors
+    && leverage !== null
+    && underlyingReference !== null
+    && etfReference !== null
+    && leverage !== 0;
+
+  const forwardEstimate = canCalculate && underlyingTarget !== null
+    ? calculateLeveragedEtfEstimate({
+        leverage,
+        underlyingReference,
+        etfReference,
+        underlyingTarget,
+      })
+    : null;
+  const impliedUnderlying = canCalculate && etfTarget !== null
+    ? calculateImpliedUnderlying({
+        leverage,
+        underlyingReference,
+        etfReference,
+        etfTarget,
+      })
+    : null;
+  const optionalMarks: OptionalMark[] = ([
+    ['etfEntry', copy.etfEntry],
+    ['etfStop', copy.etfStop],
+    ['etfTakeProfit', copy.etfTakeProfit],
+  ] as const).flatMap(([key, label]) => {
+    const parsed = parseNumeric(fields[key]);
+    const mark = {
+      key,
+      label,
+      value: canCalculate && parsed !== null
+        ? calculateImpliedUnderlying({
+            leverage,
+            underlyingReference,
+            etfReference,
+            etfTarget: parsed,
+          })
+        : null,
+    };
+    return mark.value !== null || hasValue(fields[mark.key]) ? [mark] : [];
+  });
+
+  return {
+    errors,
+    forwardEstimate,
+    impliedUnderlying,
+    optionalMarks,
+    hasRequestedOutput: requested,
+  };
+}
+
 export default function LeveragedEtfMapper({
   defaultUnderlyingSymbol,
   defaultEtfSymbol,
@@ -147,93 +235,7 @@ export default function LeveragedEtfMapper({
   const [fields, setFields] = useState<NumericFields>(INITIAL_NUMERIC_FIELDS);
   const underlyingSymbol = underlyingSymbolEdited ? underlyingSymbolDraft : defaultUnderlyingSymbol || '';
 
-  const result = useMemo(() => {
-    const requested = hasValue(fields.underlyingTarget)
-      || hasValue(fields.etfTarget)
-      || hasValue(fields.etfEntry)
-      || hasValue(fields.etfStop)
-      || hasValue(fields.etfTakeProfit);
-    const errors: FieldErrors = {};
-
-    if (requested) {
-      const leverageError = fieldError(language === 'zh' ? '杠杆倍数' : 'Leverage', fields.leverage, true, true);
-      const underlyingReferenceError = fieldError(copy.underlyingReference, fields.underlyingReference, true);
-      const etfReferenceError = fieldError(copy.etfReference, fields.etfReference, true);
-      if (leverageError) errors.leverage = leverageError;
-      if (underlyingReferenceError) errors.underlyingReference = underlyingReferenceError;
-      if (etfReferenceError) errors.etfReference = etfReferenceError;
-    }
-
-    ([
-      ['underlyingTarget', copy.underlyingTarget],
-      ['etfTarget', copy.etfTarget],
-      ['etfEntry', copy.etfEntry],
-      ['etfStop', copy.etfStop],
-      ['etfTakeProfit', copy.etfTakeProfit],
-    ] as const).forEach(([key, label]) => {
-      const error = fieldError(label, fields[key], false);
-      if (error) errors[key] = error;
-    });
-
-    const hasErrors = Object.keys(errors).length > 0;
-    const leverage = parseNumeric(fields.leverage);
-    const underlyingReference = parseNumeric(fields.underlyingReference);
-    const etfReference = parseNumeric(fields.etfReference);
-    const underlyingTarget = parseNumeric(fields.underlyingTarget);
-    const etfTarget = parseNumeric(fields.etfTarget);
-
-    const canCalculate = requested
-      && !hasErrors
-      && leverage !== null
-      && underlyingReference !== null
-      && etfReference !== null
-      && leverage !== 0;
-
-    const forwardEstimate = canCalculate && underlyingTarget !== null
-      ? calculateLeveragedEtfEstimate({
-          leverage,
-          underlyingReference,
-          etfReference,
-          underlyingTarget,
-        })
-      : null;
-    const impliedUnderlying = canCalculate && etfTarget !== null
-      ? calculateImpliedUnderlying({
-          leverage,
-          underlyingReference,
-          etfReference,
-          etfTarget,
-        })
-      : null;
-    const optionalMarks: OptionalMark[] = ([
-      ['etfEntry', copy.etfEntry],
-      ['etfStop', copy.etfStop],
-      ['etfTakeProfit', copy.etfTakeProfit],
-    ] as const).flatMap(([key, label]) => {
-      const parsed = parseNumeric(fields[key]);
-      const mark = {
-        key,
-        label,
-        value: canCalculate && parsed !== null
-          ? calculateImpliedUnderlying({
-              leverage,
-              underlyingReference,
-              etfReference,
-              etfTarget: parsed,
-            })
-          : null,
-      };
-      return mark.value !== null || hasValue(fields[mark.key]) ? [mark] : [];
-    });
-
-    return {
-      errors,
-      forwardEstimate,
-      impliedUnderlying,
-      optionalMarks,
-      hasRequestedOutput: requested,
-    };
-  }, [copy, fields, language]);
+  const result = buildMapperResult(fields, copy, language);
 
   const updateField = (key: NumericFieldKey, value: string) => {
     setFields((current) => ({ ...current, [key]: value }));
