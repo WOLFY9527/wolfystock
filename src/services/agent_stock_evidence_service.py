@@ -22,7 +22,10 @@ from src.services.sec_edgar_evidence_service import (
     build_sec_filing_evidence_sidecar,
 )
 from src.services.stock_evidence_packet import project_stock_evidence_packet
-from src.services.stock_evidence_quote_adapter import StockEvidenceQuoteAdapter
+from src.services.stock_evidence_quote_adapter import (
+    StockEvidenceQuoteAdapter,
+    build_quote_diagnostic_source_metadata,
+)
 
 
 EvidencePayload = Dict[str, Any]
@@ -397,9 +400,26 @@ class StockEvidenceService:
         try:
             quote = self.quote_adapter.get_quote_snapshot(symbol)
         except Exception as exc:
-            return {"status": "error", "provider": "realtime_quote", "error": str(exc)[:120]}
+            return {
+                "status": "error",
+                "provider": "realtime_quote",
+                "error": str(exc)[:120],
+                **build_quote_diagnostic_source_metadata(
+                    source="realtime_quote",
+                    as_of=None,
+                    is_unavailable=True,
+                ),
+            }
         if quote is None:
-            return {"status": "unknown", "provider": "realtime_quote"}
+            return {
+                "status": "unknown",
+                "provider": "realtime_quote",
+                **build_quote_diagnostic_source_metadata(
+                    source="realtime_quote",
+                    as_of=None,
+                    is_unavailable=True,
+                ),
+            }
         payload: EvidencePayload = {
             "status": "available",
             "price": _compact_number(quote.price),
@@ -407,6 +427,7 @@ class StockEvidenceService:
             "currency": "USD" if _infer_market(symbol) == "US" else "CNY" if _infer_market(symbol) == "CN" else "HKD",
             "provider": quote.source or "realtime_quote",
             "updatedAt": quote.market_timestamp,
+            **quote.source_metadata,
         }
         for target, attr in (
             ("marketCap", "total_mv"),

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -396,3 +397,100 @@ def test_stock_evidence_endpoint_preserves_unknown_symbol_degraded_payload(
     assert data["items"][0]["symbol"] == "UNKNOWN1"
     assert data["items"][0]["quote"]["status"] == "unknown"
     assert data["items"][0]["fundamental"]["status"] == "missing"
+
+
+def test_stock_evidence_endpoint_preserves_quote_diagnostic_metadata_and_readonly_seam(
+    monkeypatch,
+) -> None:
+    instances: list[Any] = []
+
+    class _FakeServiceWithQuoteSeam:
+        def __init__(self) -> None:
+            self.quote_adapter = SimpleNamespace(fetcher_manager=object())
+            self.fetcher_manager = object()
+            self.calls: list[list[str]] = []
+            instances.append(self)
+
+        def get_stock_evidence(self, symbols: list[str], **_: Any) -> dict[str, Any]:
+            self.calls.append(symbols)
+            assert type(self.quote_adapter.fetcher_manager).__name__ == "_ReadOnlyEvidenceFetcherManager"
+            assert type(self.fetcher_manager).__name__ == "_ReadOnlyEvidenceFetcherManager"
+            payload = _base_payload(symbols[0])
+            payload["items"][0]["quote"] = {
+                "status": "available",
+                "price": 214.55,
+                "changePct": 1.23,
+                "currency": "USD",
+                "provider": "alpaca",
+                "updatedAt": "2026-05-13T08:30:00Z",
+                "source": "alpaca",
+                "sourceType": "local_or_reported",
+                "freshness": "unknown",
+                "asOf": "2026-05-13T08:30:00Z",
+                "degradationReason": "freshness_not_proven",
+                "isFallback": False,
+                "isStale": False,
+                "isPartial": False,
+                "isSynthetic": False,
+                "isUnavailable": False,
+                "observationOnly": True,
+                "scoreContributionAllowed": False,
+                "sourceAuthorityAllowed": False,
+                "rawPayloadStored": False,
+                "sourceConfidence": {
+                    "source": "alpaca",
+                    "sourceLabel": "alpaca",
+                    "asOf": "2026-05-13T08:30:00Z",
+                    "freshness": "unknown",
+                    "isFallback": False,
+                    "isStale": False,
+                    "isPartial": False,
+                    "isSynthetic": False,
+                    "isUnavailable": False,
+                    "confidenceWeight": 0.3,
+                    "coverage": 1.0,
+                    "degradationReason": "freshness_not_proven",
+                    "capReason": "freshness_not_proven",
+                },
+            }
+            return payload
+
+    monkeypatch.setattr(
+        stocks_endpoint,
+        "StockEvidenceService",
+        _FakeServiceWithQuoteSeam,
+        raising=False,
+    )
+
+    response = _client().get("/api/v1/stocks/AAPL/evidence")
+
+    assert response.status_code == 200
+    assert len(instances) == 1
+    assert instances[0].calls == [["AAPL"]]
+    quote = response.json()["items"][0]["quote"]
+    assert quote["provider"] == "alpaca"
+    assert quote["source"] == "alpaca"
+    assert quote["sourceType"] == "local_or_reported"
+    assert quote["freshness"] == "unknown"
+    assert quote["asOf"] == "2026-05-13T08:30:00Z"
+    assert quote["isFallback"] is False
+    assert quote["isStale"] is False
+    assert quote["isPartial"] is False
+    assert quote["isSynthetic"] is False
+    assert quote["isUnavailable"] is False
+    assert quote["observationOnly"] is True
+    assert quote["scoreContributionAllowed"] is False
+    assert quote["sourceAuthorityAllowed"] is False
+    assert quote["rawPayloadStored"] is False
+    assert quote["sourceConfidence"]["confidenceWeight"] == 0.3
+    assert quote["sourceConfidence"]["capReason"] == "freshness_not_proven"
+    for deferred_key in (
+        "providerId",
+        "sourceTier",
+        "trustLevel",
+        "freshnessExpectation",
+        "readinessState",
+        "authorityGrant",
+    ):
+        assert deferred_key not in quote
+        assert deferred_key not in quote["sourceConfidence"]

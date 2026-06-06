@@ -631,7 +631,10 @@ def test_stock_evidence_quote_preserves_available_provider_source() -> None:
 
     payload = service._quote("AAPL")
 
-    assert payload == {
+    assert {
+        key: payload[key]
+        for key in ("status", "price", "changePct", "currency", "provider", "updatedAt")
+    } == {
         "status": "available",
         "price": 214.55,
         "changePct": 1.23,
@@ -639,6 +642,12 @@ def test_stock_evidence_quote_preserves_available_provider_source() -> None:
         "provider": "alpaca",
         "updatedAt": "2026-05-13T08:30:00Z",
     }
+    assert payload["source"] == "alpaca"
+    assert payload["sourceType"] == "local_or_reported"
+    assert payload["freshness"] == "unknown"
+    assert payload["asOf"] == "2026-05-13T08:30:00Z"
+    assert payload["sourceConfidence"]["capReason"] == "freshness_not_proven"
+    _assert_quote_diagnostic_authority_is_closed(payload)
 
 
 def test_stock_evidence_quote_adapter_returns_inert_snapshot_for_basic_quote() -> None:
@@ -668,6 +677,37 @@ def test_stock_evidence_quote_adapter_returns_inert_snapshot_for_basic_quote() -
         pe_ratio=30.2,
         pb_ratio=12.1,
         market_timestamp="2026-05-13T08:30:00Z",
+        source_metadata={
+            "source": "alpaca",
+            "sourceType": "local_or_reported",
+            "freshness": "unknown",
+            "asOf": "2026-05-13T08:30:00Z",
+            "degradationReason": "freshness_not_proven",
+            "isFallback": False,
+            "isStale": False,
+            "isPartial": False,
+            "isSynthetic": False,
+            "isUnavailable": False,
+            "observationOnly": True,
+            "scoreContributionAllowed": False,
+            "sourceAuthorityAllowed": False,
+            "rawPayloadStored": False,
+            "sourceConfidence": {
+                "source": "alpaca",
+                "sourceLabel": "alpaca",
+                "asOf": "2026-05-13T08:30:00Z",
+                "freshness": "unknown",
+                "isFallback": False,
+                "isStale": False,
+                "isPartial": False,
+                "isSynthetic": False,
+                "isUnavailable": False,
+                "confidenceWeight": 0.3,
+                "coverage": 1.0,
+                "degradationReason": "freshness_not_proven",
+                "capReason": "freshness_not_proven",
+            },
+        },
     )
 
 
@@ -681,6 +721,139 @@ def test_stock_evidence_service_keeps_fetcher_manager_constructor_compatibility(
 
     assert service.fetcher_manager is fetcher_manager
     assert service.quote_adapter.fetcher_manager is fetcher_manager
+
+
+def _assert_quote_diagnostic_authority_is_closed(quote: dict[str, object]) -> None:
+    assert quote["observationOnly"] is True
+    assert quote["scoreContributionAllowed"] is False
+    assert quote["sourceAuthorityAllowed"] is False
+    assert quote["rawPayloadStored"] is False
+    for deferred_key in (
+        "providerId",
+        "sourceTier",
+        "trustLevel",
+        "freshnessExpectation",
+        "readinessState",
+        "authorityGrant",
+    ):
+        assert deferred_key not in quote
+        assert deferred_key not in quote["sourceConfidence"]
+
+
+def test_stock_evidence_quote_projects_diagnostic_source_confidence_without_promotion() -> None:
+    service = StockEvidenceService(
+        fetcher_manager=SimpleNamespace(
+            get_realtime_quote=lambda symbol: UnifiedRealtimeQuote(
+                code=symbol,
+                name="Apple",
+                source=RealtimeSource.ALPACA,
+                price=214.55,
+                change_pct=1.23,
+                total_mv=3210000000.0,
+                pe_ratio=30.2,
+                pb_ratio=12.1,
+                market_timestamp="2026-05-13T08:30:00Z",
+            )
+        ),
+        stock_repo=MagicMock(),
+        analysis_repo=MagicMock(),
+    )
+
+    payload = service.get_stock_evidence(["AAPL"])
+
+    item = payload["items"][0]
+    quote = item["quote"]
+    packet = item["stockEvidencePacket"]
+    quote_ref = next(ref for ref in packet["sourceRefs"] if ref["evidenceClass"] == "quote")
+    blocked = {boundary["claim"]: boundary for boundary in packet["claimBoundaries"] if not boundary["allowed"]}
+
+    assert list(item)[:6] == ["symbol", "market", "quote", "technical", "fundamental", "news"]
+    assert {
+        key: quote[key]
+        for key in ("status", "price", "changePct", "currency", "provider", "updatedAt")
+    } == {
+        "status": "available",
+        "price": 214.55,
+        "changePct": 1.23,
+        "currency": "USD",
+        "provider": "alpaca",
+        "updatedAt": "2026-05-13T08:30:00Z",
+    }
+    assert quote["source"] == "alpaca"
+    assert quote["sourceType"] == "local_or_reported"
+    assert quote["freshness"] == "unknown"
+    assert quote["asOf"] == "2026-05-13T08:30:00Z"
+    assert quote["degradationReason"] == "freshness_not_proven"
+    assert quote["isFallback"] is False
+    assert quote["isStale"] is False
+    assert quote["isPartial"] is False
+    assert quote["isSynthetic"] is False
+    assert quote["isUnavailable"] is False
+    _assert_quote_diagnostic_authority_is_closed(quote)
+    assert quote["sourceConfidence"] == {
+        "source": "alpaca",
+        "sourceLabel": "alpaca",
+        "asOf": "2026-05-13T08:30:00Z",
+        "freshness": "unknown",
+        "isFallback": False,
+        "isStale": False,
+        "isPartial": False,
+        "isSynthetic": False,
+        "isUnavailable": False,
+        "confidenceWeight": 0.3,
+        "coverage": 1.0,
+        "degradationReason": "freshness_not_proven",
+        "capReason": "freshness_not_proven",
+    }
+    assert quote_ref["provider"] == "alpaca"
+    assert quote_ref["asOf"] == "2026-05-13T08:30:00Z"
+    assert quote_ref["sourceType"] == "local_or_reported"
+    assert quote_ref["freshness"] == "unknown"
+    assert all(evidence["evidenceClass"] != "quote" for evidence in packet["scoreEligibleEvidence"])
+    assert blocked["price_is_live"]["reasonCode"] == "quote_freshness_not_proven"
+
+
+def test_stock_evidence_quote_marks_missing_quote_timestamp_as_partial_diagnostic_only() -> None:
+    service = StockEvidenceService(
+        fetcher_manager=SimpleNamespace(
+            get_realtime_quote=lambda symbol: UnifiedRealtimeQuote(
+                code=symbol,
+                name="Apple",
+                source=RealtimeSource.ALPACA,
+                price=214.55,
+                change_pct=1.23,
+                market_timestamp=None,
+            )
+        ),
+        stock_repo=MagicMock(),
+        analysis_repo=MagicMock(),
+    )
+
+    payload = service.get_stock_evidence(["AAPL"])
+
+    item = payload["items"][0]
+    quote = item["quote"]
+    packet = item["stockEvidencePacket"]
+    quote_ref = next(ref for ref in packet["sourceRefs"] if ref["evidenceClass"] == "quote")
+    blocked = {boundary["claim"]: boundary for boundary in packet["claimBoundaries"] if not boundary["allowed"]}
+
+    assert quote["status"] == "available"
+    assert quote["provider"] == "alpaca"
+    assert quote["updatedAt"] is None
+    assert quote["sourceType"] == "local_or_reported"
+    assert quote["freshness"] == "partial"
+    assert quote["degradationReason"] == "partial_coverage"
+    assert quote["isFallback"] is False
+    assert quote["isStale"] is False
+    assert quote["isPartial"] is True
+    assert quote["isSynthetic"] is False
+    assert quote["isUnavailable"] is False
+    _assert_quote_diagnostic_authority_is_closed(quote)
+    assert quote["sourceConfidence"]["freshness"] == "partial"
+    assert quote["sourceConfidence"]["capReason"] == "partial_coverage"
+    assert quote_ref["freshness"] == "partial"
+    assert all(evidence["evidenceClass"] != "quote" for evidence in packet["scoreEligibleEvidence"])
+    assert blocked["price_is_live"]["reasonCode"] == "quote_freshness_not_proven"
 
 
 def test_stock_evidence_quote_rejects_partial_or_non_basic_quotes_as_unknown() -> None:
@@ -700,10 +873,13 @@ def test_stock_evidence_quote_rejects_partial_or_non_basic_quotes_as_unknown() -
 
     payload = service._quote("AAPL")
 
-    assert payload == {
-        "status": "unknown",
-        "provider": "realtime_quote",
-    }
+    assert payload["status"] == "unknown"
+    assert payload["provider"] == "realtime_quote"
+    assert payload["source"] == "realtime_quote"
+    assert payload["sourceType"] == "missing"
+    assert payload["freshness"] == "unavailable"
+    assert payload["isUnavailable"] is True
+    _assert_quote_diagnostic_authority_is_closed(payload)
 
 
 def test_stock_evidence_quote_surfaces_runtime_errors_as_error_status() -> None:
@@ -720,6 +896,10 @@ def test_stock_evidence_quote_surfaces_runtime_errors_as_error_status() -> None:
     assert payload["status"] == "error"
     assert payload["provider"] == "realtime_quote"
     assert payload["error"] == "provider down"
+    assert payload["sourceType"] == "missing"
+    assert payload["freshness"] == "unavailable"
+    assert payload["isUnavailable"] is True
+    _assert_quote_diagnostic_authority_is_closed(payload)
 
 
 def test_runtime_fallback_quote_keeps_provider_trace_but_packet_downgrades_live_claims() -> None:
@@ -745,7 +925,10 @@ def test_runtime_fallback_quote_keeps_provider_trace_but_packet_downgrades_live_
     quote_ref = next(ref for ref in packet["sourceRefs"] if ref["evidenceClass"] == "quote")
     blocked = {boundary["claim"]: boundary for boundary in packet["claimBoundaries"] if not boundary["allowed"]}
 
-    assert item["quote"] == {
+    assert {
+        key: item["quote"][key]
+        for key in ("status", "price", "changePct", "currency", "provider", "updatedAt")
+    } == {
         "status": "available",
         "price": 214.55,
         "changePct": -0.42,
@@ -753,9 +936,22 @@ def test_runtime_fallback_quote_keeps_provider_trace_but_packet_downgrades_live_
         "provider": "fallback",
         "updatedAt": "2026-05-13T08:30:00Z",
     }
+    assert item["quote"]["source"] == "fallback"
+    assert item["quote"]["sourceType"] == "fallback"
+    assert item["quote"]["freshness"] == "fallback"
+    assert item["quote"]["degradationReason"] == "fallback_source"
+    assert item["quote"]["isFallback"] is True
+    assert item["quote"]["isStale"] is False
+    assert item["quote"]["isPartial"] is False
+    assert item["quote"]["isSynthetic"] is False
+    assert item["quote"]["isUnavailable"] is False
+    _assert_quote_diagnostic_authority_is_closed(item["quote"])
+    assert item["quote"]["sourceConfidence"]["confidenceWeight"] == 0.4
+    assert item["quote"]["sourceConfidence"]["capReason"] == "fallback_source"
     assert quote_ref["provider"] == "fallback"
     assert quote_ref["asOf"] == "2026-05-13T08:30:00Z"
-    assert quote_ref["freshness"] == "unknown"
+    assert quote_ref["sourceType"] == "fallback"
+    assert quote_ref["freshness"] == "fallback"
     assert all(evidence["evidenceClass"] != "quote" for evidence in packet["scoreEligibleEvidence"])
     assert blocked["price_is_live"]["reasonCode"] == "quote_freshness_not_proven"
     assert "weak_or_fallback_provider_evidence" in packet["confidenceCap"]["reasonCodes"]
@@ -775,13 +971,24 @@ def test_runtime_unavailable_quote_keeps_unknown_contract_and_no_fake_live_field
     quote_ref = next(ref for ref in packet["sourceRefs"] if ref["evidenceClass"] == "quote")
     blocked = {boundary["claim"]: boundary for boundary in packet["claimBoundaries"] if not boundary["allowed"]}
 
-    assert item["quote"] == {
-        "status": "unknown",
-        "provider": "realtime_quote",
-    }
+    assert item["quote"]["status"] == "unknown"
+    assert item["quote"]["provider"] == "realtime_quote"
+    assert item["quote"]["source"] == "realtime_quote"
+    assert item["quote"]["sourceType"] == "missing"
+    assert item["quote"]["freshness"] == "unavailable"
+    assert item["quote"]["degradationReason"] == "unavailable_source"
+    assert item["quote"]["isFallback"] is False
+    assert item["quote"]["isStale"] is False
+    assert item["quote"]["isPartial"] is False
+    assert item["quote"]["isSynthetic"] is False
+    assert item["quote"]["isUnavailable"] is True
+    _assert_quote_diagnostic_authority_is_closed(item["quote"])
+    assert item["quote"]["sourceConfidence"]["confidenceWeight"] == 0.0
+    assert item["quote"]["sourceConfidence"]["capReason"] == "unavailable_source"
     assert quote_ref["status"] == "unknown"
     assert quote_ref["asOf"] is None
-    assert quote_ref["freshness"] == "unknown"
+    assert quote_ref["sourceType"] == "missing"
+    assert quote_ref["freshness"] == "unavailable"
     assert all(evidence["evidenceClass"] != "quote" for evidence in packet["scoreEligibleEvidence"])
     assert blocked["price_is_live"]["reasonCode"] == "quote_freshness_not_proven"
 
