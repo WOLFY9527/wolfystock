@@ -1,4 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type {
+  ScannerEvidencePacket,
+  ScannerRunDetail,
+  ScannerScoreExplainability,
+} from '../../types/scanner';
 
 const { get } = vi.hoisted(() => ({
   get: vi.fn(),
@@ -129,5 +134,224 @@ describe('scannerApi investor signal normalization', () => {
     expect(investorSignal?.themeFlowState).toBe('fading');
     expect(investorSignal?.confidenceLabel).toBe('blocked');
     expect(investorSignal?.reasonCodes).toEqual(['fallback_source', 'source_authority_missing']);
+  });
+
+  it('preserves score cap explainability metadata while keeping score order stable', async () => {
+    const { scannerApi } = await import('../scanner');
+    get.mockResolvedValueOnce({
+      data: {
+        id: 43,
+        market: 'cn',
+        profile: 'cn_preopen_v1',
+        status: 'completed',
+        universe_name: 'CN pre-open',
+        shortlist_size: 2,
+        universe_size: 20,
+        preselected_size: 8,
+        evaluated_size: 5,
+        universe_notes: [],
+        scoring_notes: [],
+        universe_type: 'default',
+        requested_symbols_count: 0,
+        accepted_symbols_count: 0,
+        rejected_symbols: [],
+        diagnostics: {},
+        notification: {
+          attempted: false,
+          status: 'skipped',
+          channels: [],
+        },
+        comparison_to_previous: {
+          available: false,
+          new_count: 0,
+          retained_count: 0,
+          dropped_count: 0,
+          new_symbols: [],
+          retained_symbols: [],
+          dropped_symbols: [],
+        },
+        review_summary: {
+          available: false,
+          review_window_days: 5,
+          review_status: 'pending',
+          candidate_count: 2,
+          reviewed_count: 0,
+          pending_count: 2,
+          strong_count: 0,
+          mixed_count: 0,
+          weak_count: 0,
+        },
+        shortlist: [
+          {
+            symbol: '600001',
+            name: '股票600001',
+            rank: 1,
+            score: 40,
+            raw_score: 81.6,
+            final_score: 40,
+            reasons: [],
+            key_metrics: [],
+            feature_signals: [],
+            risk_notes: [],
+            watch_context: [],
+            boards: [],
+            appeared_in_recent_runs: 1,
+            ai_interpretation: {
+              available: false,
+              status: 'unavailable',
+            },
+            realized_outcome: {
+              review_status: 'pending',
+              outcome_label: 'Pending',
+              thesis_match: 'unknown',
+              review_window_days: 5,
+            },
+            diagnostics: {
+              score_explainability: {
+                raw_score: 81.6,
+                final_score: 40,
+                score_delta: -41.6,
+                score_cap: 40,
+                score_confidence: 0.4,
+                evidence_coverage: 0.76,
+                cap_reason: 'fallback_source',
+                degradation_reason: 'fallback_source',
+                cap_applied: true,
+                missing_evidence: ['history_depth', 'quote_context'],
+                reason_codes: ['fallback_source'],
+                score_grade_allowed: false,
+                source_confidence: {
+                  source: 'fallback_snapshot',
+                  source_label: 'Fallback snapshot',
+                  source_type: 'fallback_static',
+                  freshness: 'fallback',
+                  is_fallback: true,
+                  is_stale: true,
+                  is_partial: true,
+                  confidence_weight: 0.4,
+                  coverage: 0.76,
+                  cap_reason: 'fallback_source',
+                  degradation_reason: 'fallback_source',
+                  source_authority_allowed: false,
+                  score_contribution_allowed: false,
+                  observation_only: true,
+                },
+              },
+              evidence_packet: {
+                symbol: '600001',
+                market: 'cn',
+                rank: 1,
+                score: 40,
+                raw_score: 81.6,
+                final_score: 40,
+                score_confidence: 0.4,
+                evidence_coverage: 0.76,
+                cap_reason: 'fallback_source',
+                degradation_reason: 'fallback_source',
+                evidence_version: 'scanner_evidence_v1',
+                run_id: 43,
+                data_quality_state: 'partial',
+                freshness_state: 'fallback',
+                freshness_detail: {
+                  quote_state: 'fallback',
+                  history_state: 'stale',
+                  latest_trade_date: '2026-05-08',
+                },
+                provider_observation: {
+                  observation_only: true,
+                  score_contribution_allowed: false,
+                  entries: [
+                    {
+                      stage: 'snapshot',
+                      provider_name: 'akshare',
+                      source_type: 'public_proxy',
+                      observation_only: true,
+                      score_contribution_allowed: false,
+                    },
+                  ],
+                },
+                missing_evidence: ['history_depth', 'quote_context'],
+                user_facing_labels: ['仅供观察', '需人工复核'],
+                warning_flags: ['仅供观察', '需人工复核'],
+              },
+            },
+            consumer_diagnostics: {
+              status: 'limited',
+              score_grade_allowed: false,
+              score_confidence: 0.4,
+              cap_reason: 'fallback_source',
+              degradation_reason: 'fallback_source',
+              data_quality_state: 'partial',
+              freshness_state: 'fallback',
+              source_class: 'fallback',
+              missing_evidence: ['history_depth', 'quote_context'],
+              user_facing_labels: ['仅供观察', '需人工复核'],
+              warning_flags: ['仅供观察', '需人工复核'],
+            },
+          },
+          {
+            symbol: '600002',
+            name: '股票600002',
+            rank: 2,
+            score: 39,
+            raw_score: 39,
+            final_score: 39,
+            reasons: [],
+            key_metrics: [],
+            feature_signals: [],
+            risk_notes: [],
+            watch_context: [],
+            boards: [],
+            appeared_in_recent_runs: 1,
+            ai_interpretation: {
+              available: false,
+              status: 'unavailable',
+            },
+            realized_outcome: {
+              review_status: 'pending',
+              outcome_label: 'Pending',
+              thesis_match: 'unknown',
+              review_window_days: 5,
+            },
+            diagnostics: {},
+          },
+        ],
+      },
+    });
+
+    const payload: ScannerRunDetail = await scannerApi.getRun(43);
+    const explainability: ScannerScoreExplainability | undefined = payload.shortlist[0].diagnostics.scoreExplainability;
+    const evidencePacket: ScannerEvidencePacket | undefined = payload.shortlist[0].diagnostics.evidencePacket;
+
+    expect(payload.shortlist.map((item) => [item.symbol, item.rank, item.score])).toEqual([
+      ['600001', 1, 40],
+      ['600002', 2, 39],
+    ]);
+    expect(explainability?.rawScore).toBe(81.6);
+    expect(explainability?.finalScore).toBe(40);
+    expect(explainability?.scoreDelta).toBe(-41.6);
+    expect(explainability?.scoreCap).toBe(40);
+    expect(explainability?.scoreConfidence).toBe(0.4);
+    expect(explainability?.evidenceCoverage).toBe(0.76);
+    expect(explainability?.capApplied).toBe(true);
+    expect(explainability?.missingEvidence).toEqual(['history_depth', 'quote_context']);
+    expect(explainability?.sourceConfidence?.sourceType).toBe('fallback_static');
+    expect(explainability?.sourceConfidence?.isFallback).toBe(true);
+    expect(explainability?.sourceConfidence?.isStale).toBe(true);
+    expect(explainability?.sourceConfidence?.isPartial).toBe(true);
+    expect(explainability?.sourceConfidence?.sourceAuthorityAllowed).toBe(false);
+    expect(explainability?.sourceConfidence?.scoreContributionAllowed).toBe(false);
+    expect(explainability?.sourceConfidence?.observationOnly).toBe(true);
+    expect(evidencePacket?.rawScore).toBe(81.6);
+    expect(evidencePacket?.finalScore).toBe(40);
+    expect(evidencePacket?.evidenceCoverage).toBe(0.76);
+    expect(evidencePacket?.missingEvidence).toEqual(['history_depth', 'quote_context']);
+    expect(evidencePacket?.freshnessDetail?.quoteState).toBe('fallback');
+    expect(evidencePacket?.freshnessDetail?.historyState).toBe('stale');
+    expect(evidencePacket?.providerObservation?.entries?.[0]?.sourceType).toBe('public_proxy');
+    expect(payload.shortlist[0].consumerDiagnostics?.degradationReason).toBe('fallback_source');
+    expect(payload.shortlist[0].consumerDiagnostics?.dataQualityState).toBe('partial');
+    expect(payload.shortlist[0].consumerDiagnostics?.freshnessState).toBe('fallback');
+    expect(payload.shortlist[0].consumerDiagnostics?.missingEvidence).toEqual(['history_depth', 'quote_context']);
   });
 });

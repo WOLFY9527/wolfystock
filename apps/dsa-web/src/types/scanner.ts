@@ -1,4 +1,5 @@
-import type { ScannerContextFrame } from './researchReadiness';
+import type { SourceProvenanceSummary } from './analysis';
+import type { ResearchReadinessV1, ScannerContextFrame } from './researchReadiness';
 
 export interface ScannerRunRequest {
   market?: 'cn' | 'us' | 'hk';
@@ -196,6 +197,7 @@ export interface ScannerProviderDiagnostics {
 export interface ScannerSourceConfidence {
   source?: string | null;
   sourceLabel?: string | null;
+  sourceType?: string | null;
   asOf?: string | null;
   freshness?: string | null;
   isFallback?: boolean | null;
@@ -215,34 +217,53 @@ export interface ScannerSourceConfidence {
 export interface ScannerScoreExplainability {
   rawScore?: number | null;
   finalScore?: number | null;
+  scoreDelta?: number | null;
+  scoreCap?: number | null;
   capReason?: string | null;
   degradationReason?: string | null;
   scoreConfidence?: number | null;
   evidenceCoverage?: number | null;
   capApplied?: boolean | null;
   scoreGradeAllowed?: boolean | null;
+  missingEvidence?: string[];
   reasonCodes?: string[];
   sourceConfidence?: ScannerSourceConfidence | null;
 }
 
+export interface ScannerFreshnessDetail {
+  quoteState?: string | null;
+  historyState?: string | null;
+  latestTradeDate?: string | null;
+}
+
+export interface ScannerProviderObservation {
+  observationOnly?: boolean | null;
+  scoreContributionAllowed?: boolean | null;
+  entries?: Array<Record<string, unknown>>;
+}
+
 export interface ScannerEvidencePacket {
+  symbol?: string | null;
+  market?: string | null;
+  rank?: number | null;
+  score?: number | null;
+  rawScore?: number | null;
+  finalScore?: number | null;
   scoreConfidence?: number | null;
+  evidenceCoverage?: number | null;
   capReason?: string | null;
   degradationReason?: string | null;
+  evidenceVersion?: string | null;
+  runId?: number | null;
   freshnessState?: string | null;
   dataQualityState?: string | null;
-  freshnessDetail?: {
-    quoteState?: string | null;
-    historyState?: string | null;
-  } | null;
+  freshnessDetail?: ScannerFreshnessDetail | null;
+  missingEvidence?: string[];
   userFacingLabels?: string[];
   warningFlags?: string[];
   sourceConfidence?: ScannerSourceConfidence | null;
-  providerObservation?: {
-    observationOnly?: boolean | null;
-    scoreContributionAllowed?: boolean | null;
-    entries?: Array<Record<string, unknown>>;
-  } | null;
+  providerObservation?: ScannerProviderObservation | null;
+  [key: string]: unknown;
 }
 
 export interface InvestorSignalAssetPressure {
@@ -290,6 +311,12 @@ export interface ScannerConsumerDiagnostics {
   scoreGradeAllowed?: boolean | null;
   scoreConfidence?: number | null;
   capReason?: string | null;
+  degradationReason?: string | null;
+  dataQualityState?: string | null;
+  freshnessState?: string | null;
+  missingEvidence?: string[];
+  userFacingLabels?: string[];
+  warningFlags?: string[];
   sourceClass?: string | null;
   investorSignal?: InvestorSignalContract | null;
   [key: string]: unknown;
@@ -349,6 +376,52 @@ export interface ScannerSummaryDiagnostics {
   limitedByResultCap?: boolean;
 }
 
+export interface ScannerCandidateEvidenceDomain {
+  state?: string | null;
+  observationOnly?: boolean | null;
+  scoreGradeAllowed?: boolean | null;
+}
+
+export interface ScannerCandidateEvidenceFrame {
+  contractVersion?: string | null;
+  coverageState?: string | null;
+  domains?: Record<string, ScannerCandidateEvidenceDomain> | null;
+  coverage?: {
+    availableCount?: number | null;
+    partialCount?: number | null;
+    observeOnlyCount?: number | null;
+    missingCount?: number | null;
+    totalCount?: number | null;
+  } | null;
+  noAdviceBoundary?: boolean | null;
+  [key: string]: unknown;
+}
+
+export interface ScannerCandidateResearchSummaryTopDownRef {
+  key?: string | null;
+  state?: string | null;
+  label?: string | null;
+}
+
+export interface ScannerCandidateResearchSummaryFrame {
+  contractVersion?: string | null;
+  frameState?: string | null;
+  symbol?: string | null;
+  rank?: number | null;
+  scoreBand?: string | null;
+  primaryResearchReason?: string | null;
+  evidenceHighlights?: string[] | null;
+  missingEvidence?: string[] | null;
+  blockingReasons?: string[] | null;
+  topDownContextRefs?: ScannerCandidateResearchSummaryTopDownRef[] | null;
+  sourceAuthority?: string | null;
+  freshness?: string | null;
+  nextResearchStep?: string | null;
+  noAdviceBoundary?: boolean | null;
+  debugRef?: string | null;
+  [key: string]: unknown;
+}
+
 export interface ScannerCandidate {
   symbol: string;
   name: string;
@@ -377,6 +450,10 @@ export interface ScannerCandidate {
   realizedOutcome: ScannerCandidateOutcome;
   diagnostics: ScannerRunDiagnostics;
   consumerDiagnostics?: ScannerConsumerDiagnostics | null;
+  candidateEvidenceFrame?: ScannerCandidateEvidenceFrame | null;
+  candidateResearchReadiness?: ResearchReadinessV1 | null;
+  candidateResearchSummaryFrame?: ScannerCandidateResearchSummaryFrame | null;
+  candidateSourceProvenanceFrame?: SourceProvenanceSummary | null;
 }
 
 export interface ScannerRunDetail {

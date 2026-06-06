@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ScannerRunRequest(BaseModel):
@@ -201,6 +201,128 @@ class ScannerQualitySummaryResponse(BaseModel):
     negative_candidate_avg_score: Optional[float] = None
 
 
+class ScannerSourceConfidenceMetadata(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    source: Optional[str] = None
+    sourceLabel: Optional[str] = None
+    sourceType: Optional[str] = None
+    asOf: Optional[str] = None
+    freshness: Optional[str] = None
+    isFallback: Optional[bool] = None
+    isStale: Optional[bool] = None
+    isPartial: Optional[bool] = None
+    isSynthetic: Optional[bool] = None
+    isUnavailable: Optional[bool] = None
+    confidenceWeight: Optional[float] = None
+    coverage: Optional[float] = None
+    degradationReason: Optional[str] = None
+    capReason: Optional[str] = None
+    sourceAuthorityAllowed: Optional[bool] = None
+    scoreContributionAllowed: Optional[bool] = None
+    observationOnly: Optional[bool] = None
+    proxyOnly: Optional[bool] = None
+
+
+class ScannerScoreExplainabilityMetadata(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    raw_score: Optional[float] = None
+    final_score: Optional[float] = None
+    score_delta: Optional[float] = None
+    score_cap: Optional[float] = None
+    score_confidence: Optional[float] = None
+    evidence_coverage: Optional[float] = None
+    cap_reason: Optional[str] = None
+    degradation_reason: Optional[str] = None
+    cap_applied: Optional[bool] = None
+    missing_evidence: List[str] = Field(default_factory=list)
+    reason_codes: List[str] = Field(default_factory=list)
+    score_grade_allowed: Optional[bool] = None
+    source_confidence: Optional[ScannerSourceConfidenceMetadata] = None
+
+
+class ScannerFreshnessDetailMetadata(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    quoteState: Optional[str] = None
+    historyState: Optional[str] = None
+    latestTradeDate: Optional[str] = None
+
+
+class ScannerProviderObservationMetadata(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    observationOnly: Optional[bool] = None
+    scoreContributionAllowed: Optional[bool] = None
+    entries: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ScannerEvidencePacketMetadata(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    symbol: Optional[str] = None
+    market: Optional[str] = None
+    rank: Optional[int] = None
+    score: Optional[float] = None
+    rawScore: Optional[float] = None
+    finalScore: Optional[float] = None
+    scoreConfidence: Optional[float] = None
+    evidenceCoverage: Optional[float] = None
+    capReason: Optional[str] = None
+    degradationReason: Optional[str] = None
+    evidenceVersion: Optional[str] = None
+    runId: Optional[int] = None
+    dataQualityState: Optional[str] = None
+    freshnessState: Optional[str] = None
+    freshnessDetail: Optional[ScannerFreshnessDetailMetadata] = None
+    providerObservation: Optional[ScannerProviderObservationMetadata] = None
+    missingEvidence: List[str] = Field(default_factory=list)
+    userFacingLabels: List[str] = Field(default_factory=list)
+    warningFlags: List[str] = Field(default_factory=list)
+    sourceConfidence: Optional[ScannerSourceConfidenceMetadata] = None
+
+
+class ScannerConsumerDiagnosticsMetadata(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    status: Optional[str] = None
+    scoreGradeAllowed: Optional[bool] = None
+    scoreConfidence: Optional[float] = None
+    capReason: Optional[str] = None
+    degradationReason: Optional[str] = None
+    dataQualityState: Optional[str] = None
+    freshnessState: Optional[str] = None
+    sourceClass: Optional[str] = None
+    missingEvidence: List[str] = Field(default_factory=list)
+    userFacingLabels: List[str] = Field(default_factory=list)
+    warningFlags: List[str] = Field(default_factory=list)
+    investorSignal: Optional[Dict[str, Any]] = None
+
+
+def _dump_metadata_model(model_type: Any, value: Any) -> Any:
+    if isinstance(value, model_type):
+        return value.model_dump(exclude_unset=True)
+    if isinstance(value, dict):
+        return model_type.model_validate(value).model_dump(exclude_unset=True)
+    return value
+
+
+def _lock_candidate_diagnostics_metadata(value: Dict[str, Any]) -> Dict[str, Any]:
+    payload = dict(value or {})
+    if isinstance(payload.get("score_explainability"), dict):
+        payload["score_explainability"] = _dump_metadata_model(
+            ScannerScoreExplainabilityMetadata,
+            payload["score_explainability"],
+        )
+    if isinstance(payload.get("evidence_packet"), dict):
+        payload["evidence_packet"] = _dump_metadata_model(
+            ScannerEvidencePacketMetadata,
+            payload["evidence_packet"],
+        )
+    return payload
+
+
 class ScannerCandidateResponse(BaseModel):
     symbol: str
     name: str
@@ -227,6 +349,16 @@ class ScannerCandidateResponse(BaseModel):
     candidateResearchReadiness: Dict[str, Any] = Field(default_factory=dict)
     candidateResearchSummaryFrame: Dict[str, Any] = Field(default_factory=dict)
     candidateSourceProvenanceFrame: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("diagnostics")
+    @classmethod
+    def _validate_explainability_diagnostics(cls, value: Dict[str, Any]) -> Dict[str, Any]:
+        return _lock_candidate_diagnostics_metadata(value)
+
+    @field_validator("consumerDiagnostics")
+    @classmethod
+    def _validate_consumer_diagnostics(cls, value: Dict[str, Any]) -> Dict[str, Any]:
+        return _dump_metadata_model(ScannerConsumerDiagnosticsMetadata, value)
 
 
 class ScannerThemeDiagnosticsResponse(BaseModel):
