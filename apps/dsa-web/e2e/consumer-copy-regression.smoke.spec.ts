@@ -18,6 +18,7 @@ import {
   buildScannerRunSummaryBase,
   expectSurfaceTextSafe,
 } from './fixtures/smokeEvidence';
+import { installPortfolioSmokeHarness } from './fixtures/portfolioSmoke';
 
 const viewports = [
   { width: 1440, height: 1000 },
@@ -26,6 +27,8 @@ const viewports = [
 
 const forbiddenInternalPattern =
   /(?:^|[\s_-])(raw|debug|payload|prompt|env|trace|credential)(?:$|[\s_-])|providerRoute|sourceAuthority|provider\s+payload|cache\s+router|stack\s+trace/i;
+const forbiddenDiagnosticVocabularyPattern =
+  /provider\s+trace|provider_trace|raw\s+diagnostics?|raw_diagnostics?|raw\s+provider\s+payload|raw_provider_payload|sourceAuthorityAllowed|source_authority_allowed|scoreContributionAllowed|score_contribution_allowed|observationOnly|observation_only|reasonCode|reasonCodes|reason_code|reason_codes|contract_version|owner_scoped|delivery_mode|in_app_only|providerRoute|provider_route|cacheRouter|cache_router|cacheMutation|cache_mutation|runtimeStatus|runtime_status|runtimeChanged|runtime_changed|debugRef|debug_ref|sessionToken|session_token|accessToken|access_token|refreshToken|refresh_token/i;
 const forbiddenTradingPattern =
   /小仓试错|第二笔|建仓|加仓|减仓|买入|卖出|下单|券商|\bbuy\b|\bsell\b|\border\b|\bbroker\b/i;
 const optionsTimestamp = '2026-05-06T09:45:00-04:00';
@@ -46,7 +49,7 @@ const allowedComplianceCopy = [
 async function expectConsumerSafeSurface(surface: Locator) {
   await expectSurfaceTextSafe(surface, {
     allowedPhrases: allowedComplianceCopy,
-    forbiddenPatterns: [forbiddenInternalPattern, forbiddenTradingPattern],
+    forbiddenPatterns: [forbiddenInternalPattern, forbiddenDiagnosticVocabularyPattern, forbiddenTradingPattern],
   });
 }
 
@@ -327,6 +330,216 @@ async function installScannerContextRoutes(page: Page) {
 
   await page.route('**/api/v1/scanner/runs/11**', async (route) => {
     await fulfillJson(route, buildScannerRunDetailWithContext());
+  });
+}
+
+async function installLiquidityMonitorRoutes(page: Page) {
+  await installSignedInSessionRoutes(page);
+
+  await page.route('**/api/v1/market/liquidity-monitor', async (route) => {
+    await fulfillJson(route, {
+      endpoint: '/api/v1/market/liquidity-monitor',
+      generatedAt: '2026-06-05T09:30:00+08:00',
+      score: {
+        value: 50,
+        regime: 'neutral',
+        confidence: 0.42,
+        includedIndicatorCount: 1,
+        possibleIndicatorWeight: 43,
+        includedIndicatorWeight: 8,
+      },
+      freshness: {
+        status: 'partial',
+        weakestIndicatorFreshness: 'delayed',
+        latestAsOf: '2026-06-05T09:30:00+08:00',
+      },
+      indicators: [
+        {
+          key: 'usd_pressure',
+          label: 'DXY / 美元压力',
+          status: 'partial',
+          freshness: 'delayed',
+          includedInScore: false,
+          scoreContribution: 0,
+          scoreWeight: 0,
+          summary: '当前只有观察级样本，暂不形成方向结论。',
+          updatedAt: '2026-06-05T09:30:00+08:00',
+          sourceAuthorityAllowed: false,
+          scoreContributionAllowed: false,
+          observationOnly: true,
+          reasonCode: 'observation_only',
+          providerTrace: 'provider-trace-should-stay-hidden',
+          rawDiagnostics: {
+            cacheMutation: false,
+            runtimeStatus: 'debug-only',
+            payload: 'internal-only',
+          },
+        },
+      ],
+      liquidityImpulseSynthesis: {
+        liquidityImpulse: 'neutral',
+        impulseLabel: '无明显方向',
+        subtype: 'insufficient_evidence',
+        confidence: 0.12,
+        confidenceLabel: 'low',
+        pillarScores: {
+          dollar_pressure: 0,
+          equity_flow_proxy: 0,
+          crypto_liquidity_beta: 0,
+          funding_stress: 0,
+        },
+        directionScore: 0,
+        dominantDrivers: [],
+        counterEvidence: [],
+        dataGaps: [
+          {
+            key: 'missing:equity_flow_proxy',
+            label: 'Missing scoring evidence for equity_flow_proxy',
+            pillar: 'equity_flow_proxy',
+            reason: 'missing_scoring_evidence',
+          },
+        ],
+        narrativeBullets: ['数据不足，暂不形成结论。'],
+        evidenceQuality: {
+          version: 'liquidity_impulse_synthesis_v1',
+          inputCount: 1,
+          scoringEvidenceCount: 0,
+          scoringPillarCount: 0,
+          coveredPillars: [],
+          missingPillars: ['dollar_pressure', 'equity_flow_proxy', 'crypto_liquidity_beta', 'funding_stress'],
+          discountedEvidenceCount: 0,
+          observationOnlyEvidenceCount: 1,
+          scoreBlockedEvidenceCount: 1,
+          proxyOnlyScoringCount: 0,
+          realScoringEvidenceCount: 0,
+          allScoringEvidenceProxyOnly: false,
+          dataGapCount: 1,
+        },
+        notInvestmentAdvice: true,
+      },
+      advisoryDisclosure: '仅用于观察市场流动性环境，不构成交易/下单指令。',
+      sourceMetadata: {
+        externalProviderCalls: false,
+        providerRuntimeChanged: false,
+        marketCacheMutation: false,
+      },
+    });
+  });
+}
+
+async function installWatchlistDiagnosticRoutes(page: Page) {
+  await installSignedInSessionRoutes(page);
+
+  await page.route('**/api/v1/watchlist/items', async (route) => {
+    await fulfillJson(route, {
+      items: [
+        {
+          id: 1,
+          symbol: 'NVDA',
+          market: 'us',
+          name: 'NVIDIA',
+          source: 'scanner',
+          scanner_run_id: 42,
+          scanner_rank: 1,
+          scanner_score: 94,
+          last_scored_at: '2026-05-01T12:30:00Z',
+          score_source: 'scanner_run',
+          score_profile: 'us_preopen_v1',
+          score_reason: 'Latest scanner score.',
+          score_status: 'fresh',
+          theme_id: 'ai-momentum',
+          universe_type: 'theme',
+          notes: 'Scanner observation: watch follow-through after the next catalyst.',
+          intelligence: {
+            scanner: {
+              last_score: 94,
+              last_rank: 1,
+              status: 'selected',
+              reason: 'Latest scanner score.',
+              last_scanned_at: '2026-05-01T12:30:00Z',
+              investor_signal: {
+                contract_version: 'investor_signal_contract_v1',
+                diagnostic_only: true,
+                observation_only: true,
+                authority_grant: false,
+                decision_grade: false,
+                source_authority_allowed: false,
+                score_contribution_allowed: false,
+                market_regime: 'mixed',
+                market_regime_label: '信号分化',
+                confidence_label: 'blocked',
+                confidence_text: '禁止判断',
+                freshness: 'cached',
+                reason_codes: ['source_authority_missing', 'score_rights_missing'],
+                explanation: '主题强弱仍然分化，当前只保留观察意义。',
+                provider_trace: 'watchlist-provider-trace-should-not-render',
+                debug_ref: 'watchlist:nvda:investor-signal',
+              },
+            },
+            catalyst_exposures: [
+              {
+                id: 'catalyst:NVDA:us:news:1',
+                symbol: 'NVDA',
+                market: 'us',
+                category: 'stored_news_catalyst_proxy',
+                title: 'Stored news catalyst proxy',
+                summary: 'Stored article summary references a potential demand catalyst.',
+                evidence_status: 'proxy',
+                evidence_labels: ['proxy', 'unverified'],
+                as_of: '2026-05-17T20:00:00+00:00',
+                published_at: '2026-05-17T13:00:00+00:00',
+                reason_codes: ['observation_only', 'proxy_evidence_not_authoritative'],
+                observation_only: true,
+                source_authority_allowed: false,
+                score_contribution_allowed: false,
+                decision_grade: false,
+                calendar_claim_allowed: false,
+                provider_route: 'news.saved',
+                raw_provider_payload: { unsafe: true },
+                payload: 'watchlist-raw-payload-should-not-render',
+              },
+            ],
+          },
+          created_at: '2026-04-30T08:00:00Z',
+          updated_at: '2026-04-30T09:00:00Z',
+        },
+      ],
+    });
+  });
+
+  await page.route('**/api/v1/watchlist/refresh-status', async (route) => {
+    await fulfillJson(route, {
+      enabled: true,
+      usTime: '08:45',
+      cnTime: '09:00',
+      hkTime: '09:00',
+      status: 'idle',
+      lastRunAt: null,
+      nextRunAt: null,
+    });
+  });
+
+  await page.route('**/api/v1/user-alerts/rules', async (route) => {
+    await fulfillJson(route, {
+      contract_version: 'user_alert_contract_v1',
+      delivery_mode: 'in_app',
+      in_app_only: true,
+      owner_scoped: true,
+      items: [],
+    });
+  });
+
+  await page.route('**/api/v1/user-alerts/events', async (route) => {
+    await fulfillJson(route, {
+      contract_version: 'user_alert_contract_v1',
+      delivery_mode: 'in_app',
+      in_app_only: true,
+      owner_scoped: true,
+      total: 0,
+      limit: 20,
+      offset: 0,
+      items: [],
+    });
   });
 }
 
@@ -675,6 +888,81 @@ appTest.describe('consumer copy regression smoke', () => {
       await baseExpect(consoleErrors).toEqual([]);
       await baseExpect(unhandledApiRoutes).toEqual([]);
       await expectNoHorizontalOverflow(page);
+    });
+
+    appTest(`Liquidity Monitor keeps degraded copy consumer-safe without exposing diagnostic vocabulary (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
+      await page.setViewportSize(viewport);
+      await installLiquidityMonitorRoutes(page);
+      await openSignedInRoute(page, '/zh/market/liquidity-monitor');
+
+      const guidancePanel = page.getByTestId('liquidity-monitor-guidance-panel');
+      const readiness = page.getByTestId('liquidity-decision-readiness').first();
+      await appExpect(guidancePanel).toBeVisible({ timeout: 15_000 });
+      await appExpect(readiness).toBeVisible();
+      await appExpect(guidancePanel).toContainText(/数据不足，暂不形成结论|已使用最近一次可用数据|仅用于观察市场流动性环境/);
+      await appExpect(readiness).toContainText(/数据说明与限制|最近更新|流动性状态/);
+      await expectConsumerSafeSurface(guidancePanel);
+      await expectConsumerSafeSurface(readiness);
+      await baseExpect(consoleErrors).toEqual([]);
+      await baseExpect(unhandledApiRoutes).toEqual([]);
+      await expectNoHorizontalOverflow(page);
+    });
+
+    appTest(`Rotation Radar keeps read-only consumer wording free of backend diagnostics (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
+      await page.setViewportSize(viewport);
+      await installSignedInSessionRoutes(page);
+      await openSignedInRoute(page, '/zh/market/rotation-radar');
+
+      const routeRoot = page.getByTestId('market-rotation-radar-page');
+      const guidance = page.getByTestId('rotation-radar-guidance');
+      const summaryBand = page.getByTestId('rotation-radar-summary-band');
+      await appExpect(routeRoot).toBeVisible({ timeout: 15_000 });
+      await appExpect(guidance).toBeVisible();
+      await appExpect(summaryBand).toBeVisible();
+      await appExpect(guidance).toContainText(/轮动状态|当前市场|下一步/);
+      await appExpect(summaryBand).toContainText(/当前市场|当前信号|置信/);
+      await expectConsumerSafeSurface(summaryBand);
+      await expectConsumerSafeSurface(routeRoot);
+      await baseExpect(consoleErrors).toEqual([]);
+      await baseExpect(unhandledApiRoutes).toEqual([]);
+      await expectNoHorizontalOverflow(page);
+    });
+
+    appTest(`Watchlist keeps default-visible detail rails consumer-safe (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
+      await page.setViewportSize(viewport);
+      await installWatchlistDiagnosticRoutes(page);
+      await openSignedInRoute(page, '/zh/watchlist');
+
+      const routeRoot = page.getByTestId('watchlist-page');
+      const detailRail = page.getByTestId('watchlist-detail-rail');
+      await appExpect(routeRoot).toBeVisible({ timeout: 15_000 });
+      await appExpect(page.getByTestId('watchlist-row-NVDA')).toBeVisible();
+      await appExpect(detailRail).toBeVisible();
+      await appExpect(detailRail).toContainText(/当前只保留观察意义|观察|数据说明/);
+      await expectConsumerSafeSurface(detailRail);
+      await expectConsumerSafeSurface(routeRoot);
+      await baseExpect(consoleErrors).toEqual([]);
+      await baseExpect(unhandledApiRoutes).toEqual([]);
+      await expectNoHorizontalOverflow(page);
+    });
+
+    appTest(`Portfolio keeps default-visible holdings and risk copy consumer-safe (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
+      await page.setViewportSize(viewport);
+      const harness = await installPortfolioSmokeHarness(page);
+      await page.goto('/zh/portfolio');
+      await page.waitForLoadState('domcontentloaded');
+
+      const routeRoot = page.getByTestId('portfolio-bento-page');
+      await appExpect(routeRoot).toBeVisible({ timeout: 15_000 });
+      await appExpect(page.getByTestId('portfolio-total-assets-card')).toBeVisible();
+      await appExpect(page.getByTestId('portfolio-current-holdings-panel')).toBeVisible();
+      await expectConsumerSafeSurface(routeRoot);
+      pwExpect(harness.requests.count('GET', '/api/v1/portfolio/snapshot')).toBeGreaterThan(0);
+      pwExpect(harness.requests.count('GET', '/api/v1/portfolio/risk')).toBeGreaterThan(0);
+      pwExpect(consoleErrors).toEqual([]);
+      pwExpect(unhandledApiRoutes).toEqual([]);
+      await expectNoHorizontalOverflow(page);
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
     });
 
     appTest(`Options Lab keeps non-decision copy and read-only boundaries consumer-safe (${viewportLabel})`, async ({ page, consoleErrors, unhandledApiRoutes }) => {
