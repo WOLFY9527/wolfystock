@@ -339,6 +339,9 @@ def test_tradier_dry_run_fixture_remains_non_decision_grade_in_service() -> None
     assert decision.decision_label == "数据不足，禁止判断"
     assert "dry_run_source_not_decision_grade" in decision.fail_closed_reason_codes
     assert "provider_dry_run_not_decision_grade" in decision.fail_closed_reason_codes
+    assert "live_evidence_live_disabled" in decision.fail_closed_reason_codes
+    assert "live_evidence_dry_run_blocked" in decision.fail_closed_reason_codes
+    assert "live_evidence_tradeable_data_false" in decision.fail_closed_reason_codes
     assert all(item.decision_label != "有条件可交易" for item in decision.ranked_alternatives)
     request_mock.assert_not_called()
 
@@ -411,6 +414,8 @@ def test_tradier_live_shaped_self_authorizing_metadata_remains_non_decision_grad
     assert decision.decision_grade is False
     assert "provider_self_authority_ignored" in decision.fail_closed_reason_codes
     assert "provider_authority_tier_observation_only" in decision.fail_closed_reason_codes
+    assert "live_evidence_provider_self_claim_ignored" in decision.fail_closed_reason_codes
+    assert "live_evidence_iv_rank_authority_missing" in decision.fail_closed_reason_codes
     assert all(item.decision_label != "有条件可交易" for item in decision.ranked_alternatives)
 
 

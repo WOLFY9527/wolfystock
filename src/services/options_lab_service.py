@@ -25,6 +25,7 @@ from api.v1.schemas.options import (
 )
 from src.services.options_data_quality_gates import (
     build_options_provider_authority_contract,
+    build_options_provider_live_evidence_from_snapshot,
     evaluate_options_data_quality_gates,
 )
 from src.services.options_lab_domain_models import (
@@ -462,6 +463,7 @@ class OptionsLabService:
         )
         risk_reward = self._decision_risk_reward(comparison, decision_contracts, parsed.risk_budget)
         expected_move = self._expected_move(fixture, contracts, decision_contracts, underlying_price)
+        requires_event_calendar = bool(parsed.scenario_assumptions.get("requireEventCalendar"))
         gate_diagnostics = evaluate_options_data_quality_gates(
             strategy_key=parsed.strategy,
             contracts=decision_contracts,
@@ -472,8 +474,12 @@ class OptionsLabService:
             iv_percentile=iv_greeks.iv_percentile,
             expected_move_source=expected_move.expected_move_source,
             event_calendar=fixture.get("eventCalendar"),
-            requires_event_calendar=bool(parsed.scenario_assumptions.get("requireEventCalendar")),
+            requires_event_calendar=requires_event_calendar,
             provider_authority=self._provider_authority(fixture),
+            provider_live_evidence=self._provider_live_evidence(
+                fixture,
+                requires_event_calendar=requires_event_calendar,
+            ),
         )
         raw_score = (
             data_quality.data_quality_score * 0.25
@@ -1140,6 +1146,7 @@ class OptionsLabService:
             event_calendar=fixture.get("eventCalendar"),
             requires_event_calendar=False,
             provider_authority=self._provider_authority(fixture),
+            provider_live_evidence=self._provider_live_evidence(fixture),
         )
         raw_score = (
             data_quality.data_quality_score * 0.23
@@ -1443,6 +1450,31 @@ class OptionsLabService:
                 capabilities.get("recommendationAuthority"),
             ),
             notes=notes,
+        )
+
+    @classmethod
+    def _provider_live_evidence(
+        cls,
+        fixture: Dict[str, Any],
+        *,
+        requires_event_calendar: bool = False,
+    ) -> Dict[str, Any]:
+        capabilities = dict(fixture.get("providerCapabilities") or {})
+        return build_options_provider_live_evidence_from_snapshot(
+            fixture,
+            iv_rank_authority=cls._first_present(
+                fixture.get("ivRankAuthority"),
+                fixture.get("iv_rank_authority"),
+                capabilities.get("ivRankAuthority"),
+                capabilities.get("iv_rank_authority"),
+            ),
+            event_calendar_authority=cls._first_present(
+                fixture.get("eventCalendarAuthority"),
+                fixture.get("event_calendar_authority"),
+                capabilities.get("eventCalendarAuthority"),
+                capabilities.get("event_calendar_authority"),
+            ),
+            requires_event_calendar=requires_event_calendar,
         )
 
     @staticmethod

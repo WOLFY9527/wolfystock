@@ -39,6 +39,9 @@ from src.services.options_lab_domain_models import (
     StrategyComparisonModel,
     StrategyLegModel,
 )
+from src.services.options_data_quality_gates import (
+    evaluate_options_data_quality_gates as _evaluate_options_data_quality_gates,
+)
 from src.services.options_lab_service import OptionsLabService, OptionsLabUnsupportedSymbol
 
 
@@ -88,6 +91,58 @@ def _json_text(payload) -> str:
         return value
 
     return json.dumps(_normalize(payload), ensure_ascii=False, sort_keys=True)
+
+
+def _live_shaped_snapshot_fixture() -> dict:
+    fixture = json.loads(Path("tests/fixtures/options/tem_chain.json").read_text(encoding="utf-8"))
+    fixture["providerName"] = "review_fixture"
+    fixture["source"] = "review_live_snapshot"
+    fixture["chainFreshness"] = "fresh"
+    fixture["providerQuality"] = "review_live_shaped"
+    fixture["providerCapabilities"] = {
+        "providerName": "review_fixture",
+        "sourceType": "live",
+        "fixtureOnly": False,
+        "liveEnabled": True,
+        "delayed": False,
+        "tradeableData": True,
+        "supportsExpirations": True,
+        "supportsChain": True,
+        "supportsUnderlyingQuote": True,
+        "supportsBidAsk": True,
+        "supportsIv": True,
+        "supportsGreeks": True,
+        "supportsOpenInterest": True,
+        "supportsVolume": True,
+        "notes": [],
+    }
+    fixture["dataQuality"] = {"tier": "live_usable", "tradeable": True, "hints": []}
+    fixture["eventCalendar"] = {"source": "fixture_event_calendar_proxy", "earningsDate": "2026-07-24"}
+    fixture["underlying"].update(
+        {
+            "source": "review_live_snapshot",
+            "freshness": "fresh",
+            "providerQuality": "review_live_shaped",
+        }
+    )
+    for contract in fixture["contracts"]:
+        contract["source"] = "review_live_snapshot"
+        contract["freshness"] = "fresh"
+        contract["dataQuality"] = {"tier": "live_usable", "tradeable": True, "hints": []}
+    return fixture
+
+
+class _SnapshotOptionsProvider:
+    provider_name = "review_fixture"
+
+    def __init__(self, snapshot: dict) -> None:
+        self.snapshot = snapshot
+
+    def get_chain(self, symbol: str, expiration: str | None = None) -> dict:
+        del expiration
+        payload = json.loads(json.dumps(self.snapshot))
+        payload["symbol"] = symbol
+        return payload
 
 
 def test_tem_summary_uses_synthetic_fixture_and_risk_metadata() -> None:
@@ -705,7 +760,69 @@ def test_decision_synthetic_fixture_forces_demo_only_insufficient_label() -> Non
     assert response.liquidity_gates is not None
     assert response.gate_issues
     assert response.fail_closed_reason_codes
+    assert "live_evidence_live_disabled" in response.fail_closed_reason_codes
+    assert "live_evidence_synthetic_blocked" in response.fail_closed_reason_codes
+    assert "live_evidence_tradeable_data_false" in response.fail_closed_reason_codes
+    assert response.no_advice_disclosure == (
+        "Analytical output under explicit assumptions only; not personalized financial advice "
+        "and not an instruction to trade."
+    )
     assert all(item.decision_label != "有条件可交易" for item in response.ranked_alternatives)
+
+
+def test_decision_passes_snapshot_live_evidence_without_inferred_authorities(tmp_path: Path) -> None:
+    fixture = _live_shaped_snapshot_fixture()
+    path = tmp_path / "tem_review_live_shaped.json"
+    path.write_text(json.dumps(fixture), encoding="utf-8")
+    service = OptionsLabService(
+        fixture_path=path,
+        market_data_provider=_SnapshotOptionsProvider(fixture),
+        provider_name="review_fixture",
+    )
+    captured_live_evidence: list[dict | None] = []
+
+    def capture_gate_call(**kwargs):
+        captured_live_evidence.append(kwargs.get("provider_live_evidence"))
+        return _evaluate_options_data_quality_gates(**kwargs)
+
+    with patch(
+        "src.services.options_lab_service.evaluate_options_data_quality_gates",
+        side_effect=capture_gate_call,
+    ):
+        response = service.evaluate_decision(
+            {
+                "symbol": "TEM",
+                "marketDataProvider": "review_fixture",
+                "strategy": "bull_call_spread",
+                "expiration": "2026-06-19",
+                "targetPrice": 65,
+                "targetDate": "2026-06-19",
+                "riskBudget": 600,
+                "scenarioAssumptions": {"requireEventCalendar": True},
+            }
+        )
+
+    decision_evidence = captured_live_evidence[0]
+    assert decision_evidence is not None
+    assert decision_evidence["providerId"] == "review_fixture"
+    assert decision_evidence["sourceType"] == "live"
+    assert decision_evidence["liveEnabled"] is True
+    assert decision_evidence["tradeableData"] is True
+    assert decision_evidence["quoteFreshness"] == "fresh"
+    assert decision_evidence["chainFreshness"] == "fresh"
+    assert decision_evidence["expirationCoverage"] == "complete"
+    assert decision_evidence["bidAskCoverage"] == "complete"
+    assert decision_evidence["openInterestCoverage"] == "complete"
+    assert decision_evidence["volumeCoverage"] == "complete"
+    assert decision_evidence["ivCoverage"] == "complete"
+    assert decision_evidence["greeksCoverage"] == "complete"
+    assert decision_evidence["ivRankAuthority"] == "missing"
+    assert decision_evidence["eventCalendarAuthority"] == "missing"
+    assert "provider_live_evidence_missing" not in response.fail_closed_reason_codes
+    assert "live_evidence_iv_rank_authority_missing" in response.fail_closed_reason_codes
+    assert "live_evidence_event_calendar_authority_missing" in response.fail_closed_reason_codes
+    assert response.decision_grade is False
+    assert response.decision_label == "数据不足，禁止判断"
 
 
 def test_decision_iv_rank_unavailable_returns_safe_status_no_crash(tmp_path: Path) -> None:
@@ -825,6 +942,52 @@ def test_decision_optimizer_ranks_debit_spread_over_long_call_when_risk_reward_i
     long_call = next(item for item in response.ranked_alternatives if item.strategy_key == "long_call")
     assert spread.risk_reward_ratio is not None
     assert long_call.risk_reward_ratio is None
+    assert response.optimizer.no_trade_reason == "data_quality_not_decision_grade"
+
+
+def test_optimizer_candidates_reuse_snapshot_live_evidence_without_score_changes() -> None:
+    captured_live_evidence: list[dict | None] = []
+
+    def capture_gate_call(**kwargs):
+        captured_live_evidence.append(kwargs.get("provider_live_evidence"))
+        return _evaluate_options_data_quality_gates(**kwargs)
+
+    with patch(
+        "src.services.options_lab_service.evaluate_options_data_quality_gates",
+        side_effect=capture_gate_call,
+    ):
+        response = _service().evaluate_decision(
+            {
+                "symbol": "TEM",
+                "strategy": "long_call",
+                "expiration": "2026-06-19",
+                "targetPrice": 65,
+                "targetDate": "2026-06-19",
+                "riskBudget": 600,
+            }
+        )
+
+    assert len(captured_live_evidence) >= 5
+    decision_evidence = captured_live_evidence[0]
+    optimizer_evidence = captured_live_evidence[1:]
+    assert decision_evidence is not None
+    assert all(item == decision_evidence for item in optimizer_evidence)
+    assert "live_evidence_synthetic_blocked" in decision_evidence["reasonCodes"]
+    assert "live_evidence_iv_rank_authority_missing" in decision_evidence["reasonCodes"]
+    assert [item.strategy_key for item in response.ranked_alternatives] == [
+        "bear_put_spread",
+        "bull_call_spread",
+        "long_put",
+        "long_call",
+    ]
+    assert {item.strategy_key: item.trade_quality_score for item in response.ranked_alternatives} == {
+        "bear_put_spread": 35,
+        "bull_call_spread": 35,
+        "long_put": 35,
+        "long_call": 35,
+    }
+    assert all(item.decision_label == "数据不足，禁止判断" for item in response.ranked_alternatives)
+    assert response.optimizer.preferred_strategy_key is None
     assert response.optimizer.no_trade_reason == "data_quality_not_decision_grade"
 
 
