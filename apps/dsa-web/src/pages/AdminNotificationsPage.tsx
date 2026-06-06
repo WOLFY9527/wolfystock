@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BellRing, CheckCircle2, Power, Send, ShieldCheck, Trash2, Webhook } from 'lucide-react';
 import {
   adminNotificationsApi,
@@ -255,10 +255,10 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
     : (language === 'en' ? 'Unacknowledged' : '未确认');
 }
 
-const AdminNotificationsPage: React.FC = () => {
+  const AdminNotificationsPage: React.FC = () => {
   const { language } = useI18n();
   const isEnglish = language === 'en';
-  const text = useCallback((en: string, zh: string) => (isEnglish ? en : zh), [isEnglish]);
+  const text = (en: string, zh: string) => (isEnglish ? en : zh);
   const [channels, setChannels] = useState<NotificationChannel[]>([]);
   const [availableSystemChannels, setAvailableSystemChannels] = useState<string[]>([]);
   const [events, setEvents] = useState<NotificationEvent[]>([]);
@@ -270,7 +270,7 @@ const AdminNotificationsPage: React.FC = () => {
   const [notice, setNotice] = useState<StatusNotice | null>(null);
   const [error, setError] = useState<ParsedApiError | null>(null);
 
-  const routeSummary = useMemo(() => {
+  const routeSummary = (() => {
     const enabledRoutes = channels.filter((channel) => channel.enabled).length;
     const disabledRoutes = channels.filter((channel) => !channel.enabled).length;
     const missingTargets = channels.filter((channel) => String(channel.targetSummary || '').includes('unconfigured')).length;
@@ -293,12 +293,9 @@ const AdminNotificationsPage: React.FC = () => {
       grouped,
       categories,
     };
-  }, [channels, text]);
-  const unacknowledgedCriticalEvents = useMemo(
-    () => events.filter((event) => event.severity === 'critical' && !event.acknowledgedAt).length,
-    [events],
-  );
-  const latestOperationalTimestamp = useMemo(() => {
+  })();
+  const unacknowledgedCriticalEvents = events.filter((event) => event.severity === 'critical' && !event.acknowledgedAt).length;
+  const latestOperationalTimestamp = (() => {
     const timestamps = [
       ...channels.flatMap((channel) => [channel.lastTriggeredAt, channel.lastSentAt, channel.updatedAt, channel.createdAt]),
       ...events.map((event) => event.createdAt),
@@ -307,7 +304,7 @@ const AdminNotificationsPage: React.FC = () => {
     return timestamps.reduce((latest, current) => (
       new Date(current).getTime() > new Date(latest).getTime() ? current : latest
     ));
-  }, [channels, events]);
+  })();
   const l0TrustState: AdminOpsTrustState = error && channels.length === 0 && events.length === 0
     ? 'blocked'
     : isLoading && channels.length === 0 && events.length === 0
@@ -365,7 +362,7 @@ const AdminNotificationsPage: React.FC = () => {
     void loadAll();
   }, [loadAll]);
 
-  const payload = useMemo<NotificationChannelPayload>(() => {
+  const payload: NotificationChannelPayload = (() => {
     const config: Record<string, unknown> = {};
     if (draft.type === 'webhook') {
       config.webhookUrl = draft.webhookUrl.trim();
@@ -388,9 +385,9 @@ const AdminNotificationsPage: React.FC = () => {
         }),
       config,
     };
-  }, [draft]);
+  })();
 
-  const createChannel = useCallback(async () => {
+  async function createChannel() {
     setFormError(null);
     setNotice(null);
     if (!payload.name) {
@@ -416,9 +413,9 @@ const AdminNotificationsPage: React.FC = () => {
     } finally {
       setIsSaving(false);
     }
-  }, [loadAll, payload, text]);
+  }
 
-  const toggleChannel = useCallback(async (channel: NotificationChannel) => {
+  async function toggleChannel(channel: NotificationChannel) {
     setBusyId(channel.id);
     setNotice(null);
     try {
@@ -429,9 +426,9 @@ const AdminNotificationsPage: React.FC = () => {
     } finally {
       setBusyId(null);
     }
-  }, [loadAll]);
+  }
 
-  const testChannel = useCallback(async (channelId: number, dryRun: boolean) => {
+  async function testChannel(channelId: number, dryRun: boolean) {
     setBusyId(channelId);
     setNotice(null);
     try {
@@ -457,9 +454,9 @@ const AdminNotificationsPage: React.FC = () => {
     } finally {
       setBusyId(null);
     }
-  }, [language, loadAll, text]);
+  }
 
-  const deleteChannel = useCallback(async (channelId: number) => {
+  async function deleteChannel(channelId: number) {
     const confirmed = window.confirm(text(
       'Remove only this log notification route association? The configured system channel and credentials will not be deleted.',
       '仅解除日志路由绑定？这不会删除系统通道或已配置凭据。',
@@ -481,9 +478,9 @@ const AdminNotificationsPage: React.FC = () => {
     } finally {
       setBusyId(null);
     }
-  }, [loadAll, text]);
+  }
 
-  const acknowledge = useCallback(async (eventId: number) => {
+  async function acknowledge(eventId: number) {
     setBusyId(eventId);
     setNotice(null);
     try {
@@ -494,7 +491,7 @@ const AdminNotificationsPage: React.FC = () => {
     } finally {
       setBusyId(null);
     }
-  }, [loadAll]);
+  }
 
   return (
     <TerminalPageShell

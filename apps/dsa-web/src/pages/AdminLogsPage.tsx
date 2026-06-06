@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   adminLogsApi,
   type AdminDataMissingDrilldownItem,
@@ -1247,7 +1247,7 @@ async function copyTextValue(value: unknown): Promise<void> {
 const AdminLogsPage: React.FC = () => {
   const { language, t } = useI18n();
   const locale = language as AdminLogsLanguage;
-  const drillQuery = useMemo(() => readAdminLogsQuery(), []);
+  const [drillQuery] = useState(readAdminLogsQuery);
   const [activeTab, setActiveTab] = useState<LogsTab>(drillQuery.activeTab);
   const [levelFilter, setLevelFilter] = useState<LevelFilter>('warning_plus');
   const [categoryFilter, setCategoryFilter] = useState<'all' | LogCategory>('all');
@@ -1491,26 +1491,24 @@ const AdminLogsPage: React.FC = () => {
     void loadOperatorIssues();
   }, [loadOperatorIssues]);
 
-  const filteredSessions = useMemo(() => {
+  const filteredSessions = sessions.filter((item) => {
     const query = searchQuery.trim().toLowerCase();
-    return sessions.filter((item) => {
-      const summary = item.readableSummary || {};
-      const category = String(summary.logCategory || '').trim();
-      const level = normalizeLogLevel(summary.logLevel);
-      const haystack = `${summary.eventName || ''} ${summary.eventMessage || ''} ${summary.requestId || ''} ${summary.source || ''} ${summary.actorDisplay || ''} ${summary.actorUsername || ''} ${summary.operationTarget || ''} ${item.code || ''} ${item.name || ''}`.toLowerCase();
-      if (levelFilter === 'warning_plus' && !['WARNING', 'ERROR', 'CRITICAL'].includes(level)) return false;
-      if (levelFilter === 'error_plus' && !['ERROR', 'CRITICAL'].includes(level)) return false;
-      if (levelFilter === 'all' && !showDebugLogs && ['DEBUG', 'INFO'].includes(level)) return false;
-      if (!['all', 'warning_plus', 'error_plus'].includes(levelFilter) && level !== levelFilter) return false;
-      if (categoryFilter !== 'all' && category !== categoryFilter) return false;
-      if (query && !haystack.includes(query)) return false;
-      return true;
-    }).sort((a, b) => {
-      const left = a.startedAt ? new Date(a.startedAt).getTime() : 0;
-      const right = b.startedAt ? new Date(b.startedAt).getTime() : 0;
-      return right - left;
-    });
-  }, [categoryFilter, levelFilter, searchQuery, sessions, showDebugLogs]);
+    const summary = item.readableSummary || {};
+    const category = String(summary.logCategory || '').trim();
+    const level = normalizeLogLevel(summary.logLevel);
+    const haystack = `${summary.eventName || ''} ${summary.eventMessage || ''} ${summary.requestId || ''} ${summary.source || ''} ${summary.actorDisplay || ''} ${summary.actorUsername || ''} ${summary.operationTarget || ''} ${item.code || ''} ${item.name || ''}`.toLowerCase();
+    if (levelFilter === 'warning_plus' && !['WARNING', 'ERROR', 'CRITICAL'].includes(level)) return false;
+    if (levelFilter === 'error_plus' && !['ERROR', 'CRITICAL'].includes(level)) return false;
+    if (levelFilter === 'all' && !showDebugLogs && ['DEBUG', 'INFO'].includes(level)) return false;
+    if (!['all', 'warning_plus', 'error_plus'].includes(levelFilter) && level !== levelFilter) return false;
+    if (categoryFilter !== 'all' && category !== categoryFilter) return false;
+    if (query && !haystack.includes(query)) return false;
+    return true;
+  }).sort((a, b) => {
+    const left = a.startedAt ? new Date(a.startedAt).getTime() : 0;
+    const right = b.startedAt ? new Date(b.startedAt).getTime() : 0;
+    return right - left;
+  });
 
   const openDetail = useCallback(async (summary: ExecutionLogSessionSummary) => {
     setSelectedBusinessDetail(null);
@@ -1683,14 +1681,14 @@ const AdminLogsPage: React.FC = () => {
   const rawTraceValue = readable.traceId || readable.requestId || readable.actorRequestId || drawerDetail?.queryId;
   const rawRootCause = operatorSafeText(readable.errorSummary || readable.topFailureReason || readable.eventMessage || readable.summaryParagraph, locale, locale === 'zh' ? '原因未确认' : 'Reason unknown');
   const rawActorRole = String(readable.actorRole || '').trim().toLowerCase();
-  const incidentHooks = useMemo(() => {
+  const incidentHooks = (() => {
     const hooks = incidentTimeline?.hooks || [];
     return hooks.slice().sort((left: AdminIncidentTimelineHook, right: AdminIncidentTimelineHook) => {
       const leftIndex = INCIDENT_KIND_ORDER.indexOf(left.kind as (typeof INCIDENT_KIND_ORDER)[number]);
       const rightIndex = INCIDENT_KIND_ORDER.indexOf(right.kind as (typeof INCIDENT_KIND_ORDER)[number]);
       return (leftIndex === -1 ? 99 : leftIndex) - (rightIndex === -1 ? 99 : rightIndex);
     });
-  }, [incidentTimeline]);
+  })();
   const aiCallEntries = buildStableListKeys(aiCalls, (item) => [
     text(item.model),
     text(item.version),
@@ -1720,7 +1718,7 @@ const AdminLogsPage: React.FC = () => {
   ].join('::'));
   const canOpenBusinessIncident = Boolean(businessDetail && buildIncidentLookupFromBusinessEvent(businessDetail));
   const canOpenRawIncident = Boolean(drawerDetail && buildIncidentLookupFromSession(drawerDetail));
-  const computedSummary = useMemo(() => {
+  const computedSummary = (() => {
     const emptySummary = {
       errorCount: 0,
       warningCount: 0,
@@ -1775,10 +1773,10 @@ const AdminLogsPage: React.FC = () => {
         }
         return acc;
       },
-      { ...emptySummary },
-    );
-  }, [activeTab, businessEvents, filteredSessions, summary]);
-  const healthSummary = useMemo<AdminLogHealthSummary>(() => {
+        { ...emptySummary },
+      );
+  })();
+  const healthSummary: AdminLogHealthSummary = (() => {
     const fallback: AdminLogHealthSummary = {
       totalEvents: activeTab === 'raw' ? filteredSessions.length : businessTotal,
       failedEvents: computedSummary.totalFailedCount || computedSummary.errorCount || 0,
@@ -1797,15 +1795,15 @@ const AdminLogsPage: React.FC = () => {
     };
     if (activeTab === 'raw') return summary?.healthSummary || fallback;
     return businessHealth || fallback;
-  }, [activeTab, businessHealth, businessTotal, computedSummary, filteredSessions.length, summary]);
-  const scannerSummary = useMemo(() => {
+  })();
+  const scannerSummary = (() => {
     const scannerEvents = businessEvents.filter((item) => item.category === 'scanner');
     const latest = scannerEvents[0] || null;
     const failed = scannerEvents.filter((item) => ['failed', 'error'].includes(normalizeStatus(item.status))).length;
     const success = scannerEvents.filter((item) => normalizeStatus(item.status) === 'success').length;
     const latestError = scannerEvents.find((item) => ['failed', 'error'].includes(normalizeStatus(item.status)));
     return { latest, failed, success, latestError };
-  }, [businessEvents]);
+  })();
   const topCategory = healthSummary.failuresByCategory?.[0];
   const latestCriticalError = healthSummary.latestCriticalError || healthSummary.topRecentErrors?.[0] || null;
   const currentStorageBytes = storageBytes(storageSummary);
