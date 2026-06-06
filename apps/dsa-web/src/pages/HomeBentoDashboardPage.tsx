@@ -3742,6 +3742,25 @@ function polishHomeNarrativeCopy(locale: DashboardLocale, raw: string, context: 
   return sanitizeHomeConsumerActionCopy(locale, sanitized);
 }
 
+const HISTORY_TIMESTAMP_FORMATTERS = {
+  en: new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }),
+  zh: new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }),
+} as const;
+
 function formatHistoryTimestamp(value?: string, locale: DashboardLocale = 'zh'): string {
   const text = String(value || '').trim();
   if (!text) {
@@ -3753,14 +3772,7 @@ function formatHistoryTimestamp(value?: string, locale: DashboardLocale = 'zh'):
     return text;
   }
 
-  const parts = new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(date);
+  const parts = HISTORY_TIMESTAMP_FORMATTERS[locale].formatToParts(date);
   const get = (type: string) => parts.find((part) => part.type === type)?.value || '';
   return `${get('month')}/${get('day')} ${get('hour')}:${get('minute')}`;
 }

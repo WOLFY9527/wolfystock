@@ -141,7 +141,7 @@ Next candidates:
 
 ## Batch 3: Watchlist Date Formatter Hoist
 
-Status: validated locally, ready for immediate checkpoint commit and push.
+Status: committed and pushed as checkpoint `403d16d7`.
 
 Files changed:
 
@@ -184,6 +184,50 @@ Next candidates:
 - Remaining `js-hoist-intl`: `HomeBentoDashboardPage.tsx` and carefully bounded `UserScannerPage.tsx` formatter helpers.
 - Remaining immutable sort/copy: evaluate `OptionsLabPage.tsx` first; avoid scanner ranking/filtering/cap semantics unless the line is purely display-local and tests prove parity.
 - Manual memoization: continue only where removing memo does not affect function identity used by effects or child memo contracts in Vitest/non-compiler paths.
+
+## Batch 4: Scanner And Home Formatter Hoist
+
+Status: validated locally, ready for immediate checkpoint commit and push.
+
+Files changed:
+
+- `apps/dsa-web/src/pages/UserScannerPage.tsx`
+- `apps/dsa-web/src/pages/HomeBentoDashboardPage.tsx`
+
+Changes:
+
+- Hoisted User Scanner date-time and date-only formatters to module scope.
+- Hoisted Home history timestamp formatter to module scope.
+- Touched only display formatter helpers; scanner scoring/ranking/filtering/cap semantics and Home selection logic were not changed.
+
+Diagnostics after batch:
+
+- Score: `61`
+- Total diagnostics: `517`
+- Errors: `112`
+- Warnings: `405`
+- Affected files: `44`
+- Reduced total diagnostics from previous checkpoint: `3`
+- Reduced total diagnostics from baseline: `50`
+- Reduced by rule from previous checkpoint:
+  - `js-hoist-intl`: `3 -> 0` (`-3`)
+- React Doctor diff for changed files: `0` diagnostics.
+
+Validations run:
+
+- `git diff --check` -> pass
+- `./scripts/release_secret_scan.sh` -> pass
+- `npm --prefix apps/dsa-web run test -- 'src/pages/__tests__/UserScannerPage.test.tsx' 'src/pages/__tests__/HomeSurfacePage.test.tsx'` -> pass, `163` tests
+- `npm --prefix apps/dsa-web run lint` -> pass
+- `npm --prefix apps/dsa-web run build` -> pass with existing Vite chunk-size warning
+- `npx react-doctor@latest --json --json-compact --yes --no-score` -> remaining diagnostics expected, totals above
+- `npx react-doctor@latest --score --yes` -> `61`
+
+Next candidates:
+
+- Consider `OptionsLabPage.tsx` immutable sort/copy only if focused tests show no options payoff/scoring/strategy/no-advice semantic drift.
+- Consider remaining display-only manual memoization in files where callbacks are not `useEffect` dependencies.
+- Remaining high-count findings are increasingly state/effect flow, giant component, and reducer suggestions; many require semantic caution or broader refactor boundaries.
 
 ## Protected Domain Confirmation
 

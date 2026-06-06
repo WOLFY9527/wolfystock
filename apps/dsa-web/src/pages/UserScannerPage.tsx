@@ -404,16 +404,39 @@ function formatPercent(value?: number | null): string {
   return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
 }
 
-function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
-  if (!value) return '--';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
+const SCANNER_DATE_TIME_FORMATTERS = {
+  en: new Intl.DateTimeFormat('en-US', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(date);
+  }),
+  zh: new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }),
+} as const;
+
+const SCANNER_DATE_ONLY_FORMATTERS = {
+  en: new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }),
+  zh: new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }),
+} as const;
+
+function formatTimestamp(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
+  if (!value) return '--';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return SCANNER_DATE_TIME_FORMATTERS[language].format(date);
 }
 
 function formatDurationMs(startedAt?: string | null, completedAt?: string | null): string {
@@ -473,11 +496,7 @@ function formatDateOnly(value?: string | null, language: 'zh' | 'en' = 'zh'): st
   if (!value) return '--';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date);
+  return SCANNER_DATE_ONLY_FORMATTERS[language].format(date);
 }
 
 function findCandidateValue(
