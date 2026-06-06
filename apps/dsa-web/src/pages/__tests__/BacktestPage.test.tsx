@@ -943,7 +943,7 @@ describe('BacktestPage', () => {
     );
     expect(pageShell).not.toHaveClass('max-w-none', 'mx-0', 'px-0', 'xl:px-0', 'max-w-[1600px]');
     expect(pageShell).toHaveAttribute('data-terminal-primitive', 'page-shell');
-    expect(screen.getByTestId('backtest-subnav')).toHaveClass('w-full', 'rounded-[24px]', 'border', 'border-white/5', 'bg-white/[0.02]');
+    expect(screen.getByTestId('backtest-subnav')).toHaveClass('w-full', 'rounded-[14px]', 'border', 'border-white/5', 'bg-white/[0.02]');
     expect(screen.getByTestId('backtest-v1-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'gap-6', 'bg-transparent');
     expect(screen.getByTestId('backtest-v1-page')).not.toHaveClass('pt-6');
     expect(screen.getByRole('tab', { name: bt('zh', 'page.ruleTab') })).toBeInTheDocument();
@@ -954,6 +954,11 @@ describe('BacktestPage', () => {
     expect(await screen.findByTestId('normal-backtest-workspace')).toBeInTheDocument();
     expect(screen.queryByTestId('pro-backtest-workspace')).not.toBeInTheDocument();
     expect(screen.getByTestId('normal-backtest-consolidated-card')).toBeInTheDocument();
+    expect(screen.getByTestId('backtest-v1-stage')).toHaveClass(
+      "[&_[data-testid='normal-backtest-consolidated-card']]:rounded-[14px]",
+      "[&_[data-testid='normal-backtest-template-insights']>div]:rounded-xl",
+      "[&_[data-testid='normal-backtest-template-insights-loading']>div]:rounded-xl",
+    );
     expect(screen.getByTestId('normal-backtest-form-grid')).toHaveClass('grid', 'md:grid-cols-4');
     expect(screen.getByLabelText('标的代码')).toBeInTheDocument();
     expect(screen.getByLabelText('回测区间开始')).toBeInTheDocument();
@@ -965,6 +970,7 @@ describe('BacktestPage', () => {
     expect(screen.getByLabelText('策略模板')).toHaveClass('min-h-[44px]', 'leading-6');
     expect(screen.queryByLabelText('策略文本')).not.toBeInTheDocument();
     const researchBoundary = screen.getByTestId('backtest-research-boundary');
+    expect(researchBoundary).toHaveClass('rounded-[14px]');
     expect(researchBoundary).toHaveTextContent('本工具仅用于回测分析与学习研究');
     expect(researchBoundary).toHaveTextContent('不构成投资建议');
     expect(researchBoundary).toHaveTextContent('过往表现不代表未来收益');

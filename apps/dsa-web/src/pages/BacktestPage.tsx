@@ -1350,6 +1350,13 @@ const BacktestPage: React.FC = () => {
   const researchBoundaryEventNote = language === 'en'
     ? 'Buy/sell labels on this page describe historical rule events only. They do not place orders, connect to a broker, or change portfolio holdings.'
     : '页面中的买入/卖出仅表示历史规则事件，不会提交订单、不会连接券商或改动组合持仓。';
+  const configPanelRadiusClass = 'rounded-[14px]';
+  const configInsetRadiusClass = 'rounded-xl';
+  const normalModeRadiusTaxonomyClass = [
+    "[&_[data-testid='normal-backtest-consolidated-card']]:rounded-[14px]",
+    "[&_[data-testid='normal-backtest-template-insights']>div]:rounded-xl",
+    "[&_[data-testid='normal-backtest-template-insights-loading']>div]:rounded-xl",
+  ].join(' ');
 
   return (
     <div
@@ -1369,7 +1376,7 @@ const BacktestPage: React.FC = () => {
         />
         <div
           data-testid="backtest-subnav"
-          className="w-full rounded-[24px] border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-sm"
+          className={`w-full ${configPanelRadiusClass} border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-sm`}
         >
           <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <nav
@@ -1389,7 +1396,7 @@ const BacktestPage: React.FC = () => {
         <section
           data-testid="backtest-research-boundary"
           aria-label={researchBoundaryTitle}
-          className="w-full rounded-[24px] border border-amber-300/15 bg-amber-300/[0.07] px-4 py-4 text-sm text-amber-50 backdrop-blur-sm"
+          className={`w-full ${configPanelRadiusClass} border border-amber-300/15 bg-amber-300/[0.07] px-4 py-4 text-sm text-amber-50 backdrop-blur-sm`}
         >
           <div className="flex min-w-0 flex-col gap-3">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -1401,7 +1408,7 @@ const BacktestPage: React.FC = () => {
               {researchBoundaryItems.map((item) => (
                 <li
                   key={item}
-                  className="rounded-2xl border border-amber-50/10 bg-black/10 px-3 py-2 leading-6 text-amber-50/95"
+                  className={`${configInsetRadiusClass} border border-amber-50/10 bg-black/10 px-3 py-2 leading-6 text-amber-50/95`}
                 >
                   {item}
                 </li>
@@ -1418,7 +1425,7 @@ const BacktestPage: React.FC = () => {
           className="w-full flex-1 min-w-0 flex flex-col gap-6 bg-transparent"
         >
         {scannerHandoff ? (
-          <section className="rounded-[24px] border border-sky-400/15 bg-sky-400/10 px-4 py-3 text-sm text-sky-50">
+          <section className={`${configPanelRadiusClass} border border-sky-400/15 bg-sky-400/10 px-4 py-3 text-sm text-sky-50`}>
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold">{language === 'en' ? 'From scanner' : '来自扫描器'}</span>
               <span>{scannerHandoff.symbol}</span>
@@ -1433,7 +1440,7 @@ const BacktestPage: React.FC = () => {
           <AnimatePresence mode="wait" initial={false}>
             <m.div
               key={activeModule === 'rule' ? `${activeModule}-${controlPanelMode}` : activeModule}
-              className={`backtest-v1-stage backtest-v1-stage--${activeModule} w-full min-w-0`}
+              className={`backtest-v1-stage backtest-v1-stage--${activeModule} w-full min-w-0 ${normalModeRadiusTaxonomyClass}`}
               data-testid="backtest-v1-stage"
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
