@@ -77,21 +77,6 @@ export function NotesList({ notes, empty }: { notes: string[]; empty: string }) 
   );
 }
 
-export function DetailSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <TerminalPanel as="section" dense className="p-2.5">
-      <h5 className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">{title}</h5>
-      {children}
-    </TerminalPanel>
-  );
-}
-
 export function AdvancedDisclosure({
   title,
   summary,

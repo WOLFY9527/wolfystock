@@ -231,7 +231,7 @@ Next candidates:
 
 ## Batch 5: Backtest Shared Dead Export Removal
 
-Status: included in the checkpoint commit for this batch after local validation.
+Status: committed and pushed as checkpoint `70aaa88d`.
 
 Files changed:
 
@@ -273,9 +273,63 @@ Next candidates:
 - Manual memoization remains mostly blocked where callbacks are effect dependencies or child identity contracts in non-compiler tests.
 - State/effect/reducer/giant-component findings remain blocker-prone without narrower behavioral coverage.
 
+## Batch 6: Frontend Presenter Dead Export Cleanup
+
+Status: included in the checkpoint commit for this batch after local validation.
+
+Files changed:
+
+- `apps/dsa-web/src/components/home-bento/DeepReportDrawer.tsx`
+- `apps/dsa-web/src/components/scanner/ScannerCandidatePresenters.tsx`
+- `apps/dsa-web/src/components/scanner/ScannerDisplayAtoms.tsx`
+- `apps/dsa-web/src/hooks/useDashboardLifecycle.ts`
+
+Changes:
+
+- Removed unused default exports from Home Bento drawer and dashboard lifecycle hook while keeping their named exports unchanged.
+- Removed unreferenced scanner presenter components and their now-unused shared atom.
+- Left the scanner page's active presenter exports intact; scanner score/ranking/filtering/cap semantics were not changed.
+
+Diagnostics after batch:
+
+- Score: `61`
+- Total diagnostics: `500`
+- Errors: `112`
+- Warnings: `388`
+- Affected files: `41`
+- Reduced total diagnostics from previous checkpoint: `8`
+- Reduced total diagnostics from baseline: `67`
+- Reduced by rule from previous checkpoint:
+  - `unused-export`: `7 -> 2` (`-5`)
+  - `no-many-boolean-props`: `6 -> 4` (`-2`)
+  - `no-noninteractive-element-interactions`: `2 -> 1` (`-1`)
+- React Doctor diff for changed files:
+  - `src/components/scanner/ScannerCandidatePresenters.tsx`: `9 -> 3` (`-6`)
+  - `src/components/home-bento/DeepReportDrawer.tsx`: `1 -> 0` (`-1`)
+  - `src/hooks/useDashboardLifecycle.ts`: `1 -> 0` (`-1`)
+  - `src/components/scanner/ScannerDisplayAtoms.tsx`: `0`
+
+Validations run:
+
+- `git diff --check` -> pass
+- `./scripts/release_secret_scan.sh` -> pass
+- `npm --prefix apps/dsa-web run test -- 'src/hooks/__tests__/useDashboardLifecycle.test.tsx' 'src/pages/__tests__/UserScannerPage.test.tsx' 'src/pages/__tests__/HomeSurfacePage.test.tsx' --no-file-parallelism` -> pass, `165` tests
+- `npm --prefix apps/dsa-web run lint` -> pass
+- `npm --prefix apps/dsa-web run build` -> pass with existing Vite chunk-size warning
+- `npx react-doctor@latest --json --json-compact --yes --no-score` -> remaining diagnostics expected, totals above
+- `npx react-doctor@latest --score --yes` -> `61`
+
+Next candidates:
+
+- Remaining `unused-export`:
+  - `apps/dsa-web/src/api/error.ts` `isApiRequestError`: deferred because API client boundary is close to forbidden API scope.
+  - `apps/dsa-web/src/components/backtest/DeterministicBacktestFlow.tsx` default export: removal likely requires deleting or reshaping a large unused component, which is too broad for a small safe batch.
+- Remaining scanner presenter findings are on active components and require accessibility/prop-contract changes; evaluate separately with route tests before touching.
+- Manual memoization remains mostly unsafe where callbacks are `useEffect` dependencies or non-compiler tests depend on stable identity.
+
 ## Protected Domain Confirmation
 
-No changes in Batches 1 through 5 to:
+No changes in Batches 1 through 6 to:
 
 - backend/API/provider/cache/runtime/auth/package/lockfile/config/CI
 - provider order, fallback, deadlines, cache semantics, payload shapes

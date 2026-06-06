@@ -97,5 +97,3 @@ export function useDashboardLifecycle({
     enabled,
   });
 }
-
-export default useDashboardLifecycle;

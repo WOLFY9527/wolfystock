@@ -92,5 +92,3 @@ export const DeepReportDrawer: React.FC<DeepReportDrawerProps> = ({
     </div>
   </Drawer>
 );
-
-export default DeepReportDrawer;
