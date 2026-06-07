@@ -52,11 +52,20 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
 };
 
+type AdminNavGroupKey = 'trust' | 'evidence' | 'dataOps' | 'support';
+
 type AdminNavItem = {
   key: string;
   label: string;
   to: string;
   icon: React.ComponentType<{ className?: string }>;
+  group: AdminNavGroupKey;
+};
+
+type AdminNavGroup = {
+  key: AdminNavGroupKey;
+  label: string;
+  items: AdminNavItem[];
 };
 
 const BrandWordmark: React.FC<{
@@ -91,6 +100,27 @@ const NAV_ITEMS: NavItem[] = [
 
 const HEADER_UTILITY_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-white/42 transition-colors hover:text-white/78';
 const HEADER_UTILITY_DANGER_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-white/38 transition-colors hover:text-red-300/90';
+const ADMIN_NAV_GROUP_ORDER: AdminNavGroupKey[] = ['trust', 'evidence', 'dataOps', 'support'];
+
+function adminNavGroupLabel(group: AdminNavGroupKey, language: 'zh' | 'en'): string {
+  const labels: Record<AdminNavGroupKey, { zh: string; en: string }> = {
+    trust: { zh: '总览 / Trust', en: 'Overview / Trust' },
+    evidence: { zh: '事件 / Evidence', en: 'Events / Evidence' },
+    dataOps: { zh: '数据运行 / Data Ops', en: 'Data Ops' },
+    support: { zh: '用户支持 / Support', en: 'Support' },
+  };
+  return labels[group][language];
+}
+
+function groupAdminNavItems(items: AdminNavItem[], language: 'zh' | 'en'): AdminNavGroup[] {
+  return ADMIN_NAV_GROUP_ORDER
+    .map((group) => ({
+      key: group,
+      label: adminNavGroupLabel(group, language),
+      items: items.filter((item) => item.group === group),
+    }))
+    .filter((group) => group.items.length > 0);
+}
 
 function NavLabel({ label }: { label: string }) {
   return (
@@ -157,26 +187,27 @@ function useSidebarNavView({
   const costObservabilityPath = routeLocale ? buildLocalizedPath('/admin/cost-observability', routeLocale) : '/admin/cost-observability';
   const adminNavItems: AdminNavItem[] = [];
   if (canReadSystemConfig) {
-    adminNavItems.push({ key: 'system', label: consoleLabel, to: consolePath, icon: ShieldCheck });
-  }
-  if (canReadUsers) {
-    adminNavItems.push({ key: 'users', label: userGovernanceLabel, to: userGovernancePath, icon: UsersRound });
-  }
-  if (canReadCostObservability) {
-    adminNavItems.push({ key: 'cost', label: costObservabilityLabel, to: costObservabilityPath, icon: BarChart3 });
-  }
-  if (canReadNotifications) {
-    adminNavItems.push({ key: 'notifications', label: notificationsLabel, to: notificationsPath, icon: BellRing });
-  }
-  if (canReadProviders) {
-    adminNavItems.push({ key: 'providers', label: marketProvidersLabel, to: marketProvidersPath, icon: DatabaseZap });
-    adminNavItems.push({ key: 'provider-circuits', label: providerCircuitsLabel, to: providerCircuitsPath, icon: CircuitBoard });
+    adminNavItems.push({ key: 'system', label: consoleLabel, to: consolePath, icon: ShieldCheck, group: 'trust' });
   }
   if (canReadOpsLogs) {
-    adminNavItems.push({ key: 'evidence', label: evidenceWorkflowLabel, to: evidenceWorkflowPath, icon: FileCheck2 });
-    adminNavItems.push({ key: 'logs', label: t('adminNav.logs'), to: adminLogsPath, icon: Activity });
+    adminNavItems.push({ key: 'logs', label: t('adminNav.logs'), to: adminLogsPath, icon: Activity, group: 'evidence' });
+    adminNavItems.push({ key: 'evidence', label: evidenceWorkflowLabel, to: evidenceWorkflowPath, icon: FileCheck2, group: 'evidence' });
+  }
+  if (canReadProviders) {
+    adminNavItems.push({ key: 'providers', label: marketProvidersLabel, to: marketProvidersPath, icon: DatabaseZap, group: 'dataOps' });
+    adminNavItems.push({ key: 'provider-circuits', label: providerCircuitsLabel, to: providerCircuitsPath, icon: CircuitBoard, group: 'dataOps' });
+  }
+  if (canReadCostObservability) {
+    adminNavItems.push({ key: 'cost', label: costObservabilityLabel, to: costObservabilityPath, icon: BarChart3, group: 'dataOps' });
+  }
+  if (canReadUsers) {
+    adminNavItems.push({ key: 'users', label: userGovernanceLabel, to: userGovernancePath, icon: UsersRound, group: 'support' });
+  }
+  if (canReadNotifications) {
+    adminNavItems.push({ key: 'notifications', label: notificationsLabel, to: notificationsPath, icon: BellRing, group: 'support' });
   }
   const hasAdminMenu = adminNavItems.length > 0;
+  const adminNavGroups = groupAdminNavItems(adminNavItems, language);
 
   const handleAdminNavigate = () => {
     setShowAdminMenu(false);
@@ -334,21 +365,26 @@ function useSidebarNavView({
           <div
             id="shell-admin-utility-menu"
             data-testid="shell-admin-utility-menu"
-            className="space-y-1 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]/60 p-2"
+            className="space-y-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)]/60 p-2"
           >
-            {adminNavItems.map(({ key, label, to, icon: Icon }) => (
-              <NavLink
-                key={key}
-                to={to}
-                onClick={handleAdminNavigate}
-                className={({ isActive }) => cn('shell-drawer-action', isActive ? 'is-active' : '')}
-                aria-label={label}
-              >
-                <span className="shell-nav-item__icon" aria-hidden="true">
-                  <Icon className="size-4" />
-                </span>
-                <DrawerUtilityLabel label={label} />
-              </NavLink>
+            {adminNavGroups.map((group) => (
+              <div key={group.key} data-testid={`shell-admin-utility-group-${group.key}`} className="space-y-1">
+                <p className="px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">{group.label}</p>
+                {group.items.map(({ key, label, to, icon: Icon }) => (
+                  <NavLink
+                    key={key}
+                    to={to}
+                    onClick={handleAdminNavigate}
+                    className={({ isActive }) => cn('shell-drawer-action', isActive ? 'is-active' : '')}
+                    aria-label={label}
+                  >
+                    <span className="shell-nav-item__icon" aria-hidden="true">
+                      <Icon className="size-4" />
+                    </span>
+                    <DrawerUtilityLabel label={label} />
+                  </NavLink>
+                ))}
+              </div>
             ))}
           </div>
         ) : null}
@@ -373,22 +409,27 @@ function useSidebarNavView({
             id="shell-admin-utility-menu"
             role="menu"
             data-testid="shell-admin-utility-menu"
-            className="absolute right-0 top-full z-20 mt-2 flex min-w-[15rem] max-w-[min(22rem,calc(100vw-2rem))] flex-col gap-1 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-2 shadow-[0_20px_48px_rgba(0,0,0,0.28)]"
+            className="absolute right-0 top-full z-20 mt-2 flex min-w-[17rem] max-w-[min(24rem,calc(100vw-2rem))] flex-col gap-2 rounded-2xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)] p-2 shadow-[0_20px_48px_rgba(0,0,0,0.28)]"
           >
-            {adminNavItems.map(({ key, label, to, icon: Icon }) => (
-              <NavLink
-                key={key}
-                to={to}
-                onClick={handleAdminNavigate}
-                className={({ isActive }) => cn(
-                  'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-white/72 transition-colors hover:bg-white/[0.04] hover:text-white',
-                  isActive ? 'bg-white/[0.05] text-white' : '',
-                )}
-                aria-label={label}
-              >
-                <Icon className="size-4 shrink-0 text-white/56" />
-                <span className="truncate">{label}</span>
-              </NavLink>
+            {adminNavGroups.map((group) => (
+              <div key={group.key} data-testid={`shell-admin-utility-group-${group.key}`} className="space-y-1">
+                <p className="px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/34">{group.label}</p>
+                {group.items.map(({ key, label, to, icon: Icon }) => (
+                  <NavLink
+                    key={key}
+                    to={to}
+                    onClick={handleAdminNavigate}
+                    className={({ isActive }) => cn(
+                      'flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-white/72 transition-colors hover:bg-white/[0.04] hover:text-white',
+                      isActive ? 'bg-white/[0.05] text-white' : '',
+                    )}
+                    aria-label={label}
+                  >
+                    <Icon className="size-4 shrink-0 text-white/56" />
+                    <span className="truncate">{label}</span>
+                  </NavLink>
+                ))}
+              </div>
             ))}
           </div>
         ) : null}

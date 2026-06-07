@@ -472,7 +472,12 @@ describe('Shell', () => {
     expect(screen.getByRole('button', { name: translate('zh', 'language.toggle') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.settings') })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'nav.independentConsole') }));
-    expect(await screen.findByTestId('shell-admin-utility-menu')).toBeInTheDocument();
+    const adminMenu = await screen.findByTestId('shell-admin-utility-menu');
+    expect(adminMenu).toBeInTheDocument();
+    expect(within(adminMenu).getByTestId('shell-admin-utility-group-trust')).toHaveTextContent('总览 / Trust');
+    expect(within(adminMenu).getByTestId('shell-admin-utility-group-evidence')).toHaveTextContent('事件 / Evidence');
+    expect(within(adminMenu).getByTestId('shell-admin-utility-group-dataOps')).toHaveTextContent('数据运行 / Data Ops');
+    expect(within(adminMenu).getByTestId('shell-admin-utility-group-support')).toHaveTextContent('用户支持 / Support');
     expect(screen.getByRole('link', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'adminNav.logs') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '证据复核' })).toBeInTheDocument();
@@ -816,7 +821,12 @@ describe('Shell', () => {
     expect(within(actionIsland).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
     expect(within(actionIsland).queryByRole('button', { name: '控制台' })).not.toBeInTheDocument();
     fireEvent.click(adminMenuButton);
-    expect(await screen.findByTestId('shell-admin-utility-menu')).toBeInTheDocument();
+    const adminMenu = await screen.findByTestId('shell-admin-utility-menu');
+    expect(adminMenu).toBeInTheDocument();
+    expect(within(adminMenu).getByTestId('shell-admin-utility-group-trust')).toHaveTextContent('总览 / Trust');
+    expect(within(adminMenu).getByTestId('shell-admin-utility-group-evidence')).toHaveTextContent('事件 / Evidence');
+    expect(within(adminMenu).getByTestId('shell-admin-utility-group-dataOps')).toHaveTextContent('数据运行 / Data Ops');
+    expect(within(adminMenu).getByTestId('shell-admin-utility-group-support')).toHaveTextContent('用户支持 / Support');
     expect(screen.getByRole('link', { name: translate('zh', 'nav.marketProviders') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '系统日志' })).toBeInTheDocument();
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.logout') })).toBeInTheDocument();
@@ -851,6 +861,11 @@ describe('Shell', () => {
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
     fireEvent.click(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.independentConsole') }));
+    const adminMenu = await screen.findByTestId('shell-admin-utility-menu');
+    expect(within(adminMenu).queryByTestId('shell-admin-utility-group-trust')).not.toBeInTheDocument();
+    expect(within(adminMenu).queryByTestId('shell-admin-utility-group-evidence')).not.toBeInTheDocument();
+    expect(within(adminMenu).getByTestId('shell-admin-utility-group-dataOps')).toHaveTextContent('数据运行 / Data Ops');
+    expect(within(adminMenu).getByTestId('shell-admin-utility-group-support')).toHaveTextContent('用户支持 / Support');
     expect(await screen.findByRole('link', { name: translate('zh', 'nav.userGovernance') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.costObservability') })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
@@ -888,6 +903,11 @@ describe('Shell', () => {
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
     fireEvent.click(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.independentConsole') }));
+    const adminMenu = await screen.findByTestId('shell-admin-utility-menu');
+    expect(within(adminMenu).queryByTestId('shell-admin-utility-group-trust')).not.toBeInTheDocument();
+    expect(within(adminMenu).getByTestId('shell-admin-utility-group-evidence')).toHaveTextContent('事件 / Evidence');
+    expect(within(adminMenu).queryByTestId('shell-admin-utility-group-dataOps')).not.toBeInTheDocument();
+    expect(within(adminMenu).queryByTestId('shell-admin-utility-group-support')).not.toBeInTheDocument();
     expect(await screen.findByRole('link', { name: '证据复核' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'adminNav.logs') })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Evidence Review' })).not.toBeInTheDocument();
@@ -926,6 +946,11 @@ describe('Shell', () => {
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
     fireEvent.click(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.independentConsole') }));
+    const adminMenu = await screen.findByTestId('shell-admin-utility-menu');
+    expect(within(adminMenu).getByTestId('shell-admin-utility-group-trust')).toHaveTextContent('总览 / Trust');
+    expect(within(adminMenu).queryByTestId('shell-admin-utility-group-evidence')).not.toBeInTheDocument();
+    expect(within(adminMenu).getByTestId('shell-admin-utility-group-dataOps')).toHaveTextContent('数据运行 / Data Ops');
+    expect(within(adminMenu).getByTestId('shell-admin-utility-group-support')).toHaveTextContent('用户支持 / Support');
     expect(await screen.findByRole('link', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.userGovernance') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: translate('zh', 'nav.costObservability') })).toBeInTheDocument();

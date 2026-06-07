@@ -654,11 +654,21 @@ describe('AdminLogsPage', () => {
     expect(screen.getByText('当前状态')).toBeInTheDocument();
     expect(screen.getByText('下一步')).toBeInTheDocument();
     expect(screen.getByText('定位失败与审计线索')).toBeInTheDocument();
-    expect((await screen.findAllByText('1 个失败 / 6 条记录')).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('先处理失败和数据源降级').length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/1 个失败 \/ 6 条记录/)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('数据源响应超时：请检查数据源配置与上游状态。').length).toBeGreaterThan(0);
     expect(screen.getByTestId('admin-logs-filter-bar')).toBeInTheDocument();
     expect(await screen.findByTestId('admin-logs-health-summary')).toBeInTheDocument();
     expect(await screen.findByTestId('admin-logs-operator-issue-rollup')).toHaveTextContent('数据源健康摘要');
+    await waitFor(() => {
+      const overviewStrip = screen.getByTestId('admin-logs-l0-overview-strip');
+      expect(overviewStrip).toHaveTextContent('首要问题：数据源响应超时 · finnhub');
+      expect(overviewStrip).toHaveTextContent('影响 Market Overview / 行情');
+      expect(overviewStrip).toHaveTextContent('数据源响应超时：请检查数据源配置与上游状态。');
+      expect(overviewStrip).toHaveTextContent('运维问题 · 3 条事件 · 样例 evt-timeout-1 / evt-timeout-2');
+      expect(overviewStrip).not.toHaveTextContent('FRONTENDTOKEN');
+      expect(overviewStrip).not.toHaveTextContent('/Users/alice');
+      expect(overviewStrip).not.toHaveTextContent('/private/tmp');
+    });
     expect(screen.getByTestId('admin-logs-operator-issue-rollup')).toHaveTextContent('响应超时');
     expect(screen.getByTestId('admin-logs-operator-issue-rollup')).toHaveTextContent('数据源配置与上游状态');
     expect(screen.getByTestId('admin-logs-operator-issue-rollup')).toHaveTextContent('evt-timeout-1');

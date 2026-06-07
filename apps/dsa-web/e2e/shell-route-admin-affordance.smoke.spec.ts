@@ -260,7 +260,7 @@ async function expectGuestAdminGate(page: Page) {
   await appExpect(page).toHaveURL(/\/zh\/guest$/);
   await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible({ timeout: 15_000 });
   await appExpect(page.getByTestId('guest-home-command-surface')).toBeVisible();
-  await appExpect(page.getByTestId('guest-home-capability-strip')).toContainText('登录后解锁');
+  await appExpect(page.getByTestId('guest-home-capability-strip')).toContainText('登录后继续');
   await appExpect(page.getByTestId('guest-home-command-workflow')).toContainText('搜索');
   await appExpect(page.getByTestId('guest-home-command-workflow')).toContainText('分析');
   await appExpect(page.getByTestId('guest-home-command-workflow')).toContainText('观察');
@@ -293,6 +293,10 @@ async function expectAdminRedirectSurface(page: Page, isMobile: boolean) {
   const adminMenu = await openVisibleAdminMenu(page, isMobile);
   if (adminMenu) {
     await adminExpect(adminMenu).toBeVisible();
+    await adminExpect(adminMenu.getByTestId('shell-admin-utility-group-trust')).toContainText('总览 / Trust');
+    await adminExpect(adminMenu.getByTestId('shell-admin-utility-group-evidence')).toContainText('事件 / Evidence');
+    await adminExpect(adminMenu.getByTestId('shell-admin-utility-group-dataOps')).toContainText('数据运行 / Data Ops');
+    await adminExpect(adminMenu.getByTestId('shell-admin-utility-group-support')).toContainText('用户支持 / Support');
     await adminExpect(adminMenu).toContainText('系统');
     await adminExpect(adminMenu).toContainText('用户治理');
     await adminExpect(adminMenu).toContainText('成本观测');

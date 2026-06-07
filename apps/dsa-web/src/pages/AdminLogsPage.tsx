@@ -1104,6 +1104,35 @@ function operatorIssueFilterQuery(item: AdminOperatorIssueRollupItem): string {
     .join(' ');
 }
 
+function operatorDimensionLabel(value: unknown, locale: AdminLogsLanguage): string {
+  const raw = safeOperatorText(value, '');
+  if (!raw) return '';
+  const normalized = raw.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const labels: Record<string, { zh: string; en: string }> = {
+    market_overview: { zh: 'Market Overview', en: 'Market Overview' },
+    liquidity_monitor: { zh: 'Liquidity Monitor', en: 'Liquidity Monitor' },
+    rotation_radar: { zh: 'Rotation Radar', en: 'Rotation Radar' },
+    scanner: { zh: 'Scanner', en: 'Scanner' },
+    watchlist: { zh: 'Watchlist', en: 'Watchlist' },
+    portfolio: { zh: 'Portfolio', en: 'Portfolio' },
+    options_lab: { zh: 'Options Lab', en: 'Options Lab' },
+    quote: { zh: '行情', en: 'Quote' },
+    news: { zh: '新闻', en: 'News' },
+    macro: { zh: '宏观', en: 'Macro' },
+    breadth: { zh: '宽度', en: 'Breadth' },
+    flow: { zh: '资金流', en: 'Flow' },
+    data_source: { zh: '数据源', en: 'Data source' },
+  };
+  return labels[normalized]?.[locale] || operatorSafeText(raw, locale, raw.replace(/_/g, ' '));
+}
+
+function uniqueOperatorLabels(values: unknown[], locale: AdminLogsLanguage): string[] {
+  return values
+    .map((value) => operatorDimensionLabel(value, locale))
+    .filter(Boolean)
+    .filter((value, index, list) => list.indexOf(value) === index);
+}
+
 function JsonBlock({ value }: { value: unknown }) {
   if (value == null || value === '') return <span>--</span>;
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -1813,18 +1842,43 @@ const AdminLogsPage: React.FC = () => {
   const hardPercent = clampPercent(storageSummary?.usedPercentageOfHardLimit);
   const canRunCapacityCleanup = Boolean(storageSummary?.storageSizeAvailable && storageSummary.status === 'critical');
   const visibleRecordCount = activeTab === 'raw' ? filteredSessions.length : businessTotal;
-  const operatorCurrentState = locale === 'zh'
-    ? `${healthSummary.failedEvents} 个失败 / ${visibleRecordCount} 条记录`
-    : `${healthSummary.failedEvents} failed / ${visibleRecordCount} records`;
-  const operatorNextAction = healthSummary.failedEvents > 0
-    ? (locale === 'zh' ? '先处理失败和数据源降级' : 'Review failures and data-source degradations first')
-    : (locale === 'zh' ? '保持业务事件监控' : 'Keep monitoring business events');
+  const primaryOperatorIssue = operatorIssueItems[0] || null;
+  const primaryOperatorIssueTitle = primaryOperatorIssue
+    ? operatorSafeText(primaryOperatorIssue.issueTitle, locale, locale === 'zh' ? '未命名问题' : 'Untitled issue')
+    : '';
+  const primaryOperatorAffected = primaryOperatorIssue
+    ? uniqueOperatorLabels([
+      ...(primaryOperatorIssue.affectedSurfaces || []),
+      ...(primaryOperatorIssue.affectedDomains || []),
+    ], locale)
+    : [];
+  const primaryOperatorSamples = primaryOperatorIssue
+    ? (primaryOperatorIssue.sampleEventIds || []).map((value) => safeOperatorText(value, '')).filter(Boolean).slice(0, 2)
+    : [];
+  const operatorCurrentState = primaryOperatorIssue
+    ? (locale === 'zh'
+      ? `${healthSummary.failedEvents} 个失败 / ${visibleRecordCount} 条记录 · 首要问题：${primaryOperatorIssueTitle} · 影响 ${primaryOperatorAffected.join(' / ') || '待汇总'}`
+      : `${healthSummary.failedEvents} failed / ${visibleRecordCount} records · Top issue: ${primaryOperatorIssueTitle} · Impact ${primaryOperatorAffected.join(' / ') || 'pending'}`)
+    : (locale === 'zh'
+      ? `${healthSummary.failedEvents} 个失败 / ${visibleRecordCount} 条记录`
+      : `${healthSummary.failedEvents} failed / ${visibleRecordCount} records`);
+  const operatorNextAction = primaryOperatorIssue
+    ? operatorSafeText(primaryOperatorIssue.operatorGuidance, locale, locale === 'zh' ? '先处理首要运维问题，再回看相关事件。' : 'Review the top operator issue, then inspect related events.')
+    : healthSummary.failedEvents > 0
+      ? (locale === 'zh' ? '先处理失败和数据源降级' : 'Review failures and data-source degradations first')
+      : (locale === 'zh' ? '保持业务事件监控' : 'Keep monitoring business events');
+  const operatorEvidenceRef = primaryOperatorIssue
+    ? (locale === 'zh'
+      ? `运维问题 · ${countLabel(primaryOperatorIssue.count, 'event', 'events', '条事件', locale)}${primaryOperatorSamples.length ? ` · 样例 ${primaryOperatorSamples.join(' / ')}` : ''}`
+      : `Operator issue · ${countLabel(primaryOperatorIssue.count, 'event', 'events', '条事件', locale)}${primaryOperatorSamples.length ? ` · samples ${primaryOperatorSamples.join(' / ')}` : ''}`)
+    : (locale === 'zh' ? '当前页 / 业务事件 / 运维问题 / 数据缺口' : 'Current page / business events / operator issues / data gaps');
   const l0TrustState: AdminOpsTrustState = healthSummary.failedEvents > 0
     ? 'degraded'
     : healthSummary.warningEvents > 0
       ? 'observe'
       : 'healthy';
-  const latestOverviewTimestamp = latestCriticalError?.startedAt
+  const latestOverviewTimestamp = primaryOperatorIssue?.latestTimestamp
+    || latestCriticalError?.startedAt
     || businessEvents[0]?.startedAt
     || filteredSessions[0]?.startedAt
     || null;
@@ -1849,7 +1903,7 @@ const AdminLogsPage: React.FC = () => {
               systemTrustState={l0TrustState}
               impact={operatorCurrentState}
               recommendedAction={operatorNextAction}
-              evidenceRef={locale === 'zh' ? '当前页 / 业务事件 / 运维问题 / 数据缺口' : 'Current page / business events / operator issues / data gaps'}
+              evidenceRef={operatorEvidenceRef}
               lastUpdated={formatDateTime(latestOverviewTimestamp, locale)}
             />
             <AdminDrillThroughStrip
