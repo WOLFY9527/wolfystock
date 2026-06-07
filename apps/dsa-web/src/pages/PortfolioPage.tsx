@@ -2859,7 +2859,7 @@ const PortfolioPage: React.FC = () => {
               >
                 <div data-testid="portfolio-total-assets-card" className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <h1 className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/40">
+                    <h1 className="text-[1.45rem] font-semibold leading-tight tracking-normal text-white md:text-[1.75rem]">
                       {language === 'zh' ? '组合总览' : 'Portfolio Overview'}
                     </h1>
                     <TerminalChip variant="neutral">

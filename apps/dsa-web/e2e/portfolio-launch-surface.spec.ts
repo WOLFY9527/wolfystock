@@ -126,6 +126,21 @@ test.describe('portfolio launch surface', () => {
       });
       expect(summaryTypeScale.marketValue).toBeGreaterThan(summaryTypeScale.cashValue);
       expect(summaryTypeScale.pnlValue).toBeGreaterThan(summaryTypeScale.cashValue);
+      const titleTypeScale = await page.evaluate(() => {
+        const pageTitle = document.querySelector('[data-testid="portfolio-total-assets-card"] h1');
+        const visibleSectionHeadings = Array.from(document.querySelectorAll('h2')).filter((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        });
+        const pageTitleFontSize = pageTitle ? Number.parseFloat(window.getComputedStyle(pageTitle).fontSize) : 0;
+        const maxSectionHeadingFontSize = Math.max(
+          0,
+          ...visibleSectionHeadings.map((element) => Number.parseFloat(window.getComputedStyle(element).fontSize)),
+        );
+
+        return { pageTitleFontSize, maxSectionHeadingFontSize };
+      });
+      expect(titleTypeScale.pageTitleFontSize).toBeGreaterThan(titleTypeScale.maxSectionHeadingFontSize);
 
       if (viewport.name === 'desktop') {
         expect(primaryBox).not.toBeNull();
