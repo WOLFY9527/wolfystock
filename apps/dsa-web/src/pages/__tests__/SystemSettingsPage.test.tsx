@@ -64,6 +64,7 @@ describe('SystemSettingsPage', () => {
     const pageRoot = screen.getByTestId('system-settings-page');
     const shellHeader = screen.getByTestId('system-settings-shell-header');
     const overviewStrip = screen.getByTestId('system-settings-l0-overview-strip');
+    const visualBoundary = screen.getByTestId('system-settings-visual-boundary');
 
     expect(screen.getByRole('heading', { name: '系统设置' })).toBeInTheDocument();
     expect(screen.getByText('管理员默认落点')).toBeInTheDocument();
@@ -78,6 +79,12 @@ describe('SystemSettingsPage', () => {
     expect(within(overviewStrip).getByText('系统运维中心 / 下方摘要')).toBeInTheDocument();
     expect(screen.getByText('凭证、调度、系统状态与高风险操作仍需结合运维中心快照确认。')).toBeInTheDocument();
     expect(screen.getByText('详细配置项保留在下方运维中心。')).toBeInTheDocument();
+    expect(visualBoundary).toHaveTextContent('将常规配置与危险维护动作分开呈现');
+    expect(visualBoundary).toHaveTextContent('常规配置区');
+    expect(visualBoundary).toHaveTextContent('危险操作区');
+    expect(visualBoundary).toHaveTextContent('运行态维护清理与维护控制');
+    expect(visualBoundary).toHaveTextContent('工厂重置与系统初始化路径');
+    expect(visualBoundary).toHaveTextContent('仅在确有需要时进入，不作为日常配置步骤并列展示。');
     expect(screen.queryByText(/control plane/i)).not.toBeInTheDocument();
     expect(screen.queryByText(defaultVisibleInternalCopyPattern)).not.toBeInTheDocument();
     expect(screen.getByTestId('system-settings-loading')).toHaveAttribute('aria-busy', 'true');
@@ -107,6 +114,11 @@ describe('SystemSettingsPage', () => {
     expect(
       screen.getByText('This page is the default landing for admin settings and control work, not a missing standalone dashboard. Review overall risk, pending setup, and safe next steps before opening the control center below.'),
     ).toBeInTheDocument();
+    expect(screen.getByTestId('system-settings-visual-boundary')).toHaveTextContent('Separate normal settings from destructive maintenance');
+    expect(screen.getByTestId('system-settings-visual-boundary')).toHaveTextContent('Normal settings workspace');
+    expect(screen.getByTestId('system-settings-visual-boundary')).toHaveTextContent('Danger zone');
+    expect(screen.getByTestId('system-settings-visual-boundary')).toHaveTextContent('Runtime maintenance cleanup controls');
+    expect(screen.getByTestId('system-settings-visual-boundary')).toHaveTextContent('Factory reset and system initialization paths');
     expect(screen.getByText('System control center / summary below')).toBeInTheDocument();
     expect(screen.getByText('Access readiness, schedules, system state, risky actions')).toBeInTheDocument();
     expect(screen.getByText('Access readiness, schedules, system state, and risky actions still need confirmation from the control center snapshot.')).toBeInTheDocument();

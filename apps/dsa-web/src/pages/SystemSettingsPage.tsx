@@ -52,6 +52,25 @@ const SystemSettingsPage: FC = () => {
       l0RecommendedAction: 'Review the system summary first, then open the relevant settings domain.',
       l0EvidenceRef: 'System control center / summary below',
       l0LastUpdated: 'Updates after the snapshot loads',
+      boundaryEyebrow: 'Visual boundary',
+      boundaryTitle: 'Separate normal settings from destructive maintenance',
+      boundaryDescription:
+        'Daily configuration stays in the normal workspace. Destructive maintenance stays grouped in a dedicated secondary danger zone with the existing confirmation chain.',
+      ordinaryZoneTitle: 'Normal settings workspace',
+      ordinaryZoneSummary: 'Use this area for routine configuration and review.',
+      ordinaryZoneItems: [
+        'AI model, route, and notification settings',
+        'Data source setup, system summary, and compatibility checks',
+        'Standard save flow remains separate from maintenance actions',
+      ],
+      dangerZoneTitle: 'Danger zone',
+      dangerZoneSummary: 'High-risk maintenance remains visually isolated before you enter it.',
+      dangerZoneItems: [
+        'Runtime maintenance cleanup controls',
+        'Factory reset and system initialization paths',
+        'Other action-level flows that still require explicit confirmation',
+      ],
+      dangerZoneNote: 'Open this area only when needed; it is not presented as a normal configuration step.',
       loadingTitle: 'Loading system control center',
       loadingBody: 'The top-level risk summary is ready. The latest snapshot and settings workspace are loading below.',
     }
@@ -84,6 +103,25 @@ const SystemSettingsPage: FC = () => {
       l0RecommendedAction: '先看系统运维摘要，再进入相关配置域。',
       l0EvidenceRef: '系统运维中心 / 下方摘要',
       l0LastUpdated: '配置快照加载后更新',
+      boundaryEyebrow: '视觉边界',
+      boundaryTitle: '将常规配置与危险维护动作分开呈现',
+      boundaryDescription:
+        '日常配置保留在常规工作区，缓存清理、系统初始化等高风险维护动作统一归入独立危险操作区，并继续沿用现有确认链路。',
+      ordinaryZoneTitle: '常规配置区',
+      ordinaryZoneSummary: '先在这里处理日常配置与系统检查。',
+      ordinaryZoneItems: [
+        'AI 模型、路由与通知配置',
+        '数据源设置、系统摘要与兼容性检查',
+        '标准保存流程与维护动作保持分离',
+      ],
+      dangerZoneTitle: '危险操作区',
+      dangerZoneSummary: '高风险维护动作在进入前就保持独立的视觉边界。',
+      dangerZoneItems: [
+        '运行态维护清理与维护控制',
+        '工厂重置与系统初始化路径',
+        '其他仍需显式确认的高风险动作',
+      ],
+      dangerZoneNote: '仅在确有需要时进入，不作为日常配置步骤并列展示。',
       loadingTitle: '正在加载系统运维中心',
       loadingBody: '外层风险总览已就绪，最新快照与配置工作区正在下方加载。',
     };
@@ -212,6 +250,65 @@ const SystemSettingsPage: FC = () => {
             />
           ))}
         </div>
+        <section
+          data-testid="system-settings-visual-boundary"
+          className="min-w-0 rounded-2xl border border-white/6 bg-white/[0.02] p-4 md:p-5"
+        >
+          <div className="flex min-w-0 flex-col gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/42">
+              {pageCopy.boundaryEyebrow}
+            </p>
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-white md:text-base">{pageCopy.boundaryTitle}</h2>
+              <p className="mt-2 max-w-4xl text-xs leading-6 text-white/58 md:text-sm">
+                {pageCopy.boundaryDescription}
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
+            <article className="min-w-0 rounded-2xl border border-white/6 bg-black/15 p-4">
+              <div className="flex min-w-0 flex-col gap-2">
+                <div>
+                  <p className="text-xs font-semibold text-white">{pageCopy.ordinaryZoneTitle}</p>
+                  <p className="mt-1 text-xs leading-5 text-white/58">
+                    {pageCopy.ordinaryZoneSummary}
+                  </p>
+                </div>
+                <ul className="space-y-2 text-xs leading-5 text-white/62">
+                  {pageCopy.ordinaryZoneItems.map((item) => (
+                    <li key={item} className="flex min-w-0 items-start gap-2">
+                      <span aria-hidden="true" className="mt-1 size-1.5 shrink-0 rounded-full bg-emerald-300/70" />
+                      <span className="min-w-0">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </article>
+            <article className="min-w-0 rounded-2xl border border-amber-300/20 bg-amber-300/[0.05] p-4">
+              <div className="border-l-2 border-amber-200/70 pl-4">
+                <div className="flex min-w-0 flex-col gap-2">
+                  <div>
+                    <p className="text-xs font-semibold text-amber-100">{pageCopy.dangerZoneTitle}</p>
+                    <p className="mt-1 text-xs leading-5 text-amber-50/75">
+                      {pageCopy.dangerZoneSummary}
+                    </p>
+                  </div>
+                  <ul className="space-y-2 text-xs leading-5 text-white/70">
+                    {pageCopy.dangerZoneItems.map((item) => (
+                      <li key={item} className="flex min-w-0 items-start gap-2">
+                        <span aria-hidden="true" className="mt-1 size-1.5 shrink-0 rounded-full bg-amber-200/80" />
+                        <span className="min-w-0">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="rounded-xl border border-amber-200/15 bg-black/20 px-3 py-2 text-xs leading-5 text-amber-50/78">
+                    {pageCopy.dangerZoneNote}
+                  </p>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
         <Suspense
