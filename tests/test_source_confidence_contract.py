@@ -773,6 +773,48 @@ def test_provider_source_readiness_contract_fails_closed_for_missing_capability_
     assert payload["marketCacheMutation"] is False
 
 
+def test_provider_source_readiness_contract_keeps_capability_and_observed_metadata_separate() -> None:
+    contract = build_provider_source_readiness_contract(
+        {
+            "providerId": "authorized.us_etf_flow",
+            "capability": "us_etf_flow_daily",
+            "sourceType": "missing",
+            "sourceTier": "authorized_licensed_feed",
+            "trustLevel": "score_grade_when_configured",
+            "freshnessExpectation": "licensed_daily_or_delayed_fund_flow",
+            "scoreContributionAllowed": True,
+            "missingProviderReason": "authorized_us_etf_flow_feed_not_configured",
+        },
+        {
+            "source": "licensed_us_etf_flow",
+            "sourceLabel": "Licensed US ETF Flow",
+            "freshness": "fresh",
+            "confidenceWeight": 0.95,
+            "coverage": 1.0,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+        },
+    )
+    payload = contract.to_dict()
+
+    assert payload["providerId"] == "authorized.us_etf_flow"
+    assert payload["source"] == "licensed_us_etf_flow"
+    assert payload["sourceLabel"] == "Licensed US ETF Flow"
+    assert payload["readinessState"] == "blocked_missing_capability_metadata"
+    assert payload["observedFreshness"] == "fresh"
+    assert payload["effectiveFreshness"] == "unknown"
+    assert payload["confidenceWeight"] == 0.0
+    assert payload["capReason"] == "missing_capability_metadata"
+    assert "missing_capability_metadata" in payload["reasonCodes"]
+    assert payload["diagnosticOnly"] is True
+    assert payload["observationOnly"] is True
+    assert payload["authorityGrant"] is False
+    assert payload["scoreContributionAllowed"] is False
+    assert payload["providerRuntimeCalled"] is False
+    assert payload["networkCallsEnabled"] is False
+    assert payload["marketCacheMutation"] is False
+
+
 def test_provider_source_readiness_contract_fails_closed_for_missing_source_confidence() -> None:
     contract = build_provider_source_readiness_contract(
         {
@@ -793,6 +835,45 @@ def test_provider_source_readiness_contract_fails_closed_for_missing_source_conf
     assert payload["coverage"] == 0.0
     assert payload["capReason"] == "missing_source_confidence"
     assert "missing_source_confidence" in payload["reasonCodes"]
+
+
+def test_provider_source_readiness_contract_fails_closed_for_ambiguous_source_freshness() -> None:
+    contract = build_provider_source_readiness_contract(
+        {
+            "providerId": "official.quote_provider",
+            "capability": "quote",
+            "sourceType": "score_grade",
+            "sourceTier": "score_grade",
+            "trustLevel": "score_grade_when_configured",
+            "freshnessExpectation": "intraday_or_better",
+            "scoreContributionAllowed": True,
+        },
+        {
+            "source": "official_quote",
+            "sourceLabel": "Official Quote",
+            "freshness": "ambiguous_liveish",
+            "confidenceWeight": 0.92,
+            "coverage": 1.0,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+        },
+    )
+    payload = contract.to_dict()
+
+    assert payload["readinessState"] == "blocked_missing_source_confidence"
+    assert payload["observedFreshness"] == "unknown"
+    assert payload["effectiveFreshness"] == "unknown"
+    assert payload["confidenceWeight"] == 0.0
+    assert payload["coverage"] == 0.0
+    assert payload["capReason"] == "missing_source_confidence"
+    assert "missing_source_confidence" in payload["reasonCodes"]
+    assert payload["diagnosticOnly"] is True
+    assert payload["observationOnly"] is True
+    assert payload["authorityGrant"] is False
+    assert payload["scoreContributionAllowed"] is False
+    assert payload["providerRuntimeCalled"] is False
+    assert payload["networkCallsEnabled"] is False
+    assert payload["marketCacheMutation"] is False
 
 
 @pytest.mark.parametrize(
@@ -841,6 +922,47 @@ def test_provider_source_readiness_contract_fails_closed_for_non_authority_or_no
     assert payload["scoreContributionAllowed"] is False
     assert payload["authorityGrant"] is False
     assert expected_reason in payload["reasonCodes"]
+
+
+def test_provider_source_readiness_contract_uses_strongest_degraded_state_fail_closed() -> None:
+    contract = build_provider_source_readiness_contract(
+        {
+            "providerId": "official.quote_provider",
+            "capability": "quote",
+            "sourceType": "score_grade",
+            "sourceTier": "score_grade",
+            "trustLevel": "score_grade_when_configured",
+            "freshnessExpectation": "intraday_or_better",
+        },
+        {
+            "source": "official_quote",
+            "sourceLabel": "Official Quote",
+            "freshness": "live",
+            "isFallback": True,
+            "isUnavailable": True,
+            "confidenceWeight": 1.0,
+            "coverage": 1.0,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+        },
+    )
+    payload = contract.to_dict()
+
+    assert payload["readinessState"] == "blocked_unavailable_source"
+    assert payload["observedFreshness"] == "live"
+    assert payload["effectiveFreshness"] == "unavailable"
+    assert payload["effectiveFreshness"] not in {"live", "fresh"}
+    assert payload["confidenceWeight"] == 0.0
+    assert payload["coverage"] == 0.0
+    assert "fallback_source" in payload["reasonCodes"]
+    assert "unavailable_source" in payload["reasonCodes"]
+    assert payload["diagnosticOnly"] is True
+    assert payload["observationOnly"] is True
+    assert payload["authorityGrant"] is False
+    assert payload["scoreContributionAllowed"] is False
+    assert payload["providerRuntimeCalled"] is False
+    assert payload["networkCallsEnabled"] is False
+    assert payload["marketCacheMutation"] is False
 
 
 def test_authorized_index_futures_metadata_contracts_remain_observation_only_and_non_scoring() -> None:
