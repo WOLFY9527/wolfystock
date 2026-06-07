@@ -2,6 +2,17 @@ import type { AnalysisReport } from '../types/analysis';
 
 const EMPTY_FIELD_VALUE = '-';
 const EMPTY_DISPLAY_VALUE = '--';
+const CONSUMER_REPORT_OBSERVATION_FALLBACK = '当前研究包仍不完整，仅支持继续跟踪。';
+const CONSUMER_REPORT_DATA_GAP_FALLBACK = '数据不足，仅支持情景参考。';
+
+const CONSUMER_REPORT_INTERNAL_PATTERN =
+  /reasonCode|reasonCodes|reason_code|reason_codes|reasonFamilies|sourceRefId|sourceRefIds|source_ref_id|source_ref_ids|raw_result|rawResult|raw_ai_response|rawAiResponse|context_snapshot|contextSnapshot|rawPayload|raw_payload|rawRows|provider|backend|debug|diagnostic|diagnostics|trace|schema|cache|payload|prompt|model|fallback_cache|provider_timeout|synthetic_fixture|snake_case|\b[a-z]+(?:_[a-z0-9]+)+\b/i;
+
+const CONSUMER_REPORT_ACTION_PATTERN =
+  /投资结论|理想买点|次级买点|目标价|仓位建议|持仓建议|空仓建议|建议\s*(买入|卖出|加仓|减仓|持有)|买入|卖出|加仓|减仓|建仓|开仓|平仓|止损|止盈|减持|\bAction\b|Ideal buy|Secondary buy|Stop loss|\bTarget\b|Position sizing|Entry strategy|Risk control strategy|holding advice|empty-position advice|empty-position|holding-position|\bbuy\b|\bsell\b|\badd(?:ing)?\b|\breduce\b|\bentry\b|\bexit\b|\bstop(?: loss)?\b|\btarget price\b|\bposition sizing\b/i;
+
+const CONSUMER_REPORT_PRICE_TOKEN_PATTERN =
+  /(?:[$¥€￥]\s*)?\d+(?:,\d{3})*(?:\.\d+)?(?:\s*(?:-|–|—|~|至|到)\s*(?:[$¥€￥]\s*)?\d+(?:,\d{3})*(?:\.\d+)?)?/g;
 
 function normalizeTickerQuery(value?: string): string {
   return String(value || '').trim().toUpperCase();
@@ -21,6 +32,80 @@ export function readObjectField(payload: unknown, path: string[]): unknown {
 function safeReportValue(value: unknown): string {
   const text = String(value ?? '').trim();
   return text && text !== '-' && !/^n\/?a$/i.test(text) ? text : EMPTY_DISPLAY_VALUE;
+}
+
+export function isConsumerInternalReportText(value: unknown): boolean {
+  return CONSUMER_REPORT_INTERNAL_PATTERN.test(String(value ?? ''));
+}
+
+function extractConsumerPriceContext(value: string): string {
+  const matches = value.match(CONSUMER_REPORT_PRICE_TOKEN_PATTERN) || [];
+  return uniqueText(matches.map((item) => item.replace(/\s+/g, ' ').replace(/\s*[-–—~]\s*/g, ' - ').trim())).join(' / ');
+}
+
+export function consumerSafeReportText(
+  value: unknown,
+  fallback = CONSUMER_REPORT_OBSERVATION_FALLBACK,
+): string {
+  const text = safeReportValue(value);
+  if (text === EMPTY_DISPLAY_VALUE) {
+    return text;
+  }
+  if (isConsumerInternalReportText(text)) {
+    return fallback;
+  }
+  if (CONSUMER_REPORT_ACTION_PATTERN.test(text)) {
+    return fallback;
+  }
+  return text;
+}
+
+export function consumerSafeReportPriceContext(
+  value: unknown,
+  fallback = CONSUMER_REPORT_DATA_GAP_FALLBACK,
+): string {
+  const text = safeReportValue(value);
+  if (text === EMPTY_DISPLAY_VALUE) {
+    return text;
+  }
+  if (isConsumerInternalReportText(text)) {
+    return fallback;
+  }
+  if (!CONSUMER_REPORT_ACTION_PATTERN.test(text)) {
+    return text;
+  }
+  const priceContext = extractConsumerPriceContext(text);
+  return priceContext || fallback;
+}
+
+export function consumerSafeReportLabel(value: unknown, fallback = '情景参考'): string {
+  const label = String(value ?? '').trim();
+  if (!label || isConsumerInternalReportText(label)) {
+    return '';
+  }
+  if (/投资结论|Investment Thesis|\bAction\b|动作|操作建议|结论/i.test(label)) {
+    return '研究包完整度';
+  }
+  if (/理想|次级|买点|buy|entry|support|resistance|target|目标|支撑|压力/i.test(label)) {
+    return '关键价格区间';
+  }
+  if (/止损|止盈|stop|risk|风险|仓位|position|持仓|空仓/i.test(label)) {
+    return '风险边界';
+  }
+  if (/strategy|plan|reminder|condition|建仓|加仓|入场|执行|条件/i.test(label)) {
+    return '继续跟踪';
+  }
+  return CONSUMER_REPORT_ACTION_PATTERN.test(label) ? fallback : label;
+}
+
+export function consumerSafeReportStatus(value: unknown): string {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'used' || normalized === 'available' || normalized === 'ready') return '可用';
+  if (normalized === 'fallback' || normalized === 'stale' || normalized === 'cached') return '已使用最近一次可用数据';
+  if (normalized === 'partial' || normalized === 'degraded') return '部分数据暂不可用';
+  if (normalized === 'missing' || normalized === 'error' || normalized === 'unavailable') return '数据不足';
+  if (normalized === 'unknown' || !normalized) return '状态待确认';
+  return consumerSafeReportText(value, '状态待确认') || '状态待确认';
 }
 
 function isPlaceholderName(value: string): boolean {
@@ -191,14 +276,6 @@ function conciseField(record: Record<string, unknown> | undefined, keys: string[
   return conciseText(readRecordField(record, keys));
 }
 
-function conciseList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return uniqueText(value.flatMap((item) => { const t = conciseText(item); return t ? [t] : []; }));
-  }
-  const text = conciseText(value);
-  return text ? [text] : [];
-}
-
 function findStockEvidencePacket(report: AnalysisReport | null): Record<string, unknown> | undefined {
   const direct = firstRecordValue(report, [
     ['stockEvidencePacket'],
@@ -226,53 +303,36 @@ function findStockEvidencePacket(report: AnalysisReport | null): Record<string, 
 function formatEvidenceGap(item: unknown): string | null {
   const record = asRecord(item);
   if (!record) {
-    return conciseText(item);
+    return consumerSafeReportText(item, '');
   }
-  const label = uniqueText([
-    conciseField(record, ['evidenceClass', 'evidence_class', 'surface', 'key', 'label']),
-    conciseField(record, ['reasonCode', 'reason_code', 'reason']),
-  ]).join(' / ');
-  const detail = conciseField(record, ['detail', 'message', 'summary', 'status']);
-  if (label && detail) {
-    return `${label} - ${detail}`;
-  }
-  return label || detail;
+  const detail = consumerSafeReportText(conciseField(record, ['detail', 'message', 'summary', 'status']), '');
+  return detail || '数据不足，需继续跟踪。';
 }
 
 function formatClaimBoundary(item: unknown): string | null {
   const record = asRecord(item);
   if (!record) {
-    return conciseText(item);
+    return consumerSafeReportText(item, '');
   }
-  const claim = conciseField(record, ['claim', 'key', 'label']);
   const allowed = readRecordField(record, ['allowed']);
-  const state = typeof allowed === 'boolean' ? (allowed ? 'allowed' : 'blocked') : conciseField(record, ['status', 'state']);
-  const reason = conciseField(record, ['reasonCode', 'reason_code', 'reason']);
-  const detail = conciseField(record, ['detail', 'message', 'summary']);
-  const claimState = uniqueText([claim, state]).join(' ');
-  const head = uniqueText([claimState, reason]).join(' / ');
-  if (head && detail) {
-    return `${head} - ${detail}`;
+  const detail = consumerSafeReportText(conciseField(record, ['detail', 'message', 'summary']), '');
+  if (detail) {
+    return detail;
   }
-  return head || detail;
+  if (allowed === false) {
+    return '风险边界已收敛为观察说明。';
+  }
+  return '情景参考边界已标注。';
 }
 
 function formatSourceRef(item: unknown): string | null {
   const record = asRecord(item);
   if (!record) {
-    return conciseText(item);
+    return consumerSafeReportText(item, '');
   }
-  const parts = uniqueText([
-    conciseField(record, ['sourceRefId', 'source_ref_id', 'id']),
-    conciseField(record, ['provider', 'providerId', 'provider_id']),
-    conciseField(record, ['status']),
-    conciseField(record, ['freshness', 'freshnessClass', 'freshness_class']),
-  ]);
-  const observationOnly = readRecordField(record, ['observationOnly', 'observation_only']);
-  if (observationOnly === true) {
-    parts.push('observation-only');
-  }
-  return parts.join(' / ') || null;
+  const status = consumerSafeReportStatus(readRecordField(record, ['status']));
+  const freshness = consumerSafeReportStatus(readRecordField(record, ['freshness', 'freshnessClass', 'freshness_class']));
+  return uniqueText([status, freshness]).join(' / ') || null;
 }
 
 function evidenceClasses(items: unknown[]): string[] {
@@ -290,11 +350,6 @@ function buildEvidenceBoundaryLines(report: AnalysisReport | null): string[] {
   const confidenceCap = readRecordField(packet, ['confidenceCap', 'confidence_cap']);
   const confidenceCapRecord = asRecord(confidenceCap);
   const confidenceCapValue = conciseText(confidenceCapRecord?.value) || conciseText(confidenceCap) || conciseText(dataQualityReport?.confidenceCap);
-  const capReasons = uniqueText([
-    ...conciseList(confidenceCapRecord?.reasonCodes),
-    ...conciseList(confidenceCapRecord?.reason_codes),
-    ...conciseList(dataQualityReport?.reasonCodes),
-  ]);
   const thesisEligibility = asRecord(readRecordField(packet, ['thesisEligibility', 'thesis_eligibility']));
   const sourceRefs = asArray(readRecordField(packet, ['sourceRefs', 'source_refs']));
   const scoreEligibleEvidence = asArray(readRecordField(packet, ['scoreEligibleEvidence', 'score_eligible_evidence']));
@@ -302,56 +357,53 @@ function buildEvidenceBoundaryLines(report: AnalysisReport | null): string[] {
   const lines: string[] = [];
 
   const notInvestmentAdvice = readRecordField(packet, ['notInvestmentAdvice', 'not_investment_advice']);
-  if (typeof notInvestmentAdvice === 'boolean') {
-    lines.push(`- Not investment advice: ${notInvestmentAdvice}`);
+  if (notInvestmentAdvice === true) {
+    lines.push('- 继续跟踪: 本报告仅支持观察和研究记录。');
   }
   if (confidenceCapValue) {
-    lines.push(`- Confidence cap: ${confidenceCapValue}`);
-  }
-  if (capReasons.length) {
-    lines.push(`- Cap reasons: ${capReasons.slice(0, 5).join(', ')}`);
+    lines.push(`- 研究包完整度: ${confidenceCapValue}`);
   }
 
   const confidenceLabel = conciseField(packet, ['confidenceLabel', 'confidence_label']);
   if (confidenceLabel) {
-    lines.push(`- Packet confidence: ${confidenceLabel}`);
+    lines.push(`- 情景参考: ${consumerSafeReportText(confidenceLabel, '数据不足')}`);
   }
   const promptSummary = conciseField(packet, ['promptSummary', 'prompt_summary']);
   if (promptSummary) {
-    lines.push(`- Packet summary: ${promptSummary}`);
+    lines.push(`- 研究摘要: ${consumerSafeReportText(promptSummary, CONSUMER_REPORT_OBSERVATION_FALLBACK)}`);
   }
   const thesisStatus = conciseField(thesisEligibility, ['status']);
   if (thesisStatus) {
-    lines.push(`- Thesis eligibility: ${thesisStatus}`);
+    lines.push(`- 数据不足: ${consumerSafeReportStatus(thesisStatus)}`);
   }
 
   const dataGapLines = asArray(readRecordField(packet, ['dataGaps', 'data_gaps']))
     .map(formatEvidenceGap)
     .filter((item): item is string => Boolean(item))
     .slice(0, 5);
-  dataGapLines.forEach((item) => lines.push(`- Data gap: ${item}`));
+  dataGapLines.forEach((item) => lines.push(`- 数据不足: ${item}`));
 
   const boundaryLines = asArray(readRecordField(packet, ['claimBoundaries', 'claim_boundaries']))
     .map(formatClaimBoundary)
     .filter((item): item is string => Boolean(item))
     .slice(0, 5);
-  boundaryLines.forEach((item) => lines.push(`- Boundary: ${item}`));
+  boundaryLines.forEach((item) => lines.push(`- 风险边界: ${item}`));
 
   if (sourceRefs.length || scoreEligibleEvidence.length || observationOnlyEvidence.length) {
-    lines.push(`- Source refs: ${sourceRefs.length} total; ${scoreEligibleEvidence.length} score-eligible; ${observationOnlyEvidence.length} observation-only`);
+    lines.push(`- 情景参考: 已折叠 ${sourceRefs.length} 条研究线索，未导出原始引用。`);
   }
   sourceRefs
     .map(formatSourceRef)
     .filter((item): item is string => Boolean(item))
     .slice(0, 5)
-    .forEach((item) => lines.push(`- Source: ${item}`));
+    .forEach((item) => lines.push(`- 研究包状态: ${item}`));
 
   const observationClasses = evidenceClasses(observationOnlyEvidence);
   if (observationClasses.length) {
-    lines.push(`- Observation-only evidence: ${observationClasses.slice(0, 5).join(', ')}`);
+    lines.push(`- 继续跟踪: ${observationClasses.length} 类证据仅作观察背景。`);
   }
 
-  return lines.length ? ['## 证据边界 / Evidence Boundaries', ...lines, ''] : [];
+  return lines.length ? ['## 研究包完整度 / Research Packet Completeness', ...lines, ''] : [];
 }
 
 const REPORT_DATE_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
@@ -406,56 +458,78 @@ export function buildInstitutionalReportMarkdown(
       const label = String(item.label || '').toLowerCase();
       return loweredAliases.some((alias) => label.includes(alias));
     });
-    return safeReportValue(field?.value);
+    return consumerSafeReportText(field?.value, EMPTY_DISPLAY_VALUE);
+  };
+  const priceFieldValue = (fields: Array<{ label?: string; value?: unknown }> | undefined, aliases: string[]) => {
+    const loweredAliases = aliases.map((alias) => alias.toLowerCase());
+    const field = fields?.find((item) => {
+      const label = String(item.label || '').toLowerCase();
+      return loweredAliases.some((alias) => label.includes(alias));
+    });
+    return consumerSafeReportPriceContext(field?.value, EMPTY_DISPLAY_VALUE);
   };
   const generatedAt = override?.generatedAt || report?.meta.reportGeneratedAt || report?.meta.createdAt;
   const dataSources = report?.decisionTrace?.dataSources || [];
   const dataStatus = [
-    ...new Set(dataSources.flatMap((source) => source.status ? [source.status] : [])),
+    ...new Set(dataSources.flatMap((source) => source.status ? [consumerSafeReportStatus(source.status)] : [])),
   ].join(' / ') || EMPTY_DISPLAY_VALUE;
-  const alphaVantage = readObjectField(report, ['details', 'rawResult', 'dashboard', 'data_perspective', 'alpha_vantage']);
-  const alphaEntries = alphaVantage && typeof alphaVantage === 'object'
-    ? Object.entries(alphaVantage as Record<string, unknown>).map(([key, value]) => `- ${key}: ${safeReportValue(value)}`)
-    : [];
   const battleCards = standardReport?.battlePlanCompact?.cards || [];
   const battleNotes = standardReport?.battlePlanCompact?.notes || [];
   const evidenceBoundaryLines = buildEvidenceBoundaryLines(report);
   const compactList = (items?: Array<string | undefined | null>, fallback = '- 数据缺失') => {
-    const values = uniqueText(items || []);
+    const values = uniqueText((items || [])
+      .map((item) => consumerSafeReportText(item, ''))
+      .filter(Boolean));
     return values.length ? values.map((item) => `- ${item}`) : [fallback];
   };
+  const safeFieldLines = (fields: Array<{ label?: string; value?: unknown }> | undefined, fallback = '- 数据缺失') => {
+    const values = (fields || []).flatMap((field) => {
+      const label = consumerSafeReportLabel(field.label);
+      if (!label) return [];
+      const value = label === '关键价格区间' || label === '风险边界'
+        ? consumerSafeReportPriceContext(field.value, CONSUMER_REPORT_DATA_GAP_FALLBACK)
+        : consumerSafeReportText(field.value, CONSUMER_REPORT_DATA_GAP_FALLBACK);
+      return value ? [`- ${label}: ${value}`] : [];
+    });
+    return values.length ? values : [fallback];
+  };
+  const checklistLines = (standardReport?.checklistItems || [])
+    .flatMap((item) => {
+      const text = consumerSafeReportText(item.text, '研究包完整度待复核。');
+      return text ? [`- [${consumerSafeReportText(item.status, 'UNKNOWN')}] ${text}`] : [];
+    });
 
   return [
     `# Wolfy AI Equity Research: ${companyWithTicker}`,
     '',
-    `- Action: ${safeReportValue(summaryPanel?.operationAdvice || report?.summary.operationAdvice)}`,
+    `- 研究状态: ${consumerSafeReportText(summaryPanel?.operationAdvice || report?.summary.operationAdvice, '继续跟踪')}`,
     `- Score: ${safeReportValue(summaryPanel?.score ?? report?.summary.sentimentScore)} / 100`,
-    `- Confidence: ${safeReportValue(decisionPanel?.confidence || report?.decisionTrace?.decisionFields?.confidence?.value)}`,
+    `- Confidence: ${consumerSafeReportText(decisionPanel?.confidence || report?.decisionTrace?.decisionFields?.confidence?.value, '数据不足')}`,
     `- Report generated: ${formatReportDateTime(generatedAt)}`,
     `- Market: ${safeReportValue(report?.decisionTrace?.market)}`,
     `- Currency: ${safeReportValue(readObjectField(standardReport, ['summaryPanel', 'currency']) || readObjectField(standardReport, ['market', 'currency']))}`,
-    `- Data status: ${dataStatus}`,
-    `- Time horizon: ${safeReportValue(summaryPanel?.timeSensitivity || decisionPanel?.marketStructure)}`,
+    `- 研究包状态: ${dataStatus}`,
+    `- Time horizon: ${consumerSafeReportText(summaryPanel?.timeSensitivity || decisionPanel?.marketStructure, '情景参考')}`,
     '',
     'AI 洞察仅供参考，不构成投资建议。',
     '',
-    '## 投资结论 / Investment Thesis',
-    `- 动作: ${safeReportValue(summaryPanel?.operationAdvice || report?.summary.operationAdvice)}`,
+    '## 研究包完整度 / Research Packet Completeness',
+    `- 继续跟踪: ${consumerSafeReportText(summaryPanel?.operationAdvice || report?.summary.operationAdvice, '继续跟踪')}`,
     `- 评分: ${safeReportValue(summaryPanel?.score ?? report?.summary.sentimentScore)}`,
-    `- 趋势/结构: ${safeReportValue(decisionPanel?.marketStructure || summaryPanel?.trendPrediction || report?.summary.trendPrediction)}`,
-    `- 一句话判断: ${safeReportValue(summaryPanel?.oneSentence || report?.summary.analysisSummary)}`,
-    `- 关键理由: ${safeReportValue(reasonLayer?.coreReasons?.[0] || reasonLayer?.latestKeyUpdate)}`,
+    `- 情景参考: ${consumerSafeReportText(decisionPanel?.marketStructure || summaryPanel?.trendPrediction || report?.summary.trendPrediction, '情景参考')}`,
+    `- 研究摘要: ${consumerSafeReportText(summaryPanel?.oneSentence || report?.summary.analysisSummary, CONSUMER_REPORT_OBSERVATION_FALLBACK)}`,
+    `- 关键理由: ${consumerSafeReportText(reasonLayer?.coreReasons?.[0] || reasonLayer?.latestKeyUpdate, '价格与证据仍需继续跟踪。')}`,
     '',
     '## 重要信息速览 / Important Brief',
-    `- 舆情情绪: ${safeReportValue(highlights?.sentimentSummary || reasonLayer?.sentimentSummary || fieldValue(sentimentFields, ['sentiment', '舆情', '情绪']) || report?.summary.sentimentLabel)}`,
-    `- 业绩预期: ${safeReportValue(highlights?.earningsOutlook || fieldValue(earningsFields, ['earnings', '业绩', 'eps']))}`,
+    `- 舆情情绪: ${consumerSafeReportText(highlights?.sentimentSummary || reasonLayer?.sentimentSummary || fieldValue(sentimentFields, ['sentiment', '舆情', '情绪']) || report?.summary.sentimentLabel, '数据不足')}`,
+    `- 业绩预期: ${consumerSafeReportText(highlights?.earningsOutlook || fieldValue(earningsFields, ['earnings', '业绩', 'eps']), '数据不足')}`,
     ...compactList(highlights?.latestNews || [reasonLayer?.latestKeyUpdate], '- 最新动态: 数据缺失'),
     '',
-    '## 风险警报 / Risk Alerts',
-    ...compactList([reasonLayer?.topRisk, ...(highlights?.riskAlerts || []), ...(highlights?.bearishFactors || [])]),
+    '## 风险边界 / Risk Boundaries',
+    ...compactList([reasonLayer?.topRisk, ...(highlights?.riskAlerts || []), ...(highlights?.bearishFactors || [])], '- 风险边界: 暂无明确风险条目'),
     '',
-    '## 利好催化 / Positive Catalysts',
-    ...compactList([reasonLayer?.topCatalyst, ...(highlights?.positiveCatalysts || []), ...(highlights?.bullishFactors || [])]),
+    '## 情景参考 / Scenario Context',
+    ...compactList([reasonLayer?.topCatalyst, ...(highlights?.positiveCatalysts || []), ...(highlights?.bullishFactors || [])], '- 情景参考: 数据不足'),
     '',
     '## 当日行情 / Market Snapshot',
     `- Open: ${fieldValue(marketFields, ['open', '开盘'])}`,
@@ -473,34 +547,34 @@ export function buildInstitutionalReportMarkdown(
     `- MA10: ${fieldValue(technicalFields, ['MA10', '10日'])}`,
     `- MA20: ${fieldValue(technicalFields, ['MA20', '20日'])}`,
     `- MA60: ${fieldValue(technicalFields, ['MA60', '60日'])}`,
-    `- Support: ${safeReportValue(decisionPanel?.support || decisionPanel?.idealEntry || report?.strategy?.idealBuy)}`,
-    `- Resistance: ${safeReportValue(decisionPanel?.resistance || decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit)}`,
-    ...(alphaEntries.length ? alphaEntries : ['- Alpha Vantage indicators: 数据缺失']),
+    `- 关键价格区间: ${consumerSafeReportPriceContext(decisionPanel?.support || decisionPanel?.idealEntry || report?.strategy?.idealBuy || priceFieldValue(battleFields, ['ideal', '理想']), '数据不足')}`,
+    `- 情景参考: ${consumerSafeReportPriceContext(decisionPanel?.resistance || decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit || priceFieldValue(battleFields, ['target', '目标']), '数据不足')}`,
     '',
     '## 技术透视 / Technical View',
-    ...(technicalFields.length ? technicalFields.map((field) => `- ${field.label}: ${safeReportValue(field.value)}`) : ['- 数据缺失']),
+    ...safeFieldLines(technicalFields),
     '',
     '## 基本面摘要 / Fundamental Snapshot',
-    ...(fundamentalFields.length ? fundamentalFields.map((field) => `- ${field.label}: ${safeReportValue(field.value)}`) : ['- 数据缺失']),
+    ...safeFieldLines(fundamentalFields),
     '',
-    '## 观察计划 / Observation Plan',
-    `- Ideal buy: ${safeReportValue(decisionPanel?.idealEntry || report?.strategy?.idealBuy || fieldValue(battleFields, ['ideal', '理想']))}`,
-    `- Secondary buy: ${safeReportValue(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy || fieldValue(battleFields, ['secondary', '次级']))}`,
-    `- Stop loss: ${safeReportValue(decisionPanel?.stopLoss || report?.strategy?.stopLoss || fieldValue(battleFields, ['stop', '止损']))}`,
-    `- Target: ${safeReportValue(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit || fieldValue(battleFields, ['target', '目标']))}`,
-    `- Position sizing: ${safeReportValue(decisionPanel?.positionSizing || battleCards.find((item) => /position|仓位/i.test(item.label))?.value)}`,
-    `- Entry strategy: ${safeReportValue(decisionPanel?.buildStrategy || battleNotes.find((item) => /entry|建仓|入场/i.test(item.label))?.value)}`,
-    `- Risk control strategy: ${safeReportValue(decisionPanel?.riskControlStrategy || decisionPanel?.stopReason)}`,
-    `- Empty-position advice: ${safeReportValue(decisionPanel?.noPositionAdvice)}`,
-    `- Holding-position advice: ${safeReportValue(decisionPanel?.holderAdvice)}`,
-    ...(decisionPanel?.executionReminders?.length ? decisionPanel.executionReminders.map((item) => `- ${item}`) : []),
+    '## 继续跟踪 / Observation Plan',
+    `- 关键价格区间: ${consumerSafeReportPriceContext(decisionPanel?.idealEntry || report?.strategy?.idealBuy || priceFieldValue(battleFields, ['ideal', '理想']), '数据不足')}`,
+    `- 情景参考: ${consumerSafeReportPriceContext(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy || priceFieldValue(battleFields, ['secondary', '次级']), '数据不足')}`,
+    `- 风险边界: ${consumerSafeReportPriceContext(decisionPanel?.stopLoss || report?.strategy?.stopLoss || priceFieldValue(battleFields, ['stop', '止损']), '数据不足')}`,
+    `- 关键价格区间: ${consumerSafeReportPriceContext(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit || priceFieldValue(battleFields, ['target', '目标']), '数据不足')}`,
+    `- 风险边界: ${consumerSafeReportText(decisionPanel?.positionSizing || battleCards.find((item) => /position|仓位/i.test(item.label))?.value, '风险边界仅作情景约束。')}`,
+    `- 继续跟踪: ${consumerSafeReportText(decisionPanel?.buildStrategy || battleNotes.find((item) => /entry|建仓|入场/i.test(item.label))?.value, '继续跟踪，等待研究包补齐。')}`,
+    `- 风险边界: ${consumerSafeReportText(decisionPanel?.riskControlStrategy || decisionPanel?.stopReason, '风险边界用于说明不确定性。')}`,
+    `- 数据不足: ${consumerSafeReportText(decisionPanel?.noPositionAdvice, '数据不足，仅支持继续跟踪。')}`,
+    `- 继续跟踪: ${consumerSafeReportText(decisionPanel?.holderAdvice, '继续跟踪，不输出配置建议。')}`,
+    ...(decisionPanel?.executionReminders?.length ? compactList(decisionPanel.executionReminders, '- 继续跟踪: 暂无额外提醒') : []),
     '',
-    '## 检查清单 / Decision Checklist',
-    ...(standardReport?.checklistItems?.length ? standardReport.checklistItems.map((item) => `- [${item.status}] ${item.text}`) : ['- [UNKNOWN] 数据覆盖待确认']),
+    '## 研究清单 / Research Checklist',
+    ...(checklistLines.length ? checklistLines : ['- [UNKNOWN] 数据覆盖待确认']),
     '',
     ...evidenceBoundaryLines,
     '## 数据说明 / Data Notes',
-    ...(coverageNotes?.dataSources?.length ? coverageNotes.dataSources.map((item) => `- ${item}`) : ['- 数据源未完整标注']),
-    ...(coverageNotes?.coverageGaps?.length ? coverageNotes.coverageGaps.map((item) => `- ${item}`) : ['- 缺失字段会以 -- 展示']),
+    ...(coverageNotes?.coverageGaps?.length ? compactList(coverageNotes.coverageGaps, '- 缺失字段会以 -- 展示') : ['- 缺失字段会以 -- 展示']),
+    ...(coverageNotes?.conflictNotes?.length ? compactList(coverageNotes.conflictNotes, '- 暂无额外冲突说明') : []),
+    ...(coverageNotes?.methodNotes?.length ? compactList(coverageNotes.methodNotes, '- AI 洞察仅供参考，不构成投资建议。') : []),
   ].join('\n');
 }

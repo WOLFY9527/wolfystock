@@ -1095,17 +1095,17 @@ describe('HomeSurfacePage', () => {
 
     const report = await screen.findByTestId('home-bento-full-report-drawer');
     [
-      '投资结论',
+      '研究包完整度',
       '重要信息速览',
-      '风险警报',
-      '利好催化',
+      '风险边界',
+      '情景参考',
       '当日行情',
       '数据透视',
       '技术透视',
       '基本面摘要',
-      '观察计划',
-      '检查清单',
-      '来源',
+      '继续跟踪',
+      '研究清单',
+      '研究包说明',
     ].forEach((sectionTitle) => {
       expect(within(report).getAllByText(sectionTitle).length).toBeGreaterThan(0);
     });
@@ -1117,7 +1117,8 @@ describe('HomeSurfacePage', () => {
 
     fireEvent.click(within(report).getByRole('button', { name: '复制报告' }));
     await waitFor(() => expect(writeText).toHaveBeenCalled());
-    expect(String(writeText.mock.calls[0][0])).toContain('投资结论');
+    expect(String(writeText.mock.calls[0][0])).toContain('研究包完整度');
+    expect(String(writeText.mock.calls[0][0])).not.toMatch(/投资结论|Ideal buy|Stop loss|Position sizing|reasonCode|sourceRefId|raw_result|raw_ai_response|context_snapshot/i);
   });
 
   it('builds markdown export with company identity and disclaimer', () => {
@@ -1140,13 +1141,13 @@ describe('HomeSurfacePage', () => {
 
     expect(markdown).toContain('# Wolfy AI Equity Research: Tempus AI (TEM)');
     expect(markdown).toContain('AI 洞察仅供参考，不构成投资建议。');
-    expect(markdown).toContain('## 投资结论 / Investment Thesis');
+    expect(markdown).toContain('## 研究包完整度 / Research Packet Completeness');
     expect(markdown).toContain('## 重要信息速览 / Important Brief');
     expect(markdown).toContain('## 当日行情 / Market Snapshot');
     expect(markdown).toContain('## 数据透视 / Data Lens');
-    expect(markdown).toContain('## 观察计划 / Observation Plan');
+    expect(markdown).toContain('## 继续跟踪 / Observation Plan');
     expect(markdown).toContain('## 数据说明 / Data Notes');
-    expect(markdown).toContain('- Data status: used / fallback / missing');
+    expect(markdown).toContain('- 研究包状态: 可用 / 已使用最近一次可用数据 / 数据不足');
     expect(markdown).not.toContain('- Data providers:');
     expect(markdown).not.toContain('Finnhub, Finnhub');
   });
@@ -1238,20 +1239,19 @@ describe('HomeSurfacePage', () => {
 
     const markdown = buildInstitutionalReportMarkdown(reportWithEvidenceBoundaries);
 
-    expect(markdown).toContain('## 证据边界 / Evidence Boundaries');
-    expect(markdown).toContain('- Not investment advice: true');
-    expect(markdown).toContain('- Confidence cap: 55');
-    expect(markdown).toContain('- Cap reasons: weak_or_fallback_provider_evidence');
-    expect(markdown).toContain('- Packet confidence: low');
-    expect(markdown).toContain('- Packet summary: ORCL evidence packet: quote=available; confidence_cap=55; thesis_eligibility=caution.');
-    expect(markdown).toContain('- Thesis eligibility: caution');
-    expect(markdown).toContain('- Data gap: news / news_unknown_or_placeholder - News is unknown, missing, weak, or placeholder.');
-    expect(markdown).toContain('- Boundary: price_is_live blocked / quote_freshness_not_proven - Quote freshness is not proven.');
-    expect(markdown).toContain('- Source refs: 2 total; 1 score-eligible; 1 observation-only');
-    expect(markdown).toContain('- Source: quote:fallback_cache / fallback_cache / available / stale');
-    expect(markdown).toContain('- Observation-only evidence: sec_filing_evidence');
+    expect(markdown).toContain('## 研究包完整度 / Research Packet Completeness');
+    expect(markdown).toContain('- 继续跟踪: 本报告仅支持观察和研究记录。');
+    expect(markdown).toContain('- 研究包完整度: 55');
+    expect(markdown).toContain('- 情景参考: low');
+    expect(markdown).toContain('- 数据不足: caution');
+    expect(markdown).toContain('- 数据不足: News is unknown, missing, weak, or placeholder.');
+    expect(markdown).toContain('- 风险边界: Quote freshness is not proven.');
+    expect(markdown).toContain('- 情景参考: 已折叠 2 条研究线索，未导出原始引用。');
+    expect(markdown).toContain('- 研究包状态: 可用 / 已使用最近一次可用数据');
+    expect(markdown).toContain('- 继续跟踪: 1 类证据仅作观察背景。');
     expect(markdown).not.toContain('must-not-export-raw-result');
     expect(markdown).not.toContain('must-not-export-raw-packet');
+    expect(markdown).not.toMatch(/reasonCode|sourceRefId|fallback_cache|weak_or_fallback_provider_evidence|quote_freshness_not_proven|sec_observation_only_non_scoring|confidence_cap|thesis_eligibility/i);
   });
 
   it('uses ticker-only fallback for placeholder or duplicated company identities', () => {
@@ -1388,7 +1388,7 @@ describe('HomeSurfacePage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '完整报告' }));
     const report = await screen.findByTestId('home-bento-full-report-drawer');
-    expect(within(report).getAllByText('投资结论').length).toBeGreaterThan(0);
+    expect(within(report).getAllByText('研究包完整度').length).toBeGreaterThan(0);
     expect(within(report).getByText('AMD 完整报告正文仍然保留专业章节。')).toBeInTheDocument();
 
     await closeOpenDrawer();
@@ -1515,7 +1515,7 @@ describe('HomeSurfacePage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '完整报告' }));
     const report = await screen.findByTestId('home-bento-full-report-drawer');
-    expect(within(report).getAllByText('投资结论').length).toBeGreaterThan(0);
+    expect(within(report).getAllByText('研究包完整度').length).toBeGreaterThan(0);
     expect(within(report).getByText('短线技术偏弱，但基本面仍有支撑，综合建议以观望为主。')).toBeInTheDocument();
 
     await closeOpenDrawer();
@@ -2011,7 +2011,7 @@ describe('HomeSurfacePage', () => {
 
     const report = await screen.findByTestId('home-bento-full-report-drawer');
     expect(screen.getByRole('dialog')).toHaveTextContent('完整报告');
-    expect(within(report).getAllByText('投资结论').length).toBeGreaterThan(0);
+    expect(within(report).getAllByText('研究包完整度').length).toBeGreaterThan(0);
     expect(within(report).getByText('Tempus AI (TEM)')).toBeInTheDocument();
     expect(within(report).getByText('AI 洞察仅供参考，不构成投资建议。')).toBeInTheDocument();
   });
@@ -2228,7 +2228,7 @@ describe('HomeSurfacePage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '完整报告' }));
     const report = await screen.findByTestId('home-bento-full-report-drawer');
-    expect(within(report).getAllByText('投资结论').length).toBeGreaterThan(0);
+    expect(within(report).getAllByText('研究包完整度').length).toBeGreaterThan(0);
 
     await closeOpenDrawer();
     fireEvent.click(screen.getByRole('button', { name: '决策来源' }));

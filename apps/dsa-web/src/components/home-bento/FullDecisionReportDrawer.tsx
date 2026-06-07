@@ -10,6 +10,9 @@ import type {
 } from '../../types/analysis';
 import {
   buildInstitutionalReportMarkdown,
+  consumerSafeReportPriceContext,
+  consumerSafeReportStatus,
+  consumerSafeReportText,
   getCompanyDisplayName,
   getCompanyWithTicker,
   getSymbolDisplay,
@@ -101,18 +104,29 @@ function findStandardField(fields: StandardReportField[] | undefined, aliases: s
 
 function fieldValue(fields: StandardReportField[] | undefined, aliases: string[]): string {
   const field = findStandardField(fields, aliases);
-  return field ? safeReportValue(field.value) : '';
+  return field ? consumerSafeReportText(field.value, '--') : '';
+}
+
+function priceFieldValue(fields: StandardReportField[] | undefined, aliases: string[]): string {
+  const field = findStandardField(fields, aliases);
+  return field ? consumerSafeReportPriceContext(field.value, '--') : '';
 }
 
 function getReportSource(report: AnalysisReport | null): StandardReport | undefined {
   return report?.details?.standardReport;
 }
 
-function listOrMissing(items?: Array<string | undefined | null>, fallback = '暂无明确记录'): string[] {
+function listOrMissing(
+  items?: Array<string | undefined | null>,
+  fallback = '暂无明确记录',
+  mode: 'text' | 'price' = 'text',
+): string[] {
   const seen = new Set<string>();
   const values: string[] = [];
   for (const raw of items || []) {
-    const item = String(raw || '').trim();
+    const item = mode === 'price'
+      ? consumerSafeReportPriceContext(raw, '')
+      : consumerSafeReportText(raw, '');
     if (!item) continue;
     const key = item.toLowerCase();
     if (seen.has(key)) continue;
@@ -124,7 +138,7 @@ function listOrMissing(items?: Array<string | undefined | null>, fallback = '暂
 
 function normalizeChecklistStatus(item: StandardReportChecklistItem | string): { label: string; status: string } {
   if (typeof item === 'string') {
-    return { label: item, status: '未知' };
+    return { label: consumerSafeReportText(item, '研究包完整度待复核。'), status: '未知' };
   }
   const status = String(item.status || '').toLowerCase();
   const normalized = status === 'pass'
@@ -136,7 +150,7 @@ function normalizeChecklistStatus(item: StandardReportChecklistItem | string): {
         : status === 'na'
           ? 'N/A'
           : '未知';
-  return { label: item.text || '--', status: normalized };
+  return { label: consumerSafeReportText(item.text, '研究包完整度待复核。'), status: normalized };
 }
 
 function formatReportDateTime(value?: string): string {
@@ -175,14 +189,7 @@ function buildReportIdentity(report: AnalysisReport | null, dashboard?: Dashboar
   const sourceStatus = statuses.length
     ? statuses.map((status) => {
       const normalized = String(status || '').trim().toLowerCase();
-      if (normalized === 'used' || normalized === 'available') return '可用';
-      if (normalized === 'fallback') return '备用';
-      if (normalized === 'stale') return '陈旧';
-      if (normalized === 'missing') return '缺失';
-      if (normalized === 'partial') return '部分可用';
-      if (normalized === 'error') return '异常';
-      if (normalized === 'unknown' || !normalized) return '未知';
-      return status || '未知';
+      return consumerSafeReportStatus(normalized);
     }).join(' / ')
     : '数据覆盖未确认';
 
@@ -218,47 +225,43 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
   const battleFields = standardReport?.battleFields || [];
   const coverageNotes = standardReport?.coverageNotes;
   const checklistItems = (standardReport?.checklistItems || standardReport?.checklist || []).map(normalizeChecklistStatus);
-  const alphaVantage = readObjectField(report, ['details', 'rawResult', 'dashboard', 'data_perspective', 'alpha_vantage']);
-  const alphaRows = alphaVantage && typeof alphaVantage === 'object'
-    ? Object.entries(alphaVantage as Record<string, unknown>).map(([label, value]) => ({ label, value: safeReportValue(value) }))
-    : [];
   const battleCards = standardReport?.battlePlanCompact?.cards || [];
   const battleNotes = standardReport?.battlePlanCompact?.notes || [];
 
   return [
     {
       id: 'summary',
-      title: '投资结论',
+      title: '研究包完整度',
       rows: [
-        { label: '分析状态', value: safeReportValue(summaryPanel?.operationAdvice || report?.summary.operationAdvice || dashboard.decision.signalLabel) },
+        { label: '继续跟踪', value: consumerSafeReportText(summaryPanel?.operationAdvice || report?.summary.operationAdvice || dashboard.decision.signalLabel, '继续跟踪') },
         { label: '评分', value: safeReportValue(summaryPanel?.score ?? dashboard.decision.heroValue) },
-        { label: '趋势/结构', value: safeReportValue(decisionPanel?.marketStructure || summaryPanel?.trendPrediction || report?.summary.trendPrediction || dashboard.decision.scoreValue) },
-        { label: '一句话判断', value: safeReportValue(summaryPanel?.oneSentence || report?.summary.analysisSummary || dashboard.decision.summary) },
-        { label: '关键理由', value: safeReportValue(reasonLayer?.coreReasons?.[0] || reasonLayer?.latestKeyUpdate || dashboard.decision.reasonBody) },
+        { label: '情景参考', value: consumerSafeReportText(decisionPanel?.marketStructure || summaryPanel?.trendPrediction || report?.summary.trendPrediction || dashboard.decision.scoreValue, '情景参考') },
+        { label: '研究摘要', value: consumerSafeReportText(summaryPanel?.oneSentence || report?.summary.analysisSummary || dashboard.decision.summary, '当前研究包仍不完整，仅支持继续跟踪。') },
+        { label: '关键理由', value: consumerSafeReportText(reasonLayer?.coreReasons?.[0] || reasonLayer?.latestKeyUpdate || dashboard.decision.reasonBody, '价格与证据仍需继续跟踪。') },
       ],
     },
     {
       id: 'important-brief',
       title: '重要信息速览',
       rows: [
-        { label: '舆情情绪', value: safeReportValue(highlights?.sentimentSummary || reasonLayer?.sentimentSummary || fieldValue(sentimentFields, ['sentiment', '舆情', '情绪']) || report?.summary.sentimentLabel) },
-        { label: '业绩预期', value: safeReportValue(highlights?.earningsOutlook || fieldValue(earningsFields, ['earnings', '业绩', 'eps'])) },
-        { label: '最新动态', value: safeReportValue(reasonLayer?.latestKeyUpdate || highlights?.latestNews?.[0]) },
+        { label: '舆情情绪', value: consumerSafeReportText(highlights?.sentimentSummary || reasonLayer?.sentimentSummary || fieldValue(sentimentFields, ['sentiment', '舆情', '情绪']) || report?.summary.sentimentLabel, '数据不足') },
+        { label: '业绩预期', value: consumerSafeReportText(highlights?.earningsOutlook || fieldValue(earningsFields, ['earnings', '业绩', 'eps']), '数据不足') },
+        { label: '最新动态', value: consumerSafeReportText(reasonLayer?.latestKeyUpdate || highlights?.latestNews?.[0], '数据不足') },
       ],
       bullets: listOrMissing(highlights?.latestNews, '暂无最新动态字段'),
     },
     {
       id: 'risks',
-      title: '风险警报',
+      title: '风险边界',
       bullets: listOrMissing([
         reasonLayer?.topRisk,
         ...(highlights?.riskAlerts || []),
         ...(highlights?.bearishFactors || []),
-      ], '暂无明确风险条目'),
+      ], '暂无明确风险条目', 'price'),
     },
     {
       id: 'catalysts',
-      title: '利好催化',
+      title: '情景参考',
       bullets: listOrMissing([
         reasonLayer?.topCatalyst,
         ...(highlights?.positiveCatalysts || []),
@@ -276,7 +279,7 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
         { label: '涨跌幅', value: fieldValue(marketFields, ['change pct', 'change%', '涨跌幅']) || safeReportValue(summaryPanel?.changePct || market?.regularMetrics?.changePct) },
         { label: '成交量', value: fieldValue(marketFields, ['volume', '成交量']) || safeReportValue(market?.regularMetrics?.volume) },
         { label: '成交额', value: fieldValue(marketFields, ['turnover', 'amount', '成交额']) || safeReportValue(market?.regularMetrics?.amount) },
-        { label: '来源', value: safeReportValue(coverageNotes?.dataSources?.[0] || summaryPanel?.priceBasis || summaryPanel?.priceBasisDetail) },
+        { label: '价格上下文', value: consumerSafeReportText(summaryPanel?.priceContextNote || summaryPanel?.priceBasis || summaryPanel?.priceBasisDetail, '数据不足') },
       ],
     },
     {
@@ -289,11 +292,10 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
         { label: 'MA10', value: fieldValue(technicalFields, ['MA10', '10日']) },
         { label: 'MA20', value: fieldValue(technicalFields, ['MA20', '20日']) },
         { label: 'MA60', value: fieldValue(technicalFields, ['MA60', '60日']) },
-        { label: 'Support', value: safeReportValue(decisionPanel?.support || decisionPanel?.idealEntry || report?.strategy?.idealBuy) },
-        { label: 'Resistance', value: safeReportValue(decisionPanel?.resistance || decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit) },
+        { label: '关键价格区间', value: consumerSafeReportPriceContext(decisionPanel?.support || decisionPanel?.idealEntry || report?.strategy?.idealBuy, '数据不足') },
+        { label: '情景参考', value: consumerSafeReportPriceContext(decisionPanel?.resistance || decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit, '数据不足') },
         { label: 'Volume / turnover', value: fieldValue(technicalFields, ['VOLUME DYNAMICS', 'Volume', '量价', '成交量']) || fieldValue(marketFields, ['volume', 'turnover', 'amount', '成交']) },
-        { label: 'Chip notes', value: safeReportValue(fieldValue(technicalFields, ['chip', '筹码']) || standardReport?.decisionContext?.compositeView) },
-        ...alphaRows,
+        { label: '筹码观察', value: consumerSafeReportText(fieldValue(technicalFields, ['chip', '筹码']) || standardReport?.decisionContext?.compositeView, '数据不足') },
       ],
     },
     {
@@ -303,8 +305,8 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
         { label: '均线排列', value: fieldValue(technicalFields, ['MA ALIGNMENT', 'Moving Averages', '均线']) },
         { label: 'RSI', value: fieldValue(technicalFields, ['RSI-14', 'RSI14', 'RSI']) },
         { label: 'MACD', value: fieldValue(technicalFields, ['MACD']) },
-        { label: '支撑位', value: safeReportValue(decisionPanel?.support || decisionPanel?.idealEntry || report?.strategy?.idealBuy) },
-        { label: '压力位', value: safeReportValue(decisionPanel?.resistance || decisionPanel?.target || report?.strategy?.takeProfit) },
+        { label: '关键价格区间', value: consumerSafeReportPriceContext(decisionPanel?.support || decisionPanel?.idealEntry || report?.strategy?.idealBuy, '数据不足') },
+        { label: '情景参考', value: consumerSafeReportPriceContext(decisionPanel?.resistance || decisionPanel?.target || report?.strategy?.takeProfit, '数据不足') },
         { label: '量价判断', value: fieldValue(technicalFields, ['VOLUME DYNAMICS', 'Volume', '量价', '成交量']) },
       ],
     },
@@ -321,26 +323,26 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
     },
     {
       id: 'observation-plan',
-      title: '观察计划',
+      title: '继续跟踪',
       rows: [
-        { label: '优先观察区', value: safeReportValue(decisionPanel?.idealEntry || report?.strategy?.idealBuy || fieldValue(battleFields, ['ideal', '理想'])) },
-        { label: '次级观察区', value: safeReportValue(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy || fieldValue(battleFields, ['secondary', '次级'])) },
-        { label: '风险失效线', value: safeReportValue(decisionPanel?.stopLoss || report?.strategy?.stopLoss || fieldValue(battleFields, ['stop', '止损'])) },
-        { label: '上方观察区', value: safeReportValue(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit || fieldValue(battleFields, ['target', '目标'])) },
-        { label: '风险暴露', value: safeReportValue(decisionPanel?.positionSizing || battleCards.find((item) => /position|仓位/i.test(item.label))?.value) },
-        { label: '观察条件', value: safeReportValue(decisionPanel?.buildStrategy || battleNotes.find((item) => /entry|建仓|入场/i.test(item.label))?.value) },
-        { label: '风险边界', value: safeReportValue(decisionPanel?.riskControlStrategy || decisionPanel?.stopReason) },
-        { label: '空仓观察', value: safeReportValue(decisionPanel?.noPositionAdvice) },
-        { label: '持仓复核', value: safeReportValue(decisionPanel?.holderAdvice) },
+        { label: '关键价格区间', value: consumerSafeReportPriceContext(decisionPanel?.idealEntry || report?.strategy?.idealBuy || priceFieldValue(battleFields, ['ideal', '理想']), '数据不足') },
+        { label: '情景参考', value: consumerSafeReportPriceContext(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy || priceFieldValue(battleFields, ['secondary', '次级']), '数据不足') },
+        { label: '风险边界', value: consumerSafeReportPriceContext(decisionPanel?.stopLoss || report?.strategy?.stopLoss || priceFieldValue(battleFields, ['stop', '止损']), '数据不足') },
+        { label: '关键价格区间', value: consumerSafeReportPriceContext(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit || priceFieldValue(battleFields, ['target', '目标']), '数据不足') },
+        { label: '风险边界说明', value: consumerSafeReportText(decisionPanel?.positionSizing || battleCards.find((item) => /position|仓位/i.test(item.label))?.value, '风险边界仅作情景约束。') },
+        { label: '继续跟踪', value: consumerSafeReportText(decisionPanel?.buildStrategy || battleNotes.find((item) => /entry|建仓|入场/i.test(item.label))?.value, '继续跟踪，等待研究包补齐。') },
+        { label: '风险边界', value: consumerSafeReportText(decisionPanel?.riskControlStrategy || decisionPanel?.stopReason, '风险边界用于说明不确定性。') },
+        { label: '数据不足', value: consumerSafeReportText(decisionPanel?.noPositionAdvice, '数据不足，仅支持继续跟踪。') },
+        { label: '继续跟踪说明', value: consumerSafeReportText(decisionPanel?.holderAdvice, '继续跟踪，不输出配置建议。') },
       ],
-      bullets: decisionPanel?.executionReminders,
+      bullets: listOrMissing(decisionPanel?.executionReminders, '暂无额外提醒'),
     },
     {
       id: 'checklist',
-      title: '检查清单',
+      title: '研究清单',
       checklist: checklistItems.length ? checklistItems : [
-        { label: '趋势与行动一致', status: '未知' },
-        { label: '观察区间明确', status: '未知' },
+        { label: '研究包完整度待复核', status: '未知' },
+        { label: '关键价格区间仅作背景', status: '未知' },
         { label: '风险边界明确', status: '未知' },
         { label: '数据覆盖充分', status: '未知' },
         { label: '冲突已标注', status: '未知' },
@@ -348,9 +350,8 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
     },
     {
       id: 'data-notes',
-      title: '来源',
+      title: '研究包说明',
       bullets: [
-        ...listOrMissing(coverageNotes?.dataSources, '数据源未完整标注'),
         ...listOrMissing(coverageNotes?.coverageGaps || coverageNotes?.missingFieldNotes, '缺失字段显示为 --'),
         ...listOrMissing(coverageNotes?.conflictNotes, '暂无额外冲突说明'),
         ...listOrMissing(coverageNotes?.methodNotes, '本报告为 AI 辅助分析，不构成投资建议'),
@@ -374,16 +375,17 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
   const observationSection = sections.find((section) => section.id === 'observation-plan');
   const primaryReportSections = [riskSection, observationSection].filter((section): section is FullReportSection => Boolean(section));
   const technicalSections = sections.filter((section) => !['summary', 'risks', 'observation-plan'].includes(section.id));
-  const summaryLine = summarySection?.rows?.find((row) => row.label === '一句话判断')?.value
-    || dashboard.decision.summary
+  const summaryLine = summarySection?.rows?.find((row) => row.label === '研究摘要')?.value
+    || consumerSafeReportText(dashboard.decision.summary, '当前研究包仍不完整，仅支持继续跟踪。')
     || '--';
-  const observationLine = summarySection?.rows?.find((row) => row.label === '分析状态')?.value
-    || dashboard.decision.signalLabel
+  const observationLine = summarySection?.rows?.find((row) => row.label === '继续跟踪')?.value
+    || consumerSafeReportText(dashboard.decision.signalLabel, '继续跟踪')
     || '--';
   const confidenceLine = dashboard.decision.confidenceValue || '--';
   const riskLine = riskSection?.bullets?.find((item) => item && item !== '--')
-    || observationSection?.rows?.find((row) => row.label === '风险边界' || row.label === '风险失效线')?.value
+    || observationSection?.rows?.find((row) => row.label === '风险边界' || row.label === '风险边界说明')?.value
     || '--';
+  const headerSignalLabel = consumerSafeReportText(dashboard.decision.signalLabel, '继续跟踪') || '继续跟踪';
 
   const handleCopyReport = async () => {
     if (!navigator.clipboard?.writeText) {
@@ -469,7 +471,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
                 {identity.companyWithTicker}
               </h2>
               <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 text-sm text-white/68 sm:grid-cols-2">
-                <span>分析状态：{dashboard.decision.signalLabel}</span>
+                <span>研究状态：{headerSignalLabel}</span>
                 <span>评分：{dashboard.decision.heroValue}{dashboard.decision.heroUnit || ''}</span>
                 <span>置信度：{dashboard.decision.confidenceValue || '--'}</span>
                 <span>生成时间：{identity.generatedAt}</span>
@@ -518,19 +520,19 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
           className="min-w-0 rounded-3xl border border-white/[0.08] bg-white/[0.03] p-4 sm:p-5"
           data-testid="home-bento-report-executive-summary"
         >
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">EXECUTIVE SUMMARY</p>
-          <h3 className="mt-2 text-xl font-semibold tracking-[0] text-white">投资结论</h3>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">RESEARCH SUMMARY</p>
+          <h3 className="mt-2 text-xl font-semibold tracking-[0] text-white">研究包完整度</h3>
           <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold tracking-[0.08em] text-white/42">
-            {['投资结论'].map((label) => (
+            {['继续跟踪', '情景参考', '数据不足'].map((label) => (
               <span key={label} className="rounded-full border border-white/[0.06] bg-black/20 px-2 py-1">{label}</span>
             ))}
           </div>
           <p className="mt-3 break-words text-sm leading-6 text-white/72">{summaryLine}</p>
           <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 md:grid-cols-3">
             {[
-              { label: '结论', value: observationLine },
+              { label: '研究状态', value: observationLine },
               { label: '置信度', value: confidenceLine },
-              { label: '关键风险', value: riskLine },
+              { label: '风险边界', value: riskLine },
             ].map((item) => (
               <div key={item.label} className="min-w-0 rounded-2xl border border-white/[0.06] bg-black/20 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">{item.label}</p>
