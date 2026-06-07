@@ -94,11 +94,12 @@ async function assertRotationRadarConsumerShell(page: Page) {
   const bodyText = await page.locator('body').innerText();
   await appExpect(page.getByTestId('rotation-radar-guidance')).toBeVisible();
   await appExpect(page.getByTestId('rotation-radar-summary-band')).toBeVisible();
+  await appExpect(page.getByTestId('rotation-radar-leader-list')).toBeVisible();
   await appExpect(page.getByTestId('rotation-radar-universe-list')).toBeVisible();
   await appExpect(page.getByTestId('rotation-theme-detail-panel')).toBeVisible();
   const mechanicsDisclosure = page.getByTestId('rotation-radar-mechanics-details');
   await appExpect(mechanicsDisclosure).toBeAttached();
-  await appExpect(mechanicsDisclosure.getByText('当前为静态主题库，本地行情覆盖后可计算轮动强度。')).toBeHidden();
+  await appExpect(mechanicsDisclosure.getByText('轮动方向说明')).toBeHidden();
   const visualMatrix = page.getByTestId('rotation-radar-visual-matrix');
   const visualUnavailable = page.getByTestId('rotation-radar-visual-unavailable');
   if ((await visualMatrix.count()) > 0) {

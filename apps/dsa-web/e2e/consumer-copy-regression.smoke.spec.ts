@@ -919,8 +919,10 @@ appTest.describe('consumer copy regression smoke', () => {
       await appExpect(routeRoot).toBeVisible({ timeout: 15_000 });
       await appExpect(guidance).toBeVisible();
       await appExpect(summaryBand).toBeVisible();
-      await appExpect(guidance).toContainText(/轮动状态|当前市场|下一步/);
-      await appExpect(summaryBand).toContainText(/当前市场|当前信号|置信/);
+      await appExpect(page.getByTestId('rotation-radar-visual-matrix')).toBeVisible();
+      await appExpect(page.getByTestId('rotation-radar-leader-list')).toBeVisible();
+      await appExpect(guidance).toContainText(/状态摘要|板块强弱|轮动方向/);
+      await appExpect(summaryBand).toContainText(/当前市场|轮动方向|数据状态/);
       await expectConsumerSafeSurface(summaryBand);
       await expectConsumerSafeSurface(routeRoot);
       await baseExpect(consoleErrors).toEqual([]);

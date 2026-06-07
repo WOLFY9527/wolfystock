@@ -25,7 +25,7 @@ test.describe('rotation radar loading polish', () => {
       await expect(loadingPanel).toBeVisible();
       await expect(loadingPanel).toContainText('正在整理主题强弱、轮动线索与最近更新时间。');
       await expect(loadingPanel).toContainText('准备好后会自动显示当前市场、头部主题和观察重点。');
-      await expect(loadingPanel).toContainText('结果出来前不会补写临时结论。');
+      await expect(loadingPanel).toContainText('结果出来前不会补写临时轮动方向。');
       await expect(loadingPanel).not.toContainText(forbiddenDiagnosticPattern);
       await expectNoHorizontalOverflow(page);
 

@@ -57,15 +57,15 @@ const STAGE_LABELS: Record<MarketRotationStage, string> = {
 
 const REAL_FLOW_EVIDENCE_TYPES = new Set(['real_flow', 'mixed_real_and_proxy']);
 const DATA_GAP_LABELS: Record<string, string> = {
-  true_flow_data_missing: '关键输入不足',
-  flow_methodology_missing: '信号确认不足',
-  source_authority_rejected: '信号确认不足',
-  stale_quote_window: '最近数据不足',
-  benchmark_proxy_missing: '对比样本不足',
-  proxy_coverage_incomplete: '对比样本不足',
-  taxonomy_only: '仅可分类浏览',
-  missing_required_windows: '观察时窗不足',
-  no_headline_theme: '可比较样本不足',
+  true_flow_data_missing: '信号待确认',
+  flow_methodology_missing: '信号待确认',
+  source_authority_rejected: '信号待确认',
+  stale_quote_window: '数据延迟',
+  benchmark_proxy_missing: '走势分化',
+  proxy_coverage_incomplete: '走势分化',
+  taxonomy_only: '分类浏览',
+  missing_required_windows: '信号待确认',
+  no_headline_theme: '走势分化',
 };
 const THEME_FLOW_STATE_LABELS: Record<string, string> = {
   leading: '领涨观察',
@@ -78,9 +78,9 @@ const THEME_FLOW_STATE_LABELS: Record<string, string> = {
 };
 const THEME_FLOW_REASON_LABELS: Record<string, string> = {
   fallback_source: '最近一次可用数据',
-  stale_source: '数据略有延迟',
-  partial_source: '覆盖仍待补齐',
-  source_authority_missing: '确认信号仍待补齐',
+  stale_source: '数据延迟',
+  partial_source: '走势分化',
+  source_authority_missing: '信号待确认',
   conflicting_signal_inputs: '强弱与扩散信号分化',
 };
 
@@ -262,54 +262,54 @@ function consumerThemeSubtitle(theme: MarketRotationTheme): string {
 
 function consumerFreshnessLabel(freshness?: string | null, isFallback?: boolean, isStale?: boolean): string {
   if (isFallback || freshness === 'fallback' || isStale || freshness === 'stale') {
-    return '已使用最近一次可用数据。';
+    return '数据延迟，已使用最近一次可用数据。';
   }
   if (freshness === 'delayed') {
-    return '数据略有延迟。';
+    return '数据延迟。';
   }
   if (freshness === 'live') {
     return '数据已更新。';
   }
-  return '数据更新中，稍后将自动刷新。';
+  return '信号待确认，等待数据更新。';
 }
 
 function consumerConfidenceLabel(state: DecisionReadinessState): string {
   if (state === 'ready') {
-    return '当前轮动信号置信度可用，仍需持续观察。';
+    return '当前轮动信号可用，仍需持续观察走势分化。';
   }
   if (state === 'observe') {
-    return '当前信号置信度较低，仅供观察。';
+    return '信号待确认，先看板块强弱与走势分化。';
   }
-  return '当前轮动数据不足，暂不能形成稳定判断。';
+  return '当前轮动数据不足，轮动方向待确认。';
 }
 
 function consumerSufficiencyLabel(state: DecisionReadinessState): string {
   if (state === 'ready') {
-    return '信号充分性可用。';
+    return '板块强弱可读。';
   }
   if (state === 'observe') {
-    return '部分轮动数据暂不可用。';
+    return '部分数据延迟。';
   }
-  return '当前轮动数据不足，暂不能形成稳定判断。';
+  return '信号待确认。';
 }
 
 function consumerStatusLabel(state: DecisionReadinessState, payload: MarketRotationRadarResponse): string {
   if (!payload.themes.length) {
-    return '暂不能判断';
+    return '轮动方向待确认';
   }
   if (state === 'ready') {
-    return payload.freshness === 'delayed' ? '信号延迟可用' : '信号可用';
+    return payload.freshness === 'delayed' ? '数据延迟可读' : '板块强弱可读';
   }
   if (state === 'observe') {
-    return payload.isFallback || payload.isStale ? '信号延迟观察' : '信号部分可用';
+    return payload.isFallback || payload.isStale ? '数据延迟' : '信号待确认';
   }
   if (isRotationLibraryMode(payload)) {
-    return '数据不足';
+    return '信号待确认';
   }
   if (payload.isFallback || payload.isStale) {
-    return '信号延迟';
+    return '数据延迟';
   }
-  return payload.themes.length ? '数据不足' : '暂不能判断';
+  return payload.themes.length ? '信号待确认' : '轮动方向待确认';
 }
 
 function formatThemeStage(stage?: MarketRotationStage): string {
@@ -436,9 +436,9 @@ function themeConfidenceSummary(theme?: MarketRotationTheme): string {
     return '待确认';
   }
   if (isTaxonomyOnlyTheme(theme)) {
-    return '分类观察';
+    return '信号待确认';
   }
-  return `置信 ${formatConfidenceValue(theme.confidence)}`;
+  return `信号 ${formatConfidenceValue(theme.confidence)}`;
 }
 
 function themeRelativeStrengthValue(theme?: MarketRotationTheme): number | null {
@@ -501,6 +501,10 @@ function sanitizeRotationText(value?: string | null, fallback = '数据不足，
     .replaceAll('缺少可用行情与时窗证据', '当前缺少足够行情与时间窗口数据，暂不能形成稳定轮动判断')
     .replaceAll('缺少可用行情和时窗证据', '当前缺少足够行情与时间窗口数据，暂不能形成稳定轮动判断')
     .replaceAll('新鲜度', '数据更新')
+    .replaceAll('置信度', '信号确认')
+    .replaceAll('结论状态', '轮动方向')
+    .replaceAll('缺失证据', '信号待确认')
+    .replaceAll('缺失', '待确认')
     .replaceAll('静态主题库', '分类浏览')
     .replaceAll('主题库', '分类浏览')
     .replaceAll('真实资金流', '确认信号')
@@ -707,11 +711,11 @@ function deriveRotationConclusion(
   if (state === 'ready') {
     return {
       state,
-      title: '可判断',
-      detail: '当前轮动信号较完整，可形成主题轮动方向的研究观察；仍需持续复核反证、风险与数据更新。',
-      whyNotConclusion: '当前已具备研究判断所需的核心证据，但页面仍只输出观察结论，不扩展为交易动作。',
+      title: '板块强弱可读',
+      detail: '当前轮动信号较完整，可作为主题轮动方向观察；仍需持续复核走势分化、风险与数据更新。',
+      whyNotConclusion: '当前板块强弱、广度和持续性较完整，但页面仍只呈现研究观察，不扩展为交易动作。',
       missingEvidence,
-      nextStep: '继续观察退潮主题、风险标签与更新时间；若反证增加，应降级为仅观察。',
+      nextStep: '继续观察退潮主题、风险标签与更新时间；若走势分化扩大，应降级为信号待确认。',
       variant: 'success',
     };
   }
@@ -719,12 +723,12 @@ function deriveRotationConclusion(
   if (state === 'observe') {
     return {
       state,
-      title: '仅观察',
-      detail: '已有候选线索，但确认度或广度仍不足，暂不能判断轮动方向。',
-      whyNotConclusion: `${themeScope}主要依赖相对强弱、观察项或局部样本，尚不能证明扩散与连续性同时成立。`,
+      title: '信号待确认',
+      detail: '已有候选线索，但轮动方向、扩散广度或持续性仍待确认。',
+      whyNotConclusion: `${themeScope}主要依赖相对强弱、观察项或局部样本，扩散与连续性尚未同时成立。`,
       missingEvidence,
       nextStep: tiers.libraryMode
-        ? '可先查看下方分类候选，或切换到其他市场对比；待数据更新后再复核。'
+        ? '可先查看下方分类候选，或切换到其他市场对比；待数据更新后再确认强弱。'
         : '可先查看候选主题，并等待新的多时窗与成员广度快照；必要时切换市场对比。',
       variant: 'info',
     };
@@ -732,15 +736,15 @@ function deriveRotationConclusion(
 
   return {
     state,
-    title: '当前暂不能判断轮动方向',
-    detail: '当前缺少足够行情与时间窗口数据，暂不能形成稳定轮动判断。',
+    title: '轮动方向待确认',
+    detail: '当前缺少足够行情与时间窗口数据，轮动方向待确认。',
     whyNotConclusion: tiers.libraryMode || payload.themes.length === 0
-      ? `${themeScope}，缺少足够的可比较行情、时间窗口、成员广度或确认信号。`
-      : `${themeScope}缺少足够的近期行情、广度扩散和确认信号，暂不能形成方向结论。`,
+      ? `${themeScope}，可比较行情、时间窗口、成员广度或确认信号仍待确认。`
+      : `${themeScope}近期行情、广度扩散和确认信号仍待确认。`,
     missingEvidence,
     nextStep: tiers.libraryMode
-      ? '可先查看下方分类候选，或切换到其他市场对比；待数据更新后再复核。'
-      : '可切换到其他市场查看分类候选，或等待数据更新后再复核。',
+      ? '可先查看下方分类候选，或切换到其他市场对比；待数据更新后再确认强弱。'
+      : '可切换到其他市场查看分类候选，或等待数据更新后再确认强弱。',
     variant: 'danger',
   };
 }
@@ -845,23 +849,23 @@ function deriveCapitalRotationSummary(payload: MarketRotationRadarResponse): Cap
     cards: [
       {
         key: 'confirmed',
-        label: '确认信号',
+        label: '轮动方向',
         value: themeNamesSummary(confirmedLeaders, '暂无确认信号'),
-        detail: confirmedLeaders.length ? '当前信号较完整，仍仅作研究观察。' : '当前轮动数据不足，暂不能形成稳定判断。',
+        detail: confirmedLeaders.length ? '当前信号较完整，继续观察走势分化。' : '信号待确认。',
         variant: confirmedLeaders.length ? 'success' : 'caution',
       },
       {
         key: 'candidate',
         label: taxonomyThemes.length && !candidateThemes.length ? '分类浏览' : '观察信号',
         value: themeNamesSummary(observationThemes, taxonomyThemes.length ? '暂无分类条目' : '暂无观察信号'),
-        detail: observationThemes.length ? '当前信号置信度较低，仅供观察。' : '部分轮动数据暂不可用。',
+        detail: observationThemes.length ? '信号待确认，先看板块强弱与走势分化。' : '部分数据延迟。',
         variant: observationThemes.length ? 'info' : 'neutral',
       },
       {
         key: 'cooling',
         label: '降温 / 分歧',
         value: themeNamesSummary(coolingThemes, '暂无降温主题'),
-        detail: coolingThemes.length ? '走弱或分歧主题继续作为反证观察。' : '未见明显退潮列表。',
+        detail: coolingThemes.length ? '走弱或分歧主题继续作为分化观察。' : '未见明显退潮列表。',
         variant: coolingThemes.length ? 'caution' : 'neutral',
       },
     ],
@@ -888,7 +892,7 @@ const RotationVisualPanel: React.FC<{
             <p className="mt-2 max-w-3xl text-sm leading-6 text-white/58">{unavailableReason}</p>
             <p className="mt-2 text-[11px] leading-5 text-white/48">{unavailableDetail}</p>
           </div>
-          <TerminalChip variant="caution">等待结构化维度</TerminalChip>
+          <span className="shrink-0 rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/52">信号待确认</span>
         </div>
       </TerminalPanel>
     );
@@ -904,14 +908,10 @@ const RotationVisualPanel: React.FC<{
           <p className="text-[10px] font-medium tracking-[0.22em] text-white/38">相对强弱矩阵</p>
           <h3 className="mt-2 text-lg font-semibold text-white/88">主题排行与阶段分布</h3>
           <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">
-            仅用现有相对强弱与阶段字段组织可视化，不改写当前排序、结论或信号口径。
+            沿用现有相对强弱与阶段字段组织可视化，不改写当前排序、评分或信号口径。
           </p>
         </div>
-        <div className="flex min-w-0 flex-wrap gap-2">
-          <TerminalChip variant="neutral">强弱轴</TerminalChip>
-          <TerminalChip variant="neutral">阶段轴</TerminalChip>
-          <TerminalChip variant="neutral">{marketLabelText}</TerminalChip>
-        </div>
+        <span className="shrink-0 rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/52">{marketLabelText}</span>
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(22rem,0.9fr)]">
@@ -928,11 +928,11 @@ const RotationVisualPanel: React.FC<{
             </span>
           </div>
           <div className="mt-4 overflow-x-auto no-scrollbar">
-            <div className="min-w-[20rem]">
+            <div className="min-w-[17.5rem] sm:min-w-[20rem]">
               {ROTATION_MATRIX_STAGE_ORDER.map((stageMeta) => {
                 const stageThemes = visualThemes.filter((theme) => theme.stage === stageMeta.key);
                 return (
-                  <div key={stageMeta.key} className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-stretch gap-3 border-t border-white/[0.05] py-2 first:border-t-0 first:pt-0 last:pb-0">
+                  <div key={stageMeta.key} className="grid grid-cols-[3.75rem_minmax(0,1fr)] items-stretch gap-2 border-t border-white/[0.05] py-2 first:border-t-0 first:pt-0 last:pb-0 sm:grid-cols-[4.5rem_minmax(0,1fr)] sm:gap-3">
                     <div className="flex items-center text-[11px] font-medium text-white/48">{stageMeta.label}</div>
                     <div className="relative h-12 rounded-lg border border-white/[0.05] bg-white/[0.02]">
                       <div className="absolute inset-y-2 left-1/2 w-px bg-white/[0.08]" aria-hidden="true" />
@@ -941,7 +941,7 @@ const RotationVisualPanel: React.FC<{
                         const range = domain.max - domain.min || 1;
                         const left = `${((strength - domain.min) / range) * 100}%`;
                         const bubbleVariant = selectedThemeId === theme.id
-                          ? 'border-cyan-200/40 bg-cyan-200/[0.18] text-cyan-50'
+                          ? 'border-white/24 bg-white/[0.12] text-white'
                           : 'border-white/[0.08] bg-white/[0.08] text-white/82 hover:bg-white/[0.12]';
                         return (
                           <button
@@ -956,7 +956,7 @@ const RotationVisualPanel: React.FC<{
                             onClick={() => onSelectTheme(theme.id)}
                             aria-label={`${theme.name} ${formatThemeStage(theme.stage)} ${formatRelativeStrengthValue(strength)}`}
                           >
-                            <span className="max-w-[6.5rem] truncate">{theme.name}</span>
+                            <span className="max-w-[5rem] truncate sm:max-w-[6.5rem]">{theme.name}</span>
                             <span className="text-white/55">{formatRelativeStrengthValue(strength)}</span>
                           </button>
                         );
@@ -965,7 +965,7 @@ const RotationVisualPanel: React.FC<{
                   </div>
                 );
               })}
-              <div className="mt-3 flex items-center justify-between px-[4.5rem] text-[10px] text-white/40">
+              <div className="mt-3 flex items-center justify-between px-[3.75rem] text-[10px] text-white/40 sm:px-[4.5rem]">
                 <span>偏弱</span>
                 <span>基准</span>
                 <span>偏强</span>
@@ -995,7 +995,7 @@ const RotationVisualPanel: React.FC<{
                   data-testid={`rotation-radar-ranking-bar-${theme.id}`}
                   className={cn(
                     'block w-full rounded-lg border border-white/[0.05] bg-white/[0.02] p-2 text-left transition-colors',
-                    selected ? 'bg-cyan-200/[0.08]' : 'hover:bg-white/[0.04]',
+                    selected ? 'bg-white/[0.075]' : 'hover:bg-white/[0.04]',
                   )}
                   onClick={() => onSelectTheme(theme.id)}
                 >
@@ -1018,7 +1018,7 @@ const RotationVisualPanel: React.FC<{
                     <div
                       className={cn(
                         'h-full rounded-full',
-                        selected ? 'bg-cyan-200/75' : 'bg-white/55',
+                        selected ? 'bg-white/70' : 'bg-white/55',
                       )}
                       style={{ width: scoreWidth }}
                     />
@@ -1083,10 +1083,10 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
     ? summaryTitle(payload.summary.strongestThemes, '按主题分类浏览')
     : themeNamesSummary(primaryThemes, '等待主题更新');
   const surfaceState = decisionSummary.state === 'ready'
-    ? '正常'
+    ? '板块强弱可读'
     : decisionSummary.state === 'observe'
-      ? '观察中'
-      : '暂不能判断';
+      ? '信号待确认'
+      : '轮动方向待确认';
   const heroTitle = selectedTheme?.name || topThemeTitle;
   const heroSummary = selectedTheme
     ? sanitizeRotationText(
@@ -1103,21 +1103,21 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
       key: 'market',
       label: '当前市场',
       value: marketLabel(payload.market || 'US'),
-      detail: tiers.libraryMode ? '当前以主题分类浏览为主。' : '当前市场下按主题与信号强弱组织内容。',
+      detail: tiers.libraryMode ? '当前以主题分类浏览为主。' : '当前市场下按主题与强弱变化组织内容。',
     },
     {
       key: 'signal',
-      label: '当前信号',
+      label: '轮动方向',
       value: selectedTheme ? themeConsumerStateLabel(selectedTheme) : surfaceState,
       detail: selectedTheme
-        ? (selectedTheme.riskExplanations?.length ? '已保留主要弱点与风险提示。' : '当前仅保留对用户有用的信号层结论。')
+        ? (selectedTheme.riskExplanations?.length ? '保留主要弱点与走势分化。' : '当前以主题强弱和阶段变化为主。')
         : guidance.detail,
     },
     {
       key: 'confidence',
-      label: '置信 / 更新',
+      label: '数据状态',
       value: selectedTheme
-        ? `${themeConfidenceSummary(selectedTheme)} · ${mapDataStateLabel(selectedTheme)}`
+        ? mapDataStateLabel(selectedTheme)
         : formatDateTime(payload.generatedAt) || '待确认',
       detail: selectedTheme
         ? consumerFreshnessLabel(selectedTheme.freshness, selectedTheme.isFallback, isThemeStale(selectedTheme))
@@ -1131,28 +1131,21 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
       data-testid="rotation-radar-guidance"
       className="relative overflow-hidden"
     >
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-cyan-400/0 via-cyan-200/42 to-sky-400/0" aria-hidden="true" />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-white/0 via-white/16 to-white/0" aria-hidden="true" />
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-medium tracking-[0.24em] text-white/38">轮动状态</p>
-          <p className="mt-2 text-base font-semibold leading-6 text-white/90 md:text-lg">{surfaceState}</p>
+          <p className="text-[10px] font-medium tracking-[0.24em] text-white/38">状态摘要</p>
           <h2
             data-testid="rotation-radar-hero-title"
-            className="mt-3 break-words text-lg font-semibold leading-7 text-white md:text-xl"
+            className="mt-2 break-words text-base font-semibold leading-6 text-white md:text-lg"
           >
-            {heroTitle}
+            板块强弱：{heroTitle}
           </h2>
           <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">{heroSummary}</p>
         </div>
-        <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
-          <TerminalChip variant={decisionSummary.state === 'ready' ? 'success' : decisionSummary.state === 'observe' ? 'info' : 'caution'}>
-            {surfaceState}
-          </TerminalChip>
-          <TerminalChip variant="neutral">{marketLabel(payload.market || 'US')}</TerminalChip>
-          <TerminalChip variant={payload.isFallback || payload.isStale ? 'caution' : payload.freshness === 'delayed' ? 'info' : 'success'}>
-            {consumerFreshnessLabel(payload.freshness, payload.isFallback, payload.isStale).replace('。', '')}
-          </TerminalChip>
-        </div>
+        <span className="shrink-0 rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/52">
+          轮动方向：{surfaceState}
+        </span>
       </div>
 
       <div data-testid="rotation-radar-summary-band" data-terminal-primitive="panel" className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-3">
@@ -1165,11 +1158,6 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
         ))}
       </div>
 
-      <div className="mt-4 rounded-lg border border-white/[0.06] bg-black/10 p-3">
-        <p className="text-[11px] font-medium text-white/48">下一步</p>
-        <p className="mt-2 text-[11px] leading-5 text-white/60">{conclusion.nextStep}</p>
-      </div>
-
       {familyRollup.length ? (
         <div
           data-testid="rotation-family-flow-rollup"
@@ -1178,9 +1166,9 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-medium text-white/48">家族流向观察</p>
-              <p className="mt-2 text-[11px] leading-5 text-white/60">优先看家族级轮动方向，不把观察信号放大成强结论。</p>
+              <p className="mt-2 text-[11px] leading-5 text-white/60">优先看家族级轮动方向，信号待确认时只作为走势分化观察。</p>
             </div>
-            <TerminalChip variant="neutral">摘要优先</TerminalChip>
+            <span className="shrink-0 rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/48">摘要优先</span>
           </div>
           <div className="mt-3 max-h-72 overflow-y-auto no-scrollbar">
             <DenseRows>
@@ -1199,7 +1187,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
                       <TerminalChip variant={themeFlowChipVariant(signal?.themeFlowState)}>
                         {formatThemeFlowState(signal?.themeFlowState)}
                       </TerminalChip>
-                      <span className="text-[11px] font-medium text-white/58">置信 {formatThemeFlowConfidence(signal)}</span>
+                      <span className="text-[11px] font-medium text-white/58">信号 {formatThemeFlowConfidence(signal)}</span>
                     </div>
                     <p className="mt-2 text-[11px] leading-5 text-white/58">
                       {sanitizeRotationText(signal?.explanation, `${familyName} 当前仅保留家族级观察。`)}
@@ -1208,9 +1196,9 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
                       {themeFlowEvidenceLines(signal).map((line) => <p key={`${familyName}-${line}`}>{line}</p>)}
                     </div>
                     {reasonLabels.length ? (
-                      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] leading-5 text-white/46">
                         <span className="text-[10px] font-medium text-white/40">观察项</span>
-                        {reasonLabels.map((label) => <TerminalChip key={`${familyName}-${label}`}>{label}</TerminalChip>)}
+                        <span>{reasonLabels.join(' / ')}</span>
                       </div>
                     ) : null}
                   </div>
@@ -1229,7 +1217,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
       >
         <div className="grid gap-3 text-[11px] leading-5 text-white/56">
           <div>
-            <p className="font-semibold text-white/74">当前状态说明</p>
+            <p className="font-semibold text-white/74">轮动方向说明</p>
             <p className="mt-1">{conclusion.whyNotConclusion}</p>
           </div>
           <div>
@@ -1262,7 +1250,7 @@ const CommandBar: React.FC<{
     leading={(
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase text-white/35">
-          <SlidersHorizontal className="size-3.5 text-cyan-200/70" aria-hidden="true" />
+          <SlidersHorizontal className="size-3.5 text-white/46" aria-hidden="true" />
           市场
         </div>
         <div className="flex min-w-0 gap-2 overflow-x-auto no-scrollbar">
@@ -1278,7 +1266,7 @@ const CommandBar: React.FC<{
                   className={cn(
                     'shrink-0',
                     selectedMarket === market.id
-                      ? 'border-cyan-200/24 bg-cyan-200/[0.08] text-cyan-50 hover:bg-cyan-200/[0.1] hover:text-cyan-50'
+                      ? 'border-white/18 bg-white/[0.065] text-white hover:bg-white/[0.085] hover:text-white'
                       : 'text-white/48 hover:border-white/10 hover:bg-white/[0.04] hover:text-white/75',
                   )}
                   onClick={() => onMarketChange(market.id)}
@@ -1314,7 +1302,7 @@ const CommandBar: React.FC<{
       <label className="relative min-w-0 flex-1">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/35" aria-hidden="true" />
         <input
-          className="h-10 w-full rounded-lg border border-white/10 bg-black/25 py-2 pl-9 pr-3 text-sm text-white/78 outline-none transition-all placeholder:text-white/30 focus:border-cyan-200/30 focus:bg-white/[0.035]"
+          className="h-10 w-full rounded-lg border border-white/10 bg-black/25 py-2 pl-9 pr-3 text-sm text-white/78 outline-none transition-all placeholder:text-white/30 focus:border-white/24 focus:bg-white/[0.035]"
           value={searchQuery}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="搜索主题、英文名或成员"
@@ -1326,7 +1314,7 @@ const CommandBar: React.FC<{
         className="inline-flex min-h-8 shrink-0 items-center gap-2 rounded-md border border-white/[0.06] bg-white/[0.025] px-2.5 text-[11px] text-white/46"
       >
         <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase text-white/35">
-          <Gauge className="size-3.5 text-cyan-200/70" aria-hidden="true" />
+          <Gauge className="size-3.5 text-white/46" aria-hidden="true" />
           分类
         </div>
         <span>主题优先，行业/概念随结果展开</span>
@@ -1354,7 +1342,7 @@ const LeaderRow: React.FC<{
     onClick={onSelect}
     className={cn(
       'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_5.5rem_6.25rem] items-center gap-2 p-3 text-left transition-colors',
-      selected ? 'bg-cyan-200/[0.06]' : 'hover:bg-white/[0.025]',
+      selected ? 'bg-white/[0.055]' : 'hover:bg-white/[0.025]',
     )}
   >
     <span className="min-w-0">
@@ -1381,7 +1369,7 @@ const CompactThemeRow: React.FC<{
     onClick={onSelect}
     className={cn(
       'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_5.5rem_6.25rem] items-center gap-2 px-3 py-2.5 text-left text-xs transition-colors',
-      selected ? 'bg-cyan-200/[0.06]' : 'hover:bg-white/[0.025]',
+      selected ? 'bg-white/[0.055]' : 'hover:bg-white/[0.025]',
     )}
   >
     <span className="min-w-0">
@@ -1414,7 +1402,7 @@ const ThemeDetailPanel: React.FC<{
       ...riskExplanationNotes,
       ...themeDataGaps(theme).map(formatGapLabel),
       taxonomyOnly ? '当前仍以分类与观察为主。' : '',
-      dataWarning ? '当前数据略有延迟，先看节奏是否继续保持。' : '',
+      dataWarning ? '数据延迟，先看节奏是否继续保持。' : '',
     ],
     3,
     taxonomyOnly ? '当前仍以分类与观察为主。' : '继续观察广度、量能与持续性是否继续同步。',
@@ -1439,10 +1427,10 @@ const ThemeDetailPanel: React.FC<{
         : `${theme.name} 当前以主题强弱与广度变化为主，适合继续观察。`,
   );
   const nextStep = nextWatch?.symbol
-    ? `继续观察 ${nextWatch.symbol} 与 ${theme.name} 的延续性，再决定是否升级判断。`
+    ? `继续观察 ${nextWatch.symbol} 与 ${theme.name} 的延续性，先确认走势分化是否收敛。`
     : taxonomyOnly
       ? '等待新的多时窗行情后，再确认主题是否形成稳定强弱。'
-      : '继续观察广度、量能与持续性变化，避免过早放大结论。';
+      : '继续观察广度、量能与持续性变化，避免过早放大方向。';
 
   return (
     <ConsoleContextRail data-testid="rotation-theme-detail-panel" className="xl:sticky xl:top-4">
@@ -1458,30 +1446,26 @@ const ThemeDetailPanel: React.FC<{
         <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
           <TerminalChip variant={taxonomyOnly ? 'neutral' : dataWarning ? 'caution' : 'info'}>{themeConsumerStateLabel(theme)}</TerminalChip>
           <TerminalChip variant="neutral">{marketLabelText}</TerminalChip>
-          <TerminalChip variant={taxonomyOnly ? 'neutral' : theme.confidence != null && theme.confidence >= 0.65 ? 'success' : 'info'}>
-            {themeConfidenceSummary(theme)}
-          </TerminalChip>
           <TerminalChip variant={dataWarning ? 'caution' : 'success'}>{mapDataStateLabel(theme)}</TerminalChip>
-          {!taxonomyOnly ? <DataFreshnessBadge freshness={theme.freshness} className="px-1.5 text-[9px]" /> : null}
         </div>
       </div>
 
       <div className="min-w-0 px-1 py-3">
-        <p className="text-[10px] font-bold uppercase text-white/35">当前结论</p>
+        <p className="text-[10px] font-bold uppercase text-white/35">轮动方向</p>
         <TerminalNotice variant={taxonomyOnly ? 'info' : dataWarning ? 'caution' : 'neutral'} className="mt-2 text-[12px] leading-5 text-white/58">
           {shortReason}
         </TerminalNotice>
       </div>
 
       <div className="min-w-0 px-1 py-3">
-        <p className="text-[10px] font-bold uppercase text-white/35">风险 / 弱点</p>
+        <p className="text-[10px] font-bold uppercase text-white/35">走势分化</p>
         <div className="mt-2 grid gap-1 text-[11px] leading-5 text-white/58">
           {weaknessNotes.map((item) => <p key={item}>· {item}</p>)}
         </div>
       </div>
 
       <div className="min-w-0 px-1 py-3">
-        <p className="text-[10px] font-bold uppercase text-white/35">下一步</p>
+        <p className="text-[10px] font-bold uppercase text-white/35">观察重点</p>
         <p className="mt-2 text-[11px] leading-5 text-white/58">{nextStep}</p>
       </div>
 
@@ -1506,7 +1490,7 @@ const ThemeDetailPanel: React.FC<{
                 <TerminalChip variant={themeFlowChipVariant(theme.themeFlowSignal.themeFlowState)}>
                   {formatThemeFlowState(theme.themeFlowSignal.themeFlowState)}
                 </TerminalChip>
-                <TerminalChip variant="neutral">置信 {formatThemeFlowConfidence(theme.themeFlowSignal)}</TerminalChip>
+                <TerminalChip variant="neutral">信号 {formatThemeFlowConfidence(theme.themeFlowSignal)}</TerminalChip>
               </div>
               <div>
                 <p className="font-semibold text-white/74">解释</p>
@@ -1554,7 +1538,7 @@ const ThemeDetailPanel: React.FC<{
               <p className="mt-1">
                 {taxonomyOnly
                   ? '当前页面先保留分类、观察范围与后续跟踪方向，等待更多行情覆盖后再确认强弱。'
-                  : '默认先展示主题、当前信号、置信与更新时间，再把更深一层的支持证据与方法说明折叠起来。'}
+                  : '默认先展示板块强弱、轮动方向与数据更新，再把更深一层的支持证据与方法说明折叠起来。'}
               </p>
             </div>
           </div>
@@ -1574,7 +1558,7 @@ const LoadingPanel: React.FC<{ showFallback: boolean; onRefresh: () => void }> =
       <p className="leading-6">正在整理主题强弱、轮动线索与最近更新时间。</p>
       <p className="leading-6">准备好后会自动显示当前市场、头部主题和观察重点。</p>
       <TerminalNotice variant="info" className="text-[12px] leading-5 text-white/58">
-        结果出来前不会补写临时结论。
+        结果出来前不会补写临时轮动方向。
       </TerminalNotice>
     </div>
     {showFallback ? (
@@ -1584,7 +1568,7 @@ const LoadingPanel: React.FC<{ showFallback: boolean; onRefresh: () => void }> =
       >
         <div className="font-semibold text-amber-100">轮动数据暂未返回</div>
         <p className="mt-2 leading-5 text-white/62">
-          可稍后重试；当前不会生成临时结论，也不会补写任何轮动方向。
+          可稍后重试；当前不会补写临时轮动方向。
         </p>
         <TerminalButton
           variant="compact"
@@ -1768,8 +1752,8 @@ const MarketRotationRadarPage: React.FC = () => {
   const marketLabelText = marketLabel(state.payload?.market || state.selectedMarket);
   const visualUnavailableReason = rotationConclusion?.title || '矩阵暂不可用';
   const visualUnavailableDetail = libraryMode
-    ? '当前仅有分类浏览条目，缺少可用于矩阵定位的相对强弱与阶段组合。'
-    : rotationConclusion?.whyNotConclusion || '当前缺少足够的结构化强弱维度，暂不展示矩阵。';
+    ? '当前仅有分类浏览条目，尚无可用于矩阵定位的相对强弱与阶段组合。'
+    : rotationConclusion?.whyNotConclusion || '当前结构化强弱维度仍待确认，暂不展示矩阵。';
 
   return (
     <div
@@ -1813,8 +1797,6 @@ const MarketRotationRadarPage: React.FC = () => {
               onRefresh={handleRefresh}
             />
 
-            <RotationGuidancePanel payload={state.payload} />
-
             <RotationVisualPanel
               themes={filteredThemes}
               selectedThemeId={selectedTheme?.id}
@@ -1825,35 +1807,7 @@ const MarketRotationRadarPage: React.FC = () => {
             />
 
             <TerminalGrid className="gap-4" data-workbench-split="8:4">
-              <section className="min-w-0 space-y-4 xl:col-span-8" aria-label={libraryMode ? '分类浏览与观察线索' : primaryTierLabel}>
-                <DataWorkbenchFrame data-testid="rotation-radar-universe-list">
-                  <div className="border-b border-white/[0.05] p-3">
-                    <TerminalSectionHeader
-                      eyebrow="主题 / 分类"
-                      title={libraryMode ? `${filteredThemes.length}/${state.payload.themes.length} 个分类条目` : `${filteredThemes.length}/${state.payload.themes.length} 个条目，先看主题再看信号。`}
-                    />
-                  </div>
-                  <div className="max-h-80 overflow-y-auto no-scrollbar">
-                    {filteredThemes.length ? (
-                      <DenseRows>
-                        {filteredThemes.map((theme) => (
-                          <CompactThemeRow
-                            key={theme.id}
-                            theme={theme}
-                            marketLabelText={marketLabelText}
-                            selected={selectedTheme?.id === theme.id}
-                            onSelect={() => dispatch({ type: 'selectTheme', themeId: theme.id })}
-                          />
-                        ))}
-                      </DenseRows>
-                    ) : (
-                      <div className="p-3">
-                        <TerminalEmptyState className="min-h-[72px] justify-start text-sm text-white/42">没有匹配主题。</TerminalEmptyState>
-                      </div>
-                    )}
-                  </div>
-                </DataWorkbenchFrame>
-
+              <section className="min-w-0 xl:col-span-8" aria-label={libraryMode ? '分类浏览与观察线索' : primaryTierLabel}>
                 <DataWorkbenchFrame data-testid="rotation-radar-leader-list">
                   <div className="border-b border-white/[0.05] p-3">
                     <TerminalSectionHeader
@@ -1886,13 +1840,13 @@ const MarketRotationRadarPage: React.FC = () => {
                         className="min-h-[104px] items-start justify-start p-3 text-left text-sm text-white/52"
                       >
                         <span className="block font-semibold text-white/82">
-                          {rotationConclusion?.title || '当前暂不能判断轮动方向'}
+                          {rotationConclusion?.title || '轮动方向待确认'}
                         </span>
                         <span className="mt-2 block leading-5">
-                          {rotationConclusion?.whyNotConclusion || '当前轮动数据不足，暂不能形成稳定判断。'}
+                          {rotationConclusion?.detail || '当前轮动数据不足，轮动方向待确认。'}
                         </span>
                         <span className="mt-3 block leading-5 text-white/60">
-                          {rotationConclusion?.nextStep || '可切换到其他市场查看分类候选，或等待数据更新后再复核。'}
+                          {rotationConclusion?.nextStep || '可切换到其他市场查看分类候选，或等待数据更新后再确认强弱。'}
                         </span>
                       </TerminalEmptyState>
                     </div>
@@ -1908,6 +1862,36 @@ const MarketRotationRadarPage: React.FC = () => {
                 />
               </div>
             </TerminalGrid>
+
+            <DataWorkbenchFrame data-testid="rotation-radar-universe-list">
+              <div className="border-b border-white/[0.05] p-3">
+                <TerminalSectionHeader
+                  eyebrow="主题 / 分类"
+                  title={libraryMode ? `${filteredThemes.length}/${state.payload.themes.length} 个分类条目` : `${filteredThemes.length}/${state.payload.themes.length} 个条目，先看主题再看信号。`}
+                />
+              </div>
+              <div className="max-h-80 overflow-y-auto no-scrollbar">
+                {filteredThemes.length ? (
+                  <DenseRows>
+                    {filteredThemes.map((theme) => (
+                      <CompactThemeRow
+                        key={theme.id}
+                        theme={theme}
+                        marketLabelText={marketLabelText}
+                        selected={selectedTheme?.id === theme.id}
+                        onSelect={() => dispatch({ type: 'selectTheme', themeId: theme.id })}
+                      />
+                    ))}
+                  </DenseRows>
+                ) : (
+                  <div className="p-3">
+                    <TerminalEmptyState className="min-h-[72px] justify-start text-sm text-white/42">没有匹配主题。</TerminalEmptyState>
+                  </div>
+                )}
+              </div>
+            </DataWorkbenchFrame>
+
+            <RotationGuidancePanel payload={state.payload} />
           </>
         ) : null}
       </ConsumerWorkspacePageShell>

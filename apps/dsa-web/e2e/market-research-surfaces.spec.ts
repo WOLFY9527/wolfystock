@@ -17,10 +17,10 @@ const routes = [
   {
     path: '/zh/market/rotation-radar',
     root: 'market-rotation-radar-page',
-    first: ['rotation-radar-summary-band', 'rotation-radar-universe-list'],
+    first: ['rotation-radar-visual-matrix', 'rotation-radar-leader-list'],
     collapsedDisclosures: [
       { testId: 'rotation-theme-data-notes', hiddenText: '方法口径' },
-      { testId: 'rotation-radar-mechanics-details', hiddenText: '当前为静态主题库，本地行情覆盖后可计算轮动强度。' },
+      { testId: 'rotation-radar-mechanics-details', hiddenText: '轮动方向说明' },
     ],
   },
 ];
