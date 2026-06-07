@@ -8,7 +8,6 @@ const viewports = [
 ] as const;
 
 const forbiddenAffordancePattern = /Bootstrap Admin|debug|internal|provider route|cache router|\benv\b|credential/i;
-const adminMenuLabelPattern = /系统|System/i;
 
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
   await route.fulfill({
@@ -223,18 +222,6 @@ async function readVisibleText(page: Page) {
   return normalizeText(await page.locator('body').innerText());
 }
 
-async function openVisibleAdminMenu(page: Page, isMobile: boolean) {
-  if (isMobile) {
-    return null;
-  }
-
-  const adminButton = page.getByTestId('shell-header-utility-island').getByRole('button', { name: adminMenuLabelPattern });
-  await adminExpect(adminButton).toBeVisible();
-  await adminExpect(adminButton).toHaveAttribute('aria-expanded', 'false');
-  await adminButton.click();
-  return page.getByTestId('shell-admin-utility-menu');
-}
-
 async function expectMarketRedirectSurface(page: Page, isMobile: boolean) {
   await appExpect(page).toHaveURL(/\/zh\/market-overview$/);
   await appExpect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
@@ -281,32 +268,31 @@ async function expectAdminRedirectSurface(page: Page, isMobile: boolean) {
   await expectNoRawSecretLikeText(page);
 
   if (isMobile) {
-    await adminExpect(page.getByTestId('shell-mobile-active-route')).toHaveText('系统');
+    await adminExpect(page.getByTestId('shell-mobile-active-route')).toHaveText('运维总览/系统设置');
+    await page.getByRole('button', { name: '打开导航菜单' }).click();
   } else {
     const accountEntry = page.getByTestId('shell-account-center-entry');
     await adminExpect(accountEntry).toBeVisible();
     await adminExpect(accountEntry).toContainText('管理员');
     await adminExpect(accountEntry).not.toContainText(/Bootstrap Admin/i);
     await expectNoForbiddenAffordanceText(await accountEntry.innerText());
+    await adminExpect(page.getByTestId('shell-header-utility-island').getByRole('button', { name: /系统|System/i })).toHaveCount(0);
   }
 
-  const adminMenu = await openVisibleAdminMenu(page, isMobile);
-  if (adminMenu) {
-    await adminExpect(adminMenu).toBeVisible();
-    await adminExpect(adminMenu.getByTestId('shell-admin-utility-group-trust')).toContainText('总览 / Trust');
-    await adminExpect(adminMenu.getByTestId('shell-admin-utility-group-evidence')).toContainText('事件 / Evidence');
-    await adminExpect(adminMenu.getByTestId('shell-admin-utility-group-dataOps')).toContainText('数据运行 / Data Ops');
-    await adminExpect(adminMenu.getByTestId('shell-admin-utility-group-support')).toContainText('用户支持 / Support');
-    await adminExpect(adminMenu).toContainText('系统');
-    await adminExpect(adminMenu).toContainText('用户治理');
-    await adminExpect(adminMenu).toContainText('成本观测');
-    await adminExpect(adminMenu).toContainText('通知');
-    await adminExpect(adminMenu).toContainText('数据源运维');
-    await adminExpect(adminMenu).toContainText('熔断诊断');
-    await adminExpect(adminMenu).toContainText('证据复核');
-    await adminExpect(adminMenu).toContainText('日志');
-    await expectNoForbiddenAffordanceText(await adminMenu.innerText());
-  }
+  const adminNav = page.getByTestId('shell-admin-primary-nav');
+  await adminExpect(adminNav).toBeVisible();
+  await adminExpect(adminNav.getByRole('link', { name: '运维总览/系统设置' })).toHaveClass(/is-active/);
+  await adminExpect(adminNav.getByRole('link', { name: '数据源与就绪度' })).toBeVisible();
+  await adminExpect(adminNav.getByRole('link', { name: '熔断诊断' })).toBeVisible();
+  await adminExpect(adminNav.getByRole('link', { name: '系统日志' })).toBeVisible();
+  await adminExpect(adminNav.getByRole('link', { name: '成本观测' })).toBeVisible();
+  await adminExpect(adminNav.getByRole('link', { name: '用户治理' })).toBeVisible();
+  await adminExpect(adminNav.getByRole('link', { name: '证据复核' })).toBeVisible();
+  await adminExpect(adminNav.getByRole('link', { name: '通知通道' })).toBeVisible();
+  await adminExpect(adminNav.getByRole('link', { name: '首页' })).toHaveCount(0);
+  await adminExpect(page.getByTestId('shell-consumer-primary-nav')).toHaveCount(0);
+  await adminExpect(page.getByTestId('shell-admin-utility-menu')).toHaveCount(0);
+  await expectNoForbiddenAffordanceText(await adminNav.innerText());
 }
 
 async function expectAdminAliasTarget(page: Page, targetPattern: RegExp, visibleTestId: string) {

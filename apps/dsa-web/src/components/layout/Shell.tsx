@@ -33,15 +33,56 @@ function resolveRailDescription(t: (key: string) => string): string {
   return t('shell.archiveDesc');
 }
 
+function isAdminOpsRoute(pathname: string): boolean {
+  return pathname.startsWith('/settings/system')
+    || pathname.startsWith('/admin/logs')
+    || pathname.startsWith('/admin/evidence-workflow')
+    || pathname.startsWith('/admin/notifications')
+    || pathname.startsWith('/admin/market-providers')
+    || pathname.startsWith('/admin/provider-circuits')
+    || pathname.startsWith('/admin/users')
+    || pathname.startsWith('/admin/cost-observability');
+}
+
+function resolveAdminOpsRouteLabel(pathname: string, language: string): string | null {
+  const isEnglish = language === 'en';
+  if (pathname.startsWith('/settings/system')) {
+    return isEnglish ? 'Ops Overview / System Settings' : '运维总览/系统设置';
+  }
+  if (pathname.startsWith('/admin/market-providers')) {
+    return isEnglish ? 'Data Sources & Readiness' : '数据源与就绪度';
+  }
+  if (pathname.startsWith('/admin/provider-circuits')) {
+    return isEnglish ? 'Circuit Diagnostics' : '熔断诊断';
+  }
+  if (pathname.startsWith('/admin/logs')) {
+    return isEnglish ? 'System Logs' : '系统日志';
+  }
+  if (pathname.startsWith('/admin/cost-observability')) {
+    return isEnglish ? 'Cost Observability' : '成本观测';
+  }
+  if (pathname.startsWith('/admin/users')) {
+    return isEnglish ? 'User Governance' : '用户治理';
+  }
+  if (pathname.startsWith('/admin/evidence-workflow')) {
+    return isEnglish ? 'Evidence Review' : '证据复核';
+  }
+  if (pathname.startsWith('/admin/notifications')) {
+    return isEnglish ? 'Notification Channels' : '通知通道';
+  }
+  return null;
+}
+
 function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, language: string): string {
   if (pathname === '/' || pathname === '') {
     return t('nav.home');
   }
+  const adminRouteLabel = resolveAdminOpsRouteLabel(pathname, language);
+  if (adminRouteLabel) {
+    return adminRouteLabel;
+  }
   if (pathname.startsWith('/settings') && !pathname.startsWith('/settings/system')) {
     return language === 'en' ? 'Account Center' : '账户中心';
-  }
-  if (pathname.startsWith('/settings/system')) {
-    return t('nav.independentConsole');
   }
   if (pathname.startsWith('/scanner')) {
     return t('nav.scanner');
@@ -69,27 +110,6 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, l
   }
   if (pathname.startsWith('/settings')) {
     return t('nav.settings');
-  }
-  if (pathname.startsWith('/admin/notifications')) {
-    return t('nav.notifications');
-  }
-  if (pathname.startsWith('/admin/logs')) {
-    return t('adminNav.logs');
-  }
-  if (pathname.startsWith('/admin/evidence-workflow')) {
-    return language === 'en' ? 'Evidence Review' : '证据复核';
-  }
-  if (pathname.startsWith('/admin/market-providers')) {
-    return t('nav.marketProviders');
-  }
-  if (pathname.startsWith('/admin/provider-circuits')) {
-    return t('nav.providerCircuits');
-  }
-  if (pathname.startsWith('/admin/users')) {
-    return t('nav.userGovernance');
-  }
-  if (pathname.startsWith('/admin/cost-observability')) {
-    return t('nav.costObservability');
   }
   return t('nav.terminal');
 }
@@ -203,14 +223,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const isLiquidityMonitorRoute = surfacePathname.startsWith('/market/liquidity-monitor');
   const isRotationRadarRoute = surfacePathname.startsWith('/market/rotation-radar');
   const isScannerRoute = surfacePathname.startsWith('/scanner');
-  const isSystemControlRoute = surfacePathname.startsWith('/settings/system')
-    || surfacePathname.startsWith('/admin/logs')
-    || surfacePathname.startsWith('/admin/evidence-workflow')
-    || surfacePathname.startsWith('/admin/notifications')
-    || surfacePathname.startsWith('/admin/market-providers')
-    || surfacePathname.startsWith('/admin/provider-circuits')
-    || surfacePathname.startsWith('/admin/users')
-    || surfacePathname.startsWith('/admin/cost-observability');
+  const isSystemControlRoute = isAdminOpsRoute(surfacePathname);
   const isPageScrollRoute = isHomeRoute;
   const shellViewportClass = isScannerRoute || isHomeRoute ? 'min-h-screen' : 'h-full min-h-0';
   const shellFrameOverflowClass = '';

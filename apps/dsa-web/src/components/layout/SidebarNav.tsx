@@ -33,7 +33,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { buildLoginPath, useProductSurface } from '../../hooks/useProductSurface';
 import { cn } from '../../utils/cn';
-import { buildLocalizedPath, parseLocaleFromPathname } from '../../utils/localeRouting';
+import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../../utils/localeRouting';
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 
@@ -66,6 +66,18 @@ type AdminNavGroup = {
   key: AdminNavGroupKey;
   label: string;
   items: AdminNavItem[];
+};
+
+type AdminNavCopy = {
+  menuLabel: string;
+  system: string;
+  marketProviders: string;
+  providerCircuits: string;
+  logs: string;
+  cost: string;
+  users: string;
+  evidence: string;
+  notifications: string;
 };
 
 const BrandWordmark: React.FC<{
@@ -101,6 +113,46 @@ const NAV_ITEMS: NavItem[] = [
 const HEADER_UTILITY_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-white/42 transition-colors hover:text-white/78';
 const HEADER_UTILITY_DANGER_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-white/38 transition-colors hover:text-red-300/90';
 const ADMIN_NAV_GROUP_ORDER: AdminNavGroupKey[] = ['trust', 'evidence', 'dataOps', 'support'];
+
+function isAdminOpsRoute(pathname: string): boolean {
+  const routePathname = stripLocalePrefix(pathname);
+  return routePathname.startsWith('/settings/system')
+    || routePathname.startsWith('/admin/logs')
+    || routePathname.startsWith('/admin/evidence-workflow')
+    || routePathname.startsWith('/admin/notifications')
+    || routePathname.startsWith('/admin/market-providers')
+    || routePathname.startsWith('/admin/provider-circuits')
+    || routePathname.startsWith('/admin/users')
+    || routePathname.startsWith('/admin/cost-observability');
+}
+
+function resolveAdminNavCopy(language: string): AdminNavCopy {
+  if (language === 'en') {
+    return {
+      menuLabel: 'Admin/Ops navigation',
+      system: 'Ops Overview / System Settings',
+      marketProviders: 'Data Sources & Readiness',
+      providerCircuits: 'Circuit Diagnostics',
+      logs: 'System Logs',
+      cost: 'Cost Observability',
+      users: 'User Governance',
+      evidence: 'Evidence Review',
+      notifications: 'Notification Channels',
+    };
+  }
+
+  return {
+    menuLabel: 'Admin/Ops 运维导航',
+    system: '运维总览/系统设置',
+    marketProviders: '数据源与就绪度',
+    providerCircuits: '熔断诊断',
+    logs: '系统日志',
+    cost: '成本观测',
+    users: '用户治理',
+    evidence: '证据复核',
+    notifications: '通知通道',
+  };
+}
 
 function adminNavGroupLabel(group: AdminNavGroupKey, language: 'zh' | 'en'): string {
   const labels: Record<AdminNavGroupKey, { zh: string; en: string }> = {
@@ -167,15 +219,11 @@ function useSidebarNavView({
   const [showAdminMenu, setShowAdminMenu] = useState(false);
   const adminMenuRef = useRef<HTMLDivElement | null>(null);
   const routeLocale = parseLocaleFromPathname(location.pathname);
+  const adminNavCopy = resolveAdminNavCopy(language);
+  const isAdminRoute = isAdminOpsRoute(location.pathname);
   const isDrawer = layout === 'drawer';
   const signInLabel = t('nav.signIn');
   const consoleLabel = t('nav.independentConsole');
-  const notificationsLabel = t('nav.notifications');
-  const marketProvidersLabel = t('nav.marketProviders');
-  const providerCircuitsLabel = t('nav.providerCircuits');
-  const userGovernanceLabel = t('nav.userGovernance');
-  const costObservabilityLabel = t('nav.costObservability');
-  const evidenceWorkflowLabel = language === 'en' ? 'Evidence Review' : '证据复核';
   const signInPath = buildLoginPath(location.pathname + location.search);
   const consolePath = routeLocale ? buildLocalizedPath('/settings/system', routeLocale) : '/settings/system';
   const adminLogsPath = routeLocale ? buildLocalizedPath('/admin/logs', routeLocale) : '/admin/logs';
@@ -187,27 +235,28 @@ function useSidebarNavView({
   const costObservabilityPath = routeLocale ? buildLocalizedPath('/admin/cost-observability', routeLocale) : '/admin/cost-observability';
   const adminNavItems: AdminNavItem[] = [];
   if (canReadSystemConfig) {
-    adminNavItems.push({ key: 'system', label: consoleLabel, to: consolePath, icon: ShieldCheck, group: 'trust' });
+    adminNavItems.push({ key: 'system', label: adminNavCopy.system, to: consolePath, icon: ShieldCheck, group: 'trust' });
   }
   if (canReadOpsLogs) {
-    adminNavItems.push({ key: 'logs', label: t('adminNav.logs'), to: adminLogsPath, icon: Activity, group: 'evidence' });
-    adminNavItems.push({ key: 'evidence', label: evidenceWorkflowLabel, to: evidenceWorkflowPath, icon: FileCheck2, group: 'evidence' });
+    adminNavItems.push({ key: 'logs', label: adminNavCopy.logs, to: adminLogsPath, icon: Activity, group: 'evidence' });
+    adminNavItems.push({ key: 'evidence', label: adminNavCopy.evidence, to: evidenceWorkflowPath, icon: FileCheck2, group: 'evidence' });
   }
   if (canReadProviders) {
-    adminNavItems.push({ key: 'providers', label: marketProvidersLabel, to: marketProvidersPath, icon: DatabaseZap, group: 'dataOps' });
-    adminNavItems.push({ key: 'provider-circuits', label: providerCircuitsLabel, to: providerCircuitsPath, icon: CircuitBoard, group: 'dataOps' });
+    adminNavItems.push({ key: 'providers', label: adminNavCopy.marketProviders, to: marketProvidersPath, icon: DatabaseZap, group: 'dataOps' });
+    adminNavItems.push({ key: 'provider-circuits', label: adminNavCopy.providerCircuits, to: providerCircuitsPath, icon: CircuitBoard, group: 'dataOps' });
   }
   if (canReadCostObservability) {
-    adminNavItems.push({ key: 'cost', label: costObservabilityLabel, to: costObservabilityPath, icon: BarChart3, group: 'dataOps' });
+    adminNavItems.push({ key: 'cost', label: adminNavCopy.cost, to: costObservabilityPath, icon: BarChart3, group: 'dataOps' });
   }
   if (canReadUsers) {
-    adminNavItems.push({ key: 'users', label: userGovernanceLabel, to: userGovernancePath, icon: UsersRound, group: 'support' });
+    adminNavItems.push({ key: 'users', label: adminNavCopy.users, to: userGovernancePath, icon: UsersRound, group: 'support' });
   }
   if (canReadNotifications) {
-    adminNavItems.push({ key: 'notifications', label: notificationsLabel, to: notificationsPath, icon: BellRing, group: 'support' });
+    adminNavItems.push({ key: 'notifications', label: adminNavCopy.notifications, to: notificationsPath, icon: BellRing, group: 'support' });
   }
   const hasAdminMenu = adminNavItems.length > 0;
   const adminNavGroups = groupAdminNavItems(adminNavItems, language);
+  const showAdminPrimaryNav = isAdminRoute;
 
   const handleAdminNavigate = () => {
     setShowAdminMenu(false);
@@ -271,6 +320,37 @@ function useSidebarNavView({
       </NavLink>
     );
   });
+
+  const adminNavLinks = adminNavItems.map(({ key, label, to, icon: Icon }) => (
+    <NavLink
+      key={key}
+      to={to}
+      end={key === 'system'}
+      onClick={handleAdminNavigate}
+      aria-label={label}
+      className={({ isActive }) => cn(
+        isDrawer
+          ? 'shell-drawer-link'
+          : 'shell-header-link text-sm transition-colors',
+        !isDrawer && (isActive
+          ? 'font-bold text-white'
+          : 'font-medium text-white/50 hover:text-white'),
+        isActive ? 'is-active' : '',
+      )}
+    >
+      {isDrawer ? (
+        <span className="shell-nav-item__icon" aria-hidden="true">
+          <Icon className="size-4" />
+        </span>
+      ) : null}
+      <span className={isDrawer ? 'shell-nav-item__label' : 'shell-header-link__label'}>
+        <NavLabel label={label} />
+      </span>
+    </NavLink>
+  ));
+  const primaryNavLinks = showAdminPrimaryNav ? adminNavLinks : navLinks;
+  const primaryNavLabel = showAdminPrimaryNav ? adminNavCopy.menuLabel : t('shell.drawerTitle');
+  const primaryNavTestId = showAdminPrimaryNav ? 'shell-admin-primary-nav' : 'shell-consumer-primary-nav';
 
   const archiveAction = !isGuest && hasArchive ? (
     <button
@@ -345,7 +425,7 @@ function useSidebarNavView({
     </NavLink>
   ) : null;
 
-  const adminMenuAction = hasAdminMenu ? (
+  const adminMenuAction = hasAdminMenu && !showAdminPrimaryNav ? (
     isDrawer ? (
       <div className="space-y-2">
         <button
@@ -487,8 +567,8 @@ function useSidebarNavView({
         <BrandWordmark onNavigate={onNavigate} />
         <span className="shell-drawer-note">{t('nav.terminal')}</span>
       </div>
-      <nav className="shell-drawer-links" aria-label={t('shell.drawerTitle')}>
-        {navLinks}
+      <nav className="shell-drawer-links" aria-label={primaryNavLabel} data-testid={primaryNavTestId}>
+        {primaryNavLinks}
       </nav>
       <div className="shell-drawer-footer">
         {archiveAction}
@@ -504,8 +584,8 @@ function useSidebarNavView({
       <div className="shell-header-brand">
         <BrandWordmark />
       </div>
-      <nav className="shell-header-links" aria-label={t('shell.drawerTitle')}>
-        {navLinks}
+      <nav className="shell-header-links" aria-label={primaryNavLabel} data-testid={primaryNavTestId}>
+        {primaryNavLinks}
       </nav>
       <div className="shell-header-utilities">
         {archiveAction}

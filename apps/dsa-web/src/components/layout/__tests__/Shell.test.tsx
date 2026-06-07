@@ -478,10 +478,10 @@ describe('Shell', () => {
     expect(within(adminMenu).getByTestId('shell-admin-utility-group-evidence')).toHaveTextContent('事件 / Evidence');
     expect(within(adminMenu).getByTestId('shell-admin-utility-group-dataOps')).toHaveTextContent('数据运行 / Data Ops');
     expect(within(adminMenu).getByTestId('shell-admin-utility-group-support')).toHaveTextContent('用户支持 / Support');
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: translate('zh', 'adminNav.logs') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '运维总览/系统设置' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '系统日志' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '证据复核' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.notifications') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '通知通道' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('zh', 'nav.logout') })).toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: 'Escape' });
@@ -649,12 +649,53 @@ describe('Shell', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByTestId('shell-mobile-active-route')).toHaveTextContent(translate('zh', 'adminNav.logs'));
+    expect(screen.getByTestId('shell-mobile-active-route')).toHaveTextContent('系统日志');
     expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--system-control')).not.toBeNull();
     expect(document.querySelector('.shell-main-column')).toHaveClass('shell-main-column--system-control', 'p-0');
     expect(document.querySelector('.theme-page-transition')).toHaveClass('theme-page-transition--system-control');
+  });
+
+  it('uses an admin primary menu instead of consumer routes inside the mobile drawer on admin routes', async () => {
+    window.innerWidth = 390;
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      currentUser: fullCapabilityAdminUser,
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/zh/admin/market-providers']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('shell-mobile-active-route')).toHaveTextContent('数据源与就绪度');
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '打开导航菜单' }));
+      await settleDrawerMotion();
+    });
+
+    const adminNav = await screen.findByTestId('shell-admin-primary-nav');
+    expect(within(adminNav).getByRole('link', { name: '运维总览/系统设置' })).toBeInTheDocument();
+    expect(within(adminNav).getByRole('link', { name: '数据源与就绪度' })).toHaveClass('is-active');
+    expect(within(adminNav).getByRole('link', { name: '熔断诊断' })).toBeInTheDocument();
+    expect(within(adminNav).getByRole('link', { name: '系统日志' })).toBeInTheDocument();
+    expect(within(adminNav).getByRole('link', { name: '成本观测' })).toBeInTheDocument();
+    expect(within(adminNav).getByRole('link', { name: '用户治理' })).toBeInTheDocument();
+    expect(within(adminNav).getByRole('link', { name: '证据复核' })).toBeInTheDocument();
+    expect(within(adminNav).getByRole('link', { name: '通知通道' })).toBeInTheDocument();
+    expect(within(adminNav).queryByRole('link', { name: translate('zh', 'nav.home') })).not.toBeInTheDocument();
+    expect(within(adminNav).queryByRole('link', { name: translate('zh', 'nav.scanner') })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('shell-consumer-primary-nav')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('shell-admin-utility-menu')).not.toBeInTheDocument();
   });
 
   it('uses the wide workspace lane for the backtest route', () => {
@@ -827,7 +868,7 @@ describe('Shell', () => {
     expect(within(adminMenu).getByTestId('shell-admin-utility-group-evidence')).toHaveTextContent('事件 / Evidence');
     expect(within(adminMenu).getByTestId('shell-admin-utility-group-dataOps')).toHaveTextContent('数据运行 / Data Ops');
     expect(within(adminMenu).getByTestId('shell-admin-utility-group-support')).toHaveTextContent('用户支持 / Support');
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.marketProviders') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '数据源与就绪度' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '系统日志' })).toBeInTheDocument();
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.logout') })).toBeInTheDocument();
     expect(actionIsland.querySelectorAll('[data-testid="shell-header-utility-divider"]')).toHaveLength(2);
@@ -866,13 +907,13 @@ describe('Shell', () => {
     expect(within(adminMenu).queryByTestId('shell-admin-utility-group-evidence')).not.toBeInTheDocument();
     expect(within(adminMenu).getByTestId('shell-admin-utility-group-dataOps')).toHaveTextContent('数据运行 / Data Ops');
     expect(within(adminMenu).getByTestId('shell-admin-utility-group-support')).toHaveTextContent('用户支持 / Support');
-    expect(await screen.findByRole('link', { name: translate('zh', 'nav.userGovernance') })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.costObservability') })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: '用户治理' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '成本观测' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: translate('zh', 'adminNav.logs') })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: translate('zh', 'nav.notifications') })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: translate('zh', 'nav.marketProviders') })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: translate('zh', 'nav.providerCircuits') })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '系统日志' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '通知通道' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '数据源与就绪度' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '熔断诊断' })).not.toBeInTheDocument();
   });
 
   it('shows only ops-log destinations when the admin account has only log capability', async () => {
@@ -902,20 +943,16 @@ describe('Shell', () => {
     );
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
-    fireEvent.click(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.independentConsole') }));
-    const adminMenu = await screen.findByTestId('shell-admin-utility-menu');
-    expect(within(adminMenu).queryByTestId('shell-admin-utility-group-trust')).not.toBeInTheDocument();
-    expect(within(adminMenu).getByTestId('shell-admin-utility-group-evidence')).toHaveTextContent('事件 / Evidence');
-    expect(within(adminMenu).queryByTestId('shell-admin-utility-group-dataOps')).not.toBeInTheDocument();
-    expect(within(adminMenu).queryByTestId('shell-admin-utility-group-support')).not.toBeInTheDocument();
-    expect(await screen.findByRole('link', { name: '证据复核' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: translate('zh', 'adminNav.logs') })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Evidence Review' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: translate('zh', 'nav.userGovernance') })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: translate('zh', 'nav.costObservability') })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: translate('zh', 'nav.notifications') })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: translate('zh', 'nav.marketProviders') })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: translate('zh', 'nav.providerCircuits') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('button', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
+    const adminNav = await screen.findByTestId('shell-admin-primary-nav');
+    expect(within(adminNav).getByRole('link', { name: '证据复核' })).toBeInTheDocument();
+    expect(within(adminNav).getByRole('link', { name: '系统日志' })).toHaveClass('is-active');
+    expect(within(adminNav).queryByRole('link', { name: 'Evidence Review' })).not.toBeInTheDocument();
+    expect(within(adminNav).queryByRole('link', { name: '用户治理' })).not.toBeInTheDocument();
+    expect(within(adminNav).queryByRole('link', { name: '成本观测' })).not.toBeInTheDocument();
+    expect(within(adminNav).queryByRole('link', { name: '通知通道' })).not.toBeInTheDocument();
+    expect(within(adminNav).queryByRole('link', { name: '数据源与就绪度' })).not.toBeInTheDocument();
+    expect(within(adminNav).queryByRole('link', { name: '熔断诊断' })).not.toBeInTheDocument();
   });
 
   it('does not show evidence workflow nav for adjacent admin capabilities without ops-log read', async () => {
@@ -945,20 +982,16 @@ describe('Shell', () => {
     );
 
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
-    fireEvent.click(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.independentConsole') }));
-    const adminMenu = await screen.findByTestId('shell-admin-utility-menu');
-    expect(within(adminMenu).getByTestId('shell-admin-utility-group-trust')).toHaveTextContent('总览 / Trust');
-    expect(within(adminMenu).queryByTestId('shell-admin-utility-group-evidence')).not.toBeInTheDocument();
-    expect(within(adminMenu).getByTestId('shell-admin-utility-group-dataOps')).toHaveTextContent('数据运行 / Data Ops');
-    expect(within(adminMenu).getByTestId('shell-admin-utility-group-support')).toHaveTextContent('用户支持 / Support');
-    expect(await screen.findByRole('link', { name: translate('zh', 'nav.independentConsole') })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.userGovernance') })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.costObservability') })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.notifications') })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.marketProviders') })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: translate('zh', 'nav.providerCircuits') })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: translate('zh', 'adminNav.logs') })).not.toBeInTheDocument();
+    expect(within(actionIsland).queryByRole('button', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
+    const adminNav = await screen.findByTestId('shell-admin-primary-nav');
+    expect(within(adminNav).getByRole('link', { name: '运维总览/系统设置' })).toBeInTheDocument();
+    expect(within(adminNav).getByRole('link', { name: '数据源与就绪度' })).toHaveClass('is-active');
+    expect(within(adminNav).getByRole('link', { name: '熔断诊断' })).toBeInTheDocument();
+    expect(within(adminNav).getByRole('link', { name: '成本观测' })).toBeInTheDocument();
+    expect(within(adminNav).getByRole('link', { name: '用户治理' })).toBeInTheDocument();
+    expect(within(adminNav).getByRole('link', { name: '通知通道' })).toBeInTheDocument();
+    expect(within(adminNav).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
+    expect(within(adminNav).queryByRole('link', { name: '系统日志' })).not.toBeInTheDocument();
   });
 
   it('fails closed for sensitive admin nav when capability fields are absent', async () => {

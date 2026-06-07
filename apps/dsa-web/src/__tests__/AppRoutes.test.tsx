@@ -2,7 +2,6 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App, { AppContent } from '../App';
-import { translate } from '../i18n/core';
 import { expectNoRawI18nKeys } from '../test-utils/i18nRawKeySentinel';
 import { isPreviewRoutePath } from '../utils/appRouteGuards';
 import type { AdminCapabilityFlags } from '../utils/adminCapabilities';
@@ -226,6 +225,7 @@ function mockSignedInAdminWithCapabilities(adminCapabilities: AdminCapabilityFla
     isAdminAccount: true,
     isAdminMode: true,
     adminCapabilities,
+    ...adminCapabilities,
   });
 }
 
@@ -244,6 +244,7 @@ describe('AppContent route flows', () => {
       isAdmin: false,
       isAdminMode: false,
       adminCapabilities: noCapabilities,
+      ...noCapabilities,
     });
     languageState.value = 'en';
   });
@@ -680,6 +681,7 @@ describe('AppContent route flows', () => {
       isAdmin: true,
       isAdminMode: true,
       adminCapabilities: fullCapabilities,
+      ...fullCapabilities,
     });
 
     renderAt('/settings/system');
@@ -701,15 +703,17 @@ describe('AppContent route flows', () => {
       isAdmin: true,
       isAdminMode: true,
       adminCapabilities: fullCapabilities,
+      ...fullCapabilities,
     });
 
     const { container } = renderAt('/en/settings/system');
 
     await waitFor(() => expect(screen.getByText('system-settings-page')).toBeInTheDocument());
-    const primaryNav = screen.getByRole('navigation', { name: translate('en', 'shell.drawerTitle') });
+    const primaryNav = screen.getByRole('navigation', { name: 'Admin/Ops navigation' });
     expectNoRawI18nKeys(container);
-    expect(within(primaryNav).getByRole('link', { name: translate('en', 'nav.home') })).toBeInTheDocument();
-    expect(within(primaryNav).getByRole('link', { name: translate('en', 'nav.marketOverview') })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole('link', { name: 'Ops Overview / System Settings' })).toBeInTheDocument();
+    expect(within(primaryNav).getByRole('link', { name: 'Data Sources & Readiness' })).toBeInTheDocument();
+    expect(screen.queryByTestId('shell-consumer-primary-nav')).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: 'Decision Desk' })).not.toBeInTheDocument();
   });
 

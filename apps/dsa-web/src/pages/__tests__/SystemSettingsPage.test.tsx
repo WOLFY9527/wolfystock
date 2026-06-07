@@ -76,8 +76,11 @@ describe('SystemSettingsPage', () => {
     expect(within(overviewStrip).getByText('建议动作')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('证据参考')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('最近更新')).toBeInTheDocument();
+    expect(within(overviewStrip).getByText('需复核')).toBeInTheDocument();
+    expect(within(overviewStrip).queryByText('未汇总')).not.toBeInTheDocument();
     expect(within(overviewStrip).getByText('系统运维中心 / 下方摘要')).toBeInTheDocument();
-    expect(screen.getByText('凭证、调度、系统状态与高风险操作仍需结合运维中心快照确认。')).toBeInTheDocument();
+    expect(screen.getByText('需要关注：凭证、调度、系统状态需逐项确认')).toBeInTheDocument();
+    expect(screen.getByText('凭证、调度、系统状态与高风险操作需要在运维中心逐项确认。')).toBeInTheDocument();
     expect(screen.getByText('详细配置项保留在下方运维中心。')).toBeInTheDocument();
     expect(visualBoundary).toHaveTextContent('将常规配置与危险维护动作分开呈现');
     expect(visualBoundary).toHaveTextContent('常规配置区');
@@ -121,7 +124,11 @@ describe('SystemSettingsPage', () => {
     expect(screen.getByTestId('system-settings-visual-boundary')).toHaveTextContent('Factory reset and system initialization paths');
     expect(screen.getByText('System control center / summary below')).toBeInTheDocument();
     expect(screen.getByText('Access readiness, schedules, system state, risky actions')).toBeInTheDocument();
-    expect(screen.getByText('Access readiness, schedules, system state, and risky actions still need confirmation from the control center snapshot.')).toBeInTheDocument();
+    const overviewStrip = screen.getByTestId('system-settings-l0-overview-strip');
+    expect(within(overviewStrip).getByText('Review required')).toBeInTheDocument();
+    expect(within(overviewStrip).queryByText('Unknown')).not.toBeInTheDocument();
+    expect(screen.getByText('Needs review: access setup, schedules, and system state require confirmation')).toBeInTheDocument();
+    expect(screen.getByText('Access setup, schedules, system state, and risky actions need step-by-step confirmation in the control center.')).toBeInTheDocument();
     expect(screen.queryByText(defaultVisibleInternalCopyPattern)).not.toBeInTheDocument();
 
     expect(await screen.findByText('settings-page-core')).toBeInTheDocument();

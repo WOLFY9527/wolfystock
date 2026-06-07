@@ -34,8 +34,8 @@ const SystemSettingsPage: FC = () => {
       overview: [
         {
           label: 'Current status',
-          value: 'Waiting for the latest snapshot',
-          note: 'The control center below loads system health, config domains, and access-readiness summaries.',
+          value: 'Needs review: access setup, schedules, and system state require confirmation',
+          note: 'This is a frontend operator entry verdict. The control center below loads the latest snapshot.',
         },
         {
           label: 'Watch items',
@@ -48,7 +48,7 @@ const SystemSettingsPage: FC = () => {
           note: 'Detailed settings stay inside the control center below.',
         },
       ],
-      l0Impact: 'Access readiness, schedules, system state, and risky actions still need confirmation from the control center snapshot.',
+      l0Impact: 'Access setup, schedules, system state, and risky actions need step-by-step confirmation in the control center.',
       l0RecommendedAction: 'Review the system summary first, then open the relevant settings domain.',
       l0EvidenceRef: 'System control center / summary below',
       l0LastUpdated: 'Updates after the snapshot loads',
@@ -85,8 +85,8 @@ const SystemSettingsPage: FC = () => {
       overview: [
         {
           label: '当前状态',
-          value: '等待最新快照',
-          note: '由下方运维中心加载系统健康、配置域与凭证摘要。',
+          value: '需要关注：凭证、调度、系统状态需逐项确认',
+          note: '这是前端运维入口判断；最新配置快照由下方运维中心加载。',
         },
         {
           label: '需关注',
@@ -99,7 +99,7 @@ const SystemSettingsPage: FC = () => {
           note: '详细配置项保留在下方运维中心。',
         },
       ],
-      l0Impact: '凭证、调度、系统状态与高风险操作仍需结合运维中心快照确认。',
+      l0Impact: '凭证、调度、系统状态与高风险操作需要在运维中心逐项确认。',
       l0RecommendedAction: '先看系统运维摘要，再进入相关配置域。',
       l0EvidenceRef: '系统运维中心 / 下方摘要',
       l0LastUpdated: '配置快照加载后更新',
@@ -231,7 +231,7 @@ const SystemSettingsPage: FC = () => {
         </p>
         <AdminOpsL0OverviewStrip
           dataTestId="system-settings-l0-overview-strip"
-          systemTrustState="unknown"
+          systemTrustState="review_required"
           language={isEnglish ? 'en' : 'zh'}
           impact={pageCopy.l0Impact}
           recommendedAction={pageCopy.l0RecommendedAction}
