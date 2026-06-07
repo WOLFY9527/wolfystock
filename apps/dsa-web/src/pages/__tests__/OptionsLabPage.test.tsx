@@ -606,6 +606,8 @@ describe('OptionsLabPage', () => {
     ['状态', '最大亏损', '情景上沿', '盈亏平衡', '目标价下情景估算', '核心原因'].forEach((label) => {
       expect(within(section).getAllByText(label).length).toBeGreaterThan(0);
     });
+    expect(within(section).getAllByTestId('options-lab-strategy-metric-list')).toHaveLength(4);
+    expect(within(section).getAllByTestId('options-lab-strategy-metric-list')[0]).toHaveTextContent('风险指标');
     expect(within(section).getByTestId('options-lab-primary-strategy-row')).toHaveTextContent('样例顺序 #1');
     expect(within(section).getByTestId('options-lab-primary-strategy-row')).toHaveTextContent('观察结构样例 #1');
     expect(within(section).getByTestId('options-lab-primary-strategy-row')).toHaveTextContent('未达判断等级');
@@ -623,7 +625,10 @@ describe('OptionsLabPage', () => {
     renderPage();
 
     const section = await screen.findByTestId('options-lab-decision-engine');
-    expect(within(section).getByText('情景判断')).toBeInTheDocument();
+    const heading = within(section).getByRole('heading', { name: '情景判断' });
+    expect(heading).toBeInTheDocument();
+    expect(heading).toHaveClass('break-words');
+    expect(heading).not.toHaveClass('truncate');
     await waitFor(() => {
       expect(within(section).getAllByText('预期波动').length).toBeGreaterThan(0);
     });
@@ -632,6 +637,7 @@ describe('OptionsLabPage', () => {
     expect(within(section).getAllByText(NO_CONCLUSION_LABEL).length).toBeGreaterThan(0);
     expect(within(section).getAllByText('演示/延迟数据').length).toBeGreaterThan(0);
     expect(screen.getByTestId('options-lab-risk-boundary-panel')).toHaveTextContent(OBSERVE_ONLY_EVIDENCE_COPY);
+    expect(within(section).getByTestId('options-lab-decision-metric-list')).toHaveTextContent('判断指标');
     expect(within(section).getByText('IV / 敏感度')).toBeInTheDocument();
     expect(within(section).getAllByText('IV 分位不可用').length).toBeGreaterThan(0);
     expect(within(section).getAllByText('$7.50').length).toBeGreaterThan(0);

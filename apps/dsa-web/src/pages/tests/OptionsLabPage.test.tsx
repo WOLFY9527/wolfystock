@@ -24,8 +24,14 @@ describe('OptionsLabPage research-trust copy sentinels', () => {
     expect(source).toContain('情景上沿');
     expect(source).toContain('目标价下情景估算');
     expect(source).toContain('未设上沿，不代表可获利');
+    expect(source).toContain('break-words text-sm font-medium leading-6');
+    expect(source).toContain('options-lab-strategy-metric-list');
+    expect(source).toContain('options-lab-decision-metric-list');
+    expect(source).toContain('风险指标');
+    expect(source).toContain('判断指标');
     expect(source).toContain('假设价格');
     expect(source).toContain('专业结构：');
+    expect(source).toContain('xl:col-start-2 xl:row-start-1');
 
     [
       'trade quality',

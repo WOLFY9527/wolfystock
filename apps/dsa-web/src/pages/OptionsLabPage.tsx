@@ -38,7 +38,6 @@ import {
   TerminalEmptyState,
   TerminalNotice,
   TerminalPageHeading,
-  TerminalSectionHeader,
 } from '../components/terminal/TerminalPrimitives';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { cn } from '../utils/cn';
@@ -77,6 +76,12 @@ type ScenarioEvidenceView = {
   missingEvidence: string[];
   nextEvidenceNeeded: string[];
   boundaryLines: string[];
+};
+
+type CompactMetricListItem = {
+  label: string;
+  value: React.ReactNode;
+  tone?: string;
 };
 
 const DIRECTION_OPTIONS: Array<{ value: OptionsDirection; label: string }> = [
@@ -716,16 +721,57 @@ const SectionHeader: React.FC<{
   icon: React.ComponentType<{ className?: string }>;
   children?: React.ReactNode;
 }> = ({ eyebrow, title, icon: Icon, children }) => (
-  <TerminalSectionHeader
-    eyebrow={(
-      <span className="inline-flex items-center gap-2">
+  <div
+    data-terminal-primitive="section-header"
+    className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+  >
+    <div className="min-w-0 max-w-full">
+      <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">
+        <span className="inline-flex min-w-0 items-center gap-2">
         <Icon className="h-4 w-4 text-[color:var(--wolfy-accent)]" aria-hidden="true" />
         <span>{eyebrow}</span>
-      </span>
+        </span>
+      </p>
+      <h2 className="mt-1 max-w-full break-words text-sm font-medium leading-6 text-[color:var(--wolfy-text-primary)]">
+        {title}
+      </h2>
+    </div>
+    {children ? <div className="min-w-0 sm:shrink-0">{children}</div> : null}
+  </div>
+);
+
+const CompactMetricList: React.FC<{
+  title: string;
+  items: CompactMetricListItem[];
+  testId?: string;
+  className?: string;
+  desktopColumnsClassName?: string;
+  desktopContents?: boolean;
+}> = ({ title, items, testId, className, desktopColumnsClassName = 'lg:grid-cols-3', desktopContents = false }) => (
+  <div
+    data-testid={testId}
+    className={cn(
+      innerBlockClass,
+      'min-w-0 p-3',
+      desktopContents ? 'lg:contents' : 'lg:border-0 lg:bg-transparent lg:p-0',
+      className,
     )}
-    title={title}
-    action={children}
-  />
+  >
+    <p className={cn(labelClass, 'lg:hidden')}>{title}</p>
+    <dl className={cn('mt-3 grid gap-2', desktopContents ? 'lg:contents' : cn('lg:mt-0', desktopColumnsClassName))}>
+      {items.map((item) => (
+        <div
+          key={item.label}
+          className="grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-3 border-t border-[color:var(--wolfy-divider)] pt-2 first:border-t-0 first:pt-0 lg:block lg:rounded-md lg:border lg:border-[color:var(--wolfy-divider)] lg:bg-[var(--wolfy-surface-input)] lg:p-3 lg:first:border lg:first:pt-3"
+        >
+          <dt className={labelClass}>{item.label}</dt>
+          <dd className={cn('min-w-0 text-right font-mono text-sm font-semibold leading-5 text-[color:var(--wolfy-text-primary)] lg:mt-2 lg:text-left', item.tone)}>
+            {item.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  </div>
 );
 
 const WorkspaceRegion: React.FC<{
@@ -1693,60 +1739,69 @@ const StrategyRow: React.FC<{
   highlighted: boolean;
   gateBlocked: boolean;
   alternative?: RankedAlternative;
-}> = ({ strategy, rank, highlighted, gateBlocked, alternative }) => (
-  <article
-    data-testid={highlighted ? 'options-lab-primary-strategy-row' : undefined}
-    className={cn(
-      'min-w-0 rounded-lg border px-4 py-4 text-sm transition-colors',
-      highlighted
-        ? 'border-[color:color-mix(in_srgb,var(--wolfy-accent)_42%,transparent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_10%,transparent)]'
-        : 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] hover:border-[color:var(--wolfy-border-subtle)]',
-    )}
-  >
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-xs text-[color:var(--wolfy-text-muted)]">#{rank}</span>
-          {highlighted ? <Pill tone={gateBlocked ? 'warn' : 'info'}>{gateBlocked ? `样例顺序 #${rank}` : '样例顺序靠前'}</Pill> : null}
+}> = ({ strategy, rank, highlighted, gateBlocked, alternative }) => {
+  const metrics: CompactMetricListItem[] = [
+    {
+      label: '最大亏损',
+      value: money(alternative?.maxLoss ?? strategy.maxLoss),
+      tone: 'text-[color:var(--wolfy-market-down)]',
+    },
+    {
+      label: '情景上沿',
+      value: (alternative?.maxGain ?? strategy.maxGain) == null ? '未设上沿，不代表可获利' : money(alternative?.maxGain ?? strategy.maxGain),
+      tone: 'text-[color:var(--wolfy-market-up)]',
+    },
+    {
+      label: '盈亏平衡',
+      value: money(strategy.breakeven),
+    },
+    {
+      label: '目标价下情景估算',
+      value: money(strategy.payoffAtTarget),
+      tone: metricTone(strategy.payoffAtTarget),
+    },
+  ];
+
+  return (
+    <article
+      data-testid={highlighted ? 'options-lab-primary-strategy-row' : undefined}
+      className={cn(
+        'min-w-0 rounded-lg border px-4 py-4 text-sm transition-colors',
+        highlighted
+          ? 'border-[color:color-mix(in_srgb,var(--wolfy-accent)_42%,transparent)] bg-[color:color-mix(in_srgb,var(--wolfy-accent)_10%,transparent)]'
+          : 'border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] hover:border-[color:var(--wolfy-border-subtle)]',
+      )}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-xs text-[color:var(--wolfy-text-muted)]">#{rank}</span>
+            {highlighted ? <Pill tone={gateBlocked ? 'warn' : 'info'}>{gateBlocked ? `样例顺序 #${rank}` : '样例顺序靠前'}</Pill> : null}
+          </div>
+          <h3 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">观察结构样例 #{rank}</h3>
+          <p className="mt-1 break-words font-mono text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
+            专业结构：{strategyChineseLabel(strategy.strategyType)} · {strategyLabel(strategy.strategyType)}
+          </p>
         </div>
-        <h3 className="mt-1 text-base font-semibold text-[color:var(--wolfy-text-primary)]">观察结构样例 #{rank}</h3>
-        <p className="mt-1 break-words font-mono text-[11px] leading-5 text-[color:var(--wolfy-text-muted)]">
-          专业结构：{strategyChineseLabel(strategy.strategyType)} · {strategyLabel(strategy.strategyType)}
-        </p>
-      </div>
-      <div className="shrink-0">
-        <p className={labelClass}>状态</p>
-        <div className="mt-2">
-          <Pill tone={gateBlocked ? 'warn' : 'info'}>
-            {gateBlocked ? '未达判断等级' : strategyStatusLabel(strategy, alternative)}
-          </Pill>
+        <div className="sm:shrink-0 sm:text-right">
+          <p className={labelClass}>状态</p>
+          <div className="mt-2">
+            <Pill tone={gateBlocked ? 'warn' : 'info'}>
+              {gateBlocked ? '未达判断等级' : strategyStatusLabel(strategy, alternative)}
+            </Pill>
+          </div>
         </div>
       </div>
-    </div>
-    <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      <div className={cn(innerBlockClass, 'p-3')}>
-        <p className={labelClass}>最大亏损</p>
-        <p className="mt-2 font-mono text-sm font-semibold text-[color:var(--wolfy-market-down)]">{money(alternative?.maxLoss ?? strategy.maxLoss)}</p>
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        <CompactMetricList title="风险指标" items={metrics} testId="options-lab-strategy-metric-list" desktopContents />
+        <div className={cn(innerBlockClass, 'p-3 lg:col-span-2')}>
+          <p className={labelClass}>核心原因</p>
+          <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{strategyPrimaryReason(strategy, alternative)}</p>
+        </div>
       </div>
-      <div className={cn(innerBlockClass, 'p-3')}>
-        <p className={labelClass}>情景上沿</p>
-        <p className="mt-2 font-mono text-sm font-semibold text-[color:var(--wolfy-market-up)]">{(alternative?.maxGain ?? strategy.maxGain) == null ? '未设上沿，不代表可获利' : money(alternative?.maxGain ?? strategy.maxGain)}</p>
-      </div>
-      <div className={cn(innerBlockClass, 'p-3')}>
-        <p className={labelClass}>盈亏平衡</p>
-        <p className="mt-2 font-mono text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{money(strategy.breakeven)}</p>
-      </div>
-      <div className={cn(innerBlockClass, 'p-3')}>
-        <p className={labelClass}>目标价下情景估算</p>
-        <p className={cn('mt-2 font-mono text-sm font-semibold', metricTone(strategy.payoffAtTarget))}>{money(strategy.payoffAtTarget)}</p>
-      </div>
-      <div className={cn(innerBlockClass, 'p-3 sm:col-span-2 xl:col-span-2')}>
-        <p className={labelClass}>核心原因</p>
-        <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">{strategyPrimaryReason(strategy, alternative)}</p>
-      </div>
-    </div>
-  </article>
-);
+    </article>
+  );
+};
 
 const StrategyComparisonPanel: React.FC<{
   comparisonState: ComparisonState;
@@ -1824,13 +1879,6 @@ const StrategyComparisonPanel: React.FC<{
   );
 };
 
-const DecisionMetric: React.FC<{ label: string; value: string; tone?: string }> = ({ label, value, tone = 'text-[color:var(--wolfy-text-primary)]' }) => (
-  <div className={cn(innerBlockClass, 'min-w-0 p-3')}>
-    <p className={labelClass}>{label}</p>
-    <p className={cn('mt-2 truncate font-mono text-base font-semibold tracking-tight', tone)}>{value}</p>
-  </div>
-);
-
 const ScenarioEvidencePanel: React.FC<{
   frame: OptionsConsumerScenarioFrame;
   className?: string;
@@ -1893,29 +1941,32 @@ const ScenarioEvidencePanel: React.FC<{
           </div>
         </div>
       </div>
-      <div className="mt-3 grid gap-3 xl:grid-cols-3">
-        <div className={cn(innerBlockClass, 'p-4')}>
-          <p className={labelClass}>缺失证据</p>
-          <div className="mt-2 space-y-1.5 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-            {view.missingEvidence.length ? view.missingEvidence.map((line) => (
-              <p key={line}>{line}</p>
-            )) : <p>当前未发现额外缺口。</p>}
+      <div className={cn(innerBlockClass, 'mt-3 p-4')}>
+        <p className={labelClass}>补证与只读边界</p>
+        <div className="mt-3 grid gap-4 xl:grid-cols-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-[color:var(--wolfy-text-primary)]">缺失证据</p>
+            <div className="mt-2 space-y-1.5 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+              {view.missingEvidence.length ? view.missingEvidence.map((line) => (
+                <p key={line}>{line}</p>
+              )) : <p>当前未发现额外缺口。</p>}
+            </div>
           </div>
-        </div>
-        <div className={cn(innerBlockClass, 'p-4')}>
-          <p className={labelClass}>下一步补证</p>
-          <div className="mt-2 space-y-1.5 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-            {view.nextEvidenceNeeded.length ? view.nextEvidenceNeeded.map((line) => (
-              <p key={line}>{line}</p>
-            )) : <p>等待下一次证据更新。</p>}
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-[color:var(--wolfy-text-primary)]">下一步补证</p>
+            <div className="mt-2 space-y-1.5 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+              {view.nextEvidenceNeeded.length ? view.nextEvidenceNeeded.map((line) => (
+                <p key={line}>{line}</p>
+              )) : <p>等待下一次证据更新。</p>}
+            </div>
           </div>
-        </div>
-        <div className={cn(innerBlockClass, 'p-4')}>
-          <p className={labelClass}>只读边界</p>
-          <div className="mt-2 space-y-1.5 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-            {view.boundaryLines.length ? view.boundaryLines.map((line) => (
-              <p key={line}>{line}</p>
-            )) : <p>当前仅保留研究记录边界。</p>}
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-[color:var(--wolfy-text-primary)]">只读边界</p>
+            <div className="mt-2 space-y-1.5 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
+              {view.boundaryLines.length ? view.boundaryLines.map((line) => (
+                <p key={line}>{line}</p>
+              )) : <p>当前仅保留研究记录边界。</p>}
+            </div>
           </div>
         </div>
       </div>
@@ -1953,6 +2004,26 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
     freshnessLabel(decision?.freshness?.freshness),
     ivRankStatus === 'available' ? 'IV 分位可用' : 'IV 分位不可用',
   ].filter((item) => item && item !== '--'))].slice(0, 3);
+  const decisionMetrics: CompactMetricListItem[] = [
+    {
+      label: '情景质量',
+      value: number(decision?.tradeQualityScore),
+    },
+    {
+      label: '最大亏损',
+      value: money(decision?.riskReward?.maxLoss),
+      tone: 'text-[color:var(--wolfy-market-down)]',
+    },
+    {
+      label: '预期波动',
+      value: money(expectedMove?.expectedMoveAbs),
+    },
+    {
+      label: 'IV / 敏感度',
+      value: number(decision?.ivGreeks?.ivReadiness),
+      tone: 'text-[color:var(--wolfy-accent-soft)]',
+    },
+  ];
   return (
     <section className={cn(panelClass, className)} data-testid="options-lab-decision-engine">
       <SectionHeader eyebrow="判断内容" title="情景判断" icon={ShieldCheck}>
@@ -2001,12 +2072,13 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
               </div>
             </div>
             <ReadinessGateStrip decision={decision} testId="options-lab-decision-readiness-strip" className="mt-4" />
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <DecisionMetric label="情景质量" value={number(decision?.tradeQualityScore)} tone="text-[color:var(--wolfy-text-primary)]" />
-              <DecisionMetric label="最大亏损" value={money(decision?.riskReward?.maxLoss)} tone="text-[color:var(--wolfy-market-down)]" />
-              <DecisionMetric label="预期波动" value={money(expectedMove?.expectedMoveAbs)} tone="text-[color:var(--wolfy-text-primary)]" />
-              <DecisionMetric label="IV / 敏感度" value={number(decision?.ivGreeks?.ivReadiness)} tone="text-[color:var(--wolfy-accent-soft)]" />
-            </div>
+            <CompactMetricList
+              title="判断指标"
+              items={decisionMetrics}
+              testId="options-lab-decision-metric-list"
+              className="mt-4"
+              desktopColumnsClassName="xl:grid-cols-4"
+            />
             <div className={cn(innerBlockClass, 'mt-4 p-3')}>
               <p className={labelClass}>观察结构样例</p>
               <p className="mt-2 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{observationCandidate ? '观察结构样例' : '暂无可判断结构'}</p>
@@ -2204,12 +2276,13 @@ const MethodologyDisclosure: React.FC<{
   targetPrice: string;
   targetDate: string;
   riskBudget: string;
-}> = ({ state, targetPrice, targetDate, riskBudget }) => (
+  className?: string;
+}> = ({ state, targetPrice, targetDate, riskBudget, className }) => (
   <ConsoleDisclosure
     data-testid="options-lab-analysis-details"
     title="数据注记"
     summary="默认折叠，仅在需要时展开方法与限制。"
-    className="border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]"
+    className={cn('border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-console)]', className)}
   >
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
       <div className={cn(innerBlockClass, 'p-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
@@ -2648,64 +2721,75 @@ const OptionsLabPageContent: React.FC = () => {
               summary="输出区统一承载观察结构样例、情景判断、图形证据、链表与风险边界。先看结构与风险，再下钻图形和明细。"
               icon={BarChart3}
             >
-              <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.82fr)]">
-                <div className="grid min-w-0 gap-6">
-                  <StrategyComparisonPanel
-                    comparisonState={comparisonState}
-                    decision={decisionState.decision}
-                    loading={comparisonState.loading}
-                    emptyMessage={comparisonEmptyMessage}
-                    chain={state.chain}
-                  />
-                  <DecisionPanel decisionState={decisionState} emptyMessage={decisionEmptyMessage} />
-                  <ResearchVisualsPanel
-                    decision={decisionState.decision}
-                    comparison={comparisonState.comparison}
-                    chain={state.chain}
-                    targetPrice={Number.isFinite(Number(targetPrice)) ? Number(targetPrice) : null}
-                  />
-                  {scenarioEvidenceFrame ? <ScenarioEvidencePanel frame={scenarioEvidenceFrame} /> : null}
+              <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.82fr)] xl:items-start">
+                <StrategyComparisonPanel
+                  comparisonState={comparisonState}
+                  decision={decisionState.decision}
+                  loading={comparisonState.loading}
+                  emptyMessage={comparisonEmptyMessage}
+                  chain={state.chain}
+                  className="xl:col-start-1 xl:row-start-1"
+                />
+                <DecisionPanel
+                  decisionState={decisionState}
+                  emptyMessage={decisionEmptyMessage}
+                  className="xl:col-start-1 xl:row-start-2"
+                />
+                <RiskBoundaryPanel
+                  decision={decisionState.decision}
+                  chain={state.chain}
+                  loading={state.loading || decisionState.loading}
+                  error={state.error || decisionState.error}
+                  className="xl:col-start-2 xl:row-start-1"
+                />
+                <ContextRailPanel
+                  decision={decisionState.decision}
+                  loading={state.loading || comparisonState.loading || decisionState.loading}
+                  error={state.error || comparisonState.error || decisionState.error}
+                  hasChainRows={hasChainRows}
+                  className="xl:col-start-2 xl:row-start-2"
+                />
+                <ResearchVisualsPanel
+                  decision={decisionState.decision}
+                  comparison={comparisonState.comparison}
+                  chain={state.chain}
+                  targetPrice={Number.isFinite(Number(targetPrice)) ? Number(targetPrice) : null}
+                  className="xl:col-start-1 xl:row-start-3"
+                />
+                {scenarioEvidenceFrame ? (
+                  <ScenarioEvidencePanel frame={scenarioEvidenceFrame} className="xl:col-start-1 xl:row-start-4" />
+                ) : null}
 
-                  <WolfyShellSurface variant="console" padding="sm" className="overflow-hidden">
-                    <SectionHeader eyebrow="链表工作区" title="Call / Put 链" icon={BarChart3} />
-                    {state.loading ? (
-                      <TerminalNotice variant="info" className="mt-4">正在加载期权链快照...</TerminalNotice>
-                    ) : null}
-                    {state.error ? (
-                      <TerminalNotice variant="danger" className="mt-4">{state.error}</TerminalNotice>
-                    ) : null}
-                    {!state.loading && !state.error && hasChainRows ? (
-                      <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                        <ChainTable title="Call 链" contracts={calls} testId="options-lab-calls-table" />
-                        <ChainTable title="Put 链" contracts={puts} testId="options-lab-puts-table" />
-                      </div>
-                    ) : null}
-                    {!state.loading && !state.error && !hasChainRows ? (
-                      <div className="mt-4">
-                        <TerminalEmptyState title="暂无数据">
-                          保留输入、观察结构样例与风险边界，等待下一次数据更新。
-                        </TerminalEmptyState>
-                      </div>
-                    ) : null}
-                  </WolfyShellSurface>
+                <WolfyShellSurface variant="console" padding="sm" className="overflow-hidden xl:col-start-1 xl:row-start-5">
+                  <SectionHeader eyebrow="链表工作区" title="Call / Put 链" icon={BarChart3} />
+                  {state.loading ? (
+                    <TerminalNotice variant="info" className="mt-4">正在加载期权链快照...</TerminalNotice>
+                  ) : null}
+                  {state.error ? (
+                    <TerminalNotice variant="danger" className="mt-4">{state.error}</TerminalNotice>
+                  ) : null}
+                  {!state.loading && !state.error && hasChainRows ? (
+                    <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                      <ChainTable title="Call 链" contracts={calls} testId="options-lab-calls-table" />
+                      <ChainTable title="Put 链" contracts={puts} testId="options-lab-puts-table" />
+                    </div>
+                  ) : null}
+                  {!state.loading && !state.error && !hasChainRows ? (
+                    <div className="mt-4">
+                      <TerminalEmptyState title="暂无数据">
+                        保留输入、观察结构样例与风险边界，等待下一次数据更新。
+                      </TerminalEmptyState>
+                    </div>
+                  ) : null}
+                </WolfyShellSurface>
 
-                  <MethodologyDisclosure state={state} targetPrice={targetPrice} targetDate={targetDate} riskBudget={riskBudget} />
-                </div>
-
-                <div className="grid min-w-0 gap-6 self-start">
-                  <RiskBoundaryPanel
-                    decision={decisionState.decision}
-                    chain={state.chain}
-                    loading={state.loading || decisionState.loading}
-                    error={state.error || decisionState.error}
-                  />
-                  <ContextRailPanel
-                    decision={decisionState.decision}
-                    loading={state.loading || comparisonState.loading || decisionState.loading}
-                    error={state.error || comparisonState.error || decisionState.error}
-                    hasChainRows={hasChainRows}
-                  />
-                </div>
+                <MethodologyDisclosure
+                  state={state}
+                  targetPrice={targetPrice}
+                  targetDate={targetDate}
+                  riskBudget={riskBudget}
+                  className="xl:col-start-1 xl:row-start-6"
+                />
               </div>
             </WorkspaceRegion>
           </div>
