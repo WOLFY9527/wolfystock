@@ -571,6 +571,29 @@ describe('MarketProviderOperationsPage', () => {
     expect(pageRoot.className).not.toContain('bg-black');
   });
 
+  it('keeps page-level overflow hidden while exposing a contained mobile matrix scroll affordance', async () => {
+    getOperations.mockResolvedValue(populatedPayload);
+
+    render(<MarketProviderOperationsPage />);
+
+    const pageRoot = await screen.findByTestId('market-provider-operations-page');
+    expect(pageRoot).toHaveClass('min-w-0', 'overflow-x-hidden');
+
+    const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
+    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' }));
+
+    expect(within(matrixDisclosure).getByText('左右滑动查看完整矩阵列')).toBeInTheDocument();
+    expect(within(matrixDisclosure).getByText('滚动仅限表格区域')).toBeInTheDocument();
+    expect(screen.getByTestId('market-provider-matrix-table-shell')).toHaveClass(
+      '-mx-4',
+      'px-4',
+      'overflow-x-auto',
+      'overscroll-x-contain',
+      'sm:mx-0',
+      'sm:px-0',
+    );
+  });
+
   it('renders Chinese-first operator hierarchy and keeps diagnostics available without exposing raw secrets or backend credential names', async () => {
     getOperations.mockResolvedValue(populatedPayload);
 

@@ -1443,7 +1443,14 @@ const ProviderOperationsMatrixPanel: React.FC<{
             summary={`默认折叠 · ${formatNumber(rows.length, 0)} 行 · ${formatNumber(summary.paidDataLikelyRequiredRows, 0)} 行含付费/配额线索 · 原始代码仅限这里`}
             className="mt-2 bg-black/10"
           >
-            <TerminalDenseTable>
+            <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[11px] leading-5 text-white/54 sm:hidden">
+              <span>左右滑动查看完整矩阵列</span>
+              <span className="shrink-0 text-white/38">滚动仅限表格区域</span>
+            </div>
+            <TerminalDenseTable
+              data-testid="market-provider-matrix-table-shell"
+              className="-mx-4 overflow-x-auto overscroll-x-contain px-4 [-webkit-overflow-scrolling:touch] sm:mx-0 sm:px-0"
+            >
               <table className="min-w-[52rem] table-fixed">
                 <thead className="bg-black/20 text-[10px] uppercase tracking-widest text-white/35">
                   <tr className="border-b border-white/5 text-left">
@@ -2091,8 +2098,8 @@ const MarketProviderOperationsPage: React.FC = () => {
       : '保持只读观察，按需切换影响面。';
 
   return (
-    <div data-testid="market-provider-operations-page" className="market-provider-operations-page flex min-h-0 w-full flex-1 flex-col overflow-y-auto no-scrollbar text-white">
-      <TerminalPageShell className="py-5 md:py-6">
+    <div data-testid="market-provider-operations-page" className="market-provider-operations-page flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto no-scrollbar text-white">
+      <TerminalPageShell className="min-w-0 overflow-x-hidden py-5 md:py-6">
         <TerminalPanel as="section" className="relative overflow-hidden">
           <TerminalPageHeading
             eyebrow="数据源维护"
