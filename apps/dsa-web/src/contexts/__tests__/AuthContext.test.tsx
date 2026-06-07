@@ -25,6 +25,8 @@ const { hardRedirectMock } = vi.hoisted(() => ({
   hardRedirectMock: vi.fn(),
 }));
 
+const PROBE_PASSWORD = 'unit-test-passwd6';
+
 vi.mock('../../api/auth', () => ({
   authApi: {
     getStatus,
@@ -61,7 +63,7 @@ const Probe = () => {
       <span data-testid="password-set">{auth.passwordSet ? 'set' : 'unset'}</span>
       <button
         type="button"
-        onClick={() => void auth.login({ username: 'admin', password: 'passwd6', passwordConfirm: 'passwd6' })}
+        onClick={() => void auth.login({ username: 'admin', password: PROBE_PASSWORD, passwordConfirm: PROBE_PASSWORD })}
       >
         trigger-login
       </button>
@@ -137,8 +139,44 @@ describe('AuthContext', () => {
     fireEvent.click(screen.getByRole('button', { name: 'trigger-login' }));
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-in'));
-    expect(updateSettings).toHaveBeenCalledWith(true, 'passwd6', 'passwd6');
+    expect(updateSettings).toHaveBeenCalledWith(true, PROBE_PASSWORD, PROBE_PASSWORD);
     expect(login).not.toHaveBeenCalled();
+  });
+
+  it('uses login endpoint when auth is enabled but first-run password is missing', async () => {
+    getStatus
+      .mockResolvedValueOnce({
+        authEnabled: true,
+        loggedIn: false,
+        passwordSet: false,
+        passwordChangeable: true,
+        setupState: 'no_password',
+      })
+      .mockResolvedValueOnce({
+        authEnabled: true,
+        loggedIn: true,
+        passwordSet: true,
+        passwordChangeable: true,
+        setupState: 'enabled',
+      });
+    login.mockResolvedValue(undefined);
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    );
+
+    await screen.findByTestId('status');
+    fireEvent.click(screen.getByRole('button', { name: 'trigger-login' }));
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('logged-in'));
+    expect(login).toHaveBeenCalledWith({
+      username: 'admin',
+      password: PROBE_PASSWORD,
+      passwordConfirm: PROBE_PASSWORD,
+    });
+    expect(updateSettings).not.toHaveBeenCalled();
   });
 
   it('wipes browser and in-memory state after logout', async () => {

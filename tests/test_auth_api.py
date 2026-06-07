@@ -140,6 +140,7 @@ class AuthApiTestCase(unittest.TestCase):
         self.assertTrue(data["authEnabled"])
         self.assertFalse(data["passwordSet"])
         self.assertFalse(data["loggedIn"])
+        self.assertEqual(data["setupState"], "no_password")
 
     def test_login_first_time_set_initial_password(self) -> None:
         response = asyncio.run(
@@ -288,13 +289,13 @@ class AuthApiTestCase(unittest.TestCase):
             ):
                 self.assertFalse(payload[key])
 
-    def test_unauthenticated_auth_status_contract_is_unchanged(self) -> None:
+    def test_unauthenticated_auth_status_reports_first_run_when_password_missing(self) -> None:
         data = asyncio.run(auth_endpoint.auth_status(self._build_request()))
 
         self.assertTrue(data["authEnabled"])
         self.assertFalse(data["loggedIn"])
         self.assertFalse(data["passwordSet"])
-        self.assertEqual(data["setupState"], "enabled")
+        self.assertEqual(data["setupState"], "no_password")
         self.assertIsNone(data["currentUser"])
 
     def test_current_user_capability_summary_exposes_no_sensitive_fields(self) -> None:

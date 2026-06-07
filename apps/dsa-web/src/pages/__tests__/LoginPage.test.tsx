@@ -55,6 +55,36 @@ describe('LoginPage', () => {
     expect(login).not.toHaveBeenCalled();
   });
 
+  it('renders first-time setup when auth is enabled but no password is stored', async () => {
+    const login = vi.fn().mockResolvedValue({ success: true });
+    const setupPassword = 'unit-test-passwd6';
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login,
+      passwordSet: false,
+      setupState: 'no_password',
+    });
+
+    renderPage();
+
+    expect(screen.getByRole('heading', { name: translate('zh', 'auth.login.heroTitleSetup') })).toBeInTheDocument();
+    expect(screen.queryByLabelText(translate('zh', 'auth.login.usernameLabel'))).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordLabelSetup')), { target: { value: setupPassword } });
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordConfirmLabel')), { target: { value: setupPassword } });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.submitSetup') }));
+
+    await waitFor(() => {
+      expect(login).toHaveBeenCalledWith({
+        username: 'admin',
+        displayName: undefined,
+        password: setupPassword,
+        passwordConfirm: setupPassword,
+        createUser: false,
+      });
+    });
+  });
+
   it('navigates to redirect after a successful login', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,

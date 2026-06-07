@@ -100,6 +100,17 @@ class AuthStatusSetupStateTestCase(unittest.TestCase):
                 self.assertTrue(data["authEnabled"])
                 self.assertTrue(data["passwordSet"])
 
+    def test_status_enabled_without_password_reports_first_run_setup(self) -> None:
+        """Scenario: Auth enabled but the credential store has not been initialized."""
+        request = _make_request()
+
+        with patch("api.v1.endpoints.auth.is_auth_enabled", return_value=True):
+            with patch("src.auth.is_auth_enabled", return_value=True):
+                data = asyncio.run(auth_status(request))
+                self.assertEqual(data["setupState"], "no_password")
+                self.assertTrue(data["authEnabled"])
+                self.assertFalse(data["passwordSet"])
+
     def test_settings_update_returns_setup_state(self) -> None:
         """Verify that /auth/settings also returns setupState in response."""
         request = _make_request()

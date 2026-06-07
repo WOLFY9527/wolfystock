@@ -861,16 +861,17 @@ def _delete_session_cookie(response: Response, request: Request) -> None:
 def _get_auth_status_dict(request: Request | None = None) -> dict:
     """Helper to build consistent auth status response body."""
     auth_enabled = is_auth_enabled()
+    stored_password_exists = has_stored_password()
     current_user_payload = _serialize_current_user(request) if request is not None else None
     logged_in = bool(current_user_payload and current_user_payload.get("isAuthenticated"))
 
     # setupState determination:
-    # - enabled: auth is active
+    # - enabled: auth is active and a valid bootstrap password exists
     # - password_retained: auth disabled but password exists
-    # - no_password: auth disabled and no password exists
-    if auth_enabled:
+    # - no_password: no valid bootstrap password exists, even when auth is active
+    if auth_enabled and stored_password_exists:
         setup_state = "enabled"
-    elif has_stored_password():
+    elif stored_password_exists:
         setup_state = "password_retained"
     else:
         setup_state = "no_password"

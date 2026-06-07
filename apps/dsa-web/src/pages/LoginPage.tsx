@@ -136,7 +136,7 @@ const LoginPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | ParsedApiError | null>(null);
 
-  const isAdminBootstrap = !authEnabled && setupState === 'no_password';
+  const isAdminBootstrap = setupState === 'no_password';
   const isAuthReenable = !authEnabled && setupState === 'password_retained';
 
   if (!isAdminBootstrap && createModeRequested !== routeCreateMode) {
