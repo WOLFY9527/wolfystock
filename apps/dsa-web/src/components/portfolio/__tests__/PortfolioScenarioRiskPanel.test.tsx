@@ -46,7 +46,7 @@ describe('PortfolioScenarioRiskPanel', () => {
     expect(runScenario).not.toHaveBeenCalled();
   });
 
-  it('renders impact, coverage, warnings, and advisory-only metadata from the scenario response', async () => {
+  it('renders impact, coverage, consumer-safe warnings, and advisory-only metadata from the scenario response', async () => {
     const runScenario = vi.fn().mockResolvedValue({
       readModelType: 'portfolio_scenario_risk_advisory_v1',
       advisoryOnly: true,
@@ -68,7 +68,7 @@ describe('PortfolioScenarioRiskPanel', () => {
           portfolioImpactAmount: -64,
           coveredWeight: 0.8,
           coveredMarketValue: 1600,
-          warnings: ['coverage_partial'],
+          warnings: ['coverage_partial', 'missing_scenario_coverage'],
           missingCoverage: [
             {
               label: 'QQQ',
@@ -109,8 +109,8 @@ describe('PortfolioScenarioRiskPanel', () => {
           ],
         },
       ],
-      insufficientDataReasons: ['theme_mapping_pending'],
-      missingDataWarnings: ['scenario_coverage_incomplete'],
+      insufficientDataReasons: ['theme_mapping_pending', 'no_usable_scenario_shocks'],
+      missingDataWarnings: ['scenario_coverage_incomplete', 'backend_debug_warning_token'],
       metadata: {
         sideEffectFree: true,
         noBrokerSync: true,
@@ -178,13 +178,23 @@ describe('PortfolioScenarioRiskPanel', () => {
     expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('覆盖情况');
     expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('显式映射');
     expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('1 行');
+    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('情景风险仅供观察');
+    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('风险读数受限');
+    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('部分输入缺失');
+    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('数据更新中 / 数据不足');
     expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('数据不足 / 需补充映射');
     expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('BABA');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('theme_mapping_pending');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('scenario_coverage_incomplete');
+    expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('portfolio_scenario_risk_advisory_v1');
+    expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('advisory_only_not_trade_execution');
+    expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('coverage_partial');
+    expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('missing_scenario_coverage');
+    expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('theme_mapping_pending');
+    expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('scenario_coverage_incomplete');
+    expect(screen.getByTestId('portfolio-scenario-risk-result')).not.toHaveTextContent('backend_debug_warning_token');
+    expect(screen.getByTestId('portfolio-scenario-risk-result').textContent).not.toMatch(/\b[a-z]+(?:_[a-z0-9]+)+\b/);
     expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('不触发经纪商同步');
     expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('不改动账务结果');
     expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('不触发任何下单');
-    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('不构成投资建议');
+    expect(screen.getByTestId('portfolio-scenario-risk-result')).toHaveTextContent('模型结果不可作为仓位建议');
   });
 });

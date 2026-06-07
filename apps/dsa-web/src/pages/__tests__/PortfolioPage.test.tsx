@@ -916,7 +916,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('不触发经纪商同步');
     expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('不改动账务结果');
     expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('不触发任何下单');
-    expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('不构成投资建议');
+    expect(screen.getByTestId('portfolio-scenario-risk-panel')).toHaveTextContent('模型结果不可作为仓位建议');
   });
 
   it('retargets scenario projection to the current visible holdings after account scope changes', async () => {

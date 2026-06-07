@@ -48,6 +48,86 @@ const DECIMAL_FORMATTER = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 2,
 });
 
+type LocalizedCopy = {
+  zh: string;
+  en: string;
+};
+
+const SCENARIO_RISK_OBSERVATION_ONLY: LocalizedCopy = {
+  zh: '情景风险仅供观察',
+  en: 'Scenario risk is observation-only',
+};
+const SCENARIO_RISK_LIMITED: LocalizedCopy = {
+  zh: '风险读数受限',
+  en: 'Risk reading limited',
+};
+const SCENARIO_RISK_PARTIAL_INPUT: LocalizedCopy = {
+  zh: '部分输入缺失',
+  en: 'Some inputs missing',
+};
+const SCENARIO_RISK_NOT_POSITION_ADVICE: LocalizedCopy = {
+  zh: '模型结果不可作为仓位建议',
+  en: 'Model output is not position advice',
+};
+const SCENARIO_RISK_DATA_PENDING: LocalizedCopy = {
+  zh: '数据更新中 / 数据不足',
+  en: 'Data updating / insufficient',
+};
+
+const SCENARIO_RISK_WARNING_LABELS: Record<string, LocalizedCopy> = {
+  coverage_partial: SCENARIO_RISK_LIMITED,
+  missing_scenario_coverage: SCENARIO_RISK_PARTIAL_INPUT,
+  scenario_coverage_incomplete: SCENARIO_RISK_PARTIAL_INPUT,
+  theme_mapping_pending: SCENARIO_RISK_PARTIAL_INPUT,
+  no_positions: SCENARIO_RISK_DATA_PENDING,
+  no_usable_scenario_shocks: SCENARIO_RISK_DATA_PENDING,
+};
+
+function localizedCopy(copy: LocalizedCopy, isEnglish: boolean): string {
+  return isEnglish ? copy.en : copy.zh;
+}
+
+function normalizeScenarioRiskToken(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s.-]+/g, '_');
+}
+
+function formatScenarioRiskReadModel(value: string | undefined, isEnglish: boolean): string {
+  const token = normalizeScenarioRiskToken(value ?? '');
+  if (!token || token.includes('scenario_risk') || token.includes('advisory')) {
+    return localizedCopy(SCENARIO_RISK_OBSERVATION_ONLY, isEnglish);
+  }
+  return localizedCopy(SCENARIO_RISK_LIMITED, isEnglish);
+}
+
+function classifyScenarioRiskWarning(value: string, isEnglish: boolean): string | null {
+  const token = normalizeScenarioRiskToken(value);
+  if (!token) return null;
+
+  const directLabel = SCENARIO_RISK_WARNING_LABELS[token];
+  if (directLabel) return localizedCopy(directLabel, isEnglish);
+
+  if (/(advisory|not_trade|investment|order|broker|accounting|mutation|execution)/.test(token)) {
+    return localizedCopy(SCENARIO_RISK_NOT_POSITION_ADVICE, isEnglish);
+  }
+  if (/(missing|incomplete|pending|mapping|input)/.test(token)) {
+    return localizedCopy(SCENARIO_RISK_PARTIAL_INPUT, isEnglish);
+  }
+  if (/(insufficient|unavailable|updating|stale|delayed|empty|sample|^no_)/.test(token)) {
+    return localizedCopy(SCENARIO_RISK_DATA_PENDING, isEnglish);
+  }
+  return localizedCopy(SCENARIO_RISK_LIMITED, isEnglish);
+}
+
+function buildConsumerWarningRows(values: string[], isEnglish: boolean): string[] {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => classifyScenarioRiskWarning(value, isEnglish))
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+}
+
 function formatSignedAmount(value?: number | null): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
   return SIGNED_AMOUNT_FORMATTER.format(value);
@@ -117,11 +197,12 @@ export function PortfolioScenarioRiskPanel({
     ...(result?.missingDataWarnings ?? []),
     ...(scenarioResult?.warnings ?? []),
   ];
+  const consumerWarningRows = buildConsumerWarningRows(warningRows, isEnglish);
   const metadataRows = [
     result?.metadata?.noBrokerSync ? (isEnglish ? 'No broker sync' : '不触发经纪商同步') : null,
     result?.metadata?.noAccountingMutation ? (isEnglish ? 'No accounting mutation' : '不改动账务结果') : null,
     result?.metadata?.noOrderPlacement ? (isEnglish ? 'No order placement' : '不触发任何下单') : null,
-    result?.metadata?.notInvestmentAdvice ? (isEnglish ? 'Not investment advice' : '不构成投资建议') : null,
+    result?.metadata?.notInvestmentAdvice ? localizedCopy(SCENARIO_RISK_NOT_POSITION_ADVICE, isEnglish) : null,
   ].filter(Boolean) as string[];
 
   const handleRunScenario = async () => {
@@ -250,7 +331,7 @@ export function PortfolioScenarioRiskPanel({
                     setMappingLabel(event.target.value);
                     setResult(null);
                   }}
-                  placeholder={isEnglish ? 'Example: QQQ or AI_THEME' : '例如：QQQ / AI_THEME'}
+                  placeholder={isEnglish ? 'Example: QQQ or AI theme' : '例如：QQQ / AI 主题'}
                   className={INPUT_CLASS}
                   error={mappingError ?? undefined}
                 />
@@ -347,15 +428,15 @@ export function PortfolioScenarioRiskPanel({
                 </div>
               </div>
               <div className="rounded-xl border border-white/[0.03] bg-black/20 px-3 py-3">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{isEnglish ? 'Scenario read model' : '只读模型'}</div>
-                <div className="mt-2 text-sm text-white">{result.readModelType || '--'}</div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{isEnglish ? 'Scenario status' : '情景风险状态'}</div>
+                <div className="mt-2 text-sm text-white">{formatScenarioRiskReadModel(result.readModelType, isEnglish)}</div>
                 <div className="mt-1 text-xs text-white/45">{result.asOf || snapshotAsOf || '--'}</div>
               </div>
             </div>
 
-            {warningRows.length ? (
+            {consumerWarningRows.length ? (
               <div className="flex flex-wrap gap-1.5">
-                {warningRows.map((warning) => (
+                {consumerWarningRows.map((warning) => (
                   <PillBadge key={warning} variant="warning" className="normal-case tracking-normal text-white/70">
                     {warning}
                   </PillBadge>
