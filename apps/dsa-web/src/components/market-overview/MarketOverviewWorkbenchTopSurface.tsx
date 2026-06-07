@@ -183,7 +183,6 @@ type MarketOverviewWorkbenchTopSurfaceProps = {
   exportLabel: string;
   onExportSummary: () => void;
   heroAnchors: MarketOverviewHeroAnchorView[];
-  visualEvidenceCards: MarketOverviewVisualEvidenceCardView[];
   showAdminDiagnostics?: boolean;
 };
 
@@ -200,6 +199,21 @@ type ConsumerDataQualityNoticeView = {
 };
 
 const MARKET_OVERVIEW_SETUP_ACTION_CLASS = 'inline-flex min-h-8 items-center rounded-md border border-white/[0.08] bg-white/[0.035] px-2.5 py-1 text-[11px] font-semibold text-white/72 transition-colors hover:border-cyan-200/25 hover:bg-white/[0.06] hover:text-white';
+
+function marketOverviewConsumerCopy(text: string): string {
+  return text
+    .replace(/评分级来源覆盖/g, '充分来源覆盖')
+    .replace(/评分级支持证据/g, '充分支持信号')
+    .replace(/评分级/g, '充分')
+    .replace(/更高授权/g, '更多可靠')
+    .replace(/高授权/g, '可靠')
+    .replace(/缺口/g, '待补项')
+    .replace(/回退/g, '最近一次可用')
+    .replace(/缓存/g, '最近一次可用')
+    .replace(/仅供界面演示/g, '仅作临时状态展示')
+    .replace(/保持界面结构/g, '保持页面可读')
+    .replace(/等待真实行情源/g, '等待更多市场数据');
+}
 
 const MarketOverviewSetupPath: React.FC<{ testId: string }> = ({ testId }) => (
   <div
@@ -291,7 +305,7 @@ const CrossAssetHeroRibbon: React.FC<{ anchors: MarketOverviewHeroAnchorView[] }
   />
 );
 
-const MarketOverviewVisualEvidenceStrip: React.FC<{
+export const MarketOverviewVisualEvidenceStrip: React.FC<{
   cards: MarketOverviewVisualEvidenceCardView[];
 }> = ({ cards }) => (
   <section
@@ -674,8 +688,8 @@ const MarketOverviewConclusionLayer: React.FC<{
     {
       key: 'driver',
       label: '主驱动',
-      value: directionalSummary.supportingDrivers[0] || directionalSummary.regimePhrase,
-      detail: directionalSummary.supportingTitle,
+      value: marketOverviewConsumerCopy(directionalSummary.supportingDrivers[0] || directionalSummary.regimePhrase),
+      detail: marketOverviewConsumerCopy(directionalSummary.supportingTitle),
     },
     {
       key: 'coverage',
@@ -701,10 +715,10 @@ const MarketOverviewConclusionLayer: React.FC<{
             {conclusionDirectionValue(summary, statusSummary)}
           </h2>
           <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">
-            {summary.conclusion}
+            {marketOverviewConsumerCopy(summary.conclusion)}
           </p>
           <p className="mt-2 max-w-3xl text-[11px] leading-5 text-white/42">
-            {statusSummary.detail}
+            {marketOverviewConsumerCopy(statusSummary.detail)}
           </p>
         </div>
         <div data-testid="market-command-chips" className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
@@ -729,8 +743,8 @@ const MarketOverviewConclusionLayer: React.FC<{
         {summaryFacts.map((fact) => (
           <div key={fact.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5">
             <p className="text-[11px] font-medium text-white/48">{fact.label}</p>
-            <p className="mt-1 text-sm font-semibold text-white/88">{fact.value}</p>
-            <p className="mt-1 text-[11px] leading-5 text-white/50">{fact.detail}</p>
+            <p className="mt-1 text-sm font-semibold text-white/88">{marketOverviewConsumerCopy(fact.value)}</p>
+            <p className="mt-1 text-[11px] leading-5 text-white/50">{marketOverviewConsumerCopy(fact.detail)}</p>
           </div>
         ))}
       </div>
@@ -901,7 +915,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
         />
 
         <p className="mt-3 text-[11px] leading-5 text-white/42">
-          仅供研究观察，不构成交易指令。{summarySentence !== decisionText ? ` ${summarySentence}` : ''}
+          仅供研究观察，不构成交易指令。{summarySentence !== decisionText ? ` ${marketOverviewConsumerCopy(summarySentence)}` : ''}
         </p>
         {showAdminDiagnostics ? (
           <TerminalDisclosure
@@ -1015,7 +1029,6 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
   exportLabel,
   onExportSummary,
   heroAnchors,
-  visualEvidenceCards,
   showAdminDiagnostics = false,
 }) => {
   return (
@@ -1050,7 +1063,6 @@ export const MarketOverviewWorkbenchTopSurface: React.FC<MarketOverviewWorkbench
             <div data-market-research-flow="pulse" className="border-t border-[color:var(--wolfy-divider)]">
               <CrossAssetHeroRibbon anchors={heroAnchors} />
             </div>
-            <MarketOverviewVisualEvidenceStrip cards={visualEvidenceCards} />
           </div>
         </ConsoleBoard>
       </section>

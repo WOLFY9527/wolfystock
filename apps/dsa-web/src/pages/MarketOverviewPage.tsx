@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MarketDataMeta, MarketOverviewPanel } from '../api/marketOverview';
 import { marketOverviewApi } from '../api/marketOverview';
-import {
-  buildConsumerResearchReadinessView,
-  extractMarketResearchReadiness,
-  inferMarketResearchReadiness,
-} from '../api/researchReadiness';
 import type {
   CnShortSentimentResponse,
   MarketBriefingResponse,
@@ -20,8 +15,6 @@ import {
   normalizeMarketOverviewPanelConsumerCopy,
   normalizeMarketTemperatureResponse,
 } from '../api/market';
-import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
-import MarketIntelligenceActionabilityStrip from '../components/market/MarketIntelligenceActionabilityStrip';
 import {
   MarketOverviewWorkbench,
   type CryptoRealtimeStatus,
@@ -924,13 +917,6 @@ const MarketOverviewPage = () => {
     resetAutoRevalidatePanel(panelKey);
     void refreshPanel(panelKey, loadPanel);
   }, [refreshPanel, resetAutoRevalidatePanel]);
-  const marketResearchReadinessView = buildConsumerResearchReadinessView(
-    extractMarketResearchReadiness(panels.temperature) || inferMarketResearchReadiness(panels.temperature),
-    language,
-  );
-  const marketActionabilityFrame = panels.temperature.marketActionabilityFrame;
-  const marketIntelligenceEvidenceFrame = panels.temperature.marketIntelligenceEvidenceFrame;
-
   return (
     <ConsumerWorkspaceScope className="min-h-0 flex-1">
       <ConsumerWorkspacePageShell
@@ -954,20 +940,6 @@ const MarketOverviewPage = () => {
           showAdminDiagnostics={isAdminMode && canReadProviders}
           onRefreshPanel={handleWorkbenchRefresh}
         />
-        <ConsumerResearchReadinessStrip
-          readiness={marketResearchReadinessView}
-          title={language === 'en' ? 'Research readiness' : '研究就绪度'}
-          testId="market-overview-research-readiness-strip"
-          className="w-full shrink-0"
-        />
-        {marketActionabilityFrame && marketIntelligenceEvidenceFrame ? (
-          <MarketIntelligenceActionabilityStrip
-            actionability={marketActionabilityFrame}
-            evidence={marketIntelligenceEvidenceFrame}
-            testId="market-intelligence-actionability-strip"
-            className="mx-0 w-full shrink-0 md:mx-0"
-          />
-        ) : null}
       </ConsumerWorkspacePageShell>
     </ConsumerWorkspaceScope>
   );

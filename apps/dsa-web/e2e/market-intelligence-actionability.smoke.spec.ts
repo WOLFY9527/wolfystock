@@ -248,78 +248,60 @@ async function installTemperatureOverride(page: Page, payload: unknown) {
 }
 
 test.describe('market intelligence actionability browser smoke', () => {
-  test('renders consumer-safe actionability and evidence coverage on market overview', async ({ page }) => {
+  test('keeps actionability diagnostics out of the default market overview surface', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await installTemperatureOverride(page, actionabilityReadyPayload());
     await signIn(page, routePath);
 
     await expect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
-    const strip = page.getByTestId('market-intelligence-actionability-strip');
     const visualStrip = page.getByTestId('market-overview-visual-evidence-strip');
-    await expect(strip).toBeVisible();
+    await expect(page.getByTestId('market-intelligence-actionability-strip')).toHaveCount(0);
+    await expect(page.getByTestId('market-overview-research-readiness-strip')).toHaveCount(0);
+    await expect(page.getByTestId('market-overview-main-grid')).toBeVisible();
     await expect(visualStrip).toBeVisible();
     await expect(visualStrip).toContainText('核心图表证据');
     await expect(page.getByTestId('market-overview-visual-card-core-trends')).toBeVisible();
     await expect(page.getByTestId('market-overview-visual-card-risk-pressure')).toBeVisible();
     await expect(page.getByTestId('market-overview-visual-card-flow-rotation')).toBeVisible();
-    await expect(strip).toContainText('市场研判可用性');
-    await expect(strip).toContainText('仅观察');
-    await expect(strip).toContainText('低把握');
-    await expect(strip).toContainText('仅供研究观察，不作为执行依据');
-    await expect(strip).toContainText('继续确认流动性是否保持扩张');
-    await expect(strip).toContainText('证据覆盖 2/1/0');
-    await expect(strip).toContainText('证据覆盖 3/5');
-    await expect(strip).toContainText('宏观 可参考');
-    await expect(strip).toContainText('流动性 仅观察');
-    await expect(strip).toContainText('轮动 仅观察');
-    await expect(strip).toContainText('宽度 可参考');
-    await expect(strip).toContainText('扫描上下文 可参考');
 
-    await strip.getByText('更多证据细节').click();
-    await expect(strip).toContainText('缺口 0');
-    await expect(strip).toContainText('新鲜度 延迟');
-    await expect(strip).toContainText('来源级别 观察级');
+    const order = await page.evaluate(() => {
+      const mainGrid = document.querySelector('[data-testid="market-overview-main-grid"]') as HTMLElement | null;
+      const visualEvidence = document.querySelector('[data-testid="market-overview-visual-evidence-strip"]') as HTMLElement | null;
+      return mainGrid && visualEvidence
+        ? mainGrid.compareDocumentPosition(visualEvidence)
+        : null;
+    });
+    expect(order).toBe(4);
 
-    const stripText = await strip.innerText();
+    await expect(page.getByTestId('market-decision-semantics-strip')).toContainText('不构成交易指令');
     const visualText = await visualStrip.innerText();
-    expect(stripText).not.toMatch(forbiddenInternalPattern);
-    expect(stripText).not.toMatch(forbiddenExecutionPattern);
+    const bodyText = await page.locator('body').innerText();
+    expect(bodyText).not.toMatch(/研究就绪度|市场研判可用性|证据覆盖\s*\d+\/\d+|来源级别|高授权|观察级|评分级|缺口\s*\d+|更高授权|限制因素|回退|缓存|仅供界面演示|保持界面结构|等待真实行情源/);
+    expect(bodyText).not.toMatch(forbiddenInternalPattern);
+    expect(bodyText).not.toMatch(forbiddenExecutionPattern);
     expect(visualText).not.toMatch(forbiddenInternalPattern);
     expect(visualText).not.toMatch(forbiddenExecutionPattern);
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 
-  test('fail closes missing evidence without exposing internal or trading language', async ({ page }) => {
+  test('fail closes missing evidence without default diagnostic strips or trading language', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await installTemperatureOverride(page, actionabilityInsufficientPayload());
     await signIn(page, routePath);
 
     await expect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
-    const strip = page.getByTestId('market-intelligence-actionability-strip');
     const visualStrip = page.getByTestId('market-overview-visual-evidence-strip');
-    await expect(strip).toBeVisible();
+    await expect(page.getByTestId('market-intelligence-actionability-strip')).toHaveCount(0);
+    await expect(page.getByTestId('market-overview-research-readiness-strip')).toHaveCount(0);
+    await expect(page.getByTestId('market-overview-main-grid')).toBeVisible();
     await expect(visualStrip).toBeVisible();
-    await expect(strip).toContainText('证据不足');
-    await expect(strip).toContainText('把握不足');
-    await expect(strip).toContainText('等待更高授权流动性证据');
-    await expect(strip).toContainText('宏观 待补');
-    await expect(strip).toContainText('流动性 待补');
-    await expect(strip).toContainText('轮动 待补');
-    await expect(strip).toContainText('宽度 待补');
-    await expect(strip).toContainText('扫描上下文 待补');
+    await expect(page.getByTestId('market-decision-semantics-strip')).toContainText('不构成交易指令');
 
-    await strip.getByText('更多证据细节').click();
-    await expect(strip).toContainText('缺口 5');
-    await expect(strip).toContainText('新鲜度 回退');
-    await expect(strip).toContainText('来源级别 证据不足');
-    await expect(strip).toContainText('待补证据 宏观证据 / 流动性证据 / 轮动证据 / 宽度证据 / 扫描上下文证据');
-    await expect(strip).toContainText('限制因素 关键证据待补 / 新鲜度不足 / 回退证据未解除');
-    await expect(strip).not.toContainText('可参考');
-
-    const stripText = await strip.innerText();
     const visualText = await visualStrip.innerText();
-    expect(stripText).not.toMatch(forbiddenInternalPattern);
-    expect(stripText).not.toMatch(forbiddenExecutionPattern);
+    const bodyText = await page.locator('body').innerText();
+    expect(bodyText).not.toMatch(/研究就绪度|市场研判可用性|证据覆盖\s*\d+\/\d+|来源级别|高授权|观察级|评分级|缺口\s*\d+|更高授权|限制因素|回退|缓存|仅供界面演示|保持界面结构|等待真实行情源/);
+    expect(bodyText).not.toMatch(forbiddenInternalPattern);
+    expect(bodyText).not.toMatch(forbiddenExecutionPattern);
     expect(visualText).not.toMatch(forbiddenInternalPattern);
     expect(visualText).not.toMatch(forbiddenExecutionPattern);
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);

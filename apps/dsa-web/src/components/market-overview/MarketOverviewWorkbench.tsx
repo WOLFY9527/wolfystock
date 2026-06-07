@@ -31,6 +31,7 @@ import type {
 } from './MarketOverviewWorkbenchGrid';
 import {
   MarketOverviewWorkbenchTopSurface,
+  MarketOverviewVisualEvidenceStrip,
   type MarketOverviewBriefingSummaryView,
   type MarketOverviewCategoryTabView,
   type MarketOverviewDataStateStripView,
@@ -265,6 +266,7 @@ const US_BREADTH_AD_SYMBOLS = ['ADVANCERS', 'DECLINERS', 'UNCHANGED', 'ADVANCE_D
 const US_BREADTH_HIGH_LOW_SYMBOLS = ['NEW_HIGHS', 'NEW_LOWS', 'HIGH_LOW_RATIO'];
 const US_BREADTH_ALL_SYMBOLS = [...US_BREADTH_AD_SYMBOLS, ...US_BREADTH_HIGH_LOW_SYMBOLS];
 const US_BREADTH_PROXY_SYMBOLS = ['SECTORS_UP', 'SECTORS_DOWN', 'STRONGEST_SECTOR', 'WEAKEST_SECTOR', 'RSP_SPY', 'IWM_SPY', 'QQQ_SPY', 'SECTOR_PROXY_UNAVAILABLE'];
+const MARKET_OVERVIEW_CRYPTO_CONSUMER_DESCRIPTION = '跟踪 BTC、ETH、BNB 的现价、24H 涨跌和 7D 走势；异常时显示最近一次可用快照。';
 const US_BREADTH_HIGH_LOW_LABELS: Record<string, string> = {
   NEW_HIGHS: 'NEW_HIGHS',
   NEW_LOWS: 'NEW_LOWS',
@@ -2278,7 +2280,7 @@ function useMarketOverviewWorkbenchModel({
         <MarketOverviewCard
           title={t('marketOverviewPage.cards.crypto.title')}
           eyebrow={t('marketOverviewPage.cards.crypto.eyebrow')}
-          description={t('marketOverviewPage.cards.crypto.description')}
+          description={MARKET_OVERVIEW_CRYPTO_CONSUMER_DESCRIPTION}
           sourceLabel={t('marketOverviewPage.cards.crypto.source')}
           panel={panels.crypto}
           loading={loading && !panels.crypto}
@@ -2948,7 +2950,6 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
         exportLabel={exportLabel}
         onExportSummary={handleExportSummary}
         heroAnchors={heroAnchorViews}
-        visualEvidenceCards={visualEvidenceCards}
         showAdminDiagnostics={showAdminDiagnostics}
       />
       <Suspense fallback={<MarketOverviewWorkbenchGridFallback language={language} />}>
@@ -2963,6 +2964,7 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
           showExecutiveGroups={showExecutiveGroups}
         />
       </Suspense>
+      <MarketOverviewVisualEvidenceStrip cards={visualEvidenceCards} />
     </div>
   );
 };

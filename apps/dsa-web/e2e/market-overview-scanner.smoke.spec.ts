@@ -198,7 +198,8 @@ test.describe('market overview smoke', () => {
     await expect(page.getByTestId('market-overview-hero-ribbon')).toBeVisible();
     await expect(page.getByTestId('market-decision-semantics-strip')).toBeVisible();
     await expect(page.getByTestId('market-overview-decision-readiness')).toBeVisible();
-    await expect(page.getByTestId('market-overview-research-readiness-strip')).toBeVisible();
+    await expect(page.getByTestId('market-overview-research-readiness-strip')).toHaveCount(0);
+    await expect(page.getByTestId('market-intelligence-actionability-strip')).toHaveCount(0);
     await expect(page.getByTestId('market-decision-semantics-advice-boundary')).toBeVisible();
     await expect(page.getByTestId('market-overview-side-rail')).toBeVisible();
     await expect(page.getByTestId('market-overview-card-indices')).toBeVisible();
@@ -218,34 +219,38 @@ test.describe('market overview smoke', () => {
       expect((box?.y ?? 0) + Math.min(box?.height ?? 0, 48)).toBeLessThanOrEqual((viewport?.height ?? 0) - 8);
     });
     const verdictBox = await page.getByTestId('market-overview-decision-readiness').boundingBox();
-    const readinessStripBox = await page.getByTestId('market-overview-research-readiness-strip').boundingBox();
+    const mainGridBox = await page.getByTestId('market-overview-main-grid').boundingBox();
+    const visualEvidenceBox = await page.getByTestId('market-overview-visual-evidence-strip').boundingBox();
     expect(verdictBox).not.toBeNull();
-    expect(readinessStripBox).not.toBeNull();
-    expect((verdictBox?.y ?? Number.POSITIVE_INFINITY) < (readinessStripBox?.y ?? Number.NEGATIVE_INFINITY)).toBe(true);
-    const actionabilityStrip = page.getByTestId('market-intelligence-actionability-strip');
-    if (await actionabilityStrip.count()) {
-      const actionabilityStripBox = await actionabilityStrip.boundingBox();
-      expect(actionabilityStripBox).not.toBeNull();
-      expect((verdictBox?.y ?? Number.POSITIVE_INFINITY) < (actionabilityStripBox?.y ?? Number.NEGATIVE_INFINITY)).toBe(true);
-    }
+    expect(mainGridBox).not.toBeNull();
+    expect(visualEvidenceBox).not.toBeNull();
+    expect((verdictBox?.y ?? Number.POSITIVE_INFINITY) < (mainGridBox?.y ?? Number.NEGATIVE_INFINITY)).toBe(true);
+    expect((mainGridBox?.y ?? Number.POSITIVE_INFINITY) < (visualEvidenceBox?.y ?? Number.NEGATIVE_INFINITY)).toBe(true);
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
     const shellLayout = await page.evaluate(() => {
       const shell = document.querySelector('[data-testid="market-overview-shell"]') as HTMLElement | null;
       const mainGrid = document.querySelector('[data-testid="market-overview-main-grid"]') as HTMLElement | null;
-      if (!shell || !mainGrid) {
+      const visualEvidence = document.querySelector('[data-testid="market-overview-visual-evidence-strip"]') as HTMLElement | null;
+      if (!shell || !mainGrid || !visualEvidence) {
         return null;
       }
 
       return {
         shellScrollHeight: shell.scrollHeight,
         shellClientHeight: shell.clientHeight,
-        trailingGap: shell.scrollHeight - (mainGrid.offsetTop + mainGrid.offsetHeight),
+        visualEvidenceTop: visualEvidence.offsetTop,
+        mainGridBottom: mainGrid.offsetTop + mainGrid.offsetHeight,
+        trailingGap: shell.scrollHeight - (visualEvidence.offsetTop + visualEvidence.offsetHeight),
       };
     });
     expect(shellLayout).not.toBeNull();
     expect(shellLayout?.shellScrollHeight ?? 0).toBeGreaterThanOrEqual(shellLayout?.shellClientHeight ?? 0);
+    expect(shellLayout?.visualEvidenceTop ?? 0).toBeGreaterThanOrEqual(shellLayout?.mainGridBottom ?? Number.POSITIVE_INFINITY);
     expect(shellLayout?.trailingGap ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(96);
+    await expect(await page.locator('body').innerText()).not.toMatch(
+      /sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|reasonCodes?|reasonFamilies|schemaVersion|fallback_static|synthetic_fixture|rotation_non_scoring_or_taxonomy_only|Rotation Non Scoring Or Taxonomy Only|研究就绪度|市场研判可用性|证据覆盖\s*\d+\/\d+|来源级别|高授权|观察级|评分级|缺口\s*\d+|更高授权|限制因素|回退|缓存|仅供界面演示|保持界面结构|等待真实行情源/i,
+    );
 
     const evidenceDetails = await openMarketOverviewEvidenceDetails(page);
     await expect(evidenceDetails).toContainText(/市场方向摘要/);
@@ -270,9 +275,6 @@ test.describe('market overview smoke', () => {
     expect(copiedSummary).toContain('市场总览');
     expect(copiedSummary).toContain('市场温度');
     expect(copiedSummary).toContain('市场解读');
-    await expect(await page.locator('body').innerText()).not.toMatch(
-      /sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|reasonCodes?|reasonFamilies|schemaVersion|fallback_static|synthetic_fixture|rotation_non_scoring_or_taxonomy_only|Rotation Non Scoring Or Taxonomy Only/i,
-    );
   });
 
   test('market overview keeps the top summary cards wide and balanced across desktop viewports', async ({ page }) => {
@@ -386,19 +388,14 @@ test.describe('market overview smoke', () => {
       await expect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('market-overview-decision-readiness')).toContainText(/暂不形成方向结论|等待数据完成后再判断|仅观察/);
       await expect(page.getByTestId('market-overview-decision-readiness')).toContainText(/当前信号置信度较低，仅供观察。|部分数据暂不可用，当前评分已暂停。|数据更新中，稍后将自动刷新。/);
-      await expect(page.getByTestId('market-overview-research-readiness-strip')).toBeVisible();
+      await expect(page.getByTestId('market-overview-research-readiness-strip')).toHaveCount(0);
+      await expect(page.getByTestId('market-intelligence-actionability-strip')).toHaveCount(0);
       await expect(page.getByTestId('market-decision-semantics-advice-boundary')).toContainText(/暂不形成方向结论|等待数据完成后再判断/);
       const verdictBox = await page.getByTestId('market-overview-decision-readiness').boundingBox();
-      const readinessStripBox = await page.getByTestId('market-overview-research-readiness-strip').boundingBox();
+      const mainGridBox = await page.getByTestId('market-overview-main-grid').boundingBox();
       expect(verdictBox).not.toBeNull();
-      expect(readinessStripBox).not.toBeNull();
-      expect((verdictBox?.y ?? Number.POSITIVE_INFINITY) < (readinessStripBox?.y ?? Number.NEGATIVE_INFINITY)).toBe(true);
-      const actionabilityStrip = page.getByTestId('market-intelligence-actionability-strip');
-      if (await actionabilityStrip.count()) {
-        const actionabilityStripBox = await actionabilityStrip.boundingBox();
-        expect(actionabilityStripBox).not.toBeNull();
-        expect((verdictBox?.y ?? Number.POSITIVE_INFINITY) < (actionabilityStripBox?.y ?? Number.NEGATIVE_INFINITY)).toBe(true);
-      }
+      expect(mainGridBox).not.toBeNull();
+      expect((verdictBox?.y ?? Number.POSITIVE_INFINITY) < (mainGridBox?.y ?? Number.NEGATIVE_INFINITY)).toBe(true);
       const evidenceDetails = await openMarketOverviewEvidenceDetails(page);
       await expect(evidenceDetails).toContainText(/当前市场：证据不足|Current market: Evidence insufficient/);
       await expect(evidenceDetails).toContainText(/不支持强方向判断/);

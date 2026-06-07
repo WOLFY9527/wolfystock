@@ -1912,42 +1912,27 @@ describe('MarketOverviewPage', () => {
     expect(screen.queryByText(/开发者详情|debug|raw|schema|trace|provider_timeout|not_enough_history|MarketCache|generatedCandidates|failedCandidates|LLM Ledger|QUOTA PILOT/i)).not.toBeInTheDocument();
   });
 
-  it('renders a compact market intelligence actionability strip for ready-ish frames without leaking raw terms or trading wording', async () => {
+  it('does not render route-level actionability diagnostics by default for ready-ish frames', async () => {
     renderMarketOverviewWithLanguage('zh');
 
-    const strip = await screen.findByTestId('market-intelligence-actionability-strip');
-    expect(strip).toHaveTextContent('市场研判可用性');
-    expect(strip).toHaveTextContent('仅观察');
-    expect(strip).toHaveTextContent('低把握');
-    expect(strip).toHaveTextContent('仅供研究观察，不作为执行依据');
-    expect(strip).toHaveTextContent('继续确认流动性是否保持扩张');
-    expect(strip).toHaveTextContent('证据覆盖 3/5');
-    expect(strip).toHaveTextContent('宏观 可参考');
-    expect(strip).toHaveTextContent('流动性 仅观察');
-    expect(strip).toHaveTextContent('轮动 仅观察');
-    expect(strip).toHaveTextContent('宽度 可参考');
-    expect(strip).toHaveTextContent('扫描上下文 可参考');
-    expect(strip.textContent || '').not.toMatch(/buy|sell|order|trade|broker|下单|交易|买入|卖出|加仓|减仓|raw|debug|provider|cache|runtime|router|env|trace|credential/i);
+    await screen.findByTestId('market-overview-workbench');
+    expect(screen.queryByTestId('market-intelligence-actionability-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
+    expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent('不构成交易指令');
   });
 
-  it('fail closes the market intelligence actionability strip when evidence is missing or fallback degraded', async () => {
+  it('keeps fail-closed market state without default route-level diagnostics when evidence is missing', async () => {
     vi.mocked(marketApi.getTemperature).mockResolvedValueOnce(unreliableTemperaturePayload());
 
     renderMarketOverviewWithLanguage('zh');
 
-    const strip = await screen.findByTestId('market-intelligence-actionability-strip');
-    expect(strip).toHaveTextContent('证据不足');
-    expect(strip).toHaveTextContent('证据覆盖 0/5');
-    expect(strip).toHaveTextContent('缺口 5');
-    expect(strip).toHaveTextContent('等待更高授权流动性证据');
-    expect(strip).toHaveTextContent('宏观 待补');
-    expect(strip).toHaveTextContent('流动性 待补');
-    expect(strip).toHaveTextContent('轮动 待补');
-    expect(strip).toHaveTextContent('扫描上下文 待补');
-    expect(strip).not.toHaveTextContent('可参考');
+    const decisionReadiness = await screen.findByTestId('market-overview-decision-readiness');
+    expect(decisionReadiness).toHaveTextContent(/暂不形成方向结论|等待数据完成后再判断|仅观察/);
+    expect(screen.queryByTestId('market-intelligence-actionability-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
   });
 
-  it('shows stale or fallback evidence as downgraded instead of supportive in the market intelligence strip', async () => {
+  it('does not promote stale or fallback evidence diagnostics into the default route surface', async () => {
     vi.mocked(marketApi.getTemperature).mockResolvedValueOnce({
       ...temperaturePayload(),
       marketActionabilityFrame: {
@@ -1984,13 +1969,9 @@ describe('MarketOverviewPage', () => {
 
     renderMarketOverviewWithLanguage('zh');
 
-    const strip = await screen.findByTestId('market-intelligence-actionability-strip');
-    expect(strip).toHaveTextContent('证据不足');
-    expect(strip).toHaveTextContent('新鲜度不足');
-    expect(strip).toHaveTextContent('轮动 已降级');
-    expect(strip).toHaveTextContent('扫描上下文 已降级');
-    expect(strip).not.toHaveTextContent('轮动 可参考');
-    expect(strip).not.toHaveTextContent('扫描上下文 可参考');
+    await screen.findByTestId('market-overview-workbench');
+    expect(screen.queryByTestId('market-intelligence-actionability-strip')).not.toBeInTheDocument();
+    expect(screen.queryByText('市场研判可用性')).not.toBeInTheDocument();
   });
 
   it('keeps old temperature payloads compatible by omitting the actionability strip when additive frames are absent', async () => {
@@ -2004,7 +1985,7 @@ describe('MarketOverviewPage', () => {
 
     await screen.findByTestId('market-overview-workbench');
     expect(screen.queryByTestId('market-intelligence-actionability-strip')).not.toBeInTheDocument();
-    expect(screen.getByTestId('market-overview-research-readiness-strip')).toBeInTheDocument();
+    expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
   });
 
   it('exposes a distinct tab composition registry for market overview tabs', () => {
@@ -2197,8 +2178,8 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-decision-semantics-strip')).toBeInTheDocument();
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/市场状态/);
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/数据说明/);
-    expect(screen.getByTestId('market-overview-research-readiness-strip')).toHaveTextContent('研究就绪度');
-    expect(screen.getByTestId('market-overview-research-readiness-strip')).toHaveTextContent(/仅观察|证据不足|研究证据可用/);
+    expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('market-intelligence-actionability-strip')).not.toBeInTheDocument();
     const conclusion = screen.getByTestId('market-overview-decision-readiness');
     expect(conclusion).toHaveTextContent('市场状态');
     expect(conclusion).toHaveTextContent('主驱动');
@@ -2263,10 +2244,10 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-overview-category-tabs').querySelector('.ui-scroll-x-quiet')).not.toBeNull();
     expect(shell).toContainElement(screen.getByTestId('market-overview-category-tabs'));
     expect(shell).toContainElement(screen.getByTestId('market-overview-workbench'));
-    expect(shell).toContainElement(screen.getByTestId('market-overview-research-readiness-strip'));
     expect(shell).toContainElement(screen.getByTestId('market-overview-hero-ribbon'));
     expect(shell).toContainElement(screen.getByTestId('market-data-quality'));
     expect(shell).toContainElement(screen.getByTestId('market-overview-main-grid'));
+    expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
 
     expect(await screen.findByTestId('market-overview-main-grid')).toHaveClass('grid', 'grid-cols-1', 'xl:grid-cols-12', 'gap-4', 'items-start');
     expect(screen.getByTestId('market-overview-primary-rail')).toHaveClass('xl:col-span-9', 'flex', 'flex-col');
@@ -2466,15 +2447,13 @@ describe('MarketOverviewPage', () => {
 
     const topStack = await screen.findByTestId('market-overview-top-stack');
     const decisionReadiness = screen.getByTestId('market-overview-decision-readiness');
-    const researchReadinessStrip = screen.getByTestId('market-overview-research-readiness-strip');
     expect(topStack.firstElementChild).toContainElement(screen.getByTestId('market-decision-semantics-strip'));
     expect(topStack.querySelectorAll('[data-market-research-flow="decision-semantics"]')).toHaveLength(1);
     expect(screen.getByTestId('market-overview-main-grid').compareDocumentPosition(screen.getByTestId('market-decision-semantics-strip'))).toBe(Node.DOCUMENT_POSITION_PRECEDING);
-    expect(decisionReadiness.compareDocumentPosition(researchReadinessStrip)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    const actionabilityStrip = screen.queryByTestId('market-intelligence-actionability-strip');
-    if (actionabilityStrip) {
-      expect(decisionReadiness.compareDocumentPosition(actionabilityStrip)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    }
+    expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('market-intelligence-actionability-strip')).not.toBeInTheDocument();
+    expect(decisionReadiness.compareDocumentPosition(screen.getByTestId('market-overview-main-grid'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(screen.getByTestId('market-overview-main-grid').compareDocumentPosition(screen.getByTestId('market-overview-visual-evidence-strip'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('renders each tab with deterministic row groups and the shared decision layer', async () => {
