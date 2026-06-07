@@ -9,7 +9,7 @@ type ConsumerWorkspaceProps = React.HTMLAttributes<HTMLDivElement> & {
 
 const CONSUMER_SCOPE_CLASS =
   'workspace-width-near-full flex w-full min-w-0 flex-col overflow-x-hidden [--wolfy-consumer-shell-max:1880px] [&_[data-terminal-primitive="page-shell"]]:max-w-[var(--wolfy-consumer-shell-max)]';
-const CONSUMER_PAGE_SHELL_CLASS = 'flex min-h-0 min-w-0 w-full max-w-[var(--wolfy-consumer-shell-max,1880px)] py-5 md:py-6 2xl:px-10';
+const CONSUMER_PAGE_SHELL_CLASS = 'flex min-h-0 min-w-0 w-full max-w-[var(--wolfy-consumer-shell-max,1880px)] py-5 md:py-6 xl:px-8 2xl:px-10';
 
 export function ConsumerWorkspaceScope({ className, children, ...props }: ConsumerWorkspaceProps) {
   return (
