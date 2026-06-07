@@ -351,7 +351,7 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.getByText('下一步')).toBeInTheDocument();
     expect(screen.getByText('评估成本与配额风险')).toBeInTheDocument();
     expect(await screen.findByText('12 次 AI / 18 次数据源')).toBeInTheDocument();
-    expect(screen.getByText('先做配额试运行，再定位归属')).toBeInTheDocument();
+    expect(screen.getByText('先查看配额估算，再定位归属')).toBeInTheDocument();
     expect(screen.getByText('成本压力')).toBeInTheDocument();
     expect(screen.getByText('缓存效率')).toBeInTheDocument();
     expect(screen.getByText('只读')).toBeInTheDocument();
@@ -367,7 +367,7 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.getByText('重复候选与报告重合')).toBeInTheDocument();
     expect(screen.getByText('限制与数据质量')).toBeInTheDocument();
     expect(screen.getByText('计数器快照不含历史时间戳')).toBeInTheDocument();
-    expect(screen.getByText('L2 配额 / 成本运维：配额试运行')).toBeInTheDocument();
+    expect(screen.getByText('L2 配额 / 成本运维：只读配额估算')).toBeInTheDocument();
     expect(screen.getAllByText('AI 调用账本').length).toBeGreaterThan(0);
     expect(screen.getByText('模型价格策略')).toBeInTheDocument();
   });
@@ -524,7 +524,7 @@ describe('AdminCostObservabilityPage', () => {
     render(<AdminCostObservabilityPage />);
 
     await openCostSecondaryDisclosure();
-    expect(await screen.findByText('L2 配额 / 成本运维：配额试运行')).toBeInTheDocument();
+    expect(await screen.findByText('L2 配额 / 成本运维：只读配额估算')).toBeInTheDocument();
     await waitFor(() => expect(runQuotaDryRun).toHaveBeenCalled());
     expect(screen.getByText('17')).toBeInTheDocument();
     expect(screen.getByText('预算内')).toBeInTheDocument();
@@ -534,6 +534,22 @@ describe('AdminCostObservabilityPage', () => {
       operation: 'estimate',
       enforcementMode: 'dry_run',
     });
+  });
+
+  it('does not render quota lifecycle write controls under the read-only diagnostic panel', async () => {
+    getDuplicateSummary.mockResolvedValue(populatedPayload);
+
+    render(<AdminCostObservabilityPage />);
+
+    const panel = await screen.findByTestId('quota-dry-run-panel');
+    expect(within(panel).getAllByText('只读估算').length).toBeGreaterThan(0);
+    expect(within(panel).queryByLabelText('试运行操作')).not.toBeInTheDocument();
+    expect(within(panel).queryByLabelText('预占编号')).not.toBeInTheDocument();
+    expect(within(panel).queryByText('预占')).not.toBeInTheDocument();
+    expect(within(panel).queryByText('消耗')).not.toBeInTheDocument();
+    expect(within(panel).queryByText('释放')).not.toBeInTheDocument();
+    await waitFor(() => expect(runQuotaDryRun).toHaveBeenCalled());
+    expect(runQuotaDryRun.mock.calls.every(([request]) => request.operation === 'estimate')).toBe(true);
   });
 
   it('renders LLM ledger totals and cost summaries for users with cost observability capability', async () => {
@@ -690,7 +706,7 @@ describe('AdminCostObservabilityPage', () => {
     expect(screen.queryByText(/token=secret/)).not.toBeInTheDocument();
 
     runQuotaDryRun.mockRejectedValueOnce({ response: { status: 500, data: { detail: { message: 'stack trace apiKey=secret' } } } });
-    fireEvent.click(screen.getByRole('button', { name: '运行试运行' }));
+    fireEvent.click(screen.getByRole('button', { name: '重新估算' }));
 
     await waitFor(() => expect(screen.getAllByText('读取配额诊断失败').length).toBeGreaterThan(0));
     expect(screen.getByText('服务器暂时不可用，请稍后重试。')).toBeInTheDocument();
@@ -706,7 +722,7 @@ describe('AdminCostObservabilityPage', () => {
     await openCostSecondaryDisclosure();
     expect(await screen.findByText('读取 AI 调用账本失败')).toBeInTheDocument();
     expect(screen.getByText('当前账号没有成本观测权限。')).toBeInTheDocument();
-    expect(screen.getByText('L2 配额 / 成本运维：配额试运行')).toBeInTheDocument();
+    expect(screen.getByText('L2 配额 / 成本运维：只读配额估算')).toBeInTheDocument();
     expect(screen.queryByText(/token=secret/)).not.toBeInTheDocument();
 
     getLlmLedgerSummary.mockRejectedValueOnce({ response: { status: 500, data: { detail: { message: 'stack trace apiKey=secret' } } } });
@@ -746,7 +762,7 @@ describe('AdminCostObservabilityPage', () => {
     render(<AdminCostObservabilityPage />);
 
     await openCostSecondaryDisclosure();
-    expect(await screen.findByText('L4 已脱敏 Quota 试运行响应：门禁 / 来源 / redaction')).toBeInTheDocument();
+    expect(await screen.findByText('L4 已脱敏 Quota 估算响应：门禁 / 来源 / redaction')).toBeInTheDocument();
     expect(screen.queryByText('diagnosticOnly')).not.toBeInTheDocument();
   });
 

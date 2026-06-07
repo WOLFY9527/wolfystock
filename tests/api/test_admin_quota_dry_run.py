@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from api.deps import CurrentUser, get_current_user
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
+from src.services.quota_policy_service import QuotaPolicyService
 from src.storage import DatabaseManager, QuotaReservation, QuotaUsageWindow
 
 
@@ -230,13 +231,10 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
             daily_budget_units=120,
             metadata={"daily_soft_limit_units": 100},
         )
-        self._post_dry_run(
-            {
-                "ownerUserId": "user-2",
-                "routeFamily": "analysis",
-                "operation": "reserve",
-                "estimatedUnits": 95,
-            }
+        QuotaPolicyService(db=self.db, enforcement_enabled=True).reserve_quota(
+            owner_user_id="user-2",
+            route_family="analysis",
+            estimated_units=95,
         )
 
         response = self._post_dry_run(
@@ -367,7 +365,7 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertFalse(operator_review["globalEnforcementChanged"])
         self.assertFalse(operator_review["realOutboundNotification"])
 
-    def test_enabled_pilot_out_of_scope_reserve_does_not_write_quota_state(self) -> None:
+    def test_read_endpoint_rejects_reserve_without_quota_state_write(self) -> None:
         self._as_admin()
         self.db.upsert_quota_policy(
             policy_key="user-budget-alerts",
@@ -387,11 +385,10 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
             }
         )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
         payload = response.json()
-        self.assertTrue(payload["allowed"])
-        self.assertEqual(payload["status"], "pilot_advisory")
-        self.assertIsNone(payload["reservationId"])
+        self.assertEqual(payload["detail"]["error"], "validation_error")
+        self.assertIn("estimate", payload["detail"]["message"])
         with self.db.session_scope() as session:
             self.assertEqual(session.query(QuotaReservation).count(), 0)
             self.assertEqual(session.query(QuotaUsageWindow).count(), 0)
@@ -595,50 +592,49 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertTrue(payload["wouldBlock"])
         self.assertEqual(payload["reasonCode"], "token_cap_exceeded")
 
-    def test_reservation_lifecycle_through_diagnostic_path(self) -> None:
+    def test_read_endpoint_rejects_consume_and_release_without_mutating_existing_state(self) -> None:
         self._as_admin()
+        reserved = QuotaPolicyService(db=self.db, enforcement_enabled=True).reserve_quota(
+            owner_user_id="user-1",
+            route_family="analysis",
+            token_estimate=1000,
+            metadata={"safe_label": "quota-test", "api_key": "must-not-leak"},
+        )
+        self.assertTrue(reserved.reservation_id)
 
-        reserved = self._post_dry_run(
-            {
-                "ownerUserId": "user-1",
-                "routeFamily": "analysis",
-                "operation": "reserve",
-                "tokenEstimate": 1000,
-                "metadata": {"safe_label": "quota-test", "api_key": "must-not-leak"},
-            }
-        )
-        self.assertEqual(reserved.status_code, 200)
-        reservation_id = reserved.json()["reservationId"]
-        self.assertTrue(reservation_id)
+        with self.db.session_scope() as session:
+            before_reservations = session.query(QuotaReservation).count()
+            before_windows = session.query(QuotaUsageWindow).count()
+            before_reserved_units = sum(int(row.reserved_units or 0) for row in session.query(QuotaUsageWindow).all())
+            before_consumed_units = sum(int(row.consumed_units or 0) for row in session.query(QuotaUsageWindow).all())
 
-        consumed = self._post_dry_run(
-            {
-                "operation": "consume",
-                "reservationId": reservation_id,
-                "actualUnits": 4,
-            }
-        )
-        self.assertEqual(consumed.status_code, 200)
-        self.assertTrue(consumed.json()["allowed"])
-        self.assertEqual(consumed.json()["status"], "consumed")
+        for operation in ("consume", "release"):
+            with self.subTest(operation=operation):
+                response = self._post_dry_run(
+                    {
+                        "operation": operation,
+                        "reservationId": reserved.reservation_id,
+                        "actualUnits": 4,
+                    }
+                )
 
-        reserved_for_release = self._post_dry_run(
-            {
-                "ownerUserId": "user-1",
-                "routeFamily": "analysis",
-                "operation": "reserve",
-                "tokenEstimate": 1000,
-            }
-        )
-        released = self._post_dry_run(
-            {
-                "operation": "release",
-                "reservationId": reserved_for_release.json()["reservationId"],
-            }
-        )
-        self.assertEqual(released.status_code, 200)
-        self.assertTrue(released.json()["allowed"])
-        self.assertEqual(released.json()["status"], "released")
+                self.assertEqual(response.status_code, 400)
+                payload = response.json()
+                self.assertEqual(payload["detail"]["error"], "validation_error")
+                self.assertIn("estimate", payload["detail"]["message"])
+                with self.db.session_scope() as session:
+                    self.assertEqual(session.query(QuotaReservation).count(), before_reservations)
+                    self.assertEqual(session.query(QuotaUsageWindow).count(), before_windows)
+                    row = session.query(QuotaReservation).filter_by(reservation_id=reserved.reservation_id).one()
+                    self.assertEqual(row.status, "reserved")
+                    self.assertEqual(
+                        sum(int(item.reserved_units or 0) for item in session.query(QuotaUsageWindow).all()),
+                        before_reserved_units,
+                    )
+                    self.assertEqual(
+                        sum(int(item.consumed_units or 0) for item in session.query(QuotaUsageWindow).all()),
+                        before_consumed_units,
+                    )
 
     def test_disabled_mode_is_non_blocking(self) -> None:
         self._as_admin()
@@ -685,7 +681,7 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
             {
                 "ownerUserId": "user-1",
                 "routeFamily": "analysis",
-                "operation": "reserve",
+                "operation": "estimate",
                 "metadata": {
                     "api_key": "must-not-leak",
                     "cookie": "must-not-leak",

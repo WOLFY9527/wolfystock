@@ -99,12 +99,20 @@ def run_quota_dry_run(
     request: QuotaDryRunRequest,
     _: CurrentUser = Depends(require_admin_capability("cost:observability:read")),
 ) -> QuotaDryRunResponse:
-    route_family = QuotaPolicyService().classify_route_family(request.route_family)
     enforcement_enabled = request.enforcement_mode != "disabled"
     service = QuotaPolicyService(
         enforcement_enabled=enforcement_enabled,
         global_kill_switch=bool(request.global_kill_switch),
     )
+    route_family = service.classify_route_family(request.route_family)
+    if request.operation != "estimate":
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "validation_error",
+                "message": "Cost observability quota diagnostics are read-only; only estimate operation is supported.",
+            },
+        )
 
     budget_alert = service.classify_budget_alert(
         owner_user_id=request.owner_user_id,
@@ -155,7 +163,7 @@ def run_quota_dry_run(
             reason_code=pilot_readiness.reason_code,
             estimated_units=int(budget_alert.estimated_units or 0),
         )
-    elif request.operation == "estimate":
+    else:
         decision = service.evaluate_quota(
             owner_user_id=request.owner_user_id,
             route_family=route_family,
@@ -164,27 +172,6 @@ def run_quota_dry_run(
             token_estimate=request.token_estimate,
             estimated_units=request.estimated_units,
         )
-    elif request.operation == "reserve":
-        decision = service.reserve_quota(
-            owner_user_id=request.owner_user_id,
-            route_family=route_family,
-            provider=request.provider,
-            model_tier=request.model_tier,
-            token_estimate=request.token_estimate,
-            estimated_units=request.estimated_units,
-            metadata={
-                **request.metadata,
-                "source": "admin_quota_dry_run",
-                "diagnostic_only": True,
-            },
-        )
-    elif request.operation == "consume":
-        decision = service.consume_reservation(
-            reservation_id=request.reservation_id,
-            actual_units=request.actual_units,
-        )
-    else:
-        decision = service.release_reservation(reservation_id=request.reservation_id)
 
     response_allowed = bool(decision.allowed)
     response_status = decision.status

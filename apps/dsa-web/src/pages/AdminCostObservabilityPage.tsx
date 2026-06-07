@@ -14,7 +14,6 @@ import {
   type LlmLedgerSummaryRollup,
   type ModelPricingPoliciesResponse,
   type ModelPricingPolicyItem,
-  type QuotaDryRunOperation,
   type QuotaDryRunResponse,
   type QuotaEnforcementMode,
 } from '../api/adminCost';
@@ -111,19 +110,6 @@ const ROUTE_FAMILY_OPTIONS = [
   { value: 'scanner_ai', label: 'Scanner AI' },
   { value: 'agent_chat', label: 'Agent Chat' },
   { value: 'provider_market_data', label: '数据源数据' },
-];
-
-const QUOTA_OPERATION_OPTIONS: Array<{ value: QuotaDryRunOperation; label: string }> = [
-  { value: 'estimate', label: '估算' },
-  { value: 'reserve', label: '预占' },
-  { value: 'consume', label: '消耗' },
-  { value: 'release', label: '释放' },
-];
-
-const ENFORCEMENT_OPTIONS: Array<{ value: QuotaEnforcementMode; label: string }> = [
-  { value: 'disabled', label: '关闭' },
-  { value: 'dry_run', label: '试运行' },
-  { value: 'enabled', label: '启用策略模拟' },
 ];
 
 const UNSAFE_VISIBLE_TEXT_PATTERN = /(https?:\/\/|www\.|\?|=|token|secret|cookie|session|password|bearer|apikey|api_key|stack|trace|payload|prompt|credential)/i;
@@ -256,9 +242,9 @@ function clampTokenEstimate(value: string): number {
 }
 
 function enforcementLabel(value?: QuotaEnforcementMode | string): string {
-  if (value === 'disabled') return '关闭';
-  if (value === 'enabled') return '启用策略模拟';
-  return '试运行';
+  if (value === 'disabled') return '策略关闭';
+  if (value === 'enabled') return '策略估算';
+  return '只读估算';
 }
 
 function reasonLabel(value?: string | null): string {
@@ -788,9 +774,6 @@ const QuotaDryRunPanel: React.FC = () => {
   const { canReadCostObservability } = useProductSurface();
   const [routeFamily, setRouteFamily] = useState('analysis');
   const [tokenEstimateInput, setTokenEstimateInput] = useState('4000');
-  const [operation, setOperation] = useState<QuotaDryRunOperation>('estimate');
-  const [enforcementMode, setEnforcementMode] = useState<QuotaEnforcementMode>('dry_run');
-  const [reservationId, setReservationId] = useState('');
   const [state, setState] = useState<QuotaDryRunState>({ loading: false, error: null, data: null });
 
   useEffect(() => {
@@ -802,7 +785,7 @@ const QuotaDryRunPanel: React.FC = () => {
       routeFamily,
       tokenEstimate: clampTokenEstimate(tokenEstimateInput),
       operation: 'estimate',
-      enforcementMode,
+      enforcementMode: 'dry_run',
     })
       .then((data) => {
         if (alive) setState({ loading: false, error: null, data });
@@ -813,14 +796,13 @@ const QuotaDryRunPanel: React.FC = () => {
     return () => {
       alive = false;
     };
-  }, [canReadCostObservability, enforcementMode, routeFamily, tokenEstimateInput]);
+  }, [canReadCostObservability, routeFamily, tokenEstimateInput]);
 
   if (!canReadCostObservability) {
     return null;
   }
 
   const tokenEstimate = clampTokenEstimate(tokenEstimateInput);
-  const canSubmit = operation === 'estimate' || operation === 'reserve' || reservationId.trim().length > 0;
   const data = state.data;
 
   const runDiagnostic = () => {
@@ -828,10 +810,8 @@ const QuotaDryRunPanel: React.FC = () => {
     void adminCostApi.runQuotaDryRun({
       routeFamily,
       tokenEstimate,
-      operation,
-      enforcementMode,
-      reservationId: reservationId.trim() || undefined,
-      actualUnits: operation === 'consume' ? tokenEstimate : undefined,
+      operation: 'estimate',
+      enforcementMode: 'dry_run',
     })
       .then((next) => setState({ loading: false, error: null, data: next }))
       .catch((error) => setState({ loading: false, error: sanitizedQuotaError(error), data: null }));
@@ -840,24 +820,24 @@ const QuotaDryRunPanel: React.FC = () => {
   return (
     <TerminalPanel as="section" data-testid="quota-dry-run-panel">
       <TerminalSectionHeader
-        eyebrow="配额试运行"
-        title={iconTitle(<Gauge className="h-4 w-4" />, 'L2 配额 / 成本运维：配额试运行')}
-        action={<TerminalChip variant="info">只读诊断</TerminalChip>}
+        eyebrow="配额估算"
+        title={iconTitle(<Gauge className="h-4 w-4" />, 'L2 配额 / 成本运维：只读配额估算')}
+        action={<TerminalChip variant="info">只读估算</TerminalChip>}
       />
 
       <TerminalNotice variant="info" className="mt-4">
-        当前为试运行/诊断，不会阻断真实请求
+        当前仅估算配额压力，不会变更任何配额生命周期状态。
       </TerminalNotice>
 
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-4">
         <TerminalMetric label="状态" value={state.loading ? '检查中' : quotaStatusLabel(data?.status)} valueClassName={metricValueClass(data?.wouldBlock ? 'warn' : 'info')} />
-        <TerminalMetric label="模式" value={enforcementLabel(data?.enforcementMode || enforcementMode)} valueClassName={metricValueClass('warn')} />
+        <TerminalMetric label="模式" value={enforcementLabel(data?.enforcementMode || 'dry_run')} valueClassName={metricValueClass('warn')} />
         <TerminalMetric label="估算单位" value={compactNumber(data?.estimatedUnits)} valueClassName={metricValueClass('info')} />
         <TerminalMetric label="判定" value={data?.wouldBlock ? '会阻断' : data?.allowed ? '允许' : '--'} valueClassName={metricValueClass(data?.wouldBlock ? 'warn' : data?.allowed ? 'good' : 'neutral')} />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-12">
-        <div className="min-w-0 xl:col-span-3">
+        <div className="min-w-0 xl:col-span-6">
           <Select
             label="功能族群"
             value={routeFamily}
@@ -866,7 +846,7 @@ const QuotaDryRunPanel: React.FC = () => {
             onChange={setRouteFamily}
           />
         </div>
-        <label className="min-w-0 xl:col-span-3">
+        <label className="min-w-0 xl:col-span-6">
           <span className="theme-field-label mb-2 block">用量估算</span>
           <input
             className="h-10 w-full min-w-0 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 font-mono text-sm text-white outline-none transition focus:border-emerald-500/50"
@@ -877,37 +857,7 @@ const QuotaDryRunPanel: React.FC = () => {
             onChange={(event) => setTokenEstimateInput(String(clampTokenEstimate(event.target.value)))}
           />
         </label>
-        <div className="min-w-0 xl:col-span-3">
-          <Select
-            label="策略模式"
-            value={enforcementMode}
-            options={ENFORCEMENT_OPTIONS}
-            placeholder=""
-            onChange={(value) => setEnforcementMode(value as QuotaEnforcementMode)}
-          />
-        </div>
-        <div className="min-w-0 xl:col-span-3">
-          <Select
-            label="试运行操作"
-            value={operation}
-            options={QUOTA_OPERATION_OPTIONS}
-            placeholder=""
-            onChange={(value) => setOperation(value as QuotaDryRunOperation)}
-          />
-        </div>
       </div>
-
-      {operation === 'consume' || operation === 'release' ? (
-        <label className="mt-3 block min-w-0">
-          <span className="theme-field-label mb-2 block">预占编号</span>
-          <input
-            className="h-10 w-full min-w-0 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 font-mono text-sm text-white outline-none transition focus:border-emerald-500/50"
-            value={reservationId}
-            onChange={(event) => setReservationId(event.target.value.slice(0, 128))}
-            placeholder="试运行 reservation id"
-          />
-        </label>
-      ) : null}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 text-xs leading-5 text-white/48">
@@ -917,20 +867,20 @@ const QuotaDryRunPanel: React.FC = () => {
         <TerminalButton
           variant="secondary"
           onClick={runDiagnostic}
-          disabled={state.loading || !canSubmit}
+          disabled={state.loading}
         >
-          {state.loading ? '诊断中' : '运行试运行'}
+          {state.loading ? '估算中' : '重新估算'}
         </TerminalButton>
       </div>
 
       {data?.wouldBlock ? (
         <TerminalNotice variant="caution" className="mt-4" role="status">
-          试运行结果显示该策略会阻断；真实请求未被阻断。
+          估算结果显示该策略会阻断；真实请求未被阻断。
         </TerminalNotice>
       ) : null}
       {state.error ? <div className="mt-4"><ApiErrorAlert error={state.error} /></div> : null}
 
-      <TerminalDisclosure title="L4 已脱敏 Quota 试运行响应：门禁 / 来源 / redaction" summary="默认折叠 · 仅显示 redaction 后字段" className="mt-4">
+      <TerminalDisclosure title="L4 已脱敏 Quota 估算响应：门禁 / 来源 / redaction" summary="默认折叠 · 仅显示 redaction 后字段" className="mt-4">
         <dl className="grid gap-3 text-[11px] leading-5 text-white/48 sm:grid-cols-2">
           <div className="min-w-0">
             <dt className="text-white/32">diagnosticOnly</dt>
@@ -1022,7 +972,7 @@ const AdminCostObservabilityPage: React.FC = () => {
             className="mt-5"
             systemTrustState={l0TrustState}
             impact={emptyCounters ? '当前窗口缺少可用计数器，成本压力只能保持观察。' : `${operatorState} · ${attentionLabel}`}
-            recommendedAction={needsAttentionCount ? '先做配额试运行，再定位归属。' : '保持观测，按需切换窗口与范围。'}
+            recommendedAction={needsAttentionCount ? '先查看配额估算，再定位归属。' : '保持观测，按需切换窗口与范围。'}
             evidenceRef="主诊断板 / 二级细节：账本、价格、数据源 / 缓存"
             lastUpdated={formatDate(data?.generatedAt)}
           />
@@ -1077,7 +1027,7 @@ const AdminCostObservabilityPage: React.FC = () => {
             />
             <TerminalMetric
               label="下一步"
-              value={needsAttentionCount ? '先做配额试运行，再定位归属' : '保持观测，按需切换窗口'}
+              value={needsAttentionCount ? '先查看配额估算，再定位归属' : '保持观测，按需切换窗口'}
               subvalue={`生成 ${formatDate(data?.generatedAt)} · ${exactnessLabel(data?.metadata.exactness)}`}
               valueClassName={metricValueClass(needsAttentionCount ? 'warn' : 'neutral')}
             />
@@ -1101,7 +1051,7 @@ const AdminCostObservabilityPage: React.FC = () => {
                     action={emptyCounters ? <TerminalChip variant="caution">计数器尚未接入或当前窗口暂无事件</TerminalChip> : <TerminalChip variant="neutral">窗口 {data.window?.key || filters.window}</TerminalChip>}
                   />
                   <TerminalNotice variant={emptyCounters ? 'caution' : needsAttentionCount ? 'info' : 'neutral'} className="mt-4">
-                    {emptyCounters ? '计数器尚未接入或当前窗口暂无事件' : needsAttentionCount ? '优先查看重复候选、备用链路和完整性重试，再进入配额试运行。' : '当前成本观测保持稳定，先维持只读观察。'}
+                    {emptyCounters ? '计数器尚未接入或当前窗口暂无事件' : needsAttentionCount ? '优先查看重复候选、备用链路和完整性重试，再查看只读配额估算。' : '当前成本观测保持稳定，先维持只读观察。'}
                   </TerminalNotice>
                   <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                     <TerminalMetric
@@ -1136,8 +1086,8 @@ const AdminCostObservabilityPage: React.FC = () => {
                 <AdminOpsSectionHeading
                   eyebrow="L2 / 成本运维"
                   title="L2 配额 / 成本运维"
-                  description="保留窗口过滤、Quota dry-run、账本与价格策略，但把它们明确标成运维控制与观测，而不是产品行为开关。"
-                  action={<TerminalChip variant="info">只读控制与下钻</TerminalChip>}
+                  description="保留窗口过滤、只读配额估算、账本与价格策略，并明确这些内容只用于运维观测。"
+                  action={<TerminalChip variant="info">只读估算与下钻</TerminalChip>}
                 />
                 <FilterRail filters={filters} onChange={updateFilters} />
                 <QuotaDryRunPanel />
