@@ -2455,6 +2455,7 @@ const PortfolioPage: React.FC = () => {
   const holdingsPrimaryValue = hasHoldings
     ? (language === 'zh' ? `${positionRows.length} 项持仓` : `${positionRows.length} holdings`)
     : (language === 'zh' ? '无持仓' : 'No holdings');
+  const showHeaderPortfolioActions = hasHoldings;
   const accountStateSummary = !hasActiveAccounts
     ? (language === 'zh' ? '暂无可用账户' : 'No available account')
     : selectedAccount === 'all'
@@ -2930,17 +2931,19 @@ const PortfolioPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex min-w-0 flex-wrap gap-2">
-                    <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={() => openManualLedger('trade', 'stock')}>
-                      {addHoldingActionLabel}
-                    </TerminalButton>
-                    <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
-                      {importTradesActionLabel}
-                    </TerminalButton>
-                    <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
-                      {syncDataActionLabel}
-                    </TerminalButton>
-                  </div>
+                  {showHeaderPortfolioActions ? (
+                    <div className="flex min-w-0 flex-wrap gap-2">
+                      <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={() => openManualLedger('trade', 'stock')}>
+                        {addHoldingActionLabel}
+                      </TerminalButton>
+                      <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
+                        {importTradesActionLabel}
+                      </TerminalButton>
+                      <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
+                        {syncDataActionLabel}
+                      </TerminalButton>
+                    </div>
+                  ) : null}
                 </div>
               </TerminalPanel>
             </div>
