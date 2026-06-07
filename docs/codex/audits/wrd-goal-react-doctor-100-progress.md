@@ -598,18 +598,64 @@ Next candidates:
 - Remaining `todo` errors are concentrated in state/effect/action-flow areas and should not be chased without route-specific behavioral tests.
 - Remaining accessibility findings still need semantic design and tests rather than tag substitutions.
 
+## Batch 13: Market Overview Display Derivation Cleanup
+
+Status: included in the checkpoint commit for this batch after local validation.
+
+Files changed:
+
+- `apps/dsa-web/src/pages/MarketOverviewPage.tsx`
+
+Changes:
+
+- Removed a redundant `useMemo` around the market research readiness view, keeping the same display-only builder input.
+- Replaced the initial local snapshot `useMemo` with lazy `useState` so localStorage hydration still runs only once during route initialization.
+- Left market overview polling, provider gating, panel request order, cache/dedupe behavior, and auto-revalidation timing unchanged.
+
+Diagnostics after batch:
+
+- Score: `61`
+- Total diagnostics: `482`
+- Errors: `110`
+- Warnings: `372`
+- Affected files: `40`
+- Reduced total diagnostics from previous checkpoint: `4`
+- Reduced total diagnostics from baseline: `85`
+- Reduced by rule from previous checkpoint:
+  - `react-compiler-no-manual-memoization`: `191 -> 189` (`-2`)
+  - `no-chain-state-updates`: `27 -> 26` (`-1`)
+  - `no-giant-component`: `25 -> 24` (`-1`)
+- React Doctor diff for changed file:
+  - `src/pages/MarketOverviewPage.tsx`: `14 -> 10` (`-4`)
+
+Validations run:
+
+- `npm --prefix apps/dsa-web run test -- 'src/pages/__tests__/MarketOverviewPage.test.tsx' --no-file-parallelism` -> pass, `89` tests
+- `git diff --check` -> pass
+- `./scripts/release_secret_scan.sh` -> pass
+- `npm --prefix apps/dsa-web run lint` -> pass
+- `npm --prefix apps/dsa-web run build` -> pass with existing Vite chunk-size warning
+- `npx react-doctor@latest --json --json-compact --yes --no-score` -> remaining diagnostics expected, totals above
+- `npx react-doctor@latest --score --yes` -> `61`
+
+Next candidates:
+
+- Remaining `MarketOverviewPage.tsx` callbacks are effect, polling, timeout, and refresh dependencies; removing memoization would change non-compiler runtime behavior.
+- Remaining `autoRevalidateTick` is a control state used to re-run scheduling effects; ref conversion would change refresh timing.
+- Continue only if another pure display derivation appears outside protected domains.
+
 ## Stop Manifest
 
-Latest pushed checkpoint before Batch 12: `9103ed2c`. The Batch 12 checkpoint is the commit containing this section once pushed.
+Latest pushed checkpoint before Batch 13: `21d07434`. The Batch 13 checkpoint is the commit containing this section once pushed.
 
 Final React Doctor state:
 
 - Score: `61`
-- Total diagnostics: `486`
+- Total diagnostics: `482`
 - Errors: `110`
-- Warnings: `376`
+- Warnings: `372`
 - Affected files: `40`
-- Reduced total diagnostics from baseline: `81`
+- Reduced total diagnostics from baseline: `85`
 
 Remaining blocker groups:
 

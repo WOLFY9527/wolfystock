@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MarketDataMeta, MarketOverviewPanel } from '../api/marketOverview';
 import { marketOverviewApi } from '../api/marketOverview';
 import {
@@ -671,7 +671,7 @@ function subscribeToCryptoStream(subscriber: CryptoStreamSubscriber): () => void
 const MarketOverviewPage = () => {
   const { language } = useI18n();
   const { isAdminMode, canReadProviders } = useProductSurface();
-  const initialLocalSnapshot = useMemo(() => buildInitialPanelsFromLocalSnapshot(), []);
+  const [initialLocalSnapshot] = useState(() => buildInitialPanelsFromLocalSnapshot());
   const [panels, setPanels] = useState<PanelState>(initialLocalSnapshot.panels);
   const [loading, setLoading] = useState(initialLocalSnapshot.source !== 'local');
   const [localSnapshotSavedAt, setLocalSnapshotSavedAt] = useState<string | undefined>(initialLocalSnapshot.savedAt);
@@ -924,12 +924,9 @@ const MarketOverviewPage = () => {
     resetAutoRevalidatePanel(panelKey);
     void refreshPanel(panelKey, loadPanel);
   }, [refreshPanel, resetAutoRevalidatePanel]);
-  const marketResearchReadinessView = useMemo(
-    () => buildConsumerResearchReadinessView(
-      extractMarketResearchReadiness(panels.temperature) || inferMarketResearchReadiness(panels.temperature),
-      language,
-    ),
-    [language, panels.temperature],
+  const marketResearchReadinessView = buildConsumerResearchReadinessView(
+    extractMarketResearchReadiness(panels.temperature) || inferMarketResearchReadiness(panels.temperature),
+    language,
   );
   const marketActionabilityFrame = panels.temperature.marketActionabilityFrame;
   const marketIntelligenceEvidenceFrame = panels.temperature.marketIntelligenceEvidenceFrame;
