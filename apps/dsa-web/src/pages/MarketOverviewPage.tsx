@@ -933,20 +933,6 @@ const MarketOverviewPage = () => {
 
   return (
     <ConsumerWorkspaceScope className="min-h-0 flex-1">
-      <ConsumerResearchReadinessStrip
-        readiness={marketResearchReadinessView}
-        title={language === 'en' ? 'Research readiness' : '研究就绪度'}
-        testId="market-overview-research-readiness-strip"
-        className="mx-4 mt-4 shrink-0 md:mx-6"
-      />
-      {marketActionabilityFrame && marketIntelligenceEvidenceFrame ? (
-        <MarketIntelligenceActionabilityStrip
-          actionability={marketActionabilityFrame}
-          evidence={marketIntelligenceEvidenceFrame}
-          testId="market-intelligence-actionability-strip"
-          className="mt-3"
-        />
-      ) : null}
       <MarketOverviewWorkbench
         heading={(
           <TerminalPageHeading
@@ -964,6 +950,20 @@ const MarketOverviewPage = () => {
         showAdminDiagnostics={isAdminMode && canReadProviders}
         onRefreshPanel={handleWorkbenchRefresh}
       />
+      <ConsumerResearchReadinessStrip
+        readiness={marketResearchReadinessView}
+        title={language === 'en' ? 'Research readiness' : '研究就绪度'}
+        testId="market-overview-research-readiness-strip"
+        className="mx-4 shrink-0 pb-4 md:mx-6 md:pb-6"
+      />
+      {marketActionabilityFrame && marketIntelligenceEvidenceFrame ? (
+        <MarketIntelligenceActionabilityStrip
+          actionability={marketActionabilityFrame}
+          evidence={marketIntelligenceEvidenceFrame}
+          testId="market-intelligence-actionability-strip"
+          className="pb-4 md:pb-6"
+        />
+      ) : null}
     </ConsumerWorkspaceScope>
   );
 };

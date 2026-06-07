@@ -157,13 +157,14 @@ test.describe('scanner smoke', () => {
 test.describe('market overview smoke', () => {
   test('market overview keeps top metrics visible with no ghost vertical overflow', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await signIn(page, '/market-overview');
+    await signIn(page, '/zh/market-overview');
 
     await expect(page.getByTestId('market-overview-shell')).toBeVisible();
     await expect(page.getByTestId('market-overview-category-tabs')).toBeVisible();
     await expect(page.getByTestId('market-overview-hero-ribbon')).toBeVisible();
     await expect(page.getByTestId('market-decision-semantics-strip')).toBeVisible();
     await expect(page.getByTestId('market-overview-decision-readiness')).toBeVisible();
+    await expect(page.getByTestId('market-overview-research-readiness-strip')).toBeVisible();
     await expect(page.getByTestId('market-decision-semantics-advice-boundary')).toBeVisible();
     await expect(page.getByTestId('market-overview-side-rail')).toBeVisible();
     await expect(page.getByTestId('market-overview-card-indices')).toBeVisible();
@@ -182,6 +183,17 @@ test.describe('market overview smoke', () => {
       expect(box?.y ?? 0).toBeLessThan((viewport?.height ?? 0));
       expect((box?.y ?? 0) + Math.min(box?.height ?? 0, 48)).toBeLessThanOrEqual((viewport?.height ?? 0) - 8);
     });
+    const verdictBox = await page.getByTestId('market-overview-decision-readiness').boundingBox();
+    const readinessStripBox = await page.getByTestId('market-overview-research-readiness-strip').boundingBox();
+    expect(verdictBox).not.toBeNull();
+    expect(readinessStripBox).not.toBeNull();
+    expect((verdictBox?.y ?? Number.POSITIVE_INFINITY) < (readinessStripBox?.y ?? Number.NEGATIVE_INFINITY)).toBe(true);
+    const actionabilityStrip = page.getByTestId('market-intelligence-actionability-strip');
+    if (await actionabilityStrip.count()) {
+      const actionabilityStripBox = await actionabilityStrip.boundingBox();
+      expect(actionabilityStripBox).not.toBeNull();
+      expect((verdictBox?.y ?? Number.POSITIVE_INFINITY) < (actionabilityStripBox?.y ?? Number.NEGATIVE_INFINITY)).toBe(true);
+    }
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
     const shellLayout = await page.evaluate(() => {
@@ -224,6 +236,9 @@ test.describe('market overview smoke', () => {
     expect(copiedSummary).toContain('市场总览');
     expect(copiedSummary).toContain('市场温度');
     expect(copiedSummary).toContain('市场解读');
+    await expect(await page.locator('body').innerText()).not.toMatch(
+      /sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|reasonCodes?|reasonFamilies|schemaVersion|fallback_static|synthetic_fixture|rotation_non_scoring_or_taxonomy_only|Rotation Non Scoring Or Taxonomy Only/i,
+    );
   });
 
   test('market overview degrades partial temperature payload without blanking', async ({ page }) => {
@@ -246,14 +261,26 @@ test.describe('market overview smoke', () => {
       await expect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('market-overview-decision-readiness')).toContainText(/暂不形成方向结论|等待数据完成后再判断|仅观察/);
       await expect(page.getByTestId('market-overview-decision-readiness')).toContainText(/当前信号置信度较低，仅供观察。|部分数据暂不可用，当前评分已暂停。|数据更新中，稍后将自动刷新。/);
+      await expect(page.getByTestId('market-overview-research-readiness-strip')).toBeVisible();
       await expect(page.getByTestId('market-decision-semantics-advice-boundary')).toContainText(/暂不形成方向结论|等待数据完成后再判断/);
+      const verdictBox = await page.getByTestId('market-overview-decision-readiness').boundingBox();
+      const readinessStripBox = await page.getByTestId('market-overview-research-readiness-strip').boundingBox();
+      expect(verdictBox).not.toBeNull();
+      expect(readinessStripBox).not.toBeNull();
+      expect((verdictBox?.y ?? Number.POSITIVE_INFINITY) < (readinessStripBox?.y ?? Number.NEGATIVE_INFINITY)).toBe(true);
+      const actionabilityStrip = page.getByTestId('market-intelligence-actionability-strip');
+      if (await actionabilityStrip.count()) {
+        const actionabilityStripBox = await actionabilityStrip.boundingBox();
+        expect(actionabilityStripBox).not.toBeNull();
+        expect((verdictBox?.y ?? Number.POSITIVE_INFINITY) < (actionabilityStripBox?.y ?? Number.NEGATIVE_INFINITY)).toBe(true);
+      }
       const evidenceDetails = await openMarketOverviewEvidenceDetails(page);
       await expect(evidenceDetails).toContainText(/当前市场：证据不足|Current market: Evidence insufficient/);
       await expect(evidenceDetails).toContainText(/不支持强方向判断/);
       await expect(evidenceDetails).toContainText(/备用或代理证据偏多/);
       await expect(evidenceDetails).not.toContainText('N/A');
       await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-      await expect(await page.locator('body').innerText()).not.toMatch(/raw|payload/i);
+      await expect(await page.locator('body').innerText()).not.toMatch(/raw|payload|rotation_non_scoring_or_taxonomy_only|Rotation Non Scoring Or Taxonomy Only/i);
     }
   });
 });

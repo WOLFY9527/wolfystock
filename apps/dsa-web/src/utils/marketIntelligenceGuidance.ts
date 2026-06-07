@@ -18,7 +18,7 @@ export type DecisionReadinessSummary = {
   conclusion: string;
 };
 
-export const MARKET_DECISION_NOT_READY_NOTICE = '当前只适合作为观察，不应用作方向判断';
+export const MARKET_DECISION_NOT_READY_NOTICE = '当前只适合作为观察，不应用作方向判断。';
 
 export function decisionReadinessStateLabel(state: DecisionReadinessState): string {
   switch (state) {
@@ -115,6 +115,7 @@ const ZH_REASON_LABELS: Record<string, string> = {
   proxy_context_only: '代理数据仅作观察',
   proxy_only_missing_real_source: '需要权威来源',
   proxy_or_observation_only_evidence: '仅有代理或观察证据',
+  rotation_non_scoring_or_taxonomy_only: '轮动证据仅作分类参考',
   score_contribution_not_allowed: '不参与方向判断',
   score_grade_evidence: '评分级证据',
   source_authority_router_rejected: '需要权威来源',
@@ -170,6 +171,7 @@ const EN_REASON_LABELS: Record<string, string> = {
   proxy_context_only: 'Proxy data is context-only',
   proxy_only_missing_real_source: 'Real source missing',
   proxy_or_observation_only_evidence: 'Proxy or observation-only evidence',
+  rotation_non_scoring_or_taxonomy_only: 'Rotation evidence is taxonomy-only',
   score_contribution_not_allowed: 'Not score-grade eligible',
   score_grade_evidence: 'Score-grade evidence',
   source_authority_router_rejected: 'Source authority gate did not pass',

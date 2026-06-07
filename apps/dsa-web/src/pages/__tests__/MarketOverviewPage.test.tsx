@@ -10,6 +10,7 @@ import { DataFreshnessBadge, MarketDataRow } from '../../components/market-overv
 import { TerminalPageHeading } from '../../components/terminal/TerminalPrimitives';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { UI_LANGUAGE_STORAGE_KEY } from '../../i18n/core';
+import { marketIntelligenceReasonLabel } from '../../utils/marketIntelligenceGuidance';
 
 const { useProductSurfaceMock } = vi.hoisted(() => ({
   useProductSurfaceMock: vi.fn(),
@@ -2464,9 +2465,16 @@ describe('MarketOverviewPage', () => {
     render(createElement(MarketOverviewPage));
 
     const topStack = await screen.findByTestId('market-overview-top-stack');
+    const decisionReadiness = screen.getByTestId('market-overview-decision-readiness');
+    const researchReadinessStrip = screen.getByTestId('market-overview-research-readiness-strip');
     expect(topStack.firstElementChild).toContainElement(screen.getByTestId('market-decision-semantics-strip'));
     expect(topStack.querySelectorAll('[data-market-research-flow="decision-semantics"]')).toHaveLength(1);
     expect(screen.getByTestId('market-overview-main-grid').compareDocumentPosition(screen.getByTestId('market-decision-semantics-strip'))).toBe(Node.DOCUMENT_POSITION_PRECEDING);
+    expect(decisionReadiness.compareDocumentPosition(researchReadinessStrip)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    const actionabilityStrip = screen.queryByTestId('market-intelligence-actionability-strip');
+    if (actionabilityStrip) {
+      expect(decisionReadiness.compareDocumentPosition(actionabilityStrip)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    }
   });
 
   it('renders each tab with deterministic row groups and the shared decision layer', async () => {
@@ -2610,6 +2618,11 @@ describe('MarketOverviewPage', () => {
     expect(renderedCopy).not.toMatch(
       /PROVIDER ALTERNATIVE_ME|ETF flow proxy|Institutional pressure proxy|Industry breadth proxy|Rotation Non Scoring Or Taxonomy Only|Sector ETF proxy/i,
     );
+  });
+
+  it('maps rotation_non_scoring_or_taxonomy_only to consumer-safe Chinese copy', () => {
+    expect(marketIntelligenceReasonLabel('rotation_non_scoring_or_taxonomy_only', 'zh')).toBe('轮动证据仅作分类参考');
+    expect(marketIntelligenceReasonLabel('Rotation Non Scoring Or Taxonomy Only', 'zh')).toBe('轮动证据仅作分类参考');
   });
 
   it('copies a market overview summary from the current visible state', async () => {
