@@ -44,6 +44,66 @@ async function installDegradedLiquidityMonitorPayload(page: Page) {
           scoreWeight: 0,
           summary: '仅有 yfinance_proxy 代理观察，缺少 official_or_authorized.fx_dxy，当前不计分。',
           updatedAt: '2026-05-20T09:30:00+08:00',
+          evidence: {
+            contractVersion: 'source_confidence_contract_v1',
+            source: 'synthetic_fixture',
+            sourceLabel: 'Synthetic boundary fixture',
+            asOf: '2026-05-20T09:30:00+08:00',
+            freshness: 'mock',
+            isFallback: true,
+            isStale: true,
+            isPartial: true,
+            isUnavailable: false,
+            degradationReason: 'synthetic_or_fixture_data_not_decision_grade',
+            capReason: 'partial_coverage',
+            inputs: [
+              {
+                key: 'DXY',
+                label: 'DXY proxy fixture',
+                source: 'synthetic_fixture',
+                sourceLabel: 'Synthetic DXY fixture',
+                sourceType: 'synthetic_fixture',
+                sourceTier: 'synthetic_fixture',
+                trustLevel: 'synthetic',
+                asOf: '2026-05-20T09:30:00+08:00',
+                freshness: 'mock',
+                isFallback: true,
+                isStale: true,
+                isPartial: true,
+                isUnavailable: false,
+                observationOnly: true,
+                sourceAuthorityAllowed: false,
+                scoreContributionAllowed: false,
+                sourceAuthorityReason: 'synthetic_or_fixture_data_not_decision_grade',
+                sourceAuthorityRouteRejected: false,
+                routeRejectedReasonCodes: ['synthetic_or_fixture_data_not_decision_grade'],
+              },
+              {
+                key: 'US30Y',
+                label: 'US 30Y',
+                source: 'unavailable',
+                sourceLabel: 'Treasury DGS30 unavailable',
+                sourceType: 'official_public',
+                sourceTier: 'official_public',
+                trustLevel: 'unavailable',
+                asOf: '2026-05-20T09:30:00+08:00',
+                freshness: 'unavailable',
+                isFallback: false,
+                isStale: false,
+                isPartial: false,
+                isUnavailable: true,
+                observationOnly: true,
+                sourceAuthorityAllowed: false,
+                scoreContributionAllowed: false,
+                sourceAuthorityReason: 'provider_unavailable',
+                sourceAuthorityRouteRejected: true,
+                routeRejectedReasonCodes: ['provider_unavailable'],
+                officialSeriesId: 'DGS30',
+                officialObservationDate: null,
+                officialAsOf: null,
+              },
+            ],
+          },
         },
         {
           key: 'us_etf_flow_proxy',
@@ -163,7 +223,7 @@ async function expectNoHorizontalOverflow(page: Page) {
 async function expectNoRawDebugFields(page: Page) {
   const bodyText = await page.locator('body').innerText();
   expect(bodyText).not.toMatch(
-    /raw[_\s-]?(payload|response)|provider[_\s-]?(payload|debug)|coverageDiagnostics|liquidityImpulseSynthesis|evidenceQuality|scoreContributionAllowed|sourceMetadata|providerRuntimeChanged|marketCacheMutation/i,
+    /raw[_\s-]?(payload|response)|provider[_\s-]?(payload|debug)|coverageDiagnostics|liquidityImpulseSynthesis|evidenceQuality|scoreContributionAllowed|sourceMetadata|providerRuntimeChanged|marketCacheMutation|synthetic_fixture|synthetic_or_fixture_data_not_decision_grade|reasonCodes|officialSeriesId|officialObservationDate|officialAsOf|source_confidence_contract_v1/i,
   );
 }
 
@@ -189,7 +249,7 @@ test.describe('Liquidity Monitor degraded proxy-only state', () => {
         await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('流动性状态');
         await expect(page.getByTestId('liquidity-summary-strip')).toContainText('主线索');
         await expect(page.getByTestId('liquidity-context-rail')).toContainText('优先恢复');
-        await expect(page.locator('body')).not.toContainText(/guaranteed|decision-grade|强结论|provider_unavailable|scoreContributionAllowed|proxy-only|Binance|official_or_authorized|yfinance_proxy|外部调用|运行顺序|缓存写入|fallback|provider|runtime|backend/i);
+        await expect(page.locator('body')).not.toContainText(/guaranteed|decision-grade|强结论|provider_unavailable|scoreContributionAllowed|proxy-only|Binance|official_or_authorized|yfinance_proxy|synthetic_fixture|source_confidence_contract_v1|reasonCodes|officialSeriesId|外部调用|运行顺序|缓存写入|fallback|provider|runtime|backend/i);
         await expect(page.getByRole('button', { name: '展开 技术细节' })).toHaveCount(0);
         await expect(page.getByTestId('liquidity-monitor-guidance-panel')).not.toContainText('流动性方向待确认');
         await expect(page.getByTestId('liquidity-monitor-guidance-panel')).not.toContainText('不升级为真实扩张或收缩结论');

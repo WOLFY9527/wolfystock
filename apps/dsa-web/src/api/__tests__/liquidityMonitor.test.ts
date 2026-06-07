@@ -288,4 +288,165 @@ describe('liquidityMonitorApi', () => {
     expect(payload.capitalFlowSignal?.contradictionSignals).toEqual(['btc_not_confirming_growth_absorption']);
     expect(payload.sourceMetadata.externalProviderCalls).toBe(false);
   });
+
+  it('preserves evidence boundary metadata for fallback, stale, synthetic, and unavailable inputs', async () => {
+    const { liquidityMonitorApi } = await import('../liquidityMonitor');
+    get.mockResolvedValueOnce({
+      data: {
+        endpoint: '/api/v1/market/liquidity-monitor',
+        generated_at: '2026-05-21T16:00:00+08:00',
+        score: {
+          value: 51,
+          regime: 'unavailable',
+          confidence: 0.12,
+          included_indicator_count: 0,
+          possible_indicator_weight: 43,
+          included_indicator_weight: 0,
+        },
+        freshness: {
+          status: 'mock',
+          weakest_indicator_freshness: 'unavailable',
+          latest_as_of: '2026-05-21T16:00:00+08:00',
+        },
+        indicators: [
+          {
+            key: 'us_breadth_proxy',
+            label: 'US Breadth Proxy',
+            status: 'partial',
+            freshness: 'stale',
+            included_in_score: false,
+            score_contribution: 0,
+            score_weight: 0,
+            summary: 'Synthetic breadth fixture kept only for boundary validation.',
+            updated_at: '2026-05-21T16:00:00+08:00',
+            evidence: {
+              contract_version: 'source_confidence_contract_v1',
+              source: 'synthetic_fixture',
+              source_label: 'Synthetic boundary fixture',
+              as_of: '2026-05-21T16:00:00+08:00',
+              freshness: 'mock',
+              is_fallback: true,
+              is_stale: true,
+              is_partial: true,
+              is_unavailable: false,
+              coverage: 0.4,
+              confidence_weight: 0.15,
+              degradation_reason: 'synthetic_or_fixture_data_not_decision_grade',
+              cap_reason: 'partial_coverage',
+              inputs: [
+                {
+                  key: 'SECTORS_UP',
+                  label: 'Sectors Up',
+                  source: 'synthetic_fixture',
+                  source_label: 'Synthetic breadth fixture',
+                  source_type: 'synthetic_fixture',
+                  source_tier: 'synthetic_fixture',
+                  trust_level: 'synthetic',
+                  as_of: '2026-05-21T16:00:00+08:00',
+                  freshness: 'mock',
+                  is_fallback: true,
+                  is_stale: true,
+                  is_partial: true,
+                  is_unavailable: false,
+                  observation_only: true,
+                  source_authority_allowed: false,
+                  score_contribution_allowed: false,
+                  source_authority_reason: 'synthetic_or_fixture_data_not_decision_grade',
+                  source_authority_route_rejected: false,
+                  route_rejected_reason_codes: ['synthetic_or_fixture_data_not_decision_grade'],
+                  confidence_weight: 0.15,
+                },
+                {
+                  key: 'RSP_SPY',
+                  label: 'RSP/SPY',
+                  source: 'unavailable',
+                  source_label: 'Breadth pair unavailable',
+                  source_type: 'official_public',
+                  source_tier: 'official_public',
+                  trust_level: 'unavailable',
+                  as_of: '2026-05-21T16:00:00+08:00',
+                  freshness: 'unavailable',
+                  is_fallback: false,
+                  is_stale: false,
+                  is_partial: false,
+                  is_unavailable: true,
+                  observation_only: true,
+                  source_authority_allowed: false,
+                  score_contribution_allowed: false,
+                  source_authority_reason: 'provider_unavailable',
+                  source_authority_route_rejected: true,
+                  route_rejected_reason_codes: ['provider_unavailable'],
+                  official_series_id: 'RSP_SPY',
+                  official_observation_date: null,
+                  official_as_of: null,
+                  confidence_weight: 0,
+                },
+              ],
+            },
+          },
+        ],
+        advisory_disclosure: '仅用于观察市场流动性环境，非买卖建议，不触发扫描、回测或组合动作。',
+        source_metadata: {
+          external_provider_calls: false,
+          provider_runtime_changed: false,
+          market_cache_mutation: false,
+        },
+      },
+    });
+
+    const payload = await liquidityMonitorApi.getLiquidityMonitor();
+
+    expect(payload.freshness).toMatchObject({
+      status: 'mock',
+      weakestIndicatorFreshness: 'unavailable',
+      latestAsOf: '2026-05-21T16:00:00+08:00',
+    });
+    expect(payload.indicators[0]).toMatchObject({
+      key: 'us_breadth_proxy',
+      freshness: 'stale',
+      includedInScore: false,
+    });
+    expect(payload.indicators[0].evidence).toMatchObject({
+      source: 'synthetic_fixture',
+      sourceLabel: 'Synthetic boundary fixture',
+      asOf: '2026-05-21T16:00:00+08:00',
+      freshness: 'mock',
+      isFallback: true,
+      isStale: true,
+      isPartial: true,
+      isUnavailable: false,
+      degradationReason: 'synthetic_or_fixture_data_not_decision_grade',
+      capReason: 'partial_coverage',
+    });
+    expect(payload.indicators[0].evidence?.inputs[0]).toMatchObject({
+      source: 'synthetic_fixture',
+      sourceType: 'synthetic_fixture',
+      sourceTier: 'synthetic_fixture',
+      asOf: '2026-05-21T16:00:00+08:00',
+      freshness: 'mock',
+      isFallback: true,
+      isStale: true,
+      isPartial: true,
+      isUnavailable: false,
+      sourceAuthorityAllowed: false,
+      scoreContributionAllowed: false,
+      routeRejectedReasonCodes: ['synthetic_or_fixture_data_not_decision_grade'],
+    });
+    expect(payload.indicators[0].evidence?.inputs[1]).toMatchObject({
+      source: 'unavailable',
+      asOf: '2026-05-21T16:00:00+08:00',
+      freshness: 'unavailable',
+      isFallback: false,
+      isStale: false,
+      isPartial: false,
+      isUnavailable: true,
+      sourceAuthorityAllowed: false,
+      scoreContributionAllowed: false,
+      sourceAuthorityRouteRejected: true,
+      routeRejectedReasonCodes: ['provider_unavailable'],
+      officialSeriesId: 'RSP_SPY',
+      officialObservationDate: null,
+      officialAsOf: null,
+    });
+  });
 });

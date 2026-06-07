@@ -789,6 +789,120 @@ describe('LiquidityMonitorPage', () => {
     );
   });
 
+  it('keeps consumer default copy safe when fallback, stale, synthetic, and unavailable metadata are present', async () => {
+    getLiquidityMonitor.mockResolvedValueOnce({
+      ...payload,
+      freshness: {
+        ...payload.freshness,
+        status: 'mock',
+        weakestIndicatorFreshness: 'unavailable',
+      },
+      indicators: payload.indicators.map((indicator) => (
+        indicator.key === 'us_rates_pressure'
+          ? {
+            ...indicator,
+            freshness: 'stale',
+            evidence: {
+              ...indicator.evidence!,
+              source: 'synthetic_fixture',
+              sourceLabel: 'Synthetic boundary fixture',
+              freshness: 'mock',
+              isFallback: true,
+              isStale: true,
+              isPartial: true,
+              degradationReason: 'synthetic_or_fixture_data_not_decision_grade',
+              capReason: 'partial_coverage',
+              inputs: [
+                {
+                  key: 'SECTORS_UP',
+                  label: 'Sectors Up',
+                  source: 'synthetic_fixture',
+                  sourceLabel: 'Synthetic breadth fixture',
+                  sourceType: 'synthetic_fixture',
+                  sourceTier: 'synthetic_fixture',
+                  trustLevel: 'synthetic',
+                  asOf: '2026-05-21T16:00:00+08:00',
+                  freshness: 'mock',
+                  isFallback: true,
+                  isStale: true,
+                  isPartial: true,
+                  isUnavailable: false,
+                  observationOnly: true,
+                  sourceAuthorityAllowed: false,
+                  scoreContributionAllowed: false,
+                  sourceAuthorityReason: 'synthetic_or_fixture_data_not_decision_grade',
+                  sourceAuthorityRouteRejected: false,
+                  routeRejectedReasonCodes: ['synthetic_or_fixture_data_not_decision_grade'],
+                  confidenceWeight: 0.15,
+                  officialSeriesId: null,
+                  officialObservationDate: null,
+                  officialAsOf: null,
+                },
+                {
+                  key: 'US30Y',
+                  label: 'US 30Y',
+                  source: 'unavailable',
+                  sourceLabel: 'Treasury DGS30 unavailable',
+                  sourceType: 'official_public',
+                  sourceTier: 'official_public',
+                  trustLevel: 'unavailable',
+                  asOf: '2026-05-21T16:00:00+08:00',
+                  freshness: 'unavailable',
+                  isFallback: false,
+                  isStale: false,
+                  isPartial: false,
+                  isUnavailable: true,
+                  observationOnly: true,
+                  sourceAuthorityAllowed: false,
+                  scoreContributionAllowed: false,
+                  sourceAuthorityReason: 'provider_unavailable',
+                  sourceAuthorityRouteRejected: true,
+                  routeRejectedReasonCodes: ['provider_unavailable'],
+                  confidenceWeight: 0,
+                  officialSeriesId: 'DGS30',
+                  officialObservationDate: null,
+                  officialAsOf: null,
+                },
+              ],
+            },
+          }
+          : indicator
+      )),
+      capitalFlowSignal: {
+        ...payload.capitalFlowSignal!,
+        reasonCodes: ['synthetic_or_fixture_data_not_decision_grade', 'provider_unavailable'],
+        contradictionCodes: ['provider_runtime_changed'],
+        freshness: 'partial',
+        isFallback: true,
+        isStale: true,
+        isPartial: true,
+      },
+    });
+
+    render(<LiquidityMonitorPage />);
+
+    const guidancePanel = await screen.findByTestId('liquidity-monitor-guidance-panel');
+    expect(guidancePanel).toHaveTextContent('评分已暂停');
+    expect(guidancePanel).toHaveTextContent('最近可用');
+    expect(guidancePanel).not.toHaveTextContent('synthetic_fixture');
+    expect(guidancePanel).not.toHaveTextContent('provider_unavailable');
+
+    const summaryStrip = screen.getByTestId('liquidity-summary-strip');
+    expect(summaryStrip).toHaveTextContent('最近更新');
+
+    const consumerDisclosure = screen.getByTestId('liquidity-monitor-consumer-details');
+    expect(consumerDisclosure).toHaveTextContent('数据说明与限制');
+    expect(consumerDisclosure).toHaveTextContent('最近更新');
+    expect(consumerDisclosure).toHaveTextContent('方法、限制与最近更新默认折叠');
+
+    const bodyText = document.body.textContent || '';
+    expect(bodyText).toContain('最近可用');
+    expect(bodyText).not.toMatch(
+      /synthetic_fixture|synthetic_or_fixture_data_not_decision_grade|reasonCodes|reasonCode|sourceMetadata|sourceAuthorityAllowed|scoreContributionAllowed|officialSeriesId|officialObservationDate|officialAsOf|providerRuntimeChanged|marketCacheMutation|contractVersion|source_confidence_contract_v1|runtime|cache|schema|debug/i,
+    );
+    expect(screen.queryByRole('button', { name: '展开 技术细节' })).not.toBeInTheDocument();
+  });
+
   it('renders consumer-safe paused and unavailable states without provider remediation CTAs', async () => {
     getLiquidityMonitor.mockResolvedValueOnce(payload);
     const readyView = render(<LiquidityMonitorPage />);
