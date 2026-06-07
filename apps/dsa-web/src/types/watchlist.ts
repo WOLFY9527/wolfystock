@@ -12,6 +12,13 @@ export interface WatchlistScannerIntelligence {
   investorSignal?: InvestorSignalContract | null;
 }
 
+export interface WatchlistScoreStatusContext {
+  scope?: string | null;
+  freshMeans?: string | null;
+  sourceFreshnessImplied?: boolean | null;
+  sourceAuthorityImplied?: boolean | null;
+}
+
 export interface WatchlistCatalystExposure {
   id: string;
   symbol: string;
@@ -73,6 +80,7 @@ export interface WatchlistItem {
   scoreProfile?: string | null;
   scoreReason?: string | null;
   scoreStatus?: string | null;
+  scoreStatusContext?: WatchlistScoreStatusContext | null;
   scoreError?: string | null;
   themeId?: string | null;
   universeType?: string | null;

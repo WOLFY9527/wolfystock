@@ -56,7 +56,11 @@ type Notice = { tone: 'success' | 'warning' | 'danger'; message: string } | null
 type FailureReason = '数据不足' | '行情缺失' | '服务暂不可用' | '回测失败' | '扫描失败' | '超时' | '未知错误';
 type BatchFailure = { label: FailureReason; detail?: string };
 type WatchlistTrustState = 'fresh' | 'stale' | 'unknown';
-type WatchlistScoreDisclosureState = 'fresh' | 'stale' | 'limitedConfidence' | 'unknown' | 'failed';
+type WatchlistScoreDisclosureState = 'fresh' | 'stale' | 'cached' | 'blocked' | 'limitedConfidence' | 'unknown' | 'failed';
+type WatchlistScannerLineageCue = {
+  label: string;
+  detail: string;
+} | null;
 type WatchlistInvestorSignalView = {
   confidenceLabel: string | null;
   freshnessLabel: string | null;
@@ -271,7 +275,17 @@ function formatFreshness(value?: string | null): string {
 
 function isFallbackTrustSource(value?: string | null): boolean {
   const token = normalizeToken(value);
-  return token.includes('fallback') || token.includes('proxy');
+  return token.includes('fallback')
+    || token.includes('proxy')
+    || token.includes('source_confidence')
+    || token.includes('score_blocked')
+    || token.includes('sourceauthorityallowed=false')
+    || token.includes('scorecontributionallowed=false')
+    || token.includes('observationonly')
+    || token.includes('authority_missing')
+    || token.includes('score_rights_missing')
+    || token.includes('unavailable')
+    || token.includes('synthetic');
 }
 
 function hasLimitedConfidenceScoreContext(item: WatchlistItem): boolean {
@@ -284,19 +298,34 @@ function hasLimitedConfidenceScoreContext(item: WatchlistItem): boolean {
   ].some(isFallbackTrustSource);
 }
 
+function hasScoreStatusContextAuthorityLimit(item: WatchlistItem): boolean {
+  const context = item.scoreStatusContext;
+  if (!context) return true;
+  return context.sourceFreshnessImplied === false
+    || context.sourceAuthorityImplied === false
+    || normalizeToken(context.freshMeans) === 'persisted_scanner_score_refreshed';
+}
+
 function getScoreDisclosureState(item: WatchlistItem): WatchlistScoreDisclosureState {
   const status = normalizeToken(item.scoreStatus);
   if (['data_failed', 'provider_down', 'provider_error', 'failed', 'error', 'critical'].includes(status)) {
     return 'failed';
   }
-  if (hasLimitedConfidenceScoreContext(item)) return 'limitedConfidence';
+  if (['blocked', 'score_blocked', 'paused', 'insufficient', 'insufficient_history', 'unavailable'].includes(status)) {
+    return 'blocked';
+  }
   if (['stale', 'partial'].includes(status)) return 'stale';
+  if (['cached', 'cache', 'stored', 'snapshot'].includes(status)) return 'cached';
+  if (hasLimitedConfidenceScoreContext(item)) return 'limitedConfidence';
   if (status === 'fresh') return 'fresh';
   return 'unknown';
 }
 
 function formatScoreDisclosureFreshness(item: WatchlistItem, value: string | null | undefined, language: 'zh' | 'en'): string {
   const state = getScoreDisclosureState(item);
+  if (state === 'fresh') return language === 'en' ? 'Score recently refreshed' : '评分最近刷新';
+  if (state === 'cached') return language === 'en' ? 'Saved score snapshot' : '已保存评分';
+  if (state === 'blocked') return language === 'en' ? 'Observation only' : '仅作观察';
   if (state === 'stale' || state === 'limitedConfidence') return language === 'en' ? 'Recent available' : '最近可用';
   if (state === 'unknown') return language === 'en' ? 'Updating' : '更新中';
   return formatFreshness(value);
@@ -304,12 +333,16 @@ function formatScoreDisclosureFreshness(item: WatchlistItem, value: string | nul
 
 function formatScoreDisclosureStatus(state: WatchlistScoreDisclosureState, language: 'zh' | 'en'): string {
   if (language === 'en') {
-    if (state === 'fresh') return 'Signal fresh';
+    if (state === 'fresh') return 'Score refreshed';
+    if (state === 'cached') return 'Saved score';
+    if (state === 'blocked') return 'Observation only';
     if (state === 'stale' || state === 'limitedConfidence') return 'Limited confidence';
     if (state === 'failed') return 'Scan failed';
     return 'Updating';
   }
-  if (state === 'fresh') return '信号最新';
+  if (state === 'fresh') return '评分已刷新';
+  if (state === 'cached') return '已保存评分';
+  if (state === 'blocked') return '仅作观察';
   if (state === 'stale' || state === 'limitedConfidence') return '置信度较低';
   if (state === 'failed') return '扫描失败';
   return '数据更新中';
@@ -318,22 +351,37 @@ function formatScoreDisclosureStatus(state: WatchlistScoreDisclosureState, langu
 function scoreDisclosureChipVariant(state: WatchlistScoreDisclosureState): React.ComponentProps<typeof TerminalChip>['variant'] {
   if (state === 'fresh') return 'success';
   if (state === 'failed') return 'danger';
-  if (state === 'stale' || state === 'limitedConfidence' || state === 'unknown') return 'caution';
+  if (state === 'stale' || state === 'cached' || state === 'blocked' || state === 'limitedConfidence' || state === 'unknown') return 'caution';
   return 'neutral';
 }
 
 function scannerStatusChipVariant(label: string): React.ComponentProps<typeof TerminalChip>['variant'] {
   if (label === '扫描失败') return 'danger';
   if (label === '已验证' || label === '通过筛选') return 'info';
-  if (['置信度较低', '数据更新中', '最近数据'].includes(label)) return 'caution';
+  if (['置信度较低', '数据更新中', '最近数据', '仅作观察'].includes(label)) return 'caution';
   return 'neutral';
 }
 
-function formatScoreDisclosureNotice(state: WatchlistScoreDisclosureState, language: 'zh' | 'en'): string | null {
+function formatScoreDisclosureNotice(item: WatchlistItem, state: WatchlistScoreDisclosureState, language: 'zh' | 'en'): string | null {
+  if (state === 'fresh' && hasScoreStatusContextAuthorityLimit(item)) {
+    return language === 'en'
+      ? 'Score was recently refreshed; this does not prove source freshness or authority.'
+      : '评分最近刷新；不代表来源实时或权威。';
+  }
   if (state === 'stale') {
     return language === 'en'
       ? 'Using the most recent available data.'
       : '已使用最近一次可用数据。';
+  }
+  if (state === 'cached') {
+    return language === 'en'
+      ? 'Using a saved score snapshot; source freshness is not confirmed.'
+      : '已使用已保存评分；来源实时性未确认。';
+  }
+  if (state === 'blocked') {
+    return language === 'en'
+      ? 'Score context is limited; keep this item in observation mode.'
+      : '当前评分依据有限，先保持观察。';
   }
   if (state === 'limitedConfidence') {
     return language === 'en'
@@ -354,6 +402,7 @@ function formatScannerStatus(item: WatchlistItem): string {
   const scoreDisclosureState = getScoreDisclosureState(item);
   if (scoreDisclosureState === 'failed') return '扫描失败';
   if (['data_failed', 'provider_down', 'provider_error', 'error', 'failed', 'critical'].includes(status)) return '扫描失败';
+  if (scoreDisclosureState === 'blocked') return '仅作观察';
   if (scoreDisclosureState === 'stale' || scoreDisclosureState === 'limitedConfidence') return '置信度较低';
   if (scoreDisclosureState === 'unknown') return hasScannerEvidence(item) ? '数据更新中' : '未扫描';
   if (['selected', 'verified', 'ready', 'fresh'].includes(status)) return '已验证';
@@ -677,8 +726,8 @@ function buildWatchlistConclusion(items: WatchlistItem[], language: 'zh' | 'en')
           ? 'Data is updating and will refresh shortly.'
           : '数据更新中，稍后将自动刷新。')
         : (language === 'en'
-          ? `Review ${symbol}'s score freshness, confidence, and backtest summary.`
-          : `查看 ${symbol} 的评分鲜度、置信度和回测概览。`);
+          ? `Review ${symbol}'s refreshed score state and observation summary.`
+          : `查看 ${symbol} 的评分刷新状态与观察摘要。`);
   return {
     title: language === 'en' ? `Current focus ${symbol}` : `当前焦点 ${symbol}`,
     detail,
@@ -720,9 +769,28 @@ function buildObservationSummary(item: WatchlistItem, language: 'zh' | 'en'): st
   return parts.join(' · ');
 }
 
+function buildScannerLineageCue(item: WatchlistItem, language: 'zh' | 'en'): WatchlistScannerLineageCue {
+  const source = normalizeToken(item.source);
+  if (source !== 'scanner' && source !== 'scanner_run') return null;
+  if (!item.scannerRunId || !item.lastScoredAt || !item.createdAt) return null;
+  const lastScoredTime = getTime(item.lastScoredAt);
+  const createdTime = getTime(item.createdAt);
+  if (!lastScoredTime || !createdTime || lastScoredTime <= createdTime + 60 * 1000) return null;
+
+  return language === 'en'
+    ? {
+      label: 'Post-add refresh',
+      detail: 'Score was refreshed after this item was added; it may reflect a later scanner observation.',
+    }
+    : {
+      label: '加入后刷新',
+      detail: '评分在加入后刷新，可能反映后续扫描观察。',
+    };
+}
+
 function buildWatchRiskNote(item: WatchlistItem, language: 'zh' | 'en'): string | null {
   const state = getScoreDisclosureState(item);
-  const notice = formatScoreDisclosureNotice(state, language);
+  const notice = formatScoreDisclosureNotice(item, state, language);
   if (notice) return notice;
   if (state === 'failed') {
     return language === 'en'
@@ -1598,6 +1666,7 @@ const WatchlistPage: React.FC = () => {
   const activeScore = activeItem ? getScannerScore(activeItem) : null;
   const activeLatestTime = activeItem ? getLatestIntelligenceTime(activeItem) : null;
   const activeScoreDisclosureState = activeItem ? getScoreDisclosureState(activeItem) : 'unknown';
+  const activeScannerLineageCue = activeItem ? buildScannerLineageCue(activeItem, language) : null;
   const activeScannerStatusLabel = activeItem ? formatScannerStatus(activeItem) : '--';
   const activeBacktestStatusLabel = activeItem ? formatBacktestStatus(activeItem) : '--';
   const activeScannerReason = activeItem ? formatScannerReason(activeScanner?.reason, language) : null;
@@ -1832,6 +1901,7 @@ const WatchlistPage: React.FC = () => {
                     const scoreDisclosureState = getScoreDisclosureState(item);
                     const scoreDisclosureStatusLabel = formatScoreDisclosureStatus(scoreDisclosureState, language);
                     const rowRiskNote = buildWatchRiskNote(item, language);
+                    const scannerLineageCue = buildScannerLineageCue(item, language);
                     const originLabel = formatWatchlistOrigin(item.source, language);
                     const scoreFreshnessVariant = scoreDisclosureChipVariant(scoreDisclosureState);
                     const backtestStatusVariant = backtestStatusLabel === '已回测'
@@ -1863,6 +1933,10 @@ const WatchlistPage: React.FC = () => {
                       typeof avgForward === 'number' ? `${copy.historyPrefix} ${formatPct(avgForward)}` : null,
                       typeof hitRate === 'number' ? `${copy.hitPrefix} ${Math.round(hitRate * 100)}%` : null,
                     ].filter(Boolean).join(' · ');
+                    const rowNotes = [
+                      rowRiskNote,
+                      scannerLineageCue?.detail,
+                    ].filter(Boolean).join(' ');
 
                     return (
                       <article
@@ -1926,6 +2000,9 @@ const WatchlistPage: React.FC = () => {
                                 {scannerStatusLabel}
                               </TerminalChip>
                               <TerminalChip variant={backtestStatusVariant}>{backtestStatusLabel}</TerminalChip>
+                              {scannerLineageCue ? (
+                                <TerminalChip variant="neutral">{scannerLineageCue.label}</TerminalChip>
+                              ) : null}
                               {batchDisplayStatus ? (
                                 <TerminalChip variant={terminalChipVariant(batchDisplayStatus.tone)} className="font-mono">
                                   {batchDisplayStatus.label}
@@ -1944,9 +2021,9 @@ const WatchlistPage: React.FC = () => {
                               {latestTime ? <span className="font-mono text-white/45">{copy.latestUpdate} {formatDateTime(latestTime, language)}</span> : null}
                               <span className="text-white/55">{language === 'en' ? 'Next' : '下一步'} {rowNextAction}</span>
                             </div>
-                            {rowRiskNote ? (
+                            {rowNotes ? (
                               <p className="text-xs leading-5 text-white/52" data-testid={`watchlist-row-note-${item.symbol}`}>
-                                {rowRiskNote}
+                                {rowNotes}
                               </p>
                             ) : scannerFailure && scannerStatusLabel === '扫描失败' ? (
                               <p className="text-xs leading-5 text-rose-100/75">{scannerFailure.label}</p>
@@ -2060,6 +2137,9 @@ const WatchlistPage: React.FC = () => {
                     <TerminalChip variant={scoreDisclosureChipVariant(activeScoreDisclosureState)}>
                       {formatScoreDisclosureStatus(activeScoreDisclosureState, language)}
                     </TerminalChip>
+                    {activeScannerLineageCue ? (
+                      <TerminalChip variant="neutral">{activeScannerLineageCue.label}</TerminalChip>
+                    ) : null}
                     <TerminalChip variant={activeBacktestStatusLabel === '已回测' ? 'success' : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(activeBacktestStatusLabel) ? 'danger' : ['样本不足', '数据缺失'].includes(activeBacktestStatusLabel) ? 'caution' : 'neutral'}>
                       {activeBacktestStatusLabel}
                     </TerminalChip>
@@ -2070,6 +2150,9 @@ const WatchlistPage: React.FC = () => {
                   <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
                     <p className="text-[11px] text-white/40">{language === 'zh' ? '当前状态' : 'Current state'}</p>
                     <p className="mt-1 text-sm text-white/78">{formatScoreDisclosureFreshness(activeItem, activeLatestTime, language)}</p>
+                    {activeScannerLineageCue ? (
+                      <p className="mt-2 text-xs leading-5 text-white/52">{activeScannerLineageCue.detail}</p>
+                    ) : null}
                   </div>
                   <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3">
                     <p className="text-[11px] text-white/40">{language === 'zh' ? '风险提示' : 'Risk note'}</p>

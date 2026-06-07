@@ -80,6 +80,12 @@ function makeItem(overrides: Partial<WatchlistItem>): WatchlistItem {
     scoreProfile: 'us_preopen_v1',
     scoreReason: 'Latest scanner score.',
     scoreStatus: 'fresh',
+    scoreStatusContext: {
+      scope: 'score_refresh_recency',
+      freshMeans: 'persisted_scanner_score_refreshed',
+      sourceFreshnessImplied: false,
+      sourceAuthorityImplied: false,
+    },
     scoreError: null,
     intelligence: {
       scanner: {
@@ -596,7 +602,7 @@ describe('WatchlistPage', () => {
 
     fireEvent.change(screen.getByLabelText('排序'), { target: { value: 'scannerScore' } });
 
-    const rows = Array.from(screen.getByTestId('watchlist-candidate-list').querySelectorAll('[data-testid^="watchlist-row-"]'));
+    const rows = Array.from(screen.getByTestId('watchlist-candidate-list').querySelectorAll('article[data-testid^="watchlist-row-"]'));
     expect(within(rows[0] as HTMLElement).getByText('NVDA')).toBeInTheDocument();
     expect(within(rows[1] as HTMLElement).getByText('TSM')).toBeInTheDocument();
     expect(within(rows[2] as HTMLElement).getByText('600519')).toBeInTheDocument();
@@ -713,6 +719,126 @@ describe('WatchlistPage', () => {
     expect(row).toHaveTextContent('已使用最近一次可用数据。');
     expect(row).toHaveTextContent('下一步 补充回测');
     expect(row).not.toHaveTextContent(/proxy_fallback|proxy fallback|fallback|proxy|备用数据|代理证据|来源|扫描批次|source|scanner run|score source/i);
+  });
+
+  it('maps score_status_context freshness to score-refresh copy without source authority', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [makeItem({
+        id: 14,
+        symbol: 'AMD',
+        source: 'scanner',
+        scannerRunId: 88,
+        scannerScore: 89,
+        lastScoredAt: '2026-05-01T11:50:00Z',
+        scoreSource: 'scanner_run',
+        scoreStatus: 'fresh',
+        scoreStatusContext: {
+          scope: 'score_refresh_recency',
+          freshMeans: 'persisted_scanner_score_refreshed',
+          sourceFreshnessImplied: false,
+          sourceAuthorityImplied: false,
+        },
+        createdAt: '2026-05-01T11:49:30Z',
+        updatedAt: '2026-05-01T11:49:30Z',
+        intelligence: {
+          scanner: {
+            lastScore: 89,
+            lastRank: 2,
+            status: 'selected',
+            reason: 'Latest scanner score.',
+            lastScannedAt: '2026-05-01T11:50:00Z',
+          },
+          strategySimulation: { status: 'ready' },
+          backtest: {},
+        },
+      })],
+    });
+
+    renderWatchlist();
+
+    const row = await screen.findByTestId('watchlist-row-AMD');
+    const detailRail = screen.getByTestId('watchlist-detail-rail');
+    expect(row).toHaveTextContent('评分已刷新');
+    expect(row).toHaveTextContent('评分最近刷新；不代表来源实时或权威。');
+    expect(detailRail).toHaveTextContent('评分最近刷新');
+    expect(detailRail).toHaveTextContent('评分最近刷新；不代表来源实时或权威。');
+    expect(row).not.toHaveTextContent(/信号最新|source_status_context|score_status_context|sourceFreshnessImplied|sourceAuthorityImplied|source_confidence|reason_families|scanner_run_id|scannerRunId/i);
+  });
+
+  it('maps cached and blocked score statuses to bounded consumer copy', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          id: 18,
+          symbol: 'CASH',
+          source: 'portfolio',
+          scannerRunId: 12,
+          scannerScore: 72,
+          lastScoredAt: '2026-05-01T09:30:00Z',
+          scoreStatus: 'cached',
+          createdAt: '2026-05-01T09:00:00Z',
+          updatedAt: '2026-05-01T09:00:00Z',
+        }),
+        makeItem({
+          id: 19,
+          symbol: 'HOLD',
+          source: 'scanner',
+          scannerRunId: 13,
+          scannerScore: 66,
+          lastScoredAt: '2026-05-01T09:20:00Z',
+          scoreStatus: 'blocked',
+          scoreReason: 'score_blocked source_confidence sourceAuthorityAllowed=false',
+          createdAt: '2026-05-01T09:20:00Z',
+          updatedAt: '2026-05-01T09:20:00Z',
+        }),
+      ],
+    });
+
+    renderWatchlist();
+
+    const cachedRow = await screen.findByTestId('watchlist-row-CASH');
+    const blockedRow = await screen.findByTestId('watchlist-row-HOLD');
+    expect(cachedRow).toHaveTextContent('已保存评分');
+    expect(cachedRow).toHaveTextContent('已使用已保存评分；来源实时性未确认。');
+    expect(blockedRow).toHaveTextContent('仅作观察');
+    expect(blockedRow).toHaveTextContent('当前评分依据有限，先保持观察。');
+    expect(screen.getByTestId('watchlist-page')).not.toHaveTextContent(/score_blocked|source_confidence|sourceAuthorityAllowed|score_status_context|reason_families|raw diagnostics|JSON/i);
+  });
+
+  it('shows a bounded scanner lineage cue only when post-add refresh fields support it', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          id: 20,
+          symbol: 'NVDA',
+          source: 'scanner',
+          scannerRunId: 90,
+          lastScoredAt: '2026-05-01T11:50:00Z',
+          createdAt: '2026-05-01T10:00:00Z',
+          updatedAt: '2026-05-01T10:00:00Z',
+        }),
+        makeItem({
+          id: 21,
+          symbol: 'MSFT',
+          source: 'scanner',
+          scannerRunId: 91,
+          lastScoredAt: '2026-05-01T11:40:00Z',
+          createdAt: '2026-05-01T11:40:00Z',
+          updatedAt: '2026-05-01T11:40:00Z',
+        }),
+      ],
+    });
+
+    renderWatchlist();
+
+    const refreshedRow = await screen.findByTestId('watchlist-row-NVDA');
+    const unchangedRow = await screen.findByTestId('watchlist-row-MSFT');
+    expect(refreshedRow).toHaveTextContent('加入后刷新');
+    expect(refreshedRow).toHaveTextContent('评分在加入后刷新，可能反映后续扫描观察。');
+    expect(unchangedRow).not.toHaveTextContent('加入后刷新');
+    fireEvent.click(within(refreshedRow).getByRole('button', { name: '查看详情 NVDA' }));
+    expect(screen.getByTestId('watchlist-detail-rail')).toHaveTextContent('加入后刷新');
+    expect(screen.getByTestId('watchlist-page')).not.toHaveTextContent(/scannerRunId|scanner_run_id|扫描批次|source_confidence|reason_families/i);
   });
 
   it('keeps stale inherited scanner scores from rendering as verified latest evidence', async () => {
@@ -921,11 +1047,11 @@ describe('WatchlistPage', () => {
     await screen.findByTestId('watchlist-row-NVDA');
 
     fireEvent.change(screen.getByLabelText('排序'), { target: { value: 'backtestReturn' } });
-    let rows = Array.from(screen.getByTestId('watchlist-candidate-list').querySelectorAll('[data-testid^="watchlist-row-"]'));
+    let rows = Array.from(screen.getByTestId('watchlist-candidate-list').querySelectorAll('article[data-testid^="watchlist-row-"]'));
     expect(within(rows[0] as HTMLElement).getByText('NVDA')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('排序'), { target: { value: 'historicalHitRate' } });
-    rows = Array.from(screen.getByTestId('watchlist-candidate-list').querySelectorAll('[data-testid^="watchlist-row-"]'));
+    rows = Array.from(screen.getByTestId('watchlist-candidate-list').querySelectorAll('article[data-testid^="watchlist-row-"]'));
     expect(within(rows[0] as HTMLElement).getByText('NVDA')).toBeInTheDocument();
   });
 
@@ -1057,7 +1183,7 @@ describe('WatchlistPage', () => {
     expect(secondaryDeck).not.toContainElement(mapper);
     expect(within(mapper).getByRole('button', { name: '展开 杠杆 ETF 映射' })).toHaveAttribute('aria-expanded', 'false');
     expect(within(mapper).queryByLabelText('ETF 参考价')).not.toBeInTheDocument();
-    expect(within(detailRail).getByText('信号最新')).toBeInTheDocument();
+    expect(within(detailRail).getByText('评分已刷新')).toBeInTheDocument();
     expect(within(detailRail).getByText('观察摘要')).toBeInTheDocument();
     expect(screen.queryByTestId('sidebar-nav')).not.toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/watchlist');
@@ -1125,14 +1251,14 @@ describe('WatchlistPage', () => {
 
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(disclosure).toHaveTextContent('来自已保存的 Scanner 观察');
-    expect(within(detailRail).getByText('信号最新')).toBeInTheDocument();
+    expect(within(detailRail).getByText('评分已刷新')).toBeInTheDocument();
     expect(within(disclosure).queryByText('禁止判断')).not.toBeInTheDocument();
     expect(within(disclosure).queryByText('已缓存')).not.toBeInTheDocument();
 
     fireEvent.click(toggle);
 
     expect(within(disclosure).getByRole('button', { name: '收起 资金面观察信号' })).toHaveAttribute('aria-expanded', 'true');
-    expect(within(detailRail).getByText('信号最新')).toBeInTheDocument();
+    expect(within(detailRail).getByText('评分已刷新')).toBeInTheDocument();
     expect(within(disclosure).getByText('信号分化')).toBeInTheDocument();
     expect(within(disclosure).getByText('禁止判断')).toBeInTheDocument();
     expect(within(disclosure).getByText('已缓存')).toBeInTheDocument();
@@ -1553,12 +1679,12 @@ describe('WatchlistPage', () => {
     const runtimeStatus = screen.getByTestId('watchlist-runtime-status');
     expect(runtimeStatus).toHaveTextContent('自动刷新');
     expect(runtimeStatus).toHaveTextContent('批量进度');
-    expect(screen.getAllByText('最新').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('评分已刷新').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: /刷新评分/ }));
 
     await waitFor(() => expect(refreshScores).toHaveBeenCalledWith({ force: true }));
-    expect(await screen.findByText(/评分已刷新/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('评分已刷新。 3/3'));
     expect(screen.getByTestId('watchlist-row-NVDA')).toHaveTextContent('96.0');
   });
 
