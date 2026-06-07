@@ -237,26 +237,25 @@ test.describe('Liquidity Monitor degraded proxy-only state', () => {
       try {
         await expect(page.getByRole('heading', { name: '流动性监测' })).toBeVisible({ timeout: 15_000 });
         const guidancePanel = page.getByTestId('liquidity-monitor-guidance-panel');
-        await expect(guidancePanel).toContainText('当前流动性读数暂不可用，仅保留最近一次状态与更新时间。');
-        await expect(guidancePanel).toContainText('评分已暂停');
+        await expect(guidancePanel).toContainText('数据不足，暂不判断；保留最近一次流动性状态。');
         await expect(guidancePanel).toContainText('暂不可用');
-        await expect(guidancePanel).toContainText('当前证据');
-        await expect(guidancePanel).toContainText('当前缺口');
-        await expect(guidancePanel).toContainText('下一次关注');
+        await expect(guidancePanel).toContainText('关键指标');
+        await expect(guidancePanel).toContainText('状态限制');
+        await expect(guidancePanel).toContainText('下一步观察');
         await expect(guidancePanel).toContainText('已使用最近一次可用数据');
-        await expect(page.getByTestId('liquidity-section-overview')).toContainText('流动性总览');
-        await expect(page.getByTestId('liquidity-section-metrics')).toContainText('细分指标');
-        await expect(page.getByTestId('liquidity-section-observation')).toContainText('历史/观察线索');
+        await expect(page.getByTestId('liquidity-section-overview')).toContainText('流动性格局');
+        await expect(page.getByTestId('liquidity-section-metrics')).toContainText('关键指标');
+        await expect(page.getByTestId('liquidity-section-observation')).toContainText('资金面与说明');
         const conclusionFontSize = await page.getByTestId('liquidity-section-overview').locator('h2').evaluate((element) => {
           return Number.parseFloat(window.getComputedStyle(element).fontSize);
         });
         expect(conclusionFontSize).toBeGreaterThanOrEqual(24);
-        await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('数据说明与限制');
+        await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('方法与数据限制');
         await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('最近更新');
-        await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('流动性状态');
-        await expect(page.getByTestId('liquidity-summary-strip')).toContainText('主线索');
+        await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('流动性格局');
+        await expect(page.getByTestId('liquidity-summary-strip')).toContainText('主要压力');
         await expect(page.getByTestId('liquidity-context-rail')).toContainText('优先恢复');
-        await expect(page.locator('body')).not.toContainText(/guaranteed|decision-grade|强结论|provider_unavailable|scoreContributionAllowed|proxy-only|Binance|official_or_authorized|yfinance_proxy|synthetic_fixture|source_confidence_contract_v1|reasonCodes|officialSeriesId|外部调用|运行顺序|缓存写入|fallback|provider|runtime|backend/i);
+        await expect(page.locator('body')).not.toContainText(/guaranteed|decision-grade|强结论|provider_unavailable|scoreContributionAllowed|proxy-only|Binance|official_or_authorized|yfinance_proxy|synthetic_fixture|source_confidence_contract_v1|reasonCodes|officialSeriesId|外部调用|运行顺序|缓存写入|fallback|provider|runtime|backend|证据覆盖|缺失证据|当前证据|决策就绪|就绪度|置信度/i);
         await expect(page.getByRole('button', { name: '展开 技术细节' })).toHaveCount(0);
         await expect(page.getByTestId('liquidity-monitor-guidance-panel')).not.toContainText('流动性方向待确认');
         await expect(page.getByTestId('liquidity-monitor-guidance-panel')).not.toContainText('不升级为真实扩张或收缩结论');

@@ -189,12 +189,12 @@ const PILLAR_LABELS: Record<string, string> = {
   rates_pressure: '利率压力',
   dollar_pressure: '美元压力',
   volatility_stress: '波动率压力',
-  crypto_liquidity_beta: 'Crypto Beta',
+  crypto_liquidity_beta: '资金面',
   risk_asset_demand: '风险资产需求',
-  funding_stress: '资金费率压力',
-  equity_flow_proxy: '权益流向代理',
+  funding_stress: '资金面',
+  equity_flow_proxy: '资金面',
   breadth_confirmation: '市场宽度确认',
-  china_liquidity_context: '中国流动性环境',
+  china_liquidity_context: '中港资金面',
 };
 
 const EVIDENCE_DIRECTION_LABELS: Record<string, string> = {
@@ -218,17 +218,17 @@ const EVIDENCE_REASON_LABELS: Record<string, string> = {
 };
 
 const LIQUIDITY_BLOCKING_REASON_LABELS: Record<string, string> = {
-  partial_coverage: '覆盖不完整',
-  observation_only: '仅观察态',
-  proxy_only_missing_real_source: '缺少真实数据源',
-  proxy_context_only: '代理上下文仅观察',
-  source_authority_router_rejected: '来源权限未通过',
-  provider_forbidden_for_use_case: '当前用例禁止该来源',
-  provider_observation_only: '提供方仅允许观察',
-  provider_unavailable: '数据源不可用',
+  partial_coverage: '部分数据暂不可用',
+  observation_only: '观察线索',
+  proxy_only_missing_real_source: '关键数据待恢复',
+  proxy_context_only: '观察线索',
+  source_authority_router_rejected: '关键数据待恢复',
+  provider_forbidden_for_use_case: '关键数据待恢复',
+  provider_observation_only: '观察线索',
+  provider_unavailable: '部分数据暂不可用',
   trust_gate_blocked: '信任门禁阻断',
-  provider_absent: '所需提供方未配置',
-  unavailable_source: '来源不可用',
+  provider_absent: '部分数据暂不可用',
+  unavailable_source: '部分数据暂不可用',
   indicator_unavailable: '指标不可用',
 };
 
@@ -369,11 +369,11 @@ function capitalFlowContradictionLabel(value?: string | null): string {
 
 function capitalFlowFlagLabels(signal?: LiquidityCapitalFlowSignal | null): string[] {
   if (!signal) return [];
-  return [
+  return uniqueCompactValues([
     signal.isPartial ? '部分' : null,
-    signal.isStale ? '过期' : null,
-    signal.isFallback ? '备用' : null,
-  ].filter((value): value is string => Boolean(value));
+    signal.isStale ? '最近可用' : null,
+    signal.isFallback ? '最近可用' : null,
+  ], 3);
 }
 
 function impulseCodeLabel(value?: string | null): string {
@@ -905,12 +905,12 @@ function buildLiquidityNextWatch(
   const missing = topIndicatorNames(indicators, isMissingOrUnavailableIndicator, 2);
   const observation = topIndicatorNames(indicators, isObservationOnlyIndicator, 1);
   const parts = [
-    missing.length ? `优先补齐 ${missing.join('、')}` : '',
+    missing.length ? `优先恢复 ${missing.join('、')}` : '',
     observation.length ? `继续观察 ${observation.join('、')}` : '',
-    coverageSummary.directionLabel === '可参考' ? '确认新增反证是否进入可计分范围' : '',
+    coverageSummary.directionLabel === '可参考' ? '确认新增反向线索是否改变压力方向' : '',
     '等待刷新后，对照 Market Overview / Rotation Radar 的主线是否一致',
   ].filter(Boolean);
-  return parts.length ? parts.join('；') : '等待新的评分级证据进入可计分范围。';
+  return parts.length ? parts.join('；') : '等待新的关键指标恢复。';
 }
 
 function uniqueReadinessItems(items: Array<string | null | undefined>, limit: number, fallback: string): string[] {
@@ -1000,7 +1000,7 @@ function buildLiquidityBiasSummary(
       label: '不可判断',
       variant: 'danger',
       toneClassName: 'text-rose-200',
-      detail: '没有足够评分级证据支撑方向，不能判断偏宽松或偏收紧。',
+      detail: '可用线索不足，暂不判断偏宽松或偏收紧。',
     };
   }
 
@@ -1009,7 +1009,7 @@ function buildLiquidityBiasSummary(
       label: '仅观察',
       variant: 'info',
       toneClassName: 'text-cyan-100',
-      detail: '已有部分线索，但仍受来源、时效或覆盖缺口限制。',
+      detail: '已有部分线索，但仍受时效或状态限制。',
     };
   }
 
@@ -1019,7 +1019,7 @@ function buildLiquidityBiasSummary(
       label: '偏宽松',
       variant: 'success',
       toneClassName: 'text-emerald-200',
-      detail: '评分级证据支持流动性背景偏宽松，仍只作为研究背景。',
+      detail: '流动性背景偏宽松，仍只作为研究背景。',
     };
   }
   if (impulse === 'contracting_liquidity') {
@@ -1027,7 +1027,7 @@ function buildLiquidityBiasSummary(
       label: '偏收紧',
       variant: 'caution',
       toneClassName: 'text-amber-200',
-      detail: '评分级证据显示流动性压力更强，继续观察反证是否改善。',
+      detail: '流动性压力更强，继续观察反向线索是否改善。',
     };
   }
   if (impulse !== 'balanced_liquidity' && (data.score.regime === 'abundant' || data.score.regime === 'supportive')) {
@@ -1035,7 +1035,7 @@ function buildLiquidityBiasSummary(
       label: '偏宽松',
       variant: 'success',
       toneClassName: 'text-emerald-200',
-      detail: '评分级证据支持流动性背景偏宽松，仍只作为研究背景。',
+      detail: '流动性背景偏宽松，仍只作为研究背景。',
     };
   }
   if (impulse !== 'balanced_liquidity' && (data.score.regime === 'tight' || data.score.regime === 'stress')) {
@@ -1043,7 +1043,7 @@ function buildLiquidityBiasSummary(
       label: '偏收紧',
       variant: 'caution',
       toneClassName: 'text-amber-200',
-      detail: '评分级证据显示流动性压力更强，继续观察反证是否改善。',
+      detail: '流动性压力更强，继续观察反向线索是否改善。',
     };
   }
 
@@ -1051,7 +1051,7 @@ function buildLiquidityBiasSummary(
     label: '无明显方向',
     variant: 'neutral',
     toneClassName: 'text-white/78',
-    detail: '扩张与收缩证据暂未形成单边方向，可先对照 Market Overview / Rotation Radar 继续观察。',
+    detail: '扩张与收缩线索暂未形成单边方向，可先对照 Market Overview / Rotation Radar 继续观察。',
   };
 }
 
@@ -1078,10 +1078,7 @@ function buildLiquidityMainGapLine(
 type ConsumerLiquidityStatusView = {
   availabilityLabel: '正常' | '观察中' | '暂不可用';
   availabilityVariant: 'success' | 'info' | 'neutral';
-  scoringLabel: '评分可用' | '评分已暂停';
-  scoringVariant: 'success' | 'caution';
-  confidenceLabel: '置信度稳定' | '置信度受限';
-  confidenceVariant: 'success' | 'info';
+  regimeLabel: LiquidityBiasSummary['label'];
   freshnessChipLabel: string;
   freshnessVariant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
   headline: string;
@@ -1103,10 +1100,8 @@ type ConsumerLiquidityEvidenceRowView = {
   label: string;
   statusLabel: '可用' | '观察中' | '待恢复';
   statusVariant: 'success' | 'info' | 'neutral';
-  scoreLabel: '进入判断' | '仅观察' | '评分暂停';
+  scoreLabel: '主要线索' | '观察线索' | '暂未恢复';
   scoreVariant: 'success' | 'info' | 'caution';
-  freshnessLabel: string;
-  freshnessVariant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
   note: string;
   detail: string;
 };
@@ -1129,7 +1124,7 @@ type ConsumerLiquidityCoverageSegment = {
   barClassName: string;
 };
 
-const CONSUMER_FORBIDDEN_COPY_PATTERN = /provider|proxy|fallback|reason|source|authority|cache|runtime|raw|json|diagnostic|official_or_authorized|marketcache|scorecontributionallowed|sourceauthorityallowed|yfinance|fred|binance|polygon|tushare|bucket|backend|snake_case|routeRejected/i;
+const CONSUMER_FORBIDDEN_COPY_PATTERN = /provider|proxy|fallback|reason|source|authority|cache|runtime|raw|json|diagnostic|official_or_authorized|marketcache|scorecontributionallowed|sourceauthorityallowed|yfinance|fred|binance|polygon|tushare|bucket|backend|snake_case|routeRejected|计分|评分|证据|覆盖|缺口|代理|提供方|数据源|官方|授权|来源|置信度|就绪/i;
 
 function consumerFreshnessLabel(freshness: LiquidityMonitorFreshness): string {
   if (freshness === 'live') return '已更新';
@@ -1196,14 +1191,14 @@ function buildConsumerEvidenceNote(indicator: LiquidityMonitorIndicator): string
   const scoreReady = indicator.coverageDiagnostics?.scoreContributionAllowed === true || indicator.includedInScore;
   if (scoreReady) {
     return indicator.freshness === 'live'
-      ? '当前作为可用判断线索。'
-      : '当前仍可作为判断线索，页面会继续自动刷新。';
+      ? '当前作为主要流动性线索。'
+      : '当前仍可作为主要线索，页面会继续自动刷新。';
   }
   if (indicator.status === 'unavailable') {
     return '当前信号暂不可用，等待后续更新。';
   }
   if (isObservationOnlyIndicator(indicator)) {
-    return '当前信号仅供观察，暂不进入评分。';
+    return '当前信号仅供观察，暂不改变流动性格局。';
   }
   if (isMissingOrUnavailableIndicator(indicator) || indicator.status === 'partial') {
     return '当前信号仍不完整，先关注状态恢复。';
@@ -1217,11 +1212,11 @@ function buildConsumerEvidenceDetail(indicator: LiquidityMonitorIndicator): stri
   ];
   const diagnostics = indicator.coverageDiagnostics;
   if (diagnostics?.missingInputs.length) {
-    pieces.push(`缺口 ${diagnostics.missingInputs.length} 项`);
+    pieces.push(`待恢复 ${diagnostics.missingInputs.length} 项`);
   } else if (indicator.coverageDiagnostics?.scoreContributionAllowed === true || indicator.includedInScore) {
-    pieces.push('当前进入判断');
+    pieces.push('用于当前状态');
   } else if (isObservationOnlyIndicator(indicator)) {
-    pieces.push('当前仅观察');
+    pieces.push('作为观察线索');
   }
   return pieces.join(' · ');
 }
@@ -1239,10 +1234,8 @@ function buildConsumerEvidenceRows(indicators: LiquidityMonitorIndicator[]): Con
       label: displayLabel(indicator),
       statusLabel,
       statusVariant: statusLabel === '可用' ? 'success' : statusLabel === '观察中' ? 'info' : 'neutral',
-      scoreLabel: scoreReady ? '进入判断' : indicator.status === 'unavailable' ? '评分暂停' : '仅观察',
+      scoreLabel: scoreReady ? '主要线索' : indicator.status === 'unavailable' ? '暂未恢复' : '观察线索',
       scoreVariant: scoreReady ? 'success' : indicator.status === 'unavailable' ? 'caution' : 'info',
-      freshnessLabel: consumerFreshnessLabel(indicator.freshness),
-      freshnessVariant: chipVariantForFreshness(indicator.freshness),
       note: buildConsumerEvidenceNote(indicator),
       detail: buildConsumerEvidenceDetail(indicator),
     };
@@ -1259,13 +1252,13 @@ function buildConsumerSummaryFacts(
   return [
     {
       key: 'direction',
-      label: '当前读数',
+      label: '流动性格局',
       value: buildLiquidityBiasSummary(data, readinessSummary, buildLiquidityImpulseSynthesisView(data.liquidityImpulseSynthesis)).label,
       detail: coverageSummary.directionLabel === '可参考' ? '可继续跟踪' : '暂以观察为主',
     },
     {
       key: 'signal',
-      label: '主线索',
+      label: '主要压力',
       value: topSignal || '等待关键信号恢复',
       detail: topSignal ? '当前最先影响状态的线索' : '当前没有稳定主线索',
     },
@@ -1284,15 +1277,15 @@ function buildConsumerGapSummary(
   consumerView: ConsumerLiquidityStatusView,
 ): string {
   if (missing.count > 0) {
-    return `数据不足，暂不形成结论；仍有 ${missing.count} 项关键信号待恢复，当前先保留状态与最近更新。`;
+    return `数据不足，暂不判断；${missing.count} 项关键信号待恢复。`;
   }
   if (observation.count > 0) {
-    return '数据不足，暂不形成结论；部分线索仍仅供观察，当前先不升级为完整方向判断。';
+    return '数据不足，暂不判断；部分线索仍仅供观察。';
   }
-  if (consumerView.scoringLabel === '评分已暂停') {
-    return '数据不足，暂不形成结论；当前评分仍处于暂停状态，等待更多可用线索恢复。';
+  if (consumerView.availabilityLabel === '暂不可用') {
+    return '数据不足，暂不判断；等待更多可用线索恢复。';
   }
-  return '当前没有新增缺口，继续跟踪后续变化。';
+  return '当前没有新增限制，继续跟踪后续变化。';
 }
 
 function clampPercent(value: number, min = 8, max = 100): number {
@@ -1310,21 +1303,21 @@ function buildConsumerCoverageSegments(
   const rawSegments: Array<Omit<ConsumerLiquidityCoverageSegment, 'widthPct'>> = [
     {
       key: 'scoring',
-      label: '可判断',
+      label: '主要',
       count: coverageSummary.scoreGradeCount,
       chipVariant: 'success',
       barClassName: 'bg-emerald-300/80',
     },
     {
       key: 'observation',
-      label: '仅观察',
+      label: '观察',
       count: coverageSummary.observationOnlyCount,
       chipVariant: 'info',
       barClassName: 'bg-cyan-300/75',
     },
     {
       key: 'missing',
-      label: '缺口',
+      label: '待恢复',
       count: coverageSummary.missingOrUnavailableCount,
       chipVariant: 'caution',
       barClassName: 'bg-amber-300/80',
@@ -1422,6 +1415,7 @@ function buildConsumerLiquidityStatusView(
   indicators: LiquidityMonitorIndicator[],
 ): ConsumerLiquidityStatusView {
   const unavailableModules = topIndicatorNames(indicators, isMissingOrUnavailableIndicator, 2);
+  const bias = buildLiquidityBiasSummary(data, readinessSummary, synthesisView);
   const limitedConfidence = readinessSummary.state !== 'ready'
     || synthesisView.state !== 'ready'
     || (data.score.confidence || 0) < 0.45;
@@ -1449,21 +1443,18 @@ function buildConsumerLiquidityStatusView(
   return {
     availabilityLabel,
     availabilityVariant: availabilityLabel === '正常' ? 'success' : availabilityLabel === '观察中' ? 'info' : 'neutral',
-    scoringLabel: scoringPaused ? '评分已暂停' : '评分可用',
-    scoringVariant: scoringPaused ? 'caution' : 'success',
-    confidenceLabel: limitedConfidence ? '置信度受限' : '置信度稳定',
-    confidenceVariant: limitedConfidence ? 'info' : 'success',
+    regimeLabel: bias.label,
     freshnessChipLabel: consumerFreshnessLabel(data.freshness.status),
     freshnessVariant: chipVariantForFreshness(data.freshness.status),
     headline: availabilityLabel === '暂不可用'
-      ? '当前流动性读数暂不可用，仅保留最近一次状态与更新时间。'
+      ? '数据不足，暂不判断；保留最近一次流动性状态。'
       : availabilityLabel === '观察中'
         ? topSignal
-          ? `当前流动性仍在观察中，主线索是${topSignal}。`
-          : '当前流动性仍在观察中，先关注状态变化。'
+          ? `流动性格局${bias.label}，主要压力是${topSignal}。`
+          : `流动性格局${bias.label}，先关注状态变化。`
         : topSignal
-          ? `当前流动性状态正常，主线索是${topSignal}。`
-          : '当前流动性状态正常，可继续观察。',
+          ? `流动性格局${bias.label}，主要压力是${topSignal}。`
+          : `流动性格局${bias.label}，可继续观察。`,
     availabilityDetail: availabilityLabel === '暂不可用'
       ? '当前关键流动性线索不足，页面会继续自动刷新。'
       : availabilityLabel === '观察中'
@@ -1472,12 +1463,12 @@ function buildConsumerLiquidityStatusView(
           : '当前仍有部分信号待恢复，先保持观察。'
         : '当前主要流动性读数已返回，可继续观察。',
     scoringDetail: availabilityLabel === '暂不可用'
-      ? '数据不足，暂不形成结论；请等待刷新，并对照 Market Overview / Rotation Radar 的相关线索。'
+      ? '数据不足，暂不判断；请等待刷新，并对照 Market Overview / Rotation Radar 的相关线索。'
       : limitedConfidence
-        ? '数据不足，暂不形成结论；当前流动性信号置信度较低，请等待刷新并先查看当前证据。'
+        ? '数据不足，暂不判断；等待更多可用线索恢复。'
         : scoringPaused
-          ? '数据不足，暂不形成结论；部分流动性数据暂不可用，当前评分已暂停。'
-          : '当前流动性评分可继续参考。',
+          ? '数据不足，暂不判断；部分流动性数据暂不可用。'
+          : '当前流动性状态可继续参考。',
     freshnessSummary,
     freshnessDetail: `最近更新：${formatDateTime(data.freshness.latestAsOf) || '待确认'}`,
   };
@@ -1505,7 +1496,7 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
       >
         <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-white/48">流动性姿态</p>
+            <p className="text-[11px] font-medium text-white/48">流动性格局</p>
             <p className={cn('mt-1 text-sm font-semibold', bias.toneClassName)}>{bias.label}</p>
             <p className="mt-1 text-[11px] leading-5 text-white/56">{bias.detail}</p>
           </div>
@@ -1517,11 +1508,11 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
         <div className="mt-3 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
           <div className="flex items-end justify-between gap-3">
             <div>
-              <p className="text-[10px] uppercase tracking-[0.24em] text-white/34">Posture</p>
+              <p className="text-[10px] uppercase tracking-[0.24em] text-white/34">REGIME</p>
               <p className="mt-2 font-mono text-3xl font-semibold text-white/86">{scoreLabel(data.score.value)}</p>
             </div>
             <p className="text-[11px] leading-5 text-white/48">
-              {coverageSummary.directionLabel === '可参考' ? '当前读数可继续跟踪' : '当前读数先保持观察'}
+              {coverageSummary.directionLabel === '可参考' ? '当前格局可继续跟踪' : '当前格局先保持观察'}
             </p>
           </div>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.06]">
@@ -1546,12 +1537,12 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
       >
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-white/48">证据覆盖</p>
+            <p className="text-[11px] font-medium text-white/48">指标状态</p>
             <p className="mt-1 text-sm font-semibold text-white/84">
-              {coverageSummary.scoreGradeCount}/{Math.max(indicators.length, 1)} 项当前可判断
+              {coverageSummary.scoreGradeCount}/{Math.max(indicators.length, 1)} 项支撑当前状态
             </p>
             <p className="mt-1 text-[11px] leading-5 text-white/56">
-              缺口 {coverageSummary.missingOrUnavailableCount} 项，观察 {coverageSummary.observationOnlyCount} 项。
+              待恢复 {coverageSummary.missingOrUnavailableCount} 项，观察 {coverageSummary.observationOnlyCount} 项。
             </p>
           </div>
           <TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.directionLabel}</TerminalChip>
@@ -1580,8 +1571,8 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
       >
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-white/48">关键驱动</p>
-            <p className="mt-1 text-sm font-semibold text-white/84">当前最影响状态的线索</p>
+            <p className="text-[11px] font-medium text-white/48">压力来源</p>
+            <p className="mt-1 text-sm font-semibold text-white/84">美元、利率、波动等主要压力线索</p>
           </div>
           <TerminalChip variant="neutral">最多 3 项</TerminalChip>
         </div>
@@ -1613,9 +1604,9 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[11px] font-medium text-white/48">压力走势</p>
-            <p className="mt-1 text-sm font-semibold text-white/84">图形证据缺失，当前保持观察</p>
+            <p className="mt-1 text-sm font-semibold text-white/84">连续走势暂未返回，当前保持观察</p>
             <p className="mt-1 text-[11px] leading-5 text-white/56">
-              当前页面没有连续走势数据，先对照读数、覆盖与缺口继续观察。
+              当前页面没有连续走势数据，先对照读数、指标状态与压力来源继续观察。
             </p>
           </div>
           <TerminalChip variant="neutral">未返回走势</TerminalChip>
@@ -1726,10 +1717,10 @@ const CapitalFlowSignalPanel: React.FC<{
     >
       <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] font-medium text-white/48">资金流向观察</p>
+          <p className="text-[11px] font-medium text-white/48">资金面</p>
           <p className="mt-1 text-sm font-semibold text-white/84">{capitalFlowRegimeLabel(signal)}</p>
           <p className="mt-1 text-[11px] leading-5 text-white/56">
-            仅观察线索，不代表真实资金流，也不会升级为交易或主要判断结论。
+            作为流动性背景观察，不触发交易或主要方向判断。
           </p>
         </div>
         <div className="flex min-w-0 flex-wrap gap-1.5 lg:justify-end">
@@ -1751,7 +1742,7 @@ const CapitalFlowSignalPanel: React.FC<{
           <p className="mt-2 text-sm font-semibold text-white/82">{capitalFlowAssetLabel(signal.likelyDestination)}</p>
         </div>
         <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
-          <p className="text-[11px] font-medium text-white/48">置信度</p>
+          <p className="text-[11px] font-medium text-white/48">状态强弱</p>
           <p className="mt-2 text-sm font-semibold text-white/82">{capitalFlowConfidenceLabel(signal)}</p>
         </div>
       </div>
@@ -1759,7 +1750,7 @@ const CapitalFlowSignalPanel: React.FC<{
       {pressureRows.length || signal.contradictionSignals?.length ? (
         <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
           {pressureRows.length ? <TerminalChip variant="neutral">资产压力 {pressureRows.length} 项</TerminalChip> : null}
-          {signal.contradictionSignals?.length ? <TerminalChip variant="caution">矛盾信号 {signal.contradictionSignals.length} 项</TerminalChip> : null}
+          {signal.contradictionSignals?.length ? <TerminalChip variant="caution">反向线索 {signal.contradictionSignals.length} 项</TerminalChip> : null}
         </div>
       ) : null}
 
@@ -1779,13 +1770,13 @@ const CapitalFlowSignalPanel: React.FC<{
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-white/82">{capitalFlowAssetLabel(item.asset)}</p>
-                <p className="mt-1 text-[11px] leading-5 text-white/56">来源资产压力观察</p>
+                <p className="mt-1 text-[11px] leading-5 text-white/56">资产压力观察</p>
               </div>
               <div className="flex min-w-0 flex-wrap gap-1.5 lg:justify-end">
                 <TerminalChip variant="info">{capitalFlowPressureLabel(item.pressure)}</TerminalChip>
                 {item.isPartial ? <TerminalChip variant="caution">部分</TerminalChip> : null}
-                {item.isStale ? <TerminalChip variant="caution">过期</TerminalChip> : null}
-                {item.isFallback ? <TerminalChip variant="caution">备用</TerminalChip> : null}
+                {item.isStale ? <TerminalChip variant="caution">最近可用</TerminalChip> : null}
+                {item.isFallback ? <TerminalChip variant="caution">最近可用</TerminalChip> : null}
               </div>
             </div>
           ))}
@@ -1796,13 +1787,13 @@ const CapitalFlowSignalPanel: React.FC<{
         <ConsumerDisclosure
           testId="liquidity-capital-flow-details"
           title="观察细节"
-          summary="资产压力、矛盾信号与说明默认折叠"
+          summary="资产压力、反向线索与说明默认折叠"
           className="mt-3 bg-black/10"
         >
           <div className="grid gap-3 text-[11px] leading-5 text-white/58">
             {pressureRows.length ? (
               <div className="grid gap-2">
-                <p className="text-[11px] font-medium text-white/48">来源资产压力</p>
+                <p className="text-[11px] font-medium text-white/48">资产压力</p>
                 {pressureRows.map((item) => (
                   <div
                     key={[
@@ -1821,8 +1812,8 @@ const CapitalFlowSignalPanel: React.FC<{
                     </div>
                     <div className="flex min-w-0 flex-wrap gap-1.5 lg:justify-end">
                       {item.isPartial ? <TerminalChip variant="caution">部分</TerminalChip> : null}
-                      {item.isStale ? <TerminalChip variant="caution">过期</TerminalChip> : null}
-                      {item.isFallback ? <TerminalChip variant="caution">备用</TerminalChip> : null}
+                      {item.isStale ? <TerminalChip variant="caution">最近可用</TerminalChip> : null}
+                      {item.isFallback ? <TerminalChip variant="caution">最近可用</TerminalChip> : null}
                     </div>
                   </div>
                 ))}
@@ -1830,7 +1821,7 @@ const CapitalFlowSignalPanel: React.FC<{
             ) : null}
             {signal.contradictionSignals?.length ? (
               <div className="grid gap-2">
-                <p className="text-[11px] font-medium text-white/48">矛盾信号</p>
+                <p className="text-[11px] font-medium text-white/48">反向线索</p>
                 <div className="flex min-w-0 flex-wrap gap-1.5">
                   {signal.contradictionSignals.map((item) => (
                     <TerminalChip key={item} variant="neutral">{capitalFlowContradictionLabel(item)}</TerminalChip>
@@ -1885,7 +1876,7 @@ const DecisionReadinessBand: React.FC<{
         <div data-testid="liquidity-section-overview" className="min-w-0">
           <div className="mb-3 flex min-w-0 items-center gap-3">
             <div className="h-px flex-1 bg-white/[0.08]" aria-hidden="true" />
-            <p className="shrink-0 text-[11px] font-semibold text-white/54">流动性总览</p>
+            <p className="shrink-0 text-[11px] font-semibold text-white/54">流动性格局</p>
             <div className="h-px flex-1 bg-white/[0.08]" aria-hidden="true" />
           </div>
 
@@ -1893,16 +1884,14 @@ const DecisionReadinessBand: React.FC<{
             <div className="min-w-0 rounded-xl border border-cyan-200/14 bg-[radial-gradient(circle_at_top_left,rgba(103,232,249,0.10),transparent_34%),rgba(255,255,255,0.035)] p-4 shadow-[0_18px_60px_rgba(3,7,18,0.22)] md:p-5">
               <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-cyan-100/70">当前结论 · 流动性状态</p>
+                  <p className="text-[11px] font-semibold text-cyan-100/70">当前状态 · 流动性格局</p>
                   <h2 className="mt-2 text-[26px] font-semibold leading-tight text-white/94 md:text-3xl">
-                    {consumerView.availabilityLabel}
+                    {consumerView.regimeLabel}
                   </h2>
                   <p className="mt-3 max-w-3xl text-sm leading-6 text-white/68">{consumerView.headline}</p>
                 </div>
                 <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
                   <TerminalChip variant={consumerView.availabilityVariant}>{consumerView.availabilityLabel}</TerminalChip>
-                  <TerminalChip variant={consumerView.scoringVariant}>{consumerView.scoringLabel}</TerminalChip>
-                  <TerminalChip variant={consumerView.confidenceVariant}>{consumerView.confidenceLabel}</TerminalChip>
                   <TerminalChip variant={consumerView.freshnessVariant}>{consumerView.freshnessChipLabel}</TerminalChip>
                 </div>
               </div>
@@ -1928,19 +1917,11 @@ const DecisionReadinessBand: React.FC<{
         <div data-testid="liquidity-section-metrics" className="min-w-0 rounded-xl border border-white/[0.055] bg-black/10 p-3 md:p-4">
           <div className="flex min-w-0 flex-col gap-2 border-b border-white/[0.06] pb-3 md:flex-row md:items-end md:justify-between">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold text-white/54">细分指标</p>
-              <p className="mt-1 text-sm leading-6 text-white/62">把读数、覆盖、关键驱动和当前证据分开查看。</p>
+              <p className="text-[11px] font-semibold text-white/54">关键指标</p>
+              <p className="mt-1 text-sm leading-6 text-white/62">先看资金面、美元压力、利率压力、波动压力与信用压力，再展开方法细节。</p>
             </div>
             <TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.directionLabel}</TerminalChip>
           </div>
-
-          <ConsumerLiquidityVisualEvidence
-            data={data}
-            coverageSummary={coverageSummary}
-            readinessSummary={summary}
-            synthesisView={synthesisView}
-            indicators={indicators}
-          />
 
           {consumerEvidenceRows.length ? (
             <div
@@ -1949,8 +1930,8 @@ const DecisionReadinessBand: React.FC<{
             >
               <div className="flex min-w-0 items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-medium text-white/48">当前证据</p>
-                  <p className="mt-1 text-[11px] leading-5 text-white/56">只保留最影响当前状态的线索与缺口。</p>
+                  <p className="text-[11px] font-medium text-white/48">关键指标</p>
+                  <p className="mt-1 text-[11px] leading-5 text-white/56">按资金面、美元压力、利率压力、波动压力与信用压力查看当前状态。</p>
                 </div>
               </div>
               <div className="mt-3 grid gap-2">
@@ -1964,7 +1945,6 @@ const DecisionReadinessBand: React.FC<{
                       <div className="flex min-w-0 flex-wrap gap-1.5 lg:justify-end">
                         <TerminalChip variant={row.statusVariant}>{row.statusLabel}</TerminalChip>
                         <TerminalChip variant={row.scoreVariant}>{row.scoreLabel}</TerminalChip>
-                        <TerminalChip variant={row.freshnessVariant}>{row.freshnessLabel}</TerminalChip>
                       </div>
                     </div>
                     <p className="mt-2 text-[11px] leading-5 text-white/48">{row.detail}</p>
@@ -1973,12 +1953,20 @@ const DecisionReadinessBand: React.FC<{
               </div>
             </div>
           ) : null}
+
+          <ConsumerLiquidityVisualEvidence
+            data={data}
+            coverageSummary={coverageSummary}
+            readinessSummary={summary}
+            synthesisView={synthesisView}
+            indicators={indicators}
+          />
         </div>
 
         <div data-testid="liquidity-section-observation" className="min-w-0">
           <div className="mb-3 flex min-w-0 items-center gap-3">
             <div className="h-px flex-1 bg-white/[0.08]" aria-hidden="true" />
-            <p className="shrink-0 text-[11px] font-semibold text-white/54">历史/观察线索</p>
+            <p className="shrink-0 text-[11px] font-semibold text-white/54">资金面与说明</p>
             <div className="h-px flex-1 bg-white/[0.08]" aria-hidden="true" />
           </div>
 
@@ -1988,8 +1976,8 @@ const DecisionReadinessBand: React.FC<{
 
               <ConsumerDisclosure
                 testId="liquidity-monitor-consumer-details"
-                title="数据说明与限制"
-                summary="方法、限制与最近更新默认折叠"
+                title="方法与数据限制"
+                summary="方法、限制与更新时间默认折叠"
                 className="mt-4 bg-black/10"
               >
                 <div className="grid gap-2 text-[11px] leading-5 text-white/56">
@@ -2008,14 +1996,14 @@ const DecisionReadinessBand: React.FC<{
               className="grid min-w-0 gap-3 self-start"
             >
               <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
-                <p className="text-[11px] font-medium text-white/48">当前缺口</p>
+                <p className="text-[11px] font-medium text-white/48">状态限制</p>
                 <p className="mt-2 text-sm leading-6 text-white/76">{consumerGapSummary}</p>
                 <p className="mt-2 text-[11px] leading-5 text-white/48">
-                  {missing.count > 0 ? `优先恢复：${missing.namesLine}` : '当前没有新增缺口，继续观察后续变化。'}
+                  {missing.count > 0 ? `优先恢复：${missing.namesLine}` : '当前没有新增限制，继续观察后续变化。'}
                 </p>
               </div>
               <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
-                <p className="text-[11px] font-medium text-white/48">下一次关注</p>
+                <p className="text-[11px] font-medium text-white/48">下一步观察</p>
                 <p className="mt-2 text-sm leading-6 text-white/76">{nextWatch}</p>
                 <p className="mt-2 text-[11px] leading-5 text-white/48">
                   {consumerView.freshnessSummary}；页面会在后续刷新中继续更新状态。
