@@ -1583,6 +1583,7 @@ const WatchlistPage: React.FC = () => {
       : 'border-emerald-400/20 bg-emerald-400/5 text-emerald-100/80';
   const autoRefreshStatus = describeBooleanEnabled(refreshStatus?.enabled, { language });
   const scannerPath = buildLocalizedPath('/scanner', language);
+  const hasVisibleItems = filteredItems.length > 0;
   const attentionCount = watchlistConclusion.staleCount + watchlistConclusion.unknownCount + watchlistConclusion.limitedConfidenceCount;
   const monitoringStateLabel = formatMonitoringStateLabel(watchlistConclusion.tone, filteredItems.length, language);
   const statusItems = [
@@ -1642,7 +1643,7 @@ const WatchlistPage: React.FC = () => {
         <DensePageHeader
           eyebrow={language === 'zh' ? '监控队列' : 'Monitoring board'}
           title={copy.title}
-          action={(
+          action={hasVisibleItems ? (
             <TerminalButton
               type="button"
               variant="secondary"
@@ -1652,7 +1653,7 @@ const WatchlistPage: React.FC = () => {
               <ExternalLink className="h-4 w-4" />
               {copy.openScanner}
             </TerminalButton>
-          )}
+          ) : undefined}
         />
 
         <WatchlistConclusionBand
@@ -2003,12 +2004,12 @@ const WatchlistPage: React.FC = () => {
                 <CompactEmptyRow
                   data-testid="watchlist-compact-empty-state"
                   title={copy.emptyTitle}
-                  className="rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent px-4 py-4 min-h-[72px]"
+                  className="min-h-[72px] flex-col items-start justify-start rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
                   action={(
                     <TerminalButton
                       type="button"
                       variant="secondary"
-                      className="h-9 px-3 text-xs"
+                      className="h-9 w-full px-3 text-xs sm:w-auto"
                       onClick={() => navigate(scannerPath)}
                     >
                       <ExternalLink className="h-4 w-4" />

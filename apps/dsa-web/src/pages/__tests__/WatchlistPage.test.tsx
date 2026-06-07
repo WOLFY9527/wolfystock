@@ -1598,22 +1598,40 @@ describe('WatchlistPage', () => {
     expect(await screen.findByText('NVDA 已复制')).toBeInTheDocument();
   });
 
-  it('renders an empty state with a scanner action', async () => {
+  it('renders a mobile-safe empty state with a single scanner action', async () => {
     listWatchlistItems.mockResolvedValue({ items: [] });
 
     renderWatchlist();
 
     const watchBoard = await screen.findByTestId('watchlist-watch-board');
+    const headerStrip = screen.getByTestId('watchlist-header-strip');
     const primaryWorkRegion = screen.getByTestId('watchlist-primary-work-region');
     const emptyState = await screen.findByTestId('watchlist-compact-empty-state');
     expect(watchBoard).toContainElement(primaryWorkRegion);
     expect(primaryWorkRegion).toContainElement(emptyState);
-    expect(emptyState).toHaveClass('min-h-[72px]', 'rounded-none', 'border-x-0', 'border-t');
+    expect(emptyState).toHaveClass(
+      'min-h-[72px]',
+      'flex-col',
+      'items-start',
+      'justify-start',
+      'sm:flex-row',
+      'sm:items-center',
+      'sm:justify-between',
+      'rounded-none',
+      'border-x-0',
+      'border-t',
+    );
     expect(within(emptyState).getByText('还没有观察标的')).toBeInTheDocument();
     expect(emptyState).toHaveTextContent('观察列表为空，搜索股票并添加到关注列表。');
     expect(emptyState).toHaveTextContent('添加后可在这里查看候选证据与状态。');
     expect(emptyState).not.toHaveTextContent(/数据不足，禁止判断|买入|卖出|下单|交易|券商|broker/i);
-    fireEvent.click(within(emptyState).getByRole('button', { name: /打开扫描器/ }));
+    expect(within(headerStrip).queryByRole('button', { name: /打开扫描器/ })).not.toBeInTheDocument();
+
+    const emptyStateScannerAction = within(emptyState).getByRole('button', { name: /打开扫描器/ });
+    expect(emptyStateScannerAction).toHaveClass('w-full', 'sm:w-auto');
+    expect(screen.getAllByRole('button', { name: /打开扫描器/ })).toHaveLength(1);
+
+    fireEvent.click(emptyStateScannerAction);
     expect(screen.getByText('scanner')).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/zh/scanner');
   });
