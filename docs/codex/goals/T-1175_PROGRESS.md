@@ -386,7 +386,7 @@ Rollback:
 | 2026-06-08 03:10 CST | `50e61289` | Auth redirect, Market Overview consumer fallback copy, Provider Ops endpoint redaction | Focused Vitest, lint, build, check:design, `git diff --check`, `./scripts/release_secret_scan.sh` |
 | 2026-06-08 04:07 CST | `8effe763` | Playwright truth alignment, provider diagnostics mobile L2 layout, product auth e2e harness restore | AdminProviderCircuit unit test, critical route smoke, admin auth smoke, no-secret smoke, `git diff --check` |
 | 2026-06-08 04:22 CST | `5784eb2a` | Backend auth route inventory and paywall copy sentinel repair | Focused backend/release pytest, release secret scan, lint, build, check:design, `git diff --check` |
-| 2026-06-08 04:57 CST | pending final commit | Consumer journey proof, Options Lab execution-boundary copy, stale e2e truth alignment | Options Lab Vitest, 32-test consumer Playwright batch, focused backend pytest, release secret scan, lint, build, check:design, `git diff --check` |
+| 2026-06-08 04:57 CST | `06dfba6a` | Consumer journey proof, Options Lab execution-boundary copy, stale e2e truth alignment | Options Lab Vitest, 32-test consumer Playwright batch, focused backend pytest, release secret scan, lint, build, check:design, `git diff --check` |
 
 ## Running Notes
 
