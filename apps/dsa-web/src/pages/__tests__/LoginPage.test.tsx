@@ -98,7 +98,7 @@ describe('LoginPage', () => {
     fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordLabelLogin')), { target: { value: 'passwd6' } });
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.submitLogin') }));
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/', { replace: true }));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/settings', { replace: true }));
   });
 
   it('re-enables submit controls after an unsuccessful login response', async () => {
@@ -211,6 +211,24 @@ describe('LoginPage', () => {
     fireEvent.click(screen.getByRole('button', { name: translate('en', 'auth.login.returnToGuest') }));
 
     expect(navigate).toHaveBeenCalledWith('/en/guest', { replace: true });
+  });
+
+  it('keeps locale-prefixed redirects after a successful login', async () => {
+    window.history.replaceState(window.history.state, '', '/en/login?redirect=%2Fen%2Fscanner');
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fen%2Fscanner')]);
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login: vi.fn().mockResolvedValue({ success: true }),
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText(translate('en', 'auth.login.passwordLabelLogin')), { target: { value: 'passwd6' } });
+    fireEvent.click(screen.getByRole('button', { name: translate('en', 'auth.login.submitLogin') }));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/en/scanner', { replace: true }));
   });
 
   it('renders visible login copy in English for /en/login', () => {

@@ -7,6 +7,7 @@ import type { ParsedApiError } from '../api/error';
 import { isParsedApiError } from '../api/error';
 import { SettingsAlert } from '../components/settings/SettingsAlert';
 import { useAuth } from '../hooks/useAuth';
+import { resolveAuthRedirect } from '../hooks/useProductSurface';
 import { translate, type UiLanguage } from '../i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 
@@ -122,6 +123,7 @@ const LoginPage: React.FC = () => {
   const language: LoginLanguage = routeLanguage === 'en' ? 'en' : 'zh';
   const copy = buildLoginCopy(language);
   const homePath = routeLanguage ? buildLocalizedPath('/', routeLanguage) : '/';
+  const postAuthPath = resolveAuthRedirect(`?${searchParams.toString()}`, homePath);
   const guestPath = routeLanguage ? buildLocalizedPath('/guest', routeLanguage) : '/guest';
   const resetPasswordPath = routeLanguage ? buildLocalizedPath('/reset-password', routeLanguage) : '/reset-password';
 
@@ -184,7 +186,7 @@ const LoginPage: React.FC = () => {
     }
 
     if (result.success) {
-      navigate(homePath, { replace: true });
+      navigate(postAuthPath, { replace: true });
     } else {
       setError(result.error ?? copy.errorLoginFailed);
     }

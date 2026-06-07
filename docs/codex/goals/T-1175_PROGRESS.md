@@ -95,6 +95,74 @@ Baseline blocker inventory:
 - P1: route-level raw diagnostic and no-advice checks need fresh proof for the
   requested journey.
 
+## Checkpoint 1 - Frontend Safety Fixes
+
+Time: 2026-06-08 03:10 CST.
+
+Public Beta Readiness estimate after focused unit/build validation: 70/100.
+
+Scorecard estimate:
+
+| Area | Points | V0 | CP1 |
+| --- | ---: | ---: | ---: |
+| guest/auth/protected | 15 | 9 | 12 |
+| Market/Liquidity/Rotation observation-mode | 15 | 8 | 10 |
+| demo research loop | 20 | 11 | 12 |
+| consumer UI de-AI/de-diagnostic | 15 | 8 | 12 |
+| perceived speed/partial/last-good | 10 | 6 | 6 |
+| admin health | 10 | 6 | 8 |
+| deploy precheck | 15 | 10 | 10 |
+
+P0/P1 movement:
+
+- P0 narrowed: protected route overlay now preserves the current localized path
+  in `redirect`; login/register success now consumes that safe redirect instead
+  of always returning home.
+- P0 narrowed: Market Overview fallback and old adapter payload wording no longer
+  presents "demo/interface/sample" narrative on default consumer surfaces.
+- P0 narrowed: Admin Market Providers no longer renders provider endpoint values
+  in L3 detail or L4 JSON summaries.
+- P1 remains: full route-level Playwright proof at desktop/mobile is still
+  pending for the broader journey.
+- P1 remains: public launch docs still keep real public multi-user launch as
+  NO-GO; this remains a bounded beta-candidate hardening branch only.
+- P1 remains: performance sidecar identified Rotation/Liquidity retained
+  last-good behavior as a safe later frontend-only opportunity; not opened in
+  this checkpoint to avoid widening state-machine scope.
+
+Route before/after:
+
+| Route | Before | After | Evidence |
+| --- | --- | --- | --- |
+| guest protected overlay | Login CTA opened bare login route and lost source | CTA opens localized login with redirect to current protected route | `AuthGuardOverlay.test.tsx` |
+| login/register | Success always navigated home | Success navigates to safe `redirect` when present | `LoginPage.test.tsx` |
+| `/zh/market-overview` | fallback copy could read as interface/demo sample | fallback and legacy payload copy reads as data-insufficient observation | `MarketOverviewPage.test.tsx`, `market.test.ts` |
+| `/zh/admin/market-providers` | selected provider detail and L4 JSON exposed endpoint | visible detail shows redacted reference only; L4 JSON omits endpoint | `MarketProviderOperationsPage.test.tsx` |
+
+Validation completed:
+
+- `npm --prefix apps/dsa-web run test -- src/components/auth/__tests__/AuthGuardOverlay.test.tsx src/pages/__tests__/LoginPage.test.tsx src/pages/__tests__/MarketProviderOperationsPage.test.tsx src/api/__tests__/market.test.ts src/pages/__tests__/MarketOverviewPage.test.tsx --run` -> PASS, 5 files / 138 tests.
+- `npm --prefix apps/dsa-web run lint` -> PASS.
+- `npm --prefix apps/dsa-web run build` -> PASS; Vite emitted existing large-chunk warnings.
+- `npm --prefix apps/dsa-web run check:design` -> PASS with existing warning-only `Shell.tsx` native-ui finding.
+- `git diff --check` -> PASS.
+- `./scripts/release_secret_scan.sh` -> PASS.
+
+Validation pending:
+
+- Focused Playwright at `1440x1000` and `390x844` for guest/login/market/admin
+  routes.
+- P1 focused backend/release tests around admin/provider/auth/release contracts.
+- Broader consumer journey routes: liquidity, rotation, scanner, watchlist,
+  portfolio, report/history.
+
+Rollback:
+
+- Revert checkpoint commit after it is created:
+  `git revert <checkpoint-1-commit>`.
+- Restore changed frontend files to the baseline checkpoint:
+  `git restore --source=050e2276 -- apps/dsa-web/src/api/__tests__/market.test.ts apps/dsa-web/src/api/market.ts apps/dsa-web/src/components/auth/AuthGuardOverlay.tsx apps/dsa-web/src/components/auth/__tests__/AuthGuardOverlay.test.tsx apps/dsa-web/src/pages/LoginPage.tsx apps/dsa-web/src/pages/MarketOverviewPage.tsx apps/dsa-web/src/pages/MarketProviderOperationsPage.tsx apps/dsa-web/src/pages/__tests__/LoginPage.test.tsx apps/dsa-web/src/pages/__tests__/MarketOverviewPage.test.tsx apps/dsa-web/src/pages/__tests__/MarketProviderOperationsPage.test.tsx`.
+
 ## Milestone Plan
 
 1. Baseline checkpoint and score.
@@ -131,12 +199,15 @@ Implementation checkpoint:
 
 | Time | Commit | Scope | Validation |
 | --- | --- | --- | --- |
-| 2026-06-08 02:30 CST | pending | Initial baseline progress doc | pending |
+| 2026-06-08 02:30 CST | `050e2276` | Initial baseline progress doc | `git diff --check`, `./scripts/release_secret_scan.sh` |
+| 2026-06-08 03:10 CST | this checkpoint commit | Auth redirect, Market Overview consumer fallback copy, Provider Ops endpoint redaction | Focused Vitest, lint, build, check:design, `git diff --check`, `./scripts/release_secret_scan.sh` |
 
 ## Running Notes
 
 - Subagents are being used for read-only product, market/backend, frontend UX,
   auth/journey, admin/ops, and DB/safety scans. Main agent owns all writes,
   integration, validation, commits, and pushes.
-- Performance and QA/release scans are currently handled by the main agent due
-  to thread limit; they can be delegated after explorer slots close if useful.
+- Product, market/backend, auth/journey, admin/ops, DB/safety, performance, and
+  QA/release sidecars have completed read-only scans. Frontend UX was closed
+  before returning a result, so main-agent UI checks use the repository frontend
+  guardrails and focused browser/tests instead.

@@ -65,7 +65,7 @@ describe('AuthGuardOverlay', () => {
     expect(screen.getByRole('button', { name: '返回首页' })).toBeInTheDocument();
     expectNoRawI18nKeys(container);
     fireEvent.click(screen.getByRole('button', { name: '登录或创建账户' }));
-    expect(navigate).toHaveBeenCalledWith('/zh/login');
+    expect(navigate).toHaveBeenCalledWith('/zh/login?redirect=%2Fzh%2Fmarket-overview');
   });
 
   it('keeps optional protected children as a non-interactive blurred backdrop', () => {
@@ -101,7 +101,7 @@ describe('AuthGuardOverlay', () => {
     expect(screen.getByRole('button', { name: 'Return home' })).toBeInTheDocument();
     expectNoRawI18nKeys(container);
     fireEvent.click(screen.getByRole('button', { name: 'Sign in or create account' }));
-    expect(navigate).toHaveBeenCalledWith('/en/login');
+    expect(navigate).toHaveBeenCalledWith('/en/login?redirect=%2Fen%2Fportfolio');
   });
 
   it('moves focus to the primary login CTA when the blocking dialog opens', () => {
@@ -181,6 +181,6 @@ describe('AuthGuardOverlay', () => {
     expect(navigate).toHaveBeenCalledWith('/zh');
 
     fireEvent.click(screen.getByRole('button', { name: '登录或创建账户' }));
-    expect(navigate).toHaveBeenLastCalledWith('/zh/login');
+    expect(navigate).toHaveBeenLastCalledWith('/zh/login?redirect=%2Fzh%2Fportfolio');
   });
 });

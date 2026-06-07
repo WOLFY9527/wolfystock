@@ -25,6 +25,10 @@ const CONSUMER_SOURCE_LABEL_MAP: Record<string, string> = {
   'BINANCE PARTIAL SNAPSHOT': '最近可用快照',
   'RECENT CACHE': '最近可用快照',
   'LOCAL CACHE': '本地最近快照',
+  FALLBACK: '最近可用数据',
+  MOCK: '最近可用数据',
+  '备用数据': '最近可用数据',
+  '最近可用数据': '最近可用数据',
   'OFFICIAL MACRO MIX': '宏观综合数据',
   'NYSE OFFICIAL BREADTH CACHE': '市场宽度统计',
   'POLYGON GROUPED DAILY': '市场宽度日频统计',
@@ -40,6 +44,20 @@ const CONSUMER_SOURCE_LABEL_RULES: Array<[RegExp, string]> = [
   [/Institutional pressure proxy/gi, '机构压力指标'],
   [/Industry breadth proxy/gi, '行业广度指标'],
   [/Rotation Non Scoring Or Taxonomy Only/gi, '轮动仅作分类参考'],
+];
+
+const CONSUMER_TEXT_RULES: Array<[RegExp, string]> = [
+  [/当前真实数据不足/g, '当前关键数据不足'],
+  [/市场温度仅供界面演示/g, '暂不形成方向判断'],
+  [/备用示例数据仅用于保持界面结构/g, '最近可用数据仅保留市场结构观察'],
+  [/备用示例数据，不代表当前行情/g, '已使用最近一次可用数据，不代表当前实时行情'],
+  [/等待真实行情源/g, '等待数据恢复'],
+  [/数据源异常/g, '数据更新中'],
+  [/数据源暂不可用/g, '部分数据暂不可用'],
+  [/数据源刷新失败/g, '数据更新失败'],
+  [/数据源请求超时/g, '数据更新超时'],
+  [/保持界面结构/g, '保持页面可读'],
+  [/界面演示/g, '临时状态展示'],
 ];
 
 function normalizeConsumerSourceKey(value?: string | null): string {
@@ -59,6 +77,9 @@ export function normalizeMarketConsumerText(value?: string | null): string | und
 
   let normalized = trimmed;
   CONSUMER_SOURCE_LABEL_RULES.forEach(([pattern, replacement]) => {
+    normalized = normalized.replace(pattern, replacement);
+  });
+  CONSUMER_TEXT_RULES.forEach(([pattern, replacement]) => {
     normalized = normalized.replace(pattern, replacement);
   });
 
@@ -739,7 +760,7 @@ const DEFAULT_MARKET_TEMPERATURE_SCORE: MarketTemperatureScore = {
   value: 50,
   label: '数据不足',
   trend: 'stable',
-  description: '当前真实数据不足，市场温度仅供界面演示。',
+  description: '当前关键数据不足，暂不形成方向判断。',
 };
 
 function normalizeMarketTemperatureScore(score?: Partial<MarketTemperatureScore>): MarketTemperatureScore {

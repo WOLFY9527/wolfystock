@@ -1107,7 +1107,37 @@ describe('MarketProviderOperationsPage', () => {
     expect(await screen.findByText('诊断默认收起')).toBeInTheDocument();
     expect(screen.queryByTestId('market-provider-detail-endpoint')).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: '查看诊断' })[0]);
-    expect(await screen.findByTestId('market-provider-detail-endpoint')).toHaveClass('break-all');
+    const endpointField = await screen.findByTestId('market-provider-detail-endpoint');
+    expect(endpointField).toHaveTextContent('已脱敏，仅保留产品面诊断引用');
+    expect(endpointField).not.toHaveTextContent('/api/v1/market/cn-indices');
+    expect(endpointField).not.toHaveTextContent('endpoint');
+    expect(endpointField).toHaveClass('break-words');
     expect(screen.getByTestId('market-provider-detail-provider-id')).toHaveClass('break-all');
+  });
+
+  it('keeps provider endpoint values out of visible L3 and L4 diagnostics', async () => {
+    getOperations.mockResolvedValue({
+      ...populatedPayload,
+      items: [
+        {
+          ...populatedPayload.items[0],
+          endpoint: '/api/v1/market/cn-indices?token=secret-token&path=/Users/example/provider',
+        },
+      ],
+    });
+
+    render(<MarketProviderOperationsPage />);
+
+    await screen.findByText('诊断默认收起');
+    fireEvent.click(screen.getAllByRole('button', { name: '查看诊断' })[0]);
+    expect(await screen.findByTestId('market-provider-detail-endpoint')).toHaveTextContent('已脱敏，仅保留产品面诊断引用');
+
+    const diagnosticsDisclosure = screen.getByTestId('market-provider-diagnostics-disclosure');
+    fireEvent.click(within(diagnosticsDisclosure).getByRole('button', { name: '展开 L4 已脱敏细节：限制代码 / 快照摘要 / 追踪标识' }));
+
+    expect(document.body).not.toHaveTextContent('/api/v1/market/cn-indices');
+    expect(document.body).not.toHaveTextContent('secret-token');
+    expect(document.body).not.toHaveTextContent('/Users/example/provider');
+    expect(diagnosticsDisclosure).not.toHaveTextContent('"endpoint"');
   });
 });

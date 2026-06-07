@@ -40,7 +40,10 @@ export const AuthGuardOverlay: React.FC<AuthGuardOverlayProps> = ({ moduleName, 
   const loginButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const routeLocale = parseLocaleFromPathname(location.pathname);
-  const loginPath = routeLocale ? buildLocalizedPath('/login', routeLocale) : '/login';
+  const currentRoute = `${location.pathname}${location.search}${location.hash}`;
+  const loginPath = routeLocale
+    ? buildLocalizedPath(`/login?redirect=${encodeURIComponent(currentRoute)}`, routeLocale)
+    : `/login?redirect=${encodeURIComponent(currentRoute)}`;
   const homePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
   const title = language === 'en' ? `Sign in to continue to ${moduleName}` : `登录后即可进入 ${moduleName}`;
   const body = language === 'en'

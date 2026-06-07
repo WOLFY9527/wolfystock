@@ -1772,8 +1772,10 @@ const ProviderDetailsPanel: React.FC<{ item: MarketProviderOperationItem | null 
             <p data-testid="market-provider-detail-provider-id" className="mt-1 max-w-full break-all font-mono text-[11px] text-white/65">{item.provider}</p>
           </TerminalNestedBlock>
           <TerminalNestedBlock className="px-3 py-2">
-            <p className="text-[10px] uppercase tracking-widest text-white/35">API</p>
-            <p data-testid="market-provider-detail-endpoint" className="mt-1 max-w-full break-all font-mono text-[11px] text-white/65">{item.endpoint}</p>
+            <p className="text-[10px] uppercase tracking-widest text-white/35">接口引用</p>
+            <p data-testid="market-provider-detail-endpoint" className="mt-1 max-w-full break-words text-[11px] text-white/65">
+              已脱敏，仅保留产品面诊断引用
+            </p>
           </TerminalNestedBlock>
           <DrillLink drill={item.adminLogDrillThrough} />
         </TerminalDenseList>
@@ -1919,7 +1921,6 @@ const DiagnosticsPanel: React.FC<{
                 selectedProvider: selectedItem ? {
                   provider: selectedItem.provider,
                   cacheKey: selectedItem.cacheKey,
-                  endpoint: selectedItem.endpoint,
                   status: normalizeStatus(selectedItem.status),
                   latestLogEventId: selectedItem.adminLogDrillThrough?.eventId || null,
                 } : null,

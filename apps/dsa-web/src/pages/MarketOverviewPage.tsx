@@ -144,58 +144,58 @@ const AUTO_REVALIDATE_PANEL_KEYS: PanelKey[] = [
 
 const FALLBACK_TEMPERATURE: MarketTemperatureResponse = {
   source: 'fallback',
-  sourceLabel: '备用数据',
+  sourceLabel: '最近可用数据',
   updatedAt: new Date(0).toISOString(),
   freshness: 'fallback',
   isFallback: true,
-  warning: '当前真实数据不足，市场温度仅供界面演示',
+  warning: '当前关键数据不足，暂不形成方向判断。',
   confidence: 0,
   reliableInputCount: 0,
   fallbackInputCount: 0,
   excludedInputCount: 0,
   isReliable: false,
   scores: {
-    overall: { value: 50, label: '数据不足', trend: 'stable', description: '当前真实数据不足，市场温度仅供界面演示。' },
-    usRiskAppetite: { value: 50, label: '数据不足', trend: 'stable', description: '当前真实数据不足，市场温度仅供界面演示。' },
-    cnMoneyEffect: { value: 50, label: '数据不足', trend: 'stable', description: '当前真实数据不足，市场温度仅供界面演示。' },
-    macroPressure: { value: 50, label: '数据不足', trend: 'stable', description: '当前真实数据不足，市场温度仅供界面演示。' },
-    liquidity: { value: 50, label: '数据不足', trend: 'stable', description: '当前真实数据不足，市场温度仅供界面演示。' },
+    overall: { value: 50, label: '数据不足', trend: 'stable', description: '当前关键数据不足，暂不形成方向判断。' },
+    usRiskAppetite: { value: 50, label: '数据不足', trend: 'stable', description: '当前关键数据不足，暂不形成方向判断。' },
+    cnMoneyEffect: { value: 50, label: '数据不足', trend: 'stable', description: '当前关键数据不足，暂不形成方向判断。' },
+    macroPressure: { value: 50, label: '数据不足', trend: 'stable', description: '当前关键数据不足，暂不形成方向判断。' },
+    liquidity: { value: 50, label: '数据不足', trend: 'stable', description: '当前关键数据不足，暂不形成方向判断。' },
   },
 };
 
 const FALLBACK_BRIEFING: MarketBriefingResponse = {
   source: 'fallback',
-  sourceLabel: '备用数据',
+  sourceLabel: '最近可用数据',
   updatedAt: new Date(0).toISOString(),
   freshness: 'fallback',
   isFallback: true,
-  warning: '当前真实数据不足，暂不生成强市场判断。',
+  warning: '当前关键数据不足，暂不生成强市场判断。',
   confidence: 0,
   reliableInputCount: 0,
   fallbackInputCount: 0,
   excludedInputCount: 0,
   isReliable: false,
   items: [
-    { title: '当前真实数据不足', message: '当前真实数据不足，暂不生成强市场判断。', severity: 'warning', category: 'risk', confidence: 0 },
-    { title: '备用数据已降级', message: '备用示例数据仅用于保持界面结构，不参与市场温度评分。', severity: 'neutral', category: 'risk', confidence: 0 },
-    { title: '等待真实行情源', message: '接入足够真实输入后，再恢复风险偏好、赚钱效应和流动性判断。', severity: 'neutral', category: 'risk', confidence: 0 },
+    { title: '当前关键数据不足', message: '当前关键数据不足，暂不生成强市场判断。', severity: 'warning', category: 'risk', confidence: 0 },
+    { title: '评分已暂停', message: '最近可用数据仅保留市场结构观察，不参与市场温度评分。', severity: 'neutral', category: 'risk', confidence: 0 },
+    { title: '等待数据恢复', message: '关键输入补齐后，再恢复风险偏好、赚钱效应和流动性判断。', severity: 'neutral', category: 'risk', confidence: 0 },
   ],
 };
 
 const FALLBACK_FUTURES: MarketFuturesResponse = {
   source: 'fallback',
-  sourceLabel: '备用数据',
+  sourceLabel: '最近可用数据',
   updatedAt: new Date(0).toISOString(),
   freshness: 'fallback',
   isFallback: true,
-  warning: '备用示例数据，不代表当前行情',
+  warning: '已使用最近一次可用数据，不代表当前实时行情。',
   items: [
-    { name: '纳指期货', symbol: 'NQ', value: 18420.5, change: 65.2, changePercent: 0.35, market: 'US', session: 'premarket', sparkline: [18320, 18380, 18420.5], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '备用示例数据，不代表当前行情' },
-    { name: '标普500期货', symbol: 'ES', value: 5238.25, change: 14.5, changePercent: 0.28, market: 'US', session: 'premarket', sparkline: [5208, 5218, 5238.25], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '备用示例数据，不代表当前行情' },
-    { name: '道指期货', symbol: 'YM', value: 38980, change: 72, changePercent: 0.19, market: 'US', session: 'premarket', sparkline: [38820, 38930, 38980], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '备用示例数据，不代表当前行情' },
-    { name: '罗素2000期货', symbol: 'RTY', value: 2094.6, change: -3.8, changePercent: -0.18, market: 'US', session: 'premarket', sparkline: [2108, 2098, 2094.6], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '备用示例数据，不代表当前行情' },
-    { name: '富时A50期货', symbol: 'CN00Y', value: 12580, change: 38, changePercent: 0.3, market: 'CN', session: 'day', sparkline: [12420, 12542, 12580], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '备用示例数据，不代表当前行情' },
-    { name: '恒指期货', symbol: 'HSI_F', value: 17712, change: 128, changePercent: 0.73, market: 'HK', session: 'day', sparkline: [17490, 17640, 17712], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '备用示例数据，不代表当前行情' },
+    { name: '纳指期货', symbol: 'NQ', value: 18420.5, change: 65.2, changePercent: 0.35, market: 'US', session: 'premarket', sparkline: [18320, 18380, 18420.5], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '已使用最近一次可用数据，不代表当前实时行情。' },
+    { name: '标普500期货', symbol: 'ES', value: 5238.25, change: 14.5, changePercent: 0.28, market: 'US', session: 'premarket', sparkline: [5208, 5218, 5238.25], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '已使用最近一次可用数据，不代表当前实时行情。' },
+    { name: '道指期货', symbol: 'YM', value: 38980, change: 72, changePercent: 0.19, market: 'US', session: 'premarket', sparkline: [38820, 38930, 38980], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '已使用最近一次可用数据，不代表当前实时行情。' },
+    { name: '罗素2000期货', symbol: 'RTY', value: 2094.6, change: -3.8, changePercent: -0.18, market: 'US', session: 'premarket', sparkline: [2108, 2098, 2094.6], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '已使用最近一次可用数据，不代表当前实时行情。' },
+    { name: '富时A50期货', symbol: 'CN00Y', value: 12580, change: 38, changePercent: 0.3, market: 'CN', session: 'day', sparkline: [12420, 12542, 12580], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '已使用最近一次可用数据，不代表当前实时行情。' },
+    { name: '恒指期货', symbol: 'HSI_F', value: 17712, change: 128, changePercent: 0.73, market: 'HK', session: 'day', sparkline: [17490, 17640, 17712], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '已使用最近一次可用数据，不代表当前实时行情。' },
   ],
 };
 
@@ -204,7 +204,7 @@ const FALLBACK_CRYPTO_PANEL: MarketOverviewPanel = {
   lastRefreshAt: new Date(0).toISOString(),
   status: 'failure',
   source: 'fallback',
-  sourceLabel: '备用数据',
+  sourceLabel: '最近可用数据',
   updatedAt: new Date(0).toISOString(),
   asOf: new Date(0).toISOString(),
   freshness: 'fallback',
@@ -212,21 +212,21 @@ const FALLBACK_CRYPTO_PANEL: MarketOverviewPanel = {
   isRefreshing: true,
   warning: '正在刷新，稍后自动更新',
   items: [
-    { symbol: 'BTC', label: 'Bitcoin', value: 75800, unit: 'USD', changePct: -0.2, riskDirection: 'increasing', trend: [75220, 75640, 76110, 75800], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '正在刷新，稍后自动更新' },
-    { symbol: 'ETH', label: 'Ethereum', value: 3120, unit: 'USD', changePct: -0.4, riskDirection: 'increasing', trend: [3090, 3148, 3162, 3120], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '正在刷新，稍后自动更新' },
-    { symbol: 'BNB', label: 'BNB', value: 590, unit: 'USD', changePct: 0.3, riskDirection: 'decreasing', trend: [584, 588, 586, 590], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback', isFallback: true, warning: '正在刷新，稍后自动更新' },
+    { symbol: 'BTC', label: 'Bitcoin', value: 75800, unit: 'USD', changePct: -0.2, riskDirection: 'increasing', trend: [75220, 75640, 76110, 75800], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '正在刷新，稍后自动更新' },
+    { symbol: 'ETH', label: 'Ethereum', value: 3120, unit: 'USD', changePct: -0.4, riskDirection: 'increasing', trend: [3090, 3148, 3162, 3120], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '正在刷新，稍后自动更新' },
+    { symbol: 'BNB', label: 'BNB', value: 590, unit: 'USD', changePct: 0.3, riskDirection: 'decreasing', trend: [584, 588, 586, 590], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback', isFallback: true, warning: '正在刷新，稍后自动更新' },
   ],
 };
 
 const FALLBACK_CN_SHORT_SENTIMENT: CnShortSentimentResponse = {
   source: 'fallback',
-  sourceLabel: '备用数据',
+  sourceLabel: '最近可用数据',
   updatedAt: new Date(0).toISOString(),
   freshness: 'fallback',
   isFallback: true,
-  warning: '备用示例数据，不代表当前行情',
+  warning: '已使用最近一次可用数据，不代表当前实时行情。',
   sentimentScore: 50,
-  summary: '暂未接入真实数据源，当前为备用示例数据。',
+  summary: '当前关键数据不足，短线情绪仅保留结构观察。',
   metrics: {
     limitUpCount: 68,
     limitDownCount: 18,
@@ -378,12 +378,12 @@ function describePanelError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error || '');
   const lower = message.toLowerCase();
   if (lower.includes('timeout') || lower.includes('timed out') || message.includes('超时')) {
-    return '数据源请求超时';
+    return '数据更新超时';
   }
   if (lower.includes('provider_down') || lower.includes('provider_error') || lower.includes('unavailable') || message.includes('不可用')) {
-    return '数据源暂不可用';
+    return '部分数据暂不可用';
   }
-  return '数据源刷新失败';
+  return '数据更新失败';
 }
 
 function fallbackPanel(panelName: string, error: unknown): MarketOverviewPanel {
@@ -393,15 +393,15 @@ function fallbackPanel(panelName: string, error: unknown): MarketOverviewPanel {
     panelName,
     lastRefreshAt: updatedAt,
     status: 'failure',
-    errorMessage: '更新失败：数据源刷新失败',
+    errorMessage: '更新失败：数据更新失败',
     source: 'error',
-    sourceLabel: '数据源异常',
+    sourceLabel: '数据更新中',
     updatedAt,
     asOf: updatedAt,
     freshness: 'error',
     isFallback: true,
     isStale: true,
-    warning: `数据源暂不可用，请稍后自动刷新。${warning}`,
+    warning: `部分数据暂不可用，请稍后自动刷新。${warning}`,
     items: [],
   };
 }
@@ -412,27 +412,27 @@ function fallbackPanelValue(panelKey: PanelKey, error: unknown): PanelState[Pane
       return {
         ...FALLBACK_TEMPERATURE,
         updatedAt: new Date().toISOString(),
-        warning: `数据源暂不可用，请稍后自动刷新。${describePanelError(error)}`,
+        warning: `部分数据暂不可用，请稍后自动刷新。${describePanelError(error)}`,
       } as PanelState[PanelKey];
     case 'briefing':
       return {
         ...FALLBACK_BRIEFING,
         updatedAt: new Date().toISOString(),
-        warning: `数据源暂不可用，请稍后自动刷新。${describePanelError(error)}`,
+        warning: `部分数据暂不可用，请稍后自动刷新。${describePanelError(error)}`,
       } as PanelState[PanelKey];
     case 'futures':
       return {
         ...FALLBACK_FUTURES,
         updatedAt: new Date().toISOString(),
         isRefreshing: true,
-        warning: `数据源暂不可用，请稍后自动刷新。${describePanelError(error)}`,
+        warning: `部分数据暂不可用，请稍后自动刷新。${describePanelError(error)}`,
       } as PanelState[PanelKey];
     case 'cnShortSentiment':
       return {
         ...FALLBACK_CN_SHORT_SENTIMENT,
         updatedAt: new Date().toISOString(),
         isRefreshing: true,
-        warning: `数据源暂不可用，请稍后自动刷新。${describePanelError(error)}`,
+        warning: `部分数据暂不可用，请稍后自动刷新。${describePanelError(error)}`,
       } as PanelState[PanelKey];
     case 'indices':
       return fallbackPanel('IndexTrendsCard', error) as PanelState[PanelKey];

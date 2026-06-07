@@ -1208,12 +1208,12 @@ const briefingPayload = () => ({
 
 const unreliableTemperaturePayload = () => ({
   source: 'fallback',
-  sourceLabel: '备用数据',
+  sourceLabel: '最近可用数据',
   updatedAt: '2026-04-29T10:00:00',
   asOf: '2026-04-29T10:00:00',
   freshness: 'fallback' as const,
   isFallback: true,
-  warning: '当前真实数据不足，市场温度仅供界面演示',
+  warning: '当前关键数据不足，暂不形成方向判断。',
   confidence: 0,
   reliableInputCount: 0,
   requiredReliableInputCount: 5,
@@ -1379,11 +1379,11 @@ const unreliableTemperaturePayload = () => ({
     notInvestmentAdvice: true,
   },
   scores: {
-    overall: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前真实数据不足，市场温度仅供界面演示。' },
-    usRiskAppetite: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前真实数据不足，市场温度仅供界面演示。' },
-    cnMoneyEffect: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前真实数据不足，市场温度仅供界面演示。' },
-    macroPressure: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前真实数据不足，市场温度仅供界面演示。' },
-    liquidity: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前真实数据不足，市场温度仅供界面演示。' },
+    overall: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前关键数据不足，暂不形成方向判断。' },
+    usRiskAppetite: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前关键数据不足，暂不形成方向判断。' },
+    cnMoneyEffect: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前关键数据不足，暂不形成方向判断。' },
+    macroPressure: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前关键数据不足，暂不形成方向判断。' },
+    liquidity: { value: 50, label: '数据不足', trend: 'stable' as const, description: '当前关键数据不足，暂不形成方向判断。' },
   },
 });
 
@@ -1404,45 +1404,45 @@ const limitedRealTemperaturePayload = () => ({
 
 const unreliableBriefingPayload = () => ({
   source: 'fallback',
-  sourceLabel: '备用数据',
+  sourceLabel: '最近可用数据',
   updatedAt: '2026-04-29T10:00:00',
   asOf: '2026-04-29T10:00:00',
   freshness: 'fallback' as const,
   isFallback: true,
-  warning: '当前真实数据不足，暂不生成强市场判断。',
+  warning: '当前关键数据不足，暂不生成强市场判断。',
   confidence: 0,
   reliableInputCount: 0,
   fallbackInputCount: 18,
   excludedInputCount: 18,
   isReliable: false,
   items: [
-    { title: '当前真实数据不足', message: '当前真实数据不足，暂不生成强市场判断。', severity: 'warning' as const, category: 'risk', confidence: 0 },
-    { title: '备用数据已降级', message: '备用示例数据仅用于保持界面结构，不参与市场温度评分。', severity: 'neutral' as const, category: 'risk', confidence: 0 },
+    { title: '当前关键数据不足', message: '当前关键数据不足，暂不生成强市场判断。', severity: 'warning' as const, category: 'risk', confidence: 0 },
+    { title: '评分已暂停', message: '最近可用数据仅保留市场结构观察，不参与市场温度评分。', severity: 'neutral' as const, category: 'risk', confidence: 0 },
   ],
 });
 
 const futuresPayload = () => ({
   source: 'fallback',
-  sourceLabel: '备用数据',
+  sourceLabel: '最近可用数据',
   updatedAt: '2026-04-29T10:00:00',
   asOf: '2026-04-29T10:00:00',
   freshness: 'fallback' as const,
   isFallback: true,
-  warning: '备用示例数据，不代表当前行情',
+  warning: '已使用最近一次可用数据，不代表当前实时行情。',
   items: [
-    { name: '纳指期货', symbol: 'NQ', value: 18420.5, change: 65.2, changePercent: 0.35, market: 'US', session: 'premarket', sparkline: [18320, 18380, 18420.5], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback' as const, isFallback: true, warning: '备用示例数据，不代表当前行情' },
-    { name: '富时A50期货', symbol: 'CN00Y', value: 12580, change: 38, changePercent: 0.3, market: 'CN', session: 'day', sparkline: [12420, 12542, 12580], source: 'fallback', sourceLabel: '备用数据', freshness: 'fallback' as const, isFallback: true, warning: '备用示例数据，不代表当前行情' },
+    { name: '纳指期货', symbol: 'NQ', value: 18420.5, change: 65.2, changePercent: 0.35, market: 'US', session: 'premarket', sparkline: [18320, 18380, 18420.5], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback' as const, isFallback: true, warning: '已使用最近一次可用数据，不代表当前实时行情。' },
+    { name: '富时A50期货', symbol: 'CN00Y', value: 12580, change: 38, changePercent: 0.3, market: 'CN', session: 'day', sparkline: [12420, 12542, 12580], source: 'fallback', sourceLabel: '最近可用数据', freshness: 'fallback' as const, isFallback: true, warning: '已使用最近一次可用数据，不代表当前实时行情。' },
   ],
 });
 
 const cnShortSentimentPayload = () => ({
   source: 'fallback',
-  sourceLabel: '备用数据',
+  sourceLabel: '最近可用数据',
   updatedAt: '2026-04-29T10:00:00',
   asOf: '2026-04-29T10:00:00',
   freshness: 'fallback' as const,
   isFallback: true,
-  warning: '备用示例数据，不代表当前行情',
+  warning: '已使用最近一次可用数据，不代表当前实时行情。',
   sentimentScore: 64,
   summary: '涨停家数占优，炸板率可控，短线情绪偏暖。',
   metrics: {
@@ -2190,7 +2190,7 @@ describe('MarketOverviewPage', () => {
     expect(within(details).getByTestId('market-regime-synthesis-header')).toBeInTheDocument();
     expect(within(details).getByTestId('market-regime-synthesis-title')).toHaveTextContent(/风险偏好修复 \/ 流动性扩张|综合结论待返回/);
     expect(within(details).getByTestId('market-temperature-strip')).toBeInTheDocument();
-    expect(within(details).getByTestId('market-briefing-card')).toHaveTextContent(/主要指数走强，VIX 回落|当前真实数据不足/);
+    expect(within(details).getByTestId('market-briefing-card')).toHaveTextContent(/主要指数走强，VIX 回落|当前关键数据不足/);
 
     const shell = screen.getByTestId('market-overview-shell');
     const workbench = screen.getByTestId('market-overview-workbench');
@@ -2864,7 +2864,7 @@ describe('MarketOverviewPage', () => {
     expect(within(details).getByTestId('market-regime-synthesis-data-gaps')).toHaveTextContent(/A股宽度/);
     expect(screen.getByTestId('market-overview-rail-action-hint')).toBeInTheDocument();
     expect(screen.getByTestId('market-overview-rail-signal-watch')).toHaveTextContent(/A股宽度|US10Y|VIX|DXY/);
-    expect(within(details).getByTestId('market-briefing-warning')).toHaveTextContent('当前真实数据不足，暂不生成强市场判断');
+    expect(within(details).getByTestId('market-briefing-warning')).toHaveTextContent('当前关键数据不足，暂不生成强市场判断');
     expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/暂不形成方向结论|等待数据完成后再判断/);
   });
 
@@ -2954,6 +2954,7 @@ describe('MarketOverviewPage', () => {
     expect(visibleText).not.toMatch(
       /sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|reasonCodes?|reasonFamilies|routeRejectedReasonCodes|providerHealth|provider_runtime|sourceTier|trustLevel|debugRef|schemaVersion|MarketCache|runtime|internal|fallback_static|synthetic_fixture|official_public|authorized_licensed_feed|public_proxy|unofficial_public/i,
     );
+    expect(visibleText).not.toMatch(/仅供界面演示|备用示例|保持界面结构|等待真实行情源|数据源异常/);
   });
 
   it('reveals technical diagnostics only in admin mode', async () => {
