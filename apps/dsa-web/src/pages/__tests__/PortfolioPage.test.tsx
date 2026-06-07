@@ -840,8 +840,8 @@ describe('PortfolioPage FX refresh', () => {
     expect(within(commandStrip).getByRole('button', { name: '导入记录' })).toBeInTheDocument();
     expect(within(commandStrip).getByRole('button', { name: '同步数据' })).toBeInTheDocument();
     const holdings = screen.getByTestId('portfolio-current-holdings-panel');
-    expect(within(holdings).getByText('AAPL')).toBeInTheDocument();
-    expect(within(holdings).getByText('6.7%')).toBeInTheDocument();
+    expect(within(holdings).getAllByText('AAPL').length).toBeGreaterThan(0);
+    expect(within(holdings).getAllByText('6.7%').length).toBeGreaterThan(0);
     const exposure = screen.getByTestId('portfolio-exposure-card');
     expect(within(exposure).getByRole('button', { name: '账户' })).toBeInTheDocument();
     expect(within(exposure).getByRole('button', { name: '币种' })).toBeInTheDocument();
@@ -2451,6 +2451,31 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByLabelText(p('actionType'))).toBeInTheDocument();
     expect(screen.getByLabelText(p('stockCode'))).toBeInTheDocument();
     expect(screen.getByLabelText(p('note'))).toBeInTheDocument();
+  });
+
+  it('uses mobile holding cards at 390px while keeping the desktop holdings table from md up', async () => {
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true, fxStale: false }));
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const primaryLane = screen.getByTestId('portfolio-primary-lane');
+    const holdingsPanel = screen.getByTestId('portfolio-current-holdings-panel');
+    const mobileList = within(holdingsPanel).getByTestId('portfolio-holdings-mobile-list');
+    const mobileCard = within(mobileList).getByTestId('portfolio-holding-mobile-card-AAPL');
+    const desktopTable = within(holdingsPanel).getByRole('table');
+    const desktopShell = desktopTable.closest('[data-terminal-primitive="dense-table"]');
+
+    expect(primaryLane).toHaveClass('min-w-0');
+    expect(mobileList).toHaveClass('md:hidden');
+    expect(mobileCard).toHaveTextContent('AAPL');
+    expect(mobileCard).toHaveTextContent('市值');
+    expect(mobileCard).toHaveTextContent('手工记账');
+    expect(within(mobileCard).getByTestId('portfolio-holding-mobile-trust-AAPL')).toHaveTextContent('价格快照');
+    expect(desktopTable).toHaveClass('min-w-[760px]');
+    expect(desktopShell).toHaveClass('hidden', 'md:block');
   });
 
   it('renders the full-width order history panel and shows event filters', async () => {

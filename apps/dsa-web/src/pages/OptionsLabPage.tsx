@@ -1032,7 +1032,7 @@ const StrategyPayoffVisual: React.FC<{
   return (
     <div data-testid="options-lab-payoff-visual" className="grid gap-3">
       <DataWorkbenchFrame>
-        <div className="overflow-x-auto overscroll-x-contain">
+        <div className="relative overflow-x-auto overscroll-x-contain">
           <div className="min-w-[20rem] p-3 sm:min-w-[26rem] sm:p-4">
             <svg
               viewBox={`0 0 ${width} ${height}`}
@@ -1094,6 +1094,7 @@ const StrategyPayoffVisual: React.FC<{
               })}
             </svg>
           </div>
+          <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[var(--wolfy-surface-console)] to-transparent sm:hidden" />
         </div>
       </DataWorkbenchFrame>
       <div className="grid gap-2 sm:grid-cols-3">
@@ -1146,7 +1147,7 @@ const IvSmileVisual: React.FC<{ chain: OptionsChainResponse | null }> = ({ chain
   return (
     <div data-testid="options-lab-iv-visual" className="grid gap-3">
       <DataWorkbenchFrame>
-        <div className="overflow-x-auto overscroll-x-contain">
+        <div className="relative overflow-x-auto overscroll-x-contain">
           <div className="min-w-[20rem] p-3 sm:min-w-[26rem] sm:p-4">
             <svg
               viewBox={`0 0 ${width} ${height}`}
@@ -1193,6 +1194,7 @@ const IvSmileVisual: React.FC<{ chain: OptionsChainResponse | null }> = ({ chain
               })}
             </svg>
           </div>
+          <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[var(--wolfy-surface-console)] to-transparent sm:hidden" />
         </div>
       </DataWorkbenchFrame>
       <div className="grid gap-2 sm:grid-cols-3">
@@ -1586,7 +1588,7 @@ const ChainMetric: React.FC<{ label: string; value: string; className?: string }
     )}
   >
     <p className={labelClass}>{label}</p>
-    <p className="mt-1 break-words font-mono text-xs text-[color:var(--wolfy-text-primary)]">{value}</p>
+    <p className="mt-1 break-words font-mono text-sm text-[color:var(--wolfy-text-primary)]">{value}</p>
   </div>
 );
 
@@ -1616,12 +1618,12 @@ const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId:
                 <article
                   key={contract.contractSymbol}
                   data-testid={`${testId}-mobile-card-${contract.contractSymbol}`}
-                  className="min-w-0 rounded-md border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-3 text-xs text-[color:var(--wolfy-text-secondary)]"
+                  className="min-w-0 rounded-md border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] p-3 text-sm text-[color:var(--wolfy-text-secondary)]"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className={labelClass}>合约</p>
-                      <p className="mt-1 break-all font-mono text-xs text-[color:var(--wolfy-text-primary)]">{contract.contractSymbol}</p>
+                      <p className="mt-1 break-all font-mono text-sm text-[color:var(--wolfy-text-primary)]">{contract.contractSymbol}</p>
                     </div>
                     <div className="shrink-0 text-right">
                       <p className={labelClass}>流动性</p>

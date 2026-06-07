@@ -2482,7 +2482,61 @@ const AdminLogsPage: React.FC = () => {
                   : t('adminLogs.noSessionsBody')}
               </TerminalEmptyState>
             ) : (
-              <TerminalDenseList data-testid="business-events-table-shell" className="-mx-4 mt-3 gap-0 overflow-x-auto overflow-y-hidden overscroll-x-contain px-4 no-scrollbar rounded-xl border border-white/6 bg-black/15 sm:mx-0 sm:px-0">
+              <>
+                <div data-testid="business-events-mobile-list" className="mt-3 grid gap-2 md:hidden">
+                  {businessEvents.map((item) => {
+                    const status = normalizeStatus(item.status);
+                    const actorRole = actorBadgeLabel(item.actorType);
+                    const actorType = actorBadgeDisplay(item.actorType, locale);
+                    const actorSecondary = text(item.actorLabel || item.userId || item.requestId, locale === 'zh' ? '未记录' : 'Not recorded');
+                    const contextPrimary = operatorSafeText(item.contextLabel || item.symbol || item.subject || item.event, locale, locale === 'zh' ? '未记录' : 'Not recorded');
+                    const contextSecondary = [item.market, item.route || item.endpoint, item.component || item.feature]
+                      .map((value) => String(value || '').trim())
+                      .filter(Boolean)
+                      .join(' · ');
+                    const sourcePrimary = operatorSafeText(item.provider || item.source || item.category, locale, locale === 'zh' ? '未记录' : 'Not recorded');
+                    const sourceSecondary = [item.source && item.source !== item.provider ? item.source : null, item.category, item.type]
+                      .map((value) => String(value || '').trim())
+                      .filter(Boolean)
+                      .filter((value, index, values) => values.indexOf(value) === index)
+                      .join(' · ');
+                    const severity = businessEventSeverity(item);
+                    const reason = friendlyRawStatusLabel(item.reason || (isFailedStatus(item.status) ? 'unknown' : '--'), locale);
+                    const errorSummary = friendlyRawStatusLabel(item.errorSummary || item.rootCauseSummary, locale);
+                    const stepLabel = stepStatsLabel(item, locale);
+                    return (
+                      <article
+                        key={`${item.id}-mobile`}
+                        data-testid="business-event-mobile-card"
+                        className="min-w-0 rounded-xl border border-white/6 bg-black/15 p-3"
+                      >
+                        <div className="flex min-w-0 items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-foreground" title={operatorSafeText(item.event || item.symbol, locale)}>{operatorSafeText(item.event || item.symbol, locale)}</p>
+                            <p className="mt-1 text-xs leading-5 text-muted-text" title={operatorSafeText(item.type, locale)}>{operatorSafeText(item.eventType || item.type, locale)}</p>
+                          </div>
+                          <p className="shrink-0 font-mono text-xs text-secondary-text" title={formatDateTime(item.startedAt, locale)}>{formatDateTime(item.startedAt, locale)}</p>
+                        </div>
+                        <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
+                          <StatusChip status={status} locale={locale} className="w-fit" />
+                          <SeverityChip severity={severity} locale={locale} className="w-fit" />
+                          <TerminalChip variant={actorRole === 'admin' ? 'info' : actorRole === 'system' ? 'success' : actorRole === 'guest' || actorRole === 'anonymous' ? 'caution' : 'neutral'} className="w-fit font-semibold">{actorType}</TerminalChip>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-sm leading-6 text-secondary-text">
+                          <p className="font-medium text-foreground" title={errorSummary || reason || stepLabel}>{errorSummary || reason || stepLabel}</p>
+                          <p className="text-xs leading-5 text-muted-text" title={stepLabel}>{stepLabel}</p>
+                          <p className="text-xs leading-5 text-muted-text" title={contextSecondary || contextPrimary}>{contextPrimary}{contextSecondary ? ` · ${contextSecondary}` : ''}</p>
+                          <p className="text-xs leading-5 text-muted-text" title={sourceSecondary || sourcePrimary}>{sourcePrimary}{sourceSecondary ? ` · ${operatorSafeText(sourceSecondary, locale)}` : ''}</p>
+                          <p className="text-xs leading-5 text-muted-text" title={actorSecondary}>{actorSecondary}</p>
+                        </div>
+                        <TerminalButton type="button" variant="compact" className="mt-3 w-fit px-3 py-1.5 text-xs" onClick={() => void openBusinessDetail(item)}>
+                          {t('adminLogs.viewDetails')}
+                        </TerminalButton>
+                      </article>
+                    );
+                  })}
+                </div>
+                <TerminalDenseList data-testid="business-events-table-shell" className="-mx-4 mt-3 hidden gap-0 overflow-x-auto overflow-y-hidden overscroll-x-contain px-4 no-scrollbar rounded-xl border border-white/6 bg-black/15 sm:mx-0 sm:px-0 md:flex">
                 <div data-testid="business-events-table-inner" className="min-w-[44rem]">
                   <div className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
                     <div>{locale === 'zh' ? '时间' : 'Time'}</div>
@@ -2563,15 +2617,16 @@ const AdminLogsPage: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              </TerminalDenseList>
+                </TerminalDenseList>
+              </>
             )
           ) : filteredSessions.length === 0 ? (
             <TerminalEmptyState className="mt-3 min-h-[88px]" title={t('adminLogs.noSessionsTitle')}>
               {t('adminLogs.noSessionsBody')}
             </TerminalEmptyState>
           ) : (
-            <TerminalDenseTable data-testid="raw-logs-table-shell" className="-mx-4 mt-3 overflow-x-auto overscroll-x-contain px-4 border-white/6 bg-black/15 sm:mx-0 sm:px-0">
-              <div className="min-w-[880px]">
+            <TerminalDenseTable data-testid="raw-logs-table-shell" className="-mx-4 mt-3 relative overflow-x-auto overscroll-x-contain px-4 border-white/6 bg-black/15 sm:mx-0 sm:px-0">
+              <div data-testid="raw-logs-table-inner" className="min-w-[880px]">
                 <div className="grid grid-cols-[9rem_5.5rem_7rem_minmax(10rem,1fr)_minmax(13rem,1.35fr)_minmax(9rem,1fr)_6rem] gap-3 border-b border-white/6 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/38">
                   <div>{locale === 'zh' ? '时间' : 'Time'}</div>
                   <div>{locale === 'zh' ? '级别' : 'level'}</div>
@@ -2610,6 +2665,7 @@ const AdminLogsPage: React.FC = () => {
                   })}
                 </div>
               </div>
+              <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-10 rounded-r-lg bg-gradient-to-l from-black/70 to-transparent md:hidden" />
             </TerminalDenseTable>
           )}
         </TerminalPanel>

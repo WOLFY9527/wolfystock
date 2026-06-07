@@ -1728,6 +1728,9 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('user-scanner-workspace')).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(screen.getByTestId('scanner-page-heading')).toHaveAttribute('data-terminal-primitive', 'dense-page-header');
     expect(screen.getByTestId('scanner-status-strip')).toHaveAttribute('data-terminal-primitive', 'dense-status-strip');
+    expect(screen.getByTestId('scanner-status-strip-scroll-frame')).toHaveClass('relative');
+    expect(screen.getByTestId('scanner-status-strip-scroll-frame')).toContainElement(screen.getByTestId('scanner-status-strip'));
+    expect(screen.getByTestId('scanner-status-strip-scroll-frame').querySelector('span[aria-hidden="true"]')).toHaveClass('bg-gradient-to-l');
     expect(screen.getByTestId('scanner-launch-bar')).toHaveAttribute('data-terminal-primitive', 'dense-table-shell');
     expect(screen.getByTestId('scanner-command-bar')).toHaveAttribute('data-terminal-primitive', 'dense-command-bar');
     expect(screen.getByTestId('scanner-launch-bar')).toHaveClass('rounded-xl', 'border', 'p-2');

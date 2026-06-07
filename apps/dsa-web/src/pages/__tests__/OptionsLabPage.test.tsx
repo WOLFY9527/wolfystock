@@ -692,6 +692,10 @@ describe('OptionsLabPage', () => {
       expect(within(section).getByTestId('options-lab-payoff-visual')).toBeInTheDocument();
       expect(within(section).getByTestId('options-lab-iv-visual')).toBeInTheDocument();
     });
+    const payoffVisual = within(section).getByTestId('options-lab-payoff-visual');
+    const ivVisual = within(section).getByTestId('options-lab-iv-visual');
+    expect(payoffVisual.querySelector('span[aria-hidden="true"]')).toHaveClass('bg-gradient-to-l');
+    expect(ivVisual.querySelector('span[aria-hidden="true"]')).toHaveClass('bg-gradient-to-l');
     expect(within(section).getByText('专业结构')).toBeInTheDocument();
     expect(within(section).getAllByText('牛市看涨价差').length).toBeGreaterThan(0);
     expect(within(section).getByText('Call / Put 点位')).toBeInTheDocument();
@@ -2244,11 +2248,17 @@ describe('OptionsLabPage', () => {
     const callsMobileList = within(callsTable).getByTestId('options-lab-calls-table-mobile-list');
     const putsMobileList = within(putsTable).getByTestId('options-lab-puts-table-mobile-list');
 
+    expect(callsDesktopTable).toHaveClass('min-w-[720px]');
+    expect(putsDesktopTable).toHaveClass('min-w-[720px]');
+    expect(callsMobileList.parentElement).toHaveClass('md:hidden');
+    expect(putsMobileList.parentElement).toHaveClass('md:hidden');
     expect(within(callsDesktopTable).getByText('TEM260619C00055000')).toBeInTheDocument();
     expect(within(putsDesktopTable).getByText('TEM260619P00050000')).toBeInTheDocument();
 
     const callCard = within(callsMobileList).getByTestId('options-lab-calls-table-mobile-card-TEM260619C00055000');
     const putCard = within(putsMobileList).getByTestId('options-lab-puts-table-mobile-card-TEM260619P00050000');
+    expect(callCard).toHaveClass('text-sm');
+    expect(putCard).toHaveClass('text-sm');
     expect(callCard).toHaveTextContent('TEM260619C00055000');
     expect(callCard).toHaveTextContent('行权价');
     expect(callCard).toHaveTextContent('$55.00');

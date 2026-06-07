@@ -56,6 +56,13 @@ function expectZhL0OverviewStrip(testId: string) {
   expect(within(overviewStrip).getByText('最近更新')).toBeInTheDocument();
 }
 
+async function findBusinessEventRowByText(text: string | RegExp) {
+  const rows = await screen.findAllByTestId('business-event-row');
+  const row = rows.find((item) => within(item).queryAllByText(text).length > 0);
+  expect(row).toBeTruthy();
+  return row as HTMLElement;
+}
+
 const businessEvents = [
   {
     id: 'analysis-tsla',
@@ -704,8 +711,10 @@ describe('AdminLogsPage', () => {
     expect(screen.queryByText('Trace')).not.toBeInTheDocument();
     expect(screen.getByText('状态 / 严重度')).toBeInTheDocument();
     expect(screen.queryByText('耗时')).not.toBeInTheDocument();
-    expect(screen.getByText('alice')).toBeInTheDocument();
-    expect(screen.getByText('newsapi')).toBeInTheDocument();
+    expect(screen.getByTestId('business-events-mobile-list')).toHaveClass('md:hidden');
+    expect(screen.getAllByTestId('business-event-mobile-card').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('alice').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('newsapi').length).toBeGreaterThan(0);
     const fallbackRowLabel = (await screen.findAllByText('备用链路激活')).find((item) => item.closest('[data-testid="business-event-row"]'));
     const fallbackRow = fallbackRowLabel.closest('[data-testid="business-event-row"]');
     expect(fallbackRow).not.toBeNull();
@@ -713,19 +722,21 @@ describe('AdminLogsPage', () => {
     expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill')).toHaveClass('text-amber-100');
     expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill')).not.toHaveClass('text-rose-100');
     expect(screen.getAllByText('MarketSentimentCard').length).toBeGreaterThan(0);
-    expect(screen.getByText('失败 · 无步骤明细')).toBeInTheDocument();
+    expect(screen.getAllByText('失败 · 无步骤明细').length).toBeGreaterThan(0);
     expect(screen.queryByText('成功 0 · 跳过 0 · 失败 0 · 未确认 0')).not.toBeInTheDocument();
-    expect(screen.getByText('Scanner: 大盘单机游戏')).toBeInTheDocument();
-    expect(screen.getByText('Backtest: MA20 Breakout')).toBeInTheDocument();
-    expect(screen.getByTestId('business-events-table-shell')).toHaveClass('overflow-x-auto');
+    expect(screen.getAllByText('Scanner: 大盘单机游戏').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Backtest: MA20 Breakout').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('business-events-table-shell')).toHaveClass('hidden', 'overflow-x-auto', 'md:flex');
     expect(screen.getByTestId('admin-logs-pagination')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '上一页' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '下一页' })).toBeInTheDocument();
     expect(screen.queryByText('fetch_news')).not.toBeInTheDocument();
     const operatorCopy = (screen.getByTestId('admin-logs-operator-issue-rollup').textContent || '').replace(/evt-[a-z0-9-]+/gi, '');
     const businessCopy = screen.getByTestId('business-events-table-shell').textContent || '';
+    const businessMobileCopy = screen.getByTestId('business-events-mobile-list').textContent || '';
     expect(operatorCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b/i);
     expect(businessCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b/i);
+    expect(businessMobileCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b/i);
     await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ since: '24h', limit: 20, offset: 0 })));
     await waitFor(() => expect(listDataMissingDrilldown).toHaveBeenCalledWith({ since: '24h', limit: 4 }));
     await waitFor(() => expect(listOperatorIssueRollup).toHaveBeenCalledWith({ since: '24h', limit: 6 }));
@@ -1160,10 +1171,8 @@ describe('AdminLogsPage', () => {
   it('opens business-event detail with call-chain steps and failed error message', async () => {
     render(<AdminLogsPage />);
 
-    const row = (await screen.findAllByText('TSLA'))[0];
-    const rowContainer = row.closest('[data-testid="business-event-row"]');
-    expect(rowContainer).not.toBeNull();
-    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
+    const rowContainer = await findBusinessEventRowByText('TSLA');
+    fireEvent.click(within(rowContainer).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByTestId('admin-logs-workspace')).toHaveClass('overflow-x-hidden');
@@ -1195,10 +1204,8 @@ describe('AdminLogsPage', () => {
   it('shows degraded execution summary for successful fallback events and copies a sanitized debug summary', async () => {
     render(<AdminLogsPage />);
 
-    const row = (await screen.findAllByText('备用链路激活')).find((item) => item.closest('[data-testid="business-event-row"]'));
-    const rowContainer = row.closest('[data-testid="business-event-row"]');
-    expect(rowContainer).not.toBeNull();
-    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
+    const rowContainer = await findBusinessEventRowByText('备用链路激活');
+    fireEvent.click(within(rowContainer).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.queryByText('Root Cause')).not.toBeInTheDocument();
@@ -1224,13 +1231,11 @@ describe('AdminLogsPage', () => {
   it('shows failed no-step events without all-zero step stats and can copy trace id', async () => {
     render(<AdminLogsPage />);
 
-    const row = (await screen.findAllByText('MarketSentimentCard')).find((item) => item.closest('[data-testid="business-event-row"]'));
-    const rowContainer = row.closest('[data-testid="business-event-row"]');
-    expect(rowContainer).not.toBeNull();
-    expect(within(rowContainer as HTMLElement).getByText('失败 · 无步骤明细')).toBeInTheDocument();
-    expect(within(rowContainer as HTMLElement).queryByText('成功 0 · 跳过 0 · 失败 0 · 未确认 0')).not.toBeInTheDocument();
+    const rowContainer = await findBusinessEventRowByText('MarketSentimentCard');
+    expect(within(rowContainer).getByText('失败 · 无步骤明细')).toBeInTheDocument();
+    expect(within(rowContainer).queryByText('成功 0 · 跳过 0 · 失败 0 · 未确认 0')).not.toBeInTheDocument();
 
-    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
+    fireEvent.click(within(rowContainer).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
     expect(await screen.findByTestId('root-cause-section')).toHaveTextContent('该事件在步骤级 trace 记录前已失败');
     expect(screen.getByText('根因')).toBeInTheDocument();
     expect(screen.getAllByText(/数据源响应超时.*token=\*\*\*/).length).toBeGreaterThan(0);
@@ -1297,10 +1302,8 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
-    const row = (await screen.findAllByText('TSLA'))[0];
-    const rowContainer = row.closest('[data-testid="business-event-row"]');
-    expect(rowContainer).not.toBeNull();
-    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
+    const rowContainer = await findBusinessEventRowByText('TSLA');
+    fireEvent.click(within(rowContainer).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('请求的资源不存在');
@@ -1319,10 +1322,8 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
-    const row = (await screen.findAllByText('TSLA'))[0];
-    const rowContainer = row.closest('[data-testid="business-event-row"]');
-    expect(rowContainer).not.toBeNull();
-    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
+    const rowContainer = await findBusinessEventRowByText('TSLA');
+    fireEvent.click(within(rowContainer).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
 
     expect(await screen.findAllByText('未确认')).not.toHaveLength(0);
     expect(document.querySelector('[data-status="running"]')).toBeNull();
@@ -1349,10 +1350,8 @@ describe('AdminLogsPage', () => {
 
     render(<AdminLogsPage />);
 
-    const row = (await screen.findAllByText('TSLA'))[0];
-    const rowContainer = row.closest('[data-testid="business-event-row"]');
-    expect(rowContainer).not.toBeNull();
-    fireEvent.click(within(rowContainer as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
+    const rowContainer = await findBusinessEventRowByText('TSLA');
+    fireEvent.click(within(rowContainer).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
 
     expect(await screen.findAllByText('未配置 API Key，已跳过')).not.toHaveLength(0);
     const skippedBadges = document.querySelectorAll('[data-status="skipped"]');
@@ -1465,34 +1464,45 @@ describe('AdminLogsPage', () => {
 
     expect(await screen.findByText('数据源响应超时')).toBeInTheDocument();
     expect(screen.getByLabelText('级别筛选')).toBeInTheDocument();
-    expect(screen.getByTestId('raw-logs-table-shell')).toHaveClass('overflow-x-auto', 'overscroll-x-contain', '-mx-4', 'px-4', 'sm:mx-0', 'sm:px-0');
+    const rawShell = screen.getByTestId('raw-logs-table-shell');
+    expect(rawShell).toHaveClass('relative', 'overflow-x-auto', 'overscroll-x-contain', '-mx-4', 'px-4', 'sm:mx-0', 'sm:px-0');
+    expect(screen.getByTestId('raw-logs-table-inner')).toHaveClass('min-w-[880px]');
+    expect(rawShell.querySelector('span[aria-hidden="true"]')).toHaveClass('bg-gradient-to-l');
     await waitFor(() => expect(listSessions).toHaveBeenCalledWith(expect.objectContaining({ minLevel: 'WARNING' })));
   });
 
-  it('contains the default business event queue inside a narrow-safe horizontal rail', async () => {
+  it('uses mobile business event cards while keeping the desktop event rail from md up', async () => {
     render(<AdminLogsPage />);
 
+    const mobileList = await screen.findByTestId('business-events-mobile-list');
     const shell = await screen.findByTestId('business-events-table-shell');
-    expect(shell).toHaveClass('overflow-x-auto', 'overscroll-x-contain', '-mx-4', 'px-4', 'sm:mx-0', 'sm:px-0');
+    expect(mobileList).toHaveClass('md:hidden');
+    expect(screen.getAllByTestId('business-event-mobile-card').length).toBeGreaterThan(0);
+    expect(shell).toHaveClass('hidden', 'overflow-x-auto', 'overscroll-x-contain', '-mx-4', 'px-4', 'sm:mx-0', 'sm:px-0', 'md:flex');
     expect(screen.getByTestId('business-events-table-inner')).toHaveClass('min-w-[44rem]');
   });
 
-  it('keeps page-level overflow hidden while mobile tables scroll locally at 390px', async () => {
+  it('keeps page-level overflow hidden while mobile lists and raw logs stay contained at 390px', async () => {
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
 
     render(<AdminLogsPage />);
 
     const workspace = screen.getByTestId('admin-logs-workspace');
+    const mobileList = await screen.findByTestId('business-events-mobile-list');
     const businessShell = await screen.findByTestId('business-events-table-shell');
 
     expect(workspace).toHaveClass('w-full', 'min-w-0', 'overflow-x-hidden');
-    expect(businessShell).toHaveClass('overflow-x-auto', 'overscroll-x-contain', '-mx-4', 'px-4');
+    expect(mobileList).toHaveClass('md:hidden');
+    expect(screen.getAllByTestId('business-event-mobile-card').length).toBeGreaterThan(0);
+    expect(businessShell).toHaveClass('hidden', 'md:flex');
     expect(screen.getByTestId('business-events-table-inner')).toHaveClass('min-w-[44rem]');
 
     fireEvent.click(screen.getByRole('tab', { name: '原始日志' }));
 
     const rawShell = await screen.findByTestId('raw-logs-table-shell');
-    expect(rawShell).toHaveClass('overflow-x-auto', 'overscroll-x-contain', '-mx-4', 'px-4');
+    expect(rawShell).toHaveClass('relative', 'overflow-x-auto', 'overscroll-x-contain', '-mx-4', 'px-4');
+    expect(screen.getByTestId('raw-logs-table-inner')).toHaveClass('min-w-[880px]');
+    expect(rawShell.querySelector('span[aria-hidden="true"]')).toHaveClass('bg-gradient-to-l');
     expect(rawShell).toHaveTextContent('数据源响应超时');
   });
 

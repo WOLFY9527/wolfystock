@@ -2960,12 +2960,15 @@ const UserScannerPage: React.FC = () => {
                   className="mx-3"
                 />
               ) : null}
-              <DenseStatusStrip
-                data-testid="scanner-status-strip"
-                ariaLabel={language === 'en' ? 'Scanner summary strip' : '扫描摘要条'}
-                items={scannerStatusItems}
-                className="ui-scroll-x-quiet flex-nowrap overflow-x-auto border-y border-white/10 bg-transparent px-2 py-1"
-              />
+              <div data-testid="scanner-status-strip-scroll-frame" className="relative">
+                <DenseStatusStrip
+                  data-testid="scanner-status-strip"
+                  ariaLabel={language === 'en' ? 'Scanner summary strip' : '扫描摘要条'}
+                  items={scannerStatusItems}
+                  className="ui-scroll-x-quiet flex-nowrap overflow-x-auto border-y border-white/10 bg-transparent px-2 py-1"
+                />
+                <span aria-hidden="true" className="pointer-events-none absolute inset-y-1 right-0 w-8 bg-gradient-to-l from-[var(--wolfy-surface-console)] to-transparent sm:hidden" />
+              </div>
             </div>
 
 		          <div data-testid="scanner-workspace-grid" className="grid w-full flex-1 min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_clamp(16rem,18vw,18.5rem)]">

@@ -2470,6 +2470,27 @@ const PortfolioPage: React.FC = () => {
   const addHoldingActionLabel = language === 'zh' ? '添加持仓' : 'Add holding';
   const importTradesActionLabel = language === 'zh' ? '导入记录' : 'Import records';
   const manualLedgerActionLabel = language === 'zh' ? '手工记账' : 'Manual ledger';
+  const buildHoldingTrustItems = (row: FlatPosition) => uniqueTrustItems([
+    {
+      key: `${row.symbol}-freshness`,
+      label: positionPriceFreshnessLabel(row, language),
+      variant: row.isPriceFallback ? 'caution' : 'neutral',
+    },
+    hasLimitedValuationConfidence(row)
+      ? {
+        key: `${row.symbol}-limited-confidence`,
+        label: limitedConfidenceLabel(language),
+        variant: 'caution',
+      }
+      : null,
+    topPosition?.key === row.symbol && topPositionPercent >= 35
+      ? {
+        key: `${row.symbol}-concentration`,
+        label: language === 'zh' ? '集中' : 'Concentrated',
+        variant: topPositionPercent >= 50 ? 'danger' : 'caution',
+      }
+      : null,
+  ]).slice(0, 3);
   const scenarioRiskPositions = useMemo<PortfolioScenarioRiskVisiblePosition[]>(
     () => positionRows.map((row) => ({
       symbol: row.symbol,
@@ -3027,10 +3048,79 @@ const PortfolioPage: React.FC = () => {
 
                   <div className="pt-3 lg:max-h-[560px] lg:min-h-0 lg:overflow-y-auto lg:no-scrollbar lg:[&::-webkit-scrollbar]:hidden lg:[-ms-overflow-style:none] lg:[scrollbar-width:none]">
                     {hasHoldings ? (
-                      <TerminalDenseTable className="border-0 bg-transparent">
-                        <table className="min-w-[760px] w-full text-left text-xs">
-                          <thead className="text-white/35">
-                            <tr className="border-b border-white/5">
+                        <>
+                          <div data-testid="portfolio-holdings-mobile-list" className="grid gap-2 md:hidden">
+                            {positionRows.map((row) => {
+                              const rowTrustItems = buildHoldingTrustItems(row);
+                              return (
+                                <article
+                                  key={`${row.accountId}-${row.symbol}-${row.market}-mobile`}
+                                  data-testid={`portfolio-holding-mobile-card-${row.symbol}`}
+                                  className="min-w-0 rounded-xl border border-white/[0.06] bg-black/10 p-3"
+                                >
+                                  <div className="flex min-w-0 items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <p className="font-mono text-base font-semibold text-white">{row.symbol}</p>
+                                      <p className="mt-1 text-xs leading-5 text-white/50">
+                                        {row.accountName}
+                                        {' · '}
+                                        {translate(language, 'portfolio.positionContext', {
+                                          market: formatAccountMarketLabel(row.market, language),
+                                          currency: row.currency || '--',
+                                        })}
+                                      </p>
+                                    </div>
+                                    <div className={`shrink-0 text-right font-mono text-sm ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                      {formatSignedMoney(row.unrealizedPnlBase, row.valuationCurrency)}
+                                      <div className="mt-1 text-xs text-white/50">{formatPercent(row.unrealizedPnlPct)}</div>
+                                    </div>
+                                  </div>
+                                  <div className="mt-3 grid min-w-0 grid-cols-2 gap-2">
+                                    <div className="min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.025] px-2.5 py-2">
+                                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">{language === 'zh' ? '数量' : 'Qty'}</p>
+                                      <p className="mt-1 font-mono text-sm text-white/75">{Number(row.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}</p>
+                                    </div>
+                                    <div className="min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.025] px-2.5 py-2">
+                                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">{language === 'zh' ? '成本' : 'Cost'}</p>
+                                      <p className="mt-1 font-mono text-sm text-white/75">{formatMoney(row.totalCost, row.currency)}</p>
+                                    </div>
+                                    <div className="col-span-2 min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.025] px-2.5 py-2">
+                                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">{language === 'zh' ? '市值' : 'Market Value'}</p>
+                                      <p className="mt-1 break-words font-mono text-sm text-white/78">{formatMoney(row.marketValueBase, row.valuationCurrency)}</p>
+                                      {row.valuationCurrency !== displayCurrency ? (
+                                        <p className="mt-1 break-words text-xs leading-5 text-white/48">{formatConvertedDisplay(row.marketValueBase, row.valuationCurrency)}</p>
+                                      ) : null}
+                                      <p className={`mt-1 text-xs leading-5 ${row.isPriceFallback ? 'text-amber-300' : 'text-white/50'}`}>
+                                        {row.priceAsOf
+                                          ? `${formatMoney(row.lastPrice, row.currency)} · ${language === 'zh' ? `截至 ${row.priceAsOf}` : `As of ${row.priceAsOf}`}`
+                                          : `${formatMoney(row.lastPrice, row.currency)} · ${positionPriceFreshnessExplanation(row, language)}`}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  {rowTrustItems.length ? (
+                                    <PortfolioTrustStrip
+                                      items={rowTrustItems}
+                                      className="mt-3 border-0 bg-transparent p-0"
+                                      chipsClassName="gap-1.5"
+                                      data-testid={`portfolio-holding-mobile-trust-${row.symbol}`}
+                                    />
+                                  ) : null}
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="mt-3 min-h-10 w-full rounded-md border border-[color:var(--wolfy-border-subtle)] bg-transparent px-3 py-2 text-sm text-[color:var(--wolfy-text-secondary)] transition-colors hover:text-[color:var(--wolfy-text-primary)] disabled:text-white/15 disabled:opacity-50"
+                                    onClick={() => openManualLedger('trade', 'stock')}
+                                  >
+                                    {manualLedgerActionLabel}
+                                  </Button>
+                                </article>
+                              );
+                            })}
+                          </div>
+                          <TerminalDenseTable className="hidden border-0 bg-transparent md:block">
+                            <table className="min-w-[760px] w-full text-left text-xs">
+                              <thead className="text-white/35">
+                                <tr className="border-b border-white/5">
                               {[
                                 language === 'zh' ? '标的' : 'Symbol',
                                 language === 'zh' ? '数量' : 'Qty',
@@ -3046,28 +3136,7 @@ const PortfolioPage: React.FC = () => {
                           </thead>
                           <tbody>
                             {positionRows.map((row) => {
-                              const rowTrustItems = uniqueTrustItems([
-                                {
-                                  key: `${row.symbol}-freshness`,
-                                  label: positionPriceFreshnessLabel(row, language),
-                                  variant: row.isPriceFallback ? 'caution' : 'neutral',
-                                },
-                                hasLimitedValuationConfidence(row)
-                                  ? {
-                                    key: `${row.symbol}-limited-confidence`,
-                                    label: limitedConfidenceLabel(language),
-                                    variant: 'caution',
-                                  }
-                                  : null,
-                                topPosition?.key === row.symbol && topPositionPercent >= 35
-                                  ? {
-                                    key: `${row.symbol}-concentration`,
-                                    label: language === 'zh' ? '集中' : 'Concentrated',
-                                    variant: topPositionPercent >= 50 ? 'danger' : 'caution',
-                                  }
-                                  : null,
-                              ]).slice(0, 3);
-
+                              const rowTrustItems = buildHoldingTrustItems(row);
                               return (
                                 <tr key={`${row.accountId}-${row.symbol}-${row.market}`} className="border-b border-white/5 text-white/62 transition-colors hover:bg-white/[0.03]">
                                   <td className="px-3 py-2">
@@ -3116,9 +3185,10 @@ const PortfolioPage: React.FC = () => {
                                 </tr>
                               );
                             })}
-                          </tbody>
-                        </table>
-                      </TerminalDenseTable>
+                              </tbody>
+                            </table>
+                          </TerminalDenseTable>
+                        </>
                     ) : (
                       <div data-testid="portfolio-empty-workflow-column" className="min-w-0">
                         <TerminalEmptyState

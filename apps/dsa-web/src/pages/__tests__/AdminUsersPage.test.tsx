@@ -438,6 +438,33 @@ describe('AdminUsersPage', () => {
     expectNoSecrets();
   });
 
+  it('uses mobile holding cards at 390px while preserving the desktop holdings table', async () => {
+    const originalInnerWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
+    getUserDetail.mockResolvedValue(detailPayload);
+    getAdminUserPortfolioSummary.mockResolvedValue(portfolioSummaryPayload);
+    getAdminUserHoldings.mockResolvedValue(holdingsPayload);
+    getAdminUserPortfolioActivity.mockResolvedValue(portfolioActivityPayload);
+
+    renderAt('/zh/admin/users/user-123?tab=portfolio');
+
+    expect(screen.getByTestId('admin-users-page-shell')).toHaveClass('overflow-x-hidden');
+    expect(await screen.findByText('组合只读总览')).toBeInTheDocument();
+    const holdingsPanel = screen.getByText('持仓明细').closest('[data-terminal-primitive="panel"]') as HTMLElement;
+    const mobileList = within(holdingsPanel).getByTestId('admin-users-holdings-mobile-list');
+    const mobileCard = within(mobileList).getByTestId('admin-users-holding-mobile-card-AAPL');
+    const desktopTable = within(holdingsPanel).getByRole('table');
+    const desktopShell = desktopTable.closest('[data-terminal-primitive="dense-table"]');
+
+    expect(mobileList).toHaveClass('md:hidden');
+    expect(mobileCard).toHaveTextContent('AAPL');
+    expect(mobileCard).toHaveTextContent('Growth Main');
+    expect(mobileCard).toHaveTextContent('汇率状态');
+    expect(desktopShell).toHaveClass('hidden', 'md:block');
+    expect(desktopTable).toHaveClass('min-w-[620px]');
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: originalInnerWidth });
+  });
+
   it('hides portfolio tab and does not fetch portfolio data when portfolio capability is missing', async () => {
     useProductSurfaceMock.mockReturnValue({
       ...fullCapabilities,

@@ -773,6 +773,27 @@ describe('LiquidityMonitorPage', () => {
     expect(within(details).getByTestId('liquidity-impulse-synthesis-data-gaps')).toHaveTextContent('中港资金流');
   });
 
+  it('uses mobile indicator cards while keeping the admin indicator table desktop-only', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: true,
+      canReadProviders: true,
+    });
+    getLiquidityMonitor.mockResolvedValueOnce(payload);
+
+    render(<LiquidityMonitorPage />);
+
+    await screen.findByRole('heading', { name: '流动性监测' });
+    const details = await expandLiquidityDetails();
+    const mobileList = within(details).getByTestId('liquidity-indicator-mobile-list');
+    const tableShell = within(details).getByTestId('liquidity-indicator-table-shell');
+
+    expect(mobileList).toHaveClass('md:hidden');
+    expect(within(mobileList).getByTestId('liquidity-indicator-mobile-card-us_rates_pressure')).toHaveTextContent('美国利率压力');
+    expect(within(mobileList).getByTestId('liquidity-indicator-mobile-card-us_rates_pressure')).toHaveTextContent('部分可用');
+    expect(tableShell).toHaveClass('hidden', 'md:block');
+    expect(within(tableShell).getByRole('table')).toHaveClass('min-w-[760px]');
+  });
+
   it('renders a compact consumer summary without backend diagnostic wording', async () => {
     getLiquidityMonitor.mockResolvedValueOnce(payload);
 
@@ -1193,9 +1214,9 @@ describe('LiquidityMonitorPage', () => {
     await screen.findByRole('heading', { name: '流动性监测' });
     const indicatorDisclosure = await expandLiquidityDetails();
     expect(within(indicatorDisclosure).getAllByText('部分可用').length).toBeGreaterThan(0);
-    expect(within(indicatorDisclosure).getByText('暂不可用')).toBeInTheDocument();
-    expect(within(indicatorDisclosure).getByText('Crypto 资金费率')).toBeVisible();
-    expect(within(indicatorDisclosure).getByText('仅在真实 funding 快照存在时显示')).toBeVisible();
+    expect(within(indicatorDisclosure).getAllByText('暂不可用').length).toBeGreaterThan(0);
+    expect(within(indicatorDisclosure).getAllByText('Crypto 资金费率').length).toBeGreaterThan(0);
+    expect(within(indicatorDisclosure).getAllByText('仅在真实 funding 快照存在时显示').length).toBeGreaterThan(0);
   });
 
   it('shows compact official macro authority diagnostics for official, observation-only, fallback, and rejected rows', async () => {
@@ -1248,7 +1269,8 @@ describe('LiquidityMonitorPage', () => {
     expect(rowStrip).toHaveTextContent('依据：官方市场宽度快照');
     expect(rowStrip).not.toHaveTextContent('仅观察');
 
-    const breadthRow = within(details).getAllByText('美国市场广度')[0]?.closest('tr');
+    const tableShell = within(details).getByTestId('liquidity-indicator-table-shell');
+    const breadthRow = within(tableShell).getAllByText('美国市场广度')[0]?.closest('tr');
     expect(breadthRow).toBeTruthy();
     fireEvent.click(breadthRow!);
 
@@ -1280,7 +1302,8 @@ describe('LiquidityMonitorPage', () => {
     expect(rowStrip).toHaveTextContent('缺口：RSP/SPY、IWM/SPY、QQQ/SPY');
     expect(rowStrip).toHaveTextContent('限制：缺少官方/授权宽度主源；代表性样本，不等于全市场宽度');
 
-    const breadthRow = within(details).getAllByText('美国市场广度')[0]?.closest('tr');
+    const tableShell = within(details).getByTestId('liquidity-indicator-table-shell');
+    const breadthRow = within(tableShell).getAllByText('美国市场广度')[0]?.closest('tr');
     expect(breadthRow).toBeTruthy();
     fireEvent.click(breadthRow!);
 

@@ -686,32 +686,67 @@ const PortfolioTab: React.FC<{
           ) : holdings.length === 0 ? (
             <TerminalEmptyState className="mt-4" title="暂无持仓" />
           ) : (
-            <TerminalDenseTable className="mt-4 border-white/6 bg-black/15">
-              <table className="w-full min-w-[620px] text-left text-xs">
-                <thead className="text-white/34">
-                  <tr>
-                    <th className="py-2 pr-3">标的</th>
-                    <th className="py-2 pr-3">账户</th>
-                    <th className="py-2 pr-3">数量</th>
-                    <th className="py-2 pr-3">市值</th>
-                    <th className="py-2 pr-3">未实现 P&L</th>
-                    <th className="py-2">汇率</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5 text-white/62">
-                  {holdings.map((item) => (
-                    <tr key={`${item.accountId}-${item.symbol}`}>
-                      <td className="py-3 pr-3 font-mono text-white">{item.symbol}</td>
-                      <td className="py-3 pr-3">{item.accountName}</td>
-                      <td className="py-3 pr-3 font-mono">{compactNumber(item.quantity)}</td>
-                      <td className="py-3 pr-3 font-mono">{formatCurrency(item.marketValueBase, { currency: item.valuationCurrency || item.currency || 'USD' })}</td>
-                      <td className={cn('py-3 pr-3 font-mono', item.unrealizedPnlBase >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{formatCurrency(item.unrealizedPnlBase, { currency: item.valuationCurrency || item.currency || 'USD' })}</td>
-                      <td className="py-3">{item.fxStatus}</td>
+            <>
+              <div data-testid="admin-users-holdings-mobile-list" className="mt-4 grid gap-2 md:hidden">
+                {holdings.map((item) => (
+                  <article
+                    key={`${item.accountId}-${item.symbol}-mobile`}
+                    data-testid={`admin-users-holding-mobile-card-${item.symbol}`}
+                    className="min-w-0 rounded-xl border border-white/6 bg-black/15 p-3"
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-mono text-base font-semibold text-white">{item.symbol}</p>
+                        <p className="mt-1 text-sm leading-6 text-white/54">{item.accountName}</p>
+                      </div>
+                      <p className={cn('shrink-0 text-right font-mono text-sm', item.unrealizedPnlBase >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
+                        {formatCurrency(item.unrealizedPnlBase, { currency: item.valuationCurrency || item.currency || 'USD' })}
+                      </p>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <div className="min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.025] px-2.5 py-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">数量</p>
+                        <p className="mt-1 font-mono text-sm text-white/72">{compactNumber(item.quantity)}</p>
+                      </div>
+                      <div className="min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.025] px-2.5 py-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">市值</p>
+                        <p className="mt-1 break-words font-mono text-sm text-white/72">{formatCurrency(item.marketValueBase, { currency: item.valuationCurrency || item.currency || 'USD' })}</p>
+                      </div>
+                      <div className="col-span-2 min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.025] px-2.5 py-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">汇率状态</p>
+                        <p className="mt-1 text-sm leading-6 text-white/62">{item.fxStatus}</p>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <TerminalDenseTable className="mt-4 hidden border-white/6 bg-black/15 md:block">
+                <table className="w-full min-w-[620px] text-left text-xs">
+                  <thead className="text-white/34">
+                    <tr>
+                      <th className="py-2 pr-3">标的</th>
+                      <th className="py-2 pr-3">账户</th>
+                      <th className="py-2 pr-3">数量</th>
+                      <th className="py-2 pr-3">市值</th>
+                      <th className="py-2 pr-3">未实现 P&L</th>
+                      <th className="py-2">汇率</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </TerminalDenseTable>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-white/62">
+                    {holdings.map((item) => (
+                      <tr key={`${item.accountId}-${item.symbol}`}>
+                        <td className="py-3 pr-3 font-mono text-white">{item.symbol}</td>
+                        <td className="py-3 pr-3">{item.accountName}</td>
+                        <td className="py-3 pr-3 font-mono">{compactNumber(item.quantity)}</td>
+                        <td className="py-3 pr-3 font-mono">{formatCurrency(item.marketValueBase, { currency: item.valuationCurrency || item.currency || 'USD' })}</td>
+                        <td className={cn('py-3 pr-3 font-mono', item.unrealizedPnlBase >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{formatCurrency(item.unrealizedPnlBase, { currency: item.valuationCurrency || item.currency || 'USD' })}</td>
+                        <td className="py-3">{item.fxStatus}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </TerminalDenseTable>
+            </>
           )}
         </TerminalPanel>
       </div>

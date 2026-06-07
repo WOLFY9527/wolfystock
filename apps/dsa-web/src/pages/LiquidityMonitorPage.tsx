@@ -884,15 +884,15 @@ const LiquidityBreadthTruthStrip: React.FC<{
         <TerminalChip variant={view.freshnessVariant}>{view.freshnessLabel}</TerminalChip>
         <TerminalChip variant={view.coverageVariant}>{view.coverageLabel}</TerminalChip>
       </div>
-      <p className="mt-2 text-[11px] leading-5 text-white/68">{view.summary}</p>
+      <p className="mt-2 text-xs leading-5 text-white/68">{view.summary}</p>
       {view.sourceDetail ? (
-        <p className="mt-1 text-[11px] leading-5 text-white/52">依据：{view.sourceDetail}</p>
+        <p className="mt-1 text-xs leading-5 text-white/52">依据：{view.sourceDetail}</p>
       ) : null}
       {view.missingSummary ? (
-        <p className="mt-1 text-[11px] leading-5 text-white/52">{view.missingSummary}</p>
+        <p className="mt-1 text-xs leading-5 text-white/52">{view.missingSummary}</p>
       ) : null}
       {view.limitationSummary ? (
-        <p className="mt-1 text-[11px] leading-5 text-white/52">限制：{view.limitationSummary}</p>
+        <p className="mt-1 text-xs leading-5 text-white/52">限制：{view.limitationSummary}</p>
       ) : null}
     </div>
   );
@@ -2205,7 +2205,49 @@ const LiquidityGuidancePanel: React.FC<{
               </div>
             </TerminalPanel>
 
-            <TerminalDenseTable>
+            <div data-testid="liquidity-indicator-mobile-list" className="grid gap-2 md:hidden">
+              {indicators.map((indicator) => {
+                const active = indicator.key === selectedIndicator?.key;
+                return (
+                  <button
+                    key={indicator.key}
+                    type="button"
+                    data-testid={`liquidity-indicator-mobile-card-${indicator.key}`}
+                    className={cn(
+                      'min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3 text-left transition-colors',
+                      active ? 'border-cyan-200/22 bg-cyan-200/[0.055]' : 'hover:border-white/12 hover:bg-white/[0.03]',
+                    )}
+                    onClick={() => onSelectIndicator(indicator.key)}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white/82">{displayLabel(indicator)}</p>
+                        <p className="mt-1 text-sm leading-6 text-white/56">{indicator.summary || '—'}</p>
+                      </div>
+                      <span className="shrink-0 font-mono text-sm text-white/70">{contributionLabel(indicator)}</span>
+                    </div>
+                    <div className="mt-3 flex min-w-0 flex-wrap gap-1.5">
+                      <TerminalChip variant={chipVariantForStatus(indicator.status)}>
+                        {statusLabel(indicator.status)}
+                      </TerminalChip>
+                      <TerminalChip variant={chipVariantForFreshness(indicator.freshness)}>
+                        {FRESHNESS_LABELS[indicator.freshness]}
+                      </TerminalChip>
+                    </div>
+                    {isUsBreadthIndicator(indicator) ? (
+                      <div className="mt-3">
+                        <LiquidityBreadthTruthStrip
+                          indicator={indicator}
+                          testId="liquidity-breadth-truth-strip-mobile"
+                        />
+                      </div>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+
+            <TerminalDenseTable data-testid="liquidity-indicator-table-shell" className="hidden md:block">
               <table className="w-full min-w-[760px] border-collapse text-left">
               <thead className="border-b border-white/5 text-[10px] uppercase tracking-widest text-white/35">
                 <tr>
