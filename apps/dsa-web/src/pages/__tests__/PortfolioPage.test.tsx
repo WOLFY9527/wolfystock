@@ -2795,6 +2795,62 @@ describe('PortfolioPage FX refresh', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('作废失败');
   });
 
+  it('shows permanent non-recoverable copy before deleting cash and corporate records', async () => {
+    getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: true }));
+    listCashLedger.mockResolvedValueOnce({
+      items: [
+        { id: 3, accountId: 1, eventDate: '2026-03-17', direction: 'in', amount: 1000, currency: 'USD', note: 'seed', createdAt: '2026-03-17T00:00:00Z' },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    });
+    listCorporateActions.mockResolvedValueOnce({
+      items: [
+        {
+          id: 4,
+          accountId: 1,
+          symbol: 'AAPL',
+          market: 'us',
+          currency: 'USD',
+          effectiveDate: '2026-03-16',
+          actionType: 'cash_dividend',
+          cashDividendPerShare: 0.5,
+          splitRatio: null,
+          note: 'seed',
+          createdAt: '2026-03-16T00:00:00Z',
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    });
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    let historyPanel = screen.getByTestId('portfolio-history-full');
+    fireEvent.click(within(historyPanel).getByRole('button', { name: translate('zh', 'portfolio.cashLedger') }));
+    expect(await screen.findByText('2026-03-17 · USD 1,000.00')).toBeInTheDocument();
+    fireEvent.click(within(screen.getByTestId('portfolio-history-full')).getByRole('button', { name: translate('zh', 'portfolio.deleteConfirm') }));
+
+    expect(await screen.findByText('永久删除 2026-03-17 的资金流水（流入 1000 USD）吗？此操作不可恢复，仅删除这条记录，不会自动重建。')).toBeInTheDocument();
+    expect(deleteCashLedger).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText(translate('zh', 'portfolio.deleteConfirm')));
+    await waitFor(() => expect(deleteCashLedger).toHaveBeenCalledWith(3));
+
+    historyPanel = screen.getByTestId('portfolio-history-full');
+    fireEvent.click(within(historyPanel).getByRole('button', { name: translate('zh', 'portfolio.corporateLedger') }));
+    expect(await screen.findByText('2026-03-16 · 每股分红 0.5')).toBeInTheDocument();
+    fireEvent.click(within(screen.getByTestId('portfolio-history-full')).getByRole('button', { name: translate('zh', 'portfolio.deleteConfirm') }));
+
+    expect(await screen.findByText('永久删除 2026-03-16 的公司行为 现金分红（AAPL）吗？此操作不可恢复，仅删除这条记录，不会自动重建。')).toBeInTheDocument();
+    expect(deleteCorporateAction).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText(translate('zh', 'portfolio.deleteConfirm')));
+    await waitFor(() => expect(deleteCorporateAction).toHaveBeenCalledWith(4));
+  });
+
   it('exposes compact recent-activity actions and mobile more-menu edit path', async () => {
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
     getSnapshot.mockResolvedValue(makeSnapshot({ includePosition: false }));

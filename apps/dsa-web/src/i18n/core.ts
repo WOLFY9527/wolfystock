@@ -704,8 +704,8 @@ const RESOURCES = {
       deleteHintBlocked: '删除修正仅在单账户视图可用。请先选择具体账户后再删除错误流水。',
       deleteHintReady: '如有错误流水，可直接删除后重新录入。',
       tradeDeleteMessage: '确认删除 {tradeDate} 的{sideLabel}流水 {symbol}（数量 {quantity}，价格 {price}）吗？',
-      cashDeleteMessage: '确认删除 {eventDate} 的资金流水（{directionLabel} {amount} {currency}）吗？',
-      corporateDeleteMessage: '确认删除 {effectiveDate} 的公司行为 {actionLabel}（{symbol}）吗？',
+      cashDeleteMessage: '永久删除 {eventDate} 的资金流水（{directionLabel} {amount} {currency}）吗？此操作不可恢复，仅删除这条记录，不会自动重建。',
+      corporateDeleteMessage: '永久删除 {effectiveDate} 的公司行为 {actionLabel}（{symbol}）吗？此操作不可恢复，仅删除这条记录，不会自动重建。',
       brokerName: {
         huatai: '华泰',
         citic: '中信',
@@ -3699,8 +3699,8 @@ This memo is for research discussion and does not constitute investment advice.`
       deleteHintBlocked: 'Delete corrections are available only in a single-account scope. Pick a specific account first.',
       deleteHintReady: 'Delete incorrect ledger items here, then record the corrected one.',
       tradeDeleteMessage: 'Delete the {tradeDate} {sideLabel} holding record for {symbol} ({quantity} shares at {price})?',
-      cashDeleteMessage: 'Delete the {eventDate} cash event ({directionLabel} {amount} {currency})?',
-      corporateDeleteMessage: 'Delete the {effectiveDate} {actionLabel} event for {symbol}?',
+      cashDeleteMessage: 'Permanently delete the {eventDate} cash event ({directionLabel} {amount} {currency})? This cannot be recovered. Only this record is deleted, and it will not be rebuilt automatically.',
+      corporateDeleteMessage: 'Permanently delete the {effectiveDate} {actionLabel} event for {symbol}? This cannot be recovered. Only this record is deleted, and it will not be rebuilt automatically.',
       brokerName: {
         huatai: 'Huatai',
         citic: 'Citic',
