@@ -554,4 +554,181 @@ describe('marketRotationApi', () => {
     expect(payload.themes[0].dataGaps).toContain('taxonomy_only');
     expect(payload.themes[0].themeDetail?.mappedConcepts).toContain('算力租赁');
   });
+
+  it('preserves consumer evidence metadata fields at the frontend boundary', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: {
+        endpoint: '/api/v1/market/rotation-radar',
+        generated_at: '2026-05-07T10:00:00Z',
+        source: 'synthetic_boundary_fixture',
+        source_label: 'Synthetic Boundary Fixture',
+        freshness: 'unavailable',
+        is_fallback: true,
+        is_stale: true,
+        metadata: {},
+        benchmarks: {},
+        summary: {
+          strongest_themes: [],
+          accelerating_themes: [],
+          fading_themes: [],
+          watchlist_signals: [],
+          safe_wording: [],
+        },
+        themes: [],
+        consumer_evidence_snapshot: {
+          market: 'US',
+          generated_at: '2026-05-07T10:00:00Z',
+          as_of: '2026-05-07T09:58:00Z',
+          freshness: 'unavailable',
+          is_fallback: true,
+          is_stale: true,
+          is_partial: true,
+          authority_grant: false,
+          score_contribution_allowed: false,
+          reason_codes: ['synthetic_fixture', 'provider_timeout'],
+          provider_state: {
+            present: true,
+            status: 'unavailable',
+            quote_mode: 'synthetic',
+            source_type: 'synthetic_bundle',
+            source_tier: 'synthetic_internal',
+            provider_tier: 'degraded_cache',
+            freshness: 'unavailable',
+            as_of: '2026-05-07T09:58:00Z',
+            coverage: {
+              requested_symbol_count: 6,
+              usable_symbol_count: 0,
+              coverage_percent: 0,
+            },
+            source_authority_allowed: false,
+            score_contribution_allowed: false,
+            no_external_calls: true,
+          },
+          etf_proxy_summary: {
+            present: true,
+            proxy_only: true,
+            label: 'Synthetic proxy watch',
+            fund_flow_authority_allowed: false,
+            enabled: false,
+            source: 'synthetic_proxy_pack',
+            as_of: '2026-05-07T09:58:00Z',
+            eligible_symbol_count: 0,
+            leading_symbols: ['QQQ', '', null],
+            lagging_symbols: ['IWM', '', null],
+            reason_codes: ['synthetic_fixture', 'provider_timeout'],
+          },
+          themes: [
+            {
+              id: 'ai_applications',
+              name: 'AI 应用',
+              rank_eligible: false,
+              headline_eligible: false,
+              ranking_lane: 'observation',
+              observation_only: true,
+              taxonomy_only: false,
+              score_contribution_allowed: false,
+              freshness: 'unavailable',
+              is_fallback: true,
+              is_stale: true,
+              is_partial: true,
+              evidence_quality: 'synthetic_only',
+              data_gaps: ['synthetic_fixture', 'provider_timeout'],
+            },
+          ],
+          rotation_family_rollup: [
+            {
+              family_id: 'ai',
+              family_name: 'AI',
+              theme_ids: ['ai_applications'],
+              theme_names: ['AI 应用'],
+              leader_theme_ids: ['ai_applications'],
+              theme_count: 1,
+              signal_theme_count: 0,
+              average_rotation_score: null,
+              average_confidence: null,
+              theme_flow_signal: {
+                theme_flow_state: 'unavailable',
+                freshness: 'unavailable',
+              },
+            },
+          ],
+        },
+      },
+    } as never);
+
+    const payload = await marketRotationApi.getRotationRadar();
+
+    expect(payload.source).toBe('synthetic_boundary_fixture');
+    expect(payload.sourceLabel).toBe('Synthetic Boundary Fixture');
+    expect(payload.freshness).toBe('unavailable');
+    expect(payload.isFallback).toBe(true);
+    expect(payload.isStale).toBe(true);
+    expect(payload.consumerEvidenceSnapshot).toMatchObject({
+      market: 'US',
+      generatedAt: '2026-05-07T10:00:00Z',
+      asOf: '2026-05-07T09:58:00Z',
+      freshness: 'unavailable',
+      isFallback: true,
+      isStale: true,
+      isPartial: true,
+      authorityGrant: false,
+      scoreContributionAllowed: false,
+      reasonCodes: ['synthetic_fixture', 'provider_timeout'],
+    });
+    expect(payload.consumerEvidenceSnapshot?.providerState).toMatchObject({
+      present: true,
+      status: 'unavailable',
+      quoteMode: 'synthetic',
+      sourceType: 'synthetic_bundle',
+      sourceTier: 'synthetic_internal',
+      providerTier: 'degraded_cache',
+      freshness: 'unavailable',
+      asOf: '2026-05-07T09:58:00Z',
+      sourceAuthorityAllowed: false,
+      scoreContributionAllowed: false,
+      noExternalCalls: true,
+      coverage: {
+        requestedSymbolCount: 6,
+        usableSymbolCount: 0,
+        coveragePercent: 0,
+      },
+    });
+    expect(payload.consumerEvidenceSnapshot?.etfProxySummary).toMatchObject({
+      present: true,
+      proxyOnly: true,
+      label: 'Synthetic proxy watch',
+      fundFlowAuthorityAllowed: false,
+      enabled: false,
+      source: 'synthetic_proxy_pack',
+      asOf: '2026-05-07T09:58:00Z',
+      eligibleSymbolCount: 0,
+      leadingSymbols: ['QQQ'],
+      laggingSymbols: ['IWM'],
+      reasonCodes: ['synthetic_fixture', 'provider_timeout'],
+    });
+    expect(payload.consumerEvidenceSnapshot?.themes).toEqual([
+      expect.objectContaining({
+        id: 'ai_applications',
+        freshness: 'unavailable',
+        isFallback: true,
+        isStale: true,
+        isPartial: true,
+        evidenceQuality: 'synthetic_only',
+        dataGaps: ['synthetic_fixture', 'provider_timeout'],
+      }),
+    ]);
+    expect(payload.consumerEvidenceSnapshot?.rotationFamilyRollup[0]).toMatchObject({
+      familyId: 'ai',
+      familyName: 'AI',
+      themeIds: ['ai_applications'],
+      themeNames: ['AI 应用'],
+      leaderThemeIds: ['ai_applications'],
+      themeCount: 1,
+      signalThemeCount: 0,
+    });
+    expect(payload.consumerEvidenceSnapshot?.rotationFamilyRollup[0].themeFlowSignal).toMatchObject({
+      themeFlowState: 'unavailable',
+      freshness: 'unavailable',
+    });
+  });
 });

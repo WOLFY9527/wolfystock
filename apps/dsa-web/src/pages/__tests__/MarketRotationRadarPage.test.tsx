@@ -23,6 +23,8 @@ const forbiddenTradingActionPattern =
 const rawI18nKeyPattern = /\b(?:rotationRadar|marketRotationRadar|marketIntelligence)\.[A-Za-z0-9_.-]+/;
 const consumerDiagnosticLeakPattern =
   /alpaca|alpaca_etf_authority_spine|Alpaca SIP|bounded_etf_authority_active|missing_required_windows|ineligible_bounded_etf|entitlement|reasonCodes?|reasonFamilies|sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|local_taxonomy|taxonomy-only|fallback_static|synthetic_fixture|official_public|authorized_licensed_feed|public_proxy|unofficial_proxy|provider|quote provider|提供方运维|数据源设置|原始来源|原因代码|ETF 权威|ETF 代理|权威来源|权威检查|权威可计分|可计分证据|代理缺口|代理过期|代理完整|proxy_quote_missing|proxy_stale|backend|raw_payload|provider_payload|debug|trace/i;
+const consumerMetadataLeakPattern =
+  /schema[_\s-]?version|reasonCodes?|sourceAuthorityAllowed|scoreContributionAllowed|providerState|runtime|cache|debug|trace|internal|synthetic|partial_source|raw_payload|provider_payload/i;
 
 type ThemeFlowSignalFixture = NonNullable<NonNullable<MarketRotationRadarResponse['themes'][number]['themeFlowSignal']>> & {
   leadershipEvidence?: string | null;
@@ -1038,6 +1040,128 @@ describe('MarketRotationRadarPage', () => {
     expect(bodyText).not.toMatch(forbiddenTradingActionPattern);
     expect(bodyText).not.toMatch(rawI18nKeyPattern);
     expect(bodyText).not.toMatch(consumerDiagnosticLeakPattern);
+  });
+
+  it('keeps metadata and diagnostics vocabulary hidden behind consumer-safe wording', async () => {
+    const fixture = radarFixture();
+    fixture.metadata = {
+      ...fixture.metadata,
+      schemaVersion: 'market_rotation_radar_phase4_boundary_v1',
+      runtimeBoundary: 'provider_state_cache_trace',
+    };
+    fixture.warning = 'provider runtime cache unavailable';
+    fixture.summary.headlineWarning = 'reasonCodes sourceAuthorityAllowed scoreContributionAllowed partial_source';
+    fixture.summary.noHeadlineReason = 'schema_version synthetic internal trace provider_payload';
+    fixture.summary.rankingPolicy = 'providerState runtime cache internal';
+    fixture.consumerEvidenceSnapshot = {
+      ...fixture.consumerEvidenceSnapshot,
+      reasonCodes: ['partial_source', 'synthetic_fixture'],
+      providerState: {
+        present: true,
+        status: 'unavailable',
+        quoteMode: 'synthetic',
+        sourceType: 'synthetic_bundle',
+        sourceTier: 'public_proxy',
+        providerTier: 'cache_runtime',
+        freshness: 'unavailable',
+        asOf: '2026-05-07T09:45:00Z',
+        sourceAuthorityAllowed: false,
+        scoreContributionAllowed: false,
+        noExternalCalls: true,
+      },
+      etfProxySummary: {
+        present: true,
+        proxyOnly: true,
+        label: 'synthetic proxy pack',
+        fundFlowAuthorityAllowed: false,
+        enabled: false,
+        source: 'synthetic_proxy',
+        asOf: '2026-05-07T09:45:00Z',
+        reasonCodes: ['synthetic_fixture', 'provider_timeout'],
+      },
+      themes: [
+        {
+          id: 'ai_applications',
+          name: 'AI 应用',
+          freshness: 'unavailable',
+          isFallback: true,
+          isStale: true,
+          isPartial: true,
+          evidenceQuality: 'synthetic_only',
+          dataGaps: ['synthetic_fixture', 'provider_timeout'],
+        },
+      ],
+      rotationFamilyRollup: [
+        {
+          familyId: 'ai',
+          familyName: 'AI / 软件',
+          themeIds: ['ai_applications'],
+          themeNames: ['AI 应用'],
+          leaderThemeIds: ['ai_applications'],
+          themeCount: 1,
+          signalThemeCount: 1,
+          averageRotationScore: 78,
+          averageConfidence: 0.68,
+          themeFlowSignal: {
+            ...buildThemeFlowSignalFixture(),
+            reasonCodes: ['synthetic_fixture', 'partial_source'],
+            explanation: 'provider runtime cache trace boundary',
+          },
+        },
+      ],
+    };
+    fixture.themes = fixture.themes.map((theme, index) => (
+      index === 0
+        ? {
+            ...theme,
+            stageExplanation: 'provider runtime cache synthetic internal reasonCodes sourceAuthorityAllowed',
+            evidence: [
+              'provider payload trace',
+              'runtime cache providerState',
+            ],
+            riskExplanations: [
+              'schema_version partial_source',
+              'synthetic internal trace',
+            ],
+            dataGaps: ['synthetic_fixture', 'provider_timeout'],
+            themeFlowSignal: buildThemeFlowSignalFixture({
+              explanation: 'provider runtime cache trace raw_payload',
+              reasonCodes: ['synthetic_fixture', 'provider_timeout'],
+              leadershipEvidence: 'sourceAuthorityAllowed provider_state',
+              breadthEvidence: 'reasonCodes cache_runtime',
+              relativeStrengthEvidence: 'debug trace synthetic',
+            }),
+          }
+        : theme
+    ));
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(fixture);
+
+    render(<MarketRotationRadarPage />);
+
+    const page = await screen.findByTestId('market-rotation-radar-page');
+    const detail = screen.getByTestId('rotation-theme-detail-panel');
+    expect(detail).toHaveTextContent('部分轮动数据暂不可用。');
+    expect(detail.textContent || '').not.toMatch(consumerMetadataLeakPattern);
+
+    const dataNotes = screen.getByTestId('rotation-theme-data-notes');
+    fireEvent.click(within(dataNotes).getByRole('button', { name: '展开 查看数据说明' }));
+    expect(dataNotes).toHaveTextContent('部分轮动数据暂不可用。');
+    expect(dataNotes.textContent || '').not.toMatch(consumerMetadataLeakPattern);
+
+    const themeFlow = screen.getByTestId('rotation-theme-flow-signal');
+    fireEvent.click(within(themeFlow).getByRole('button', { name: '展开 查看主题流向观察' }));
+    expect(themeFlow).toHaveTextContent('部分轮动数据暂不可用。');
+    expect(themeFlow.textContent || '').not.toMatch(consumerMetadataLeakPattern);
+
+    fireEvent.click(screen.getByRole('button', { name: '展开 查看轮动说明' }));
+    const mechanics = screen.getByTestId('rotation-radar-mechanics-details');
+    expect(mechanics.textContent || '').not.toMatch(consumerMetadataLeakPattern);
+
+    const bodyText = page.textContent || '';
+    expect(bodyText).not.toMatch(rawI18nKeyPattern);
+    expect(bodyText).not.toMatch(consumerDiagnosticLeakPattern);
+    expect(bodyText).not.toMatch(consumerMetadataLeakPattern);
+    expect(bodyText).not.toMatch(forbiddenTradingActionPattern);
   });
 
   it('fails closed when the route request never settles', async () => {
