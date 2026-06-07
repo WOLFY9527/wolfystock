@@ -221,8 +221,9 @@ P0/P1 movement:
   portfolio projection.
 - P0 narrowed: no-secret smoke now runs through home, Market Overview, Options
   Lab, Portfolio, cost observability, and provider diagnostics without raw
-  secret/debug/provider payload leakage. Options Lab keeps negative safety copy
-  such as "不会提交订单" while still blocking executable trading/action wording.
+  secret/debug/provider payload leakage. The initial checkpoint still allowed
+  explicit negative no-order copy; CP4 later tightened default Options Lab copy
+  to avoid order/broker vocabulary on consumer surfaces.
 - P0 narrowed: admin auth harness now verifies full admin, cost-only admin,
   providers-only admin, denied admin, legacy fallback-disabled, and missing
   capability-field paths with current route copy and no protected API fetches
@@ -308,14 +309,84 @@ Rollback:
 - Restore changed inventory files to checkpoint 2:
   `git restore --source=8effe763 -- tests/fixtures/auth/backend_route_capability_inventory.json tests/test_auth_route_capability_inventory.py`.
 
+## Checkpoint 4 - Consumer Journey Proof And Options Copy Tightening
+
+Time: 2026-06-08 04:57 CST.
+
+Public Beta Readiness estimate after broader consumer journey validation:
+85/100.
+
+Scorecard estimate:
+
+| Area | Points | V0 | CP1 | CP2 | CP3 | CP4 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| guest/auth/protected | 15 | 9 | 12 | 13 | 13 | 13 |
+| Market/Liquidity/Rotation observation-mode | 15 | 8 | 10 | 11 | 11 | 13 |
+| demo research loop | 20 | 11 | 12 | 13 | 13 | 16 |
+| consumer UI de-AI/de-diagnostic | 15 | 8 | 12 | 13 | 13 | 14 |
+| perceived speed/partial/last-good | 10 | 6 | 6 | 6 | 6 | 7 |
+| admin health | 10 | 6 | 8 | 9 | 9 | 9 |
+| deploy precheck | 15 | 10 | 10 | 11 | 14 | 13 |
+
+P0/P1/P2 movement:
+
+- P0 cleared for this branch target: broad consumer route smoke now passes at
+  desktop and mobile for Home, Market Overview, Liquidity Monitor, Rotation
+  Radar, Scanner, Watchlist, Portfolio, Options Lab, market research IA, and
+  Backtest result launch surfaces.
+- P1 improved: Options Lab default safety copy no longer uses visible
+  order/broker wording such as `下单`, `订单`, or `经纪商`; it now says
+  `不构成执行指令`, `不会触发外部执行`, and `不连接外部执行通道`.
+- P1 improved: consumer copy regression smoke now matches the intentional
+  Market Overview boundary where `market-intelligence-actionability-strip` is
+  absent by default and the visible page uses decision semantics plus chart
+  evidence instead of diagnostic actionability strips.
+- P1 improved: Portfolio scenario-risk smoke now asserts translated bounded
+  labels and explicitly rejects raw snake_case tokens such as
+  `theme_mapping_pending` and `scenario_coverage_incomplete`.
+- P2 remains: public launch register still keeps real public multi-user launch
+  as NO-GO; this branch is a bounded beta-candidate readiness branch, not a
+  production deployment.
+- P2 remains: Vite still emits existing large-chunk warnings during e2e/build;
+  no bundle-splitting change was opened in this checkpoint.
+
+Route before/after:
+
+| Route | Before | After | Evidence |
+| --- | --- | --- | --- |
+| `/zh/options-lab` | Default safety copy still contained negative order/broker wording | Default copy uses execution-boundary language without order/broker terms; payoff/math/API semantics unchanged | `OptionsLabPage.test.tsx`, `consumer-copy-regression.smoke.spec.ts`, `public-safety-ai-scanner-options.smoke.spec.ts`, `research-surfaces-launch.spec.ts` |
+| `/zh/market-overview` | Broad consumer copy smoke expected the removed actionability diagnostic strip | Smoke now locks the default diagnostic strip absence and verifies decision semantics plus visual evidence | `consumer-copy-regression.smoke.spec.ts`, `market-research-surfaces.spec.ts` |
+| `/zh/market/liquidity-monitor` | Broad consumer copy smoke expected stale exact degraded text | Smoke now accepts current bounded observation copy while still blocking raw diagnostics | `consumer-copy-regression.smoke.spec.ts`, `market-liquidity-monitor-degraded.spec.ts` |
+| `/zh/portfolio` | Scenario-risk smoke expected raw snake_case warning tokens | Smoke now requires translated product labels and rejects snake_case leakage | `portfolio-launch-surface.spec.ts` |
+| `/zh/backtest/results/34` | Research smoke expected old bento test IDs and developer-detail controls | Smoke now verifies current hero/KPI/result-summary/evidence/ledger disclosure structure | `research-surfaces-launch.spec.ts` |
+
+Validation completed:
+
+- `npm --prefix apps/dsa-web run test -- --run src/pages/__tests__/OptionsLabPage.test.tsx` -> PASS, 1 file / 39 tests.
+- `DSA_WEB_PLAYWRIGHT_PORT=4198 npm --prefix apps/dsa-web run test:e2e -- e2e/consumer-copy-regression.smoke.spec.ts e2e/portfolio-launch-surface.spec.ts e2e/research-surfaces-launch.spec.ts e2e/public-safety-ai-scanner-options.smoke.spec.ts e2e/market-liquidity-monitor-degraded.spec.ts e2e/watchlist-user-alerts.smoke.spec.ts e2e/market-research-surfaces.spec.ts` -> PASS, 32 tests.
+- `git diff --check` -> PASS.
+- `./scripts/release_secret_scan.sh` -> PASS.
+- `/Library/Frameworks/Python.framework/Versions/3.11/bin/python3 -m pytest tests/api/test_market_provider_operations.py tests/api/test_admin_provider_circuit_diagnostics.py tests/api/test_auth_rbac_release_contracts.py tests/test_auth_route_capability_inventory.py tests/test_release_secret_scan.py tests/api/test_auth_security_hardening.py` -> PASS, 88 tests.
+- `npm --prefix apps/dsa-web run lint` -> PASS.
+- `npm --prefix apps/dsa-web run build` -> PASS; existing Vite large-chunk warnings remain.
+- `npm --prefix apps/dsa-web run check:design` -> PASS with existing warning-only `Shell.tsx` native-ui finding.
+
+Rollback:
+
+- Revert checkpoint commit after it is created:
+  `git revert <checkpoint-4-commit>`.
+- Restore changed files to checkpoint 3:
+  `git restore --source=5784eb2a -- apps/dsa-web/src/pages/OptionsLabPage.tsx apps/dsa-web/src/pages/__tests__/OptionsLabPage.test.tsx apps/dsa-web/e2e/consumer-copy-regression.smoke.spec.ts apps/dsa-web/e2e/controlled-user-testing.smoke.spec.ts apps/dsa-web/e2e/portfolio-launch-surface.spec.ts apps/dsa-web/e2e/public-safety-ai-scanner-options.smoke.spec.ts apps/dsa-web/e2e/readiness-browser-acceptance.smoke.spec.ts apps/dsa-web/e2e/research-surfaces-launch.spec.ts apps/dsa-web/e2e/secondary-consumer-copy.smoke.spec.ts docs/codex/goals/T-1175_PROGRESS.md`.
+
 ## Checkpoints
 
 | Time | Commit | Scope | Validation |
 | --- | --- | --- | --- |
 | 2026-06-08 02:30 CST | `050e2276` | Initial baseline progress doc | `git diff --check`, `./scripts/release_secret_scan.sh` |
-| 2026-06-08 03:10 CST | this checkpoint commit | Auth redirect, Market Overview consumer fallback copy, Provider Ops endpoint redaction | Focused Vitest, lint, build, check:design, `git diff --check`, `./scripts/release_secret_scan.sh` |
-| 2026-06-08 04:07 CST | this checkpoint commit | Playwright truth alignment, provider diagnostics mobile L2 layout, product auth e2e harness restore | AdminProviderCircuit unit test, critical route smoke, admin auth smoke, no-secret smoke, `git diff --check` |
-| 2026-06-08 04:22 CST | this checkpoint commit | Backend auth route inventory and paywall copy sentinel repair | Focused backend/release pytest, release secret scan, lint, build, check:design, `git diff --check` |
+| 2026-06-08 03:10 CST | `50e61289` | Auth redirect, Market Overview consumer fallback copy, Provider Ops endpoint redaction | Focused Vitest, lint, build, check:design, `git diff --check`, `./scripts/release_secret_scan.sh` |
+| 2026-06-08 04:07 CST | `8effe763` | Playwright truth alignment, provider diagnostics mobile L2 layout, product auth e2e harness restore | AdminProviderCircuit unit test, critical route smoke, admin auth smoke, no-secret smoke, `git diff --check` |
+| 2026-06-08 04:22 CST | `5784eb2a` | Backend auth route inventory and paywall copy sentinel repair | Focused backend/release pytest, release secret scan, lint, build, check:design, `git diff --check` |
+| 2026-06-08 04:57 CST | pending final commit | Consumer journey proof, Options Lab execution-boundary copy, stale e2e truth alignment | Options Lab Vitest, 32-test consumer Playwright batch, focused backend pytest, release secret scan, lint, build, check:design, `git diff --check` |
 
 ## Running Notes
 

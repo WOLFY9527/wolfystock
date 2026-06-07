@@ -85,8 +85,11 @@ async function expectForbiddenTradingWordingAbsent(page: Page) {
     .replaceAll('不构成下单指令', '')
     .replaceAll('不构成交易或下单指令', '')
     .replaceAll('不构成交易/下单指令', '')
+    .replaceAll('不构成执行指令', '')
     .replaceAll('仅做只读情景分析，不构成交易或下单指令。', '')
+    .replaceAll('仅做只读情景分析，不构成执行指令。', '')
     .replaceAll('控制区只记录假设；数据是否可判断以后续准备度和风险边界为准，不构成交易或下单指令。', '')
+    .replaceAll('控制区只记录假设；数据是否可判断以后续准备度和风险边界为准，不构成执行指令。', '')
     .replaceAll('仅反映当前期权链的 IV / 行权价点位绘制，仅反映快照形状，不延伸为交易结论。', '')
     .replaceAll('仅做只读情景分析，不构成交易或下单指令。', '');
   expect(text).not.toMatch(forbiddenUnsafeTradingPattern);

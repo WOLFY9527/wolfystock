@@ -31,12 +31,11 @@ const forbiddenInternalPattern =
 const forbiddenExecutionPattern =
   /买入按钮|建议买入|建议卖出|立即交易|提交订单|连接券商|连接经纪商|真实下单|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy|must buy|must sell|buy now|sell now|place order|submit order|connect broker|broker CTA/i;
 const consumerSafeAllowedPhrases = [
-  '仅做只读情景分析，不构成交易或下单指令。',
-  '不构成交易/下单指令',
-  '不构成交易或下单指令',
+  '仅做只读情景分析，不构成执行指令。',
+  '不构成执行指令',
   '不构成买卖建议',
-  '不会提交订单',
-  '不连接经纪商',
+  '不会触发外部执行',
+  '不连接外部执行通道',
   '不改动投资组合',
 ];
 

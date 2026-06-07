@@ -416,7 +416,7 @@ appTest.describe('options public safety surface', () => {
       await expect(page.getByTestId('options-lab-decision-engine')).toContainText('数据不足，暂不形成结论');
       await expect(page.getByTestId('options-lab-decision-engine')).toContainText('演示数据');
       await expect(page.locator('body')).toContainText('只读情景分析');
-      await expect(page.locator('body')).toContainText('不构成交易/下单指令');
+      await expect(page.locator('body')).toContainText('不构成执行指令');
       await expect(page.getByTestId('options-lab-summary-strip')).toContainText('首个观察结构');
       await expect(page.getByTestId('options-lab-summary-strip')).toContainText('假设价格');
       await expect(page.getByTestId('options-lab-strategy-comparison')).toContainText('观察结构样例');

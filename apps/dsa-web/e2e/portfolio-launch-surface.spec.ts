@@ -10,6 +10,7 @@ const forbiddenLaunchLabels = ['交易工作台', '股票买卖', '提交交易'
 const requiredLedgerLabels = ['当前持仓', '历史记录', '手工记账台', '手工记账', '持仓流水', '保存记录'];
 const forbiddenInternalLeakagePattern =
   /\braw\b|\bdebug\b|\bschema\b|\btrace\b|\bprompt\b|\btoken\b|\bcookie\b|\bauthorization\b|provider_timeout|MarketCache|local_db|fixture|mock|synthetic|generatedCandidates|failedCandidates/i;
+const forbiddenSnakeCaseTokenPattern = /\b[a-z]+(?:_[a-z0-9]+)+\b/;
 
 async function expectNoHorizontalOverflow(page: import('@playwright/test').Page) {
   const overflow = await page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth));
@@ -225,12 +226,14 @@ test.describe('portfolio launch surface', () => {
     await expect(resultPanel).toContainText('数据不足 / 需补充映射');
     await expect(resultPanel).toContainText('现金缓冲');
     await expect(resultPanel).toContainText('USD cash');
-    await expect(resultPanel).toContainText('theme_mapping_pending');
-    await expect(resultPanel).toContainText('scenario_coverage_incomplete');
+    await expect(resultPanel).toContainText('部分输入缺失');
+    await expect(resultPanel).not.toContainText('theme_mapping_pending');
+    await expect(resultPanel).not.toContainText('scenario_coverage_incomplete');
+    expect(await resultPanel.innerText()).not.toMatch(forbiddenSnakeCaseTokenPattern);
     await expect(resultPanel).toContainText('不触发经纪商同步');
     await expect(resultPanel).toContainText('不改动账务结果');
     await expect(resultPanel).toContainText('不触发任何下单');
-    await expect(resultPanel).toContainText('不构成投资建议');
+    await expect(resultPanel).toContainText('模型结果不可作为仓位建议');
 
     expect(harness.requests.count('POST', '/api/v1/portfolio/scenario-risk')).toBe(1);
     expect(harness.scenarioRiskPayloads).toHaveLength(1);

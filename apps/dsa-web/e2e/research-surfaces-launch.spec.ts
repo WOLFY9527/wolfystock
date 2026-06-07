@@ -56,30 +56,31 @@ productTest.describe('Options Lab launch research surface', () => {
       await openProductRouteWithHarness(page, '/options-lab');
 
       const decision = page.getByTestId('options-lab-decision-engine');
-      const assumptions = page.getByTestId('options-lab-assumptions-row');
-      const chainDetails = page.getByTestId('options-lab-chain-details');
-      const strategyDetails = page.getByTestId('options-lab-strategy-details');
+      const assumptions = page.getByTestId('options-lab-assumptions-panel');
+      const chainPanel = page.getByTestId('options-lab-chain-panel').first();
+      const strategyDetails = page.getByTestId('options-lab-analysis-details');
 
       await productExpect(page.getByRole('heading', { name: '期权实验室' })).toBeVisible();
       await productExpect(decision).toBeVisible();
-      await productExpect(decision).toContainText('情景结论');
-      await productExpect(decision).toContainText('数据准备度');
-      await productExpect(decision).toContainText('主要风险边界');
+      await productExpect(decision).toContainText('情景判断');
+      await productExpect(decision).toContainText('判断指标');
+      await productExpect(page.getByTestId('options-lab-risk-boundary-panel')).toContainText('风险边界');
       await productExpect(decision).toContainText('演示/延迟数据');
       await productExpect(assumptions).toBeVisible();
-      await productExpect(chainDetails).not.toHaveJSProperty('open', true);
-      await productExpect(strategyDetails).not.toHaveJSProperty('open', true);
-      await expectBefore(decision, assumptions);
-      await expectBefore(assumptions, chainDetails);
+      await productExpect(chainPanel).toBeVisible();
+      await productExpect(strategyDetails.getByRole('button', { name: /展开/ })).toHaveAttribute('aria-expanded', 'false');
+      await expectBefore(assumptions, decision);
+      await expectBefore(decision, chainPanel);
 
-      const decisionBox = await decision.boundingBox();
-      productExpect(decisionBox?.y ?? viewport.height).toBeLessThan(viewport.height);
+      const heroBox = await page.getByTestId('options-lab-product-hero').boundingBox();
+      productExpect(heroBox?.y ?? viewport.height).toBeLessThan(viewport.height);
+      await productExpect(page.getByTestId('options-lab-product-hero')).toContainText('期权数据暂不可用，情景分析已暂停。');
+      await productExpect(page.getByTestId('options-lab-product-hero')).toContainText('不构成执行指令');
       await expectNoHorizontalOverflow(page);
 
-      await chainDetails.locator('summary').click();
       await productExpect(page.getByTestId('options-lab-calls-table')).toBeVisible();
-      await strategyDetails.locator('summary').filter({ hasText: '策略对比明细' }).click();
-      await productExpect(page.getByTestId('options-lab-strategy-comparison')).toBeVisible();
+      await strategyDetails.getByRole('button', { name: /展开/ }).click();
+      await productExpect(strategyDetails.getByRole('button', { name: /收起/ })).toHaveAttribute('aria-expanded', 'true');
       await page.unrouteAll({ behavior: 'ignoreErrors' });
     }
   });
@@ -93,23 +94,26 @@ appTest.describe('Backtest result launch research surface', () => {
       await page.goto('/zh/backtest/results/34');
       await page.waitForLoadState('domcontentloaded');
 
-      const hero = page.getByTestId('deterministic-result-page-bento-hero');
-      const kpis = page.getByTestId('deterministic-result-kpi-bento');
+      const hero = page.getByTestId('deterministic-result-page-hero');
+      const kpis = page.getByTestId('deterministic-result-kpi-strip');
       const summary = page.getByTestId('backtest-report-summary');
+      const resultSummary = page.getByTestId('backtest-report-result-summary');
       const chart = page.getByTestId('backtest-report-chart');
       const tradeTable = page.getByTestId('backtest-report-trade-table');
       const evidence = page.getByTestId('backtest-report-evidence-details');
+      const dataQuality = page.getByTestId('backtest-report-data-quality');
+      const advancedDetails = page.getByTestId('backtest-report-advanced-details');
       const secondaryActions = page.getByTestId('deterministic-result-secondary-actions');
 
       await appExpect(hero).toBeVisible({ timeout: 15_000 });
       await appExpect(kpis).toBeVisible();
       await appExpect(summary).toBeVisible();
-      await appExpect(summary).toContainText('研究结论');
-      await appExpect(summary).toContainText('表现');
-      await appExpect(summary).toContainText('回撤');
-      await appExpect(summary).toContainText('交易');
-      await appExpect(summary).toContainText('可靠性');
-      await appExpect(secondaryActions).not.toHaveJSProperty('open', true);
+      await appExpect(resultSummary).toContainText('诊断结论');
+      await appExpect(resultSummary).toContainText('总收益');
+      await appExpect(resultSummary).toContainText('最大回撤');
+      await appExpect(resultSummary).toContainText('交易次数');
+      await appExpect(resultSummary).toContainText('诊断材料');
+      await appExpect(secondaryActions).toBeVisible();
       await appExpect(evidence).not.toHaveJSProperty('open', true);
       await expectNoHorizontalOverflow(page);
 
@@ -122,9 +126,11 @@ appTest.describe('Backtest result launch research surface', () => {
 
       await evidence.locator('summary').click();
       await appExpect(evidence).toHaveJSProperty('open', true);
-      await page.getByRole('button', { name: /开发者细节/ }).click();
-      await appExpect(page.getByText(/原始执行轨迹仅提供导出/)).toBeVisible();
-      await page.getByRole('button', { name: /展开每日账本/ }).click();
+      await appExpect(dataQuality).toBeVisible();
+      await appExpect(advancedDetails).toBeVisible();
+      await advancedDetails.getByRole('button').first().click();
+      await appExpect(page.getByText(/执行明细仅提供导出/)).toBeVisible();
+      await advancedDetails.getByRole('button', { name: /展开每日账本/ }).click();
       await appExpect(page.getByTestId('backtest-report-ledger-table')).toBeVisible();
     }
   });

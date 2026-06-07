@@ -17,7 +17,7 @@ vi.mock('../../api/optionsLab', () => ({
 
 const NO_CONCLUSION_LABEL = '数据不足，暂不形成结论';
 const WAITING_STATE_LABEL = '等待数据确认';
-const SAFE_INSTRUCTION_BOUNDARY = '不构成交易或下单指令';
+const SAFE_INSTRUCTION_BOUNDARY = '不构成执行指令';
 const OBSERVE_ONLY_EVIDENCE_COPY = '仅供观察，不作为结论依据';
 const DEMO_EVIDENCE_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不作为结论依据。';
 const NON_DECISION_BOUNDARY_COPY = '未达到可判断等级，仅供情景观察，暂不形成结论。';
@@ -563,7 +563,7 @@ describe('OptionsLabPage', () => {
     expect(screen.getByTestId('options-lab-research-readiness-strip')).toHaveTextContent(/研究结论受限|仅观察|等待证据更新/);
     const inputRegion = screen.getByTestId('options-lab-input-region');
     expect(inputRegion).toHaveTextContent('情景参数');
-    expect(inputRegion).toHaveTextContent('这里仅记录研究输入，不直接形成交易或下单结论');
+    expect(inputRegion).toHaveTextContent('这里仅记录研究输入，不直接形成执行结论');
     const summaryStrip = screen.getByTestId('options-lab-summary-strip');
     expect(summaryStrip).toHaveTextContent('输入情景');
     expect(summaryStrip).toHaveTextContent('首个观察结构');
@@ -700,8 +700,8 @@ describe('OptionsLabPage', () => {
     expect(within(section).getAllByText('牛市看涨价差').length).toBeGreaterThan(0);
     expect(within(section).getByText('Call / Put 点位')).toBeInTheDocument();
     expect(within(section).getByText('不构成买卖建议')).toBeInTheDocument();
-    expect(within(section).getByText('不会提交订单')).toBeInTheDocument();
-    expect(within(section).getByText('不连接经纪商')).toBeInTheDocument();
+    expect(within(section).getByText('不会触发外部执行')).toBeInTheDocument();
+    expect(within(section).getByText('不连接外部执行通道')).toBeInTheDocument();
     expect(within(section).getByText('不改动投资组合')).toBeInTheDocument();
     expect(within(section).queryByText(/best contract|AI recommends you buy|buy now|sell now/i)).not.toBeInTheDocument();
   });

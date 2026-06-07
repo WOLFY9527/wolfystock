@@ -38,11 +38,13 @@ const allowedComplianceCopy = [
   '不构成下单指令',
   '不构成交易或下单指令',
   '不构成交易/下单指令',
+  '不会触发外部执行',
+  '不连接外部执行通道',
+  '不触发执行动作',
+  '不触发执行动作，不改动现有持仓。',
   '仅供研究观察，不构成交易指令。',
-  '仅做只读情景分析，不构成交易或下单指令。',
-  '仅做只读情景分析，不构成交易/下单指令。',
-  '控制区只记录假设；数据是否可判断以后续准备度和风险边界为准，不构成交易或下单指令。',
-  '控制区只记录假设；数据是否可判断以后续准备度和风险边界为准，不构成交易/下单指令。',
+  '仅做只读情景分析，不构成执行指令。',
+  '控制区只记录假设；数据是否可判断以后续准备度和风险边界为准，不构成执行指令。',
   '仅做只读情景分析，。',
 ];
 
@@ -844,19 +846,12 @@ appTest.describe('consumer copy regression smoke', () => {
 
       const shell = page.getByTestId('market-overview-shell');
       await appExpect(shell).toBeVisible({ timeout: 15_000 });
-      const strip = page.getByTestId('market-intelligence-actionability-strip');
       const visualStrip = page.getByTestId('market-overview-visual-evidence-strip');
-      await appExpect(strip).toBeVisible();
+      await appExpect(page.getByTestId('market-intelligence-actionability-strip')).toHaveCount(0);
       await appExpect(visualStrip).toBeVisible();
       await appExpect(visualStrip).toContainText('核心图表证据');
-      await appExpect(strip).toContainText('市场研判可用性');
-      await appExpect(strip).toContainText('仅观察');
-      await appExpect(strip).toContainText('来源级别');
-      await appExpect(strip).toContainText('仅供研究观察，不作为执行依据');
-      await appExpect(strip).toContainText('继续确认流动性是否保持扩张');
+      await appExpect(page.getByTestId('market-decision-semantics-strip')).toContainText('不构成交易指令');
       await appExpect(shell).toContainText(/已使用最近一次可用数据|最近一次可用数据|更新中/);
-      await strip.getByText('更多证据细节').click();
-      await appExpect(strip).toContainText('来源级别 观察级');
       await expectConsumerSafeSurface(visualStrip);
       await expectConsumerSafeSurface(shell);
       await baseExpect(consoleErrors).toEqual([]);
@@ -899,7 +894,7 @@ appTest.describe('consumer copy regression smoke', () => {
       const readiness = page.getByTestId('liquidity-decision-readiness').first();
       await appExpect(guidancePanel).toBeVisible({ timeout: 15_000 });
       await appExpect(readiness).toBeVisible();
-      await appExpect(guidancePanel).toContainText(/数据不足，暂不形成结论|已使用最近一次可用数据|仅用于观察市场流动性环境/);
+      await appExpect(guidancePanel).toContainText(/数据不足，暂不形成结论|已使用最近一次可用数据|流动性格局仅观察|暂以观察为主/);
       await appExpect(readiness).toContainText(/数据说明与限制|最近更新|流动性状态/);
       await expectConsumerSafeSurface(guidancePanel);
       await expectConsumerSafeSurface(readiness);
@@ -987,8 +982,8 @@ appTest.describe('consumer copy regression smoke', () => {
       await appExpect(boundaryPanel).toContainText('仅供观察，不作为结论依据');
       await appExpect(visualsPanel).toContainText('收益边界与 IV 快照');
       await appExpect(visualsPanel).toContainText('不构成买卖建议');
-      await appExpect(visualsPanel).toContainText('不会提交订单');
-      await appExpect(pageRoot).toContainText('不构成交易或下单指令');
+      await appExpect(visualsPanel).toContainText('不会触发外部执行');
+      await appExpect(pageRoot).toContainText('不构成执行指令');
       await expectConsumerSafeSurface(pageRoot);
       pwExpect(harness.count('POST', '/api/v1/options/strategies/compare')).toBeGreaterThan(0);
       pwExpect(harness.count('POST', '/api/v1/options/decision/evaluate')).toBeGreaterThan(0);

@@ -107,11 +107,11 @@ const OPTIONS_INSUFFICIENT_COPY = '当前期权信号数据不足，仅供观察
 const OPTIONS_UPDATING_COPY = '数据更新中，稍后将自动刷新。';
 const OPTIONS_UNAVAILABLE_COPY = '本模块暂不可用，请稍后重试。';
 const OPTIONS_NO_CONCLUSION_COPY = '数据不足，暂不形成结论';
-const OPTIONS_SAFE_INSTRUCTION_COPY = '仅做只读情景分析，不构成交易或下单指令。';
+const OPTIONS_SAFE_INSTRUCTION_COPY = '仅做只读情景分析，不构成执行指令。';
 const OPTIONS_READ_ONLY_BOUNDARY_COPY = '不触发执行动作，不改动现有持仓。';
 const OPTIONS_NON_ADVICE_COPY = '不构成买卖建议';
-const OPTIONS_NO_ORDER_COPY = '不会提交订单';
-const OPTIONS_NO_BROKER_COPY = '不连接经纪商';
+const OPTIONS_NO_ORDER_COPY = '不会触发外部执行';
+const OPTIONS_NO_BROKER_COPY = '不连接外部执行通道';
 const OPTIONS_NO_PORTFOLIO_MUTATION_COPY = '不改动投资组合';
 const OPTIONS_OBSERVE_ONLY_COPY = '仅供观察，不作为结论依据';
 const OPTIONS_DEMO_BOUNDARY_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不作为结论依据。';
@@ -1336,7 +1336,7 @@ const AssumptionPanel: React.FC<{
           </div>
         </SectionHeader>
         <p className="mt-2 text-sm text-[color:var(--wolfy-text-secondary)]">
-          控制区只记录假设；数据是否可判断以后续准备度和风险边界为准，不构成交易或下单指令。
+          控制区只记录假设；数据是否可判断以后续准备度和风险边界为准，不构成执行指令。
         </p>
       </div>
 
@@ -2670,7 +2670,7 @@ const OptionsLabPageContent: React.FC = () => {
             action={(
               <div className="flex flex-wrap justify-end gap-2">
                 <Pill tone="info">门控优先</Pill>
-                <Pill tone="warn">不构成交易/下单指令</Pill>
+                <Pill tone="warn">不构成执行指令</Pill>
               </div>
             )}
           />
@@ -2690,7 +2690,7 @@ const OptionsLabPageContent: React.FC = () => {
               testId="options-lab-input-region"
               eyebrow="工作流起点"
               title="情景参数"
-              summary="先设定标的、方向、假设价格、目标日期与风险预算；这里仅记录研究输入，不直接形成交易或下单结论。"
+              summary="先设定标的、方向、假设价格、目标日期与风险预算；这里仅记录研究输入，不直接形成执行结论。"
               icon={Search}
             >
               <AssumptionPanel

@@ -36,6 +36,7 @@ const forbiddenTradingTerms = [
 const allowedBoundaryTerms = [
   '不构成交易指令',
   '不构成交易或下单指令',
+  '不构成执行指令',
   '不构成交易建议',
 ];
 
