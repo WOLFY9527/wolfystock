@@ -1880,118 +1880,149 @@ const DecisionReadinessBand: React.FC<{
     return (
       <section
         data-testid="liquidity-decision-readiness"
-        className="min-w-0 border-b border-white/[0.06] pb-4"
+        className="min-w-0 space-y-5 border-b border-white/[0.06] pb-5"
       >
-        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.28fr)_minmax(280px,0.72fr)]">
-          <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-4">
-            <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold text-white/45">流动性状态</p>
-                <h2 className="mt-1 text-lg font-semibold leading-7 text-white/92 md:text-xl">
-                  {consumerView.availabilityLabel}
-                </h2>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">{consumerView.headline}</p>
-              </div>
-              <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
-                <TerminalChip variant={consumerView.availabilityVariant}>{consumerView.availabilityLabel}</TerminalChip>
-                <TerminalChip variant={consumerView.scoringVariant}>{consumerView.scoringLabel}</TerminalChip>
-                <TerminalChip variant={consumerView.freshnessVariant}>{consumerView.freshnessChipLabel}</TerminalChip>
+        <div data-testid="liquidity-section-overview" className="min-w-0">
+          <div className="mb-3 flex min-w-0 items-center gap-3">
+            <div className="h-px flex-1 bg-white/[0.08]" aria-hidden="true" />
+            <p className="shrink-0 text-[11px] font-semibold text-white/54">流动性总览</p>
+            <div className="h-px flex-1 bg-white/[0.08]" aria-hidden="true" />
+          </div>
+
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(300px,0.82fr)]">
+            <div className="min-w-0 rounded-xl border border-cyan-200/14 bg-[radial-gradient(circle_at_top_left,rgba(103,232,249,0.10),transparent_34%),rgba(255,255,255,0.035)] p-4 shadow-[0_18px_60px_rgba(3,7,18,0.22)] md:p-5">
+              <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold text-cyan-100/70">当前结论 · 流动性状态</p>
+                  <h2 className="mt-2 text-[26px] font-semibold leading-tight text-white/94 md:text-3xl">
+                    {consumerView.availabilityLabel}
+                  </h2>
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-white/68">{consumerView.headline}</p>
+                </div>
+                <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
+                  <TerminalChip variant={consumerView.availabilityVariant}>{consumerView.availabilityLabel}</TerminalChip>
+                  <TerminalChip variant={consumerView.scoringVariant}>{consumerView.scoringLabel}</TerminalChip>
+                  <TerminalChip variant={consumerView.confidenceVariant}>{consumerView.confidenceLabel}</TerminalChip>
+                  <TerminalChip variant={consumerView.freshnessVariant}>{consumerView.freshnessChipLabel}</TerminalChip>
+                </div>
               </div>
             </div>
 
             <div
               data-testid="liquidity-summary-strip"
-              className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3"
+              className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1"
             >
               {consumerSummaryFacts.map((fact) => (
-                <div key={fact.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
+                <div key={fact.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
                   <p className="text-[11px] font-medium text-white/48">{fact.label}</p>
-                  <p className="mt-2 truncate text-sm font-semibold text-white/84">{fact.value}</p>
+                  <p className="mt-2 break-words text-sm font-semibold text-white/84">{fact.value}</p>
                   {fact.detail ? (
                     <p className="mt-1 text-[11px] leading-5 text-white/56">{fact.detail}</p>
                   ) : null}
                 </div>
               ))}
             </div>
+          </div>
+        </div>
 
-            <ConsumerLiquidityVisualEvidence
-              data={data}
-              coverageSummary={coverageSummary}
-              readinessSummary={summary}
-              synthesisView={synthesisView}
-              indicators={indicators}
-            />
-
-            {consumerEvidenceRows.length ? (
-              <div
-                data-testid="liquidity-consumer-evidence"
-                className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3"
-              >
-                <div className="flex min-w-0 items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-medium text-white/48">当前证据</p>
-                    <p className="mt-1 text-[11px] leading-5 text-white/56">只保留最影响当前状态的线索与缺口。</p>
-                  </div>
-                </div>
-                <div className="mt-3 grid gap-2">
-                  {consumerEvidenceRows.map((row) => (
-                    <div key={row.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
-                      <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-white/84">{row.label}</p>
-                          <p className="mt-1 text-[11px] leading-5 text-white/60">{row.note}</p>
-                        </div>
-                        <div className="flex min-w-0 flex-wrap gap-1.5 lg:justify-end">
-                          <TerminalChip variant={row.statusVariant}>{row.statusLabel}</TerminalChip>
-                          <TerminalChip variant={row.scoreVariant}>{row.scoreLabel}</TerminalChip>
-                          <TerminalChip variant={row.freshnessVariant}>{row.freshnessLabel}</TerminalChip>
-                        </div>
-                      </div>
-                      <p className="mt-2 text-[11px] leading-5 text-white/48">{row.detail}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            <CapitalFlowSignalPanel signal={data.capitalFlowSignal} />
-
-            <ConsumerDisclosure
-              testId="liquidity-monitor-consumer-details"
-              title="数据说明与限制"
-              summary="方法、限制与最近更新默认折叠"
-              className="mt-4 bg-black/10"
-            >
-              <div className="grid gap-2 text-[11px] leading-5 text-white/56">
-                <p>{consumerView.availabilityDetail}</p>
-                <p>{consumerView.scoringDetail}</p>
-                <p>{consumerView.freshnessDetail}</p>
-                {observation.count > 0 ? <p>仍在观察：{observation.namesLine}</p> : null}
-                {missing.count > 0 ? <p>待恢复：{missing.namesLine}</p> : null}
-                <p>本页把流动性作为研究背景展示；当关键信号缺失、延迟或暂不可用时，状态会自动降级。</p>
-              </div>
-            </ConsumerDisclosure>
+        <div data-testid="liquidity-section-metrics" className="min-w-0 rounded-xl border border-white/[0.055] bg-black/10 p-3 md:p-4">
+          <div className="flex min-w-0 flex-col gap-2 border-b border-white/[0.06] pb-3 md:flex-row md:items-end md:justify-between">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold text-white/54">细分指标</p>
+              <p className="mt-1 text-sm leading-6 text-white/62">把读数、覆盖、关键驱动和当前证据分开查看。</p>
+            </div>
+            <TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.directionLabel}</TerminalChip>
           </div>
 
-          <aside
-            data-testid="liquidity-context-rail"
-            className="grid min-w-0 gap-3 self-start"
-          >
-            <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
-              <p className="text-[11px] font-medium text-white/48">当前缺口</p>
-              <p className="mt-2 text-sm leading-6 text-white/76">{consumerGapSummary}</p>
-              <p className="mt-2 text-[11px] leading-5 text-white/48">
-                {missing.count > 0 ? `优先恢复：${missing.namesLine}` : '当前没有新增缺口，继续观察后续变化。'}
-              </p>
+          <ConsumerLiquidityVisualEvidence
+            data={data}
+            coverageSummary={coverageSummary}
+            readinessSummary={summary}
+            synthesisView={synthesisView}
+            indicators={indicators}
+          />
+
+          {consumerEvidenceRows.length ? (
+            <div
+              data-testid="liquidity-consumer-evidence"
+              className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3"
+            >
+              <div className="flex min-w-0 items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-medium text-white/48">当前证据</p>
+                  <p className="mt-1 text-[11px] leading-5 text-white/56">只保留最影响当前状态的线索与缺口。</p>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {consumerEvidenceRows.map((row) => (
+                  <div key={row.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
+                    <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="break-words text-sm font-semibold text-white/84">{row.label}</p>
+                        <p className="mt-1 text-[11px] leading-5 text-white/60">{row.note}</p>
+                      </div>
+                      <div className="flex min-w-0 flex-wrap gap-1.5 lg:justify-end">
+                        <TerminalChip variant={row.statusVariant}>{row.statusLabel}</TerminalChip>
+                        <TerminalChip variant={row.scoreVariant}>{row.scoreLabel}</TerminalChip>
+                        <TerminalChip variant={row.freshnessVariant}>{row.freshnessLabel}</TerminalChip>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-[11px] leading-5 text-white/48">{row.detail}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
-              <p className="text-[11px] font-medium text-white/48">下一次关注</p>
-              <p className="mt-2 text-sm leading-6 text-white/76">{nextWatch}</p>
-              <p className="mt-2 text-[11px] leading-5 text-white/48">
-                {consumerView.freshnessSummary}；页面会在后续刷新中继续更新状态。
-              </p>
+          ) : null}
+        </div>
+
+        <div data-testid="liquidity-section-observation" className="min-w-0">
+          <div className="mb-3 flex min-w-0 items-center gap-3">
+            <div className="h-px flex-1 bg-white/[0.08]" aria-hidden="true" />
+            <p className="shrink-0 text-[11px] font-semibold text-white/54">历史/观察线索</p>
+            <div className="h-px flex-1 bg-white/[0.08]" aria-hidden="true" />
+          </div>
+
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(300px,0.88fr)]">
+            <div className="min-w-0">
+              <CapitalFlowSignalPanel signal={data.capitalFlowSignal} />
+
+              <ConsumerDisclosure
+                testId="liquidity-monitor-consumer-details"
+                title="数据说明与限制"
+                summary="方法、限制与最近更新默认折叠"
+                className="mt-4 bg-black/10"
+              >
+                <div className="grid gap-2 text-[11px] leading-5 text-white/56">
+                  <p>{consumerView.availabilityDetail}</p>
+                  <p>{consumerView.scoringDetail}</p>
+                  <p>{consumerView.freshnessDetail}</p>
+                  {observation.count > 0 ? <p>仍在观察：{observation.namesLine}</p> : null}
+                  {missing.count > 0 ? <p>待恢复：{missing.namesLine}</p> : null}
+                  <p>本页把流动性作为研究背景展示；当关键信号缺失、延迟或暂不可用时，状态会自动降级。</p>
+                </div>
+              </ConsumerDisclosure>
             </div>
-          </aside>
+
+            <aside
+              data-testid="liquidity-context-rail"
+              className="grid min-w-0 gap-3 self-start"
+            >
+              <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
+                <p className="text-[11px] font-medium text-white/48">当前缺口</p>
+                <p className="mt-2 text-sm leading-6 text-white/76">{consumerGapSummary}</p>
+                <p className="mt-2 text-[11px] leading-5 text-white/48">
+                  {missing.count > 0 ? `优先恢复：${missing.namesLine}` : '当前没有新增缺口，继续观察后续变化。'}
+                </p>
+              </div>
+              <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
+                <p className="text-[11px] font-medium text-white/48">下一次关注</p>
+                <p className="mt-2 text-sm leading-6 text-white/76">{nextWatch}</p>
+                <p className="mt-2 text-[11px] leading-5 text-white/48">
+                  {consumerView.freshnessSummary}；页面会在后续刷新中继续更新状态。
+                </p>
+              </div>
+            </aside>
+          </div>
         </div>
       </section>
     );

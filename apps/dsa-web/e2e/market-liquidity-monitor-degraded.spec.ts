@@ -244,6 +244,13 @@ test.describe('Liquidity Monitor degraded proxy-only state', () => {
         await expect(guidancePanel).toContainText('当前缺口');
         await expect(guidancePanel).toContainText('下一次关注');
         await expect(guidancePanel).toContainText('已使用最近一次可用数据');
+        await expect(page.getByTestId('liquidity-section-overview')).toContainText('流动性总览');
+        await expect(page.getByTestId('liquidity-section-metrics')).toContainText('细分指标');
+        await expect(page.getByTestId('liquidity-section-observation')).toContainText('历史/观察线索');
+        const conclusionFontSize = await page.getByTestId('liquidity-section-overview').locator('h2').evaluate((element) => {
+          return Number.parseFloat(window.getComputedStyle(element).fontSize);
+        });
+        expect(conclusionFontSize).toBeGreaterThanOrEqual(24);
         await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('数据说明与限制');
         await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('最近更新');
         await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('流动性状态');

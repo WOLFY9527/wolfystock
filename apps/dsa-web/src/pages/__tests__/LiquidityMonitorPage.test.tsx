@@ -720,7 +720,11 @@ describe('LiquidityMonitorPage', () => {
 
     expect(await screen.findByRole('heading', { name: '流动性监测' })).toBeInTheDocument();
     const guidancePanel = screen.getByTestId('liquidity-monitor-guidance-panel');
+    expect(screen.getByTestId('liquidity-section-overview')).toHaveTextContent('流动性总览');
+    expect(screen.getByTestId('liquidity-section-metrics')).toHaveTextContent('细分指标');
+    expect(screen.getByTestId('liquidity-section-observation')).toHaveTextContent('历史/观察线索');
     expect(guidancePanel).toHaveTextContent('流动性状态');
+    expect(guidancePanel).toHaveTextContent('当前结论');
     expect(guidancePanel).toHaveTextContent('观察中');
     expect(guidancePanel).toHaveTextContent('评分已暂停');
     expect(guidancePanel).toHaveTextContent('当前流动性仍在观察中，主线索是美国利率压力。');
