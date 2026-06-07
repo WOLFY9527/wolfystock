@@ -65,9 +65,18 @@
     },
     {
       "route_id": "portfolio.member_surface",
-      "path_pattern": "^/api/v1/portfolio/(?:accounts(?:/\\{account_id\\})?|fx-rate(?:/refresh)?|broker-connections(?:/\\{connection_id\\})?|sync/ibkr|trades(?:/\\{trade_id\\})?|cash-ledger(?:/\\{entry_id\\})?|corporate-actions(?:/\\{action_id\\})?|snapshot|imports/(?:parse|brokers|commit|csv/parse|csv/brokers|csv/commit)|fx/refresh|risk)$",
+      "path_pattern": "^/api/v1/portfolio/(?:accounts(?:/\\{account_id\\})?|fx-rate(?:/refresh)?|broker-connections(?:/\\{connection_id\\})?|sync/ibkr|trades(?:/\\{trade_id\\})?|cash-ledger(?:/\\{entry_id\\})?|corporate-actions(?:/\\{action_id\\})?|snapshot|imports/(?:parse|brokers|commit|csv/parse|csv/brokers|csv/commit)|fx/refresh|risk|scenario-risk)$",
       "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"],
       "surface": "portfolio",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "user_alerts.member_surface",
+      "path_pattern": "^/api/v1/user-alerts/(?:rules(?:/\\{rule_id\\})?|events)$",
+      "methods": ["GET", "POST", "PATCH", "DELETE"],
+      "surface": "user_alerts",
       "auth_dependency_label": "authenticated_user",
       "capability_label": null,
       "transitional_note": null

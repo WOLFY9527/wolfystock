@@ -253,7 +253,6 @@ Validation completed:
 
 Validation pending:
 
-- P1 focused backend/release tests around admin/provider/auth/release contracts.
 - Full `npm --prefix apps/dsa-web run lint`, build, and `check:design` after
   the final validation batch.
 - Broader consumer journey routes: liquidity, watchlist, portfolio/report
@@ -266,6 +265,49 @@ Rollback:
 - Restore changed smoke/layout/test utility files to checkpoint 1:
   `git restore --source=50e61289 -- apps/dsa-web/e2e/admin-auth-harness.spec.ts apps/dsa-web/e2e/critical-route-launch-smoke.spec.ts apps/dsa-web/e2e/no-secret-critical-surface.smoke.spec.ts apps/dsa-web/src/pages/AdminProviderCircuitDiagnosticsPage.tsx apps/dsa-web/src/test-utils/productAuthHarness.ts`.
 
+## Checkpoint 3 - Release Contract Inventory Repair
+
+Time: 2026-06-08 04:22 CST.
+
+Public Beta Readiness estimate after backend/release validation: 81/100.
+
+P0/P1 movement:
+
+- P0 narrowed: focused admin/provider/auth/release pytest gate now passes with
+  current route inventory.
+- P1 improved: backend route capability fixture now covers authenticated-user
+  portfolio scenario-risk and user-alerts routes without changing their auth
+  dependency or promoting them to admin capability surfaces.
+- P1 improved: frontend auth paywall inventory sentinel now tracks current
+  Chinese/English overlay copy instead of stale launch wording.
+
+Validation completed:
+
+- `/Library/Frameworks/Python.framework/Versions/3.11/bin/python3 -m pytest tests/test_auth_route_capability_inventory.py::test_backend_route_capability_inventory_covers_current_dependency_guarded_routes tests/test_auth_route_capability_inventory.py::test_frontend_guest_paywall_and_admin_gate_boundaries_are_represented_in_existing_tests -q` -> PASS, 2 tests.
+- `/Library/Frameworks/Python.framework/Versions/3.11/bin/python3 -m pytest tests/api/test_market_provider_operations.py tests/api/test_admin_provider_circuit_diagnostics.py tests/api/test_auth_rbac_release_contracts.py tests/test_auth_route_capability_inventory.py tests/test_release_secret_scan.py tests/api/test_auth_security_hardening.py` -> PASS, 88 tests.
+- `./scripts/release_secret_scan.sh` -> PASS.
+- `npm --prefix apps/dsa-web run lint` -> PASS.
+- `npm --prefix apps/dsa-web run build` -> PASS; existing Vite large-chunk warnings remain.
+- `npm --prefix apps/dsa-web run check:design` -> PASS with existing warning-only `Shell.tsx` native-ui finding.
+- `git diff --check` -> PASS.
+
+Validation note:
+
+- The first pytest attempt used the default `/Users/yehengli/.browser-use-env/bin/python` and failed before collection because that environment has no `pytest`.
+- A second attempt with Python 3.11 used a stale path `tests/test_auth_security_hardening.py`; the current file is `tests/api/test_auth_security_hardening.py`.
+
+Validation pending:
+
+- Broader consumer journey routes: liquidity, watchlist, portfolio/report
+  history beyond current no-secret and critical-route coverage.
+
+Rollback:
+
+- Revert checkpoint commit after it is created:
+  `git revert <checkpoint-3-commit>`.
+- Restore changed inventory files to checkpoint 2:
+  `git restore --source=8effe763 -- tests/fixtures/auth/backend_route_capability_inventory.json tests/test_auth_route_capability_inventory.py`.
+
 ## Checkpoints
 
 | Time | Commit | Scope | Validation |
@@ -273,6 +315,7 @@ Rollback:
 | 2026-06-08 02:30 CST | `050e2276` | Initial baseline progress doc | `git diff --check`, `./scripts/release_secret_scan.sh` |
 | 2026-06-08 03:10 CST | this checkpoint commit | Auth redirect, Market Overview consumer fallback copy, Provider Ops endpoint redaction | Focused Vitest, lint, build, check:design, `git diff --check`, `./scripts/release_secret_scan.sh` |
 | 2026-06-08 04:07 CST | this checkpoint commit | Playwright truth alignment, provider diagnostics mobile L2 layout, product auth e2e harness restore | AdminProviderCircuit unit test, critical route smoke, admin auth smoke, no-secret smoke, `git diff --check` |
+| 2026-06-08 04:22 CST | this checkpoint commit | Backend auth route inventory and paywall copy sentinel repair | Focused backend/release pytest, release secret scan, lint, build, check:design, `git diff --check` |
 
 ## Running Notes
 

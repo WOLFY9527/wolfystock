@@ -662,5 +662,5 @@ def test_frontend_guest_paywall_and_admin_gate_boundaries_are_represented_in_exi
     assert "/settings/system" in app_routes_test_source
     assert "/zh/admin/evidence-workflow" in app_routes_test_source
     assert "/zh/admin/cost-observability" in app_routes_test_source
-    assert "Sign in to unlock Portfolio" in auth_guard_test_source
-    assert "登录解锁 市场总览" in auth_guard_test_source
+    assert "Sign in to continue to Portfolio" in auth_guard_test_source
+    assert "登录后即可进入 市场总览" in auth_guard_test_source
