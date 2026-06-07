@@ -232,14 +232,13 @@ function HomeCandlestickChartFallback({
   statusLabel: string;
 }) {
   return (
-    <div
+    <output
       className={cn(
-        'home-chart-well min-w-0 rounded-[14px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-3 py-2.5 shadow-[var(--wolfy-shadow-panel)]',
+        'home-chart-well block min-w-0 rounded-[14px] border border-[color:var(--wolfy-border-faint)] bg-[var(--wolfy-surface-inset)] px-3 py-2.5 shadow-[var(--wolfy-shadow-panel)]',
         className,
       )}
       style={style}
       data-testid="home-candlestick-chart-fallback"
-      role="status"
       aria-live="polite"
       aria-atomic="true"
       aria-busy="true"
@@ -285,7 +284,7 @@ function HomeCandlestickChartFallback({
           </div>
         </div>
       </div>
-    </div>
+    </output>
   );
 }
 

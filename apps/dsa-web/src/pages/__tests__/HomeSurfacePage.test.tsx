@@ -467,7 +467,9 @@ describe('HomeSurfacePage', () => {
 
       const chartWorkspace = screen.getByTestId('home-research-chart-workspace');
       expect(chartWorkspace).toContainElement(screen.getByRole('status', { name: '正在加载首页价格图表' }));
-      expect(chartWorkspace).toContainElement(screen.getByTestId('home-candlestick-chart-fallback'));
+      const fallback = screen.getByTestId('home-candlestick-chart-fallback');
+      expect(chartWorkspace).toContainElement(fallback);
+      expect(fallback.tagName).toBe('OUTPUT');
       await waitFor(() => expect(window.requestIdleCallback).toHaveBeenCalledTimes(1));
       expect(stocksApi.getHistory).not.toHaveBeenCalled();
       expect(screen.queryByTestId('home-candlestick-chart-frame')).not.toBeInTheDocument();

@@ -500,18 +500,64 @@ Next candidates:
 - Stop unless explicitly re-scoped: remaining findings require forbidden domains, unsafe semantic changes, or broader state/effect/component decomposition.
 - If re-scoped later, start with tests for a single route and explicitly allow the relevant state/effect or accessibility semantic contract.
 
+## Batch 11: Home Chart Native Status Output
+
+Status: included in the checkpoint commit for this batch after local validation.
+
+Files changed:
+
+- `apps/dsa-web/src/pages/HomeBentoDashboardPage.tsx`
+- `apps/dsa-web/src/pages/__tests__/HomeSurfacePage.test.tsx`
+
+Changes:
+
+- Replaced the Home chart fallback `role="status"` wrapper with the native `<output>` element.
+- Added `block` to preserve the previous block-level wrapper layout.
+- Added a focused Home Surface assertion that the fallback still exposes the `status` role and now renders as `OUTPUT`.
+- Kept Home dashboard route behavior, visible copy, and chart fallback layout unchanged.
+
+Diagnostics after batch:
+
+- Score: `61`
+- Total diagnostics: `488`
+- Errors: `112`
+- Warnings: `376`
+- Affected files: `41`
+- Reduced total diagnostics from previous checkpoint: `1`
+- Reduced total diagnostics from baseline: `79`
+- Reduced by rule from previous checkpoint:
+  - `prefer-tag-over-role`: `2 -> 1` (`-1`)
+- React Doctor diff for changed file:
+  - `src/pages/HomeBentoDashboardPage.tsx`: `78 -> 77` (`-1`)
+
+Validations run:
+
+- `git diff --check` -> pass
+- `./scripts/release_secret_scan.sh` -> pass
+- `npm --prefix apps/dsa-web run test -- 'src/pages/__tests__/HomeSurfacePage.test.tsx' --no-file-parallelism` -> pass, `75` tests
+- `npm --prefix apps/dsa-web run lint` -> pass
+- `npm --prefix apps/dsa-web run build` -> pass with existing Vite chunk-size warning
+- `npx react-doctor@latest --json --json-compact --yes --no-score` -> remaining diagnostics expected, totals above
+- `npx react-doctor@latest --score --yes` -> `61`
+
+Next candidates:
+
+- Remaining `prefer-tag-over-role` on the scanner filter bar is not equivalent: the flagged element groups filter buttons, while `<address>` would imply contact/address semantics.
+- Remaining accessibility findings need route-specific semantic design and focused tests before changes.
+- Remaining score gains still require forbidden domains, unsafe semantic changes, or broader state/effect/component decomposition.
+
 ## Stop Manifest
 
-Latest pushed checkpoint before stopping: `b7dc5ef0`.
+Latest pushed checkpoint before this resumed batch: `372c9815`.
 
 Final React Doctor state:
 
 - Score: `61`
-- Total diagnostics: `489`
+- Total diagnostics: `488`
 - Errors: `112`
-- Warnings: `377`
+- Warnings: `376`
 - Affected files: `41`
-- Reduced total diagnostics from baseline: `78`
+- Reduced total diagnostics from baseline: `79`
 
 Remaining blocker groups:
 
@@ -529,11 +575,11 @@ Remaining blocker groups:
   - `Array.prototype.toSorted()` suggestions require ES2023 library support while `tsconfig.app.json` targets `ES2022`.
   - `ReportPriceChart` passive listener suggestions are unsafe because the wheel/touch handlers intentionally call `preventDefault()`.
   - `HomeBentoDashboardPage.tsx` `js-set-map-lookups` flags string substring matching, not a Set-compatible array lookup.
-  - Accessibility tag suggestions for Home output/address and scroll-container `tabIndex` need explicit semantic design and tests before changes.
+  - The remaining scanner `<address>` suggestion and scroll-container `tabIndex` suggestions need explicit semantic design and tests before changes.
 
 ## Protected Domain Confirmation
 
-No changes in Batches 1 through 10 to:
+No changes in Batches 1 through 11 to:
 
 - backend/API/provider/cache/runtime/auth/package/lockfile/config/CI
 - provider order, fallback, deadlines, cache semantics, payload shapes
