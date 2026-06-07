@@ -85,12 +85,18 @@ test('keeps a single primary scanner CTA in the empty state on desktop', async (
 
   const headerStrip = page.getByTestId('watchlist-header-strip');
   const emptyState = page.getByTestId('watchlist-compact-empty-state');
+  const boardShell = page.getByTestId('watchlist-board-shell');
   const scannerButton = page.getByRole('button', { name: '打开扫描器' });
 
   await expect(scannerButton).toHaveCount(1);
   await expect(headerStrip.getByRole('button', { name: '打开扫描器' })).toHaveCount(0);
-  await expect(emptyState).toContainText('观察列表为空，搜索股票并添加到关注列表。');
-  await expect(emptyState).toContainText('添加后可在这里查看候选证据与状态。');
+  await expect(emptyState).toContainText('从扫描器添加标的到观察列表');
+  await expect(emptyState).toContainText('添加后可在这里查看已保存的候选证据与状态。');
+  await expect(page.getByTestId('watchlist-compact-filter-bar')).toHaveCount(0);
+  await expect(page.getByTestId('watchlist-advanced-filters')).toHaveCount(0);
+  await expect(page.getByTestId('watchlist-list-header')).toHaveCount(0);
+  await expect(page.getByTestId('watchlist-command-bar')).toHaveCount(0);
+  await expect(boardShell).not.toHaveClass(/lg:grid-cols-\[minmax\(0,1fr\)_340px\]/);
   await expectNoHorizontalOverflow(page);
 });
 
@@ -104,6 +110,9 @@ test('stacks the empty-state CTA cleanly at 390px without overlap', async ({ pag
 
   await expect(scannerButton).toHaveCount(1);
   await expect(headerStrip.getByRole('button', { name: '打开扫描器' })).toHaveCount(0);
+  await expect(emptyState).toContainText('从扫描器添加标的到观察列表');
+  await expect(page.getByTestId('watchlist-compact-filter-bar')).toHaveCount(0);
+  await expect(page.getByTestId('watchlist-command-bar')).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 
   const layout = await emptyState.evaluate((node) => {

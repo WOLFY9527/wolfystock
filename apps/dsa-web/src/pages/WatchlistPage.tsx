@@ -928,8 +928,8 @@ function getCopy(language: 'zh' | 'en') {
       copySymbol: 'Copy symbol',
       copied: 'Copied',
       emptyTitle: 'No tracked candidates yet.',
-      emptyBody: 'Add candidates from Scanner, or use Scanner manual symbol entry for a focused list.',
-      emptyHelp: 'Return here to review candidate evidence and status.',
+      emptyBody: 'Add symbols from Scanner to the watchlist, or use Scanner manual symbol entry.',
+      emptyHelp: 'Return here to review saved candidate evidence and status.',
       openScanner: 'Open Scanner',
       tableTitle: 'Monitoring list',
       tableDescription: 'Rows keep state, observation, and actions aligned.',
@@ -1034,8 +1034,8 @@ function getCopy(language: 'zh' | 'en') {
     copySymbol: '复制代码',
     copied: '已复制',
     emptyTitle: '还没有观察标的',
-    emptyBody: '观察列表为空，搜索股票并添加到关注列表。',
-    emptyHelp: '添加后可在这里查看候选证据与状态。',
+    emptyBody: '从扫描器添加标的到观察列表，或在扫描器手动补充代码。',
+    emptyHelp: '添加后可在这里查看已保存的候选证据与状态。',
     openScanner: '打开扫描器',
     tableTitle: '监控列表',
     tableDescription: '按行查看状态、观察与操作。',
@@ -1584,6 +1584,7 @@ const WatchlistPage: React.FC = () => {
   const autoRefreshStatus = describeBooleanEnabled(refreshStatus?.enabled, { language });
   const scannerPath = buildLocalizedPath('/scanner', language);
   const hasVisibleItems = filteredItems.length > 0;
+  const isWatchlistEmptyWorkspace = !isLoading && !error && items.length === 0;
   const attentionCount = watchlistConclusion.staleCount + watchlistConclusion.unknownCount + watchlistConclusion.limitedConfidenceCount;
   const monitoringStateLabel = formatMonitoringStateLabel(watchlistConclusion.tone, filteredItems.length, language);
   const statusItems = [
@@ -1683,123 +1684,129 @@ const WatchlistPage: React.FC = () => {
       </div>
 
       <DenseTableShell data-testid="watchlist-watch-board" variant="board">
-        <CompactFilterBar
-          data-testid="watchlist-compact-filter-bar"
-          className="min-h-0 rounded-none border-x-0 border-t-0 px-3 py-2"
-          leading={<span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.filters}</span>}
-        >
-          <div className="flex min-w-0 flex-col gap-2">
-            <div
-              data-testid="watchlist-filter-grid"
-              className="grid min-w-0 grid-cols-2 gap-2 md:flex md:flex-wrap md:items-end"
-            >
-              <div data-testid="watchlist-primary-filters" className="col-span-2 min-w-0 md:flex-[2_1_20rem]">
-                <Input
-                  label={copy.search}
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={copy.searchPlaceholder}
-                  containerClassName="min-w-0"
-                  trailingAction={<Search className="h-4 w-4 text-white/35" />}
-                />
-              </div>
-              <div className="min-w-0 md:flex-[0_0_9rem]">
-                <Select label={copy.market} value={marketFilter} onChange={setMarketFilter} options={marketOptions} className="min-w-0" />
-              </div>
-              <div className="min-w-0 md:flex-[0_0_10.5rem]">
-                <Select
-                  label={copy.sort}
-                  value={sortKey}
-                  onChange={(value) => setSortKey(value as SortKey)}
-                  className="min-w-0"
-                  options={[
-                    { value: 'newest', label: copy.newest },
-                    { value: 'scannerScore', label: copy.scannerScore },
-                    { value: 'backtestReturn', label: copy.backtestReturn },
-                    { value: 'historicalHitRate', label: copy.historicalHitRate },
-                    { value: 'recentlyScored', label: copy.recentlyScored },
-                    { value: 'recentlyBacktested', label: copy.recentlyBacktested },
-                    { value: 'symbol', label: copy.symbol },
-                    { value: 'market', label: copy.market },
-                  ]}
-                />
-              </div>
-              <div className="min-w-0 md:flex-[0_0_9.5rem]">
-                <Select label={copy.source} value={sourceFilter} onChange={setSourceFilter} options={sourceOptions} className="min-w-0" />
-              </div>
-              <div className="min-w-0">
-                <TerminalButton
-                  type="button"
-                  variant="secondary"
-                  className="h-9 w-full px-3 text-xs"
-                  aria-expanded={advancedFiltersOpen}
-                  aria-controls="watchlist-advanced-filter-grid"
-                  onClick={() => setAdvancedFiltersOpen((current) => !current)}
-                >
-                  {copy.advancedFilters}
-                </TerminalButton>
-              </div>
-            </div>
-            <div
-              data-testid="watchlist-advanced-filters"
-              className="flex min-w-0 flex-col gap-2 border-t border-[color:var(--wolfy-divider)] pt-2"
-            >
-              <div className="flex min-w-0 items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.advancedFilters}</span>
-                  <TerminalChip variant="neutral">{advancedFiltersOpen ? copy.enabled : language === 'zh' ? '默认收起' : 'Collapsed'}</TerminalChip>
+        {!isWatchlistEmptyWorkspace ? (
+          <CompactFilterBar
+            data-testid="watchlist-compact-filter-bar"
+            className="min-h-0 rounded-none border-x-0 border-t-0 px-3 py-2"
+            leading={<span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)]">{copy.filters}</span>}
+          >
+            <div className="flex min-w-0 flex-col gap-2">
+              <div
+                data-testid="watchlist-filter-grid"
+                className="grid min-w-0 grid-cols-2 gap-2 md:flex md:flex-wrap md:items-end"
+              >
+                <div data-testid="watchlist-primary-filters" className="col-span-2 min-w-0 md:flex-[2_1_20rem]">
+                  <Input
+                    label={copy.search}
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={copy.searchPlaceholder}
+                    containerClassName="min-w-0"
+                    trailingAction={<Search className="h-4 w-4 text-white/35" />}
+                  />
                 </div>
-              </div>
-              {advancedFiltersOpen ? (
-                <div
-                  id="watchlist-advanced-filter-grid"
-                  data-testid="watchlist-advanced-filter-grid"
-                  className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2"
-                >
-                  <Select label={copy.context} value={contextFilter} onChange={setContextFilter} options={contextOptions} className="min-w-0" />
+                <div className="min-w-0 md:flex-[0_0_9rem]">
+                  <Select label={copy.market} value={marketFilter} onChange={setMarketFilter} options={marketOptions} className="min-w-0" />
+                </div>
+                <div className="min-w-0 md:flex-[0_0_10.5rem]">
                   <Select
-                    label={copy.evidence}
-                    value={evidenceFilter}
-                    onChange={(value) => setEvidenceFilter(value as EvidenceFilter)}
+                    label={copy.sort}
+                    value={sortKey}
+                    onChange={(value) => setSortKey(value as SortKey)}
                     className="min-w-0"
                     options={[
-                      { value: 'all', label: copy.all },
-                      { value: 'hasScanner', label: copy.hasScanner },
-                      { value: 'hasBacktest', label: copy.hasBacktest },
-                      { value: 'scannerSelected', label: copy.scannerSelected },
-                      { value: 'staleIntelligence', label: copy.staleIntelligence },
+                      { value: 'newest', label: copy.newest },
+                      { value: 'scannerScore', label: copy.scannerScore },
+                      { value: 'backtestReturn', label: copy.backtestReturn },
+                      { value: 'historicalHitRate', label: copy.historicalHitRate },
+                      { value: 'recentlyScored', label: copy.recentlyScored },
+                      { value: 'recentlyBacktested', label: copy.recentlyBacktested },
+                      { value: 'symbol', label: copy.symbol },
+                      { value: 'market', label: copy.market },
                     ]}
                   />
                 </div>
-              ) : null}
+                <div className="min-w-0 md:flex-[0_0_9.5rem]">
+                  <Select label={copy.source} value={sourceFilter} onChange={setSourceFilter} options={sourceOptions} className="min-w-0" />
+                </div>
+                <div className="min-w-0">
+                  <TerminalButton
+                    type="button"
+                    variant="secondary"
+                    className="h-9 w-full px-3 text-xs"
+                    aria-expanded={advancedFiltersOpen}
+                    aria-controls="watchlist-advanced-filter-grid"
+                    onClick={() => setAdvancedFiltersOpen((current) => !current)}
+                  >
+                    {copy.advancedFilters}
+                  </TerminalButton>
+                </div>
+              </div>
+              <div
+                data-testid="watchlist-advanced-filters"
+                className="flex min-w-0 flex-col gap-2 border-t border-[color:var(--wolfy-divider)] pt-2"
+              >
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.advancedFilters}</span>
+                    <TerminalChip variant="neutral">{advancedFiltersOpen ? copy.enabled : language === 'zh' ? '默认收起' : 'Collapsed'}</TerminalChip>
+                  </div>
+                </div>
+                {advancedFiltersOpen ? (
+                  <div
+                    id="watchlist-advanced-filter-grid"
+                    data-testid="watchlist-advanced-filter-grid"
+                    className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2"
+                  >
+                    <Select label={copy.context} value={contextFilter} onChange={setContextFilter} options={contextOptions} className="min-w-0" />
+                    <Select
+                      label={copy.evidence}
+                      value={evidenceFilter}
+                      onChange={(value) => setEvidenceFilter(value as EvidenceFilter)}
+                      className="min-w-0"
+                      options={[
+                        { value: 'all', label: copy.all },
+                        { value: 'hasScanner', label: copy.hasScanner },
+                        { value: 'hasBacktest', label: copy.hasBacktest },
+                        { value: 'scannerSelected', label: copy.scannerSelected },
+                        { value: 'staleIntelligence', label: copy.staleIntelligence },
+                      ]}
+                    />
+                  </div>
+                ) : null}
+              </div>
             </div>
-          </div>
-        </CompactFilterBar>
+          </CompactFilterBar>
+        ) : null}
 
         <div
           data-testid="watchlist-board-shell"
-          className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_340px]"
+          className={isWatchlistEmptyWorkspace ? 'grid min-w-0' : 'grid min-w-0 lg:grid-cols-[minmax(0,1fr)_340px]'}
         >
           <div data-layout-zone="PrimaryWorkRegion" data-testid="watchlist-primary-work-region" className="min-w-0">
             <ConsoleBoard className="rounded-none border-0 bg-transparent">
-              <div className="flex min-w-0 items-center justify-between gap-3 border-b border-[color:var(--wolfy-divider)] px-4 py-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.tableTitle}</p>
-                  <p className="truncate text-xs text-[color:var(--wolfy-text-secondary)]">{copy.tableDescription}</p>
+              {!isWatchlistEmptyWorkspace ? (
+                <div className="flex min-w-0 items-center justify-between gap-3 border-b border-[color:var(--wolfy-divider)] px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-[color:var(--wolfy-text-muted)]">{copy.tableTitle}</p>
+                    <p className="truncate text-xs text-[color:var(--wolfy-text-secondary)]">{copy.tableDescription}</p>
+                  </div>
+                  <TerminalChip variant="neutral" className="font-mono">
+                    {actionScopeLabel}
+                  </TerminalChip>
                 </div>
-                <TerminalChip variant="neutral" className="font-mono">
-                  {actionScopeLabel}
-                </TerminalChip>
-              </div>
-              <div
-                data-testid="watchlist-list-header"
-                className="hidden min-w-0 grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_auto] gap-4 border-b border-[color:var(--wolfy-divider)] px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)] lg:grid"
-              >
-                <span>{language === 'en' ? 'Symbol' : '标的'}</span>
-                <span>{language === 'en' ? 'State' : '状态'}</span>
-                <span>{language === 'en' ? 'Observation' : '观察'}</span>
-                <span className="text-right">{copy.actions}</span>
-              </div>
+              ) : null}
+              {!isWatchlistEmptyWorkspace ? (
+                <div
+                  data-testid="watchlist-list-header"
+                  className="hidden min-w-0 grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_auto] gap-4 border-b border-[color:var(--wolfy-divider)] px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-[color:var(--wolfy-text-muted)] lg:grid"
+                >
+                  <span>{language === 'en' ? 'Symbol' : '标的'}</span>
+                  <span>{language === 'en' ? 'State' : '状态'}</span>
+                  <span>{language === 'en' ? 'Observation' : '观察'}</span>
+                  <span className="text-right">{copy.actions}</span>
+                </div>
+              ) : null}
               {isLoading ? (
                 <TerminalPanel as="section" dense className="py-8 text-center text-sm text-white/45" role="status">
                   {copy.loading}
@@ -2004,12 +2011,15 @@ const WatchlistPage: React.FC = () => {
                 <CompactEmptyRow
                   data-testid="watchlist-compact-empty-state"
                   title={copy.emptyTitle}
-                  className="min-h-[72px] flex-col items-start justify-start rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+                  className={isWatchlistEmptyWorkspace
+                    ? 'mx-auto min-h-[168px] w-full max-w-2xl flex-col items-center justify-center rounded-none border-0 bg-transparent px-4 py-8 text-center sm:min-h-[188px]'
+                    : 'min-h-[72px] flex-col items-start justify-start rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent px-4 py-4 sm:flex-row sm:items-center sm:justify-between'
+                  }
                   action={(
                     <TerminalButton
                       type="button"
                       variant="secondary"
-                      className="h-9 w-full px-3 text-xs sm:w-auto"
+                      className={isWatchlistEmptyWorkspace ? 'mt-2 h-9 px-4 text-xs' : 'h-9 w-full px-3 text-xs sm:w-auto'}
                       onClick={() => navigate(scannerPath)}
                     >
                       <ExternalLink className="h-4 w-4" />
@@ -2303,6 +2313,7 @@ const WatchlistPage: React.FC = () => {
           ) : null}
         </div>
 
+        {!isWatchlistEmptyWorkspace ? (
         <div data-layout-zone="SecondaryDeck" data-testid="watchlist-secondary-deck" className="min-w-0 border-t border-[color:var(--wolfy-divider)]">
           <DenseCommandBar
             data-testid="watchlist-command-bar"
@@ -2399,6 +2410,7 @@ const WatchlistPage: React.FC = () => {
             </div>
           </div>
         </div>
+        ) : null}
       </DenseTableShell>
       </ConsumerWorkspacePageShell>
     </ConsumerWorkspaceScope>

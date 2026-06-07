@@ -1610,25 +1610,29 @@ describe('WatchlistPage', () => {
     expect(watchBoard).toContainElement(primaryWorkRegion);
     expect(primaryWorkRegion).toContainElement(emptyState);
     expect(emptyState).toHaveClass(
-      'min-h-[72px]',
+      'min-h-[168px]',
       'flex-col',
-      'items-start',
-      'justify-start',
-      'sm:flex-row',
+      'items-center',
+      'justify-center',
       'sm:items-center',
-      'sm:justify-between',
       'rounded-none',
-      'border-x-0',
-      'border-t',
+      'border-0',
+      'max-w-2xl',
+      'text-center',
     );
     expect(within(emptyState).getByText('还没有观察标的')).toBeInTheDocument();
-    expect(emptyState).toHaveTextContent('观察列表为空，搜索股票并添加到关注列表。');
-    expect(emptyState).toHaveTextContent('添加后可在这里查看候选证据与状态。');
+    expect(emptyState).toHaveTextContent('从扫描器添加标的到观察列表，或在扫描器手动补充代码。');
+    expect(emptyState).toHaveTextContent('添加后可在这里查看已保存的候选证据与状态。');
     expect(emptyState).not.toHaveTextContent(/数据不足，禁止判断|买入|卖出|下单|交易|券商|broker/i);
     expect(within(headerStrip).queryByRole('button', { name: /打开扫描器/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('watchlist-compact-filter-bar')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('watchlist-advanced-filters')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('watchlist-list-header')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('watchlist-secondary-deck')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('watchlist-command-bar')).not.toBeInTheDocument();
 
     const emptyStateScannerAction = within(emptyState).getByRole('button', { name: /打开扫描器/ });
-    expect(emptyStateScannerAction).toHaveClass('w-full', 'sm:w-auto');
+    expect(emptyStateScannerAction).toHaveClass('mt-2');
     expect(screen.getAllByRole('button', { name: /打开扫描器/ })).toHaveLength(1);
 
     fireEvent.click(emptyStateScannerAction);
