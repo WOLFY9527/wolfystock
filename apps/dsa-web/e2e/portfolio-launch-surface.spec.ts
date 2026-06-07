@@ -73,6 +73,8 @@ test.describe('portfolio launch surface', () => {
       await waitForPortfolioSurface(page);
 
       const accountHero = page.getByTestId('portfolio-total-assets-card');
+      const summaryCoreRow = page.getByTestId('portfolio-summary-core-row');
+      const summaryAuxRow = page.getByTestId('portfolio-summary-aux-row');
       const workspaceLanes = page.getByTestId('portfolio-workspace-lanes');
       const primaryLane = page.getByTestId('portfolio-primary-lane');
       const secondaryLane = page.getByTestId('portfolio-secondary-lane');
@@ -84,6 +86,14 @@ test.describe('portfolio launch surface', () => {
       const manualPanel = page.getByTestId('portfolio-trade-station-card');
 
       await expect(workspaceLanes).toBeVisible({ timeout: 15_000 });
+      await expect(summaryCoreRow).toBeVisible({ timeout: 15_000 });
+      await expect(summaryAuxRow).toBeVisible({ timeout: 15_000 });
+      await expect(summaryCoreRow).toContainText('总市值');
+      await expect(summaryCoreRow).toContainText('总盈亏');
+      await expect(summaryAuxRow).toContainText('总现金');
+      await expect(summaryAuxRow).toContainText('持仓');
+      await expect(summaryAuxRow).toContainText('风险状态');
+      await expect(summaryAuxRow).toContainText('状态快照');
       await expect(primaryLane).toBeVisible({ timeout: 15_000 });
       await expect(secondaryLane).toBeVisible({ timeout: 15_000 });
       await expect(activityLane).toBeVisible({ timeout: 15_000 });
@@ -95,11 +105,27 @@ test.describe('portfolio launch surface', () => {
       await expect(activityPanel).toContainText('历史记录');
 
       const heroBox = await accountHero.boundingBox();
+      const summaryCoreBox = await summaryCoreRow.boundingBox();
+      const summaryAuxBox = await summaryAuxRow.boundingBox();
       const primaryBox = await primaryLane.boundingBox();
       const secondaryBox = await secondaryLane.boundingBox();
       const activityBox = await activityLane.boundingBox();
       const manualLaneBox = await manualLane.boundingBox();
       expect(heroBox?.y ?? Infinity).toBeLessThan(viewport.name === 'mobile' ? viewport.height * 0.38 : 280);
+      expect(summaryCoreBox?.y ?? Infinity).toBeLessThan(summaryAuxBox?.y ?? 0);
+      const summaryTypeScale = await page.evaluate(() => {
+        const readFontSize = (testId: string) => {
+          const element = document.querySelector(`[data-testid="${testId}"]`);
+          return element ? Number.parseFloat(window.getComputedStyle(element).fontSize) : 0;
+        };
+        return {
+          marketValue: readFontSize('portfolio-summary-market-value'),
+          pnlValue: readFontSize('portfolio-summary-pnl-value'),
+          cashValue: readFontSize('portfolio-summary-cash-value'),
+        };
+      });
+      expect(summaryTypeScale.marketValue).toBeGreaterThan(summaryTypeScale.cashValue);
+      expect(summaryTypeScale.pnlValue).toBeGreaterThan(summaryTypeScale.cashValue);
 
       if (viewport.name === 'desktop') {
         expect(primaryBox).not.toBeNull();

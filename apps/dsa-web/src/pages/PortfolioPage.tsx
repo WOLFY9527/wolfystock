@@ -2949,27 +2949,57 @@ const PortfolioPage: React.FC = () => {
             </div>
 
             <div data-testid="portfolio-row-summary" className="order-2 col-span-12 min-w-0">
-              <div data-testid="portfolio-summary-strip" className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-3">
-                <TerminalPanel as="section" data-testid="portfolio-summary-cash-card" className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{copy.totalCash}</div>
-                  <div className="mt-2 font-mono text-xl text-white tabular-nums">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</div>
-                  <div className="mt-2 text-xs text-white/40">{language === 'zh' ? '可用于继续配置或缓冲波动。' : 'Available for new allocation or downside buffer.'}</div>
-                </TerminalPanel>
-                <TerminalPanel as="section" data-testid="portfolio-summary-market-value-card" className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{copy.totalMarketValue}</div>
-                  <div className="mt-2 font-mono text-xl text-white tabular-nums">{formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}</div>
-                  <div className="mt-2 text-xs text-white/40">{holdingsHeaderNote}</div>
-                </TerminalPanel>
-                <TerminalPanel as="section" data-testid="portfolio-pnl-summary" className="min-w-0">
-                  <div data-testid="portfolio-pnl-total" className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{pnlLabels.total}</div>
-                  <div className={`mt-2 font-mono text-xl tabular-nums ${totalPnl >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
-                    {totalPnlDisplay ? formatSignedMoney(totalPnlDisplay.value, displayCurrency) : formatSignedMoney(totalPnl, pnlSourceCurrency)}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/40">
-                    <span data-testid="portfolio-pnl-realized">{pnlLabels.realized} {realizedPnlDisplay ? formatSignedMoney(realizedPnlDisplay.value, displayCurrency) : formatSignedMoney(realizedPnl, pnlSourceCurrency)}</span>
-                    <span data-testid="portfolio-pnl-unrealized">{pnlLabels.unrealized} {unrealizedPnlDisplay ? formatSignedMoney(unrealizedPnlDisplay.value, displayCurrency) : formatSignedMoney(unrealizedPnl, pnlSourceCurrency)}</span>
-                  </div>
-                </TerminalPanel>
+              <div data-testid="portfolio-summary-strip" className="flex min-w-0 flex-col gap-3">
+                <div data-testid="portfolio-summary-core-row" className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+                  <TerminalPanel as="section" data-testid="portfolio-summary-market-value-card" className="min-w-0 border-white/[0.08] bg-white/[0.035]">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{copy.totalMarketValue}</div>
+                    <div
+                      data-testid="portfolio-summary-market-value"
+                      className="mt-2 break-words font-mono text-[1.75rem] font-semibold leading-none text-white tabular-nums md:text-[2.1rem]"
+                    >
+                      {formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}
+                    </div>
+                    <div className="mt-2 text-xs leading-5 text-white/44">{holdingsHeaderNote}</div>
+                  </TerminalPanel>
+                  <TerminalPanel as="section" data-testid="portfolio-pnl-summary" className="min-w-0 border-white/[0.08] bg-white/[0.035]">
+                    <div data-testid="portfolio-pnl-total" className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{pnlLabels.total}</div>
+                    <div
+                      data-testid="portfolio-summary-pnl-value"
+                      className={`mt-2 break-words font-mono text-[1.75rem] font-semibold leading-none tabular-nums md:text-[2.1rem] ${totalPnl >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}
+                    >
+                      {totalPnlDisplay ? formatSignedMoney(totalPnlDisplay.value, displayCurrency) : formatSignedMoney(totalPnl, pnlSourceCurrency)}
+                    </div>
+                    <div className="mt-3 grid min-w-0 grid-cols-1 gap-1.5 text-xs text-white/44 sm:grid-cols-2">
+                      <span data-testid="portfolio-pnl-realized" className="min-w-0 break-words">{pnlLabels.realized} {realizedPnlDisplay ? formatSignedMoney(realizedPnlDisplay.value, displayCurrency) : formatSignedMoney(realizedPnl, pnlSourceCurrency)}</span>
+                      <span data-testid="portfolio-pnl-unrealized" className="min-w-0 break-words">{pnlLabels.unrealized} {unrealizedPnlDisplay ? formatSignedMoney(unrealizedPnlDisplay.value, displayCurrency) : formatSignedMoney(unrealizedPnl, pnlSourceCurrency)}</span>
+                    </div>
+                  </TerminalPanel>
+                </div>
+
+                <div data-testid="portfolio-summary-aux-row" className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  <TerminalPanel as="section" dense data-testid="portfolio-summary-cash-card" className="min-w-0">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{copy.totalCash}</div>
+                    <div data-testid="portfolio-summary-cash-value" className="mt-1.5 break-words font-mono text-base font-medium text-white tabular-nums">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</div>
+                    <div className="mt-1 text-xs leading-5 text-white/38">{language === 'zh' ? '可用于继续配置或缓冲波动。' : 'Available for new allocation or downside buffer.'}</div>
+                  </TerminalPanel>
+                  <TerminalPanel as="section" dense data-testid="portfolio-summary-holdings-card" className="min-w-0">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{language === 'zh' ? '持仓' : 'Holdings'}</div>
+                    <div className="mt-1.5 break-words font-mono text-base font-medium text-white tabular-nums">{holdingsPrimaryValue}</div>
+                    <div className="mt-1 text-xs leading-5 text-white/38">{accountStateSummary}</div>
+                  </TerminalPanel>
+                  <TerminalPanel as="section" dense data-testid="portfolio-summary-risk-card" className="min-w-0">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{language === 'zh' ? '风险状态' : 'Risk state'}</div>
+                    <div className={`mt-1.5 break-words text-base font-semibold ${concentrationToneClass}`}>{concentrationLabel}</div>
+                    <div className="mt-1 text-xs leading-5 text-white/38">
+                      {hasHoldings ? `${language === 'zh' ? '最大持仓' : 'Largest'} ${formatPercent(topPositionPercent)}` : valuationSnapshotNote}
+                    </div>
+                  </TerminalPanel>
+                  <TerminalPanel as="section" dense data-testid="portfolio-summary-status-card" className="min-w-0">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{language === 'zh' ? '状态快照' : 'Status snapshot'}</div>
+                    <div className="mt-1.5 break-words text-sm font-medium text-white/72">{valuationSnapshotNote}</div>
+                    <div className="mt-1 text-xs leading-5 text-white/38">{heroStatusChips.map((item) => item.label).join(' · ')}</div>
+                  </TerminalPanel>
+                </div>
               </div>
             </div>
 
