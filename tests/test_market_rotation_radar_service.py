@@ -340,6 +340,108 @@ def _family_rollup(payload: dict, family_id: str) -> dict:
 
 
 class MarketRotationRadarServiceTestCase(unittest.TestCase):
+    def test_default_provider_deadline_covers_total_provider_budget(self) -> None:
+        original_timeout = market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS
+        timeout_env = {
+            "ROTATION_RADAR_ALPACA_PER_WINDOW_TIMEOUT_SECONDS": "",
+            "ROTATION_RADAR_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS": "",
+            "ROTATION_RADAR_ALPACA_PROVIDER_DEADLINE_SECONDS": "",
+        }
+        try:
+            with patch.dict(os.environ, timeout_env):
+                diagnostics = rotation_radar_quote_provider.get_rotation_radar_provider_diagnostics()
+                rotation_radar_quote_provider.get_rotation_radar_quote_provider()
+
+            self.assertGreaterEqual(
+                diagnostics["providerDeadlineSeconds"],
+                diagnostics["totalProviderBudget"],
+            )
+            self.assertGreaterEqual(
+                market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS,
+                diagnostics["totalProviderBudget"],
+            )
+        finally:
+            market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS = original_timeout
+
+    def test_default_deadline_waits_for_bounded_partial_provider_result(self) -> None:
+        original_timeout = market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS
+        timeout_env = {
+            "ROTATION_RADAR_ALPACA_PER_WINDOW_TIMEOUT_SECONDS": "",
+            "ROTATION_RADAR_ALPACA_TOTAL_PROVIDER_BUDGET_SECONDS": "",
+            "ROTATION_RADAR_ALPACA_PROVIDER_DEADLINE_SECONDS": "",
+        }
+        covered_symbols = set(_bounded_etf_authority_fixture()[0])
+        covered_symbols.update(_rotation_theme("ai_applications").members[:2])
+
+        class BoundedPartialAlpacaFetcher:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def get_bars(self, symbol: str, *, timeframe: str, start: str, end: str, limit: int = 100) -> list[dict]:
+                if symbol not in covered_symbols:
+                    return []
+                return _alpaca_bars(
+                    start_close=100.0,
+                    end_close={
+                        "5Min": 101.0,
+                        "15Min": 102.0,
+                        "1Hour": 103.0,
+                        "1Day": 104.0,
+                    }[timeframe],
+                )
+
+        try:
+            with patch.dict(os.environ, timeout_env), patch(
+                "src.services.rotation_radar_quote_provider._UNAVAILABLE_SYMBOL_STATE",
+                {},
+            ), patch(
+                "src.services.rotation_radar_quote_provider.get_provider_credentials",
+                return_value=_alpaca_credentials(feed="sip"),
+                create=True,
+            ), patch(
+                "src.services.rotation_radar_quote_provider.AlpacaFetcher",
+                BoundedPartialAlpacaFetcher,
+                create=True,
+            ), patch(
+                "src.services.rotation_radar_quote_provider.fetch_yfinance_quote_history_frame",
+                return_value=pd.DataFrame(),
+            ):
+                default_provider = rotation_radar_quote_provider.get_rotation_radar_quote_provider()
+
+                def delayed_bounded_provider(symbols):
+                    result = default_provider(symbols)
+                    time.sleep(3.2)
+                    return result
+
+                payload = MarketRotationRadarService(
+                    quote_provider=delayed_bounded_provider,
+                    now_provider=lambda: datetime(2026, 5, 7, 9, 50, tzinfo=timezone.utc),
+                ).get_rotation_radar()
+        finally:
+            market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS = original_timeout
+
+        self.assertEqual(payload["source"], "computed")
+        self.assertFalse(payload["isFallback"])
+        self.assertGreater(payload["metadata"]["liveThemeCount"], 0)
+        provider_meta = payload["metadata"]["quoteProvider"]
+        diagnostics = provider_meta["providerDiagnostics"]
+        spine = diagnostics["etfAuthoritySpine"]
+        ai_theme = next(theme for theme in payload["themes"] if theme["id"] == "ai_applications")
+
+        self.assertEqual(provider_meta["status"], "partial")
+        self.assertFalse(provider_meta["sourceAuthorityAllowed"])
+        self.assertFalse(provider_meta["scoreContributionAllowed"])
+        self.assertEqual(provider_meta["sourceAuthorityReason"], "source_authority_router_rejected")
+        self.assertEqual(payload["summary"]["headlineEligibleThemeCount"], 0)
+        self.assertFalse(ai_theme["headlineEligible"])
+        self.assertFalse(ai_theme["scoreContributionAllowed"])
+        self.assertEqual(spine["universe"], ["SPY", "QQQ", "IWM", "SMH", "SOXX", "IGV"])
+        self.assertEqual(spine["fulfilledWindows"], ["5m", "15m", "60m", "1d"])
+        self.assertEqual(spine["missingWindows"], [])
+        self.assertTrue(spine["sourceAuthorityAllowed"])
+        self.assertTrue(spine["scoreContributionAllowed"])
+        self.assertTrue(diagnostics["yfinanceFallbackUsed"])
+
     def test_live_quotes_score_confirmed_rotation_with_breadth_and_newsless_evidence(self) -> None:
         quotes = {
             "QQQ": _quote("QQQ", 0.8),
@@ -1643,8 +1745,8 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             self.assertIs(provider, load_rotation_radar_quotes)
             self.assertEqual(diagnostics["perWindowTimeout"], 2.5)
             self.assertEqual(diagnostics["totalProviderBudget"], 8.0)
-            self.assertEqual(diagnostics["providerDeadlineSeconds"], 3.0)
-            self.assertEqual(market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS, 3.0)
+            self.assertEqual(diagnostics["providerDeadlineSeconds"], 10.0)
+            self.assertEqual(market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS, 10.0)
         finally:
             market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS = original_deadline
 
@@ -1724,8 +1826,8 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
             diagnostics = payload["metadata"]["providerDiagnostics"]
             self.assertEqual(diagnostics["perWindowTimeout"], 2.5)
             self.assertEqual(diagnostics["totalProviderBudget"], 8.0)
-            self.assertEqual(diagnostics["providerDeadlineSeconds"], 3.0)
-            self.assertEqual(market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS, 3.0)
+            self.assertEqual(diagnostics["providerDeadlineSeconds"], 10.0)
+            self.assertEqual(market_rotation_radar_service._QUOTE_PROVIDER_TIMEOUT_SECONDS, 10.0)
             self.assertEqual(payload["metadata"]["providerOrder"], ["alpaca", "yfinance"])
             self.assertEqual(payload["metadata"]["source"], "yfinance_proxy")
             self.assertFalse(diagnostics["alpacaActivationDiagnostics"]["sourceAuthorityAllowed"])
