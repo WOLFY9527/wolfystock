@@ -1246,7 +1246,7 @@ describe('UserScannerPage', () => {
     expect(orderedSymbolsFromRows()).toEqual(['NVDA', 'AVGO', 'AMD']);
   });
 
-  it('surfaces a compact scanner workflow from market drivers to focus evidence before ranked rows', async () => {
+  it('keeps ranked rows ahead of compact scanner workflow summaries', async () => {
     const nvda = makeCandidate({ symbol: 'NVDA', rank: 1, score: 94 });
     (nvda as ScannerCandidate & Record<string, unknown>).candidateEvidenceFrame = makeCandidateEvidenceFrame();
     (nvda as ScannerCandidate & Record<string, unknown>).candidateResearchReadiness = makeCandidateResearchReadiness({
@@ -1271,6 +1271,7 @@ describe('UserScannerPage', () => {
     const topDown = await screen.findByTestId('scanner-top-down-context-strip');
     const workflow = await screen.findByTestId('scanner-workflow-summary');
     const rankedList = screen.getByTestId('scanner-ranked-list');
+    const postTableSummaries = screen.getByTestId('scanner-post-table-summaries');
 
     expect(workflow).toHaveTextContent(/先看市场驱动|Start with market drivers/);
     expect(workflow).toHaveTextContent(/当前候选 NVDA|Focus candidate NVDA/);
@@ -1278,8 +1279,9 @@ describe('UserScannerPage', () => {
     expect(workflow).toHaveTextContent(/来源确认：含评分级/);
     expect(workflow).toHaveTextContent(/查看排名主表|Review ranked rows/);
     expect(workflow).toHaveTextContent(/94\/100/);
-    expectElementBefore(topDown, workflow);
-    expectElementBefore(workflow, rankedList);
+    expectElementBefore(topDown, rankedList);
+    expectElementBefore(rankedList, postTableSummaries);
+    expect(postTableSummaries).toContainElement(workflow);
     expectElementBefore(screen.getByTestId('scanner-workflow-step-topdown'), screen.getByTestId('scanner-workflow-step-focus-candidate'));
     expectElementBefore(screen.getByTestId('scanner-workflow-step-focus-candidate'), screen.getByTestId('scanner-workflow-step-ranked-rows'));
   });
@@ -1728,7 +1730,11 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-status-strip')).toHaveAttribute('data-terminal-primitive', 'dense-status-strip');
     expect(screen.getByTestId('scanner-launch-bar')).toHaveAttribute('data-terminal-primitive', 'dense-table-shell');
     expect(screen.getByTestId('scanner-command-bar')).toHaveAttribute('data-terminal-primitive', 'dense-command-bar');
-    expect(screen.getByTestId('scanner-launch-bar')).toHaveClass('border-y');
+    expect(screen.getByTestId('scanner-launch-bar')).toHaveClass('rounded-xl', 'border', 'p-2');
+    expect(screen.getByTestId('scanner-command-panel')).toHaveClass('rounded-xl', 'border');
+    expect(screen.getByTestId('scanner-results-panel')).toHaveClass('rounded-xl', 'border');
+    expect(screen.getByTestId('scanner-summary-rail')).toHaveAttribute('data-linear-primitive', 'surface');
+    expect(screen.getByTestId('scanner-summary-rail')).toHaveAttribute('data-layout-zone', 'ContextRail');
     expect(screen.getByTestId('scanner-launch-bar')).not.toHaveClass('rounded-[14px]', 'shadow-[0_20px_80px_rgba(0,0,0,0.22)]');
     expect(screen.queryByTestId('scanner-control-rail')).not.toBeInTheDocument();
     expect(screen.queryByTestId('scanner-sidebar')).not.toBeInTheDocument();
@@ -1866,9 +1872,12 @@ describe('UserScannerPage', () => {
     const compactFilterBar = screen.getByTestId('scanner-compact-filter-bar');
     const secondaryDeck = screen.getByTestId('scanner-secondary-deck');
     const contextRail = screen.getByTestId('scanner-context-rail');
+    const summaryRail = screen.getByTestId('scanner-summary-rail');
 
     expect(headerStrip).toContainElement(screen.getByTestId('scanner-status-strip'));
     expectElementBefore(headerStrip, screen.getByTestId('scanner-command-bar'));
+    expect(screen.getByTestId('scanner-command-panel')).toContainElement(screen.getByTestId('scanner-command-bar'));
+    expect(screen.getByTestId('scanner-results-panel')).toContainElement(screen.getByTestId('scanner-ranked-list'));
     expect(compactFilterBar).toBeInTheDocument();
     expect(primaryWorkRegion).toContainElement(screen.getByTestId('scanner-ranked-list'));
     expect(primaryWorkRegion).toContainElement(screen.getByTestId('scanner-result-table'));
@@ -1876,6 +1885,12 @@ describe('UserScannerPage', () => {
     expect(screen.getByTestId('scanner-candidate-scroll-region')).toContainElement(screen.getByTestId('scanner-candidate-row-WULF'));
     expect(contextRail).toContainElement(screen.getByTestId('scanner-inline-detail-panel'));
     expect(contextRail).toContainElement(screen.getByTestId('scanner-candidate-inspector'));
+    expect(summaryRail).toHaveTextContent(/工作区摘要|Workspace summary/i);
+    expect(summaryRail).toHaveTextContent(/候选|Candidates/i);
+    expect(summaryRail).toHaveTextContent(/淘汰|Rejected/i);
+    expect(summaryRail).toHaveTextContent(/数据受限|Limited/i);
+    expect(summaryRail).toHaveTextContent(/范围|Scope/i);
+    expect(summaryRail).not.toHaveTextContent(/provider|reasonCode|schema|debug|raw|cache/i);
     expect(secondaryDeck).toContainElement(screen.getByTestId('scanner-diagnostics-disclosure'));
     expect(secondaryDeck).toContainElement(screen.getByTestId('scanner-run-comparison-strip'));
     expect(secondaryDeck).toContainElement(screen.getByTestId('scanner-strategy-experiment'));
@@ -1930,6 +1945,7 @@ describe('UserScannerPage', () => {
       screen.getByTestId('scanner-primary-actions'),
       screen.getByTestId('scanner-candidate-scroll-region'),
       screen.getByTestId('scanner-inline-detail-panel'),
+      screen.getByTestId('scanner-summary-rail'),
     ];
 
     defaultSurfaces.forEach((surface) => {

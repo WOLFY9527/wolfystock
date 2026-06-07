@@ -67,6 +67,7 @@ import {
   DenseStatusStrip,
   DenseTableShell,
 } from '../components/terminal/DenseWorkbenchPrimitives';
+import { WolfyShellSurface } from '../components/linear/LinearPrimitives';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { useI18n } from '../contexts/UiLanguageContext';
 import {
@@ -2815,6 +2816,41 @@ const UserScannerPage: React.FC = () => {
       value: generatedAt ? `${scannerDataStateLabel} · ${formatTimestamp(generatedAt, language)}` : scannerDataStateLabel,
     },
   ];
+  const scannerRailProfileLabel = runDetail
+    ? sanitizeScannerProfileLabel(runDetail.profileLabel || runDetail.profile)
+    : sanitizeScannerProfileLabel(SCANNER_PROFILE_DEFAULTS[market]?.profile || profile);
+  const scannerRailItems = [
+    {
+      label: language === 'en' ? 'Scope' : '范围',
+      value: scannerScopeLabel,
+    },
+    {
+      label: language === 'en' ? 'Profile' : '策略',
+      value: scannerRailProfileLabel || '--',
+    },
+    {
+      label: language === 'en' ? 'Theme' : '主题',
+      value: scannerThemeLabel,
+    },
+    {
+      label: language === 'en' ? 'Latest' : '最近更新',
+      value: generatedAt ? formatTimestamp(generatedAt, language) : '--',
+    },
+  ];
+  const scannerRailCounts = [
+    {
+      label: language === 'en' ? 'Candidates' : '候选',
+      value: currentRunSummary?.candidateCount ?? shortlistCount,
+    },
+    {
+      label: language === 'en' ? 'Rejected' : '淘汰',
+      value: currentRunSummary?.rejectedCount ?? runDetail?.summary?.rejectedCount ?? 0,
+    },
+    {
+      label: language === 'en' ? 'Limited' : '数据受限',
+      value: currentRunSummary?.failedCount ?? ((runDetail?.summary?.dataFailedCount ?? 0) + (runDetail?.summary?.errorCount ?? 0)),
+    },
+  ];
 
   return (
     <>
@@ -2909,15 +2945,20 @@ const UserScannerPage: React.FC = () => {
               />
             </div>
 
-		          <div data-testid="scanner-workspace-grid" className="w-full flex-1 min-w-0">
+		          <div data-testid="scanner-workspace-grid" className="grid w-full flex-1 min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_clamp(16rem,18vw,18.5rem)]">
                 <DenseTableShell
                   data-testid="scanner-launch-bar"
                   variant="board"
-                  className="flex min-h-[520px] flex-1 flex-col"
+                  className="flex min-h-[520px] flex-1 flex-col gap-3 rounded-xl border border-white/10 bg-[var(--wolfy-surface-console)] p-2"
                 >
+                  <section
+                    data-testid="scanner-command-panel"
+                    data-layout-zone="CommandBar"
+                    className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-[var(--wolfy-surface-input)]"
+                  >
                   <DenseCommandBar
                     data-testid="scanner-command-bar"
-                    className="bg-transparent px-2 py-2"
+                    className="border-0 bg-transparent px-3 py-3"
                   >
                     <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(112px,0.55fr)_minmax(150px,0.72fr)_minmax(106px,0.45fr)_minmax(156px,0.72fr)_minmax(118px,0.5fr)_minmax(118px,0.5fr)_auto] xl:items-end [&_[data-testid='scanner-market-toggle']_button]:h-12 [&_[data-testid='scanner-market-toggle']_button]:px-3 [&_[data-testid='scanner-market-toggle']_button]:py-2 [&_[data-testid='scanner-scope-selector']_button]:h-12 [&_[data-testid='scanner-scope-selector']_button]:px-3 [&_[data-testid='scanner-scope-selector']_button]:py-2 md:[&_[data-testid='scanner-market-toggle']_button]:h-8 md:[&_[data-testid='scanner-market-toggle']_button]:py-1 md:[&_[data-testid='scanner-scope-selector']_button]:h-8 md:[&_[data-testid='scanner-scope-selector']_button]:py-1">
                       <PillTagGroup compact label={t('scanner.marketLabel')} value={market} onChange={(next) => handleMarketChange(next as 'cn' | 'us' | 'hk')} options={[{ value: 'cn', label: t('scanner.marketCn') }, { value: 'us', label: t('scanner.marketUs') }, { value: 'hk', label: t('scanner.marketHk') }]} variant="market" testId="scanner-market-toggle" />
@@ -3134,8 +3175,14 @@ const UserScannerPage: React.FC = () => {
                       </p>
                     ) : null}
                   </DenseCommandBar>
+                  </section>
 
-                  <div data-testid="scanner-ranked-workbench" className="flex min-h-0 flex-1 min-w-0 flex-col border-t border-white/10">
+                  <section
+                    data-testid="scanner-results-panel"
+                    data-layout-zone="PrimaryWorkRegion"
+                    className="flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-black/[0.16]"
+                  >
+                  <div data-testid="scanner-ranked-workbench" className="flex min-h-0 flex-1 min-w-0 flex-col">
                     <div data-testid="scanner-primary-actions" className="flex shrink-0 flex-row flex-wrap items-center justify-between gap-3 px-2 py-2">
                       <div className="flex min-w-0 flex-row flex-wrap items-center gap-2">
                         {runDetail && hasCandidateDiagnostics ? (
@@ -3278,19 +3325,6 @@ const UserScannerPage: React.FC = () => {
                           />
                         ) : workbenchDiagnostics.length ? (
                           <>
-                            {activeDetailCandidate ? (
-                              <ScannerWorkflowSummaryPanel
-                                contextSummary={scannerTopDownContextView}
-                                candidate={activeDetailCandidate}
-                                diagnostic={activeDetailDiagnostic}
-                                rankedRowCount={workbenchDiagnostics.length}
-                                selectedCount={currentSelectedCount}
-                                language={language}
-                              />
-                            ) : null}
-                            {visualEvidenceSummary ? (
-                              <ScannerVisualEvidenceSummaryPanel model={visualEvidenceSummary} language={language} />
-                            ) : null}
                             <div
                               data-testid="scanner-ranked-list"
                               className="overflow-x-auto overscroll-x-contain rounded-xl border border-white/5 bg-white/[0.02] [-webkit-overflow-scrolling:touch]"
@@ -3371,6 +3405,21 @@ const UserScannerPage: React.FC = () => {
                                   })}
                                 </div>
                               </div>
+                            </div>
+                            <div data-testid="scanner-post-table-summaries" className="mt-3 grid gap-3">
+                              {activeDetailCandidate ? (
+                                <ScannerWorkflowSummaryPanel
+                                  contextSummary={scannerTopDownContextView}
+                                  candidate={activeDetailCandidate}
+                                  diagnostic={activeDetailDiagnostic}
+                                  rankedRowCount={workbenchDiagnostics.length}
+                                  selectedCount={currentSelectedCount}
+                                  language={language}
+                                />
+                              ) : null}
+                              {visualEvidenceSummary ? (
+                                <ScannerVisualEvidenceSummaryPanel model={visualEvidenceSummary} language={language} />
+                              ) : null}
                             </div>
                           </>
                         ) : (
@@ -3599,7 +3648,50 @@ const UserScannerPage: React.FC = () => {
                       </div>
                     ) : null}
                   </div>
+                  </section>
                 </DenseTableShell>
+
+                <WolfyShellSurface
+                  as="aside"
+                  variant="rail"
+                  padding="sm"
+                  data-testid="scanner-summary-rail"
+                  data-layout-zone="ContextRail"
+                  className="min-w-0 self-start rounded-xl border-white/10 lg:sticky lg:top-4"
+                  aria-label={language === 'en' ? 'Scanner workspace summary' : '扫描工作区摘要'}
+                >
+                  <div className="flex min-w-0 flex-col gap-4">
+                    <div className="min-w-0 border-b border-white/10 pb-3">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                        {language === 'en' ? 'Workspace summary' : '工作区摘要'}
+                      </p>
+                      <h2 className="mt-1 text-sm font-semibold text-white">
+                        {scannerConclusion.title}
+                      </h2>
+                      <p className="mt-2 text-xs leading-5 text-white/58">
+                        {scannerConclusion.detail}
+                      </p>
+                    </div>
+
+                    <div className="grid min-w-0 grid-cols-3 gap-2" data-testid="scanner-summary-rail-counts">
+                      {scannerRailCounts.map((item) => (
+                        <div key={item.label} className="min-w-0 rounded-lg border border-white/8 bg-white/[0.025] px-2 py-2">
+                          <p className="truncate text-[10px] text-white/38">{item.label}</p>
+                          <p className="mt-1 font-mono text-base font-semibold text-white">{item.value}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <dl className="grid min-w-0 gap-2 text-xs" data-testid="scanner-summary-rail-context">
+                      {scannerRailItems.map((item) => (
+                        <div key={item.label} className="grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)] gap-2 border-b border-white/8 pb-2 last:border-b-0 last:pb-0">
+                          <dt className="text-white/38">{item.label}</dt>
+                          <dd className="truncate text-right font-mono text-white/72">{item.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                </WolfyShellSurface>
 		          </div>
 	        </ConsumerWorkspacePageShell>
           </ConsumerWorkspaceScope>

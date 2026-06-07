@@ -3,6 +3,79 @@ import { expect, test } from './fixtures/appSmoke';
 
 const forbiddenTradingAction = /买入按钮|建议买入|建议卖出|立即交易|下单|提交订单|订单载荷|开仓|平仓|加仓|减仓|place order|submit order|buy now|sell now/i;
 const rawPayloadPattern = /raw\s+(payload|response)|provider\s+payload|debug\s+payload|payload_json|raw_provider_payload/i;
+const retryNoCandidateRun = {
+  id: 11,
+  market: 'cn',
+  profile: 'cn_preopen_v1',
+  profile_label: 'A-share Pre-open v1',
+  status: 'empty',
+  run_at: '2026-05-02T09:00:00Z',
+  completed_at: '2026-05-02T09:00:00Z',
+  watchlist_date: '2026-05-02',
+  trigger_mode: 'manual',
+  universe_name: 'cn_a_liquid_watchlist_v1',
+  shortlist_size: 0,
+  universe_size: 320,
+  preselected_size: 72,
+  evaluated_size: 48,
+  source_summary: 'Mocked scanner payload',
+  headline: 'Mock scanner empty result for retry verification',
+  universe_notes: [],
+  scoring_notes: [],
+  universe_type: 'default',
+  theme_id: null,
+  theme_label: null,
+  requested_symbols_count: 0,
+  accepted_symbols_count: 0,
+  rejected_symbols: [],
+  diagnostics: {
+    coverage_summary: {
+      input_universe_size: 320,
+      eligible_after_universe_fetch: 300,
+      eligible_after_liquidity_filter: 244,
+      eligible_after_data_availability_filter: 192,
+      ranked_candidate_count: 48,
+      shortlisted_count: 0,
+      excluded_total: 48,
+      excluded_by_reason: [{ reason: 'below_threshold', label: 'Screening condition not met', count: 48 }],
+      likely_bottleneck: 'screening_threshold',
+      likely_bottleneck_label: 'Screening threshold',
+    },
+    universe_selection: {
+      universe_type: 'default',
+      theme_id: null,
+      theme_label: null,
+      requested_symbols_count: 0,
+      accepted_symbols_count: 0,
+      rejected_symbols: [],
+      universe_notes: [],
+    },
+  },
+  notification: {
+    attempted: false,
+    status: 'not_attempted',
+    success: null,
+    channels: [],
+    message: null,
+    report_path: null,
+    sent_at: null,
+  },
+  failure_reason: null,
+  summary: {
+    universe_count: 320,
+    submitted_count: 320,
+    evaluated_count: 48,
+    selected_count: 0,
+    rejected_count: 48,
+    data_failed_count: 0,
+    skipped_count: 0,
+    error_count: 0,
+    limited_by_result_cap: false,
+  },
+  shortlist: [],
+  selected: [],
+  candidates: [],
+};
 
 async function assertScannerLaunchViewport(page: Page, viewport: { width: number; height: number }) {
   await page.setViewportSize(viewport);
@@ -37,7 +110,10 @@ async function assertScannerLaunchViewport(page: Page, viewport: { width: number
   const candidateRegion = page.getByTestId('scanner-candidate-scroll-region');
   const firstCandidate = page.getByTestId('scanner-result-row-NVDA');
   const denseShell = page.getByTestId('scanner-launch-bar');
+  const commandPanel = page.getByTestId('scanner-command-panel');
   const commandBar = page.getByTestId('scanner-command-bar');
+  const resultsPanel = page.getByTestId('scanner-results-panel');
+  const summaryRail = page.getByTestId('scanner-summary-rail');
   const resultTable = page.getByTestId('scanner-result-table');
   const inlineDetailPanel = page.getByTestId('scanner-inline-detail-panel');
   const detailRail = page.getByTestId('scanner-detail-rail');
@@ -45,7 +121,10 @@ async function assertScannerLaunchViewport(page: Page, viewport: { width: number
 
   await expect(page.getByTestId('user-scanner-workspace')).toBeVisible({ timeout: 15_000 });
   await expect(denseShell).toBeVisible();
+  await expect(commandPanel).toBeVisible();
   await expect(commandBar).toBeVisible();
+  await expect(resultsPanel).toBeVisible();
+  await expect(summaryRail).toBeVisible();
   await expect(conclusionBand).toBeVisible();
   await expect(launchSummary).toBeVisible();
   await expect(conclusionBand).toContainText(/当前候选|Current candidate|证据不足|Evidence insufficient|等待扫描|Waiting for a scan/);
@@ -56,6 +135,10 @@ async function assertScannerLaunchViewport(page: Page, viewport: { width: number
   await expect(resultTable).toBeVisible();
   await expect(firstCandidate).toBeVisible();
   await expect(firstCandidate).toContainText('NVDA');
+  await expect(summaryRail).toContainText(/工作区摘要|Workspace summary/);
+  await expect(summaryRail).toContainText(/候选|Candidates/);
+  await expect(summaryRail).toContainText(/淘汰|Rejected/);
+  await expect(summaryRail).toContainText(/数据受限|Limited/);
   if (await detailRail.count()) {
     await expect(detailRail).toBeVisible();
   } else {
@@ -69,24 +152,36 @@ async function assertScannerLaunchViewport(page: Page, viewport: { width: number
   await expect(page.getByTestId('scanner-card-wall')).toHaveCount(0);
 
   const launchBox = await commandBar.boundingBox();
+  const commandPanelBox = await commandPanel.boundingBox();
   const conclusionBox = await conclusionBand.boundingBox();
   const summaryBox = await launchSummary.boundingBox();
   const candidateRegionBox = await candidateRegion.boundingBox();
   const resultBox = await denseShell.boundingBox();
+  const resultsPanelBox = await resultsPanel.boundingBox();
+  const summaryRailBox = await summaryRail.boundingBox();
   const viewportWidth = viewport.width;
   expect(launchBox).not.toBeNull();
+  expect(commandPanelBox).not.toBeNull();
   expect(conclusionBox).not.toBeNull();
   expect(summaryBox).not.toBeNull();
   expect(candidateRegionBox).not.toBeNull();
   expect(resultBox).not.toBeNull();
-  expect(resultBox?.width ?? 0).toBeGreaterThan(viewportWidth * 0.72);
+  expect(resultsPanelBox).not.toBeNull();
+  expect(summaryRailBox).not.toBeNull();
   expect(summaryBox?.y ?? 0).toBeGreaterThan(conclusionBox?.y ?? 0);
   expect(candidateRegionBox?.y ?? 0).toBeGreaterThan(summaryBox?.y ?? 0);
   expect(candidateRegionBox?.y ?? 0).toBeGreaterThan((launchBox?.y ?? 0) - 1);
-  const firstRowLimit = viewportWidth >= 1024 ? 0.78 : viewportWidth >= 768 ? 0.92 : 1.1;
-  expect(candidateRegionBox?.y ?? 0).toBeLessThan(viewport.height * firstRowLimit);
+  if (viewportWidth >= 768) {
+    const firstRowLimit = viewportWidth >= 1024 ? 0.78 : 1.0;
+    expect(candidateRegionBox?.y ?? 0).toBeLessThan(viewport.height * firstRowLimit);
+  }
   if (viewportWidth >= 1024) {
-    expect(launchBox?.width ?? 0).toBeGreaterThan(viewportWidth * 0.72);
+    expect(resultBox?.width ?? 0).toBeGreaterThan(viewportWidth * 0.62);
+    expect(summaryRailBox?.x ?? 0).toBeGreaterThan((resultBox?.x ?? 0) + (resultBox?.width ?? 0) - 1);
+    expect(summaryRailBox?.width ?? 0).toBeGreaterThan(220);
+  } else {
+    expect(resultBox?.width ?? 0).toBeGreaterThan(viewportWidth * 0.72);
+    expect(summaryRailBox?.y ?? 0).toBeGreaterThan((resultBox?.y ?? 0) + (resultBox?.height ?? 0) - 1);
   }
 
   const secondaryDisclosures = [
@@ -120,5 +215,65 @@ test.describe('scanner launch surface', () => {
     await assertScannerLaunchViewport(page, { width: 1920, height: 1080 });
     await assertScannerLaunchViewport(page, { width: 768, height: 900 });
     await assertScannerLaunchViewport(page, { width: 390, height: 844 });
+  });
+
+  test('keeps retry scan POST params unchanged in the workspace layout', async ({ page }) => {
+    let postedRunRequest: unknown = null;
+
+    await page.route('**/api/v1/auth/status', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          authEnabled: true,
+          loggedIn: true,
+          passwordSet: true,
+          passwordChangeable: true,
+          setupState: 'enabled',
+          currentUser: {
+            id: 'user-1',
+            username: 'wolfy-user',
+            displayName: 'Wolfy User',
+            role: 'user',
+            isAdmin: false,
+            isAuthenticated: true,
+            transitional: false,
+            authEnabled: true,
+          },
+        }),
+      });
+    });
+    await page.route('**/api/v1/scanner/runs/11', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(retryNoCandidateRun),
+      });
+    });
+    await page.route('**/api/v1/scanner/run', async (route) => {
+      postedRunRequest = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ...retryNoCandidateRun, id: 12 }),
+      });
+    });
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/zh/scanner');
+    await page.waitForLoadState('domcontentloaded');
+
+    await expect(page.getByTestId('scanner-summary-rail')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('scanner-command-panel')).toBeVisible();
+    await expect(page.getByRole('button', { name: '重新扫描' })).toBeEnabled();
+    await page.getByRole('button', { name: '重新扫描' }).click();
+
+    await expect.poll(() => JSON.stringify(postedRunRequest)).toBe(JSON.stringify({
+      market: 'cn',
+      profile: 'cn_preopen_v1',
+      shortlist_size: 5,
+      universe_limit: 300,
+      detail_limit: 60,
+    }));
   });
 });
