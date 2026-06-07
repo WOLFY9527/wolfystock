@@ -1565,6 +1565,13 @@ const LoadingPanel: React.FC<{ showFallback: boolean; onRefresh: () => void }> =
       <RefreshCcw className="size-4 animate-spin" aria-hidden="true" />
       <span className="text-sm">正在读取主题轮动 / 相对强弱雷达...</span>
     </div>
+    <div className="mt-4 grid gap-3 text-sm text-white/62">
+      <p className="leading-6">正在整理主题强弱、轮动线索与最近更新时间。</p>
+      <p className="leading-6">准备好后会自动显示当前市场、头部主题和观察重点。</p>
+      <TerminalNotice variant="info" className="text-[12px] leading-5 text-white/58">
+        结果出来前不会补写临时结论。
+      </TerminalNotice>
+    </div>
     {showFallback ? (
       <TerminalNestedBlock
         data-testid="rotation-radar-loading-fallback"
