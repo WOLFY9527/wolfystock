@@ -51,6 +51,12 @@ POLYGON_HIGH_LOW_MIN_ELIGIBLE_COUNT = 8000
 
 POLYGON_US_BREADTH_REASON_UNAUTHORIZED = "polygon_unauthorized"
 POLYGON_US_BREADTH_REASON_RESPONSE_INVALID = "polygon_response_invalid"
+POLYGON_US_BREADTH_REASON_STATUS_NOT_OK = "polygon_status_not_ok"
+POLYGON_US_BREADTH_REASON_HTTP_NON_200 = "polygon_http_non_200"
+POLYGON_US_BREADTH_REASON_RESULTS_COUNT_MISSING = "polygon_results_count_missing"
+POLYGON_US_BREADTH_REASON_RESULTS_NOT_LIST = "polygon_results_not_list"
+POLYGON_US_BREADTH_REASON_NO_VALID_OHLC_ROWS = "polygon_no_valid_ohlc_rows"
+POLYGON_US_BREADTH_REASON_PAYLOAD_NOT_MAPPING = "polygon_payload_not_mapping"
 POLYGON_US_BREADTH_REASON_COVERAGE_BELOW_THRESHOLD = "polygon_coverage_below_threshold"
 POLYGON_US_BREADTH_REASON_EOD_STALE = "polygon_eod_stale"
 POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE = "polygon_previous_close_unavailable"
@@ -85,6 +91,15 @@ _HIGH_LOW_REASON_CODES = {
     POLYGON_HIGH_LOW_HISTORY_DIAGNOSTIC_SESSION_CAP_REASON,
     POLYGON_HIGH_LOW_HISTORY_TIMEOUT_REASON,
     POLYGON_HIGH_LOW_RATIO_UNAVAILABLE_REASON,
+}
+_RECENT_GROUPED_DAILY_FAILURE_REASONS = {
+    POLYGON_US_BREADTH_REASON_RESPONSE_INVALID,
+    POLYGON_US_BREADTH_REASON_STATUS_NOT_OK,
+    POLYGON_US_BREADTH_REASON_HTTP_NON_200,
+    POLYGON_US_BREADTH_REASON_RESULTS_COUNT_MISSING,
+    POLYGON_US_BREADTH_REASON_RESULTS_NOT_LIST,
+    POLYGON_US_BREADTH_REASON_NO_VALID_OHLC_ROWS,
+    POLYGON_US_BREADTH_REASON_PAYLOAD_NOT_MAPPING,
 }
 _EPSILON = 1e-12
 
@@ -209,8 +224,16 @@ def run_polygon_us_breadth_activation(
         if status_code == 0 and diagnostic_controls_enabled and transport_reason:
             latest_reason = transport_reason
             break
+        if status_code != 200:
+            parsed = parse_polygon_grouped_daily_payload(payload)
+            latest_reason = (
+                POLYGON_US_BREADTH_REASON_HTTP_NON_200
+                if status_code > 0
+                else parsed.reason or POLYGON_US_BREADTH_REASON_PAYLOAD_NOT_MAPPING
+            )
+            continue
         parsed = parse_polygon_grouped_daily_payload(payload)
-        if status_code == 200 and parsed.ok:
+        if parsed.ok:
             latest_payload = payload
             latest_date = candidate
             latest_index = index
@@ -375,7 +398,7 @@ def run_polygon_us_breadth_activation(
             )
             failed_date = failed_date or derived_failed_date
             failed_session_index = failed_session_index or derived_failed_session_index
-    elif POLYGON_US_BREADTH_REASON_RESPONSE_INVALID in reason_codes:
+    elif reason_codes & _RECENT_GROUPED_DAILY_FAILURE_REASONS:
         failure_window = POLYGON_HIGH_LOW_FAILURE_WINDOW_RECENT_GROUPED_DAILY
         failed_date = latest_failed_date or latest_date
         attempted_sessions = 0
@@ -582,14 +605,16 @@ def parse_polygon_grouped_daily_payload(payload: Mapping[str, Any] | None) -> _P
     """Strictly parse Polygon grouped-daily payloads into valid OHLC rows."""
 
     if not isinstance(payload, Mapping):
-        return _ParsedGroupedDaily(False, 0, (), POLYGON_US_BREADTH_REASON_RESPONSE_INVALID)
+        return _ParsedGroupedDaily(False, 0, (), POLYGON_US_BREADTH_REASON_PAYLOAD_NOT_MAPPING)
     status = _text(payload.get("status")).upper()
     if status != "OK":
-        return _ParsedGroupedDaily(False, 0, (), POLYGON_US_BREADTH_REASON_RESPONSE_INVALID)
+        return _ParsedGroupedDaily(False, 0, (), POLYGON_US_BREADTH_REASON_STATUS_NOT_OK)
     results_count = _parse_int(payload.get("resultsCount"))
+    if results_count is None:
+        return _ParsedGroupedDaily(False, 0, (), POLYGON_US_BREADTH_REASON_RESULTS_COUNT_MISSING)
     results = payload.get("results")
-    if results_count is None or not isinstance(results, list):
-        return _ParsedGroupedDaily(False, 0, (), POLYGON_US_BREADTH_REASON_RESPONSE_INVALID)
+    if not isinstance(results, list):
+        return _ParsedGroupedDaily(False, 0, (), POLYGON_US_BREADTH_REASON_RESULTS_NOT_LIST)
 
     rows: list[_GroupedDailyRow] = []
     for item in results:
@@ -610,6 +635,14 @@ def parse_polygon_grouped_daily_payload(payload: Mapping[str, Any] | None) -> _P
                 high_price=high_price,
                 low_price=low_price,
             )
+        )
+
+    if (results_count > 0 or results) and not rows:
+        return _ParsedGroupedDaily(
+            False,
+            int(results_count),
+            (),
+            POLYGON_US_BREADTH_REASON_NO_VALID_OHLC_ROWS,
         )
 
     return _ParsedGroupedDaily(True, int(results_count), tuple(rows))
@@ -1187,8 +1220,14 @@ __all__ = [
     "POLYGON_US_BREADTH_AUTHORITY_BASIS",
     "POLYGON_US_BREADTH_REASON_COVERAGE_BELOW_THRESHOLD",
     "POLYGON_US_BREADTH_REASON_EOD_STALE",
+    "POLYGON_US_BREADTH_REASON_HTTP_NON_200",
+    "POLYGON_US_BREADTH_REASON_NO_VALID_OHLC_ROWS",
+    "POLYGON_US_BREADTH_REASON_PAYLOAD_NOT_MAPPING",
     "POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE",
+    "POLYGON_US_BREADTH_REASON_RESULTS_COUNT_MISSING",
+    "POLYGON_US_BREADTH_REASON_RESULTS_NOT_LIST",
     "POLYGON_US_BREADTH_REASON_RESPONSE_INVALID",
+    "POLYGON_US_BREADTH_REASON_STATUS_NOT_OK",
     "POLYGON_US_BREADTH_REASON_UNAUTHORIZED",
     "POLYGON_US_BREADTH_SOURCE",
     "POLYGON_US_BREADTH_SOURCE_LABEL",

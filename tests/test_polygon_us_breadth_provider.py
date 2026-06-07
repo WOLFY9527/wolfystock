@@ -24,8 +24,13 @@ from src.services.polygon_us_breadth_provider import (
     POLYGON_HIGH_LOW_HISTORY_UNAVAILABLE_REASON,
     POLYGON_HIGH_LOW_LOOKBACK_SESSIONS,
     POLYGON_US_BREADTH_REASON_COVERAGE_BELOW_THRESHOLD,
+    POLYGON_US_BREADTH_REASON_HTTP_NON_200,
+    POLYGON_US_BREADTH_REASON_NO_VALID_OHLC_ROWS,
+    POLYGON_US_BREADTH_REASON_PAYLOAD_NOT_MAPPING,
     POLYGON_US_BREADTH_REASON_PREVIOUS_CLOSE_UNAVAILABLE,
-    POLYGON_US_BREADTH_REASON_RESPONSE_INVALID,
+    POLYGON_US_BREADTH_REASON_RESULTS_COUNT_MISSING,
+    POLYGON_US_BREADTH_REASON_RESULTS_NOT_LIST,
+    POLYGON_US_BREADTH_REASON_STATUS_NOT_OK,
     POLYGON_US_BREADTH_REASON_UNAUTHORIZED,
     POLYGON_US_EASTERN_TZ,
     compute_polygon_us_breadth,
@@ -521,7 +526,69 @@ def test_malformed_polygon_grouped_response_keeps_us_breadth_fail_closed() -> No
     assert result["probePassed"] is False
     assert result["sourceAuthorityAllowed"] is False
     assert result["scoreContributionAllowed"] is False
-    assert result["reasonCodes"] == [POLYGON_US_BREADTH_REASON_RESPONSE_INVALID]
+    assert result["reasonCodes"] == [POLYGON_US_BREADTH_REASON_RESULTS_COUNT_MISSING]
+
+
+def test_malformed_polygon_grouped_response_uses_specific_sanitized_buckets() -> None:
+    cases = [
+        (None, POLYGON_US_BREADTH_REASON_PAYLOAD_NOT_MAPPING),
+        (
+            {"status": "ERROR", "resultsCount": 0, "results": []},
+            POLYGON_US_BREADTH_REASON_STATUS_NOT_OK,
+        ),
+        (
+            {"status": "OK", "results": []},
+            POLYGON_US_BREADTH_REASON_RESULTS_COUNT_MISSING,
+        ),
+        (
+            {"status": "OK", "resultsCount": 1, "results": {}},
+            POLYGON_US_BREADTH_REASON_RESULTS_NOT_LIST,
+        ),
+        (
+            {"status": "OK", "resultsCount": 1, "results": [{"T": "BAD"}]},
+            POLYGON_US_BREADTH_REASON_NO_VALID_OHLC_ROWS,
+        ),
+    ]
+
+    for payload, expected_reason in cases:
+        result = compute_polygon_us_breadth(
+            payload,
+            observation_date="2026-05-21",
+            now=datetime(2026, 5, 22, 12, tzinfo=ZoneInfo("America/New_York")),
+            min_coverage_count=3,
+        )
+
+        assert result["probePassed"] is False
+        assert result["sourceAuthorityAllowed"] is False
+        assert result["scoreContributionAllowed"] is False
+        assert result["broadMarketClaimAllowed"] is False
+        assert result["reasonCodes"] == [expected_reason]
+
+
+def test_polygon_activation_non_200_response_uses_http_bucket_and_stays_sanitized() -> None:
+    def transport(date: str, api_key: str, timeout: float) -> tuple[int, dict[str, object]]:
+        return 502, {"status": "ERROR", "error": "upstream with polygon-secret-key"}
+
+    result = run_polygon_us_breadth_activation(
+        api_key="test-key",
+        transport=transport,
+        now=datetime(2026, 5, 22, 12, tzinfo=POLYGON_US_EASTERN_TZ),
+        min_coverage_count=3,
+        high_low_max_history_sessions=3,
+    )
+    output = build_market_overview_activation_smoke_output(diagnostic_summary(result))
+
+    assert result["probePassed"] is False
+    assert result["sourceAuthorityAllowed"] is False
+    assert result["scoreContributionAllowed"] is False
+    assert result["broadMarketClaimAllowed"] is False
+    assert result["reasonCodes"] == [POLYGON_US_BREADTH_REASON_HTTP_NON_200]
+    assert output["reason"] == POLYGON_US_BREADTH_REASON_HTTP_NON_200
+    assert output["status"] == "unavailable_or_invalid_response"
+    assert output["missingRequiredWindows"] == ["recent_grouped_daily_window"]
+    serialized = json.dumps(output, ensure_ascii=False)
+    assert "polygon-secret-key" not in serialized
+    assert "upstream" not in serialized
 
 
 def test_low_polygon_coverage_keeps_us_breadth_fail_closed() -> None:
@@ -965,7 +1032,7 @@ def test_polygon_activation_invalid_grouped_daily_diagnostic_context_is_sanitize
     )
     output = build_high_low_lookback_certification_output(diagnostic_summary(result))
 
-    assert output["reason"] == POLYGON_US_BREADTH_REASON_RESPONSE_INVALID
+    assert output["reason"] == POLYGON_US_BREADTH_REASON_STATUS_NOT_OK
     assert output["failureWindow"] == "recent_grouped_daily_candidate_window"
     assert output["failedDate"] == "2026-05-21"
     assert output["failedSessionIndex"] is None
