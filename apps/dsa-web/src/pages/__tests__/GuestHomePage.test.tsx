@@ -96,18 +96,17 @@ describe('GuestHomePage', () => {
     expect(screen.getByTestId('guest-home-command-workflow')).toHaveTextContent('报告');
     expect(screen.getByTestId('home-bento-omnibar')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '分析' })).toBeEnabled();
-    expect(screen.getByText('输入股票代码或标的名称，先启动研究命令。登录后可保存观察、生成报告，并进入组合或扫描工作台。')).toBeInTheDocument();
-    expect(capabilityStrip).toHaveTextContent('登录后解锁');
-    expect(capabilityStrip).toHaveTextContent('保存观察');
-    expect(capabilityStrip).toHaveTextContent('生成报告');
+    expect(screen.getByText('WolfyStock 是面向独立研究者与自驱投资者的股票研究工作区。你可以先查看单个标的预览，登录后再保存报告、回看历史，并继续进入组合或扫描工作台。')).toBeInTheDocument();
+    expect(capabilityStrip).toHaveTextContent('登录后继续');
+    expect(capabilityStrip).toHaveTextContent('保存报告');
+    expect(capabilityStrip).toHaveTextContent('回看历史');
     expect(capabilityStrip).toHaveTextContent('组合工作台');
     expect(capabilityStrip).toHaveTextContent('全市场扫描');
     expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/login?mode=create&redirect=%2F');
     expect(trustStrip).toHaveTextContent('研究边界');
     expect(trustStrip).toHaveTextContent('不等于买卖建议');
-    expect(previewStrip).toHaveTextContent('游客预览范围');
-    expect(previewStrip).toHaveTextContent('完整报告');
-    expect(previewStrip).toHaveTextContent('既有登录链路解锁');
+    expect(previewStrip).toHaveTextContent('登录后下一步');
+    expect(previewStrip).toHaveTextContent('回到上次研究现场');
     expect(screen.queryByTestId('guest-home-frosted-lock')).not.toBeInTheDocument();
     expect(guestFirstScreen).not.toHaveTextContent('WolfyStock 分析面板');
     expect(guestFirstScreen).not.toHaveTextContent('输入股票代码，搜索后生成 AI 分析面板。');
@@ -143,7 +142,7 @@ describe('GuestHomePage', () => {
     renderGuest(['/en/guest']);
 
     expect(screen.getByRole('heading', { name: 'WolfyStock Research Console' })).toBeInTheDocument();
-    expect(screen.getByText('Enter a ticker or name to start a research pass. Sign in to save watch items, generate reports, and open portfolio or scanner workflows.')).toBeInTheDocument();
+    expect(screen.getByText('WolfyStock is a stock research workspace for self-directed investors and research-oriented users. Start with one ticker preview now, then sign in to save reports, reopen history, and continue into portfolio or scanner workflows.')).toBeInTheDocument();
     expect(screen.getByTestId('guest-home-trust-strip')).toHaveTextContent('not a trading instruction');
     expect(screen.getByRole('button', { name: 'Analyze' })).toBeInTheDocument();
     expect(screen.queryByTestId('home-research-console')).not.toBeInTheDocument();
