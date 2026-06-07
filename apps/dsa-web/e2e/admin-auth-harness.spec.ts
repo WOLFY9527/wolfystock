@@ -52,7 +52,7 @@ const adminSecurityActionApiPaths = [
 
 const rawAuthRehearsalLeakPattern =
   /raw-session-canary-should-not-render|cookie_canary_should_not_render|RECOVERY-CODE-CANARY-0001|rawRbacCapabilityDump|adminCapabilities:\s|coarseFallbackEnabled|stagingOnly/i;
-const providerCircuitSecondaryDisclosureLabel = '二级细节：探测、事件、配额窗口、路由 bucket';
+const providerCircuitSecondaryDisclosureLabel = 'L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA（已脱敏摘要）';
 
 async function expectNoRawAuthRehearsalLeak(page: Parameters<typeof expectNoHorizontalOverflow>[0]) {
   const bodyText = await page.locator('body').innerText();
@@ -69,7 +69,7 @@ async function expectAdminRouteShellClean(page: Parameters<typeof expectNoHorizo
 async function expectProviderSlaReadinessSmoke(page: Parameters<typeof expectNoHorizontalOverflow>[0]) {
   const slaPanel = page.getByRole('heading', { name: 'Provider SLA / 凭证就绪' }).locator('xpath=ancestor::section[1]');
   await expect(slaPanel).toBeVisible();
-  await expect(slaPanel.getByText('只读 · 外部调用关闭')).toBeVisible();
+  await expect(slaPanel.getByText(/个就绪信号 · 外呼关闭|只读 · 外部调用关闭/)).toBeVisible();
   await expect(slaPanel.getByText('分类 llm · 路由 analysis')).toBeVisible();
   await expect(slaPanel.getByText('缺少凭证')).toBeVisible();
   await expect(slaPanel.getByText('延迟')).toBeVisible();
@@ -81,8 +81,8 @@ async function expectProviderSlaReadinessSmoke(page: Parameters<typeof expectNoH
   await expect(slaPanel.getByText('趋势请求')).toBeVisible();
   await expect(slaPanel.getByText('6_20')).toBeVisible();
   await expect(slaPanel.getByText('最近错误 buckets')).toBeVisible();
-  await expect(slaPanel.getByRole('button', { name: '展开 最近错误 buckets' })).toHaveAttribute('aria-expanded', 'false');
-  await expect(slaPanel.getByRole('button', { name: '展开 技术边界' })).toHaveAttribute('aria-expanded', 'false');
+  await expect(slaPanel.getByRole('button', { name: '展开 L3 最近错误 buckets：已脱敏原因 / 计数 / 最近观察' })).toHaveAttribute('aria-expanded', 'false');
+  await expect(slaPanel.getByRole('button', { name: '展开 L3 已脱敏技术边界：只读 / 外呼 / 门禁' })).toHaveAttribute('aria-expanded', 'false');
   await expect(slaPanel.getByRole('button', { name: /^收起 / })).toHaveCount(0);
 
   const bodyText = await page.locator('body').innerText();
@@ -135,7 +135,7 @@ test.describe('mocked admin auth browser harness', () => {
       await expect(page.getByTestId('model-pricing-policy-panel')).toHaveCount(0);
       await expect(page.getByText('LLM 成本账本')).toHaveCount(0);
       await expect(page.getByText('模型价格策略')).toHaveCount(0);
-      await expect(page.getByText('配额试运行诊断')).toBeVisible();
+      await expect(page.getByText('L2 配额 / 成本运维：只读配额估算')).toBeVisible();
       await expect(page.getByText('用户成本排行')).toHaveCount(0);
       await expect(page.getByText('模型成本分布')).toHaveCount(0);
       await expect(page.getByText('功能成本分布')).toHaveCount(0);
@@ -149,8 +149,8 @@ test.describe('mocked admin auth browser harness', () => {
       await page.unrouteAll({ behavior: 'ignoreErrors' });
 
       harness = await openAdminRouteWithHarness(page, '/zh/admin/provider-circuits');
-      await expect(page.getByRole('heading', { name: 'Provider 熔断诊断' })).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByText('当前熔断状态', { exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: '数据源熔断诊断' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText('熔断状态', { exact: true })).toBeVisible();
       await expandProviderCircuitSecondaryDiagnostics(page);
       await expectProviderSlaReadinessSmoke(page);
       for (const [method, path] of providerCircuitApiPaths) {
@@ -180,8 +180,9 @@ test.describe('mocked admin auth browser harness', () => {
       await page.unrouteAll({ behavior: 'ignoreErrors' });
 
       harness = await openAdminRouteWithHarness(page, '/zh/settings/system');
-      await expect(page.getByTestId('settings-bento-page')).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByTestId('system-health-summary')).toBeVisible();
+      await expect(page.getByTestId('settings-bento-page')).toBeAttached({ timeout: 15_000 });
+      await expect(page.getByRole('heading', { name: '系统设置' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('system-health-summary')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('duckdb-quant-panel')).toBeAttached();
       expect(harness.requests.count('GET', '/api/v1/system/config')).toBeGreaterThan(0);
       await expectAdminRouteShellClean(page);
@@ -201,7 +202,7 @@ test.describe('mocked admin auth browser harness', () => {
       await expect(page.getByTestId('llm-ledger-panel')).toHaveCount(0);
       await expect(page.getByTestId('model-pricing-policy-panel')).toHaveCount(0);
       await expect(page.getByText('模型价格策略')).toHaveCount(0);
-      await expect(page.getByText('配额试运行诊断')).toBeVisible();
+      await expect(page.getByText('L2 配额 / 成本运维：只读配额估算')).toBeVisible();
       for (const [method, path] of primaryCostApiPaths) {
         expect(harness.requests.count(method, path)).toBeGreaterThan(0);
       }
@@ -215,7 +216,7 @@ test.describe('mocked admin auth browser harness', () => {
         capabilities: ['cost:observability:read'],
       });
       await expect(page.getByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByRole('heading', { name: 'Provider 熔断诊断' })).toHaveCount(0);
+      await expect(page.getByRole('heading', { name: '数据源熔断诊断' })).toHaveCount(0);
       for (const [method, path] of providerCircuitApiPaths) {
         expect(harness.requests.wasFetched(method, path)).toBe(false);
       }
@@ -256,8 +257,8 @@ test.describe('mocked admin auth browser harness', () => {
       let harness = await openAdminRouteWithHarness(page, '/zh/admin/provider-circuits', {
         capabilities: ['ops:providers:read'],
       });
-      await expect(page.getByRole('heading', { name: 'Provider 熔断诊断' })).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByText('当前熔断状态', { exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: '数据源熔断诊断' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText('熔断状态', { exact: true })).toBeVisible();
       await expandProviderCircuitSecondaryDiagnostics(page);
       await expectProviderSlaReadinessSmoke(page);
       for (const [method, path] of providerCircuitApiPaths) {
@@ -336,7 +337,7 @@ test.describe('mocked admin auth browser harness', () => {
       },
       {
         path: '/zh/admin/provider-circuits',
-        hidden: page.getByRole('heading', { name: 'Provider 熔断诊断' }),
+        hidden: page.getByRole('heading', { name: '数据源熔断诊断' }),
         blockedApis: providerCircuitApiPaths,
       },
       {
@@ -427,7 +428,7 @@ test.describe('mocked admin auth browser harness', () => {
         includeCapabilityFields: false,
       });
       await expect(page.getByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByRole('heading', { name: 'Provider 熔断诊断' })).toHaveCount(0);
+      await expect(page.getByRole('heading', { name: '数据源熔断诊断' })).toHaveCount(0);
       for (const [method, path] of providerCircuitApiPaths) {
         expect(providersHarness.requests.wasFetched(method, path)).toBe(false);
       }

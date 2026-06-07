@@ -1112,13 +1112,13 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
               description="这组保留原有事件、quota 与 probe 细节，但让每个子面板各自表达数量和已脱敏 bucket 影响。"
               action={<TerminalChip variant="caution">{formatNumber(summary.events + summary.quotaWindows + summary.probeEvents, 0)} 条线索</TerminalChip>}
             />
-            <div className="min-w-0 xl:col-span-4">
+            <div className="col-span-12 min-w-0 xl:col-span-4">
               <ProbeEventsPanel items={data?.probeEvents.items || []} />
             </div>
-            <div className="min-w-0 xl:col-span-4">
+            <div className="col-span-12 min-w-0 xl:col-span-4">
               <EventsPanel items={data?.events.items || []} />
             </div>
-            <div className="min-w-0 xl:col-span-4">
+            <div className="col-span-12 min-w-0 xl:col-span-4">
               <QuotaWindowsPanel items={data?.quotaWindows.items || []} />
             </div>
           </TerminalGrid>

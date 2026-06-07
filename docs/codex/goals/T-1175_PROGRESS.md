@@ -195,12 +195,84 @@ Implementation checkpoint:
   guest, login/register, market overview, liquidity, rotation, scanner,
   watchlist, portfolio, report/history, and admin health.
 
+## Checkpoint 2 - Launch Smoke Truth Alignment
+
+Time: 2026-06-08 04:07 CST.
+
+Public Beta Readiness estimate after focused Playwright validation: 76/100.
+
+Scorecard estimate:
+
+| Area | Points | V0 | CP1 | CP2 |
+| --- | ---: | ---: | ---: | ---: |
+| guest/auth/protected | 15 | 9 | 12 | 13 |
+| Market/Liquidity/Rotation observation-mode | 15 | 8 | 10 | 11 |
+| demo research loop | 20 | 11 | 12 | 13 |
+| consumer UI de-AI/de-diagnostic | 15 | 8 | 12 | 13 |
+| perceived speed/partial/last-good | 10 | 6 | 6 | 6 |
+| admin health | 10 | 6 | 8 | 9 |
+| deploy precheck | 15 | 10 | 10 | 11 |
+
+P0/P1 movement:
+
+- P0 narrowed: core public/admin route smoke now runs at `1440x1000` and
+  `390x844` for home, Market Overview, Rotation Radar, Scanner, backtest,
+  cost observability, provider diagnostics, system settings, and admin user
+  portfolio projection.
+- P0 narrowed: no-secret smoke now runs through home, Market Overview, Options
+  Lab, Portfolio, cost observability, and provider diagnostics without raw
+  secret/debug/provider payload leakage. Options Lab keeps negative safety copy
+  such as "不会提交订单" while still blocking executable trading/action wording.
+- P0 narrowed: admin auth harness now verifies full admin, cost-only admin,
+  providers-only admin, denied admin, legacy fallback-disabled, and missing
+  capability-field paths with current route copy and no protected API fetches
+  when capability gates deny access.
+- P1 improved: provider diagnostics L2 event/quota/probe panels now keep full
+  mobile grid width and desktop three-column layout, so the expanded diagnostic
+  group is visible and scrollable at `390x844` without changing data or
+  provider semantics.
+- P1 improved: restored the shared product auth e2e harness utility so product
+  smoke specs execute route assertions instead of failing at static import time.
+
+Route before/after:
+
+| Route | Before | After | Evidence |
+| --- | --- | --- | --- |
+| `/zh/admin/provider-circuits` | L2 event/quota/probe panels could collapse into hidden grid cells on mobile; tests still asserted stale Provider wording | L2 panels span mobile width; smoke asserts current Chinese copy and collapsed/expanded redaction behavior | `AdminProviderCircuitDiagnosticsPage.test.tsx`, `critical-route-launch-smoke.spec.ts`, `no-secret-critical-surface.smoke.spec.ts`, `admin-auth-harness.spec.ts` |
+| `/zh/settings/system` | smoke expected hidden root wrapper to be visible | smoke now asserts attached root plus visible `系统设置` and health summary | `critical-route-launch-smoke.spec.ts`, `admin-auth-harness.spec.ts` |
+| `/zh/options-lab` | no-secret smoke could fail on negative safety copy containing order words | smoke now blocks executable trading/action wording while allowing explicit no-order boundary copy | `no-secret-critical-surface.smoke.spec.ts` |
+| product protected routes | `productAuth.ts` fixture could not resolve shared product auth harness | restored `src/test-utils/productAuthHarness.ts` and no-secret product smoke reaches page assertions | `no-secret-critical-surface.smoke.spec.ts` |
+
+Validation completed:
+
+- `npm --prefix apps/dsa-web run test -- --run src/pages/__tests__/AdminProviderCircuitDiagnosticsPage.test.tsx` -> PASS, 1 file / 8 tests.
+- `DSA_WEB_PLAYWRIGHT_PORT=4177 npm --prefix apps/dsa-web run test:e2e -- e2e/critical-route-launch-smoke.spec.ts` -> PASS, 8 tests.
+- `DSA_WEB_PLAYWRIGHT_PORT=4180 npm --prefix apps/dsa-web run test:e2e -- e2e/admin-auth-harness.spec.ts` -> PASS, 7 tests.
+- `DSA_WEB_PLAYWRIGHT_PORT=4181 npm --prefix apps/dsa-web run test:e2e -- e2e/no-secret-critical-surface.smoke.spec.ts` -> PASS, 6 tests.
+- `git diff --check` -> PASS.
+
+Validation pending:
+
+- P1 focused backend/release tests around admin/provider/auth/release contracts.
+- Full `npm --prefix apps/dsa-web run lint`, build, and `check:design` after
+  the final validation batch.
+- Broader consumer journey routes: liquidity, watchlist, portfolio/report
+  history beyond current no-secret and critical-route coverage.
+
+Rollback:
+
+- Revert checkpoint commit after it is created:
+  `git revert <checkpoint-2-commit>`.
+- Restore changed smoke/layout/test utility files to checkpoint 1:
+  `git restore --source=50e61289 -- apps/dsa-web/e2e/admin-auth-harness.spec.ts apps/dsa-web/e2e/critical-route-launch-smoke.spec.ts apps/dsa-web/e2e/no-secret-critical-surface.smoke.spec.ts apps/dsa-web/src/pages/AdminProviderCircuitDiagnosticsPage.tsx apps/dsa-web/src/test-utils/productAuthHarness.ts`.
+
 ## Checkpoints
 
 | Time | Commit | Scope | Validation |
 | --- | --- | --- | --- |
 | 2026-06-08 02:30 CST | `050e2276` | Initial baseline progress doc | `git diff --check`, `./scripts/release_secret_scan.sh` |
 | 2026-06-08 03:10 CST | this checkpoint commit | Auth redirect, Market Overview consumer fallback copy, Provider Ops endpoint redaction | Focused Vitest, lint, build, check:design, `git diff --check`, `./scripts/release_secret_scan.sh` |
+| 2026-06-08 04:07 CST | this checkpoint commit | Playwright truth alignment, provider diagnostics mobile L2 layout, product auth e2e harness restore | AdminProviderCircuit unit test, critical route smoke, admin auth smoke, no-secret smoke, `git diff --check` |
 
 ## Running Notes
 

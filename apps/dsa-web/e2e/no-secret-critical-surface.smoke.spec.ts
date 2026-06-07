@@ -20,7 +20,8 @@ const viewports = [
 ] as const;
 
 const rawDebugArtifactPattern = /raw\s+(payload|response)|debug\s+(payload|response|panel)|stack\s+(trace|details)|traceback|bearer\s+[a-z0-9._-]+|api[_\s-]?key\s*[=:]|password\s*[=:]|session[_\s-]?id\s*[=:]|secret\s*[=:]|sk-[a-z0-9_-]{12,}|ghp_[a-z0-9_]{12,}|xox[baprs]-[a-z0-9-]{12,}/i;
-const providerCircuitSecondaryDisclosureLabel = '二级细节：探测、事件、配额窗口、路由 bucket';
+const executableTradingActionPattern = /买入按钮|建议买入|建议卖出|卖出指令|立即交易|订单载荷|开仓|平仓|加仓|减仓|持仓建议|仓位建议|决策级|decision[-\s]?grade|buy now|sell now|place order|submit order|best contract|guaranteed/i;
+const providerCircuitSecondaryDisclosureLabel = 'L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA（已脱敏摘要）';
 
 async function installAuthenticatedAppSmokeSession(page: Page) {
   await page.route('**/api/v1/auth/status', async (route) => {
@@ -59,11 +60,22 @@ async function expectCriticalSurfaceClean(page: Page, expectedExpandedDisclosure
   expect(bodyText).not.toMatch(rawDebugArtifactPattern);
 }
 
+async function expectOptionsLabSurfaceClean(page: Page) {
+  await expectRootNonEmpty(page);
+  await expectNoHorizontalOverflow(page);
+  await expectNoRawSecretLikeText(page);
+  await expect(page.getByRole('button', { name: /^收起 / })).toHaveCount(0);
+
+  const bodyText = await page.locator('body').innerText();
+  expect(bodyText).not.toMatch(rawDebugArtifactPattern);
+  expect(bodyText).not.toMatch(executableTradingActionPattern);
+}
+
 async function expectProviderCircuitSecondaryDisclosure(page: Page) {
   const expandButton = page.getByRole('button', { name: `展开 ${providerCircuitSecondaryDisclosureLabel}` });
 
   await expect(page.getByText(providerCircuitSecondaryDisclosureLabel, { exact: true })).toBeVisible();
-  await expect(page.getByText('默认折叠', { exact: true })).toBeVisible();
+  await expect(page.getByText(/已脱敏 bucket\/边界默认折叠/)).toBeVisible();
   await expect(expandButton).toBeVisible();
   await expect(expandButton).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByRole('heading', { name: '最近熔断事件' })).toHaveCount(0);
@@ -110,7 +122,7 @@ productTest.describe('no-secret critical product surfaces', () => {
       await expect(page.getByTestId('options-lab-strategy-comparison')).toBeVisible();
       await expect(page.getByTestId('options-lab-decision-engine')).toBeVisible();
       await expect(page.getByTestId('options-lab-calls-table')).toBeVisible();
-      await expectCriticalSurfaceClean(page);
+      await expectOptionsLabSurfaceClean(page);
 
       expect(harness.requests.count('GET', '/api/v1/options/underlyings/TEM/summary')).toBeGreaterThan(0);
       expect(harness.requests.count('POST', '/api/v1/options/strategies/compare')).toBeGreaterThan(0);
@@ -163,8 +175,8 @@ adminTest.describe('no-secret critical admin diagnostics surfaces', () => {
       await page.setViewportSize(viewport.size);
       const harness = await openAdminRouteWithHarness(page, '/zh/admin/provider-circuits');
 
-      await expect(page.getByRole('heading', { name: 'Provider 熔断诊断' })).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByText('当前熔断状态', { exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: '数据源熔断诊断' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText('熔断状态', { exact: true })).toBeVisible();
       await expectCriticalSurfaceClean(page);
       await expectProviderCircuitSecondaryDisclosure(page);
       await expectCriticalSurfaceClean(page, 1);

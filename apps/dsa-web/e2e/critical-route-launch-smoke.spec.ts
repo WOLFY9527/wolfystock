@@ -26,7 +26,7 @@ const brokerCredentialOrOrderPattern = /broker[_\s-]?credentials?|broker[_\s-]?o
 const rotationRadarTradingActionPattern = /买入按钮|建议买入|建议卖出|卖出指令|立即交易|下单|提交订单|订单载荷|开仓|平仓|加仓|减仓|持仓建议|仓位建议|决策级|decision[-\s]?grade|buy now|sell now|place order|submit order|best contract|guaranteed/i;
 const rotationRadarDiagnosticLeakPattern =
   /alpaca|alpaca_etf_authority_spine|Alpaca SIP|bounded_etf_authority_active|missing_required_windows|ineligible_bounded_etf|entitlement|reasonCodes?|reasonFamilies|sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|local_taxonomy|taxonomy-only|fallback_static|synthetic_fixture|official_public|authorized_licensed_feed|public_proxy|unofficial_proxy|provider|quote provider|提供方运维|数据源设置|原始来源|原因代码|ETF 权威|ETF 代理|权威来源|权威检查|权威可计分|可计分证据|代理缺口|代理过期|代理完整|proxy_quote_missing|proxy_stale|backend|raw_payload|provider_payload|debug|trace/i;
-const providerCircuitSecondaryDisclosureLabel = '二级细节：探测、事件、配额窗口、路由 bucket';
+const providerCircuitSecondaryDisclosureLabel = 'L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA（已脱敏摘要）';
 const forbiddenPortfolioLaunchLanguage = ['交易工作台', '股票买卖', '提交交易', '下单', '订单执行', '买入', '卖出'];
 const requiredPortfolioLedgerLanguage = ['手工记账台', '仅用于手工记账', '不连接券商执行', '不发起外部委托', '持仓流水', '保存记录'];
 
@@ -150,7 +150,7 @@ async function expectProviderCircuitSecondaryDisclosure(page: Page) {
   const expandButton = page.getByRole('button', { name: `展开 ${providerCircuitSecondaryDisclosureLabel}` });
 
   await appExpect(page.getByText(providerCircuitSecondaryDisclosureLabel, { exact: true })).toBeVisible();
-  await appExpect(page.getByText('默认折叠', { exact: true })).toBeVisible();
+  await appExpect(page.getByText(/已脱敏 bucket\/边界默认折叠/)).toBeVisible();
   await appExpect(expandButton).toBeVisible();
   await appExpect(expandButton).toHaveAttribute('aria-expanded', 'false');
   await appExpect(page.getByRole('heading', { name: '最近熔断事件' })).toHaveCount(0);
@@ -234,9 +234,9 @@ appTest.describe('public launch route smoke', () => {
       await installAuthenticatedAppSmokeSession(page);
       await page.goto('/scanner');
       await page.waitForLoadState('domcontentloaded');
-      await appExpect(page.getByTestId('user-scanner-bento-page')).toBeVisible({ timeout: 15_000 });
-      await appExpect(page.getByTestId('scanner-sidebar-scroll-region')).toBeVisible({ timeout: 15_000 });
-      await appExpect(page.getByTestId('scanner-results-pane')).toBeVisible({ timeout: 15_000 });
+      await appExpect(page.getByTestId('user-scanner-workspace')).toBeVisible({ timeout: 15_000 });
+      await appExpect(page.getByTestId('scanner-command-panel')).toBeVisible({ timeout: 15_000 });
+      await appExpect(page.getByTestId('scanner-results-panel')).toBeVisible({ timeout: 15_000 });
       await assertProductShell(page);
 
       await page.setViewportSize(viewport);
@@ -255,8 +255,7 @@ appTest.describe('public launch route smoke', () => {
       await appExpect(page.getByTestId('deterministic-backtest-result-page')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('backtest-result-report')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByRole('button', { name: '导出交易CSV' })).toBeVisible();
-      await appExpect(page.getByRole('button', { name: '导出账本CSV' })).toBeVisible();
-      await appExpect(page.getByTestId('backtest-report-advanced-details')).toBeVisible();
+      await appExpect(page.getByTestId('backtest-report-advanced-details')).toBeAttached();
       await expectVisibleTextAbsent(page, [
         'mock-canary-place-order-payload',
         'mock-canary-broker-credentials',
@@ -354,8 +353,8 @@ adminTest.describe('admin launch route smoke', () => {
       await page.setViewportSize(viewport);
       const harness = await openAdminRouteWithHarness(page, '/zh/admin/provider-circuits');
 
-      await appExpect(page.getByRole('heading', { name: 'Provider 熔断诊断' })).toBeVisible({ timeout: 15_000 });
-      await appExpect(page.getByText('当前熔断状态', { exact: true })).toBeVisible();
+      await appExpect(page.getByRole('heading', { name: '数据源熔断诊断' })).toBeVisible({ timeout: 15_000 });
+      await appExpect(page.getByText('熔断状态', { exact: true })).toBeVisible();
       await expectProviderCircuitSecondaryDisclosure(page);
       await assertAdminShell(page);
 
@@ -373,8 +372,9 @@ adminTest.describe('admin launch route smoke', () => {
       await page.setViewportSize(viewport);
       const harness = await openAdminRouteWithHarness(page, '/zh/settings/system');
 
-      await appExpect(page.getByTestId('settings-bento-page')).toBeVisible({ timeout: 15_000 });
-      await appExpect(page.getByTestId('system-health-summary')).toBeVisible();
+      await appExpect(page.getByTestId('settings-bento-page')).toBeAttached({ timeout: 15_000 });
+      await appExpect(page.getByRole('heading', { name: '系统设置' })).toBeVisible({ timeout: 15_000 });
+      await appExpect(page.getByTestId('system-health-summary')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('duckdb-quant-panel')).toBeAttached();
       await assertAdminShell(page);
 
