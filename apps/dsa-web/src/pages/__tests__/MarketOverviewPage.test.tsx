@@ -2941,6 +2941,29 @@ describe('MarketOverviewPage', () => {
     expect(regimeSummaryText).not.toMatch(/买入|卖出|交易指令|评分级别|score[-\s]?grade|investment advice/i);
   });
 
+  it('keeps default consumer market overview surfaces free of raw evidence metadata vocabulary', async () => {
+    useProductSurfaceMock.mockReturnValue({
+      isAdminMode: false,
+      canReadProviders: false,
+    });
+    render(createElement(MarketOverviewPage));
+
+    const readinessBand = await screen.findByTestId('market-overview-decision-readiness');
+    expect(readinessBand).toBeInTheDocument();
+
+    const evidence = expandMarketEvidenceDetails();
+    await within(evidence).findByTestId('market-overview-direction-summary');
+
+    const titleText = Array.from(document.querySelectorAll<HTMLElement>('[title]'))
+      .map((node) => node.getAttribute('title') || '')
+      .join(' ');
+    const visibleText = `${document.body.textContent || ''} ${titleText}`;
+
+    expect(visibleText).not.toMatch(
+      /sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|reasonCodes?|reasonFamilies|routeRejectedReasonCodes|providerHealth|provider_runtime|sourceTier|trustLevel|debugRef|schemaVersion|MarketCache|runtime|internal|fallback_static|synthetic_fixture|official_public|authorized_licensed_feed|public_proxy|unofficial_public/i,
+    );
+  });
+
   it('reveals technical diagnostics only in admin mode', async () => {
     useProductSurfaceMock.mockReturnValue({
       isAdminMode: true,
