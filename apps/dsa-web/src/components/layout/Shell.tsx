@@ -23,6 +23,8 @@ type ShellProps = {
   children?: React.ReactNode;
 };
 
+const MOBILE_MENU_TOUCH_TARGET_PX = 44;
+
 function resolveRailTitle(t: (key: string) => string): string {
   return t('shell.archiveTitle');
 }
@@ -49,6 +51,9 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, l
   }
   if (pathname.startsWith('/market-overview')) {
     return t('nav.marketOverview');
+  }
+  if (pathname.startsWith('/market/liquidity-monitor')) {
+    return t('nav.liquidityMonitor');
   }
   if (pathname.startsWith('/market/rotation-radar')) {
     return t('nav.rotationRadar');
@@ -516,6 +521,12 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                   type="button"
                   onClick={openMobileNav}
                   className="shell-mobile-button"
+                  style={{
+                    width: MOBILE_MENU_TOUCH_TARGET_PX,
+                    minWidth: MOBILE_MENU_TOUCH_TARGET_PX,
+                    height: MOBILE_MENU_TOUCH_TARGET_PX,
+                    minHeight: MOBILE_MENU_TOUCH_TARGET_PX,
+                  }}
                   aria-label={t('shell.openMenu')}
                   title={t('shell.openMenu')}
                 >

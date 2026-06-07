@@ -405,6 +405,32 @@ describe('Shell', () => {
     expect(screen.queryByRole('button', { name: '账户中心' })).not.toBeInTheDocument();
   });
 
+  it('uses the liquidity monitor mobile header label and a 44px-safe menu target', async () => {
+    window.innerWidth = 390;
+
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/zh/market/liquidity-monitor']}>
+          <ThemeProvider>
+            <Shell>
+              <div>page content</div>
+            </Shell>
+          </ThemeProvider>
+        </MemoryRouter>
+      );
+    });
+
+    expect(screen.getByTestId('shell-mobile-active-route')).toHaveTextContent('流动性监测');
+
+    const menuButton = screen.getByRole('button', { name: '打开导航菜单' });
+    expect(menuButton).toHaveStyle({
+      width: '44px',
+      minWidth: '44px',
+      height: '44px',
+      minHeight: '44px',
+    });
+  });
+
   it('opens a mobile admin menu with all primary routes and account actions', async () => {
     window.innerWidth = 390;
     useAuthMock.mockReturnValue({
