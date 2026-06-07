@@ -6,13 +6,21 @@ import { previewChartFixtures } from '../../../dev/reportPreviewFixture';
 
 vi.mock('../../../hooks/useElementSize', () => {
   let callCount = 0;
+  const createRef = () => {
+    const ref = ((node: HTMLElement | null) => {
+      ref.current = node;
+    }) as ((node: HTMLElement | null) => void) & { current: HTMLElement | null };
+    ref.current = null;
+    return ref;
+  };
+
   return {
     useElementSize: () => {
       callCount += 1;
       if (callCount % 2 === 1) {
-        return { ref: { current: null }, size: { width: 1360, height: 720 } };
+        return { ref: createRef(), size: { width: 1360, height: 720 } };
       }
-      return { ref: { current: null }, size: { width: 1280, height: 460 } };
+      return { ref: createRef(), size: { width: 1280, height: 460 } };
     },
   };
 });

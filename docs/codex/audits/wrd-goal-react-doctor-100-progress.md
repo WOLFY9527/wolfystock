@@ -502,7 +502,7 @@ Next candidates:
 
 ## Batch 11: Home Chart Native Status Output
 
-Status: included in the checkpoint commit for this batch after local validation.
+Status: committed and pushed as checkpoint `9103ed2c`.
 
 Files changed:
 
@@ -546,18 +546,70 @@ Next candidates:
 - Remaining accessibility findings need route-specific semantic design and focused tests before changes.
 - Remaining score gains still require forbidden domains, unsafe semantic changes, or broader state/effect/component decomposition.
 
+## Batch 12: Shared Element Size Ref Compatibility
+
+Status: included in the checkpoint commit for this batch after local validation.
+
+Files changed:
+
+- `apps/dsa-web/src/hooks/useElementSize.ts`
+- `apps/dsa-web/src/hooks/__tests__/useElementSize.test.tsx`
+- `apps/dsa-web/src/components/report/ReportPriceChart.tsx`
+- `apps/dsa-web/src/components/report/__tests__/StandardReportPanel.test.tsx`
+- `apps/dsa-web/src/components/backtest/DeterministicBacktestChartWorkspace.tsx`
+
+Changes:
+
+- Replaced the custom object ref setter in `useElementSize` with a stable callable ref that also preserves `.current` compatibility for existing chart consumers.
+- Updated `ReportPriceChart` to call the shared measurement ref while continuing to maintain its local chart-stage ref.
+- Removed an obsolete deterministic chart workspace cast now that the returned ref is directly compatible with React's `ref` prop.
+- Added hook-level tests for ref identity, `.current` compatibility, initial node measurement, ResizeObserver updates, and detach cleanup.
+- Updated the report panel test mock to model the new callable ref contract.
+
+Diagnostics after batch:
+
+- Score: `61`
+- Total diagnostics: `486`
+- Errors: `110`
+- Warnings: `376`
+- Affected files: `40`
+- Reduced total diagnostics from previous checkpoint: `2`
+- Reduced total diagnostics from baseline: `81`
+- Reduced by rule from previous checkpoint:
+  - `todo`: `54 -> 52` (`-2`)
+- React Doctor diff for changed files:
+  - `src/hooks/useElementSize.ts`: `2 -> 0` (`-2`)
+  - `src/components/report/ReportPriceChart.tsx`: `4 -> 4`
+  - `src/components/backtest/DeterministicBacktestChartWorkspace.tsx`: `1 -> 1`
+  - `src/components/report/__tests__/StandardReportPanel.test.tsx`: `0 -> 0`
+
+Validations run:
+
+- `npm --prefix apps/dsa-web run test -- 'src/hooks/__tests__/useElementSize.test.tsx' --no-file-parallelism` -> pass, `3` tests
+- `npm --prefix apps/dsa-web run test -- 'src/hooks/__tests__/useElementSize.test.tsx' 'src/pages/__tests__/HomeSurfacePage.test.tsx' 'src/components/report/__tests__/StandardReportPanel.test.tsx' 'src/pages/__tests__/DeterministicBacktestResultPage.test.tsx' 'src/pages/tests/DeterministicBacktestResultPage.test.tsx' --no-file-parallelism` -> pass, `111` tests
+- `npm --prefix apps/dsa-web run lint` -> pass
+- `npm --prefix apps/dsa-web run build` -> pass with existing Vite chunk-size warning
+- `npx react-doctor@latest --json --json-compact --yes --no-score` -> remaining diagnostics expected, totals above
+- `npx react-doctor@latest --score --yes` -> `61`
+
+Next candidates:
+
+- Re-check remaining low-count diagnostics after this checkpoint, but treat shared chart measurement and chart interaction paths as exhausted for this task.
+- Remaining `todo` errors are concentrated in state/effect/action-flow areas and should not be chased without route-specific behavioral tests.
+- Remaining accessibility findings still need semantic design and tests rather than tag substitutions.
+
 ## Stop Manifest
 
-Latest pushed checkpoint before this resumed batch: `372c9815`.
+Latest pushed checkpoint before Batch 12: `9103ed2c`. The Batch 12 checkpoint is the commit containing this section once pushed.
 
 Final React Doctor state:
 
 - Score: `61`
-- Total diagnostics: `488`
-- Errors: `112`
+- Total diagnostics: `486`
+- Errors: `110`
 - Warnings: `376`
-- Affected files: `41`
-- Reduced total diagnostics from baseline: `79`
+- Affected files: `40`
+- Reduced total diagnostics from baseline: `81`
 
 Remaining blocker groups:
 

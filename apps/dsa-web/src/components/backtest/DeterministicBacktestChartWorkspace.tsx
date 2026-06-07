@@ -367,7 +367,7 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
           </div>
         ))}
       </div>
-      <div className="backtest-void-workspace__body" ref={sizeRef as React.RefObject<HTMLDivElement>}>
+      <div className="backtest-void-workspace__body" ref={sizeRef}>
         <aside className={`backtest-void-workspace__sidebar ${sidebarOpen ? 'is-open' : ''}`}>
           <button
             type="button"

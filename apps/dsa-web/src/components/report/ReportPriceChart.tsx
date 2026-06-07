@@ -998,7 +998,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerLeave}
             ref={(node) => {
-              chartRef.current = node;
+              chartRef(node);
               chartStageRef.current = node;
             }}
           >

@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { useEffect, useRef, useState, type RefCallback } from 'react';
 
 type ElementSize = {
   width: number;
   height: number;
+};
+
+type ElementSizeRef<T extends HTMLElement> = RefCallback<T> & {
+  current: T | null;
 };
 
 const DEFAULT_SIZE: ElementSize = { width: 0, height: 0 };
@@ -11,27 +15,24 @@ export const useElementSize = <T extends HTMLElement>() => {
   const [node, setNode] = useState<T | null>(null);
   const [size, setSize] = useState<ElementSize>(DEFAULT_SIZE);
   const nextSizeRef = useRef<ElementSize>(DEFAULT_SIZE);
-  const [ref] = useState<MutableRefObject<T | null>>(() => {
-    let currentNode: T | null = null;
-    return {
-      get current() {
-        return currentNode;
-      },
-      set current(nextNode: T | null) {
-        currentNode = nextNode;
-        setNode(nextNode);
+  const [ref] = useState<ElementSizeRef<T>>(() => {
+    const handleNode = ((nextNode: T | null) => {
+      handleNode.current = nextNode;
+      setNode(nextNode);
 
-        const nextSize = nextNode
-          ? { width: nextNode.clientWidth, height: nextNode.clientHeight }
-          : DEFAULT_SIZE;
-        nextSizeRef.current = nextSize;
-        setSize((current) => (
-          current.width === nextSize.width && current.height === nextSize.height
-            ? current
-            : nextSize
-        ));
-      },
-    };
+      const nextSize = nextNode
+        ? { width: nextNode.clientWidth, height: nextNode.clientHeight }
+        : DEFAULT_SIZE;
+      nextSizeRef.current = nextSize;
+      setSize((current) => (
+        current.width === nextSize.width && current.height === nextSize.height
+          ? current
+          : nextSize
+      ));
+    }) as ElementSizeRef<T>;
+
+    handleNode.current = null;
+    return handleNode;
   });
 
   useEffect(() => {
