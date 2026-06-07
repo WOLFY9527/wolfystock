@@ -264,7 +264,7 @@ describe('BacktestResultReport', () => {
 
     expect(screen.getByText('ORCL · 回测完成')).toBeInTheDocument();
     expect(screen.getAllByText('--').length).toBeGreaterThan(4);
-    expect(screen.getAllByText('暂无基准数据；不影响策略自身回测结果。').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('暂无可比基准数据；仅展示策略自身历史曲线。').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('--');
     expect(screen.getByTestId('backtest-diagnosis-risk')).toHaveTextContent('--');
     fireEvent.click(screen.getByRole('button', { name: /数据质量/ }));
@@ -297,20 +297,21 @@ describe('BacktestResultReport', () => {
     expect(within(panel).getByTestId('backtest-execution-warning-0')).toHaveTextContent('涨跌停/停牌未建模');
   });
 
-  it('renders diagnosis summary and benchmark verdicts from existing metrics', () => {
+  it('renders diagnosis summary and benchmark comparisons from existing metrics', () => {
     const { rerender } = render(<BacktestResultReport run={makeRun()} mode="professional" />);
 
-    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('研究结论');
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('诊断结论');
     expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('总收益');
     expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('最大回撤');
     expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('交易次数');
-    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('可靠性');
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('诊断材料');
     expect(screen.getByTestId('backtest-report-diagnosis')).toHaveTextContent('收益质量');
-    expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('跑赢基准');
+    expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('高于参照基准');
     expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('+24.60%');
     expect(screen.getByTestId('backtest-diagnosis-risk')).toHaveTextContent('回撤受控');
-    expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('明显跑赢');
-    expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('策略 +24.60% · 基准 +19.40% · 超额 +5.20%');
+    expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('高于参照基准');
+    expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('策略 +24.60% · 参照基准 +19.40% · 差值 +5.20%');
+    expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('基准可比性仍需复核');
 
     rerender(<BacktestResultReport run={makeRun({
       id: 79,
@@ -319,8 +320,8 @@ describe('BacktestResultReport', () => {
       excessReturnVsBenchmarkPct: -6,
     })} mode="professional" />);
 
-    expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('弱于基准');
-    expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('弱于基准');
+    expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('低于参照基准');
+    expect(screen.getByTestId('backtest-diagnosis-return')).toHaveTextContent('低于参照基准');
 
     rerender(<BacktestResultReport run={makeRun({
       id: 80,
@@ -329,23 +330,23 @@ describe('BacktestResultReport', () => {
       benchmarkSummary: { resolvedMode: 'none', unavailableReason: 'missing benchmark' },
     })} mode="professional" />);
 
-    expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('基准缺失');
-    expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('不影响策略自身回测结果');
+    expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('参照基准待补');
+    expect(screen.getByTestId('backtest-report-benchmark')).toHaveTextContent('仅展示策略自身历史曲线');
   });
 
-  it('renders compact readiness chips without leaking raw readiness codes', () => {
+  it('renders compact observe-only readiness chips without unsupported research-grade claims', () => {
     render(<BacktestResultReport run={makeRun()} mode="professional" />);
 
     const chips = screen.getByTestId('backtest-readiness-chips');
     expect(chips).toHaveTextContent('仅供观察');
-    expect(chips).toHaveTextContent('研究级回测');
+    expect(chips).toHaveTextContent('观察级原型');
     expect(chips).toHaveTextContent('专业级条件未满足');
     expect(chips).toHaveTextContent('数据口径需复核');
     expect(chips).toHaveTextContent('交易日历待确认');
     expect(chips).toHaveTextContent('复权/公司行动待确认');
     expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('总收益');
     expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('最大回撤');
-    expect(chips).not.toHaveTextContent(/research_prototype|unknown_or_mixed|available_bars_only|baseline_bps_only|partial_without_dataset_lineage|professional_quant_ready/i);
+    expect(chips).not.toHaveTextContent(/研究级回测|research[-_\s]?grade|research_prototype|unknown_or_mixed|available_bars_only|baseline_bps_only|partial_without_dataset_lineage|professional_quant_ready/i);
   });
 
   it('renders a research-quality review checklist from complete diagnostic evidence', () => {
@@ -391,17 +392,20 @@ describe('BacktestResultReport', () => {
     })} mode="professional" />);
 
     const checklist = screen.getByTestId('backtest-report-research-quality-review');
-    expect(checklist).toHaveTextContent('研究复核清单');
-    expect(checklist).toHaveTextContent('反过拟合门禁');
+    expect(checklist).toHaveTextContent('观察复核清单');
+    expect(checklist).toHaveTextContent('诊断门禁');
     expect(within(checklist).getByTestId('backtest-research-review-row-readiness')).toHaveTextContent('仅供观察');
     expect(within(checklist).getByTestId('backtest-research-review-row-data-quality')).toHaveTextContent('数据质量');
-    expect(within(checklist).getByTestId('backtest-research-review-row-assumptions')).toHaveTextContent('2bp / 1bp');
+    expect(within(checklist).getByTestId('backtest-research-review-row-assumptions')).toHaveTextContent('简化成本 / 滑点 2bp / 1bp');
     expect(within(checklist).getByTestId('backtest-research-review-row-trace')).toHaveTextContent('1 行');
     expect(within(checklist).getByTestId('backtest-research-review-row-benchmark')).toHaveTextContent('QQQ');
     expect(within(checklist).getByTestId('backtest-research-review-row-oos')).toHaveTextContent('Walk-forward 4 窗口');
     expect(within(checklist).getByTestId('backtest-research-review-row-parameter')).toHaveTextContent('参数稳定性');
     expect(within(checklist).getByTestId('backtest-research-review-row-robustness')).toHaveTextContent('Monte Carlo 200 次');
-    expect(within(checklist).getAllByText('可复查').length).toBeGreaterThanOrEqual(5);
+    expect(within(checklist).getAllByText('诊断可查').length).toBeGreaterThanOrEqual(5);
+    expect(checklist).toHaveTextContent('不构成选模证明');
+    expect(checklist).toHaveTextContent('不代表样本外验证已完成');
+    expect(checklist).not.toHaveTextContent(/研究级回测|research[-_\s]?grade|专业就绪|benchmark-ready|professional-ready/i);
   });
 
   it('fails closed when OOS, parameter, or benchmark evidence is missing', () => {
@@ -415,10 +419,10 @@ describe('BacktestResultReport', () => {
 
     const checklist = screen.getByTestId('backtest-report-research-quality-review');
     expect(within(checklist).getByTestId('backtest-research-review-overall')).toHaveTextContent('需补充复核');
-    expect(within(checklist).getByTestId('backtest-research-review-row-benchmark')).toHaveTextContent('不可用 / 需验证');
-    expect(within(checklist).getByTestId('backtest-research-review-row-oos')).toHaveTextContent('不可用 / 需验证');
-    expect(within(checklist).getByTestId('backtest-research-review-row-parameter')).toHaveTextContent('不可用 / 需验证');
-    expect(within(checklist).getByTestId('backtest-research-review-row-trace')).toHaveTextContent('不可用 / 需验证');
+    expect(within(checklist).getByTestId('backtest-research-review-row-benchmark')).toHaveTextContent('缺失 / 待验证');
+    expect(within(checklist).getByTestId('backtest-research-review-row-oos')).toHaveTextContent('缺失 / 待验证');
+    expect(within(checklist).getByTestId('backtest-research-review-row-parameter')).toHaveTextContent('缺失 / 待验证');
+    expect(within(checklist).getByTestId('backtest-research-review-row-trace')).toHaveTextContent('缺失 / 待验证');
     expect(within(checklist).queryByText('复核材料较完整')).not.toBeInTheDocument();
   });
 
@@ -437,7 +441,31 @@ describe('BacktestResultReport', () => {
     expect(screen.getByTestId('backtest-report-evidence-details')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-report-advanced-details')).toBeInTheDocument();
     expect(report).toHaveTextContent('稳健性');
-    expect(report).not.toHaveTextContent(/safe to trade|deploy live|live trading|best parameter|strategy recommendation|投资建议|交易建议|实盘|上线|最佳参数|安全交易/i);
+    expect(report).toHaveTextContent('不构成投资建议');
+    expect(report).not.toHaveTextContent(/safe to trade|deploy live|live trading|best parameter|strategy recommendation|交易建议|建议买入|建议卖出|实盘|上线|最佳参数|安全交易/i);
+  });
+
+  it('keeps default result surfaces observe-only and exposes execution realism gaps without changing numbers', () => {
+    render(<BacktestResultReport run={makeRun({
+      executionTrace: null,
+      robustnessAnalysis: undefined,
+    })} mode="professional" />);
+
+    const report = screen.getByTestId('backtest-result-report');
+    expect(report).toHaveTextContent('仅供观察');
+    expect(report).toHaveTextContent('仅用于观察复盘，不构成投资建议。');
+    expect(report).toHaveTextContent('+24.60%');
+    expect(report).toHaveTextContent('+19.40%');
+    expect(report).not.toHaveTextContent(/研究级回测|research[-_\s]?grade|benchmark-ready|professional-ready|专业就绪|可用于历史表现评估|跑赢基准|明显跑赢|复核材料较完整|安全交易|上线|实盘/i);
+
+    const assumptions = screen.getByTestId('backtest-research-review-row-assumptions');
+    fireEvent.click(within(assumptions).getByText('复核依据'));
+    expect(assumptions).toHaveTextContent('简化成本 / 滑点 2bp / 1bp');
+    expect(assumptions).toHaveTextContent('未建模 partial/no-fill、停牌/涨跌停、成交量上限、税费、冲击，除非结果明确返回支持。');
+
+    const oos = screen.getByTestId('backtest-research-review-row-oos');
+    expect(oos).toHaveTextContent('未返回样本外证据');
+    expect(oos).toHaveTextContent('缺失 / 待验证');
   });
 
   it('keeps the default consumer reliability view product-safe when support evidence is incomplete', () => {
@@ -467,9 +495,9 @@ describe('BacktestResultReport', () => {
     }} mode="simple" />);
 
     const report = screen.getByTestId('backtest-result-report');
-    expect(report).toHaveTextContent('本次回测结果可查看，但部分复现材料不完整。');
-    expect(report).toHaveTextContent('回测数据质量有限，结果仅供评估。');
-    expect(report).toHaveTextContent('部分辅助证据暂不可用，不影响历史收益曲线展示。');
+    expect(report).toHaveTextContent('本次回测结果可查看，但部分复现材料不完整，仅供观察复盘。');
+    expect(report).toHaveTextContent('回测数据质量有限，结果仅供观察复盘。');
+    expect(report).toHaveTextContent('部分辅助证据暂不可用，仅保留历史曲线观察。');
     expect(screen.queryByTestId('backtest-data-quality-grid')).not.toBeInTheDocument();
     expect(screen.queryByTestId('backtest-execution-assumptions-grid')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /导出执行明细 JSON/ })).not.toBeInTheDocument();
@@ -636,7 +664,7 @@ describe('BacktestResultReport', () => {
     expect(evidence).not.toHaveAttribute('open');
     expect(evidence).toHaveTextContent('复查材料');
     expect(evidence).toHaveTextContent('数据质量、执行假设和每日账本默认折叠');
-    expect(report).toHaveTextContent('研究结论');
+    expect(report).toHaveTextContent('诊断结论');
     expect(report).not.toHaveTextContent('signal_exit');
     expect(report).not.toHaveTextContent('stop_loss');
     expect(report).not.toHaveTextContent('Full metrics');
@@ -659,11 +687,11 @@ describe('BacktestResultReport', () => {
     const assumptions = screen.getByTestId('backtest-report-execution-assumptions');
     const advanced = screen.getByTestId('backtest-report-advanced-details');
 
-    expect(summary).toHaveTextContent('研究结论');
+    expect(summary).toHaveTextContent('诊断结论');
     expect(summary).toHaveTextContent('总收益');
     expect(summary).toHaveTextContent('最大回撤');
     expect(summary).toHaveTextContent('交易次数');
-    expect(summary).toHaveTextContent('可靠性');
+    expect(summary).toHaveTextContent('诊断材料');
     expect(Boolean(summary.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(chart.compareDocumentPosition(keyMetrics) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(chart.compareDocumentPosition(tradeTable) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
@@ -702,7 +730,7 @@ describe('BacktestResultReport', () => {
     expect(screen.getByRole('tab', { name: '可靠性' })).toBeInTheDocument();
     expect(screen.queryByTestId('backtest-data-quality-grid')).not.toBeInTheDocument();
     expect(screen.queryByTestId('backtest-execution-assumptions-grid')).not.toBeInTheDocument();
-    expect(report).toHaveTextContent('回测数据质量有限，结果仅供评估。');
+    expect(report).toHaveTextContent('回测数据质量有限，结果仅供观察复盘。');
     expect(report).not.toHaveTextContent(/developer|debug|raw|schema|trace|provider_timeout|not_enough_history|fundamentals_unavailable|optional_news_timeout|fallback|dry run|MarketCache/i);
   });
 });

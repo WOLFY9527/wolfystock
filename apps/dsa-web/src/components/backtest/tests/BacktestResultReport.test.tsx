@@ -131,8 +131,8 @@ describe('BacktestResultReport compare evidence', () => {
     />);
 
     const checklist = screen.getByTestId('backtest-report-research-quality-review');
-    expect(within(checklist).getByTestId('backtest-research-review-row-parameter')).toHaveTextContent('可复查');
+    expect(within(checklist).getByTestId('backtest-research-review-row-parameter')).toHaveTextContent('诊断可查');
     expect(within(checklist).getByTestId('backtest-research-review-row-parameter')).toHaveTextContent('参数稳定性证据可用');
-    expect(checklist).not.toHaveTextContent(/交易建议|实盘|最佳参数|safe to trade|deploy live/i);
+    expect(checklist).not.toHaveTextContent(/交易建议|实盘|安全交易|safe to trade|deploy live/i);
   });
 });

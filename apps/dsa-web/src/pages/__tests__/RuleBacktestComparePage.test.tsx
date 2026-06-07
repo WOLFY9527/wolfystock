@@ -457,7 +457,8 @@ describe('RuleBacktestComparePage', () => {
     expect(screen.getByText('费滑场景')).toBeInTheDocument();
     expect(screen.getByText('参数热力投影')).toBeInTheDocument();
     expect(screen.getByText('基于已完成回测结果生成，用于观察参数差异下的历史表现。')).toBeInTheDocument();
-    expect(screen.getByText('回测数据质量有限，结果仅供评估。')).toBeInTheDocument();
+    expect(screen.getByText('回测数据质量有限，结果仅供观察复盘。')).toBeInTheDocument();
+    expect(pageShell).not.toHaveTextContent(/研究级回测|research[-_\s]?grade|benchmark-ready|professional-ready|可用于历史表现评估|跑赢基准|明显跑赢/i);
     expect(screen.queryByText('执行次数 0')).not.toBeInTheDocument();
     expect(screen.queryByText('未触发数据调用')).not.toBeInTheDocument();
     expect(pageShell).not.toHaveTextContent(/stored_rule_backtest_runs|stored_projection_only|providerCallsExecuted|executionCount|authorityScope|sourceState|trace JSON|helper metadata|后端判定|字段分组|AI \//i);

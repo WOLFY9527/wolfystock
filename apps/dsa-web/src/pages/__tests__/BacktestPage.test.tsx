@@ -1444,8 +1444,8 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('deterministic-result-page-hero')).toHaveTextContent('ORCL');
     expect(screen.getByTestId('backtest-result-report')).toHaveAttribute('data-report-mode', 'professional');
     expect(screen.getByTestId('backtest-report-summary')).toBeInTheDocument();
-    expect(screen.getByTestId('backtest-readiness-chips')).toHaveTextContent('研究级回测');
-    expect(screen.getByTestId('backtest-readiness-chips')).not.toHaveTextContent(/research_prototype|unknown_or_mixed|available_bars_only|professional_quant_ready/i);
+    expect(screen.getByTestId('backtest-readiness-chips')).toHaveTextContent('仅供观察');
+    expect(screen.getByTestId('backtest-readiness-chips')).not.toHaveTextContent(/研究级回测|research[-_\s]?grade|research_prototype|unknown_or_mixed|available_bars_only|professional_quant_ready/i);
     expect(screen.getByTestId('backtest-report-key-metrics')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-report-trade-table')).toBeInTheDocument();
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');
@@ -1741,7 +1741,7 @@ describe('BacktestPage', () => {
     fireEvent.click(within(screen.getByTestId('pro-workflow-rail')).getByRole('button', { name: '查看' }));
 
     expect(await screen.findByTestId('deterministic-backtest-result-page')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /ORCL/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /ORCL/i })).toBeInTheDocument();
     expect(
       within(screen.getByTestId('deterministic-result-page-hero')).getByText((content, element) => (
         element?.tagName === 'P'

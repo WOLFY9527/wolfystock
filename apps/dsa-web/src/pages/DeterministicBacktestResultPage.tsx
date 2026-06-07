@@ -1631,7 +1631,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
                         <section data-testid="backtest-result-report" data-report-mode={resultMode}>
                           <div data-testid="backtest-report-summary" />
                           <div data-testid="backtest-readiness-chips">
-                            {resultMode === 'professional' ? '研究级回测' : '标准回测'}
+                            {resultMode === 'professional' ? '仅供观察' : '诊断回测'}
                           </div>
                           <div data-testid="backtest-report-key-metrics" />
                           <div data-testid="backtest-report-chart" />

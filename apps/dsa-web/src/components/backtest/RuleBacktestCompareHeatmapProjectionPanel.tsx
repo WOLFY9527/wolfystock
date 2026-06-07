@@ -191,14 +191,14 @@ export default function RuleBacktestCompareHeatmapProjectionPanel({
       <TerminalSectionHeader
         eyebrow="参数敏感度"
         title="参数热力投影"
-        action={<TerminalChip variant={hasLimitedCells ? 'caution' : 'info'}>{hasLimitedCells ? '部分可用' : '可复查'}</TerminalChip>}
+        action={<TerminalChip variant={hasLimitedCells ? 'caution' : 'info'}>{hasLimitedCells ? '部分可用' : '诊断可查'}</TerminalChip>}
       />
       <p className="product-footnote">基于已完成回测结果生成，用于观察参数差异下的历史表现。</p>
 
       <div className="flex flex-wrap gap-2">
         <TerminalChip variant="neutral">结果可查看</TerminalChip>
-        <TerminalChip variant={hasLimitedCells ? 'caution' : 'success'}>
-          {hasLimitedCells ? '回测数据质量有限，结果仅供评估。' : '当前结果可用于历史表现评估。'}
+        <TerminalChip variant={hasLimitedCells ? 'caution' : 'info'}>
+          {hasLimitedCells ? '回测数据质量有限，结果仅供观察复盘。' : '当前结果仅用于观察参数差异下的历史表现。'}
         </TerminalChip>
       </div>
 

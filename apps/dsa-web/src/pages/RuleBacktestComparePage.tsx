@@ -168,7 +168,7 @@ function formatUnavailableRunReason(reason?: string | null): string {
   if (!normalized) return '该运行暂不可用于比较。';
   if (normalized.includes('missing') || normalized.includes('not_found')) return '部分运行结果暂不可用。';
   if (normalized.includes('status') || normalized.includes('completed')) return '部分运行尚未生成可比较结果。';
-  if (normalized.includes('metric') || normalized.includes('data')) return '部分运行数据质量有限，比较结果仅供评估。';
+  if (normalized.includes('metric') || normalized.includes('data')) return '部分运行数据质量有限，比较结果仅供观察复盘。';
   return '部分运行暂不可用于比较。';
 }
 

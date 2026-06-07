@@ -9,7 +9,7 @@ import type {
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { EvidenceChips } from '../evidence/EvidenceChips';
 import { StatusBadge } from '../ui/StatusBadge';
-import { normalizeBacktestReadiness } from '../../utils/evidenceDisplay';
+import { normalizeBacktestReadiness, type NormalizedEvidenceSummary } from '../../utils/evidenceDisplay';
 import {
   downloadExecutionTraceCsv,
   downloadExecutionTraceJson,
@@ -103,6 +103,7 @@ const TRADE_ROW_LIMIT = 20;
 const LEDGER_ROW_LIMIT = 30;
 const EVENT_ROW_LIMIT = 12;
 const ATTRIBUTION_ROW_LIMIT = 6;
+const EXECUTION_REALISM_LIMITS = '未建模 partial/no-fill、停牌/涨跌停、成交量上限、税费、冲击，除非结果明确返回支持。';
 
 function safeNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -325,13 +326,13 @@ function reviewStateFromEvidence(record: Record<string, unknown> | null, default
 }
 
 function reviewStatusLabel(state: ResearchReviewState): string {
-  if (state === 'ready') return '可复查';
-  if (state === 'review') return '需复核';
-  return '不可用 / 需验证';
+  if (state === 'ready') return '诊断可查';
+  if (state === 'review') return '需诊断复核';
+  return '缺失 / 待验证';
 }
 
 function reviewTone(state: ResearchReviewState): MetricItem['tone'] {
-  if (state === 'ready') return 'positive';
+  if (state === 'ready') return 'neutral';
   if (state === 'missing') return 'negative';
   return 'neutral';
 }
@@ -369,6 +370,18 @@ function evidenceStateLabel(value: unknown): string {
     none: '未提供',
   };
   return labels[state] || humanToken(state);
+}
+
+function getReportReadinessSummary(summary: NormalizedEvidenceSummary): NormalizedEvidenceSummary {
+  const mappedLimitations = summary.limitationLabels.map((label) => (
+    label === '研究级回测' ? '观察级原型' : label
+  ));
+  return {
+    ...summary,
+    displayLabel: summary.posture === 'observe_only' ? '仅供观察' : summary.displayLabel,
+    tone: summary.tone === 'success' ? 'info' : summary.tone,
+    limitationLabels: Array.from(new Set(mappedLimitations)),
+  };
 }
 
 function getAssumptionCostLabel(run: RuleBacktestRunResponse): string {
@@ -492,28 +505,29 @@ function getResearchQualityReviewItems({
       [
         dataQuality?.actualStart || dataQuality?.actualEnd ? `实际区间：${dataQuality.actualStart || '--'} -> ${dataQuality.actualEnd || '--'}` : '',
         dataQuality?.adjustmentMode ? `复权口径：${humanToken(dataQuality.adjustmentMode)}` : '',
+        '来源、复权、公司行动与数据 lineage 需按明细确认。',
       ],
     ),
     researchReviewItem(
       'assumptions',
       '执行与成本',
       assumptionState,
-      hasExplicitAssumptions ? `手续费 / 滑点 ${getAssumptionCostLabel(run)}` : '未返回执行假设',
-      executionWarnings.length ? [`执行提示：${executionWarnings.length} 条`] : ['仅披露模拟撮合与成本口径'],
+      hasExplicitAssumptions ? `简化成本 / 滑点 ${getAssumptionCostLabel(run)}` : '未返回执行假设',
+      executionWarnings.length ? [`执行提示：${executionWarnings.length} 条`, EXECUTION_REALISM_LIMITS] : ['仅披露简化模拟撮合与成本口径', EXECUTION_REALISM_LIMITS],
     ),
     researchReviewItem(
       'trace',
       '执行轨迹',
       traceState,
       hasExplicitTraceRows ? `执行轨迹 ${traceRows} 行` : run.executionTrace ? '轨迹元数据存在，明细待补' : '未返回执行轨迹',
-      ['仅用于复盘模拟执行路径'],
+      ['模拟轨迹仅用于复盘路径，不代表真实成交；partial/no-fill 未建模除非结果明确返回。'],
     ),
     researchReviewItem(
       'benchmark',
       '基准可用性',
       benchmarkState,
-      benchmarkAvailable ? `${benchmarkLabel} · ${signedPct(benchmarkReturn)}` : '未提供可复查基准',
-      [benchmarkSummary.method ? `基准口径：${humanToken(benchmarkSummary.method)}` : ''],
+      benchmarkAvailable ? `参照基准 ${benchmarkLabel} · ${signedPct(benchmarkReturn)}` : '未提供可比基准',
+      [benchmarkSummary.method ? `基准口径：${humanToken(benchmarkSummary.method)}` : '', '基准可比性需复核，不代表可比性完整。'],
     ),
     researchReviewItem(
       'oos',
@@ -522,7 +536,7 @@ function getResearchQualityReviewItems({
       walkForwardState === 'ready'
         ? `Walk-forward ${walkForwardCount != null ? `${formatNumber(walkForwardCount, 0)} 窗口` : '证据可用'}`
         : walkForward ? `Walk-forward ${evidenceStateLabel(recordValue(walkForward, 'state'))}` : '未返回样本外证据',
-      ['诊断性窗口复查，不代表样本外验证已完成'],
+      ['诊断性窗口复查，不代表样本外验证已完成，也不构成选模证明。'],
     ),
     researchReviewItem(
       'parameter',
@@ -531,7 +545,7 @@ function getResearchQualityReviewItems({
       parameterState === 'ready'
         ? '参数稳定性证据可用'
         : parameterStability ? `参数稳定性 ${evidenceStateLabel(recordValue(parameterStability, 'state'))}` : '未返回参数稳定性证据',
-      ['仅展示已有诊断证据，不做参数优选'],
+      ['仅展示已有诊断证据，不做参数优选，也不构成参数优选证明。'],
     ),
     researchReviewItem(
       'robustness',
@@ -544,7 +558,7 @@ function getResearchQualityReviewItems({
             stressScenarioCount != null ? `压力 ${formatNumber(stressScenarioCount, 0)} 场景` : '',
           ].filter(Boolean).join(' · ') || `稳健性 ${evidenceStateLabel(recordValue(robustness || {}, 'state'))}`
         : '未返回稳健性诊断',
-      ['用于识别过拟合风险线索，不改变回测结果'],
+      ['Walk-forward、Monte Carlo 与压力场景仅用于识别过拟合风险线索，不改变回测结果，不构成选模证明。'],
     ),
   ];
 }
@@ -553,12 +567,12 @@ function getResearchReviewOverall(items: ResearchReviewItem[]): { label: string;
   const missingCount = items.filter((item) => item.state === 'missing').length;
   const reviewCount = items.filter((item) => item.state === 'review').length;
   if (missingCount) {
-    return { label: '需补充复核', tone: 'negative', note: `${missingCount} 项证据不可用，默认降低研究准备度。` };
+    return { label: '需补充复核', tone: 'negative', note: `${missingCount} 项证据不可用，默认保持观察级。` };
   }
   if (reviewCount) {
     return { label: '需人工复核', tone: 'neutral', note: `${reviewCount} 项证据需复核后再解释结果。` };
   }
-  return { label: '复核材料较完整', tone: 'positive', note: '关键诊断证据已返回，仍仅用于研究复盘。' };
+  return { label: '诊断材料较完整', tone: 'neutral', note: '关键诊断证据已返回，仍仅用于观察复盘。' };
 }
 
 function assumptionEntries(run: RuleBacktestRunResponse): Array<[string, string]> {
@@ -571,8 +585,10 @@ function assumptionEntries(run: RuleBacktestRunResponse): Array<[string, string]
     ['成交价假设', humanToken(recordValue(source, 'fillPrice', 'fill_price', 'defaultFillPriceBasis', 'default_fill_price_basis'))],
     ['手续费 / 滑点', `${formatBps(recordValue(feeModel, 'commissionBps', 'commission_bps') ?? run.feeBps)}bp / ${formatBps(recordValue(slippageModel, 'slippageBps', 'slippage_bps') ?? run.slippageBps)}bp`],
     ['成交单位', `${recordValue(source, 'allowFractionalShares', 'allow_fractional_shares') === false ? '整股' : '允许碎股'} / lot ${displayToken(recordValue(source, 'lotSize', 'lot_size') ?? 1)}`],
+    ['部分成交 / 未成交', humanToken(recordValue(source, 'partialFillHandling', 'partial_fill_handling', 'noFillHandling', 'no_fill_handling'))],
     ['成交量限制', humanToken(recordValue(source, 'volumeParticipationLimit', 'volume_participation_limit'))],
     ['市场规则', `${humanToken(recordValue(source, 'limitUpDownHandling', 'limit_up_down_handling'))} / ${humanToken(recordValue(source, 'haltHandling', 'halt_handling'))}`],
+    ['税费 / 冲击', `${humanToken(recordValue(source, 'taxHandling', 'tax_handling'))} / ${humanToken(recordValue(source, 'marketImpactModel', 'market_impact_model', 'impactModel', 'impact_model'))}`],
     ['做空规则', humanToken(recordValue(source, 'shortSelling', 'short_selling'))],
   ];
   const hasStructured = Boolean(recordValue(source, 'engine', 'feeModel', 'fee_model', 'slippageModel', 'slippage_model'));
@@ -650,25 +666,25 @@ function getWorstDailyReturn(rows: DeterministicBacktestNormalizedRow[]): number
 
 function getBenchmarkVerdict(totalReturnPct: number | null, benchmarkReturnPct: number | null, excessReturnPct: number | null): { label: string; tone: MetricItem['tone']; note: string } {
   if (benchmarkReturnPct == null || totalReturnPct == null || excessReturnPct == null) {
-    return { label: '基准缺失', tone: 'neutral', note: '暂无基准数据；不影响策略自身回测结果。' };
+    return { label: '参照基准待补', tone: 'neutral', note: '暂无可比基准数据；仅展示策略自身历史曲线。' };
   }
-  if (excessReturnPct >= 5) return { label: '明显跑赢', tone: 'positive', note: `策略相对基准多获得 ${signedPct(excessReturnPct)}。` };
-  if (excessReturnPct > 1) return { label: '小幅跑赢', tone: 'positive', note: `策略相对基准多获得 ${signedPct(excessReturnPct)}。` };
-  if (excessReturnPct >= -1) return { label: '接近基准', tone: 'neutral', note: `策略与基准差距 ${signedPct(excessReturnPct)}。` };
-  return { label: '弱于基准', tone: 'negative', note: `策略相对基准落后 ${signedPct(Math.abs(excessReturnPct))}。` };
+  if (excessReturnPct >= 5) return { label: '高于参照基准', tone: 'neutral', note: `策略历史收益相对参照基准多 ${signedPct(excessReturnPct)}，基准可比性仍需复核。` };
+  if (excessReturnPct > 1) return { label: '略高于参照基准', tone: 'neutral', note: `策略历史收益相对参照基准多 ${signedPct(excessReturnPct)}，基准可比性仍需复核。` };
+  if (excessReturnPct >= -1) return { label: '接近参照基准', tone: 'neutral', note: `策略与参照基准差值 ${signedPct(excessReturnPct)}，基准可比性仍需复核。` };
+  return { label: '低于参照基准', tone: 'negative', note: `策略历史收益相对参照基准少 ${signedPct(Math.abs(excessReturnPct))}，基准可比性仍需复核。` };
 }
 
 function getBenchmarkSentence(normalized: DeterministicBacktestNormalizedResult): string {
   const { totalReturnPct, benchmarkReturnPct, excessReturnVsBenchmarkPct, maxDrawdownPct } = normalized.metrics;
   const verdict = getBenchmarkVerdict(totalReturnPct, benchmarkReturnPct, excessReturnVsBenchmarkPct);
-  if (verdict.label === '基准缺失') return verdict.note;
+  if (verdict.label === '参照基准待补') return verdict.note;
   const parts = [
     `策略 ${signedPct(totalReturnPct)}`,
-    `基准 ${signedPct(benchmarkReturnPct)}`,
-    `超额 ${signedPct(excessReturnVsBenchmarkPct)}`,
+    `参照基准 ${signedPct(benchmarkReturnPct)}`,
+    `差值 ${signedPct(excessReturnVsBenchmarkPct)}`,
   ];
   if (maxDrawdownPct != null) parts.push(`策略最大回撤 ${signedPct(displayDrawdown(maxDrawdownPct))}`);
-  return `${verdict.label}：${parts.join(' · ')}。`;
+  return `${verdict.label}：${parts.join(' · ')}。${verdict.note}`;
 }
 
 function getDiagnosisItems(
@@ -687,11 +703,7 @@ function getDiagnosisItems(
     ? '收益未提供'
     : metrics.benchmarkReturnPct == null
       ? (metrics.totalReturnPct >= 0 ? '策略收益为正' : '策略收益为负')
-      : benchmarkVerdict.label === '弱于基准'
-        ? '弱于基准'
-        : benchmarkVerdict.label === '基准缺失'
-          ? '基准缺失'
-          : '跑赢基准';
+      : benchmarkVerdict.label;
   const riskLabel = drawdownAbs == null
     ? '回撤未提供'
     : drawdownAbs >= 20
@@ -713,8 +725,8 @@ function getDiagnosisItems(
       : metrics.sharpeRatio >= 0
         ? '夏普通常'
         : '夏普承压';
-  const dataLabel = dataQualityWarnings.length || rowCount < 30 ? '数据样本有限' : '数据覆盖正常';
-  const executionLabel = executionWarnings.length || !hasExplicitAssumptions ? '执行假设需谨慎' : '执行假设完整';
+  const dataLabel = dataQualityWarnings.length || rowCount < 30 ? '数据样本有限' : '数据覆盖可查';
+  const executionLabel = executionWarnings.length || !hasExplicitAssumptions ? '执行假设需谨慎' : '执行假设已披露';
   return [
     {
       key: 'return',
@@ -1026,28 +1038,28 @@ function getConsumerReliabilityItems({
       label: '结果可用性',
       value: isCompleted ? '可查看' : isRunning ? '生成中' : '暂不可用',
       tone: isCompleted ? 'positive' : isRunning ? 'neutral' : 'negative',
-      note: isCompleted ? '本次回测结果可查看。' : isRunning ? '结果生成中，请稍后刷新。' : '当前回测结果暂不可查看。',
+      note: isCompleted ? '本次回测结果可查看，仅用于观察复盘，不构成投资建议。' : isRunning ? '结果生成中，请稍后刷新。' : '当前回测结果暂不可查看。',
     },
     {
       key: 'reproducibility',
       label: '复现状态',
-      value: supportIncomplete ? '部分可用' : '可复查',
-      tone: supportIncomplete ? 'neutral' : 'positive',
-      note: supportIncomplete ? '本次回测结果可查看，但部分复现材料不完整。' : '复现材料已就绪，可按需展开复查。',
+      value: supportIncomplete ? '部分可用' : '诊断可查',
+      tone: 'neutral',
+      note: supportIncomplete ? '本次回测结果可查看，但部分复现材料不完整，仅供观察复盘。' : '复现材料可展开复查，仍仅用于诊断观察。',
     },
     {
       key: 'freshness',
       label: '辅助证据',
-      value: supportIncomplete ? '部分可用' : '可查看',
-      tone: supportIncomplete ? 'neutral' : 'positive',
-      note: supportIncomplete ? '部分辅助证据暂不可用，不影响历史收益曲线展示。' : '辅助证据可按需展开复查。',
+      value: supportIncomplete ? '部分可用' : '诊断可查',
+      tone: 'neutral',
+      note: supportIncomplete ? '部分辅助证据暂不可用，仅保留历史曲线观察。' : '辅助证据可按需展开复查，用于诊断限制。',
     },
     {
       key: 'confidence',
       label: '结果置信度',
-      value: limitedConfidence ? '有限置信' : '正常评估',
-      tone: limitedConfidence ? 'neutral' : 'positive',
-      note: limitedConfidence ? '回测数据质量有限，结果仅供评估。' : '当前结果可用于历史表现评估。',
+      value: limitedConfidence ? '有限置信' : '观察级',
+      tone: 'neutral',
+      note: limitedConfidence ? '回测数据质量有限，结果仅供观察复盘。' : '结果仅用于诊断观察，不构成投资建议。',
     },
   ];
 }
@@ -1104,9 +1116,9 @@ function ResearchQualityReviewBlock({
     <div data-testid="backtest-report-research-quality-review" className={GHOST_SECTION_CLASS}>
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className={LABEL_CLASS}>研究复核清单</p>
-          <h3 className="mt-1 text-sm font-semibold text-white">反过拟合门禁</h3>
-          <p className="mt-1 text-xs leading-5 text-white/48">仅汇总已返回证据；缺失项默认进入需验证状态。</p>
+          <p className={LABEL_CLASS}>观察复核清单</p>
+          <h3 className="mt-1 text-sm font-semibold text-white">诊断门禁</h3>
+          <p className="mt-1 text-xs leading-5 text-white/48">仅汇总已返回证据；缺失项默认进入需验证状态，不作为选模证明。</p>
         </div>
         <div className="min-w-0 sm:text-right">
           <span
@@ -1187,7 +1199,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
   const firstDate = normalized.viewerMeta.firstDate || run.startDate || run.periodStart || null;
   const lastDate = normalized.viewerMeta.lastDate || run.endDate || run.periodEnd || null;
   const dateRange = firstDate || lastDate ? `${firstDate || '--'} -> ${lastDate || '--'}` : '--';
-  const readinessSummary = normalizeBacktestReadiness(run, { maxLimitationLabels: 5 });
+  const readinessSummary = getReportReadinessSummary(normalizeBacktestReadiness(run, { maxLimitationLabels: 5 }));
   const showReadinessChips = readinessSummary.posture !== 'unknown'
     || readinessSummary.confidenceCap != null
     || readinessSummary.limitationLabels.length > 0
@@ -1327,16 +1339,16 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <MetricCard item={{ key: 'summary-risk', label: '最大回撤', value: signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), tone: 'negative' }} />
             <MetricCard item={{ key: 'summary-win-rate', label: '胜率', value: signedPct(normalized.metrics.winRatePct), tone: toneFor(normalized.metrics.winRatePct) }} />
             <MetricCard item={{ key: 'summary-trades', label: '交易次数', value: `${normalized.metrics.tradeCount ?? 0} 次`, tone: 'neutral' }} />
-            <MetricCard item={{ key: 'summary-data', label: '可靠性', value: dataQuality.length ? `${dataQuality.length} 项` : '待补充', tone: dataQuality.length ? 'positive' : 'neutral' }} />
+            <MetricCard item={{ key: 'summary-data', label: '诊断材料', value: dataQuality.length ? `${dataQuality.length} 项` : '待补充', tone: 'neutral' }} />
             <div className="col-span-2 rounded-xl border border-white/5 bg-black/20 p-3 text-xs leading-5 text-white/50 lg:col-span-4">
-              <span className={LABEL_CLASS}>研究结论</span>
-              <span className="ml-2">先读总收益、最大回撤、胜率、交易次数与可靠性；曲线和风险解释跟随结论，复查材料默认折叠。</span>
+              <span className={LABEL_CLASS}>诊断结论</span>
+              <span className="ml-2">先读总收益、最大回撤、胜率、交易次数与诊断材料；曲线和风险解释只用于观察复盘，复查材料默认折叠。</span>
             </div>
           </div>
           <div className="mt-4" data-testid="backtest-report-diagnosis">
             <div className="mb-2 flex min-w-0 flex-wrap items-center justify-between gap-2">
               <p className={LABEL_CLASS}>策略解读</p>
-              <span className="text-xs text-white/42">基于收益、风险、交易和数据完整度生成</span>
+              <span className="text-xs text-white/42">基于既有收益、风险、交易和数据完整度生成</span>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
               {diagnosisItems.map((item) => <DiagnosisCard key={item.key} item={item} />)}
@@ -1380,8 +1392,8 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                   <p className={LABEL_CLASS}>基准对比</p>
                   <h3 className={`mt-1 text-sm font-semibold ${valueToneClass(benchmarkVerdict.tone)}`}>{benchmarkVerdict.label}</h3>
                 </div>
-                {benchmarkVerdict.label === '基准缺失' ? (
-                  <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-white/50">不影响策略自身回测结果</span>
+                {benchmarkVerdict.label === '参照基准待补' ? (
+                  <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-white/50">仅展示策略自身历史曲线</span>
                 ) : null}
               </div>
               <p className="mt-2 text-sm text-white/78">{getBenchmarkSentence(normalized)}</p>
@@ -1390,7 +1402,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <div className={GHOST_SECTION_CLASS}>
               <p className={LABEL_CLASS}>数据质量</p>
               <p className="mt-2 text-xs leading-5 text-white/48">
-                {dataQualityWarnings.length ? '回测数据质量有限，结果仅供评估。' : '数据质量明细默认折叠，必要时展开复查。'}
+                {dataQualityWarnings.length ? '回测数据质量有限，结果仅供观察复盘。' : '数据质量明细默认折叠，必要时展开复查。'}
               </p>
             </div>
           </aside>
@@ -1578,7 +1590,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <span className="text-xs text-white/45">展开</span>
           </summary>
           <p className="mt-3 text-xs leading-5 text-white/50">
-            数据质量、执行假设和每日账本默认折叠，只在需要复查研究材料时展开。
+            数据质量、执行假设和每日账本默认折叠，只在需要复查诊断材料时展开。
           </p>
         </details>
 
