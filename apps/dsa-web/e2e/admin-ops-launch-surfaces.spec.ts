@@ -417,7 +417,13 @@ const routes = [
     first: ['数据源维护路线图', '数据源健康', '熔断状态', '失败率', '数据源运维'],
     secondary: [],
     secondaryButtons: [],
-    groupings: ['L1 / Provider Readiness', 'L2 / Operations Matrix', 'L2 / Data Readiness', 'L2 / Quota-Cost Signals'],
+    groupings: ['L1 / 数据源就绪', 'L2 / 运维矩阵', 'L2 / 本地就绪', 'L2 / 配额与成本'],
+    testIds: [
+      'market-provider-readability-summary',
+      'market-provider-source-gap-disclosure',
+      'market-provider-matrix-disclosure',
+      'market-provider-diagnostics-disclosure',
+    ],
     disclosures: [],
     drillLink: {
       label: '查看证据工作流',
@@ -471,6 +477,9 @@ test.describe('admin ops launch surfaces', () => {
         await expectL0OverviewStrip(page, route.l0);
         for (const text of route.groupings || []) {
           expect(bodyText).toContain(text);
+        }
+        for (const testId of route.testIds || []) {
+          await expect(page.getByTestId(testId)).toBeVisible();
         }
         for (const text of route.disclosures || []) {
           expect(bodyText).toContain(text);
