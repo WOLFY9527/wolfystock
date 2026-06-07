@@ -3346,6 +3346,9 @@ describe('MarketOverviewPage', () => {
     const firstQuote = await waitFor(() => within(indicesCard).getAllByTestId('market-overview-dense-quote-item')[0]);
     expect(firstQuote).toHaveAttribute('data-quote-item-layout', 'compact-grid');
     expect(firstQuote).toHaveClass('grid', 'min-w-0', 'grid-cols-[minmax(96px,1fr)_minmax(104px,0.9fr)_76px_minmax(82px,max-content)_minmax(92px,max-content)]');
+    expect(indicesCard.className).toContain("[&_[data-testid='market-overview-dense-quote-grid']]:overflow-x-hidden");
+    expect(indicesCard.className).toContain("[&_[data-testid='market-overview-dense-quote-item']]:grid-cols-[minmax(0,1fr)_minmax(0,0.72fr)_minmax(44px,56px)_minmax(62px,max-content)_minmax(64px,max-content)]");
+    expect(indicesCard.className).toContain("max-[520px]:[&_[data-testid='market-overview-dense-quote-sparkline']]:hidden");
     expect(within(firstQuote).getByTestId('market-overview-quote-metadata')).toHaveClass('col-start-2');
     const sparklineSlot = within(firstQuote).getByTestId('market-overview-dense-quote-sparkline');
     expect(sparklineSlot.className).toContain('w-[76px]');

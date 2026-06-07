@@ -62,6 +62,42 @@ async function openMarketOverviewEvidenceDetails(page: Page) {
   return disclosure;
 }
 
+async function expectWatchlistLaunchSurface(page: Page) {
+  await expect(page.getByTestId('watchlist-page')).toBeVisible();
+  await expect(page.locator('[data-testid="watchlist-filter-grid"], [data-testid="watchlist-compact-empty-state"]')).toBeVisible();
+}
+
+async function expectMarketOverviewDenseQuotesFit(page: Page) {
+  const overflowingRows = await page.evaluate(() => {
+    const rows = Array.from(document.querySelectorAll('[data-testid="market-overview-dense-quote-item"]')) as HTMLElement[];
+    return rows.map((row, index) => {
+      const rowRect = row.getBoundingClientRect();
+      const childSpill = Array.from(row.querySelectorAll<HTMLElement>(
+        [
+          '[data-testid="market-overview-quote-metadata"]',
+          '[data-testid="market-overview-dense-quote-sparkline"]',
+          '[data-testid="market-overview-quote-value"]',
+          '[data-testid="market-overview-quote-change"]',
+        ].join(','),
+      )).filter((child) => {
+        const childRect = child.getBoundingClientRect();
+        if (childRect.width === 0 && childRect.height === 0) {
+          return false;
+        }
+        return childRect.left < rowRect.left - 1 || childRect.right > rowRect.right + 1;
+      }).map((child) => child.getAttribute('data-testid'));
+      return {
+        index,
+        rowWidth: Math.round(rowRect.width),
+        scrollDelta: Math.round(row.scrollWidth - row.clientWidth),
+        childSpill,
+      };
+    }).filter((row) => row.scrollDelta > 1 || row.childSpill.length > 0);
+  });
+
+  expect(overflowingRows).toEqual([]);
+}
+
 test.describe('scanner smoke', () => {
   test('scanner keeps controls visible without horizontal overflow', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -101,8 +137,7 @@ test.describe('scanner smoke', () => {
 
     await page.goto('/watchlist');
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.getByTestId('watchlist-page')).toBeVisible();
-    await expect(page.getByTestId('watchlist-filter-grid')).toBeVisible();
+    await expectWatchlistLaunchSurface(page);
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 
@@ -129,9 +164,8 @@ test.describe('scanner smoke', () => {
 
     await page.goto('/watchlist');
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.getByTestId('watchlist-page')).toBeVisible();
+    await expectWatchlistLaunchSurface(page);
     await expect(page.getByRole('heading', { name: /观察列表|watchlist/i })).toBeVisible();
-    await expect(page.getByTestId('watchlist-filter-grid')).toBeVisible();
     await expect(page.getByTestId('watchlist-page')).toContainText(/观察列表|watchlist/i);
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
@@ -291,6 +325,7 @@ test.describe('market overview smoke', () => {
       expect(heroRowLayout?.topOffsets.every((offset) => Math.abs(offset) <= 2)).toBe(true);
       expect(heroRowLayout?.leftGap ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(2);
       expect(heroRowLayout?.rightGap ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(2);
+      await expectMarketOverviewDenseQuotesFit(page);
       await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     }
   });
@@ -327,6 +362,7 @@ test.describe('market overview smoke', () => {
     mobileLayout?.widths.forEach((width) => {
       expect(Math.abs(width - (mobileLayout?.rowWidth ?? width))).toBeLessThanOrEqual(2);
     });
+    await expectMarketOverviewDenseQuotesFit(page);
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 

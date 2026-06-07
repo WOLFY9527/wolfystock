@@ -216,6 +216,8 @@ const DENSE_QUOTE_MODULES = new Set<MarketOverviewModuleId>([
   'usIndices',
   'cnHkIndices',
   'cryptoCore',
+  'volatility',
+  'fundsFlow',
   'rates',
   'fxCommodities',
   'cryptoSnapshot',
@@ -229,6 +231,22 @@ const DENSE_QUOTE_MODULES = new Set<MarketOverviewModuleId>([
   'cryptoMomentum',
   'cryptoRiskContext',
 ]);
+
+const DENSE_QUOTE_ROW_FIT_CLASS = [
+  "[&_[data-testid='market-overview-dense-quote-grid']]:min-w-0",
+  "[&_[data-testid='market-overview-dense-quote-grid']]:overflow-x-hidden",
+  "[&_[data-testid='market-overview-dense-quote-item']]:overflow-hidden",
+  "[&_[data-testid='market-overview-dense-quote-item']]:grid-cols-[minmax(0,1fr)_minmax(0,0.72fr)_minmax(44px,56px)_minmax(62px,max-content)_minmax(64px,max-content)]",
+  "[&_[data-testid='market-overview-dense-quote-sparkline']]:w-[56px]",
+  "[&_[data-testid='market-overview-quote-value']]:min-w-[62px]",
+  "[&_[data-testid='market-overview-quote-change']]:min-w-[64px]",
+  "max-[720px]:[&_[data-testid='market-overview-dense-quote-item']]:grid-cols-[minmax(0,1fr)_minmax(44px,56px)_minmax(62px,max-content)]",
+  "max-[720px]:[&_[data-testid='market-overview-dense-quote-sparkline']]:w-[56px]",
+  "max-[520px]:[&_[data-testid='market-overview-dense-quote-item']]:grid-cols-[minmax(0,1fr)_minmax(62px,max-content)]",
+  "max-[520px]:[&_[data-testid='market-overview-dense-quote-sparkline']]:hidden",
+  "max-[520px]:[&_[data-testid='market-overview-quote-value']]:col-start-2",
+  "max-[520px]:[&_[data-testid='market-overview-quote-change']]:col-start-2",
+].join(' ');
 
 const MODULE_CARD_TEST_ID: Partial<Record<MarketOverviewModuleId, string>> = {
   globalIndices: 'indices',
@@ -2637,6 +2655,7 @@ function useMarketOverviewWorkbenchModel({
   const renderModule = (moduleId: MarketOverviewModuleId, rank: number, rail: WorkbenchRail = 'hero') => {
     const layoutMeta = MODULE_LAYOUT_META[moduleId];
     const cardTestId = MODULE_CARD_TEST_ID[moduleId] || moduleId;
+    const denseQuoteModule = DENSE_QUOTE_MODULES.has(moduleId);
     return (
       <div
         key={moduleId}
@@ -2645,8 +2664,11 @@ function useMarketOverviewWorkbenchModel({
         data-market-card-rank={rank}
         data-market-card-row={rail}
         data-market-card-size={layoutMeta.size}
-        data-market-card-density={DENSE_QUOTE_MODULES.has(moduleId) ? 'dense-quote' : 'standard'}
-        className="h-full min-w-0 w-full overflow-hidden"
+        data-market-card-density={denseQuoteModule ? 'dense-quote' : 'standard'}
+        className={cn(
+          'h-full min-w-0 w-full overflow-hidden',
+          denseQuoteModule ? DENSE_QUOTE_ROW_FIT_CLASS : '',
+        )}
       >
         {moduleNodes[moduleId]}
       </div>
