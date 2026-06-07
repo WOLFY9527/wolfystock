@@ -644,18 +644,62 @@ Next candidates:
 - Remaining `autoRevalidateTick` is a control state used to re-run scheduling effects; ref conversion would change refresh timing.
 - Continue only if another pure display derivation appears outside protected domains.
 
+## Batch 14: Home Trace Display Memo Cleanup
+
+Status: included in the checkpoint commit for this batch after local validation.
+
+Files changed:
+
+- `apps/dsa-web/src/pages/HomeBentoDashboardPage.tsx`
+
+Changes:
+
+- Removed redundant `useMemo` wrappers around Home skeleton timeline display state, standby copy, trace/readiness/evidence frame derivations, reanalysis ticker display state, and delete dialog copy.
+- Kept dashboard selection, dashboard payload selection, route/task hydration, active evidence ticker effects, chart context, and task lifecycle behavior unchanged.
+- Rejected a Watchlist display-memo candidate after focused Watchlist tests exposed a loading/summary timing regression; Watchlist was restored before this checkpoint.
+
+Diagnostics after batch:
+
+- Score: `61`
+- Total diagnostics: `466`
+- Errors: `110`
+- Warnings: `356`
+- Affected files: `40`
+- Reduced total diagnostics from previous checkpoint: `16`
+- Reduced total diagnostics from baseline: `101`
+- Reduced by rule from previous checkpoint:
+  - `react-compiler-no-manual-memoization`: `189 -> 173` (`-16`)
+- React Doctor diff for changed file:
+  - `src/pages/HomeBentoDashboardPage.tsx`: `77 -> 61` (`-16`)
+
+Validations run:
+
+- `npm --prefix apps/dsa-web run test -- 'src/pages/__tests__/HomeSurfacePage.test.tsx' --no-file-parallelism` -> pass, `75` tests
+- `git diff --check` -> pass
+- `./scripts/release_secret_scan.sh` -> pass
+- `npm --prefix apps/dsa-web run lint` -> pass
+- `npm --prefix apps/dsa-web run build` -> pass with existing Vite chunk-size warning
+- `npx react-doctor@latest --json --json-compact --yes --no-score` -> remaining diagnostics expected, totals above
+- `npx react-doctor@latest --score --yes` -> `61`
+
+Next candidates:
+
+- Remaining Home memo findings are tied to route fixture hydration, recent history and dashboard selection, dashboard payload selection, active evidence ticker effect dependencies, or task lifecycle input identity.
+- Watchlist display memo removal is blocked by focused test timing regression, even though React Doctor would reduce diagnostics.
+- Continue only with display derivations that do not feed effects, task lifecycle inputs, route hydration, protected scoring/filtering, or tested loading timing.
+
 ## Stop Manifest
 
-Latest pushed checkpoint before Batch 13: `21d07434`. The Batch 13 checkpoint is the commit containing this section once pushed.
+Latest pushed checkpoint before Batch 14: `a66d3cb3`. The Batch 14 checkpoint is the commit containing this section once pushed.
 
 Final React Doctor state:
 
 - Score: `61`
-- Total diagnostics: `482`
+- Total diagnostics: `466`
 - Errors: `110`
-- Warnings: `372`
+- Warnings: `356`
 - Affected files: `40`
-- Reduced total diagnostics from baseline: `85`
+- Reduced total diagnostics from baseline: `101`
 
 Remaining blocker groups:
 

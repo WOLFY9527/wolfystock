@@ -4866,10 +4866,7 @@ function InPlaceDecisionSkeleton({
     return () => window.clearInterval(timer);
   }, []);
 
-  const timelineStages = useMemo(
-    () => buildTimelineProgressState(locale, progressModules, message, progress, phaseTick),
-    [locale, progressModules, message, progress, phaseTick],
-  );
+  const timelineStages = buildTimelineProgressState(locale, progressModules, message, progress, phaseTick);
   const activeStage = timelineStages.find((stage) => stage.status === 'running') || timelineStages[0];
   const leadCopy = buildTimelineLeadCopy(locale, activeStage?.detail, message);
 
@@ -5159,15 +5156,15 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
 
     return buildInPlacePlaceholderDashboard(locale, dashboardSelection.effectiveTicker);
   }, [activeTicker, dashboardSelection.dashboardReport, dashboardSelection.effectiveTicker, guestPreview, isGuest, locale, traceFixtureReport]);
-  const activeTraceReport = useMemo<AnalysisReport | null>(() => {
+  const activeTraceReport: AnalysisReport | null = (() => {
     if (traceFixtureReport) {
       return traceFixtureReport;
     }
 
     return dashboardSelection.activeTraceReport;
-  }, [dashboardSelection.activeTraceReport, traceFixtureReport]);
+  })();
   const copy = dashboardData;
-  const standbyCopy = useMemo(() => (
+  const standbyCopy = (
     locale === 'en'
       ? {
         analyzeButton: 'Analyze',
@@ -5177,20 +5174,14 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         analyzeButton: '分析',
         omnibarPlaceholder: '输入有效股票代码...',
       }
-  ), [locale]);
+  );
   const activeDrawerPayload = activeDrawer && copy ? buildDrawerPayload(locale, copy, activeDrawer) : null;
-  const activeDecisionTrace = useMemo(() => (activeTraceReport ? getDecisionTrace(activeTraceReport) : undefined), [activeTraceReport]);
-  const activeReportQuality = useMemo(() => getReportQuality(activeTraceReport), [activeTraceReport]);
-  const activeDataQualityReport = useMemo(() => getDataQualityReport(activeTraceReport), [activeTraceReport]);
-  const activeResearchReadiness = useMemo(
-    () => extractAnalysisResearchReadiness(activeTraceReport) || inferAnalysisResearchReadiness(activeDataQualityReport),
-    [activeDataQualityReport, activeTraceReport],
-  );
-  const activeResearchReadinessView = useMemo(
-    () => buildConsumerResearchReadinessView(activeResearchReadiness, locale === 'en' ? 'en' : 'zh'),
-    [activeResearchReadiness, locale],
-  );
-  const sessionOriginLabel = useMemo(() => {
+  const activeDecisionTrace = activeTraceReport ? getDecisionTrace(activeTraceReport) : undefined;
+  const activeReportQuality = getReportQuality(activeTraceReport);
+  const activeDataQualityReport = getDataQualityReport(activeTraceReport);
+  const activeResearchReadiness = extractAnalysisResearchReadiness(activeTraceReport) || inferAnalysisResearchReadiness(activeDataQualityReport);
+  const activeResearchReadinessView = buildConsumerResearchReadinessView(activeResearchReadiness, locale === 'en' ? 'en' : 'zh');
+  const sessionOriginLabel = (() => {
     const restoredTicker = normalizeTickerQuery(selectedReport?.meta.stockCode)
       || normalizeTickerQuery(recentHistoryItems[0]?.stockCode)
       || null;
@@ -5206,27 +5197,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       return null;
     }
     return locale === 'en' ? 'Last research' : '上次研究';
-  }, [activeTicker, isGuest, locale, pendingAnalysisTicker, recentHistoryItems, routeSource, routeSymbol, routeTaskId, selectedReport?.meta.stockCode]);
-  const activeEvidenceCoverageFrame = useMemo(
-    () => extractAnalysisEvidenceCoverageFrame(activeTraceReport),
-    [activeTraceReport],
-  );
-  const activeEvidenceCitationFrame = useMemo(
-    () => extractAnalysisEvidenceCitationFrame(activeTraceReport),
-    [activeTraceReport],
-  );
-  const activeSourceProvenanceFrame = useMemo(
-    () => extractAnalysisSourceProvenanceFrame(activeTraceReport),
-    [activeTraceReport],
-  );
-  const activeSingleStockEvidencePacket = useMemo(
-    () => getSingleStockEvidencePacket(activeTraceReport),
-    [activeTraceReport],
-  );
-  const sourceSummary = useMemo(
-    () => buildTraceSummary(activeDecisionTrace, activeReportQuality, locale),
-    [activeDecisionTrace, activeReportQuality, locale],
-  );
+  })();
+  const activeEvidenceCoverageFrame = extractAnalysisEvidenceCoverageFrame(activeTraceReport);
+  const activeEvidenceCitationFrame = extractAnalysisEvidenceCitationFrame(activeTraceReport);
+  const activeSourceProvenanceFrame = extractAnalysisSourceProvenanceFrame(activeTraceReport);
+  const activeSingleStockEvidencePacket = getSingleStockEvidencePacket(activeTraceReport);
+  const sourceSummary = buildTraceSummary(activeDecisionTrace, activeReportQuality, locale);
   const hasActiveTraceReport = Boolean(activeTraceReport);
   const activeEvidenceTicker = useMemo(() => {
     if (isGuest) {
@@ -5244,17 +5220,17 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     );
     return TICKER_FORMAT_RE.test(candidate) ? candidate : '';
   }, [activeTicker, activeTraceReport?.meta.stockCode, dashboardSelection.activeEvidenceTicker, isGuest, recentHistoryItems, routeSymbol, selectedTicker, traceFixtureReport]);
-  const reanalysisTicker = useMemo(() => {
+  const reanalysisTicker = (() => {
     if (!traceFixtureReport) {
       return dashboardSelection.reanalysisTicker;
     }
     const reportTicker = normalizeTickerQuery(activeTraceReport?.meta.stockCode);
     const candidate = reportTicker || (hasActiveTraceReport ? '' : normalizeTickerQuery(dashboardData.ticker));
     return TICKER_FORMAT_RE.test(candidate) ? candidate : '';
-  }, [activeTraceReport?.meta.stockCode, dashboardData.ticker, dashboardSelection.reanalysisTicker, hasActiveTraceReport, traceFixtureReport]);
+  })();
   const shouldRenderDashboardPanels = !isGuest || Boolean(guestPreview || pendingAnalysisTicker);
   const guestPaywall = isGuest ? <GuestPaywallOverlay locale={locale} registrationPath={registrationPath} /> : null;
-  const deleteCopy = useMemo(() => ({
+  const deleteCopy = {
     title: t('home.deleteTitle'),
     single: t('home.deleteSingle'),
     multiple: (count: number) => t('home.deleteMultiple', { count }),
@@ -5264,7 +5240,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     clearVisible: t('home.deleteAll'),
     deleteOne: t('home.deleteOne'),
     visibleCount: t('home.visibleCount'),
-  }), [t]);
+  };
 
   useEffect(() => {
     document.title = copy.documentTitle;
