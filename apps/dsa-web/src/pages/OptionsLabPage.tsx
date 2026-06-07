@@ -81,8 +81,8 @@ type ScenarioEvidenceView = {
 };
 
 const DIRECTION_OPTIONS: Array<{ value: OptionsDirection; label: string }> = [
-  { value: 'bullish', label: '上涨情景' },
-  { value: 'bearish', label: '下跌情景' },
+  { value: 'bullish', label: '上行情景假设' },
+  { value: 'bearish', label: '下行情景假设' },
   { value: 'neutral', label: '区间情景' },
   { value: 'volatility', label: '波动扩张' },
 ];
@@ -96,7 +96,7 @@ const RISK_PROFILE_OPTIONS: Array<{ value: OptionsRiskProfile; label: string }> 
 const EMPTY_CONTRACTS: OptionContract[] = [];
 const EMPTY_EXPIRATIONS: OptionsExpiration[] = [];
 const COMPARISON_LOADING_TIMEOUT_MS = 12000;
-const COMPARISON_EMPTY_MESSAGE = '先选择可用到期日并加载合约后，再进入策略对比。';
+const COMPARISON_EMPTY_MESSAGE = '先选择可用到期日并加载合约后，再进入结构样例比较。';
 const OPTIONS_LAB_CRASH_FALLBACK = '期权实验室暂时无法加载，请刷新或稍后重试。';
 const OPTIONS_MODULE_PAUSED_COPY = '期权数据暂不可用，情景分析已暂停。';
 const OPTIONS_INSUFFICIENT_COPY = '当前期权信号数据不足，仅供观察。';
@@ -447,13 +447,13 @@ function scenarioAssumptionLines(assumptions?: Record<string, unknown> | null): 
   const targetPriceStatus = typeof assumptions.targetPriceStatus === 'string' ? assumptions.targetPriceStatus : null;
 
   if (inputMode === 'decision') lines.push('当前来自判断回执');
-  if (inputMode === 'strategy_compare') lines.push('当前来自候选结构比较');
+  if (inputMode === 'strategy_compare') lines.push('当前来自观察结构样例比较');
   if (inputMode === 'scenario') lines.push('当前来自单结构情景推演');
   if (direction === 'bullish' || direction === 'bearish' || direction === 'neutral' || direction === 'volatility') {
     lines.push(`方向：${directionSummaryLabel(direction)}`);
   }
   if (typeof targetPrice === 'number' && Number.isFinite(targetPrice)) {
-    lines.push(`目标价：${money(targetPrice)}`);
+    lines.push(`假设价格：${money(targetPrice)}`);
   }
   if (targetDate) {
     lines.push(`目标日：${targetDate}`);
@@ -461,8 +461,8 @@ function scenarioAssumptionLines(assumptions?: Record<string, unknown> | null): 
   if (riskProfile === 'conservative' || riskProfile === 'balanced' || riskProfile === 'aggressive') {
     lines.push(`风险偏好：${RISK_PROFILE_OPTIONS.find((item) => item.value === riskProfile)?.label || '待确认'}`);
   }
-  if (targetPriceStatus === 'target_above_breakeven') lines.push('目标价仍在盈亏平衡线之上');
-  if (targetPriceStatus === 'target_below_breakeven') lines.push('目标价仍在盈亏平衡线之下');
+  if (targetPriceStatus === 'target_above_breakeven') lines.push('假设价格仍在盈亏平衡线之上');
+  if (targetPriceStatus === 'target_below_breakeven') lines.push('假设价格仍在盈亏平衡线之下');
 
   return lines.slice(0, 4);
 }
@@ -495,13 +495,13 @@ function buildScenarioEvidenceView(frame?: OptionsConsumerScenarioFrame | null):
   const payoffLines = [
     typeof frame.payoffEvidence?.expectedMoveAbs === 'number' ? `预期波动：${money(frame.payoffEvidence.expectedMoveAbs)}` : null,
     typeof frame.payoffEvidence?.expectedMovePct === 'number' ? `预期波动幅度：${ratio(frame.payoffEvidence.expectedMovePct)}` : null,
-    typeof frame.payoffEvidence?.payoffAtTarget === 'number' ? `目标情景收益：${money(frame.payoffEvidence.payoffAtTarget)}` : null,
+    typeof frame.payoffEvidence?.payoffAtTarget === 'number' ? `目标价下情景估算：${money(frame.payoffEvidence.payoffAtTarget)}` : null,
     frame.payoffEvidence?.expectedMoveSource ? `波动来源：${expectedMoveSourceLabel(frame.payoffEvidence.expectedMoveSource)}` : null,
   ].filter((item): item is string => Boolean(item)).slice(0, 4);
   const riskLines = [
     typeof frame.riskEvidence?.premiumAtRisk === 'number' ? `权利金风险：${money(frame.riskEvidence.premiumAtRisk)}` : null,
     typeof frame.riskEvidence?.maxLoss === 'number' ? `最大亏损：${money(frame.riskEvidence.maxLoss)}` : null,
-    typeof frame.riskEvidence?.maxGain === 'number' ? `最大收益：${money(frame.riskEvidence.maxGain)}` : null,
+    typeof frame.riskEvidence?.maxGain === 'number' ? `情景上沿：${money(frame.riskEvidence.maxGain)}` : null,
     typeof frame.riskEvidence?.breakeven === 'number' ? `盈亏平衡：${money(frame.riskEvidence.breakeven)}` : null,
     typeof frame.riskEvidence?.requiredMovePct === 'number' ? `所需波动：${ratio(frame.riskEvidence.requiredMovePct)}` : null,
   ].filter((item): item is string => Boolean(item)).slice(0, 4);
@@ -533,8 +533,8 @@ function buildScenarioEvidenceView(frame?: OptionsConsumerScenarioFrame | null):
 
 function noTradeReasonLabel(value?: string | null): string {
   if (value === 'data_quality_not_decision_grade') return '数据质量未达到可判断等级';
-  if (value === 'all_candidates_have_weak_edge_or_unfavorable_risk_reward') return '候选结构边际优势或风险回报不足';
-  if (value === 'no_supported_strategy_candidates') return '暂无可比较候选结构';
+  if (value === 'all_candidates_have_weak_edge_or_unfavorable_risk_reward') return '观察结构样例边际优势或风险回报不足';
+  if (value === 'no_supported_strategy_candidates') return '暂无可比较观察结构样例';
   return value ? limitationLabel(value) : '暂无';
 }
 
@@ -772,7 +772,7 @@ function padDomain(minimum: number, maximum: number, ratioValue: number, fallbac
 }
 
 function payoffBoundaryLabel(strategyType: OptionsStrategyType): string {
-  if (strategyType === 'long_call') return '单腿多头收益上沿不封顶，图形仅示意边界变化。';
+  if (strategyType === 'long_call') return '单腿多头情景上沿未设上沿，不代表可获利；图形仅示意边界变化。';
   if (strategyType === 'long_put') return '单腿多头收益受标的下行限制，图形仅示意边界变化。';
   if (strategyType === 'bull_call_spread') return '定义风险结构：亏损与收益边界都已封顶。';
   return '定义风险结构：下行收益与风险边界都已封顶。';
@@ -816,11 +816,11 @@ function buildPayoffVisualModel(
     case 'long_call':
       pushPoint(minPrice, -Math.abs(maxLoss), '低位风险', 'boundary');
       pushPoint(breakeven, 0, '盈亏平衡');
-      if (target != null) pushPoint(target, payoffAtTarget, '目标情景', 'target');
+      if (target != null) pushPoint(target, payoffAtTarget, '假设情景', 'target');
       else pushPoint(maxPrice, Math.max(payoffAtTarget, 0), '高位观察');
       break;
     case 'long_put':
-      if (target != null) pushPoint(target, payoffAtTarget, '目标情景', 'target');
+      if (target != null) pushPoint(target, payoffAtTarget, '假设情景', 'target');
       else pushPoint(minPrice, Math.max(payoffAtTarget, 0), '下行观察', 'boundary');
       pushPoint(breakeven, 0, '盈亏平衡');
       pushPoint(maxPrice, -Math.abs(maxLoss), '高位风险', 'boundary');
@@ -831,12 +831,12 @@ function buildPayoffVisualModel(
       pushPoint(breakeven, 0, '盈亏平衡');
       pushPoint(highStrike, maxGain ?? payoffAtTarget, '收益上沿', 'boundary');
       pushPoint(maxPrice, maxGain ?? payoffAtTarget);
-      if (target != null) pushPoint(target, payoffAtTarget, '目标情景', 'target');
+      if (target != null) pushPoint(target, payoffAtTarget, '假设情景', 'target');
       break;
     case 'bear_put_spread':
       pushPoint(minPrice, maxGain ?? payoffAtTarget, '收益上沿', 'boundary');
       pushPoint(lowStrike, maxGain ?? payoffAtTarget);
-      if (target != null) pushPoint(target, payoffAtTarget, '目标情景', 'target');
+      if (target != null) pushPoint(target, payoffAtTarget, '假设情景', 'target');
       pushPoint(breakeven, 0, '盈亏平衡');
       pushPoint(highStrike, -Math.abs(maxLoss));
       pushPoint(maxPrice, -Math.abs(maxLoss), '高位风险', 'boundary');
@@ -941,7 +941,7 @@ const StrategyPayoffVisual: React.FC<{
       <CompactVisualEmptyState
         testId="options-lab-payoff-empty"
         title="收益边界待补证"
-        body="当前缺少可绘制的收益边界。等待候选结构、腿部行权价与目标情景收益同时可用后，再显示图形示意。"
+        body="当前缺少可绘制的收益边界。等待观察结构样例、腿部行权价与假设价格下情景估算同时可用后，再显示图形示意。"
       />
     );
   }
@@ -1033,11 +1033,11 @@ const StrategyPayoffVisual: React.FC<{
       </DataWorkbenchFrame>
       <div className="grid gap-2 sm:grid-cols-3">
         <div className={cn(innerBlockClass, 'p-3')}>
-          <p className={labelClass}>观察结构</p>
+          <p className={labelClass}>专业结构</p>
           <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{strategyChineseLabel(strategy.strategyType)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
-          <p className={labelClass}>目标情景收益</p>
+          <p className={labelClass}>目标价下情景估算</p>
           <p className={cn('mt-2 font-mono text-sm font-semibold', metricTone(strategy.payoffAtTarget))}>{money(strategy.payoffAtTarget)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
@@ -1167,12 +1167,12 @@ const ResearchVisualsPanel: React.FC<{
         </div>
       </SectionHeader>
       <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-        先用现有候选结构与链快照观察收益边界和 IV 分布，再回到门控、缺口与风险约束做交叉复核。
+        先用现有观察结构样例与链快照观察收益边界和 IV 分布，再回到门控、缺口与风险约束做交叉复核。
       </p>
       <div className="mt-5 grid gap-4 xl:grid-cols-2">
         <div className={cn(innerBlockClass, 'p-4')}>
           <p className={labelClass}>到期收益示意</p>
-          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">基于当前候选结构的现有收益边界字段绘制，仅用于情景观察。</p>
+          <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">基于当前观察结构样例的现有收益边界字段绘制，仅用于情景观察。</p>
           <div className="mt-4">
             <StrategyPayoffVisual strategy={strategy} underlyingPrice={underlyingPrice} targetPrice={targetPrice} />
           </div>
@@ -1294,8 +1294,8 @@ const AssumptionPanel: React.FC<{
               />
             </label>
             <label className={fieldShellClass}>
-              <span className={labelClass}>目标价格</span>
-              <input aria-label="目标价格" value={targetPrice} onChange={(event) => onTargetPriceChange(event.target.value)} className={fieldClass} inputMode="decimal" />
+              <span className={labelClass}>假设价格</span>
+              <input aria-label="假设价格" value={targetPrice} onChange={(event) => onTargetPriceChange(event.target.value)} className={fieldClass} inputMode="decimal" />
             </label>
             <label className={fieldShellClass}>
               <span className={labelClass}>目标日期</span>
@@ -1357,8 +1357,8 @@ function decisionStatusLabel(decision?: OptionsDecisionResponse | null): string 
 }
 
 function directionSummaryLabel(value: OptionsDirection): string {
-  if (value === 'bullish') return '上涨情景';
-  if (value === 'bearish') return '下跌情景';
+  if (value === 'bullish') return '上行情景假设';
+  if (value === 'bearish') return '下行情景假设';
   if (value === 'neutral') return '区间情景';
   return '波动扩张';
 }
@@ -1388,8 +1388,8 @@ function heroSummaryLine(
   comparison: OptionsStrategyCompareResponse | null,
   hasChainRows: boolean,
 ): string {
-  if (!hasChainRows) return '先加载可用期权链，再进入候选策略与风险边界。';
-  if (availability.stateKey === 'UPDATING') return '正在整理情景输入、候选结构与风险边界。';
+  if (!hasChainRows) return '先加载可用期权链，再进入观察结构样例与风险边界。';
+  if (availability.stateKey === 'UPDATING') return '正在整理情景输入、样例结构与风险边界。';
   if (availability.stateKey === 'UNAVAILABLE' || availability.stateKey === 'PAUSED') {
     return '当前不形成判断，先保留输入与风险预算，等待下一次数据刷新。';
   }
@@ -1397,12 +1397,12 @@ function heroSummaryLine(
   const observationStrategy = firstObservationStrategy(decision, comparison);
   if (isNonDecisionGrade(decision)) {
     return observationStrategy
-      ? `当前先观察 ${strategyChineseLabel(observationStrategy)}，但判断等级未满足，需等待更完整的数据。`
+      ? '当前只显示观察结构样例，判断等级未满足，需等待更完整的数据。'
       : '当前只满足观察条件，先记录风险边界与触发条件。';
   }
 
   if (observationStrategy) {
-    return `当前优先跟踪 ${strategyChineseLabel(observationStrategy)}，先复核最大亏损、盈亏平衡与流动性边界。`;
+    return '当前显示样例顺序靠前的观察结构，先复核最大亏损、盈亏平衡与流动性边界。';
   }
 
   return availability.explanation;
@@ -1684,10 +1684,12 @@ const StrategyRow: React.FC<{
     <div className="min-w-0">
       <div className="flex items-center gap-2">
         <span className="font-mono text-xs text-[color:var(--wolfy-text-muted)]">#{rank}</span>
-        {highlighted ? <Pill tone={gateBlocked ? 'warn' : 'info'}>{gateBlocked ? `观察排序 #${rank}` : '观察排序靠前'}</Pill> : null}
+        {highlighted ? <Pill tone={gateBlocked ? 'warn' : 'info'}>{gateBlocked ? `样例顺序 #${rank}` : '样例顺序靠前'}</Pill> : null}
       </div>
-      <h3 className="mt-1 truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{strategyChineseLabel(strategy.strategyType)}</h3>
-      <p className="mt-0.5 truncate font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">{strategyLabel(strategy.strategyType)}</p>
+      <h3 className="mt-1 truncate text-sm font-semibold text-[color:var(--wolfy-text-primary)]">观察结构样例 #{rank}</h3>
+      <p className="mt-0.5 truncate font-mono text-[11px] text-[color:var(--wolfy-text-muted)]">
+        专业结构：{strategyChineseLabel(strategy.strategyType)} · {strategyLabel(strategy.strategyType)}
+      </p>
     </div>
     <div>
       <p className={labelClass}>状态</p>
@@ -1698,15 +1700,15 @@ const StrategyRow: React.FC<{
       <p className="mt-1 font-mono text-xs text-[color:var(--wolfy-market-down)]">{money(alternative?.maxLoss ?? strategy.maxLoss)}</p>
     </div>
     <div>
-      <p className={labelClass}>最大收益</p>
-      <p className="mt-1 font-mono text-xs text-[color:var(--wolfy-market-up)]">{(alternative?.maxGain ?? strategy.maxGain) == null ? '不封顶' : money(alternative?.maxGain ?? strategy.maxGain)}</p>
+      <p className={labelClass}>情景上沿</p>
+      <p className="mt-1 font-mono text-xs text-[color:var(--wolfy-market-up)]">{(alternative?.maxGain ?? strategy.maxGain) == null ? '未设上沿，不代表可获利' : money(alternative?.maxGain ?? strategy.maxGain)}</p>
     </div>
     <div>
       <p className={labelClass}>盈亏平衡</p>
       <p className="mt-1 font-mono text-xs text-[color:var(--wolfy-text-primary)]">{money(strategy.breakeven)}</p>
     </div>
     <div>
-      <p className={labelClass}>情景收益</p>
+      <p className={labelClass}>目标价下情景估算</p>
       <p className={cn('mt-1 font-mono text-xs', metricTone(strategy.payoffAtTarget))}>{money(strategy.payoffAtTarget)}</p>
     </div>
     <div className="min-w-0">
@@ -1743,29 +1745,29 @@ const StrategyComparisonPanel: React.FC<{
   const limitationSummary = summarizeLabels(limitations, limitationLabel);
   return (
     <section className={cn(panelClass, className)} data-testid="options-lab-strategy-comparison">
-      <SectionHeader eyebrow="主工作区" title="候选策略" icon={Layers3}>
+      <SectionHeader eyebrow="主工作区" title="观察结构样例" icon={Layers3}>
         <div className="flex flex-wrap justify-end gap-2">
           <Pill tone="info">{freshness ? limitationLabel(String(freshness)) : '等待快照'}</Pill>
         </div>
       </SectionHeader>
       <p className="mt-3 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
-        先看排序靠前的结构，再复核最大亏损、盈亏平衡与流动性边界。
+        先把样例结构作为风险剖面阅读，再复核最大亏损、盈亏平衡与流动性边界。
       </p>
       {emptyMessage ? (
         <div className={cn(innerBlockClass, 'mt-5 border-dashed px-4 py-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
-          <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">等待策略对比前提</p>
+          <p className="text-sm font-semibold text-[color:var(--wolfy-text-primary)]">等待结构比较前提</p>
           <p className="mt-2">{emptyMessage}</p>
         </div>
       ) : null}
       {!emptyMessage && loading ? (
-        <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 font-mono text-sm text-[color:var(--wolfy-accent-soft)]')}>正在计算策略对比...</p>
+        <p className={cn(innerBlockClass, 'mt-5 px-4 py-5 font-mono text-sm text-[color:var(--wolfy-accent-soft)]')}>正在计算结构样例比较...</p>
       ) : null}
       {!emptyMessage && !loading && comparisonState.error ? (
         <TerminalNotice variant="danger" className="mt-5">{comparisonState.error}</TerminalNotice>
       ) : null}
       {!emptyMessage && !loading && !comparisonState.error && strategies.length === 0 ? (
-        <TerminalEmptyState title="暂无可比较策略" className="mt-5">
-          当前假设下暂无可比较策略。
+        <TerminalEmptyState title="暂无可比较结构样例" className="mt-5">
+          当前假设下暂无可比较结构样例。
         </TerminalEmptyState>
       ) : null}
       {!emptyMessage && !loading && !comparisonState.error && strategies.length > 0 ? (
@@ -1783,7 +1785,7 @@ const StrategyComparisonPanel: React.FC<{
         </DenseRows>
       ) : null}
       <div className={cn(innerBlockClass, 'mt-5 p-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
-        <span className={labelClass}>候选约束</span>
+        <span className={labelClass}>样例约束</span>
         <p className="mt-2">
           {limitationSummary.length ? limitationSummary.map(formatLabelSummary).join(' · ') : '当前数据可用于情景比较'}
         </p>
@@ -1913,6 +1915,10 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
       : 'text-amber-100';
   const primaryStrategy = isNonDecisionGrade(decision) ? null : optimizer?.preferredStrategyKey || null;
   const observationCandidate = primaryStrategy || rankedAlternatives[0]?.strategyKey || decision?.betterAlternative?.strategyType || null;
+  const boundaryReason = noTradeReasonLabel(optimizer?.noTradeReason);
+  const observationDetail = observationCandidate
+    ? `专业结构：${strategyChineseLabel(observationCandidate)}${boundaryReason !== '暂无' ? ` · 边界原因：${boundaryReason}` : ''}`
+    : `边界原因：${boundaryReason}`;
   const decisionTags = [...new Set([
     freshnessLabel(decision?.freshness?.freshness),
     ivRankStatus === 'available' ? 'IV 分位可用' : 'IV 分位不可用',
@@ -1951,7 +1957,7 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
                 <p className={cn('mt-2 text-xl font-semibold', labelTone)}>{decisionStatusLabel(decision)}</p>
                 <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]">
                   {boundaryCopy || (primaryStrategy
-                    ? `观察结构：${strategyChineseLabel(primaryStrategy)}`
+                    ? '观察结构样例已满足基础边界，仍需复核风险字段。'
                     : '暂无可判断结构')}
                 </p>
                 {demoBoundaryCopy && demoBoundaryCopy !== boundaryCopy ? (
@@ -1972,12 +1978,10 @@ const DecisionPanel: React.FC<{ decisionState: DecisionState; emptyMessage: stri
               <DecisionMetric label="IV / 敏感度" value={number(decision?.ivGreeks?.ivReadiness)} tone="text-[color:var(--wolfy-accent-soft)]" />
             </div>
             <div className={cn(innerBlockClass, 'mt-4 p-3')}>
-              <p className={labelClass}>观察结构</p>
-              <p className="mt-2 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{observationCandidate ? strategyChineseLabel(observationCandidate) : '暂无可判断结构'}</p>
+              <p className={labelClass}>观察结构样例</p>
+              <p className="mt-2 text-base font-semibold text-[color:var(--wolfy-text-primary)]">{observationCandidate ? '观察结构样例' : '暂无可判断结构'}</p>
               <p className="mt-2 text-sm leading-6 text-[color:var(--wolfy-accent-soft)]/80">
-                {primaryStrategy
-                  ? `观察结构：${strategyChineseLabel(primaryStrategy)}`
-                  : `边界原因：${noTradeReasonLabel(optimizer?.noTradeReason)}`}
+                {observationDetail}
               </p>
             </div>
           </div>
@@ -2115,15 +2119,15 @@ function liquiditySensitivityNote(decision: OptionsDecisionResponse | null): str
   const hasSensitivity = ivWarnings.some((warning) => warning.includes('iv') || warning.includes('greeks') || warning.includes('expected_move'));
 
   if (hasLiquidity && hasSensitivity) {
-    return '流动性与敏感度都有限时，先看最大亏损与价差，再决定是否继续跟踪该结构。';
+    return '流动性与敏感度都有限时，先看最大亏损与价差，再决定是否保留研究记录。';
   }
   if (hasLiquidity) {
-    return '价差偏宽或成交深度不足时，名义收益不等于可成交结果，先观察定义风险结构。';
+    return '价差偏宽或成交深度不足时，名义上沿不等于实际可实现结果，先观察定义风险结构。';
   }
   if (hasSensitivity) {
     return 'IV 分位或 Greeks 不完整时，只能看方向边界，不能把到期前收益当成稳定结论。';
   }
-  return '优先同时看价差、OI、IV 与 Theta，再决定是否继续跟踪该结构。';
+  return '优先同时看价差、OI、IV 与 Theta，再决定是否保留研究记录。';
 }
 
 function nextActionCopy(
@@ -2132,11 +2136,11 @@ function nextActionCopy(
   hasChainRows: boolean,
   decision: OptionsDecisionResponse | null,
 ): string {
-  if (loading) return '等待链表、候选结构与风险边界刷新完成。';
+  if (loading) return '等待链表、观察结构样例与风险边界刷新完成。';
   if (error) return '稍后重试或更换标的，当前不要扩展判断。';
-  if (!hasChainRows) return '先加载可用到期日与期权链，再进入策略比较。';
+  if (!hasChainRows) return '先加载可用到期日与期权链，再进入结构样例比较。';
   if (isNonDecisionGrade(decision)) return '先记录观察结构与风险预算，等待更完整数据后再复核。';
-  return '先复核首个候选的最大亏损、盈亏平衡与流动性，再决定是否继续跟踪。';
+  return '先复核首个观察结构的最大亏损、盈亏平衡与流动性，再决定是否保留研究记录。';
 }
 
 const ContextRailPanel: React.FC<{
@@ -2180,7 +2184,7 @@ const MethodologyDisclosure: React.FC<{
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
       <div className={cn(innerBlockClass, 'p-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
         <p className={labelClass}>输入摘要</p>
-        <p className="mt-2">目标价 {targetPrice || '--'}，目标日 {targetDate || '--'}，风险预算 {riskBudget || '--'}。</p>
+        <p className="mt-2">假设价格 {targetPrice || '--'}，目标日 {targetDate || '--'}，风险预算 {riskBudget || '--'}。</p>
       </div>
       <div className={cn(innerBlockClass, 'p-4 text-sm leading-6 text-[color:var(--wolfy-text-secondary)]')}>
         <p className={labelClass}>数据说明</p>
@@ -2343,7 +2347,7 @@ const OptionsLabPageContent: React.FC = () => {
         if (ignored) return;
         setComparisonState({
           loading: false,
-          error: '策略对比暂不可用。请稍后重试或调整假设。',
+          error: '结构样例比较暂不可用。请稍后重试或调整假设。',
           comparison: null,
         });
       }, COMPARISON_LOADING_TIMEOUT_MS);
@@ -2371,7 +2375,7 @@ const OptionsLabPageContent: React.FC = () => {
         window.clearTimeout(timeoutId);
         setComparisonState({
           loading: false,
-          error: '策略对比暂不可用。请稍后重试或调整假设。',
+          error: '结构样例比较暂不可用。请稍后重试或调整假设。',
           comparison: null,
         });
       }
@@ -2476,8 +2480,8 @@ const OptionsLabPageContent: React.FC = () => {
   const puts = asArray(state.chain?.puts).length ? asArray(state.chain?.puts) : EMPTY_CONTRACTS;
   const hasChainRows = calls.length > 0 || puts.length > 0;
   const comparisonEmptyMessage = useMemo(() => {
-    if (state.loading) return '正在加载基础数据，稍后将自动计算策略对比。';
-    if (state.error) return '期权链暂不可用，策略对比已暂停。';
+    if (state.loading) return '正在加载基础数据，稍后将自动计算结构样例比较。';
+    if (state.error) return '期权链暂不可用，结构样例比较已暂停。';
     const targetPriceValue = Number(targetPrice);
     const hasTargetPrice = Number.isFinite(targetPriceValue) && targetPriceValue > 0;
     const hasTargetDate = targetDate.trim().length > 0;
@@ -2492,7 +2496,7 @@ const OptionsLabPageContent: React.FC = () => {
     if (state.error) return '期权链暂不可用，情景准备度已暂停。';
     const targetPriceValue = Number(targetPrice);
     if (!state.summary || !state.expirations || !state.chain || !hasChainRows) return '先加载合约链后，再进入情景准备度。';
-    if (!Number.isFinite(targetPriceValue) || targetPriceValue <= 0 || !targetDate.trim()) return '先补齐目标价格与目标日期。';
+    if (!Number.isFinite(targetPriceValue) || targetPriceValue <= 0 || !targetDate.trim()) return '先补齐假设价格与目标日期。';
     return null;
   }, [hasChainRows, state.chain, state.error, state.expirations, state.loading, state.summary, targetDate, targetPrice]);
   const consumerAvailability = useMemo(
@@ -2502,8 +2506,8 @@ const OptionsLabPageContent: React.FC = () => {
   const summaryStripItems = useMemo<SummaryStripItem[]>(() => {
     const topCandidate = firstObservationStrategy(decisionState.decision, comparisonState.comparison);
     const maxLoss = decisionState.decision?.riskReward?.maxLoss;
-    const scenarioMeta = targetDate.trim() ? `目标日 ${targetDate}` : '补齐目标日后可比较策略';
-    const candidateMeta = topCandidate ? '优先复核最大亏损与盈亏平衡' : '当前未形成可判断结构';
+    const scenarioMeta = targetDate.trim() ? `目标日 ${targetDate}` : '补齐目标日后可比较结构样例';
+    const candidateMeta = topCandidate ? `专业结构：${strategyChineseLabel(topCandidate)}` : '当前未形成可判断结构';
     const riskValue = typeof maxLoss === 'number' && Number.isFinite(maxLoss)
       ? `最大亏损 ${money(maxLoss)}`
       : noTradeReasonLabel(decisionState.decision?.optimizer?.noTradeReason);
@@ -2511,12 +2515,12 @@ const OptionsLabPageContent: React.FC = () => {
     return [
       {
         label: '输入情景',
-        value: `${directionSummaryLabel(direction)} · 目标价 ${targetPrice || '--'}`,
+        value: `${directionSummaryLabel(direction)} · 假设价格 ${targetPrice || '--'}`,
         meta: scenarioMeta,
       },
       {
-        label: '首个候选',
-        value: topCandidate ? strategyChineseLabel(topCandidate) : '暂无可判断结构',
+        label: '首个观察结构',
+        value: topCandidate ? '观察结构样例' : '暂无可判断结构',
         meta: candidateMeta,
       },
       {
@@ -2630,7 +2634,7 @@ const OptionsLabPageContent: React.FC = () => {
                 {!state.loading && !state.error && !hasChainRows ? (
                   <div className="mt-4">
                     <TerminalEmptyState title="暂无数据">
-                      保留输入、候选结构与风险边界，等待下一次数据更新。
+                      保留输入、观察结构样例与风险边界，等待下一次数据更新。
                     </TerminalEmptyState>
                   </div>
                 ) : null}

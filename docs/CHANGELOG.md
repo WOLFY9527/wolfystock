@@ -1,3 +1,6 @@
+## 2026-06-07
+- Options Lab visible copy now separates the default observation layer from the professional structure layer: primary strategy comparison and blocked/demo states use `观察结构样例`, `样例顺序`, `假设价格`, `情景上沿`, and `未设上沿，不代表可获利` wording, while option strategy terms remain secondary `专业结构` labels. No options engine, payoff math, ranking, API, broker, or portfolio behavior changed.
+
 ## 2026-06-05
 - Scanner candidate payloads now expose additive `candidateSourceProvenanceFrame` sidecars derived only from existing candidate evidence/readiness/summary/context metadata and SourceProvenanceV1 semantics, without changing scanner ranking, scoring, filtering, selection, persistence, provider runtime, cache, or advice boundaries.
 - Home analysis responses now expose additive `sourceProvenanceFrame` mirrors on the response, report, report meta, and report analysis result, derived only from existing Home evidence/readiness metadata and the SourceProvenanceV1 sidecar without changing provider/cache/LLM/chart/scoring behavior.
