@@ -390,3 +390,128 @@ def test_scanner_run_response_locks_score_explainability_metadata_without_score_
     assert consumer_diagnostics.dataQualityState == "partial"
     assert consumer_diagnostics.freshnessState == "fallback"
     assert consumer_diagnostics.sourceClass == "fallback"
+
+
+def test_scanner_run_response_keeps_mixed_quality_candidates_fail_closed() -> None:
+    def candidate(
+        *,
+        symbol: str,
+        rank: int,
+        freshness: str,
+        source_authority_allowed: bool,
+        score_contribution_allowed: bool,
+        flags: dict[str, bool] | None = None,
+    ) -> dict:
+        score = 90.0 - rank
+        confidence_weight = 1.0 if score_contribution_allowed else 0.35
+        return {
+            "symbol": symbol,
+            "name": f"股票{symbol}",
+            "rank": rank,
+            "score": score,
+            "raw_score": score,
+            "final_score": score,
+            "diagnostics": {
+                "score_explainability": {
+                    "raw_score": score,
+                    "final_score": score,
+                    "score_confidence": confidence_weight,
+                    "evidence_coverage": confidence_weight,
+                    "cap_reason": None if score_contribution_allowed else f"{freshness}_evidence",
+                    "degradation_reason": None if score_contribution_allowed else f"{freshness}_evidence",
+                    "score_grade_allowed": score_contribution_allowed,
+                    "source_confidence": {
+                        "source": "official_feed" if source_authority_allowed else f"{freshness}_candidate",
+                        "sourceType": "official_public" if source_authority_allowed else freshness,
+                        "freshness": freshness,
+                        "confidenceWeight": confidence_weight,
+                        "coverage": confidence_weight,
+                        "sourceAuthorityAllowed": source_authority_allowed,
+                        "scoreContributionAllowed": score_contribution_allowed,
+                        "observationOnly": not score_contribution_allowed,
+                        **(flags or {}),
+                    },
+                }
+            },
+            "consumerDiagnostics": {
+                "status": "available" if score_contribution_allowed else "limited",
+                "scoreGradeAllowed": score_contribution_allowed,
+                "scoreConfidence": confidence_weight,
+                "freshnessState": freshness,
+                "sourceClass": "official" if source_authority_allowed else "limited",
+            },
+        }
+
+    response = ScannerRunDetailResponse(
+        id=5,
+        market="us",
+        profile="us_preopen_v1",
+        status="completed",
+        universe_name="us_liquid",
+        shortlist_size=6,
+        universe_size=6,
+        preselected_size=6,
+        evaluated_size=6,
+        shortlist=[
+            candidate(
+                symbol="OFFICIAL",
+                rank=1,
+                freshness="fresh",
+                source_authority_allowed=True,
+                score_contribution_allowed=True,
+            ),
+            candidate(
+                symbol="FALLB",
+                rank=2,
+                freshness="fallback",
+                source_authority_allowed=False,
+                score_contribution_allowed=False,
+                flags={"isFallback": True},
+            ),
+            candidate(
+                symbol="STALE",
+                rank=3,
+                freshness="stale",
+                source_authority_allowed=False,
+                score_contribution_allowed=False,
+                flags={"isStale": True},
+            ),
+            candidate(
+                symbol="PARTL",
+                rank=4,
+                freshness="partial",
+                source_authority_allowed=False,
+                score_contribution_allowed=False,
+                flags={"isPartial": True},
+            ),
+            candidate(
+                symbol="SYNTH",
+                rank=5,
+                freshness="synthetic",
+                source_authority_allowed=False,
+                score_contribution_allowed=False,
+                flags={"isSynthetic": True},
+            ),
+            candidate(
+                symbol="UNAVL",
+                rank=6,
+                freshness="unavailable",
+                source_authority_allowed=False,
+                score_contribution_allowed=False,
+                flags={"isUnavailable": True},
+            ),
+        ],
+    )
+
+    serialized = response.model_dump()
+    by_symbol = {item["symbol"]: item for item in serialized["shortlist"]}
+    official_confidence = by_symbol["OFFICIAL"]["diagnostics"]["score_explainability"]["source_confidence"]
+    assert official_confidence["sourceAuthorityAllowed"] is True
+    assert official_confidence["scoreContributionAllowed"] is True
+
+    for symbol in ("FALLB", "STALE", "PARTL", "SYNTH", "UNAVL"):
+        source_confidence = by_symbol[symbol]["diagnostics"]["score_explainability"]["source_confidence"]
+        assert source_confidence["sourceAuthorityAllowed"] is False
+        assert source_confidence["scoreContributionAllowed"] is False
+        assert source_confidence["observationOnly"] is True
+        assert by_symbol[symbol]["consumerDiagnostics"]["scoreGradeAllowed"] is False

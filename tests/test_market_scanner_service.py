@@ -940,6 +940,150 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertIn("candidateSourceProvenanceFrame", detail["shortlist"][0])
         self.assertEqual(detail["shortlist"][0]["candidateSourceProvenanceFrame"]["contractVersion"], "source_provenance_v1")
 
+    def test_get_run_detail_keeps_mixed_quality_shortlist_authority_fail_closed(self) -> None:
+        def candidate_with_source_state(
+            *,
+            symbol: str,
+            rank: int,
+            score: float,
+            freshness: str,
+            source_authority_allowed: bool,
+            score_contribution_allowed: bool,
+            source_type: str,
+            flags: dict[str, bool] | None = None,
+        ) -> dict:
+            payload = self._candidate_payload(symbol, f"样本{symbol}", rank, score, "2026-06-02")
+            confidence_weight = 1.0 if score_contribution_allowed else 0.35
+            payload["raw_score"] = score
+            payload["final_score"] = score
+            payload["_component_scores"] = {"trend": 18.0, "liquidity": 16.0}
+            payload["_diagnostics"].update(
+                {
+                    "history": {
+                        "source": "official_feed" if source_authority_allowed else source_type,
+                        "latest_trade_date": "2026-06-02",
+                        "rows": 120,
+                        "stale": freshness == "stale",
+                    },
+                    "quote_context": {
+                        "available": freshness != "unavailable",
+                        "source": "official_feed" if source_authority_allowed else source_type,
+                        "sourceType": source_type,
+                    },
+                    "score_explainability": {
+                        "raw_score": score,
+                        "final_score": score,
+                        "score_confidence": confidence_weight,
+                        "evidence_coverage": confidence_weight,
+                        "cap_reason": None if score_contribution_allowed else f"{freshness}_evidence",
+                        "degradation_reason": None if score_contribution_allowed else f"{freshness}_evidence",
+                        "score_grade_allowed": score_contribution_allowed,
+                        "source_confidence": {
+                            "source": "official_feed" if source_authority_allowed else source_type,
+                            "sourceLabel": "Official feed" if source_authority_allowed else "Degraded observation",
+                            "sourceType": source_type,
+                            "freshness": freshness,
+                            "confidenceWeight": confidence_weight,
+                            "coverage": confidence_weight,
+                            "sourceAuthorityAllowed": source_authority_allowed,
+                            "scoreContributionAllowed": score_contribution_allowed,
+                            "observationOnly": not score_contribution_allowed,
+                            **(flags or {}),
+                        },
+                    },
+                }
+            )
+            return payload
+
+        detail = self._record_context_run(
+            market="us",
+            profile="us_preopen_v1",
+            diagnostics={},
+            shortlist=[
+                candidate_with_source_state(
+                    symbol="OFFICIAL",
+                    rank=1,
+                    score=88.0,
+                    freshness="fresh",
+                    source_authority_allowed=True,
+                    score_contribution_allowed=True,
+                    source_type="official_public",
+                ),
+                candidate_with_source_state(
+                    symbol="FALLB",
+                    rank=2,
+                    score=64.0,
+                    freshness="fallback",
+                    source_authority_allowed=False,
+                    score_contribution_allowed=False,
+                    source_type="fallback_static",
+                    flags={"isFallback": True},
+                ),
+                candidate_with_source_state(
+                    symbol="STALE",
+                    rank=3,
+                    score=62.0,
+                    freshness="stale",
+                    source_authority_allowed=False,
+                    score_contribution_allowed=False,
+                    source_type="official_public",
+                    flags={"isStale": True},
+                ),
+                candidate_with_source_state(
+                    symbol="PARTL",
+                    rank=4,
+                    score=60.0,
+                    freshness="partial",
+                    source_authority_allowed=False,
+                    score_contribution_allowed=False,
+                    source_type="official_public",
+                    flags={"isPartial": True},
+                ),
+                candidate_with_source_state(
+                    symbol="SYNTH",
+                    rank=5,
+                    score=58.0,
+                    freshness="synthetic",
+                    source_authority_allowed=False,
+                    score_contribution_allowed=False,
+                    source_type="synthetic",
+                    flags={"isSynthetic": True},
+                ),
+                candidate_with_source_state(
+                    symbol="UNAVL",
+                    rank=6,
+                    score=56.0,
+                    freshness="unavailable",
+                    source_authority_allowed=False,
+                    score_contribution_allowed=False,
+                    source_type="unavailable",
+                    flags={"isUnavailable": True},
+                ),
+            ],
+        )
+
+        by_symbol = {item["symbol"]: item for item in detail["shortlist"]}
+        official_confidence = by_symbol["OFFICIAL"]["diagnostics"]["score_explainability"]["source_confidence"]
+        self.assertTrue(official_confidence["sourceAuthorityAllowed"])
+        self.assertTrue(official_confidence["scoreContributionAllowed"])
+
+        for symbol in ("FALLB", "STALE", "PARTL", "SYNTH", "UNAVL"):
+            with self.subTest(symbol=symbol):
+                item = by_symbol[symbol]
+                source_confidence = item["diagnostics"]["score_explainability"]["source_confidence"]
+                self.assertFalse(source_confidence["sourceAuthorityAllowed"])
+                self.assertFalse(source_confidence["scoreContributionAllowed"])
+                self.assertTrue(source_confidence["observationOnly"])
+                self.assertFalse(item["consumerDiagnostics"]["scoreGradeAllowed"])
+                self.assertIn(
+                    item["candidateResearchSummaryFrame"]["scoreBand"],
+                    {"limited", "blocked"},
+                )
+                self.assertEqual(
+                    item["candidateSourceProvenanceFrame"]["scoreContributionAllowedCount"],
+                    0,
+                )
+
     def test_get_run_detail_adds_supportive_scanner_context_frame_for_us_runs(self) -> None:
         detail = self._record_context_run(
             market="us",

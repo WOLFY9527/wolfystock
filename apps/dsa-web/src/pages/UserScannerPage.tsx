@@ -1391,6 +1391,17 @@ function fallbackDiagnosticFromCandidate(candidate: ScannerCandidate): ScannerCa
   };
 }
 
+function officialDiagnosticHandoffCandidates(
+  candidates: ScannerCandidateDiagnostic[],
+  shortlistCandidateBySymbol: Map<string | null, ScannerCandidate>,
+): ScannerCandidate[] {
+  return candidates.reduce<ScannerCandidate[]>((items, candidate) => {
+    if (!isOfficialSelected(candidate)) return items;
+    items.push(shortlistCandidateBySymbol.get(normalizeCandidateSymbol(candidate.symbol)) || diagnosticToCandidate(candidate));
+    return items;
+  }, []);
+}
+
 function formatWorkbenchWatchSummary(
   candidate: ScannerCandidate,
   language: 'zh' | 'en',
@@ -2206,6 +2217,18 @@ const UserScannerPage: React.FC = () => {
     () => sortDiagnosticsForDecision(diagnosticCandidates, previewThreshold).slice(0, 5),
     [diagnosticCandidates, previewThreshold],
   );
+  const previewHandoffCandidates = useMemo(
+    () => officialDiagnosticHandoffCandidates(previewSelectedDiagnostics, shortlistCandidateBySymbol),
+    [previewSelectedDiagnostics, shortlistCandidateBySymbol],
+  );
+  const topFiveHandoffCandidates = useMemo(
+    () => officialDiagnosticHandoffCandidates(topFiveDiagnostics, shortlistCandidateBySymbol),
+    [topFiveDiagnostics, shortlistCandidateBySymbol],
+  );
+  const currentFilterHandoffCandidates = useMemo(
+    () => officialDiagnosticHandoffCandidates(workbenchDiagnostics, shortlistCandidateBySymbol),
+    [shortlistCandidateBySymbol, workbenchDiagnostics],
+  );
   const {
     backtestCounts,
     backtestItems,
@@ -2218,9 +2241,9 @@ const UserScannerPage: React.FC = () => {
     language,
     batchCandidatesBySource: {
       official_selected: sortedCandidates,
-      preview_selected: previewSelectedDiagnostics.map(diagnosticToCandidate),
-      top_5: topFiveDiagnostics.map(diagnosticToCandidate),
-      current_filter: workbenchDiagnostics.map((candidate) => shortlistCandidateBySymbol.get(normalizeCandidateSymbol(candidate.symbol)) || diagnosticToCandidate(candidate)),
+      preview_selected: previewHandoffCandidates,
+      top_5: topFiveHandoffCandidates,
+      current_filter: currentFilterHandoffCandidates,
     },
   });
   const activeDetailBacktestItem = getBacktestItem(activeDetailCandidate?.symbol);
@@ -3291,14 +3314,14 @@ const UserScannerPage: React.FC = () => {
                               <ActionButton
                                 label={language === 'en' ? 'Add preview selected' : '加入预览入选'}
                                 icon={<BookmarkPlus className="h-3.5 w-3.5" />}
-                                onClick={() => void handleBatchTrackCandidates('preview', previewSelectedDiagnostics.map(diagnosticToCandidate))}
-                                disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !previewSelectedDiagnostics.length}
+                                onClick={() => void handleBatchTrackCandidates('preview', previewHandoffCandidates)}
+                                disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !previewHandoffCandidates.length}
                               />
                               <ActionButton
                                 label={language === 'en' ? 'Add filtered' : '加入当前筛选'}
                                 icon={<BookmarkPlus className="h-3.5 w-3.5" />}
-                                onClick={() => void handleBatchTrackCandidates('filtered', workbenchDiagnostics.map((candidate) => shortlistCandidateBySymbol.get(normalizeCandidateSymbol(candidate.symbol)) || diagnosticToCandidate(candidate)))}
-                                disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !workbenchDiagnostics.length}
+                                onClick={() => void handleBatchTrackCandidates('filtered', currentFilterHandoffCandidates)}
+                                disabled={Boolean(pendingBatchWatchlistAction) || watchlistAuthBlocked || !currentFilterHandoffCandidates.length}
                               />
                               <ActionButton
                                 label={language === 'en' ? 'Batch backtest' : '批量回测'}

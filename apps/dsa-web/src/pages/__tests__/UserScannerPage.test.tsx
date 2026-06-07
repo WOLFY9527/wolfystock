@@ -1978,6 +1978,7 @@ describe('UserScannerPage', () => {
     expect(within(row).getAllByText('60/100').length).toBeGreaterThan(0);
     expect(row).not.toHaveTextContent(/provider_timeout|fallback|proxy|stale|source-confidence|sourceConfidence|provider|reasonCode|reasonFamilies/i);
     expect(row).toHaveTextContent(/部分结果使用最近一次可用数据|Some results use the latest available data/);
+    expect(row).not.toHaveTextContent(/已验证|Verified|Signal fresh|fully trusted|authority allowed/i);
 
     fireEvent.click(getActionButton(row, /详情|Detail/i));
     const detail = await screen.findByTestId('scanner-result-detail-WULF');
@@ -1988,6 +1989,7 @@ describe('UserScannerPage', () => {
     const secondary = await within(detail).findByTestId('scanner-result-detail-secondary-WULF');
     fireEvent.click(within(secondary).getByRole('button', { name: /展开.*次要说明|Expand.*Secondary notes|展开/i }));
     expect(within(detail).getByText('仅供观察')).toBeInTheDocument();
+    expect(detail).not.toHaveTextContent(/fully trusted|authority allowed|sourceAuthorityAllowed|scoreContributionAllowed/i);
     expect(within(detail).queryByText(/provider_timeout/i)).not.toBeInTheDocument();
   });
 
@@ -2068,6 +2070,65 @@ describe('UserScannerPage', () => {
     const summary = await screen.findByTestId('scanner-diagnostics-summary');
     fireEvent.click(within(summary).getByRole('button', { name: /淘汰分布|Rejection mix/i }));
     expect(await screen.findByTestId('scanner-rejection-aggregate')).toBeInTheDocument();
+  });
+
+  it('keeps expanded scanner diagnostics free of raw provider and internal keys', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun({
+      diagnostics: {
+        providerDiagnostics: {
+          configuredPrimaryProvider: 'raw_provider_debug',
+          quoteSourceUsed: 'fallback_static',
+          providerWarnings: ['sourceAuthorityAllowed raw_provider_trace'],
+        },
+      },
+      candidates: [
+        {
+          symbol: 'MARA',
+          name: 'MARA Holdings',
+          rank: 2,
+          status: 'rejected',
+          score: 55,
+          provider: 'raw_provider_debug',
+          reason: 'below liquidity threshold',
+          failedRules: ['source_authority_router_rejected', 'below_liquidity_threshold'],
+          missingFields: ['raw_history_field'],
+          metrics: { raw_score_delta: 12 },
+          metadata: {
+            sourceAuthorityAllowed: true,
+            scoreContributionAllowed: true,
+            debugRef: 'scanner:mara:debug',
+          },
+        },
+        {
+          symbol: 'CIFR',
+          name: 'Cipher Mining',
+          rank: 10,
+          status: 'data_failed',
+          score: null,
+          provider: 'raw_provider_debug',
+          reason: 'provider_timeout',
+          failedRules: ['not_enough_history'],
+          missingFields: ['history'],
+          metrics: {},
+        },
+      ],
+    }));
+    renderUserScannerPage();
+
+    const diagnostics = await screen.findByTestId('scanner-diagnostics-disclosure');
+    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*(?:数据说明|Data notes)|Expand.*(?:数据说明|Data notes)/i }));
+    const panel = await screen.findByTestId('scanner-diagnostics-panel');
+    const summary = await screen.findByTestId('scanner-diagnostics-summary');
+    fireEvent.click(within(summary).getByRole('button', { name: /淘汰分布|Rejection mix/i }));
+    const aggregate = await screen.findByTestId('scanner-rejection-aggregate');
+
+    expect(aggregate).toHaveTextContent(/流动性不足|Liquidity weak|历史数据不足|Historical data insufficient|数据不足/);
+    expect(panel).not.toHaveTextContent(
+      /sourceAuthorityAllowed|scoreContributionAllowed|source_authority_router_rejected|raw_provider_debug|fallback_static|provider_timeout|raw_history_field|raw_score_delta|debugRef|scanner:mara:debug/i,
+    );
+    expect(aggregate).not.toHaveTextContent(
+      /sourceAuthorityAllowed|scoreContributionAllowed|source_authority_router_rejected|raw_provider_debug|fallback_static|provider_timeout|raw_history_field|raw_score_delta|debugRef|scanner:mara:debug/i,
+    );
   });
 
   it('keeps Scanner on the table-first path without card/table toggle chrome', async () => {
@@ -2781,7 +2842,7 @@ describe('UserScannerPage', () => {
     expect(within(lab).queryByText('MARA')).not.toBeInTheDocument();
   });
 
-  it('batch backtests preview selected, top five, and current filtered candidate sets', async () => {
+  it('batch backtests preview selected, top five, and current filtered candidate sets without rejected or data-failed rows', async () => {
     getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
     const previewRender = renderUserScannerPage();
 
@@ -2790,7 +2851,7 @@ describe('UserScannerPage', () => {
     const lab = await screen.findByTestId('scanner-backtest-lab');
     fireEvent.click(within(lab).getByRole('button', { name: /回测预览入选|Preview selected/i }));
     await waitFor(() => {
-      expect(runRuleBacktest.mock.calls.map((call) => call[0].code)).toEqual(['WULF', 'MARA', 'RIOT']);
+      expect(runRuleBacktest.mock.calls.map((call) => call[0].code)).toEqual(['WULF']);
     });
 
     previewRender.unmount();
@@ -2802,7 +2863,7 @@ describe('UserScannerPage', () => {
     const topLab = await screen.findByTestId('scanner-backtest-lab');
     fireEvent.click(within(topLab).getByRole('button', { name: /回测前 5 名|Top 5/i }));
     await waitFor(() => {
-      expect(runRuleBacktest.mock.calls.map((call) => call[0].code)).toEqual(['WULF', 'MARA', 'RIOT', 'CIFR', 'HIVE']);
+      expect(runRuleBacktest.mock.calls.map((call) => call[0].code)).toEqual(['WULF']);
     });
 
     topRender.unmount();
@@ -2815,8 +2876,13 @@ describe('UserScannerPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /候选池|Candidate pool/i }));
     fireEvent.click(within(filteredLab).getByRole('button', { name: /回测当前筛选|Filtered/i }));
     await waitFor(() => {
-      expect(runRuleBacktest.mock.calls.map((call) => call[0].code)).toEqual(['WULF', 'MARA', 'RIOT', 'CIFR', 'HIVE']);
+      expect(runRuleBacktest.mock.calls.map((call) => call[0].code)).toEqual(['WULF']);
     });
+
+    runRuleBacktest.mockClear();
+    fireEvent.click(within(screen.getByTestId('scanner-candidate-filters')).getByRole('button', { name: /数据受限|Limited data/i }));
+    expect(within(filteredLab).getByRole('button', { name: /回测当前筛选|Filtered/i })).toBeDisabled();
+    expect(runRuleBacktest).not.toHaveBeenCalled();
   });
 
   it('renders compact failed backtest errors without crashing old scanner responses', async () => {
@@ -3011,7 +3077,7 @@ describe('UserScannerPage', () => {
     expect(screen.queryByTestId('scanner-diagnostics-panel')).not.toBeInTheDocument();
   });
 
-  it('adds official and preview candidates through batch watchlist actions with duplicate accounting', async () => {
+  it('adds official candidates through batch watchlist actions without rejected or data-failed rows', async () => {
     const themedRun = makeCryptoDiagnosticsRun();
     getRun.mockResolvedValue(themedRun);
     listWatchlistItems.mockResolvedValueOnce({
@@ -3029,10 +3095,14 @@ describe('UserScannerPage', () => {
 
     fireEvent.click(within(more).getByRole('button', { name: /加入预览入选|Add preview selected/i }));
     await waitFor(() => {
-      expect(addWatchlistItem).toHaveBeenCalledWith(expect.objectContaining({ symbol: 'MARA', market: 'us' }));
-      expect(addWatchlistItem).toHaveBeenCalledWith(expect.objectContaining({ symbol: 'RIOT', market: 'us' }));
+      expect(screen.getByText(/已加入 0 个 · 已存在 1 个|Added 0 · already existed 1/i)).toBeInTheDocument();
     });
-    expect(await screen.findByText(/已加入 2 个 · 已存在 1 个|Added 2 · already existed 1/i)).toBeInTheDocument();
+    expect(addWatchlistItem).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /候选池|Candidate pool/i }));
+    fireEvent.click(within(screen.getByTestId('scanner-candidate-filters')).getByRole('button', { name: /数据受限|Limited data/i }));
+    expect(within(more).getByRole('button', { name: /加入当前筛选|Add filtered/i })).toBeDisabled();
+    expect(addWatchlistItem).not.toHaveBeenCalled();
   });
 
   it('keeps action buttons from changing row inspector selection', async () => {
