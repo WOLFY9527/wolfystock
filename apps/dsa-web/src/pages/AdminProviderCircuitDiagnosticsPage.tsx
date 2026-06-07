@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Activity, ChevronDown, ChevronRight } from 'lucide-react';
 import {
   adminProviderCircuitsApi,
@@ -953,7 +953,7 @@ function readCircuitQuery(): ProviderCircuitDiagnosticsParams {
 
 const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
   const { canReadProviders } = useProductSurface();
-  const initialQuery = useMemo(() => readCircuitQuery(), []);
+  const [initialQuery] = useState<ProviderCircuitDiagnosticsParams>(() => readCircuitQuery());
   const [data, setData] = useState<ProviderCircuitDiagnosticsBundle | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<ParsedApiError | null>(null);
@@ -981,13 +981,10 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
     };
   }, [canReadProviders, initialQuery]);
 
-  const summary = useMemo(() => buildOperationalSummary(data), [data]);
-  const operationalVerdict = useMemo(
-    () => buildOperationalVerdict(summary, isLoading, Boolean(data), Boolean(error)),
-    [data, error, isLoading, summary],
-  );
-  const summaryMetrics = useMemo(() => buildSummaryMetrics(summary), [summary]);
-  const operatorActions = useMemo(() => buildOperatorActions(data), [data]);
+  const summary = buildOperationalSummary(data);
+  const operationalVerdict = buildOperationalVerdict(summary, isLoading, Boolean(data), Boolean(error));
+  const summaryMetrics = buildSummaryMetrics(summary);
+  const operatorActions = buildOperatorActions(data);
 
   if (!canReadProviders) {
     return null;
