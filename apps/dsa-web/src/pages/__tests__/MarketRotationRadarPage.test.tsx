@@ -771,11 +771,16 @@ describe('MarketRotationRadarPage', () => {
     expect(screen.getByTestId('rotation-radar-freshness')).toHaveTextContent('更新时间');
 
     const guidance = screen.getByTestId('rotation-radar-guidance');
+    const pageHeading = screen.getByRole('heading', { level: 1, name: '主题轮动雷达' });
+    const heroHeading = screen.getByTestId('rotation-radar-hero-title');
     expect(guidance).toHaveTextContent('观察中');
     expect(guidance).toHaveTextContent('AI 应用');
     expect(guidance).toHaveTextContent('当前以相对强弱、成交额扩张、广度和同步性作为观察依据。');
     expect(within(guidance).getAllByText('观察中').length).toBeGreaterThanOrEqual(2);
     expect(guidance.querySelectorAll('[data-terminal-primitive="chip"]').length).toBeGreaterThanOrEqual(3);
+    expect(pageHeading).toHaveClass('text-xl', 'md:text-2xl');
+    expect(heroHeading).toHaveClass('text-lg', 'md:text-xl');
+    expect(heroHeading).not.toHaveClass('text-2xl');
 
     const summaryBand = screen.getByTestId('rotation-radar-summary-band');
     expect(summaryBand).toHaveAttribute('data-terminal-primitive', 'panel');

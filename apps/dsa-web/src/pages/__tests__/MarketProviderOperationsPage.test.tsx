@@ -600,6 +600,14 @@ describe('MarketProviderOperationsPage', () => {
     render(<MarketProviderOperationsPage />);
 
     const overviewStrip = await screen.findByTestId('market-provider-l0-overview-strip');
+    expect(screen.getByTestId('market-provider-section-ops-status')).toHaveClass(
+      '[&_[data-terminal-primitive=section-header]_h2]:text-lg',
+      'md:[&_[data-terminal-primitive=section-header]_h2]:text-xl',
+    );
+    expect(screen.getByTestId('market-provider-section-matrix')).toHaveClass(
+      '[&_[data-terminal-primitive=section-header]_h2]:text-lg',
+      'md:[&_[data-terminal-primitive=section-header]_h2]:text-xl',
+    );
     expect(within(overviewStrip).getByText('信任状态')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('影响范围')).toBeInTheDocument();
     expect(within(overviewStrip).getByText('建议动作')).toBeInTheDocument();

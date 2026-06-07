@@ -101,6 +101,8 @@ const MATRIX_SUMMARY_DEFAULTS = {
   scoreEligibleRows: 0,
   paidDataLikelyRequiredRows: 0,
 };
+const ADMIN_SECTION_HEADING_CLASSNAME =
+  '[&_[data-terminal-primitive=section-header]_p]:text-[12px] [&_[data-terminal-primitive=section-header]_p]:font-medium [&_[data-terminal-primitive=section-header]_h2]:text-lg [&_[data-terminal-primitive=section-header]_h2]:font-semibold md:[&_[data-terminal-primitive=section-header]_h2]:text-xl';
 
 function safeFiniteNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -2179,10 +2181,12 @@ const MarketProviderOperationsPage: React.FC = () => {
         {!isLoading ? (
           <TerminalGrid>
             <AdminOpsSectionHeading
+              dataTestId="market-provider-section-ops-status"
               eyebrow="L1 / 数据源就绪"
               title="数据源就绪与运维状态"
               description="先看当前数据源状态、熔断、缓存和最近异常，再决定是否需要下钻到矩阵或 Admin Logs。"
               action={<TerminalChip variant="neutral">{formatNumber(items.length, 0)} 个数据源快照</TerminalChip>}
+              className={ADMIN_SECTION_HEADING_CLASSNAME}
             />
             {response ? (
               <>
@@ -2191,10 +2195,12 @@ const MarketProviderOperationsPage: React.FC = () => {
               </>
             ) : null}
             <AdminOpsSectionHeading
+              dataTestId="market-provider-section-matrix"
               eyebrow="L2 / 运维矩阵"
               title="来源缺口、配置清单与完整矩阵"
               description="这一组只重排既有来源缺口、配置动作和完整矩阵，不改变评分、fallback、数据源顺序或就绪语义。"
               action={<TerminalChip variant="info">{formatNumber(matrixRows.length, 0)} 条矩阵行</TerminalChip>}
+              className={ADMIN_SECTION_HEADING_CLASSNAME}
             />
             <ProviderOperationsMatrixPanel
               response={matrixResponse}
@@ -2205,10 +2211,12 @@ const MarketProviderOperationsPage: React.FC = () => {
               surfaceFocus={surfaceFocus}
             />
             <AdminOpsSectionHeading
+              dataTestId="market-provider-section-readiness"
               eyebrow="L2 / 本地就绪"
               title="本地数据就绪与样本诊断"
               description="继续把本地行情只读诊断放在独立分组中，明确它解释的是环境/样本覆盖，而不是数据源运行时行为。"
               action={<TerminalChip variant={readiness?.readinessStatus === 'ready' ? 'success' : readiness?.readinessStatus === 'partial' ? 'caution' : 'neutral'}>{readiness ? readinessStatusLabel(readiness.readinessStatus) : '待读取'}</TerminalChip>}
+              className={ADMIN_SECTION_HEADING_CLASSNAME}
             />
             <MarketDataReadinessPanel
               data={readiness}
@@ -2219,10 +2227,12 @@ const MarketProviderOperationsPage: React.FC = () => {
               onSymbolSubmit={submitReadinessSymbols}
             />
             <AdminOpsSectionHeading
+              dataTestId="market-provider-section-cost"
               eyebrow="L2 / 配额与成本"
               title="配额 / 成本线索与下钻"
               description="保留既有失败、缓存、限制代码和 Admin Logs 下钻入口，把付费/配额线索集中到一组里展示。"
               action={<TerminalChip variant="caution">{formatNumber((matrixResponse?.summary?.paidDataLikelyRequiredRows ?? 0) + (response?.limitations.length ?? 0), 0)} 个线索</TerminalChip>}
+              className={ADMIN_SECTION_HEADING_CLASSNAME}
             />
             {response ? (
               <>

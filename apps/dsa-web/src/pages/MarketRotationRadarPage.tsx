@@ -1136,7 +1136,12 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
         <div className="min-w-0">
           <p className="text-[10px] font-medium tracking-[0.24em] text-white/38">轮动状态</p>
           <p className="mt-2 text-base font-semibold leading-6 text-white/90 md:text-lg">{surfaceState}</p>
-          <h2 className="mt-3 break-words text-xl font-semibold leading-7 text-white md:text-2xl">{heroTitle}</h2>
+          <h2
+            data-testid="rotation-radar-hero-title"
+            className="mt-3 break-words text-lg font-semibold leading-7 text-white md:text-xl"
+          >
+            {heroTitle}
+          </h2>
           <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">{heroSummary}</p>
         </div>
         <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
