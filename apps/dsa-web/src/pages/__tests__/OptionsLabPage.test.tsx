@@ -561,11 +561,18 @@ describe('OptionsLabPage', () => {
     });
     expect(screen.getByTestId('options-lab-research-readiness-strip')).toHaveTextContent('研究就绪度');
     expect(screen.getByTestId('options-lab-research-readiness-strip')).toHaveTextContent(/研究结论受限|仅观察|等待证据更新/);
+    const inputRegion = screen.getByTestId('options-lab-input-region');
+    expect(inputRegion).toHaveTextContent('情景参数');
+    expect(inputRegion).toHaveTextContent('这里仅记录研究输入，不直接形成交易或下单结论');
     const summaryStrip = screen.getByTestId('options-lab-summary-strip');
     expect(summaryStrip).toHaveTextContent('输入情景');
     expect(summaryStrip).toHaveTextContent('首个观察结构');
     expect(summaryStrip).toHaveTextContent('专业结构：牛市看涨价差');
     expect(summaryStrip).toHaveTextContent('风险边界');
+    expect(inputRegion).toContainElement(summaryStrip);
+    const outputRegion = screen.getByTestId('options-lab-output-region');
+    expect(outputRegion).toHaveTextContent('分析结果');
+    expect(outputRegion).toHaveTextContent('先看结构与风险，再下钻图形和明细');
     expect(screen.getByTestId('options-lab-bento-grid')).toHaveClass('mt-5', 'grid', 'gap-6');
     ['期权情景输入', '观察结构样例', '收益边界与 IV 快照', '情景判断', '风险边界', '数据注记', 'Call / Put 链', '流动性与下一步'].forEach((label) => {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
@@ -602,6 +609,7 @@ describe('OptionsLabPage', () => {
     expect(within(section).getByTestId('options-lab-primary-strategy-row')).toHaveTextContent('样例顺序 #1');
     expect(within(section).getByTestId('options-lab-primary-strategy-row')).toHaveTextContent('观察结构样例 #1');
     expect(within(section).getByTestId('options-lab-primary-strategy-row')).toHaveTextContent('未达判断等级');
+    expect(within(section).getByTestId('options-lab-strategy-grid')).toHaveClass('2xl:grid-cols-2');
     expect(within(section).queryByText('流动性提示')).not.toBeInTheDocument();
     expect(within(section).queryByText('波动率 / 时间价值提示')).not.toBeInTheDocument();
     expect(within(section).getByText('先把样例结构作为风险剖面阅读，再复核最大亏损、盈亏平衡与流动性边界。')).toBeInTheDocument();

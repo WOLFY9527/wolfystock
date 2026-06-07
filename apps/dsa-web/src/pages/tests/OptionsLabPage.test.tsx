@@ -14,7 +14,11 @@ describe('OptionsLabPage research-trust copy sentinels', () => {
     expect(source).toContain('不连接经纪商');
     expect(source).toContain('不改动投资组合');
     expect(source).toContain('options-lab-consumer-availability');
+    expect(source).toContain('options-lab-input-region');
+    expect(source).toContain('options-lab-output-region');
     expect(source).toContain('观察结构样例');
+    expect(source).toContain('情景参数');
+    expect(source).toContain('分析结果');
     expect(source).toContain('首个观察结构');
     expect(source).toContain('样例顺序 #');
     expect(source).toContain('情景上沿');
