@@ -1563,6 +1563,63 @@ describe('UserScannerPage', () => {
     expect(band).toHaveTextContent('继续观察淘汰分布');
   });
 
+  it('uses a retry CTA with bounded no-candidate guidance while keeping the same run parameters', async () => {
+    const noCandidateRun = makeCryptoDiagnosticsRun({
+      shortlist: [],
+      selected: [],
+      summary: {
+        universeCount: 11,
+        submittedCount: 11,
+        evaluatedCount: 3,
+        selectedCount: 0,
+        rejectedCount: 3,
+        dataFailedCount: 0,
+        skippedCount: 0,
+        errorCount: 0,
+        limitedByResultCap: false,
+      },
+      candidates: [
+        {
+          symbol: 'MARA',
+          name: 'MARA Holdings',
+          rank: 1,
+          status: 'rejected',
+          score: 55,
+          provider: 'alpaca',
+          reason: 'below liquidity threshold',
+          failedRules: ['below_liquidity_threshold'],
+          missingFields: [],
+          metrics: {},
+        },
+      ],
+    });
+    getRun.mockResolvedValue(noCandidateRun);
+    runScan.mockResolvedValueOnce(noCandidateRun);
+
+    renderUserScannerPage();
+
+    const band = await screen.findByTestId('scanner-conclusion-band');
+    const runButton = await screen.findByRole('button', { name: '重新扫描' });
+    expect(runButton).toBeEnabled();
+    expect(runButton).toHaveClass('bg-[var(--wolfy-surface-input)]');
+    expect(runButton).not.toHaveClass('bg-[var(--wolfy-accent)]');
+    expect(band).toHaveTextContent('本次无可用候选，仅供观察。');
+    expect(band).toHaveTextContent('当前无可用候选，先查看淘汰分布或历史记录，再决定是否重新扫描。');
+    expect(band).not.toHaveTextContent('先使用候选行作为主证据');
+
+    fireEvent.click(runButton);
+
+    await waitFor(() => {
+      expect(runScan).toHaveBeenCalledWith({
+        market: 'cn',
+        profile: 'cn_preopen_v1',
+        shortlistSize: 5,
+        universeLimit: 300,
+        detailLimit: 60,
+      });
+    });
+  });
+
   it('renders a scanner conclusion band when evidence is insufficient', async () => {
     getRun.mockResolvedValue(makeCryptoDiagnosticsRun({
       status: 'failed',
@@ -1603,6 +1660,51 @@ describe('UserScannerPage', () => {
       expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent('候选 0');
       expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent('补齐行情或历史证据');
     });
+  });
+
+  it('uses a retry CTA with bounded insufficient-evidence guidance', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun({
+      status: 'failed',
+      failureReason: 'not_enough_history',
+      shortlist: [],
+      selected: [],
+      summary: {
+        universeCount: 11,
+        submittedCount: 11,
+        evaluatedCount: 2,
+        selectedCount: 0,
+        rejectedCount: 0,
+        dataFailedCount: 2,
+        skippedCount: 0,
+        errorCount: 0,
+        limitedByResultCap: false,
+      },
+      candidates: [
+        {
+          symbol: 'CIFR',
+          name: 'Cipher Mining',
+          rank: 1,
+          status: 'data_failed',
+          score: null,
+          provider: null,
+          reason: 'missing price history',
+          failedRules: ['not_enough_history'],
+          missingFields: ['history'],
+          metrics: {},
+        },
+      ],
+    }));
+
+    renderUserScannerPage();
+
+    const band = await screen.findByTestId('scanner-conclusion-band');
+    const runButton = await screen.findByRole('button', { name: '重新扫描' });
+    expect(runButton).toBeEnabled();
+    expect(runButton).toHaveClass('bg-[var(--wolfy-surface-input)]');
+    expect(runButton).not.toHaveClass('bg-[var(--wolfy-accent)]');
+    expect(band).toHaveTextContent('数据不足，评分已暂停。');
+    expect(band).toHaveTextContent('当前证据不足，重新扫描仅刷新候选观察，不代表可用候选。');
+    expect(band).not.toHaveTextContent('先使用候选行作为主证据');
   });
 
   it('replaces actiony scanner labels with observation and risk-boundary copy', async () => {

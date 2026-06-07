@@ -2790,6 +2790,12 @@ const UserScannerPage: React.FC = () => {
     () => buildScannerConclusion(runDetail, language),
     [language, runDetail],
   );
+  const isRetryScanState = scannerConclusion.state === 'no-candidate' || scannerConclusion.state === 'insufficient';
+  const scannerRunButtonLabel = isRunning
+    ? t('scanner.running')
+    : language === 'en'
+      ? (isRetryScanState ? 'Run again' : t('scanner.run'))
+      : (isRetryScanState ? '重新扫描' : '启动扫描');
   const heroLatestLabel = `${language === 'en' ? 'Latest' : '最近'} ${generatedAt ? formatTimestamp(generatedAt, language) : '--'}`;
   const scannerStatusItems = [
     {
@@ -2941,11 +2947,13 @@ const UserScannerPage: React.FC = () => {
                         disabled={runDisabled}
                         aria-busy={isRunning}
                         data-testid="scanner-run-button"
-                        className="group col-span-1 h-12 w-full px-3 py-2 text-sm font-bold active:scale-95 disabled:pointer-events-none sm:col-span-2 md:h-8 md:py-1 xl:col-span-1 xl:min-w-[132px]"
-                        variant="primary"
+                        className={`group col-span-1 h-12 w-full px-3 py-2 text-sm font-bold active:scale-95 disabled:pointer-events-none sm:col-span-2 md:h-8 md:py-1 xl:col-span-1 xl:min-w-[132px] ${
+                          isRetryScanState ? 'shadow-none text-[color:var(--wolfy-text-secondary)]' : ''
+                        }`}
+                        variant={isRetryScanState ? 'secondary' : 'primary'}
                       >
-                        <Play className="h-4 w-4 group-hover:animate-pulse" />
-                        <span>{isRunning ? t('scanner.running') : (language === 'zh' ? '启动扫描' : t('scanner.run'))}</span>
+                        <Play className={`h-4 w-4 ${isRetryScanState ? '' : 'group-hover:animate-pulse'}`} />
+                        <span>{scannerRunButtonLabel}</span>
                       </TerminalButton>
                     </div>
                     {scanScope !== 'default' ? (

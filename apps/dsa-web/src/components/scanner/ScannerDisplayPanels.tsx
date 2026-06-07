@@ -471,6 +471,17 @@ export function ScannerConclusionBand({
         ? 'caution'
         : 'neutral';
   const trustNotice = consumerTrustNoticeFromBuckets(model.trustSummary.buckets, language);
+  const primaryCue = model.state === 'top-candidate'
+    ? (language === 'en' ? 'Review the ranked table first, then inspect the selected candidate rail.' : '先看排名主表，再查看右侧当前候选。')
+    : model.state === 'waiting'
+      ? (language === 'en' ? 'Choose the market scope, then run a scan or open history.' : '先确认市场范围，再启动扫描或打开历史记录。')
+      : model.state === 'insufficient'
+        ? (language === 'en'
+          ? 'Scoring is paused because evidence is insufficient. Running again only refreshes observation candidates and does not confirm a usable result.'
+          : '数据不足，评分已暂停。当前证据不足，重新扫描仅刷新候选观察，不代表可用候选。')
+        : (language === 'en'
+          ? 'This run has no usable candidate and remains observation-only. Check the rejection mix or history before deciding whether to run again.'
+          : '本次无可用候选，仅供观察。当前无可用候选，先查看淘汰分布或历史记录，再决定是否重新扫描。');
 
   return (
     <TerminalPanel
@@ -512,11 +523,7 @@ export function ScannerConclusionBand({
             {language === 'en' ? 'Primary cue' : '当前提示'}
           </p>
           <p className="mt-1 text-sm leading-relaxed text-white/72">
-            {model.state === 'top-candidate'
-              ? (language === 'en' ? 'Review the ranked table first, then inspect the selected candidate rail.' : '先看排名主表，再查看右侧当前候选。')
-              : model.state === 'waiting'
-                ? (language === 'en' ? 'Choose the market scope, then run a scan or open history.' : '先确认市场范围，再启动扫描或打开历史记录。')
-                : (language === 'en' ? 'Use the ranked rows as evidence and keep diagnostics collapsed until needed.' : '先使用候选行作为主证据，只有需要时再展开数据说明。')}
+            {primaryCue}
           </p>
         </div>
         {trustNotice ? (
