@@ -98,7 +98,7 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         self.assertTrue(payload["source"])
         self.assertTrue(payload["sourceLabel"])
         self.assertTrue(payload["updatedAt"])
-        self.assertIn(payload["freshness"], {"live", "delayed", "cached", "stale", "fallback", "mock", "error"})
+        self.assertIn(payload["freshness"], {"live", "delayed", "cached", "stale", "partial", "fallback", "mock", "error"})
         self.assertIn("isFallback", payload)
         self.assertIn("isStale", payload)
         self.assertTrue(payload["items"])
@@ -126,6 +126,7 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         self.assertEqual(payload["freshness"], "fallback")
         self.assertTrue(payload["fallbackUsed"])
         self.assertTrue(payload["isFallback"])
+        self.assertFalse(payload["isPartial"])
         self.assertTrue(payload["items"])
         self.assertEqual(payload["items"][0]["freshness"], "fallback")
         self.assertTrue(payload["items"][0]["isFallback"])
@@ -166,7 +167,11 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
             payload = service.get_cn_indices()
 
         self.assertEqual(payload["source"], "mixed")
+        self.assertEqual(payload["freshness"], "partial")
+        self.assertNotEqual(payload["freshness"], "live")
+        self.assertTrue(payload["fallbackUsed"])
         self.assertFalse(payload["isFallback"])
+        self.assertTrue(payload["isPartial"])
         live_item = next(item for item in payload["items"] if item["symbol"] == "000001.SH")
         fallback_item = next(item for item in payload["items"] if item["symbol"] == "399001.SZ")
         self.assertEqual(live_item["source"], "sina")
@@ -275,8 +280,12 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
 
         self.assertEqual(payload["source"], "mixed")
         self.assertEqual(payload["sourceLabel"], "多来源")
+        self.assertEqual(payload["freshness"], "partial")
+        self.assertNotEqual(payload["freshness"], "live")
         self.assertTrue(payload["fallbackUsed"])
+        self.assertEqual(payload["warning"], "备用示例数据，不代表当前行情")
         self.assertFalse(payload["isFallback"])
+        self.assertTrue(payload["isPartial"])
         self.assertEqual(payload["providerHealth"]["provider"], "mixed")
         self.assertEqual(payload["providerHealth"]["status"], "partial")
         live_item = next(item for item in payload["items"] if item["symbol"] == "000001.SH")
@@ -286,6 +295,34 @@ class MarketCnIndicesApiTestCase(unittest.TestCase):
         self.assertFalse(live_item["isFallback"])
         self.assertEqual(fallback_item["source"], "fallback")
         self.assertTrue(fallback_item["isFallback"])
+
+    def test_cn_indices_full_sina_panel_stays_non_fallback_without_warnings(self) -> None:
+        service = MarketOverviewService()
+        now = _fresh_sina_as_of()
+        quotes = {
+            str(item["symbol"]): {
+                "name": item["name"],
+                "symbol": str(item["symbol"]),
+                "value": item["value"],
+                "change": item["change"],
+                "changePercent": item["changePercent"],
+                "sparkline": item["sparkline"],
+                "asOf": now,
+            }
+            for item in service._fallback_cn_indices_snapshot()["items"]
+        }
+
+        with patch.object(service, "_fetch_sina_cn_index_quotes", return_value=quotes):
+            payload = service.get_cn_indices()
+
+        self.assertEqual(payload["source"], "sina")
+        self.assertIn(payload["freshness"], {"live", "cached", "delayed"})
+        self.assertFalse(payload["fallbackUsed"])
+        self.assertFalse(payload["isFallback"])
+        self.assertFalse(payload["isPartial"])
+        self.assertIsNone(payload["warning"])
+        self.assertTrue(all(item["source"] == "sina" for item in payload["items"]))
+        self.assertTrue(all(not item["isFallback"] for item in payload["items"]))
 
     def test_cn_indices_adds_observation_only_cn_provider_health_metadata(self) -> None:
         service = MarketOverviewService()

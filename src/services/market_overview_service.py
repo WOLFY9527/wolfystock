@@ -5058,6 +5058,15 @@ class MarketOverviewService:
         as_of = payload.get("asOf") or payload.get("last_update") or payload.get("last_refresh_at") or updated_at
         freshness = get_freshness_status(as_of, category, source, is_fallback, source_type=payload.get("sourceType") or "")
         preserved_freshness = self._preserved_freshness_meta(payload)
+        if not preserved_freshness and payload.get("isPartial"):
+            preserved_freshness = {
+                "freshness": payload.get("freshness") or "partial",
+                "isFallback": bool(payload.get("isFallback")),
+                "isStale": bool(payload.get("isStale")),
+                "isPartial": True,
+                "isUnavailable": bool(payload.get("isUnavailable")),
+                "warning": payload.get("warning"),
+            }
         if preserved_freshness:
             freshness = self._apply_preserved_freshness(freshness, preserved_freshness)
         raw_error = payload.get("refreshError") or payload.get("lastError") or payload.get("error")
@@ -5947,16 +5956,21 @@ class MarketOverviewService:
             return fallback
 
         updated_at = _now_iso()
-        source = "sina" if live_count == len(merged_items) else "mixed"
-        return {
+        is_partial = live_count != len(merged_items)
+        source = "sina" if not is_partial else "mixed"
+        payload = {
             "source": source,
             "sourceLabel": self._source_label(source),
             "updatedAt": updated_at,
             "asOf": max((str(item.get("asOf") or "") for item in merged_items), default=updated_at) or updated_at,
             "items": merged_items,
-            "fallbackUsed": live_count != len(merged_items),
-            "warning": FALLBACK_WARNING if live_count != len(merged_items) else None,
+            "fallbackUsed": is_partial,
+            "warning": FALLBACK_WARNING if is_partial else None,
         }
+        if is_partial:
+            payload["freshness"] = "partial"
+            payload["isPartial"] = True
+        return payload
 
     def _fetch_sina_cn_index_quotes(self) -> Dict[str, Dict[str, Any]]:
         rows = fetch_sina_cn_index_rows(sorted(set(self.CN_SINA_SYMBOLS.values())))
