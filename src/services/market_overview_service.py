@@ -806,6 +806,7 @@ class MarketOverviewService:
     YFINANCE_PROXY_AGGREGATE_BUDGET_SECONDS = 1.8
     OFFICIAL_MACRO_AGGREGATE_BUDGET_SECONDS = 1.8
     OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS = 0.9
+    OFFICIAL_MACRO_TREASURY_FALLBACK_TIMEOUT_CAP_SECONDS = 0.25
     OFFICIAL_MACRO_CRITICAL_FRED_TIMEOUT_FLOOR_SECONDS = 0.2
     OFFICIAL_MACRO_MICRO_CACHE_TTL_SECONDS = 15.0
     SENTIMENT_AGGREGATE_BUDGET_SECONDS = 1.8
@@ -3342,6 +3343,8 @@ class MarketOverviewService:
 
     def _align_official_macro_runtime_payload(self, cache_key: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         if cache_key not in {"macro", "rates", "volatility"}:
+            return payload
+        if self._is_fallback_only_market_snapshot(payload):
             return payload
         if not isinstance(payload.get("items"), list):
             return payload
@@ -6809,6 +6812,10 @@ class MarketOverviewService:
             if budget_seconds is None
             else budget_seconds
         )
+        treasury_series_ids = {"DGS2", "DGS10", "DGS30"}
+        initial_missing_treasury_series_ids = {
+            series_id for series_id in treasury_series_ids if series_id not in points
+        }
         attempted_fred_series: set[str] = set()
         fred_refresh_disabled_reason: str | None = None
         fred_refresh_disabled_details: Dict[str, Any] | None = None
@@ -6818,13 +6825,6 @@ class MarketOverviewService:
             return min(
                 float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
                 float(self.OFFICIAL_MACRO_CRITICAL_FRED_TIMEOUT_FLOOR_SECONDS),
-            )
-
-        def pending_critical_fred_count() -> int:
-            return sum(
-                1
-                for critical_series_id in self.OFFICIAL_MACRO_CRITICAL_FRED_SERIES_IDS
-                if critical_series_id not in points and critical_series_id not in attempted_fred_series
             )
 
         def record_provider_attempt(
@@ -6865,6 +6865,9 @@ class MarketOverviewService:
                     details,
                     series_id=series_id,
                 )
+
+        def treasury_failure_can_be_primary(series_id: str) -> bool:
+            return series_id not in points and series_id not in diagnostics
 
         def fetch_fred_series(series_id: str, *, timeout_cap: float | None = None) -> None:
             nonlocal fred_refresh_disabled_reason, fred_refresh_disabled_details
@@ -6987,168 +6990,6 @@ class MarketOverviewService:
         if "VIXCLS" not in points:
             fetch_fred_series("VIXCLS")
 
-        treasury_series_ids = {"DGS2", "DGS10", "DGS30"}
-        missing_treasury_series_ids = {series_id for series_id in treasury_series_ids if series_id not in points}
-        if missing_treasury_series_ids:
-            treasury_timeout_cap = self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS
-            if critical_fred_series_ids & missing_treasury_series_ids:
-                remaining_budget = self._deadline_remaining(deadline)
-                fallback_reserve = critical_fred_timeout_floor() * pending_critical_fred_count()
-                if fallback_reserve > 0 and remaining_budget > fallback_reserve:
-                    treasury_timeout_cap = min(
-                        float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
-                        max(0.001, remaining_budget - fallback_reserve),
-                    )
-                else:
-                    treasury_timeout_cap = min(
-                        float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
-                        remaining_budget / 2.0,
-                    )
-            elif missing_treasury_series_ids:
-                treasury_timeout_cap = min(
-                    float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
-                    self._deadline_remaining(deadline),
-                )
-            timeout = self._deadline_timeout(deadline, treasury_timeout_cap)
-        else:
-            timeout = None
-        if timeout is not None:
-            treasury_error_reason: str | None = None
-            treasury_error_details: Dict[str, Any] | None = None
-            try:
-                treasury_points = fetch_treasury_daily_rate_observation_points(limit=2, timeout=timeout)
-            except Exception as exc:
-                treasury_points = {}
-                treasury_error_reason = self._official_macro_exception_reason(exc)
-                treasury_error_details = self._official_macro_failure_details(
-                    "DGS10",
-                    treasury_error_reason,
-                    provider_name="treasury",
-                    source_id="treasury:daily_treasury_yield_curve",
-                    attempted_at=_now_iso(),
-                    timeout_seconds=timeout,
-                    exception=exc,
-                    transport_details=getattr(exc, "diagnostics", None),
-                )
-            self._store_official_macro_points(treasury_points, fetched_at)
-            for series_id in treasury_series_ids:
-                series_points = treasury_points.get(series_id, [])
-                if series_points:
-                    freshness_reason = self._official_macro_row_failure_reason(series_id, series_points)
-                    if freshness_reason is None:
-                        points[series_id] = list(series_points)
-                        diagnostics.pop(series_id, None)
-                        diagnostic_details.pop(series_id, None)
-                    else:
-                        record_provider_attempt(
-                            series_id,
-                            freshness_reason,
-                            provider_name="treasury",
-                            source_id=series_points[0].source_id if series_points else "treasury:daily_treasury_yield_curve",
-                            attempted_at=_now_iso(),
-                            timeout_seconds=timeout,
-                            freshness_details=self._official_macro_freshness_details(series_id, series_points),
-                        )
-                        self._record_official_macro_diagnostic(
-                            diagnostics,
-                            series_id,
-                            freshness_reason,
-                            diagnostic_details=diagnostic_details,
-                            details=self._official_macro_failure_details(
-                                series_id,
-                                freshness_reason,
-                                provider_name="treasury",
-                                source_id=series_points[0].source_id if series_points else "treasury:daily_treasury_yield_curve",
-                                attempted_at=_now_iso(),
-                                freshness_details=self._official_macro_freshness_details(series_id, series_points),
-                            ),
-                        )
-                elif series_id in treasury_points:
-                    record_provider_attempt(
-                        series_id,
-                        "empty_response",
-                        provider_name="treasury",
-                        source_id="treasury:daily_treasury_yield_curve",
-                        attempted_at=_now_iso(),
-                        timeout_seconds=timeout,
-                    )
-                    self._record_official_macro_diagnostic(
-                        diagnostics,
-                        series_id,
-                        "empty_response",
-                        diagnostic_details=diagnostic_details,
-                        details=self._official_macro_failure_details(
-                            series_id,
-                            "empty_response",
-                            provider_name="treasury",
-                            source_id="treasury:daily_treasury_yield_curve",
-                            attempted_at=_now_iso(),
-                            timeout_seconds=timeout,
-                        ),
-                    )
-                elif treasury_error_reason is not None:
-                    record_provider_attempt(
-                        series_id,
-                        treasury_error_reason,
-                        provider_name="treasury",
-                        source_id="treasury:daily_treasury_yield_curve",
-                        attempted_at=_now_iso(),
-                        timeout_seconds=timeout,
-                        transport_details=treasury_error_details,
-                    )
-                    self._record_official_macro_diagnostic(
-                        diagnostics,
-                        series_id,
-                        treasury_error_reason,
-                        diagnostic_details=diagnostic_details,
-                        details=self._official_macro_failure_details(
-                            series_id,
-                            treasury_error_reason,
-                            provider_name="treasury",
-                            source_id="treasury:daily_treasury_yield_curve",
-                            attempted_at=_now_iso(),
-                            timeout_seconds=timeout,
-                            transport_details=treasury_error_details,
-                        ),
-                    )
-                else:
-                    record_provider_attempt(
-                        series_id,
-                        "missing_series",
-                        provider_name="treasury",
-                        source_id="treasury:daily_treasury_yield_curve",
-                        attempted_at=_now_iso(),
-                        timeout_seconds=timeout,
-                    )
-                    self._record_official_macro_diagnostic(
-                        diagnostics,
-                        series_id,
-                        "missing_series",
-                        diagnostic_details=diagnostic_details,
-                        details=self._official_macro_failure_details(
-                            series_id,
-                            "missing_series",
-                            provider_name="treasury",
-                            source_id="treasury:daily_treasury_yield_curve",
-                            attempted_at=_now_iso(),
-                            timeout_seconds=timeout,
-                        ),
-                    )
-        else:
-            for series_id in missing_treasury_series_ids:
-                self._record_official_macro_diagnostic(
-                    diagnostics,
-                    series_id,
-                    "budget_exhausted",
-                    diagnostic_details=diagnostic_details,
-                    details=self._official_macro_failure_details(
-                        series_id,
-                        "budget_exhausted",
-                        provider_name="treasury",
-                        source_id="treasury:daily_treasury_yield_curve",
-                        attempted_at=_now_iso(),
-                    ),
-                )
         if fred_refresh_disabled_reason is not None:
             for series_id in fred_series_ids:
                 if series_id not in points:
@@ -7239,6 +7080,169 @@ class MarketOverviewService:
                             ),
                         )
                 break
+
+        missing_treasury_series_ids = {
+            series_id for series_id in initial_missing_treasury_series_ids if series_id not in points
+        }
+        treasury_attempt_series_ids = set(initial_missing_treasury_series_ids)
+        if treasury_attempt_series_ids:
+            treasury_timeout_cap = min(
+                float(self.OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS),
+                float(self.OFFICIAL_MACRO_TREASURY_FALLBACK_TIMEOUT_CAP_SECONDS),
+                self._deadline_remaining(deadline),
+            )
+            timeout = self._deadline_timeout(deadline, treasury_timeout_cap)
+        else:
+            timeout = None
+        if timeout is not None:
+            treasury_error_reason: str | None = None
+            treasury_error_details: Dict[str, Any] | None = None
+            try:
+                treasury_points = fetch_treasury_daily_rate_observation_points(limit=2, timeout=timeout)
+            except Exception as exc:
+                treasury_points = {}
+                treasury_error_reason = self._official_macro_exception_reason(exc)
+                treasury_error_details = self._official_macro_failure_details(
+                    "DGS10",
+                    treasury_error_reason,
+                    provider_name="treasury",
+                    source_id="treasury:daily_treasury_yield_curve",
+                    attempted_at=_now_iso(),
+                    timeout_seconds=timeout,
+                    exception=exc,
+                    transport_details=getattr(exc, "diagnostics", None),
+                )
+            self._store_official_macro_points(
+                {
+                    series_id: series_points
+                    for series_id, series_points in treasury_points.items()
+                    if series_id not in points
+                },
+                fetched_at,
+            )
+            for series_id in sorted(treasury_attempt_series_ids):
+                series_points = treasury_points.get(series_id, [])
+                if series_points:
+                    freshness_reason = self._official_macro_row_failure_reason(series_id, series_points)
+                    if freshness_reason is None:
+                        if series_id not in points:
+                            points[series_id] = list(series_points)
+                            diagnostics.pop(series_id, None)
+                            diagnostic_details.pop(series_id, None)
+                    else:
+                        record_provider_attempt(
+                            series_id,
+                            freshness_reason,
+                            provider_name="treasury",
+                            source_id=series_points[0].source_id if series_points else "treasury:daily_treasury_yield_curve",
+                            attempted_at=_now_iso(),
+                            timeout_seconds=timeout,
+                            freshness_details=self._official_macro_freshness_details(series_id, series_points),
+                        )
+                        if treasury_failure_can_be_primary(series_id):
+                            self._record_official_macro_diagnostic(
+                                diagnostics,
+                                series_id,
+                                freshness_reason,
+                                diagnostic_details=diagnostic_details,
+                                details=self._official_macro_failure_details(
+                                    series_id,
+                                    freshness_reason,
+                                    provider_name="treasury",
+                                    source_id=series_points[0].source_id if series_points else "treasury:daily_treasury_yield_curve",
+                                    attempted_at=_now_iso(),
+                                    freshness_details=self._official_macro_freshness_details(series_id, series_points),
+                                ),
+                            )
+                elif series_id in treasury_points:
+                    record_provider_attempt(
+                        series_id,
+                        "empty_response",
+                        provider_name="treasury",
+                        source_id="treasury:daily_treasury_yield_curve",
+                        attempted_at=_now_iso(),
+                        timeout_seconds=timeout,
+                    )
+                    if treasury_failure_can_be_primary(series_id):
+                        self._record_official_macro_diagnostic(
+                            diagnostics,
+                            series_id,
+                            "empty_response",
+                            diagnostic_details=diagnostic_details,
+                            details=self._official_macro_failure_details(
+                                series_id,
+                                "empty_response",
+                                provider_name="treasury",
+                                source_id="treasury:daily_treasury_yield_curve",
+                                attempted_at=_now_iso(),
+                                timeout_seconds=timeout,
+                            ),
+                        )
+                elif treasury_error_reason is not None:
+                    record_provider_attempt(
+                        series_id,
+                        treasury_error_reason,
+                        provider_name="treasury",
+                        source_id="treasury:daily_treasury_yield_curve",
+                        attempted_at=_now_iso(),
+                        timeout_seconds=timeout,
+                        transport_details=treasury_error_details,
+                    )
+                    if treasury_failure_can_be_primary(series_id):
+                        self._record_official_macro_diagnostic(
+                            diagnostics,
+                            series_id,
+                            treasury_error_reason,
+                            diagnostic_details=diagnostic_details,
+                            details=self._official_macro_failure_details(
+                                series_id,
+                                treasury_error_reason,
+                                provider_name="treasury",
+                                source_id="treasury:daily_treasury_yield_curve",
+                                attempted_at=_now_iso(),
+                                timeout_seconds=timeout,
+                                transport_details=treasury_error_details,
+                            ),
+                        )
+                else:
+                    record_provider_attempt(
+                        series_id,
+                        "missing_series",
+                        provider_name="treasury",
+                        source_id="treasury:daily_treasury_yield_curve",
+                        attempted_at=_now_iso(),
+                        timeout_seconds=timeout,
+                    )
+                    if treasury_failure_can_be_primary(series_id):
+                        self._record_official_macro_diagnostic(
+                            diagnostics,
+                            series_id,
+                            "missing_series",
+                            diagnostic_details=diagnostic_details,
+                            details=self._official_macro_failure_details(
+                                series_id,
+                                "missing_series",
+                                provider_name="treasury",
+                                source_id="treasury:daily_treasury_yield_curve",
+                                attempted_at=_now_iso(),
+                                timeout_seconds=timeout,
+                            ),
+                        )
+        else:
+            for series_id in missing_treasury_series_ids:
+                self._record_official_macro_diagnostic(
+                    diagnostics,
+                    series_id,
+                    "budget_exhausted",
+                    diagnostic_details=diagnostic_details,
+                    details=self._official_macro_failure_details(
+                        series_id,
+                        "budget_exhausted",
+                        provider_name="treasury",
+                        source_id="treasury:daily_treasury_yield_curve",
+                        attempted_at=_now_iso(),
+                    ),
+                )
         attach_provider_attempt_details()
         self._official_macro_overlay_diagnostics = diagnostics
         self._official_macro_overlay_diagnostic_details = diagnostic_details

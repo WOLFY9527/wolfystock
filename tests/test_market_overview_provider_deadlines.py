@@ -91,7 +91,8 @@ def test_official_macro_points_prioritize_vixcls_then_fred_dgs10_dgs30_after_tre
     ):
         points = service._official_macro_points()
 
-    assert calls[:4] == ["VIXCLS", "treasury", "DGS10", "DGS30"]
+    assert calls[:4] == ["VIXCLS", "DGS10", "DGS30", "DGS2"]
+    assert calls.index("treasury") > calls.index("DGS30")
     assert points["VIXCLS"]
     assert points["DGS10"]
     assert points["DGS30"]
@@ -129,7 +130,8 @@ def test_official_macro_points_attempt_fred_dgs10_dgs30_after_treasury_timeout(m
     ):
         points = service._official_macro_points()
 
-    assert calls[:4] == ["VIXCLS", "treasury", "DGS10", "DGS30"]
+    assert calls[:4] == ["VIXCLS", "DGS10", "DGS30", "DGS2"]
+    assert calls.index("treasury") > calls.index("DGS30")
     assert treasury_timeouts and treasury_timeouts[0] is not None
     assert treasury_timeouts[0] < 0.18
     assert points["DGS10"][0].source_id == "fred:DGS10"
@@ -175,6 +177,50 @@ def test_official_macro_points_reserve_usable_fred_rate_timeout_after_treasury_t
     assert fred_timeouts["DGS30"] >= 0.2
     assert points["DGS10"][0].source_id == "fred:DGS10"
     assert points["DGS30"][0].source_id == "fred:DGS30"
+
+
+def test_official_macro_points_protect_fred_series_from_slow_treasury_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = MarketOverviewService()
+    latest = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
+    previous = (datetime.now(timezone.utc).date() - timedelta(days=2)).isoformat()
+    calls: list[str] = []
+    treasury_timeouts: list[float | None] = []
+
+    def timeout_treasury_points(*, limit: int = 2, timeout: float | None = None) -> dict:
+        calls.append("treasury")
+        treasury_timeouts.append(timeout)
+        time.sleep(float(timeout or 0.0) + 0.005)
+        raise TimeoutError("treasury timeout token=SECRET")
+
+    def fred_points(series_id: str, *, limit: int = 2, timeout: float | None = None) -> list[MacroObservation]:
+        calls.append(series_id)
+        if series_id in {"DGS2", "DGS10", "DGS30", "SOFR", "DTWEXBGS"}:
+            return [
+                MacroObservation(series_id, 4.5, latest, latest, f"fred:{series_id}", "official_public", "daily_rate"),
+                MacroObservation(series_id, 4.4, previous, previous, f"fred:{series_id}", "official_public", "daily_rate"),
+            ]
+        return []
+
+    monkeypatch.setattr(service, "OFFICIAL_MACRO_AGGREGATE_BUDGET_SECONDS", 0.35, raising=False)
+    monkeypatch.setattr(service, "OFFICIAL_MACRO_CALL_TIMEOUT_SECONDS", 0.35, raising=False)
+    with (
+        patch("src.services.market_overview_service.fetch_treasury_daily_rate_observation_points", side_effect=timeout_treasury_points),
+        patch("src.services.market_overview_service.fetch_fred_observation_points", side_effect=fred_points),
+    ):
+        points = service._official_macro_points(include_usd_pressure=True)
+
+    for series_id in ("DGS2", "DGS10", "DGS30", "SOFR", "DTWEXBGS"):
+        assert series_id in calls
+        assert points[series_id][0].source_id == f"fred:{series_id}"
+
+    assert "treasury" in calls
+    assert max(calls.index(series_id) for series_id in ("DGS2", "DGS10", "DGS30", "SOFR", "DTWEXBGS")) < calls.index("treasury")
+    assert treasury_timeouts and treasury_timeouts[0] is not None
+    assert treasury_timeouts[0] <= 0.35
+    assert service._official_macro_overlay_diagnostics.get("DGS10") != "budget_exhausted"
+    assert "SECRET" not in str(service._official_macro_overlay_diagnostic_details)
 
 
 def test_rates_macro_and_volatility_reuse_official_macro_observations_within_micro_cache_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -262,10 +308,13 @@ def test_rates_macro_and_volatility_reuse_official_macro_observations_within_mic
     assert volatility_payload["items"]
     assert calls == [
         "VIXCLS",
-        "treasury",
+        "DGS10",
+        "DGS30",
+        "DGS2",
         "SOFR",
         "T10Y2Y",
         "T10Y3M",
+        "treasury",
         "DFF",
         "CPIAUCSL",
         "PPIACO",
