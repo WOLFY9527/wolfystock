@@ -53,7 +53,6 @@ import {
   MarketOverviewPanelFooter,
   MarketOverviewRefreshButton,
 } from './marketOverviewPrimitives';
-import { ConsumerWorkspacePageShell } from '../layout/ConsumerWorkspaceShell';
 import { TerminalChip, TerminalGrid, TerminalPanel } from '../terminal/TerminalPrimitives';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
@@ -299,17 +298,22 @@ function getCachedNumberFormat(maximumFractionDigits: number): Intl.NumberFormat
 function buildCategoryLayout(tab: MarketOverviewTab): MarketOverviewLayoutRow[] {
   const config = MARKET_OVERVIEW_TAB_CONFIG[tab];
   const rows: MarketOverviewLayoutRow[] = [];
+  const promoteTopSummaryCards = tab === 'all' && config.hero.length === 1 && config.modules.length >= 2;
+  const topRowModules = promoteTopSummaryCards
+    ? [config.hero[0], ...config.modules.slice(0, 2)]
+    : config.hero;
   if (config.hero.length > 0) {
     rows.push({
       id: `${tab}-hero`,
       tier: 'hero',
-      columns: Math.min(config.hero.length, 2) as MarketOverviewRowColumns,
-      modules: config.hero,
+      columns: Math.min(topRowModules.length, 3) as MarketOverviewRowColumns,
+      modules: topRowModules,
       allowSingleFullWidth: true,
     });
   }
-  for (let index = 0; index < config.modules.length; index += 2) {
-    const modules = config.modules.slice(index, index + 2);
+  const remainingModules = promoteTopSummaryCards ? config.modules.slice(2) : config.modules;
+  for (let index = 0; index < remainingModules.length; index += 2) {
+    const modules = remainingModules.slice(index, index + 2);
     rows.push({
       id: `${tab}-modules-${index / 2 + 1}`,
       tier: index < 4 ? 'secondary' : 'deep',
@@ -2899,46 +2903,44 @@ export const MarketOverviewWorkbench: React.FC<MarketOverviewWorkbenchProps> = (
 
   return (
     <div
-      data-testid="market-overview-shell"
+      data-testid="market-overview-workbench"
       data-bento-surface="true"
       className="bento-surface-root flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden no-scrollbar text-white"
     >
-      <ConsumerWorkspacePageShell data-testid="market-overview-workbench" className="flex min-h-0 flex-1">
-        <MarketOverviewWorkbenchTopSurface
-          heading={heading}
-          directionalSummary={directionalSummaryView}
-          regimeSynthesis={regimeSynthesisView}
-          regimeSummary={regimeSummaryView}
-          decisionText={marketDecision.text}
-          decisionChips={marketDecision.chips}
-          decisionReliable={decisionReliable}
-          decisionSemantics={decisionSemanticsView}
-          dataState={dataStateView}
-          temperatureSummary={temperatureSummary}
-          briefingSummary={briefingSummary}
-          officialMacroRecords={officialMacroRecords}
-          categoryTabs={categoryTabs}
-          activeCategory={activeCategory}
-          onCategoryChange={setActiveCategory}
-          exportLabel={exportLabel}
-          onExportSummary={handleExportSummary}
-          heroAnchors={heroAnchorViews}
-          visualEvidenceCards={visualEvidenceCards}
-          showAdminDiagnostics={showAdminDiagnostics}
+      <MarketOverviewWorkbenchTopSurface
+        heading={heading}
+        directionalSummary={directionalSummaryView}
+        regimeSynthesis={regimeSynthesisView}
+        regimeSummary={regimeSummaryView}
+        decisionText={marketDecision.text}
+        decisionChips={marketDecision.chips}
+        decisionReliable={decisionReliable}
+        decisionSemantics={decisionSemanticsView}
+        dataState={dataStateView}
+        temperatureSummary={temperatureSummary}
+        briefingSummary={briefingSummary}
+        officialMacroRecords={officialMacroRecords}
+        categoryTabs={categoryTabs}
+        activeCategory={activeCategory}
+        onCategoryChange={setActiveCategory}
+        exportLabel={exportLabel}
+        onExportSummary={handleExportSummary}
+        heroAnchors={heroAnchorViews}
+        visualEvidenceCards={visualEvidenceCards}
+        showAdminDiagnostics={showAdminDiagnostics}
+      />
+      <Suspense fallback={<MarketOverviewWorkbenchGridFallback language={language} />}>
+        <LazyMarketOverviewWorkbenchGrid
+          heroRows={heroRows}
+          secondaryRows={secondaryRows}
+          deepRows={deepRows}
+          showDeepSection={showDeepSection}
+          showContextRail={showContextRail}
+          contextHighlights={contextHighlights}
+          executiveGroups={executiveGroups}
+          showExecutiveGroups={showExecutiveGroups}
         />
-        <Suspense fallback={<MarketOverviewWorkbenchGridFallback language={language} />}>
-          <LazyMarketOverviewWorkbenchGrid
-            heroRows={heroRows}
-            secondaryRows={secondaryRows}
-            deepRows={deepRows}
-            showDeepSection={showDeepSection}
-            showContextRail={showContextRail}
-            contextHighlights={contextHighlights}
-            executiveGroups={executiveGroups}
-            showExecutiveGroups={showExecutiveGroups}
-          />
-        </Suspense>
-      </ConsumerWorkspacePageShell>
+      </Suspense>
     </div>
   );
 };

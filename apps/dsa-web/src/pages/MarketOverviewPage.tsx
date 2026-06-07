@@ -28,7 +28,7 @@ import {
   type PanelKey,
   type PanelState,
 } from '../components/market-overview/MarketOverviewWorkbench';
-import { ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
+import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
 import { TerminalPageHeading } from '../components/terminal/TerminalPrimitives';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
@@ -933,37 +933,42 @@ const MarketOverviewPage = () => {
 
   return (
     <ConsumerWorkspaceScope className="min-h-0 flex-1">
-      <MarketOverviewWorkbench
-        heading={(
-          <TerminalPageHeading
-            data-testid="market-overview-page-heading"
-            title={language === 'en' ? 'Market Overview' : '市场总览'}
-          />
-        )}
-        panels={panels}
-        loading={loading}
-        localSnapshotSavedAt={localSnapshotSavedAt}
-        refreshErrorCount={Object.keys(refreshErrors).length}
-        refreshingPanel={refreshingPanel}
-        cryptoRealtimeStatus={cryptoRealtimeStatus}
-        isCnShortSentimentBootstrapping={loading && panels.cnShortSentiment === FALLBACK_CN_SHORT_SENTIMENT}
-        showAdminDiagnostics={isAdminMode && canReadProviders}
-        onRefreshPanel={handleWorkbenchRefresh}
-      />
-      <ConsumerResearchReadinessStrip
-        readiness={marketResearchReadinessView}
-        title={language === 'en' ? 'Research readiness' : '研究就绪度'}
-        testId="market-overview-research-readiness-strip"
-        className="mx-4 shrink-0 pb-4 md:mx-6 md:pb-6"
-      />
-      {marketActionabilityFrame && marketIntelligenceEvidenceFrame ? (
-        <MarketIntelligenceActionabilityStrip
-          actionability={marketActionabilityFrame}
-          evidence={marketIntelligenceEvidenceFrame}
-          testId="market-intelligence-actionability-strip"
-          className="pb-4 md:pb-6"
+      <ConsumerWorkspacePageShell
+        data-testid="market-overview-shell"
+        className="flex min-h-0 flex-1 flex-col gap-4 md:gap-6"
+      >
+        <MarketOverviewWorkbench
+          heading={(
+            <TerminalPageHeading
+              data-testid="market-overview-page-heading"
+              title={language === 'en' ? 'Market Overview' : '市场总览'}
+            />
+          )}
+          panels={panels}
+          loading={loading}
+          localSnapshotSavedAt={localSnapshotSavedAt}
+          refreshErrorCount={Object.keys(refreshErrors).length}
+          refreshingPanel={refreshingPanel}
+          cryptoRealtimeStatus={cryptoRealtimeStatus}
+          isCnShortSentimentBootstrapping={loading && panels.cnShortSentiment === FALLBACK_CN_SHORT_SENTIMENT}
+          showAdminDiagnostics={isAdminMode && canReadProviders}
+          onRefreshPanel={handleWorkbenchRefresh}
         />
-      ) : null}
+        <ConsumerResearchReadinessStrip
+          readiness={marketResearchReadinessView}
+          title={language === 'en' ? 'Research readiness' : '研究就绪度'}
+          testId="market-overview-research-readiness-strip"
+          className="w-full shrink-0"
+        />
+        {marketActionabilityFrame && marketIntelligenceEvidenceFrame ? (
+          <MarketIntelligenceActionabilityStrip
+            actionability={marketActionabilityFrame}
+            evidence={marketIntelligenceEvidenceFrame}
+            testId="market-intelligence-actionability-strip"
+            className="mx-0 w-full shrink-0 md:mx-0"
+          />
+        ) : null}
+      </ConsumerWorkspacePageShell>
     </ConsumerWorkspaceScope>
   );
 };

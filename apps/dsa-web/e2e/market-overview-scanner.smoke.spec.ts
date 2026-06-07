@@ -156,7 +156,7 @@ test.describe('scanner smoke', () => {
 
 test.describe('market overview smoke', () => {
   test('market overview keeps top metrics visible with no ghost vertical overflow', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize({ width: 1440, height: 1000 });
     await signIn(page, '/zh/market-overview');
 
     await expect(page.getByTestId('market-overview-shell')).toBeVisible();
@@ -239,6 +239,95 @@ test.describe('market overview smoke', () => {
     await expect(await page.locator('body').innerText()).not.toMatch(
       /sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|reasonCodes?|reasonFamilies|schemaVersion|fallback_static|synthetic_fixture|rotation_non_scoring_or_taxonomy_only|Rotation Non Scoring Or Taxonomy Only/i,
     );
+  });
+
+  test('market overview keeps the top summary cards wide and balanced across desktop viewports', async ({ page }) => {
+    const desktopViewports = [
+      { width: 1440, height: 1000 },
+      { width: 1728, height: 1117 },
+    ];
+
+    for (const [index, viewport] of desktopViewports.entries()) {
+      await page.setViewportSize(viewport);
+      if (index === 0) {
+        await signIn(page, '/zh/market-overview');
+      } else {
+        await page.goto('/zh/market-overview');
+        await page.waitForLoadState('domcontentloaded');
+      }
+
+      await expect(page.getByTestId('market-overview-shell')).toBeVisible();
+      await expect(page.getByTestId('market-overview-card-indices')).toBeVisible();
+      await expect(page.getByTestId('market-overview-card-volatility')).toBeVisible();
+      await expect(page.getByTestId('market-overview-card-fundsFlow')).toBeVisible();
+
+      const heroRowLayout = await page.evaluate(() => {
+        const row = document.querySelector('[data-row-id="all-hero"]') as HTMLElement | null;
+        const cards = [
+          document.querySelector('[data-testid="market-overview-card-indices"]') as HTMLElement | null,
+          document.querySelector('[data-testid="market-overview-card-volatility"]') as HTMLElement | null,
+          document.querySelector('[data-testid="market-overview-card-fundsFlow"]') as HTMLElement | null,
+        ];
+        if (!row || cards.some((card) => !card)) {
+          return null;
+        }
+
+        const rowRect = row.getBoundingClientRect();
+        const cardRects = cards.map((card) => (card as HTMLElement).getBoundingClientRect());
+        const widths = cardRects.map((rect) => rect.width);
+        return {
+          rowTop: rowRect.top,
+          widths,
+          topOffsets: cardRects.map((rect) => Math.round(rect.top - rowRect.top)),
+          leftGap: Math.round(cardRects[0].left - rowRect.left),
+          rightGap: Math.round(rowRect.right - cardRects[2].right),
+        };
+      });
+
+      expect(heroRowLayout).not.toBeNull();
+      const widths = heroRowLayout?.widths || [];
+      expect(widths).toHaveLength(3);
+      expect(Math.max(...widths) - Math.min(...widths)).toBeLessThanOrEqual(6);
+      expect(heroRowLayout?.topOffsets.every((offset) => Math.abs(offset) <= 2)).toBe(true);
+      expect(heroRowLayout?.leftGap ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(2);
+      expect(heroRowLayout?.rightGap ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(2);
+      await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    }
+  });
+
+  test('market overview keeps the default mobile viewport single-column with no overflow', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page, '/zh/market-overview');
+
+    await expect(page.getByTestId('market-overview-shell')).toBeVisible();
+    await expect(page.getByTestId('market-overview-decision-readiness')).toBeVisible();
+    await expect(page.getByTestId('market-overview-card-indices')).toBeVisible();
+    await expect(page.getByTestId('market-overview-card-volatility')).toBeVisible();
+    await expect(page.getByTestId('market-overview-card-fundsFlow')).toBeVisible();
+
+    const mobileLayout = await page.evaluate(() => {
+      const row = document.querySelector('[data-row-id="all-hero"]') as HTMLElement | null;
+      const cards = Array.from(document.querySelectorAll('[data-row-id="all-hero"] [data-testid^="market-overview-card-"]')) as HTMLElement[];
+      if (!row || cards.length < 3) {
+        return null;
+      }
+
+      const rowRect = row.getBoundingClientRect();
+      const cardRects = cards.slice(0, 3).map((card) => card.getBoundingClientRect());
+      return {
+        rowWidth: Math.round(rowRect.width),
+        widths: cardRects.map((rect) => Math.round(rect.width)),
+        topOffsets: cardRects.map((rect) => Math.round(rect.top - rowRect.top)),
+      };
+    });
+
+    expect(mobileLayout).not.toBeNull();
+    expect(mobileLayout?.topOffsets[1] ?? 0).toBeGreaterThan(mobileLayout?.topOffsets[0] ?? 0);
+    expect(mobileLayout?.topOffsets[2] ?? 0).toBeGreaterThan(mobileLayout?.topOffsets[1] ?? 0);
+    mobileLayout?.widths.forEach((width) => {
+      expect(Math.abs(width - (mobileLayout?.rowWidth ?? width))).toBeLessThanOrEqual(2);
+    });
+    await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 
   test('market overview degrades partial temperature payload without blanking', async ({ page }) => {
