@@ -580,7 +580,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(pageRoot).toHaveClass('min-w-0', 'overflow-x-hidden');
 
     const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
-    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' }));
+    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L4 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' }));
 
     expect(within(matrixDisclosure).getByText('左右滑动查看完整矩阵列')).toBeInTheDocument();
     expect(within(matrixDisclosure).getByText('滚动仅限表格区域')).toBeInTheDocument();
@@ -635,6 +635,16 @@ describe('MarketProviderOperationsPage', () => {
     expect(topSummary).not.toHaveTextContent('official_public.fed_liquidity');
     expect(topSummary).not.toHaveTextContent('missing_provider_configuration');
     expect(topSummary).not.toHaveTextContent('TUSHARE_TOKEN');
+    const actionQueue = screen.getByTestId('market-provider-action-queue');
+    expect(actionQueue).toHaveTextContent('L1 行动队列');
+    expect(actionQueue).toHaveTextContent('优先处理少量阻断和注意项');
+    expect(actionQueue).toHaveTextContent('Fed Liquidity 需要运维确认');
+    expect(actionQueue).toHaveTextContent('影响：Market Overview、Liquidity Monitor');
+    expect(actionQueue).toHaveTextContent('补齐既有数据源运行配置');
+    expect(actionQueue).not.toHaveTextContent('official_public.fed_liquidity');
+    expect(actionQueue).not.toHaveTextContent('missing_provider_configuration');
+    expect(actionQueue).not.toHaveTextContent('cache_required');
+    expect(actionQueue).not.toHaveTextContent('TUSHARE_TOKEN');
     const pageRoot = screen.getByTestId('market-provider-operations-page');
     expect(pageRoot).not.toHaveTextContent('Provider Setup Checklist');
     expect(pageRoot).not.toHaveTextContent('Why it matters');
@@ -703,17 +713,17 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.queryByText('/Users/example/provider')).not.toBeInTheDocument();
 
     const diagnosticsDisclosure = screen.getByTestId('market-provider-diagnostics-disclosure');
-    const disclosureToggle = screen.getByRole('button', { name: '展开 L3 已脱敏细节：限制代码 / 快照摘要 / 追踪标识' });
+    const disclosureToggle = screen.getByRole('button', { name: '展开 L4 已脱敏细节：限制代码 / 快照摘要 / 追踪标识' });
     expect(disclosureToggle).toBeInTheDocument();
     expect(diagnosticsDisclosure).not.toHaveAttribute('open');
     fireEvent.click(disclosureToggle);
     expect(diagnosticsDisclosure).toHaveAttribute('open');
-    expect(screen.getByRole('button', { name: '收起 L3 已脱敏细节：限制代码 / 快照摘要 / 追踪标识' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '收起 L4 已脱敏细节：限制代码 / 快照摘要 / 追踪标识' })).toBeInTheDocument();
     expect(screen.getByText('cache_metadata_unavailable:rates')).toBeVisible();
 
     const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
     expect(matrixDisclosure).not.toHaveAttribute('open');
-    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' }));
+    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L4 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' }));
     expect(matrixDisclosure).toHaveTextContent('数据源');
     expect(matrixDisclosure).toHaveTextContent('来源');
     expect(matrixDisclosure).toHaveTextContent('就绪状态');
@@ -746,6 +756,13 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklist).toHaveTextContent('Watchlist');
     expect(checklist).toHaveTextContent('Options Lab');
     expect(checklist).toHaveTextContent('数据源运维 / 系统诊断');
+    const marketOverviewGroup = screen.getByTestId('market-provider-setup-surface-market-overview');
+    const rotationGroup = screen.getByTestId('market-provider-setup-surface-rotation-radar');
+    expect(marketOverviewGroup).toHaveAttribute('open');
+    expect(rotationGroup).not.toHaveAttribute('open');
+    expect(rotationGroup).toHaveTextContent('默认折叠');
+    expect(rotationGroup).not.toHaveTextContent('刷新 CN/HK connect 缓存快照');
+    within(checklist).getAllByRole('button', { name: /^展开 / }).forEach((button) => fireEvent.click(button));
     expect(checklist).toHaveTextContent('需要凭据');
     expect(checklist).toHaveTextContent('可能需付费');
     expect(checklist).toHaveTextContent('需要缓存');
@@ -789,16 +806,16 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklistText.indexOf('Watchlist')).toBeLessThan(checklistText.indexOf('Options Lab'));
 
     const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
-    expect(matrixDisclosure).toHaveTextContent('L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）');
+    expect(matrixDisclosure).toHaveTextContent('L4 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）');
     expect(matrixDisclosure).not.toHaveTextContent('Provider');
     expect(matrixDisclosure).not.toHaveTextContent('Readiness');
     expect(matrixDisclosure).not.toHaveTextContent('Reason codes');
-    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' }));
+    fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L4 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' }));
     expect(matrixDisclosure).toHaveTextContent('cache-required');
     expect(matrixDisclosure).toHaveTextContent('present');
     expect(matrixDisclosure).toHaveTextContent('polygon_high_low_history_unavailable');
     expect(matrixDisclosure).toHaveTextContent('missing_provider_configuration');
-    expect(within(matrixDisclosure).getByRole('button', { name: '收起 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' })).toBeInTheDocument();
+    expect(within(matrixDisclosure).getByRole('button', { name: '收起 L4 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' })).toBeInTheDocument();
   });
 
   it('keeps non-scoring setup copy conservative and leaves score eligibility to existing source gates', async () => {
@@ -878,6 +895,10 @@ describe('MarketProviderOperationsPage', () => {
     render(<MarketProviderOperationsPage />);
 
     const checklist = await screen.findByTestId('market-provider-setup-checklist');
+    const watchlistGroup = screen.getByTestId('market-provider-setup-surface-watchlist');
+    expect(watchlistGroup).not.toHaveAttribute('open');
+    expect(watchlistGroup).not.toHaveTextContent('Synthetic fixture context');
+    fireEvent.click(within(watchlistGroup).getByRole('button', { name: '展开 Watchlist' }));
     expect(checklist).toHaveTextContent('Synthetic fixture context');
     expect(checklist).toHaveTextContent('仅用于诊断/观察/配置指引');
     expect(checklist).toHaveTextContent('改善数据覆盖披露');
@@ -916,11 +937,16 @@ describe('MarketProviderOperationsPage', () => {
       expect(checklist).toHaveTextContent('Market Overview');
       expect(checklist).toHaveTextContent('Fed Liquidity');
       expect(checklist).toHaveTextContent('Polygon grouped daily US equities');
-      expect(checklist).not.toHaveTextContent('Rotation Radar');
-      expect(checklist).not.toHaveTextContent('Portfolio');
+      expect(checklist).toHaveTextContent('Rotation Radar');
+      expect(checklist).toHaveTextContent('Portfolio');
+      expect(screen.getByTestId('market-provider-setup-surface-market-overview')).toHaveAttribute('open');
+      expect(screen.getByTestId('market-provider-setup-surface-rotation-radar')).not.toHaveAttribute('open');
+      expect(screen.getByTestId('market-provider-setup-surface-portfolio')).not.toHaveAttribute('open');
+      expect(screen.getByTestId('market-provider-setup-surface-rotation-radar')).not.toHaveTextContent('CN/HK connect');
+      expect(screen.getByTestId('market-provider-setup-surface-portfolio')).not.toHaveTextContent('Portfolio 手动');
 
       const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
-      fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' }));
+      fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L4 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' }));
       expect(matrixDisclosure).toHaveTextContent('cache.cn_hk_connect_daily');
       expect(matrixDisclosure).toHaveTextContent('authorized.cn_index_futures_feed');
     } finally {
@@ -1047,7 +1073,7 @@ describe('MarketProviderOperationsPage', () => {
     expect(screen.getByText('暂无缓存状态')).toBeInTheDocument();
     expect(screen.getAllByText('窗口内暂无异常').length).toBeGreaterThan(0);
     expect(screen.getByText('缓存元数据未覆盖 indices')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '展开 L3 已脱敏细节：限制代码 / 快照摘要 / 追踪标识' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '展开 L4 已脱敏细节：限制代码 / 快照摘要 / 追踪标识' })).toBeInTheDocument();
   });
 
   it('renders API errors with the existing alert pattern', async () => {
@@ -1078,6 +1104,9 @@ describe('MarketProviderOperationsPage', () => {
 
     render(<MarketProviderOperationsPage />);
 
+    expect(await screen.findByText('诊断默认收起')).toBeInTheDocument();
+    expect(screen.queryByTestId('market-provider-detail-endpoint')).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: '查看诊断' })[0]);
     expect(await screen.findByTestId('market-provider-detail-endpoint')).toHaveClass('break-all');
     expect(screen.getByTestId('market-provider-detail-provider-id')).toHaveClass('break-all');
   });

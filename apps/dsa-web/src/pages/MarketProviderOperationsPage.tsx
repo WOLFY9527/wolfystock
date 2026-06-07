@@ -51,6 +51,7 @@ type ProviderOpsTopSummaryData = {
   affectedSurfaces: string[];
 };
 type ReadinessDiagnosticGroupId = 'credentials' | 'localCache' | 'coverage' | 'runtime' | 'other';
+type DisclosureSeverity = 'blocked' | 'warning' | 'info' | 'ok';
 type TickflowProjection = {
   provider?: unknown;
   market?: unknown;
@@ -535,6 +536,13 @@ type SetupChecklistEntry = {
   safeNextStep: string;
   badges: SetupChecklistBadge[];
 };
+type ProviderOpsActionQueueItem = {
+  key: string;
+  title: string;
+  scope: string;
+  action: string;
+  severity: DisclosureSeverity;
+};
 
 const SOURCE_GAP_CAPABILITIES: SourceGapCapability[] = [
   {
@@ -675,7 +683,7 @@ function sourceGapRequiredWork(row: ProviderOperationsMatrixRow): string {
     return '沿现有运行路径补齐所需凭证。';
   }
   if (row.runtimeState === 'missing_provider_configuration' || row.missingProviderReason) {
-    return '补齐既有 provider/runtime 契约，并满足缓存与时效门槛。';
+    return '补齐既有数据源运行配置，并满足缓存与时效门槛。';
   }
   if (row.dependencyState === 'dependency_missing') {
     return '补齐既有依赖，再让运行时证据进入页面。';
@@ -835,6 +843,38 @@ function checklistBadgeDisplayLabel(label: string): string {
   }[label] || label;
 }
 
+function disclosureSeverityVariant(severity: DisclosureSeverity): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
+  if (severity === 'blocked') return 'danger';
+  if (severity === 'warning') return 'caution';
+  if (severity === 'info') return 'info';
+  return 'success';
+}
+
+function disclosureSeverityLabel(severity: DisclosureSeverity): string {
+  return {
+    blocked: '阻断',
+    warning: '需处理',
+    info: '观察',
+    ok: '正常',
+  }[severity];
+}
+
+function checklistEntrySeverity(entry: SetupChecklistEntry): DisclosureSeverity {
+  if (entry.badges.some((badge) => badge.variant === 'danger')) return 'blocked';
+  if (entry.badges.some((badge) => badge.variant === 'caution')) return 'warning';
+  if (entry.badges.some((badge) => badge.variant === 'info')) return 'info';
+  return 'ok';
+}
+
+function severityWeight(severity: DisclosureSeverity): number {
+  return {
+    blocked: 0,
+    warning: 1,
+    info: 2,
+    ok: 3,
+  }[severity];
+}
+
 function defaultChecklistWhyItMatters(title: string, conservativeOnly = false): string {
   if (conservativeOnly) {
     return `${title} 仅用于诊断/观察/配置指引，用来补足可用性说明并改善数据覆盖披露；是否进入评分仍由既有 source-confidence gates 决定。`;
@@ -987,6 +1027,56 @@ function buildSetupChecklistEntries(
   }
 
   return entries;
+}
+
+function buildProviderActionQueue(
+  items: MarketProviderOperationItem[],
+  rows: ProviderOperationsMatrixRow[],
+  checks: MarketDataReadinessCheck[],
+): ProviderOpsActionQueueItem[] {
+  const queue: ProviderOpsActionQueueItem[] = [];
+  const seen = new Set<string>();
+  const pushItem = (item: ProviderOpsActionQueueItem): void => {
+    if (seen.has(item.key) || queue.length >= 4) return;
+    seen.add(item.key);
+    queue.push(item);
+  };
+
+  for (const row of rows) {
+    if (!matrixRowHasMissingSetup(row) && !sourceGapBlocksScoreGrade(row)) continue;
+    const surfaces = resolveChecklistMatrixSurfaces(row).filter((surface) => surface !== PROVIDER_OPS_DIAGNOSTIC_SURFACE);
+    pushItem({
+      key: `matrix:${row.providerId}`,
+      title: `${sourceGapName(row)} 需要运维确认`,
+      scope: formatReadableList(surfaces, '数据源运维'),
+      action: sourceGapRequiredWork(row),
+      severity: matrixRowHasMissingSetup(row) ? 'blocked' : 'warning',
+    });
+  }
+
+  for (const check of checks) {
+    if (check.status === 'ready' && check.severity !== 'warning' && check.severity !== 'error') continue;
+    pushItem({
+      key: `readiness:${check.id}`,
+      title: readinessCheckName(check),
+      scope: formatReadableList(resolveChecklistReadinessSurfaces(check), '本地就绪诊断'),
+      action: readinessCheckGuidance(check),
+      severity: check.severity === 'error' ? 'blocked' : 'warning',
+    });
+  }
+
+  for (const item of items) {
+    if (!item.errorSummary && !item.warning && !item.isFallback && !item.fallbackUsed && !item.isStale) continue;
+    pushItem({
+      key: `provider:${providerKey(item)}`,
+      title: providerLabel(item),
+      scope: item.card || item.domain || '数据源运维',
+      action: providerNextAction(item),
+      severity: item.errorSummary ? 'blocked' : 'warning',
+    });
+  }
+
+  return queue.sort((left, right) => severityWeight(left.severity) - severityWeight(right.severity) || left.title.localeCompare(right.title)).slice(0, 4);
 }
 
 function statusChipVariant(status: StatusTone): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
@@ -1212,6 +1302,43 @@ const ProviderOpsTopSummary: React.FC<{
   );
 };
 
+const ProviderOpsActionQueue: React.FC<{
+  items: ProviderOpsActionQueueItem[];
+  isLoading: boolean;
+}> = ({ items, isLoading }) => (
+  <div data-testid="market-provider-action-queue" className="mt-3 rounded-lg border border-white/[0.07] bg-black/10 px-3 py-3">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">L1 行动队列</p>
+        <p className="mt-1 text-sm font-semibold text-white/84">优先处理少量阻断和注意项</p>
+      </div>
+      <TerminalChip variant={items.length ? 'caution' : 'success'}>
+        {isLoading ? '读取中' : items.length ? `${formatNumber(items.length, 0)} 项` : '暂无待办'}
+      </TerminalChip>
+    </div>
+    <div className="mt-3 grid gap-2">
+      {isLoading && !items.length ? (
+        <p className="text-[11px] leading-5 text-white/40">正在汇总行动队列；不触发额外 provider 调用。</p>
+      ) : null}
+      {!isLoading && !items.length ? (
+        <p className="text-[11px] leading-5 text-white/44">当前没有需要置顶处理的 provider 缺口；继续保持只读观察。</p>
+      ) : null}
+      {items.map((item) => (
+        <div key={item.key} className="grid min-w-0 gap-2 rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2.5 md:grid-cols-[minmax(0,0.95fr)_minmax(0,0.7fr)_minmax(0,1.35fr)] md:items-center">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <TerminalChip variant={disclosureSeverityVariant(item.severity)}>{disclosureSeverityLabel(item.severity)}</TerminalChip>
+              <p className="min-w-0 truncate text-xs font-semibold text-white/82">{item.title}</p>
+            </div>
+          </div>
+          <p className="min-w-0 truncate text-[11px] leading-5 text-white/52">影响：{item.scope}</p>
+          <p className="min-w-0 text-[11px] leading-5 text-white/62">下一步：{item.action}</p>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
 const SourceGapBoard: React.FC<{ rows: ProviderOperationsMatrixRow[] }> = ({ rows }) => (
   <div data-testid="market-provider-source-gap-board" className="mt-4 grid min-w-0 gap-3 xl:grid-cols-2">
     {SOURCE_GAP_CAPABILITIES.map((capability) => {
@@ -1304,16 +1431,24 @@ const ProviderSetupChecklistPanel: React.FC<{
   surfaceFocus: ProductSetupSurface | null;
 }> = ({ rows, checks, isLoading, surfaceFocus }) => {
   const entries = buildSetupChecklistEntries(rows, checks);
-  const visibleEntries = surfaceFocus ? entries.filter((entry) => entry.surface === surfaceFocus.label) : entries;
-  const groups: Array<{ surface: string; items: SetupChecklistEntry[] }> = [];
+  const groups: Array<{ surface: string; items: SetupChecklistEntry[]; severity: DisclosureSeverity }> = [];
 
   for (const surface of CHECKLIST_SURFACE_ORDER) {
-    const items = visibleEntries
+    const items = entries
       .filter((entry) => entry.surface === surface)
       .sort((left, right) => left.title.localeCompare(right.title));
     if (!items.length) continue;
-    groups.push({ surface, items });
+    const severity = items.reduce<DisclosureSeverity>((current, item) => (
+      severityWeight(checklistEntrySeverity(item)) < severityWeight(current) ? checklistEntrySeverity(item) : current
+    ), 'ok');
+    groups.push({ surface, items, severity });
   }
+  const defaultOpenSurface = surfaceFocus && groups.some((group) => group.surface === surfaceFocus.label)
+    ? surfaceFocus.label
+    : groups.slice().sort((left, right) => (
+      severityWeight(left.severity) - severityWeight(right.severity)
+      || CHECKLIST_SURFACE_ORDER.indexOf(left.surface as (typeof CHECKLIST_SURFACE_ORDER)[number]) - CHECKLIST_SURFACE_ORDER.indexOf(right.surface as (typeof CHECKLIST_SURFACE_ORDER)[number])
+    ))[0]?.surface;
 
   return (
     <TerminalNestedBlock data-testid="market-provider-setup-checklist" className="mt-4 bg-black/10 px-3 py-3">
@@ -1324,7 +1459,7 @@ const ProviderSetupChecklistPanel: React.FC<{
         </div>
         <div className="flex flex-wrap gap-1.5">
           <TerminalChip variant="neutral">{formatNumber(groups.length, 0)} 个产品面</TerminalChip>
-          <TerminalChip variant="info">{formatNumber(visibleEntries.length, 0)} 个配置项</TerminalChip>
+          <TerminalChip variant="info">{formatNumber(entries.length, 0)} 个配置项</TerminalChip>
         </div>
       </div>
       <p className="mt-2 text-[11px] leading-5 text-white/48">
@@ -1337,11 +1472,11 @@ const ProviderSetupChecklistPanel: React.FC<{
         >
           <span className="font-semibold text-cyan-100/82">已按 {surfaceFocus.label} 聚焦：</span>
           {' '}
-          以下清单来自现有 productAffectedSurfaces，用于确认覆盖缺口；仅改善数据覆盖披露，不会改变评分规则，是否进入评分仍由既有 source-confidence gates 决定。
+          默认只展开该产品面；其他产品面保留紧凑标题、数量和状态，避免首屏变成完整清单墙。以下清单来自现有 productAffectedSurfaces，用于确认覆盖缺口；仅改善数据覆盖披露，不会改变评分规则。
         </div>
       ) : null}
 
-      {isLoading && !visibleEntries.length ? (
+      {isLoading && !entries.length ? (
         <p className="mt-3 text-[11px] leading-5 text-white/38">正在汇总配置清单；仍然只读，不触发数据源运行时。</p>
       ) : null}
 
@@ -1350,14 +1485,20 @@ const ProviderSetupChecklistPanel: React.FC<{
       ) : null}
 
       {groups.length ? (
-        <div className="mt-3 grid gap-3 xl:grid-cols-2">
+        <div className="mt-3 grid gap-2">
           {groups.map((group) => (
-            <div key={group.surface} className="rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-white/82">{group.surface}</p>
-                <TerminalChip variant="neutral">{formatNumber(group.items.length, 0)} 项</TerminalChip>
-              </div>
-              <div className="mt-3 space-y-2">
+            <TerminalDisclosure
+              key={group.surface}
+              data-testid={`market-provider-setup-surface-${group.surface.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+              title={group.surface}
+              summary={`${formatNumber(group.items.length, 0)} 项 · ${disclosureSeverityLabel(group.severity)} · ${group.surface === defaultOpenSurface ? '默认展开' : '默认折叠'}`}
+              defaultOpen={group.surface === defaultOpenSurface}
+              className={cn(
+                'bg-white/[0.025]',
+                surfaceFocus?.label === group.surface ? 'border-cyan-200/20 bg-cyan-300/[0.035]' : '',
+              )}
+            >
+              <div className="space-y-2">
                 {group.items.map((entry) => (
                   <div key={entry.key} className="rounded-md border border-white/[0.05] bg-black/10 px-3 py-2.5">
                     <p className="text-xs font-semibold text-white/78">{entry.title}</p>
@@ -1379,7 +1520,7 @@ const ProviderSetupChecklistPanel: React.FC<{
                   </div>
                 ))}
               </div>
-            </div>
+            </TerminalDisclosure>
           ))}
         </div>
       ) : null}
@@ -1441,8 +1582,8 @@ const ProviderOperationsMatrixPanel: React.FC<{
           <SourceGapDisclosure rows={rows} />
           <TerminalDisclosure
             data-testid="market-provider-matrix-disclosure"
-            title="L2 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）"
-            summary={`默认折叠 · ${formatNumber(rows.length, 0)} 行 · ${formatNumber(summary.paidDataLikelyRequiredRows, 0)} 行含付费/配额线索 · 原始代码仅限这里`}
+            title="L4 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）"
+            summary={`默认折叠 · ${formatNumber(rows.length, 0)} 行 · ${formatNumber(summary.paidDataLikelyRequiredRows, 0)} 行含付费/配额线索 · 原因代码仅限 L4`}
             className="mt-2 bg-black/10"
           >
             <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[11px] leading-5 text-white/54 sm:hidden">
@@ -1605,10 +1746,13 @@ const ProviderOperationsTable: React.FC<{
 );
 
 const ProviderDetailsPanel: React.FC<{ item: MarketProviderOperationItem | null }> = ({ item }) => (
-  <TerminalPanel as="section" className="col-span-12 xl:col-span-4">
-    <TerminalSectionHeader eyebrow="熔断状态" title={item ? providerLabel(item) : '待统计'} />
+  <TerminalPanel as="section" data-testid="market-provider-detail-panel" className="col-span-12 xl:col-span-4">
+    <TerminalSectionHeader eyebrow="L3 诊断抽屉" title={item ? providerLabel(item) : '选择数据源'} />
     {item ? (
       <>
+        <p className="mt-3 text-[11px] leading-5 text-white/46">
+          已通过表格行“查看诊断”打开；行级状态仍保留在左侧表格，这里只展示所选数据源的 bounded 诊断摘要。
+        </p>
         <div className="mt-4 grid grid-cols-2 gap-3">
           <TerminalMetric label="状态" value={<DataFreshnessBadge status={normalizeStatus(item.status) as MarketProviderHealthStatus} />} valueClassName="text-sm font-sans" />
           <TerminalMetric label="缓存" value={item.cacheKey || '待统计'} valueClassName="truncate text-xs font-semibold" />
@@ -1636,7 +1780,7 @@ const ProviderDetailsPanel: React.FC<{ item: MarketProviderOperationItem | null 
       </>
     ) : (
       <div className="mt-4">
-        <TerminalEmptyState title="待统计">暂无可聚焦的数据源，保留只读边界与诊断入口。</TerminalEmptyState>
+        <TerminalEmptyState title="诊断默认收起">先在左侧数据源表格查看行摘要；需要诊断时再点击“查看诊断”。</TerminalEmptyState>
       </div>
     )}
   </TerminalPanel>
@@ -1753,8 +1897,8 @@ const DiagnosticsPanel: React.FC<{
         )) : <TerminalChip variant="neutral">暂无限制</TerminalChip>}
       </div>
       <TerminalDisclosure
-        title="L3 已脱敏细节：限制代码 / 快照摘要 / 追踪标识"
-        summary="默认折叠 · 原始代码与追踪标识只保留已脱敏摘要"
+        title="L4 已脱敏细节：限制代码 / 快照摘要 / 追踪标识"
+        summary="默认折叠 · 原始代码与追踪标识只保留在 L4 摘要"
         className="mt-4"
         data-testid="market-provider-diagnostics-disclosure"
       >
@@ -1865,15 +2009,20 @@ const MarketDataReadinessPanel: React.FC<{
       ) : null}
 
       {!isLoading && !error ? (
-        <div className="mt-4 space-y-4">
+        <div className="mt-4 space-y-2">
           {!groupedChecks.length ? (
             <TerminalEmptyState title="暂无就绪检查项">接口未返回检查项时，不在前端推断环境健康度。</TerminalEmptyState>
-          ) : groupedChecks.map((group) => (
-            <div key={group.id}>
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <TerminalChip variant="info">{group.title}</TerminalChip>
-                <span className="text-[11px] text-white/42">{formatNumber(group.items.length, 0)} 项 · {group.description}</span>
-              </div>
+          ) : groupedChecks.map((group) => {
+            const hasBlockingOrWarning = group.items.some((check) => check.severity === 'error' || check.severity === 'warning' || check.status === 'missing' || check.status === 'misconfigured');
+            return (
+              <TerminalDisclosure
+                key={group.id}
+                data-testid={`market-provider-readiness-group-${group.id}`}
+                title={group.title}
+                summary={`${formatNumber(group.items.length, 0)} 项 · ${hasBlockingOrWarning ? '默认展开' : '默认折叠'} · ${group.description}`}
+                defaultOpen={hasBlockingOrWarning}
+                className="bg-black/10"
+              >
               <TerminalDenseList>
                 {group.items.map((check) => {
                   const facts = summarizeReadinessFacts(check);
@@ -1902,8 +2051,8 @@ const MarketDataReadinessPanel: React.FC<{
                         ))}
                       </div>
                       <TerminalDisclosure
-                        title="L3 已脱敏样本差异：诊断 ID / 影响面 / 样本缺口"
-                        summary="默认折叠 · 只保留诊断 ID、影响面与样本差异摘要"
+                        title="L4 已脱敏样本差异：诊断 ID / 影响面 / 样本缺口"
+                        summary="默认折叠 · 原始诊断 ID、影响面与样本差异摘要只在 L4 展开"
                         className="mt-2 bg-black/10"
                       >
                         <div className="space-y-2 text-[11px] leading-5 text-white/50">
@@ -1920,8 +2069,9 @@ const MarketDataReadinessPanel: React.FC<{
                   );
                 })}
               </TerminalDenseList>
-            </div>
-          ))}
+              </TerminalDisclosure>
+            );
+          })}
         </div>
       ) : null}
     </TerminalPanel>
@@ -2049,13 +2199,11 @@ const MarketProviderOperationsPage: React.FC = () => {
   const degradedCount = summary.fallbackCount + summary.partialCount + summary.unavailableCount + summary.errorCount + summary.failureCount;
   const preferredProvider = selectPreferredProvider(items);
 
-  const effectiveSelectedProviderKey = !items.length
-    ? null
-    : (selectedProviderKey && items.some((item) => providerKey(item) === selectedProviderKey))
-      ? selectedProviderKey
-      : providerKey(preferredProvider || items[0]);
-
-  const selectedItem = items.find((item) => providerKey(item) === effectiveSelectedProviderKey) || preferredProvider || null;
+  const effectiveSelectedProviderKey = selectedProviderKey && items.some((item) => providerKey(item) === selectedProviderKey)
+    ? selectedProviderKey
+    : null;
+  const selectedItem = items.find((item) => providerKey(item) === effectiveSelectedProviderKey) || null;
+  const drillContextItem = selectedItem || preferredProvider;
 
   const withReason = eventRollups.find((rollup) => rollup.topReasons.length) || null;
   const withItemError = items.find((item) => item.errorSummary || item.warning) || null;
@@ -2081,6 +2229,7 @@ const MarketProviderOperationsPage: React.FC = () => {
   ];
 
   const topSummary = buildProviderOpsTopSummary(items, matrixRows, readinessChecks);
+  const actionQueueItems = buildProviderActionQueue(items, matrixRows, readinessChecks);
   const l0TrustState: AdminOpsTrustState = error && !response
     ? 'blocked'
     : isLoading && !response
@@ -2137,7 +2286,7 @@ const MarketProviderOperationsPage: React.FC = () => {
                 target: 'providerCircuits',
                 evidenceType: '数据源名称',
                 reason: '继续核对熔断、配额拒绝与探测事件。',
-                params: { provider: selectedItem?.provider || response?.eventRollups?.[0]?.provider || '', since: response?.window?.key || '24h' },
+                params: { provider: drillContextItem?.provider || response?.eventRollups?.[0]?.provider || '', since: response?.window?.key || '24h' },
               },
               {
                 label: '查看成本观测',
@@ -2157,6 +2306,7 @@ const MarketProviderOperationsPage: React.FC = () => {
             ]}
           />
           <ProviderOpsTopSummary data={topSummary} isLoading={isLoading || isMatrixLoading || isReadinessLoading} />
+          <ProviderOpsActionQueue items={actionQueueItems} isLoading={isLoading || isMatrixLoading || isReadinessLoading} />
           {error ? <ApiErrorAlert error={error} className="mt-5" /> : null}
         </TerminalPanel>
 
