@@ -177,9 +177,11 @@ def build_official_fed_liquidity_cache_bundle(
     required_count = len(OFFICIAL_FED_LIQUIDITY_REQUIRED_SERIES)
     coverage_count = len(fulfilled)
     coverage_ratio = round(coverage_count / required_count, 3)
+    coverage_threshold = 1.0
+    coverage_threshold_passed = coverage_count == required_count
     has_runtime_rows = bool(rows)
     score_allowed = bool(
-        coverage_count == required_count
+        coverage_threshold_passed
         and not missing
         and not stale
         and not malformed
@@ -234,6 +236,9 @@ def build_official_fed_liquidity_cache_bundle(
         "requiredSeries": list(OFFICIAL_FED_LIQUIDITY_REQUIRED_SERIES),
         "supportedSourceIds": [f"FRED_{series_id}" for series_id in OFFICIAL_FED_LIQUIDITY_REQUIRED_SERIES],
         "runtimeEvidence": "full" if score_allowed else ("partial" if has_runtime_rows else "missing"),
+        "coverageThreshold": coverage_threshold,
+        "coverageThresholdPassed": coverage_threshold_passed,
+        "coverageThresholdFailure": not coverage_threshold_passed,
     }
     if score_allowed or has_runtime_rows:
         evidence["coverageRatio"] = coverage_ratio
@@ -274,6 +279,9 @@ def build_official_fed_liquidity_cache_bundle(
         "missingMetrics": list(missing),
         "coverageCount": coverage_count,
         "coverageRatio": coverage_ratio,
+        "coverageThreshold": coverage_threshold,
+        "coverageThresholdPassed": coverage_threshold_passed,
+        "coverageThresholdFailure": not coverage_threshold_passed,
         "coverage": coverage_ratio,
         "isPartial": bool(has_runtime_rows and not score_allowed),
         "isStale": bool(stale),
@@ -698,8 +706,10 @@ def _build_official_macro_readiness_bundle(
     required_count = len(required_series)
     coverage_count = len(fulfilled_required)
     coverage_ratio = round(coverage_count / required_count, 3) if required_count else 0.0
+    coverage_threshold = 1.0
+    coverage_threshold_passed = coverage_count == required_count
     readiness_eligible = bool(
-        coverage_count == required_count
+        coverage_threshold_passed
         and not missing
         and not stale
         and not malformed
@@ -764,6 +774,9 @@ def _build_official_macro_readiness_bundle(
         "supportedSourceIds": [f"OFFICIAL_MACRO:{series_id}" for series_id in required_series],
         "runtimeEvidence": "full" if readiness_eligible else ("partial" if has_runtime_rows else "missing"),
         "coverageRatio": coverage_ratio,
+        "coverageThreshold": coverage_threshold,
+        "coverageThresholdPassed": coverage_threshold_passed,
+        "coverageThresholdFailure": not coverage_threshold_passed,
         "fulfilledSeries": list(fulfilled_required),
         "missingSeries": list(missing),
     }
@@ -809,6 +822,9 @@ def _build_official_macro_readiness_bundle(
         "missingMetrics": list(missing),
         "coverageCount": coverage_count,
         "coverageRatio": coverage_ratio,
+        "coverageThreshold": coverage_threshold,
+        "coverageThresholdPassed": coverage_threshold_passed,
+        "coverageThresholdFailure": not coverage_threshold_passed,
         "coverage": coverage_ratio,
         "isPartial": bool(has_runtime_rows and not readiness_eligible),
         "isStale": bool(stale),

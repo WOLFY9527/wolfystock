@@ -491,11 +491,17 @@ def test_fed_liquidity_live_smoke_reports_bounded_official_series_successfully()
         "fulfilledSeries": ["WALCL", "RRPONTSYD", "WTREGEN", "WRESBAL"],
         "missingSeries": [],
         "staleSeries": [],
+        "timeoutSeries": [],
         "reason": None,
         "attempts": 1,
         "maxAttempts": 3,
         "transientMissingSeries": [],
+        "transientTimeoutSeries": [],
         "finalAttemptMissingSeries": [],
+        "finalAttemptTimeoutSeries": [],
+        "coverageRatio": 1.0,
+        "coverageThreshold": 1.0,
+        "coverageThresholdPassed": True,
     }
 
 
@@ -532,6 +538,41 @@ def test_fed_liquidity_live_smoke_fails_closed_on_partial_or_stale_series() -> N
     assert summary["missingSeries"] == ["WRESBAL"]
     assert summary["staleSeries"] == ["WTREGEN"]
     assert summary["reason"] == "stale_series"
+
+
+def test_fed_liquidity_live_smoke_distinguishes_fred_timeout_from_missing_series() -> None:
+    now = datetime(2026, 5, 14, 12, 0, tzinfo=timezone.utc)
+
+    def _fake_fetch_fred(series_id: str, *, limit: int = 2, timeout: float = 0.0):
+        if series_id == "RRPONTSYD":
+            raise OfficialMacroTransportError("timeout", "fred request timed out")
+        return [_macro_point(series_id, 100.0, "2026-05-13")]
+
+    with patch(
+        "src.services.official_macro_transport.fetch_fred_observation_points",
+        side_effect=_fake_fetch_fred,
+    ), patch(
+        "src.services.official_macro_transport.fred_runtime_config_probe",
+        return_value={"configPresent": True, "apiKeyPresent": True},
+    ):
+        summary = run_fed_liquidity_live_smoke(
+            now=now,
+            max_attempts=1,
+            retry_sleep_seconds=0.0,
+        )
+
+    _assert_smoke_summary_fields(summary)
+    assert summary["probePassed"] is False
+    assert summary["sourceAuthorityAllowed"] is False
+    assert summary["scoreContributionAllowed"] is False
+    assert summary["fulfilledSeries"] == ["WALCL", "WTREGEN", "WRESBAL"]
+    assert summary["missingSeries"] == []
+    assert summary["timeoutSeries"] == ["RRPONTSYD"]
+    assert summary["finalAttemptTimeoutSeries"] == ["RRPONTSYD"]
+    assert summary["reason"] == "fetch_timeout"
+    assert summary["coverageRatio"] == 0.75
+    assert summary["coverageThreshold"] == 1.0
+    assert summary["coverageThresholdPassed"] is False
 
 
 def test_usd_pressure_live_smoke_reports_bounded_official_series_successfully() -> None:
@@ -808,7 +849,7 @@ def test_official_macro_activation_cache_readiness_smoke_outputs_sanitized_requi
         },
         {
             "blocked": True,
-            "blockedReason": "stale_series",
+            "blockedReason": "missing_required_series",
             "freshnessPolicy": "official_daily_us_weekday_t_plus_1",
             "group": "fed_liquidity",
             "series": "RRPONTSYD",
@@ -840,6 +881,90 @@ def test_official_macro_activation_cache_readiness_smoke_outputs_sanitized_requi
     assert payload["groups"]["fedLiquidity"]["requiredSeriesStatus"]["RRPONTSYD"] == "missing"
     assert "rawProviderPayload" not in output
     assert "SECRET" not in output
+
+
+def test_official_macro_activation_cache_readiness_distinguishes_blocker_reasons_and_coverage_threshold(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = _load_official_macro_activation_script()
+
+    monkeypatch.setattr(
+        script,
+        "run_usd_pressure_live_smoke",
+        lambda: {
+            "credentialsPresent": True,
+            "providerConstructed": True,
+            "probePassed": True,
+            "freshnessValid": True,
+            "sourceMetadataValid": True,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "fulfilledSeries": ["DTWEXBGS"],
+            "missingSeries": [],
+            "staleSeries": [],
+            "timeoutSeries": [],
+            "coverageRatio": 1.0,
+            "coverageThreshold": 1.0,
+            "coverageThresholdPassed": True,
+            "reason": None,
+        },
+    )
+    monkeypatch.setattr(
+        script,
+        "run_fed_liquidity_live_smoke",
+        lambda: {
+            "credentialsPresent": True,
+            "providerConstructed": True,
+            "probePassed": False,
+            "freshnessValid": False,
+            "sourceMetadataValid": True,
+            "sourceAuthorityAllowed": False,
+            "scoreContributionAllowed": False,
+            "fulfilledSeries": ["WALCL"],
+            "missingSeries": ["WRESBAL"],
+            "staleSeries": ["WTREGEN"],
+            "timeoutSeries": ["RRPONTSYD"],
+            "coverageRatio": 0.25,
+            "coverageThreshold": 1.0,
+            "coverageThresholdPassed": False,
+            "reason": "fetch_timeout",
+        },
+    )
+
+    exit_code = script.main(["--cache-readiness"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["readiness"] == "blocked"
+    assert payload["sourceAuthorityAllowed"] is False
+    assert payload["scoreContributionAllowed"] is False
+    assert payload["reason"] == "fetch_timeout"
+    assert payload["readinessBlockers"] == [
+        "fetch_timeout",
+        "stale_series",
+        "missing_required_series",
+        "coverage_threshold_failure",
+    ]
+    assert payload["coverageRatio"] == 0.4
+    assert payload["coverageThreshold"] == 1.0
+    assert payload["coverageThresholdPassed"] is False
+    assert payload["timeoutSeries"] == ["RRPONTSYD"]
+    assert payload["staleSeries"] == ["WTREGEN"]
+    assert payload["missingSeries"] == ["WRESBAL"]
+    assert payload["requiredSeriesStatus"]["RRPONTSYD"] == "timeout"
+    assert payload["requiredSeriesStatus"]["WTREGEN"] == "stale"
+    assert payload["requiredSeriesStatus"]["WRESBAL"] == "missing"
+    readiness_by_series = {item["series"]: item for item in payload["seriesReadiness"]}
+    assert readiness_by_series["RRPONTSYD"]["blockedReason"] == "fetch_timeout"
+    assert readiness_by_series["WTREGEN"]["blockedReason"] == "stale_series"
+    assert readiness_by_series["WRESBAL"]["blockedReason"] == "missing_required_series"
+    assert payload["groups"]["fedLiquidity"]["requiredSeriesStatus"] == {
+        "WALCL": "fulfilled",
+        "RRPONTSYD": "timeout",
+        "WTREGEN": "stale",
+        "WRESBAL": "missing",
+    }
 
 
 def test_official_macro_activation_cache_readiness_unexpected_error_is_sanitized(

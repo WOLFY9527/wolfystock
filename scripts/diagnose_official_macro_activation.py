@@ -61,11 +61,18 @@ _GROUP_FIELD_ALLOWLIST = (
     "fulfilledSeries",
     "missingSeries",
     "staleSeries",
+    "timeoutSeries",
     "reason",
+    "readinessBlockers",
+    "coverageRatio",
+    "coverageThreshold",
+    "coverageThresholdPassed",
     "attempts",
     "maxAttempts",
     "transientMissingSeries",
+    "transientTimeoutSeries",
     "finalAttemptMissingSeries",
+    "finalAttemptTimeoutSeries",
     "latestObservationDate",
     "latestAsOf",
     "freshnessPolicy",
@@ -115,6 +122,11 @@ def _cache_readiness_unexpected_error_summary() -> dict[str, object]:
         "requiredSeriesStatus": {series: "missing" for series in required_series},
         "missingSeries": required_series,
         "staleSeries": [],
+        "timeoutSeries": [],
+        "coverageRatio": 0.0,
+        "coverageThreshold": 1.0,
+        "coverageThresholdPassed": False,
+        "readinessBlockers": ["unexpected_error"],
         "reason": "unexpected_error",
         "groups": {},
         }
@@ -131,8 +143,17 @@ def _required_series_status(summary: Mapping[str, object], required_series: Sequ
     fulfilled = set(_as_list(summary.get("fulfilledSeries")))
     missing = set(_as_list(summary.get("missingSeries")))
     stale = set(_as_list(summary.get("staleSeries")))
+    timeout = set(_as_list(summary.get("timeoutSeries")))
     return {
-        series: "stale" if series in stale else ("fulfilled" if series in fulfilled else ("missing" if series in missing else "missing"))
+        series: (
+            "timeout"
+            if series in timeout
+            else (
+                "stale"
+                if series in stale
+                else ("fulfilled" if series in fulfilled else ("missing" if series in missing else "missing"))
+            )
+        )
         for series in required_series
     }
 
@@ -140,6 +161,11 @@ def _required_series_status(summary: Mapping[str, object], required_series: Sequ
 def _sanitize_group_summary(summary: Mapping[str, object], required_series: Sequence[str]) -> dict[str, object]:
     sanitized = {field: summary[field] for field in _GROUP_FIELD_ALLOWLIST if field in summary}
     sanitized["requiredSeriesStatus"] = _required_series_status(summary, required_series)
+    fulfilled_count = sum(1 for status in sanitized["requiredSeriesStatus"].values() if status == "fulfilled")
+    required_count = len(required_series)
+    sanitized.setdefault("coverageRatio", round(fulfilled_count / required_count, 3) if required_count else 0.0)
+    sanitized.setdefault("coverageThreshold", 1.0)
+    sanitized.setdefault("coverageThresholdPassed", fulfilled_count == required_count)
     return sanitized
 
 
@@ -149,12 +175,16 @@ def _aggregate_reason(groups: Mapping[str, Mapping[str, object]]) -> str | None:
         return "unexpected_error"
     if not all(bool(summary.get("credentialsPresent")) for summary in summaries):
         return "credentials"
+    if any(_as_list(summary.get("timeoutSeries")) for summary in summaries):
+        return "fetch_timeout"
     if not all(bool(summary.get("freshnessValid")) for summary in summaries):
         return "stale_series"
     if not all(bool(summary.get("sourceMetadataValid")) for summary in summaries):
         return "source_metadata_invalid"
     if any(_as_list(summary.get("missingSeries")) for summary in summaries):
-        return "series_coverage"
+        return "missing_required_series"
+    if any(summary.get("coverageThresholdPassed") is False for summary in summaries):
+        return "coverage_threshold_failure"
     return None
 
 
@@ -166,6 +196,8 @@ def _series_status(summary: Mapping[str, object], series_id: str) -> str:
     required_series_status = summary.get("requiredSeriesStatus")
     if isinstance(required_series_status, Mapping):
         return str(required_series_status.get(series_id) or "missing").strip().lower()
+    if series_id in set(_as_list(summary.get("timeoutSeries"))):
+        return "timeout"
     if series_id in set(_as_list(summary.get("staleSeries"))):
         return "stale"
     if series_id in set(_as_list(summary.get("fulfilledSeries"))):
@@ -178,9 +210,15 @@ def _series_status(summary: Mapping[str, object], series_id: str) -> str:
 def _series_blocked_reason(summary: Mapping[str, object], series_id: str, status: str) -> str | None:
     if status == "fulfilled":
         return None
+    top_level_reason = str(summary.get("reason") or "").strip()
+    if top_level_reason == "unexpected_error":
+        return top_level_reason
+    if status == "timeout":
+        return "fetch_timeout"
     if status == "stale":
         return "stale_series"
-    top_level_reason = str(summary.get("reason") or "").strip()
+    if status == "missing":
+        return "missing_required_series"
     if top_level_reason:
         return top_level_reason
     if summary.get("sourceAuthorityAllowed") is False:
@@ -228,6 +266,39 @@ def _operator_next_gate(summary: Mapping[str, object]) -> str:
     return "run_official_macro_cache_prewarm" if readiness == "ready" else "remediate_required_series_before_prewarm"
 
 
+def _cache_readiness_blockers(
+    *,
+    credentials_present: bool,
+    source_metadata_valid: bool,
+    source_authority_allowed: bool,
+    score_contribution_allowed: bool,
+    missing_series: Sequence[str],
+    stale_series: Sequence[str],
+    timeout_series: Sequence[str],
+    coverage_threshold_passed: bool,
+) -> list[str]:
+    blockers: list[str] = []
+    if not credentials_present:
+        blockers.append("credentials")
+    if timeout_series:
+        blockers.append("fetch_timeout")
+    if stale_series:
+        blockers.append("stale_series")
+    if missing_series:
+        blockers.append("missing_required_series")
+    if not coverage_threshold_passed:
+        blockers.append("coverage_threshold_failure")
+    if not source_metadata_valid:
+        blockers.append("source_metadata_invalid")
+    if blockers:
+        return list(dict.fromkeys(blockers))
+    if not source_authority_allowed:
+        blockers.append("source_authority_blocked")
+    if not score_contribution_allowed:
+        blockers.append("score_contribution_blocked")
+    return list(dict.fromkeys(blockers))
+
+
 def _decorate_cache_readiness_summary(summary: Mapping[str, object]) -> dict[str, object]:
     required_series = _as_list(summary.get("requiredSeries")) or _required_series()
     decorated = dict(summary)
@@ -268,6 +339,7 @@ def _run_cache_readiness_smoke() -> dict[str, object]:
     required_series_status: dict[str, str] = {}
     missing_series: list[str] = []
     stale_series: list[str] = []
+    timeout_series: list[str] = []
     for name, series_ids in _CACHE_READINESS_GROUPS.items():
         status_by_series = groups[name]["requiredSeriesStatus"]
         if not isinstance(status_by_series, Mapping):
@@ -275,10 +347,12 @@ def _run_cache_readiness_smoke() -> dict[str, object]:
         for series_id in series_ids:
             status = str(status_by_series.get(series_id) or "missing")
             required_series_status[series_id] = status
-            if status == "missing":
-                missing_series.append(series_id)
+            if status == "timeout":
+                timeout_series.append(series_id)
             elif status == "stale":
                 stale_series.append(series_id)
+            elif status == "missing":
+                missing_series.append(series_id)
 
     credentials_present = all(bool(summary.get("credentialsPresent")) for summary in groups.values())
     provider_constructed = all(bool(summary.get("providerConstructed")) for summary in groups.values())
@@ -287,6 +361,11 @@ def _run_cache_readiness_smoke() -> dict[str, object]:
     probe_passed = all(bool(summary.get("probePassed")) for summary in groups.values())
     source_authority_allowed = all(bool(summary.get("sourceAuthorityAllowed")) for summary in groups.values())
     score_contribution_allowed = all(bool(summary.get("scoreContributionAllowed")) for summary in groups.values())
+    required_count = len(required_series_status)
+    fulfilled_count = sum(1 for status in required_series_status.values() if status == "fulfilled")
+    coverage_ratio = round(fulfilled_count / required_count, 3) if required_count else 0.0
+    coverage_threshold = 1.0
+    coverage_threshold_passed = fulfilled_count == required_count
 
     return _decorate_cache_readiness_summary(
         {
@@ -294,7 +373,14 @@ def _run_cache_readiness_smoke() -> dict[str, object]:
         "keyPresent": credentials_present,
         "providerConstructed": provider_constructed,
         "probePassed": probe_passed,
-        "readiness": "ready" if probe_passed and source_authority_allowed and score_contribution_allowed else "blocked",
+        "readiness": (
+            "ready"
+            if probe_passed
+            and source_authority_allowed
+            and score_contribution_allowed
+            and coverage_threshold_passed
+            else "blocked"
+        ),
         "freshnessValid": freshness_valid,
         "sourceMetadataValid": source_metadata_valid,
         "sourceAuthorityAllowed": source_authority_allowed,
@@ -302,6 +388,20 @@ def _run_cache_readiness_smoke() -> dict[str, object]:
         "requiredSeriesStatus": required_series_status,
         "missingSeries": missing_series,
         "staleSeries": stale_series,
+        "timeoutSeries": timeout_series,
+        "coverageRatio": coverage_ratio,
+        "coverageThreshold": coverage_threshold,
+        "coverageThresholdPassed": coverage_threshold_passed,
+        "readinessBlockers": _cache_readiness_blockers(
+            credentials_present=credentials_present,
+            source_metadata_valid=source_metadata_valid,
+            source_authority_allowed=source_authority_allowed,
+            score_contribution_allowed=score_contribution_allowed,
+            missing_series=missing_series,
+            stale_series=stale_series,
+            timeout_series=timeout_series,
+            coverage_threshold_passed=coverage_threshold_passed,
+        ),
         "reason": _aggregate_reason(groups),
         "groups": groups,
         }

@@ -596,9 +596,15 @@ def test_official_fed_liquidity_cache_bundle_source_confidence_is_fail_closed() 
     assert complete_bundle["providerId"] == OFFICIAL_FED_LIQUIDITY_PROVIDER_ID
     assert complete_bundle["scoreContributionAllowed"] is True
     assert complete_bundle["sourceAuthorityAllowed"] is True
+    assert complete_bundle["coverageThreshold"] == 1.0
+    assert complete_bundle["coverageThresholdPassed"] is True
+    assert complete_bundle["coverageThresholdFailure"] is False
     assert complete_bundle["externalProviderCalls"] is False
     assert malformed_bundle["scoreContributionAllowed"] is False
     assert malformed_bundle["sourceAuthorityAllowed"] is False
+    assert malformed_bundle["coverageThreshold"] == 1.0
+    assert malformed_bundle["coverageThresholdPassed"] is False
+    assert malformed_bundle["coverageThresholdFailure"] is True
     assert malformed_bundle["malformedSeries"] == ["WALCL"]
     assert malformed_bundle["observationOnly"] is True
 

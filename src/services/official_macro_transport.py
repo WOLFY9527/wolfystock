@@ -605,6 +605,7 @@ def run_fed_liquidity_live_smoke(
     results: dict[str, str] = {series_id: "missing" for series_id in FED_LIQUIDITY_LIVE_SMOKE_SERIES_IDS}
     attempts_executed = 0
     transient_missing_series_seen: set[str] = set()
+    timeout_series_seen: set[str] = set()
 
     def remaining_timeout(cap: float) -> float | None:
         remaining = deadline - time.monotonic()
@@ -617,20 +618,27 @@ def run_fed_liquidity_live_smoke(
         for attempt_index in range(bounded_max_attempts):
             attempts_executed = attempt_index + 1
             current_attempt_missing: list[str] = []
+            current_attempt_timeout: list[str] = []
             for series_id in pending_series:
                 timeout = remaining_timeout(fred_timeout_seconds)
                 if timeout is None:
-                    current_attempt_missing.append(series_id)
+                    results[series_id] = "timeout"
+                    current_attempt_timeout.append(series_id)
                     continue
                 try:
                     points = fetch_fred_observation_points(series_id, limit=2, timeout=timeout)
-                except Exception:
+                except Exception as exc:
+                    if classify_official_macro_exception(exc) == "timeout":
+                        results[series_id] = "timeout"
+                        current_attempt_timeout.append(series_id)
+                        continue
                     points = []
                 series_status = _official_macro_smoke_series_status(series_id, points, now=now)
                 results[series_id] = series_status
                 if series_status == "missing":
                     current_attempt_missing.append(series_id)
             transient_missing_series_seen.update(current_attempt_missing)
+            timeout_series_seen.update(current_attempt_timeout)
             pending_series = [
                 series_id
                 for series_id in FED_LIQUIDITY_LIVE_SMOKE_SERIES_IDS
@@ -654,28 +662,44 @@ def run_fed_liquidity_live_smoke(
     stale_series = [
         series_id for series_id in FED_LIQUIDITY_LIVE_SMOKE_SERIES_IDS if results.get(series_id) == "stale"
     ]
+    timeout_series = [
+        series_id for series_id in FED_LIQUIDITY_LIVE_SMOKE_SERIES_IDS if results.get(series_id) == "timeout"
+    ]
     missing_series = [
         series_id
         for series_id in FED_LIQUIDITY_LIVE_SMOKE_SERIES_IDS
-        if results.get(series_id) not in {"fulfilled", "stale"}
+        if results.get(series_id) not in {"fulfilled", "stale", "timeout"}
     ]
     invalid_metadata_detected = any(
         results.get(series_id) == "invalid_metadata" for series_id in FED_LIQUIDITY_LIVE_SMOKE_SERIES_IDS
     )
     freshness_valid = not stale_series
     source_metadata_valid = not invalid_metadata_detected
-    probe_passed = not missing_series and freshness_valid and source_metadata_valid
+    required_count = len(FED_LIQUIDITY_LIVE_SMOKE_SERIES_IDS)
+    coverage_ratio = round(len(fulfilled_series) / required_count, 3) if required_count else 0.0
+    coverage_threshold = 1.0
+    coverage_threshold_passed = len(fulfilled_series) == required_count
+    probe_passed = (
+        not missing_series
+        and not timeout_series
+        and freshness_valid
+        and source_metadata_valid
+        and coverage_threshold_passed
+    )
     source_authority_allowed = bool(
         credentials_present
         and provider_constructed
         and probe_passed
         and freshness_valid
         and source_metadata_valid
+        and coverage_threshold_passed
     )
 
     reason: str | None = None
     if not credentials_present:
         reason = "credentials"
+    elif timeout_series:
+        reason = "fetch_timeout"
     elif not freshness_valid:
         reason = "stale_series"
     elif not source_metadata_valid:
@@ -687,6 +711,11 @@ def run_fed_liquidity_live_smoke(
         series_id
         for series_id in FED_LIQUIDITY_LIVE_SMOKE_SERIES_IDS
         if series_id in transient_missing_series_seen and results.get(series_id) == "fulfilled"
+    ]
+    transient_timeout_series = [
+        series_id
+        for series_id in FED_LIQUIDITY_LIVE_SMOKE_SERIES_IDS
+        if series_id in timeout_series_seen and results.get(series_id) == "fulfilled"
     ]
 
     return {
@@ -700,11 +729,17 @@ def run_fed_liquidity_live_smoke(
         "fulfilledSeries": fulfilled_series,
         "missingSeries": missing_series,
         "staleSeries": stale_series,
+        "timeoutSeries": timeout_series,
         "reason": reason,
         "attempts": attempts_executed,
         "maxAttempts": bounded_max_attempts,
         "transientMissingSeries": transient_missing_series,
+        "transientTimeoutSeries": transient_timeout_series,
         "finalAttemptMissingSeries": missing_series,
+        "finalAttemptTimeoutSeries": timeout_series,
+        "coverageRatio": coverage_ratio,
+        "coverageThreshold": coverage_threshold,
+        "coverageThresholdPassed": coverage_threshold_passed,
     }
 
 
