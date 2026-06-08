@@ -52,6 +52,7 @@ FORBIDDEN_OUTPUT_TERMS = (
     "storage",
     "engine",
     "fallback",
+    "raw",
     "raw json",
     "pit_as_of",
     "transaction_cost_realism",
@@ -62,6 +63,17 @@ FORBIDDEN_OUTPUT_TERMS = (
     "institutional",
     "live trading",
     "professional",
+    "professional readiness",
+    "execution readiness",
+    "institutional-ready",
+    "live-ready",
+    "专业级",
+    "专业就绪",
+    "实盘",
+    "实盘就绪",
+    "交易就绪",
+    "机构级",
+    "执行就绪",
 )
 
 
@@ -178,6 +190,76 @@ def _missing_p1_packet() -> dict[str, Any]:
     )
 
 
+def _support_bundle_like_readiness_metadata() -> dict[str, Any]:
+    return {
+        "bundleKind": "backtest-support-bundle-like",
+        "readinessMetadata": {
+            "backtestReadiness": {
+                "pointInTimeUniverseMembership": {"available": True},
+                "asOfTimestampPolicy": {"status": "available"},
+                "survivorshipBiasSafeUniverseEvidence": "available",
+                "delistingInactiveSymbolHandling": "available",
+                "corporateActionAdjustedOhlcLineage": "available",
+                "exchangeCalendarSessionAlignment": "available",
+                "sessionConstraints": "available",
+                "haltConstraints": "available",
+                "transactionCostModel": "missing",
+                "slippageModel": "missing",
+                "marketImpactModel": "missing",
+                "portfolioRebalanceModel": "available",
+                "oosWalkForward": "available",
+                "parameterStability": "available",
+            },
+            "factorMetricsAvailability": {
+                "decileReturns": "available",
+                "forwardReturnGeneration": "available",
+                "neutralization": "available",
+                "factorCorrelation": "available",
+                "parameterStability": "available",
+            },
+            "bridgeManifest": {
+                "panelContract": "available",
+                "multiFactorComposition": "available",
+                "oosWalkForward": "available",
+            },
+            "dataLineage": {
+                "datasetSnapshot": "available",
+                "datasetVersion": "available",
+                "sourceAuthority": "available",
+                "providerDiagnostics": "must not reach report summary",
+                "cacheDiagnostics": "must not reach report summary",
+                "storageDiagnostics": "must not reach report summary",
+                "engineDiagnostics": "must not reach report summary",
+                "rawFieldName": "must not reach report summary",
+            },
+            "missingProfessionalPrerequisites": [
+                "transaction_cost_realism",
+            ],
+            "rawRuntimeDiagnostics": {
+                "providerPayload": {"raw": True},
+                "cachePayload": {"raw": True},
+                "storagePayload": {"raw": True},
+                "enginePayload": {"raw": True},
+            },
+        },
+    }
+
+
+def _readiness_packet_from_support_bundle_like_metadata(
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    readiness_metadata = metadata["readinessMetadata"]
+    return build_backtest_factor_lab_readiness_packet(
+        backtest_readiness=readiness_metadata["backtestReadiness"],
+        factor_metrics_availability=readiness_metadata["factorMetricsAvailability"],
+        bridge_manifest=readiness_metadata["bridgeManifest"],
+        data_lineage=readiness_metadata["dataLineage"],
+        missing_professional_prerequisites=readiness_metadata[
+            "missingProfessionalPrerequisites"
+        ],
+    )
+
+
 def _serialize(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
@@ -257,6 +339,42 @@ def test_report_summary_maps_p1_blockers_to_safe_partial_summary() -> None:
         },
     ]
     _assert_report_safe(summary)
+
+
+def test_report_summary_adopts_support_bundle_like_metadata_as_observe_only_smoke() -> None:
+    metadata = _support_bundle_like_readiness_metadata()
+    original_metadata = copy.deepcopy(metadata)
+
+    first_packet = _readiness_packet_from_support_bundle_like_metadata(metadata)
+    second_packet = _readiness_packet_from_support_bundle_like_metadata(metadata)
+    first_summary = build_backtest_factor_lab_report_summary(
+        readiness_packet=first_packet,
+    )
+    second_summary = build_backtest_factor_lab_report_summary(
+        readiness_packet=second_packet,
+    )
+
+    assert metadata == original_metadata
+    assert first_packet == second_packet
+    assert first_summary == second_summary
+    assert first_packet["observeOnly"] is True
+    assert first_packet["professionalReady"] is False
+    assert first_packet["productState"] == "observe_only_not_professional_ready"
+    assert first_packet["blockingPriority"] == "P0"
+    assert first_packet["blockingDimensionIds"] == ["transaction_cost_realism"]
+    assert first_summary["shortStatus"] == "关键资料不足，仅供观察"
+    assert first_summary["missingPrerequisiteGroups"] == [
+        {
+            "name": "基础研究资料",
+            "status": "待补充",
+            "items": ["交易成本、滑点与冲击约束"],
+        },
+    ]
+    assert (
+        json.loads(json.dumps(first_packet, ensure_ascii=False, sort_keys=True))
+        == first_packet
+    )
+    _assert_report_safe(first_summary)
 
 
 def test_report_summary_maps_complete_metadata_without_promoting_actionability() -> None:
