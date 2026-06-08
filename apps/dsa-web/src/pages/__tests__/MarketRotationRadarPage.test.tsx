@@ -1100,17 +1100,22 @@ describe('MarketRotationRadarPage', () => {
     expect(visualMatrix).toHaveTextContent('对比样本与观察数据');
     expect(visualMatrix).toHaveTextContent('不形成强结论');
     expect(visualMatrix).toHaveTextContent('AI 观察主题');
-    expect(within(visualMatrix).getByTestId('rotation-radar-matrix-point-observation_ai')).toHaveTextContent('+2.4%');
+    expect(within(visualMatrix).getByTestId('rotation-radar-matrix-point-observation_ai')).toHaveTextContent('↑ +2.4%');
     expect(screen.queryByTestId('rotation-radar-visual-unavailable')).not.toBeInTheDocument();
 
     const leaderList = screen.getByTestId('rotation-radar-leader-list');
     expect(leaderList).toHaveTextContent('观察数据');
     expect(leaderList).toHaveTextContent('前 1 个观察数据');
     expect(within(leaderList).getByTestId('rotation-radar-leader-row-observation_ai')).toHaveTextContent('AI 观察主题');
+    expect(within(leaderList).getByTestId('rotation-radar-leader-row-observation_ai')).toHaveTextContent('对比样本观察');
+    expect(within(leaderList).getByTestId('rotation-radar-leader-row-observation_ai')).toHaveTextContent('升温观察');
     expect(screen.queryByTestId('rotation-radar-insufficient-empty')).not.toBeInTheDocument();
 
     const detail = screen.getByTestId('rotation-theme-detail-panel');
     expect(detail).toHaveTextContent('AI 观察主题');
+    expect(detail).toHaveTextContent('对比样本观察');
+    expect(detail).toHaveTextContent('升温观察');
+    expect(detail).toHaveTextContent('相对 QQQ +2.4%');
     expect(detail).toHaveTextContent('AI 观察主题由对比样本强弱与广度扩散支持，仅作走势观察。');
 
     const bodyText = document.body.textContent || '';

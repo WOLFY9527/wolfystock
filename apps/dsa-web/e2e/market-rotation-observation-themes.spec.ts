@@ -189,10 +189,16 @@ appTest.describe('rotation observation themes primary view', () => {
       await appExpect(visualMatrix).toContainText('对比样本与观察数据');
       await appExpect(visualMatrix).toContainText('不形成强结论');
       await appExpect(visualMatrix).toContainText('AI 观察主题');
+      await appExpect(page.getByTestId('rotation-radar-matrix-point-observation_ai')).toContainText('↑ +2.4%');
       await appExpect(page.getByTestId('rotation-radar-matrix-point-observation_ai')).toBeVisible();
       await appExpect(page.getByTestId('rotation-radar-visual-unavailable')).toHaveCount(0);
       await appExpect(leaderList).toContainText('前 1 个观察数据');
+      await appExpect(leaderList.getByTestId('rotation-radar-leader-row-observation_ai')).toContainText('对比样本观察');
+      await appExpect(leaderList.getByTestId('rotation-radar-leader-row-observation_ai')).toContainText('升温观察');
       await appExpect(page.getByTestId('rotation-radar-insufficient-empty')).toHaveCount(0);
+      await appExpect(page.getByTestId('rotation-theme-detail-panel')).toContainText('对比样本观察');
+      await appExpect(page.getByTestId('rotation-theme-detail-panel')).toContainText('升温观察');
+      await appExpect(page.getByTestId('rotation-theme-detail-panel')).toContainText('方向线索：相对 QQQ +2.4%');
 
       const bodyText = await page.locator('body').innerText();
       baseExpect(bodyText).not.toMatch(forbiddenRotationInternalPattern);

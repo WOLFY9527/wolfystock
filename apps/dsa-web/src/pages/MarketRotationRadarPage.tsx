@@ -448,6 +448,69 @@ function themeRelativeStrengthValue(theme?: MarketRotationTheme): number | null 
   return Number.isFinite(Number(raw)) ? Number(raw) : null;
 }
 
+function isObservationTheme(theme?: MarketRotationTheme): theme is MarketRotationTheme {
+  if (!theme || isTaxonomyOnlyTheme(theme)) {
+    return false;
+  }
+  return theme.rankingLane === 'observation'
+    || theme.observationOnly === true
+    || theme.headlineEligible === false
+    || resolveEvidenceQuality(theme) === 'degraded_proxy'
+    || resolveEvidenceQuality(theme) === 'observation_only';
+}
+
+function observationStateLabel(theme?: MarketRotationTheme): string | null {
+  if (!isObservationTheme(theme)) {
+    return null;
+  }
+  const signalType = resolveSignalType(theme);
+  if (signalType === 'relative_strength' || signalType === 'momentum_proxy' || resolveEvidenceQuality(theme) === 'degraded_proxy') {
+    return '对比样本观察';
+  }
+  return '观察信号';
+}
+
+function observationDirectionCue(theme?: MarketRotationTheme): {
+  indicator: '↑' | '↓' | '→';
+  label: string;
+  changeText: string;
+} | null {
+  if (!isObservationTheme(theme)) {
+    return null;
+  }
+
+  const strength = themeRelativeStrengthValue(theme);
+  const benchmark = String(theme?.relativeStrength?.benchmark || theme?.benchmark || '').trim();
+  const benchmarkPrefix = benchmark ? `相对 ${benchmark} ` : '';
+
+  if (strength !== null) {
+    if (strength >= 0.5) {
+      return { indicator: '↑', label: '升温观察', changeText: `${benchmarkPrefix}${formatRelativeStrengthValue(strength)}` };
+    }
+    if (strength <= -0.5) {
+      return { indicator: '↓', label: '降温观察', changeText: `${benchmarkPrefix}${formatRelativeStrengthValue(strength)}` };
+    }
+    return { indicator: '→', label: '横向观察', changeText: `${benchmarkPrefix}${formatRelativeStrengthValue(strength)}` };
+  }
+
+  if (theme?.stage === 'cooling_watch' || theme?.stage === 'weak_or_no_signal') {
+    return { indicator: '↓', label: '降温观察', changeText: '方向仍待更多样本确认' };
+  }
+
+  if (theme?.stage === 'early_watch' || theme?.stage === 'extended_watch' || theme?.stage === 'confirmed_rotation') {
+    return { indicator: '↑', label: '升温观察', changeText: '方向仍待更多样本确认' };
+  }
+
+  return { indicator: '→', label: '横向观察', changeText: '方向仍待更多样本确认' };
+}
+
+function observationThemeSummary(theme?: MarketRotationTheme): string | null {
+  const stateLabel = observationStateLabel(theme);
+  const directionCue = observationDirectionCue(theme);
+  const items = [stateLabel, directionCue?.label].filter(Boolean);
+  return items.length ? items.join(' · ') : null;
+}
+
 function themeSupportsVisualMatrix(theme?: MarketRotationTheme): theme is MarketRotationTheme {
   if (!theme || isTaxonomyOnlyTheme(theme)) {
     return false;
@@ -1069,6 +1132,7 @@ const RotationVisualPanel: React.FC<{
                       <div className="absolute inset-y-2 left-1/2 w-px bg-white/[0.08]" aria-hidden="true" />
                       {stageThemes.map((theme) => {
                         const strength = themeRelativeStrengthValue(theme) ?? 0;
+                        const directionCue = observationDirectionCue(theme);
                         const range = domain.max - domain.min || 1;
                         const left = `${((strength - domain.min) / range) * 100}%`;
                         const bubbleVariant = selectedThemeId === theme.id
@@ -1085,10 +1149,12 @@ const RotationVisualPanel: React.FC<{
                             )}
                             style={{ left }}
                             onClick={() => onSelectTheme(theme.id)}
-                            aria-label={`${theme.name} ${formatThemeStage(theme.stage)} ${formatRelativeStrengthValue(strength)}`}
+                            aria-label={`${theme.name} ${observationThemeSummary(theme) || formatThemeStage(theme.stage)} ${directionCue?.changeText || formatRelativeStrengthValue(strength)}`}
                           >
                             <span className="max-w-[5rem] truncate sm:max-w-[6.5rem]">{theme.name}</span>
-                            <span className="text-white/55">{formatRelativeStrengthValue(strength)}</span>
+                            <span className="text-white/55">
+                              {directionCue ? `${directionCue.indicator} ${formatRelativeStrengthValue(strength)}` : formatRelativeStrengthValue(strength)}
+                            </span>
                           </button>
                         );
                       })}
@@ -1118,6 +1184,7 @@ const RotationVisualPanel: React.FC<{
           <div className="mt-4 space-y-2">
             {rankingThemes.map((theme, index) => {
               const scoreWidth = `${Math.max(8, Math.min(100, theme.rotationScore))}%`;
+              const observationSummary = observationThemeSummary(theme);
               const selected = selectedThemeId === theme.id;
               return (
                 <button
@@ -1137,7 +1204,9 @@ const RotationVisualPanel: React.FC<{
                         <span className="truncate text-sm font-semibold text-white/84">{theme.name}</span>
                       </div>
                       <p className="mt-1 truncate text-[10px] text-white/42">
-                        {formatThemeStage(theme.stage)} · {themeConfidenceSummary(theme)}
+                        {observationSummary
+                          ? `${observationSummary} · ${themeConfidenceSummary(theme)}`
+                          : `${formatThemeStage(theme.stage)} · ${themeConfidenceSummary(theme)}`}
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
@@ -1466,54 +1535,60 @@ const LeaderRow: React.FC<{
   marketLabelText: string;
   selected: boolean;
   onSelect: () => void;
-}> = ({ theme, marketLabelText, selected, onSelect }) => (
-  <button
-    type="button"
-    data-testid={`rotation-radar-leader-row-${theme.id}`}
-    onClick={onSelect}
-    className={cn(
-      'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_5.5rem_6.25rem] items-center gap-2 p-3 text-left transition-colors',
-      selected ? 'bg-white/[0.055]' : 'hover:bg-white/[0.025]',
-    )}
-  >
-    <span className="min-w-0">
-      <span className="block truncate text-sm font-semibold text-white/84">{theme.name}</span>
-      <span className="mt-1 block truncate text-[11px] text-white/38">{consumerThemeSubtitle(theme)}</span>
-    </span>
-    <span className="truncate text-right text-[11px] font-semibold text-white/62">{themeConsumerStateLabel(theme)}</span>
-    <span className="text-right">
-      <span className="block truncate text-[11px] font-semibold text-white/70">{themeConfidenceSummary(theme)}</span>
-      <span className="block truncate text-[10px] text-white/38">{marketLabelText} · {mapDataStateLabel(theme)}</span>
-    </span>
-  </button>
-);
+}> = ({ theme, marketLabelText, selected, onSelect }) => {
+  const listSummary = observationThemeSummary(theme) || consumerThemeSubtitle(theme);
+  return (
+    <button
+      type="button"
+      data-testid={`rotation-radar-leader-row-${theme.id}`}
+      onClick={onSelect}
+      className={cn(
+        'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_5.5rem_6.25rem] items-center gap-2 p-3 text-left transition-colors',
+        selected ? 'bg-white/[0.055]' : 'hover:bg-white/[0.025]',
+      )}
+    >
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-semibold text-white/84">{theme.name}</span>
+        <span className="mt-1 block truncate text-[11px] text-white/38">{listSummary}</span>
+      </span>
+      <span className="truncate text-right text-[11px] font-semibold text-white/62">{themeConsumerStateLabel(theme)}</span>
+      <span className="text-right">
+        <span className="block truncate text-[11px] font-semibold text-white/70">{themeConfidenceSummary(theme)}</span>
+        <span className="block truncate text-[10px] text-white/38">{marketLabelText} · {mapDataStateLabel(theme)}</span>
+      </span>
+    </button>
+  );
+};
 
 const CompactThemeRow: React.FC<{
   theme: MarketRotationTheme;
   marketLabelText: string;
   selected: boolean;
   onSelect: () => void;
-}> = ({ theme, marketLabelText, selected, onSelect }) => (
-  <button
-    type="button"
-    data-testid={`rotation-radar-universe-row-${theme.id}`}
-    onClick={onSelect}
-    className={cn(
-      'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_5.5rem_6.25rem] items-center gap-2 px-3 py-2.5 text-left text-xs transition-colors',
-      selected ? 'bg-white/[0.055]' : 'hover:bg-white/[0.025]',
-    )}
-  >
-    <span className="min-w-0">
-      <span className="block truncate font-semibold text-white/76">{theme.name}</span>
-      <span className="block truncate text-[10px] text-white/35">{consumerThemeSubtitle(theme)}</span>
-    </span>
-    <span className="truncate text-right text-[11px] text-white/58">{themeConsumerStateLabel(theme)}</span>
-    <span className="text-right">
-      <span className="block truncate text-[10px] font-semibold text-white/62">{themeConfidenceSummary(theme)}</span>
-      <span className="block truncate text-[10px] text-white/35">{marketLabelText} · {mapDataStateLabel(theme)}</span>
-    </span>
-  </button>
-);
+}> = ({ theme, marketLabelText, selected, onSelect }) => {
+  const listSummary = observationThemeSummary(theme) || consumerThemeSubtitle(theme);
+  return (
+    <button
+      type="button"
+      data-testid={`rotation-radar-universe-row-${theme.id}`}
+      onClick={onSelect}
+      className={cn(
+        'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_5.5rem_6.25rem] items-center gap-2 px-3 py-2.5 text-left text-xs transition-colors',
+        selected ? 'bg-white/[0.055]' : 'hover:bg-white/[0.025]',
+      )}
+    >
+      <span className="min-w-0">
+        <span className="block truncate font-semibold text-white/76">{theme.name}</span>
+        <span className="block truncate text-[10px] text-white/35">{listSummary}</span>
+      </span>
+      <span className="truncate text-right text-[11px] text-white/58">{themeConsumerStateLabel(theme)}</span>
+      <span className="text-right">
+        <span className="block truncate text-[10px] font-semibold text-white/62">{themeConfidenceSummary(theme)}</span>
+        <span className="block truncate text-[10px] text-white/35">{marketLabelText} · {mapDataStateLabel(theme)}</span>
+      </span>
+    </button>
+  );
+};
 
 const ThemeDetailPanel: React.FC<{
   theme?: MarketRotationTheme;
@@ -1526,6 +1601,8 @@ const ThemeDetailPanel: React.FC<{
 
   const taxonomyOnly = isTaxonomyOnlyTheme(theme) || libraryMode;
   const dataWarning = Boolean(theme.isFallback || theme.freshness === 'fallback' || isThemeStale(theme));
+  const observationState = observationStateLabel(theme);
+  const directionCue = observationDirectionCue(theme);
   const evidenceNotes = sanitizeRotationNotes(theme.evidence);
   const riskExplanationNotes = sanitizeRotationNotes(theme.riskExplanations);
   const weaknessNotes = uniqueReadinessItems(
@@ -1553,6 +1630,8 @@ const ThemeDetailPanel: React.FC<{
     theme.stageExplanation,
     taxonomyOnly
       ? `${theme.name} 当前仍是分类观察，等待更多行情覆盖后再确认强弱。`
+      : observationState && directionCue
+        ? `${observationState} · ${directionCue.label}，${directionCue.changeText}，当前仅作方向观察。`
       : dataWarning
         ? `${theme.name} 当前使用最近一次可用数据，仅供观察。`
         : `${theme.name} 当前以主题强弱与广度变化为主，适合继续观察。`,
@@ -1576,6 +1655,8 @@ const ThemeDetailPanel: React.FC<{
 
         <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
           <TerminalChip variant={taxonomyOnly ? 'neutral' : dataWarning ? 'caution' : 'info'}>{themeConsumerStateLabel(theme)}</TerminalChip>
+          {observationState ? <TerminalChip variant="neutral">{observationState}</TerminalChip> : null}
+          {directionCue ? <TerminalChip variant="info">{directionCue.label}</TerminalChip> : null}
           <TerminalChip variant="neutral">{marketLabelText}</TerminalChip>
           <TerminalChip variant={dataWarning ? 'caution' : 'success'}>{mapDataStateLabel(theme)}</TerminalChip>
         </div>
@@ -1586,6 +1667,11 @@ const ThemeDetailPanel: React.FC<{
         <TerminalNotice variant={taxonomyOnly ? 'info' : dataWarning ? 'caution' : 'neutral'} className="mt-2 text-[12px] leading-5 text-white/58">
           {shortReason}
         </TerminalNotice>
+        {directionCue ? (
+          <p className="mt-2 text-[11px] leading-5 text-white/48">
+            方向线索：{directionCue.changeText}
+          </p>
+        ) : null}
       </div>
 
       <div className="min-w-0 px-1 py-3">
