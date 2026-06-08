@@ -126,8 +126,56 @@ FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS = (
     "training score",
 )
 
+FACTOR_LAB_READINESS_FORBIDDEN_API_SURFACE_TOKENS = (
+    "packetKind",
+    "packet_kind",
+    "packetVersion",
+    "packet_version",
+    "professionalReady",
+    "professional_ready",
+    "productState",
+    "product_state",
+    "dimensionCounts",
+    "dimension_counts",
+    "inputObservations",
+    "input_observations",
+    "blockingPriority",
+    "blocking_priority",
+    "blockingDimensionIds",
+    "blocking_dimension_ids",
+    "backtestFactorLabReadiness",
+    "backtest_factor_lab_readiness",
+    "factorLabReadiness",
+    "factor_lab_readiness",
+    "backtest-factor-lab-readiness",
+    "factor-lab-readiness",
+    "backtest_factor_lab_readiness_json",
+    "factor_lab_readiness_json",
+)
+
+FACTOR_LAB_READINESS_FORBIDDEN_EXPORT_KEYS = frozenset(
+    {
+        "backtest_factor_lab_readiness_json",
+        "factor_lab_readiness_json",
+        "backtest_factor_lab_readiness_packet_json",
+        "factor_lab_readiness_packet_json",
+    }
+)
+
 
 class BacktestApiContractTestCase(unittest.TestCase):
+    def _assert_no_factor_lab_readiness_api_surface(self, payload: object) -> None:
+        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+        for token in FACTOR_LAB_READINESS_FORBIDDEN_API_SURFACE_TOKENS:
+            self.assertNotIn(token, serialized, token)
+
+    def _assert_no_factor_lab_readiness_export_keys(self, export_keys: object) -> None:
+        keys = set(export_keys)
+        self.assertTrue(
+            FACTOR_LAB_READINESS_FORBIDDEN_EXPORT_KEYS.isdisjoint(keys),
+            sorted(FACTOR_LAB_READINESS_FORBIDDEN_EXPORT_KEYS.intersection(keys)),
+        )
+
     @staticmethod
     def _payload_without_allowed_oos_authority_flags(payload: dict) -> dict:
         normalized = json.loads(json.dumps(payload, ensure_ascii=False))
@@ -1096,6 +1144,12 @@ class BacktestApiContractTestCase(unittest.TestCase):
             self.assertEqual(oos_parameter_readiness_response.run_id, 123)
             self.assertEqual(manifest_response.run["status"], export_index_response.status)
             self.assertEqual(reproducibility_response.run["status"], export_index_response.status)
+            self._assert_no_factor_lab_readiness_api_surface(manifest_response.model_dump())
+            self._assert_no_factor_lab_readiness_api_surface(reproducibility_response.model_dump())
+            self._assert_no_factor_lab_readiness_api_surface(export_index_response.model_dump())
+            self._assert_no_factor_lab_readiness_api_surface(readiness_response.model_dump())
+            self._assert_no_factor_lab_readiness_api_surface(oos_parameter_readiness_response.model_dump())
+            self._assert_no_factor_lab_readiness_export_keys(item.key for item in export_index_response.exports)
             self.assertTrue(readiness_response.diagnosticOnly)
             self.assertFalse(readiness_response.engineReexecuted)
             self.assertFalse(readiness_response.mathChanged)
@@ -1295,6 +1349,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
                     trace_json_response.benchmark_summary,
                     trace_json_payload["benchmark_summary"],
                 )
+                self._assert_no_factor_lab_readiness_api_surface(trace_json_response.model_dump())
+                self._assert_no_factor_lab_readiness_api_surface(trace_csv_response.body.decode("utf-8"))
 
             if robustness_payload is None:
                 with self.assertRaises(HTTPException) as robustness_ctx:
@@ -1314,6 +1370,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 )
                 self.assertEqual(robustness_response.model_dump(), robustness_payload)
                 self._assert_robustness_payload_stays_research_prototype(robustness_response.model_dump())
+                self._assert_no_factor_lab_readiness_api_surface(robustness_response.model_dump())
             self.assertEqual(readiness_response.model_dump(), regime_readiness_payload)
             self.assertTrue(export_index_response.exports[5].available)
             self.assertEqual(
@@ -3031,6 +3088,8 @@ class BacktestApiContractTestCase(unittest.TestCase):
                 "oos_parameter_readiness_json",
             ],
         )
+        self._assert_no_factor_lab_readiness_api_surface(response.model_dump())
+        self._assert_no_factor_lab_readiness_export_keys(item.key for item in response.exports)
         self.assertEqual(response.exports[0].key, "support_bundle_manifest_json")
         self.assertTrue(response.exports[0].available)
         self.assertEqual(response.exports[0].delivery_mode, "api")
@@ -3093,6 +3152,45 @@ class BacktestApiContractTestCase(unittest.TestCase):
             response.exports[7].endpoint_path,
             "/api/v1/backtest/rule/runs/123/oos-parameter-readiness.json",
         )
+        service.get_support_export_index.assert_called_once_with(123)
+
+    def test_factor_lab_readiness_fields_stay_out_of_support_export_index_api(self) -> None:
+        service = MagicMock()
+        service.get_support_export_index.return_value = self._support_export_index_payload(status="completed")
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_support_export_index(123, db_manager=MagicMock())
+
+        export_keys = [item.key for item in response.exports]
+        self.assertEqual(
+            export_keys,
+            [
+                "support_bundle_manifest_json",
+                "support_bundle_reproducibility_manifest_json",
+                "execution_trace_json",
+                "execution_trace_csv",
+                "robustness_evidence_json",
+                "regime_attribution_readiness_json",
+                "execution_model_metadata_json",
+                "oos_parameter_readiness_json",
+            ],
+        )
+        self.assertEqual(
+            [item.endpoint_path for item in response.exports],
+            [
+                "/api/v1/backtest/rule/runs/123/support-bundle-manifest",
+                "/api/v1/backtest/rule/runs/123/support-bundle-reproducibility-manifest",
+                "/api/v1/backtest/rule/runs/123/execution-trace.json",
+                "/api/v1/backtest/rule/runs/123/execution-trace.csv",
+                "/api/v1/backtest/rule/runs/123/robustness-evidence.json",
+                "/api/v1/backtest/rule/runs/123/regime-attribution-readiness.json",
+                "/api/v1/backtest/rule/runs/123/execution-model-metadata.json",
+                "/api/v1/backtest/rule/runs/123/oos-parameter-readiness.json",
+            ],
+        )
+        self.assertEqual([item.delivery_mode for item in response.exports], ["api"] * 8)
+        self._assert_no_factor_lab_readiness_export_keys(export_keys)
+        self._assert_no_factor_lab_readiness_api_surface(response.model_dump())
         service.get_support_export_index.assert_called_once_with(123)
 
     def test_get_rule_backtest_execution_trace_json_returns_compact_contract(self) -> None:
