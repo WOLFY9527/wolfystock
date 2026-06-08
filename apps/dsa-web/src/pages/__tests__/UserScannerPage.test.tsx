@@ -2418,9 +2418,15 @@ describe('UserScannerPage', () => {
     const { container } = renderUserScannerPage({ viewportWidth: 1800 });
 
     expect(await screen.findByTestId('scanner-status-strip')).toHaveTextContent(/等待|Waiting/);
+    expect(await screen.findByTestId('scanner-conclusion-band')).toHaveTextContent('首次使用：先运行一次扫描');
+    expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent('扫描器会先按当前范围筛出可继续观察的候选。');
+    expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent('A股 · 默认市场池 · 300 只 · 60 条详评');
     expect(await screen.findByTestId('scanner-workbench-empty-state')).toHaveTextContent('尚未运行扫描');
-    expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent(/顶部命令栏.*市场.*范围.*评估深度.*候选上限/);
+    expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('扫描器会先按当前范围整理候选与观察线索。');
+    expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('A股 · 默认市场池 · 300 只 · 60 条详评');
+    expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('先直接启动一次扫描');
     expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent(/打开历史/);
+    expect(screen.getAllByRole('button', { name: '启动扫描' })).toHaveLength(1);
     expect(screen.queryByTestId('scanner-candidate-scroll-region')).not.toBeInTheDocument();
     expect(screen.queryByTestId('scanner-context-rail')).not.toBeInTheDocument();
     expect(screen.queryByTestId('scanner-detail-rail')).not.toBeInTheDocument();
@@ -2540,10 +2546,12 @@ describe('UserScannerPage', () => {
 
     renderUserScannerPage();
 
-    const emptyState = await screen.findByTestId('scanner-workbench-empty-state');
-    expect(emptyState).toHaveTextContent(/数据受限或证据不足|尚未运行扫描/);
-    expect(emptyState).toHaveTextContent(/切换候选视图到数据受限|先在顶部命令栏确认市场、范围、评估深度与候选上限/);
-    expect(emptyState).toHaveTextContent(/查看行级说明|如需已有结果可打开历史记录/);
+    await waitFor(() => {
+      expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('数据受限或证据不足');
+    });
+    const emptyState = screen.getByTestId('scanner-workbench-empty-state');
+    expect(emptyState).toHaveTextContent('切换候选视图到数据受限');
+    expect(emptyState).toHaveTextContent('查看行级说明');
     expect(emptyState).toHaveTextContent(/稍后重试或打开历史/);
   });
 

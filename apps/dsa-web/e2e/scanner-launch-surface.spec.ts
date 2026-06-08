@@ -217,6 +217,64 @@ test.describe('scanner launch surface', () => {
     await assertScannerLaunchViewport(page, { width: 390, height: 844 });
   });
 
+  test('shows first-run guidance with one primary scan CTA when no scan history exists', async ({ page }) => {
+    await page.route('**/api/v1/auth/status', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          authEnabled: true,
+          loggedIn: true,
+          passwordSet: true,
+          passwordChangeable: true,
+          setupState: 'enabled',
+          currentUser: {
+            id: 'user-1',
+            username: 'wolfy-user',
+            displayName: 'Wolfy User',
+            role: 'user',
+            isAdmin: false,
+            isAuthenticated: true,
+            transitional: false,
+            authEnabled: true,
+          },
+        }),
+      });
+    });
+    await page.route('**/api/v1/scanner/runs**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [],
+          total: 0,
+          page: 1,
+          page_size: 20,
+        }),
+      });
+    });
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/zh/scanner');
+    await page.waitForLoadState('domcontentloaded');
+
+    const conclusionBand = page.getByTestId('scanner-conclusion-band');
+    const emptyState = page.getByTestId('scanner-workbench-empty-state');
+    const runButton = page.getByRole('button', { name: '启动扫描' });
+
+    await expect(conclusionBand).toContainText('首次使用：先运行一次扫描');
+    await expect(conclusionBand).toContainText('扫描器会先按当前范围筛出可继续观察的候选。');
+    await expect(conclusionBand).toContainText('A股 · 默认市场池 · 300 只 · 60 条详评');
+    await expect(emptyState).toContainText('尚未运行扫描');
+    await expect(emptyState).toContainText('扫描器会先按当前范围整理候选与观察线索。');
+    await expect(emptyState).toContainText('先直接启动一次扫描');
+    await expect(emptyState).toContainText('打开历史记录');
+    await expect(runButton).toHaveCount(1);
+    await expect(page.getByRole('button', { name: '重新扫描' })).toHaveCount(0);
+    await expect(page.locator('body')).not.toContainText(forbiddenTradingAction);
+    await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  });
+
   test('keeps retry scan POST params unchanged in the workspace layout', async ({ page }) => {
     let postedRunRequest: unknown = null;
 

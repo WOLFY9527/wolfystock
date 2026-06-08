@@ -901,15 +901,19 @@ function buildScannerTrustSummary(runDetail: ScannerRunDetail | null): ScannerTr
   return summary;
 }
 
-function buildScannerConclusion(runDetail: ScannerRunDetail | null, language: 'zh' | 'en'): ScannerConclusionModel {
+function buildScannerConclusion(
+  runDetail: ScannerRunDetail | null,
+  language: 'zh' | 'en',
+  firstRunSetupLabel: string,
+): ScannerConclusionModel {
   const trustSummary = buildScannerTrustSummary(runDetail);
   if (!runDetail) {
     return {
       state: 'waiting',
-      title: language === 'en' ? 'Waiting for a scan' : '等待扫描',
+      title: language === 'en' ? 'First run: start a scan' : '首次使用：先运行一次扫描',
       detail: language === 'en'
-        ? 'Run or open a scan to see the candidate evidence summary.'
-        : '运行或打开一次扫描后，可查看候选证据摘要。',
+        ? `Scanner reviews the current scope and surfaces observation candidates. Starting setup: ${firstRunSetupLabel}. Run one scan first, then adjust market, scope, or review depth if needed.`
+        : `扫描器会先按当前范围筛出可继续观察的候选。当前起始范围：${firstRunSetupLabel}。先直接启动一次扫描，再按结果决定是否切换市场、范围或评估深度。`,
       candidateCount: 0,
       trustSummary,
       tone: 'neutral',
@@ -973,12 +977,14 @@ function buildScannerConclusion(runDetail: ScannerRunDetail | null, language: 'z
 function buildScannerWorkbenchEmptyState({
   candidateFilter,
   diagnosticCandidates,
+  firstRunSetupLabel,
   language,
   pageErrorSummary,
   runDetail,
 }: {
   candidateFilter: CandidateFilter;
   diagnosticCandidates: ScannerCandidateDiagnostic[];
+  firstRunSetupLabel: string;
   language: 'zh' | 'en';
   pageErrorSummary: string | null;
   runDetail: ScannerRunDetail | null;
@@ -996,8 +1002,8 @@ function buildScannerWorkbenchEmptyState({
     return {
       title: language === 'en' ? 'No scan has run yet' : '尚未运行扫描',
       body: language === 'en'
-        ? 'Use the top command bar to check market, universe, detailed review, and shortlist controls. Review shortlist, universe, and detailed review settings before retrying, or open history for previous runs.'
-        : '先在顶部命令栏确认市场、范围、评估深度与候选上限；也可再检查候选上限、范围与评估深度，可稍后重试或打开历史记录，如需已有结果可打开历史记录。',
+        ? `Scanner organizes observation candidates from the current scope. Starting setup: ${firstRunSetupLabel}. Run one scan first; if you want earlier results, open history.`
+        : `扫描器会先按当前范围整理候选与观察线索。当前起始范围：${firstRunSetupLabel}。先直接启动一次扫描；如需查看已有结果，可打开历史记录。`,
     };
   }
 
@@ -1586,6 +1592,50 @@ function getThemeLabel(theme: ScannerTheme, language: 'zh' | 'en'): string {
   return language === 'en' ? theme.labelEn : theme.labelZh;
 }
 
+function getScannerMarketLabel(market: 'cn' | 'us' | 'hk', language: 'zh' | 'en'): string {
+  if (market === 'us') return language === 'en' ? 'US' : '美股';
+  if (market === 'hk') return language === 'en' ? 'HK' : '港股';
+  return language === 'en' ? 'CN' : 'A股';
+}
+
+function buildScannerFirstRunSetupLabel({
+  market,
+  scanScope,
+  universeLimit,
+  detailLimit,
+  selectedTheme,
+  customSymbolCount,
+  language,
+}: {
+  market: 'cn' | 'us' | 'hk';
+  scanScope: ScanScope;
+  universeLimit: string;
+  detailLimit: string;
+  selectedTheme: ScannerTheme | null;
+  customSymbolCount: number;
+  language: 'zh' | 'en';
+}): string {
+  const parts = [getScannerMarketLabel(market, language)];
+
+  if (scanScope === 'theme') {
+    parts.push(language === 'en' ? 'Theme universe' : '主题标的池');
+    parts.push(selectedTheme ? getThemeLabel(selectedTheme, language) : (language === 'en' ? 'Select a theme' : '选择主题'));
+  } else if (scanScope === 'symbols') {
+    parts.push(language === 'en' ? 'Custom symbols' : '自定义标的');
+    parts.push(
+      customSymbolCount > 0
+        ? (language === 'en' ? `${customSymbolCount} symbols` : `${customSymbolCount} 个代码`)
+        : (language === 'en' ? 'Add symbols' : '补充代码'),
+    );
+  } else {
+    parts.push(language === 'en' ? 'Default market universe' : '默认市场池');
+    parts.push(language === 'en' ? `${universeLimit} names` : `${universeLimit} 只`);
+  }
+
+  parts.push(language === 'en' ? `${detailLimit} detailed reviews` : `${detailLimit} 条详评`);
+  return parts.join(' · ');
+}
+
 function buildCustomThemeId(label: string): string {
   const slug = label
     .trim()
@@ -1843,6 +1893,18 @@ const UserScannerPage: React.FC = () => {
   const parsedThemeManualSymbols = useMemo(() => parseCustomSymbols(customThemeManualSymbols), [customThemeManualSymbols]);
   const customSymbolTokenCount = useMemo(() => getSymbolTokenCount(customSymbols), [customSymbols]);
   const customThemeManualSymbolTokenCount = useMemo(() => getSymbolTokenCount(customThemeManualSymbols), [customThemeManualSymbols]);
+  const scannerFirstRunSetupLabel = useMemo(
+    () => buildScannerFirstRunSetupLabel({
+      market,
+      scanScope,
+      universeLimit,
+      detailLimit,
+      selectedTheme,
+      customSymbolCount: parsedCustomSymbols.length,
+      language,
+    }),
+    [detailLimit, language, market, parsedCustomSymbols.length, scanScope, selectedTheme, universeLimit],
+  );
 
   const handleMarketChange = useCallback((nextMarket: string) => {
     const normalizedMarket = nextMarket === 'us' ? 'us' : nextMarket === 'hk' ? 'hk' : 'cn';
@@ -2356,18 +2418,19 @@ const UserScannerPage: React.FC = () => {
   }), [historyItems, language, t]);
   const emptyStateTitle = language === 'en' ? 'No scan has run yet' : '尚未运行扫描';
   const emptyStateBody = language === 'en'
-    ? 'Use the top command bar to check market, universe, detailed review, and shortlist controls.'
-    : '先在顶部命令栏确认市场、范围、评估深度与候选上限。';
+    ? `Scanner organizes observation candidates from the current scope. Starting setup: ${scannerFirstRunSetupLabel}.`
+    : `扫描器会先按当前范围整理候选与观察线索。当前起始范围：${scannerFirstRunSetupLabel}。`;
   const pageErrorSummary = pageError ? sanitizeScannerErrorSummary(pageError.message, language) || compactScannerStateLabel('failed', language) : null;
   const workbenchEmptyState = useMemo(
     () => buildScannerWorkbenchEmptyState({
       candidateFilter,
       diagnosticCandidates,
+      firstRunSetupLabel: scannerFirstRunSetupLabel,
       language,
       pageErrorSummary,
       runDetail,
     }),
-    [candidateFilter, diagnosticCandidates, language, pageErrorSummary, runDetail],
+    [candidateFilter, diagnosticCandidates, language, pageErrorSummary, runDetail, scannerFirstRunSetupLabel],
   );
   const visibleHistorySummaries = useMemo(
     () => [currentRunSummary, recentRunSummary, previousRunSummary]
@@ -2811,8 +2874,8 @@ const UserScannerPage: React.FC = () => {
     [language, runDetail],
   );
   const scannerConclusion = useMemo(
-    () => buildScannerConclusion(runDetail, language),
-    [language, runDetail],
+    () => buildScannerConclusion(runDetail, language, scannerFirstRunSetupLabel),
+    [language, runDetail, scannerFirstRunSetupLabel],
   );
   const isRetryScanState = scannerConclusion.state === 'no-candidate' || scannerConclusion.state === 'insufficient';
   const scannerRunButtonLabel = isRunning
