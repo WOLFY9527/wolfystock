@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -108,6 +109,13 @@ def _providers_by_id(payload: dict) -> dict[str, dict]:
     }
 
 
+def _execution_probe_statuses(payload: dict) -> dict[str, dict]:
+    return {
+        str(item["id"]): item
+        for item in payload.get("diagnosticExecution", {}).get("probes", [])
+    }
+
+
 def _market_overview_macro_payload(
     *,
     provider_status: str = "success",
@@ -201,6 +209,7 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
     )
 
     payload = module.collect_diagnostic_bundle()
+    execution = payload.pop("diagnosticExecution")
 
     assert payload == {
         "officialMacroDiagnostic": {
@@ -1062,6 +1071,11 @@ def test_runtime_diagnostic_no_base_url_stays_local_only(monkeypatch) -> None:
         },
         "discrepancies": [],
     }
+    assert execution["status"] == "completed"
+    assert execution["probeCount"] == 0
+    assert execution["completedProbeCount"] == 0
+    assert execution["timedOutProbeCount"] == 0
+    assert execution["probes"] == []
 
 
 def test_runtime_diagnostic_options_authority_summary_is_sanitized_and_non_authoritative(monkeypatch) -> None:
@@ -1976,6 +1990,24 @@ def test_runtime_diagnostic_parses_explicit_tradier_options_live_probe_cli() -> 
     assert args.options_probe_expiration is None
 
 
+def test_runtime_diagnostic_parses_probe_budget_cli() -> None:
+    module = _load_script_module()
+
+    args = module._parse_args(
+        [
+            "--live-smoke",
+            "--probe-timeout-seconds",
+            "7.5",
+            "--global-timeout-seconds",
+            "22",
+        ]
+    )
+
+    assert args.live_smoke is True
+    assert args.probe_timeout_seconds == pytest.approx(7.5)
+    assert args.global_timeout_seconds == pytest.approx(22.0)
+
+
 def test_runtime_diagnostic_parses_explicit_tradier_chain_probe_cli() -> None:
     module = _load_script_module()
 
@@ -2512,3 +2544,183 @@ def test_runtime_diagnostic_keeps_polygon_breadth_probe_failure_fail_closed(monk
     assert "raw-secret" not in serialized
     assert "polygon-test-key" not in serialized
     assert "api_key" not in serialized
+
+
+def test_runtime_diagnostic_times_out_live_smoke_probe_and_keeps_partial_results(monkeypatch) -> None:
+    module = _load_script_module()
+
+    def slow_official_macro() -> dict:
+        time.sleep(0.2)
+        return {
+            "credentialsPresent": True,
+            "providerConstructed": True,
+            "probePassed": True,
+            "freshnessValid": True,
+            "sourceMetadataValid": True,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "fulfilledSeries": ["VIXCLS"],
+            "missingSeries": [],
+            "staleSeries": [],
+            "reason": "ok",
+        }
+
+    monkeypatch.setattr(module, "run_official_macro_live_smoke", slow_official_macro)
+    monkeypatch.setattr(
+        module,
+        "run_rotation_radar_alpaca_live_smoke",
+        lambda: {
+            "credentialsPresent": True,
+            "providerConstructed": True,
+            "probePassed": True,
+            "freshnessValid": True,
+            "sourceMetadataValid": True,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "fulfilledWindows": ["5m"],
+            "missingWindows": [],
+            "staleWindows": [],
+            "reason": "ok",
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "_collect_polygon_us_breadth_diagnostic",
+        lambda: {
+            "credentialsPresent": True,
+            "probePassed": True,
+            "observationDate": "2026-06-08",
+            "freshnessValid": True,
+            "coverageCount": 7,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "fulfilledMetrics": ["ADVANCERS"],
+            "missingMetrics": [],
+            "reasonCodes": [],
+        },
+    )
+
+    payload = module.collect_diagnostic_bundle(
+        include_live_smoke=True,
+        probe_timeout_seconds=0.05,
+        global_timeout_seconds=1.0,
+    )
+    probe_statuses = _execution_probe_statuses(payload)
+
+    assert payload["officialMacroDiagnostic"]["status"] == "timeout"
+    assert payload["officialMacroDiagnostic"]["reason"] == "probe_timeout"
+    assert payload["officialMacroDiagnostic"]["probePassed"] is False
+    assert payload["alpacaRotationDiagnostic"]["probePassed"] is True
+    assert payload["polygonUsBreadthDiagnostic"]["probePassed"] is True
+    assert probe_statuses["officialMacroDiagnostic"]["status"] == "timeout"
+    assert probe_statuses["alpacaRotationDiagnostic"]["status"] == "completed"
+    assert payload["diagnosticExecution"]["timedOutProbeCount"] == 1
+
+
+def test_runtime_diagnostic_global_timeout_skips_later_live_smoke_probes(monkeypatch) -> None:
+    module = _load_script_module()
+    seen: list[str] = []
+
+    def slow_official_macro() -> dict:
+        seen.append("officialMacroDiagnostic")
+        time.sleep(0.05)
+        return {
+            "credentialsPresent": True,
+            "providerConstructed": True,
+            "probePassed": True,
+            "freshnessValid": True,
+            "sourceMetadataValid": True,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "fulfilledSeries": ["VIXCLS"],
+            "missingSeries": [],
+            "staleSeries": [],
+            "reason": "ok",
+        }
+
+    def should_not_run() -> dict:
+        seen.append("unexpected")
+        raise AssertionError("global timeout should skip later probes")
+
+    monkeypatch.setattr(module, "run_official_macro_live_smoke", slow_official_macro)
+    monkeypatch.setattr(module, "run_rotation_radar_alpaca_live_smoke", should_not_run)
+    monkeypatch.setattr(module, "_collect_polygon_us_breadth_diagnostic", should_not_run)
+
+    payload = module.collect_diagnostic_bundle(
+        include_live_smoke=True,
+        probe_timeout_seconds=1.0,
+        global_timeout_seconds=0.01,
+    )
+    probe_statuses = _execution_probe_statuses(payload)
+
+    assert seen == ["officialMacroDiagnostic"]
+    assert payload["officialMacroDiagnostic"]["status"] == "timeout"
+    assert payload["officialMacroDiagnostic"]["reason"] == "global_timeout_exhausted"
+    assert payload["alpacaRotationDiagnostic"]["status"] == "timeout"
+    assert payload["alpacaRotationDiagnostic"]["reason"] == "global_timeout_exhausted"
+    assert payload["polygonUsBreadthDiagnostic"]["status"] == "timeout"
+    assert payload["polygonUsBreadthDiagnostic"]["reasonCodes"] == ["global_timeout_exhausted"]
+    assert probe_statuses["officialMacroDiagnostic"]["status"] == "timeout"
+    assert probe_statuses["alpacaRotationDiagnostic"]["status"] == "timeout"
+    assert payload["diagnosticExecution"]["timedOutProbeCount"] == 3
+
+
+def test_runtime_diagnostic_main_returns_zero_when_probe_times_out(
+    monkeypatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module = _load_script_module()
+
+    monkeypatch.setattr(
+        module,
+        "run_official_macro_live_smoke",
+        lambda: time.sleep(0.1),
+    )
+    monkeypatch.setattr(
+        module,
+        "run_rotation_radar_alpaca_live_smoke",
+        lambda: {
+            "credentialsPresent": True,
+            "providerConstructed": True,
+            "probePassed": True,
+            "freshnessValid": True,
+            "sourceMetadataValid": True,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "fulfilledWindows": ["5m"],
+            "missingWindows": [],
+            "staleWindows": [],
+            "reason": "ok",
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "_collect_polygon_us_breadth_diagnostic",
+        lambda: {
+            "credentialsPresent": True,
+            "probePassed": True,
+            "observationDate": "2026-06-08",
+            "freshnessValid": True,
+            "coverageCount": 7,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "fulfilledMetrics": ["ADVANCERS"],
+            "missingMetrics": [],
+            "reasonCodes": [],
+        },
+    )
+
+    exit_code = module.main(
+        [
+            "--live-smoke",
+            "--probe-timeout-seconds",
+            "0.02",
+            "--global-timeout-seconds",
+            "1.0",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["officialMacroDiagnostic"]["status"] == "timeout"
+    assert payload["diagnosticExecution"]["timedOutProbeCount"] == 1

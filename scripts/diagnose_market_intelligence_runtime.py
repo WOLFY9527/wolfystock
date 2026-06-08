@@ -6,10 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -58,6 +61,8 @@ from src.services.market_data_source_registry import (
 
 
 DEFAULT_TIMEOUT_SECONDS = 3.0
+DEFAULT_PROBE_TIMEOUT_SECONDS = 10.0
+DEFAULT_GLOBAL_TIMEOUT_SECONDS = 45.0
 BASE_URL_ENV_VAR = "MARKET_INTELLIGENCE_BASE_URL"
 REDACTED = "redacted"
 _BLOCKED_REASON_TOKENS = ("token", "secret", "auth", "cookie", "header", "bearer", "apikey", "api_key")
@@ -92,6 +97,10 @@ _IV_RANK_SOURCE_REGISTRY_KEY = "options_lab.iv_rank_candidate_evidence"
 _SOURCE_REGISTRY_CANDIDATE_WARNING = (
     "Registry metadata is diagnostic-only, candidate-only, and non-authoritative."
 )
+
+
+class _ProbeTimeoutExpired(TimeoutError):
+    """Raised when a bounded diagnostic probe exceeds its script-level budget."""
 
 
 def _skipped_official_macro_diagnostic(reason: str = "not_requested") -> dict[str, Any]:
@@ -144,6 +153,24 @@ def _skipped_polygon_us_breadth_diagnostic(
         "missingMetrics": list(US_BREADTH_SYMBOLS),
         "reasonCodes": [reason_code],
     }
+
+
+def _timed_out_official_macro_diagnostic(reason: str) -> dict[str, Any]:
+    payload = _skipped_official_macro_diagnostic(reason)
+    payload["status"] = "timeout"
+    return payload
+
+
+def _timed_out_alpaca_rotation_diagnostic(reason: str) -> dict[str, Any]:
+    payload = _skipped_alpaca_rotation_diagnostic(reason)
+    payload["status"] = "timeout"
+    return payload
+
+
+def _timed_out_polygon_us_breadth_diagnostic(reason_code: str) -> dict[str, Any]:
+    payload = _skipped_polygon_us_breadth_diagnostic(reason_code)
+    payload["status"] = "timeout"
+    return payload
 
 
 def _sanitize_reason(value: Any) -> str | None:
@@ -200,6 +227,115 @@ def _bounded_options_probe_timeout_seconds(value: Any) -> float:
     except (TypeError, ValueError):
         return 2.0
     return max(0.25, min(parsed, 5.0))
+
+
+def _bounded_probe_timeout_seconds(value: Any) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return DEFAULT_PROBE_TIMEOUT_SECONDS
+    return max(0.01, min(parsed, 120.0))
+
+
+def _bounded_global_timeout_seconds(value: Any) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return DEFAULT_GLOBAL_TIMEOUT_SECONDS
+    return max(0.01, min(parsed, 600.0))
+
+
+def _global_deadline(global_timeout_seconds: float | None) -> float | None:
+    if global_timeout_seconds is None:
+        return None
+    return time.monotonic() + _bounded_global_timeout_seconds(global_timeout_seconds)
+
+
+def _remaining_global_timeout_seconds(deadline: float | None) -> float | None:
+    if deadline is None:
+        return None
+    return max(0.0, deadline - time.monotonic())
+
+
+def _probe_timeout_budget(
+    per_probe_timeout_seconds: float,
+    deadline: float | None,
+) -> tuple[float | None, str]:
+    bounded_timeout = _bounded_probe_timeout_seconds(per_probe_timeout_seconds)
+    remaining = _remaining_global_timeout_seconds(deadline)
+    if remaining is None:
+        return bounded_timeout, "probe_timeout"
+    if remaining <= 0.0:
+        return None, "global_timeout_exhausted"
+    if remaining < bounded_timeout:
+        return max(remaining, 0.001), "global_timeout_exhausted"
+    return bounded_timeout, "probe_timeout"
+
+
+@contextmanager
+def _timeboxed_probe(timeout_seconds: float) -> Any:
+    if timeout_seconds <= 0.0 or not hasattr(signal, "SIGALRM") or not hasattr(signal, "setitimer"):
+        yield
+        return
+    previous_handler = signal.getsignal(signal.SIGALRM)
+
+    def _handle_timeout(signum: int, frame: Any) -> None:
+        raise _ProbeTimeoutExpired("probe timed out")
+
+    signal.signal(signal.SIGALRM, _handle_timeout)
+    signal.setitimer(signal.ITIMER_REAL, timeout_seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0.0)
+        signal.signal(signal.SIGALRM, previous_handler)
+
+
+def _new_diagnostic_execution(
+    *,
+    per_probe_timeout_seconds: float,
+    global_timeout_seconds: float,
+) -> dict[str, Any]:
+    return {
+        "status": "completed",
+        "perProbeTimeoutSeconds": per_probe_timeout_seconds,
+        "globalTimeoutSeconds": global_timeout_seconds,
+        "probeCount": 0,
+        "completedProbeCount": 0,
+        "timedOutProbeCount": 0,
+        "probes": [],
+    }
+
+
+def _record_diagnostic_probe(
+    execution: dict[str, Any],
+    *,
+    probe_id: str,
+    status: str,
+    timeout_seconds: float | None,
+    duration_seconds: float,
+    reason_code: str | None = None,
+) -> None:
+    probe_entry: dict[str, Any] = {
+        "id": probe_id,
+        "status": status,
+        "durationSeconds": round(max(duration_seconds, 0.0), 3),
+    }
+    if timeout_seconds is not None:
+        probe_entry["timeoutSeconds"] = round(max(timeout_seconds, 0.0), 3)
+    if reason_code:
+        probe_entry["reasonCode"] = reason_code
+    execution["probes"].append(probe_entry)
+
+
+def _finalize_diagnostic_execution(execution: dict[str, Any]) -> dict[str, Any]:
+    probes = execution.get("probes", [])
+    timed_out_count = sum(1 for probe in probes if probe.get("status") == "timeout")
+    execution["probeCount"] = len(probes)
+    execution["timedOutProbeCount"] = timed_out_count
+    execution["completedProbeCount"] = len(probes) - timed_out_count
+    execution["status"] = "completed_with_timeouts" if timed_out_count else "completed"
+    return execution
 
 
 def _normalize_options_probe_symbol(symbol: str) -> str:
@@ -1043,6 +1179,40 @@ def _failed_options_live_probe(
     )
 
 
+def _timed_out_options_live_probe(
+    *,
+    provider_id: str,
+    timeout_reason: str,
+    timeout_seconds: float,
+    network_call_executed: bool,
+    endpoint_results: list[dict[str, Any]],
+    timed_out_endpoint_class: str,
+    quote_shape_status: str = "unknown",
+    expiration_count: int = 0,
+    chain_summary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    endpoint_results.append(
+        {
+            "endpointClass": timed_out_endpoint_class,
+            "status": "timeout",
+            "responseShape": {"status": "unknown", "count": 0},
+        }
+    )
+    return _options_live_probe_result(
+        provider_id=provider_id,
+        status="timeout",
+        enabled=True,
+        reason_code=timeout_reason,
+        sanitized_error_code=timeout_reason,
+        timeout_seconds=timeout_seconds,
+        network_call_executed=network_call_executed,
+        endpoint_results=endpoint_results,
+        quote_shape_status=quote_shape_status,
+        expiration_count=expiration_count,
+        chain_summary=chain_summary,
+    )
+
+
 def _run_options_live_probe(
     *,
     provider_id: str,
@@ -1051,6 +1221,7 @@ def _run_options_live_probe(
     probe_chain: bool = False,
     probe_expiration: str | None = None,
     timeout_seconds: float | None = None,
+    global_deadline: float | None = None,
 ) -> dict[str, Any]:
     normalized_provider = str(provider_id or "").strip().lower()
     bounded_timeout = _bounded_options_probe_timeout_seconds(
@@ -1096,63 +1267,89 @@ def _run_options_live_probe(
     quote_shape_status = "unknown"
     expiration_count = 0
     chain_summary = _empty_options_chain_summary()
+    effective_timeout_seconds, timeout_reason = _probe_timeout_budget(bounded_timeout, global_deadline)
+    if effective_timeout_seconds is None:
+        return _timed_out_options_live_probe(
+            provider_id=normalized_provider,
+            timeout_reason=timeout_reason,
+            timeout_seconds=0.0,
+            network_call_executed=False,
+            endpoint_results=endpoint_results,
+            timed_out_endpoint_class=current_endpoint_class,
+            quote_shape_status=quote_shape_status,
+            expiration_count=expiration_count,
+            chain_summary=chain_summary,
+        )
     try:
-        transport = _build_tradier_options_live_probe_transport(
-            api_token=api_token,
-            timeout_seconds=bounded_timeout,
-        )
-        normalized_symbol = _normalize_options_probe_symbol(symbol)
-        current_endpoint_class = "quote"
-        network_call_executed = True
-        quote_payload = transport.get_quote(normalized_symbol)
-        quote_shape = _response_shape_status("quote", quote_payload)
-        quote_shape_status = str(quote_shape.get("status") or "unknown")
-        endpoint_results.append(
-            {
-                "endpointClass": "quote",
-                "status": "ok",
-                "responseShape": quote_shape,
-            }
-        )
-        current_endpoint_class = "expirations"
-        network_call_executed = True
-        expirations_payload = transport.get_expirations(normalized_symbol)
-        expirations_shape = _response_shape_status("expirations", expirations_payload)
-        expiration_count = _non_negative_int(expirations_shape.get("count"))
-        endpoint_results.append(
-            {
-                "endpointClass": "expirations",
-                "status": "ok",
-                "responseShape": expirations_shape,
-            }
-        )
-        if probe_chain:
-            current_endpoint_class = _OPTIONS_CHAIN_PROBE_ENDPOINT_CLASS
-            expiration = _normalize_options_probe_expiration(probe_expiration) or _first_tradier_expiration_date(
-                expirations_payload
+        with _timeboxed_probe(effective_timeout_seconds):
+            transport = _build_tradier_options_live_probe_transport(
+                api_token=api_token,
+                timeout_seconds=min(bounded_timeout, effective_timeout_seconds),
             )
-            if not expiration:
-                raise OptionsProviderUnavailable(
-                    "tradier",
-                    code="options_provider_probe_expiration_missing",
-                    message="Options provider chain probe expiration is missing.",
-                )
+            normalized_symbol = _normalize_options_probe_symbol(symbol)
+            current_endpoint_class = "quote"
             network_call_executed = True
-            chain_payload = transport.get_chain(normalized_symbol, expiration=expiration)
-            chain_summary = _summarize_tradier_chain_payload(chain_payload)
+            quote_payload = transport.get_quote(normalized_symbol)
+            quote_shape = _response_shape_status("quote", quote_payload)
+            quote_shape_status = str(quote_shape.get("status") or "unknown")
             endpoint_results.append(
                 {
-                    "endpointClass": _OPTIONS_CHAIN_PROBE_ENDPOINT_CLASS,
+                    "endpointClass": "quote",
                     "status": "ok",
-                    "responseShape": chain_summary["responseShape"],
+                    "responseShape": quote_shape,
                 }
             )
+            current_endpoint_class = "expirations"
+            network_call_executed = True
+            expirations_payload = transport.get_expirations(normalized_symbol)
+            expirations_shape = _response_shape_status("expirations", expirations_payload)
+            expiration_count = _non_negative_int(expirations_shape.get("count"))
+            endpoint_results.append(
+                {
+                    "endpointClass": "expirations",
+                    "status": "ok",
+                    "responseShape": expirations_shape,
+                }
+            )
+            if probe_chain:
+                current_endpoint_class = _OPTIONS_CHAIN_PROBE_ENDPOINT_CLASS
+                expiration = _normalize_options_probe_expiration(probe_expiration) or _first_tradier_expiration_date(
+                    expirations_payload
+                )
+                if not expiration:
+                    raise OptionsProviderUnavailable(
+                        "tradier",
+                        code="options_provider_probe_expiration_missing",
+                        message="Options provider chain probe expiration is missing.",
+                    )
+                network_call_executed = True
+                chain_payload = transport.get_chain(normalized_symbol, expiration=expiration)
+                chain_summary = _summarize_tradier_chain_payload(chain_payload)
+                endpoint_results.append(
+                    {
+                        "endpointClass": _OPTIONS_CHAIN_PROBE_ENDPOINT_CLASS,
+                        "status": "ok",
+                        "responseShape": chain_summary["responseShape"],
+                    }
+                )
+    except _ProbeTimeoutExpired:
+        return _timed_out_options_live_probe(
+            provider_id=normalized_provider,
+            timeout_reason=timeout_reason,
+            timeout_seconds=effective_timeout_seconds,
+            network_call_executed=network_call_executed,
+            endpoint_results=endpoint_results,
+            timed_out_endpoint_class=current_endpoint_class,
+            quote_shape_status=quote_shape_status,
+            expiration_count=expiration_count,
+            chain_summary=chain_summary,
+        )
     except OptionsProviderUnavailable as exc:
         error_code = _sanitize_reason_code(exc.code) or "options_provider_error"
         return _failed_options_live_probe(
             provider_id=normalized_provider,
             error_code=error_code,
-            timeout_seconds=bounded_timeout,
+            timeout_seconds=effective_timeout_seconds,
             network_call_executed=network_call_executed,
             endpoint_results=endpoint_results,
             failed_endpoint_class=current_endpoint_class,
@@ -1165,7 +1362,7 @@ def _run_options_live_probe(
         return _failed_options_live_probe(
             provider_id=normalized_provider,
             error_code=error_code,
-            timeout_seconds=bounded_timeout,
+            timeout_seconds=effective_timeout_seconds,
             network_call_executed=network_call_executed,
             endpoint_results=endpoint_results,
             failed_endpoint_class=current_endpoint_class,
@@ -1177,7 +1374,7 @@ def _run_options_live_probe(
         return _failed_options_live_probe(
             provider_id=normalized_provider,
             error_code="unexpected_error",
-            timeout_seconds=bounded_timeout,
+            timeout_seconds=effective_timeout_seconds,
             network_call_executed=network_call_executed,
             endpoint_results=endpoint_results,
             failed_endpoint_class=current_endpoint_class,
@@ -1192,7 +1389,7 @@ def _run_options_live_probe(
         enabled=True,
         reason_code="options_provider_live_probe_passed",
         sanitized_error_code=None,
-        timeout_seconds=bounded_timeout,
+        timeout_seconds=effective_timeout_seconds,
         network_call_executed=network_call_executed,
         endpoint_results=endpoint_results,
         quote_shape_status=quote_shape_status,
@@ -1209,6 +1406,7 @@ def _collect_options_lab_provider_preflight(
     options_probe_chain: bool = False,
     options_probe_expiration: str | None = None,
     options_probe_timeout_seconds: float | None = None,
+    global_deadline: float | None = None,
 ) -> dict[str, Any]:
     config = OptionsLiveProviderConfig.from_env()
     providers: list[dict[str, Any]] = []
@@ -1250,6 +1448,7 @@ def _collect_options_lab_provider_preflight(
                     probe_chain=options_probe_chain,
                     probe_expiration=options_probe_expiration,
                     timeout_seconds=options_probe_timeout_seconds,
+                    global_deadline=global_deadline,
                 )
             )
         providers.append(compact)
@@ -1457,6 +1656,8 @@ def collect_diagnostic_bundle(
     *,
     base_url: str | None = None,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    probe_timeout_seconds: float = DEFAULT_PROBE_TIMEOUT_SECONDS,
+    global_timeout_seconds: float = DEFAULT_GLOBAL_TIMEOUT_SECONDS,
     include_live_smoke: bool = False,
     options_live_probe: bool = False,
     options_provider: str = _OPTIONS_LIVE_PROBE_PROVIDER,
@@ -1465,12 +1666,103 @@ def collect_diagnostic_bundle(
     options_probe_expiration: str | None = None,
     options_probe_timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
+    bounded_probe_timeout_seconds = _bounded_probe_timeout_seconds(probe_timeout_seconds)
+    bounded_global_timeout_seconds = _bounded_global_timeout_seconds(global_timeout_seconds)
+    global_deadline = _global_deadline(bounded_global_timeout_seconds)
+    diagnostic_execution = _new_diagnostic_execution(
+        per_probe_timeout_seconds=bounded_probe_timeout_seconds,
+        global_timeout_seconds=bounded_global_timeout_seconds,
+    )
+
     if include_live_smoke:
-        official_macro_diagnostic = _compact_official_macro_diagnostic(run_official_macro_live_smoke())
-        alpaca_rotation_diagnostic = _compact_alpaca_rotation_diagnostic(
-            run_rotation_radar_alpaca_live_smoke()
+        live_probe_specs: tuple[
+            tuple[
+                str,
+                Callable[[], dict[str, Any]],
+                Callable[[str], dict[str, Any]],
+                Callable[[str], dict[str, Any]],
+                Callable[[dict[str, Any]], dict[str, Any]],
+            ],
+            ...,
+        ] = (
+            (
+                "officialMacroDiagnostic",
+                run_official_macro_live_smoke,
+                _timed_out_official_macro_diagnostic,
+                _skipped_official_macro_diagnostic,
+                _compact_official_macro_diagnostic,
+            ),
+            (
+                "alpacaRotationDiagnostic",
+                run_rotation_radar_alpaca_live_smoke,
+                _timed_out_alpaca_rotation_diagnostic,
+                _skipped_alpaca_rotation_diagnostic,
+                _compact_alpaca_rotation_diagnostic,
+            ),
+            (
+                "polygonUsBreadthDiagnostic",
+                _collect_polygon_us_breadth_diagnostic,
+                _timed_out_polygon_us_breadth_diagnostic,
+                _skipped_polygon_us_breadth_diagnostic,
+                lambda payload: payload,
+            ),
         )
-        polygon_us_breadth_diagnostic = _collect_polygon_us_breadth_diagnostic()
+        live_probe_results: dict[str, dict[str, Any]] = {}
+        for probe_id, probe_loader, timeout_loader, error_loader, success_loader in live_probe_specs:
+            effective_timeout_seconds, timeout_reason = _probe_timeout_budget(
+                bounded_probe_timeout_seconds,
+                global_deadline,
+            )
+            if effective_timeout_seconds is None:
+                live_probe_results[probe_id] = timeout_loader(timeout_reason)
+                _record_diagnostic_probe(
+                    diagnostic_execution,
+                    probe_id=probe_id,
+                    status="timeout",
+                    timeout_seconds=0.0,
+                    duration_seconds=0.0,
+                    reason_code=timeout_reason,
+                )
+                continue
+
+            started_at = time.monotonic()
+            try:
+                with _timeboxed_probe(effective_timeout_seconds):
+                    live_probe_results[probe_id] = success_loader(probe_loader())
+            except _ProbeTimeoutExpired:
+                live_probe_results[probe_id] = timeout_loader(timeout_reason)
+                _record_diagnostic_probe(
+                    diagnostic_execution,
+                    probe_id=probe_id,
+                    status="timeout",
+                    timeout_seconds=effective_timeout_seconds,
+                    duration_seconds=time.monotonic() - started_at,
+                    reason_code=timeout_reason,
+                )
+                continue
+            except Exception:
+                live_probe_results[probe_id] = error_loader("unexpected_error")
+                _record_diagnostic_probe(
+                    diagnostic_execution,
+                    probe_id=probe_id,
+                    status="completed",
+                    timeout_seconds=effective_timeout_seconds,
+                    duration_seconds=time.monotonic() - started_at,
+                    reason_code="unexpected_error",
+                )
+                continue
+
+            _record_diagnostic_probe(
+                diagnostic_execution,
+                probe_id=probe_id,
+                status="completed",
+                timeout_seconds=effective_timeout_seconds,
+                duration_seconds=time.monotonic() - started_at,
+            )
+
+        official_macro_diagnostic = live_probe_results["officialMacroDiagnostic"]
+        alpaca_rotation_diagnostic = live_probe_results["alpacaRotationDiagnostic"]
+        polygon_us_breadth_diagnostic = live_probe_results["polygonUsBreadthDiagnostic"]
     else:
         official_macro_diagnostic = _skipped_official_macro_diagnostic()
         alpaca_rotation_diagnostic = _skipped_alpaca_rotation_diagnostic()
@@ -1501,6 +1793,7 @@ def collect_diagnostic_bundle(
             options_probe_chain=options_probe_chain,
             options_probe_expiration=options_probe_expiration,
             options_probe_timeout_seconds=options_probe_timeout_seconds,
+            global_deadline=global_deadline,
         ),
         "optionsAuthorityDiagnostics": options_authority_diagnostics,
         "optionsAuthorityOperatorSummary": _collect_options_authority_operator_summary(
@@ -1523,9 +1816,11 @@ def collect_diagnostic_bundle(
         "optionsExpirationCalendarAuthority": options_expiration_calendar_authority,
         "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
         "discrepancies": [],
+        "diagnosticExecution": diagnostic_execution,
     }
 
     if not base_url:
+        result["diagnosticExecution"] = _finalize_diagnostic_execution(result["diagnosticExecution"])
         return result
 
     endpoint_reachability: dict[str, Any] = {
@@ -1535,8 +1830,57 @@ def collect_diagnostic_bundle(
     runtime_readiness: dict[str, Any] = {}
 
     for endpoint_id, path in _ENDPOINTS:
+        effective_timeout_seconds, timeout_reason = _probe_timeout_budget(
+            bounded_probe_timeout_seconds,
+            global_deadline,
+        )
+        if effective_timeout_seconds is None:
+            endpoint_reachability["endpoints"].append(
+                {
+                    "id": endpoint_id,
+                    "path": path,
+                    "ok": False,
+                    "status": "timeout",
+                    "errorType": "TimeoutError",
+                }
+            )
+            _record_diagnostic_probe(
+                diagnostic_execution,
+                probe_id=endpoint_id,
+                status="timeout",
+                timeout_seconds=0.0,
+                duration_seconds=0.0,
+                reason_code=timeout_reason,
+            )
+            continue
+
+        started_at = time.monotonic()
         try:
-            status_code, payload = _fetch_json(base_url, path, timeout_seconds)
+            with _timeboxed_probe(effective_timeout_seconds):
+                status_code, payload = _fetch_json(
+                    base_url,
+                    path,
+                    min(float(timeout_seconds), effective_timeout_seconds),
+                )
+        except _ProbeTimeoutExpired:
+            endpoint_reachability["endpoints"].append(
+                {
+                    "id": endpoint_id,
+                    "path": path,
+                    "ok": False,
+                    "status": "timeout",
+                    "errorType": "TimeoutError",
+                }
+            )
+            _record_diagnostic_probe(
+                diagnostic_execution,
+                probe_id=endpoint_id,
+                status="timeout",
+                timeout_seconds=effective_timeout_seconds,
+                duration_seconds=time.monotonic() - started_at,
+                reason_code=timeout_reason,
+            )
+            continue
         except urllib.error.HTTPError as exc:
             endpoint_reachability["endpoints"].append(
                 {
@@ -1547,6 +1891,13 @@ def collect_diagnostic_bundle(
                     "errorType": type(exc).__name__,
                 }
             )
+            _record_diagnostic_probe(
+                diagnostic_execution,
+                probe_id=endpoint_id,
+                status="completed",
+                timeout_seconds=effective_timeout_seconds,
+                duration_seconds=time.monotonic() - started_at,
+            )
             continue
         except Exception as exc:
             endpoint_reachability["endpoints"].append(
@@ -1556,6 +1907,14 @@ def collect_diagnostic_bundle(
                     "ok": False,
                     "errorType": type(exc).__name__,
                 }
+            )
+            _record_diagnostic_probe(
+                diagnostic_execution,
+                probe_id=endpoint_id,
+                status="completed",
+                timeout_seconds=effective_timeout_seconds,
+                duration_seconds=time.monotonic() - started_at,
+                reason_code=type(exc).__name__,
             )
             continue
 
@@ -1568,6 +1927,13 @@ def collect_diagnostic_bundle(
             }
         )
         runtime_readiness[endpoint_id] = _ENDPOINT_SUMMARIZERS[endpoint_id](payload)
+        _record_diagnostic_probe(
+            diagnostic_execution,
+            probe_id=endpoint_id,
+            status="completed",
+            timeout_seconds=effective_timeout_seconds,
+            duration_seconds=time.monotonic() - started_at,
+        )
 
     reachable_count = sum(1 for endpoint in endpoint_reachability["endpoints"] if endpoint.get("ok"))
     endpoint_reachability["reachableCount"] = reachable_count
@@ -1580,6 +1946,7 @@ def collect_diagnostic_bundle(
             alpaca_rotation_diagnostic,
             runtime_readiness,
         )
+    result["diagnosticExecution"] = _finalize_diagnostic_execution(result["diagnosticExecution"])
     return result
 
 
@@ -1600,6 +1967,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=DEFAULT_TIMEOUT_SECONDS,
         help="Per-endpoint timeout when querying the optional local backend.",
+    )
+    parser.add_argument(
+        "--probe-timeout-seconds",
+        type=float,
+        default=DEFAULT_PROBE_TIMEOUT_SECONDS,
+        help="Script-level per-probe timeout budget for live/runtime diagnostic probes.",
+    )
+    parser.add_argument(
+        "--global-timeout-seconds",
+        type=float,
+        default=DEFAULT_GLOBAL_TIMEOUT_SECONDS,
+        help="Script-level global timeout budget for the aggregated diagnostic run.",
     )
     parser.add_argument(
         "--options-live-probe",
@@ -1642,6 +2021,8 @@ def main(argv: list[str] | None = None) -> int:
         payload = collect_diagnostic_bundle(
             base_url=args.base_url,
             timeout_seconds=args.timeout_seconds,
+            probe_timeout_seconds=args.probe_timeout_seconds,
+            global_timeout_seconds=args.global_timeout_seconds,
             include_live_smoke=args.live_smoke,
             options_live_probe=args.options_live_probe,
             options_provider=args.options_provider,
@@ -1692,6 +2073,12 @@ def main(argv: list[str] | None = None) -> int:
             "optionsExpirationCalendarAuthority": options_expiration_calendar_authority,
             "usBreadthAuthorityDiagnostic": build_us_breadth_missing_authority_diagnostic(),
             "discrepancies": [],
+            "diagnosticExecution": _finalize_diagnostic_execution(
+                _new_diagnostic_execution(
+                    per_probe_timeout_seconds=_bounded_probe_timeout_seconds(args.probe_timeout_seconds),
+                    global_timeout_seconds=_bounded_global_timeout_seconds(args.global_timeout_seconds),
+                )
+            ),
         }
         print(json.dumps(fallback, ensure_ascii=False, sort_keys=True))
         return 1
