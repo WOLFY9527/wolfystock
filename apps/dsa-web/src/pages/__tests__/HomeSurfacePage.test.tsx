@@ -274,6 +274,8 @@ const HOME_EVIDENCE_PACKET_TRADING_COPY_PATTERN =
   /buy now|sell now|trade now|order now|broker route|买入|卖出|下单|交易|经纪商|小仓试错|第二笔|建仓|加仓|减仓|probe size|start light|add only/i;
 const HOME_PROVENANCE_INTERNAL_COPY_PATTERN =
   /provider|router|cache|credential|token|prompt|request body|raw payload|article body|sourceId|debugRef|internal|trace|stack|env/i;
+const HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN =
+  /provider|provider_timeout|providerTrace|sourceRefId|sourceId|sourceConfidence|sourceAuthority|sourceTier|scoreContributionAllowed|sourceAuthorityAllowed|authority|freshness|fallback_cache|cache|debug|diagnostic|diagnostics|trace|router|prompt|schema|raw payload|raw_result|raw_ai_response|context_snapshot|token|credential|stack|env|reasonCode|reasonCodes|reason_code|reason_codes|one_sentence|stop_loss|standard_report|Yahoo Finance|Yfinance|Finnhub|Alpaca|FMP|Gnews|Tavily|openai|deepseek|fixture-provider|fixture-model|buy|sell|trade now|order now|broker route|buy recommendation|sell recommendation|trading recommendation|probe size|start light|add only|position sizing|Ideal buy|Secondary entry|Stop loss|Take profit|Target zone|买入|卖出|下单|交易|立即交易|建仓|加仓|减仓|止损|止盈|目标价|目标位|目标区间|仓位建议|持仓建议|空仓建议|小仓试错|第二笔/i;
 const GUEST_HOME_FORBIDDEN_COPY_PATTERN =
   /provider|cache|debug|schema|raw payload|token|session[_\s-]?id|secret|buy now|sell now|trade now|order now|connect broker|broker CTA|guaranteed|必买|稳赚|保证收益|立即交易|提交订单|连接经纪商/i;
 const defaultStockEvidenceResponse = {
@@ -1900,6 +1902,176 @@ describe('HomeSurfacePage', () => {
     expect(strip).toHaveTextContent('待核验 1 项');
     expect(strip.textContent).not.toMatch(HOME_PROVENANCE_INTERNAL_COPY_PATTERN);
     expect(strip.textContent).not.toMatch(HOME_EVIDENCE_PACKET_TRADING_COPY_PATTERN);
+  });
+
+  it('shows a bounded Home research packet panel when all sidecars are present', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      researchReadiness: {
+        contractVersion: 'research_readiness_v1',
+        researchReady: true,
+        readinessState: 'ready',
+        verdictLabel: '研究证据可用',
+        sourceAuthority: 'scoreGradeAllowed',
+        freshnessFloor: 'fresh',
+        evidenceCoverage: {
+          scoreGradeCount: 4,
+          observationOnlyCount: 0,
+          missingCount: 0,
+          totalCount: 4,
+        },
+        nextEvidenceNeeded: ['provider_timeout must-not-render'],
+        debugRef: 'debug must-not-render',
+      },
+      evidenceCoverageFrame: {
+        technicals: { status: 'available', nextEvidenceNeeded: [] },
+        fundamentals: { status: 'available', nextEvidenceNeeded: [] },
+        news: { status: 'available', nextEvidenceNeeded: [] },
+        catalysts: { status: 'available', nextEvidenceNeeded: [] },
+        earnings: { status: 'available', nextEvidenceNeeded: [] },
+        valuation: { status: 'available', nextEvidenceNeeded: [] },
+      },
+      singleStockEvidencePacket: {
+        ...orclPartialEvidencePacket,
+        packetState: 'available',
+        fundamentals: { status: 'available', label: 'provider must-not-render' },
+        earnings: { status: 'available', label: 'sourceTier must-not-render' },
+        news: { status: 'available', label: 'buy now must-not-render' },
+        catalysts: { status: 'available', label: 'debug must-not-render' },
+      },
+      evidenceCitationFrame: {
+        frameState: 'ready',
+        citedEvidence: [
+          { id: 'cit-1', domain: 'fundamentals', summary: 'provider must-not-render' },
+        ],
+        domainCoverage: [
+          { domain: 'fundamentals', status: 'available' },
+          { domain: 'news', status: 'available' },
+        ],
+        missingEvidence: [],
+        nextEvidenceNeeded: [],
+        noAdviceBoundary: true,
+      },
+      sourceProvenanceFrame: [
+        {
+          contractVersion: 'source_provenance_v1',
+          sourceId: 'provider must-not-render',
+          sourceLabel: 'Yahoo Finance must-not-render',
+          evidenceDomain: 'market_data',
+          authorityTier: 'score_grade',
+          freshnessState: 'fresh',
+          sourceTier: 'authorized_feed',
+          fallbackOrProxy: false,
+          observationOnly: false,
+          scoreContributionAllowed: true,
+          limitations: [],
+          nextEvidenceNeeded: [],
+        },
+      ],
+    } as never);
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+
+    const panel = screen.getByTestId('home-research-packet-panel');
+    expect(panel).toHaveTextContent('研究包');
+    expect(panel).toHaveTextContent('AVAILABLE');
+    expect(panel).toHaveTextContent('当前研究包可用于观察性阅读。');
+    expect(panel).toHaveTextContent('观察边界');
+    expect(panel).toHaveTextContent('仅作为研究观察，不构成投资建议。');
+    expect(panel).toHaveTextContent('截至');
+    expect(panel.textContent).not.toMatch(HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN);
+  });
+
+  it('fails the Home research packet panel closed for partial sidecars', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      researchReadiness: {
+        contractVersion: 'research_readiness_v1',
+        researchReady: false,
+        readinessState: 'observe_only',
+        verdictLabel: '仅观察',
+        sourceAuthority: 'observationOnly',
+        freshnessFloor: 'fallback',
+        nextEvidenceNeeded: ['补充基本面证据', 'provider_timeout must-not-render'],
+        blockingReasons: ['reason_code_must_not_render'],
+      },
+      evidenceCoverageFrame: {
+        technicals: { status: 'available' },
+        fundamentals: {
+          status: 'degraded',
+          missingReasons: ['partial_coverage'],
+          nextEvidenceNeeded: ['补充基本面证据'],
+        },
+        news: {
+          status: 'missing',
+          missingReasons: ['provider_timeout'],
+          nextEvidenceNeeded: ['补充新闻证据'],
+        },
+      },
+      singleStockEvidencePacket: {
+        ...orclPartialEvidencePacket,
+        packetState: 'degraded',
+      },
+      evidenceCitationFrame: {
+        frameState: 'observe_only',
+        citedEvidence: [],
+        domainCoverage: [{ domain: 'fundamentals', status: 'degraded' }],
+        missingEvidence: ['news'],
+        nextEvidenceNeeded: ['补充新闻证据', 'sourceAuthority must-not-render'],
+        noAdviceBoundary: true,
+      },
+      sourceProvenanceFrame: [
+        {
+          contractVersion: 'source_provenance_v1',
+          sourceId: 'fallback_cache',
+          sourceLabel: 'FMP',
+          evidenceDomain: 'news',
+          authorityTier: 'observation_only',
+          freshnessState: 'fallback',
+          sourceTier: 'fallback',
+          fallbackOrProxy: true,
+          observationOnly: true,
+          scoreContributionAllowed: false,
+          limitations: ['provider_timeout'],
+          nextEvidenceNeeded: ['verified_source_metadata'],
+        },
+      ],
+    } as never);
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+
+    const panel = screen.getByTestId('home-research-packet-panel');
+    expect(panel).toHaveTextContent('PARTIAL');
+    expect(panel).toHaveTextContent('部分证据仍需补齐，当前只保留观察性阅读。');
+    expect(panel).toHaveTextContent('下一步证据：补充基本面证据');
+    expect(panel).toHaveTextContent('截至');
+    expect(panel.textContent).not.toMatch(HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN);
+  });
+
+  it('fails the Home research packet panel closed when sidecars are missing', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      researchReadiness: undefined,
+      evidenceCoverageFrame: undefined,
+      singleStockEvidencePacket: undefined,
+      evidenceCitationFrame: undefined,
+      sourceProvenanceFrame: undefined,
+    } as never);
+
+    renderSurface();
+    await screen.findByText('Oracle Corporation');
+
+    const panel = screen.getByTestId('home-research-packet-panel');
+    expect(panel).toHaveTextContent('INSUFFICIENT');
+    expect(panel).toHaveTextContent('研究包证据不足，当前不能视为完整研究结论。');
+    expect(panel).toHaveTextContent('下一步证据：等待完整研究侧车后再阅读。');
+    expect(panel).not.toHaveTextContent('AVAILABLE');
+    expect(panel.textContent).not.toMatch(HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN);
   });
 
   it('fails closed when Home sourceProvenanceFrame is absent', async () => {

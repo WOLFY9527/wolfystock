@@ -45,6 +45,7 @@ import {
 import { useDashboardLifecycle } from '../hooks/useDashboardLifecycle';
 import type {
   AnalysisEvidenceCitationFrame,
+  AnalysisEvidenceCoverageDomain,
   AnalysisEvidenceCoverageFrame,
   AnalysisReport,
   DataQualityReport,
@@ -1450,8 +1451,288 @@ function HomeSourceProvenanceStrip({
   );
 }
 
+type HomeResearchPacketStatus = 'AVAILABLE' | 'PARTIAL' | 'INSUFFICIENT';
+
+type HomeResearchPacketView = {
+  status: HomeResearchPacketStatus;
+  tone: 'neutral' | 'used' | 'warning' | 'missing';
+  explanation: string;
+  asOfLabel: string | null;
+  observationBoundary: string;
+  nextEvidence: string;
+};
+
+const HOME_RESEARCH_PACKET_PRIMARY_COVERAGE_DOMAINS: AnalysisEvidenceCoverageDomain[] = [
+  'technicals',
+  'fundamentals',
+  'news',
+  'catalysts',
+  'earnings',
+  'valuation',
+];
+
+const HOME_RESEARCH_PACKET_UNSAFE_COPY_PATTERN =
+  /provider|source|authority|freshness|fallback|cache|debug|diagnostic|trace|router|prompt|schema|raw|token|credential|stack|env|reason[_\s-]?codes?|one_sentence|stop_loss|standard_report|buy|sell|trade|order|broker|position|target|stop|entry|买入|卖出|下单|交易|建仓|加仓|减仓|止损|止盈|目标|仓位|小仓|第二笔/i;
+
+function normalizeHomeResearchPacketStatus(value: string | undefined | null): string {
+  return String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_') || 'unknown';
+}
+
+function isHomeResearchPacketAvailableStatus(value: string | undefined | null): boolean {
+  const status = normalizeHomeResearchPacketStatus(value);
+  return status === 'available' || status === 'ready';
+}
+
+function isHomeResearchPacketHardMissingStatus(value: string | undefined | null): boolean {
+  const status = normalizeHomeResearchPacketStatus(value);
+  return status === 'missing' || status === 'blocked' || status === 'insufficient' || status === 'unavailable' || status === 'unknown';
+}
+
+function hasHomeResearchPacketSidecar(
+  evidenceCoverageFrame: AnalysisEvidenceCoverageFrame | null,
+  evidenceCitationFrame: AnalysisEvidenceCitationFrame | null,
+  evidencePacket?: SingleStockEvidencePacket | null,
+  sourceProvenanceEntries?: SourceProvenanceEntry[] | null,
+): boolean {
+  return Boolean(
+    evidenceCoverageFrame
+    || evidenceCitationFrame
+    || evidencePacket
+    || sourceProvenanceEntries?.length,
+  );
+}
+
+function homeResearchPacketCoverageStatuses(frame: AnalysisEvidenceCoverageFrame | null): string[] {
+  if (!frame) return [];
+  return HOME_RESEARCH_PACKET_PRIMARY_COVERAGE_DOMAINS.map((domain) => normalizeHomeResearchPacketStatus(frame[domain]?.status));
+}
+
+function homeResearchPacketEvidencePacketStatuses(packet?: SingleStockEvidencePacket | null): string[] {
+  if (!packet) return [];
+  return [
+    packet.packetState,
+    packet.technicals?.status,
+    packet.fundamentals?.status,
+    packet.news?.status,
+    packet.catalysts?.status,
+    packet.earnings?.status,
+    packet.valuation?.status,
+  ].map(normalizeHomeResearchPacketStatus);
+}
+
+function safeHomeResearchPacketNextEvidence(values: Array<string | undefined | null>): string | null {
+  const seen = new Set<string>();
+  for (const item of values) {
+    const text = String(item || '').trim();
+    if (!text || seen.has(text) || HOME_RESEARCH_PACKET_UNSAFE_COPY_PATTERN.test(text)) {
+      continue;
+    }
+    seen.add(text);
+    return text.length > 42 ? `${text.slice(0, 42)}...` : text;
+  }
+  return null;
+}
+
+function collectHomeResearchPacketNextEvidence(
+  locale: DashboardLocale,
+  evidenceCoverageFrame: AnalysisEvidenceCoverageFrame | null,
+  evidenceCitationFrame: AnalysisEvidenceCitationFrame | null,
+): string {
+  const values: Array<string | undefined | null> = [];
+  if (evidenceCoverageFrame) {
+    for (const domain of HOME_RESEARCH_PACKET_PRIMARY_COVERAGE_DOMAINS) {
+      values.push(...(evidenceCoverageFrame[domain]?.nextEvidenceNeeded || []));
+    }
+  }
+  values.push(...(evidenceCitationFrame?.nextEvidenceNeeded || []));
+
+  const safeValue = safeHomeResearchPacketNextEvidence(values);
+  if (safeValue) {
+    return safeValue;
+  }
+  return locale === 'en'
+    ? 'Wait for the complete research sidecars before reading.'
+    : '等待完整研究侧车后再阅读。';
+}
+
+function resolveHomeResearchPacketAsOf(
+  locale: DashboardLocale,
+  report: AnalysisReport | null | undefined,
+  dataQualityReport: DataQualityReport | undefined,
+): string | null {
+  const value = dataQualityReport?.enrichmentAsOf
+    || dataQualityReport?.enrichmentUpdatedAt
+    || report?.meta.reportGeneratedAt
+    || report?.meta.createdAt
+    || report?.decisionTrace?.generatedAt;
+  const formatted = formatHistoryTimestamp(value || undefined, locale);
+  if (!formatted) return null;
+  return locale === 'en' ? `As of ${formatted}` : `截至 ${formatted}`;
+}
+
+function buildHomeResearchPacketView({
+  locale,
+  report,
+  dataQualityReport,
+  researchReadiness,
+  evidenceCoverageFrame,
+  evidenceCitationFrame,
+  evidencePacket,
+  sourceProvenanceEntries,
+}: {
+  locale: DashboardLocale;
+  report?: AnalysisReport | null;
+  dataQualityReport?: DataQualityReport;
+  researchReadiness: ConsumerResearchReadinessView;
+  evidenceCoverageFrame: AnalysisEvidenceCoverageFrame | null;
+  evidenceCitationFrame: AnalysisEvidenceCitationFrame | null;
+  evidencePacket?: SingleStockEvidencePacket | null;
+  sourceProvenanceEntries: SourceProvenanceEntry[] | null;
+}): HomeResearchPacketView {
+  const isEnglish = locale === 'en';
+  const hasSidecar = hasHomeResearchPacketSidecar(
+    evidenceCoverageFrame,
+    evidenceCitationFrame,
+    evidencePacket,
+    sourceProvenanceEntries,
+  );
+  const coverageStatuses = homeResearchPacketCoverageStatuses(evidenceCoverageFrame);
+  const packetStatuses = homeResearchPacketEvidencePacketStatuses(evidencePacket);
+  const citationState = normalizeHomeResearchPacketStatus(evidenceCitationFrame?.frameState);
+  const hasCitationBoundary = evidenceCitationFrame?.noAdviceBoundary === true;
+  const hasProvenanceLimit = Boolean(sourceProvenanceEntries?.some((item) => (
+    item.fallbackOrProxy === true
+    || item.observationOnly === true
+    || item.freshnessState === 'fallback'
+    || item.freshnessState === 'stale'
+    || item.freshnessState === 'unknown'
+    || item.freshnessState === 'unavailable'
+  )));
+  const statuses = [
+    researchReadiness.state,
+    ...coverageStatuses,
+    ...packetStatuses,
+    citationState,
+  ].map(normalizeHomeResearchPacketStatus);
+  const hasHardMissing = !hasSidecar
+    || !evidenceCoverageFrame
+    || !evidencePacket
+    || !evidenceCitationFrame
+    || !sourceProvenanceEntries?.length
+    || !hasCitationBoundary
+    || statuses.some((item) => isHomeResearchPacketHardMissingStatus(item));
+  const hasPartial = hasProvenanceLimit
+    || researchReadiness.state !== 'ready'
+    || statuses.some((item) => !isHomeResearchPacketAvailableStatus(item));
+  const status: HomeResearchPacketStatus = (() => {
+    if (!hasSidecar) return 'INSUFFICIENT';
+    if (hasHardMissing && !evidenceCoverageFrame && !evidencePacket && !evidenceCitationFrame && !sourceProvenanceEntries?.length) {
+      return 'INSUFFICIENT';
+    }
+    if (hasHardMissing && !hasPartial) return 'INSUFFICIENT';
+    if (hasHardMissing || hasPartial) return 'PARTIAL';
+    return 'AVAILABLE';
+  })();
+  const tone: HomeResearchPacketView['tone'] = status === 'AVAILABLE'
+    ? 'used'
+    : status === 'PARTIAL'
+      ? 'warning'
+      : 'missing';
+  const explanationByStatus: Record<HomeResearchPacketStatus, string> = {
+    AVAILABLE: isEnglish
+      ? 'The current research packet can be read for observation.'
+      : '当前研究包可用于观察性阅读。',
+    PARTIAL: isEnglish
+      ? 'Some evidence still needs confirmation; keep this as observation-only.'
+      : '部分证据仍需补齐，当前只保留观察性阅读。',
+    INSUFFICIENT: isEnglish
+      ? 'Research packet evidence is insufficient and should not be read as a complete research conclusion.'
+      : '研究包证据不足，当前不能视为完整研究结论。',
+  };
+
+  return {
+    status,
+    tone,
+    explanation: explanationByStatus[status],
+    asOfLabel: resolveHomeResearchPacketAsOf(locale, report, dataQualityReport),
+    observationBoundary: isEnglish
+      ? 'Observation only, not investment advice.'
+      : '仅作为研究观察，不构成投资建议。',
+    nextEvidence: collectHomeResearchPacketNextEvidence(locale, evidenceCoverageFrame, evidenceCitationFrame),
+  };
+}
+
+function HomeResearchPacketPanel({
+  locale,
+  report,
+  dataQualityReport,
+  researchReadiness,
+  evidenceCoverageFrame,
+  evidenceCitationFrame,
+  evidencePacket,
+  sourceProvenanceEntries,
+}: {
+  locale: DashboardLocale;
+  report?: AnalysisReport | null;
+  dataQualityReport?: DataQualityReport;
+  researchReadiness: ConsumerResearchReadinessView;
+  evidenceCoverageFrame: AnalysisEvidenceCoverageFrame | null;
+  evidenceCitationFrame: AnalysisEvidenceCitationFrame | null;
+  evidencePacket?: SingleStockEvidencePacket | null;
+  sourceProvenanceEntries: SourceProvenanceEntry[] | null;
+}) {
+  const isEnglish = locale === 'en';
+  const view = buildHomeResearchPacketView({
+    locale,
+    report,
+    dataQualityReport,
+    researchReadiness,
+    evidenceCoverageFrame,
+    evidenceCitationFrame,
+    evidencePacket,
+    sourceProvenanceEntries,
+  });
+
+  return (
+    <section
+      className="min-w-0 rounded-[8px] border border-[color:var(--wolfy-divider)] bg-white/[0.025] px-4 py-3.5"
+      data-testid="home-research-packet-panel"
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <p className="text-[11px] font-semibold tracking-[0] text-white/52">
+          {isEnglish ? 'Research packet' : '研究包'}
+        </p>
+        <TraceBadge tone={view.tone}>{view.status}</TraceBadge>
+        {view.asOfLabel ? <TraceBadge tone="neutral">{view.asOfLabel}</TraceBadge> : null}
+      </div>
+      <p className="mt-3 min-w-0 break-words text-sm leading-6 text-white/72">
+        {view.explanation}
+      </p>
+      <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2">
+        <div className="min-w-0 rounded-[7px] border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
+          <p className="text-[11px] font-semibold tracking-[0] text-white/42">
+            {isEnglish ? 'Observation boundary' : '观察边界'}
+          </p>
+          <p className="mt-1 min-w-0 break-words text-xs leading-5 text-white/64">
+            {view.observationBoundary}
+          </p>
+        </div>
+        <div className="min-w-0 rounded-[7px] border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
+          <p className="text-[11px] font-semibold tracking-[0] text-white/42">
+            {isEnglish ? 'Next evidence:' : '下一步证据：'}
+          </p>
+          <p className="mt-1 min-w-0 break-words text-xs leading-5 text-white/64">
+            {view.nextEvidence}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function HomeConclusionFirstConsole({
   locale,
+  report,
   dashboard,
   dataQualityReport,
   researchReadiness,
@@ -1466,6 +1747,7 @@ function HomeConclusionFirstConsole({
   confidenceVisual,
 }: {
   locale: DashboardLocale;
+  report?: AnalysisReport | null;
   dashboard: DashboardPayload;
   dataQualityReport?: DataQualityReport;
   researchReadiness: ConsumerResearchReadinessView;
@@ -1550,6 +1832,18 @@ function HomeConclusionFirstConsole({
           testId="home-evidence-packet-strip"
           className="mb-4"
         />
+        <div className="mb-4">
+          <HomeResearchPacketPanel
+            locale={locale}
+            report={report}
+            dataQualityReport={dataQualityReport}
+            researchReadiness={researchReadiness}
+            evidenceCoverageFrame={evidenceCoverageFrame}
+            evidenceCitationFrame={evidenceCitationFrame}
+            evidencePacket={evidencePacket}
+            sourceProvenanceEntries={sourceProvenanceEntries}
+          />
+        </div>
         {sourceProvenanceEntries ? (
           <div className="mb-4">
             <HomeSourceProvenanceStrip locale={locale} entries={sourceProvenanceEntries} />
@@ -6215,6 +6509,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           <div data-testid={completedTaskReport ? 'home-bento-analysis-result-card' : undefined}>
                             <HomeConclusionFirstConsole
                               locale={locale}
+                              report={activeTraceReport}
                               dashboard={readyCopy}
                               dataQualityReport={activeDataQualityReport}
                               researchReadiness={activeResearchReadinessView}
