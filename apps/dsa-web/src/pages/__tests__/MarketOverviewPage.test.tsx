@@ -2809,10 +2809,16 @@ describe('MarketOverviewPage', () => {
 
     const observationView = render(createElement(MarketOverviewPage));
     await screen.findByTestId('market-overview-decision-readiness');
-    await waitFor(() => expect(screen.getByTestId('market-overview-decision-readiness')).toHaveTextContent(/暂不形成方向结论|仅观察/));
+    await waitFor(() => expect(screen.getByTestId('market-overview-decision-readiness')).toHaveTextContent('方向仅供观察'));
     const observationBand = screen.getByTestId('market-overview-decision-readiness');
-    expect(observationBand).toHaveTextContent(/暂不形成方向结论|仅观察/);
-    expect(observationBand).toHaveTextContent(/当前信号置信度较低，仅供观察。|当前只适合作为观察，不应用作方向判断/);
+    expect(observationBand).toHaveTextContent('方向仅供观察');
+    expect(observationBand).toHaveTextContent('部分可参考');
+    expect(observationBand).toHaveTextContent('主驱动');
+    expect(observationBand).toHaveTextContent('关键阻断');
+    expect(observationBand).toHaveTextContent('标普500');
+    expect(observationBand).toHaveTextContent('缺少充分证据');
+    expect(observationBand).toHaveTextContent(/仅供观察|不应用作方向判断/);
+    expect(observationBand).not.toHaveTextContent('partial_context_only');
     expect(within(observationBand).queryByTestId('market-overview-setup-path')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '展开 技术细节' })).not.toBeInTheDocument();
     observationView.unmount();

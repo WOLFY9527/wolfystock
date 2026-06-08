@@ -608,6 +608,9 @@ function conclusionDirectionValue(summary: DecisionReadinessSummary, statusSumma
   if (summary.state === 'waiting') {
     return '等待数据完成后再判断';
   }
+  if (summary.state === 'observe' && statusSummary.label === '部分可参考') {
+    return '方向仅供观察';
+  }
   return '暂不形成方向结论';
 }
 
@@ -678,6 +681,13 @@ const MarketOverviewConclusionLayer: React.FC<{
 }> = ({ testId, summary, statusSummary, dataState, directionalSummary }) => {
   const notice = buildConsumerDataQualityNotice(summary, dataState);
   const updatedAtText = dataState.updatedAtLabel || '待刷新';
+  const partialObserve = summary.state === 'observe' && statusSummary.label === '部分可参考';
+  const keyDriver = marketOverviewConsumerCopy(
+    directionalSummary.supportingDrivers[0] || directionalSummary.regimePhrase,
+  );
+  const keyBlocker = marketOverviewConsumerCopy(
+    summary.blockers[0] || directionalSummary.blockingDrivers[0] || '关键证据仍待补齐',
+  );
   const summaryFacts = [
     {
       key: 'state',
@@ -688,16 +698,29 @@ const MarketOverviewConclusionLayer: React.FC<{
     {
       key: 'driver',
       label: '主驱动',
-      value: marketOverviewConsumerCopy(directionalSummary.supportingDrivers[0] || directionalSummary.regimePhrase),
+      value: keyDriver,
       detail: marketOverviewConsumerCopy(directionalSummary.supportingTitle),
     },
-    {
-      key: 'coverage',
-      label: '数据覆盖',
-      value: dataStatusLabel(summary, dataState),
-      detail: `最近更新：${updatedAtText}`,
-    },
+    partialObserve
+      ? {
+        key: 'blocker',
+        label: '关键阻断',
+        value: keyBlocker,
+        detail: marketOverviewConsumerCopy(`待补：${summary.nextEvidence[0] || '更多评分级确认'}`),
+      }
+      : {
+        key: 'coverage',
+        label: '数据覆盖',
+        value: dataStatusLabel(summary, dataState),
+        detail: `最近更新：${updatedAtText}`,
+      },
   ];
+  const conclusionText = partialObserve
+    ? '部分可参考：当前只用于观察，不作广泛市场方向判断。'
+    : marketOverviewConsumerCopy(summary.conclusion);
+  const detailText = partialObserve
+    ? `可参考线索：${keyDriver}；主要阻断：${keyBlocker}。`
+    : marketOverviewConsumerCopy(statusSummary.detail);
 
   return (
     <section
@@ -715,10 +738,10 @@ const MarketOverviewConclusionLayer: React.FC<{
             {conclusionDirectionValue(summary, statusSummary)}
           </h2>
           <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">
-            {marketOverviewConsumerCopy(summary.conclusion)}
+            {conclusionText}
           </p>
           <p className="mt-2 max-w-3xl text-[11px] leading-5 text-white/42">
-            {marketOverviewConsumerCopy(statusSummary.detail)}
+            {detailText}
           </p>
         </div>
         <div data-testid="market-command-chips" className="flex min-w-0 flex-wrap gap-2 lg:justify-end">

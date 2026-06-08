@@ -36,7 +36,91 @@ async function installPartialTemperaturePayload(page: Page) {
         fallbackInputCount: 3,
         excludedInputCount: 2,
         isReliable: false,
+        regimeSummary: {
+          headline: '风险偏好改善但仍需确认',
+          detail: '主线仍可观察，但缺少足够评分级确认。',
+          riskLevel: 'medium',
+        },
+        marketRegimeSynthesis: {
+          regime: 'risk_on_liquidity_expansion',
+          summary: '流动性改善，风险偏好修复。',
+          confidence: 0.34,
+          confidenceLabel: 'low',
+          topDrivers: [
+            { key: 'indices:SPX', label: '标普500' },
+          ],
+          counterEvidence: [
+            { key: 'rates:US10Y', label: 'US10Y' },
+          ],
+          dataGaps: [
+            { key: 'breadth_health', label: 'Breadth health' },
+          ],
+        },
+        marketDecisionSemantics: {
+          version: 'market_decision_semantics_v1',
+          posture: 'neutral',
+          postureConfidence: {
+            value: 42,
+            label: 'low',
+            capReasons: ['insufficient_score_grade_evidence'],
+          },
+          exposureBias: 'risk_on_watch',
+          directionReadiness: {
+            status: 'partial_context_only',
+            confidenceLabel: 'low',
+            scoreGradePillars: {
+              count: 1,
+              items: [
+                { pillar: 'official_macro_rates_volatility', label: 'Official macro/rates/volatility', reasonCode: 'score_grade_evidence' },
+              ],
+            },
+            observationOnlyPillars: {
+              count: 2,
+              items: [
+                { pillar: 'rotation_or_risk_participation', label: 'Rotation/risk participation', reasonCode: 'observation_only_evidence' },
+                { pillar: 'liquidity_conditions', label: 'Liquidity/conditions', reasonCode: 'fallback_or_proxy_evidence' },
+              ],
+            },
+            missingPillars: {
+              count: 1,
+              items: [
+                { pillar: 'breadth_health', label: 'Breadth health', reasonCode: 'missing_scoring_evidence' },
+              ],
+            },
+            blockingReasons: ['insufficient_score_grade_evidence'],
+            claimBoundaries: [
+              { claim: 'market_direction_readiness_context', allowed: false, reasonCode: 'partial_context_only' },
+            ],
+            notInvestmentAdvice: true,
+          },
+          styleTilts: [
+            { tilt: 'liquidity_beta_watch', label: 'Liquidity beta watch', detail: 'Risk-on regime is still only a watch.' },
+          ],
+          confirmationSignals: [
+            { signal: 'regime_alignment', detail: 'Primary regime remains observation-only.' },
+          ],
+          invalidationTriggers: [
+            { trigger: 'breadth_stays_thin', detail: 'Breadth must improve before a stronger direction call.' },
+          ],
+          counterEvidence: [
+            { surface: 'market_regime_synthesis', key: 'rates:US10Y', label: 'US10Y', detail: 'Rates pressure remains a contradiction.' },
+          ],
+          dataGaps: [
+            { surface: 'market_regime_synthesis', key: 'breadth_health', label: 'Breadth health', reason: 'missing_scoring_evidence' },
+          ],
+          claimBoundaries: [
+            { claim: 'observational_posture_watch', allowed: true, reasonCode: 'watch_only_language', detail: 'Only observational posture watch language is allowed.' },
+            { claim: 'direct_trade_action', allowed: false, reasonCode: 'not_investment_advice', detail: 'No execution language.' },
+          ],
+          notInvestmentAdvice: true,
+        },
         scores: {
+          overall: {
+            value: 49,
+            label: '中性',
+            trend: 'stable',
+            description: '主线可观察，但当前仍缺少足够评分级确认。',
+          },
           liquidity: {
             value: 51,
             label: '中性',
@@ -385,10 +469,13 @@ test.describe('market overview smoke', () => {
       }
 
       await expect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText(/暂不形成方向结论|等待数据完成后再判断|仅观察/);
-      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText(/当前信号置信度较低，仅供观察。|部分数据暂不可用，当前评分已暂停。|数据更新中，稍后将自动刷新。/);
+      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('方向仅供观察');
+      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('部分可参考');
+      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('主驱动');
+      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('关键阻断');
+      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText(/缺少充分证据|缺少评分级证据/);
       await expect(page.getByTestId('market-overview-research-readiness-strip')).toHaveCount(0);
-      await expect(page.getByTestId('market-decision-semantics-advice-boundary')).toContainText(/暂不形成方向结论|等待数据完成后再判断/);
+      await expect(page.getByTestId('market-decision-semantics-advice-boundary')).toContainText('方向仅供观察');
       const verdictBox = await page.getByTestId('market-overview-decision-readiness').boundingBox();
       const mainGridBox = await page.getByTestId('market-overview-main-grid').boundingBox();
       expect(verdictBox).not.toBeNull();
@@ -396,11 +483,10 @@ test.describe('market overview smoke', () => {
       expect((verdictBox?.y ?? Number.POSITIVE_INFINITY) < (mainGridBox?.y ?? Number.NEGATIVE_INFINITY)).toBe(true);
       const evidenceDetails = await openMarketOverviewEvidenceDetails(page);
       await expect(evidenceDetails).toContainText(/当前市场：证据不足|Current market: Evidence insufficient/);
-      await expect(evidenceDetails).toContainText(/不支持强方向判断/);
-      await expect(evidenceDetails).toContainText(/备用或代理证据偏多/);
+      await expect(evidenceDetails).toContainText(/支持证据|反证 \/ 风险|下一步观察/);
       await expect(evidenceDetails).not.toContainText('N/A');
       await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-      await expect(await page.locator('body').innerText()).not.toMatch(/raw|payload|rotation_non_scoring_or_taxonomy_only|Rotation Non Scoring Or Taxonomy Only/i);
+      await expect(await page.locator('body').innerText()).not.toMatch(/raw|payload|partial_context_only|reasonCode|sourceAuthorityAllowed|scoreContributionAllowed|rotation_non_scoring_or_taxonomy_only|Rotation Non Scoring Or Taxonomy Only/i);
     }
   });
 });
