@@ -148,14 +148,88 @@ class AnalysisPreviewRequest(BaseModel):
     )
 
 
+class AnalysisPreviewMeta(BaseModel):
+    """Consumer-safe metadata for public guest preview."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query_id: str = Field(..., description="预览请求 ID")
+    stock_code: str = Field(..., description="股票代码")
+    stock_name: Optional[str] = Field(None, description="股票名称")
+    company_name: Optional[str] = Field(None, description="公司名称")
+    report_type: Optional[str] = Field(None, description="报告类型")
+    report_language: Optional[str] = Field(None, description="报告输出语言（zh/en）")
+    created_at: Optional[str] = Field(None, description="创建时间")
+    market_timestamp: Optional[str] = Field(None, description="市场行情时间（ISO 8601, aware）")
+    market_session_date: Optional[str] = Field(None, description="市场会话日期（YYYY-MM-DD）")
+    news_published_at: Optional[str] = Field(None, description="新闻发布时间（ISO 8601, aware）")
+    report_generated_at: Optional[str] = Field(None, description="报告生成时间（ISO 8601, aware）")
+    current_price: Optional[float] = Field(None, description="分析时股价")
+    change_pct: Optional[float] = Field(None, description="分析时涨跌幅(%)")
+
+
+class AnalysisPreviewSummary(BaseModel):
+    """Observation-only summary for public guest preview."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    analysis_summary: str = Field(..., description="研究摘要")
+    trend_prediction: str = Field(..., description="观察口径")
+    sentiment_score: Optional[int] = Field(None, description="情绪评分 (0-100)", ge=0, le=100)
+    sentiment_label: Optional[str] = Field(None, description="情绪标签")
+    observation_scope: str = Field("仅观察", description="公开预览观察边界")
+    key_price_reference: str = Field(..., description="关键价位参考说明")
+    evidence_boundary: str = Field(..., description="证据边界说明")
+
+
+class AnalysisPreviewReport(BaseModel):
+    """Whitelist projection for public guest preview."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    meta: AnalysisPreviewMeta = Field(..., description="消费者可见元信息")
+    summary: AnalysisPreviewSummary = Field(..., description="消费者可见研究摘要")
+
+
 class AnalysisPreviewResponse(BaseModel):
     """Trimmed report contract for guest-mode preview."""
 
     query_id: str = Field(..., description="预览请求 ID")
     stock_code: str = Field(..., description="股票代码")
     stock_name: Optional[str] = Field(None, description="股票名称")
-    report: AnalysisReport = Field(..., description="仅含 meta/summary/strategy 的预览报告")
+    report: AnalysisPreviewReport = Field(..., description="仅含消费者安全投影的预览报告")
     preview_scope: str = Field("guest", description="预览作用域标识")
+
+
+def build_consumer_safe_preview_report(report: AnalysisReport) -> AnalysisPreviewReport:
+    """Project legacy analysis output into a public, observation-only preview."""
+    meta = report.meta
+    summary = report.summary
+    return AnalysisPreviewReport(
+        meta=AnalysisPreviewMeta(
+            query_id=meta.query_id,
+            stock_code=meta.stock_code,
+            stock_name=meta.stock_name,
+            company_name=meta.company_name,
+            report_type=meta.report_type,
+            report_language=meta.report_language,
+            created_at=meta.created_at,
+            market_timestamp=meta.market_timestamp,
+            market_session_date=meta.market_session_date,
+            news_published_at=meta.news_published_at,
+            report_generated_at=meta.report_generated_at,
+            current_price=meta.current_price,
+            change_pct=meta.change_pct,
+        ),
+        summary=AnalysisPreviewSummary(
+            analysis_summary="研究摘要：公开预览仅保留观察性信息，完整研究需登录后查看。",
+            trend_prediction="仅观察",
+            sentiment_score=summary.sentiment_score,
+            sentiment_label=summary.sentiment_label,
+            key_price_reference="关键价位参考：公开预览以观察说明呈现，详细价位不在公开预览中展示。",
+            evidence_boundary="证据边界：公开预览仅展示研究摘要，不展示内部推演细节。",
+        ),
+    )
 
 
 class TaskAccepted(BaseModel):

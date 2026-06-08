@@ -350,6 +350,11 @@ def test_sync_analysis_api_preserves_home_evidence_packet_contract(client) -> No
     payload = response.json()
     report = payload["report"]
     serialized_payload = json.dumps(payload, sort_keys=True)
+    assert report["summary"]["operation_advice"] == "Observe only"
+    assert report["strategy"]["ideal_buy"] == "184-186"
+    assert report["strategy"]["stop_loss"] == "179"
+    assert report["strategy"]["take_profit"] == "195-198"
+    assert report["details"]["analysis_result"] is not None
     assert "report_evidence_export_v1" not in serialized_payload
     assert "reportEvidenceExport" not in serialized_payload
     assert "report_evidence_export" not in serialized_payload

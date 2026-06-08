@@ -45,6 +45,7 @@ from api.v1.schemas.analysis import (
     TaskInfo,
     TaskListResponse,
     DuplicateTaskErrorResponse,
+    build_consumer_safe_preview_report,
 )
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.history import (
@@ -286,16 +287,13 @@ def preview_analysis(
             context_snapshot=None,
             fallback_fundamental_payload=None,
         )
-        report.details = None
-        report.decision_trace = None
-        report.report_quality = None
-        report.meta.model_used = None
+        preview_report = build_consumer_safe_preview_report(report)
 
         preview_response = AnalysisPreviewResponse(
             query_id=resolved_query_id,
             stock_code=result.get("stock_code", stock_code),
             stock_name=result.get("stock_name") or request.stock_name,
-            report=report,
+            report=preview_report,
             preview_scope="guest",
         )
         execution_logs.append_runtime_result(
