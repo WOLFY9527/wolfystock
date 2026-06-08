@@ -15,6 +15,6 @@ Additional retained design note:
   Admin/Ops provider health surface. Keep for operator-surface planning only;
   it is not the visual source of truth for normal product routes.
 
-Historical or transitional UI notes live under `../frontend/archive/` and
-`archive/`. They are provenance only and must not override the frontend docs
-above.
+Historical or transitional UI notes live under `../frontend/archive/` and the
+archive locations indexed in `../ARCHIVE_INDEX.md`. They are provenance only
+and must not override the frontend docs above.

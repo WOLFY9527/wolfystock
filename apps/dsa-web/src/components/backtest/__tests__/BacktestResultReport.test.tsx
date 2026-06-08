@@ -401,6 +401,7 @@ describe('BacktestResultReport', () => {
     expect(within(checklist).getByTestId('backtest-research-review-row-benchmark')).toHaveTextContent('QQQ');
     expect(within(checklist).getByTestId('backtest-research-review-row-oos')).toHaveTextContent('Walk-forward 4 窗口');
     expect(within(checklist).getByTestId('backtest-research-review-row-parameter')).toHaveTextContent('参数稳定性');
+    expect(within(checklist).getByTestId('backtest-research-review-row-parameter')).toHaveTextContent('参数稳定性证据可用');
     expect(within(checklist).getByTestId('backtest-research-review-row-robustness')).toHaveTextContent('Monte Carlo 200 次');
     expect(within(checklist).getAllByText('诊断可查').length).toBeGreaterThanOrEqual(5);
     expect(checklist).toHaveTextContent('不构成选模证明');

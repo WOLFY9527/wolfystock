@@ -1,9 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OptionsLabPage, { OptionsLabErrorBoundary } from '../OptionsLabPage';
 import { optionsLabApi } from '../../api/optionsLab';
 import type { OptionsResearchReadiness } from '../../types/researchReadiness';
+
+const optionsLabPageSource = readFileSync(resolve(process.cwd(), 'src/pages/OptionsLabPage.tsx'), 'utf8');
 
 vi.mock('../../api/optionsLab', () => ({
   optionsLabApi: {
@@ -2277,5 +2281,52 @@ describe('OptionsLabPage', () => {
     expect(putCard).toHaveTextContent('$50.00');
     expect(putCard).toHaveTextContent('$3.35');
     expect(putCard).toHaveTextContent('$3.20 / $3.50');
+  });
+
+  it('keeps research-trust copy sentinels analytical and no-decision grade', () => {
+    expect(optionsLabPageSource).toContain('只读观察');
+    expect(optionsLabPageSource).toContain('不构成买卖建议');
+    expect(optionsLabPageSource).toContain('不可用于真实交易判断');
+    expect(optionsLabPageSource).toContain('不会触发外部执行');
+    expect(optionsLabPageSource).toContain('不连接外部执行通道');
+    expect(optionsLabPageSource).toContain('不改动投资组合');
+    expect(optionsLabPageSource).toContain('options-lab-consumer-availability');
+    expect(optionsLabPageSource).toContain('options-lab-input-region');
+    expect(optionsLabPageSource).toContain('options-lab-output-region');
+    expect(optionsLabPageSource).toContain('观察结构样例');
+    expect(optionsLabPageSource).toContain('情景参数');
+    expect(optionsLabPageSource).toContain('分析结果');
+    expect(optionsLabPageSource).toContain('首个观察结构');
+    expect(optionsLabPageSource).toContain('样例顺序 #');
+    expect(optionsLabPageSource).toContain('情景上沿');
+    expect(optionsLabPageSource).toContain('目标价下情景估算');
+    expect(optionsLabPageSource).toContain('未设上沿，不代表可获利');
+    expect(optionsLabPageSource).toContain('break-words text-sm font-medium leading-6');
+    expect(optionsLabPageSource).toContain('options-lab-strategy-metric-list');
+    expect(optionsLabPageSource).toContain('options-lab-decision-metric-list');
+    expect(optionsLabPageSource).toContain('风险指标');
+    expect(optionsLabPageSource).toContain('判断指标');
+    expect(optionsLabPageSource).toContain('假设价格');
+    expect(optionsLabPageSource).toContain('专业结构：');
+    expect(optionsLabPageSource).toContain('xl:col-start-2 xl:row-start-1');
+
+    [
+      'trade quality',
+      '决策实验室',
+      '可成交性',
+      '有条件可交易',
+      '候选策略',
+      '首个候选',
+      '观察排序 #',
+      '先看排序靠前的结构',
+      '最大收益',
+      '情景收益',
+      '上涨情景',
+      '下跌情景',
+      '目标价格',
+      '再决定是否继续跟踪',
+    ].forEach((forbidden) => {
+      expect(optionsLabPageSource).not.toContain(forbidden);
+    });
   });
 });

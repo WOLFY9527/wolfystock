@@ -28,6 +28,10 @@ Start current work from:
 | `docs/architecture/archive/phase-f/` | Phase F evidence plans and runbooks | Portfolio comparison/proof provenance |
 | `sources/archive/legacy-screenshots/` | Legacy root-level screenshots and GIF captures retired from active references | Historical binary evidence only |
 
+Note: there is no standalone design-archive lane in the current tree.
+Historical design-transition provenance is retained through the archive lanes
+above and the active frontend/design indexes that point to them.
+
 ## Historical Audit Files
 
 Retained audit archive files include:

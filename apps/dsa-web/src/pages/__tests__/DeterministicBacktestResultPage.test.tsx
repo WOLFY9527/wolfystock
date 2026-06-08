@@ -1837,6 +1837,83 @@ describe('DeterministicBacktestResultPage', () => {
     expect(await screen.findByText('至少需要 2 条已完成运行才能打开比较工作台。')).toBeInTheDocument();
   });
 
+  it('updates the inline report when compare summary adds parameter stability evidence', async () => {
+    const currentRun = makeResultRun({ id: 99 });
+    const compareRun = makeResultRun({ id: 123, totalReturnPct: 26.8, benchmarkReturnPct: 20.1 });
+    getRuleBacktestRun.mockImplementation(async (id: number) => (id === 123 ? compareRun : currentRun));
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 2,
+      page: 1,
+      limit: 10,
+      items: [currentRun, compareRun],
+    });
+    compareRuleBacktestRuns.mockResolvedValue({
+      comparisonSource: 'stored_compare_summary',
+      readMode: 'stored_first',
+      requestedRunIds: [99, 123],
+      resolvedRunIds: [99, 123],
+      comparableRunIds: [99, 123],
+      missingRunIds: [],
+      unavailableRuns: [],
+      fieldGroups: ['parameter_stability_evidence'],
+      parameterStabilityEvidence: {
+        contractKind: 'backtest_parameter_stability_diagnostic_evidence',
+        state: 'available',
+        diagnosticOnly: true,
+        decisionGrade: false,
+        source: 'stored_compare_summary',
+      },
+      items: [],
+    });
+
+    renderResultPage();
+
+    const parameterRow = await screen.findByTestId('backtest-research-review-row-parameter');
+    expect(parameterRow).toHaveTextContent('缺失 / 待验证');
+    expect(compareRuleBacktestRuns).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('tab', { name: '历史结果' }));
+    await act(async () => {
+      await vi.dynamicImportSettled();
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: '比较运行 123' }));
+
+    await waitFor(() => {
+      expect(compareRuleBacktestRuns).toHaveBeenCalledWith({ runIds: [99, 123] });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('backtest-research-review-row-parameter')).toHaveTextContent('参数稳定性证据可用');
+    });
+  });
+
+  it('keeps parameter evidence missing when compare summary loading fails', async () => {
+    const currentRun = makeResultRun({ id: 99 });
+    const compareRun = makeResultRun({ id: 123 });
+    getRuleBacktestRun.mockImplementation(async (id: number) => (id === 123 ? compareRun : currentRun));
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 2,
+      page: 1,
+      limit: 10,
+      items: [currentRun, compareRun],
+    });
+    compareRuleBacktestRuns.mockRejectedValue(new Error('compare unavailable'));
+
+    renderResultPage();
+
+    expect(await screen.findByTestId('backtest-research-review-row-parameter')).toHaveTextContent('缺失 / 待验证');
+
+    fireEvent.click(screen.getByRole('tab', { name: '历史结果' }));
+    await act(async () => {
+      await vi.dynamicImportSettled();
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: '比较运行 123' }));
+
+    await waitFor(() => {
+      expect(compareRuleBacktestRuns).toHaveBeenCalledWith({ runIds: [99, 123] });
+    });
+    expect(await screen.findByTestId('backtest-research-review-row-parameter')).toHaveTextContent('缺失 / 待验证');
+  });
+
   it('runs lightweight scenario variants and exports the summary report with a robustness appendix', async () => {
     const currentRun = makeResultRun({
       id: 99,

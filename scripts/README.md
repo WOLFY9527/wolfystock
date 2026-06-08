@@ -70,11 +70,23 @@ freshness and source-metadata gates:
 
 - `python3 scripts/diagnose_official_macro_activation.py`
 - `python3 scripts/diagnose_rotation_alpaca_activation.py`
+- `python3 scripts/diagnose_fed_liquidity_activation.py`
+- `python3 scripts/diagnose_polygon_us_breadth_activation.py`
+- `python3 scripts/diagnose_usd_pressure_activation.py`
+- `python3 scripts/diagnose_polygon_market_overview_activation.py`
 
 They may call only their specific live providers during the probe and should
 print sanitized status summaries only. Passing either diagnostic is operator
 evidence for that provider activation path, not full release approval and not a
 substitute for the normal release or CI gates.
+
+Related local operator helpers:
+
+- `python3 scripts/local_soak_performance_smoke.py`
+- `python3 scripts/smoke_market_data_authenticated.py`
+
+These are discoverability-only entries for local smoke/performance loops. They
+are not release approval and should be run only with deliberate local context.
 
 ### Release/deploy/operator workflows
 

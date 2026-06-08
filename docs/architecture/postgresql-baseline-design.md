@@ -57,7 +57,7 @@ This phase does **not** implement a full migration. It does **not** move bulk hi
   - `src/auth.py`
   - `api/deps.py`
   - `api/v1/endpoints/auth.py`
-  - `docs/architecture/multi-user-foundation-phase2.md`
+  - `docs/architecture/archive/multi-user-foundation/multi-user-foundation-phase2.md`
 - Storage inconsistencies:
   - bootstrap admin password still has file-backed compatibility semantics
   - session truth is split between signed cookie and session row
@@ -155,7 +155,7 @@ This phase does **not** implement a full migration. It does **not** move bulk hi
 - Evidence:
   - `src/agent/conversation.py`
   - `src/storage.py`
-  - `docs/architecture/multi-user-foundation-phase3.md`
+  - `docs/architecture/archive/multi-user-foundation/multi-user-foundation-phase3.md`
 - Storage inconsistencies:
   - current table names are conversation-oriented, while the product surface is chat-oriented
   - session context is partially transient and partially implicit
