@@ -473,6 +473,8 @@ test.describe('market overview smoke', () => {
       await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('部分可参考');
       await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('主驱动');
       await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('关键阻断');
+      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('信心水平');
+      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('有限');
       await expect(page.getByTestId('market-overview-decision-readiness')).toContainText(/缺少充分证据|缺少评分级证据/);
       await expect(page.getByTestId('market-overview-research-readiness-strip')).toHaveCount(0);
       await expect(page.getByTestId('market-decision-semantics-advice-boundary')).toContainText('方向仅供观察');

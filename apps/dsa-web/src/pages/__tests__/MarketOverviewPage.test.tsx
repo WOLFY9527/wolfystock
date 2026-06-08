@@ -2753,6 +2753,8 @@ describe('MarketOverviewPage', () => {
     expect(readyBand).toHaveTextContent('市场状态');
     expect(readyBand).toHaveTextContent('主驱动');
     expect(readyBand).toHaveTextContent('数据覆盖');
+    expect(readyBand).toHaveTextContent('信心水平');
+    expect(readyBand).toHaveTextContent('中等');
     expect(readyBand).toHaveTextContent(/可判断|等待数据完成后再判断|暂不形成方向结论/);
     expect(within(readyBand).queryByText('查看需配置的数据源')).not.toBeInTheDocument();
     expect(readyBand.textContent || '').not.toMatch(/买入|卖出|买卖|buy now|sell now|target|stop|recommend/i);
@@ -2815,6 +2817,8 @@ describe('MarketOverviewPage', () => {
     expect(observationBand).toHaveTextContent('部分可参考');
     expect(observationBand).toHaveTextContent('主驱动');
     expect(observationBand).toHaveTextContent('关键阻断');
+    expect(observationBand).toHaveTextContent('信心水平');
+    expect(observationBand).toHaveTextContent('有限');
     expect(observationBand).toHaveTextContent('标普500');
     expect(observationBand).toHaveTextContent('缺少充分证据');
     expect(observationBand).toHaveTextContent(/仅供观察|不应用作方向判断/);
@@ -2832,6 +2836,8 @@ describe('MarketOverviewPage', () => {
     await waitFor(() => expect(screen.getByTestId('market-overview-decision-readiness')).toHaveTextContent(/暂不形成方向结论|仅观察|等待数据完成后再判断/));
     const unavailableBand = screen.getByTestId('market-overview-decision-readiness');
     expect(unavailableBand).toHaveTextContent(/暂不形成方向结论|仅观察|等待数据完成后再判断/);
+    expect(unavailableBand).toHaveTextContent('信心水平');
+    expect(unavailableBand).toHaveTextContent('不形成判断');
     expect(unavailableBand).toHaveTextContent(/当前信号置信度较低，仅供观察。|部分数据暂不可用，当前评分已暂停。|数据更新中，稍后将自动刷新。/);
     expect(within(unavailableBand).queryByTestId('market-overview-setup-path')).not.toBeInTheDocument();
     unavailableView.unmount();

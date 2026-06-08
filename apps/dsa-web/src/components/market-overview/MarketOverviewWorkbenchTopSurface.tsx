@@ -198,6 +198,12 @@ type ConsumerDataQualityNoticeView = {
   variant: 'neutral' | 'info' | 'caution';
 };
 
+type ConsumerConfidenceSummaryView = {
+  value: string;
+  detail: string;
+  chipLabel: string;
+};
+
 const MARKET_OVERVIEW_SETUP_ACTION_CLASS = 'inline-flex min-h-8 items-center rounded-md border border-white/[0.08] bg-white/[0.035] px-2.5 py-1 text-[11px] font-semibold text-white/72 transition-colors hover:border-cyan-200/25 hover:bg-white/[0.06] hover:text-white';
 
 function marketOverviewConsumerCopy(text: string): string {
@@ -642,18 +648,84 @@ function buildConsumerDataQualityNotice(summary: DecisionReadinessSummary, dataS
   return null;
 }
 
-function confidenceStatusLabel(summary: DecisionReadinessSummary): string {
-  switch (summary.state) {
-    case 'ready':
-      return '当前信号可参考';
-    case 'waiting':
-      return '更新中';
-    case 'observe':
-      return '仅供观察';
-    case 'unavailable':
-    default:
-      return '评分暂停';
+function normalizeConfidenceValue(label?: string | null): '较充分' | '中等' | '有限' {
+  const normalized = String(label || '').trim();
+  if (normalized === '高') {
+    return '较充分';
   }
+  if (normalized === '中') {
+    return '中等';
+  }
+  return '有限';
+}
+
+function buildConsumerConfidenceSummary(
+  summary: DecisionReadinessSummary,
+  view?: MarketOverviewDecisionSemanticsView,
+): ConsumerConfidenceSummaryView {
+  const failClosedDirection = view?.insufficient || view?.directionReadiness?.status === 'data_insufficient';
+
+  if (summary.state === 'waiting') {
+    return {
+      value: '更新中',
+      detail: '等待当前批次数据完成后，再更新方向观察依据。',
+      chipLabel: '信心水平：更新中',
+    };
+  }
+
+  if (summary.state === 'unavailable') {
+    return {
+      value: '不形成判断',
+      detail: '关键数据暂不可用或未满足方向门槛，当前不输出可用方向结论。',
+      chipLabel: '信心水平：不形成判断',
+    };
+  }
+
+  if (failClosedDirection) {
+    return {
+      value: '不形成判断',
+      detail: '关键依据仍不足，当前不输出可用方向结论。',
+      chipLabel: '信心水平：不形成判断',
+    };
+  }
+
+  if (summary.state === 'observe') {
+    return {
+      value: '有限',
+      detail: '现有线索只足够支持观察，不应用作方向判断。',
+      chipLabel: '信心水平：有限',
+    };
+  }
+
+  const confidenceValue = normalizeConfidenceValue(
+    view?.directionReadiness?.confidenceLabel || view?.confidenceLabel,
+  );
+  if (confidenceValue === '较充分') {
+    return {
+      value: confidenceValue,
+      detail: '主要依据较完整，当前方向可继续观察参考，但不构成交易指令。',
+      chipLabel: `信心水平：${confidenceValue}`,
+    };
+  }
+  if (confidenceValue === '中等') {
+    return {
+      value: confidenceValue,
+      detail: '已有主要依据，但仍需继续核对反证与后续更新。',
+      chipLabel: `信心水平：${confidenceValue}`,
+    };
+  }
+  return {
+    value: confidenceValue,
+    detail: '方向线索仍偏有限，先保持研究观察。',
+    chipLabel: `信心水平：${confidenceValue}`,
+  };
+}
+
+function confidenceStatusLabel(
+  summary: DecisionReadinessSummary,
+  view?: MarketOverviewDecisionSemanticsView,
+): string {
+  return buildConsumerConfidenceSummary(summary, view).chipLabel;
 }
 
 function dataStatusLabel(summary: DecisionReadinessSummary, dataState: MarketOverviewDataStateStripView): string {
@@ -678,7 +750,9 @@ const MarketOverviewConclusionLayer: React.FC<{
   statusSummary: DirectionUsabilitySummary;
   dataState: MarketOverviewDataStateStripView;
   directionalSummary: MarketDirectionalSummary;
-}> = ({ testId, summary, statusSummary, dataState, directionalSummary }) => {
+  view?: MarketOverviewDecisionSemanticsView;
+}> = ({ testId, summary, statusSummary, dataState, directionalSummary, view }) => {
+  const confidenceSummary = buildConsumerConfidenceSummary(summary, view);
   const notice = buildConsumerDataQualityNotice(summary, dataState);
   const updatedAtText = dataState.updatedAtLabel || '待刷新';
   const partialObserve = summary.state === 'observe' && statusSummary.label === '部分可参考';
@@ -714,6 +788,12 @@ const MarketOverviewConclusionLayer: React.FC<{
         value: dataStatusLabel(summary, dataState),
         detail: `最近更新：${updatedAtText}`,
       },
+    {
+      key: 'confidence',
+      label: '信心水平',
+      value: confidenceSummary.value,
+      detail: confidenceSummary.detail,
+    },
   ];
   const conclusionText = partialObserve
     ? '部分可参考：当前只用于观察，不作广泛市场方向判断。'
@@ -746,7 +826,7 @@ const MarketOverviewConclusionLayer: React.FC<{
         </div>
         <div data-testid="market-command-chips" className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
           <TerminalChip variant={summary.stateVariant}>{summary.stateLabel}</TerminalChip>
-          <TerminalChip variant="neutral">{confidenceStatusLabel(summary)}</TerminalChip>
+          <TerminalChip variant="neutral">{confidenceStatusLabel(summary, view)}</TerminalChip>
           <TerminalChip variant="neutral">{dataStatusLabel(summary, dataState)}</TerminalChip>
         </div>
       </div>
@@ -761,7 +841,7 @@ const MarketOverviewConclusionLayer: React.FC<{
       ) : null}
       <div
         data-testid="market-overview-summary-strip"
-        className="mt-4 grid min-w-0 grid-cols-1 gap-2 xl:grid-cols-3"
+        className="mt-4 grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4"
       >
         {summaryFacts.map((fact) => (
           <div key={fact.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-2.5">
@@ -926,6 +1006,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
           statusSummary={statusSummary}
           dataState={dataState}
           directionalSummary={directionalSummary}
+          view={view}
         />
         <MarketOverviewDataNotesDisclosure
           directionalSummary={directionalSummary}
