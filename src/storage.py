@@ -20,6 +20,7 @@ import re
 from datetime import datetime, date, timedelta, time
 from types import SimpleNamespace
 from typing import Optional, List, Dict, Any, TYPE_CHECKING, Tuple, Iterable
+from urllib.parse import unquote_plus, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -85,6 +86,83 @@ logger = logging.getLogger(__name__)
 AdminNotificationService = None
 DEFAULT_RECENT_ANALYSIS_SYMBOL_LIMIT = 100
 MAX_RECENT_ANALYSIS_SYMBOL_LIMIT = 500
+_DB_URL_REDACTED_VALUE = "***"
+
+
+def _redact_db_url_query_for_log(query: str) -> str:
+    if not query:
+        return query
+
+    redacted_parts: List[str] = []
+    for part in query.split("&"):
+        key, separator, _value = part.partition("=")
+        try:
+            decoded_key = unquote_plus(key)
+        except Exception:
+            decoded_key = key
+        if separator and is_sensitive_key(decoded_key):
+            redacted_parts.append(f"{key}{separator}{_DB_URL_REDACTED_VALUE}")
+        else:
+            redacted_parts.append(part)
+    return "&".join(redacted_parts)
+
+
+def _replace_db_url_query_for_log(db_url: str, redacted_query: str) -> str:
+    before_query, separator, query_and_fragment = db_url.partition("?")
+    if not separator:
+        return db_url
+
+    _original_query, fragment_separator, fragment = query_and_fragment.partition("#")
+    return f"{before_query}?{redacted_query}{fragment_separator}{fragment}"
+
+
+def _redact_db_url_for_log(db_url: Any) -> str:
+    """Return a display-only DB URL with credentials masked."""
+    text = str(db_url or "")
+    if not text:
+        return text
+
+    try:
+        parsed = urlsplit(text)
+    except ValueError:
+        return sanitize_message(text)
+
+    if not parsed.scheme:
+        return sanitize_message(text)
+
+    query = _redact_db_url_query_for_log(parsed.query)
+    if not parsed.netloc:
+        return sanitize_message(_replace_db_url_query_for_log(text, query))
+
+    netloc = parsed.netloc
+    if "@" in netloc:
+        userinfo, hostinfo = netloc.rsplit("@", 1)
+        if ":" in userinfo:
+            username, _password = userinfo.split(":", 1)
+            userinfo = f"{username}:{_DB_URL_REDACTED_VALUE}"
+        netloc = f"{userinfo}@{hostinfo}"
+
+    redacted = urlunsplit((parsed.scheme, netloc, parsed.path, query, parsed.fragment))
+    return sanitize_message(redacted)
+
+
+def _sanitize_database_topology_for_log(value: Any) -> Any:
+    if isinstance(value, dict):
+        sanitized: Dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            if isinstance(item, str) and ("url" in key_text.lower() or is_sensitive_key(key_text)):
+                sanitized[key_text] = _redact_db_url_for_log(item)
+            else:
+                sanitized[key_text] = _sanitize_database_topology_for_log(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_database_topology_for_log(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_database_topology_for_log(item) for item in value)
+    if isinstance(value, str):
+        return sanitize_message(value)
+    return value
 
 
 def _execution_log_level_from_status(status: Any) -> str:
@@ -2201,7 +2279,7 @@ class DatabaseManager:
                     ) from exc
 
             self._initialized = True
-            logger.info(f"数据库初始化完成: {db_url}")
+            logger.info("数据库初始化完成: %s", _redact_db_url_for_log(db_url))
             topology = self.describe_database_topology()
             enabled_store_names = [
                 phase_key
@@ -2233,7 +2311,10 @@ class DatabaseManager:
                         sort_keys=True,
                     ),
                 )
-            logger.debug("数据库拓扑详情: %s", json.dumps(topology, ensure_ascii=False, sort_keys=True))
+            logger.debug(
+                "数据库拓扑详情: %s",
+                json.dumps(_sanitize_database_topology_for_log(topology), ensure_ascii=False, sort_keys=True),
+            )
 
             # 注册退出钩子，确保程序退出时关闭数据库连接
             atexit.register(DatabaseManager._cleanup_engine, self._engine)
