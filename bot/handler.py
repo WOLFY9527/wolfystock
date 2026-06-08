@@ -5,6 +5,10 @@ Bot Webhook 处理器
 ===================================
 
 处理各平台的 Webhook 回调，分发到命令处理器。
+
+注意：
+- 当前 `ALL_PLATFORMS` 只注册了钉钉适配器。
+- 其余 helper 函数保留为未来接线入口；未注册的平台调用会返回 unknown platform。
 """
 
 import json
@@ -28,10 +32,11 @@ def get_platform(platform_name: str) -> Optional['BotPlatform']:
     """
     获取平台适配器实例
     
-    使用缓存避免重复创建。
+    使用缓存避免重复创建。当前只会为 `ALL_PLATFORMS`
+    中已注册的平台返回实例。
     
     Args:
-        platform_name: 平台名称
+        platform_name: 平台名称（当前活跃命令入口仅 `dingtalk`）
         
     Returns:
         平台适配器实例，或 None
@@ -59,7 +64,7 @@ def handle_webhook(
     这是所有平台 Webhook 的统一入口。
     
     Args:
-        platform_name: 平台名称 (feishu, dingtalk, wecom, telegram)
+        platform_name: 平台名称（当前注册仅 `dingtalk`；其他值仅保留占位 helper）
         headers: HTTP 请求头
         body: 请求体原始字节
         query_params: URL 查询参数（用于某些平台的验证）
@@ -119,7 +124,7 @@ def handle_webhook(
 
 
 def handle_feishu_webhook(headers: Dict[str, str], body: bytes) -> WebhookResponse:
-    """处理飞书 Webhook"""
+    """处理飞书 Webhook 占位入口；需先注册平台适配器后才可用"""
     return handle_webhook('feishu', headers, body)
 
 
@@ -129,10 +134,10 @@ def handle_dingtalk_webhook(headers: Dict[str, str], body: bytes) -> WebhookResp
 
 
 def handle_wecom_webhook(headers: Dict[str, str], body: bytes) -> WebhookResponse:
-    """处理企业微信 Webhook"""
+    """处理企业微信 Webhook 占位入口；需先注册平台适配器后才可用"""
     return handle_webhook('wecom', headers, body)
 
 
 def handle_telegram_webhook(headers: Dict[str, str], body: bytes) -> WebhookResponse:
-    """处理 Telegram Webhook"""
+    """处理 Telegram Webhook 占位入口；需先注册平台适配器后才可用"""
     return handle_webhook('telegram', headers, body)

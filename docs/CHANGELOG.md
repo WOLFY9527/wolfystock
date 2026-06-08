@@ -1,3 +1,6 @@
+## 2026-06-08
+- Cleaned up dependency and bot/deployment docs truth: `requirements.txt` now lists the actively imported `pydantic`, `python-dateutil`, and `websockets` runtime dependencies explicitly, removes the unused `discord.py` package, documents that the command-bot registry currently exposes DingTalk only, preserves Discord as an outbound notification sender configuration, and removes the stale Zeabur/Discord bot mode claim that implied a `python main.py --discord-bot` runtime.
+
 ## 2026-06-07
 - Options Lab visible copy now separates the default observation layer from the professional structure layer: primary strategy comparison and blocked/demo states use `观察结构样例`, `样例顺序`, `假设价格`, `情景上沿`, and `未设上沿，不代表可获利` wording, while option strategy terms remain secondary `专业结构` labels. No options engine, payoff math, ranking, API, broker, or portfolio behavior changed.
 

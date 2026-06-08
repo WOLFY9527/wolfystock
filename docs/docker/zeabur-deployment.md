@@ -1,13 +1,13 @@
 # Zeabur 部署指南
 
-本指南详细介绍如何在 Zeabur 上部署 A股自选股智能分析系统，包括 WebUI 和 Discord 机器人功能。
+本指南详细介绍如何在 Zeabur 上部署 A股自选股智能分析系统，包括 WebUI、API、定时任务，以及当前真实存在的 Discord 通知发送能力。
 
 ## 目录
 
 - [1. 部署前准备](#1-部署前准备)
 - [2. 在 Zeabur 上部署](#2-在-zeabur-上部署)
 - [3. 配置启动命令](#3-配置启动命令)
-- [4. Discord 机器人部署](#4-discord-机器人部署)
+- [4. Discord 通知发送配置](#4-discord-通知发送配置)
 - [5. 环境变量配置](#5-环境变量配置)
 - [6. 挂载配置](#6-挂载配置)
 - [7. 健康检查](#7-健康检查)
@@ -19,7 +19,7 @@
 
 - Zeabur 账号
 - GitHub 账号（用于连接仓库）
-- Discord 开发者账号（如需部署机器人）
+- Discord 开发者账号（如需配置 Discord 通知发送）
 - 相关 API 密钥（如 Gemini API Key、搜索服务 API Key 等）
 
 ### 1.2 仓库准备
@@ -90,22 +90,22 @@ Dockerfile 已采用多阶段构建，前端会在镜像构建时自动打包。
 5. 点击「保存」
 6. 重启服务
 
-## 4. Discord 机器人部署
+## 4. Discord 通知发送配置
 
 ### 4.1 准备工作
 
-1. 创建 Discord 应用和机器人
+1. 创建 Discord 应用和 Bot
    - 访问 [Discord 开发者平台](https://discord.com/developers/applications)
    - 点击「New Application」创建新应用
-   - 在「Bot」标签页，点击「Add Bot」创建机器人
-   - 复制机器人 Token
+   - 在「Bot」标签页，点击「Add Bot」创建 Bot
+   - 复制 Bot Token（如使用 Bot Token 发送模式）
 
-2. 配置机器人权限
+2. 配置 Bot 权限
    - 在「Bot」标签页，向下滚动到「Privileged Gateway Intents」
    - 启用「Server Members Intent」和「Message Content Intent」
    - 在「OAuth2」→「URL Generator」中，选择「bot」范围
    - 选择所需权限（如「Send Messages」、「Read Messages/View Channels」等）
-   - 复制生成的邀请链接，将机器人添加到你的服务器
+   - 复制生成的邀请链接，将 Bot 添加到你的服务器
 
 ### 4.2 配置环境变量
 
@@ -113,13 +113,16 @@ Dockerfile 已采用多阶段构建，前端会在镜像构建时自动打包。
 
 | 变量名 | 说明 | 示例值 |
 |--------|------|--------|
-| `DISCORD_BOT_TOKEN` | Discord 机器人 Token | `MTAxMjM0NTY3ODkwMTEyMzQ1Ng.GhIjKl.MnOpQrStUvWxYz1234567890` |
+| `DISCORD_BOT_TOKEN` | Discord Bot Token | `MTAxMjM0NTY3ODkwMTEyMzQ1Ng.GhIjKl.MnOpQrStUvWxYz1234567890` |
 | `DISCORD_MAIN_CHANNEL_ID` | 主频道 ID | `123456789012345678` |
 | `DISCORD_WEBHOOK_URL` | Discord Webhook URL（可选） | `https://discord.com/api/webhooks/...` |
 
-### 4.3 启动机器人
+### 4.3 运行方式
 
-机器人功能默认通过配置启用，无需特殊启动命令。确保你的配置文件中包含机器人相关配置，或通过环境变量设置。
+当前 Discord 路径是随现有应用进程执行的出站通知发送，不需要单独的 Discord bot 进程。
+
+- 没有可用的 `python main.py --discord-bot` 启动模式
+- 只要当前运行的 API / 定时任务进程会触发通知，并且环境变量已配置，Discord 发送就会生效
 
 ## 5. 环境变量配置
 
@@ -213,11 +216,11 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 - 检查「访问」标签页是否已配置域名
 - 检查防火墙设置
 
-### 8.2 机器人不响应
+### 8.2 Discord 通知未发送
 
-- 检查 Discord 机器人 Token 是否正确
-- 检查机器人是否已添加到服务器
-- 检查机器人权限是否足够
+- 检查 Discord Bot Token 或 Webhook URL 是否正确
+- 检查 Bot 是否已添加到服务器（仅 Bot Token 模式需要）
+- 检查目标频道权限是否足够
 - 检查日志文件，查看是否有错误信息
 
 ### 8.3 分析任务不执行
@@ -239,7 +242,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 
 1. 一个实例用于 API 服务（`python main.py --serve-only`，保持单实例/单进程）
 2. 一个实例用于定时任务（`python main.py --schedule`）
-3. 一个实例用于机器人（`python main.py --discord-bot`）
+3. 不需要单独的 Discord bot 实例；由会实际发送通知的 `--schedule` 或 `--serve`/`--serve-only` 进程承载 Discord 出站发送
 
 确保它们共享同一个 `/app/data` 存储卷，以共享数据库。
 
