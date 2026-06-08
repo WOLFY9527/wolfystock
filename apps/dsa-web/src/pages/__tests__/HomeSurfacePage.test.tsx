@@ -567,7 +567,7 @@ describe('HomeSurfacePage', () => {
     expect(rail).toHaveAttribute('data-layout-zone', 'ContextRail');
     expect(rail).toHaveClass('home-research-context-rail', 'bg-transparent', 'divide-y-0', 'lg:border-l-0');
 
-    expect(homeSearch).toHaveAttribute('placeholder', '输入代码唤醒 AI (如 ORCL)...');
+    expect(homeSearch).toHaveAttribute('placeholder', '输入代码开始研究 (如 ORCL)...');
     expect(homeSearch).toHaveValue('');
     expect(screen.getByTestId('home-bento-omnibar-input-shell')).toHaveClass('overflow-hidden', 'rounded-lg', 'border', 'border-[color:var(--wolfy-border-subtle)]', 'bg-[var(--wolfy-surface-console)]');
     expect(homeSearch).toHaveClass('bg-transparent', 'text-sm', 'leading-none', 'pl-11', 'caret-[#93C5FD]');
@@ -2364,7 +2364,7 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Search ticker' })).toBeInTheDocument();
     expect((await screen.findAllByText('Current conclusion')).length).toBeGreaterThan(0);
-    expect(screen.getByTestId('home-bento-omnibar-input')).toHaveAttribute('placeholder', 'Enter a ticker to wake the AI (for example ORCL)...');
+    expect(screen.getByTestId('home-bento-omnibar-input')).toHaveAttribute('placeholder', 'Enter a ticker to start research (for example ORCL)...');
     expect(screen.getByText('Technical Structure')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /scanner/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /portfolio/i })).not.toBeInTheDocument();

@@ -8,30 +8,20 @@ interface GlobalLoaderProps {
   subtext?: string;
 }
 
-const BOOT_LINES = [
-  'INITIALIZING WOLFY AI CORE...',
-  'CONNECTING US/HK/CN FEEDS... [OK]',
-  'LOADING QUANTITATIVE MODELS...',
-  'SYSTEM READY.',
-];
-
 const SEGMENT_COUNT = 10;
+const DEFAULT_LOADING_TEXT = 'Loading the WolfyStock research workspace...';
 
-const GlobalLoader: React.FC<GlobalLoaderProps> = ({ fading = false }) => {
-  const [visibleLineCount, setVisibleLineCount] = useState(1);
+const GlobalLoader: React.FC<GlobalLoaderProps> = ({ fading = false, text, subtext }) => {
   const [activeSegmentCount, setActiveSegmentCount] = useState(0);
+  const headline = text?.trim() || DEFAULT_LOADING_TEXT;
+  const detail = subtext?.trim() || null;
 
   useEffect(() => {
-    const lineTimer = window.setInterval(() => {
-      setVisibleLineCount((count) => Math.min(count + 1, BOOT_LINES.length));
-    }, 500);
-
     const segmentTimer = window.setInterval(() => {
       setActiveSegmentCount((count) => Math.min(count + 1, SEGMENT_COUNT));
     }, 170);
 
     return () => {
-      window.clearInterval(lineTimer);
       window.clearInterval(segmentTimer);
     };
   }, []);
@@ -42,18 +32,13 @@ const GlobalLoader: React.FC<GlobalLoaderProps> = ({ fading = false }) => {
         fading ? 'pointer-events-none opacity-0' : 'opacity-100'
       }`}
       aria-live="polite"
-      aria-label="WolfyStock quant terminal boot sequence"
+      aria-label="WolfyStock research workspace loading"
     >
       <style>
         {`
           @keyframes quant-grid-rise {
             from { transform: translate3d(0, 0, 0); }
             to { transform: translate3d(0, -40px, 0); }
-          }
-
-          @keyframes terminal-caret {
-            0%, 45% { opacity: 1; }
-            46%, 100% { opacity: 0; }
           }
         `}
       </style>
@@ -90,34 +75,15 @@ const GlobalLoader: React.FC<GlobalLoaderProps> = ({ fading = false }) => {
           WOLFYSTOCK
         </p>
 
-        <div className="mt-6 w-72 md:w-80">
-          <div className="min-h-[5.75rem] text-left font-mono text-[10px] leading-relaxed text-emerald-400 md:text-xs">
-            {BOOT_LINES.map((line, index) => {
-              const isVisible = index < visibleLineCount;
-              const isActive = index === visibleLineCount - 1 && visibleLineCount < BOOT_LINES.length;
-
-              return (
-                <p
-                  key={line}
-                  className={`flex gap-2 transition-opacity duration-200 ${
-                    isVisible ? 'opacity-100' : 'opacity-0'
-                  }`}
-                >
-                  <span className="text-emerald-300/90">&gt;</span>
-                  <span>
-                    {line}
-                    {isActive ? (
-                      <span
-                        className="ml-1 inline-block h-3 w-1 translate-y-0.5 bg-emerald-400"
-                        style={{ animation: 'terminal-caret 0.8s steps(1) infinite' }}
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                  </span>
-                </p>
-              );
-            })}
-          </div>
+        <div className="mt-6 w-72 text-center md:w-80">
+          <p className="text-sm font-semibold leading-6 text-white/86 md:text-[15px]">
+            {headline}
+          </p>
+          {detail ? (
+            <p className="mt-2 text-xs leading-5 text-white/52 md:text-[13px]">
+              {detail}
+            </p>
+          ) : null}
 
           <div className="mt-4 flex w-full gap-1" aria-hidden="true">
             {Array.from({ length: SEGMENT_COUNT }).map((_, index) => (

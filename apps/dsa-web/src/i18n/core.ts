@@ -2993,7 +2993,7 @@ const RESOURCES = {
     },
     app: {
       loading: '加载中',
-      loadingBrand: '正在加载 WolfyStock...',
+      loadingBrand: '正在加载 WolfyStock 研究工作区...',
       retry: '重试',
       workspaceEyebrow: '研究工作区',
     },
@@ -5988,7 +5988,7 @@ This memo is for research discussion and does not constitute investment advice.`
     },
     app: {
       loading: 'Loading',
-      loadingBrand: 'Loading WolfyStock...',
+      loadingBrand: 'Loading the WolfyStock research workspace...',
       retry: 'Retry',
       workspaceEyebrow: 'Research Workspace',
     },

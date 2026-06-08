@@ -112,6 +112,7 @@ const HOME_LOCAL_HEADER_STRIP_CLASS =
   'mb-4 min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-4 md:px-5';
 const HOME_LOCAL_SECONDARY_DECK_CLASS =
   'home-research-secondary-deck mt-4 min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-3 md:px-5 md:py-3';
+const GUEST_PREVIEW_TIMEOUT_MS = 4_000;
 
 const LazyFullDecisionReportDrawer = lazy(() => import('../components/home-bento/FullDecisionReportDrawer'));
 const LazyHomeCandlestickChart = lazy(() =>
@@ -2990,14 +2991,14 @@ const CONTENT: Record<DashboardLocale, {
     eyebrow: 'SYSTEM VIEW',
     heading: 'WolfyStock 分析面板',
     description: '',
-    omnibarPlaceholder: '输入代码唤醒 AI (如 ORCL)...',
+    omnibarPlaceholder: '输入代码开始研究 (如 ORCL)...',
     analyzeButton: '分析',
     instrument: '英伟达',
     ticker: 'NVDA',
     sessionBadge: '美股 AI 基础设施',
     regimeBadge: '动量回升',
     decision: {
-      eyebrow: 'WOLFY AI 分析',
+      eyebrow: 'WolfyStock 研究判断',
       company: '英伟达',
       heroValue: '8.6',
       heroUnit: '/10',
@@ -3058,14 +3059,14 @@ const CONTENT: Record<DashboardLocale, {
     eyebrow: 'SYSTEM VIEW',
     heading: 'WolfyStock Analysis Center',
     description: '',
-    omnibarPlaceholder: 'Enter a ticker to wake the AI (for example ORCL)...',
+    omnibarPlaceholder: 'Enter a ticker to start research (for example ORCL)...',
     analyzeButton: 'Analyze',
     instrument: 'NVIDIA',
     ticker: 'NVDA',
     sessionBadge: 'US AI infrastructure',
     regimeBadge: 'Momentum rebuilding',
     decision: {
-      eyebrow: 'WOLFY AI ANALYSIS',
+      eyebrow: 'WolfyStock Research View',
       company: 'NVIDIA',
       heroValue: '8.6',
       heroUnit: '/10',
@@ -4658,6 +4659,7 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
 function buildGuestDashboardFromPreview(
   locale: DashboardLocale,
   preview: PublicAnalysisPreviewResponse,
+  mode: 'live' | 'snapshot' = 'live',
 ): DashboardPayload {
   const stockCode = normalizeTickerQuery(preview.report.meta.stockCode || preview.stockCode || 'AAPL');
   const seed = buildInPlacePlaceholderDashboard(locale, stockCode);
@@ -4698,10 +4700,12 @@ function buildGuestDashboardFromPreview(
       signalLabel: actionText,
       signalTone: sentimentTone,
       scoreValue: trendText,
-      badge: locale === 'en' ? 'Guest preview · live hook' : '游客预览 · 实时诱饵',
+      badge: mode === 'snapshot'
+        ? (locale === 'en' ? 'Guest preview · local research snapshot' : '游客预览 · 本地研究快照')
+        : (locale === 'en' ? 'Guest preview · research preview' : '游客预览 · 研究预览'),
       chartLabel: locale === 'en' ? 'Preview generated' : '预览已生成',
       summary: summaryText,
-      reasonTitle: locale === 'en' ? 'Guest Preview Context' : '游客预览归因',
+      reasonTitle: locale === 'en' ? 'Preview context' : '预览说明',
       reasonBody: summaryText,
     },
     strategy: {
@@ -4714,6 +4718,25 @@ function buildGuestDashboardFromPreview(
         ? 'Observation bands, risk boundaries, and pacing notes unlock after a free account is created.'
         : '观察区间、风险边界与跟踪节奏会在免费创建账户后解锁。',
     },
+  });
+}
+
+function withGuestPreviewTimeout<T>(promise: Promise<T>, timeoutMs = GUEST_PREVIEW_TIMEOUT_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error('guest_preview_timeout'));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
   });
 }
 
@@ -5003,7 +5026,9 @@ function GuestPaywallOverlay({ locale, registrationPath }: { locale: DashboardLo
     >
       <Lock className="h-7 w-7 text-white/85 drop-shadow-[0_0_14px_rgba(99,102,241,0.55)]" />
       <p className="mt-4 max-w-xs text-sm font-medium leading-6 text-white/80">
-        解锁完整 AI 量化策略与深度技术形态解析
+        {locale === 'en'
+          ? 'Unlock the full research framework, watch zones, and technical context.'
+          : '解锁完整研究框架、观察区间与技术形态解读'}
       </p>
       <Link
         to={registrationPath}
@@ -5029,7 +5054,7 @@ function FullDecisionReportDrawerFallback({ onClose }: { onClose: () => void }) 
         className="min-w-0 rounded-l-[28px] border border-white/[0.08] bg-[#080B10]/92 p-6 text-white shadow-2xl"
         data-testid="home-bento-full-report-drawer-fallback"
       >
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/42">WOLFY AI EQUITY RESEARCH</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/42">WOLFYSTOCK EQUITY RESEARCH</p>
         <h2 className="mt-3 text-xl font-semibold tracking-[0] text-white">完整报告加载中</h2>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-white/58">
           正在按需加载完整报告视图，报告内容、复制、导出和打印行为保持不变。
@@ -5062,6 +5087,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [isDashboardLoading, setDashboardLoading] = useState(false);
   const [statusToast, setStatusToast] = useState<{ message: string; tone: 'error' | 'warning' } | null>(null);
   const [guestPreview, setGuestPreview] = useState<PublicAnalysisPreviewResponse | null>(null);
+  const [guestPreviewMode, setGuestPreviewMode] = useState<'live' | 'snapshot'>('live');
   const [guestError, setGuestError] = useState<ParsedApiError | null>(null);
   const [guestFallbackNotice, setGuestFallbackNotice] = useState<string | null>(null);
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<PendingHistoryDelete | null>(null);
@@ -5146,7 +5172,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
 
     if (isGuest) {
       return guestPreview
-        ? buildGuestDashboardFromPreview(locale, guestPreview)
+        ? buildGuestDashboardFromPreview(locale, guestPreview, guestPreviewMode)
         : buildInPlacePlaceholderDashboard(locale, activeTicker);
     }
 
@@ -5155,7 +5181,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
 
     return buildInPlacePlaceholderDashboard(locale, dashboardSelection.effectiveTicker);
-  }, [activeTicker, dashboardSelection.dashboardReport, dashboardSelection.effectiveTicker, guestPreview, isGuest, locale, traceFixtureReport]);
+  }, [activeTicker, dashboardSelection.dashboardReport, dashboardSelection.effectiveTicker, guestPreview, guestPreviewMode, isGuest, locale, traceFixtureReport]);
   const activeTraceReport: AnalysisReport | null = (() => {
     if (traceFixtureReport) {
       return traceFixtureReport;
@@ -5334,7 +5360,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       stockCode: routeSymbol,
       status: 'pending',
       progress: 0,
-      message: locale === 'en' ? `WOLFY AI analyzing ${routeSymbol}...` : `WOLFY AI 正在分析 ${routeSymbol}...`,
+      message: locale === 'en' ? `Preparing a research snapshot for ${routeSymbol}...` : `正在整理 ${routeSymbol} 的研究快照...`,
       reportType: 'detailed',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -5467,23 +5493,25 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     if (isGuest) {
       setGuestError(null);
       setGuestFallbackNotice(null);
+      setGuestPreviewMode('live');
       try {
         const response = await withFallback(
-          () => publicAnalysisApi.preview({
+          () => withGuestPreviewTimeout(publicAnalysisApi.preview({
             stockCode: normalizedTicker,
             stockName: undefined,
             reportType: 'brief',
-          }),
+          })),
           {
             fallback: () => createPublicAnalysisFallbackPreview(normalizedTicker, language),
           },
         );
         setGuestPreview(response.data);
+        setGuestPreviewMode(response.fallback ? 'snapshot' : 'live');
         setPendingAnalysisTicker(null);
         if (response.fallback) {
           setGuestFallbackNotice(language === 'en'
-            ? 'Live preview is temporarily unavailable. Loaded a local snapshot instead.'
-            : '实时预览暂时不可用，已切换到本地快照。');
+            ? 'Live preview is unavailable right now. Loaded a local research snapshot instead.'
+            : '实时预览当前不可用，已切换到本地研究快照。');
         }
       } catch (err) {
         setGuestError(getParsedApiError(err));

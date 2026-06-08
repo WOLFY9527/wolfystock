@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { UiPreferencesProvider } from '../../contexts/UiPreferencesContext';
@@ -130,7 +130,7 @@ describe('GuestHomePage', () => {
     expect(screen.queryByTestId('home-bento-decision-score-value')).not.toBeInTheDocument();
     expect(screen.getAllByText('趋势延续但需要等待更好的介入点。').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('guest-home-frosted-lock')).toHaveLength(2);
-    expect(screen.getAllByText('解锁完整 AI 量化策略与深度技术形态解析')).toHaveLength(2);
+    expect(screen.getAllByText('解锁完整研究框架、观察区间与技术形态解读')).toHaveLength(2);
     expect(screen.getAllByRole('link', { name: '免费创建账户' })).toHaveLength(2);
     expect(screen.getByTestId('home-research-context-rail')).toContainElement(screen.getAllByTestId('guest-home-frosted-lock')[1]);
   });
@@ -158,12 +158,39 @@ describe('GuestHomePage', () => {
     fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'NVDA' } });
     fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
 
-    expect(await screen.findByText('Live preview is temporarily unavailable. Loaded a local snapshot instead.')).toBeInTheDocument();
+    expect(await screen.findByText('Live preview is unavailable right now. Loaded a local research snapshot instead.')).toBeInTheDocument();
     expect(await screen.findByText('NVIDIA Corporation')).toBeInTheDocument();
     expect(screen.getAllByText('The local snapshot keeps the leadership trend intact, with momentum still driving the short-term structure.').length).toBeGreaterThan(0);
     expect(screen.getByTestId('home-research-score-strip')).toHaveTextContent('8.4');
     expect(screen.queryByTestId('home-bento-decision-score-value')).not.toBeInTheDocument();
     expect(within(screen.getByTestId('home-research-context-rail')).getByTestId('guest-home-frosted-lock')).toBeInTheDocument();
+  });
+
+  it('resolves guest search to a bounded local snapshot when the preview request never settles', async () => {
+    languageState.value = 'en';
+    window.history.replaceState(window.history.state, '', '/en');
+    previewMock.mockImplementation(() => new Promise(() => {}));
+    vi.useFakeTimers();
+
+    try {
+      renderGuest(['/en/guest']);
+
+      fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'TSLA' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_100);
+      });
+
+      expect(screen.getByText('Live preview is unavailable right now. Loaded a local research snapshot instead.')).toBeInTheDocument();
+      expect(screen.getByTestId('home-research-console')).toBeInTheDocument();
+      expect(screen.getByText('Tesla, Inc.')).toBeInTheDocument();
+      expect(screen.getByTestId('home-research-score-strip')).toHaveTextContent('6.3');
+      expect(screen.queryByText(/Guest preview · live hook/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/WOLFY AI/i)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('redirects signed-in users away from /guest and back to home', async () => {
