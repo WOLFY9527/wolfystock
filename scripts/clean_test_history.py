@@ -29,7 +29,7 @@ def clean_test_history_records(
     *,
     before: Optional[str] = None,
     after: Optional[str] = None,
-    dry_run: bool = False,
+    dry_run: bool = True,
 ) -> int:
     db = DatabaseManager.get_instance()
     before_dt = _parse_datetime(before)
@@ -54,20 +54,37 @@ def clean_test_history_records(
         return count
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Delete analysis_history rows flagged with is_test=True.")
+def main(argv: Optional[list[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description="Clean analysis_history rows flagged with is_test=True.")
     parser.add_argument("--before", help="Delete rows created on or before this ISO timestamp.")
     parser.add_argument("--after", help="Delete rows created on or after this ISO timestamp.")
-    parser.add_argument("--dry-run", action="store_true", help="Only print how many rows would be deleted.")
-    args = parser.parse_args()
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview how many rows would be deleted. This is already the default mode.",
+    )
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Actually delete matching rows. Without this flag the script stays in dry-run mode.",
+    )
+    args = parser.parse_args(argv)
+    dry_run = not args.execute
 
     deleted = clean_test_history_records(
         before=args.before,
         after=args.after,
-        dry_run=args.dry_run,
+        dry_run=dry_run,
     )
-    print(f"{'would_delete' if args.dry_run else 'deleted'}={deleted}")
+    if dry_run:
+        print("DRY RUN: no rows were deleted. Re-run with --execute to apply deletion.")
+        print(f"would_delete={deleted}")
+        return 0
+
+    print("WARNING: destructive mode enabled. Matching analysis_history rows will be permanently deleted.")
+    print(f"deleted={deleted}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

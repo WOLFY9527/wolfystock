@@ -952,12 +952,28 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         )
 
         self.assertEqual(clean_test_history_records(dry_run=True), 1)
+
+        with self.db.get_session() as session:
+            dry_run_remaining = session.query(AnalysisHistory).order_by(AnalysisHistory.query_id.asc()).all()
+
+        self.assertEqual(
+            [row.query_id for row in dry_run_remaining],
+            ["query_clean_test_001", "query_clean_test_002"],
+        )
+
         self.assertEqual(clean_test_history_records(), 1)
 
         with self.db.get_session() as session:
             remaining = session.query(AnalysisHistory).order_by(AnalysisHistory.query_id.asc()).all()
 
-        self.assertEqual([row.query_id for row in remaining], ["query_clean_test_002"])
+        self.assertEqual([row.query_id for row in remaining], ["query_clean_test_001", "query_clean_test_002"])
+
+        self.assertEqual(clean_test_history_records(dry_run=False), 1)
+
+        with self.db.get_session() as session:
+            deleted_remaining = session.query(AnalysisHistory).order_by(AnalysisHistory.query_id.asc()).all()
+
+        self.assertEqual([row.query_id for row in deleted_remaining], ["query_clean_test_002"])
 
     def test_history_markdown_localizes_english_report_and_placeholder_name(self) -> None:
         """History markdown should preserve report_language for English reports."""
