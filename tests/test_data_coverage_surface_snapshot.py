@@ -163,6 +163,58 @@ def test_liquidity_fallback_row_pauses_surface_scoring() -> None:
     }
 
 
+def test_rotation_degraded_rows_aggregate_to_safe_surface_snapshot() -> None:
+    snapshot = build_data_coverage_surface_snapshot(
+        [
+            _row(
+                surface_id="rotation",
+                route_id="/zh/market/rotation-radar",
+                field_key="rotation_score_status",
+                evidence_family="rotation_signal",
+                freshness_state="fallback",
+                is_fallback=True,
+                as_of="2026-06-08T09:30:00Z",
+                last_updated="2026-06-08T09:32:00Z",
+            ),
+            _row(
+                surface_id="rotation",
+                route_id="/zh/market/rotation-radar",
+                field_key="rotation_score_status",
+                evidence_family="rotation_signal",
+                source_authority_allowed=False,
+                score_contribution_allowed=False,
+                authority_grant=False,
+                decision_grade=False,
+                as_of="2026-06-08T09:35:00Z",
+                last_updated="2026-06-08T09:36:00Z",
+            ),
+        ]
+    )
+
+    payload = snapshot.to_dict()
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+    assert payload == {
+        "snapshotVersion": DATA_COVERAGE_SURFACE_SNAPSHOT_VERSION,
+        "surfaceId": "rotation",
+        "routeId": "/zh/market/rotation-radar",
+        "audience": "consumer",
+        "consumerState": "INSUFFICIENT",
+        "confidencePosture": "INSUFFICIENT",
+        "consumerSummary": "INSUFFICIENT",
+        "asOf": "2026-06-08T09:35:00Z",
+        "lastUpdated": "2026-06-08T09:36:00Z",
+        "rowCount": 2,
+        "availableRowCount": 0,
+        "limitedRowCount": 0,
+        "blockedRowCount": 2,
+        "unavailableRowCount": 0,
+    }
+    assert payload["consumerState"] in {"INSUFFICIENT", "PAUSED", "UNAVAILABLE"}
+    for forbidden in _FORBIDDEN_CONSUMER_TERMS:
+        assert forbidden not in serialized
+
+
 def test_scanner_insufficient_row_fails_closed_for_surface_snapshot() -> None:
     snapshot = build_data_coverage_surface_snapshot(
         [
