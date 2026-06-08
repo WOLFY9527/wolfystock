@@ -21,6 +21,7 @@ Start current work from:
 | `docs/audits/archive/backtest/` | Archived backtest maintenance evidence and machine-readable audit bundles | Historical backtest maintenance provenance only |
 | `docs/audits/archive/frontend/` | Retired frontend DOM, CSS, route, bundle, scroll, and old launch UX reports | Historical UI evidence only; current visual authority lives in `docs/frontend/` |
 | `docs/assets/archive/` | Archived documentation-only images and screenshots removed from active doc lanes | Historical doc asset provenance only |
+| `docs/codex/audits/archive/` | Inactive Codex audit reports moved out of the active prompt/audit lane | Historical Codex task provenance only; current task definitions stay in `docs/codex/audits/` |
 | `docs/frontend/archive/` | Retired frontend route, CSS, shell, visual-constitution, and UI-doc replacement evidence moved during domain consolidation | Historical UI evidence only; current frontend authority lives in `docs/frontend/` |
 | `docs/qa/archive/` | Point-in-time QA reports | QA provenance only |
 | `docs/architecture/archive/audits/` | Older backend and backend/frontend audit reports plus archived implementation plans | Historical architecture evidence |
@@ -36,6 +37,7 @@ above and the active frontend/design indexes that point to them.
 
 Retained audit archive files include:
 
+- `docs/codex/audits/archive/README.md`
 - `docs/audits/archive/final-pre-push-audit.md`
 - `docs/audits/archive/markdown-inventory.md`
 - `docs/audits/archive/markdown-consolidation-plan.md`

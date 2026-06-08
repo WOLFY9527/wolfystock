@@ -31,3 +31,6 @@ validation policy, and reusable task templates.
 
 Frontend implementation, route taxonomy, visual system, primitive policy, and
 browser-evidence rules now live in `../frontend/README.md`.
+
+Historical Codex audit reports that no longer need to live in the active audit
+lane are retained under `audits/archive/`.
