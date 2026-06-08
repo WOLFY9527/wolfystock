@@ -15,6 +15,7 @@ public-safety wording.
 - [Rule Backtest Reopen Trustworthiness Status](../architecture/rule-backtest-reopen-trustworthiness-p0-status-index-2026-04-22.md)
 - [Backtest Quant Capability Audit](../audits/backtest-quant-capability-audit.md)
 - [Backtest / Portfolio Public Safety Audit](../audits/backtest-portfolio-public-safety-audit.md)
+- [Backtest Factor Lab Readiness Contract](./factor-lab-readiness-contract.md)
 - [Frontend Visual System](../frontend/visual-system.md)
 
 ## Current Rules
@@ -36,6 +37,10 @@ public-safety wording.
   into a stability surface, but they do not execute rule runs, promote winners,
   select live strategies, change engine math, call providers, or simulate
   portfolio allocation.
+- Backtest + Factor Lab readiness packets are observe-only metadata helpers.
+  They aggregate caller-supplied readiness/factor/bridge/lineage evidence into
+  a fail-closed research-readiness view and do not run engines, call providers,
+  touch storage, or change stored semantics.
 - Support exports are stored-first contract artifacts. The current export set is
   `support_bundle_manifest_json`,
   `support_bundle_reproducibility_manifest_json`, `execution_trace_json`,
