@@ -607,9 +607,12 @@ describe('OptionsLabPage', () => {
       expect(within(section).getByText(/专业结构：牛市看涨价差 · Call 借方价差/)).toBeInTheDocument();
       expect(within(section).getByText(/专业结构：熊市看跌价差 · Put 借方价差/)).toBeInTheDocument();
     });
-    ['状态', '最大亏损', '情景上沿', '盈亏平衡', '目标价下情景估算', '核心原因'].forEach((label) => {
+    ['状态', '最大亏损', '情景上沿', '盈亏平衡', '假设价格下情景估算', '核心原因'].forEach((label) => {
       expect(within(section).getAllByText(label).length).toBeGreaterThan(0);
     });
+    const pageText = document.body.textContent || '';
+    expect(pageText).not.toContain(['目标', '价'].join(''));
+    expect(pageText.toLowerCase()).not.toContain(['target', 'price'].join(' '));
     expect(within(section).getAllByTestId('options-lab-strategy-metric-list')).toHaveLength(4);
     expect(within(section).getAllByTestId('options-lab-strategy-metric-list')[0]).toHaveTextContent('风险指标');
     expect(within(section).getByTestId('options-lab-primary-strategy-row')).toHaveTextContent('样例顺序 #1');
@@ -2299,7 +2302,7 @@ describe('OptionsLabPage', () => {
     expect(optionsLabPageSource).toContain('首个观察结构');
     expect(optionsLabPageSource).toContain('样例顺序 #');
     expect(optionsLabPageSource).toContain('情景上沿');
-    expect(optionsLabPageSource).toContain('目标价下情景估算');
+    expect(optionsLabPageSource).toContain('假设价格下情景估算');
     expect(optionsLabPageSource).toContain('未设上沿，不代表可获利');
     expect(optionsLabPageSource).toContain('break-words text-sm font-medium leading-6');
     expect(optionsLabPageSource).toContain('options-lab-strategy-metric-list');
@@ -2323,7 +2326,8 @@ describe('OptionsLabPage', () => {
       '情景收益',
       '上涨情景',
       '下跌情景',
-      '目标价格',
+      ['目标', '价格'].join(''),
+      ['target', 'price'].join(' '),
       '再决定是否继续跟踪',
     ].forEach((forbidden) => {
       expect(optionsLabPageSource).not.toContain(forbidden);

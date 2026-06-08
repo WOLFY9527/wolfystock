@@ -500,7 +500,7 @@ function buildScenarioEvidenceView(frame?: OptionsConsumerScenarioFrame | null):
   const payoffLines = [
     typeof frame.payoffEvidence?.expectedMoveAbs === 'number' ? `预期波动：${money(frame.payoffEvidence.expectedMoveAbs)}` : null,
     typeof frame.payoffEvidence?.expectedMovePct === 'number' ? `预期波动幅度：${ratio(frame.payoffEvidence.expectedMovePct)}` : null,
-    typeof frame.payoffEvidence?.payoffAtTarget === 'number' ? `目标价下情景估算：${money(frame.payoffEvidence.payoffAtTarget)}` : null,
+    typeof frame.payoffEvidence?.payoffAtTarget === 'number' ? `假设价格下情景估算：${money(frame.payoffEvidence.payoffAtTarget)}` : null,
     frame.payoffEvidence?.expectedMoveSource ? `波动来源：${expectedMoveSourceLabel(frame.payoffEvidence.expectedMoveSource)}` : null,
   ].filter((item): item is string => Boolean(item)).slice(0, 4);
   const riskLines = [
@@ -1103,7 +1103,7 @@ const StrategyPayoffVisual: React.FC<{
           <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">{strategyChineseLabel(strategy.strategyType)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
-          <p className={labelClass}>目标价下情景估算</p>
+          <p className={labelClass}>假设价格下情景估算</p>
           <p className={cn('mt-2 font-mono text-sm font-semibold', metricTone(strategy.payoffAtTarget))}>{money(strategy.payoffAtTarget)}</p>
         </div>
         <div className={cn(innerBlockClass, 'p-3')}>
@@ -1758,7 +1758,7 @@ const StrategyRow: React.FC<{
       value: money(strategy.breakeven),
     },
     {
-      label: '目标价下情景估算',
+      label: '假设价格下情景估算',
       value: money(strategy.payoffAtTarget),
       tone: metricTone(strategy.payoffAtTarget),
     },
