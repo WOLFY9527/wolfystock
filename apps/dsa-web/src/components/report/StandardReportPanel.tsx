@@ -1167,8 +1167,8 @@ const BattlePlanPanel: React.FC<{
     const isTopMetric = (
       label.includes('交易场景') ||
       label.includes('关键动作') ||
-      label.includes('理想买入') ||
-      label.includes('次优买入') ||
+      label.includes('理想') ||
+      label.includes('次优') ||
       label.includes('止损') ||
       label.includes('目标') ||
       label.includes('关键价格区间') ||
