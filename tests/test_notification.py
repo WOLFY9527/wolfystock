@@ -327,11 +327,13 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         merged = "\n".join(sent_payloads)
         self.assertIn("## 重要信息速览", merged)
         self.assertIn("## 核心结论", merged)
-        self.assertIn("一句话决策", merged)
-        self.assertIn("操作建议", merged)
+        self.assertIn("一句话结论", merged)
+        self.assertIn("观察摘要", merged)
         self.assertIn("## 当日行情", merged)
         self.assertIn("MA5", merged)
-        self.assertIn("理想买入点", merged)
+        self.assertIn("参考区间", merged)
+        self.assertIn("风险控制参考", merged)
+        self.assertIn("上方参考", merged)
         self.assertIn("## 检查清单", merged)
         self.assertNotIn("|字段|数值|", merged)
         self.assertIn("- **当前价**", merged)
@@ -340,6 +342,10 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         self.assertIn("### 📈 财报趋势（Earnings）", merged)
         self.assertIn("### 🧠 结构化情绪（Sentiment）", merged)
         self.assertIn("### 🧩 数据质量说明", merged)
+        self.assertNotIn("操作建议", merged)
+        self.assertNotIn("理想买入点", merged)
+        self.assertNotIn("止损位", merged)
+        self.assertNotIn("目标位", merged)
 
     @mock.patch("src.notification.get_config")
     @mock.patch("requests.post")
@@ -378,21 +384,24 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
 
         sent_payloads = [call.kwargs.get("json", {}).get("content", "") for call in mock_post.call_args_list]
         merged = "\n".join(sent_payloads)
-        self.assertIn("**评分 / 建议 / 趋势**", merged)
+        self.assertIn("**评分 / 观察 / 趋势**", merged)
         self.assertIn("**一句话结论**", merged)
         self.assertIn("**当前价 / 涨跌**", merged)
         self.assertIn("**价格口径 / 会话**", merged)
-        self.assertIn("**关键动作**", merged)
-        self.assertIn("**理想买入点 / 次优买入点 / 止损位**", merged)
+        self.assertIn("**关键观察**", merged)
+        self.assertIn("**参考区间 / 观察区间 / 风险控制参考**", merged)
         self.assertIn("**目标一区 / 目标二区 / 目标区间**", merged)
         self.assertIn("**核心利好**", merged)
         self.assertIn("**核心风险**", merged)
-        self.assertIn("**空仓 / 持仓建议**", merged)
+        self.assertIn("**持有状态参考**", merged)
         self.assertIn("**Checklist 摘要**", merged)
         self.assertNotIn("|--|", merged)
         self.assertNotIn("| 字段 |", merged)
         self.assertNotIn("### Top Overview", merged)
         self.assertNotIn("### Market / Technical / Fundamental Evidence", merged)
+        self.assertNotIn("买入", merged)
+        self.assertNotIn("卖出", merged)
+        self.assertNotIn("止损位", merged)
 
     @mock.patch("src.notification.get_config")
     def test_generate_dashboard_report_localizes_english_fallback(self, mock_get_config: mock.MagicMock):
@@ -427,10 +436,13 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
 
         out = service.generate_dashboard_report([result], report_date="2026-03-18")
 
-        self.assertIn("Decision Dashboard", out)
+        self.assertIn("Research Observation Dashboard", out)
         self.assertIn("Summary", out)
-        self.assertIn("Action Levels", out)
-        self.assertIn("Buy", out)
+        self.assertIn("Observation Ranges", out)
+        self.assertIn("Positive Assessment", out)
+        self.assertNotIn("Action Levels", out)
+        self.assertNotIn("Buy", out)
+        self.assertNotIn("Stop Loss", out)
 
     @mock.patch("src.notification.get_config")
     def test_generate_dashboard_report_localizes_english_no_dashboard_fallback(
@@ -493,8 +505,10 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         out = service.generate_single_stock_report(result)
 
         self.assertIn("Core Conclusion", out)
-        self.assertIn("Action Levels", out)
-        self.assertIn("Hold", out)
+        self.assertIn("Observation Ranges", out)
+        self.assertIn("Neutral Assessment", out)
+        self.assertNotIn("Action Levels", out)
+        self.assertNotIn("Stop Loss", out)
 
     @mock.patch("src.notification.get_config")
     def test_history_compare_context_uses_cache(self, mock_get_config: mock.MagicMock):

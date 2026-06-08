@@ -202,12 +202,17 @@ class TestDiscordSender(unittest.TestCase):
         out = DiscordSender._optimize_markdown_for_discord(content)
 
         self.assertIn("## 🟡 NVIDIA (NVDA)", out)
-        self.assertIn("**评分 / 建议 / 趋势**: 78 / 观望 / 看多", out)
+        self.assertIn("**评分 / 观察 / 趋势**: 78 / 中性评估 / 看多", out)
         self.assertIn("**当前价 / 涨跌**: 当前价 125.30 | 涨跌 2.30 / 1.87%", out)
-        self.assertIn("**执行计划**: 120-121 / 118 / 115 / 132 / 分批试仓", out)
-        self.assertIn("**空仓 / 持仓建议**: 空仓 等待回踩确认 | 持仓 量价未坏可继续跟踪", out)
+        self.assertIn("**观察摘要**: 120-121 / 118 / 115 / 132 / 分批试仓", out)
+        self.assertIn("**持有状态参考**: 未持有 等待回踩确认 | 持有 量价未坏可继续跟踪", out)
         self.assertIn("**Checklist 摘要**: ⚠️ 等待回踩确认；✅ 量价结构未破坏", out)
         self.assertNotIn("### Part A. Executive Summary", out)
+        self.assertNotIn("买入", out)
+        self.assertNotIn("止损位", out)
+        self.assertNotIn("目标位", out)
+        self.assertNotIn("空仓者建议", out)
+        self.assertNotIn("持仓者建议", out)
 
     def test_send_chunks_continues_after_mid_failure(self):
         cfg = _config(discord_webhook_url="https://discord.com/webhook/1")

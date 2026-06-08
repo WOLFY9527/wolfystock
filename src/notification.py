@@ -15,6 +15,7 @@ A股自选股智能分析系统 - 通知层
    - Pushover（手机/桌面推送）
 """
 import logging
+import re
 from datetime import datetime
 from typing import Iterable, List, Dict, Any, Optional, Tuple
 from enum import Enum
@@ -50,6 +51,161 @@ from src.notification_sender import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+_NOTIFICATION_SAFE_LABEL_OVERRIDES = {
+    "zh": {
+        "dashboard_title": "研究观察仪表盘",
+        "brief_title": "研究简报",
+        "buy_label": "偏高评估",
+        "watch_label": "中性评估",
+        "sell_label": "偏低评估",
+        "one_sentence_label": "一句话结论",
+        "action_advice_label": "观察摘要",
+        "no_position_label": "未持有状态参考",
+        "has_position_label": "持有状态参考",
+        "continue_holding": "保持跟踪",
+        "battle_plan_heading": "观察计划",
+        "ideal_buy_label": "参考区间",
+        "secondary_buy_label": "观察区间",
+        "stop_loss_label": "风险控制参考",
+        "take_profit_label": "上方参考",
+        "suggested_position_label": "暴露变化参考",
+        "entry_plan_label": "关注变化",
+        "risk_control_label": "风险控制参考",
+        "advice_label": "观察",
+        "action_points_heading": "观察区间",
+        "position_advice_heading": "持有状态参考",
+        "not_investment_advice": "AI生成，仅供研究参考，不构成个性化投资指引",
+    },
+    "en": {
+        "dashboard_title": "Research Observation Dashboard",
+        "brief_title": "Research Brief",
+        "buy_label": "High Assessment",
+        "watch_label": "Neutral Assessment",
+        "sell_label": "Low Assessment",
+        "one_sentence_label": "One-line Read",
+        "action_advice_label": "Observation Summary",
+        "no_position_label": "Unheld State Reference",
+        "has_position_label": "Held State Reference",
+        "continue_holding": "Keep tracking",
+        "battle_plan_heading": "Observation Plan",
+        "ideal_buy_label": "Reference Range",
+        "secondary_buy_label": "Observation Range",
+        "stop_loss_label": "Risk Control Reference",
+        "take_profit_label": "Upper Reference",
+        "suggested_position_label": "Exposure Reference",
+        "entry_plan_label": "Attention Change",
+        "risk_control_label": "Risk Control Reference",
+        "advice_label": "Observation",
+        "action_points_heading": "Observation Ranges",
+        "position_advice_heading": "Holding State Reference",
+        "not_investment_advice": "AI-generated research reference only. Not personalized financial guidance.",
+    },
+}
+
+_NOTIFICATION_VISIBLE_COPY_REPLACEMENTS = (
+    ("理想买入点", "参考区间"),
+    ("次优买入点", "观察区间"),
+    ("空仓者建议", "观察摘要"),
+    ("持仓者建议", "持有状态参考"),
+    ("评分 / 建议 / 趋势", "评分 / 观察 / 趋势"),
+    ("空仓 / 持仓建议", "持有状态参考"),
+    ("空仓 / 持有状态参考", "持有状态参考"),
+    ("空仓建议", "观察摘要"),
+    ("持仓建议", "持有状态参考"),
+    ("操作建议", "观察摘要"),
+    ("操作理由", "观察摘要"),
+    ("仓位建议", "暴露变化参考"),
+    ("建议仓位", "暴露变化参考"),
+    ("止损位", "风险控制参考"),
+    ("目标价格", "假设价格"),
+    ("目标价", "假设价格"),
+    ("目标位", "上方参考"),
+    ("强烈买入", "偏高评估"),
+    ("强烈卖出", "偏低评估"),
+    ("观望", "中性评估"),
+    ("买入", "正向评估"),
+    ("卖出", "负向评估"),
+    ("加仓", "关注变化"),
+    ("减仓", "暴露变化"),
+    ("建仓", "关注变化"),
+    ("调仓", "暴露变化"),
+    (" / 持有 /", " / 中性评估 /"),
+    ("一句话决策", "一句话结论"),
+    ("操作点位", "观察区间"),
+    ("执行计划", "观察摘要"),
+    ("作战计划", "观察计划"),
+    ("关键动作", "关键观察"),
+)
+
+_NOTIFICATION_VISIBLE_REGEX_REPLACEMENTS = tuple(
+    (re.compile(pattern, re.IGNORECASE), replacement)
+    for pattern, replacement in (
+        (r"\bnot\s+investment\s+advice\b", "not personalized financial guidance"),
+        (r"\binvestment\s+advice\b", "personalized financial guidance"),
+        (r"\bstrong\s+buy\b", "High Assessment"),
+        (r"\bstrong\s+sell\b", "Low Assessment"),
+        (r"\bstop[\s-]?loss\b", "Risk Control Reference"),
+        (r"\btake[\s-]?profit\b", "Upper Reference"),
+        (r"\btarget\s+price\b", "Hypothetical Price"),
+        (r"\bposition\s+sizing\b", "Exposure Reference"),
+        (r"\bposition\s+size\b", "Exposure Reference"),
+        (r"\bideal\s+entry\b", "Reference Range"),
+        (r"\bsecondary\s+entry\b", "Observation Range"),
+        (r"\bentry\s+plan\b", "Attention Change"),
+        (r"\baction\s+levels?\b", "Observation Ranges"),
+        (r"\baction\s+plan\b", "Observation Plan"),
+        (r"\bbuy(?:ing)?\b", "Positive Assessment"),
+        (r"\bsell(?:ing)?\b", "Negative Assessment"),
+        (r"\btarget\b", "Upper Reference"),
+        (r"\badvice\b", "research note"),
+    )
+)
+
+
+def _notification_safe_labels(language: Optional[str]) -> Dict[str, str]:
+    normalized_language = normalize_report_language(language)
+    labels = dict(get_report_labels(normalized_language))
+    labels.update(_NOTIFICATION_SAFE_LABEL_OVERRIDES[normalized_language])
+    return labels
+
+
+def _sanitize_notification_visible_copy(value: Any) -> str:
+    text = str(value or "")
+    for old, new in _NOTIFICATION_VISIBLE_COPY_REPLACEMENTS:
+        text = text.replace(old, new)
+    for pattern, replacement in _NOTIFICATION_VISIBLE_REGEX_REPLACEMENTS:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+def _notification_safe_operation_text(value: Any, language: Optional[str]) -> str:
+    return _sanitize_notification_visible_copy(
+        localize_operation_advice(value, language)
+    )
+
+
+def _notification_safe_signal_level(
+    advice: Any,
+    score: Any,
+    language: Optional[str],
+) -> tuple[str, str, str]:
+    signal_text, emoji, signal_tag = get_signal_level(advice, score, language)
+    normalized_language = normalize_report_language(language)
+    safe_text_by_tag = {
+        "strong_buy": {"zh": "偏高评估", "en": "High Assessment"},
+        "buy": {"zh": "偏高评估", "en": "High Assessment"},
+        "hold": {"zh": "中性评估", "en": "Neutral Assessment"},
+        "watch": {"zh": "中性评估", "en": "Neutral Assessment"},
+        "reduce": {"zh": "偏低评估", "en": "Low Assessment"},
+        "sell": {"zh": "偏低评估", "en": "Low Assessment"},
+        "strong_sell": {"zh": "偏低评估", "en": "Low Assessment"},
+    }
+    safe_text = safe_text_by_tag.get(signal_tag, {}).get(normalized_language)
+    if not safe_text:
+        safe_text = _sanitize_notification_visible_copy(signal_text)
+    return safe_text, emoji, signal_tag
 
 
 class NotificationChannel(Enum):
@@ -243,7 +399,7 @@ class NotificationService(
         return normalize_report_language(getattr(get_config(), "report_language", "zh"))
 
     def _get_labels(self, payload: Optional[Any] = None) -> Dict[str, str]:
-        return get_report_labels(self._get_report_language(payload))
+        return _notification_safe_labels(self._get_report_language(payload))
 
     def _get_display_name(self, result: AnalysisResult, language: Optional[str] = None) -> str:
         report_language = normalize_report_language(language or self._get_report_language(result))
@@ -351,7 +507,9 @@ class NotificationService(
             discord_content = None
 
         if discord_content:
-            self._channel_report_cache[NotificationChannel.DISCORD] = discord_content
+            self._channel_report_cache[NotificationChannel.DISCORD] = (
+                _sanitize_notification_visible_copy(discord_content)
+            )
 
     def _collect_models_used(self, results: List[AnalysisResult]) -> List[str]:
         models: List[str] = []
@@ -645,7 +803,7 @@ class NotificationService(
         if report_date is None:
             report_date = datetime.now().strftime('%Y-%m-%d')
         report_language = self._get_report_language(results)
-        labels = get_report_labels(report_language)
+        labels = _notification_safe_labels(report_language)
         self._prime_channel_report_cache(results, report_date=report_date, report_language=report_language)
 
         # 标题
@@ -693,7 +851,7 @@ class NotificationService(
                 _, emoji, _ = self._get_signal_level(r)
                 report_lines.append(
                     f"{emoji} **{self._get_display_name(r, report_language)}({r.code})**: "
-                    f"{localize_operation_advice(r.operation_advice, report_language)} | "
+                    f"{_notification_safe_operation_text(r.operation_advice, report_language)} | "
                     f"{labels['score_label']} {r.sentiment_score} | "
                     f"{localize_trend_prediction(r.trend_prediction, report_language)}"
                 )
@@ -707,7 +865,7 @@ class NotificationService(
                 report_lines.extend([
                     f"### {emoji} {self._get_display_name(result, report_language)} ({result.code})",
                     "",
-                    f"**{labels['action_advice_label']}：{localize_operation_advice(result.operation_advice, report_language)}** | "
+                    f"**{labels['action_advice_label']}：{_notification_safe_operation_text(result.operation_advice, report_language)}** | "
                     f"**{labels['score_label']}：{result.sentiment_score}** | "
                     f"**{labels['trend_label']}：{localize_trend_prediction(result.trend_prediction, report_language)}** | "
                     f"**Confidence：{confidence_stars}**",
@@ -723,7 +881,7 @@ class NotificationService(
                         "",
                     ])
                 
-                # 买入/卖出理由
+                # 观察理由
                 if hasattr(result, 'buy_reason') and result.buy_reason:
                     report_lines.extend([
                         f"**💡 操作理由**：{result.buy_reason}",
@@ -838,7 +996,7 @@ class NotificationService(
             f"*{labels['generated_at_label']}：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*",
         ])
         
-        return "\n".join(report_lines)
+        return _sanitize_notification_visible_copy("\n".join(report_lines))
     
     @staticmethod
     def _escape_md(name: str) -> str:
@@ -866,7 +1024,7 @@ class NotificationService(
 
     def _get_signal_level(self, result: AnalysisResult) -> tuple:
         """Get localized signal level and color based on operation advice."""
-        return get_signal_level(
+        return _notification_safe_signal_level(
             result.operation_advice,
             result.sentiment_score,
             self._get_report_language(result),
@@ -891,7 +1049,7 @@ class NotificationService(
         """
         config = get_config()
         report_language = self._get_report_language(results)
-        labels = get_report_labels(report_language)
+        labels = _notification_safe_labels(report_language)
         reason_label = "Rationale" if report_language == "en" else "操作理由"
         risk_warning_label = "Risk Warning" if report_language == "en" else "风险提示"
         technical_heading = "Technicals" if report_language == "en" else "技术面"
@@ -921,7 +1079,7 @@ class NotificationService(
                 },
             )
             if out:
-                return out
+                return _sanitize_notification_visible_copy(out)
 
         # 按评分排序（高分在前）
         sorted_results = sorted(results, key=lambda x: x.sentiment_score, reverse=True)
@@ -950,7 +1108,7 @@ class NotificationService(
                 display_name = self._get_display_name(r, report_language)
                 report_lines.append(
                     f"{signal_emoji} **{display_name}({r.code})**: "
-                    f"{localize_operation_advice(r.operation_advice, report_language)} | "
+                    f"{_notification_safe_operation_text(r.operation_advice, report_language)} | "
                     f"{labels['score_label']} {r.sentiment_score} | "
                     f"{localize_trend_prediction(r.trend_prediction, report_language)}"
                 )
@@ -1028,7 +1186,7 @@ class NotificationService(
                     report_lines.extend([
                         f"| {labels['position_status_label']} | {labels['action_advice_label']} |",
                         "|---------|---------|",
-                        f"| 🆕 **{labels['no_position_label']}** | {pos_advice.get('no_position', localize_operation_advice(result.operation_advice, report_language))} |",
+                        f"| 🆕 **{labels['no_position_label']}** | {pos_advice.get('no_position', _notification_safe_operation_text(result.operation_advice, report_language))} |",
                         f"| 💼 **{labels['has_position_label']}** | {pos_advice.get('has_position', labels['continue_holding'])} |",
                         "",
                     ])
@@ -1205,7 +1363,7 @@ class NotificationService(
             f"*{labels['generated_at_label']}：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*",
         ])
         
-        return "\n".join(report_lines)
+        return _sanitize_notification_visible_copy("\n".join(report_lines))
     
     def generate_wechat_dashboard(self, results: List[AnalysisResult]) -> str:
         """
@@ -1221,7 +1379,7 @@ class NotificationService(
         """
         config = get_config()
         report_language = self._get_report_language(results)
-        labels = get_report_labels(report_language)
+        labels = _notification_safe_labels(report_language)
         report_date = datetime.now().strftime('%Y-%m-%d')
         self._prime_channel_report_cache(results, report_date=report_date, report_language=report_language)
         if getattr(config, 'report_renderer_enabled', False) and results:
@@ -1237,7 +1395,7 @@ class NotificationService(
                 },
             )
             if out:
-                return out
+                return _sanitize_notification_visible_copy(out)
         
         # 按评分排序
         sorted_results = sorted(results, key=lambda x: x.sentiment_score, reverse=True)
@@ -1264,7 +1422,7 @@ class NotificationService(
                 stock_name = self._get_display_name(r, report_language)
                 lines.append(
                     f"{signal_emoji} **{stock_name}({r.code})**: "
-                    f"{localize_operation_advice(r.operation_advice, report_language)} | "
+                    f"{_notification_safe_operation_text(r.operation_advice, report_language)} | "
                     f"{labels['score_label']} {r.sentiment_score} | "
                     f"{localize_trend_prediction(r.trend_prediction, report_language)}"
                 )
@@ -1373,7 +1531,7 @@ class NotificationService(
 
         content = "\n".join(lines)
 
-        return content
+        return _sanitize_notification_visible_copy(content)
 
     def generate_wechat_summary(self, results: List[AnalysisResult]) -> str:
         """
@@ -1387,7 +1545,7 @@ class NotificationService(
         """
         report_date = datetime.now().strftime('%Y-%m-%d')
         report_language = self._get_report_language(results)
-        labels = get_report_labels(report_language)
+        labels = _notification_safe_labels(report_language)
         self._prime_channel_report_cache(results, report_date=report_date, report_language=report_language)
 
         # 按评分排序
@@ -1415,7 +1573,7 @@ class NotificationService(
             # 核心信息行
             lines.append(f"### {emoji} {self._get_display_name(result, report_language)}({result.code})")
             lines.append(
-                f"**{localize_operation_advice(result.operation_advice, report_language)}** | "
+                f"**{_notification_safe_operation_text(result.operation_advice, report_language)}** | "
                 f"{labels['score_label']}:{result.sentiment_score} | "
                 f"{localize_trend_prediction(result.trend_prediction, report_language)}"
             )
@@ -1449,7 +1607,7 @@ class NotificationService(
 
         content = "\n".join(lines)
 
-        return content
+        return _sanitize_notification_visible_copy(content)
 
     def generate_brief_report(
         self,
@@ -1469,7 +1627,7 @@ class NotificationService(
         if report_date is None:
             report_date = datetime.now().strftime('%Y-%m-%d')
         report_language = self._get_report_language(results)
-        labels = get_report_labels(report_language)
+        labels = _notification_safe_labels(report_language)
         config = get_config()
         if getattr(config, 'report_renderer_enabled', False) and results:
             from src.services.report_renderer import render
@@ -1484,10 +1642,12 @@ class NotificationService(
                 },
             )
             if out:
-                return out
+                return _sanitize_notification_visible_copy(out)
         # Fallback: brief summary from dashboard report
         if not results:
-            return f"# {report_date} {labels['brief_title']}\n\n{labels['no_results']}"
+            return _sanitize_notification_visible_copy(
+                f"# {report_date} {labels['brief_title']}\n\n{labels['no_results']}"
+            )
         sorted_results = sorted(results, key=lambda x: x.sentiment_score, reverse=True)
         buy_count = sum(1 for r in results if getattr(r, 'decision_type', '') == 'buy')
         sell_count = sum(1 for r in results if getattr(r, 'decision_type', '') == 'sell')
@@ -1506,12 +1666,12 @@ class NotificationService(
             one = (core.get('one_sentence') or r.analysis_summary or '')[:60]
             lines.append(
                 f"**{name}({r.code})** {emoji} "
-                f"{localize_operation_advice(r.operation_advice, report_language)} | "
+                f"{_notification_safe_operation_text(r.operation_advice, report_language)} | "
                 f"{labels['score_label']} {r.sentiment_score} | {one}"
             )
         lines.append("")
         lines.append(f"*{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
-        return "\n".join(lines)
+        return _sanitize_notification_visible_copy("\n".join(lines))
 
     def generate_single_stock_report(self, result: AnalysisResult) -> str:
         """
@@ -1527,7 +1687,7 @@ class NotificationService(
         """
         report_date = datetime.now().strftime('%Y-%m-%d %H:%M')
         report_language = self._get_report_language(result)
-        labels = get_report_labels(report_language)
+        labels = _notification_safe_labels(report_language)
         signal_text, signal_emoji, _ = self._get_signal_level(result)
         dashboard = result.dashboard if hasattr(result, 'dashboard') and result.dashboard else {}
         core = dashboard.get('core_conclusion', {}) if dashboard else {}
@@ -1629,7 +1789,7 @@ class NotificationService(
             lines.extend([
                 f"### 💼 {labels['position_advice_heading']}",
                 "",
-                f"- 🆕 **{labels['no_position_label']}**: {pos_advice.get('no_position', localize_operation_advice(result.operation_advice, report_language))}",
+                f"- 🆕 **{labels['no_position_label']}**: {pos_advice.get('no_position', _notification_safe_operation_text(result.operation_advice, report_language))}",
                 f"- 💼 **{labels['has_position_label']}**: {pos_advice.get('has_position', labels['continue_holding'])}",
                 "",
             ])
@@ -1640,7 +1800,7 @@ class NotificationService(
             lines.append(f"*{labels['analysis_model_label']}: {model_used}*")
         lines.append(f"*{labels['not_investment_advice']}*")
 
-        return "\n".join(lines)
+        return _sanitize_notification_visible_copy("\n".join(lines))
 
     # Display name mapping for realtime data sources
     _SOURCE_DISPLAY_NAMES = {
@@ -1690,7 +1850,7 @@ class NotificationService(
             return
 
         report_language = self._get_report_language(result)
-        labels = get_report_labels(report_language)
+        labels = _notification_safe_labels(report_language)
 
         lines.extend([
             f"### 📈 {labels['market_snapshot_heading']}",
@@ -1950,18 +2110,18 @@ class NotificationBuilder:
         report_language = normalize_report_language(
             next((getattr(result, "report_language", None) for result in results if getattr(result, "report_language", None)), None)
         )
-        labels = get_report_labels(report_language)
+        labels = _notification_safe_labels(report_language)
         lines = [f"📊 **{labels['summary_heading']}**", ""]
         
         for r in sorted(results, key=lambda x: x.sentiment_score, reverse=True):
             _, emoji, _ = get_signal_level(r.operation_advice, r.sentiment_score, report_language)
             name = get_localized_stock_name(r.name, r.code, report_language)
             lines.append(
-                f"{emoji} {name}({r.code}): {localize_operation_advice(r.operation_advice, report_language)} | "
+                f"{emoji} {name}({r.code}): {_notification_safe_operation_text(r.operation_advice, report_language)} | "
                 f"{labels['score_label']} {r.sentiment_score}"
             )
         
-        return "\n".join(lines)
+        return _sanitize_notification_visible_copy("\n".join(lines))
 
 
 # 便捷函数
@@ -2000,7 +2160,7 @@ if __name__ == "__main__":
             sentiment_score=75,
             trend_prediction='看多',
             analysis_summary='技术面强势，消息面利好',
-            operation_advice='买入',
+            operation_advice='正向评估',
             technical_analysis='放量突破 MA20，MACD 金叉',
             news_summary='公司发布分红公告，业绩超预期',
         ),
@@ -2020,7 +2180,7 @@ if __name__ == "__main__":
             sentiment_score=35,
             trend_prediction='看空',
             analysis_summary='技术面走弱，注意风险',
-            operation_advice='卖出',
+            operation_advice='负向评估',
             technical_analysis='跌破 MA10 支撑，量能不足',
             news_summary='行业竞争加剧，毛利率承压',
         ),

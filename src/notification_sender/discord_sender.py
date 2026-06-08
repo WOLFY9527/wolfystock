@@ -20,6 +20,73 @@ _DISCORD_FIELD_RE = re.compile(r"^- \*\*(.+?)\*\*: (.+)$")
 _DISCORD_HARD_CHAR_LIMIT = 2000
 _DISCORD_PART_MARKER_RESERVE = 32
 
+_DISCORD_VISIBLE_COPY_REPLACEMENTS = (
+    ("理想买入点", "参考区间"),
+    ("次优买入点", "观察区间"),
+    ("空仓者建议", "观察摘要"),
+    ("持仓者建议", "持有状态参考"),
+    ("评分 / 建议 / 趋势", "评分 / 观察 / 趋势"),
+    ("空仓 / 持仓建议", "持有状态参考"),
+    ("空仓 / 持有状态参考", "持有状态参考"),
+    ("空仓建议", "观察摘要"),
+    ("持仓建议", "持有状态参考"),
+    ("操作建议", "观察摘要"),
+    ("操作理由", "观察摘要"),
+    ("仓位建议", "暴露变化参考"),
+    ("建议仓位", "暴露变化参考"),
+    ("止损位", "风险控制参考"),
+    ("目标价格", "假设价格"),
+    ("目标价", "假设价格"),
+    ("目标位", "上方参考"),
+    ("强烈买入", "偏高评估"),
+    ("强烈卖出", "偏低评估"),
+    ("观望", "中性评估"),
+    ("买入", "正向评估"),
+    ("卖出", "负向评估"),
+    ("加仓", "关注变化"),
+    ("减仓", "暴露变化"),
+    ("建仓", "关注变化"),
+    ("调仓", "暴露变化"),
+    (" / 持有 /", " / 中性评估 /"),
+    ("一句话决策", "一句话结论"),
+    ("执行计划", "观察摘要"),
+    ("作战计划", "观察计划"),
+    ("关键动作", "关键观察"),
+)
+
+_DISCORD_VISIBLE_REGEX_REPLACEMENTS = tuple(
+    (re.compile(pattern, re.IGNORECASE), replacement)
+    for pattern, replacement in (
+        (r"\bnot\s+investment\s+advice\b", "not personalized financial guidance"),
+        (r"\binvestment\s+advice\b", "personalized financial guidance"),
+        (r"\bstrong\s+buy\b", "High Assessment"),
+        (r"\bstrong\s+sell\b", "Low Assessment"),
+        (r"\bstop[\s-]?loss\b", "Risk Control Reference"),
+        (r"\btake[\s-]?profit\b", "Upper Reference"),
+        (r"\btarget\s+price\b", "Hypothetical Price"),
+        (r"\bposition\s+sizing\b", "Exposure Reference"),
+        (r"\bposition\s+size\b", "Exposure Reference"),
+        (r"\bideal\s+entry\b", "Reference Range"),
+        (r"\bsecondary\s+entry\b", "Observation Range"),
+        (r"\bentry\s+plan\b", "Attention Change"),
+        (r"\baction\s+levels?\b", "Observation Ranges"),
+        (r"\baction\s+plan\b", "Observation Plan"),
+        (r"\bbuy(?:ing)?\b", "Positive Assessment"),
+        (r"\bsell(?:ing)?\b", "Negative Assessment"),
+        (r"\btarget\b", "Upper Reference"),
+        (r"\badvice\b", "research note"),
+    )
+)
+
+
+def _sanitize_discord_visible_copy(value: str) -> str:
+    text = str(value or "")
+    for old, new in _DISCORD_VISIBLE_COPY_REPLACEMENTS:
+        text = text.replace(old, new)
+    for pattern, replacement in _DISCORD_VISIBLE_REGEX_REPLACEMENTS:
+        text = pattern.sub(replacement, text)
+    return text
+
 
 class DiscordSender:
     
@@ -92,7 +159,7 @@ class DiscordSender:
             return content
         compact = cls._build_compact_stock_digest(content)
         source = compact or content
-        return cls._flatten_markdown_tables(source)
+        return _sanitize_discord_visible_copy(cls._flatten_markdown_tables(source))
 
     @staticmethod
     def _flatten_markdown_tables(content: str) -> str:
@@ -194,6 +261,8 @@ class DiscordSender:
                     "检查清单" in current_section
                     or "Checklist" in current_section
                     or "Action Plan" in current_section
+                    or "Observation Plan" in current_section
+                    or "观察计划" in current_section
                 ):
                     checklist = current_stock["checklist"]
                     if isinstance(checklist, list):
@@ -215,8 +284,12 @@ class DiscordSender:
             if not isinstance(fields, dict):
                 continue
 
-            def pick(label: str, default: str = "NA（接口未返回）") -> str:
-                value = str(fields.get(label) or "").strip()
+            def pick(*labels: str, default: str = "NA（接口未返回）") -> str:
+                value = ""
+                for label in labels:
+                    value = str(fields.get(label) or "").strip()
+                    if value:
+                        break
                 return value or default
 
             header = str(stock.get("header") or "").strip()
@@ -227,33 +300,44 @@ class DiscordSender:
             output.append(f"## {header}")
             score_line = pick(
                 "评分 / 建议 / 趋势",
-                f"{pick('评分')} / {pick('买入 / 观望 / 卖出')} / {pick('看多 / 看空 / 震荡')}",
+                "评分 / 观察 / 趋势",
+                default=f"{pick('评分')} / {pick('正向评估 / 中性评估 / 负向评估')} / {pick('看多 / 看空 / 震荡')}",
             )
-            one_line = pick("一句话结论", pick("一句话决策"))
+            one_line = pick("一句话结论", default=pick("一句话决策"))
             current_line = pick(
                 "当前价 / 涨跌",
-                f"当前价 {pick('当前价')} | 涨跌 {pick('涨跌额')} / {pick('涨跌幅')}",
+                default=f"当前价 {pick('当前价')} | 涨跌 {pick('涨跌额')} / {pick('涨跌幅')}",
             )
             execution_line = pick(
                 "理想买入点 / 次优买入点 / 止损位 / 目标位 / 仓位",
-                f"{pick('理想买入点')} / {pick('次优买入点')} / {pick('止损位')} / {pick('目标位')} / {pick('仓位建议')}",
+                "参考区间 / 观察区间 / 风险控制参考 / 上方参考 / 暴露变化",
+                default=(
+                    f"{pick('理想买入点', '参考区间')} / "
+                    f"{pick('次优买入点', '观察区间')} / "
+                    f"{pick('止损位', '风险控制参考')} / "
+                    f"{pick('目标位', '上方参考')} / "
+                    f"{pick('仓位建议', '暴露变化参考')}"
+                ),
             )
-            top_risk = pick("核心风险", cls._compact_list_value(pick("风险警报")))
-            top_catalyst = pick("核心利好", cls._compact_list_value(pick("利好催化")))
-            latest_update = pick("最新关键更新", cls._compact_list_value(pick("最新动态 / 重要公告", pick("新闻价值分级"))))
-            no_position = pick("空仓者建议")
-            holder = pick("持仓者建议")
+            top_risk = pick("核心风险", default=cls._compact_list_value(pick("风险警报")))
+            top_catalyst = pick("核心利好", default=cls._compact_list_value(pick("利好催化")))
+            latest_update = pick(
+                "最新关键更新",
+                default=cls._compact_list_value(pick("最新动态 / 重要公告", default=pick("新闻价值分级"))),
+            )
+            no_position = pick("空仓者建议", "观察摘要")
+            holder = pick("持仓者建议", "持有状态参考")
 
-            output.append(f"- **评分 / 建议 / 趋势**: {score_line}")
+            output.append(f"- **评分 / 观察 / 趋势**: {score_line}")
             output.append(f"- **一句话结论**: {cls._truncate_text(one_line)}")
             output.append(f"- **当前价 / 涨跌**: {current_line}")
-            output.append(f"- **执行计划**: {execution_line}")
+            output.append(f"- **观察摘要**: {execution_line}")
             output.append(f"- **核心风险**: {cls._truncate_text(top_risk, 120)}")
             output.append(f"- **核心利好**: {cls._truncate_text(top_catalyst, 120)}")
             output.append(f"- **最新关键更新**: {cls._truncate_text(latest_update, 120)}")
             if no_position != "NA（接口未返回）" or holder != "NA（接口未返回）":
                 output.append(
-                    f"- **空仓 / 持仓建议**: 空仓 {cls._truncate_text(no_position, 64)} | 持仓 {cls._truncate_text(holder, 64)}"
+                    f"- **持有状态参考**: 未持有 {cls._truncate_text(no_position, 64)} | 持有 {cls._truncate_text(holder, 64)}"
                 )
 
             compact_checklist = []
