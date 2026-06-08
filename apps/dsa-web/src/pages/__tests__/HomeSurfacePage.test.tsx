@@ -1109,7 +1109,8 @@ describe('HomeSurfacePage', () => {
     ].forEach((sectionTitle) => {
       expect(within(report).getAllByText(sectionTitle).length).toBeGreaterThan(0);
     });
-    expect(within(report).getByText('WOLFY AI EQUITY RESEARCH')).toBeInTheDocument();
+    expect(within(report).getByText('WOLFYSTOCK RESEARCH REPORT')).toBeInTheDocument();
+    expect(within(report).queryByText('WOLFY AI EQUITY RESEARCH')).not.toBeInTheDocument();
     expect(within(report).getByText('AI 洞察仅供参考，不构成投资建议。')).toBeInTheDocument();
     expect(within(report).getByRole('button', { name: '导出 Markdown' })).toBeInTheDocument();
     expect(within(report).getByRole('button', { name: /导出 PDF|打印\/PDF/ })).toBeInTheDocument();
@@ -1118,6 +1119,8 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(within(report).getByRole('button', { name: '复制报告' }));
     await waitFor(() => expect(writeText).toHaveBeenCalled());
     expect(String(writeText.mock.calls[0][0])).toContain('研究包完整度');
+    expect(String(writeText.mock.calls[0][0])).toContain('WolfyStock Research Report');
+    expect(String(writeText.mock.calls[0][0])).not.toContain('Wolfy AI Equity Research');
     expect(String(writeText.mock.calls[0][0])).not.toMatch(/投资结论|Ideal buy|Stop loss|Position sizing|reasonCode|sourceRefId|raw_result|raw_ai_response|context_snapshot/i);
   });
 

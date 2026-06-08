@@ -23,6 +23,19 @@ const openTechnicalDetails = async (label: string) => {
 };
 
 describe('PreviewFullReportDrawerPage', () => {
+  it('uses observation-only localized labels for preview and report copy', () => {
+    expect(translate('zh', 'guestHome.decisionPanelEyebrow')).toBe('WolfyStock 研究判断');
+    expect(translate('en', 'guestHome.decisionPanelEyebrow')).toBe('WolfyStock Research Decision');
+    expect(translate('zh', 'report.idealEntry')).toBe('关键观察区间');
+    expect(translate('en', 'report.idealEntry')).toBe('Observation range');
+    expect(translate('en', 'report.noPosition')).toBe('No-position watch');
+    expect(translate('en', 'report.holding')).toBe('Holding watch');
+    expect(translate('zh', 'previewFullReport.markdown')).toContain('关键观察区间：120-121。');
+    expect(translate('zh', 'previewFullReport.markdown')).not.toContain('理想买入区间：120-121。');
+    expect(translate('en', 'previewFullReport.markdown')).toContain('Observation range: 120-121.');
+    expect(translate('en', 'previewFullReport.markdown')).not.toContain('Ideal entry range: 120-121.');
+  });
+
   it('shows the route shell buttons on first paint', () => {
     render(
       <MemoryRouter initialEntries={['/__preview/full-report']}>

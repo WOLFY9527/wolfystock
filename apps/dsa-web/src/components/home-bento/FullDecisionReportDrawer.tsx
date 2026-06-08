@@ -70,6 +70,9 @@ type ReportIdentity = {
   dataStatus: string;
 };
 
+const LEGACY_REPORT_BRAND = 'Wolfy AI Equity Research';
+const REPORT_BRAND = 'WolfyStock Research Report';
+
 function TraceBadge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'used' | 'warning' | 'missing' }) {
   const toneClass = tone === 'used'
     ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100'
@@ -204,6 +207,10 @@ function buildReportIdentity(report: AnalysisReport | null, dashboard?: Dashboar
     horizon: override?.horizon || safeReportValue(report?.details?.standardReport?.summaryPanel?.timeSensitivity || report?.details?.standardReport?.decisionPanel?.marketStructure || '短线 / 中短线'),
     dataStatus: override?.dataStatus || sourceStatus || '--',
   };
+}
+
+function normalizeReportBrand(markdown: string): string {
+  return markdown.replaceAll(LEGACY_REPORT_BRAND, REPORT_BRAND);
 }
 
 function buildFullReportSections(report: AnalysisReport | null, dashboard: DashboardPayload): FullReportSection[] {
@@ -369,7 +376,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const sections = buildFullReportSections(report, dashboard);
   const identity = buildReportIdentity(report, dashboard);
-  const markdown = buildInstitutionalReportMarkdown(report);
+  const markdown = normalizeReportBrand(buildInstitutionalReportMarkdown(report));
   const summarySection = sections.find((section) => section.id === 'summary');
   const riskSection = sections.find((section) => section.id === 'risks');
   const observationSection = sections.find((section) => section.id === 'observation-plan');
@@ -434,7 +441,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
       <!doctype html>
       <html>
         <head>
-          <title>${identity.companyWithTicker} - Wolfy AI Equity Research</title>
+          <title>${identity.companyWithTicker} - ${REPORT_BRAND}</title>
           <style>
             body { margin: 0; background: #fff; color: #111827; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
             main { max-width: 820px; margin: 0 auto; padding: 40px 34px; }
@@ -466,7 +473,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
         <header className="min-w-0 border-b border-white/8 pb-5">
           <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/42">WOLFY AI EQUITY RESEARCH</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/42">WOLFYSTOCK RESEARCH REPORT</p>
               <h2 className="mt-2 break-words text-2xl font-semibold tracking-[0] text-white md:text-3xl">
                 {identity.companyWithTicker}
               </h2>

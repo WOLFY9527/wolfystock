@@ -254,19 +254,19 @@ const RESOURCES = {
       markdown: `# NVIDIA（NVDA）完整研究报告
 
 ## 一、结论摘要
-当前建议维持“等待回踩确认后分批试仓”的执行框架。核心判断来自价格结构仍偏多，但短线动量与上方压力位尚未完成再平衡。
+当前观察重点仍是“等待回踩确认后的结构变化”。核心判断来自价格结构仍偏多，但短线动量与上方压力位尚未完成再平衡。
 
-## 二、执行层（可操作）
-### 2.1 当前动作
+## 二、观察层（当前关注）
+### 2.1 当前观察
 - 优先观察回踩 MA20 附近是否出现承接。
-- 若成交量放大但价格未失守关键支撑，可考虑首笔试仓。
-- 若价格快速跌破支撑并放量，暂停执行，进入防守模式。
+- 若成交量放大但价格未失守关键支撑，记为承接信号增强。
+- 若价格快速跌破支撑并放量，记为风险升温。
 
-### 2.2 新开仓计划
-1. 理想买入区间：120-121。
-2. 次优买入点：118。
-3. 止损位：115。
-4. 目标区间：132-138。
+### 2.2 关键观察区间
+1. 关键观察区间：120-121。
+2. 次级观察位：118。
+3. 风险边界参考：115。
+4. 上方观察区：132-138。
 
 ## 三、证据层（行情与结构）
 ### 3.1 市场结构
@@ -450,7 +450,7 @@ const RESOURCES = {
       previewTitle: '即时分析预览',
       previewNote: '该结果仅用于游客预览，不写入历史记录，也不开放后续交流。',
       previewDrawerAction: '打开预览说明',
-      decisionPanelEyebrow: 'WOLFY AI 决断',
+      decisionPanelEyebrow: 'WolfyStock 研究判断',
       decisionSnapshot: '决策快照',
       unlockTitle: '登录后继续完整功能',
       unlockSubtitle: '继续深入',
@@ -1984,15 +1984,15 @@ const RESOURCES = {
       marketStructure: '市场结构',
       positionSizing: '仓位建议',
       targetZone: '目标区间',
-      idealEntry: '理想买入点',
+      idealEntry: '关键观察区间',
       backupEntry: '次优买入点',
       stopLoss: '止损位',
       targetOne: '目标一区',
       targetTwo: '目标二区',
       buildStrategy: '建仓策略',
       riskControl: '风控策略',
-      noPosition: '空仓者建议',
-      holding: '持仓者建议',
+      noPosition: '空仓观察',
+      holding: '持仓观察',
       reminders: '执行提醒',
       checklistAndScore: '评分依据与检查项',
       checklistState: '检查清单状态',
@@ -3249,19 +3249,19 @@ const RESOURCES = {
       markdown: `# NVIDIA (NVDA) Full Research Memo
 
 ## 1. Executive Summary
-The current stance remains "wait for pullback confirmation, then scale in gradually." The trend structure is still constructive, while short-term momentum and overhead resistance are not fully resolved.
+The current focus remains "wait for the next pullback response and read the structure." The trend setup is still constructive, while short-term momentum and overhead resistance remain unresolved.
 
-## 2. Execution Layer
-### 2.1 Immediate Actions
+## 2. Observation Layer
+### 2.1 Current Watch
 - Watch for demand response near MA20.
-- Consider the first probe position only if support holds with healthy volume.
-- If support breaks with expanding volume, pause execution and switch to defense.
+- If support holds with healthy volume, record that as stronger demand confirmation.
+- If support breaks with expanding volume, record that as rising downside risk.
 
-### 2.2 New Position Plan
-1. Ideal entry range: 120-121.
-2. Secondary entry: 118.
-3. Stop loss: 115.
-4. Target zone: 132-138.
+### 2.2 Observation Zones
+1. Observation range: 120-121.
+2. Secondary watch level: 118.
+3. Risk boundary reference: 115.
+4. Upper observation zone: 132-138.
 
 ## 3. Evidence Layer
 ### 3.1 Structure
@@ -3445,7 +3445,7 @@ This memo is for research discussion and does not constitute investment advice.`
       previewTitle: 'Instant Analysis Snapshot',
       previewNote: 'This preview is intentionally limited. It is not saved and does not unlock follow-up chat.',
       previewDrawerAction: 'Open preview guide',
-      decisionPanelEyebrow: 'WOLFY AI DECISION',
+      decisionPanelEyebrow: 'WolfyStock Research Decision',
       decisionSnapshot: 'Decision Snapshot',
       unlockTitle: 'Sign in for the full app',
       unlockSubtitle: 'Next Step',
@@ -4979,15 +4979,15 @@ This memo is for research discussion and does not constitute investment advice.`
       marketStructure: 'Market structure',
       positionSizing: 'Position sizing',
       targetZone: 'Target zone',
-      idealEntry: 'Ideal entry',
+      idealEntry: 'Observation range',
       backupEntry: 'Secondary entry',
       stopLoss: 'Stop loss',
       targetOne: 'Target 1',
       targetTwo: 'Target 2',
       buildStrategy: 'Build strategy',
       riskControl: 'Risk control',
-      noPosition: 'No-position advice',
-      holding: 'Holding advice',
+      noPosition: 'No-position watch',
+      holding: 'Holding watch',
       reminders: 'Execution reminders',
       checklistAndScore: 'Scoring rationale and checklist',
       checklistState: 'Checklist status',
@@ -5090,8 +5090,8 @@ This memo is for research discussion and does not constitute investment advice.`
       stopReason: 'Stop rationale',
       targetReason: 'Target rationale',
       marketStructureTitle: 'Market structure',
-      holderAdvice: 'Holding advice',
-      noPositionAdvice: 'No-position advice',
+      holderAdvice: 'Holding watch',
+      noPositionAdvice: 'No-position watch',
       compatibility: {
         title: 'Legacy record format',
         body: 'Record missing standard structure. Full render unavailable in Standard-only mode.',
