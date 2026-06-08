@@ -48,6 +48,21 @@ EXPECTED_PROVIDER_IDS = {
     "official_or_authorized.fx_dxy",
     "official_or_authorized.us_market_breadth",
     "treasury_existing_baseline",
+    "options_lab.bid_ask_liquidity_gate",
+    "options_lab.disabled_live_provider_stubs",
+    "options_lab.iv_greeks_gate",
+    "options_lab.iv_rank_history",
+    "options_lab.oi_volume_gate",
+    "options_lab.synthetic_fixture_chain",
+    "portfolio.benchmark_return_history",
+    "portfolio.factor_risk_metrics",
+    "portfolio.fx_provenance",
+    "portfolio.price_provenance",
+    "portfolio.sector_industry_exposure",
+    "watchlist.no_score_stale_state",
+    "watchlist.scanner_score_snapshot",
+    "watchlist.score_refresh_freshness",
+    "watchlist.source_confidence_preservation",
 }
 
 
@@ -90,6 +105,10 @@ def test_provider_fit_advisor_key_required_entries_remain_secret_safe() -> None:
         "nasdaq_data_link",
         "official_or_authorized.fx_dxy",
         "official_or_authorized.us_market_breadth",
+        "options_lab.bid_ask_liquidity_gate",
+        "options_lab.iv_greeks_gate",
+        "options_lab.iv_rank_history",
+        "options_lab.oi_volume_gate",
         "tushare_pro",
         "twelve_data",
     }

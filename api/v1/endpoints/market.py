@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
-from api.deps import CurrentUser, get_optional_current_user
+from api.deps import CurrentUser, get_optional_current_user, require_admin_capability
 from api.v1.schemas.market_rotation import MarketRotationRadarResponse
 from api.v1.schemas.market_temperature import MarketTemperatureConsumedSubsetResponse
 from src.services.cn_provider_health_service import CNProviderHealthService
@@ -193,8 +193,15 @@ def get_cn_provider_health(
     return [item.to_dict() for item in CNProviderHealthService().get_snapshot(force_refresh=force_refresh)]
 
 
-@router.get("/provider-fit-advisor", summary="Get read-only provider-fit advisor snapshot")
-def get_provider_fit_advisor() -> dict[str, Any]:
+@router.get(
+    "/provider-fit-advisor",
+    summary="Get deprecated admin-only provider-fit advisor snapshot",
+    deprecated=True,
+    include_in_schema=False,
+)
+def get_provider_fit_advisor(
+    _: CurrentUser = Depends(require_admin_capability("ops:providers:read")),
+) -> dict[str, Any]:
     return build_provider_fit_advisor_snapshot().to_dict()
 
 

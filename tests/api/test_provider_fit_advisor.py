@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import json
+from typing import Callable
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import market
 
 
@@ -44,6 +46,21 @@ EXPECTED_PROVIDER_IDS = {
     "official_public.cn_money_market_rates",
     "official_public.fed_liquidity",
     "official_or_authorized.fx_dxy",
+    "options_lab.bid_ask_liquidity_gate",
+    "options_lab.disabled_live_provider_stubs",
+    "options_lab.iv_greeks_gate",
+    "options_lab.iv_rank_history",
+    "options_lab.oi_volume_gate",
+    "options_lab.synthetic_fixture_chain",
+    "portfolio.benchmark_return_history",
+    "portfolio.factor_risk_metrics",
+    "portfolio.fx_provenance",
+    "portfolio.price_provenance",
+    "portfolio.sector_industry_exposure",
+    "watchlist.no_score_stale_state",
+    "watchlist.scanner_score_snapshot",
+    "watchlist.score_refresh_freshness",
+    "watchlist.source_confidence_preservation",
 }
 EXPECTED_ENTRY_FIELDS = {
     "providerName",
@@ -87,14 +104,55 @@ FORBIDDEN_ENTRY_FIELDS = {
     "secret",
 }
 
+def _provider_read_admin() -> CurrentUser:
+    return CurrentUser(
+        user_id="bootstrap-admin",
+        username="admin",
+        display_name="Admin",
+        role="admin",
+        is_admin=True,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+        admin_capabilities=("ops:providers:read",),
+    )
 
-def _client() -> TestClient:
+
+def _admin_without_provider_read() -> CurrentUser:
+    return CurrentUser(
+        user_id="bootstrap-admin",
+        username="admin",
+        display_name="Admin",
+        role="admin",
+        is_admin=True,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+        admin_capabilities=("users:read",),
+    )
+
+
+def _regular_user() -> CurrentUser:
+    return CurrentUser(
+        user_id="user-1",
+        username="alice",
+        display_name="Alice",
+        role="user",
+        is_admin=False,
+        is_authenticated=True,
+        transitional=False,
+        auth_enabled=True,
+    )
+
+
+def _client_for(user_factory: Callable[[], CurrentUser]) -> TestClient:
     app = FastAPI()
     app.include_router(market.router, prefix="/api/v1/market")
+    app.dependency_overrides[get_current_user] = user_factory
     return TestClient(app)
 
 
-def test_provider_fit_advisor_route_is_exposed() -> None:
+def test_provider_fit_advisor_route_is_hidden_from_public_openapi() -> None:
     app = FastAPI()
     app.include_router(market.router, prefix="/api/v1/market")
     routes = {
@@ -106,10 +164,24 @@ def test_provider_fit_advisor_route_is_exposed() -> None:
     }
 
     assert ("GET", "/api/v1/market/provider-fit-advisor") in routes
+    assert "/api/v1/market/provider-fit-advisor" not in app.openapi()["paths"]
 
 
-def test_provider_fit_advisor_route_returns_metadata_only_snapshot() -> None:
-    client = _client()
+def test_provider_fit_advisor_route_requires_admin_provider_read_capability() -> None:
+    user_client = _client_for(_regular_user)
+    user_response = user_client.get("/api/v1/market/provider-fit-advisor")
+    assert user_response.status_code == 403
+    assert user_response.json()["detail"]["error"] == "admin_required"
+
+    no_capability_client = _client_for(_admin_without_provider_read)
+    no_capability_response = no_capability_client.get("/api/v1/market/provider-fit-advisor")
+    assert no_capability_response.status_code == 403
+    assert no_capability_response.json()["detail"]["error"] == "admin_capability_required"
+    assert "ops:providers:read" not in no_capability_response.text
+
+
+def test_provider_fit_advisor_route_returns_metadata_only_snapshot_for_provider_admin() -> None:
+    client = _client_for(_provider_read_admin)
 
     try:
         response = client.get("/api/v1/market/provider-fit-advisor")
