@@ -86,6 +86,9 @@ _VISIBLE_COPY_REPLACEMENTS = (
     ("风控策略", "风险边界"),
     ("交易建议", "研究观察"),
     ("投资建议", "研究参考"),
+    ("综合建议", "综合观察"),
+    ("新仓", "未持有状态"),
+    ("仓位", "风险暴露"),
     ("买入", "正向评估"),
     ("卖出", "负向评估"),
     ("加仓", "关注变化"),
@@ -1135,17 +1138,17 @@ def _build_decision_context(
             continue
         score_breakdown.append(
             {
-                "label": _format_text(item.get("label"), reason="字段待接入"),
+                "label": _project_observation_copy(_format_text(item.get("label"), reason="字段待接入")),
                 "score": _to_float(item.get("score")),
-                "note": _format_text(item.get("note"), reason="字段待接入"),
+                "note": _project_observation_copy(_format_text(item.get("note"), reason="字段待接入")),
                 "tone": str(item.get("tone") or "default"),
             }
         )
     return {
-        "short_term_view": _format_text(payload.get("short_term_view"), reason="字段待接入"),
-        "composite_view": _format_text(payload.get("composite_view"), reason="字段待接入"),
-        "adjustment_reason": _format_text(payload.get("adjustment_reason"), reason="字段待接入"),
-        "change_reason": _format_text(payload.get("change_reason"), reason="字段待接入"),
+        "short_term_view": _project_observation_copy(_format_text(payload.get("short_term_view"), reason="字段待接入")),
+        "composite_view": _project_observation_copy(_format_text(payload.get("composite_view"), reason="字段待接入")),
+        "adjustment_reason": _project_observation_copy(_format_text(payload.get("adjustment_reason"), reason="字段待接入")),
+        "change_reason": _project_observation_copy(_format_text(payload.get("change_reason"), reason="字段待接入")),
         "previous_score": _format_decimal(payload.get("previous_score"), digits=0, reason="接口未返回"),
         "score_change": _format_signed_number(payload.get("score_change"), reason="接口未返回"),
         "score_breakdown": score_breakdown,

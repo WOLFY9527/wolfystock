@@ -592,7 +592,7 @@ class StockAnalysisPipeline:
                         df = self._augment_historical_with_realtime(df, realtime_quote, code)
                     trend_result = self.trend_analyzer.analyze(df, code)
                     logger.info(f"{stock_name}({code}) 趋势分析: {trend_result.trend_status.value}, "
-                              f"买入信号={trend_result.buy_signal.value}, 评分={trend_result.signal_score}")
+                              f"正向观察信号={trend_result.buy_signal.value}, 评分={trend_result.signal_score}")
             except Exception as e:
                 logger.warning(f"{stock_name}({code}) 趋势分析失败: {e}", exc_info=True)
 
@@ -2463,13 +2463,13 @@ class StockAnalysisPipeline:
             short_term_view = "短线技术仍偏震荡，趋势方向需要继续确认。"
 
         if strong_fundamentals and technical_bearish:
-            composite_view = f"短线技术承压，但基本面、盈利质量与现金流仍有支撑，综合建议以{result.operation_advice}为主。"
+            composite_view = f"短线技术承压，但基本面、盈利质量与现金流仍有支撑，综合观察以{result.operation_advice}为主。"
         elif weak_fundamentals and technical_bearish:
-            composite_view = f"技术面与基本面共振偏弱，综合建议转向{result.operation_advice}，优先防守。"
+            composite_view = f"技术面与基本面共振偏弱，综合观察转向{result.operation_advice}，优先关注风险边界。"
         elif strong_fundamentals and technical_bullish:
-            composite_view = f"技术面与基本面相互印证，综合建议以{result.operation_advice}为主。"
+            composite_view = f"技术面与基本面相互印证，综合观察以{result.operation_advice}为主。"
         else:
-            composite_view = f"综合建议为{result.operation_advice}，结合技术、基本面与情绪继续跟踪。"
+            composite_view = f"综合观察为{result.operation_advice}，结合技术、基本面与情绪继续跟踪。"
 
         score_breakdown = [
             {
@@ -2515,18 +2515,18 @@ class StockAnalysisPipeline:
 
         one_sentence = core.get("one_sentence") if isinstance(core.get("one_sentence"), str) else ""
         if strong_fundamentals and technical_bearish:
-            core["one_sentence"] = f"短线技术偏弱，但基本面仍有支撑，综合建议以{result.operation_advice}为主。"
+            core["one_sentence"] = f"短线技术偏弱，但基本面仍有支撑，综合观察以{result.operation_advice}为主。"
         elif adjustment_reason and not one_sentence:
             core["one_sentence"] = composite_view
 
         if not position_advice:
             position_advice = {}
         if strong_fundamentals and technical_bearish:
-            position_advice["no_position"] = position_advice.get("no_position") or f"新仓以{result.operation_advice}为主，等待短线企稳后再评估。"
-            position_advice["has_position"] = position_advice.get("has_position") or "已有仓位以观察为主，不追反弹，跌破风控位再处理。"
+            position_advice["no_position"] = position_advice.get("no_position") or f"未持有状态以{result.operation_advice}为主，等待短线企稳后再评估。"
+            position_advice["has_position"] = position_advice.get("has_position") or "已持有状态以观察为主，不追反弹，关键风险边界失守后复核。"
         elif weak_fundamentals and technical_bearish:
             position_advice["no_position"] = position_advice.get("no_position") or "避免左侧逆势参与，优先等待风险释放。"
-            position_advice["has_position"] = position_advice.get("has_position") or "控制仓位并严守止损，避免弱势放大回撤。"
+            position_advice["has_position"] = position_advice.get("has_position") or "控制风险暴露并严守风险边界，避免弱势放大回撤。"
         core["position_advice"] = position_advice
         dashboard["core_conclusion"] = core
         dashboard["decision_context"] = {
@@ -3830,7 +3830,7 @@ class StockAnalysisPipeline:
         if "revenue_up_profit_not_following" in flags:
             narrative.append("存在增收不增利迹象")
         if not narrative:
-            narrative.append("财报趋势中性，建议结合下一季数据确认。")
+            narrative.append("财报趋势中性，待结合下一季数据确认。")
         return {
             "quarterly_series": quarterly,
             "derived_metrics": {**(earnings_data.get("derived_metrics", {}) or {}), **trend},
@@ -4101,9 +4101,9 @@ class StockAnalysisPipeline:
 
             # 运行 Agent
             if report_language == "en":
-                message = f"Analyze stock {code} ({stock_name}) and return the full decision dashboard JSON in English."
+                message = f"Analyze stock {code} ({stock_name}) and return the full research observation dashboard JSON in English."
             else:
-                message = f"请分析股票 {code} ({stock_name})，并生成决策仪表盘报告。"
+                message = f"请分析股票 {code} ({stock_name})，并生成研究观察仪表盘报告。"
             agent_result = executor.run(message, context=initial_context)
 
             # 转换为 AnalysisResult
@@ -4222,11 +4222,11 @@ class StockAnalysisPipeline:
                 # LLM may return {"no_position": "...", "has_position": "..."}
                 # Derive a short string from decision_type for the scalar field
                 _signal_to_advice = {
-                    "buy": "Buy" if report_language == "en" else "买入",
-                    "sell": "Sell" if report_language == "en" else "卖出",
-                    "hold": "Hold" if report_language == "en" else "持有",
-                    "strong_buy": "Strong Buy" if report_language == "en" else "强烈买入",
-                    "strong_sell": "Strong Sell" if report_language == "en" else "强烈卖出",
+                    "buy": "Positive observation" if report_language == "en" else "正向观察",
+                    "sell": "Risk contraction" if report_language == "en" else "风险收缩",
+                    "hold": "Continue observing" if report_language == "en" else "继续跟踪",
+                    "strong_buy": "Positive observation" if report_language == "en" else "正向观察",
+                    "strong_sell": "Risk contraction" if report_language == "en" else "风险收缩",
                 }
                 # Normalize decision_type (strip/lower) before lookup so
                 # variants like "BUY" or " Buy " map correctly.
@@ -4253,7 +4253,7 @@ class StockAnalysisPipeline:
             result.sentiment_score = 50
             result.operation_advice = "Watch" if report_language == "en" else "观望"
             if not result.error_message:
-                result.error_message = "Agent failed to generate a valid decision dashboard" if report_language == "en" else "Agent 未能生成有效的决策仪表盘"
+                result.error_message = "Agent failed to generate a valid research observation dashboard" if report_language == "en" else "Agent 未能生成有效的研究观察仪表盘"
 
         return result
 
@@ -4886,7 +4886,7 @@ class StockAnalysisPipeline:
         try:
             report = self._generate_aggregate_report(results, report_type)
             filepath = self.notifier.save_report_to_file(report)
-            logger.info(f"决策仪表盘日报已保存: {filepath}")
+            logger.info(f"研究观察仪表盘日报已保存: {filepath}")
         except Exception as e:
             logger.error(f"保存本地报告失败: {e}")
 
@@ -4899,14 +4899,14 @@ class StockAnalysisPipeline:
         """
         发送分析结果通知
         
-        生成决策仪表盘格式的报告
+        生成研究观察仪表盘格式的报告
         
         Args:
             results: 分析结果列表
             skip_push: 是否跳过推送（仅保存到本地，用于单股推送模式）
         """
         try:
-            logger.info("生成决策仪表盘日报...")
+            logger.info("生成研究观察仪表盘日报...")
             report = self._generate_aggregate_report(results, report_type)
             
             # 跳过推送（单股推送模式 / 合并模式：报告已由 _save_local_report 保存）
@@ -5082,9 +5082,9 @@ class StockAnalysisPipeline:
 
                 success = wechat_success or non_wechat_success or context_success
                 if success:
-                    logger.info("决策仪表盘推送成功")
+                    logger.info("研究观察仪表盘推送成功")
                 else:
-                    logger.warning("决策仪表盘推送失败")
+                    logger.warning("研究观察仪表盘推送失败")
             else:
                 logger.info("通知渠道未配置，跳过推送")
                 

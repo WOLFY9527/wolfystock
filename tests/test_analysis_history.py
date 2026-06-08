@@ -1285,7 +1285,8 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertIn("Yahoo Finance", raw_markdown)
 
         detail_report = get_history_detail(str(record_id), db_manager=self.db)
-        self.assertEqual(detail_report.summary.operation_advice, "买入")
+        self.assertEqual(detail_report.summary.operation_advice, "正向观察")
+        self.assertNotIn("买入", detail_report.summary.operation_advice)
 
         response = get_history_markdown(str(record_id), db_manager=self.db)
         exported = response.content

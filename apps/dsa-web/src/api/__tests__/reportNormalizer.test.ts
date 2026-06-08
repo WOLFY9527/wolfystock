@@ -239,7 +239,7 @@ describe('normalizeFrontendReportContract', () => {
     });
     expect(normalized.reportQuality?.level).toBe('usable');
     expect(normalized.reportQuality?.traceStatus).toBe('missing');
-    expect(normalized.reportQuality?.missingFields).toContain('决策溯源');
+    expect(normalized.reportQuality?.missingFields).toContain('研究溯源');
   });
 
   it('marks modern reports with standard report and decision trace as complete quality', () => {
@@ -362,7 +362,7 @@ describe('normalizeFrontendReportContract', () => {
     expect(normalized.reportQuality?.level).toBe('usable');
     expect(normalized.reportQuality?.userLabel).toBe('可用');
     expect(normalized.reportQuality?.hasTradingPlan).toBe(false);
-    expect(normalized.reportQuality?.missingFields).toContain('交易计划');
+    expect(normalized.reportQuality?.missingFields).toContain('观察计划');
   });
 
   it('classifies legacy prose records without standard structure as old records', () => {
@@ -389,7 +389,7 @@ describe('normalizeFrontendReportContract', () => {
 
     expect(normalized.reportQuality?.level).toBe('legacy');
     expect(normalized.reportQuality?.userLabel).toBe('旧版记录');
-    expect(normalized.reportQuality?.missingFields).toContain('决策溯源');
+    expect(normalized.reportQuality?.missingFields).toContain('研究溯源');
     expect(normalized.reportQuality?.missingFields).toContain('标准报告');
   });
 

@@ -1130,7 +1130,8 @@ class TestReportRenderer(unittest.TestCase):
         payload = build_standard_report_payload(r, report_language="zh")
 
         self.assertEqual(payload["decision_context"]["short_term_view"], "短线技术偏弱，价格位于 MA20 下方。")
-        self.assertEqual(payload["decision_context"]["composite_view"], "基本面与现金流仍有支撑，综合建议以观望为主。")
+        self.assertEqual(payload["decision_context"]["composite_view"], "基本面与现金流仍有支撑，综合观察以观望为主。")
+        self.assertNotIn("综合建议", payload["decision_context"]["composite_view"])
         self.assertEqual(payload["decision_context"]["adjustment_reason"], "MA5/10/20/60 已补齐，并保留基本面缓冲。")
         self.assertEqual(payload["decision_context"]["change_reason"], "技术指标补齐导致")
         self.assertEqual(payload["decision_context"]["previous_score"], "45")

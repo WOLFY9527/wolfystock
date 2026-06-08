@@ -810,6 +810,100 @@ def test_analysis_runtime_files_do_not_import_broker_order_or_portfolio_mutation
             assert fragment not in source, f"{fragment!r} unexpectedly appears in {path}"
 
 
+def test_agent_executor_prompts_use_observation_contract_language() -> None:
+    from src.agent.executor import AGENT_SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT
+
+    prompt = f"{AGENT_SYSTEM_PROMPT}\n{CHAT_SYSTEM_PROMPT}"
+    forbidden_fragments = (
+        "专注于趋势交易",
+        "交易技能",
+        "决策仪表盘",
+        "买入/加仓",
+        "减仓/卖出",
+        "买入信号",
+        "卖出信号",
+        "立即行动",
+        "空仓者建议",
+        "持仓者建议",
+        "强烈买入",
+        "该买该卖",
+        "分持仓建议",
+        "精确狙击点",
+        "理想买入点",
+        "止损位",
+        "目标位",
+        "建议仓位",
+        "分批建仓",
+    )
+
+    for fragment in forbidden_fragments:
+        assert fragment not in prompt, fragment
+    assert '"operation_advice": "观望/仅供观察/继续跟踪/风险收缩/数据不足"' in prompt
+    assert "仅供研究观察，不构成投资建议" in prompt
+
+
+def test_agent_orchestrator_default_copy_is_observation_only() -> None:
+    from src.agent.orchestrator import (
+        _adjust_operation_advice,
+        _default_position_advice,
+        _default_position_size,
+        _signal_to_operation,
+        _signal_to_signal_type,
+    )
+
+    public_values = [
+        _signal_to_operation("buy"),
+        _signal_to_operation("sell"),
+        _signal_to_signal_type("buy"),
+        _signal_to_signal_type("sell"),
+        _adjust_operation_advice("legacy", "buy"),
+        _adjust_operation_advice("legacy", "sell"),
+        _default_position_size("buy"),
+        _default_position_size("sell"),
+        *_default_position_advice("buy").values(),
+        *_default_position_advice("hold").values(),
+        *_default_position_advice("sell").values(),
+    ]
+    public_text = "\n".join(public_values)
+    forbidden_fragments = (
+        "买入",
+        "卖出",
+        "加仓",
+        "减仓",
+        "建仓",
+        "试仓",
+        "止损",
+        "入场",
+        "开仓",
+        "仓位",
+        "建议",
+    )
+
+    for fragment in forbidden_fragments:
+        assert fragment not in public_text, fragment
+    assert "继续跟踪" in public_text
+    assert "风险边界" in public_text
+
+
+def test_history_schema_public_descriptions_are_observation_only() -> None:
+    source = (Path(__file__).resolve().parents[1] / "api/v1/schemas/history.py").read_text(encoding="utf-8")
+    forbidden_fragments = (
+        'description="操作建议"',
+        'description="理想买入价"',
+        'description="第二买入价"',
+        'description="止损价"',
+        'description="止盈价"',
+        '"operation_advice": "持有"',
+        "技术面向好，建议持有",
+    )
+
+    for fragment in forbidden_fragments:
+        assert fragment not in source, fragment
+    assert "研究状态" in source
+    assert "关键价位参考" in source
+    assert "风险边界" in source
+
+
 def _reset_auth_globals() -> None:
     auth._auth_enabled = None
     auth._session_secret = None

@@ -155,12 +155,12 @@ export const normalizeReportQuality = (report: AnalysisReport): ReportQuality =>
           ? 'missing'
           : 'unknown';
   const missingFields: string[] = [];
-  if (!hasDecisionTrace) missingFields.push('决策溯源');
+  if (!hasDecisionTrace) missingFields.push('研究溯源');
   if (!hasStandardReport) missingFields.push('标准报告');
-  if (!hasAction) missingFields.push('操作建议');
+  if (!hasAction) missingFields.push('研究状态');
   if (!hasScore) missingFields.push('评分');
   if (!hasConfidence) missingFields.push('置信度');
-  if (!hasTradingPlan) missingFields.push('交易计划');
+  if (!hasTradingPlan) missingFields.push('观察计划');
   if (summaryStatus === 'missing') missingFields.push('摘要');
 
   const failed = hasVisibleFailureMarker(report) || reportStatus === 'missing' && summaryStatus === 'missing' && hasAnalysisResult && hasFailedAnalysisText(analysisResult?.status);

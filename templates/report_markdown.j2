@@ -1,23 +1,23 @@
 {% from '_macros.j2' import render_field_group with context %}
 {% set news_published_label = 'News Published (BJT)' if report_language == 'en' else '新闻发布时间（北京时间）' %}
-{% set score_recommendation_trend_label = 'Score / Recommendation / Trend' if report_language == 'en' else '评分 / 建议 / 趋势' %}
-{% set one_line_conclusion_label = 'One-line Conclusion' if report_language == 'en' else '一句话结论' %}
+{% set score_recommendation_trend_label = 'Score / Observation / Trend' if report_language == 'en' else '评分 / 观察 / 趋势' %}
+{% set one_line_conclusion_label = 'One-line Observation' if report_language == 'en' else '一句话观察' %}
 {% set price_contract_label = 'Price Basis / Reference Session / Updated' if report_language == 'en' else '价格口径 / 参考会话 / 更新时间' %}
 {% set generated_at_label = 'Report Generated' if report_language == 'en' else '报告生成时间' %}
-{% set key_action_label = 'Key Action' if report_language == 'en' else '关键动作' %}
+{% set key_action_label = 'Key Observation' if report_language == 'en' else '关键观察' %}
 {% set support_resistance_label = 'Support / Resistance' if report_language == 'en' else '关键支撑 / 关键压力' %}
 {% set latest_update_label = 'Latest Key Update' if report_language == 'en' else '最新关键更新' %}
-{% set entry_triplet_label = 'Ideal Entry / Backup Entry / Stop Loss' if report_language == 'en' else '理想买入点 / 次优买入点 / 止损位' %}
-{% set target_triplet_label = 'Target 1 / Target 2 / Target Zone' if report_language == 'en' else '目标一区 / 目标二区 / 目标区间' %}
-{% set no_position_advice_label = 'Advice Without Position' if report_language == 'en' else '空仓者建议' %}
-{% set holder_advice_label = 'Advice With Position' if report_language == 'en' else '持仓者建议' %}
+{% set entry_triplet_label = 'Key Price Area / Reference Area / Risk Boundary' if report_language == 'en' else '关键价格区间 / 参考区间 / 风险边界' %}
+{% set target_triplet_label = 'Upper Observation Zone' if report_language == 'en' else '上方观察区' %}
+{% set no_position_advice_label = 'Unheld State Reference' if report_language == 'en' else '未持有状态参考' %}
+{% set holder_advice_label = 'Held State Reference' if report_language == 'en' else '持有状态参考' %}
 {% set checklist_summary_label = 'Checklist Summary' if report_language == 'en' else 'Checklist 摘要' %}
-{% set no_checklist_label = 'No additional checklist items' if report_language == 'en' else '无新增执行清单' %}
-{% set setup_confidence_label = 'Setup / Confidence' if report_language == 'en' else '交易场景 / 置信度' %}
+{% set no_checklist_label = 'No additional observation items' if report_language == 'en' else '无新增观察清单' %}
+{% set setup_confidence_label = 'Observation Setup / Confidence' if report_language == 'en' else '研究状态 / 置信度' %}
 {% set market_structure_label = 'Market Structure' if report_language == 'en' else '市场结构' %}
-{% set entry_risk_control_label = 'Entry Plan / Risk Control' if report_language == 'en' else '建仓策略 / 风控策略' %}
-{% set stop_target_reason_label = 'Stop-loss Rationale / Target Rationale' if report_language == 'en' else '止损说明 / 目标说明' %}
-{% set execution_reminders_label = 'Execution Reminders' if report_language == 'en' else '执行提醒' %}
+{% set entry_risk_control_label = 'Evidence Tracking / Risk Boundary' if report_language == 'en' else '继续跟踪 / 风险边界' %}
+{% set stop_target_reason_label = 'Risk Boundary / Upper Observation Rationale' if report_language == 'en' else '风险边界 / 上方观察说明' %}
+{% set execution_reminders_label = 'Observation Reminders' if report_language == 'en' else '观察提醒' %}
 {% set core_reasons_label = 'Core Reasons' if report_language == 'en' else '核心理由' %}
 {% set data_sources_label = 'Data Sources' if report_language == 'en' else '数据来源' %}
 {% set coverage_gaps_label = 'Coverage Gaps' if report_language == 'en' else '覆盖缺口' %}
@@ -231,25 +231,25 @@
 {% endif %}
 ## {{ e.signal_emoji }} {{ e.stock_name }} ({{ result.code }})
 
-### Decision Summary
+### Research Summary
 - **{{ score_recommendation_trend_label }}**: {{ summary.score if summary.score is not none else na('接口未返回') }} / {{ summary.recommendation }} / {{ summary.trend }}
 - **{{ one_line_conclusion_label }}**: {{ summary.one_line_conclusion }}
 - **Analysis Price / 涨跌**: {{ summary.analysis_price }} | {{ summary.change_amount }} / {{ summary.change_pct }}
 - **{{ price_contract_label }}**: {{ summary.price_basis }} / {{ summary.reference_session }} / {{ summary.snapshot_time }}
 - **{{ generated_at_label }}**: {{ summary.report_generated_at }}
 
-### Execution Plan
-#### Current Action
+### Observation Plan
+#### Current Observation
 - **{{ key_action_label }}**: {{ summary.key_action }}
 - **{{ support_resistance_label }}**: {{ summary.support }} / {{ summary.resistance }}
 - **{{ latest_update_label }}**: {{ summary.latest_key_update }}
 
-#### For New Positions
+#### Unheld State
 - **{{ entry_triplet_label }}**: {{ summary.ideal_entry }} / {{ summary.backup_entry }} / {{ summary.stop_loss }}
 - **{{ target_triplet_label }}**: {{ summary.target_one }} / {{ summary.target_two }} / {{ summary.target_zone }}
 - **{{ no_position_advice_label }}**: {{ summary.no_position_advice }}
 
-#### For Existing Positions
+#### Held State
 - **{{ holder_advice_label }}**: {{ summary.holder_advice }}
 - **{{ checklist_summary_label }}**: {{ summary.checklist_summary }}
 {% if summary.checklist_items %}
@@ -260,7 +260,7 @@
 - {{ no_checklist_label }}
 {% endif %}
 
-#### Conditions & Risk Control
+#### Observation Conditions & Risk Boundary
 - **{{ setup_confidence_label }}**: {{ decision.setup_type }} / {{ decision.confidence }}
 - **{{ market_structure_label }}**: {{ decision.market_structure }}
 - **{{ entry_risk_control_label }}**: {{ decision.build_strategy }} / {{ decision.risk_control_strategy }}

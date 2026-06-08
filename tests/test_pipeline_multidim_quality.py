@@ -719,6 +719,16 @@ class TestPipelineMultiDimQuality(unittest.TestCase):
         self.assertEqual(stabilized.operation_advice, "观望")
         self.assertEqual(stabilized.trend_prediction, "看空")
         self.assertIn("短线技术偏弱", stabilized.dashboard["core_conclusion"]["one_sentence"])
+        public_text = json.dumps(
+            {
+                "core": stabilized.dashboard["core_conclusion"],
+                "decision_context": stabilized.dashboard["decision_context"],
+            },
+            ensure_ascii=False,
+        )
+        for forbidden in ("综合建议", "新仓", "仓位", "止损", "买入", "卖出", "加仓", "减仓"):
+            self.assertNotIn(forbidden, public_text, forbidden)
+        self.assertIn("综合观察", public_text)
         self.assertIn("基本面缓冲", stabilized.dashboard["decision_context"]["adjustment_reason"])
         self.assertIn("MA5/MA10/MA60", stabilized.dashboard["decision_context"]["adjustment_reason"])
         self.assertEqual(stabilized.dashboard["decision_context"]["change_reason"], "技术指标补齐导致")

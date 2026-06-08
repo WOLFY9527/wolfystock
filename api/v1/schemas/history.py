@@ -41,7 +41,7 @@ class HistoryItem(BaseModel):
                 "company_name": "贵州茅台",
                 "report_type": "detailed",
                 "sentiment_score": 75,
-                "operation_advice": "持有",
+                "operation_advice": "继续跟踪",
                 "created_at": "2024-01-01T12:00:00",
                 "generated_at": "2024-01-01T12:01:05Z",
                 "is_test": False,
@@ -61,7 +61,7 @@ class HistoryItem(BaseModel):
         ge=0,
         le=100
     )
-    operation_advice: Optional[str] = Field(None, description="操作建议")
+    operation_advice: Optional[str] = Field(None, description="研究状态")
     created_at: Optional[str] = Field(None, description="创建时间")
     generated_at: Optional[str] = Field(None, description="持久化报告生成时间")
     is_test: bool = Field(False, description="是否为测试/临时历史记录")
@@ -175,7 +175,7 @@ class ReportSummary(BaseModel):
     """报告概览区"""
     
     analysis_summary: Optional[str] = Field(None, description="关键结论")
-    operation_advice: Optional[str] = Field(None, description="操作建议")
+    operation_advice: Optional[str] = Field(None, description="研究状态")
     trend_prediction: Optional[str] = Field(None, description="趋势预测")
     sentiment_score: Optional[int] = Field(
         None, 
@@ -187,12 +187,12 @@ class ReportSummary(BaseModel):
 
 
 class ReportStrategy(BaseModel):
-    """策略点位区"""
+    """关键价位区"""
     
-    ideal_buy: Optional[str] = Field(None, description="理想买入价")
-    secondary_buy: Optional[str] = Field(None, description="第二买入价")
-    stop_loss: Optional[str] = Field(None, description="止损价")
-    take_profit: Optional[str] = Field(None, description="止盈价")
+    ideal_buy: Optional[str] = Field(None, description="关键价位参考")
+    secondary_buy: Optional[str] = Field(None, description="参考区间")
+    stop_loss: Optional[str] = Field(None, description="风险边界")
+    take_profit: Optional[str] = Field(None, description="收益阈值")
 
 
 class ReportDetails(BaseModel):
@@ -204,7 +204,7 @@ class ReportDetails(BaseModel):
     raw_ai_response: Optional[Any] = Field(None, description="原始 AI 响应（如有）")
     context_snapshot: Optional[Any] = Field(None, description="分析时上下文快照（JSON）")
     standard_report: Optional[Any] = Field(None, description="统一标准报告数据结构（JSON）")
-    data_quality_report: Optional[Any] = Field(None, description="决策关键数据质量报告（可选）")
+    data_quality_report: Optional[Any] = Field(None, description="研究关键数据质量报告（可选）")
     financial_report: Optional[Any] = Field(None, description="结构化财报摘要（来自 fundamental_context）")
     dividend_metrics: Optional[Any] = Field(None, description="结构化分红指标（含 TTM 口径）")
     analysis_result: Optional[Any] = Field(None, description="结构化分析结果（API 恢复镜像）")
@@ -233,8 +233,8 @@ class AnalysisReport(BaseModel):
                     "created_at": "2024-01-01T12:00:00",
                 },
                 "summary": {
-                    "analysis_summary": "技术面向好，建议持有",
-                    "operation_advice": "持有",
+                    "analysis_summary": "技术面偏正向，继续跟踪证据边界",
+                    "operation_advice": "继续跟踪",
                     "trend_prediction": "看多",
                     "sentiment_score": 75,
                     "sentiment_label": "乐观",
@@ -252,10 +252,10 @@ class AnalysisReport(BaseModel):
 
     meta: ReportMeta = Field(..., description="元信息")
     summary: ReportSummary = Field(..., description="概览区")
-    strategy: Optional[ReportStrategy] = Field(None, description="策略点位区")
+    strategy: Optional[ReportStrategy] = Field(None, description="关键价位区")
     details: Optional[ReportDetails] = Field(None, description="详情区")
-    decision_trace: Optional[Any] = Field(None, description="决策溯源元数据（可选）")
-    data_quality_report: Optional[Any] = Field(None, description="决策关键数据质量报告（可选）")
+    decision_trace: Optional[Any] = Field(None, description="研究溯源元数据（可选）")
+    data_quality_report: Optional[Any] = Field(None, description="研究关键数据质量报告（可选）")
     report_quality: Optional[Any] = Field(None, description="报告完整性/溯源状态摘要（可选）")
     researchReadiness: Optional[HomeResearchReadiness] = Field(None, description="研究就绪度投影（可选）")
     evidenceCoverageFrame: Optional[HomeEvidenceCoverageFrame] = Field(None, description="证据覆盖框架（可选）")

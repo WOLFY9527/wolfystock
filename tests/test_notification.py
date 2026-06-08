@@ -385,7 +385,7 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         sent_payloads = [call.kwargs.get("json", {}).get("content", "") for call in mock_post.call_args_list]
         merged = "\n".join(sent_payloads)
         self.assertIn("**评分 / 观察 / 趋势**", merged)
-        self.assertIn("**一句话结论**", merged)
+        self.assertIn("**一句话观察**", merged)
         self.assertIn("**当前价 / 涨跌**", merged)
         self.assertIn("**价格口径 / 会话**", merged)
         self.assertIn("**关键观察**", merged)
@@ -393,7 +393,7 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         self.assertIn("**上方观察区**", merged)
         self.assertIn("**核心利好**", merged)
         self.assertIn("**核心风险**", merged)
-        self.assertIn("**持有状态参考**", merged)
+        self.assertIn("**未持有 / 已持有状态参考**", merged)
         self.assertIn("**Checklist 摘要**", merged)
         self.assertNotIn("|--|", merged)
         self.assertNotIn("| 字段 |", merged)

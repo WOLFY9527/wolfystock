@@ -869,7 +869,7 @@ class AgentOrchestrator:
             battle["position_strategy"] = {
                 "suggested_position": _default_position_size(decision_type),
                 "entry_plan": position_advice["no_position"],
-                "risk_control": f"止损参考 {sniper.get('stop_loss', '待补充')}",
+                "risk_control": f"风险边界参考 {sniper.get('stop_loss', '待补充')}",
             }
 
         data_perspective = dashboard_block.get("data_perspective")
@@ -1186,9 +1186,9 @@ class AgentOrchestrator:
             core = dashboard_block.get("core_conclusion")
             if isinstance(core, dict):
                 signal_type = {
-                    "buy": "🟡持有观望",
-                    "hold": "🟡持有观望",
-                    "sell": "🔴卖出信号",
+                    "buy": "🟡继续跟踪",
+                    "hold": "🟡继续跟踪",
+                    "sell": "🔴风险收缩",
                 }.get(new_signal, "⚠️风险警告")
                 core["signal_type"] = signal_type
                 sentence = core.get("one_sentence")
@@ -1197,11 +1197,11 @@ class AgentOrchestrator:
                 position = core.get("position_advice")
                 if isinstance(position, dict):
                     if new_signal == "hold":
-                        position["no_position"] = "风险未解除前先观望，等待更清晰的入场条件。"
-                        position["has_position"] = "谨慎持有并收紧止损，待风险缓解后再考虑加仓。"
+                        position["no_position"] = "风险未解除前保持观察，等待更清晰的观察触发。"
+                        position["has_position"] = "谨慎跟踪风险边界，待风险缓解后再复核证据。"
                     elif new_signal == "sell":
-                        position["no_position"] = "风险明显偏高，暂不新开仓。"
-                        position["has_position"] = "优先控制回撤，建议减仓或退出高风险仓位。"
+                        position["no_position"] = "风险明显偏高，暂不转入行动判断。"
+                        position["has_position"] = "优先控制回撤风险，按风险边界复核暴露。"
 
         ctx.set_data("final_dashboard", dashboard)
         ctx.set_data("risk_override_applied", {
@@ -1345,48 +1345,48 @@ def _adjust_sentiment_score(score: int, signal: str) -> int:
 def _adjust_operation_advice(advice: str, signal: str) -> str:
     """Normalize action wording to the overridden decision signal."""
     mapping = {
-        "buy": "买入",
-        "hold": "观望",
-        "sell": "减仓/卖出",
+        "buy": "正向观察",
+        "hold": "继续跟踪",
+        "sell": "风险收缩",
     }
     if signal not in mapping:
         return advice
     if advice == mapping[signal]:
         return advice
-    return f"{mapping[signal]}（原建议已被风控下调）"
+    return f"{mapping[signal]}（风控调整后，仅供研究观察）"
 
 
 def _signal_to_operation(signal: str) -> str:
     mapping = {
-        "buy": "买入",
-        "hold": "观望",
-        "sell": "减仓/卖出",
+        "buy": "正向观察",
+        "hold": "继续跟踪",
+        "sell": "风险收缩",
     }
     return mapping.get(signal, "观望")
 
 
 def _signal_to_signal_type(signal: str) -> str:
     mapping = {
-        "buy": "🟢买入信号",
-        "hold": "⚪观望信号",
-        "sell": "🔴卖出信号",
+        "buy": "🟢正向观察",
+        "hold": "⚪继续跟踪",
+        "sell": "🔴风险收缩",
     }
-    return mapping.get(signal, "⚪观望信号")
+    return mapping.get(signal, "⚪继续跟踪")
 
 
 def _default_position_advice(signal: str) -> Dict[str, str]:
     mapping = {
         "buy": {
-            "no_position": "可结合支撑位分批试仓，避免一次性追高。",
-            "has_position": "可继续持有，回踩关键位不破再考虑加仓。",
+            "no_position": "观察触发接近关键价位时继续跟踪，避免追高。",
+            "has_position": "维持证据跟踪，关键价位失守前不扩大风险暴露。",
         },
         "hold": {
-            "no_position": "暂不追高，等待更清晰的入场条件。",
-            "has_position": "以观察为主，跌破止损位再执行风控。",
+            "no_position": "暂不追高，等待更清晰的观察触发。",
+            "has_position": "以观察为主，关键价位失守时复核风险边界。",
         },
         "sell": {
-            "no_position": "暂不参与，等待风险充分释放。",
-            "has_position": "优先控制回撤，按计划减仓或离场。",
+            "no_position": "风险未解除前保持研究观察。",
+            "has_position": "优先控制回撤风险，按风险边界复核暴露。",
         },
     }
     return mapping.get(signal, mapping["hold"])
@@ -1394,11 +1394,11 @@ def _default_position_advice(signal: str) -> Dict[str, str]:
 
 def _default_position_size(signal: str) -> str:
     mapping = {
-        "buy": "轻仓试仓",
-        "hold": "控制仓位",
-        "sell": "降仓防守",
+        "buy": "轻量观察",
+        "hold": "保持观察",
+        "sell": "风险收缩",
     }
-    return mapping.get(signal, "控制仓位")
+    return mapping.get(signal, "保持观察")
 
 
 def _normalize_operation_advice_value(value: Any, signal: str) -> str:
