@@ -45,6 +45,12 @@ The JSON summary always includes:
 - `destructiveWritesExecuted`
 - `authRequiredSurfaces`
 - `manualReviewRequired`
+- `timingSummary`
+
+Each item in `checkedSurfaces` includes a sanitized `elapsedMs` measurement for
+the local route/config check or explicitly enabled live probe. `timingSummary`
+aggregates those measurements with `count`, `minElapsedMs`, `maxElapsedMs`,
+`p50ElapsedMs`, and `p95ElapsedMs`.
 
 `authRequiredSurfaces` are expected to need a real authenticated staging session
 for deeper operator validation.
@@ -68,7 +74,9 @@ notification requests.
 
 Do not put credentials, tokens, query strings, or secret-bearing URLs in
 `--base-url`. The CLI rejects URLs with embedded credentials and strips query
-strings from the base URL before probing.
+strings from the base URL before probing. Timing evidence does not include the
+base URL, query strings, response bodies, provider payloads, cookies, or
+credentials.
 
 ## Classification
 

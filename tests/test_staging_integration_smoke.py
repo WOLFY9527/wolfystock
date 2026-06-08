@@ -34,12 +34,20 @@ def _surface(summary: dict, surface_id: str) -> dict:
 
 
 def test_local_mode_route_inventory_is_offline_safe(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def _fake_get(_base_url: str, path: str, _timeout: float) -> smoke.HttpProbeResult:
+        calls.append(path)
+        return smoke.HttpProbeResult(status_code=200, reason_code="ok")
+
     monkeypatch.setattr(smoke, "load_route_inventory", lambda: set(LOCAL_ROUTES))
     monkeypatch.setattr(smoke, "is_ai_research_locally_available", lambda: False)
+    monkeypatch.setattr(smoke, "safe_http_get", _fake_get)
 
     summary = smoke.run_smoke(mode="local")
 
     assert summary["smokeStatus"] == "manual_review_required"
+    assert calls == []
     assert summary["networkCallsExecuted"] is False
     assert summary["destructiveWritesExecuted"] is False
     assert _surface(summary, "public_health")["status"] == "pass"
@@ -49,6 +57,12 @@ def test_local_mode_route_inventory_is_offline_safe(monkeypatch) -> None:
     assert _surface(summary, "ai_research_provider_health")["reasonCode"] == "config_missing"
     assert "ai_research_provider_health" in summary["manualReviewRequired"]
     assert "portfolio_accounts" in summary["authRequiredSurfaces"]
+    assert all(isinstance(item["elapsedMs"], (int, float)) for item in summary["checkedSurfaces"])
+    assert all(item["elapsedMs"] >= 0 for item in summary["checkedSurfaces"])
+    assert summary["timingSummary"]["count"] == len(summary["checkedSurfaces"])
+    assert summary["timingSummary"]["minElapsedMs"] <= summary["timingSummary"]["p50ElapsedMs"]
+    assert summary["timingSummary"]["p50ElapsedMs"] <= summary["timingSummary"]["p95ElapsedMs"]
+    assert summary["timingSummary"]["p95ElapsedMs"] <= summary["timingSummary"]["maxElapsedMs"]
 
 
 def test_local_mode_distinguishes_missing_routes(monkeypatch) -> None:
@@ -109,6 +123,16 @@ def test_network_mode_classifies_http_outcomes(monkeypatch) -> None:
     assert _surface(summary, "market_overview_indices")["reasonCode"] == "dependency_unavailable"
     assert _surface(summary, "scanner_themes")["reasonCode"] == "route_missing"
     assert _surface(summary, "portfolio_accounts")["reasonCode"] == "auth_required"
+    assert _surface(summary, "public_health")["networkProbe"] is True
+    assert isinstance(_surface(summary, "public_health")["elapsedMs"], (int, float))
+    assert summary["timingSummary"]["count"] == len(summary["checkedSurfaces"])
+    assert set(summary["timingSummary"]) == {
+        "count",
+        "minElapsedMs",
+        "maxElapsedMs",
+        "p50ElapsedMs",
+        "p95ElapsedMs",
+    }
 
 
 def test_main_writes_bounded_json_output(monkeypatch, tmp_path: Path, capsys) -> None:
@@ -130,4 +154,53 @@ def test_main_writes_bounded_json_output(monkeypatch, tmp_path: Path, capsys) ->
         "destructiveWritesExecuted",
         "authRequiredSurfaces",
         "manualReviewRequired",
+        "timingSummary",
     }
+
+
+def test_json_output_omits_secret_bearing_urls_and_payload_fields(monkeypatch, tmp_path: Path, capsys) -> None:
+    output_path = tmp_path / "staging-smoke.json"
+    leaked_token = "sk-" + ("A" * 40)
+    monkeypatch.setattr(smoke, "load_route_inventory", lambda: set(LOCAL_ROUTES))
+    monkeypatch.setattr(smoke, "is_ai_research_locally_available", lambda: True)
+
+    exit_code = smoke.main(
+        [
+            "--mode",
+            "local",
+            "--base-url",
+            f"http://127.0.0.1:8000?token={leaked_token}",
+            "--json-output",
+            str(output_path),
+        ]
+    )
+
+    assert exit_code == 0
+    combined_output = capsys.readouterr().out + output_path.read_text(encoding="utf-8")
+    assert leaked_token not in combined_output
+    assert "?token=" not in combined_output
+    assert "cookie" not in combined_output.lower()
+    assert "responseBody" not in combined_output
+    assert "requestBody" not in combined_output
+    assert "providerPayload" not in combined_output
+
+
+def test_base_url_rejects_embedded_credentials(tmp_path: Path, capsys) -> None:
+    output_path = tmp_path / "staging-smoke.json"
+
+    exit_code = smoke.main(
+        [
+            "--mode",
+            "local",
+            "--base-url",
+            "http://user:password@127.0.0.1:8000",
+            "--json-output",
+            str(output_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == smoke.EXIT_FAILED
+    assert "base_url_must_not_include_credentials" in captured.err
+    assert "password" not in captured.out
+    assert not output_path.exists()

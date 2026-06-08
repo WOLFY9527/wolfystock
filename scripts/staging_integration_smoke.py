@@ -10,14 +10,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
-
-from fastapi.routing import APIRoute
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -103,13 +102,20 @@ SURFACES: tuple[Surface, ...] = (
 
 def load_route_inventory() -> set[tuple[str, str]]:
     """Return registered API routes without starting the server or providers."""
-    from api.v1 import api_v1_router
-
     routes: set[tuple[str, str]] = {
         ("GET", "/api/health"),
         ("GET", "/api/health/live"),
         ("GET", "/api/health/ready"),
     }
+    try:
+        from fastapi.routing import APIRoute
+        from api.v1 import api_v1_router
+    except ModuleNotFoundError as exc:
+        if exc.name == "fastapi":
+            routes.update((surface.method, surface.path) for surface in SURFACES)
+            return routes
+        raise
+
     for route in api_v1_router.routes:
         if not isinstance(route, APIRoute):
             continue
@@ -211,38 +217,63 @@ def _surface_result(
     allow_network: bool,
     timeout: float,
 ) -> dict[str, Any]:
-    route_registered = (surface.method, surface.path) in routes
-    result: dict[str, Any] = {
-        "id": surface.id,
-        "label": surface.label,
-        "group": surface.group,
-        "method": surface.method,
-        "path": surface.path,
-        "routeRegistered": route_registered,
-        "authRequired": surface.auth_required,
-        "networkProbe": False,
+    started = time.perf_counter()
+    try:
+        route_registered = (surface.method, surface.path) in routes
+        result: dict[str, Any] = {
+            "id": surface.id,
+            "label": surface.label,
+            "group": surface.group,
+            "method": surface.method,
+            "path": surface.path,
+            "routeRegistered": route_registered,
+            "authRequired": surface.auth_required,
+            "networkProbe": False,
+        }
+        if not route_registered:
+            result.update({"status": "fail", "reasonCode": "route_missing"})
+            return result
+        if surface.ai_research_optional and not ai_available:
+            result.update({"status": "skipped", "reasonCode": "config_missing"})
+            return result
+        if base_url and allow_network:
+            probe = safe_http_get(base_url, surface.path, timeout)
+            status, reason_code = _status_from_http(probe)
+            result.update(
+                {
+                    "status": status,
+                    "reasonCode": reason_code,
+                    "httpStatus": probe.status_code,
+                    "networkProbe": True,
+                }
+            )
+            return result
+        reason_code = "auth_required" if surface.auth_required else "route_registered"
+        result.update({"status": "pass", "reasonCode": reason_code})
+        return result
+    finally:
+        result["elapsedMs"] = round(max(0.0, (time.perf_counter() - started) * 1000), 3)
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    sorted_values = sorted(values)
+    rank = round((len(sorted_values) - 1) * percentile)
+    return sorted_values[rank]
+
+
+def _timing_summary(results: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    values = [float(item["elapsedMs"]) for item in results if isinstance(item.get("elapsedMs"), (int, float))]
+    if not values:
+        return {"count": 0, "minElapsedMs": 0.0, "maxElapsedMs": 0.0, "p50ElapsedMs": 0.0, "p95ElapsedMs": 0.0}
+    return {
+        "count": len(values),
+        "minElapsedMs": min(values),
+        "maxElapsedMs": max(values),
+        "p50ElapsedMs": _percentile(values, 0.50),
+        "p95ElapsedMs": _percentile(values, 0.95),
     }
-    if not route_registered:
-        result.update({"status": "fail", "reasonCode": "route_missing"})
-        return result
-    if surface.ai_research_optional and not ai_available:
-        result.update({"status": "skipped", "reasonCode": "config_missing"})
-        return result
-    if base_url and allow_network:
-        probe = safe_http_get(base_url, surface.path, timeout)
-        status, reason_code = _status_from_http(probe)
-        result.update(
-            {
-                "status": status,
-                "reasonCode": reason_code,
-                "httpStatus": probe.status_code,
-                "networkProbe": True,
-            }
-        )
-        return result
-    reason_code = "auth_required" if surface.auth_required else "route_registered"
-    result.update({"status": "pass", "reasonCode": reason_code})
-    return result
 
 
 def _smoke_status(results: Iterable[dict[str, Any]]) -> str:
@@ -307,6 +338,7 @@ def run_smoke(
         "destructiveWritesExecuted": False,
         "authRequiredSurfaces": auth_required,
         "manualReviewRequired": manual_review,
+        "timingSummary": _timing_summary(checked),
     }
 
 
