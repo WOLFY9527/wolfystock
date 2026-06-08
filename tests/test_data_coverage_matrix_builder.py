@@ -15,8 +15,10 @@ from src.services.data_coverage_matrix_builder import (
     build_data_coverage_matrix_row,
     resolve_data_coverage_surface_registry_entry,
 )
+from src.services.data_coverage_matrix_batch import build_data_coverage_matrix_batch
 from src.services.data_coverage_matrix_contract import RightToDisplay
 from src.services.data_coverage_surface_registry import DATA_COVERAGE_SURFACE_REGISTRY_BY_SURFACE_FIELD
+from src.services.data_coverage_surface_snapshot import build_data_coverage_surface_snapshot
 
 
 def test_market_overview_builder_accepts_registry_entry_and_returns_valid_row() -> None:
@@ -48,6 +50,95 @@ def test_market_overview_builder_accepts_registry_entry_and_returns_valid_row() 
     assert result.normalized_contract.observation_only is False
     assert result.normalized_contract.right_to_display is RightToDisplay.GRANTED
     assert result.to_dict()["decisionGrade"] is True
+
+
+def test_market_overview_adoption_proof_builds_fail_closed_row_batch_and_snapshot() -> None:
+    metadata = {
+        "providerId": "market_overview_provider_descriptor",
+        "providerLabel": "Market Overview Provider Descriptor",
+        "sourceId": "market_regime_source_descriptor",
+        "sourceLabel": "Market Regime Source Descriptor",
+        "sourceType": "authorized_licensed_feed",
+        "sourceTier": "official_public",
+        "freshnessState": "fresh",
+        "asOf": "2026-06-08T09:30:00Z",
+        "lastUpdated": "2026-06-08T09:31:00Z",
+    }
+
+    row_result = build_data_coverage_matrix_row(
+        metadata,
+        surface_id="market_overview",
+        field_key="market_regime",
+    )
+    row = row_result.to_dict()
+    issues = {issue.code for issue in row_result.validation.issues}
+
+    assert issues >= {
+        "missing_source_authority",
+        "missing_score_contribution",
+        "missing_right_to_display",
+    }
+    assert row["surfaceId"] == "market_overview"
+    assert row["routeId"] == "/zh/market-overview"
+    assert row["audience"] == "consumer"
+    assert row["fieldKey"] == "market_regime"
+    assert row["evidenceFamily"] == "market_regime"
+    assert row["freshnessState"] == "fresh"
+    assert row["sourceAuthorityAllowed"] is False
+    assert row["scoreContributionAllowed"] is False
+    assert row["authorityGrant"] is False
+    assert row["decisionGrade"] is False
+    assert row["observationOnly"] is True
+    assert row["rightToDisplay"] == "unavailable"
+    assert row["diagnosticOnly"] is True
+    assert row["providerRuntimeCalled"] is False
+    assert row["networkCallsEnabled"] is False
+    assert row["marketCacheMutation"] is False
+
+    batch_result = build_data_coverage_matrix_batch(
+        [
+            {
+                **metadata,
+                "surfaceId": "market_overview",
+                "fieldKey": "market_regime",
+            }
+        ]
+    )
+    batch = batch_result.to_dict()
+
+    assert batch["rowCounts"] == {
+        "input": 1,
+        "built": 1,
+        "valid": 0,
+        "invalid": 1,
+        "errors": 1,
+    }
+    assert batch["rows"] == [row]
+    assert batch["guardPosture"] == {
+        "diagnosticOnly": True,
+        "providerRuntimeCalled": False,
+        "networkCallsEnabled": False,
+        "marketCacheMutation": False,
+    }
+    assert set(batch["errors"][0]["codes"]) >= issues
+
+    snapshot = build_data_coverage_surface_snapshot(batch["rows"]).to_dict()
+
+    assert snapshot == {
+        "snapshotVersion": "data_coverage_surface_snapshot_v1",
+        "surfaceId": "market_overview",
+        "routeId": "/zh/market-overview",
+        "audience": "consumer",
+        "consumerState": "UNAVAILABLE",
+        "confidencePosture": "UNAVAILABLE",
+        "consumerSummary": "UNAVAILABLE",
+        "asOf": "2026-06-08T09:30:00Z",
+        "rowCount": 1,
+        "availableRowCount": 0,
+        "limitedRowCount": 0,
+        "blockedRowCount": 0,
+        "unavailableRowCount": 1,
+    }
 
 
 def test_liquidity_builder_lookup_preserves_registry_fields_and_fails_closed_without_display_review() -> None:
@@ -196,6 +287,45 @@ blocked = sorted(
                 "src.services.data_coverage_surface_registry",
             }
         )
+    )
+)
+print(json.dumps(blocked))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert json.loads(result.stdout) == []
+
+
+def test_market_overview_adoption_helpers_do_not_load_runtime_or_product_semantic_modules() -> None:
+    script = """
+import json
+import sys
+before = set(sys.modules)
+import src.services.data_coverage_surface_registry  # noqa: F401
+import src.services.data_coverage_matrix_builder  # noqa: F401
+import src.services.data_coverage_matrix_batch  # noqa: F401
+import src.services.data_coverage_surface_snapshot  # noqa: F401
+after = set(sys.modules) - before
+blocked = sorted(
+    name for name in after
+    if (
+        name.startswith("data_provider")
+        or name.startswith("api")
+        or name.startswith("apps")
+        or name.startswith("src.schemas")
+        or name.startswith("src.repositories")
+        or name.startswith("src.services.market_overview_service")
+        or name.startswith("src.services.liquidity_monitor_service")
+        or name.startswith("src.services.market_scanner_service")
+        or name.startswith("src.services.rule_backtest_service")
+        or name.startswith("src.services.market_cache")
+        or name.startswith("src.services.market_regime_synthesis_service")
+        or name.startswith("src.services.market_decision_semantics")
     )
 )
 print(json.dumps(blocked))

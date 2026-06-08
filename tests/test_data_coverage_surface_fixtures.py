@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from src.services.data_coverage_matrix_batch import build_data_coverage_matrix_batch
 from src.services.data_coverage_matrix_contract import (
     ConsumerProductStatus,
     RightToDisplay,
@@ -16,6 +17,7 @@ from src.services.data_coverage_surface_registry import (
     DATA_COVERAGE_SURFACE_REGISTRY,
     DATA_COVERAGE_SURFACE_REGISTRY_BY_SURFACE_FIELD,
 )
+from src.services.data_coverage_surface_snapshot import build_data_coverage_surface_snapshot
 
 
 _DOC_PATH = Path("docs/data-reliability/data-coverage-surface-fixtures.md")
@@ -297,6 +299,61 @@ def test_surface_fixture_catalog_projects_consumer_safe_fail_closed_states() -> 
         assert projection.status is case["expected_status"]
         assert projection.headline == case["expected_headline"]
         assert case["expected_issue_codes"] <= issues
+
+
+def test_market_overview_fixture_builds_fail_closed_matrix_row_and_surface_snapshot() -> None:
+    case = next(case for case in _SURFACE_FIXTURE_CASES if case["surface_id"] == "market_overview")
+    result = build_data_coverage_matrix_batch(
+        [_build_payload(case["surface_id"], case["field_key"], case["payload_overrides"])]
+    )
+    payload = result.to_dict()
+    row = payload["rows"][0]
+    error = payload["errors"][0]
+    snapshot = build_data_coverage_surface_snapshot(payload["rows"]).to_dict()
+
+    assert payload["rowCounts"] == {
+        "input": 1,
+        "built": 1,
+        "valid": 0,
+        "invalid": 1,
+        "errors": 1,
+    }
+    assert payload["guardPosture"] == {
+        "diagnosticOnly": True,
+        "providerRuntimeCalled": False,
+        "networkCallsEnabled": False,
+        "marketCacheMutation": False,
+    }
+    assert row["surfaceId"] == "market_overview"
+    assert row["routeId"] == "/zh/market-overview"
+    assert row["fieldKey"] == "market_regime"
+    assert row["freshnessState"] == "unknown"
+    assert row["rightToDisplay"] == "limited"
+    assert row["sourceAuthorityAllowed"] is True
+    assert row["scoreContributionAllowed"] is False
+    assert row["authorityGrant"] is False
+    assert row["decisionGrade"] is False
+    assert row["observationOnly"] is True
+    assert row["diagnosticOnly"] is True
+    assert row["providerRuntimeCalled"] is False
+    assert row["networkCallsEnabled"] is False
+    assert row["marketCacheMutation"] is False
+    assert case["expected_issue_codes"] <= set(error["codes"])
+
+    assert snapshot == {
+        "snapshotVersion": "data_coverage_surface_snapshot_v1",
+        "surfaceId": "market_overview",
+        "routeId": "/zh/market-overview",
+        "audience": "consumer",
+        "consumerState": case["expected_status"].value,
+        "confidencePosture": "PARTIAL",
+        "consumerSummary": case["expected_status"].value,
+        "rowCount": 1,
+        "availableRowCount": 0,
+        "limitedRowCount": 1,
+        "blockedRowCount": 0,
+        "unavailableRowCount": 0,
+    }
 
 
 def test_surface_fixture_doc_matches_catalog_and_stays_consumer_safe() -> None:
