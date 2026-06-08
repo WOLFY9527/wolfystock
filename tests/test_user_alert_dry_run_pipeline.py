@@ -112,6 +112,53 @@ class UserAlertDryRunPipelineTestCase(unittest.TestCase):
         self.assertIsNone(result["eventPacket"])
         self.assertFalse(result["suppressedLocalRecord"])
 
+    def test_history_like_suppressed_preview_does_not_emit_record_by_default(self) -> None:
+        result = build_user_alert_dry_run_pipeline_result(
+            rule={
+                **self.rule,
+                "owner_id": "owner-private-marker",
+                "note": "private owner memo",
+                "rawPayload": {"marker": "raw-payload-marker"},
+                "persistedEventId": "persisted-marker",
+            },
+            observed_price=130.0,
+            observed_at=self.now,
+            freshness={"status": "fresh", "rawPayload": {"marker": "freshness-private-marker"}},
+            suppression={**self.suppression, "muted": True},
+            now=self.now,
+            recorded_at=self.recorded_at,
+        )
+
+        self.assertTrue(result["dryRun"])
+        self.assertTrue(result["noSend"])
+        self.assertFalse(result["outboundAttempted"])
+        self.assertFalse(result["liveOutbound"])
+        self.assertTrue(result["localOnly"])
+        self.assertFalse(result["suppressedLocalRecord"])
+        self.assertIsNone(result["eventPacket"])
+
+        evaluation = result["evaluation"]
+        self.assertEqual(evaluation["state"], "suppressed_muted")
+        self.assertTrue(evaluation["dryRun"])
+        self.assertFalse(evaluation["outboundAttempted"])
+        self.assertFalse(evaluation["liveOutbound"])
+        self.assertFalse(evaluation["providerRuntimeCalled"])
+        self.assertFalse(evaluation["networkCallsEnabled"])
+        self.assertFalse(evaluation["marketCacheMutation"])
+        self.assertTrue(evaluation["suppressed"])
+
+        serialized = json.dumps(result, ensure_ascii=False).lower()
+        for forbidden in (
+            "owner-private-marker",
+            "private owner memo",
+            "raw-payload-marker",
+            "persisted-marker",
+            "freshness-private-marker",
+            "rawpayload",
+            "persistedeventid",
+        ):
+            self.assertNotIn(forbidden, serialized)
+
     def test_suppressed_local_record_is_opt_in(self) -> None:
         result = build_user_alert_dry_run_pipeline_result(
             rule=self.rule,
@@ -130,6 +177,35 @@ class UserAlertDryRunPipelineTestCase(unittest.TestCase):
         self.assertIsNotNone(result["eventPacket"])
         self.assertEqual(result["eventPacket"]["state"], "suppressed_muted")
         self.assertTrue(result["eventPacket"]["safeMetadata"]["suppressed"])
+
+    def test_history_like_local_record_is_opt_in_and_local_only(self) -> None:
+        result = build_user_alert_dry_run_pipeline_result(
+            rule=self.rule,
+            observed_price=130.0,
+            observed_at=self.now,
+            freshness={"status": "fresh"},
+            suppression={**self.suppression, "muted": True},
+            now=self.now,
+            recorded_at=self.recorded_at,
+            include_suppressed_local_record=True,
+        )
+
+        packet = result["eventPacket"]
+
+        self.assertTrue(result["dryRun"])
+        self.assertTrue(result["noSend"])
+        self.assertFalse(result["outboundAttempted"])
+        self.assertFalse(result["liveOutbound"])
+        self.assertTrue(result["localOnly"])
+        self.assertTrue(result["suppressedLocalRecord"])
+        self.assertIsNotNone(packet)
+        self.assertEqual(packet["observedAsOf"], "2026-06-08T10:30:00Z")
+        self.assertEqual(packet["createdAt"], "2026-06-08T10:31:00Z")
+        self.assertTrue(packet["dryRun"])
+        self.assertFalse(packet["outboundAttempted"])
+        self.assertFalse(packet["liveOutbound"])
+        self.assertTrue(packet["localOnly"])
+        self.assertTrue(packet["safeMetadata"]["suppressed"])
 
     def test_output_is_deterministic_from_safe_inputs(self) -> None:
         first = build_user_alert_dry_run_pipeline_result(

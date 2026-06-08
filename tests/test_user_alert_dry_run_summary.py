@@ -188,6 +188,53 @@ def test_live_outbound_flags_fail_closed_without_relabeling_as_observed() -> Non
     }
 
 
+def test_history_like_local_preview_rollup_stays_no_send_review_only() -> None:
+    summary = summarize_user_alert_dry_run_results(
+        [
+            {
+                "state": "condition_observed",
+                "dryRun": True,
+                "noSend": True,
+                "localOnly": True,
+                "outboundAttempted": False,
+                "liveOutbound": False,
+                "providerRuntimeCalled": False,
+                "networkCallsEnabled": False,
+                "marketCacheMutation": False,
+                "alertDeliveryIntent": True,
+                "rawPayload": {"marker": "raw-payload-marker"},
+                "ownerNote": "private owner memo",
+            },
+            {
+                "state": "suppressed_muted",
+                "dryRun": True,
+                "noSend": True,
+                "localOnly": True,
+                "outboundAttempted": False,
+                "liveOutbound": False,
+                "providerRuntimeCalled": False,
+                "networkCallsEnabled": False,
+                "marketCacheMutation": False,
+                "suppressed": True,
+                "alertDeliveryIntent": False,
+            },
+        ]
+    )
+
+    assert summary["safeStatus"] == "AVAILABLE"
+    assert summary["observedCount"] == 1
+    assert summary["suppressedCount"] == 1
+    assert summary["noSendReview"] == {
+        "dryRun": True,
+        "noSend": True,
+        "outboundAttempted": False,
+        "liveOutbound": False,
+    }
+    serialized = json.dumps(summary, ensure_ascii=False).lower()
+    assert "raw-payload-marker" not in serialized
+    assert "private owner memo" not in serialized
+
+
 def test_helper_has_no_protected_runtime_imports() -> None:
     imported_modules = _collect_imported_modules(MODULE_PATH)
     violations = sorted(

@@ -34,6 +34,14 @@ TARGET_MODULES = (
     pytest.param("src/services/user_alert_dry_run_summary.py", True, id="user_alert_dry_run_summary"),
     pytest.param("src/services/research_packet_v1.py", True, id="research_packet_v1"),
 )
+ALERT_LOCAL_PREVIEW_GUARD_TESTS = (
+    "tests/test_user_alert_evaluation.py",
+    "tests/test_user_alert_event_packet.py",
+    "tests/test_user_alert_dry_run_pipeline.py",
+    "tests/test_user_alert_dry_run_summary.py",
+    "tests/test_user_alert_dry_run_fixtures.py",
+    "tests/test_pure_helper_import_boundaries.py",
+)
 FORBIDDEN_IMPORT_PREFIXES = {
     "api": (
         "api",
@@ -90,8 +98,13 @@ FORBIDDEN_IMPORT_PREFIXES = {
         "src.notification",
         "src.services.notification_service",
     ),
+    "alert-runtime": (
+        "src.services.user_alert_service",
+    ),
     "core-runtime": (
         "main",
+        "server",
+        "src.scheduler",
         "src.core",
         "src.services.litellm_runtime",
         "src.services.task_queue",
@@ -197,5 +210,17 @@ def test_pure_helper_modules_do_not_import_protected_runtime_domains(
     violations = _forbidden_import_hits(_collect_imported_modules(module_path))
     assert not violations, (
         f"{relative_path} must remain a pure inert helper and avoid protected runtime imports. "
+        f"Found forbidden imports: {violations}"
+    )
+
+
+@pytest.mark.parametrize("relative_path", ALERT_LOCAL_PREVIEW_GUARD_TESTS)
+def test_alert_local_preview_guard_tests_do_not_import_protected_runtime_domains(relative_path: str) -> None:
+    test_path = REPO_ROOT / relative_path
+    assert test_path.exists(), f"alert local preview guard test missing: {relative_path}"
+
+    violations = _forbidden_import_hits(_collect_imported_modules(test_path))
+    assert not violations, (
+        f"{relative_path} must test pure alert helpers without importing protected runtime domains. "
         f"Found forbidden imports: {violations}"
     )

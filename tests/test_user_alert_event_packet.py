@@ -7,7 +7,7 @@ import ast
 import importlib
 import json
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from src.services.user_alert_evaluation import evaluate_user_alert_dry_run
@@ -120,6 +120,71 @@ class UserAlertEventPacketTestCase(unittest.TestCase):
 
         self.assertIn("已记录", polluted_packet["title"])
         self.assertIn("仅供观察", polluted_packet["message"])
+
+    def test_history_like_preview_packet_keeps_safe_times_and_fingerprints(self) -> None:
+        observed_at = self.now - timedelta(minutes=5)
+        created_at = self.now + timedelta(minutes=2)
+        preview_rule = {
+            **self.rule,
+            "owner_id": "owner-private-marker",
+            "note": "private owner memo",
+            "rawPayload": {"marker": "raw-payload-marker"},
+            "persistedEventId": "persisted-marker",
+        }
+        changed_private_fields_rule = {
+            **preview_rule,
+            "id": 999,
+            "owner_id": "changed-owner-private-marker",
+            "note": "changed private memo",
+            "rawPayload": {"marker": "changed-raw-payload-marker"},
+            "persistedEventId": "changed-persisted-marker",
+        }
+
+        preview = evaluate_user_alert_dry_run(
+            rule=preview_rule,
+            observed_price=130.0,
+            observed_at=observed_at,
+            freshness={"status": "fresh", "rawPayload": {"marker": "freshness-private-marker"}},
+            now=self.now,
+        )
+        changed_private_fields = evaluate_user_alert_dry_run(
+            rule=changed_private_fields_rule,
+            observed_price=130.0,
+            observed_at=observed_at,
+            freshness={"status": "fresh", "rawPayload": {"marker": "changed-freshness-private-marker"}},
+            now=self.now,
+        )
+
+        packet = build_user_alert_event_packet(result=preview, now=created_at)
+        changed_packet = build_user_alert_event_packet(result=changed_private_fields, now=created_at)
+
+        self.assertEqual(packet["observedAsOf"], "2026-06-08T10:25:00Z")
+        self.assertEqual(packet["createdAt"], "2026-06-08T10:32:00Z")
+        self.assertTrue(packet["dryRun"])
+        self.assertFalse(packet["outboundAttempted"])
+        self.assertFalse(packet["liveOutbound"])
+        self.assertTrue(packet["localOnly"])
+        self.assertEqual(preview["dedupeFingerprint"], changed_private_fields["dedupeFingerprint"])
+        self.assertEqual(packet["safeMetadata"]["dedupeFingerprint"], preview["dedupeFingerprint"])
+        self.assertEqual(packet["fingerprint"], changed_packet["fingerprint"])
+
+        serialized = json.dumps(
+            {
+                "evaluation": preview,
+                "packet": packet,
+            },
+            ensure_ascii=False,
+        ).lower()
+        for forbidden in (
+            "owner-private-marker",
+            "private owner memo",
+            "raw-payload-marker",
+            "persisted-marker",
+            "freshness-private-marker",
+            "rawpayload",
+            "persistedeventid",
+        ):
+            self.assertNotIn(forbidden, serialized)
 
     def test_blocked_results_remain_bounded_and_local_only(self) -> None:
         evaluation = evaluate_user_alert_dry_run(
