@@ -1,4 +1,5 @@
 import type { NormalStrategyTemplate } from './pointAndShootTemplateOptions';
+import { sanitizeBacktestConsumerCopy } from './consumerCopyGuards';
 
 export type BacktestLanguage = 'zh' | 'en';
 
@@ -53,8 +54,8 @@ StrategyTemplateCategoryId,
       en: 'Basic / Default Strategies',
     },
     description: {
-      zh: '仅保留当前 deterministic 引擎可直接执行的默认模板，供普通用户一键发射。',
-      en: 'Keeps only the deterministic-ready presets that ordinary users can launch directly.',
+      zh: '保留当前可用于研究模拟的默认模板，便于快速开始回测。',
+      en: 'Keeps the deterministic-ready presets that ordinary users can use for research simulations.',
     },
   },
   advanced: {
@@ -63,18 +64,18 @@ StrategyTemplateCategoryId,
       en: 'Advanced / Extended Strategies',
     },
     description: {
-      zh: '扩展更多经典量价、波动率与区间模板；已支持的条目可直接执行，其余保留参考。',
-      en: 'Expands the catalog with classic price, volume, and volatility setups; executable templates launch directly while the rest remain as references.',
+      zh: '扩展更多经典量价、波动率与区间模板；已支持的条目可直接用于研究模拟，其余保留参考。',
+      en: 'Expands the catalog with classic price, volume, and volatility setups; supported templates can be used for research simulations while the rest remain as references.',
     },
   },
   professional: {
     title: {
-      zh: '专业 / 组合策略',
-      en: 'Professional / Combination Strategies',
+      zh: '进阶 / 组合策略',
+      en: 'Advanced / Combination Strategies',
     },
     description: {
-      zh: '保留多指标联合确认模板，适合在专业模式中做组合研究与改写。',
-      en: 'Keeps multi-indicator combination templates available for professional research and rewrite workflows.',
+      zh: '保留多指标联合确认模板，适合在进阶模式中继续做研究模拟与改写。',
+      en: 'Keeps multi-indicator combination templates available for advanced research-simulation and rewrite workflows.',
     },
   },
 };
@@ -502,37 +503,8 @@ export const POINT_AND_SHOOT_TEMPLATES = BUILT_IN_STRATEGY_CATALOG.filter(
     template.executable && POINT_AND_SHOOT_TEMPLATE_SET.has(template.id),
 );
 
-const BACKTEST_STRATEGY_COPY_REPLACEMENTS: Array<[RegExp, string]> = [
-  [/买入/g, '正向信号触发'],
-  [/卖出/g, '反向信号触发'],
-  [/减仓/g, '暴露收缩'],
-  [/离场/g, '观察解除'],
-  [/退出/g, '观察解除'],
-  [/入场/g, '观察触发'],
-  [/介入/g, '观察触发'],
-  [/追涨/g, '跟踪突破'],
-  [/参与/g, '观察'],
-  [/开仓/g, '开启观察'],
-  [/建仓/g, '建立观察状态'],
-  [/加仓/g, '暴露增加'],
-  [/止损/g, '风险退出参考'],
-  [/止盈/g, '上方参考'],
-  [/\bbuy(?:s|ing)?\b/gi, 'trigger a positive signal'],
-  [/\bsell(?:s|ing)?\b/gi, 'trigger a reverse signal'],
-  [/\bexit(?:s|ing)?\b/gi, 'release the observation'],
-  [/\bentries\b/gi, 'positive signal triggers'],
-  [/\bentry\b/gi, 'positive signal trigger'],
-  [/\benter(?:s|ing)?\b/gi, 'start observing'],
-  [/\btrims?\b/gi, 'tracks exposure reduction'],
-  [/\bstop[-\s]?loss\b/gi, 'fixed exit reference'],
-  [/\btake[-\s]?profit\b/gi, 'target exit reference'],
-];
-
-export function backtestStrategyDisplayCopy(value: string): string {
-  return BACKTEST_STRATEGY_COPY_REPLACEMENTS.reduce(
-    (text, [pattern, replacement]) => text.replace(pattern, replacement),
-    value,
-  );
+export function backtestStrategyDisplayCopy(value: string, language: BacktestLanguage = 'zh'): string {
+  return sanitizeBacktestConsumerCopy(value, language);
 }
 
 export function getStrategyCatalogEntry(templateId: string): StrategyCatalogEntry | undefined {
@@ -588,5 +560,5 @@ export function buildPointAndShootStrategyDisplayText(
     initialCapital: string;
   },
 ): string {
-  return backtestStrategyDisplayCopy(buildPointAndShootStrategyText(language, template, payload));
+  return sanitizeBacktestConsumerCopy(buildPointAndShootStrategyText(language, template, payload), language);
 }

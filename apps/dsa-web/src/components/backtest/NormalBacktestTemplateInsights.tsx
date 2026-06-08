@@ -28,8 +28,8 @@ const NormalBacktestTemplateInsights: React.FC<NormalBacktestTemplateInsightsPro
 }) => {
   const currentTemplate = getStrategyCatalogEntry(strategyTemplate);
   const templateName = currentTemplate?.name[language] || '';
-  const templateDescription = backtestStrategyDisplayCopy(currentTemplate?.description[language] || '');
-  const templateLogicSummary = backtestStrategyDisplayCopy(currentTemplate?.logicSummary[language] || '');
+  const templateDescription = backtestStrategyDisplayCopy(currentTemplate?.description[language] || '', language);
+  const templateLogicSummary = backtestStrategyDisplayCopy(currentTemplate?.logicSummary[language] || '', language);
   const templatePreview = buildPointAndShootStrategyDisplayText(language, strategyTemplate, {
     code,
     startDate,

@@ -25,6 +25,7 @@ import {
   type RuleBenchmarkMode,
 } from './shared';
 import { backtestStrategyDisplayCopy, getStrategyCatalogGroups } from './strategyCatalog';
+import { sanitizeBacktestConsumerCopy } from './consumerCopyGuards';
 
 type BacktestLanguage = 'zh' | 'en';
 type WorkspaceStep = 'assets' | 'strategy' | 'orders' | 'costs' | 'advanced';
@@ -130,9 +131,9 @@ function readRiskControls(parsed: RuleBacktestParseResponse | null) {
     ?? getStrategySpecValue(spec, ['riskControls', 'trailingStopPct']);
 
   return [
-    { key: 'stop-loss', label: '风险退出参考', value: stopLoss },
-    { key: 'take-profit', label: '上方退出参考', value: takeProfit },
-    { key: 'trailing-stop', label: '移动风险退出参考', value: trailingStop },
+    { key: 'stop-loss', label: '风险阈值', value: stopLoss },
+    { key: 'take-profit', label: '收益阈值', value: takeProfit },
+    { key: 'trailing-stop', label: '移动风险阈值', value: trailingStop },
   ].filter((item) => item.value != null && item.value !== '');
 }
 
@@ -157,7 +158,8 @@ function getAssumptionItems(parsed: RuleBacktestParseResponse | null, language: 
     const reason = String(record.reason || '').trim();
     return `${label}${value}${reason ? `${language === 'en' ? '. ' : '。'}${reason}` : ''}`;
   });
-  return Array.from(new Set([...formatted, ...getParseWarnings(parsed)]));
+  return Array.from(new Set([...formatted, ...getParseWarnings(parsed)]))
+    .map((item) => sanitizeBacktestConsumerCopy(item, language));
 }
 
 function statusLabel(tone: StepStatusTone, language: BacktestLanguage): string {
@@ -311,8 +313,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         ? 'Expands the catalog with classic price, volume, and volatility setups; supported templates can be used for research simulations while the rest remain references.'
         : '扩展更多经典量价、波动率与区间模板；已支持的条目可直接用于研究模拟，其余保留参考。')
       : (language === 'en'
-        ? 'Keeps multi-indicator combination templates available for professional research-simulation and rewrite workflows.'
-        : '保留多指标联合确认模板，适合在专业模式中继续做研究模拟与改写。');
+        ? 'Keeps multi-indicator combination templates available for advanced research-simulation and rewrite workflows.'
+        : '保留多指标联合确认模板，适合在进阶模式中继续做研究模拟与改写。');
   const latestHistory = historyItems[0] as RuleBacktestHistoryItem | undefined;
   const visibleActiveStep = getVisibleWorkspaceStep(currentStep, activeStep);
 
@@ -342,8 +344,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
     {
       id: 'orders',
       number: '03',
-      title: language === 'en' ? 'Orders' : '订单与风控',
-      description: language === 'en' ? 'Routing and risk guards.' : '执行路由与风险护栏。',
+      title: language === 'en' ? 'Simulation guards' : '模拟护栏',
+      description: language === 'en' ? 'Simulation path and risk thresholds.' : '模拟路径与风险阈值。',
       testId: 'pro-workflow-step-orders',
       wizardStep: 'confirm',
     },
@@ -408,7 +410,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         ? (language === 'en' ? 'Confirm parsed strategy before launch' : '运行前请确认解析结果')
         : firstNotReady
           ? (language === 'en' ? `Waiting for ${firstNotReady.label}` : `等待 ${firstNotReady.label}`)
-          : (language === 'en' ? 'Ready to execute' : '可以执行');
+          : (language === 'en' ? 'Ready for research run' : '可运行研究模拟');
 
   const stepStatuses: Record<WorkspaceStep, StepStatusTone> = {
     assets: !symbolValid || !dateValid || !capitalValid || !benchmarkValid ? 'error' : 'done',
@@ -436,8 +438,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
     if (!executable) {
       setCatalogToast(
         language === 'en'
-          ? 'Reference only. Edit before running.'
-          : '当前模板暂不支持直接运行，请在编辑器中修改后再执行',
+          ? 'Reference only. Edit before research use.'
+          : '当前模板暂不支持直接研究模拟，请在编辑器中修改后再使用',
       );
     }
   };
@@ -486,7 +488,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
 
   const plannedCapabilityNote = language === 'en'
     ? 'Planned. Not wired into the current backtest run.'
-    : '计划中，尚未接入当前回测执行。';
+    : '计划中，尚未接入当前回测运行。';
 
   const renderAssetsStep = () => (
     <section data-testid="pro-step-assets" className="flex min-w-0 flex-col gap-4">
@@ -569,8 +571,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           <PlannedCapability
             title={language === 'en' ? 'Portfolio shell' : '组合壳层'}
             description={language === 'en'
-              ? 'Multi-asset portfolio execution is not wired here. Current runs still execute one parsed strategy per symbol.'
-              : '多资产组合执行尚未在此接线，当前运行仍按单标的已解析策略执行。'}
+              ? 'Multi-asset portfolio simulation is not wired here. Current runs still simulate one parsed strategy per symbol.'
+              : '多资产组合模拟尚未在此接线，当前运行仍按单标的已解析策略模拟。'}
             testId="pro-planned-portfolio-shell"
             language={language}
           />
@@ -588,10 +590,11 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
     </section>
   );
 
-  const rulePreviewEntry = parsedStrategy?.summary?.entry || parsedStrategy?.parsedStrategy.summary?.entry || '--';
-  const rulePreviewExit = parsedStrategy?.summary?.exit || parsedStrategy?.parsedStrategy.summary?.exit || '--';
-  const rulePreviewStrategy = parsedStrategy?.summary?.strategy || parsedStrategy?.coreIntentSummary || parsedStrategy?.parsedStrategy.coreIntentSummary || getFirstLine(strategyText) || '--';
+  const rulePreviewEntry = sanitizeBacktestConsumerCopy(parsedStrategy?.summary?.entry || parsedStrategy?.parsedStrategy.summary?.entry || '--', language);
+  const rulePreviewExit = sanitizeBacktestConsumerCopy(parsedStrategy?.summary?.exit || parsedStrategy?.parsedStrategy.summary?.exit || '--', language);
+  const rulePreviewStrategy = sanitizeBacktestConsumerCopy(parsedStrategy?.summary?.strategy || parsedStrategy?.coreIntentSummary || parsedStrategy?.parsedStrategy.coreIntentSummary || getFirstLine(strategyText) || '--', language);
   const rulePreviewSetupSource = getSetupSourceLabel(parsedStrategy, language);
+  const rulePreviewFilter = sanitizeBacktestConsumerCopy(String(getStrategySpecValue(strategySpec, ['filter']) || getStrategySpecValue(strategySpec, ['filters']) || (language === 'en' ? 'None' : '无')), language);
   const rulePreview = (
       <div data-testid="pro-rule-preview" className={`${ghostCardClass} flex min-w-0 flex-col gap-4 p-4 md:p-5`}>
         <div className="flex min-w-0 items-start justify-between gap-3">
@@ -600,7 +603,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             <p className="mt-2 truncate text-sm font-semibold text-white">{parsedStrategy ? '策略已解析' : (language === 'en' ? 'Waiting for parse' : '等待解析')}</p>
           </div>
           <span className={`rounded-full border px-2.5 py-1 text-[11px] ${statusClass(parseStale ? 'error' : parsedStrategy ? (parsedExecutable ? 'done' : 'pending') : 'pending')}`}>
-            {parseStale ? (language === 'en' ? 'Stale' : '输入已变更，请重新解析') : parsedStrategy ? (parsedExecutable ? (language === 'en' ? 'Runnable' : '可执行') : '当前不支持') : (language === 'en' ? 'Draft' : '草稿')}
+            {parseStale ? (language === 'en' ? 'Stale' : '输入已变更，请重新解析') : parsedStrategy ? (parsedExecutable ? (language === 'en' ? 'Research run' : '研究模拟') : '当前不支持') : (language === 'en' ? 'Draft' : '草稿')}
           </span>
         </div>
         <div data-testid="pro-parsed-summary" className="grid min-w-0 gap-3">
@@ -610,7 +613,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             <p className="mt-1 text-xs text-white/38">{rulePreviewSetupSource}</p>
           </div>
           <div className="rounded-lg border border-white/5 bg-black/20 p-3">
-            <p className={labelClass}>{language === 'en' ? 'Executable spec' : '实际执行内容'}</p>
+            <p className={labelClass}>{language === 'en' ? 'Research spec' : '研究规格'}</p>
             <div className="mt-2 flex flex-wrap gap-2">
               <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/62">{language === 'en' ? 'Every trading day' : '每个交易日'}</span>
               <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/62">100 股 / 次</span>
@@ -618,7 +621,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-lg border border-white/5 bg-black/20 p-3">
-              <p className={labelClass}>{language === 'en' ? 'Positive signal rules' : '正向信号规则'}</p>
+              <p className={labelClass}>{language === 'en' ? 'Observe trigger rules' : '观察触发规则'}</p>
               <p className="mt-2 text-sm text-white/72">{rulePreviewEntry}</p>
             </div>
             <div className="rounded-lg border border-white/5 bg-black/20 p-3">
@@ -628,7 +631,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           </div>
           <div className="rounded-lg border border-white/5 bg-black/20 p-3">
             <p className={labelClass}>{language === 'en' ? 'Filters' : '过滤条件'}</p>
-            <p className="mt-2 truncate text-sm text-white/58">{String(getStrategySpecValue(strategySpec, ['filter']) || getStrategySpecValue(strategySpec, ['filters']) || (language === 'en' ? 'None' : '无'))}</p>
+            <p className="mt-2 truncate text-sm text-white/58">{rulePreviewFilter}</p>
           </div>
         </div>
         {assumptionItems.length > 0 ? (
@@ -644,11 +647,13 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         {parsedStrategy && !parsedExecutable ? (
           <div data-testid="pro-unsupported-guidance" className="rounded-lg border border-amber-400/20 bg-amber-400/10 p-3">
             <p className="text-sm font-semibold text-amber-100">当前不支持</p>
-            <p className="mt-1 text-sm text-amber-50/70">{parsedStrategy.unsupportedReason || parsedStrategy.parsedStrategy.unsupportedReason || '当前解析结果需要改写后再执行。'}</p>
+            <p className="mt-1 text-sm text-amber-50/70">
+              {sanitizeBacktestConsumerCopy(parsedStrategy.unsupportedReason || parsedStrategy.parsedStrategy.unsupportedReason || '当前解析结果需要改写后再使用。', language)}
+            </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {(parsedStrategy.rewriteSuggestions || parsedStrategy.parsedStrategy.rewriteSuggestions || []).map((item) => {
                 const record = item as Record<string, unknown>;
-                const label = String(record.label || '改写成当前可执行版本');
+                const label = sanitizeBacktestConsumerCopy(String(record.label || '改写成当前研究模拟版本'), language);
                 const nextStrategyText = String(record.strategyText || record.strategy_text || '');
                 if (!nextStrategyText) return null;
                 return (
@@ -730,7 +735,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               disabled={!parsedStrategy || !parsedExecutable || parseStale}
               onChange={(event) => onToggleConfirmed(event.target.checked)}
             />
-            <span>{language === 'en' ? 'I reviewed the current parse result and execution assumptions.' : '我已确认当前解析结果与执行假设。'}</span>
+            <span>{language === 'en' ? 'I reviewed the current parse result and simulation assumptions.' : '我已确认当前解析结果与模拟假设。'}</span>
           </label>
           <details className={`${ghostCardClass} p-4`}>
             <summary className="cursor-pointer text-sm font-semibold text-white/72">{language === 'en' ? 'Advanced engine settings' : '高级引擎设置'}</summary>
@@ -755,7 +760,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   const renderOrdersStep = () => (
     <section data-testid="pro-step-orders" className="flex min-w-0 flex-col gap-4">
       <StepHeader step={stepDefinitions[2]} language={language} chips={[
-        language === 'en' ? 'parsed strategy execution' : '按解析策略执行',
+        language === 'en' ? 'parsed strategy simulation' : '按解析策略模拟',
         riskRows.length > 0
           ? `${language === 'en' ? 'parsed risk' : '解析风险'} ${riskRows.length}`
           : (language === 'en' ? 'local overrides planned' : '本地覆盖计划中'),
@@ -768,7 +773,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             aria-pressed={ordersTab === 'routing'}
             onClick={() => setOrdersTab('routing')}
           >
-            {language === 'en' ? 'Execution routing' : '执行路由'}
+            {language === 'en' ? 'Simulation path' : '模拟路径'}
           </button>
           <button
             type="button"
@@ -782,18 +787,18 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         {ordersTab === 'routing' ? (
           <div className="mt-5 grid gap-3 md:grid-cols-2">
             <PlannedCapability
-              title={language === 'en' ? 'Execution routing override' : '执行路由覆盖（计划中）'}
+              title={language === 'en' ? 'Simulation path override' : '模拟路径覆盖（计划中）'}
               description={language === 'en'
-                ? 'Event-driven routing, fixed-exit references, and target-exit references are not wired into the current executor.'
-                : '事件驱动、风险退出参考、上方退出参考尚未接入当前执行器。'}
+                ? 'Event-driven paths, risk thresholds, and return thresholds are not wired into the current run.'
+                : '事件路径、风险阈值、收益阈值尚未接入当前运行。'}
               testId="pro-planned-routing-overrides"
               language={language}
             />
             <PlannedCapability
-              title={language === 'en' ? 'Trailing exit reference route' : '移动风险退出参考路由（计划中）'}
+              title={language === 'en' ? 'Moving risk-threshold path' : '移动风险阈值路径（计划中）'}
               description={language === 'en'
-                ? 'Trailing-exit reference configuration is reserved for a future execution lane and does not trigger backend behavior today.'
-                : '移动风险退出参考配置仅为后续执行通道预留，当前不会触发后端行为。'}
+                ? 'Moving risk-threshold configuration is reserved for a future simulation path and does not change current behavior.'
+                : '移动风险阈值配置仅为后续模拟路径预留，当前不会改变运行行为。'}
               testId="pro-planned-trailing-route"
               language={language}
             />
@@ -811,8 +816,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             <PlannedCapability
               title={language === 'en' ? 'Concurrent holdings cap' : '最大同时持仓（计划中）'}
               description={language === 'en'
-                ? 'Concurrent-holdings caps remain a planned control and do not change the current backend execution.'
-                : '最大同时持仓仍为计划中控件，当前不会改变后端执行。'}
+                ? 'Concurrent-holdings caps remain a planned control and do not change the current research run.'
+                : '最大同时持仓仍为计划中控件，当前不会改变研究运行。'}
               testId="pro-planned-max-holdings"
               language={language}
             />
@@ -886,8 +891,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             <p className="mt-2 text-sm text-white/52">
               {advancedTab === 'optimization'
                 ? (language === 'en'
-                  ? 'The current professional run only uses basic parameters plus the parsed executable strategy. Optimization controls below remain planned placeholders.'
-                  : '当前专业模式实际只会提交基础参数与已解析的可执行策略；下方优化控件仍是计划中的占位能力。')
+                  ? 'The current advanced run only uses basic parameters plus the parsed research strategy. Optimization controls below remain planned placeholders.'
+                  : '当前进阶模式实际只会提交基础参数与已解析的研究策略；下方优化控件仍是计划中的占位能力。')
                 : (language === 'en'
                   ? 'Robustness diagnostics are opt-in. When disabled, no extra diagnostics config is sent. When enabled, only the fixed walk-forward preset and chosen Monte Carlo simulation count are added, without changing the primary strategy logic.'
                   : '稳健性诊断为可选项。关闭时不会附加额外诊断参数；启用后只会追加固定滚动样本外预设和你选择的 Monte Carlo 仿真次数，不会改动主策略逻辑。')}
@@ -898,16 +903,16 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               <PlannedCapability
                 title={language === 'en' ? 'Grid Search (planned)' : '网格搜索（计划中）'}
                 description={language === 'en'
-                  ? 'Parameter sweeps are not wired into the current professional executor.'
-                  : '参数网格扫描尚未接入当前专业执行流。'}
+                  ? 'Parameter sweeps are not wired into the current advanced research run.'
+                  : '参数网格扫描尚未接入当前进阶运行流。'}
                 testId="pro-advanced-grid-search"
                 language={language}
               />
               <PlannedCapability
                 title={language === 'en' ? 'Bayesian Search (planned)' : '贝叶斯搜索（计划中）'}
                 description={language === 'en'
-                  ? 'Bayesian optimization remains a future capability and does not trigger backend actions today.'
-                  : '贝叶斯优化仍为后续能力，当前不会触发后端动作。'}
+                  ? 'Bayesian optimization remains a future capability and does not trigger run behavior today.'
+                  : '贝叶斯优化仍为后续能力，当前不会触发运行行为。'}
                 testId="pro-advanced-bayesian"
                 language={language}
               />
@@ -919,7 +924,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                 className="rounded-lg border border-white/5 bg-white/[0.02] p-3"
               >
                 <p className="text-sm font-semibold text-white/78">
-                  {language === 'en' ? 'Diagnostics included with this professional run' : '将随本次专业回测提交的诊断配置'}
+                  {language === 'en' ? 'Diagnostics included with this advanced run' : '将随本次进阶回测提交的诊断配置'}
                 </p>
                 <div className="mt-3 flex min-w-0 flex-wrap gap-2">
                   {robustnessSummaryItems.map((item) => (
@@ -956,8 +961,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                       </span>
                       <span className="mt-1 block text-xs leading-5 text-white/48">
                         {language === 'en'
-                          ? 'Used only for robustness diagnostics in Professional mode. It does not require re-parsing and does not change the primary execution logic.'
-                          : '仅用于专业模式下的稳健性诊断，不需要重新解析策略，也不会改变主执行逻辑。'}
+                          ? 'Used only for robustness diagnostics in advanced mode. It does not require re-parsing and does not change the primary simulation logic.'
+                          : '仅用于进阶模式下的稳健性诊断，不需要重新解析策略，也不会改变主模拟逻辑。'}
                       </span>
                     </span>
                   </label>
@@ -992,8 +997,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                   ) : (
                     <p className="text-xs text-white/42">
                       {language === 'en'
-                        ? 'Disabled by default. The professional run request stays unchanged until you opt in.'
-                        : '默认关闭；未启用前，专业模式运行请求保持不变。'}
+                        ? 'Disabled by default. The advanced run request stays unchanged until you opt in.'
+                        : '默认关闭；未启用前，进阶模式运行请求保持不变。'}
                     </p>
                   )}
                 </div>
@@ -1018,8 +1023,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                       </span>
                       <span className="mt-1 block text-xs leading-5 text-white/48">
                         {language === 'en'
-                          ? 'Professional-mode diagnostics only. This uses fixed train/test windows to inspect sample-out stability, without changing primary strategy logic or requiring a re-parse.'
-                          : '仅用于专业模式下的固定窗口样本外诊断，用训练窗/测试窗观察稳健性，不改变主策略逻辑，也不需要重新解析。'}
+                          ? 'Advanced-mode diagnostics only. This uses fixed train/test windows to inspect sample-out stability, without changing primary strategy logic or requiring a re-parse.'
+                          : '仅用于进阶模式下的固定窗口样本外诊断，用训练窗/测试窗观察稳健性，不改变主策略逻辑，也不需要重新解析。'}
                       </span>
                     </span>
                   </label>
@@ -1050,8 +1055,8 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                   ) : (
                     <p className="text-xs text-white/42">
                       {language === 'en'
-                        ? 'Disabled by default. The professional run request adds no walk-forward config until you opt in.'
-                        : '默认关闭；未启用前，专业模式运行请求不会附加滚动样本外配置。'}
+                        ? 'Disabled by default. The advanced run request adds no walk-forward config until you opt in.'
+                        : '默认关闭；未启用前，进阶模式运行请求不会附加滚动样本外配置。'}
                     </p>
                   )}
                 </div>
@@ -1077,7 +1082,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
   const createExecutionRailContent = (readinessTestId: string) => (
     <>
       <div>
-        <p className={labelClass}>{language === 'en' ? 'EXECUTION SUMMARY' : '执行摘要'}</p>
+        <p className={labelClass}>{language === 'en' ? 'RESEARCH RUN SUMMARY' : '回测运行摘要'}</p>
         <div className="mt-3 grid gap-2 text-xs">
           {[
             [language === 'en' ? 'SYMBOL' : '标的', code || '--'],
@@ -1126,7 +1131,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
         </div>
       </div>
       <div data-testid={readinessTestId}>
-        <p className={labelClass}>{language === 'en' ? 'READINESS' : '就绪度'}</p>
+        <p className={labelClass}>{language === 'en' ? 'RESEARCH READINESS' : '研究准备状态'}</p>
         <div className="mt-3 grid gap-2">
           {readiness.map((item) => (
             <div key={item.key} className="flex items-center gap-2 text-xs text-white/60">
@@ -1149,7 +1154,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             disabled={!canRun || isSubmitting}
           >
             <Play className="size-4" />
-            {isSubmitting ? (language === 'en' ? 'Opening result...' : '正在打开结果...') : (language === 'en' ? 'Execute backtest task' : '执行回测任务')}
+            {isSubmitting ? (language === 'en' ? 'Opening result...' : '正在打开结果...') : (language === 'en' ? 'Run backtest study' : '运行回测研究')}
           </button>
           <button type="button" className={secondaryButtonClass} onClick={() => goToStep(stepDefinitions[2])}>
             <ShieldCheck className="size-4" />
@@ -1299,7 +1304,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
       >
         <div data-testid="pro-run-summary-strip" className={`${ghostCardClass} flex min-w-0 flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between`}>
           <div className="min-w-0">
-            <p className={labelClass}>{language === 'en' ? 'Professional deterministic workspace' : '专业确定性回测工作台'}</p>
+            <p className={labelClass}>{language === 'en' ? 'Advanced deterministic workspace' : '进阶确定性回测工作台'}</p>
             <p className="mt-1 truncate text-sm text-white/62">
               {(code || '--')} · {startDate || '--'} {'->'} {endDate || '--'} · <span className="font-mono">{initialCapital || '--'}</span>
             </p>
@@ -1310,7 +1315,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           </div>
         </div>
 
-        <nav data-testid="pro-mobile-step-chips" className="flex min-w-0 gap-2 overflow-x-auto no-scrollbar lg:hidden" aria-label={language === 'en' ? 'Professional steps' : '专业步骤'}>
+        <nav data-testid="pro-mobile-step-chips" className="flex min-w-0 gap-2 overflow-x-auto no-scrollbar lg:hidden" aria-label={language === 'en' ? 'Advanced steps' : '进阶步骤'}>
           {stepDefinitions.map((step) => renderStepButton(step, true))}
         </nav>
 
@@ -1361,7 +1366,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             disabled={!canRun || isSubmitting}
           >
             <Play className="size-4" />
-            {language === 'en' ? 'Execute backtest task' : '执行回测任务'}
+            {language === 'en' ? 'Run backtest study' : '运行回测研究'}
           </button>
         </div>
       </section>
@@ -1407,7 +1412,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <h5 className="truncate text-base font-semibold text-white">{template.name[language]}</h5>
-                        <p className="mt-1 text-sm leading-6 text-white/60">{backtestStrategyDisplayCopy(template.description[language])}</p>
+                        <p className="mt-1 text-sm leading-6 text-white/60">{backtestStrategyDisplayCopy(template.description[language], language)}</p>
                       </div>
                       <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                         template.executable
@@ -1416,15 +1421,15 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                       }`}
                       >
                         {template.executable
-                          ? (language === 'en' ? 'Executable' : '可执行')
+                          ? (language === 'en' ? 'Research simulation' : '可用于研究模拟')
                           : (language === 'en' ? 'Not supported yet' : '当前不支持')}
                       </span>
                     </div>
-                    <p className="mt-3 text-sm leading-6 text-white/70">{backtestStrategyDisplayCopy(template.logicSummary[language])}</p>
+                    <p className="mt-3 text-sm leading-6 text-white/70">{backtestStrategyDisplayCopy(template.logicSummary[language], language)}</p>
                     <div className="mt-4 flex flex-wrap gap-2">
                       {template.defaultParameters.map((parameter) => (
                         <span key={`${template.id}-${parameter.key}`} className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[11px] text-white/58">
-                          {backtestStrategyDisplayCopy(parameter.label[language])}: {parameter.value}
+                          {backtestStrategyDisplayCopy(parameter.label[language], language)}: {parameter.value}
                         </span>
                       ))}
                     </div>
@@ -1432,11 +1437,11 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                       <p className="text-xs leading-5 text-white/45">
                         {template.executable
                           ? (language === 'en'
-                            ? 'Fits the current fixed-rule backtest flow.'
-                            : '该模板可直接用于当前固定规则回测流程。')
+                            ? 'Fits the current fixed-rule backtest research flow.'
+                            : '该模板可用于当前固定规则回测研究流程。')
                           : (language === 'en'
-                            ? 'Reference only. Edit before running.'
-                            : '仅作参考模板。执行前请先在编辑器中修改。')}
+                            ? 'Reference only. Edit before research use.'
+                            : '仅作参考模板。使用前请先在编辑器中修改。')}
                       </p>
                       <button
                         type="button"

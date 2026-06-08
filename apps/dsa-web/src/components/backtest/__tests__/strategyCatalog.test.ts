@@ -109,16 +109,16 @@ describe('strategyCatalog', () => {
 
     expect(rawStrategyText).toContain('买入');
     expect(rawStrategyText).toContain('卖出');
-    expect(displayStrategyText).toContain('正向信号触发');
-    expect(displayStrategyText).toContain('反向信号触发');
+    expect(displayStrategyText).toContain('观察触发');
+    expect(displayStrategyText).toContain('观察解除');
     expect(displayStrategyText).not.toMatch(/买入|卖出|止损|止盈|buy|sell|stop.?loss|take.?profit/i);
 
     const sanitizedCards = BUILT_IN_STRATEGY_CATALOG.map((template) => [
-      backtestStrategyDisplayCopy(template.description.zh),
-      backtestStrategyDisplayCopy(template.logicSummary.zh),
-      backtestStrategyDisplayCopy(template.description.en),
-      backtestStrategyDisplayCopy(template.logicSummary.en),
-      ...template.defaultParameters.map((parameter) => backtestStrategyDisplayCopy(`${parameter.label.zh} ${parameter.label.en}`)),
+      backtestStrategyDisplayCopy(template.description.zh, 'zh'),
+      backtestStrategyDisplayCopy(template.logicSummary.zh, 'zh'),
+      backtestStrategyDisplayCopy(template.description.en, 'en'),
+      backtestStrategyDisplayCopy(template.logicSummary.en, 'en'),
+      ...template.defaultParameters.map((parameter) => `${backtestStrategyDisplayCopy(parameter.label.zh, 'zh')} ${backtestStrategyDisplayCopy(parameter.label.en, 'en')}`),
     ].join(' ')).join(' ');
 
     expect(sanitizedCards).not.toMatch(/买入|卖出|止损|止盈|buy|sell|stop.?loss|take.?profit/i);

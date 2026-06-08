@@ -68,7 +68,7 @@ const ExecutionTracePanel: React.FC<{ run: RuleBacktestRunResponse }> = ({ run }
 
   return (
     <Card
-      title={language === 'en' ? 'Execution trace' : '执行轨迹'}
+      title={language === 'en' ? 'Simulation review trail' : '模拟复核轨迹'}
       subtitle={language === 'en' ? 'Start with key checkpoints, then expand into the full trace when needed.' : '默认先看关键节点，完整轨迹按需展开'}
       className="product-section-card product-section-card--backtest-secondary"
     >
@@ -110,7 +110,7 @@ const ExecutionTracePanel: React.FC<{ run: RuleBacktestRunResponse }> = ({ run }
           </div>
         </div>
 
-        <div className="backtest-mode-toggle mt-4" role="tablist" aria-label={language === 'en' ? 'Execution trace view' : '执行轨迹视图'}>
+        <div className="backtest-mode-toggle mt-4" role="tablist" aria-label={language === 'en' ? 'Simulation review view' : '模拟复核视图'}>
           <button
             type="button"
             role="tab"
@@ -132,7 +132,7 @@ const ExecutionTracePanel: React.FC<{ run: RuleBacktestRunResponse }> = ({ run }
         </div>
 
         {previewRows.length === 0 ? (
-          <div className="product-empty-state product-empty-state--compact mt-4">{language === 'en' ? 'No execution trace is available to display yet.' : '暂无可展示的执行轨迹。'}</div>
+          <div className="product-empty-state product-empty-state--compact mt-4">{language === 'en' ? 'No simulation review trail is available to display yet.' : '暂无可展示的模拟复核轨迹。'}</div>
         ) : (
           <>
             <div className="product-table-shell mt-4">
@@ -176,7 +176,7 @@ const ExecutionTracePanel: React.FC<{ run: RuleBacktestRunResponse }> = ({ run }
       </div>
 
       {(assumptionsSummary || trace?.executionAssumptions || trace?.executionModel) ? (
-        <Disclosure summary={language === 'en' ? 'View advanced execution-trace notes' : '查看执行轨迹高级说明'}>
+        <Disclosure summary={language === 'en' ? 'View advanced simulation-review notes' : '查看模拟复核高级说明'}>
           <div className="backtest-result-page__tab-stack">
             {assumptionsSummary ? <p className="product-section-copy">{assumptionsSummary}</p> : null}
             <div className="preview-grid">
@@ -186,7 +186,7 @@ const ExecutionTracePanel: React.FC<{ run: RuleBacktestRunResponse }> = ({ run }
               </div>
               <div className="preview-card">
                 <p className="metric-card__label">{language === 'en' ? 'Fallback marker' : '回退标记'}</p>
-                <p className="preview-card__text">{fallbackNote || (language === 'en' ? 'Standard execution path' : '标准执行路径')}</p>
+                <p className="preview-card__text">{fallbackNote || (language === 'en' ? 'Standard simulation path' : '标准模拟路径')}</p>
               </div>
             </div>
           </div>

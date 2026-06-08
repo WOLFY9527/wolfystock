@@ -554,7 +554,7 @@ export function describeRuleRunNarrative(
   const benchmarkDelta = asFiniteNumber(run.excessReturnVsBenchmarkPct);
   const buyHoldDelta = asFiniteNumber(run.excessReturnVsBuyAndHoldPct);
   const relativeDelta = benchmarkDelta ?? buyHoldDelta;
-  const relativeTarget = benchmarkDelta != null ? benchmarkLabel : (language === 'en' ? 'hold reference' : '持有参照');
+  const relativeTarget = benchmarkDelta != null ? benchmarkLabel : (language === 'en' ? 'same-instrument holding benchmark' : '同标的持有基准');
   let verdict = language === 'en' ? 'Near the benchmark' : '接近基准';
   if (relativeDelta != null) {
     if (relativeDelta >= 1) verdict = language === 'en' ? `Outperformed ${relativeTarget}` : `跑赢 ${relativeTarget}`;
@@ -599,7 +599,7 @@ export function getRuleRunExecutionNotes(
 ): string[] {
   const notes = [
     trimText(run.executionTrace?.fallback?.note) === '标准执行路径'
-      ? (language === 'en' ? 'Standard execution path' : '标准执行路径')
+      ? (language === 'en' ? 'Standard simulation path' : '标准模拟路径')
       : trimText(run.executionTrace?.fallback?.note),
     trimText(run.executionTrace?.assumptionsDefaults?.summaryText),
     trimText(run.benchmarkSummary?.unavailableReason),
@@ -681,7 +681,7 @@ export function buildRuleRunReportMarkdown(args: {
     '',
     '## Execution and interpretation',
     '',
-    ...(executionNotes.length > 0 ? executionNotes.map((item) => `- ${item}`) : ['- No extra execution notes']),
+    ...(executionNotes.length > 0 ? executionNotes.map((item) => `- ${item}`) : ['- No extra simulation notes']),
     '',
     '## Comparison reference',
     '',
@@ -697,7 +697,7 @@ export function buildRuleRunReportMarkdown(args: {
       : []),
     '## Deep data',
     '',
-    '- The detailed execution trace still lives in CSV / JSON exports.',
+    '- The detailed simulation review trail still lives in CSV / JSON exports.',
     '- For chart interpretation, start with cumulative return, drawdown, and benchmark comparison.',
     ...(robustnessAppendix ? ['', ...robustnessAppendix] : []),
     '',
@@ -724,9 +724,9 @@ export function buildRuleRunReportMarkdown(args: {
     '',
     ...setupHighlights.map((item) => `- ${item}`),
     '',
-    '## 执行与解释',
+    '## 模拟与解释',
     '',
-    ...(executionNotes.length > 0 ? executionNotes.map((item) => `- ${item}`) : ['- 暂无额外执行备注']),
+    ...(executionNotes.length > 0 ? executionNotes.map((item) => `- ${item}`) : ['- 暂无额外模拟备注']),
     '',
     '## 对比参考',
     '',
@@ -742,7 +742,7 @@ export function buildRuleRunReportMarkdown(args: {
       : []),
     '## 深层数据',
     '',
-    '- 详细执行轨迹仍以 CSV / JSON 导出为准。',
+    '- 详细模拟复核轨迹仍以 CSV / JSON 导出为准。',
     '- 图表解读优先查看收益曲线、回撤曲线和基准对照。',
     ...(robustnessAppendix ? ['', ...robustnessAppendix] : []),
     '',
@@ -870,7 +870,7 @@ export function getRuleScenarioPlans(run: RuleBacktestRunResponse): RuleScenario
   const benchmarkVariants = dedupeVariants([
     createScenarioRequest(run, 'Auto Benchmark', { benchmarkMode: 'auto', benchmarkCode: undefined }),
     createScenarioRequest(run, 'No Benchmark', { benchmarkMode: 'none', benchmarkCode: undefined }),
-    createScenarioRequest(run, 'Hold Reference Benchmark', { benchmarkMode: 'same_symbol_buy_and_hold', benchmarkCode: undefined }),
+    createScenarioRequest(run, 'Same-Instrument Holding Benchmark', { benchmarkMode: 'same_symbol_buy_and_hold', benchmarkCode: undefined }),
     createScenarioRequest(run, 'Market Benchmark', {
       benchmarkMode: autoBenchmarkMode,
       benchmarkCode: undefined,

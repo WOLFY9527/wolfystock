@@ -41,7 +41,7 @@ describe('NormalBacktestWorkspace', () => {
     expect(screen.getByLabelText('策略模板')).toBeInTheDocument();
     expect(screen.getByTestId('normal-backtest-template-insights-loading')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '执行回测任务' }));
+    fireEvent.click(screen.getByRole('button', { name: '运行回测研究' }));
 
     expect(onLaunch).toHaveBeenCalledTimes(1);
   });

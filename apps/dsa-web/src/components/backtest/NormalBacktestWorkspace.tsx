@@ -293,7 +293,7 @@ const NormalBacktestWorkspace: React.FC<NormalBacktestWorkspaceProps> = ({
               <span>
                 {isLaunching
                   ? (language === 'en' ? 'Submitting...' : '提交中...')
-                  : (language === 'en' ? 'Execute backtest task' : '执行回测任务')}
+                  : (language === 'en' ? 'Run backtest study' : '运行回测研究')}
               </span>
             </button>
           </div>

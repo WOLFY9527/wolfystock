@@ -29,6 +29,10 @@ import {
 } from './shared';
 import { DeterministicBacktestResultView } from './DeterministicBacktestResultView';
 import type { DeterministicResultDensityConfig } from './deterministicResultDensity';
+import {
+  getBacktestObservationEventLabel,
+  sanitizeBacktestConsumerCopy,
+} from './consumerCopyGuards';
 
 export type BacktestResultReportMode = 'simple' | 'professional';
 
@@ -234,11 +238,11 @@ function humanToken(value: unknown): string {
   const labels: Record<string, string> = {
     adjustment_status_unknown: '复权状态未知',
     market_rules_not_modeled: '涨跌停/停牌未建模',
-    signal_entry: '信号入场',
-    signal_exit: '信号离场',
-    stop_loss: '风险退出参考触发',
-    take_profit: '上方退出参考触发',
-    forced_close: '期末平仓',
+    signal_entry: '信号观察触发',
+    signal_exit: '信号观察解除',
+    stop_loss: '风险阈值解除',
+    take_profit: '收益阈值解除',
+    forced_close: '期末观察解除',
     moving_average_crossover: '均线交叉',
     bar_close: '收盘信号',
     next_bar_open: '次日开盘',
@@ -250,12 +254,12 @@ function humanToken(value: unknown): string {
     not_modeled: '未建模',
     disabled: '禁用',
     unknown: '未提供',
-    local_us_parquet: '本地美股 Parquet',
-    benchmark_security: '基准证券',
+    local_us_parquet: '本地历史数据',
+    benchmark_security: '参照基准',
     daily: '日线',
     '1d': '日线',
   };
-  return labels[normalized] || raw.replaceAll('_', ' ');
+  return labels[normalized] || sanitizeBacktestConsumerCopy(raw.replaceAll('_', ' '), 'zh');
 }
 
 function holdingBucketLabel(bucket: string): string {
@@ -273,7 +277,9 @@ function formatBps(value: unknown): string {
 }
 
 function warningText(warning: BacktestDiagnosticWarning | Record<string, unknown>): string {
-  return safeText(warning.code) ? humanToken(warning.code) : safeText(warning.message) || '元数据提示';
+  return safeText(warning.code)
+    ? humanToken(warning.code)
+    : sanitizeBacktestConsumerCopy(safeText(warning.message) || '元数据提示', 'zh');
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -517,9 +523,9 @@ function getResearchQualityReviewItems({
     ),
     researchReviewItem(
       'trace',
-      '执行轨迹',
+      '模拟复核轨迹',
       traceState,
-      hasExplicitTraceRows ? `执行轨迹 ${traceRows} 行` : run.executionTrace ? '轨迹元数据存在，明细待补' : '未返回执行轨迹',
+      hasExplicitTraceRows ? `模拟复核轨迹 ${traceRows} 行` : run.executionTrace ? '复核材料存在，明细待补' : '未返回模拟复核轨迹',
       ['模拟轨迹仅用于复盘路径，不代表真实成交；partial/no-fill 未建模除非结果明确返回。'],
     ),
     researchReviewItem(
@@ -599,7 +605,10 @@ function assumptionEntries(run: RuleBacktestRunResponse): Array<[string, string]
   const explicit: Array<[string, string]> = [];
   for (const [key, value] of Object.entries(source)) {
     if (value == null || value === '') continue;
-    explicit.push([humanToken(key), typeof value === 'object' ? JSON.stringify(value) : humanToken(value)]);
+    explicit.push([
+      humanToken(key),
+      sanitizeBacktestConsumerCopy(typeof value === 'object' ? JSON.stringify(value) : humanToken(value), 'zh'),
+    ]);
   }
   if (explicit.length) return explicit;
 
@@ -617,8 +626,9 @@ function dataQualityEntries(run: RuleBacktestRunResponse, normalized: Determinis
     const barCount = safeNumber(explicit.barCount);
     const expected = safeNumber(explicit.expectedBarCount);
     const warnings = Array.isArray(explicit.warnings) ? explicit.warnings.length : 0;
+    const sourceRecorded = Boolean(safeText(explicit.provider) || safeText(explicit.source));
     const entries: Array<[string, string | number | null]> = [
-      ['价格源', humanToken(explicit.provider || explicit.source)],
+      ['数据来源状态', sourceRecorded ? '来源口径已记录' : null],
       ['样本频率', humanToken(explicit.frequency)],
       ['样本覆盖', `${barCount ?? '--'} / ${expected ?? '--'}`],
       ['实际区间', explicit.actualStart || explicit.actualEnd ? `${explicit.actualStart || '--'} -> ${explicit.actualEnd || '--'}` : null],
@@ -638,7 +648,7 @@ function dataQualityEntries(run: RuleBacktestRunResponse, normalized: Determinis
   const missingBars = safeNumber((run.summary || {}).missingBars);
   const anomalousBars = safeNumber((run.summary || {}).anomalousBars);
   const entries: Array<[string, string | number | null]> = [
-    ['数据源', source],
+    ['数据来源状态', source ? '来源口径已记录' : null],
     ['频率', frequency],
     ['复权状态', priceBasis],
     ['缺失 bars', missingBars],
@@ -1489,7 +1499,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
             <div>
               <p className={LABEL_CLASS}>持仓时间线</p>
-              <h3 className="mt-1 text-sm font-semibold text-white">模拟正向信号事件 / 模拟反向信号事件</h3>
+              <h3 className="mt-1 text-sm font-semibold text-white">模拟观察触发 / 模拟观察解除</h3>
               <p className="mt-1 text-xs leading-5 text-white/42">模拟事件仅用于回测复盘，不构成交易指令。</p>
             </div>
             <span className="font-mono text-xs text-white/38">前 {EVENT_ROW_LIMIT} 条</span>
@@ -1497,13 +1507,15 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {tradeEvents.length ? tradeEvents.map((event, index) => (
               <div key={`${event.date}-${event.type}-${index}`} className="grid min-w-0 grid-cols-[auto_1fr] gap-3 rounded-xl border border-white/5 bg-black/20 p-3">
-                <div className={`font-mono text-[10px] font-bold ${valueToneClass(event.tone)}`}>{event.type === 'ENTRY' ? '模拟正向信号事件' : '模拟反向信号事件'}</div>
+                <div className={`font-mono text-[10px] font-bold ${valueToneClass(event.tone)}`}>
+                  {getBacktestObservationEventLabel(event.type === 'ENTRY' ? 'entry' : 'exit', 'zh')}
+                </div>
                 <div className="min-w-0">
                   <p className="truncate font-mono text-xs text-white/72">{event.date}</p>
                   <p className="mt-1 truncate text-xs text-white/42">{event.label}</p>
                 </div>
               </div>
-            )) : <p className="text-xs text-white/42">暂无交易事件</p>}
+            )) : <p className="text-xs text-white/42">暂无模拟事件</p>}
           </div>
         </div>
 

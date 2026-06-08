@@ -5,6 +5,10 @@ import type {
   RuleBacktestTradeItem,
 } from '../../types/backtest';
 import { translate } from '../../i18n/core';
+import {
+  getBacktestObservationEventLabel,
+  sanitizeBacktestConsumerCopy,
+} from './consumerCopyGuards';
 
 export type DeterministicBacktestNormalizedRow = {
   date: string;
@@ -111,16 +115,16 @@ function btr(language: BacktestLanguage, key: string, vars?: Record<string, stri
 
 const ACTION_LABELS: Record<BacktestLanguage, Record<string, string>> = {
   zh: {
-    buy: '正向信号',
-    sell: '反向信号',
-    accumulate: '定期观察触发',
-    forced_close: '期末平仓',
+    buy: '观察触发',
+    sell: '观察解除',
+    accumulate: '定投观察触发',
+    forced_close: '期末观察解除',
   },
   en: {
-    buy: 'Positive signal',
-    sell: 'Reverse signal',
-    accumulate: 'Periodic observation',
-    forced_close: 'Forced close',
+    buy: 'Observe trigger',
+    sell: 'Observe release',
+    accumulate: 'Periodic observe trigger',
+    forced_close: 'End-of-window observe release',
   },
 };
 
@@ -196,13 +200,14 @@ function deriveActionFromTrade(trade: RuleBacktestTradeItem, side: 'entry' | 'ex
 }
 
 function sanitizeBenchmarkDisplayLabel(value: string, language: BacktestLanguage): string {
-  const fallback = btr(language, 'buyAndHoldDefault');
+  const fallback = language === 'en' ? 'Same-instrument holding benchmark' : '同标的持有基准';
   const label = safeText(value) || fallback;
-  return label
+  const sanitized = label
     .replace(/当前标的买入并持有|买入并持有|买入持有/g, fallback)
     .replace(/\bBuy and Hold Benchmark\b/gi, language === 'en' ? 'Hold Reference Benchmark' : fallback)
     .replace(/\bBuy and Hold\b/gi, language === 'en' ? 'Hold Reference' : fallback)
     .replace(/\bbuy-and-hold\b/gi, language === 'en' ? 'hold-reference' : fallback);
+  return sanitizeBacktestConsumerCopy(sanitized, language);
 }
 
 function getBenchmarkMeta(
@@ -212,16 +217,13 @@ function getBenchmarkMeta(
 ): DeterministicBacktestBenchmarkMeta {
   const benchmarkSummary = run.benchmarkSummary || {};
   const buyHoldSummary = run.buyAndHoldSummary || null;
-  const benchmarkLabel = sanitizeBenchmarkDisplayLabel(
-    String(benchmarkSummary.label || btr(language, 'benchmarkFallback')),
-    language,
-  );
+  const benchmarkLabel = sanitizeBenchmarkDisplayLabel(String(benchmarkSummary.label || btr(language, 'benchmarkFallback')), language);
   const rawBuyHoldLabel = String(buyHoldSummary?.label || '').trim();
   const buyHoldLabel = rawBuyHoldLabel
     && rawBuyHoldLabel !== btr('zh', 'buyAndHoldDefault')
     && rawBuyHoldLabel !== btr('en', 'buyAndHoldDefault')
     ? sanitizeBenchmarkDisplayLabel(rawBuyHoldLabel, language)
-    : btr(language, 'buyAndHoldDefault');
+    : (language === 'en' ? 'Same-instrument holding benchmark' : '同标的持有基准');
   const showBenchmark = rows.some((row) => row.benchmarkCumReturn != null) && benchmarkSummary.resolvedMode !== 'none';
   const showBuyHold = rows.some((row) => row.buyHoldCumReturn != null)
     && benchmarkSummary.resolvedMode !== 'none'
@@ -392,7 +394,9 @@ function populateFromAuditRows(rowsByDate: Map<string, MutableRow>, auditRows: R
 
 export function formatDeterministicActionLabel(action?: string | null, language: BacktestLanguage = 'zh'): string {
   if (!action) return '--';
-  return ACTION_LABELS[language][action] || action;
+  if (action === 'entry') return getBacktestObservationEventLabel('entry', language);
+  if (action === 'exit') return getBacktestObservationEventLabel('exit', language);
+  return ACTION_LABELS[language][action] || sanitizeBacktestConsumerCopy(action, language);
 }
 
 export function normalizeDeterministicBacktestResult(

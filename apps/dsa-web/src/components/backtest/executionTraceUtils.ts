@@ -15,7 +15,7 @@ const TRACE_EXPORT_COLUMNS: TraceExportColumn[] = [
   { key: 'symbolClose', label: '标的收盘价' },
   { key: 'benchmarkClose', label: '基准收盘价' },
   { key: 'signalSummary', label: '信号摘要' },
-  { key: 'actionDisplay', label: '动作' },
+  { key: 'actionDisplay', label: '模拟事件' },
   { key: 'fillPrice', label: '成交价' },
   { key: 'shares', label: '持股数' },
   { key: 'cash', label: '现金' },
@@ -25,7 +25,7 @@ const TRACE_EXPORT_COLUMNS: TraceExportColumn[] = [
   { key: 'dailyReturn', label: '当日收益率' },
   { key: 'cumulativeReturn', label: '策略累计收益率' },
   { key: 'benchmarkCumulativeReturn', label: '基准累计收益率' },
-  { key: 'buyHoldCumulativeReturn', label: '持有参照累计收益率' },
+  { key: 'buyHoldCumulativeReturn', label: '同标的持有基准累计收益率' },
   { key: 'position', label: '观察状态' },
   { key: 'fees', label: '手续费' },
   { key: 'slippage', label: '滑点' },
@@ -106,8 +106,8 @@ export function hasExecutionTraceRows(run: RuleBacktestRunResponse): boolean {
 export function getExecutionTraceSourceLabel(source?: string | null): string {
   const normalized = String(source || '').trim();
   if (!normalized) return '--';
-  if (normalized === 'storedExecutionTrace') return '已存储 execution_trace';
-  if (normalized === 'rebuiltFromStoredAuditRows') return '由历史 audit rows 回补';
+  if (normalized === 'storedExecutionTrace') return '已存储复核材料';
+  if (normalized === 'rebuiltFromStoredAuditRows') return '由历史审计行回补';
   return normalized;
 }
 

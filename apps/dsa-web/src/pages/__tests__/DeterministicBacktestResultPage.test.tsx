@@ -335,7 +335,7 @@ function makeResultRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBa
         benchmarkClose: row.benchmarkClose,
         signalSummary: row.signalSummary,
         action: row.executedAction,
-        actionDisplay: row.executedAction === 'buy' ? '买入' : row.executedAction === 'sell' ? '卖出' : '持有',
+        actionDisplay: row.executedAction === 'buy' ? '观察触发' : row.executedAction === 'sell' ? '观察解除' : '持有',
         fillPrice: row.fillPrice,
         shares: row.sharesHeld,
         cash: row.cash,
@@ -465,10 +465,10 @@ describe('DeterministicBacktestResultPage', () => {
     renderResultPage();
 
     const timeline = await screen.findByTestId('backtest-report-event-timeline');
-    expect(timeline).toHaveTextContent('模拟正向信号事件 / 模拟反向信号事件');
+    expect(timeline).toHaveTextContent('模拟观察触发 / 模拟观察解除');
     expect(timeline).toHaveTextContent('模拟事件仅用于回测复盘，不构成交易指令。');
-    expect(within(timeline).getByText('模拟正向信号事件')).toBeInTheDocument();
-    expect(within(timeline).getByText('模拟反向信号事件')).toBeInTheDocument();
+    expect(within(timeline).getByText('模拟观察触发')).toBeInTheDocument();
+    expect(within(timeline).getByText('模拟观察解除')).toBeInTheDocument();
     expect(within(timeline).queryByText('买入')).not.toBeInTheDocument();
     expect(within(timeline).queryByText('卖出')).not.toBeInTheDocument();
   }, 10000);
@@ -615,7 +615,7 @@ describe('DeterministicBacktestResultPage', () => {
     const auditPanel = await screen.findByTestId('deterministic-result-tab-panel-audit');
     expect(auditPanel).toBeInTheDocument();
     expect(screen.getByText('日级审计 / 对账')).toBeInTheDocument();
-    expect(within(auditPanel).getByRole('heading', { name: '执行轨迹' })).toBeInTheDocument();
+    expect(within(auditPanel).getByRole('heading', { name: '模拟复核轨迹' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '关键节点' })).toHaveAttribute('aria-selected', 'true');
 
     fireEvent.click(screen.getByRole('tab', { name: '交易记录' }));
@@ -683,7 +683,7 @@ describe('DeterministicBacktestResultPage', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: '审计明细' }));
     const auditPanel = await screen.findByTestId('deterministic-result-tab-panel-audit');
-    const traceHeading = within(auditPanel).getByText('执行轨迹');
+    const traceHeading = within(auditPanel).getByText('模拟复核轨迹');
     const supportExportsHeading = within(auditPanel).getByText('技术支持导出');
     const attributionPanel = within(auditPanel).getByTestId('backtest-drawdown-attribution-panel');
     const attributionHeading = within(attributionPanel).getByText('回撤阶段归因');

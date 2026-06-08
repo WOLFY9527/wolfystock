@@ -981,7 +981,7 @@ describe('BacktestPage', () => {
     expect(screen.getByText('普通模式会先把模板整理为固定规则回测流程，再跳转到独立结果页。')).toBeInTheDocument();
     expect(screen.queryByText('编译预览')).not.toBeInTheDocument();
     expect(screen.queryByText('确定性规则链路')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '执行回测任务' })).toHaveClass('bg-emerald-500/10', 'text-emerald-400', 'rounded-lg');
+    expect(screen.getByRole('button', { name: '运行回测研究' })).toHaveClass('bg-emerald-500/10', 'text-emerald-400', 'rounded-lg');
   });
 
   it('renders exactly one compact semantic backtest page heading without internal terms', async () => {
@@ -1080,9 +1080,9 @@ describe('BacktestPage', () => {
     expect(screen.getByLabelText('开始日期')).toBeInTheDocument();
     expect(screen.getByLabelText('结束日期')).toBeInTheDocument();
     expect(screen.getByLabelText('初始资金')).toBeInTheDocument();
-    expect(within(screen.getByTestId('pro-execution-rail')).getByText('执行摘要')).toBeInTheDocument();
-    expect(within(screen.getByTestId('pro-execution-rail')).getByText('就绪度')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: '执行回测任务' }).length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId('pro-execution-rail')).getByText('回测运行摘要')).toBeInTheDocument();
+    expect(within(screen.getByTestId('pro-execution-rail')).getByText('研究准备状态')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: '运行回测研究' }).length).toBeGreaterThan(0);
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
   });
 
@@ -1100,8 +1100,8 @@ describe('BacktestPage', () => {
     expect(screen.getByText('一次只浏览一个类别，选中后可带回编辑器继续研究。')).toBeInTheDocument();
     expect(screen.getAllByText('基础 / 默认策略').length).toBeGreaterThan(0);
     expect(within(catalog).getByText('均线交叉（SMA / EMA）')).toBeInTheDocument();
-    expect(within(catalog).getAllByText('可执行').length).toBeGreaterThan(0);
-    expect(within(catalog).getAllByText('该模板可直接用于当前固定规则回测流程。').length).toBeGreaterThan(0);
+    expect(within(catalog).getAllByText('可用于研究模拟').length).toBeGreaterThan(0);
+    expect(within(catalog).getAllByText('该模板可用于当前固定规则回测研究流程。').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: '进阶 / 扩展策略' }));
     expect(screen.getByText('简单动量')).toBeInTheDocument();
     expect(screen.getAllByText('当前不支持').length).toBeGreaterThan(0);
@@ -1123,7 +1123,7 @@ describe('BacktestPage', () => {
       expect(screen.queryByTestId('pro-strategy-catalog-drawer')).not.toBeInTheDocument();
     });
 
-    expect(await screen.findByTestId('pro-strategy-catalog-toast')).toHaveTextContent('当前模板暂不支持直接运行，请在编辑器中修改后再执行');
+    expect(await screen.findByTestId('pro-strategy-catalog-toast')).toHaveTextContent('当前模板暂不支持直接研究模拟，请在编辑器中修改后再使用');
     expect(screen.getByDisplayValue('近20日涨幅转正并创新高买入，跌破10日低点卖出')).toBeInTheDocument();
   });
 
@@ -1163,7 +1163,7 @@ describe('BacktestPage', () => {
 
     fireEvent.click(screen.getByTestId('pro-workflow-step-orders'));
     expect(await screen.findByTestId('pro-step-orders')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '执行路由' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '模拟路径' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '风险护栏' })).toBeInTheDocument();
     expect(screen.queryByTestId('pro-step-strategy')).not.toBeInTheDocument();
 
@@ -1195,11 +1195,11 @@ describe('BacktestPage', () => {
     expect(screen.getByText('高级组合设置（计划中）')).toBeInTheDocument();
     fireEvent.click(screen.getByText('高级组合设置（计划中）'));
     expect(await screen.findByText('组合壳层')).toBeInTheDocument();
-    expect(screen.getByText('计划中，尚未接入当前回测执行。')).toBeInTheDocument();
+    expect(screen.getByText('计划中，尚未接入当前回测运行。')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('pro-workflow-step-orders'));
     const ordersStep = await screen.findByTestId('pro-step-orders');
-    expect(within(ordersStep).getByText('执行路由覆盖（计划中）')).toBeInTheDocument();
+    expect(within(ordersStep).getByText('模拟路径覆盖（计划中）')).toBeInTheDocument();
     expect(within(ordersStep).queryByLabelText('事件驱动执行')).not.toBeInTheDocument();
     expect(within(ordersStep).queryByLabelText('止损路由')).not.toBeInTheDocument();
 
@@ -1214,7 +1214,7 @@ describe('BacktestPage', () => {
     expect(within(advancedStep).getByText('Monte Carlo 稳健性诊断')).toBeInTheDocument();
     expect(within(advancedStep).getByText('滚动样本外稳健性预设')).toBeInTheDocument();
     const robustnessSummary = within(advancedStep).getByTestId('pro-robustness-selection-summary');
-    expect(within(robustnessSummary).getByText('将随本次专业回测提交的诊断配置')).toBeInTheDocument();
+    expect(within(robustnessSummary).getByText('将随本次进阶回测提交的诊断配置')).toBeInTheDocument();
     expect(within(robustnessSummary).getByText('本次不附加额外稳健性诊断')).toBeInTheDocument();
     expect(within(advancedStep).getByLabelText('启用 Monte Carlo 稳健性诊断')).not.toBeChecked();
     expect(within(advancedStep).getByLabelText('启用滚动样本外稳健性预设')).not.toBeChecked();
@@ -1235,7 +1235,7 @@ describe('BacktestPage', () => {
     expect(await within(advancedStep).findByLabelText('启用滚动样本外稳健性预设')).toBeInTheDocument();
     expect(within(advancedStep).queryByText('24 / 12 / 12 / 4')).not.toBeInTheDocument();
 
-    expect(screen.getAllByRole('button', { name: '执行回测任务' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: '运行回测研究' }).length).toBeGreaterThan(0);
   });
 
   it('summarizes professional robustness selections without exposing hidden diagnostics', async () => {
@@ -1301,7 +1301,7 @@ describe('BacktestPage', () => {
     expect(within(assumptionsSection).getByText('未显式写出 MACD 参数，当前默认使用 (12, 26, 9)。')).toBeInTheDocument();
 
     fireEvent.click(within(guidanceSection).getByRole('button', {
-      name: /改写成当前可执行版本:\s*AAPL，MACD金叉买入，死叉卖出/i,
+      name: /改写成当前研究模拟版本:\s*AAPL，MACD金叉买入，死叉卖出/i,
     }));
 
     expect(await screen.findByText('已应用建议改写')).toBeInTheDocument();
@@ -1316,12 +1316,12 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('pro-rule-preview')).toBeInTheDocument();
     const executableSpecSection = screen.getByTestId('pro-parsed-summary');
     expect(executableSpecSection).toBeInTheDocument();
-    expect(within(executableSpecSection).getByText('实际执行内容')).toBeInTheDocument();
+    expect(within(executableSpecSection).getByText('研究规格')).toBeInTheDocument();
     expect(within(executableSpecSection).getByText('每个交易日')).toBeInTheDocument();
     expect(within(executableSpecSection).getByText('100 股 / 次')).toBeInTheDocument();
     expect(await screen.findByTestId('pro-assumption-summary')).toBeInTheDocument();
     expect(screen.queryByTestId('backtest-display-board')).not.toBeInTheDocument();
-    expect(screen.getAllByLabelText(/我已确认当前解析结果与执行假设/i)).toHaveLength(1);
+    expect(screen.getAllByLabelText(/我已确认当前解析结果与模拟假设/i)).toHaveLength(1);
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
   });
 
@@ -1332,11 +1332,11 @@ describe('BacktestPage', () => {
 
     fireEvent.click(screen.getByTestId('pro-workflow-step-orders'));
     const riskSection = await screen.findByTestId('pro-risk-controls-summary');
-    expect(within(riskSection).getByText('风险退出参考')).toBeInTheDocument();
+    expect(within(riskSection).getByText('风险阈值')).toBeInTheDocument();
     expect(within(riskSection).getByText('5.00%')).toBeInTheDocument();
-    expect(within(riskSection).getByText('上方退出参考')).toBeInTheDocument();
+    expect(within(riskSection).getByText('收益阈值')).toBeInTheDocument();
     expect(within(riskSection).getByText('10.00%')).toBeInTheDocument();
-    expect(within(riskSection).getByText('移动风险退出参考')).toBeInTheDocument();
+    expect(within(riskSection).getByText('移动风险阈值')).toBeInTheDocument();
     expect(within(riskSection).getByText('8.00%')).toBeInTheDocument();
   });
 
@@ -1425,8 +1425,8 @@ describe('BacktestPage', () => {
 
     await parseDeterministicStrategy();
 
-    fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
-    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
+    fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与模拟假设/i));
+    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '运行回测研究' }));
 
     expect(runRuleBacktest).toHaveBeenCalledTimes(1);
     const payload = vi.mocked(runRuleBacktest).mock.calls[0]?.[0];
@@ -1490,7 +1490,7 @@ describe('BacktestPage', () => {
     await waitFor(() => expect(getResults).toHaveBeenCalledTimes(1));
 
     fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: 'ORCL' } });
-    fireEvent.click(screen.getByRole('button', { name: '执行回测任务' }));
+    fireEvent.click(screen.getByRole('button', { name: '运行回测研究' }));
 
     await waitFor(() => expect(parseRuleStrategy).toHaveBeenCalledTimes(1));
     expect(runRuleBacktest).toHaveBeenCalledTimes(1);
@@ -1517,13 +1517,13 @@ describe('BacktestPage', () => {
 
     await parseDeterministicStrategy();
 
-    fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
+    fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与模拟假设/i));
     fireEvent.click(screen.getByTestId('pro-workflow-step-advanced'));
 
     const advancedStep = await screen.findByTestId('pro-step-advanced');
     fireEvent.click(within(advancedStep).getByRole('button', { name: '稳健性' }));
 
-    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
+    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '运行回测研究' }));
 
     await waitFor(() => expect(runRuleBacktest).toHaveBeenCalledTimes(1));
     const payload = vi.mocked(runRuleBacktest).mock.calls[0]?.[0];
@@ -1542,7 +1542,7 @@ describe('BacktestPage', () => {
 
     await parseDeterministicStrategy();
 
-    fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
+    fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与模拟假设/i));
     fireEvent.click(screen.getByTestId('pro-workflow-step-advanced'));
 
     const advancedStep = await screen.findByTestId('pro-step-advanced');
@@ -1555,7 +1555,7 @@ describe('BacktestPage', () => {
     expect(within(advancedStep).getByText('24 / 12 / 12 / 4')).toBeInTheDocument();
     expect(within(advancedStep).getByText('固定训练窗 / 测试窗 / 步长 / 最大窗口')).toBeInTheDocument();
 
-    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
+    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '运行回测研究' }));
 
     await waitFor(() => expect(runRuleBacktest).toHaveBeenCalledTimes(1));
     const payload = vi.mocked(runRuleBacktest).mock.calls[0]?.[0];
@@ -1583,7 +1583,7 @@ describe('BacktestPage', () => {
 
     await parseDeterministicStrategy();
 
-    fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
+    fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与模拟假设/i));
     fireEvent.click(screen.getByTestId('pro-workflow-step-advanced'));
 
     const advancedStep = await screen.findByTestId('pro-step-advanced');
@@ -1603,7 +1603,7 @@ describe('BacktestPage', () => {
     const walkForwardToggle = await within(advancedStep).findByLabelText('启用滚动样本外稳健性预设');
     fireEvent.click(walkForwardToggle);
 
-    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
+    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '运行回测研究' }));
 
     await waitFor(() => expect(runRuleBacktest).toHaveBeenCalledTimes(1));
     const payload = vi.mocked(runRuleBacktest).mock.calls[0]?.[0];
@@ -1676,8 +1676,8 @@ describe('BacktestPage', () => {
 
     await parseDeterministicStrategy();
 
-    fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与执行假设/i));
-    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '执行回测任务' }));
+    fireEvent.click(screen.getByLabelText(/我已确认当前解析结果与模拟假设/i));
+    fireEvent.click(within(screen.getByTestId('pro-execution-rail')).getByRole('button', { name: '运行回测研究' }));
 
     const alerts = await screen.findAllByRole('alert');
     const alert = alerts.find((node) => node.textContent?.includes('服务器暂时不可用'));
@@ -1816,6 +1816,6 @@ describe('BacktestPage', () => {
     expect(screen.getByRole('tab', { name: bt('en', 'page.historicalTab') })).toBeInTheDocument();
     expect(screen.getByRole('tablist', { name: bt('en', 'page.controlModeLabel') })).toBeInTheDocument();
     expect(screen.getByLabelText('Strategy template')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Execute backtest task' })).toHaveClass('bg-emerald-500/10', 'text-emerald-400', 'rounded-lg');
+    expect(screen.getByRole('button', { name: 'Run backtest study' })).toHaveClass('bg-emerald-500/10', 'text-emerald-400', 'rounded-lg');
   });
 });

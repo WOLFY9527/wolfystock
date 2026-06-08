@@ -90,7 +90,7 @@ export type RuleBenchmarkMode =
 export const RULE_BENCHMARK_OPTIONS: Array<{ value: RuleBenchmarkMode; label: string }> = [
   { value: 'auto', label: translate('zh', 'backtest.benchmarkMode.auto') },
   { value: 'none', label: translate('zh', 'backtest.benchmarkMode.none') },
-  { value: 'same_symbol_buy_and_hold', label: translate('zh', 'backtest.benchmarkMode.same_symbol_buy_and_hold') },
+  { value: 'same_symbol_buy_and_hold', label: '同标的持有基准' },
   { value: 'index_hs300', label: translate('zh', 'backtest.benchmarkMode.index_hs300') },
   { value: 'index_csi500', label: translate('zh', 'backtest.benchmarkMode.index_csi500') },
   { value: 'index_ndx100', label: translate('zh', 'backtest.benchmarkMode.index_ndx100') },
@@ -127,6 +127,9 @@ export function getBenchmarkModeLabel(mode: RuleBenchmarkMode, code?: string, cu
     return normalizedCustomCode
       ? bt(language, 'benchmarkMode.customResolved', { code: normalizedCustomCode })
       : bt(language, 'benchmarkMode.custom_code');
+  }
+  if (mode === 'same_symbol_buy_and_hold') {
+    return language === 'en' ? 'Same-instrument holding benchmark' : '同标的持有基准';
   }
   const label = bt(language, `benchmarkMode.${mode}`);
   return label === `backtest.benchmarkMode.${mode}` ? bt(language, 'benchmarkMode.fallback') : label;
