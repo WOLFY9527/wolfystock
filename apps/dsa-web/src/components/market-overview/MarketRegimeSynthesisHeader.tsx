@@ -12,6 +12,7 @@ export type MarketRegimeSynthesisHeaderView = {
   stateChipLabel: string;
   stateChipVariant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
   primaryRegimeCode?: string;
+  primaryRegimeLabel?: string;
   confidenceLabel: string;
   confidenceValueText: string;
   qualityLine?: string;
@@ -67,15 +68,15 @@ export const MarketRegimeSynthesisHeader: React.FC<{ view: MarketRegimeSynthesis
         </div>
 
         <div className="mt-3 flex min-w-0 flex-wrap gap-2">
-          {view.primaryRegimeCode ? (
+          {view.primaryRegimeLabel ? (
             <TerminalChip
               data-testid="market-regime-synthesis-regime-chip"
               variant="neutral"
               className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest"
             >
-              <span className="text-white/36">Regime</span>
+              <span className="text-white/36">状态</span>
               <span className="max-w-[240px] truncate font-mono normal-case tracking-normal">
-                {view.primaryRegimeCode}
+                {view.primaryRegimeLabel}
               </span>
             </TerminalChip>
           ) : null}

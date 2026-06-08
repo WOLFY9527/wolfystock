@@ -37,6 +37,12 @@ type MarketOverviewWorkbenchGridProps = {
   showExecutiveGroups: boolean;
 };
 
+const EXECUTIVE_COVERAGE_LABELS: Record<MarketOverviewExecutiveGroupView['coverage'], string> = {
+  real: '可用',
+  mixed: '部分可用',
+  fallback: '延迟可用',
+};
+
 const RailSummaryBlock: React.FC<{
   testId: string;
   eyebrow: string;
@@ -122,7 +128,7 @@ const ExecutiveSecondaryGroups: React.FC<{
                 status={group.coverage === 'mixed' ? 'partial' : undefined}
                 className="px-1.5 text-[9px]"
               />
-              <span className="font-mono text-[10px] uppercase text-white/32">{group.coverage}</span>
+              <span className="font-mono text-[10px] uppercase text-white/32">{EXECUTIVE_COVERAGE_LABELS[group.coverage]}</span>
             </div>
           </div>
         </div>

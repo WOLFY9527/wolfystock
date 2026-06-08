@@ -135,6 +135,21 @@ describe('createConsumerDataQualityViewModel', () => {
         confidenceCategory: 'LIMITED',
       },
       {
+        surface: 'Rotation',
+        fragment: {
+          asOf: '2026-05-25',
+          freshnessState: 'fresh',
+          scoreConfidence: 0.72,
+          sourceAuthorityAllowed: true,
+          scoreContributionAllowed: true,
+          observationOnly: true,
+          reasonCodes: ['observation_only'],
+        },
+        status: 'OBSERVATION_ONLY',
+        freshnessCategory: 'CURRENT',
+        confidenceCategory: 'LIMITED',
+      },
+      {
         surface: 'Watchlist',
         fragment: {
           updatedAt: '2026-05-24T15:00:00+08:00',

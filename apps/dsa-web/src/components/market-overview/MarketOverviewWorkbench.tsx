@@ -282,13 +282,13 @@ const US_BREADTH_INPUT_LABELS: Record<string, string> = {
   HIGH_LOW_RATIO: '新高/新低比',
 };
 const US_BREADTH_FRESHNESS_LABELS: Record<string, string> = {
-  live: '实时',
-  delayed: '延迟',
-  cached: '缓存',
-  stale: '数据过期',
-  fallback: '备用数据',
-  mock: '备用数据',
-  error: '数据异常',
+  live: '可用',
+  delayed: '延迟可用',
+  cached: '延迟可用',
+  stale: '延迟可用',
+  fallback: '延迟可用',
+  mock: '证据不足',
+  error: '暂不可用',
   unavailable: '暂不可用',
 };
 
@@ -997,9 +997,9 @@ function heroToneClass(item: MarketOverviewItem | undefined): string {
 
 function formatCoverageSummaryLine(label: string, summary: Record<CardCoverageKind, number>, language: 'zh' | 'en'): string {
   if (language === 'en') {
-    return `Coverage (${label}): real ${summary.real} | mixed ${summary.mixed} | fallback ${summary.fallback}`;
+    return `Coverage (${label}): AVAILABLE ${summary.real} | PARTIAL ${summary.mixed} | DELAYED ${summary.fallback}`;
   }
-  return `${label}数据覆盖：真实 ${summary.real} | 混合 ${summary.mixed} | 备用 ${summary.fallback}`;
+  return `${label}数据覆盖：可用 ${summary.real} | 部分可用 ${summary.mixed} | 延迟可用 ${summary.fallback}`;
 }
 
 function buildMarketOverviewSummaryText(params: {
@@ -1221,7 +1221,7 @@ function regimeLabel(regime?: string | null, language: 'zh' | 'en' = 'zh'): stri
   if (!regime) {
     return language === 'en' ? 'No synthesis conclusion' : '综合结论待返回';
   }
-  return labels[regime as keyof typeof labels] || regime;
+  return labels[regime as keyof typeof labels] || (language === 'en' ? 'Market state pending' : '市场状态待确认');
 }
 
 function regimePillarLabel(pillar?: string | null, language: 'zh' | 'en' = 'zh'): string {
@@ -1251,41 +1251,41 @@ function regimePillarLabel(pillar?: string | null, language: 'zh' | 'en' = 'zh')
   if (!pillar) {
     return language === 'en' ? 'Coverage' : '覆盖';
   }
-  return labels[pillar as keyof typeof labels] || pillar;
+  return labels[pillar as keyof typeof labels] || (language === 'en' ? 'Coverage' : '覆盖');
 }
 
 function regimeGapReasonLabel(reason?: string | null, language: 'zh' | 'en' = 'zh'): string {
   const labels = language === 'en'
     ? {
-      unknown_pillar: 'Unknown pillar',
-      missing_direction_or_magnitude: 'Missing direction or magnitude',
-      source_tier_discount: 'Discounted by source tier',
-      trust_discount: 'Discounted by trust level',
-      freshness_discount: 'Discounted by freshness',
-      observation_only_discount: 'Observation-only evidence',
-      unscorable_quality: 'Unscorable quality',
-      missing_scoring_evidence: 'Missing scoring evidence',
-      conflicts_with_primary_regime: 'Conflicts with primary regime',
-      provider_unavailable: 'Provider unavailable',
-      unavailable: 'Unavailable',
+      unknown_pillar: 'Coverage pending',
+      missing_direction_or_magnitude: 'Direction pending',
+      source_tier_discount: 'Data boundary pending',
+      trust_discount: 'Data boundary pending',
+      freshness_discount: 'DELAYED',
+      observation_only_discount: 'OBSERVATION_ONLY',
+      unscorable_quality: 'INSUFFICIENT',
+      missing_scoring_evidence: 'INSUFFICIENT',
+      conflicts_with_primary_regime: 'Counter signal',
+      provider_unavailable: 'UNAVAILABLE',
+      unavailable: 'UNAVAILABLE',
     }
     : {
-      unknown_pillar: '未识别支柱',
-      missing_direction_or_magnitude: '缺少方向或幅度',
-      source_tier_discount: '来源层级折价',
-      trust_discount: '信任级别折价',
-      freshness_discount: '时效折价',
-      observation_only_discount: '仅观察证据',
-      unscorable_quality: '不可评分质量',
-      missing_scoring_evidence: '缺少可评分证据',
-      conflicts_with_primary_regime: '与主结论相反',
-      provider_unavailable: '数据源暂不可用',
+      unknown_pillar: '覆盖待确认',
+      missing_direction_or_magnitude: '方向待确认',
+      source_tier_discount: '数据边界待确认',
+      trust_discount: '数据边界待确认',
+      freshness_discount: '延迟可用',
+      observation_only_discount: '仅供观察',
+      unscorable_quality: '证据不足',
+      missing_scoring_evidence: '证据不足',
+      conflicts_with_primary_regime: '反向信号',
+      provider_unavailable: '暂不可用',
       unavailable: '暂不可用',
     };
   if (!reason) {
-    return language === 'en' ? 'Explicit gap' : '显式缺口';
+    return language === 'en' ? 'Data boundary pending' : '数据边界待确认';
   }
-  return labels[reason as keyof typeof labels] || reason;
+  return labels[reason as keyof typeof labels] || (language === 'en' ? 'Data boundary pending' : '数据边界待确认');
 }
 
 function synthesisEvidenceMeta(
@@ -1356,11 +1356,11 @@ function buildMarketRegimeSynthesisView(
       state: 'missing',
       title: language === 'en' ? 'No synthesis conclusion returned' : '综合结论待返回',
       summary: language === 'en'
-        ? 'The market temperature payload did not return a synthesis conclusion, so no regime call is fabricated here.'
+        ? 'The market temperature payload did not return a synthesis conclusion, so no market-state call is fabricated here.'
         : '当前温度载荷未返回综合结论字段，不展示推断性市场结论。',
-      stateChipLabel: language === 'en' ? 'Payload Missing' : '载荷缺失',
+      stateChipLabel: language === 'en' ? 'UNAVAILABLE' : '暂不可用',
       stateChipVariant: 'neutral',
-      confidenceLabel: language === 'en' ? 'Unavailable' : '未返回',
+      confidenceLabel: language === 'en' ? 'UNAVAILABLE' : '未返回',
       confidenceValueText: '',
       topDrivers: [],
       counterEvidence: [],
@@ -1397,18 +1397,21 @@ function buildMarketRegimeSynthesisView(
       : regimeLabel(synthesis.primaryRegime, language),
     summary: lowConfidence
       ? (language === 'en'
-        ? 'Coverage or confidence is below threshold. Show the explicit evidence, contradictions, and gaps without promoting a strong regime call.'
+        ? 'Coverage or confidence is below threshold. Show explicit evidence, counter signals, and gaps without promoting a strong market-state call.'
         : '当前覆盖或置信度不足，只展示可验证驱动、反证和数据缺口，不升级为强结论。')
       : (language === 'en'
         ? `Top drivers ${Math.min(synthesis.topDrivers.length, 3)} · counter evidence ${Math.min(synthesis.counterEvidence.length, 3)} · data gaps ${Math.min(dataGapCount, 3)}`
         : `主要驱动 ${Math.min(synthesis.topDrivers.length, 3)} 项 · 反证 ${Math.min(synthesis.counterEvidence.length, 3)} 项 · 数据缺口 ${Math.min(dataGapCount, 3)} 项`),
     stateChipLabel: lowConfidence
       ? (synthesis.primaryRegime === 'data_insufficient'
-        ? (language === 'en' ? 'Data Insufficient' : '数据不足')
-        : (language === 'en' ? 'Low Confidence' : '低置信度'))
-      : (language === 'en' ? 'Primary Regime' : '主市场状态'),
+        ? (language === 'en' ? 'INSUFFICIENT' : '证据不足')
+        : (language === 'en' ? 'OBSERVATION_ONLY' : '仅供观察'))
+      : (language === 'en' ? 'AVAILABLE' : '可用'),
     stateChipVariant: lowConfidence ? 'caution' : 'success',
     primaryRegimeCode: synthesis.primaryRegime,
+    primaryRegimeLabel: lowConfidence
+      ? (language === 'en' ? 'INSUFFICIENT' : '证据不足')
+      : (language === 'en' ? 'AVAILABLE' : '可用'),
     confidenceLabel: regimeConfidenceLabel(synthesis.confidenceLabel, synthesis.confidence),
     confidenceValueText,
     qualityLine: [
@@ -1432,22 +1435,22 @@ function buildMarketOverviewRegimeSummaryView(
   }
 
   const toLineItems = (items: Array<{ key: string; label: string; detail: string }>): MarketOverviewDecisionSemanticsLineView[] => (
-    items.map((item) => ({
+    items.map((item, index) => ({
       key: item.key,
-      label: item.label,
-      meta: item.detail,
+      label: marketOverviewConsumerSemanticsText(item.label, `${language === 'en' ? 'Observation' : '观察'} ${index + 1}`),
+      meta: marketOverviewConsumerSemanticsText(item.detail),
     }))
   );
 
   return {
-    title: summary.title,
-    label: summary.label,
+    title: marketOverviewConsumerSemanticsText(summary.title, language === 'en' ? 'Market state pending' : '市场状态待确认'),
+    label: marketOverviewConsumerSemanticsText(summary.label, language === 'en' ? 'OBSERVATION_ONLY' : '仅供观察'),
     confidenceLabel: language === 'en' ? 'Confidence' : '置信度',
     confidenceValueText: [
       regimeConfidenceLabel(summary.confidence?.label, summary.confidence?.value),
       formatPercent(summary.confidence?.value),
     ].filter(Boolean).join(' · '),
-    explanation: summary.explanation,
+    explanation: marketOverviewConsumerSemanticsText(summary.explanation, language === 'en' ? 'Data boundary pending confirmation.' : '数据边界待确认。'),
     drivers: toLineItems(summary.drivers),
     blockers: toLineItems(summary.blockers),
     contradictions: toLineItems(summary.contradictions),
@@ -1457,6 +1460,34 @@ function buildMarketOverviewRegimeSummaryView(
 
 function marketDecisionSemanticsText(value: unknown): string {
   return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+}
+
+const MARKET_OVERVIEW_CONSUMER_UNSAFE_PATTERN = /\b(?:REAL|MIXED|FALLBACK|REGIME|ALTERNATIVE\.?ME|YFINANCE|CBOE|BINANCE|Yahoo Finance|Binance Futures|provider|sourceTier|sourceLabel|reasonCode|diagnosticOnly|scoreContributionAllowed|sourceAuthorityAllowed|authorityGrant|raw|debug|backend|cache|schema|synthetic|mock|proxy|fallback)\b|market_regime_synthesis|Conflicts With Primary Regime|ETF flow proxy|Institutional pressure proxy|Industry breadth proxy/i;
+
+function marketOverviewConsumerSemanticsText(value: unknown, fallback = ''): string {
+  const text = marketDecisionSemanticsText(value).trim();
+  if (!text) {
+    return fallback;
+  }
+  const projected = text
+    .replace(/market_regime_synthesis/gi, '市场状态')
+    .replace(/Conflicts With Primary Regime/gi, '反向信号')
+    .replace(/ETF flow proxy/gi, '部分可用')
+    .replace(/Institutional pressure proxy/gi, '部分可用')
+    .replace(/Industry breadth proxy/gi, '部分可用')
+    .replace(/\bREAL\b/g, 'AVAILABLE')
+    .replace(/\bMIXED\b/g, 'PARTIAL')
+    .replace(/\bFALLBACK\b/g, 'DELAYED')
+    .replace(/\breal\b/g, 'available')
+    .replace(/\bmixed\b/g, 'partial')
+    .replace(/\bfallback\b/g, 'delayed')
+    .replace(/\bproxy\b/gi, 'partial data')
+    .replace(/\bprovider\b/gi, 'data')
+    .trim();
+  if (!projected || MARKET_OVERVIEW_CONSUMER_UNSAFE_PATTERN.test(projected)) {
+    return fallback;
+  }
+  return projected;
 }
 
 function marketDecisionPostureLabel(posture: string, language: 'zh' | 'en'): string {
@@ -1517,7 +1548,7 @@ function marketDecisionSemanticsLine(
   index: number,
   fallbackPrefix: string,
 ): MarketOverviewDecisionSemanticsLineView {
-  const label = (
+  const rawLabel = (
     marketDecisionSemanticsText(item.label)
     || marketDecisionSemanticsText(item.detail)
     || marketDecisionSemanticsText(item.signal)
@@ -1526,10 +1557,11 @@ function marketDecisionSemanticsLine(
     || marketDecisionSemanticsText(item.key)
     || `${fallbackPrefix} ${index + 1}`
   );
+  const label = marketOverviewConsumerSemanticsText(rawLabel, `${fallbackPrefix} ${index + 1}`);
   const meta = [
     item.reason || item.reasonCode ? marketIntelligenceReasonLabel(marketDecisionSemanticsText(item.reason || item.reasonCode)) : '',
-    marketDecisionSemanticsText(item.surface),
-    marketDecisionSemanticsText(item.label) ? marketDecisionSemanticsText(item.detail) : '',
+    marketOverviewConsumerSemanticsText(item.surface),
+    marketDecisionSemanticsText(item.label) ? marketOverviewConsumerSemanticsText(item.detail) : '',
   ].filter(Boolean).join(' · ');
   return {
     key: `${fallbackPrefix}-${marketDecisionSemanticsText(item.key) || label}-${index}`,
@@ -1796,8 +1828,8 @@ function summarizeDataQuality(panels: PanelState): DataQualitySummary {
     : counts.stale > 0
       ? '存在过期数据'
       : counts.fallback + counts.mock > 0
-        ? '部分备用'
-        : '良好';
+        ? '延迟可用'
+        : '可用';
   return {
     status,
     counts,
@@ -1828,7 +1860,7 @@ function summarizeTopLevelDataStatus(params: {
     return hasRefreshing
       ? {
         kind: 'refreshing',
-        headline: '等待实时源',
+        headline: '正在更新',
         hasUsableData: false,
         hasMissingPanels: true,
       }
@@ -2122,7 +2154,7 @@ const CnShortSentimentCard: React.FC<{
         </div>
         {metrics.length > 6 ? <p className="text-[10px] text-white/38">其余 {metrics.length - 6} 项已折叠</p> : null}
         {loading ? <div className="mt-3 rounded-lg border border-white/8 bg-white/[0.03] p-3 text-sm text-white/60">{t('marketOverviewPage.loading')}</div> : null}
-        <MarketOverviewPanelFooter panel={panel} sourceLabel={data.sourceLabel || `${t('marketOverviewPage.cards.cnShortSentiment.source')}: ${data.source.toUpperCase()}`} />
+        <MarketOverviewPanelFooter panel={panel} sourceLabel={data.sourceLabel || (fallbackOnly ? '延迟可用' : '可用')} />
       </div>
     </MarketOverviewCardFrame>
   );
@@ -2462,13 +2494,13 @@ function useMarketOverviewWorkbenchModel({
         moduleId="usSectorRotation"
         title="行业健康度"
         eyebrow="行业 ETF"
-        description="美股行业 ETF 强弱代理"
+        description="美股行业强弱线索"
         panel={buildFilteredPanel(
           panels.usBreadth,
           'UsSectorHealthModule',
           ['STRONGEST_SECTOR', 'WEAKEST_SECTOR', 'XLK', 'XLF', 'XLY', 'XLE', 'XLV', 'XLI', 'XLP', 'XLU', 'SECTOR_PROXY_UNAVAILABLE'],
         )}
-        sourceLabel="Yahoo Finance"
+        sourceLabel="部分可用"
         refreshing={refreshingPanel === 'usBreadth'}
         onRefresh={() => {
           onRefreshPanel('usBreadth');
@@ -2604,9 +2636,9 @@ function useMarketOverviewWorkbenchModel({
         moduleId="cryptoLiquidity"
         title="加密流动性"
         eyebrow="资金费率 / 流动性"
-        description="资金费率；稳定币与占比在可靠数据源接入前保持不可用"
+        description="资金费率；稳定币与占比在证据补齐前保持不可用"
         panel={buildCryptoLiquidityPanel(panels.crypto)}
-        sourceLabel="Binance Futures / 未接入上下文"
+        sourceLabel="部分可用 / 证据不足"
         refreshing={refreshingPanel === 'crypto'}
         onRefresh={() => {
           onRefreshPanel('crypto');

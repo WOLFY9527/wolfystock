@@ -2587,20 +2587,18 @@ describe('MarketOverviewPage', () => {
 
     render(createElement(MarketOverviewPage));
 
-    expect(await screen.findByText('ETF 资金流指标')).toBeInTheDocument();
-    expect(screen.getByText('机构压力指标')).toBeInTheDocument();
-    expect(screen.getByText('行业广度指标')).toBeInTheDocument();
-    expect(screen.getByText('轮动仅作分类参考')).toBeInTheDocument();
-    expect(screen.getByText(/行业 ETF 指标\s*暂不可用/)).toBeInTheDocument();
-    expect(screen.getByText('Alternative.me 情绪数据')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.body.textContent || '').toMatch(/部分可用|延迟可用|证据不足|仅供观察/);
+    });
 
     const footerTitles = screen.getAllByTestId('market-overview-footer-meta')
       .map((node) => node.getAttribute('title') || '')
       .join(' ');
 
     const renderedCopy = `${document.body.textContent || ''} ${footerTitles}`;
+    expect(renderedCopy).toMatch(/部分可用|延迟可用|证据不足|仅供观察/);
     expect(renderedCopy).not.toMatch(
-      /PROVIDER ALTERNATIVE_ME|ETF flow proxy|Institutional pressure proxy|Industry breadth proxy|Rotation Non Scoring Or Taxonomy Only|Sector ETF proxy/i,
+      /PROVIDER ALTERNATIVE_ME|ETF flow proxy|Institutional pressure proxy|Industry breadth proxy|Rotation Non Scoring Or Taxonomy Only|Sector ETF proxy|Alternative\.me|Yahoo Finance|Binance Futures|YFINANCE|CBOE|BINANCE|REAL|MIXED|FALLBACK|provider|sourceTier|sourceLabel|reasonCode|diagnosticOnly|scoreContributionAllowed|sourceAuthorityAllowed|authorityGrant|raw|debug|backend|cache|schema|synthetic|mock|proxy|fallback/i,
     );
   });
 
@@ -2620,7 +2618,7 @@ describe('MarketOverviewPage', () => {
     const copiedText = String(writeTextMock.mock.calls[0]?.[0] || '');
     expect(copiedText).toContain('市场总览 | 全部');
     expect(copiedText).toContain('市场温度：偏暖（62）');
-    expect(copiedText).toContain('数据质量：部分备用');
+    expect(copiedText).toContain('数据质量：延迟可用');
     expect(copiedText).toContain('市场解读：美股风险偏好偏暖');
     expect(await screen.findByText('已复制摘要')).toBeInTheDocument();
   });
@@ -2875,7 +2873,7 @@ describe('MarketOverviewPage', () => {
     await waitFor(() => {
       expect(within(details).getByTestId('market-regime-synthesis-title')).toHaveTextContent('数据不足');
     });
-    expect(within(details).getByTestId('market-regime-synthesis-state-chip')).toHaveTextContent('数据不足');
+    expect(within(details).getByTestId('market-regime-synthesis-state-chip')).toHaveTextContent('证据不足');
     expect(within(details).getByTestId('market-regime-synthesis-confidence-chip')).toHaveTextContent('数据不足 · 22%');
     expect(within(details).getByTestId('market-regime-synthesis-summary')).toHaveTextContent('当前覆盖或置信度不足');
     expect(within(details).getByTestId('market-regime-synthesis-data-gaps')).toHaveTextContent(/A股宽度/);
@@ -2919,7 +2917,7 @@ describe('MarketOverviewPage', () => {
     expect(evidence).toHaveTextContent('下一步观察');
     expect(evidence).toHaveTextContent('Liquidity beta watch');
     expect(evidence).toHaveTextContent('Liquidity impulse should remain expanding.');
-    expect(evidence).toHaveTextContent('Remove the risk-on watch if liquidity turns mixed or contracting.');
+    expect(evidence).toHaveTextContent('Remove the risk-on watch if liquidity turns partial or contracting.');
     expect(evidence).toHaveTextContent('US10Y');
     expect(evidence).toHaveTextContent('Fed liquidity');
   });
@@ -3058,7 +3056,7 @@ describe('MarketOverviewPage', () => {
     expect(within(details).getByTestId('market-overview-temperature-summary')).not.toHaveTextContent('N/A');
     expect(screen.getByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/暂不形成方向结论|等待数据完成后再判断/);
     expect(within(details).getByTestId('market-regime-synthesis-title')).toHaveTextContent('综合结论待返回');
-    expect(within(details).getByTestId('market-regime-synthesis-state-chip')).toHaveTextContent('载荷缺失');
+    expect(within(details).getByTestId('market-regime-synthesis-state-chip')).toHaveTextContent('暂不可用');
     expect(within(details).getByTestId('market-regime-synthesis-confidence-chip')).toHaveTextContent('未返回');
     expect(within(details).queryByTestId('market-regime-synthesis-regime-chip')).not.toBeInTheDocument();
     expect(within(details).getByTestId('market-regime-synthesis-top-drivers')).toHaveTextContent('暂无可展示驱动');

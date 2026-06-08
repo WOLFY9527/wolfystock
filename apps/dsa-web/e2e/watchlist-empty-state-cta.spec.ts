@@ -90,7 +90,7 @@ test('keeps a single primary scanner CTA in the empty state on desktop', async (
 
   await expect(scannerButton).toHaveCount(1);
   await expect(headerStrip.getByRole('button', { name: '打开扫描器' })).toHaveCount(0);
-  await expect(emptyState).toContainText('从扫描器添加标的到观察列表');
+  await expect(emptyState).toContainText(/从(?:研究)?扫描器添加标的到观察列表/);
   await expect(emptyState).toContainText('添加后可在这里查看已保存的候选证据与状态。');
   await expect(page.getByTestId('watchlist-compact-filter-bar')).toHaveCount(0);
   await expect(page.getByTestId('watchlist-advanced-filters')).toHaveCount(0);
@@ -110,7 +110,7 @@ test('stacks the empty-state CTA cleanly at 390px without overlap', async ({ pag
 
   await expect(scannerButton).toHaveCount(1);
   await expect(headerStrip.getByRole('button', { name: '打开扫描器' })).toHaveCount(0);
-  await expect(emptyState).toContainText('从扫描器添加标的到观察列表');
+  await expect(emptyState).toContainText(/从(?:研究)?扫描器添加标的到观察列表/);
   await expect(page.getByTestId('watchlist-compact-filter-bar')).toHaveCount(0);
   await expect(page.getByTestId('watchlist-command-bar')).toHaveCount(0);
   await expectNoHorizontalOverflow(page);

@@ -144,6 +144,10 @@ const MARKET_OVERVIEW_SETUP_ACTION_CLASS = 'inline-flex min-h-8 items-center rou
 
 function marketOverviewConsumerCopy(text: string): string {
   return text
+    .replace(/存在备用或代理证据负担/g, '当前为延迟可用或部分可用状态')
+    .replace(/备用或代理证据/g, '延迟可用或部分可用状态')
+    .replace(/代理证据/g, '观察线索')
+    .replace(/来源覆盖/g, '证据覆盖')
     .replace(/评分级来源覆盖/g, '充分来源覆盖')
     .replace(/评分级支持证据/g, '充分支持信号')
     .replace(/评分级/g, '充分')
@@ -164,17 +168,17 @@ const MarketOverviewSetupPath: React.FC<{ testId: string }> = ({ testId }) => (
   >
     <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold text-cyan-100/82">查看需配置的数据源</p>
+        <p className="text-[11px] font-semibold text-cyan-100/82">查看数据状态说明</p>
         <p className="mt-1 max-w-3xl text-[11px] leading-5 text-white/52">
-          补齐官方或授权来源、减少备用或代理证据；是否进入评分仍由现有来源门槛决定。
+          补齐可用、部分可用与延迟可用状态；是否进入评分仍由现有证据门槛决定。
         </p>
       </div>
       <div className="flex shrink-0 flex-wrap gap-2">
         <a className={MARKET_OVERVIEW_SETUP_ACTION_CLASS} href={buildProviderOpsSetupHref('market_overview')}>
-          查看提供方运维
+          查看数据状态
         </a>
         <a className={MARKET_OVERVIEW_SETUP_ACTION_CLASS} href={buildDataSourcesSetupHref('market_overview')}>
-          前往数据源设置
+          前往数据设置
         </a>
       </div>
     </div>
@@ -211,8 +215,8 @@ const MarketOverviewDirectionSummary: React.FC<{ summary: MarketDirectionalSumma
         <div key={block.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
           <p className="text-[11px] font-medium text-white/48">{block.title}</p>
           <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
-            {block.items.map((item) => (
-              <span key={item} className={cn('max-w-full truncate rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[11px] font-semibold', block.tone)}>
+            {block.items.map((item, index) => (
+              <span key={`${block.key}-${item}-${index}`} className={cn('max-w-full truncate rounded-md border border-white/[0.06] bg-white/[0.025] px-2 py-1 text-[11px] font-semibold', block.tone)}>
                 {item}
               </span>
             ))}
@@ -505,24 +509,24 @@ function buildOverviewDecisionReadiness(params: {
     ...(readiness?.blockingReasons || []).map((reason) => marketIntelligenceReasonLabel(reason)),
     ...(readiness?.missingPillars || []).map((pillar) => pillar.label),
     ...(view?.dataGaps || []).map((gap) => gap.label),
-    dataState.hasFallback ? '存在备用或代理证据负担' : '',
+    dataState.hasFallback ? '当前为延迟可用或部分可用状态' : '',
     dataState.staleCount > 0 ? '存在过期数据' : '',
-    dataState.hasUnavailable ? '存在不可用来源' : '',
+    dataState.hasUnavailable ? '部分数据暂不可用' : '',
   ];
   const nextEvidence = [
     ...(readiness?.missingPillars || []).map((pillar) => pillar.label),
     ...(view?.dataGaps || []).map((gap) => gap.label),
     ...(view?.invalidationTriggers || []).map((item) => item.label),
-    state === 'ready' ? '继续确认反证是否进入评分级' : '',
+    state === 'ready' ? '继续确认反证是否进入可用状态' : '',
   ];
 
   return {
     state,
     stateLabel: decisionReadinessStateLabel(state),
     stateVariant: decisionReadinessVariant(state),
-    qualityLabel: `评分级 ${scoreGradeCount} · 观察 ${observationOnlyCount} · 缺失 ${missingCount}`,
+    qualityLabel: `可用 ${scoreGradeCount} · 仅供观察 ${observationOnlyCount} · 证据不足 ${missingCount}`,
     blockers: uniqueReadinessItems(rawBlockers, 4, state === 'ready' ? '暂无关键阻塞' : '关键证据仍待补齐'),
-    nextEvidence: uniqueReadinessItems(nextEvidence, 3, '补齐评分级来源覆盖'),
+    nextEvidence: uniqueReadinessItems(nextEvidence, 3, '补齐可用状态覆盖'),
     conclusion: state === 'ready'
       ? decisionText
       : MARKET_DECISION_NOT_READY_NOTICE,
@@ -666,18 +670,18 @@ function confidenceStatusLabel(
 
 function dataStatusLabel(summary: DecisionReadinessSummary, dataState: MarketOverviewDataStateStripView): string {
   if (summary.state === 'waiting' || dataState.isRefreshing) {
-    return '更新中';
+    return '正在更新';
   }
   if (summary.state === 'unavailable') {
-    return '部分不可用';
+    return '部分可用';
   }
   if (dataState.hasUnavailable) {
     return '部分可用';
   }
   if (dataState.staleCount > 0 || dataState.hasFallback) {
-    return '最近一次可用数据';
+    return '延迟可用';
   }
-  return '数据可用';
+  return '可用';
 }
 
 const MarketOverviewConclusionLayer: React.FC<{
@@ -961,7 +965,7 @@ const MarketDecisionSemanticsStrip: React.FC<{
           <TerminalDisclosure
             data-testid="market-decision-debug-details"
             title="技术细节"
-            summary="管理员模式下可查看方向可用性、来源覆盖与原始原因代码"
+            summary="管理员模式下可查看更细的方向可用性与数据状态"
             className="mt-3 bg-black/10"
           >
             {readinessSummary.state !== 'ready' ? (
@@ -995,7 +999,7 @@ const MarketDecisionDebugLoadingFallback: React.FC = () => (
   >
     <p className="text-[11px] font-semibold text-white/72">正在加载技术细节</p>
     <p className="mt-1 text-[11px] leading-5 text-white/42">
-      保留当前方向摘要，补充可用性、来源覆盖与原因代码。
+      保留当前方向摘要，补充可用性与数据状态。
     </p>
   </output>
 );

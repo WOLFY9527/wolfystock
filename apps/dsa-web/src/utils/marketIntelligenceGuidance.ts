@@ -141,8 +141,8 @@ const ZH_REASON_LABELS: Record<string, string> = {
 
 const EN_REASON_LABELS: Record<string, string> = {
   allocation_or_suitability_guidance: 'Suitability boundary',
-  bounded_etf_authority_active: 'Bounded ETF authority active',
-  cache_required: 'Cache and freshness gate required',
+  bounded_etf_authority_active: 'Available',
+  cache_required: 'Delayed data',
   counter_evidence_present: 'Counter-evidence present',
   credential_missing: 'Credential missing',
   data_insufficient: 'Data insufficient',
@@ -151,11 +151,11 @@ const EN_REASON_LABELS: Record<string, string> = {
   fallback_or_proxy_evidence: 'Partial data unavailable',
   fallback_proxy_or_observation_only_evidence_present: 'Limited confidence evidence',
   freshness_floor_required: 'Freshness floor required',
-  ineligible_bounded_etf: 'Bounded ETF set is not eligible',
+  ineligible_bounded_etf: 'Insufficient evidence',
   insufficient_score_grade_evidence: 'Score-grade evidence insufficient',
   market_direction_readiness_context: 'Direction readiness boundary',
-  missing_provider_configuration: 'Provider/runtime contract not configured',
-  missing_required_windows: 'Required ETF windows are missing',
+  missing_provider_configuration: 'Data unavailable',
+  missing_required_windows: 'Insufficient evidence',
   missing_scoring_evidence: 'Score-grade evidence missing',
   missing_scoring_pillars: 'Scoring pillars missing',
   no_meaningful_score_grade_pillars: 'No meaningful score-grade pillars',
@@ -163,21 +163,21 @@ const EN_REASON_LABELS: Record<string, string> = {
   observation_only: 'Observation-only',
   observation_only_discount: 'Observation-only evidence',
   observation_only_evidence: 'Observation-only evidence',
-  official_fed_liquidity_contract_not_configured: 'Fed liquidity official contract not configured',
+  official_fed_liquidity_contract_not_configured: 'Data unavailable',
   partial_coverage: 'Partial coverage',
-  provider_absent: 'Required provider not configured',
-  provider_forbidden_for_use_case: 'Source not allowed for this use case',
-  provider_observation_only: 'Provider is observation-only',
-  proxy_context_only: 'Proxy data is context-only',
+  provider_absent: 'Data unavailable',
+  provider_forbidden_for_use_case: 'Observation only',
+  provider_observation_only: 'Observation only',
+  proxy_context_only: 'Observation only',
   proxy_only_missing_real_source: 'More market data needed',
   proxy_or_observation_only_evidence: 'Observation-only evidence',
   rotation_non_scoring_or_taxonomy_only: 'Rotation evidence is taxonomy-only',
   score_contribution_not_allowed: 'Not score-grade eligible',
   score_grade_evidence: 'Score-grade evidence',
-  source_authority_router_rejected: 'Source authority gate did not pass',
+  source_authority_router_rejected: 'Observation only',
   trade_instruction: 'Execution boundary',
   trust_gate_blocked: 'Trust gate blocked',
-  unavailable_source: 'Source unavailable',
+  unavailable_source: 'Data unavailable',
   watch_only_language: 'Observation-only language',
 };
 
@@ -186,11 +186,7 @@ function normalizeReason(value?: string | null): string {
 }
 
 function titleCaseFromCode(value: string): string {
-  return value
-    .split('_')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
+  return value ? '数据边界待确认' : '';
 }
 
 export function marketIntelligenceReasonLabel(
@@ -202,7 +198,10 @@ export function marketIntelligenceReasonLabel(
     return locale === 'en' ? 'Data availability unconfirmed' : '数据状态待确认';
   }
   const labels = locale === 'en' ? EN_REASON_LABELS : ZH_REASON_LABELS;
-  return labels[normalized] || titleCaseFromCode(normalized);
+  if (labels[normalized]) {
+    return labels[normalized];
+  }
+  return locale === 'en' ? 'Data boundary pending confirmation' : titleCaseFromCode(normalized);
 }
 
 export function marketIntelligenceReasonLabels(
@@ -306,7 +305,7 @@ function marketDirectionalPhrase(
       bullish: 'bullish watch',
       bearish: 'bearish watch',
       neutral: 'neutral',
-      mixed: 'mixed, cautious',
+      mixed: 'divergent, cautious',
       insufficient_evidence: 'insufficient evidence',
     }
     : {
@@ -516,7 +515,7 @@ export function buildLiquidityRegimeGaugeSummary({
         : ['流动性仅可作为观察背景', '等待确认'];
 
   return {
-    title: 'Liquidity Regime Gauge',
+    title: '资金面状态',
     stateLabel: `流动性状态：${state}`,
     degreeLabel: `刻度 ${Number.isFinite(data.score.value) ? Math.round(data.score.value) : 0} / 100`,
     trendLabel: `趋势：${trend}`,

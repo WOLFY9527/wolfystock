@@ -5,7 +5,8 @@ export type ConsumerDataQualityStatus =
   | 'PARTIAL'
   | 'INSUFFICIENT'
   | 'PAUSED'
-  | 'UNAVAILABLE';
+  | 'UNAVAILABLE'
+  | 'OBSERVATION_ONLY';
 
 export type ConsumerDataQualityFreshnessCategory =
   | 'CURRENT'
@@ -84,6 +85,10 @@ const STATUS_MESSAGES: Record<ConsumerDataQualityStatus, { key: string; message:
   UNAVAILABLE: {
     key: 'dataQuality.unavailable',
     message: '本模块暂不可用，请稍后重试。',
+  },
+  OBSERVATION_ONLY: {
+    key: 'dataQuality.observation',
+    message: '当前仅供观察。',
   },
 };
 
@@ -259,6 +264,7 @@ function resolveStatus(facts: ConsumerDataQualityFacts): ConsumerDataQualityStat
   if (lowCoverage && (facts.observationOnly || facts.scoreContributionDenied || facts.isProxy)) return 'INSUFFICIENT';
   if (facts.isPartial) return 'PARTIAL';
   if (facts.scoreContributionDenied && facts.observationOnly) return 'PAUSED';
+  if (facts.observationOnly) return 'OBSERVATION_ONLY';
   if (lowCoverage || lowConfidence) return 'INSUFFICIENT';
   if (facts.isStale || facts.isFallback || facts.isProxy || containsAny(facts.freshnessText, DELAYED_MARKERS)) return 'DELAYED';
   if (!facts.sourceAuthorityGranted || facts.scoreContributionDenied) return 'INSUFFICIENT';

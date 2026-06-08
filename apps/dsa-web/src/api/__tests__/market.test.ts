@@ -27,6 +27,34 @@ describe('market API path join hygiene', () => {
 });
 
 describe('market temperature evidence normalization', () => {
+  it('projects raw provider and runtime source labels into canonical consumer data states', () => {
+    const cases = [
+      ['PROVIDER ALTERNATIVE_ME', '可用'],
+      ['ALTERNATIVE.ME', '可用'],
+      ['YFINANCE', '可用'],
+      ['YAHOO FINANCE', '可用'],
+      ['CBOE', '可用'],
+      ['BINANCE', '可用'],
+      ['REAL', '可用'],
+      ['MIXED', '部分可用'],
+      ['FALLBACK', '延迟可用'],
+      ['ETF flow proxy', '部分可用'],
+      ['Institutional pressure proxy', '部分可用'],
+      ['Industry breadth proxy', '部分可用'],
+      ['Binance Futures', '可用'],
+      ['local cache', '延迟可用'],
+      ['synthetic fixture', '证据不足'],
+    ] as const;
+
+    for (const [rawLabel, productLabel] of cases) {
+      const normalized = marketModule.normalizeMarketConsumerText(rawLabel);
+      expect(normalized, rawLabel).toBe(productLabel);
+      expect(normalized, rawLabel).not.toMatch(
+        /ALTERNATIVE\.?ME|YFINANCE|YAHOO FINANCE|Yahoo Finance|CBOE|BINANCE|Binance Futures|REAL|MIXED|FALLBACK|fallback|proxy|cache|synthetic|mock|provider/i,
+      );
+    }
+  });
+
   it('rewrites fallback demo wording into consumer-safe observation copy', () => {
     const panel = marketModule.normalizeMarketOverviewPanelConsumerCopy({
       panelName: 'ChinaIndicesCard',
@@ -48,9 +76,9 @@ describe('market temperature evidence normalization', () => {
       ],
     });
 
-    expect(panel.sourceLabel).toBe('最近可用数据');
+    expect(panel.sourceLabel).toBe('延迟可用');
     expect(panel.warning).toBe('已使用最近一次可用数据，不代表当前实时行情');
-    expect(panel.items[0].sourceLabel).toBe('最近可用数据');
+    expect(panel.items[0].sourceLabel).toBe('延迟可用');
     expect(panel.items[0].warning).toBe('当前关键数据不足，暂不形成方向判断。');
     expect(panel.items[0].hoverDetails).toEqual(['最近可用数据仅保留市场结构观察']);
   });
