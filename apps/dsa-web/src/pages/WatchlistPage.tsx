@@ -145,7 +145,7 @@ function formatMarket(value?: string | null): string {
 
 function formatWatchlistOrigin(value?: string | null, language: 'zh' | 'en' = 'zh'): string {
   const token = normalizeToken(value);
-  if (token === 'scanner' || token === 'scanner_run') return language === 'en' ? 'Scanner candidate' : '扫描候选';
+  if (token === 'scanner' || token === 'scanner_run') return language === 'en' ? 'Research candidate' : '研究候选';
   if (token === 'portfolio') return language === 'en' ? 'Portfolio watch' : '组合观察';
   if (token === 'manual') return language === 'en' ? 'Manual add' : '手动加入';
   if (token === 'imported' || token === 'import') return language === 'en' ? 'Imported' : '批量导入';
@@ -174,13 +174,10 @@ function formatDateTime(value?: string | null, language: 'zh' | 'en' = 'zh'): st
   return WATCHLIST_DATE_TIME_FORMATTERS[language].format(date);
 }
 
-function titleCaseFromSnake(value?: string | null): string {
-  if (!value) return '';
-  return value
-    .split('_')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
+function hasInternalConsumerCopy(value?: string | null): boolean {
+  const text = normalizeText(value).toLowerCase();
+  if (!text) return false;
+  return /sourceauthorityallowed|scorecontributionallowed|reasonfamilies|reasoncode|source_confidence|score_blocked|raw diagnostics?|json|debug|provider|proxy|fallback|cache\/status|cache|runtime|source ?tier|source ?authority|scannerrunid|scanner_run_id|scanner_run|source_freshness|observationonly|synthetic_fixture|official_macro_cache_status|stored_news_catalyst_proxy|exposure/.test(text);
 }
 
 function getItemTime(item: WatchlistItem): number {
@@ -491,6 +488,9 @@ function formatScannerReason(reason?: string | null, language: 'zh' | 'en' = 'zh
   const raw = String(reason || '').trim();
   if (!raw) return null;
   const normalized = raw.toLowerCase();
+  if (/latest scanner score/.test(normalized)) {
+    return language === 'en' ? 'Latest research score.' : '最新研究评分。';
+  }
   if (normalized === 'unknown' || normalized.includes('debug') || normalized.includes('critical')) {
     return null;
   }
@@ -540,9 +540,9 @@ function formatLineageFreshness(lineage: WatchlistScannerLineageV1, language: 'z
 
 function formatLineageSnapshotLabel(lineage: WatchlistScannerLineageV1, language: 'zh' | 'en'): string {
   if (lineage.scoreSnapshotKind === 'post_add_refresh') {
-    return language === 'en' ? 'Post-add refresh' : '加入后刷新';
+    return language === 'en' ? 'Updated after save' : '保存后更新';
   }
-  return language === 'en' ? 'Saved at add' : '加入时快照';
+  return language === 'en' ? 'Saved observation' : '已保存观察';
 }
 
 function buildScannerLineageView(
@@ -566,20 +566,20 @@ function buildScannerLineageView(
     language === 'en' ? 'Keep observing after more evidence.' : '补充证据后继续观察。',
   );
   const scoreLine = [
-    typeof lineage.rankAtScan === 'number' ? `${language === 'en' ? 'Scan rank' : '扫描排名'} #${lineage.rankAtScan}` : null,
-    typeof lineage.scoreAtScan === 'number' ? `${language === 'en' ? 'Score' : '分数'} ${formatScore(lineage.scoreAtScan)}` : null,
+    typeof lineage.rankAtScan === 'number' ? `${language === 'en' ? 'Candidate order' : '候选序位'} #${lineage.rankAtScan}` : null,
+    typeof lineage.scoreAtScan === 'number' ? `${language === 'en' ? 'Research score' : '研究评分'} ${formatScore(lineage.scoreAtScan)}` : null,
   ].filter(Boolean).join(' · ');
   const metadata = [
     scoreLine || null,
-    lineage.runProfile ? `${language === 'en' ? 'Profile' : '运行'} ${lineage.runProfile}` : null,
-    lineage.runCompletedAt ? `${language === 'en' ? 'Completed' : '完成'} ${formatDateTime(lineage.runCompletedAt, language)}` : null,
-    lineage.watchlistAddedAt ? `${language === 'en' ? 'Added' : '加入'} ${formatDateTime(lineage.watchlistAddedAt, language)}` : null,
-    lineage.themeId ? `${language === 'en' ? 'Theme' : '主题'} ${lineage.themeId}` : null,
-    lineage.universeType ? `${language === 'en' ? 'Universe' : '候选范围'} ${lineage.universeType}` : null,
+    lineage.runProfile ? (language === 'en' ? 'Research window recorded' : '研究窗口已记录') : null,
+    lineage.runCompletedAt ? `${language === 'en' ? 'Research updated' : '研究更新'} ${formatDateTime(lineage.runCompletedAt, language)}` : null,
+    lineage.watchlistAddedAt ? `${language === 'en' ? 'Saved' : '加入观察'} ${formatDateTime(lineage.watchlistAddedAt, language)}` : null,
+    lineage.themeId ? (language === 'en' ? 'Theme context recorded' : '主题线索已记录') : null,
+    lineage.universeType ? (language === 'en' ? 'Candidate scope recorded' : '候选范围已记录') : null,
   ].filter(Boolean) as string[];
 
   return {
-    summary: `${language === 'en' ? 'From Scanner' : '来自扫描器'} · ${freshnessLabel} · ${stateLabel}`,
+    summary: `${language === 'en' ? 'Research workflow' : '研究流程记录'} · ${freshnessLabel} · ${stateLabel}`,
     snapshotLabel,
     stateLabel,
     freshnessLabel,
@@ -593,20 +593,20 @@ function normalizeToken(value?: string | null): string {
   return normalizeText(value).toLowerCase();
 }
 
-const INVESTOR_SIGNAL_REASON_LABELS: Record<string, string> = {
-  fallback_source: '仅备用来源',
-  source_authority_missing: '来源权限未确认',
-  source_authority_router_rejected: '来源权限路由未通过',
-  score_rights_missing: '当前不允许计分',
-  score_contribution_not_allowed: '当前不允许计分',
-  observation_only: '仅观察态',
-  observation_only_discount: '仅观察，不升格结论',
-  freshness_discount: '时效折价',
-  source_tier_discount: '来源层级折价',
-  provider_unavailable: '数据源暂不可用',
-  partial_coverage: '覆盖不完整',
-  blocked: '暂不判断',
-  mixed: '信号分化',
+const INVESTOR_SIGNAL_REASON_LABELS: Record<string, { zh: string; en: string }> = {
+  fallback_source: { zh: '证据较弱', en: 'Limited evidence' },
+  source_authority_missing: { zh: '证据仍待确认', en: 'Evidence still needs confirmation' },
+  source_authority_router_rejected: { zh: '证据仍待确认', en: 'Evidence still needs confirmation' },
+  score_rights_missing: { zh: '评分依据不足', en: 'Scoring evidence is limited' },
+  score_contribution_not_allowed: { zh: '评分依据不足', en: 'Scoring evidence is limited' },
+  observation_only: { zh: '仅供观察', en: 'Observation only' },
+  observation_only_discount: { zh: '仅供观察', en: 'Observation only' },
+  freshness_discount: { zh: '时效较弱', en: 'Freshness is limited' },
+  source_tier_discount: { zh: '证据较弱', en: 'Limited evidence' },
+  provider_unavailable: { zh: '部分数据暂不可用', en: 'Some data is temporarily unavailable' },
+  partial_coverage: { zh: '覆盖不完整', en: 'Coverage is partial' },
+  blocked: { zh: '暂不判断', en: 'Not enough evidence to judge' },
+  mixed: { zh: '信号分化', en: 'Signals are mixed' },
 };
 
 const INVESTOR_SIGNAL_CONTRADICTION_LABELS: Record<string, { zh: string; en: string }> = {
@@ -624,53 +624,51 @@ const INVESTOR_SIGNAL_CONTRADICTION_LABELS: Record<string, { zh: string; en: str
 const INVESTOR_SIGNAL_FRESHNESS_LABELS: Record<string, { zh: string; en: string }> = {
   live: { zh: '已更新', en: 'Updated' },
   delayed: { zh: '更新中', en: 'Refreshing' },
-  cached: { zh: '已缓存', en: 'Cached' },
-  stale: { zh: '较旧', en: 'Stale' },
-  fallback: { zh: '备用来源', en: 'Fallback' },
-  mock: { zh: '模拟来源', en: 'Mock' },
+  cached: { zh: '最近可用', en: 'Recent available' },
+  stale: { zh: '较旧', en: 'Older context' },
+  fallback: { zh: '最近可用', en: 'Recent available' },
+  mock: { zh: '数据待确认', en: 'Context pending' },
   error: { zh: '暂不可用', en: 'Unavailable' },
 };
 
 const CATALYST_EXPOSURE_CATEGORY_LABELS: Record<string, { zh: string; en: string }> = {
-  earnings_fundamental_snapshot: { zh: '基本面快照', en: 'Fundamental snapshot exposure' },
-  stored_news_catalyst_proxy: { zh: '已保存新闻线索', en: 'Stored news catalyst proxy' },
-  official_macro_cache_status: { zh: '宏观缓存背景', en: 'Official macro cache/status exposure' },
+  earnings_fundamental_snapshot: { zh: '基本面线索', en: 'Fundamental context' },
+  stored_news_catalyst_proxy: { zh: '已保存新闻线索', en: 'Saved news context' },
+  official_macro_cache_status: { zh: '宏观背景线索', en: 'Macro context' },
 };
 
 const CATALYST_EXPOSURE_STATUS_LABELS: Record<string, { zh: string; en: string }> = {
-  delayed: { zh: '延迟快照', en: 'Delayed evidence' },
-  proxy: { zh: '代理线索', en: 'Proxy evidence' },
-  stale: { zh: '陈旧证据', en: 'Stale evidence' },
-  unverified: { zh: '待核实', en: 'Unverified' },
+  delayed: { zh: '更新延迟', en: 'Delayed context' },
+  proxy: { zh: '线索待确认', en: 'Context only' },
+  stale: { zh: '较旧线索', en: 'Older context' },
+  unverified: { zh: '待确认', en: 'Unconfirmed' },
 };
 
 const CATALYST_EXPOSURE_REASON_LABELS: Record<string, { zh: string; en: string }> = {
-  observation_only: { zh: '仅观察', en: 'Observation only' },
-  delayed_evidence: { zh: '延迟快照', en: 'Delayed evidence' },
-  stale_evidence: { zh: '陈旧证据', en: 'Stale evidence' },
-  proxy_evidence_not_authoritative: { zh: '已保存新闻，仅作线索', en: 'Stored news is context only' },
-  not_earnings_calendar: { zh: '非财报日历主张', en: 'Not an earnings-calendar claim' },
-  fundamental_snapshot_present: { zh: '已保存基本面快照', en: 'Saved fundamental snapshot' },
-  official_macro_cache_status_present: { zh: '已保存宏观缓存背景', en: 'Saved macro cache context' },
-  stored_news_catalyst_proxy: { zh: '已保存新闻线索', en: 'Stored news catalyst proxy' },
+  observation_only: { zh: '仅供观察', en: 'Observation only' },
+  delayed_evidence: { zh: '更新延迟', en: 'Delayed context' },
+  stale_evidence: { zh: '较旧线索', en: 'Older context' },
+  proxy_evidence_not_authoritative: { zh: '仅作线索', en: 'Context only' },
+  not_earnings_calendar: { zh: '日程仍待确认', en: 'Calendar context unconfirmed' },
+  fundamental_snapshot_present: { zh: '基本面线索已记录', en: 'Fundamental context saved' },
+  official_macro_cache_status_present: { zh: '宏观线索已记录', en: 'Macro context saved' },
+  stored_news_catalyst_proxy: { zh: '新闻线索已记录', en: 'News context saved' },
 };
 
 function formatInvestorSignalCode(code: string, language: 'zh' | 'en'): string {
   const normalized = normalizeToken(code);
   if (!normalized) return '';
-  if (language === 'zh') {
-    return INVESTOR_SIGNAL_REASON_LABELS[normalized] || titleCaseFromSnake(normalized);
-  }
-  return titleCaseFromSnake(normalized);
+  const label = INVESTOR_SIGNAL_REASON_LABELS[normalized];
+  if (label) return label[language];
+  return language === 'zh' ? '观察条件待确认' : 'Observation pending';
 }
 
 function formatInvestorSignalReason(code: string, language: 'zh' | 'en'): string {
   const normalized = normalizeToken(code);
   if (!normalized) return '';
-  if (language === 'zh') {
-    return INVESTOR_SIGNAL_REASON_LABELS[normalized] || '观察条件待确认';
-  }
-  return titleCaseFromSnake(normalized);
+  const label = INVESTOR_SIGNAL_REASON_LABELS[normalized];
+  if (label) return label[language];
+  return language === 'zh' ? '观察条件待确认' : 'Observation pending';
 }
 
 function formatInvestorSignalContradiction(code: string, language: 'zh' | 'en'): string {
@@ -686,7 +684,7 @@ function formatInvestorSignalFreshness(freshness?: string | null, language: 'zh'
   if (!normalized) return null;
   const labels = INVESTOR_SIGNAL_FRESHNESS_LABELS[normalized];
   if (labels) return labels[language];
-  return language === 'zh' ? titleCaseFromSnake(normalized) : titleCaseFromSnake(normalized);
+  return language === 'zh' ? '最近可用' : 'Recent available';
 }
 
 function formatInvestorSignalConfidence(signal?: InvestorSignalContract | null, language: 'zh' | 'en' = 'zh'): string | null {
@@ -749,15 +747,37 @@ function formatCatalystExposureLabel(value: string, language: 'zh' | 'en'): stri
   if (statusLabels) return statusLabels[language];
   const reasonLabels = CATALYST_EXPOSURE_REASON_LABELS[normalized];
   if (reasonLabels) return reasonLabels[language];
-  return language === 'zh' ? titleCaseFromSnake(normalized) : titleCaseFromSnake(normalized);
+  return language === 'zh' ? '线索待确认' : 'Context pending';
 }
 
 function formatCatalystExposureTitle(item: WatchlistCatalystExposure, language: 'zh' | 'en'): string {
-  const title = normalizeText(item.title);
-  if (title) return title;
   const categoryLabels = CATALYST_EXPOSURE_CATEGORY_LABELS[normalizeToken(item.category)];
   if (categoryLabels) return categoryLabels[language];
-  return language === 'zh' ? '催化剂观察' : 'Catalyst exposure';
+  const title = normalizeText(item.title);
+  if (title && !hasInternalConsumerCopy(title)) return title;
+  return language === 'zh' ? '催化剂观察' : 'Catalyst context';
+}
+
+function formatCatalystExposureSummary(item: WatchlistCatalystExposure, language: 'zh' | 'en'): string {
+  const category = normalizeToken(item.category);
+  if (category === 'earnings_fundamental_snapshot') {
+    return language === 'zh'
+      ? '已保存基本面线索，适合继续观察。'
+      : 'Saved fundamental context is available for observation.';
+  }
+  if (category === 'stored_news_catalyst_proxy') {
+    return language === 'zh'
+      ? '已保存新闻线索，可作为观察背景。'
+      : 'Saved news context is available for observation.';
+  }
+  if (category === 'official_macro_cache_status') {
+    return language === 'zh'
+      ? '宏观背景较旧，阅读时降低置信度。'
+      : 'Macro context is older, so read it with lower confidence.';
+  }
+  const summary = normalizeText(item.summary);
+  if (summary && !hasInternalConsumerCopy(summary)) return summary;
+  return language === 'zh' ? '已保存线索可供观察。' : 'Saved context is available for observation.';
 }
 
 function buildCatalystExposureMetadata(
@@ -781,7 +801,7 @@ function buildWatchlistCatalystExposureView(
     .map((item) => ({
       id: item.id,
       title: formatCatalystExposureTitle(item, language),
-      summary: normalizeText(item.summary),
+      summary: formatCatalystExposureSummary(item, language),
       statusLabels: Array.from(new Set([
         formatCatalystExposureLabel(item.evidenceStatus || '', language),
         ...((item.evidenceLabels || []).map((label) => formatCatalystExposureLabel(label, language))),
@@ -931,12 +951,12 @@ function buildScannerLineageCue(item: WatchlistItem, language: 'zh' | 'en'): Wat
   if (lineage?.scoreSnapshotKind === 'post_add_refresh') {
     return language === 'en'
       ? {
-        label: 'Post-add refresh',
-        detail: 'Score was refreshed after this item was added; it may reflect a later scanner observation.',
+        label: 'Updated after save',
+        detail: 'Research score was refreshed after this item was saved; read it as a newer observation.',
       }
       : {
-        label: '加入后刷新',
-        detail: '评分在加入后刷新，可能反映后续扫描观察。',
+        label: '保存后更新',
+        detail: '研究评分在保存后更新，可视为较新的观察记录。',
       };
   }
   if (!item.scannerRunId || !item.lastScoredAt || !item.createdAt) return null;
@@ -946,12 +966,12 @@ function buildScannerLineageCue(item: WatchlistItem, language: 'zh' | 'en'): Wat
 
   return language === 'en'
     ? {
-      label: 'Post-add refresh',
-      detail: 'Score was refreshed after this item was added; it may reflect a later scanner observation.',
+      label: 'Updated after save',
+      detail: 'Research score was refreshed after this item was saved; read it as a newer observation.',
     }
     : {
-      label: '加入后刷新',
-      detail: '评分在加入后刷新，可能反映后续扫描观察。',
+      label: '保存后更新',
+      detail: '研究评分在保存后更新，可视为较新的观察记录。',
     };
 }
 
@@ -1075,48 +1095,48 @@ function getCopy(language: 'zh' | 'en') {
   if (language === 'en') {
     return {
       title: 'Watchlist',
-      subtitle: 'Clean monitoring list for scanner candidates.',
+      subtitle: 'Clean monitoring list for research candidates.',
       totalTracked: 'Total tracked',
       marketsRepresented: 'Markets represented',
-      scannerSourced: 'Scanner-sourced',
+      scannerSourced: 'Research candidates',
       recentlyAdded: 'Recently added',
       trackedSymbols: 'Tracked symbols',
-      scannerCoverage: 'Scanner results',
+      scannerCoverage: 'Research scores',
       backtestCoverage: 'Backtest results',
       staleCoverage: 'Recent available',
       failureCoverage: 'Unavailable',
       latestUpdate: 'Latest update',
       filters: 'Filters',
       advancedFilters: 'Advanced filters',
-      runtimeStatus: 'Batch progress',
+      runtimeStatus: 'Processing status',
       batchActions: 'Batch actions',
       historyPrefix: 'HIST',
       hitPrefix: 'HIT',
       search: 'Search',
       searchPlaceholder: 'Symbol or name',
       market: 'Market',
-      source: 'Added from',
+      source: 'Added via',
       context: 'Theme / universe',
       sort: 'Sort',
       all: 'All',
       newest: 'Newest',
-      scannerScore: 'Scanner score',
+      scannerScore: 'Research score',
       backtestReturn: 'Backtest return',
       historicalHitRate: 'Historical hit rate',
       recentlyScored: 'Recently scored',
       recentlyBacktested: 'Recently backtested',
       evidence: 'Evidence',
-      hasScanner: 'Has scanner evidence',
+      hasScanner: 'Has research score',
       hasBacktest: 'Has backtest evidence',
-      scannerSelected: 'Selected by scanner',
+      scannerSelected: 'Research candidate',
       staleIntelligence: 'Recent available data',
       intelligence: 'Intelligence',
-      scannerLineage: 'Scanner lineage',
+      scannerLineage: 'Research workflow context',
       investorSignal: 'Investor signal observation',
-      investorSignalSummary: 'Persisted scanner observation · collapsed by default',
-      catalystExposures: 'Catalyst exposure watch',
-      catalystExposuresSummary: 'Saved evidence context · collapsed by default',
-      catalystExposuresReasons: 'Current limits',
+      investorSignalSummary: 'Saved research observation · collapsed by default',
+      catalystExposures: 'Catalyst observation',
+      catalystExposuresSummary: 'Saved observation context · collapsed by default',
+      catalystExposuresReasons: 'Observation limits',
       catalystExposuresBounded: 'Showing the most recent saved items only',
       investorSignalState: 'State',
       investorSignalConfidence: 'Confidence',
@@ -1125,15 +1145,15 @@ function getCopy(language: 'zh' | 'en') {
       investorSignalContradictions: 'Mixed signals',
       noEvidence: 'Evidence updating',
       batchBacktestFilter: 'Backtest current filter',
-      batchScanFilter: 'Scan current filter',
+      batchScanFilter: 'Refresh current filter',
       selectedOnly: 'Selected only',
       clearSelection: 'Clear selection',
-      refreshIntelligence: 'Refresh intelligence',
+      refreshIntelligence: 'Refresh research view',
       scopeSelected: 'selected symbols',
       scopeFiltered: 'filtered symbols',
       emptyFilteredSet: 'Current filter is empty',
       noMatchedSymbols: 'No matching symbols',
-      scanComplete: 'Scanner refresh completed.',
+      scanComplete: 'Research refresh completed.',
       batchBacktesting: 'Backtesting...',
       batchBacktestComplete: 'Watchlist backtest completed.',
       batchBacktestLabel: 'Single-symbol watchlist backtest',
@@ -1149,7 +1169,7 @@ function getCopy(language: 'zh' | 'en') {
       trustUpdated: 'Trust updated',
       refreshScores: 'Refresh scores',
       refreshingScores: 'Refreshing...',
-      autoRefresh: 'Auto refresh',
+      autoRefresh: 'Scheduled update',
       enabled: 'Enabled',
       stale: 'Stale',
       fresh: 'Fresh',
@@ -1164,7 +1184,7 @@ function getCopy(language: 'zh' | 'en') {
       copySymbol: 'Copy symbol',
       copied: 'Copied',
       emptyTitle: 'No tracked candidates yet.',
-      emptyBody: 'Add symbols from Scanner to the watchlist, or use Scanner manual symbol entry.',
+      emptyBody: 'Add symbols from the research scanner to the watchlist, or use manual symbol entry there.',
       emptyHelp: 'Return here to review saved candidate evidence and status.',
       openScanner: 'Open Scanner',
       tableTitle: 'Monitoring list',
@@ -1181,66 +1201,66 @@ function getCopy(language: 'zh' | 'en') {
     };
   }
   return {
-    title: '观察列表',
-    subtitle: '清晰跟踪每个标的的状态变化',
+      title: '观察列表',
+      subtitle: '清晰跟踪每个标的的状态变化',
     totalTracked: '追踪总数',
     marketsRepresented: '覆盖市场',
-    scannerSourced: '扫描来源',
-    recentlyAdded: '近期新增',
-    trackedSymbols: '观察标的数',
-    scannerCoverage: '已有扫描结果',
+      scannerSourced: '研究候选',
+      recentlyAdded: '近期新增',
+      trackedSymbols: '观察标的数',
+      scannerCoverage: '已有研究评分',
     backtestCoverage: '已有回测结果',
     staleCoverage: '最近可用',
     failureCoverage: '暂不可用',
     latestUpdate: '最近更新时间',
     filters: '筛选',
     advancedFilters: '高级筛选',
-    runtimeStatus: '批量进度',
-    batchActions: '批量操作',
+      runtimeStatus: '处理状态',
+      batchActions: '批量操作',
     historyPrefix: '历史',
     hitPrefix: '命中',
     search: '搜索',
     searchPlaceholder: '代码或名称',
     market: '市场',
-    source: '加入方式',
+      source: '加入路径',
     context: '主题 / 候选范围',
     sort: '排序',
     all: '全部',
     newest: '最新',
-    scannerScore: '扫描分数',
+      scannerScore: '研究评分',
     backtestReturn: '回测收益',
     historicalHitRate: '历史胜率',
     recentlyScored: '最近评分',
     recentlyBacktested: '最近回测',
     evidence: '证据筛选',
-    hasScanner: '有扫描证据',
-    hasBacktest: '有回测证据',
-    scannerSelected: '扫描入选',
+      hasScanner: '有研究评分',
+      hasBacktest: '有回测证据',
+      scannerSelected: '研究候选',
     staleIntelligence: '最近可用数据',
     intelligence: '观察依据',
-    scannerLineage: '扫描来源',
-    investorSignal: '资金面观察信号',
-    investorSignalSummary: '来自已保存的 Scanner 观察 · 默认收起',
-    catalystExposures: '催化剂观察',
-    catalystExposuresSummary: '来自已保存的证据线索 · 默认收起',
-    catalystExposuresReasons: '当前限制',
+      scannerLineage: '研究流程记录',
+      investorSignal: '资金面观察信号',
+      investorSignalSummary: '来自已保存的研究观察 · 默认收起',
+      catalystExposures: '催化剂观察',
+      catalystExposuresSummary: '来自已保存的观察线索 · 默认收起',
+      catalystExposuresReasons: '观察边界',
     catalystExposuresBounded: '仅展示最近保存的线索',
     investorSignalState: '观察状态',
     investorSignalConfidence: '置信度',
     investorSignalFreshness: '观察时效',
     investorSignalReasons: '当前限制',
     investorSignalContradictions: '分歧线索',
-    noEvidence: '依据更新中',
-    batchBacktestFilter: '回测当前筛选',
-    batchScanFilter: '扫描当前筛选',
+      noEvidence: '依据更新中',
+      batchBacktestFilter: '回测当前筛选',
+      batchScanFilter: '刷新当前筛选',
     selectedOnly: '仅选中',
     clearSelection: '清除选择',
-    refreshIntelligence: '刷新情报',
+      refreshIntelligence: '刷新观察依据',
     scopeSelected: '已选中',
     scopeFiltered: '当前筛选',
     emptyFilteredSet: '当前筛选为空',
     noMatchedSymbols: '无匹配标的',
-    scanComplete: '扫描刷新完成。',
+      scanComplete: '研究状态刷新完成。',
     batchBacktesting: '回测中...',
     batchBacktestComplete: '观察列表回测完成。',
     batchBacktestLabel: '观察列表单标的回测',
@@ -1256,7 +1276,7 @@ function getCopy(language: 'zh' | 'en') {
     trustUpdated: '信号更新时间',
     refreshScores: '刷新评分',
     refreshingScores: '刷新中...',
-    autoRefresh: '自动刷新',
+      autoRefresh: '定时更新',
     enabled: '已启用',
     stale: '过期',
     fresh: '最新',
@@ -1271,7 +1291,7 @@ function getCopy(language: 'zh' | 'en') {
     copySymbol: '复制代码',
     copied: '已复制',
     emptyTitle: '还没有观察标的',
-    emptyBody: '从扫描器添加标的到观察列表，或在扫描器手动补充代码。',
+      emptyBody: '从研究扫描器添加标的到观察列表，或在那里手动补充代码。',
     emptyHelp: '添加后可在这里查看已保存的候选证据与状态。',
     openScanner: '打开扫描器',
     tableTitle: '监控列表',

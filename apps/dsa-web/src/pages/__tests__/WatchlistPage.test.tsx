@@ -492,11 +492,11 @@ describe('WatchlistPage', () => {
     renderWatchlist();
     const row = await screen.findByTestId('watchlist-row-NVDA');
 
-    expect(screen.getByTestId('watchlist-command-bar')).toHaveTextContent('扫描当前筛选');
+    expect(screen.getByTestId('watchlist-command-bar')).toHaveTextContent('刷新当前筛选');
     expect(screen.getByTestId('watchlist-command-bar')).toHaveTextContent('回测当前筛选');
     expect(screen.getByRole('button', { name: '仅选中' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '清除选择' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '刷新情报' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '刷新观察依据' })).toBeInTheDocument();
     expect(screen.getByTestId('watchlist-action-scope')).toHaveTextContent('当前筛选 3 个标的');
     const statusStrip = screen.getByTestId('watchlist-status-strip');
     expect(within(statusStrip).getByText('观察标的数').nextElementSibling).toHaveTextContent('3');
@@ -523,7 +523,7 @@ describe('WatchlistPage', () => {
     const secondaryDeck = screen.getByTestId('watchlist-secondary-deck');
 
     expect(rows).toContainElement(screen.getByTestId('watchlist-row-NVDA'));
-    expect(commandBar).toHaveTextContent('扫描当前筛选');
+    expect(commandBar).toHaveTextContent('刷新当前筛选');
     expect(watchBoard).toContainElement(compactFilterBar);
     expect(watchBoard).toContainElement(boardShell);
     expect(boardShell).toContainElement(primaryWorkRegion);
@@ -560,7 +560,7 @@ describe('WatchlistPage', () => {
     fireEvent.change(screen.getByLabelText('搜索'), { target: { value: 'ZZZZ' } });
 
     expect(screen.getByTestId('watchlist-action-scope')).toHaveTextContent('当前筛选为空');
-    expect(screen.getByRole('button', { name: /扫描当前筛选/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /刷新当前筛选/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /回测当前筛选/ })).toBeDisabled();
     expect(screen.getByText('无匹配标的')).toBeInTheDocument();
   });
@@ -590,7 +590,7 @@ describe('WatchlistPage', () => {
     await screen.findByTestId('watchlist-row-NVDA');
 
     fireEvent.click(screen.getByRole('button', { name: '高级筛选' }));
-    fireEvent.change(screen.getByLabelText('加入方式'), { target: { value: 'scanner' } });
+    fireEvent.change(screen.getByLabelText('加入路径'), { target: { value: 'scanner' } });
     fireEvent.change(screen.getByLabelText('主题 / 候选范围'), { target: { value: 'theme:semis' } });
 
     expect(screen.queryByTestId('watchlist-row-NVDA')).not.toBeInTheDocument();
@@ -893,12 +893,12 @@ describe('WatchlistPage', () => {
 
     const refreshedRow = await screen.findByTestId('watchlist-row-NVDA');
     const unchangedRow = await screen.findByTestId('watchlist-row-MSFT');
-    expect(refreshedRow).toHaveTextContent('加入后刷新');
-    expect(refreshedRow).toHaveTextContent('评分在加入后刷新，可能反映后续扫描观察。');
-    expect(unchangedRow).not.toHaveTextContent('加入后刷新');
+    expect(refreshedRow).toHaveTextContent('保存后更新');
+    expect(refreshedRow).toHaveTextContent('研究评分在保存后更新，可视为较新的观察记录。');
+    expect(unchangedRow).not.toHaveTextContent('保存后更新');
     fireEvent.click(within(refreshedRow).getByRole('button', { name: '查看详情 NVDA' }));
-    expect(screen.getByTestId('watchlist-detail-rail')).toHaveTextContent('加入后刷新');
-    expect(screen.getByTestId('watchlist-page')).not.toHaveTextContent(/scannerRunId|scanner_run_id|扫描批次|source_confidence|reason_families/i);
+    expect(screen.getByTestId('watchlist-detail-rail')).toHaveTextContent('保存后更新');
+    expect(screen.getByTestId('watchlist-page')).not.toHaveTextContent(/scannerRunId|scanner_run_id|扫描批次|source_confidence|reason_families|sourceAuthority|来源权限/i);
   });
 
   it('renders scannerLineageV1 in a collapsed detail block without diagnostics or action-grade copy', async () => {
@@ -943,6 +943,8 @@ describe('WatchlistPage', () => {
                 observationOnly: true,
                 scoreGradeAllowed: false,
                 sourceAuthorityAllowed: false,
+                sourceType: 'authorized_licensed_feed',
+                sourceTier: 'internal_source_tier',
                 rawDiagnostics: { reasonCode: 'debug' },
                 providerObservation: [{ providerName: 'internal-provider' }],
               } as WatchlistScannerLineageV1 & Record<string, unknown>,
@@ -959,21 +961,22 @@ describe('WatchlistPage', () => {
     await screen.findByTestId('watchlist-row-WULF');
     const detailRail = screen.getByTestId('watchlist-detail-rail');
     const lineageBlock = within(detailRail).getByTestId('watchlist-scanner-lineage');
-    const toggle = within(lineageBlock).getByRole('button', { name: '展开 扫描来源' });
+    const toggle = within(lineageBlock).getByRole('button', { name: '展开 研究流程记录' });
 
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(lineageBlock).toHaveTextContent('来自扫描器 · 最近可用 · 仅作观察');
-    expect(lineageBlock).not.toHaveTextContent(/sourceAuthorityAllowed|scoreContributionAllowed|reasonCode|raw diagnostics|JSON|provider_down|internal-provider|providerObservation/i);
+    expect(lineageBlock).toHaveTextContent('研究流程记录 · 最近可用 · 仅作观察');
+    expect(lineageBlock).not.toHaveTextContent(/sourceAuthorityAllowed|scoreContributionAllowed|sourceType|sourceTier|authorized_licensed_feed|internal_source_tier|reasonCode|raw diagnostics|JSON|provider_down|internal-provider|providerObservation/i);
 
     fireEvent.click(toggle);
 
-    expect(within(lineageBlock).getByRole('button', { name: '收起 扫描来源' })).toHaveAttribute('aria-expanded', 'true');
-    expect(lineageBlock).toHaveTextContent('加入后刷新');
-    expect(lineageBlock).toHaveTextContent('扫描排名 #2 · 分数 71.5');
+    expect(within(lineageBlock).getByRole('button', { name: '收起 研究流程记录' })).toHaveAttribute('aria-expanded', 'true');
+    expect(lineageBlock).toHaveTextContent('保存后更新');
+    expect(lineageBlock).toHaveTextContent('候选序位 #2 · 研究评分 71.5');
     expect(lineageBlock).toHaveTextContent('补充证据后继续观察。');
-    expect(lineageBlock).toHaveTextContent('us_preopen_v1');
+    expect(lineageBlock).toHaveTextContent('研究窗口已记录');
+    expect(lineageBlock).not.toHaveTextContent('us_preopen_v1');
     expect(screen.getByTestId('watchlist-page')).not.toHaveTextContent(/买入|卖出|加仓|减仓|下单|立即交易|止损|止盈|目标价|仓位|guaranteed|best contract|AI recommends you buy|recommend(?:ation)?|buy|sell|stop|target|position/i);
-    expect(screen.getByTestId('watchlist-page')).not.toHaveTextContent(/sourceAuthorityAllowed|scoreContributionAllowed|reasonCode|source_confidence|reason_families|raw diagnostics|JSON|provider_down|internal-provider|providerObservation/i);
+    expect(screen.getByTestId('watchlist-page')).not.toHaveTextContent(/sourceAuthorityAllowed|scoreContributionAllowed|sourceType|sourceTier|authorized_licensed_feed|internal_source_tier|reasonCode|source_confidence|reason_families|raw diagnostics|JSON|provider_down|internal-provider|providerObservation/i);
   });
 
   it('keeps stale inherited scanner scores from rendering as verified latest evidence', async () => {
@@ -1255,8 +1258,8 @@ describe('WatchlistPage', () => {
     const savedNote = within(dataNotes).getByTestId('watchlist-saved-note');
     expect(savedNote).toHaveTextContent('保存备注');
     expect(savedNote).toHaveTextContent('Scanner observation: watch post-earnings follow-through.');
-    expect(within(dataNotes).getByText('扫描候选')).toBeInTheDocument();
-    expect(within(dataNotes).getByText('Latest scanner score.')).toBeInTheDocument();
+    expect(within(dataNotes).getByText('研究候选')).toBeInTheDocument();
+    expect(within(dataNotes).getByText('最新研究评分。')).toBeInTheDocument();
     expect(within(dataNotes).getByText(/历史 \+3.2% · 命中 56%/)).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/watchlist');
     expect(listWatchlistItems).toHaveBeenCalledTimes(1);
@@ -1294,7 +1297,7 @@ describe('WatchlistPage', () => {
 
     expect(within(dataNotes).queryByTestId('watchlist-saved-note')).not.toBeInTheDocument();
     expect(within(dataNotes).queryByText('保存备注')).not.toBeInTheDocument();
-    expect(within(dataNotes).getByText('扫描候选')).toBeInTheDocument();
+    expect(within(dataNotes).getByText('研究候选')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '查看详情 TSM' }));
 
@@ -1349,7 +1352,7 @@ describe('WatchlistPage', () => {
                 confidenceLabel: 'blocked',
                 confidenceText: '禁止判断',
                 freshness: 'cached',
-                reasonCodes: ['source_authority_missing', 'score_rights_missing'],
+                reasonCodes: ['source_authority_missing', 'score_rights_missing', 'source_tier_discount'],
                 contradictionCodes: ['theme_rotation_mismatch'],
                 explanation: '主题强弱仍然分化，当前只保留观察意义。',
               },
@@ -1385,10 +1388,10 @@ describe('WatchlistPage', () => {
     const toggle = within(disclosure).getByRole('button', { name: '展开 资金面观察信号' });
 
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(disclosure).toHaveTextContent('来自已保存的 Scanner 观察');
+    expect(disclosure).toHaveTextContent('来自已保存的研究观察');
     expect(within(detailRail).getByText('评分已刷新')).toBeInTheDocument();
     expect(within(disclosure).queryByText('禁止判断')).not.toBeInTheDocument();
-    expect(within(disclosure).queryByText('已缓存')).not.toBeInTheDocument();
+    expect(within(disclosure).queryByText('最近可用')).not.toBeInTheDocument();
 
     fireEvent.click(toggle);
 
@@ -1396,15 +1399,16 @@ describe('WatchlistPage', () => {
     expect(within(detailRail).getByText('评分已刷新')).toBeInTheDocument();
     expect(within(disclosure).getByText('信号分化')).toBeInTheDocument();
     expect(within(disclosure).getByText('禁止判断')).toBeInTheDocument();
-    expect(within(disclosure).getByText('已缓存')).toBeInTheDocument();
+    expect(within(disclosure).getByText('最近可用')).toBeInTheDocument();
     expect(within(disclosure).queryByText('信号最新')).not.toBeInTheDocument();
-    expect(within(disclosure).getByText('来源权限未确认')).toBeInTheDocument();
-    expect(within(disclosure).getByText('当前不允许计分')).toBeInTheDocument();
+    expect(within(disclosure).getByText('证据仍待确认')).toBeInTheDocument();
+    expect(within(disclosure).getByText('评分依据不足')).toBeInTheDocument();
+    expect(within(disclosure).getByText('证据较弱')).toBeInTheDocument();
     expect(within(disclosure).getByText('主题轮动暂未同向')).toBeInTheDocument();
     expect(within(disclosure).queryByText('Theme Rotation Mismatch')).not.toBeInTheDocument();
     expect(within(disclosure).getByTestId('watchlist-investor-signal-explanation')).toHaveTextContent('主题强弱仍然分化，当前只保留观察意义。');
-    expect(disclosure).not.toHaveTextContent(/contractVersion|diagnosticOnly|authorityGrant|decisionGrade|sourceAuthorityAllowed|scoreContributionAllowed|theme_rotation_mismatch/i);
-    expect(disclosure).not.toHaveTextContent(/buy|sell|recommend|provider|admin/i);
+    expect(disclosure).not.toHaveTextContent(/contractVersion|diagnosticOnly|authorityGrant|decisionGrade|sourceAuthorityAllowed|scoreContributionAllowed|sourceTier|source_tier|theme_rotation_mismatch/i);
+    expect(disclosure).not.toHaveTextContent(/来源权限|来源层级|当前不允许计分|已缓存|cache|runtime|buy|sell|recommend|provider|admin/i);
   });
 
   it('omits the investor signal disclosure when scanner observation is absent', async () => {
@@ -1472,7 +1476,7 @@ describe('WatchlistPage', () => {
                 title: 'Fundamental snapshot exposure',
                 summary: 'Quarterly revenue and margin snapshot is available.',
                 evidenceStatus: 'delayed',
-                evidenceLabels: ['delayed'],
+                evidenceLabels: ['delayed', 'source_tier_discount'],
                 asOf: '2026-05-17T20:00:00+00:00',
                 timeframe: '2026Q2',
                 reasonCodes: ['observation_only', 'delayed_evidence', 'not_earnings_calendar'],
@@ -1548,7 +1552,7 @@ describe('WatchlistPage', () => {
     const toggle = within(disclosure).getByRole('button', { name: '展开 催化剂观察' });
 
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(disclosure).toHaveTextContent('来自已保存的证据线索');
+    expect(disclosure).toHaveTextContent('来自已保存的观察线索');
     expect(within(detailRail).getByTestId('watchlist-investor-signal')).toBeInTheDocument();
     expect(within(detailRail).getByTestId('leveraged-etf-mapper')).toBeInTheDocument();
     expect(within(detailRail).getByTestId('watchlist-data-notes')).toBeInTheDocument();
@@ -1557,18 +1561,24 @@ describe('WatchlistPage', () => {
     fireEvent.click(toggle);
 
     expect(within(disclosure).getByRole('button', { name: '收起 催化剂观察' })).toHaveAttribute('aria-expanded', 'true');
-    expect(within(disclosure).getByText('Fundamental snapshot exposure')).toBeInTheDocument();
-    expect(within(disclosure).getByText('Stored news catalyst proxy')).toBeInTheDocument();
-    expect(within(disclosure).getByText('Official macro cache/status exposure')).toBeInTheDocument();
+    expect(within(disclosure).getByText('基本面线索')).toBeInTheDocument();
+    expect(within(disclosure).getByText('已保存新闻线索')).toBeInTheDocument();
+    expect(within(disclosure).getByText('宏观背景线索')).toBeInTheDocument();
+    expect(within(disclosure).getByText('已保存基本面线索，适合继续观察。')).toBeInTheDocument();
+    expect(within(disclosure).getByText('已保存新闻线索，可作为观察背景。')).toBeInTheDocument();
+    expect(within(disclosure).getByText('宏观背景较旧，阅读时降低置信度。')).toBeInTheDocument();
     expect(within(disclosure).queryByText('Extra hidden exposure')).not.toBeInTheDocument();
-    expect(within(disclosure).getAllByText('延迟快照').length).toBeGreaterThan(0);
-    expect(within(disclosure).getAllByText('代理线索').length).toBeGreaterThan(0);
-    expect(within(disclosure).getAllByText('陈旧证据').length).toBeGreaterThan(0);
-    expect(within(disclosure).getAllByText('仅观察').length).toBeGreaterThan(0);
+    expect(within(disclosure).getAllByText('更新延迟').length).toBeGreaterThan(0);
+    expect(within(disclosure).getAllByText('线索待确认').length).toBeGreaterThan(0);
+    expect(within(disclosure).getAllByText('较旧线索').length).toBeGreaterThan(0);
+    expect(within(disclosure).getAllByText('仅供观察').length).toBeGreaterThan(0);
+    expect(within(disclosure).getByText('仅作线索')).toBeInTheDocument();
+    expect(within(disclosure).getByText('日程仍待确认')).toBeInTheDocument();
     expect(within(disclosure).queryByText('earnings_fundamental_snapshot')).not.toBeInTheDocument();
     expect(within(disclosure).queryByText('stored_news_catalyst_proxy')).not.toBeInTheDocument();
-    expect(within(disclosure).queryByText(/observation_only|proxy_evidence_not_authoritative|stale_evidence|not_earnings_calendar/i)).not.toBeInTheDocument();
-    expect(disclosure).not.toHaveTextContent(/sourceAuthorityAllowed|scoreContributionAllowed|decisionGrade|calendarClaimAllowed|provider|admin|debug/i);
+    expect(within(disclosure).queryByText(/Fundamental snapshot exposure|Stored news catalyst proxy|Official macro cache\/status exposure/i)).not.toBeInTheDocument();
+    expect(within(disclosure).queryByText(/observation_only|proxy_evidence_not_authoritative|stale_evidence|not_earnings_calendar|source_tier_discount/i)).not.toBeInTheDocument();
+    expect(disclosure).not.toHaveTextContent(/sourceAuthorityAllowed|scoreContributionAllowed|decisionGrade|calendarClaimAllowed|sourceTier|sourceType|provider|admin|debug|proxy|cache|runtime|exposure/i);
   });
 
   it('omits the catalyst exposure disclosure when saved catalyst evidence is absent', async () => {
@@ -1812,8 +1822,9 @@ describe('WatchlistPage', () => {
     await screen.findByTestId('watchlist-row-NVDA');
 
     const runtimeStatus = screen.getByTestId('watchlist-runtime-status');
-    expect(runtimeStatus).toHaveTextContent('自动刷新');
-    expect(runtimeStatus).toHaveTextContent('批量进度');
+    expect(runtimeStatus).toHaveTextContent('定时更新');
+    expect(runtimeStatus).toHaveTextContent('处理状态');
+    expect(runtimeStatus).not.toHaveTextContent(/runtime|批量进度|自动刷新/i);
     expect(screen.getAllByText('评分已刷新').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: /刷新评分/ }));
@@ -1882,7 +1893,7 @@ describe('WatchlistPage', () => {
       'text-center',
     );
     expect(within(emptyState).getByText('还没有观察标的')).toBeInTheDocument();
-    expect(emptyState).toHaveTextContent('从扫描器添加标的到观察列表，或在扫描器手动补充代码。');
+    expect(emptyState).toHaveTextContent('从研究扫描器添加标的到观察列表，或在那里手动补充代码。');
     expect(emptyState).toHaveTextContent('添加后可在这里查看已保存的候选证据与状态。');
     expect(emptyState).not.toHaveTextContent(/数据不足，禁止判断|买入|卖出|下单|交易|券商|broker/i);
     expect(within(headerStrip).queryByRole('button', { name: /打开扫描器/ })).not.toBeInTheDocument();
@@ -1906,11 +1917,12 @@ describe('WatchlistPage', () => {
     await screen.findByTestId('watchlist-row-NVDA');
 
     expect(screen.getByTestId('watchlist-command-bar')).toHaveTextContent('批量操作');
-    expect(screen.getByTestId('watchlist-command-bar')).toHaveTextContent('批量进度');
-    expect(screen.getByTestId('watchlist-command-bar')).toHaveTextContent('扫描当前筛选');
+    expect(screen.getByTestId('watchlist-command-bar')).toHaveTextContent('处理状态');
+    expect(screen.getByTestId('watchlist-command-bar')).toHaveTextContent('刷新当前筛选');
     expect(screen.getByTestId('watchlist-command-bar')).toHaveTextContent('回测当前筛选');
-    expect(screen.getByRole('button', { name: '刷新情报' })).toBeInTheDocument();
-    expect(screen.getByTestId('watchlist-runtime-status')).toHaveTextContent('自动刷新');
+    expect(screen.getByRole('button', { name: '刷新观察依据' })).toBeInTheDocument();
+    expect(screen.getByTestId('watchlist-runtime-status')).toHaveTextContent('定时更新');
+    expect(screen.getByTestId('watchlist-page')).not.toHaveTextContent(/runtime|批量进度|自动刷新/i);
   });
 
   it('renders the authentication guard for guests', () => {
