@@ -122,6 +122,8 @@ type RotationTierView = {
   taxonomyThemes: MarketRotationTheme[];
 };
 
+type RotationPrimaryDisplayMode = 'headline' | 'observation' | 'taxonomy' | 'unavailable';
+
 type ThemeFlowSignalView = NonNullable<MarketRotationTheme['themeFlowSignal']>;
 type RotationMatrixStageMeta = {
   key: MarketRotationStage;
@@ -542,11 +544,89 @@ function deriveTopThemes(themes: MarketRotationTheme[], limit = TOP_THEME_LIMIT)
     .slice(0, limit);
 }
 
+function materializeSummaryTheme(item: MarketRotationSummaryItem, fullTheme?: MarketRotationTheme): MarketRotationTheme {
+  const raw = item as Partial<MarketRotationTheme>;
+  return {
+    ...fullTheme,
+    ...raw,
+    id: item.id,
+    name: item.name,
+    rotationScore: item.rotationScore,
+    confidence: item.confidence,
+    stage: item.stage,
+    riskLabels: item.riskLabels,
+    riskExplanations: raw.riskExplanations || fullTheme?.riskExplanations || [],
+    rankEligible: item.rankEligible,
+    rankExclusionReason: item.rankExclusionReason,
+    taxonomyOnly: item.taxonomyOnly,
+    observationOnly: item.observationOnly,
+    headlineEligible: item.headlineEligible,
+    rankingLane: item.rankingLane,
+    scoreContributionAllowed: item.scoreContributionAllowed,
+    signalType: item.signalType,
+    flowEvidenceType: item.flowEvidenceType,
+    flowLanguageAllowed: item.flowLanguageAllowed,
+    sourceAuthorityAllowed: item.sourceAuthorityAllowed,
+    evidenceQuality: item.evidenceQuality,
+    dataGaps: item.dataGaps,
+    sourceTier: item.sourceTier,
+    trustLevel: item.trustLevel,
+    englishName: raw.englishName || fullTheme?.englishName || item.name,
+    focus: raw.focus ?? fullTheme?.focus,
+    benchmark: raw.benchmark || fullTheme?.benchmark || '',
+    sectorBenchmark: raw.sectorBenchmark ?? fullTheme?.sectorBenchmark,
+    membersConfigured: Array.isArray(raw.membersConfigured)
+      ? raw.membersConfigured
+      : fullTheme?.membersConfigured || [],
+    newslessRotation: raw.newslessRotation ?? fullTheme?.newslessRotation ?? false,
+    relativeStrength: raw.relativeStrength || fullTheme?.relativeStrength || {},
+    volume: raw.volume || fullTheme?.volume || {},
+    breadth: raw.breadth || fullTheme?.breadth || {},
+    synchronization: raw.synchronization || fullTheme?.synchronization || {},
+    leadership: raw.leadership || fullTheme?.leadership || {},
+    themeDetail: raw.themeDetail || fullTheme?.themeDetail,
+    freshness: item.freshness,
+    isFallback: item.isFallback,
+    source: raw.source || fullTheme?.source,
+    sourceLabel: raw.sourceLabel ?? fullTheme?.sourceLabel,
+    asOf: raw.asOf ?? fullTheme?.asOf,
+    updatedAt: raw.updatedAt ?? fullTheme?.updatedAt,
+    evidence: Array.isArray(raw.evidence) ? raw.evidence : fullTheme?.evidence || [],
+    members: Array.isArray(raw.members) ? raw.members : fullTheme?.members || [],
+    noAdviceDisclosure: raw.noAdviceDisclosure || fullTheme?.noAdviceDisclosure || '',
+    themeFlowSignal: raw.themeFlowSignal || fullTheme?.themeFlowSignal,
+  };
+}
+
 function resolveSummaryThemes(themes: MarketRotationTheme[], summaryItems: MarketRotationSummaryItem[]): MarketRotationTheme[] {
   const themeById = new Map(themes.map((theme) => [theme.id, theme]));
+  const seen = new Set<string>();
   return summaryItems
-    .map((item) => themeById.get(item.id))
-    .filter((theme): theme is MarketRotationTheme => Boolean(theme));
+    .map((item) => materializeSummaryTheme(item, themeById.get(item.id)))
+    .filter((theme) => {
+      if (!theme.id || seen.has(theme.id)) {
+        return false;
+      }
+      seen.add(theme.id);
+      return true;
+    });
+}
+
+function hasObservationThemeData(theme: MarketRotationTheme): boolean {
+  if (isTaxonomyOnlyTheme(theme)) {
+    return false;
+  }
+  const hasMatrixFields = themeRelativeStrengthValue(theme) !== null && Boolean(theme.stage);
+  const hasUsableSignal = hasMatrixFields
+    || Boolean(theme.themeFlowSignal?.breadthEvidence || theme.themeFlowSignal?.relativeStrengthEvidence);
+  return hasUsableSignal
+    && Number.isFinite(Number(theme.rotationScore))
+    && (theme.rankingLane === 'observation' || theme.observationOnly === true || theme.headlineEligible === false);
+}
+
+function resolveObservationSummaryThemes(payload: MarketRotationRadarResponse): MarketRotationTheme[] {
+  const summaryThemes = resolveSummaryThemes(payload.themes || [], payload.summary.observationThemes || []);
+  return summaryThemes.filter(hasObservationThemeData).slice(0, TOP_THEME_LIMIT);
 }
 
 function deriveWeakeningThemes(themes: MarketRotationTheme[]): MarketRotationTheme[] {
@@ -613,10 +693,13 @@ function deriveRotationTiers(payload: MarketRotationRadarResponse): RotationTier
   const themes = payload.themes || [];
   const confirmedLeaders = deriveTopThemes(themes.filter(isConfirmedRealFlowLeader), 3);
   const confirmedIds = new Set(confirmedLeaders.map((theme) => theme.id));
+  const summaryObservationThemes = resolveObservationSummaryThemes(payload);
   return {
     libraryMode: isRotationLibraryMode(payload),
     confirmedLeaders,
-    candidateThemes: deriveTopThemes(themes.filter((theme) => isCandidateWatchTheme(theme, confirmedIds)), 3),
+    candidateThemes: summaryObservationThemes.length
+      ? summaryObservationThemes.slice(0, 3)
+      : deriveTopThemes(themes.filter((theme) => isCandidateWatchTheme(theme, confirmedIds)), 3),
     coolingThemes: deriveWeakeningThemes(themes).filter((theme) => !isTaxonomyOnlyTheme(theme)).slice(0, 3),
     taxonomyThemes: themes.filter(isTaxonomyOnlyTheme).slice(0, 3),
   };
@@ -636,6 +719,48 @@ function derivePrimaryDisplayThemes(
     return tiers.candidateThemes;
   }
   return resolveSummaryThemes(payload.themes || [], payload.summary.strongestThemes || []);
+}
+
+function primaryDisplayMode(tiers?: RotationTierView | null): RotationPrimaryDisplayMode {
+  if (!tiers) {
+    return 'unavailable';
+  }
+  if (tiers.libraryMode) {
+    return 'taxonomy';
+  }
+  if (tiers.confirmedLeaders.length) {
+    return 'headline';
+  }
+  if (tiers.candidateThemes.length) {
+    return 'observation';
+  }
+  return 'unavailable';
+}
+
+function primaryDisplayLabel(mode: RotationPrimaryDisplayMode): string {
+  switch (mode) {
+    case 'headline':
+      return '确认信号';
+    case 'observation':
+      return '观察数据';
+    case 'taxonomy':
+      return '分类浏览';
+    default:
+      return '信号待确认';
+  }
+}
+
+function primaryDisplayDetail(mode: RotationPrimaryDisplayMode): string {
+  if (mode === 'headline') {
+    return '当前只展示已满足确认条件的头部主题，其他主题保留在下方观察列表。';
+  }
+  if (mode === 'observation') {
+    return '当前为对比样本与观察数据，仅作走势观察，不形成强结论。';
+  }
+  if (mode === 'taxonomy') {
+    return '当前以分类浏览为主，等待更多行情覆盖后再确认强弱。';
+  }
+  return '当前结构化强弱维度仍待确认，暂不展示主视图。';
 }
 
 function deriveRotationDecisionState(
@@ -876,11 +1001,14 @@ const RotationVisualPanel: React.FC<{
   themes: MarketRotationTheme[];
   selectedThemeId?: string;
   marketLabelText: string;
+  displayMode: RotationPrimaryDisplayMode;
   unavailableReason: string;
   unavailableDetail: string;
   onSelectTheme: (themeId: string) => void;
-}> = ({ themes, selectedThemeId, marketLabelText, unavailableReason, unavailableDetail, onSelectTheme }) => {
+}> = ({ themes, selectedThemeId, marketLabelText, displayMode, unavailableReason, unavailableDetail, onSelectTheme }) => {
   const visualThemes = deriveVisualMatrixThemes(themes);
+  const modeLabel = primaryDisplayLabel(displayMode);
+  const modeDetail = primaryDisplayDetail(displayMode);
 
   if (!visualThemes.length) {
     return (
@@ -908,10 +1036,13 @@ const RotationVisualPanel: React.FC<{
           <p className="text-[10px] font-medium tracking-[0.22em] text-white/38">相对强弱矩阵</p>
           <h3 className="mt-2 text-lg font-semibold text-white/88">主题排行与阶段分布</h3>
           <p className="mt-2 max-w-4xl text-sm leading-6 text-white/58">
-            沿用现有相对强弱与阶段字段组织可视化，不改写当前排序、评分或信号口径。
+            {modeDetail}
           </p>
         </div>
-        <span className="shrink-0 rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/52">{marketLabelText}</span>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <span className="rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/52">{modeLabel}</span>
+          <span className="rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/52">{marketLabelText}</span>
+        </div>
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(22rem,0.9fr)]">
@@ -1742,13 +1873,19 @@ const MarketRotationRadarPage: React.FC = () => {
   };
 
   const rotationTiers = state.payload ? deriveRotationTiers(state.payload) : null;
-  const headlineThemes = state.payload && rotationTiers ? derivePrimaryDisplayThemes(state.payload, rotationTiers) : [];
+  const displayMode = primaryDisplayMode(rotationTiers);
+  const primaryThemes = state.payload && rotationTiers ? derivePrimaryDisplayThemes(state.payload, rotationTiers) : [];
   const filteredThemes = (state.payload?.themes || []).filter((theme) => matchesSearch(theme, state.searchQuery));
+  const visualThemes = primaryThemes.length ? primaryThemes : filteredThemes;
 
-  const selectedTheme = state.payload?.themes.find((theme) => theme.id === state.selectedThemeId) || state.payload?.themes[0];
+  const primaryThemeById = new Map(primaryThemes.map((theme) => [theme.id, theme]));
+  const selectedTheme = (state.selectedThemeId ? primaryThemeById.get(state.selectedThemeId) : undefined)
+    || state.payload?.themes.find((theme) => theme.id === state.selectedThemeId)
+    || primaryThemes[0]
+    || state.payload?.themes[0];
   const libraryMode = rotationTiers?.libraryMode || false;
   const rotationConclusion = state.payload && rotationTiers ? deriveRotationConclusion(state.payload, rotationTiers) : null;
-  const primaryTierLabel = libraryMode ? '分类浏览' : rotationTiers?.confirmedLeaders.length ? '确认信号' : '观察信号';
+  const primaryTierLabel = primaryDisplayLabel(displayMode);
   const marketLabelText = marketLabel(state.payload?.market || state.selectedMarket);
   const visualUnavailableReason = rotationConclusion?.title || '矩阵暂不可用';
   const visualUnavailableDetail = libraryMode
@@ -1798,9 +1935,10 @@ const MarketRotationRadarPage: React.FC = () => {
             />
 
             <RotationVisualPanel
-              themes={filteredThemes}
+              themes={visualThemes}
               selectedThemeId={selectedTheme?.id}
               marketLabelText={marketLabelText}
+              displayMode={displayMode}
               unavailableReason={visualUnavailableReason}
               unavailableDetail={visualUnavailableDetail}
               onSelectTheme={(themeId) => dispatch({ type: 'selectTheme', themeId })}
@@ -1812,18 +1950,18 @@ const MarketRotationRadarPage: React.FC = () => {
                   <div className="border-b border-white/[0.05] p-3">
                     <TerminalSectionHeader
                       eyebrow={primaryTierLabel}
-                      title={headlineThemes.length
+                      title={primaryThemes.length
                         ? (libraryMode
-                          ? `${headlineThemes.length} 个分类焦点`
+                          ? `${primaryThemes.length} 个分类焦点`
                           : rotationTiers?.confirmedLeaders.length
-                            ? `前 ${headlineThemes.length} 个确认信号`
-                            : `前 ${headlineThemes.length} 个观察信号`)
+                            ? `前 ${primaryThemes.length} 个确认信号`
+                            : `前 ${primaryThemes.length} 个观察数据`)
                         : (rotationConclusion?.title || (libraryMode ? '暂无可展示主题' : '暂无头部排名'))}
                     />
                   </div>
-                  {headlineThemes.length ? (
+                  {primaryThemes.length ? (
                     <DenseRows>
-                      {headlineThemes.map((theme) => (
+                      {primaryThemes.map((theme) => (
                         <LeaderRow
                           key={theme.id}
                           theme={theme}
