@@ -233,6 +233,121 @@ def test_liquidity_builder_lookup_preserves_registry_fields_and_fails_closed_wit
     assert set(batch["errors"][0]["codes"]) >= issues
 
 
+def test_rotation_adoption_proof_preserves_registry_fields_and_fails_closed_without_explicit_reviews() -> None:
+    metadata = {
+        "surfaceId": "forbidden_override",
+        "routeId": "/should-not-win",
+        "audience": "admin",
+        "fieldKey": "wrong_field",
+        "evidenceFamily": "wrong_family",
+        "providerId": "rotation_provider_descriptor",
+        "providerLabel": "Rotation Provider Descriptor",
+        "sourceId": "rotation_score_source_descriptor",
+        "sourceLabel": "Rotation Score Source Descriptor",
+        "sourceType": "authorized_derived_snapshot",
+        "sourceTier": "reviewed_internal",
+        "freshnessState": "fresh",
+        "asOf": "2026-06-08T09:30:00Z",
+        "lastUpdated": "2026-06-08T09:31:00Z",
+        "observationOnly": False,
+        "diagnosticOnly": False,
+        "providerRuntimeCalled": True,
+        "networkCallsEnabled": True,
+        "marketCacheMutation": True,
+    }
+    result = build_data_coverage_matrix_row(
+        metadata,
+        surface_id="rotation",
+        field_key="rotation_score_status",
+    )
+
+    row = result.to_dict()
+    issues = {issue.code for issue in result.validation.issues}
+
+    assert issues >= {
+        "missing_source_authority",
+        "missing_score_contribution",
+        "missing_right_to_display",
+    }
+    assert result.registry_entry.surface_id == "rotation"
+    assert result.registry_entry.route_id == "/zh/market/rotation-radar"
+    assert result.registry_entry.audience.value == "consumer"
+    assert result.registry_entry.field_key == "rotation_score_status"
+    assert result.registry_entry.evidence_family == "rotation_signal"
+    assert result.normalized_contract.surface_id == "rotation"
+    assert result.normalized_contract.route_id == "/zh/market/rotation-radar"
+    assert result.normalized_contract.audience == "consumer"
+    assert result.normalized_contract.field_key == "rotation_score_status"
+    assert result.normalized_contract.evidence_family == "rotation_signal"
+    assert result.normalized_contract.provider_id == "rotation_provider_descriptor"
+    assert result.normalized_contract.source_id == "rotation_score_source_descriptor"
+    assert result.normalized_contract.source_authority_allowed is False
+    assert result.normalized_contract.right_to_display is RightToDisplay.UNAVAILABLE
+    assert result.normalized_contract.score_contribution_allowed is False
+    assert result.normalized_contract.authority_grant is False
+    assert result.normalized_contract.decision_grade is False
+    assert result.normalized_contract.observation_only is True
+    assert row["surfaceId"] == "rotation"
+    assert row["routeId"] == "/zh/market/rotation-radar"
+    assert row["audience"] == "consumer"
+    assert row["fieldKey"] == "rotation_score_status"
+    assert row["evidenceFamily"] == "rotation_signal"
+    assert row["sourceAuthorityAllowed"] is False
+    assert row["scoreContributionAllowed"] is False
+    assert row["authorityGrant"] is False
+    assert row["decisionGrade"] is False
+    assert row["observationOnly"] is True
+    assert row["rightToDisplay"] == "unavailable"
+    assert row["diagnosticOnly"] is True
+    assert row["providerRuntimeCalled"] is False
+    assert row["networkCallsEnabled"] is False
+    assert row["marketCacheMutation"] is False
+
+    batch = build_data_coverage_matrix_batch(
+        [
+            {
+                **metadata,
+                "surfaceId": "rotation",
+                "fieldKey": "rotation_score_status",
+            }
+        ]
+    ).to_dict()
+
+    assert batch["rowCounts"] == {
+        "input": 1,
+        "built": 1,
+        "valid": 0,
+        "invalid": 1,
+        "errors": 1,
+    }
+    assert batch["rows"] == [row]
+    assert batch["guardPosture"] == {
+        "diagnosticOnly": True,
+        "providerRuntimeCalled": False,
+        "networkCallsEnabled": False,
+        "marketCacheMutation": False,
+    }
+    assert set(batch["errors"][0]["codes"]) >= issues
+
+    snapshot = build_data_coverage_surface_snapshot(batch["rows"]).to_dict()
+
+    assert snapshot == {
+        "snapshotVersion": "data_coverage_surface_snapshot_v1",
+        "surfaceId": "rotation",
+        "routeId": "/zh/market/rotation-radar",
+        "audience": "consumer",
+        "consumerState": "UNAVAILABLE",
+        "confidencePosture": "UNAVAILABLE",
+        "consumerSummary": "UNAVAILABLE",
+        "asOf": "2026-06-08T09:30:00Z",
+        "rowCount": 1,
+        "availableRowCount": 0,
+        "limitedRowCount": 0,
+        "blockedRowCount": 0,
+        "unavailableRowCount": 1,
+    }
+
+
 @pytest.mark.parametrize(
     ("metadata", "issue_code", "expected_right_to_display"),
     [
