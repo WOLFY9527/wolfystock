@@ -13,7 +13,9 @@ except ModuleNotFoundError:
 
 import src.auth as auth
 from api.app import create_app
+from api.v1.schemas.report_evidence_export import ReportEvidenceExport
 from src.analyzer import AnalysisResult
+from src.services.report_evidence_export import build_report_evidence_export
 from src.services.analysis_service import AnalysisService
 from src.services.task_queue import AnalysisTaskQueue
 
@@ -362,3 +364,15 @@ def test_sync_analysis_api_preserves_home_evidence_packet_contract(client) -> No
         "sectorTheme",
         "macroLiquidity",
     ]
+
+    export_payload = build_report_evidence_export(report)
+    validated_export = ReportEvidenceExport.model_validate(export_payload)
+    assert validated_export.contractVersion == "report_evidence_export_v1"
+    assert validated_export.payloadClass == "compact"
+    assert validated_export.availability.state == "available"
+    export_packet = validated_export.sidecars.singleStockEvidencePacket
+    assert export_packet["contractVersion"] == packet["contractVersion"]
+    assert export_packet["symbol"] == packet["symbol"]
+    assert export_packet["packetState"] == packet["packetState"]
+    assert export_packet["domains"]["news"]["status"] == packet["domains"]["news"]["status"]
+    assert export_packet["noAdviceBoundary"] == packet["noAdviceBoundary"]
