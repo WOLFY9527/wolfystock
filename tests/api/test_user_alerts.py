@@ -17,6 +17,7 @@ from api.app import create_app
 from api.deps import CurrentUser, get_current_user
 from src.config import Config
 from src.services.user_alert_dry_run_pipeline import build_user_alert_dry_run_pipeline_result
+from src.services.user_alert_service import UserAlertService
 from src.storage import DatabaseManager
 
 
@@ -25,10 +26,14 @@ _API_DRY_RUN_FIELDS = {
     "condition_observed",
     "dedupeFingerprint",
     "dedupe_fingerprint",
+    "dedupeKey",
+    "dedupe_key",
     "dryRun",
     "dry_run",
     "eventPacket",
     "event_packet",
+    "fingerprint",
+    "freshness",
     "freshnessStatus",
     "freshness_status",
     "liveOutbound",
@@ -41,6 +46,8 @@ _API_DRY_RUN_FIELDS = {
     "network_calls_enabled",
     "noSend",
     "no_send",
+    "observedAsOf",
+    "observed_as_of",
     "observedAt",
     "observed_at",
     "observedPrice",
@@ -49,7 +56,62 @@ _API_DRY_RUN_FIELDS = {
     "outbound_attempted",
     "providerRuntimeCalled",
     "provider_runtime_called",
+    "safeMetadata",
+    "safe_metadata",
+    "suppression",
+    "suppressionState",
+    "suppression_state",
     "suppressed",
+    "suppressedLocalRecord",
+    "suppressed_local_record",
+}
+_RULE_RESPONSE_KEYS = {
+    "id",
+    "contractVersion",
+    "ruleType",
+    "symbol",
+    "direction",
+    "thresholdPrice",
+    "enabled",
+    "note",
+    "deliveryMode",
+    "inAppOnly",
+    "ownerScoped",
+    "createdAt",
+    "updatedAt",
+}
+_RULE_LIST_RESPONSE_KEYS = {
+    "contractVersion",
+    "deliveryMode",
+    "inAppOnly",
+    "ownerScoped",
+    "items",
+}
+_EVENT_RESPONSE_KEYS = {
+    "id",
+    "contractVersion",
+    "eventType",
+    "ruleId",
+    "symbol",
+    "direction",
+    "thresholdPrice",
+    "title",
+    "message",
+    "deliveryMode",
+    "inAppOnly",
+    "ownerScoped",
+    "readAt",
+    "createdAt",
+}
+_EVENT_LIST_RESPONSE_KEYS = {
+    "contractVersion",
+    "deliveryMode",
+    "inAppOnly",
+    "ownerScoped",
+    "total",
+    "limit",
+    "offset",
+    "items",
 }
 
 
@@ -84,6 +146,14 @@ def _assert_no_api_dry_run_fields(test_case: unittest.TestCase, payload: object)
     if isinstance(payload, list):
         for item in payload:
             _assert_no_api_dry_run_fields(test_case, item)
+
+
+def _assert_response_keys(
+    test_case: unittest.TestCase,
+    payload: dict[str, object],
+    expected_keys: set[str],
+) -> None:
+    test_case.assertEqual(set(payload), expected_keys)
 
 
 class UserAlertsApiTestCase(unittest.TestCase):
@@ -160,6 +230,8 @@ class UserAlertsApiTestCase(unittest.TestCase):
         )
         self.assertEqual(create_resp.status_code, 200)
         created = create_resp.json()
+        _assert_response_keys(self, created, _RULE_RESPONSE_KEYS)
+        _assert_no_api_dry_run_fields(self, created)
         self.assertEqual(created["contractVersion"], "user_alert_contract_v1")
         self.assertEqual(created["ruleType"], "watchlist_price_threshold")
         self.assertEqual(created["symbol"], "NVDA")
@@ -173,7 +245,11 @@ class UserAlertsApiTestCase(unittest.TestCase):
 
         list_resp = self.client.get("/api/v1/user-alerts/rules")
         self.assertEqual(list_resp.status_code, 200)
-        self.assertEqual(list_resp.json()["items"][0]["id"], created["id"])
+        listed = list_resp.json()
+        _assert_response_keys(self, listed, _RULE_LIST_RESPONSE_KEYS)
+        _assert_no_api_dry_run_fields(self, listed)
+        self.assertEqual(listed["items"][0]["id"], created["id"])
+        _assert_response_keys(self, listed["items"][0], _RULE_RESPONSE_KEYS)
 
         update_resp = self.client.patch(
             f"/api/v1/user-alerts/rules/{created['id']}",
@@ -186,6 +262,8 @@ class UserAlertsApiTestCase(unittest.TestCase):
         )
         self.assertEqual(update_resp.status_code, 200)
         updated = update_resp.json()
+        _assert_response_keys(self, updated, _RULE_RESPONSE_KEYS)
+        _assert_no_api_dry_run_fields(self, updated)
         self.assertEqual(updated["direction"], "below")
         self.assertEqual(updated["thresholdPrice"], 118.25)
         self.assertFalse(updated["enabled"])
@@ -194,7 +272,10 @@ class UserAlertsApiTestCase(unittest.TestCase):
         delete_resp = self.client.delete(f"/api/v1/user-alerts/rules/{created['id']}")
         self.assertEqual(delete_resp.status_code, 200)
         self.assertEqual(delete_resp.json(), {"deleted": 1})
-        self.assertEqual(self.client.get("/api/v1/user-alerts/rules").json()["items"], [])
+        after_delete = self.client.get("/api/v1/user-alerts/rules").json()
+        _assert_response_keys(self, after_delete, _RULE_LIST_RESPONSE_KEYS)
+        _assert_no_api_dry_run_fields(self, after_delete)
+        self.assertEqual(after_delete["items"], [])
 
     def test_guest_or_unauthorized_access_is_rejected(self) -> None:
         client = self._make_auth_enabled_client()
@@ -357,13 +438,31 @@ class UserAlertsApiTestCase(unittest.TestCase):
             json={"symbol": "TSLA", "direction": "above", "thresholdPrice": 200},
         )
         self.assertEqual(create_resp.status_code, 200)
+        created = create_resp.json()
+        UserAlertService(db_manager=self.db).record_in_app_event(
+            owner_id="user-1",
+            rule_id=created["id"],
+            title="Price threshold condition recorded",
+            message="Condition recorded for in-app review.",
+        )
+
         events_resp = self.client.get("/api/v1/user-alerts/events")
         self.assertEqual(events_resp.status_code, 200)
         payload = events_resp.json()
-        self.assertEqual(payload["items"], [])
+        _assert_response_keys(self, payload, _EVENT_LIST_RESPONSE_KEYS)
+        _assert_no_api_dry_run_fields(self, payload)
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual(len(payload["items"]), 1)
+        _assert_response_keys(self, payload["items"][0], _EVENT_RESPONSE_KEYS)
         self.assertEqual(payload["contractVersion"], "user_alert_contract_v1")
         self.assertTrue(payload["inAppOnly"])
         self.assertEqual(payload["deliveryMode"], "in_app")
+        self.assertEqual(payload["items"][0]["eventType"], "watchlist_price_threshold")
+        self.assertEqual(payload["items"][0]["symbol"], "TSLA")
+        self.assertEqual(payload["items"][0]["direction"], "above")
+        self.assertEqual(payload["items"][0]["deliveryMode"], "in_app")
+        self.assertTrue(payload["items"][0]["inAppOnly"])
+        self.assertTrue(payload["items"][0]["ownerScoped"])
         self.assertNotIn("provider", str(payload).lower())
         self.assertNotIn("admin", str(payload).lower())
         self.assertNotIn("webhook", str(payload).lower())
