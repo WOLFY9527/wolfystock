@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import os
 import tempfile
 import unittest
@@ -15,7 +16,41 @@ import src.auth as auth
 from api.app import create_app
 from api.deps import CurrentUser, get_current_user
 from src.config import Config
+from src.services.user_alert_dry_run_pipeline import build_user_alert_dry_run_pipeline_result
 from src.storage import DatabaseManager
+
+
+_API_DRY_RUN_FIELDS = {
+    "conditionObserved",
+    "condition_observed",
+    "dedupeFingerprint",
+    "dedupe_fingerprint",
+    "dryRun",
+    "dry_run",
+    "eventPacket",
+    "event_packet",
+    "freshnessStatus",
+    "freshness_status",
+    "liveOutbound",
+    "live_outbound",
+    "localOnly",
+    "local_only",
+    "marketCacheMutation",
+    "market_cache_mutation",
+    "networkCallsEnabled",
+    "network_calls_enabled",
+    "noSend",
+    "no_send",
+    "observedAt",
+    "observed_at",
+    "observedPrice",
+    "observed_price",
+    "outboundAttempted",
+    "outbound_attempted",
+    "providerRuntimeCalled",
+    "provider_runtime_called",
+    "suppressed",
+}
 
 
 def _reset_auth_globals() -> None:
@@ -37,6 +72,18 @@ def _make_user(user_id: str, username: str) -> CurrentUser:
         transitional=False,
         auth_enabled=True,
     )
+
+
+def _assert_no_api_dry_run_fields(test_case: unittest.TestCase, payload: object) -> None:
+    if isinstance(payload, dict):
+        unexpected = sorted(_API_DRY_RUN_FIELDS.intersection(payload))
+        test_case.assertEqual(unexpected, [])
+        for value in payload.values():
+            _assert_no_api_dry_run_fields(test_case, value)
+        return
+    if isinstance(payload, list):
+        for item in payload:
+            _assert_no_api_dry_run_fields(test_case, item)
 
 
 class UserAlertsApiTestCase(unittest.TestCase):
@@ -207,6 +254,101 @@ class UserAlertsApiTestCase(unittest.TestCase):
         get_quote.assert_not_called()
         emit_event.assert_not_called()
         send_webhook.assert_not_called()
+
+    def test_api_created_rule_feeds_pure_dry_run_helper_without_send_or_persisting_events(
+        self,
+    ) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+        observed_at = datetime(2026, 6, 8, 10, 30, tzinfo=timezone.utc)
+        recorded_at = datetime(2026, 6, 8, 10, 31, tzinfo=timezone.utc)
+
+        with (
+            patch("data_provider.base.DataFetcherManager.get_realtime_quote") as get_quote,
+            patch("src.services.notification_service.NotificationService.emit_event") as emit_event,
+            patch("src.services.notification_service.NotificationDeliveryClient.send_webhook") as send_webhook,
+        ):
+            create_resp = self.client.post(
+                "/api/v1/user-alerts/rules",
+                json={
+                    "symbol": "nvda",
+                    "direction": "above",
+                    "thresholdPrice": 125.5,
+                    "enabled": True,
+                    "note": "Use helper input without API dry-run fields.",
+                },
+            )
+            self.assertEqual(create_resp.status_code, 200)
+            created = create_resp.json()
+            _assert_no_api_dry_run_fields(self, created)
+
+            rules_resp = self.client.get("/api/v1/user-alerts/rules")
+            self.assertEqual(rules_resp.status_code, 200)
+            _assert_no_api_dry_run_fields(self, rules_resp.json())
+
+            before_events_resp = self.client.get("/api/v1/user-alerts/events")
+            self.assertEqual(before_events_resp.status_code, 200)
+            before_events = before_events_resp.json()
+            _assert_no_api_dry_run_fields(self, before_events)
+            self.assertEqual(before_events["total"], 0)
+            self.assertEqual(before_events["items"], [])
+
+            result = build_user_alert_dry_run_pipeline_result(
+                rule=created,
+                observed_price=130.0,
+                observed_at=observed_at,
+                freshness={"status": "fresh", "maxAgeMinutes": 120},
+                suppression={
+                    "muted": False,
+                    "snoozedUntil": None,
+                    "cooldownStartedAt": None,
+                    "cooldownSeconds": None,
+                    "previousFingerprint": "older-local-fingerprint",
+                    "previousTimeBucket": "202606080900",
+                },
+                now=observed_at,
+                recorded_at=recorded_at,
+            )
+
+            after_events_resp = self.client.get("/api/v1/user-alerts/events")
+            self.assertEqual(after_events_resp.status_code, 200)
+            after_events = after_events_resp.json()
+            _assert_no_api_dry_run_fields(self, after_events)
+
+        get_quote.assert_not_called()
+        emit_event.assert_not_called()
+        send_webhook.assert_not_called()
+
+        self.assertEqual(after_events, before_events)
+        self.assertEqual(after_events["total"], 0)
+        self.assertEqual(after_events["items"], [])
+
+        self.assertTrue(result["dryRun"])
+        self.assertTrue(result["noSend"])
+        self.assertTrue(result["localOnly"])
+        self.assertFalse(result["outboundAttempted"])
+        self.assertFalse(result["liveOutbound"])
+
+        evaluation = result["evaluation"]
+        self.assertEqual(evaluation["ruleType"], "watchlist_price_threshold")
+        self.assertEqual(evaluation["subject"], "NVDA")
+        self.assertEqual(evaluation["direction"], "above")
+        self.assertEqual(evaluation["thresholdPrice"], 125.5)
+        self.assertEqual(evaluation["state"], "condition_observed")
+        self.assertTrue(evaluation["conditionObserved"])
+        self.assertFalse(evaluation["suppressed"])
+        self.assertFalse(evaluation["providerRuntimeCalled"])
+        self.assertFalse(evaluation["networkCallsEnabled"])
+        self.assertFalse(evaluation["marketCacheMutation"])
+
+        packet = result["eventPacket"]
+        self.assertIsNotNone(packet)
+        assert packet is not None
+        self.assertTrue(packet["dryRun"])
+        self.assertTrue(packet["localOnly"])
+        self.assertFalse(packet["outboundAttempted"])
+        self.assertFalse(packet["liveOutbound"])
+        self.assertEqual(packet["eventType"], "user.alert_dry_run_evaluation")
+        self.assertEqual(packet["safeMetadata"]["subject"], "NVDA")
 
     def test_event_payload_is_sanitized_in_app_only_and_owner_scoped(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
