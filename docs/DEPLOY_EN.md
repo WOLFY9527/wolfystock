@@ -13,6 +13,16 @@ This document explains how to deploy the AI Stock Analysis System to a server.
 
 **Conclusion: Docker Compose is recommended for the fastest and most convenient migration!**
 
+## Current Deployment Boundary
+
+- **Single-instance / private beta / operator rehearsal: allowed.** The current safe path is still a single API process and a single instance for controlled users and deployment rehearsal.
+- **Public multi-user: still NO-GO.** Do not treat this document as public-launch approval until all of the following evidence exists and is accepted:
+  - an **isolated PostgreSQL restore/PITR drill**
+  - an **HTTPS staging ingress smoke**
+  - **encrypted backup infrastructure**
+  - verified **rollback proof / last-known-good recovery path**
+- If you are only rehearsing a single-instance deployment, keep the service behind a private network or a controlled HTTPS reverse proxy and preserve the current single-process queue/SSE assumption.
+
 ---
 
 ## Option 1: Docker Compose Deployment (Recommended)
@@ -83,7 +93,23 @@ docker-compose -f ./docker/docker-compose.yml exec stock-analyzer python main.py
 - Do not scale the API surface that serves `/api/v1/analysis/*` and `/api/v1/analysis/tasks/stream` to multiple workers or multiple instances unless you have your own sticky-routing strategy and accept process-local task visibility.
 - The current Docker Compose `server` service matches this assumption.
 
-### 4.2 Post-Start Checks
+### 4.2 Public Reverse-Proxy Safety Baseline
+
+For internet-facing deployments, bind the API/Web service to `127.0.0.1:8000` or keep it private to the internal network. Put Nginx / a cloud load balancer / CDN in front to terminate HTTPS and forward traffic to the backend.
+
+Minimum baseline:
+
+- Expose only 80/443 publicly and redirect HTTP to HTTPS.
+- Enable HSTS, `X-Content-Type-Options`, `Referrer-Policy`, frame deny / `frame-ancestors`, and `Permissions-Policy`.
+- Set request-body limits and connection/read timeouts.
+- Forward `Host`, `X-Real-IP`, `X-Forwarded-For`, and `X-Forwarded-Proto` correctly.
+- Set `TRUST_X_FORWARDED_FOR=true` only behind a trusted proxy; keep it `false` on direct public exposure.
+- In production, explicitly set `APP_ENV=production`, `ADMIN_AUTH_ENABLED=true`, `CORS_ALLOW_ALL=false`, `CORS_ORIGINS=https://your-domain`, and `CSRF_TRUSTED_ORIGINS=https://your-domain`.
+- Also declare the current preflight contract flags explicitly: `WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_SCOPE=admin_only`, `WOLFYSTOCK_QUOTA_ENFORCEMENT_MODE=advisory`, `WOLFYSTOCK_BACKUP_PITR_EXECUTION_ENABLED=false`, `WOLFYSTOCK_STAGING_INGRESS_SMOKE=false`, plus the accepted RBAC fallback state.
+- SSE / WebSocket paths need HTTP/1.1 upgrade support and a longer `proxy_read_timeout`.
+- Cache static assets at the proxy if needed, but do not apply shared caching to API responses.
+
+### 4.3 Post-Start Checks
 
 ```bash
 # Liveness: confirms the process is responding
@@ -93,7 +119,7 @@ curl -fsS http://127.0.0.1:8000/api/health/live
 curl -fsS http://127.0.0.1:8000/api/health/ready
 ```
 
-### 4.3 WS1 Baseline Capture (Pre-deployment)
+### 4.4 WS1 Baseline Capture (Pre-deployment)
 
 > Goal: baseline capture and validation only. No optimization or architecture refactor.
 
@@ -115,7 +141,7 @@ python3 scripts/ws1_baseline_capture.py \
 # 3) Baseline output is written to reports/ws1_baseline/baseline_<UTC timestamp>.json
 ```
 
-### 4.4 Canonical clean-checkout smoke (repo-committed scripts only)
+### 4.5 Canonical clean-checkout smoke (repo-committed scripts only)
 
 ```bash
 # Clean-checkout example
@@ -129,7 +155,7 @@ python3 scripts/smoke_backtest_standard.py
 python3 scripts/smoke_backtest_rule.py
 ```
 
-### 4.5 Target-host queue/SSE single-process validation checklist
+### 4.6 Target-host queue/SSE single-process validation checklist
 
 ```bash
 # 1) Start single-process API on target host
@@ -162,7 +188,7 @@ curl -N "http://127.0.0.1:8000/api/v1/analysis/tasks/stream?task_id=${TASK_ID}" 
 curl -fsS "http://127.0.0.1:8000/api/v1/analysis/status/${TASK_ID}"
 ```
 
-### 4.6 Rollback checklist (WS1 deployment validation path)
+### 4.7 Rollback checklist (WS1 deployment validation path)
 
 ```bash
 # A. Stop the new version
@@ -308,18 +334,20 @@ If you also need scheduled analysis, run `--schedule` as a separate service inst
 | Config Item | Description | How to Get |
 |--------|------|----------|
 | `GEMINI_API_KEY` | Required for AI analysis | [Google AI Studio](https://aistudio.google.com/) |
-| `STOCK_LIST` | Watchlist | Comma-separated stock codes |
-| `WECHAT_WEBHOOK_URL` | WeChat push | WeChat Work group bot |
+| `ADMIN_AUTH_ENABLED` | Admin authentication; must stay `true` in production | `.env.example` |
+| `APP_ENV` | Set explicitly to `production` for public or formal rehearsal environments | `.env.example` |
 
 ### Optional Configuration
 
 | Config Item | Default | Description |
 |--------|--------|------|
+| `STOCK_LIST` | `600519,300750,002594` | Watchlist / scheduled analysis targets |
 | `SCHEDULE_ENABLED` | `false` | Enable scheduled tasks |
 | `SCHEDULE_TIME` | `18:00` | Daily execution time |
 | `MARKET_REVIEW_ENABLED` | `true` | Enable market review |
 | `TAVILY_API_KEYS` | - | News search (optional) |
 | `MINIMAX_API_KEYS` | - | MiniMax search (optional) |
+| Notification channel variables | - | All optional; configure one or more only if needed |
 
 ---
 
@@ -329,7 +357,7 @@ If server is in mainland China, accessing Gemini API requires proxy:
 
 ### Docker Method
 
-Edit `docker-compose.yml`:
+Inject proxy environment variables:
 ```yaml
 environment:
   - http_proxy=http://your-proxy:port
@@ -338,10 +366,10 @@ environment:
 
 ### Direct Deployment Method
 
-Edit top of `main.py`:
-```python
-os.environ["http_proxy"] = "http://your-proxy:port"
-os.environ["https_proxy"] = "http://your-proxy:port"
+Inject them through systemd, the shell profile, or the startup command:
+```bash
+export http_proxy=http://your-proxy:port
+export https_proxy=http://your-proxy:port
 ```
 
 ---
@@ -371,11 +399,9 @@ ls -la /opt/stock-analyzer/reports/
 ### Routine Maintenance
 
 ```bash
-# Clean old logs (keep 7 days)
-find /opt/stock-analyzer/logs -mtime +7 -delete
-
-# Clean old reports (keep 30 days)
-find /opt/stock-analyzer/reports -mtime +30 -delete
+# Preview first, then delete only through a reviewed retention workflow
+find /opt/stock-analyzer/logs -mtime +7 -print
+find /opt/stock-analyzer/reports -mtime +30 -print
 ```
 
 ---
@@ -395,10 +421,7 @@ Check proxy configuration, ensure server can access Gemini API.
 
 ### 3. Database locked
 
-```bash
-# Stop service then delete lock file
-rm /opt/stock-analyzer/data/*.lock
-```
+Do not delete `*.lock` files directly. First confirm whether a process is still running, inspect recent error logs, and verify storage health. Only handle a lock as stale residue when an operator runbook and rollback path already exist.
 
 ### 4. Insufficient memory
 
@@ -417,15 +440,21 @@ deploy:
 Migrate from one server to another:
 
 ```bash
-# Source server: Package
-cd /opt/stock-analyzer
-tar -czvf stock-analyzer-backup.tar.gz .env data/ logs/ reports/
-
-# Target server: Deploy
+# 1) Target server: deploy the code
 mkdir -p /opt/stock-analyzer
 cd /opt/stock-analyzer
 git clone <your-repo-url> .
-tar -xzvf stock-analyzer-backup.tar.gz
+
+# 2) Re-inject secrets in the target environment (do not package or transfer raw .env)
+cp .env.example .env
+vim .env
+
+# 3) Restore data through a controlled backup workflow, not an unencrypted
+#    archive of environment files or database directories. Public multi-user
+#    still requires isolated restore/PITR,
+#    HTTPS staging ingress, backup infra, and rollback proof.
+
+# 4) Start services
 docker-compose -f ./docker/docker-compose.yml up -d
 ```
 

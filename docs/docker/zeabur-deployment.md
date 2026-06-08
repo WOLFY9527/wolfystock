@@ -2,6 +2,10 @@
 
 本指南详细介绍如何在 Zeabur 上部署 A股自选股智能分析系统，包括 WebUI、API、定时任务，以及当前真实存在的 Discord 通知发送能力。
 
+> 当前定位：**Zeabur 适合单实例 / 私有 beta / 运维 rehearsal。**
+> **公网 public multi-user 仍然 NO-GO**，除非已经补齐并接受隔离 restore/PITR、HTTPS staging ingress、加密备份基础设施、以及 rollback proof。
+> 即使在 Zeabur 上部署，也应保留当前 API 单进程、单实例假设，不要把 queue/SSE 路径直接扩为多实例公网承载。
+
 ## 目录
 
 - [1. 部署前准备](#1-部署前准备)
@@ -113,9 +117,9 @@ Dockerfile 已采用多阶段构建，前端会在镜像构建时自动打包。
 
 | 变量名 | 说明 | 示例值 |
 |--------|------|--------|
-| `DISCORD_BOT_TOKEN` | Discord Bot Token | `MTAxMjM0NTY3ODkwMTEyMzQ1Ng.GhIjKl.MnOpQrStUvWxYz1234567890` |
-| `DISCORD_MAIN_CHANNEL_ID` | 主频道 ID | `123456789012345678` |
-| `DISCORD_WEBHOOK_URL` | Discord Webhook URL（可选） | `https://discord.com/api/webhooks/...` |
+| `DISCORD_BOT_TOKEN` | Discord Bot Token | `<set-in-zeabur-secret-manager>` |
+| `DISCORD_MAIN_CHANNEL_ID` | 主频道 ID | `<channel-id>` |
+| `DISCORD_WEBHOOK_URL` | Discord Webhook URL（可选） | `<set-in-zeabur-secret-manager>` |
 
 ### 4.3 运行方式
 
@@ -142,6 +146,25 @@ Dockerfile 已采用多阶段构建，前端会在镜像构建时自动打包。
 | `API_PORT` | API 服务端口 | `8000` |
 
 > 旧版 `WEBUI_HOST`/`WEBUI_PORT`/`WEBUI_ENABLED` 环境变量仍兼容，会自动转发到 API 服务。
+
+### 5.2.1 生产 preflight 合同旗标
+
+面向正式演练或受控生产环境时，建议在 Zeabur 显式设置下列变量，而不是依赖隐式默认值：
+
+| 变量名 | 建议值 | 说明 |
+|--------|--------|------|
+| `APP_ENV` | `production` | 开启生产环境安全语义 |
+| `ADMIN_AUTH_ENABLED` | `true` | 管理界面必须开启认证 |
+| `CORS_ALLOW_ALL` | `false` | 禁止公网通配跨域 |
+| `CORS_ORIGINS` | `https://your-domain` | 显式前端来源 |
+| `CSRF_TRUSTED_ORIGINS` | `https://your-domain` | 显式可信写入来源 |
+| `TRUST_X_FORWARDED_FOR` | `true` 仅限可信代理前置 | 直连公网时保持 `false` |
+| `WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_SCOPE` | `admin_only` | 当前只允许 admin 试点 |
+| `WOLFYSTOCK_QUOTA_ENFORCEMENT_MODE` | `advisory` | 当前仍是观测/演练姿态 |
+| `WOLFYSTOCK_BACKUP_PITR_EXECUTION_ENABLED` | `false` | 默认禁止 live restore/PITR |
+| `WOLFYSTOCK_STAGING_INGRESS_SMOKE` | `false` | 默认禁止 live staging ingress smoke |
+
+`WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED` 也应显式声明当前接受状态，避免把兼容 fallback 误读为已下线。
 
 ### 5.3 分析相关配置
 
@@ -308,9 +331,22 @@ cat /app/logs/stock_analysis_20260125.log
 # 进入容器
 zeabur exec <服务名> bash
 
-# 检查环境变量
-printenv | grep -i discord
-printenv | grep -i webui
+# 仅检查 presence，不打印 secret 值
+zeabur exec <服务名> python - <<'PY'
+import os
+checks = {
+    "DISCORD_BOT_TOKEN": bool(os.getenv("DISCORD_BOT_TOKEN")),
+    "DISCORD_WEBHOOK_URL": bool(os.getenv("DISCORD_WEBHOOK_URL")),
+    "DISCORD_MAIN_CHANNEL_ID": bool(os.getenv("DISCORD_MAIN_CHANNEL_ID")),
+    "API_HOST": os.getenv("API_HOST", ""),
+    "API_PORT": os.getenv("API_PORT", ""),
+}
+for key, value in checks.items():
+    if isinstance(value, bool):
+        print(f"{key}: {'present' if value else 'missing'}")
+    else:
+        print(f"{key}: {value or 'unset'}")
+PY
 ```
 
 ### 12.3 测试连接

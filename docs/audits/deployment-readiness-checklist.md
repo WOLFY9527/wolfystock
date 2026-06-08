@@ -407,9 +407,13 @@ The following must all be true before public multi-user deployment:
 - [ ] Public ingress exposes only 80/443, redirects HTTP to HTTPS, and forwards
   to a private/local backend port.
 - [ ] Production `.env` uses `APP_ENV=production`, `ADMIN_AUTH_ENABLED=true`,
-  explicit CORS/CSRF origins, and trusted proxy settings only behind a trusted
-  proxy; attach sanitized production config preflight JSON rather than raw
-  `.env` values.
+  explicit `CORS_ALLOW_ALL=false`, explicit CORS/CSRF origins, trusted proxy
+  settings only behind a trusted proxy, explicit
+  `WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_SCOPE=admin_only`, explicit
+  `WOLFYSTOCK_QUOTA_ENFORCEMENT_MODE`, and explicit default-off opt-in flags
+  for `WOLFYSTOCK_BACKUP_PITR_EXECUTION_ENABLED` plus
+  `WOLFYSTOCK_STAGING_INGRESS_SMOKE`; attach sanitized production config
+  preflight JSON rather than raw `.env` values.
 - [ ] Secrets audit confirms no real API keys, provider credentials, cookies,
   session ids, broker credentials, webhook URLs, password hashes, raw prompts,
   raw provider payloads, or stack traces are present in logs, admin diagnostics,
@@ -428,6 +432,10 @@ The following must all be true before public multi-user deployment:
 - [ ] Retention dry-run reports exist for high-growth domains.
 - [ ] Cost/quota enforcement status is explicitly labeled in user/admin-facing
   docs and UI so observability is not mistaken for a spending cap.
+- [ ] Deployment docs distinguish single-instance/private-beta rehearsal from
+  public multi-user launch and keep the public verdict at **NO-GO** until
+  isolated restore/PITR, HTTPS staging ingress, backup infra, and rollback
+  proof are accepted.
 
 Final launch verdict:
 

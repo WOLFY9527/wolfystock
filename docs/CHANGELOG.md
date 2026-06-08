@@ -1,4 +1,5 @@
 ## 2026-06-08
+- Aligned deployment docs and `.env.example` with the current production-config readiness contract: added explicit preflight flag examples for production/rehearsal posture, removed raw token-like examples plus unsafe `printenv | grep` / unencrypted `.env` tar / direct lockfile deletion guidance, and clarified that single-instance private-beta rehearsal is supported while public multi-user deployment remains **NO-GO** until isolated restore/PITR, HTTPS staging ingress, backup infrastructure, and rollback proof are accepted.
 - Cleaned up dependency and bot/deployment docs truth: `requirements.txt` now lists the actively imported `pydantic`, `python-dateutil`, and `websockets` runtime dependencies explicitly, removes the unused `discord.py` package, documents that the command-bot registry currently exposes DingTalk only, preserves Discord as an outbound notification sender configuration, and removes the stale Zeabur/Discord bot mode claim that implied a `python main.py --discord-bot` runtime.
 
 ## 2026-06-07

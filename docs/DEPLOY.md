@@ -13,6 +13,16 @@
 
 **结论：推荐使用 Docker Compose，迁移最快最方便！**
 
+## 🚦 当前部署边界
+
+- **单实例 / 私有 beta / 运维演练：可做。** 当前默认安全路径仍是 API 单进程、单实例，适合受控成员、私有入口、部署前彩排。
+- **公网 public multi-user：仍然 NO-GO。** 在以下证据补齐前，不要把本文档视为“可直接公网开放”的批准：
+  - 已完成并接受 **隔离环境 PostgreSQL restore/PITR drill**
+  - 已完成并接受 **HTTPS staging ingress smoke**
+  - 已具备 **加密备份基础设施**
+  - 已具备并验证 **rollback proof / last-known-good 回滚路径**
+- 如果只是做单实例 rehearsal，请把入口放在私有网络或受控 HTTPS 反向代理后，并保留当前单进程 queue/SSE 假设。
+
 ---
 
 ## 🐳 方案一：Docker Compose 部署（推荐）
@@ -98,7 +108,8 @@ docker-compose -f ./docker/docker-compose.yml exec stock-analyzer python main.py
 - 设置请求体大小限制和连接/读取超时，避免无限制上传或长连接耗尽。
 - 正确传递 `Host`、`X-Real-IP`、`X-Forwarded-For`、`X-Forwarded-Proto`。
 - 仅在可信代理前置时设置 `TRUST_X_FORWARDED_FOR=true`；直连公网保持 `false`。
-- 生产 `.env` 设置 `APP_ENV=production`、`ADMIN_AUTH_ENABLED=true`、显式 `CORS_ORIGINS=https://你的域名`，必要时同步 `CSRF_TRUSTED_ORIGINS`。
+- 生产 `.env` 显式设置 `APP_ENV=production`、`ADMIN_AUTH_ENABLED=true`、`CORS_ALLOW_ALL=false`、`CORS_ORIGINS=https://你的域名`、`CSRF_TRUSTED_ORIGINS=https://你的域名`。
+- 同时显式声明当前 preflight 合同旗标：`WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_SCOPE=admin_only`、`WOLFYSTOCK_QUOTA_ENFORCEMENT_MODE=advisory`、`WOLFYSTOCK_BACKUP_PITR_EXECUTION_ENABLED=false`、`WOLFYSTOCK_STAGING_INGRESS_SMOKE=false`，以及当前接受的 RBAC fallback 状态。
 - SSE / WebSocket 路径需要 HTTP/1.1 upgrade 与较长 `proxy_read_timeout`。
 - 前端静态资源可在代理层加短期缓存；API 响应不要做共享缓存。
 
@@ -331,18 +342,20 @@ journalctl -u stock-analyzer -f
 | 配置项 | 说明 | 获取方式 |
 |--------|------|----------|
 | `GEMINI_API_KEY` | AI 分析必需 | [Google AI Studio](https://aistudio.google.com/) |
-| `STOCK_LIST` | 自选股列表 | 逗号分隔的股票代码 |
-| `WECHAT_WEBHOOK_URL` | 微信推送 | 企业微信群机器人 |
+| `ADMIN_AUTH_ENABLED` | 管理界面认证，生产必须保持 `true` | `.env.example` |
+| `APP_ENV` | 公网或正式演练建议显式设为 `production` | `.env.example` |
 
 ### 可选配置项
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
+| `STOCK_LIST` | `600519,300750,002594` | 定时分析 / 观察列表 |
 | `SCHEDULE_ENABLED` | `false` | 是否启用定时任务 |
 | `SCHEDULE_TIME` | `18:00` | 每日执行时间 |
 | `MARKET_REVIEW_ENABLED` | `true` | 是否启用大盘复盘 |
 | `TAVILY_API_KEYS` | - | 新闻搜索（可选） |
 | `MINIMAX_API_KEYS` | - | MiniMax 搜索（可选） |
+| 通知渠道变量 | - | 全部可选，按需配置至少一个 |
 
 ---
 
@@ -352,7 +365,7 @@ journalctl -u stock-analyzer -f
 
 ### Docker 方式
 
-编辑 `docker-compose.yml`：
+通过环境变量注入代理：
 ```yaml
 environment:
   - http_proxy=http://your-proxy:port
@@ -361,10 +374,10 @@ environment:
 
 ### 直接部署方式
 
-编辑 `main.py` 顶部：
-```python
-os.environ["http_proxy"] = "http://your-proxy:port"
-os.environ["https_proxy"] = "http://your-proxy:port"
+在 systemd、shell profile 或启动命令前注入：
+```bash
+export http_proxy=http://your-proxy:port
+export https_proxy=http://your-proxy:port
 ```
 
 ---
@@ -394,11 +407,9 @@ ls -la /opt/stock-analyzer/reports/
 ### 定期维护
 
 ```bash
-# 清理旧日志（保留7天）
-find /opt/stock-analyzer/logs -mtime +7 -delete
-
-# 清理旧报告（保留30天）
-find /opt/stock-analyzer/reports -mtime +30 -delete
+# 先预览，再用平台级保留策略或人工确认删除
+find /opt/stock-analyzer/logs -mtime +7 -print
+find /opt/stock-analyzer/reports -mtime +30 -print
 ```
 
 ---
@@ -418,10 +429,7 @@ docker-compose -f ./docker/docker-compose.yml build --no-cache
 
 ### 3. 数据库锁定
 
-```bash
-# 停止服务后删除 lock 文件
-rm /opt/stock-analyzer/data/*.lock
-```
+不要直接删除 `*.lock` 文件。先确认仍在运行的进程、最近异常日志和底层存储状态；只有在明确该锁文件为陈旧残留且已有回滚/备份路径时，才按运维 runbook 处理。
 
 ### 4. 内存不足
 
@@ -440,15 +448,20 @@ deploy:
 从一台服务器迁移到另一台：
 
 ```bash
-# 源服务器：打包
-cd /opt/stock-analyzer
-tar -czvf stock-analyzer-backup.tar.gz .env data/ logs/ reports/
-
-# 目标服务器：部署
+# 1) 目标服务器：部署代码
 mkdir -p /opt/stock-analyzer
 cd /opt/stock-analyzer
 git clone <your-repo-url> .
-tar -xzvf stock-analyzer-backup.tar.gz
+
+# 2) 在目标环境重新注入 secrets（不要打包或传输原始 .env）
+cp .env.example .env
+vim .env
+
+# 3) 通过受控备份体系恢复数据，不要使用未加密归档直接搬运环境文件或数据库目录
+#    public multi-user 仍需先通过 isolated restore/PITR、HTTPS staging ingress、
+#    backup infra、rollback proof 四项证据
+
+# 4) 启动
 docker-compose -f ./docker/docker-compose.yml up -d
 ```
 
