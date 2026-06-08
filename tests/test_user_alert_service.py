@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import unittest
 from unittest.mock import patch
 
+from src.services.user_alert_dry_run_pipeline import build_user_alert_dry_run_pipeline_result
 from src.services.user_alert_service import UserAlertService
 from src.storage import DatabaseManager
 
@@ -117,6 +119,69 @@ class UserAlertServiceTestCase(unittest.TestCase):
         get_quote.assert_not_called()
         emit_event.assert_not_called()
         send_webhook.assert_not_called()
+
+    def test_created_rule_can_feed_pure_dry_run_pipeline_without_persisting_events(self) -> None:
+        observed_at = datetime(2026, 6, 8, 10, 30, tzinfo=timezone.utc)
+        recorded_at = datetime(2026, 6, 8, 10, 31, tzinfo=timezone.utc)
+        created = self.service.create_rule(
+            owner_id="user-1",
+            symbol="nvda",
+            direction="above",
+            threshold_price=125.5,
+            enabled=True,
+            note="Local review only.",
+        )
+        before_events = self.service.list_events(owner_id="user-1")
+
+        result = build_user_alert_dry_run_pipeline_result(
+            rule=created,
+            observed_price=130.0,
+            observed_at=observed_at,
+            freshness={"status": "fresh", "maxAgeMinutes": 120},
+            suppression={
+                "muted": False,
+                "snoozedUntil": None,
+                "cooldownStartedAt": None,
+                "cooldownSeconds": None,
+                "previousFingerprint": "older-local-fingerprint",
+                "previousTimeBucket": "202606080900",
+            },
+            now=observed_at,
+            recorded_at=recorded_at,
+        )
+
+        after_events = self.service.list_events(owner_id="user-1")
+        self.assertEqual(after_events, before_events)
+        self.assertEqual(after_events["total"], 0)
+        self.assertEqual(after_events["items"], [])
+
+        self.assertTrue(result["dryRun"])
+        self.assertTrue(result["noSend"])
+        self.assertTrue(result["localOnly"])
+        self.assertFalse(result["outboundAttempted"])
+        self.assertFalse(result["liveOutbound"])
+
+        evaluation = result["evaluation"]
+        self.assertEqual(evaluation["ruleType"], "watchlist_price_threshold")
+        self.assertEqual(evaluation["subject"], "NVDA")
+        self.assertEqual(evaluation["state"], "condition_observed")
+        self.assertTrue(evaluation["conditionObserved"])
+        self.assertFalse(evaluation["suppressed"])
+        self.assertTrue(evaluation["dryRun"])
+        self.assertFalse(evaluation["outboundAttempted"])
+        self.assertFalse(evaluation["liveOutbound"])
+        self.assertFalse(evaluation["providerRuntimeCalled"])
+        self.assertFalse(evaluation["networkCallsEnabled"])
+        self.assertFalse(evaluation["marketCacheMutation"])
+
+        packet = result["eventPacket"]
+        self.assertIsNotNone(packet)
+        assert packet is not None
+        self.assertTrue(packet["dryRun"])
+        self.assertTrue(packet["localOnly"])
+        self.assertFalse(packet["outboundAttempted"])
+        self.assertFalse(packet["liveOutbound"])
+        self.assertEqual(packet["eventType"], "user.alert_dry_run_evaluation")
 
     def test_events_are_owner_scoped_sanitized_and_in_app_only(self) -> None:
         rule = self.service.create_rule(
