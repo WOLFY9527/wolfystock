@@ -31,6 +31,7 @@ from api.v1.schemas.history import (
     MarkdownReportResponse,
 )
 from api.v1.schemas.common import ErrorResponse
+from src.core.export_filter import sanitize_markdown_export
 from src.storage import DatabaseManager
 from src.report_language import (
     get_sentiment_label,
@@ -529,4 +530,4 @@ def get_history_markdown(
             }
         )
 
-    return MarkdownReportResponse(content=markdown_content)
+    return MarkdownReportResponse(content=sanitize_markdown_export(markdown_content))

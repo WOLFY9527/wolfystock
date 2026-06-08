@@ -27,11 +27,12 @@ except ModuleNotFoundError:
 try:
     from fastapi.testclient import TestClient
     from api.app import create_app
-    from api.v1.endpoints.history import get_history_detail
+    from api.v1.endpoints.history import get_history_detail, get_history_markdown
 except ModuleNotFoundError:
     TestClient = None
     create_app = None
     get_history_detail = None
+    get_history_markdown = None
 
 from src.config import Config
 from src.storage import DatabaseManager, AnalysisHistory, BacktestResult, StockDaily
@@ -1184,6 +1185,147 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertIsNotNone(markdown)
         self.assertIn("**乖离率(MA5)**: 1.33%", markdown)
         self.assertNotIn("🚨Safe", markdown)
+
+    def test_history_markdown_export_filters_advice_provider_and_diagnostics(self) -> None:
+        """Markdown export should sanitize advice wording and raw diagnostics only at the API seam."""
+        if get_history_markdown is None:
+            self.skipTest("fastapi is not installed in this test environment")
+
+        result = AnalysisResult(
+            code="AAPL",
+            name="Apple",
+            sentiment_score=82,
+            trend_prediction="Bullish",
+            operation_advice="Buy",
+            analysis_summary=(
+                "研究摘要：基本面收入保持增长，重大产品事件值得继续跟踪；"
+                "buy on pullback, stop loss, take profit, target price, position sizing."
+            ),
+            report_language="zh",
+            dashboard={
+                "core_conclusion": {
+                    "one_sentence": (
+                        "研究摘要：基本面收入保持增长，重大产品事件值得继续跟踪；"
+                        "buy on pullback, stop loss, take profit, target price, position sizing."
+                    ),
+                    "position_advice": {
+                        "no_position": "空仓者建议：立即 buy，原因 reasonCode=provider_missing",
+                        "has_position": "持仓者建议：sell if stop loss breaks",
+                    },
+                },
+                "intelligence": {
+                    "sentiment_summary": "事件：新品发布会提升关注度。",
+                    "earnings_outlook": "基本面：收入与利润率保持观察价值。",
+                    "positive_catalysts": ["事件跟踪：服务收入增长。"],
+                    "risk_alerts": ["Market Feed provider trace raw diagnostics"],
+                    "latest_news": "Yahoo Finance / Finnhub / Alpacafetcher provider trace",
+                },
+                "battle_plan": {
+                    "sniper_points": {
+                        "ideal_buy": "理想买入点 180-182",
+                        "secondary_buy": "次优买入点 176",
+                        "stop_loss": "止损位 168",
+                        "take_profit": "目标一区 195 / 目标二区 205",
+                    },
+                    "position_strategy": {
+                        "suggested_position": "position sizing 20%",
+                        "entry_plan": "建仓策略：buy in batches",
+                        "risk_control": "风控策略：stop loss",
+                    },
+                    "action_checklist": ["reasonCode=backend_snake_case", "字段待接入"],
+                },
+                "structured_analysis": {
+                    "fundamentals": {
+                        "normalized": {
+                            "trailingPE": 28.4,
+                            "totalRevenue": 391035000000,
+                            "netIncomeToCommon": 97000000000,
+                            "returnOnEquity": 1.47,
+                        },
+                    },
+                    "fundamental_context": {
+                        "earnings": {
+                            "data": {
+                                "earnings_outlook": "基本面：收入与利润率保持观察价值。"
+                            }
+                        }
+                    },
+                },
+            },
+        )
+
+        self.assertEqual(
+            self.db.save_analysis_history(
+                result=result,
+                query_id="query_markdown_export_safety_001",
+                report_type="full",
+                news_content="news",
+                context_snapshot=None,
+                save_snapshot=False,
+            ),
+            1,
+        )
+
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(
+                AnalysisHistory.query_id == "query_markdown_export_safety_001"
+            ).first()
+            if row is None:
+                self.fail("未找到保存的历史记录")
+            record_id = row.id
+
+        raw_markdown = HistoryService(self.db).get_markdown_report(str(record_id))
+        self.assertIsNotNone(raw_markdown)
+        self.assertIn("理想买入点", raw_markdown)
+        self.assertIn("Missing Field Audit", raw_markdown)
+        self.assertIn("Yahoo Finance", raw_markdown)
+
+        detail_report = get_history_detail(str(record_id), db_manager=self.db)
+        self.assertEqual(detail_report.summary.operation_advice, "买入")
+
+        response = get_history_markdown(str(record_id), db_manager=self.db)
+        exported = response.content
+
+        forbidden_terms = (
+            "理想买入点",
+            "次优买入点",
+            "止损位",
+            "目标一区",
+            "目标二区",
+            "空仓者建议",
+            "持仓者建议",
+            "建仓策略",
+            "风控策略",
+            "作战计划",
+            "狙击点位",
+            "stop loss",
+            "take profit",
+            "target price",
+            "position sizing",
+            "Alpacafetcher",
+            "Yahoo Finance",
+            "Finnhub",
+            "Market Feed",
+            "Missing Field Audit",
+            "Full Truth",
+            "integrated_unavailable",
+            "接口未返回",
+            "字段待接入",
+            "reasonCode",
+            "backend_snake_case",
+            "raw diagnostics",
+        )
+        exported_lower = exported.lower()
+        for term in forbidden_terms:
+            self.assertNotIn(term.lower(), exported_lower)
+
+        self.assertNotRegex(exported, r"\b(buy|sell)\b")
+        self.assertNotRegex(exported, r"\b[a-z]+(?:_[a-z0-9]+)+\b")
+        self.assertIn("研究摘要", exported)
+        self.assertIn("基本面", exported)
+        self.assertIn("事件", exported)
+        self.assertIn("### Evidence", exported)
+        self.assertIn("研究数据边界", exported)
 
     def test_delete_analysis_history_records_also_cleans_backtests(self) -> None:
         """删除历史记录时应一并清理关联回测结果。"""
