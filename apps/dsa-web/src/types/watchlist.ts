@@ -1,5 +1,28 @@
 import type { InvestorSignalContract } from './scanner';
 
+export interface WatchlistScannerLineageV1 {
+  contractVersion: 'scanner_watchlist_lineage_v1' | string;
+  source: 'scanner';
+  scannerRunId?: number | null;
+  symbol: string;
+  market: string;
+  rankAtScan?: number | null;
+  scoreAtScan?: number | null;
+  scoreSnapshotKind: 'saved_at_add' | 'post_add_refresh';
+  runProfile?: string | null;
+  runCompletedAt?: string | null;
+  watchlistAddedAt?: string | null;
+  themeId?: string | null;
+  universeType?: string | null;
+  researchReason: string;
+  researchNextStep: string;
+  dataState: 'available' | 'limited' | 'observation_only' | 'insufficient' | 'updating' | 'unavailable' | string;
+  freshnessLabel: string;
+  noAdviceBoundary: boolean;
+  observationOnly: boolean;
+  scoreGradeAllowed: boolean;
+}
+
 export interface WatchlistScannerIntelligence {
   lastScore?: number | null;
   lastRank?: number | null;
@@ -10,6 +33,7 @@ export interface WatchlistScannerIntelligence {
   reason?: string | null;
   lastScannedAt?: string | null;
   investorSignal?: InvestorSignalContract | null;
+  scannerLineageV1?: WatchlistScannerLineageV1 | null;
 }
 
 export interface WatchlistScoreStatusContext {

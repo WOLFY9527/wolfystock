@@ -103,6 +103,29 @@ class WatchlistScannerReasonFamiliesResponse(BaseModel):
     source_confidence: Optional["WatchlistScannerSourceConfidenceReasonFamiliesResponse"] = None
 
 
+class WatchlistScannerLineageV1Response(BaseModel):
+    contract_version: str
+    source: Literal["scanner"] = "scanner"
+    scanner_run_id: Optional[int] = None
+    symbol: str
+    market: str
+    rank_at_scan: Optional[int] = None
+    score_at_scan: Optional[float] = None
+    score_snapshot_kind: Literal["saved_at_add", "post_add_refresh"]
+    run_profile: Optional[str] = None
+    run_completed_at: Optional[str] = None
+    watchlist_added_at: Optional[str] = None
+    theme_id: Optional[str] = None
+    universe_type: Optional[str] = None
+    research_reason: str
+    research_next_step: str
+    data_state: Literal["available", "limited", "observation_only", "insufficient", "updating", "unavailable"]
+    freshness_label: str
+    no_advice_boundary: bool = True
+    observation_only: bool = True
+    score_grade_allowed: bool = False
+
+
 class WatchlistScannerIntelligenceResponse(BaseModel):
     last_score: Optional[float] = None
     last_rank: Optional[int] = None
@@ -120,6 +143,7 @@ class WatchlistScannerIntelligenceResponse(BaseModel):
     source_confidence: Optional["WatchlistScannerSourceConfidenceResponse"] = None
     reason_families: Optional["WatchlistScannerReasonFamiliesResponse"] = None
     investor_signal: Optional[Dict[str, Any]] = None
+    scanner_lineage_v1: Optional[WatchlistScannerLineageV1Response] = None
 
 
 class WatchlistScannerSourceConfidenceResponse(BaseModel):

@@ -474,6 +474,129 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertIn("source_authority_missing", investor_signal["reasonCodes"])
         self.assertIn("score_rights_missing", investor_signal["reasonCodes"])
 
+    def test_watchlist_items_project_scanner_lineage_v1_without_raw_diagnostics(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        now = datetime(2026, 5, 4, 9, 30, 0)
+        run = MarketScannerRun(
+            market="us",
+            profile="us_preopen_v1",
+            universe_name="us_preopen_watchlist_v1",
+            status="completed",
+            run_at=now,
+            completed_at=now,
+            shortlist_size=1,
+        )
+        candidate = MarketScannerCandidate(
+            symbol="WULF",
+            name="WULF",
+            rank=2,
+            score=71.5,
+            reason_summary="动量延续，等待补充证据。",
+            diagnostics_json=json.dumps(
+                {
+                    "candidateResearchSummaryFrame": {
+                        "primaryResearchReason": "动量延续，等待补充证据。",
+                        "researchNextStep": "补充证据后继续观察。",
+                    },
+                    "consumerDiagnostics": {
+                        "userFacingLabels": ["当前信号置信度较低，仅供观察。"],
+                    },
+                    "score_explainability": {
+                        "score_confidence": 0.35,
+                        "cap_reason": "configured_cache_only_diagnostic",
+                        "degradation_reason": "configured_cache_only_diagnostic",
+                        "score_grade_allowed": True,
+                        "source_confidence": {
+                            "source": "local_us_parquet_dir",
+                            "sourceLabel": "本地 Parquet 历史",
+                            "sourceType": "cache_snapshot",
+                            "freshness": "cached",
+                            "isFallback": False,
+                            "isStale": False,
+                            "isPartial": False,
+                            "isSynthetic": False,
+                            "isUnavailable": False,
+                            "coverage": 1.0,
+                            "scoreContributionAllowed": False,
+                            "sourceAuthorityAllowed": False,
+                            "observationOnly": True,
+                        },
+                    },
+                    "providerObservation": {
+                        "entries": [{"providerName": "internal-provider"}],
+                    },
+                    "reasonCodes": ["sourceAuthorityAllowed=false"],
+                    "rawDiagnostics": {"debug": "should not leave backend"},
+                },
+                ensure_ascii=False,
+            ),
+            created_at=now,
+        )
+        with self.db.get_session() as session:
+            session.add(run)
+            session.flush()
+            run_id = int(run.id)
+            candidate.run_id = run.id
+            session.add(candidate)
+            session.commit()
+
+        add_resp = self.client.post(
+            "/api/v1/watchlist/items",
+            json={
+                "symbol": "WULF",
+                "market": "us",
+                "source": "scanner",
+                "scanner_run_id": run_id,
+                "scanner_rank": 2,
+                "scanner_score": 71.5,
+                "theme_id": "crypto_miners",
+                "universe_type": "theme",
+                "notes": "保存备注不应覆盖 Scanner 安全研究原因。",
+            },
+        )
+        self.assertEqual(add_resp.status_code, 200)
+
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        scanner = list_resp.json()["items"][0]["intelligence"]["scanner"]
+        lineage = scanner["scanner_lineage_v1"]
+
+        self.assertEqual(
+            lineage,
+            {
+                "contract_version": "scanner_watchlist_lineage_v1",
+                "source": "scanner",
+                "scanner_run_id": run_id,
+                "symbol": "WULF",
+                "market": "us",
+                "rank_at_scan": 2,
+                "score_at_scan": 71.5,
+                "score_snapshot_kind": "saved_at_add",
+                "run_profile": "us_preopen_v1",
+                "run_completed_at": "2026-05-04T09:30:00",
+                "watchlist_added_at": add_resp.json()["created_at"],
+                "theme_id": "crypto_miners",
+                "universe_type": "theme",
+                "research_reason": "动量延续，等待补充证据。",
+                "research_next_step": "补充证据后继续观察。",
+                "data_state": "observation_only",
+                "freshness_label": "最近可用",
+                "no_advice_boundary": True,
+                "observation_only": True,
+                "score_grade_allowed": False,
+            },
+        )
+
+        serialized_lineage = json.dumps(lineage, ensure_ascii=False)
+        self.assertNotIn("source_confidence", lineage)
+        self.assertNotIn("providerObservation", serialized_lineage)
+        self.assertNotIn("rawDiagnostics", serialized_lineage)
+        self.assertNotIn("reasonCodes", serialized_lineage)
+        self.assertNotIn("sourceAuthorityAllowed", serialized_lineage)
+        self.assertNotIn("scoreContributionAllowed", serialized_lineage)
+        self.assertNotIn("internal-provider", serialized_lineage)
+
     def test_watchlist_items_attach_catalyst_exposures_from_explicit_saved_evidence(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
 

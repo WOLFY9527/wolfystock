@@ -43,7 +43,7 @@ import LeveragedEtfMapper from '../components/watchlist/LeveragedEtfMapper';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useProductSurface } from '../hooks/useProductSurface';
 import type { InvestorSignalContract } from '../types/scanner';
-import type { WatchlistCatalystExposure, WatchlistItem } from '../types/watchlist';
+import type { WatchlistCatalystExposure, WatchlistItem, WatchlistScannerLineageV1 } from '../types/watchlist';
 import type { RuleBacktestRunResponse } from '../types/backtest';
 import { describeBooleanEnabled, describeDisplayStatus, type DisplayStatusTone } from '../utils/displayStatus';
 import { buildLocalizedPath } from '../utils/localeRouting';
@@ -61,6 +61,15 @@ type WatchlistScannerLineageCue = {
   label: string;
   detail: string;
 } | null;
+type WatchlistScannerLineageView = {
+  summary: string;
+  snapshotLabel: string;
+  stateLabel: string;
+  freshnessLabel: string;
+  reason: string;
+  nextStep: string;
+  metadata: string[];
+};
 type WatchlistWorkflowKey = 'discovered' | 'pendingValidation' | 'observing' | 'alertRecorded' | 'needsRefresh';
 type WatchlistWorkflowStep = {
   key: WatchlistWorkflowKey;
@@ -499,6 +508,87 @@ function formatScannerReason(reason?: string | null, language: 'zh' | 'en' = 'zh
   return raw;
 }
 
+function formatLineageConsumerText(value: string | null | undefined, language: 'zh' | 'en', fallback: string): string {
+  const safe = formatScannerReason(value, language);
+  return safe || fallback;
+}
+
+function formatLineageDataState(lineage: WatchlistScannerLineageV1, language: 'zh' | 'en'): string {
+  const state = normalizeToken(lineage.dataState);
+  if (lineage.observationOnly || !lineage.scoreGradeAllowed || state === 'observation_only') {
+    return language === 'en' ? 'Observation only' : '仅作观察';
+  }
+  if (state === 'available') return language === 'en' ? 'Ready to observe' : '可继续观察';
+  if (state === 'insufficient') return language === 'en' ? 'Insufficient' : '数据不足';
+  if (state === 'updating') return language === 'en' ? 'Updating' : '数据更新中';
+  if (state === 'unavailable') return language === 'en' ? 'Unavailable' : '暂不可用';
+  return language === 'en' ? 'Limited confidence' : '置信度较低';
+}
+
+function formatLineageFreshness(lineage: WatchlistScannerLineageV1, language: 'zh' | 'en'): string {
+  if (language === 'zh') {
+    const label = formatScannerReason(lineage.freshnessLabel, language);
+    if (label) return label;
+  }
+  const state = normalizeToken(lineage.dataState);
+  if (state === 'available') return language === 'en' ? 'Updated' : '已更新';
+  if (state === 'updating') return language === 'en' ? 'Refreshing' : '数据更新中';
+  if (state === 'unavailable') return language === 'en' ? 'Unavailable' : '暂不可用';
+  if (state === 'insufficient') return language === 'en' ? 'Insufficient' : '数据不足';
+  return language === 'en' ? 'Recent available' : '最近可用';
+}
+
+function formatLineageSnapshotLabel(lineage: WatchlistScannerLineageV1, language: 'zh' | 'en'): string {
+  if (lineage.scoreSnapshotKind === 'post_add_refresh') {
+    return language === 'en' ? 'Post-add refresh' : '加入后刷新';
+  }
+  return language === 'en' ? 'Saved at add' : '加入时快照';
+}
+
+function buildScannerLineageView(
+  lineage?: WatchlistScannerLineageV1 | null,
+  language: 'zh' | 'en' = 'zh',
+): WatchlistScannerLineageView | null {
+  if (!lineage || lineage.contractVersion !== 'scanner_watchlist_lineage_v1' || normalizeToken(lineage.source) !== 'scanner') {
+    return null;
+  }
+  const stateLabel = formatLineageDataState(lineage, language);
+  const freshnessLabel = formatLineageFreshness(lineage, language);
+  const snapshotLabel = formatLineageSnapshotLabel(lineage, language);
+  const reason = formatLineageConsumerText(
+    lineage.researchReason,
+    language,
+    language === 'en' ? 'Research observation.' : '研究观察',
+  );
+  const nextStep = formatLineageConsumerText(
+    lineage.researchNextStep,
+    language,
+    language === 'en' ? 'Keep observing after more evidence.' : '补充证据后继续观察。',
+  );
+  const scoreLine = [
+    typeof lineage.rankAtScan === 'number' ? `${language === 'en' ? 'Scan rank' : '扫描排名'} #${lineage.rankAtScan}` : null,
+    typeof lineage.scoreAtScan === 'number' ? `${language === 'en' ? 'Score' : '分数'} ${formatScore(lineage.scoreAtScan)}` : null,
+  ].filter(Boolean).join(' · ');
+  const metadata = [
+    scoreLine || null,
+    lineage.runProfile ? `${language === 'en' ? 'Profile' : '运行'} ${lineage.runProfile}` : null,
+    lineage.runCompletedAt ? `${language === 'en' ? 'Completed' : '完成'} ${formatDateTime(lineage.runCompletedAt, language)}` : null,
+    lineage.watchlistAddedAt ? `${language === 'en' ? 'Added' : '加入'} ${formatDateTime(lineage.watchlistAddedAt, language)}` : null,
+    lineage.themeId ? `${language === 'en' ? 'Theme' : '主题'} ${lineage.themeId}` : null,
+    lineage.universeType ? `${language === 'en' ? 'Universe' : '候选范围'} ${lineage.universeType}` : null,
+  ].filter(Boolean) as string[];
+
+  return {
+    summary: `${language === 'en' ? 'From Scanner' : '来自扫描器'} · ${freshnessLabel} · ${stateLabel}`,
+    snapshotLabel,
+    stateLabel,
+    freshnessLabel,
+    reason,
+    nextStep,
+    metadata,
+  };
+}
+
 function normalizeToken(value?: string | null): string {
   return normalizeText(value).toLowerCase();
 }
@@ -837,6 +927,18 @@ function buildObservationSummary(item: WatchlistItem, language: 'zh' | 'en'): st
 function buildScannerLineageCue(item: WatchlistItem, language: 'zh' | 'en'): WatchlistScannerLineageCue {
   const source = normalizeToken(item.source);
   if (source !== 'scanner' && source !== 'scanner_run') return null;
+  const lineage = item.intelligence?.scanner?.scannerLineageV1;
+  if (lineage?.scoreSnapshotKind === 'post_add_refresh') {
+    return language === 'en'
+      ? {
+        label: 'Post-add refresh',
+        detail: 'Score was refreshed after this item was added; it may reflect a later scanner observation.',
+      }
+      : {
+        label: '加入后刷新',
+        detail: '评分在加入后刷新，可能反映后续扫描观察。',
+      };
+  }
   if (!item.scannerRunId || !item.lastScoredAt || !item.createdAt) return null;
   const lastScoredTime = getTime(item.lastScoredAt);
   const createdTime = getTime(item.createdAt);
@@ -1009,6 +1111,7 @@ function getCopy(language: 'zh' | 'en') {
       scannerSelected: 'Selected by scanner',
       staleIntelligence: 'Recent available data',
       intelligence: 'Intelligence',
+      scannerLineage: 'Scanner lineage',
       investorSignal: 'Investor signal observation',
       investorSignalSummary: 'Persisted scanner observation · collapsed by default',
       catalystExposures: 'Catalyst exposure watch',
@@ -1115,6 +1218,7 @@ function getCopy(language: 'zh' | 'en') {
     scannerSelected: '扫描入选',
     staleIntelligence: '最近可用数据',
     intelligence: '观察依据',
+    scannerLineage: '扫描来源',
     investorSignal: '资金面观察信号',
     investorSignalSummary: '来自已保存的 Scanner 观察 · 默认收起',
     catalystExposures: '催化剂观察',
@@ -1732,6 +1836,7 @@ const WatchlistPage: React.FC = () => {
   const activeLatestTime = activeItem ? getLatestIntelligenceTime(activeItem) : null;
   const activeScoreDisclosureState = activeItem ? getScoreDisclosureState(activeItem) : 'unknown';
   const activeScannerLineageCue = activeItem ? buildScannerLineageCue(activeItem, language) : null;
+  const activeScannerLineageView = activeItem ? buildScannerLineageView(activeScanner?.scannerLineageV1, language) : null;
   const activeScannerStatusLabel = activeItem ? formatScannerStatus(activeItem) : '--';
   const activeBacktestStatusLabel = activeItem ? formatBacktestStatus(activeItem) : '--';
   const activeScannerReason = activeItem ? formatScannerReason(activeScanner?.reason, language) : null;
@@ -2270,6 +2375,38 @@ const WatchlistPage: React.FC = () => {
                     </div>
                   </div>
                 </section>
+
+                {activeScannerLineageView ? (
+                  <DenseSecondaryDisclosure
+                    data-testid="watchlist-scanner-lineage"
+                    variant="row"
+                    title={copy.scannerLineage}
+                    summary={activeScannerLineageView.summary}
+                  >
+                    <div className="space-y-3 text-xs leading-5 text-white/68">
+                      <div className="flex min-w-0 flex-wrap gap-1.5">
+                        <TerminalChip variant="neutral">{activeScannerLineageView.snapshotLabel}</TerminalChip>
+                        <TerminalChip variant="caution">{activeScannerLineageView.stateLabel}</TerminalChip>
+                        <TerminalChip variant="neutral">{activeScannerLineageView.freshnessLabel}</TerminalChip>
+                      </div>
+                      <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
+                        <p className="text-[11px] text-white/40">{language === 'zh' ? '研究原因' : 'Research reason'}</p>
+                        <p className="mt-1 text-sm text-white/75">{activeScannerLineageView.reason}</p>
+                      </div>
+                      <div className="rounded-lg border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-2">
+                        <p className="text-[11px] text-white/40">{language === 'zh' ? '下一步' : 'Next step'}</p>
+                        <p className="mt-1 text-sm text-white/75">{activeScannerLineageView.nextStep}</p>
+                      </div>
+                      {activeScannerLineageView.metadata.length ? (
+                        <div className="flex min-w-0 flex-wrap gap-2 text-[11px] text-white/45">
+                          {activeScannerLineageView.metadata.map((label) => (
+                            <span key={label}>{label}</span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </DenseSecondaryDisclosure>
+                ) : null}
 
                 <section className="min-w-0 py-4">
                   <div className="mb-3 flex min-w-0 items-center justify-between gap-3">

@@ -3,7 +3,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WatchlistPage from '../WatchlistPage';
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
-import type { WatchlistItem } from '../../types/watchlist';
+import type { WatchlistItem, WatchlistScannerLineageV1 } from '../../types/watchlist';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 
 const { listWatchlistItems, removeWatchlistItem, refreshScores, getRefreshStatus, runRuleBacktest, analyzeAsync, useProductSurfaceMock } = vi.hoisted(() => ({
@@ -434,6 +434,7 @@ describe('WatchlistPage', () => {
 
     renderWatchlist();
 
+    await screen.findByTestId('watchlist-row-NVDA');
     const band = await screen.findByTestId('watchlist-conclusion-band');
     expect(band).toHaveTextContent('监控状态');
     expect(band).toHaveTextContent('当前焦点 NVDA');
@@ -898,6 +899,81 @@ describe('WatchlistPage', () => {
     fireEvent.click(within(refreshedRow).getByRole('button', { name: '查看详情 NVDA' }));
     expect(screen.getByTestId('watchlist-detail-rail')).toHaveTextContent('加入后刷新');
     expect(screen.getByTestId('watchlist-page')).not.toHaveTextContent(/scannerRunId|scanner_run_id|扫描批次|source_confidence|reason_families/i);
+  });
+
+  it('renders scannerLineageV1 in a collapsed detail block without diagnostics or action-grade copy', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          id: 22,
+          symbol: 'WULF',
+          source: 'scanner',
+          scannerRunId: 90,
+          scannerRank: 2,
+          scannerScore: 71.5,
+          lastScoredAt: '2026-05-04T10:00:00Z',
+          createdAt: '2026-05-01T09:00:00Z',
+          updatedAt: '2026-05-04T10:00:00Z',
+          intelligence: {
+            scanner: {
+              lastScore: 71.5,
+              lastRank: 2,
+              status: 'selected',
+              reason: 'Latest scanner score.',
+              lastScannedAt: '2026-05-04T10:00:00Z',
+              scannerLineageV1: {
+                contractVersion: 'scanner_watchlist_lineage_v1',
+                source: 'scanner',
+                scannerRunId: 90,
+                symbol: 'WULF',
+                market: 'us',
+                rankAtScan: 2,
+                scoreAtScan: 71.5,
+                scoreSnapshotKind: 'post_add_refresh',
+                runProfile: 'us_preopen_v1',
+                runCompletedAt: '2026-05-04T10:00:00Z',
+                watchlistAddedAt: '2026-05-01T09:00:00Z',
+                themeId: 'crypto_miners',
+                universeType: 'theme',
+                researchReason: 'sourceAuthorityAllowed=false raw diagnostics JSON provider_down reasonCode=debug',
+                researchNextStep: '补充证据后继续观察。',
+                dataState: 'observation_only',
+                freshnessLabel: '最近可用',
+                noAdviceBoundary: true,
+                observationOnly: true,
+                scoreGradeAllowed: false,
+                sourceAuthorityAllowed: false,
+                rawDiagnostics: { reasonCode: 'debug' },
+                providerObservation: [{ providerName: 'internal-provider' }],
+              } as WatchlistScannerLineageV1 & Record<string, unknown>,
+            },
+            strategySimulation: { status: 'ready' },
+            backtest: {},
+          },
+        }),
+      ],
+    });
+
+    renderWatchlist();
+
+    await screen.findByTestId('watchlist-row-WULF');
+    const detailRail = screen.getByTestId('watchlist-detail-rail');
+    const lineageBlock = within(detailRail).getByTestId('watchlist-scanner-lineage');
+    const toggle = within(lineageBlock).getByRole('button', { name: '展开 扫描来源' });
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(lineageBlock).toHaveTextContent('来自扫描器 · 最近可用 · 仅作观察');
+    expect(lineageBlock).not.toHaveTextContent(/sourceAuthorityAllowed|scoreContributionAllowed|reasonCode|raw diagnostics|JSON|provider_down|internal-provider|providerObservation/i);
+
+    fireEvent.click(toggle);
+
+    expect(within(lineageBlock).getByRole('button', { name: '收起 扫描来源' })).toHaveAttribute('aria-expanded', 'true');
+    expect(lineageBlock).toHaveTextContent('加入后刷新');
+    expect(lineageBlock).toHaveTextContent('扫描排名 #2 · 分数 71.5');
+    expect(lineageBlock).toHaveTextContent('补充证据后继续观察。');
+    expect(lineageBlock).toHaveTextContent('us_preopen_v1');
+    expect(screen.getByTestId('watchlist-page')).not.toHaveTextContent(/买入|卖出|加仓|减仓|下单|立即交易|止损|止盈|目标价|仓位|guaranteed|best contract|AI recommends you buy|recommend(?:ation)?|buy|sell|stop|target|position/i);
+    expect(screen.getByTestId('watchlist-page')).not.toHaveTextContent(/sourceAuthorityAllowed|scoreContributionAllowed|reasonCode|source_confidence|reason_families|raw diagnostics|JSON|provider_down|internal-provider|providerObservation/i);
   });
 
   it('keeps stale inherited scanner scores from rendering as verified latest evidence', async () => {

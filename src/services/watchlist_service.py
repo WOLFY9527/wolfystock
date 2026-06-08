@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 import json
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, desc, select
@@ -26,6 +26,14 @@ _SCORE_STATUS_CONTEXT = {
     "source_freshness_implied": False,
     "source_authority_implied": False,
 }
+_LINEAGE_CONTRACT_VERSION = "scanner_watchlist_lineage_v1"
+_LINEAGE_FORBIDDEN_TEXT_RE = re.compile(
+    r"sourceauthorityallowed|scorecontributionallowed|reasonfamilies|reasoncode|"
+    r"source_confidence|score_blocked|raw diagnostics?|json|provider|debug|"
+    r"payload|trace|stack|buy|sell|recommend|stop|target|position|"
+    r"买入|卖出|加仓|减仓|下单|交易|止损|止盈|目标价|仓位|必买|稳赚|保证收益",
+    re.IGNORECASE,
+)
 
 
 class WatchlistService:
@@ -109,6 +117,15 @@ class WatchlistService:
         return number if number == number else None
 
     @staticmethod
+    def _safe_int(value: Any) -> Optional[int]:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
     def _scanner_candidate_key(item: Dict[str, Any]) -> Optional[tuple[int, str]]:
         scanner_run_id = item.get("scanner_run_id")
         if scanner_run_id is None:
@@ -161,6 +178,32 @@ class WatchlistService:
             return None
         normalized = str(value).strip()
         return normalized or None
+
+    @classmethod
+    def _optional_consumer_text(cls, value: Any) -> Optional[str]:
+        normalized = cls._optional_str(value)
+        if normalized is None:
+            return None
+        if _LINEAGE_FORBIDDEN_TEXT_RE.search(normalized):
+            return None
+        return normalized
+
+    @staticmethod
+    def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _isoformat_datetime(value: Any) -> Optional[str]:
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return WatchlistService._optional_str(value)
 
     @staticmethod
     def _optional_object(payload: Dict[str, Any], *keys: str) -> Any:
@@ -381,6 +424,192 @@ class WatchlistService:
         projected["reason_families"] = cls._project_scanner_reason_families(projected)
         return projected if any(value is not None for value in projected.values()) else None
 
+    @classmethod
+    def _lineage_score_grade_allowed(cls, disclosure: Optional[Dict[str, Any]]) -> bool:
+        if not isinstance(disclosure, dict):
+            return False
+        source_confidence = disclosure.get("source_confidence")
+        if not isinstance(source_confidence, dict):
+            return False
+        if disclosure.get("score_grade_allowed") is not True:
+            return False
+        if source_confidence.get("source_authority_allowed") is not True:
+            return False
+        if source_confidence.get("score_contribution_allowed") is not True:
+            return False
+        if source_confidence.get("observation_only") is True:
+            return False
+        if any(
+            source_confidence.get(flag) is True
+            for flag in ("is_fallback", "is_stale", "is_partial", "is_synthetic", "is_unavailable")
+        ):
+            return False
+        if disclosure.get("cap_reason") or disclosure.get("degradation_reason"):
+            return False
+        return True
+
+    @classmethod
+    def _lineage_data_state(
+        cls,
+        *,
+        item: Dict[str, Any],
+        disclosure: Optional[Dict[str, Any]],
+        score_grade_allowed: bool,
+    ) -> str:
+        status = str(item.get("score_status") or "").strip().lower()
+        source_confidence = disclosure.get("source_confidence") if isinstance(disclosure, dict) else None
+        if status in {"data_failed", "provider_down", "provider_error", "failed", "error", "critical"}:
+            return "unavailable"
+        if isinstance(source_confidence, dict) and source_confidence.get("is_unavailable") is True:
+            return "unavailable"
+        if status in {"insufficient", "insufficient_history", "no_data", "missing_data"}:
+            return "insufficient"
+        if status in {"", "unknown"} and item.get("scanner_score") is None:
+            return "updating"
+        if score_grade_allowed:
+            return "available"
+        if disclosure is None:
+            return "limited"
+        return "observation_only"
+
+    @staticmethod
+    def _lineage_freshness_label(data_state: str, disclosure: Optional[Dict[str, Any]]) -> str:
+        if data_state == "available":
+            return "已更新"
+        if data_state == "updating":
+            return "数据更新中"
+        if data_state == "unavailable":
+            return "暂不可用"
+        if data_state == "insufficient":
+            return "数据不足"
+        source_confidence = disclosure.get("source_confidence") if isinstance(disclosure, dict) else None
+        freshness = str(source_confidence.get("freshness") or "").strip().lower() if isinstance(source_confidence, dict) else ""
+        if freshness in {"live", "fresh"}:
+            return "已更新"
+        return "最近可用"
+
+    @classmethod
+    def _lineage_score_snapshot_kind(cls, item: Dict[str, Any]) -> str:
+        last_scored_at = cls._parse_iso_datetime(item.get("last_scored_at"))
+        created_at = cls._parse_iso_datetime(item.get("created_at"))
+        if last_scored_at is not None and created_at is not None and last_scored_at > created_at + timedelta(minutes=1):
+            return "post_add_refresh"
+        return "saved_at_add"
+
+    @classmethod
+    def _extract_lineage_frame(cls, diagnostics: Dict[str, Any], *keys: str) -> Dict[str, Any]:
+        for key in keys:
+            value = diagnostics.get(key)
+            if isinstance(value, dict):
+                return value
+        return {}
+
+    @classmethod
+    def _lineage_research_reason(
+        cls,
+        *,
+        item: Dict[str, Any],
+        candidate: MarketScannerCandidate,
+        diagnostics: Dict[str, Any],
+    ) -> str:
+        summary_frame = cls._extract_lineage_frame(
+            diagnostics,
+            "candidateResearchSummaryFrame",
+            "candidate_research_summary_frame",
+        )
+        consumer_diagnostics = cls._extract_lineage_frame(
+            diagnostics,
+            "consumerDiagnostics",
+            "consumer_diagnostics",
+        )
+        label_values = consumer_diagnostics.get("userFacingLabels") or consumer_diagnostics.get("user_facing_labels")
+        labels = label_values if isinstance(label_values, list) else []
+        for value in (
+            summary_frame.get("primaryResearchReason"),
+            summary_frame.get("primary_research_reason"),
+            summary_frame.get("researchReason"),
+            summary_frame.get("research_reason"),
+            *labels,
+            getattr(candidate, "reason_summary", None),
+            item.get("notes"),
+        ):
+            safe = cls._optional_consumer_text(value)
+            if safe is not None:
+                return safe
+        return "研究观察"
+
+    @classmethod
+    def _lineage_research_next_step(cls, diagnostics: Dict[str, Any]) -> str:
+        summary_frame = cls._extract_lineage_frame(
+            diagnostics,
+            "candidateResearchSummaryFrame",
+            "candidate_research_summary_frame",
+        )
+        readiness_frame = cls._extract_lineage_frame(
+            diagnostics,
+            "candidateResearchReadiness",
+            "candidate_research_readiness",
+        )
+        for value in (
+            summary_frame.get("researchNextStep"),
+            summary_frame.get("research_next_step"),
+            summary_frame.get("nextStep"),
+            summary_frame.get("next_step"),
+            readiness_frame.get("researchNextStep"),
+            readiness_frame.get("research_next_step"),
+            readiness_frame.get("nextStep"),
+            readiness_frame.get("next_step"),
+        ):
+            safe = cls._optional_consumer_text(value)
+            if safe is not None:
+                return safe
+        return "补充证据后继续观察。"
+
+    @classmethod
+    def _project_scanner_lineage_v1(
+        cls,
+        *,
+        item: Dict[str, Any],
+        candidate: MarketScannerCandidate,
+        run: MarketScannerRun,
+        diagnostics: Dict[str, Any],
+        disclosure: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        score_grade_allowed = cls._lineage_score_grade_allowed(disclosure)
+        data_state = cls._lineage_data_state(
+            item=item,
+            disclosure=disclosure,
+            score_grade_allowed=score_grade_allowed,
+        )
+        run_completed_at = (
+            cls._isoformat_datetime(getattr(run, "completed_at", None))
+            or cls._isoformat_datetime(getattr(run, "run_at", None))
+            or cls._isoformat_datetime(getattr(candidate, "created_at", None))
+        )
+        observation_only = not score_grade_allowed or data_state != "available"
+        return {
+            "contract_version": _LINEAGE_CONTRACT_VERSION,
+            "source": "scanner",
+            "scanner_run_id": cls._safe_int(getattr(run, "id", None) or item.get("scanner_run_id")),
+            "symbol": str(getattr(candidate, "symbol", None) or item.get("symbol") or "").strip().upper(),
+            "market": str(getattr(run, "market", None) or item.get("market") or "").strip().lower(),
+            "rank_at_scan": cls._safe_int(getattr(candidate, "rank", None) or item.get("scanner_rank")),
+            "score_at_scan": cls._safe_float(getattr(candidate, "score", None) if getattr(candidate, "score", None) is not None else item.get("scanner_score")),
+            "score_snapshot_kind": cls._lineage_score_snapshot_kind(item),
+            "run_profile": cls._optional_str(getattr(run, "profile", None)),
+            "run_completed_at": run_completed_at,
+            "watchlist_added_at": cls._optional_str(item.get("created_at")),
+            "theme_id": cls._optional_str(item.get("theme_id")),
+            "universe_type": cls._optional_str(item.get("universe_type")),
+            "research_reason": cls._lineage_research_reason(item=item, candidate=candidate, diagnostics=diagnostics),
+            "research_next_step": cls._lineage_research_next_step(diagnostics),
+            "data_state": data_state,
+            "freshness_label": cls._lineage_freshness_label(data_state, disclosure),
+            "no_advice_boundary": True,
+            "observation_only": observation_only,
+            "score_grade_allowed": score_grade_allowed,
+        }
+
     def _scanner_intelligence_context_by_item(self, items: List[Dict[str, Any]]) -> Dict[tuple[int, str], Dict[str, Any]]:
         keys = {key for item in items if (key := self._scanner_candidate_key(item)) is not None}
         if not keys:
@@ -394,32 +623,42 @@ class WatchlistService:
         symbols = sorted({symbol for _run_id, symbol in keys})
         with self.db.get_session() as session:
             candidates = session.execute(
-                select(MarketScannerCandidate)
+                select(MarketScannerCandidate, MarketScannerRun)
+                .join(MarketScannerRun, MarketScannerRun.id == MarketScannerCandidate.run_id)
                 .where(
                     and_(
                         MarketScannerCandidate.run_id.in_(run_ids),
                         MarketScannerCandidate.symbol.in_(symbols),
                     )
                 )
-            ).scalars().all()
+            ).all()
 
         context_by_key: Dict[tuple[int, str], Dict[str, Any]] = {}
-        for candidate in candidates:
+        for candidate, run in candidates:
             key = (int(candidate.run_id), str(candidate.symbol or "").upper())
             if key not in keys or key in context_by_key:
                 continue
             diagnostics = self._load_json_object(getattr(candidate, "diagnostics_json", None))
+            item = item_by_key.get(key, {})
             context: Dict[str, Any] = {}
             provenance = self._project_local_ohlcv_provenance(diagnostics)
             disclosure = self._project_scanner_score_disclosure(diagnostics)
             investor_signal = build_scanner_investor_signal(diagnostics)
-            catalyst_exposures = self._project_catalyst_exposures(item_by_key.get(key, {}), diagnostics)
+            lineage = self._project_scanner_lineage_v1(
+                item=item,
+                candidate=candidate,
+                run=run,
+                diagnostics=diagnostics,
+                disclosure=disclosure,
+            )
+            catalyst_exposures = self._project_catalyst_exposures(item, diagnostics)
             if provenance is not None:
                 context["ohlcv_provenance"] = provenance
             if disclosure is not None:
                 context["score_disclosure"] = disclosure
             if investor_signal is not None:
                 context["investor_signal"] = investor_signal
+            context["scanner_lineage_v1"] = lineage
             if catalyst_exposures is not None:
                 context["catalyst_exposures"] = catalyst_exposures
             if context:
@@ -434,6 +673,7 @@ class WatchlistService:
         scanner_ohlcv_provenance: Optional[Dict[str, str]] = None,
         scanner_score_disclosure: Optional[Dict[str, Any]] = None,
         scanner_investor_signal: Optional[Dict[str, Any]] = None,
+        scanner_lineage_v1: Optional[Dict[str, Any]] = None,
         catalyst_exposures: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         scanner_score = WatchlistService._safe_float(item.get("scanner_score"))
@@ -498,6 +738,8 @@ class WatchlistService:
             scanner_payload.update(scanner_score_disclosure)
         if scanner_investor_signal is not None:
             scanner_payload["investor_signal"] = scanner_investor_signal
+        if scanner_lineage_v1 is not None:
+            scanner_payload["scanner_lineage_v1"] = scanner_lineage_v1
 
         intelligence = {
             "scanner": scanner_payload,
@@ -561,6 +803,7 @@ class WatchlistService:
                 scanner_ohlcv_provenance=intelligence_context.get("ohlcv_provenance"),
                 scanner_score_disclosure=intelligence_context.get("score_disclosure"),
                 scanner_investor_signal=intelligence_context.get("investor_signal"),
+                scanner_lineage_v1=intelligence_context.get("scanner_lineage_v1"),
                 catalyst_exposures=intelligence_context.get("catalyst_exposures"),
             )
         return items

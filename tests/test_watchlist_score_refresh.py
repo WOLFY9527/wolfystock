@@ -131,6 +131,108 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         self.assertEqual(item["universe_type"], "theme")
         self.assertTrue(item["last_scored_at"])
 
+    def test_refresh_attaches_post_add_scanner_lineage_without_provider_fanout(self) -> None:
+        added_at = datetime(2026, 5, 1, 9, 0, 0)
+        with self.db.get_session() as session:
+            session.add(
+                UserWatchlistItem(
+                    owner_id="user-1",
+                    symbol="WULF",
+                    market="us",
+                    source="scanner",
+                    scanner_run_id=5,
+                    scanner_rank=8,
+                    scanner_score=60,
+                    theme_id="crypto_miners",
+                    universe_type="theme",
+                    created_at=added_at,
+                    updated_at=added_at,
+                )
+            )
+            session.commit()
+
+        now = datetime(2026, 5, 4, 10, 0, 0)
+        run = MarketScannerRun(
+            market="us",
+            profile="us_preopen_v1",
+            universe_name="us_watchlist",
+            status="completed",
+            run_at=now - timedelta(minutes=5),
+            completed_at=now,
+            shortlist_size=1,
+            universe_size=1,
+            preselected_size=1,
+            evaluated_size=1,
+        )
+        candidate = MarketScannerCandidate(
+            symbol="WULF",
+            name="WULF",
+            rank=3,
+            score=72.5,
+            reason_summary="Latest scanner score.",
+            diagnostics_json=json.dumps(
+                {
+                    "candidateResearchSummaryFrame": {
+                        "primaryResearchReason": "评分刷新后继续观察。",
+                        "researchNextStep": "补充证据后继续观察。",
+                    },
+                    "score_explainability": {
+                        "score_grade_allowed": False,
+                        "source_confidence": {
+                            "source": "yfinance_proxy",
+                            "sourceType": "proxy",
+                            "freshness": "fallback",
+                            "isFallback": True,
+                            "isStale": True,
+                            "isPartial": True,
+                            "scoreContributionAllowed": False,
+                            "sourceAuthorityAllowed": False,
+                            "observationOnly": True,
+                        },
+                    },
+                    "providerObservation": {
+                        "entries": [{"providerName": "internal-provider"}],
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            created_at=now,
+        )
+        with self.db.get_session() as session:
+            session.add(run)
+            session.flush()
+            run_id = int(run.id)
+            candidate.run_id = run.id
+            session.add(candidate)
+            session.commit()
+
+        with (
+            patch("data_provider.base.DataFetcherManager.get_daily_data", side_effect=AssertionError("watchlist lineage should not fetch provider history")) as get_daily_data,
+            patch("data_provider.base.DataFetcherManager.get_realtime_quote", side_effect=AssertionError("watchlist lineage should not fetch provider quotes")) as get_realtime_quote,
+        ):
+            result = self.service.refresh_scores(owner_id="user-1", market="us")
+
+        self.assertEqual(result["updated_count"], 1)
+        get_daily_data.assert_not_called()
+        get_realtime_quote.assert_not_called()
+
+        item = self.service.list_items(owner_id="user-1")[0]
+        lineage = item["intelligence"]["scanner"]["scanner_lineage_v1"]
+        self.assertEqual(lineage["scanner_run_id"], run_id)
+        self.assertEqual(lineage["score_snapshot_kind"], "post_add_refresh")
+        self.assertEqual(lineage["run_profile"], "us_preopen_v1")
+        self.assertEqual(lineage["rank_at_scan"], 3)
+        self.assertEqual(lineage["score_at_scan"], 72.5)
+        self.assertEqual(lineage["research_reason"], "评分刷新后继续观察。")
+        self.assertEqual(lineage["research_next_step"], "补充证据后继续观察。")
+        self.assertEqual(lineage["data_state"], "observation_only")
+        self.assertFalse(lineage["score_grade_allowed"])
+        serialized_lineage = json.dumps(lineage, ensure_ascii=False)
+        self.assertNotIn("providerObservation", serialized_lineage)
+        self.assertNotIn("internal-provider", serialized_lineage)
+        self.assertNotIn("sourceAuthorityAllowed", serialized_lineage)
+        self.assertNotIn("scoreContributionAllowed", serialized_lineage)
+
     def test_refresh_projects_local_us_parquet_dir_provenance_without_runtime_fetches(self) -> None:
         self.service.add_item(
             owner_id="user-1",
