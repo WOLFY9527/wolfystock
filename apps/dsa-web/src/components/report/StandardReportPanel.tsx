@@ -31,6 +31,10 @@ import {
   localizeReportControlledValue,
 } from '../../utils/reportTerminology';
 import {
+  consumerSafeReportPriceContext,
+  consumerSafeReportText,
+} from '../../utils/homeReportIdentity';
+import {
   buildMissingFieldAudit,
   collectMissingFieldEntriesFromStandardReport,
   extractMissingReason,
@@ -126,6 +130,70 @@ const isPresentValue = (value?: string | null): boolean => {
 const localizeControlledValue = (value?: string | null): string => localizeReportControlledValue(value, reportLanguage());
 
 const softenControlledValue = (value?: string | null): string => softenMissingValue(localizeControlledValue(value));
+
+const observationUiText = () => ({
+  reportState: isEnglishUi() ? 'Research state' : '研究状态',
+  continueTracking: isEnglishUi() ? 'Continue tracking' : '继续跟踪',
+  keyPriceZone: isEnglishUi() ? 'Key price zone' : '关键价格区间',
+  referenceRange: isEnglishUi() ? 'Reference range' : '参考区间',
+  upperObservationZone: isEnglishUi() ? 'Upper observation zone' : '上方观察区',
+  riskBoundary: isEnglishUi() ? 'Risk boundary' : '风险边界',
+  observationFallback: isEnglishUi()
+    ? 'Research packet still incomplete. Continue tracking only.'
+    : '当前研究包仍不完整，仅支持继续跟踪。',
+  dataGapFallback: isEnglishUi()
+    ? 'Insufficient data. Scenario context only.'
+    : '数据不足，仅支持情景参考。',
+  trackingFallback: isEnglishUi()
+    ? 'Continue tracking while the research packet is being completed.'
+    : '继续跟踪，等待研究包补齐。',
+  riskFallback: isEnglishUi()
+    ? 'Risk boundary describes uncertainty only.'
+    : '风险边界用于说明不确定性。',
+  upperFallback: isEnglishUi()
+    ? 'Upper observation zone describes overhead context only.'
+    : '上方观察区用于描述上方压力背景。',
+});
+
+const consumerSafePanelText = (
+  value: unknown,
+  fallback = observationUiText().observationFallback,
+): string => {
+  const localized = typeof value === 'string' ? localizeControlledValue(value) : value;
+  return consumerSafeReportText(localized, fallback);
+};
+
+const consumerSafePanelPrice = (
+  value: unknown,
+  fallback = observationUiText().dataGapFallback,
+): string => {
+  const localized = typeof value === 'string' ? localizeControlledValue(value) : value;
+  return consumerSafeReportPriceContext(localized, fallback);
+};
+
+const observationLabelFromText = (value?: string | null, fallback?: string): string => {
+  const label = String(value || '').trim();
+  const observationText = observationUiText();
+  if (!label) {
+    return fallback || observationText.continueTracking;
+  }
+  if (/(resistance|压力|target|目标)/i.test(label)) {
+    return observationText.upperObservationZone;
+  }
+  if (/(secondary|backup|次级|次优|参考)/i.test(label)) {
+    return observationText.referenceRange;
+  }
+  if (/(support|支撑|ideal|理想|keyprice|关键价格)/i.test(label)) {
+    return observationText.keyPriceZone;
+  }
+  if (/(stop|risk|风险|仓位|position)/i.test(label)) {
+    return observationText.riskBoundary;
+  }
+  if (/(build|entry|建仓|入场|tracking|继续跟踪)/i.test(label)) {
+    return observationText.continueTracking;
+  }
+  return fallback || observationText.continueTracking;
+};
 
 const lowerText = (value?: string | null): string => String(value || '').trim().toLowerCase();
 
@@ -617,41 +685,45 @@ const CompactDecisionMetric: React.FC<{ label: string; value?: string | null }> 
 
 const DecisionExecutionPanel: React.FC<{
   decisionPanel?: StandardReportDecisionPanel;
-}> = ({ decisionPanel }) => (
+}> = ({ decisionPanel }) => {
+  const observationText = observationUiText();
+
+  return (
   <section className={cn(solidCardClass)} data-testid="decision-execution-panel">
-    <SectionHeader eyebrow={ui('report.executionRiskLayerTitle')} title={ui('report.tradeExecution')} />
+    <SectionHeader eyebrow={ui('report.executionRiskLayerTitle')} title={observationText.continueTracking} />
 
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
       <div className="theme-panel-subtle rounded-[1rem] p-4">
         <div className="flex flex-wrap items-center gap-2.5">
-          <Badge variant="info">{softenControlledValue(decisionPanel?.setupType)}</Badge>
+          <Badge variant="info">{consumerSafePanelText(decisionPanel?.setupType, observationText.continueTracking)}</Badge>
           <Badge variant="history">{ui('report.confidenceLabel')} {softenControlledValue(decisionPanel?.confidence)}</Badge>
         </div>
         <p className={cn('mt-3', getGroupLabelClass())}>{ui('report.executionSummary')}</p>
         <p className="mt-2 text-base font-semibold leading-7 text-foreground">
-          {softenControlledValue(decisionPanel?.keyAction || decisionPanel?.noPositionAdvice)}
+          {consumerSafePanelText(decisionPanel?.keyAction || decisionPanel?.noPositionAdvice, observationText.observationFallback)}
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <CompactDecisionMetric label={ui('report.keySupport')} value={softenControlledValue(decisionPanel?.support)} />
-          <CompactDecisionMetric label={ui('report.keyResistance')} value={softenControlledValue(decisionPanel?.resistance)} />
-          <CompactDecisionMetric label={ui('report.stopReason')} value={softenControlledValue(decisionPanel?.stopReason)} />
-          <CompactDecisionMetric label={ui('report.targetReason')} value={softenControlledValue(decisionPanel?.targetReason)} />
+          <CompactDecisionMetric label={observationText.keyPriceZone} value={consumerSafePanelPrice(decisionPanel?.support, observationText.dataGapFallback)} />
+          <CompactDecisionMetric label={observationText.upperObservationZone} value={consumerSafePanelPrice(decisionPanel?.resistance, observationText.dataGapFallback)} />
+          <CompactDecisionMetric label={observationText.riskBoundary} value={consumerSafePanelText(decisionPanel?.stopReason, observationText.riskFallback)} />
+          <CompactDecisionMetric label={observationText.upperObservationZone} value={consumerSafePanelText(decisionPanel?.targetReason, observationText.upperFallback)} />
         </div>
       </div>
 
       <div className="theme-panel-subtle rounded-[1rem] p-4">
         <p className={getGroupLabelClass()}>{ui('report.structureSnapshot')}</p>
         <p className="mt-2 text-sm leading-6 text-secondary-text">
-          {softenControlledValue(decisionPanel?.marketStructure)}
+          {consumerSafePanelText(decisionPanel?.marketStructure, observationText.dataGapFallback)}
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <CompactDecisionMetric label={ui('report.positionSizing')} value={softenControlledValue(decisionPanel?.positionSizing)} />
-          <CompactDecisionMetric label={ui('report.targetZone')} value={softenControlledValue(decisionPanel?.targetZone || decisionPanel?.target)} />
+          <CompactDecisionMetric label={observationText.riskBoundary} value={consumerSafePanelText(decisionPanel?.positionSizing, observationText.riskFallback)} />
+          <CompactDecisionMetric label={observationText.referenceRange} value={consumerSafePanelPrice(decisionPanel?.targetZone || decisionPanel?.target, observationText.dataGapFallback)} />
         </div>
       </div>
     </div>
   </section>
-);
+  );
+};
 
 const ScoreBreakdownList: React.FC<{ items: StandardReportScoreBreakdownItem[] }> = ({ items }) => {
   if (items.length === 0) {
@@ -1098,7 +1170,11 @@ const BattlePlanPanel: React.FC<{
       label.includes('理想买入') ||
       label.includes('次优买入') ||
       label.includes('止损') ||
-      label.includes('目标')
+      label.includes('目标') ||
+      label.includes('关键价格区间') ||
+      label.includes('参考区间') ||
+      label.includes('上方观察区') ||
+      label.includes('风险边界')
     );
     if (isTopMetric && topGridItems.length < 4) {
       topGridItems.push(item);
@@ -1121,18 +1197,16 @@ const BattlePlanPanel: React.FC<{
               {topGridItems.map((item, index) => (
                 <div key={`${item.label}-${index}`} className="theme-panel-subtle rounded-[1rem] p-3.5">
                   <div className="flex items-center justify-between gap-3">
-                    <p className={getGroupLabelClass()}>{localizeReportHeadingLabel(item.label, isEnglishUi() ? 'en' : 'zh')}</p>
+                    <p className={getGroupLabelClass()}>
+                      {observationLabelFromText(localizeReportHeadingLabel(item.label, isEnglishUi() ? 'en' : 'zh'))}
+                    </p>
                     <Badge variant={badgeTone(item.tone)} className="min-w-[3.75rem]">
-                      {item.tone === 'buy'
-                        ? ui('report.planBuy')
-                        : item.tone === 'risk'
-                          ? ui('report.planRisk')
-                          : item.tone === 'target'
-                            ? ui('report.planTarget')
-                            : ui('report.planDefault')}
+                      {ui('report.planDefault')}
                     </Badge>
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-foreground break-words">{item.value}</p>
+                  <p className="mt-3 text-sm leading-6 text-foreground break-words">
+                    {consumerSafePanelPrice(item.value, observationUiText().dataGapFallback)}
+                  </p>
                 </div>
               ))}
             </div>
@@ -1143,16 +1217,19 @@ const BattlePlanPanel: React.FC<{
               {lowerNotes.map((item, index) => (
                 <div key={`${item.label}-${index}`} className="theme-panel-subtle rounded-[1rem] px-4 py-3.5">
                   <div className="flex items-center justify-between gap-3">
-                    <p className={getGroupLabelClass()}>{localizeReportHeadingLabel(item.label, isEnglishUi() ? 'en' : 'zh')}</p>
+                    <p className={getGroupLabelClass()}>
+                      {observationLabelFromText(localizeReportHeadingLabel(item.label, isEnglishUi() ? 'en' : 'zh'))}
+                    </p>
                     <Badge variant={badgeTone(item.tone)} className="min-w-[3.75rem]">
-                      {item.tone === 'position'
-                        ? ui('report.planPosition')
-                        : item.tone === 'risk'
-                          ? ui('report.planRisk')
-                          : ui('report.planDefault')}
+                      {ui('report.planDefault')}
                     </Badge>
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-secondary-text break-words">{item.value}</p>
+                  <p className="mt-3 text-sm leading-6 text-secondary-text break-words">
+                    {consumerSafePanelText(
+                      item.value,
+                      item.tone === 'risk' ? observationUiText().riskFallback : observationUiText().trackingFallback,
+                    )}
+                  </p>
                 </div>
               ))}
             </div>
@@ -1206,7 +1283,11 @@ const DecisionSummaryHero: React.FC<{
   const score = summary.score ?? visualBlocks.score?.value;
   const companyTitle = report.meta.stockName || summary.stock || report.meta.stockCode;
   const tickerLabel = summary.ticker || report.meta.stockCode;
-  const actionProfile = getReportControlledValueProfile(summary.operationAdvice || report.summary.operationAdvice, reportLanguage);
+  const observationText = observationUiText();
+  const actionValue = consumerSafePanelText(
+    summary.operationAdvice || report.summary.operationAdvice,
+    observationText.continueTracking,
+  );
   const trendProfile = getReportControlledValueProfile(summary.trendPrediction || report.summary.trendPrediction, reportLanguage);
   const scoreSupport = score !== undefined ? getSentimentLabel(score, reportLanguage) : undefined;
   const compactMetaLine = uniqueMeaningfulItems(
@@ -1243,7 +1324,7 @@ const DecisionSummaryHero: React.FC<{
           </div>
 
           <p className="mt-4 text-sm leading-6 text-secondary-text md:text-[15px] md:leading-7">
-            {summary.oneSentence || report.summary.analysisSummary || ui('report.oneLineFallback')}
+            {consumerSafePanelText(summary.oneSentence || report.summary.analysisSummary, observationText.observationFallback)}
           </p>
 
           {isMeaningfulText(summary.reportGeneratedAt) ? (
@@ -1263,9 +1344,8 @@ const DecisionSummaryHero: React.FC<{
             accent="score"
           />
           <HeroStat
-            label={ui('report.actionAdvice')}
-            value={actionProfile.value}
-            support={actionProfile.support}
+            label={observationText.reportState}
+            value={actionValue}
           />
           <HeroStat
             label={ui('report.trend')}
@@ -1285,19 +1365,20 @@ const ExecutionPlanLayer: React.FC<{
   decisionPanel,
   checklistItems,
 }) => {
+  const observationText = observationUiText();
   const executionSeen = new Set<string>();
   const currentActionItems = collectDedupedItems({
-    items: [softenControlledValue(decisionPanel?.keyAction || decisionPanel?.noPositionAdvice)],
+    items: [consumerSafePanelText(decisionPanel?.keyAction || decisionPanel?.noPositionAdvice, observationText.observationFallback)],
     limit: 1,
     keyResolver: executionSemanticKey,
     seenKeys: executionSeen,
   });
   const newPositionItems = collectDedupedItems({
     items: [
-      softenControlledValue(decisionPanel?.noPositionAdvice),
-      isPresentValue(decisionPanel?.idealEntry) ? joinLabelValue(ui('report.idealEntry'), softenControlledValue(decisionPanel?.idealEntry)) : undefined,
-      isPresentValue(decisionPanel?.backupEntry) ? joinLabelValue(ui('report.backupEntry'), softenControlledValue(decisionPanel?.backupEntry)) : undefined,
-      decisionPanel?.buildStrategy ? joinLabelValue(ui('report.buildStrategy'), softenControlledValue(decisionPanel?.buildStrategy)) : undefined,
+      consumerSafePanelText(decisionPanel?.noPositionAdvice, observationText.observationFallback),
+      isPresentValue(decisionPanel?.idealEntry) ? joinLabelValue(observationText.keyPriceZone, consumerSafePanelPrice(decisionPanel?.idealEntry, observationText.dataGapFallback)) : undefined,
+      isPresentValue(decisionPanel?.backupEntry) ? joinLabelValue(observationText.referenceRange, consumerSafePanelPrice(decisionPanel?.backupEntry, observationText.dataGapFallback)) : undefined,
+      decisionPanel?.buildStrategy ? joinLabelValue(observationText.continueTracking, consumerSafePanelText(decisionPanel?.buildStrategy, observationText.trackingFallback)) : undefined,
     ],
     limit: 4,
     keyResolver: executionSemanticKey,
@@ -1305,8 +1386,8 @@ const ExecutionPlanLayer: React.FC<{
   });
   const existingPositionItems = collectDedupedItems({
     items: [
-      softenControlledValue(decisionPanel?.holderAdvice),
-      decisionPanel?.positionSizing ? joinLabelValue(ui('report.positionSizing'), softenControlledValue(decisionPanel?.positionSizing)) : undefined,
+      consumerSafePanelText(decisionPanel?.holderAdvice, observationText.trackingFallback),
+      decisionPanel?.positionSizing ? joinLabelValue(observationText.riskBoundary, consumerSafePanelText(decisionPanel?.positionSizing, observationText.riskFallback)) : undefined,
     ],
     limit: 3,
     keyResolver: executionSemanticKey,
@@ -1320,17 +1401,17 @@ const ExecutionPlanLayer: React.FC<{
         }
         return acc;
       }, []),
-      isPresentValue(decisionPanel?.stopLoss) ? joinLabelValue(ui('report.stopLoss'), softenControlledValue(decisionPanel?.stopLoss)) : undefined,
-      isPresentValue(decisionPanel?.targetOne || decisionPanel?.target) ? joinLabelValue(ui('report.targetOne'), softenControlledValue(decisionPanel?.targetOne || decisionPanel?.target)) : undefined,
-      isPresentValue(decisionPanel?.targetTwo) ? joinLabelValue(ui('report.targetTwo'), softenControlledValue(decisionPanel?.targetTwo)) : undefined,
-      decisionPanel?.riskControlStrategy ? joinLabelValue(ui('report.riskControl'), softenControlledValue(decisionPanel?.riskControlStrategy)) : undefined,
+      isPresentValue(decisionPanel?.stopLoss) ? joinLabelValue(observationText.riskBoundary, consumerSafePanelPrice(decisionPanel?.stopLoss, observationText.dataGapFallback)) : undefined,
+      isPresentValue(decisionPanel?.targetOne || decisionPanel?.target) ? joinLabelValue(observationText.upperObservationZone, consumerSafePanelPrice(decisionPanel?.targetOne || decisionPanel?.target, observationText.dataGapFallback)) : undefined,
+      isPresentValue(decisionPanel?.targetTwo) ? joinLabelValue(observationText.referenceRange, consumerSafePanelPrice(decisionPanel?.targetTwo, observationText.dataGapFallback)) : undefined,
+      decisionPanel?.riskControlStrategy ? joinLabelValue(observationText.riskBoundary, consumerSafePanelText(decisionPanel?.riskControlStrategy, observationText.riskFallback)) : undefined,
     ],
     limit: 6,
     keyResolver: executionSemanticKey,
     seenKeys: executionSeen,
   });
   const compressedReminder = collectDedupedItems({
-    items: (decisionPanel?.executionReminders || []).map((item) => localizeReportHeadingLabel(item, reportLanguage())),
+    items: (decisionPanel?.executionReminders || []).map((item) => consumerSafePanelText(item, observationText.trackingFallback)),
     limit: 1,
     keyResolver: executionSemanticKey,
     seenKeys: executionSeen,

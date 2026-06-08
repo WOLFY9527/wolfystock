@@ -1,6 +1,6 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AnalysisReport } from '../../../types/analysis';
 import FullDecisionReportDrawer from '../FullDecisionReportDrawer';
 
@@ -11,7 +11,7 @@ vi.mock('../../common/Drawer', () => ({
 }));
 
 const forbiddenConsumerReportPattern =
-  /投资结论|买入|卖出|理想买点|次级买点|止损|目标价|仓位建议|\bAction\b|Ideal buy|Stop loss|Position sizing|holding advice|empty-position advice|reasonCode|sourceRefId|raw_result|raw_ai_response|context_snapshot|raw_result_marker|raw_ai_response_marker|context_snapshot_marker|provider_timeout|fallback_cache|Yahoo Finance|Finnhub|backend snake_case/i;
+  /投资结论|买入|卖出|理想买点|次级买点|止损|止盈|目标价|目标位|目标区间|仓位建议|\bAction\b|Ideal buy|Secondary entry|Stop loss|Take profit|Target 1|Target 2|Target zone|Position sizing|holding advice|empty-position advice|reasonCode|sourceRefId|raw_result|raw_ai_response|context_snapshot|raw_result_marker|raw_ai_response_marker|context_snapshot_marker|provider_timeout|fallback_cache|Yahoo Finance|Finnhub|backend snake_case/i;
 
 function buildUnsafeReportFixture(): AnalysisReport {
   return {
@@ -138,6 +138,10 @@ function buildUnsafeReportFixture(): AnalysisReport {
 }
 
 describe('FullDecisionReportDrawer no-advice guard', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('maps action fields to observation language and hides raw diagnostic fields', () => {
     render(
       <FullDecisionReportDrawer
@@ -164,12 +168,53 @@ describe('FullDecisionReportDrawer no-advice guard', () => {
     expect(within(report).getAllByText('研究包完整度').length).toBeGreaterThan(0);
     expect(within(report).getAllByText('继续跟踪').length).toBeGreaterThan(0);
     expect(within(report).getAllByText('数据不足').length).toBeGreaterThan(0);
-    expect(within(report).getAllByText('情景参考').length).toBeGreaterThan(0);
+    expect(within(report).getAllByText('参考区间').length).toBeGreaterThan(0);
+    expect(within(report).getAllByText('上方观察区').length).toBeGreaterThan(0);
     expect(within(report).getAllByText('风险边界').length).toBeGreaterThan(0);
     expect(within(report).getAllByText('关键价格区间').length).toBeGreaterThan(0);
     expect(report).toHaveTextContent('121.80 - 124.60');
     expect(report).toHaveTextContent('117.40');
     expect(report).toHaveTextContent('133.50');
     expect(report).not.toHaveTextContent(forbiddenConsumerReportPattern);
+  });
+
+  it('copies consumer-safe markdown when exporting the report text', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <FullDecisionReportDrawer
+        dashboard={{
+          ticker: 'ORCL',
+          decision: {
+            company: 'Oracle',
+            heroValue: '74',
+            confidenceValue: '中',
+            signalLabel: '买入',
+            scoreValue: '上行后卖出',
+            summary: '建议买入，目标价看 133.50。',
+            reasonBody: '价格仍需继续跟踪。',
+          },
+        }}
+        isOpen
+        onClose={() => undefined}
+        report={buildUnsafeReportFixture()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '复制报告' }));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledTimes(1);
+    });
+    expect(writeText.mock.calls[0]?.[0]).toContain('研究包完整度');
+    expect(writeText.mock.calls[0]?.[0]).toContain('参考区间');
+    expect(writeText.mock.calls[0]?.[0]).toContain('上方观察区');
+    expect(writeText.mock.calls[0]?.[0]).toContain('风险边界');
+    expect(writeText.mock.calls[0]?.[0]).toContain('关键价格区间');
+    expect(writeText.mock.calls[0]?.[0]).not.toMatch(forbiddenConsumerReportPattern);
   });
 });

@@ -6,7 +6,7 @@ const viewports = [
 ];
 
 const forbiddenTradeActionPattern =
-  /买入按钮|下单|立即交易|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy|must buy|must sell|buy now|sell now|place order|you should buy|you should sell/i;
+  /买入按钮|下单|立即交易|必买|稳赚|保证收益|理想买点|理想买入|二次买入|次级买点|止损|止盈|目标价|目标位|目标区间|仓位建议|guaranteed|best contract|AI recommends you buy|must buy|must sell|buy now|sell now|place order|you should buy|you should sell|ideal entry|secondary entry|stop loss|take profit|target zone|position sizing/i;
 const rawProviderDebugPattern = /raw\s+(payload|provider)|debug\s+(payload|schema)|provider\s+payload|api[_\s-]?key|secret\s*[=:]|bearer\s+[a-z0-9._-]+/i;
 
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
@@ -57,6 +57,29 @@ async function installAiResearchHarness(page: Page) {
     }
     if (method === 'GET' && path === '/api/v1/history') {
       return fulfillJson(route, { total: 0, page: 1, limit: 20, items: [] });
+    }
+    if (method === 'GET' && path === '/api/v1/stocks/ORCL/evidence') {
+      return fulfillJson(route, {
+        stockEvidencePacket: {
+          notInvestmentAdvice: true,
+          confidenceCap: { value: 40 },
+          claimBoundaries: [{ claim: 'direct_trade_action', allowed: false }],
+          sourceRefs: [],
+          dataGaps: [],
+        },
+      });
+    }
+    if (method === 'GET' && path === '/api/v1/stocks/ORCL/history') {
+      return fulfillJson(route, {
+        stockCode: 'ORCL',
+        stockName: 'Oracle',
+        period: 'daily',
+        data: [
+          { date: '2026-05-06', open: 120.2, high: 121.1, low: 119.8, close: 120.8, volume: 1200000 },
+          { date: '2026-05-07', open: 120.8, high: 122.4, low: 120.5, close: 121.9, volume: 1320000 },
+          { date: '2026-05-08', open: 121.9, high: 123.2, low: 121.1, close: 122.7, volume: 1410000 },
+        ],
+      });
     }
     if (method === 'GET' && path === '/api/v1/analysis/tasks') {
       return fulfillJson(route, { tasks: [], total: 0 });
@@ -144,7 +167,7 @@ test.describe('AI research entry launch surfaces', () => {
       await page.waitForLoadState('domcontentloaded');
       await expect(page.getByTestId('home-bento-dashboard')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('home-bento-research-state-row')).toBeVisible();
-      await expect(page.getByTestId('home-bento-card-strategy')).toHaveAttribute('data-research-card', 'opportunity');
+      await expect(page.getByTestId('home-bento-card-strategy')).toHaveAttribute('data-research-card', 'research-actions');
       await expect(page.getByTestId('home-bento-card-tech')).toHaveAttribute('data-research-card', 'risk-context');
       await expectNoHorizontalOverflow(page);
       await expectCleanLaunchText(page);

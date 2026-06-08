@@ -293,7 +293,7 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
         { label: 'MA20', value: fieldValue(technicalFields, ['MA20', '20日']) },
         { label: 'MA60', value: fieldValue(technicalFields, ['MA60', '60日']) },
         { label: '关键价格区间', value: consumerSafeReportPriceContext(decisionPanel?.support || decisionPanel?.idealEntry || report?.strategy?.idealBuy, '数据不足') },
-        { label: '情景参考', value: consumerSafeReportPriceContext(decisionPanel?.resistance || decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit, '数据不足') },
+        { label: '上方观察区', value: consumerSafeReportPriceContext(decisionPanel?.resistance || decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit, '数据不足') },
         { label: 'Volume / turnover', value: fieldValue(technicalFields, ['VOLUME DYNAMICS', 'Volume', '量价', '成交量']) || fieldValue(marketFields, ['volume', 'turnover', 'amount', '成交']) },
         { label: '筹码观察', value: consumerSafeReportText(fieldValue(technicalFields, ['chip', '筹码']) || standardReport?.decisionContext?.compositeView, '数据不足') },
       ],
@@ -306,7 +306,7 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
         { label: 'RSI', value: fieldValue(technicalFields, ['RSI-14', 'RSI14', 'RSI']) },
         { label: 'MACD', value: fieldValue(technicalFields, ['MACD']) },
         { label: '关键价格区间', value: consumerSafeReportPriceContext(decisionPanel?.support || decisionPanel?.idealEntry || report?.strategy?.idealBuy, '数据不足') },
-        { label: '情景参考', value: consumerSafeReportPriceContext(decisionPanel?.resistance || decisionPanel?.target || report?.strategy?.takeProfit, '数据不足') },
+        { label: '上方观察区', value: consumerSafeReportPriceContext(decisionPanel?.resistance || decisionPanel?.target || report?.strategy?.takeProfit, '数据不足') },
         { label: '量价判断', value: fieldValue(technicalFields, ['VOLUME DYNAMICS', 'Volume', '量价', '成交量']) },
       ],
     },
@@ -326,9 +326,9 @@ function buildFullReportSections(report: AnalysisReport | null, dashboard: Dashb
       title: '继续跟踪',
       rows: [
         { label: '关键价格区间', value: consumerSafeReportPriceContext(decisionPanel?.idealEntry || report?.strategy?.idealBuy || priceFieldValue(battleFields, ['ideal', '理想']), '数据不足') },
-        { label: '情景参考', value: consumerSafeReportPriceContext(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy || priceFieldValue(battleFields, ['secondary', '次级']), '数据不足') },
+        { label: '参考区间', value: consumerSafeReportPriceContext(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy || priceFieldValue(battleFields, ['secondary', '次级']), '数据不足') },
         { label: '风险边界', value: consumerSafeReportPriceContext(decisionPanel?.stopLoss || report?.strategy?.stopLoss || priceFieldValue(battleFields, ['stop', '止损']), '数据不足') },
-        { label: '关键价格区间', value: consumerSafeReportPriceContext(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit || priceFieldValue(battleFields, ['target', '目标']), '数据不足') },
+        { label: '上方观察区', value: consumerSafeReportPriceContext(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit || priceFieldValue(battleFields, ['target', '目标']), '数据不足') },
         { label: '风险边界说明', value: consumerSafeReportText(decisionPanel?.positionSizing || battleCards.find((item) => /position|仓位/i.test(item.label))?.value, '风险边界仅作情景约束。') },
         { label: '继续跟踪', value: consumerSafeReportText(decisionPanel?.buildStrategy || battleNotes.find((item) => /entry|建仓|入场/i.test(item.label))?.value, '继续跟踪，等待研究包补齐。') },
         { label: '风险边界', value: consumerSafeReportText(decisionPanel?.riskControlStrategy || decisionPanel?.stopReason, '风险边界用于说明不确定性。') },
@@ -523,7 +523,7 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/38">RESEARCH SUMMARY</p>
           <h3 className="mt-2 text-xl font-semibold tracking-[0] text-white">研究包完整度</h3>
           <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold tracking-[0.08em] text-white/42">
-            {['继续跟踪', '情景参考', '数据不足'].map((label) => (
+            {['继续跟踪', '参考区间', '风险边界', '上方观察区'].map((label) => (
               <span key={label} className="rounded-full border border-white/[0.06] bg-black/20 px-2 py-1">{label}</span>
             ))}
           </div>
@@ -548,8 +548,8 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
               <h3 className="text-base font-semibold tracking-[0] text-white">{section.title}</h3>
               {section.rows ? (
                 <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-                  {section.rows.map((row) => (
-                    <div key={`${section.id}-${row.label}`} className="min-w-0 rounded-xl border border-white/[0.06] bg-black/16 px-3 py-2">
+                  {section.rows.map((row, index) => (
+                    <div key={`${section.id}-${row.label}-${index}`} className="min-w-0 rounded-xl border border-white/[0.06] bg-black/16 px-3 py-2">
                       <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">{row.label}</p>
                       <p className="mt-1 break-words text-sm leading-6 text-white/76">{row.value}</p>
                     </div>
@@ -580,8 +580,8 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
                 <h3 className="text-base font-semibold tracking-[0] text-white">{section.title}</h3>
                 {section.rows ? (
                   <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-                    {section.rows.map((row) => (
-                      <div key={`${section.id}-${row.label}`} className="min-w-0 rounded-xl border border-white/[0.06] bg-black/16 px-3 py-2">
+                    {section.rows.map((row, index) => (
+                      <div key={`${section.id}-${row.label}-${index}`} className="min-w-0 rounded-xl border border-white/[0.06] bg-black/16 px-3 py-2">
                         <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">{row.label}</p>
                         <p className="mt-1 break-words text-sm leading-6 text-white/76">{row.value}</p>
                       </div>
@@ -597,8 +597,8 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
                 ) : null}
                 {section.checklist ? (
                   <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-                    {section.checklist.map((item) => (
-                      <div key={`${section.id}-${item.label}`} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-black/16 px-3 py-2 text-sm">
+                    {section.checklist.map((item, index) => (
+                      <div key={`${section.id}-${item.label}-${index}`} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-black/16 px-3 py-2 text-sm">
                         <span className="min-w-0 break-words text-white/72">{item.label}</span>
                         <TraceBadge tone={item.status === 'PASS' ? 'used' : item.status === 'FAIL' ? 'missing' : item.status === 'WARN' ? 'warning' : 'neutral'}>{item.status}</TraceBadge>
                       </div>

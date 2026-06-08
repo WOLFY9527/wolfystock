@@ -3,7 +3,7 @@ import type { AnalysisReport } from '../../types/analysis';
 import { buildInstitutionalReportMarkdown } from '../homeReportIdentity';
 
 const forbiddenConsumerReportPattern =
-  /投资结论|买入|卖出|理想买点|次级买点|止损|目标价|仓位建议|\bAction\b|Ideal buy|Stop loss|Position sizing|holding advice|empty-position advice|reasonCode|sourceRefId|raw_result|raw_ai_response|context_snapshot|raw_result_marker|raw_ai_response_marker|context_snapshot_marker|provider_timeout|fallback_cache|Yahoo Finance|Finnhub|backend snake_case/i;
+  /投资结论|买入|卖出|理想买点|次级买点|止损|止盈|目标价|目标位|目标区间|仓位建议|\bAction\b|Ideal buy|Secondary entry|Stop loss|Take profit|Target 1|Target 2|Target zone|Position sizing|holding advice|empty-position advice|reasonCode|sourceRefId|raw_result|raw_ai_response|context_snapshot|raw_result_marker|raw_ai_response_marker|context_snapshot_marker|provider_timeout|fallback_cache|Yahoo Finance|Finnhub|backend snake_case/i;
 
 function buildUnsafeReportFixture(): AnalysisReport {
   return {
@@ -150,7 +150,8 @@ describe('buildInstitutionalReportMarkdown no-advice guard', () => {
     expect(markdown).toContain('研究包完整度');
     expect(markdown).toContain('继续跟踪');
     expect(markdown).toContain('数据不足');
-    expect(markdown).toContain('情景参考');
+    expect(markdown).toContain('参考区间');
+    expect(markdown).toContain('上方观察区');
     expect(markdown).toContain('风险边界');
     expect(markdown).toContain('关键价格区间');
     expect(markdown).toContain('121.80 - 124.60');

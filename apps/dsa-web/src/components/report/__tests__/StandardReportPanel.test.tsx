@@ -4,6 +4,9 @@ import { StandardReportPanel } from '../StandardReportPanel';
 import type { AnalysisReport } from '../../../types/analysis';
 import { previewChartFixtures } from '../../../dev/reportPreviewFixture';
 
+const forbiddenConsumerPanelPattern =
+  /理想买入点|次优买入点|止损位|目标位|目标一区|目标二区|仓位建议|Ideal entry|Secondary entry|Stop loss|Target 1|Target 2|Position sizing/i;
+
 vi.mock('../../../hooks/useElementSize', () => {
   let callCount = 0;
   const createRef = () => {
@@ -266,7 +269,7 @@ describe('StandardReportPanel', () => {
     render(<StandardReportPanel report={report} chartFixtures={previewChartFixtures} />);
 
     expect(screen.getAllByText('NVIDIA').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('等待回踩确认后再考虑加仓').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('当前研究包仍不完整，仅支持继续跟踪。').length).toBeGreaterThan(0);
     expect(screen.getAllByText('125.30').length).toBeGreaterThan(0);
     expect(screen.getAllByText('1.87%').length).toBeGreaterThan(0);
     expect(screen.queryAllByText(/盘中快照/).length).toBeGreaterThan(0);
@@ -283,6 +286,10 @@ describe('StandardReportPanel', () => {
     expect(screen.getByTestId('watch-checklist-card')).toBeInTheDocument();
     expect(screen.getByText('执行计划')).toBeInTheDocument();
     expect(screen.getAllByText('观望').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('关键价格区间').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('参考区间').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('上方观察区').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('风险边界').length).toBeGreaterThan(0);
 
     const deepAppendix = screen.getByTestId('deep-appendix-disclosure');
     expect(deepAppendix).toBeInTheDocument();
@@ -345,14 +352,26 @@ describe('StandardReportPanel', () => {
     expect(screen.queryByText(/先看最重要的最新更新/)).not.toBeInTheDocument();
   });
 
+  it('does not render legacy action labels on the consumer report surface', () => {
+    render(<StandardReportPanel report={report} chartFixtures={previewChartFixtures} />);
+
+    const panel = screen.getByTestId('standard-report-panel');
+
+    expect(panel).toHaveTextContent('关键价格区间');
+    expect(panel).toHaveTextContent('风险边界');
+    expect(panel).toHaveTextContent('上方观察区');
+    expect(panel).not.toHaveTextContent(forbiddenConsumerPanelPattern);
+  });
+
   it('localizes controlled summary values in English mode without changing the report structure', () => {
     window.localStorage.setItem('dsa-ui-language', 'en');
 
     render(<StandardReportPanel report={report} chartFixtures={previewChartFixtures} />);
 
     expect(screen.getByTestId('hero-summary-card')).toBeInTheDocument();
-    expect(screen.getAllByText('Watch').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText('Wait for confirmation')).toBeInTheDocument();
+    expect(screen.getByText('Research state')).toBeInTheDocument();
+    expect(screen.getAllByText('Watch').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Research packet still incomplete. Continue tracking only.').length).toBeGreaterThan(0);
     expect(screen.getByText('Trend strengthening')).toBeInTheDocument();
     expect(screen.getAllByText('Bullish').length).toBeGreaterThan(0);
     expect(screen.queryByText('观望')).not.toBeInTheDocument();
@@ -365,13 +384,18 @@ describe('StandardReportPanel', () => {
     render(<StandardReportPanel report={report} chartFixtures={previewChartFixtures} />);
 
     const executionPanel = screen.getByTestId('decision-execution-panel');
-    expect(within(executionPanel).getAllByText('Pullback entry').length).toBeGreaterThanOrEqual(2);
+    expect(within(executionPanel).getAllByText('Continue tracking').length).toBeGreaterThanOrEqual(2);
     expect(within(executionPanel).getByText(/Medium-high/)).toBeInTheDocument();
-    expect(within(executionPanel).getByText('Scale in')).toBeInTheDocument();
+    expect(within(executionPanel).getByText('Key price zone')).toBeInTheDocument();
+    expect(within(executionPanel).getAllByText('Upper observation zone').length).toBeGreaterThanOrEqual(1);
+    expect(within(executionPanel).getAllByText('Risk boundary').length).toBeGreaterThanOrEqual(1);
+    expect(within(executionPanel).getByText('Reference range')).toBeInTheDocument();
     expect(within(executionPanel).getByText('A break of nearby support invalidates the bullish structure.')).toBeInTheDocument();
-    expect(within(executionPanel).getByText('Anchor the target to the prior high and the stronger resistance zone.')).toBeInTheDocument();
+    expect(within(executionPanel).getByText('Upper observation zone describes overhead context only.')).toBeInTheDocument();
     expect(within(executionPanel).queryByText('回踩买点')).not.toBeInTheDocument();
     expect(within(executionPanel).queryByText('分批试仓')).not.toBeInTheDocument();
+    expect(within(executionPanel).queryByText('Pullback entry')).not.toBeInTheDocument();
+    expect(within(executionPanel).queryByText('Scale in')).not.toBeInTheDocument();
     expect(within(executionPanel).queryByText('中高')).not.toBeInTheDocument();
     expect(screen.getByText('Technical score')).toBeInTheDocument();
     expect(screen.getByText('Fundamental score')).toBeInTheDocument();

@@ -9,7 +9,7 @@ const CONSUMER_REPORT_INTERNAL_PATTERN =
   /reasonCode|reasonCodes|reason_code|reason_codes|reasonFamilies|sourceRefId|sourceRefIds|source_ref_id|source_ref_ids|raw_result|rawResult|raw_ai_response|rawAiResponse|context_snapshot|contextSnapshot|rawPayload|raw_payload|rawRows|provider|backend|debug|diagnostic|diagnostics|trace|schema|cache|payload|prompt|model|fallback_cache|provider_timeout|synthetic_fixture|snake_case|\b[a-z]+(?:_[a-z0-9]+)+\b/i;
 
 const CONSUMER_REPORT_ACTION_PATTERN =
-  /投资结论|理想买点|次级买点|目标价|仓位建议|持仓建议|空仓建议|建议\s*(买入|卖出|加仓|减仓|持有)|买入|卖出|加仓|减仓|建仓|开仓|平仓|止损|止盈|减持|\bAction\b|Ideal buy|Secondary buy|Stop loss|\bTarget\b|Position sizing|Entry strategy|Risk control strategy|holding advice|empty-position advice|empty-position|holding-position|\bbuy\b|\bsell\b|\badd(?:ing)?\b|\breduce\b|\bentry\b|\bexit\b|\bstop(?: loss)?\b|\btarget price\b|\bposition sizing\b/i;
+  /投资结论|理想买点|理想买入|理想买入点|次级买点|二次买入|次优买入|次优买点|回踩买点|突破买点|分批试仓|试仓|目标价|目标位|目标区间|目标一区|目标二区|止损|止损位|止损线|止盈|止盈目标|仓位建议|持仓建议|空仓建议|建议\s*(买入|卖出|加仓|减仓|持有)|买入|卖出|加仓|减仓|建仓|开仓|平仓|减持|\bAction\b|Ideal buy|Ideal entry|Pullback entry|Secondary buy|Secondary entry|Stop loss|Take profit|\bTarget\b|Target 1|Target 2|Target zone|Position sizing|Entry strategy|Risk control strategy|holding advice|empty-position advice|empty-position|holding-position|\bbuy\b|\bsell\b|\badd(?:ing)?\b|\breduce\b|\bentry\b|\bexit\b|\baccumulate\b|\bscale(?:\s|-)?in\b|\bbuild(?:ing)? position\b|\bstop(?: loss)?\b|\btake profit\b|\btarget(?: price| zone)?\b|\bposition sizing\b/i;
 
 const CONSUMER_REPORT_PRICE_TOKEN_PATTERN =
   /(?:[$¥€￥]\s*)?\d+(?:,\d{3})*(?:\.\d+)?(?:\s*(?:-|–|—|~|至|到)\s*(?:[$¥€￥]\s*)?\d+(?:,\d{3})*(?:\.\d+)?)?/g;
@@ -85,6 +85,12 @@ export function consumerSafeReportLabel(value: unknown, fallback = '情景参考
   }
   if (/投资结论|Investment Thesis|\bAction\b|动作|操作建议|结论/i.test(label)) {
     return '研究包完整度';
+  }
+  if (/resistance|压力|target|目标/i.test(label)) {
+    return '上方观察区';
+  }
+  if (/secondary|backup|次级|次优|参考/i.test(label)) {
+    return '参考区间';
   }
   if (/理想|次级|买点|buy|entry|support|resistance|target|目标|支撑|压力/i.test(label)) {
     return '关键价格区间';
@@ -486,7 +492,7 @@ export function buildInstitutionalReportMarkdown(
     const values = (fields || []).flatMap((field) => {
       const label = consumerSafeReportLabel(field.label);
       if (!label) return [];
-      const value = label === '关键价格区间' || label === '风险边界'
+      const value = ['关键价格区间', '参考区间', '上方观察区', '风险边界'].includes(label)
         ? consumerSafeReportPriceContext(field.value, CONSUMER_REPORT_DATA_GAP_FALLBACK)
         : consumerSafeReportText(field.value, CONSUMER_REPORT_DATA_GAP_FALLBACK);
       return value ? [`- ${label}: ${value}`] : [];
@@ -548,7 +554,7 @@ export function buildInstitutionalReportMarkdown(
     `- MA20: ${fieldValue(technicalFields, ['MA20', '20日'])}`,
     `- MA60: ${fieldValue(technicalFields, ['MA60', '60日'])}`,
     `- 关键价格区间: ${consumerSafeReportPriceContext(decisionPanel?.support || decisionPanel?.idealEntry || report?.strategy?.idealBuy || priceFieldValue(battleFields, ['ideal', '理想']), '数据不足')}`,
-    `- 情景参考: ${consumerSafeReportPriceContext(decisionPanel?.resistance || decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit || priceFieldValue(battleFields, ['target', '目标']), '数据不足')}`,
+    `- 上方观察区: ${consumerSafeReportPriceContext(decisionPanel?.resistance || decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit || priceFieldValue(battleFields, ['target', '目标']), '数据不足')}`,
     '',
     '## 技术透视 / Technical View',
     ...safeFieldLines(technicalFields),
@@ -558,9 +564,9 @@ export function buildInstitutionalReportMarkdown(
     '',
     '## 继续跟踪 / Observation Plan',
     `- 关键价格区间: ${consumerSafeReportPriceContext(decisionPanel?.idealEntry || report?.strategy?.idealBuy || priceFieldValue(battleFields, ['ideal', '理想']), '数据不足')}`,
-    `- 情景参考: ${consumerSafeReportPriceContext(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy || priceFieldValue(battleFields, ['secondary', '次级']), '数据不足')}`,
+    `- 参考区间: ${consumerSafeReportPriceContext(decisionPanel?.backupEntry || report?.strategy?.secondaryBuy || priceFieldValue(battleFields, ['secondary', '次级']), '数据不足')}`,
     `- 风险边界: ${consumerSafeReportPriceContext(decisionPanel?.stopLoss || report?.strategy?.stopLoss || priceFieldValue(battleFields, ['stop', '止损']), '数据不足')}`,
-    `- 关键价格区间: ${consumerSafeReportPriceContext(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit || priceFieldValue(battleFields, ['target', '目标']), '数据不足')}`,
+    `- 上方观察区: ${consumerSafeReportPriceContext(decisionPanel?.target || decisionPanel?.targetZone || report?.strategy?.takeProfit || priceFieldValue(battleFields, ['target', '目标']), '数据不足')}`,
     `- 风险边界: ${consumerSafeReportText(decisionPanel?.positionSizing || battleCards.find((item) => /position|仓位/i.test(item.label))?.value, '风险边界仅作情景约束。')}`,
     `- 继续跟踪: ${consumerSafeReportText(decisionPanel?.buildStrategy || battleNotes.find((item) => /entry|建仓|入场/i.test(item.label))?.value, '继续跟踪，等待研究包补齐。')}`,
     `- 风险边界: ${consumerSafeReportText(decisionPanel?.riskControlStrategy || decisionPanel?.stopReason, '风险边界用于说明不确定性。')}`,
