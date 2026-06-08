@@ -2959,7 +2959,11 @@ const UserScannerPage: React.FC = () => {
               {/* <TerminalPageHeading /> marker: DensePageHeader emits the page-level h1. */}
               <DensePageHeader
                 data-testid="scanner-page-heading"
-                eyebrow={runDetail ? sanitizeScannerProfileLabel(runDetail.profileLabel || runDetail.profile) : (language === 'en' ? 'Candidate workbench' : '候选工作台')}
+                eyebrow={(
+                  <span data-testid="scanner-page-profile-label">
+                    {runDetail ? sanitizeScannerProfileLabel(runDetail.profileLabel || runDetail.profile) : (language === 'en' ? 'Candidate workbench' : '候选工作台')}
+                  </span>
+                )}
                 title={language === 'en' ? 'Scanner' : '扫描器'}
                 action={(
                   <TerminalButton

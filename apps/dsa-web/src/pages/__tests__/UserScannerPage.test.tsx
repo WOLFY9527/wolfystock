@@ -1227,8 +1227,8 @@ describe('UserScannerPage', () => {
 
     renderUserScannerPage();
 
-    expect(await screen.findByTestId('scanner-page-heading')).toHaveTextContent('US Pre-open Scanner');
-    expect(screen.getByTestId('scanner-page-heading')).not.toHaveTextContent(/v1/);
+    await waitFor(() => expect(screen.getByTestId('scanner-page-profile-label')).toHaveTextContent('US Pre-open Scanner'));
+    expect(screen.getByTestId('scanner-page-profile-label')).not.toHaveTextContent(/v1/);
 
     const strip = await screen.findByTestId('scanner-top-down-context-strip');
     expect(strip).toHaveTextContent('市场驱动因素');
@@ -1361,8 +1361,8 @@ describe('UserScannerPage', () => {
     const { container } = renderUserScannerPage();
 
     const row = await screen.findByTestId('scanner-result-row-NVDA');
-    expect(screen.getByTestId('scanner-page-heading')).toHaveTextContent('A股盘前扫描');
-    expect(screen.getByTestId('scanner-page-heading')).not.toHaveTextContent(/CN\s*·|v1/);
+    expect(screen.getByTestId('scanner-page-profile-label')).toHaveTextContent('A股盘前扫描');
+    expect(screen.getByTestId('scanner-page-profile-label')).not.toHaveTextContent(/CN\s*·|v1/);
     expect(row).toHaveTextContent('当前候选进入研究列表');
     expect(row).toHaveTextContent('待补 基本面 / 新闻催化');
     expect(row).toHaveTextContent('仅研究观察');
