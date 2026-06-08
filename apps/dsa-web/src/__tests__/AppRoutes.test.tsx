@@ -176,6 +176,10 @@ vi.mock('../pages/LoginPage', () => ({
   default: () => <div>login-page</div>,
 }));
 
+vi.mock('../pages/ResetPasswordPage', () => ({
+  default: () => <div>reset-password-page</div>,
+}));
+
 vi.mock('../components/auth/AuthGuardOverlay', () => ({
   AuthGuardOverlay: ({ moduleName }: { moduleName: string }) => <div>{`auth-guard:${moduleName}`}</div>,
 }));
@@ -621,6 +625,24 @@ describe('AppContent route flows', () => {
 
     expect(await screen.findByText('login-page')).toBeInTheDocument();
   });
+
+  it('supports the locale-prefixed register route as an account-creation entry', async () => {
+    renderAtWithLocationProbe('/en/register?redirect=%2Fscanner');
+
+    expect(await screen.findByText('login-page')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/login'));
+  });
+
+  it.each(['/reset-password', '/zh/reset-password'])(
+    'renders the reset password route outside protected gates at %s',
+    async (path) => {
+      renderAt(path);
+
+      expect(await screen.findByText('reset-password-page')).toBeInTheDocument();
+      expect(screen.queryByText('login-page')).not.toBeInTheDocument();
+      expect(screen.queryByText(/auth-guard:/)).not.toBeInTheDocument();
+    },
+  );
 
   it('treats preview routes as preview pages outside dev-only mode checks', () => {
     expect(isPreviewRoutePath('/__preview/report')).toBe(true);

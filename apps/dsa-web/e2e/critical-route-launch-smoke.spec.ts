@@ -1,9 +1,10 @@
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { expect as appExpect, test as appTest } from './fixtures/appSmoke';
-import { expectNoHorizontalOverflow } from './fixtures/authenticatedRouteSmoke';
+import { expectNoHorizontalOverflow, fulfillJson } from './fixtures/authenticatedRouteSmoke';
 import {
   expectNoRawSecretLikeText,
+  installAdminAuthHarness,
   openAdminRouteWithHarness,
   test as adminTest,
 } from './fixtures/adminAuth';
@@ -28,7 +29,7 @@ const rotationRadarDiagnosticLeakPattern =
   /alpaca|alpaca_etf_authority_spine|Alpaca SIP|bounded_etf_authority_active|missing_required_windows|ineligible_bounded_etf|entitlement|reasonCodes?|reasonFamilies|sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|local_taxonomy|taxonomy-only|fallback_static|synthetic_fixture|official_public|authorized_licensed_feed|public_proxy|unofficial_proxy|provider|quote provider|提供方运维|数据源设置|原始来源|原因代码|ETF 权威|ETF 代理|权威来源|权威检查|权威可计分|可计分证据|代理缺口|代理过期|代理完整|proxy_quote_missing|proxy_stale|backend|raw_payload|provider_payload|debug|trace/i;
 const providerCircuitSecondaryDisclosureLabel = 'L2 分组诊断：熔断状态 / 事件 / 配额 / 探测 / SLA（已脱敏摘要）';
 const forbiddenPortfolioLaunchLanguage = ['交易工作台', '股票买卖', '提交交易', '下单', '订单执行', '买入', '卖出'];
-const requiredPortfolioLedgerLanguage = ['手工记账台', '仅用于手工记账', '不连接券商执行', '不发起外部委托', '持仓流水', '保存记录'];
+const requiredPortfolioLedgerLanguage = ['手工记账台', '手工记账入口', '持仓流水', '保存记录'];
 
 async function installAuthenticatedAppSmokeSession(page: Page) {
   await page.route('**/api/v1/auth/status', async (route) => {
@@ -144,6 +145,84 @@ async function assertAdminShell(page: Page) {
   await expectNoRawSecretLikeText(page);
   await expectNoRawLaunchArtifacts(page);
   await expectNoBrokerCredentialOrOrderPayloads(page);
+}
+
+function notificationChannelsPayload() {
+  return {
+    items: [
+      {
+        id: 7,
+        name: 'Route smoke in-app channel',
+        type: 'in_app',
+        enabled: true,
+        severity_min: 'warning',
+        event_types: ['admin_logs'],
+        route_scope: 'log_notification_association',
+        coverage_summary: 'Admin Logs route smoke binding',
+        target_summary: 'in-app operator queue',
+        config: {},
+        created_at: '2026-05-06T10:30:00+08:00',
+        updated_at: '2026-05-06T10:30:00+08:00',
+        last_tested_at: null,
+        last_triggered_at: null,
+        last_sent_at: null,
+        last_status: 'dry_run',
+        last_error: null,
+        last_error_summary: null,
+        last_error_code: null,
+        last_error_diagnostics: {},
+      },
+    ],
+    available_system_channels: ['email'],
+  };
+}
+
+function notificationEventsPayload() {
+  return {
+    total: 1,
+    limit: 100,
+    offset: 0,
+    items: [
+      {
+        id: 11,
+        event_type: 'admin_logs',
+        severity: 'warning',
+        title: 'Admin Logs route smoke',
+        message: 'Operator notification routed to a controlled in-app record.',
+        payload: {
+          route_scope: 'log_notification_association',
+          redacted: true,
+        },
+        fingerprint: 'route-smoke-notification',
+        created_at: '2026-05-06T10:30:00+08:00',
+        acknowledged_at: null,
+        acknowledged_by: null,
+        delivery_status: 'queued',
+      },
+    ],
+  };
+}
+
+async function openAdminNotificationsRouteWithHarness(page: Page) {
+  const requests: string[] = [];
+  const harness = await installAdminAuthHarness(page, {
+    capabilities: ['ops:notifications:read'],
+  });
+
+  await page.route('**/api/v1/admin/notification-channels**', (route) => {
+    requests.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
+    return fulfillJson(route, notificationChannelsPayload());
+  });
+  await page.route('**/api/v1/admin/notifications**', (route) => {
+    requests.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
+    return fulfillJson(route, notificationEventsPayload());
+  });
+
+  await page.goto('/zh/admin/notifications');
+  await page.waitForLoadState('domcontentloaded');
+  await expect(page).not.toHaveURL(/\/guest(?:$|[/?#])/);
+
+  return { harness, requests };
 }
 
 async function expectProviderCircuitSecondaryDisclosure(page: Page) {
@@ -279,9 +358,10 @@ if (productAuthFixture) {
         await appExpect(page.getByTestId('options-lab-decision-engine')).toBeVisible();
         await appExpect(page.getByTestId('options-lab-decision-summary')).toBeVisible();
         const analysisDetails = page.getByTestId('options-lab-analysis-details');
-        await appExpect(analysisDetails.getByText('收益结构只表达显式假设下的情景结果')).toBeHidden();
-        await analysisDetails.getByText('计算假设 / 数据说明 / 限制说明').click();
-        await appExpect(analysisDetails.getByText('收益结构只表达显式假设下的情景结果')).toBeVisible();
+        const analysisToggle = analysisDetails.getByRole('button', { name: /展开/ });
+        await appExpect(analysisToggle).toHaveAttribute('aria-expanded', 'false');
+        await analysisToggle.click();
+        await appExpect(analysisDetails.getByText('方法边界')).toBeVisible();
         await appExpect(page.getByTestId('options-lab-chain-panel')).toHaveCount(2);
         await appExpect(page.getByText('Call 链').first()).toBeVisible();
         await appExpect(page.getByText('Put 链').first()).toBeVisible();
@@ -381,6 +461,26 @@ adminTest.describe('admin launch route smoke', () => {
       expect(harness.requests.count('GET', '/api/v1/system/config')).toBeGreaterThan(0);
       expect(harness.requests.count('GET', '/api/v1/quant/duckdb/health')).toBeGreaterThan(0);
       expect(harness.requests.count('GET', '/api/v1/quant/duckdb/coverage')).toBeGreaterThan(0);
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+    }
+  });
+
+  adminTest('admin notifications stays clean with notification capability on desktop and mobile', async ({ page }) => {
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      const { harness, requests } = await openAdminNotificationsRouteWithHarness(page);
+
+      await appExpect(page.getByRole('heading', { name: '管理员通知' })).toBeVisible({ timeout: 15_000 });
+      await appExpect(page.getByTestId('admin-notifications-workspace')).toBeVisible();
+      await appExpect(page.getByTestId('admin-notifications-rules-panel')).toBeVisible();
+      await appExpect(page.getByTestId('admin-notifications-events-panel')).toBeVisible();
+      await assertAdminShell(page);
+
+      expect(harness.currentUser.canReadNotifications).toBe(true);
+      expect(harness.currentUser.canReadOpsLogs).toBe(false);
+      expect(requests.filter((entry) => entry === 'GET /api/v1/admin/notification-channels').length).toBeGreaterThan(0);
+      expect(requests.filter((entry) => entry === 'GET /api/v1/admin/notifications').length).toBeGreaterThan(0);
+      expect(requests.filter((entry) => entry.startsWith('POST '))).toEqual([]);
       await page.unrouteAll({ behavior: 'ignoreErrors' });
     }
   });

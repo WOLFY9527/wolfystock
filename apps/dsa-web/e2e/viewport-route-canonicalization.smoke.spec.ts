@@ -15,6 +15,7 @@ const productRoutes = [
   { path: '/zh/market-overview', canonical: '/zh/market-overview', marker: 'market-overview-shell' },
   { path: '/zh/market/liquidity-monitor', canonical: '/zh/market/liquidity-monitor', marker: 'liquidity-monitor-guidance-panel' },
   { path: '/zh/market/rotation-radar', canonical: '/zh/market/rotation-radar', marker: 'market-rotation-radar-page' },
+  { path: '/zh/backtest/compare', canonical: '/zh/backtest/compare', marker: 'rule-backtest-compare-page' },
 ] as const;
 
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
