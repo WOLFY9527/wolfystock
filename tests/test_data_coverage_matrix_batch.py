@@ -91,6 +91,75 @@ def _rotation_missing_review_metadata() -> dict[str, object]:
     }
 
 
+def _options_reviewed_observation_metadata(provider_id: str) -> dict[str, object]:
+    return {
+        "surfaceId": "options",
+        "fieldKey": "options_setup_status",
+        "providerId": provider_id,
+        "providerLabel": "Options Reviewed Descriptor",
+        "sourceId": f"{provider_id}_source",
+        "sourceLabel": "Options Reviewed Source Descriptor",
+        "sourceType": "official_public",
+        "sourceTier": "provider_descriptor_only",
+        "freshnessState": "fresh",
+        "asOf": "2026-06-08T09:30:00Z",
+        "sourceAuthorityAllowed": False,
+        "scoreContributionAllowed": False,
+        "authorityGrant": False,
+        "decisionGrade": False,
+        "rightToDisplay": "limited",
+    }
+
+
+def _options_provider_metadata_authority_claim() -> dict[str, object]:
+    return {
+        "surfaceId": "options",
+        "fieldKey": "options_setup_status",
+        "providerId": "options_provider_metadata_claim",
+        "providerLabel": "Options Provider Metadata Claim",
+        "sourceId": "options_provider_metadata_claim_source",
+        "sourceLabel": "Options Provider Metadata Claim Source",
+        "sourceType": "official_public",
+        "sourceTier": "provider_descriptor_only",
+        "freshnessState": "fresh",
+        "asOf": "2026-06-08T09:35:00Z",
+        "authorityGrant": True,
+        "decisionGrade": True,
+        "recommendationReady": True,
+        "recommendationReadiness": "ready",
+        "consumerBadgeEligible": True,
+        "consumerBadge": "authoritative",
+    }
+
+
+def _options_degraded_unsafe_metadata() -> dict[str, object]:
+    return {
+        "surfaceId": "options",
+        "fieldKey": "options_setup_status",
+        "providerId": "options_synthetic_unsafe_claim",
+        "providerLabel": "Options Synthetic Unsafe Claim",
+        "sourceId": "options_synthetic_unsafe_claim_source",
+        "sourceLabel": "Options Synthetic Unsafe Claim Source",
+        "sourceType": "synthetic_fixture",
+        "sourceTier": "fixture_proxy",
+        "freshnessState": "synthetic",
+        "isSynthetic": True,
+        "asOf": "2026-06-08T09:40:00Z",
+        "sourceAuthorityAllowed": True,
+        "scoreContributionAllowed": True,
+        "authorityGrant": True,
+        "decisionGrade": True,
+        "observationOnly": False,
+        "diagnosticOnly": False,
+        "rightToDisplay": "granted",
+        "providerRuntimeCalled": True,
+        "networkCallsEnabled": True,
+        "marketCacheMutation": True,
+        "recommendationReady": True,
+        "consumerBadgeEligible": True,
+    }
+
+
 def test_successful_batch_returns_valid_rows_counts_and_inert_guard_posture() -> None:
     result = build_data_coverage_matrix_batch(
         [
@@ -222,6 +291,154 @@ def test_rotation_batch_preserves_caller_order_and_fails_closed_for_missing_revi
         build_data_coverage_matrix_batch(rows, raise_on_error=True)
 
     assert exc_info.value.result.to_dict()["rowCounts"] == payload["rowCounts"]
+
+
+def test_options_batch_preserves_order_and_fails_closed_for_metadata_authority_claims() -> None:
+    rows = [
+        _options_reviewed_observation_metadata("options_reviewed_observation"),
+        _options_provider_metadata_authority_claim(),
+        _options_degraded_unsafe_metadata(),
+    ]
+
+    payload = build_data_coverage_matrix_batch(rows).to_dict()
+
+    assert payload["rowCounts"] == {
+        "input": 3,
+        "built": 3,
+        "valid": 1,
+        "invalid": 2,
+        "errors": 2,
+    }
+    assert payload["guardPosture"] == DATA_COVERAGE_MATRIX_BATCH_GUARD_POSTURE
+    assert [row["surfaceId"] for row in payload["rows"]] == ["options", "options", "options"]
+    assert [row["fieldKey"] for row in payload["rows"]] == [
+        "options_setup_status",
+        "options_setup_status",
+        "options_setup_status",
+    ]
+    assert [row["providerId"] for row in payload["rows"]] == [
+        "options_reviewed_observation",
+        "options_provider_metadata_claim",
+        "options_synthetic_unsafe_claim",
+    ]
+    assert [error["rowIndex"] for error in payload["errors"]] == [1, 2]
+    assert all(error["surfaceId"] == "options" for error in payload["errors"])
+    assert all(error["fieldKey"] == "options_setup_status" for error in payload["errors"])
+    assert all(error["errorType"] == "validation_error" for error in payload["errors"])
+
+    reviewed_row, metadata_claim_row, degraded_row = payload["rows"]
+    assert reviewed_row["rightToDisplay"] == "limited"
+    assert reviewed_row["sourceAuthorityAllowed"] is False
+    assert reviewed_row["scoreContributionAllowed"] is False
+    assert reviewed_row["authorityGrant"] is False
+    assert reviewed_row["decisionGrade"] is False
+    assert reviewed_row["observationOnly"] is True
+
+    assert metadata_claim_row["providerId"] == "options_provider_metadata_claim"
+    assert metadata_claim_row["sourceType"] == "official_public"
+    assert metadata_claim_row["sourceTier"] == "provider_descriptor_only"
+    assert metadata_claim_row["freshnessState"] == "fresh"
+    assert metadata_claim_row["sourceAuthorityAllowed"] is False
+    assert metadata_claim_row["scoreContributionAllowed"] is False
+    assert metadata_claim_row["authorityGrant"] is False
+    assert metadata_claim_row["decisionGrade"] is False
+    assert metadata_claim_row["observationOnly"] is True
+    assert metadata_claim_row["rightToDisplay"] == "unavailable"
+    assert set(payload["errors"][0]["codes"]) >= {
+        "missing_source_authority",
+        "missing_score_contribution",
+        "missing_right_to_display",
+        "authority_grant_without_prerequisites",
+        "decision_grade_without_prerequisites",
+    }
+
+    assert degraded_row["freshnessState"] == "synthetic"
+    assert degraded_row["isSynthetic"] is True
+    assert degraded_row["sourceAuthorityAllowed"] is True
+    assert degraded_row["scoreContributionAllowed"] is False
+    assert degraded_row["authorityGrant"] is False
+    assert degraded_row["decisionGrade"] is False
+    assert degraded_row["observationOnly"] is True
+    assert degraded_row["rightToDisplay"] == "unavailable"
+    assert degraded_row["diagnosticOnly"] is True
+    assert degraded_row["providerRuntimeCalled"] is False
+    assert degraded_row["networkCallsEnabled"] is False
+    assert degraded_row["marketCacheMutation"] is False
+    assert set(payload["errors"][1]["codes"]) >= {
+        "degraded_synthetic_source",
+        "authority_grant_without_prerequisites",
+        "decision_grade_without_prerequisites",
+        "provider_runtime_side_effect",
+        "network_calls_enabled",
+        "market_cache_mutation",
+        "diagnostic_only_required",
+    }
+
+    for row in payload["rows"]:
+        assert row["diagnosticOnly"] is True
+        assert row["providerRuntimeCalled"] is False
+        assert row["networkCallsEnabled"] is False
+        assert row["marketCacheMutation"] is False
+        for forbidden_claim in (
+            "recommendationReady",
+            "recommendationReadiness",
+            "consumerBadgeEligible",
+            "consumerBadge",
+        ):
+            assert forbidden_claim not in row
+
+    consumer_projection = build_data_coverage_surface_snapshot(payload["rows"]).to_dict()
+    assert consumer_projection == {
+        "snapshotVersion": "data_coverage_surface_snapshot_v1",
+        "surfaceId": "options",
+        "routeId": "/zh/options-lab",
+        "audience": "consumer",
+        "consumerState": "UNAVAILABLE",
+        "confidencePosture": "UNAVAILABLE",
+        "consumerSummary": "UNAVAILABLE",
+        "asOf": "2026-06-08T09:40:00Z",
+        "rowCount": 3,
+        "availableRowCount": 0,
+        "limitedRowCount": 0,
+        "blockedRowCount": 2,
+        "unavailableRowCount": 1,
+    }
+    serialized_projection = json.dumps(consumer_projection, ensure_ascii=False, sort_keys=True)
+    for forbidden in (
+        "providerId",
+        "providerLabel",
+        "sourceId",
+        "sourceLabel",
+        "sourceType",
+        "sourceTier",
+        "sourceAuthorityAllowed",
+        "scoreContributionAllowed",
+        "authorityGrant",
+        "decisionGrade",
+        "rightToDisplay",
+        "freshnessState",
+        "options_setup_status",
+        "options_market_structure",
+        "official_public",
+        "synthetic_fixture",
+        "recommendationReady",
+        "recommendationReadiness",
+        "consumerBadgeEligible",
+        "consumerBadge",
+    ):
+        assert forbidden not in serialized_projection
+
+    with pytest.raises(DataCoverageMatrixBatchBuildError) as exc_info:
+        build_data_coverage_matrix_batch(rows, raise_on_error=True)
+
+    raised_payload = exc_info.value.result.to_dict()
+    assert raised_payload["rowCounts"] == payload["rowCounts"]
+    assert [row["providerId"] for row in raised_payload["rows"]] == [
+        "options_reviewed_observation",
+        "options_provider_metadata_claim",
+        "options_synthetic_unsafe_claim",
+    ]
+    assert [error["rowIndex"] for error in raised_payload["errors"]] == [1, 2]
 
 
 def test_partial_failure_preserves_input_order_and_reports_per_row_errors_without_throwing() -> None:
