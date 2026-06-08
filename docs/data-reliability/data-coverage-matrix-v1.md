@@ -142,6 +142,15 @@ Forbidden consumer output:
 - backend snake_case fields
 - provider/runtime/cache/API details
 
+## Static Surface Registry
+
+The inert surface/route/field registry that anchors the first adoption pass
+for Market Overview, Liquidity, Rotation, Scanner, Single-stock, Watchlist,
+Portfolio, Backtest, and Options lives in:
+
+- `src/services/data_coverage_surface_registry.py`
+- `tests/test_data_coverage_surface_registry.py`
+
 ## Non-Goals
 
 This task does not authorize:
