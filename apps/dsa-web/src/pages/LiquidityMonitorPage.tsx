@@ -220,10 +220,10 @@ const EVIDENCE_REASON_LABELS: Record<string, string> = {
 const LIQUIDITY_BLOCKING_REASON_LABELS: Record<string, string> = {
   partial_coverage: '部分数据暂不可用',
   observation_only: '观察线索',
-  proxy_only_missing_real_source: '关键数据待恢复',
+  proxy_only_missing_real_source: '待补充指标',
   proxy_context_only: '观察线索',
-  source_authority_router_rejected: '关键数据待恢复',
-  provider_forbidden_for_use_case: '关键数据待恢复',
+  source_authority_router_rejected: '待补充指标',
+  provider_forbidden_for_use_case: '待补充指标',
   provider_observation_only: '观察线索',
   provider_unavailable: '部分数据暂不可用',
   trust_gate_blocked: '信任门禁阻断',
@@ -1098,9 +1098,9 @@ type ConsumerLiquiditySummaryFact = {
 type ConsumerLiquidityEvidenceRowView = {
   key: string;
   label: string;
-  statusLabel: '可用' | '观察中' | '待恢复';
+  statusLabel: '可用' | '观察中' | '待补充';
   statusVariant: 'success' | 'info' | 'neutral';
-  scoreLabel: '主要线索' | '观察线索' | '暂未恢复';
+  scoreLabel: '主要线索' | '观察线索' | '待补充';
   scoreVariant: 'success' | 'info' | 'caution';
   note: string;
   detail: string;
@@ -1124,7 +1124,7 @@ type ConsumerLiquidityCoverageSegment = {
   barClassName: string;
 };
 
-const CONSUMER_FORBIDDEN_COPY_PATTERN = /provider|proxy|fallback|reason|source|authority|cache|runtime|raw|json|diagnostic|official_or_authorized|marketcache|scorecontributionallowed|sourceauthorityallowed|yfinance|fred|binance|polygon|tushare|bucket|backend|snake_case|routeRejected|计分|评分|证据|覆盖|缺口|代理|提供方|数据源|官方|授权|来源|置信度|就绪/i;
+const CONSUMER_FORBIDDEN_COPY_PATTERN = /provider|proxy|fallback|stale|mock|synthetic|reason|source|authority|cache|runtime|raw|json|diagnostic|official_or_authorized|marketcache|scorecontributionallowed|sourceauthorityallowed|yfinance|fred|binance|polygon|tushare|bucket|backend|snake_case|routeRejected|计分|评分|证据|覆盖|缺口|代理|提供方|数据源|官方|授权|来源|置信度|就绪/i;
 
 function consumerFreshnessLabel(freshness: LiquidityMonitorFreshness): string {
   if (freshness === 'live') return '已更新';
@@ -1191,19 +1191,19 @@ function buildConsumerEvidenceNote(indicator: LiquidityMonitorIndicator): string
   const scoreReady = indicator.coverageDiagnostics?.scoreContributionAllowed === true || indicator.includedInScore;
   if (scoreReady) {
     return indicator.freshness === 'live'
-      ? '当前作为主要流动性线索。'
-      : '当前仍可作为主要线索，页面会继续自动刷新。';
+      ? '当前作为可参考的资金面线索。'
+      : '当前作为可参考的资金面线索，页面会继续自动刷新。';
   }
   if (indicator.status === 'unavailable') {
-    return '当前信号暂不可用，等待后续更新。';
+    return '待补充指标恢复后再看方向。';
   }
   if (isObservationOnlyIndicator(indicator)) {
-    return '当前信号仅供观察，暂不改变流动性格局。';
+    return '当前方向仅供观察，先作为资金面线索跟踪。';
   }
   if (isMissingOrUnavailableIndicator(indicator) || indicator.status === 'partial') {
-    return '当前信号仍不完整，先关注状态恢复。';
+    return '数据覆盖有限，先关注状态恢复。';
   }
-  return '当前信号可继续观察。';
+  return '当前资金面线索可继续观察。';
 }
 
 function buildConsumerEvidenceDetail(indicator: LiquidityMonitorIndicator): string {
@@ -1212,11 +1212,11 @@ function buildConsumerEvidenceDetail(indicator: LiquidityMonitorIndicator): stri
   ];
   const diagnostics = indicator.coverageDiagnostics;
   if (diagnostics?.missingInputs.length) {
-    pieces.push(`待恢复 ${diagnostics.missingInputs.length} 项`);
+    pieces.push(`待补充指标 ${diagnostics.missingInputs.length} 项`);
   } else if (indicator.coverageDiagnostics?.scoreContributionAllowed === true || indicator.includedInScore) {
-    pieces.push('用于当前状态');
+    pieces.push('纳入当前状态观察');
   } else if (isObservationOnlyIndicator(indicator)) {
-    pieces.push('作为观察线索');
+    pieces.push('保留为资金面线索');
   }
   return pieces.join(' · ');
 }
@@ -1225,7 +1225,7 @@ function buildConsumerEvidenceRows(indicators: LiquidityMonitorIndicator[]): Con
   return pickConsumerEvidenceIndicators(indicators).map((indicator) => {
     const scoreReady = indicator.coverageDiagnostics?.scoreContributionAllowed === true || indicator.includedInScore;
     const statusLabel = indicator.status === 'unavailable'
-      ? '待恢复'
+      ? '待补充'
       : scoreReady
         ? '可用'
         : '观察中';
@@ -1234,7 +1234,7 @@ function buildConsumerEvidenceRows(indicators: LiquidityMonitorIndicator[]): Con
       label: displayLabel(indicator),
       statusLabel,
       statusVariant: statusLabel === '可用' ? 'success' : statusLabel === '观察中' ? 'info' : 'neutral',
-      scoreLabel: scoreReady ? '主要线索' : indicator.status === 'unavailable' ? '暂未恢复' : '观察线索',
+      scoreLabel: scoreReady ? '主要线索' : indicator.status === 'unavailable' ? '待补充' : '观察线索',
       scoreVariant: scoreReady ? 'success' : indicator.status === 'unavailable' ? 'caution' : 'info',
       note: buildConsumerEvidenceNote(indicator),
       detail: buildConsumerEvidenceDetail(indicator),
@@ -1254,13 +1254,13 @@ function buildConsumerSummaryFacts(
       key: 'direction',
       label: '流动性格局',
       value: buildLiquidityBiasSummary(data, readinessSummary, buildLiquidityImpulseSynthesisView(data.liquidityImpulseSynthesis)).label,
-      detail: coverageSummary.directionLabel === '可参考' ? '可继续跟踪' : '暂以观察为主',
+      detail: coverageSummary.directionLabel === '可参考' ? '可继续跟踪' : '当前方向仅供观察',
     },
     {
       key: 'signal',
       label: '主要压力',
       value: topSignal || '等待关键信号恢复',
-      detail: topSignal ? '当前最先影响状态的线索' : '当前没有稳定主线索',
+      detail: topSignal ? '当前最先影响状态的资金面线索' : '当前没有稳定主线索',
     },
     {
       key: 'updated',
@@ -1277,13 +1277,13 @@ function buildConsumerGapSummary(
   consumerView: ConsumerLiquidityStatusView,
 ): string {
   if (missing.count > 0) {
-    return `数据不足，暂不判断；${missing.count} 项关键信号待恢复。`;
+    return `数据覆盖有限，当前方向仅供观察；待补充指标 ${missing.count} 项。`;
   }
   if (observation.count > 0) {
-    return '数据不足，暂不判断；部分线索仍仅供观察。';
+    return '数据覆盖有限，当前方向仅供观察；部分资金面线索暂只保留观察。';
   }
   if (consumerView.availabilityLabel === '暂不可用') {
-    return '数据不足，暂不判断；等待更多可用线索恢复。';
+    return '数据覆盖有限，当前方向仅供观察；等待更多资金面线索恢复。';
   }
   return '当前没有新增限制，继续跟踪后续变化。';
 }
@@ -1303,21 +1303,21 @@ function buildConsumerCoverageSegments(
   const rawSegments: Array<Omit<ConsumerLiquidityCoverageSegment, 'widthPct'>> = [
     {
       key: 'scoring',
-      label: '主要',
+      label: '可参考',
       count: coverageSummary.scoreGradeCount,
       chipVariant: 'success',
       barClassName: 'bg-emerald-300/80',
     },
     {
       key: 'observation',
-      label: '观察',
+      label: '观察中',
       count: coverageSummary.observationOnlyCount,
       chipVariant: 'info',
       barClassName: 'bg-cyan-300/75',
     },
     {
       key: 'missing',
-      label: '待恢复',
+      label: '待补充',
       count: coverageSummary.missingOrUnavailableCount,
       chipVariant: 'caution',
       barClassName: 'bg-amber-300/80',
@@ -1361,7 +1361,7 @@ function buildConsumerVisualDrivers(
       const direction = evidenceDirectionLabel(item.direction);
       const detailParts = [
         direction,
-        item.observationOnly ? '观察线索' : '当前线索',
+        item.observationOnly ? '资金面线索' : '可参考线索',
       ].filter(Boolean);
       const contractionLike = item.direction === 'supports_contraction' || item.direction === 'negative';
       const expansionLike = item.direction === 'supports_expansion' || item.direction === 'positive';
@@ -1399,8 +1399,8 @@ function buildConsumerVisualDrivers(
     key: indicator.key,
     label: displayLabel(indicator),
     detail: indicator.includedInScore || indicator.coverageDiagnostics?.scoreContributionAllowed
-      ? '当前可判断线索'
-      : '当前观察线索',
+      ? '当前可参考线索'
+      : '当前资金面线索',
     emphasisPct: clampPercent((Math.abs(indicator.scoreContribution || 0) / emphasisBase) * 100, 18, 100),
     toneClassName: 'text-cyan-100',
     barClassName: 'from-cyan-300/80 via-sky-200/65 to-transparent',
@@ -1450,24 +1450,24 @@ function buildConsumerLiquidityStatusView(
       ? '数据不足，暂不判断；保留最近一次流动性状态。'
       : availabilityLabel === '观察中'
         ? topSignal
-          ? `流动性格局${bias.label}，主要压力是${topSignal}。`
-          : `流动性格局${bias.label}，先关注状态变化。`
+          ? `当前方向仅供观察，先看${topSignal}等资金面线索。`
+          : '当前方向仅供观察，先等待更多资金面线索恢复。'
         : topSignal
-          ? `流动性格局${bias.label}，主要压力是${topSignal}。`
-          : `流动性格局${bias.label}，可继续观察。`,
+          ? `流动性格局${bias.label}，当前先看${topSignal}。`
+          : `流动性格局${bias.label}，当前资金面线索可继续跟踪。`,
     availabilityDetail: availabilityLabel === '暂不可用'
-      ? '当前关键流动性线索不足，页面会继续自动刷新。'
+      ? '当前关键资金面线索不足，页面会继续自动刷新。'
       : availabilityLabel === '观察中'
         ? unavailableModules.length > 0
-          ? `当前以观察状态为主，受影响项：${unavailableModules.join('、')}。`
-          : '当前仍有部分信号待恢复，先保持观察。'
-        : '当前主要流动性读数已返回，可继续观察。',
+          ? `数据覆盖有限，待补充指标：${unavailableModules.join('、')}。`
+          : '数据覆盖有限，当前方向仅供观察。'
+        : '当前主要资金面线索已返回，可继续观察。',
     scoringDetail: availabilityLabel === '暂不可用'
       ? '数据不足，暂不判断；请等待刷新，并对照 Market Overview / Rotation Radar 的相关线索。'
       : limitedConfidence
-        ? '数据不足，暂不判断；等待更多可用线索恢复。'
+        ? '数据覆盖有限，当前方向仅供观察；待补充指标恢复后再判断。'
         : scoringPaused
-          ? '数据不足，暂不判断；部分流动性数据暂不可用。'
+          ? '数据覆盖有限，先等待更多资金面线索恢复。'
           : '当前流动性状态可继续参考。',
     freshnessSummary,
     freshnessDetail: `最近更新：${formatDateTime(data.freshness.latestAsOf) || '待确认'}`,
@@ -1537,12 +1537,12 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
       >
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-white/48">指标状态</p>
+            <p className="text-[11px] font-medium text-white/48">资金面线索</p>
             <p className="mt-1 text-sm font-semibold text-white/84">
-              {coverageSummary.scoreGradeCount}/{Math.max(indicators.length, 1)} 项支撑当前状态
+              {coverageSummary.scoreGradeCount}/{Math.max(indicators.length, 1)} 项线索可参考
             </p>
             <p className="mt-1 text-[11px] leading-5 text-white/56">
-              待恢复 {coverageSummary.missingOrUnavailableCount} 项，观察 {coverageSummary.observationOnlyCount} 项。
+              待补充指标 {coverageSummary.missingOrUnavailableCount} 项，观察线索 {coverageSummary.observationOnlyCount} 项。
             </p>
           </div>
           <TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.directionLabel}</TerminalChip>
@@ -1606,7 +1606,7 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
             <p className="text-[11px] font-medium text-white/48">压力走势</p>
             <p className="mt-1 text-sm font-semibold text-white/84">连续走势暂未返回，当前保持观察</p>
             <p className="mt-1 text-[11px] leading-5 text-white/56">
-              当前页面没有连续走势数据，先对照读数、指标状态与压力来源继续观察。
+              当前页面没有连续走势数据，先对照读数、线索状态与压力来源继续观察。
             </p>
           </div>
           <TerminalChip variant="neutral">未返回走势</TerminalChip>
@@ -1725,7 +1725,7 @@ const CapitalFlowSignalPanel: React.FC<{
         </div>
         <div className="flex min-w-0 flex-wrap gap-1.5 lg:justify-end">
           <TerminalChip variant="info">仅观察</TerminalChip>
-          <TerminalChip variant="neutral">观察线索</TerminalChip>
+          <TerminalChip variant="neutral">资金面线索</TerminalChip>
           {flagLabels.map((label) => (
             <TerminalChip key={label} variant="caution">{label}</TerminalChip>
           ))}
@@ -1918,7 +1918,7 @@ const DecisionReadinessBand: React.FC<{
           <div className="flex min-w-0 flex-col gap-2 border-b border-white/[0.06] pb-3 md:flex-row md:items-end md:justify-between">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold text-white/54">关键指标</p>
-              <p className="mt-1 text-sm leading-6 text-white/62">先看资金面、美元压力、利率压力、波动压力与信用压力，再展开方法细节。</p>
+              <p className="mt-1 text-sm leading-6 text-white/62">先看资金面线索，再按美元压力、利率压力、波动压力与信用压力判断当前状态。</p>
             </div>
             <TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.directionLabel}</TerminalChip>
           </div>
@@ -1931,7 +1931,7 @@ const DecisionReadinessBand: React.FC<{
               <div className="flex min-w-0 items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[11px] font-medium text-white/48">关键指标</p>
-                  <p className="mt-1 text-[11px] leading-5 text-white/56">按资金面、美元压力、利率压力、波动压力与信用压力查看当前状态。</p>
+                  <p className="mt-1 text-[11px] leading-5 text-white/56">按资金面线索、美元压力、利率压力、波动压力与信用压力查看当前状态。</p>
                 </div>
               </div>
               <div className="mt-3 grid gap-2">
@@ -1976,8 +1976,8 @@ const DecisionReadinessBand: React.FC<{
 
               <ConsumerDisclosure
                 testId="liquidity-monitor-consumer-details"
-                title="方法与数据限制"
-                summary="方法、限制与更新时间默认折叠"
+                title="数据状态说明"
+                summary="更新时间、观察边界与待补充指标默认折叠"
                 className="mt-4 bg-black/10"
               >
                 <div className="grid gap-2 text-[11px] leading-5 text-white/56">
@@ -1985,7 +1985,7 @@ const DecisionReadinessBand: React.FC<{
                   <p>{consumerView.scoringDetail}</p>
                   <p>{consumerView.freshnessDetail}</p>
                   {observation.count > 0 ? <p>仍在观察：{observation.namesLine}</p> : null}
-                  {missing.count > 0 ? <p>待恢复：{missing.namesLine}</p> : null}
+                  {missing.count > 0 ? <p>待补充指标：{missing.namesLine}</p> : null}
                   <p>本页把流动性作为研究背景展示；当关键信号缺失、延迟或暂不可用时，状态会自动降级。</p>
                 </div>
               </ConsumerDisclosure>
@@ -1999,7 +1999,7 @@ const DecisionReadinessBand: React.FC<{
                 <p className="text-[11px] font-medium text-white/48">状态限制</p>
                 <p className="mt-2 text-sm leading-6 text-white/76">{consumerGapSummary}</p>
                 <p className="mt-2 text-[11px] leading-5 text-white/48">
-                  {missing.count > 0 ? `优先恢复：${missing.namesLine}` : '当前没有新增限制，继续观察后续变化。'}
+                  {missing.count > 0 ? `待补充指标：${missing.namesLine}` : '当前没有新增限制，继续观察后续变化。'}
                 </p>
               </div>
               <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">

@@ -724,29 +724,31 @@ describe('LiquidityMonitorPage', () => {
     expect(screen.getByTestId('liquidity-section-metrics')).toHaveTextContent('关键指标');
     expect(screen.getByTestId('liquidity-section-observation')).toHaveTextContent('资金面与说明');
     expect(guidancePanel).toHaveTextContent('观察中');
-    expect(guidancePanel).toHaveTextContent('流动性格局偏收紧，主要压力是美国利率压力。');
+    expect(guidancePanel).toHaveTextContent('当前方向仅供观察，先看美国利率压力等资金面线索。');
     expect(screen.getByTestId('liquidity-summary-strip')).toHaveTextContent('流动性格局');
     expect(screen.getByTestId('liquidity-summary-strip')).toHaveTextContent('主要压力');
     expect(screen.getByTestId('liquidity-summary-strip')).toHaveTextContent('最近更新');
     expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('流动性格局');
-    expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('指标状态');
+    expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('资金面线索');
     expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('压力来源');
     expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('压力走势');
     expect(screen.getByTestId('liquidity-visual-trend')).toHaveTextContent('连续走势暂未返回，当前保持观察');
     expect(screen.getByTestId('liquidity-consumer-evidence')).toHaveTextContent('关键指标');
     expect(screen.getByTestId('liquidity-consumer-evidence')).toHaveTextContent('美国利率压力');
     expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('状态限制');
+    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('数据覆盖有限');
+    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('待补充指标');
     expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('下一步观察');
     expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('对照 Market Overview / Rotation Radar');
     const disclosure = screen.getByTestId('liquidity-monitor-consumer-details');
     expect(disclosure).toHaveAttribute('data-terminal-primitive', 'disclosure');
     expect(disclosure).not.toHaveAttribute('open');
-    expect(within(disclosure).getByRole('button', { name: '展开 方法与数据限制' })).toHaveAttribute('aria-expanded', 'false');
+    expect(within(disclosure).getByRole('button', { name: '展开 数据状态说明' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByTestId('liquidity-monitor-admin-details')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '展开 技术细节' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('liquidity-impulse-synthesis-header')).not.toBeInTheDocument();
     expect(guidancePanel.textContent || '').not.toMatch(
-      /provider_unavailable|fallback_source|score_contribution_not_allowed|sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|routeRejectedReasonCodes|外部调用|运行顺序|缓存写入|来源覆盖诊断|来源与约束|查看提供方覆盖|前往数据源设置|marketCache|runtime|backend|证据覆盖|缺失证据|当前证据|决策就绪|就绪度|置信度/i,
+      /provider_unavailable|fallback_source|score_contribution_not_allowed|sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|observationOnlyCount|scoreContribution|sourceAuthorityRouteRejected|routeRejectedReasonCodes|外部调用|运行顺序|缓存写入|来源覆盖诊断|来源与约束|查看提供方覆盖|前往数据源设置|marketCache|runtime|backend|证据覆盖|缺失证据|观察证据|可计分证据|fallback|stale|proxy|决策就绪|就绪度|置信度/i,
     );
     expect(guidancePanel.textContent || '').not.toMatch(/计分|评分|官方曲线缺口|官方利差|数据源|提供方/);
   });
@@ -800,15 +802,16 @@ describe('LiquidityMonitorPage', () => {
     render(<LiquidityMonitorPage />);
 
     const guidancePanel = await screen.findByTestId('liquidity-monitor-guidance-panel');
-    expect(guidancePanel).toHaveTextContent('流动性格局偏收紧，主要压力是美国利率压力。');
+    expect(guidancePanel).toHaveTextContent('当前方向仅供观察，先看美国利率压力等资金面线索。');
     expect(guidancePanel).toHaveTextContent('流动性格局');
     expect(guidancePanel).toHaveTextContent('主要压力');
     expect(guidancePanel).toHaveTextContent('最近更新');
-    expect(screen.getByTestId('liquidity-monitor-consumer-details')).toHaveTextContent('方法与数据限制');
+    expect(screen.getByTestId('liquidity-monitor-consumer-details')).toHaveTextContent('数据状态说明');
     expect(screen.getByTestId('liquidity-consumer-evidence')).toHaveTextContent('美国利率压力');
     expect(screen.getByTestId('liquidity-consumer-evidence')).toHaveTextContent('Crypto 资金费率');
+    expect(screen.getByTestId('liquidity-visual-coverage')).toHaveTextContent('资金面线索');
     expect(guidancePanel.textContent || '').not.toMatch(
-      /score_contribution_not_allowed|source_authority_router_rejected|provider_unavailable|fallback_source|sourceAuthorityAllowed|scoreContributionAllowed|Liquidity Regime Gauge|Proxy-only|Details|provider|fallback|reason|runtime|diagnostic/i,
+      /score_contribution_not_allowed|source_authority_router_rejected|provider_unavailable|fallback_source|sourceAuthorityAllowed|scoreContributionAllowed|Liquidity Regime Gauge|Proxy-only|Details|provider|fallback|stale|proxy|reason|runtime|diagnostic|可计分证据|观察证据|缺失证据/i,
     );
   });
 
@@ -913,8 +916,8 @@ describe('LiquidityMonitorPage', () => {
     expect(summaryStrip).toHaveTextContent('最近更新');
 
     const consumerDisclosure = screen.getByTestId('liquidity-monitor-consumer-details');
-    expect(consumerDisclosure).toHaveTextContent('方法与数据限制');
-    expect(consumerDisclosure).toHaveTextContent('方法、限制与更新时间默认折叠');
+    expect(consumerDisclosure).toHaveTextContent('数据状态说明');
+    expect(consumerDisclosure).toHaveTextContent('更新时间、观察边界与待补充指标默认折叠');
 
     const bodyText = document.body.textContent || '';
     expect(bodyText).toContain('最近可用');
@@ -931,10 +934,10 @@ describe('LiquidityMonitorPage', () => {
     await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('流动性格局偏收紧'));
     const resolvedReadyBand = screen.getByTestId('liquidity-decision-readiness');
     expect(resolvedReadyBand).toHaveTextContent('流动性格局');
-    expect(resolvedReadyBand).toHaveTextContent('流动性格局偏收紧，主要压力是美国利率压力。');
+    expect(resolvedReadyBand).toHaveTextContent('当前方向仅供观察，先看美国利率压力等资金面线索。');
     expect(resolvedReadyBand).toHaveTextContent('下一步观察');
     expect(resolvedReadyBand).toHaveTextContent('关键指标');
-    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('数据不足，暂不判断');
+    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('数据覆盖有限');
     expect(within(resolvedReadyBand).queryByText('查看提供方覆盖')).not.toBeInTheDocument();
     expect(within(resolvedReadyBand).queryByText('前往数据源设置')).not.toBeInTheDocument();
     expect(resolvedReadyBand.textContent || '').not.toMatch(/买入|卖出|buy now|sell now|recommend/i);
@@ -979,9 +982,10 @@ describe('LiquidityMonitorPage', () => {
 
     const observationView = render(<LiquidityMonitorPage />);
     await screen.findByTestId('liquidity-decision-readiness');
-    await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('流动性格局仅观察'));
+    await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('当前方向仅供观察'));
     const observationBand = screen.getByTestId('liquidity-decision-readiness');
-    expect(observationBand).toHaveTextContent('流动性格局仅观察');
+    expect(observationBand).toHaveTextContent('当前方向仅供观察');
+    expect(observationBand).toHaveTextContent('资金面线索');
     expect(observationBand).not.toHaveTextContent('代理证据不能升级方向');
     expect(observationBand).not.toHaveTextContent('提供方');
     expect(observationBand).not.toHaveTextContent('数据源设置');
@@ -1049,13 +1053,13 @@ describe('LiquidityMonitorPage', () => {
     const unavailableBand = screen.getByTestId('liquidity-decision-readiness');
     expect(unavailableBand).toHaveTextContent('数据不足，暂不判断；保留最近一次流动性状态。');
     expect(screen.getByTestId('liquidity-visual-posture')).toHaveTextContent('不可判断');
-    expect(screen.getByTestId('liquidity-visual-coverage')).toHaveTextContent('待恢复');
+    expect(screen.getByTestId('liquidity-visual-coverage')).toHaveTextContent('待补充');
     expect(screen.getByTestId('liquidity-visual-trend')).toHaveTextContent('连续走势暂未返回，当前保持观察');
     expect(screen.getByTestId('liquidity-visual-trend')).toHaveTextContent('需要连续时间序列后才展示走势');
     expect(unavailableBand).not.toHaveTextContent('数据源不可用');
     expect(unavailableBand).not.toHaveTextContent('Provider unavailable');
     expect(unavailableBand).not.toHaveTextContent('前往数据源设置');
-    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('数据不足，暂不判断');
+    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('数据覆盖有限');
     expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('等待刷新');
   });
 
@@ -1069,7 +1073,7 @@ describe('LiquidityMonitorPage', () => {
     expect(summaryStrip).toHaveTextContent('无明显方向');
     expect(summaryStrip).not.toHaveTextContent('中性观察');
     expect(screen.getByTestId('liquidity-visual-posture')).toHaveTextContent('无明显方向');
-    expect(screen.getByTestId('liquidity-visual-coverage')).toHaveTextContent('主要');
+    expect(screen.getByTestId('liquidity-visual-coverage')).toHaveTextContent('可参考');
     expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('对照 Market Overview / Rotation Radar');
     expect(screen.queryByText('No Clear Edge')).not.toBeInTheDocument();
   });
@@ -1109,7 +1113,7 @@ describe('LiquidityMonitorPage', () => {
     expect(signal).toHaveTextContent('不触发交易或主要方向判断');
     expect(signal).toHaveTextContent('资金面');
     expect(signal).toHaveTextContent('仅观察');
-    expect(signal).toHaveTextContent('观察线索');
+    expect(signal).toHaveTextContent('资金面线索');
     expect(signal).toHaveTextContent('资金净流入观察');
     expect(signal).toHaveTextContent('可能去向');
     expect(signal).toHaveTextContent('Growth Ai Software Semis');
