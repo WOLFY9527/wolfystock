@@ -21,7 +21,7 @@ except ModuleNotFoundError:
 
 import src.auth as auth
 from api.app import create_app
-from src.analyzer import AnalysisResult
+from src.analyzer import AnalysisResult, GeminiAnalyzer
 from src.config import Config
 from src.services.analysis_service import AnalysisService
 from src.storage import AnalysisHistory, DatabaseManager
@@ -65,6 +65,24 @@ FORBIDDEN_RAW_OUTPUT_TERMS = (
     "attempt_trace",
     "hidden_reasoning",
     "internal_reasoning",
+)
+
+FORBIDDEN_GENERATED_TRADING_TERMS_ZH = (
+    "买入",
+    "卖出",
+    "下单",
+    "立即交易",
+    "交易建议",
+    "投资建议",
+    "止损",
+    "止盈",
+    "目标价",
+    "目标位",
+    "目标区间",
+    "仓位建议",
+    "狙击点位",
+    "作战计划",
+    "建仓策略",
 )
 
 
@@ -179,6 +197,100 @@ def test_ai_decision_report_uses_observation_language_without_direct_trade_direc
     assert "risk" in public_text
     assert payload["decision_trace"]["decision_fields"]["action"]["value"] == "hold"
     assert payload["decision_trace"]["llm"]["prompt_exposed"] is False
+
+
+def test_analyzer_generation_prompt_is_observation_only_contract() -> None:
+    with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
+        analyzer = GeminiAnalyzer()
+
+    system_prompt = analyzer._get_analysis_system_prompt("zh")
+    user_prompt = analyzer._format_prompt(
+        {
+            "code": "600519",
+            "stock_name": "贵州茅台",
+            "date": "2026-06-09",
+            "today": {"close": 1680, "ma5": 1675, "ma10": 1660, "ma20": 1640},
+            "ma_status": "均线多头",
+        },
+        "贵州茅台",
+        report_language="zh",
+    )
+    prompt = f"{system_prompt}\n{user_prompt}"
+
+    self_forbidden = (
+        "买入/加仓",
+        "减仓/卖出",
+        "买入信号",
+        "卖出信号",
+        "具体操作指引",
+        "理想买入点",
+        "次优买入点",
+        "止损位",
+        "目标位",
+        "建议仓位",
+        "分批建仓",
+        "强烈买入",
+        "该买该卖",
+        "必须给出具体价格",
+        "买入价、止损价、目标价",
+    )
+    for forbidden in self_forbidden:
+        assert forbidden not in prompt, forbidden
+    assert '"operation_advice"' in prompt
+    assert '"decision_type"' in prompt
+    assert '"ideal_buy"' in prompt
+    assert "仅供观察" in prompt
+
+
+def test_generated_report_payload_keeps_legacy_shape_without_trading_plan_copy() -> None:
+    dashboard = {
+        "core_conclusion": {
+            "one_sentence": "仅供观察，等待证据补齐。",
+            "position_advice": {
+                "no_position": "仅跟踪关键价格区间，不提供操作指令。",
+                "has_position": "复核风险边界，不扩大风险暴露。",
+            },
+        },
+        "battle_plan": {
+            "sniper_points": {
+                "ideal_buy": "关键价格区间 184-186。",
+                "secondary_buy": "参考区间 180-182。",
+                "stop_loss": "风险边界 179 下方。",
+                "take_profit": "上方观察区 195-198。",
+            },
+            "position_strategy": {
+                "entry_plan": "继续跟踪证据变化。",
+                "risk_control": "若证据走弱，仅记录风险边界。",
+            },
+        },
+        "intelligence": {"risk_alerts": []},
+    }
+    payload = AnalysisService()._build_report_payload(
+        _safe_result(
+            report_language="zh",
+            operation_advice="观望",
+            trend_prediction="震荡",
+            analysis_summary="仅供观察，等待证据补齐。",
+            dashboard=dashboard,
+        ),
+        query_id="q-generation-contract",
+        report_type="detailed",
+    )
+
+    assert set(payload["strategy"]) >= {"ideal_buy", "secondary_buy", "stop_loss", "take_profit"}
+    assert set(payload["details"]["analysis_result"]) >= {"decision", "action", "entry_price", "stop_loss", "take_profit"}
+    assert payload["details"]["analysis_result"]["decision"] in {"buy", "hold", "sell"}
+    public_text = _public_text(
+        {
+            "summary": payload["summary"],
+            "strategy": payload["strategy"],
+            "standard_report": payload["details"]["standard_report"],
+        }
+    )
+    for forbidden in FORBIDDEN_GENERATED_TRADING_TERMS_ZH:
+        assert forbidden not in public_text, forbidden
+    assert "仅供观察" in public_text
+    assert "风险边界" in public_text
 
 
 def test_degraded_data_quality_caps_are_preserved_in_ai_decision_output() -> None:

@@ -312,6 +312,59 @@ describe('normalizeFrontendReportContract', () => {
     expect(normalized.reportQuality?.missingFields).toEqual([]);
   });
 
+  it('keeps observation-only reports usable when entry target and stop fields are intentionally absent', () => {
+    const report = {
+      meta: {
+        queryId: 'q-observation-only',
+        stockCode: 'ORCL',
+        stockName: 'Oracle',
+        reportType: 'full',
+        createdAt: '2026-05-04T00:00:00Z',
+      },
+      summary: {
+        analysisSummary: '仅供观察，等待证据补齐。',
+        operationAdvice: '仅供观察',
+        trendPrediction: '震荡',
+        sentimentScore: 62,
+      },
+      details: {
+        standard_report: {
+          summary_panel: {
+            ticker: 'ORCL',
+            score: 62,
+            operation_advice: '仅供观察',
+            one_sentence: '仅供观察，等待证据补齐。',
+          },
+          decision_panel: {
+            confidence: '中',
+            key_action: '继续跟踪证据变化。',
+            support: '关键价格区间 120',
+            resistance: '上方观察区 130',
+          },
+          technical_fields: [{ label: 'RSI14', value: '56' }],
+          reason_layer: { core_reasons: ['趋势仍需确认'] },
+        },
+      },
+      decision_trace: {
+        symbol: 'ORCL',
+        decision_fields: {
+          action: { value: 'hold', source: 'rule' },
+          score: { value: 62, source: 'rule' },
+          confidence: { value: '中', source: 'llm' },
+        },
+        data_sources: [{ name: 'quote', status: 'used' }],
+        llm: { schema_validated: true },
+      },
+    } as unknown as AnalysisReport;
+
+    const normalized = normalizeFrontendReportContract(report);
+
+    expect(normalized.reportQuality?.level).toBe('usable');
+    expect(normalized.reportQuality?.userLabel).toBe('可用');
+    expect(normalized.reportQuality?.hasTradingPlan).toBe(false);
+    expect(normalized.reportQuality?.missingFields).toContain('交易计划');
+  });
+
   it('classifies legacy prose records without standard structure as old records', () => {
     const report = {
       meta: {

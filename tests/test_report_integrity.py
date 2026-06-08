@@ -83,25 +83,25 @@ class TestCheckContentIntegrity(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("dashboard.core_conclusion.one_sentence", missing)
 
-    def test_fail_when_stop_loss_missing_for_buy(self) -> None:
-        """Integrity fails when stop_loss missing and decision_type is buy."""
+    def test_pass_when_stop_loss_missing_for_legacy_buy_decision(self) -> None:
+        """Integrity keeps legacy decision_type without requiring trade-plan fields."""
         result = AnalysisResult(
             code="600519",
             name="贵州茅台",
             trend_prediction="看多",
             sentiment_score=70,
-            operation_advice="买入",
+            operation_advice="仅供观察",
             analysis_summary="稳健",
             decision_type="buy",
             dashboard={
-                "core_conclusion": {"one_sentence": "可买入"},
+                "core_conclusion": {"one_sentence": "仅供观察"},
                 "intelligence": {"risk_alerts": []},
                 "battle_plan": {"sniper_points": {}},
             },
         )
         ok, missing = check_content_integrity(result)
-        self.assertFalse(ok)
-        self.assertIn("dashboard.battle_plan.sniper_points.stop_loss", missing)
+        self.assertTrue(ok)
+        self.assertNotIn("dashboard.battle_plan.sniper_points.stop_loss", missing)
 
     def test_pass_when_stop_loss_missing_for_sell(self) -> None:
         """Integrity passes when stop_loss missing and decision_type is sell."""
@@ -122,6 +122,26 @@ class TestCheckContentIntegrity(unittest.TestCase):
         ok, missing = check_content_integrity(result)
         self.assertTrue(ok)
         self.assertEqual(missing, [])
+
+    def test_pass_when_observation_only_report_has_no_sniper_points(self) -> None:
+        """Observation-only generation must not require direct trade plan fields."""
+        result = AnalysisResult(
+            code="600519",
+            name="贵州茅台",
+            trend_prediction="震荡",
+            sentiment_score=70,
+            operation_advice="观望",
+            analysis_summary="仅供观察，等待证据补齐。",
+            decision_type="hold",
+            dashboard={
+                "core_conclusion": {"one_sentence": "仅供观察，等待证据补齐"},
+                "intelligence": {"risk_alerts": []},
+                "battle_plan": {},
+            },
+        )
+        ok, missing = check_content_integrity(result)
+        self.assertTrue(ok)
+        self.assertNotIn("dashboard.battle_plan.sniper_points.stop_loss", missing)
 
     def test_fail_when_risk_alerts_missing(self) -> None:
         """Integrity fails when intelligence.risk_alerts field is missing."""
@@ -211,6 +231,43 @@ class TestIntegrityRetryPrompt(unittest.TestCase):
         self.assertIn("原始提示", prompt)
         self.assertIn('{"analysis_summary": "已有内容"}', prompt)
         self.assertIn("dashboard.core_conclusion.one_sentence", prompt)
+
+    def test_retry_prompt_uses_observation_only_completion_terms(self) -> None:
+        """Integrity retry must not ask the LLM to complete action instructions."""
+        with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
+            analyzer = GeminiAnalyzer()
+
+        zh_prompt = analyzer._build_integrity_complement_prompt(
+            ["operation_advice", "dashboard.battle_plan.sniper_points.stop_loss"],
+            report_language="zh",
+        )
+        en_prompt = analyzer._build_integrity_complement_prompt(
+            ["operation_advice", "dashboard.battle_plan.sniper_points.stop_loss"],
+            report_language="en",
+        )
+
+        for forbidden in ("买入", "卖出", "加仓", "减仓", "止损价"):
+            self.assertNotIn(forbidden, zh_prompt)
+        for forbidden in ("action advice", "stop-loss", "buy", "sell"):
+            self.assertNotIn(forbidden, en_prompt.lower())
+        self.assertIn("观察", zh_prompt)
+        self.assertIn("observation", en_prompt.lower())
+
+    def test_plain_text_fallback_keeps_operation_advice_observation_only(self) -> None:
+        """JSON parse fallback can keep decision_type without emitting buy/sell advice."""
+        with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
+            analyzer = GeminiAnalyzer()
+
+        result = analyzer._parse_text_response(
+            "Strong bullish breakout, buy pressure improves, but data is partial.",
+            "AAPL",
+            "Apple",
+        )
+
+        self.assertEqual(result.decision_type, "buy")
+        self.assertIn(result.operation_advice.lower(), {"watch", "observe only", "仅供观察"})
+        self.assertNotIn("buy", result.operation_advice.lower())
+        self.assertNotIn("sell", result.operation_advice.lower())
 
     def test_analyze_emits_integrity_retry_event(self) -> None:
         """Integrity retry should be observable without changing retry behavior."""

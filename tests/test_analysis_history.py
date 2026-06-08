@@ -292,6 +292,9 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertIsNotNone(detail)
         self.assertEqual(detail.get("analysis_summary"), "这是持久化后的完整报告摘要")
         self.assertEqual(detail.get("ideal_buy"), "1680 - 1705")
+        self.assertEqual(detail.get("secondary_buy"), "1660 - 1670")
+        self.assertEqual(detail.get("stop_loss"), "1628")
+        self.assertEqual(detail.get("take_profit"), "1788")
         self.assertEqual(detail.get("news_content"), "持久化新闻摘要")
         self.assertEqual(
             detail.get("standard_report", {}).get("summary_panel", {}).get("one_sentence"),
@@ -1089,7 +1092,7 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertIsNotNone(markdown)
         self.assertIn("Stock Analysis Report", markdown)
         self.assertIn("Decision Summary", markdown)
-        self.assertIn("Score / Recommendation / Trend", markdown)
+        self.assertIn("Score / Observation / Trend", markdown)
         self.assertIn("News Published (BJT)", markdown)
         self.assertNotIn("新闻发布时间（北京时间）", markdown)
         self.assertIn("Unnamed Stock (AAPL)", markdown)
@@ -1276,7 +1279,8 @@ class AnalysisHistoryTestCase(unittest.TestCase):
 
         raw_markdown = HistoryService(self.db).get_markdown_report(str(record_id))
         self.assertIsNotNone(raw_markdown)
-        self.assertIn("理想买入点", raw_markdown)
+        self.assertIn("关键价格区间", raw_markdown)
+        self.assertNotIn("理想买入点", raw_markdown)
         self.assertIn("Missing Field Audit", raw_markdown)
         self.assertIn("Yahoo Finance", raw_markdown)
 

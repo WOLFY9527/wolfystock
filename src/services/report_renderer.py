@@ -40,6 +40,70 @@ logger = logging.getLogger(__name__)
 
 _SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 _NUMERIC_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])-?\d+(?:\.\d+)?(?![A-Za-z0-9])")
+_OBSERVATION_STATUS_ZH = "仅供观察"
+_OBSERVATION_STATUS_EN = "Observe only"
+
+_VISIBLE_COPY_REPLACEMENTS = (
+    ("评分 / 建议 / 趋势", "评分 / 观察 / 趋势"),
+    ("Score / Recommendation / Trend", "Score / Observation / Trend"),
+    ("Execution Plan", "Observation Plan"),
+    ("Current Action", "Current Observation"),
+    ("For New Positions", "For Unheld State"),
+    ("For Existing Positions", "For Held State"),
+    ("Conditions & Risk Control", "Observation Conditions & Risk Boundary"),
+    ("理想买入点 / 次优买入点 / 止损位", "关键价格区间 / 参考区间 / 风险边界"),
+    ("Ideal Entry / Backup Entry / Stop Loss", "Key Price Area / Reference Area / Risk Boundary"),
+    ("Target 1 / Target 2 / Target Zone", "Upper Observation Zone"),
+    ("目标一区 / 目标二区 / 目标区间", "上方观察区"),
+    ("Advice Without Position", "Unheld State Reference"),
+    ("Advice With Position", "Held State Reference"),
+    ("空仓者建议", "未持有状态参考"),
+    ("持仓者建议", "持有状态参考"),
+    ("Setup / Confidence", "Observation Setup / Confidence"),
+    ("交易场景 / 置信度", "研究状态 / 置信度"),
+    ("Entry Plan / Risk Control", "Evidence Tracking / Risk Boundary"),
+    ("建仓策略 / 风控策略", "继续跟踪 / 风险边界"),
+    ("Stop-loss Rationale / Target Rationale", "Risk Boundary / Upper Observation Rationale"),
+    ("止损说明 / 目标说明", "风险边界 / 上方观察说明"),
+    ("Execution Reminders", "Observation Reminders"),
+    ("执行提醒", "观察提醒"),
+    ("关键动作", "关键观察"),
+    ("Key Action", "Key Observation"),
+    ("理想买入点", "关键价格区间"),
+    ("次优买入点", "参考区间"),
+    ("止损位", "风险边界"),
+    ("止损", "风险边界"),
+    ("止盈", "上方观察"),
+    ("目标一区", "上方观察区"),
+    ("目标二区", "上方观察区"),
+    ("目标区间", "上方观察区"),
+    ("目标位", "上方观察区"),
+    ("目标价", "上方观察区"),
+    ("仓位建议", "暴露变化参考"),
+    ("建议仓位", "暴露变化参考"),
+    ("作战计划", "观察计划"),
+    ("建仓策略", "继续跟踪"),
+    ("风控策略", "风险边界"),
+    ("交易建议", "研究观察"),
+    ("投资建议", "研究参考"),
+    ("买入", "正向评估"),
+    ("卖出", "负向评估"),
+    ("加仓", "关注变化"),
+    ("减仓", "暴露变化"),
+    ("试仓", "观察验证"),
+    ("建仓", "关注变化"),
+)
+_VISIBLE_COPY_REGEX_REPLACEMENTS = (
+    (re.compile(r"\bstop[\s-]?loss\b", re.IGNORECASE), "Risk Boundary"),
+    (re.compile(r"\btake[\s-]?profit\b", re.IGNORECASE), "Upper Observation"),
+    (re.compile(r"\btarget\s+price\b", re.IGNORECASE), "Upper Observation"),
+    (re.compile(r"\bposition\s+sizing\b", re.IGNORECASE), "Exposure Reference"),
+    (re.compile(r"\bentry\s+plan\b", re.IGNORECASE), "Evidence Tracking"),
+    (re.compile(r"\bbuy(?:ing)?\b", re.IGNORECASE), "Positive Assessment"),
+    (re.compile(r"\bsell(?:ing)?\b", re.IGNORECASE), "Negative Assessment"),
+    (re.compile(r"\btrading\s+advice\b", re.IGNORECASE), "research observation"),
+    (re.compile(r"\binvestment\s+advice\b", re.IGNORECASE), "research reference"),
+)
 
 _ALLOWED_MISSING_REASONS = {
     "当前数据源未提供",
@@ -174,6 +238,33 @@ def _now_shanghai():
     from datetime import datetime
 
     return datetime.now(_SHANGHAI_TZ)
+
+
+def _observation_status(language: str) -> str:
+    return _OBSERVATION_STATUS_EN if normalize_report_language(language) == "en" else _OBSERVATION_STATUS_ZH
+
+
+def _project_observation_copy(value: Any) -> str:
+    text = str(value or "")
+    if not text:
+        return text
+    for old, new in _VISIBLE_COPY_REPLACEMENTS:
+        text = text.replace(old, new)
+    for pattern, replacement in _VISIBLE_COPY_REGEX_REPLACEMENTS:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+def _project_payload_observation_copy(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _project_payload_observation_copy(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_project_payload_observation_copy(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_project_payload_observation_copy(item) for item in value)
+    if isinstance(value, str):
+        return _project_observation_copy(value)
+    return value
 
 
 def _iso_or_none(value: Any) -> Optional[str]:
@@ -589,7 +680,7 @@ def _describe_price_basis(
             "price_basis": "Intraday snapshot",
             "price_basis_detail": "Captured from a market snapshot during the current session, not streaming tick-by-tick data.",
             "reference_session": reference_session,
-            "price_context_note": "Entry, stop, target, support and resistance are anchored to the same intraday snapshot shown above.",
+            "price_context_note": "Key price area, risk boundary, upper observation area, support and resistance are anchored to the same intraday snapshot shown above.",
         }
     if session_kind == "extended":
         return {
@@ -597,7 +688,7 @@ def _describe_price_basis(
             "price_basis": "Regular-session close",
             "price_basis_detail": "The analysis stays anchored to the regular-session close. Extended-hours pricing is shown separately.",
             "reference_session": reference_session,
-            "price_context_note": "The report stays anchored to the regular close so pre-market or after-hours moves do not overwrite the trading plan baseline.",
+            "price_context_note": "The report stays anchored to the regular close so pre-market or after-hours moves do not overwrite the observation baseline.",
         }
     if session_kind == "completed":
         return {
@@ -605,14 +696,14 @@ def _describe_price_basis(
             "price_basis": "Last close",
             "price_basis_detail": "Based on the most recent completed trading session.",
             "reference_session": reference_session,
-            "price_context_note": "The trading plan is anchored to the last completed session close and does not pretend to be live pricing.",
+            "price_context_note": "The observation baseline is anchored to the last completed session close and does not pretend to be live pricing.",
         }
     return {
         "price_label": "Analysis Price",
         "price_basis": "Session reference",
         "price_basis_detail": f"Based on the best available quote from {session_label or 'the current session'}.",
         "reference_session": reference_session,
-        "price_context_note": "The report’s key trading levels use the same reference price shown above.",
+        "price_context_note": "The report’s key observation levels use the same reference price shown above.",
     }
 
 
@@ -1482,6 +1573,17 @@ def _build_battle_plan_compact(
     cards: List[Dict[str, str]] = []
     notes: List[Dict[str, str]] = []
     tone_map = {
+        "研究状态": "info",
+        "关键观察": "info",
+        "关键价格区间": "buy",
+        "参考区间": "secondary",
+        "风险边界": "risk",
+        "上方观察区": "target",
+        "上方观察区二": "target",
+        "上方观察区摘要": "target",
+        "暴露变化参考": "position",
+        "继续跟踪": "info",
+        "风险边界说明": "risk",
         "交易场景": "info",
         "关键动作": "info",
         "理想买入点": "buy",
@@ -1566,33 +1668,33 @@ def _build_decision_panel(
     trade_ctx = trade_setup if isinstance(trade_setup, dict) else {}
 
     return {
-        "setup_type": battle_map.get("交易场景", _format_text(trade_ctx.get("scenario_label"), reason="字段待接入")),
+        "setup_type": battle_map.get("研究状态") or battle_map.get("交易场景", _format_text(trade_ctx.get("scenario_label"), reason="字段待接入")),
         "confidence": _format_text(trade_ctx.get("confidence_label"), reason="字段待接入"),
-        "key_action": battle_map.get("关键动作", _format_text(trade_ctx.get("key_action"), reason="字段待接入")),
+        "key_action": battle_map.get("关键观察") or battle_map.get("关键动作", _format_text(trade_ctx.get("key_action"), reason="字段待接入")),
         "analysis_price": _to_float(trade_ctx.get("analysis_price")),
         "support": battle_map.get("关键支撑", _format_text(trade_ctx.get("support_text"), reason="字段待接入")),
         "support_level": _to_float(trade_ctx.get("support_level")),
         "resistance": battle_map.get("关键压力", _format_text(trade_ctx.get("resistance_text"), reason="字段待接入")),
         "resistance_level": _to_float(trade_ctx.get("resistance_level")),
-        "ideal_entry": battle_map.get("理想买入点", _na("字段待接入")),
+        "ideal_entry": battle_map.get("关键价格区间") or battle_map.get("理想买入点", _na("字段待接入")),
         "ideal_entry_center": _to_float(trade_ctx.get("ideal_entry_center")),
-        "backup_entry": battle_map.get("次优买入点", _na("字段待接入")),
+        "backup_entry": battle_map.get("参考区间") or battle_map.get("次优买入点", _na("字段待接入")),
         "backup_entry_center": _to_float(trade_ctx.get("backup_entry_center")),
-        "stop_loss": battle_map.get("止损位", _na("字段待接入")),
+        "stop_loss": battle_map.get("风险边界") or battle_map.get("止损位", _na("字段待接入")),
         "stop_loss_level": _to_float(trade_ctx.get("stop_loss_level")),
-        "target": battle_map.get("目标位", _na("字段待接入")),
-        "target_one": battle_map.get("目标一区", _format_text(trade_ctx.get("target_one"), reason="字段待接入")),
+        "target": battle_map.get("上方观察区摘要") or battle_map.get("目标位", _na("字段待接入")),
+        "target_one": battle_map.get("上方观察区") or battle_map.get("目标一区", _format_text(trade_ctx.get("target_one"), reason="字段待接入")),
         "target_one_level": _to_float(trade_ctx.get("target_one_level")),
-        "target_two": battle_map.get("目标二区", _format_text(trade_ctx.get("target_two"), reason="字段待接入")),
+        "target_two": battle_map.get("上方观察区二") or battle_map.get("目标二区", _format_text(trade_ctx.get("target_two"), reason="字段待接入")),
         "target_two_level": _to_float(trade_ctx.get("target_two_level")),
         "target_zone": _format_text(trade_ctx.get("target_zone"), reason="字段待接入"),
         "stop_reason": _format_text(trade_ctx.get("stop_reason"), reason="字段待接入"),
         "target_reason": _format_text(trade_ctx.get("target_reason"), reason="字段待接入"),
         "market_structure": _format_text(trade_ctx.get("market_structure"), reason="字段待接入"),
         "atr_proxy": _to_float(trade_ctx.get("atr_proxy")),
-        "position_sizing": battle_map.get("仓位建议", _na("字段待接入")),
-        "build_strategy": battle_map.get("建仓策略", _na("字段待接入")),
-        "risk_control_strategy": battle_map.get("风控策略", _na("字段待接入")),
+        "position_sizing": battle_map.get("暴露变化参考") or battle_map.get("仓位建议", _na("字段待接入")),
+        "build_strategy": battle_map.get("继续跟踪") or battle_map.get("建仓策略", _na("字段待接入")),
+        "risk_control_strategy": battle_map.get("风险边界说明") or battle_map.get("风控策略", _na("字段待接入")),
         "no_position_advice": _format_text(position_advice.get("no_position") or trade_ctx.get("no_position_advice"), reason="字段待接入"),
         "holder_advice": _format_text(position_advice.get("has_position") or trade_ctx.get("holder_advice"), reason="字段待接入"),
         "execution_reminders": execution_reminders,
@@ -1931,13 +2033,13 @@ def _annotate_trade_levels(
     def _entry_tag(level: Optional[float]) -> Optional[str]:
         if current is None or level is None:
             return None
-        return "突破买点" if level > current else "回踩买点"
+        return "突破观察区" if level > current else "支撑观察区"
 
     warnings: List[str] = []
     if bullish and current is not None and stop is not None and stop > current:
-        warnings.append("做多语境下止损位不能高于当前价")
+        warnings.append("正向观察语境下风险边界不能高于当前价")
     if current is not None and stop is not None and current < stop:
-        warnings.append("当前价已跌破关键防守位，请勿继续沿用原风控文案")
+        warnings.append("当前价已跌破关键风险边界，请勿继续沿用原风险文案")
 
     return {
         "ideal_buy_tag": _entry_tag(ideal),
@@ -3294,7 +3396,7 @@ def _should_preserve_trade_text(value: Any) -> bool:
         for token in ("MA", "ATR", "VWAP", "RSI", "MACD", "BOLL", "ADX", "EMA", "SMA")
     ) or any(
         token in text
-        for token in ("均线", "支撑", "压力", "前高", "前低", "回踩", "突破", "缩量", "放量", "止损", "仓位")
+        for token in ("均线", "支撑", "压力", "前高", "前低", "回踩", "突破", "缩量", "放量", "风险")
     )
 
 
@@ -3428,22 +3530,22 @@ def _build_trade_setup(
     scenario_label = "观望 / 等待确认"
     confidence_score = 42
     if current_price is None:
-        scenario_label = "数据不足 / 暂不交易"
+        scenario_label = "数据不足 / 仅供观察"
         confidence_score = 20
     elif weak_structure and not bullish_structure:
-        scenario_label = "观望 / 趋势未确认"
+        scenario_label = "风险观察 / 趋势未确认"
         confidence_score = 30
     elif bullish_structure and near_resistance and volume_confirm and not overextended:
         scenario = "breakout"
-        scenario_label = "突破跟随"
+        scenario_label = "突破观察"
         confidence_score = 78 if (trend_strength or 0) >= 65 else 66
     elif bullish_structure and near_support:
         scenario = "pullback"
-        scenario_label = "回踩买点"
+        scenario_label = "支撑观察"
         confidence_score = 74 if (trend_strength or 0) >= 60 else 62
     elif bullish_structure and not overextended:
         scenario = "continuation"
-        scenario_label = "趋势延续 / 等回踩"
+        scenario_label = "趋势延续观察"
         confidence_score = 58 if (trend_strength or 0) >= 55 else 52
     elif overextended:
         scenario_label = "观望 / 不追高"
@@ -3458,9 +3560,9 @@ def _build_trade_setup(
         target_two = high_52w if high_52w and target_one and high_52w > target_one else (
             target_one + max((ideal_center - stop_price) * 1.0, atr_proxy * 1.3) if target_one is not None else None
         )
-        key_action = f"只在放量站上 {nearest_resistance:.2f} 后跟进，不提前预判突破。"
-        build_strategy = f"首笔等突破价上方确认，回踩 {backup_center:.2f} 不破时再考虑补第二笔。"
-        risk_control = f"止损放在 {stop_price:.2f}，对应前高回踩失败 / MA10-MA20 防守失效。"
+        key_action = f"仅观察是否放量站上 {nearest_resistance:.2f}，不提前给出操作指令。"
+        build_strategy = f"继续跟踪突破后能否在 {backup_center:.2f} 上方保持结构。"
+        risk_control = f"风险边界在 {stop_price:.2f} 附近，对应前高回踩失败 / MA10-MA20 防守失效。"
     elif scenario == "pullback":
         ideal_center = nearest_support or ma10 or ma20 or current_price
         backup_center = secondary_support or ma20 or (ideal_center - atr_proxy * 0.6 if ideal_center is not None else None)
@@ -3468,9 +3570,9 @@ def _build_trade_setup(
         stop_price = max(0.01, invalidation_anchor - max(atr_proxy * 0.38, invalidation_anchor * 0.004))
         target_one = nearest_resistance or day_high or (current_price + max((current_price - stop_price) * 1.3, atr_proxy * 1.1))
         target_two = second_resistance or high_52w or (target_one + max((current_price - stop_price) * 0.9, atr_proxy * 1.2) if target_one is not None else None)
-        key_action = f"优先等回踩 {ideal_center:.2f} 一带出现承接后再试仓，避免离均线过远追价。"
-        build_strategy = f"理想做法是回踩支撑簇小仓试错，若站回 MA5/MA10 再做第二笔。"
-        risk_control = f"止损放在 {stop_price:.2f}，跌破近期支撑簇就视为回踩失败。"
+        key_action = f"观察 {ideal_center:.2f} 一带是否出现承接，避免离均线过远追价。"
+        build_strategy = "继续跟踪支撑簇附近的量价确认，证据不足时维持观察。"
+        risk_control = f"风险边界在 {stop_price:.2f} 附近，跌破近期支撑簇说明结构走弱。"
     elif scenario == "continuation":
         ideal_center = ma5 or nearest_support or current_price
         backup_center = ma10 or ma20 or nearest_support
@@ -3478,8 +3580,8 @@ def _build_trade_setup(
         stop_price = max(0.01, invalidation_anchor - max(atr_proxy * 0.42, invalidation_anchor * 0.004))
         target_one = nearest_resistance or high_52w or (current_price + max((current_price - stop_price) * 1.2, atr_proxy))
         target_two = second_resistance or high_52w or (target_one + max((current_price - stop_price) * 0.8, atr_proxy * 1.1) if target_one is not None else None)
-        key_action = "趋势未坏，但更适合等回踩均线再接，不建议在扩张段主动追高。"
-        build_strategy = f"等靠近 {ideal_center:.2f} 的均线支撑后分批试仓，若继续偏离均线则只跟踪不追。"
+        key_action = "趋势未坏，但仅观察均线回踩和量能确认，不给主动追价指令。"
+        build_strategy = f"继续跟踪 {ideal_center:.2f} 附近的均线支撑和证据变化。"
         risk_control = f"若失守 {stop_price:.2f} 一带，说明趋势延续条件被破坏。"
     else:
         ideal_center = nearest_support or ma20
@@ -3493,45 +3595,39 @@ def _build_trade_setup(
             else f"回踩 {nearest_support:.2f} 后企稳" if nearest_support is not None
             else "趋势重新确认"
         )
-        key_action = f"当前暂无高确定性主动买点，先等待 {wait_for}。"
-        build_strategy = "不在弱结构或高乖离区强行给出精确买点，优先等待更清晰的确认信号。"
-        risk_control = f"已有仓位可把防守位先看在 {stop_price:.2f} 附近，失守则继续收缩风险。"
+        key_action = f"当前证据不足，仅等待 {wait_for}。"
+        build_strategy = "不在弱结构或高乖离区强行给出精确价格计划，优先等待更清晰的确认信号。"
+        risk_control = f"持有状态可把风险边界先看在 {stop_price:.2f} 附近，失守则说明风险暴露上升。"
 
     target_one = target_one if target_one is None or current_price is None else min(target_one, current_price * 1.18 if high_52w is None else max(high_52w, current_price * 1.12))
     target_two = target_two if target_two is None or current_price is None else min(target_two, current_price * 1.22 if high_52w is None else max(high_52w, current_price * 1.18))
 
     stop_reason = (
-        "跌破最近支撑 / MA 簇后，做多结构被技术性否定。"
+        "跌破最近支撑 / MA 簇后，结构被技术性否定。"
         if scenario != "no_trade"
-        else "仅供持仓者参考的防守位，不构成新的进场建议。"
+        else "仅供持有状态参考的风险边界，不构成操作指令。"
     )
-    target_reason = "目标优先锚定首个技术压力、前高或 52 周高点，避免脱离当前波动结构。"
+    target_reason = "上方观察区优先锚定首个技术压力、前高或 52 周高点，避免脱离当前波动结构。"
     confidence_label = _trade_confidence_label(confidence_score)
-    position_sizing = (
-        "初始 25%-35%，确认后最多提高到 50%。"
-        if scenario in {"breakout", "pullback"}
-        else "初始 15%-25%，只在回踩确认后再考虑加仓。"
-        if scenario == "continuation"
-        else "暂无新开仓，已有仓位以控制回撤为主。"
-    )
+    position_sizing = "不提供比例；仅描述风险暴露变化和证据条件。"
 
     support_text = _format_trade_level(nearest_support, reason="近期支撑 / MA 簇") if nearest_support is not None else _na("接口未返回")
     resistance_text = _format_trade_level(nearest_resistance, reason="前高 / 压力位") if nearest_resistance is not None else _na("接口未返回")
     ideal_entry_text = _format_trade_range(
         ideal_center,
         atr_proxy,
-        reason="回踩支撑确认" if scenario != "breakout" else "突破确认带",
+        reason="支撑观察区" if scenario != "breakout" else "突破观察区",
     )
     backup_entry_text = _format_trade_range(
         backup_center,
         atr_proxy,
-        reason="更深一层支撑" if scenario != "breakout" else "突破后回踩不破",
+        reason="更深一层支撑" if scenario != "breakout" else "突破后回踩观察",
     )
-    stop_loss_text = _format_trade_level(stop_price, reason="技术失效位")
-    target_one_text = _format_trade_level(target_one, reason="首个技术目标") if target_one is not None else _na("字段待接入")
-    target_two_text = _format_trade_level(target_two, reason="更强压力 / 高位目标") if target_two is not None else _na("字段待接入")
+    stop_loss_text = _format_trade_level(stop_price, reason="技术失效观察线")
+    target_one_text = _format_trade_level(target_one, reason="首个上方观察区") if target_one is not None else _na("字段待接入")
+    target_two_text = _format_trade_level(target_two, reason="更强压力 / 高位观察区") if target_two is not None else _na("字段待接入")
     target_zone_text = (
-        f"{_extract_first_number(target_one_text):.2f}-{_extract_first_number(target_two_text):.2f}（目标区间）"
+        f"{_extract_first_number(target_one_text):.2f}-{_extract_first_number(target_two_text):.2f}（上方观察区）"
         if target_one is not None and target_two is not None
         else target_one_text
     )
@@ -3561,26 +3657,26 @@ def _build_trade_setup(
         risk_control = _format_number_token_text(raw_risk_text)
 
     no_position_advice = (
-        f"{key_action} 只有在结构确认后才值得开第一笔仓位。"
+        f"{key_action} 未持有状态仅继续跟踪，不形成操作指令。"
         if scenario != "no_trade"
         else key_action
     )
     holder_advice = (
-        f"已有仓位就沿着 {stop_price:.2f} 做风控，目标先看 {target_one:.2f}" if target_one is not None
-        else f"已有仓位先围绕 {stop_price:.2f} 收紧风控。"
+        f"持有状态复核 {stop_price:.2f} 附近的风险边界，并观察 {target_one:.2f} 上方压力。" if target_one is not None
+        else f"持有状态复核 {stop_price:.2f} 附近的风险边界。"
     )
     execution_reminders = unique_meaningful_items(
         [
             key_action,
             build_strategy,
             risk_control,
-            "若价格偏离 MA5 过大或未放量确认，不要为了给出动作而强行交易。",
+            "若价格偏离 MA5 过大或未放量确认，不要把观察区间解读为操作指令。",
         ],
         4,
     )
     checklist = unique_meaningful_items(
         [
-            f"{'✅' if scenario != 'no_trade' else '⚠️'} 交易场景：{scenario_label}",
+            f"{'✅' if scenario != 'no_trade' else '⚠️'} 研究状态：{scenario_label}",
             f"{'✅' if bullish_structure and current_price is not None and (ma20 is None or current_price >= ma20) else '⚠️'} 趋势位置：{_format_text('价格位于 MA20 上方' if current_price is not None and ma20 is not None and current_price >= ma20 else '仍需等待趋势重新确认', reason='字段待接入')}",
             f"{'✅' if volume_confirm else '⚠️'} 量能确认：{_format_text('放量/量比支持' if volume_confirm else '量能仍需确认', reason='字段待接入')}",
             f"{'❌' if overextended else '✅'} 追价控制：{_format_text('当前乖离偏大，不宜追高' if overextended else '距离均线未明显失真', reason='字段待接入')}",
@@ -3651,19 +3747,19 @@ def _build_battle_fields(
     )
 
     battle_fields = [
-        {"label": "交易场景", "value": trade_setup["scenario_label"]},
-        {"label": "关键动作", "value": trade_setup["key_action"]},
-        {"label": "理想买入点", "value": trade_setup["ideal_entry"]},
-        {"label": "次优买入点", "value": trade_setup["backup_entry"]},
-        {"label": "止损位", "value": trade_setup["stop_loss"]},
-        {"label": "目标一区", "value": trade_setup["target_one"]},
-        {"label": "目标二区", "value": trade_setup["target_two"]},
-        {"label": "目标位", "value": trade_setup["target_zone"]},
+        {"label": "研究状态", "value": trade_setup["scenario_label"]},
+        {"label": "关键观察", "value": trade_setup["key_action"]},
+        {"label": "关键价格区间", "value": trade_setup["ideal_entry"]},
+        {"label": "参考区间", "value": trade_setup["backup_entry"]},
+        {"label": "风险边界", "value": trade_setup["stop_loss"]},
+        {"label": "上方观察区", "value": trade_setup["target_one"]},
+        {"label": "上方观察区二", "value": trade_setup["target_two"]},
+        {"label": "上方观察区摘要", "value": trade_setup["target_zone"]},
         {"label": "关键支撑", "value": trade_setup["support_text"]},
         {"label": "关键压力", "value": trade_setup["resistance_text"]},
-        {"label": "仓位建议", "value": trade_setup["position_sizing"]},
-        {"label": "建仓策略", "value": trade_setup["build_strategy"]},
-        {"label": "风控策略", "value": trade_setup["risk_control"]},
+        {"label": "暴露变化参考", "value": trade_setup["position_sizing"]},
+        {"label": "继续跟踪", "value": trade_setup["build_strategy"]},
+        {"label": "风险边界说明", "value": trade_setup["risk_control"]},
     ]
 
     checklist = [str(item).strip() for item in (battle.get("action_checklist") or []) if str(item).strip()]
@@ -3740,6 +3836,7 @@ def build_standard_report_payload(result: AnalysisResult, report_language: str =
 
     stock_name = get_localized_stock_name(result.name, result.code, language)
     signal_text, signal_emoji, _ = get_signal_level(result.operation_advice, result.sentiment_score, language)
+    observation_status = _observation_status(language)
 
     market_block = _build_market_block(result, language="zh", dashboard=dashboard, labels=field_labels)
     technical_fields = _build_technical_fields(
@@ -3764,7 +3861,7 @@ def build_standard_report_payload(result: AnalysisResult, report_language: str =
         "score": result.sentiment_score,
         "signal_emoji": signal_emoji,
         "signal_text": signal_text,
-        "operation_advice": localize_operation_advice(result.operation_advice, language),
+        "operation_advice": observation_status,
         "trend_prediction": localize_trend_prediction(result.trend_prediction, language),
         "one_sentence": _format_text(core.get("one_sentence") or result.analysis_summary, reason="接口未返回"),
         "time_sensitivity": _format_text(core.get("time_sensitivity"), reason="接口未返回"),
@@ -3843,7 +3940,7 @@ def build_standard_report_payload(result: AnalysisResult, report_language: str =
         checklist=checklist,
     )
 
-    no_position = position_advice.get("no_position") or localize_operation_advice(result.operation_advice, language)
+    no_position = position_advice.get("no_position") or observation_status
     has_position = position_advice.get("has_position") or labels["continue_holding"]
 
     payload = {
@@ -3873,7 +3970,7 @@ def build_standard_report_payload(result: AnalysisResult, report_language: str =
         "checklist": checklist,
         "checklist_items": checklist_items,
     }
-    return _localize_missing_payload(payload, language)
+    return _project_payload_observation_copy(_localize_missing_payload(payload, language))
 
 
 def _summarize_checklist(checklist: List[str]) -> str:
@@ -3883,9 +3980,9 @@ def _summarize_checklist(checklist: List[str]) -> str:
     failed = sum(1 for item in items if item.startswith("❌"))
     warned = sum(1 for item in items if item.startswith("⚠️"))
     if failed:
-        return f"仍有{failed}项关键条件未满足，优先补齐买点确认与风控纪律。"
+        return f"仍有{failed}项关键条件未满足，优先补齐观察确认与风险边界。"
     if warned:
-        return f"仍有{warned}项执行条件待确认，建议继续观察量价配合。"
+        return f"仍有{warned}项观察条件待确认，继续观察量价配合。"
     return "检查项基本通过。"
 
 
@@ -4029,10 +4126,7 @@ def render(
                 "signal_text": signal_text,
                 "signal_emoji": signal_emoji,
                 "stock_name": stock_name,
-                "localized_operation_advice": localize_operation_advice(
-                    result.operation_advice,
-                    report_language,
-                ),
+                "localized_operation_advice": _observation_status(report_language),
                 "localized_trend_prediction": localize_trend_prediction(
                     result.trend_prediction,
                     report_language,
@@ -4126,6 +4220,7 @@ def render(
         )
         template = env.get_template(template_name)
         rendered = template.render(**context)
+        rendered = _project_observation_copy(rendered)
         if platform == "markdown":
             rendered = re.sub(r"\n{3,}", "\n\n", rendered).strip() + "\n"
         return rendered

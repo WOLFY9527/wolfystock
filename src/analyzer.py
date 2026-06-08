@@ -102,14 +102,6 @@ def check_content_integrity(result: "AnalysisResult") -> Tuple[bool, List[str]]:
     intel = intel if isinstance(intel, dict) else None
     if intel is None or "risk_alerts" not in intel:
         missing.append("dashboard.intelligence.risk_alerts")
-    if result.decision_type in ("buy", "hold"):
-        battle = dash.get("battle_plan")
-        battle = battle if isinstance(battle, dict) else {}
-        sp = battle.get("sniper_points")
-        sp = sp if isinstance(sp, dict) else {}
-        stop_loss = sp.get("stop_loss")
-        if stop_loss is None or (isinstance(stop_loss, str) and not stop_loss.strip()):
-            missing.append("dashboard.battle_plan.sniper_points.stop_loss")
     return len(missing) == 0, missing
 
 
@@ -364,7 +356,7 @@ class AnalysisResult:
     # ========== 核心指标 ==========
     sentiment_score: int  # 综合评分 0-100 (>70强烈看多, >60看多, 40-60震荡, <40看空)
     trend_prediction: str  # 趋势预测：强烈看多/看多/震荡/看空/强烈看空
-    operation_advice: str  # 操作建议：买入/加仓/持有/减仓/卖出/观望
+    operation_advice: str  # 研究状态：观望/仅供观察/继续跟踪/风险收缩/数据不足
     decision_type: str = "hold"  # 决策类型：buy/hold/sell（用于统计）
     confidence_level: str = "中"  # 置信度：高/中/低
     report_language: str = "zh"  # 报告输出语言：zh/en
@@ -397,7 +389,7 @@ class AnalysisResult:
     analysis_summary: str = ""  # 综合分析摘要
     key_points: str = ""  # 核心看点（3-5个要点）
     risk_warning: str = ""  # 风险提示
-    buy_reason: str = ""  # 买入/卖出理由
+    buy_reason: str = ""  # 观察理由
 
     # ========== 元数据 ==========
     market_snapshot: Optional[Dict[str, Any]] = None  # 当日行情快照（展示用）
@@ -535,13 +527,13 @@ class GeminiAnalyzer:
     """
 
     # ========================================
-    # 系统提示词 - 决策仪表盘 v2.0
+    # 系统提示词 - 观察仪表盘 v2.0
     # ========================================
     # 输出格式升级：从简单信号升级为决策仪表盘
-    # 核心模块：核心结论 + 数据透视 + 舆情情报 + 作战计划
+    # 核心模块：核心结论 + 数据透视 + 舆情情报 + 观察计划
     # ========================================
 
-    SYSTEM_PROMPT = """你是一位专注于趋势交易的 A 股投资分析师，负责生成专业的【决策仪表盘】分析报告。
+    SYSTEM_PROMPT = """你是一位专注于趋势研究的 A 股研究分析师，负责生成专业的【观察仪表盘】分析报告。
 
 """ + CORE_TRADING_SKILL_POLICY_ZH + """
 
@@ -554,18 +546,18 @@ class GeminiAnalyzer:
     "stock_name": "股票中文名称",
     "sentiment_score": 0-100整数,
     "trend_prediction": "强烈看多/看多/震荡/看空/强烈看空",
-    "operation_advice": "买入/加仓/持有/减仓/卖出/观望",
+    "operation_advice": "观望/仅供观察/继续跟踪/风险收缩/数据不足",
     "decision_type": "buy/hold/sell",
     "confidence_level": "高/中/低",
 
     "dashboard": {
         "core_conclusion": {
-            "one_sentence": "一句话核心结论（30字以内，直接告诉用户做什么）",
-            "signal_type": "🟢买入信号/🟡持有观望/🔴卖出信号/⚠️风险警告",
-            "time_sensitivity": "立即行动/今日内/本周内/不急",
+            "one_sentence": "一句话核心结论（30字以内，说明观察状态和证据边界）",
+            "signal_type": "🟢观察信号/🟡继续跟踪/🔴风险提示/⚠️数据不足",
+            "time_sensitivity": "证据已更新/今日观察/本周跟踪/不急",
             "position_advice": {
-                "no_position": "空仓者建议：具体操作指引",
-                "has_position": "持仓者建议：具体操作指引"
+                "no_position": "未持有状态：仅记录观察情景和下一证据",
+                "has_position": "持有状态：复核风险暴露和证据边界"
             }
         },
 
@@ -614,15 +606,15 @@ class GeminiAnalyzer:
 
         "battle_plan": {
             "sniper_points": {
-                "ideal_buy": "理想买入点：XX元（在MA5附近）",
-                "secondary_buy": "次优买入点：XX元（在MA10附近）",
-                "stop_loss": "止损位：XX元（跌破MA20或X%）",
-                "take_profit": "目标位：XX元（前高/整数关口）"
+                "ideal_buy": "关键价格区间：XX元（支撑或均线附近，仅用于观察）",
+                "secondary_buy": "参考区间：XX元（次级支撑或压力观察）",
+                "stop_loss": "风险边界：XX元（结构失效观察线）",
+                "take_profit": "上方观察区：XX元（前高或压力观察区）"
             },
             "position_strategy": {
-                "suggested_position": "建议仓位：X成",
-                "entry_plan": "分批建仓策略描述",
-                "risk_control": "风控策略描述"
+                "suggested_position": "暴露状态：不提供比例，仅描述风险暴露变化",
+                "entry_plan": "继续跟踪：需要补充的确认证据",
+                "risk_control": "风险边界：若结构走弱，仅提示观察风险"
             },
             "action_checklist": [
                 "✅/⚠️/❌ 检查项1：多头排列",
@@ -638,7 +630,7 @@ class GeminiAnalyzer:
     "analysis_summary": "100字综合分析摘要",
     "key_points": "3-5个核心看点，逗号分隔",
     "risk_warning": "风险提示",
-    "buy_reason": "操作理由，引用交易理念",
+    "buy_reason": "观察理由，引用证据边界",
 
     "trend_analysis": "走势形态分析",
     "short_term_outlook": "短期1-3日展望",
@@ -661,14 +653,14 @@ class GeminiAnalyzer:
 
 ## 评分标准
 
-### 强烈买入（80-100分）：
+### 高置信观察（80-100分）：
 - ✅ 多头排列：MA5 > MA10 > MA20
-- ✅ 低乖离率：<2%，最佳买点
+- ✅ 低乖离率：<2%，关键价格区间较近
 - ✅ 缩量回调或放量突破
 - ✅ 筹码集中健康
 - ✅ 消息面有利好催化
 
-### 买入（60-79分）：
+### 正向观察（60-79分）：
 - ✅ 多头排列或弱势多头
 - ✅ 乖离率 <5%
 - ✅ 量能正常
@@ -679,7 +671,7 @@ class GeminiAnalyzer:
 - ⚠️ 均线缠绕趋势不明
 - ⚠️ 有风险事件
 
-### 卖出/减仓（0-39分）：
+### 风险观察（0-39分）：
 - ❌ 空头排列
 - ❌ 跌破MA20
 - ❌ 放量下跌
@@ -687,9 +679,9 @@ class GeminiAnalyzer:
 
 ## 决策仪表盘核心原则
 
-1. **核心结论先行**：一句话说清该买该卖
-2. **分持仓建议**：空仓者和持仓者给不同建议
-3. **精确狙击点**：必须给出具体价格，不说模糊的话
+1. **核心结论先行**：一句话说清观察状态、证据边界和不确定性
+2. **分状态参考**：未持有和持有状态分别说明观察重点
+3. **关键区间**：保留价格区间作为证据锚点，但不得形成操作指令
 4. **检查清单可视化**：用 ✅⚠️❌ 明确显示每项检查结果
 5. **风险优先级**：舆情中的风险点要醒目标出"""
 
@@ -1740,12 +1732,12 @@ class GeminiAnalyzer:
 | 筹码状态 | {chip.get('chip_status', unknown_text)} | |
 """
         
-        # 添加趋势分析结果（基于交易理念的预判）
+        # 添加趋势分析结果（基于研究基线的预判）
         if 'trend_analysis' in context:
             trend = context['trend_analysis']
             bias_warning = "🚨 超过5%，严禁追高！" if trend.get('bias_ma5', 0) > 5 else "✅ 安全范围"
             prompt += f"""
-### 趋势分析预判（基于交易理念）
+### 趋势分析预判（基于研究基线）
 | 指标 | 数值 | 判定 |
 |------|------|------|
 | 趋势状态 | {trend.get('trend_status', unknown_text)} | |
@@ -1758,7 +1750,7 @@ class GeminiAnalyzer:
 | 系统评分 | {trend.get('signal_score', 0)}/100 | |
 
 #### 系统分析理由
-**买入理由**：
+**观察理由**：
 {chr(10).join('- ' + r for r in trend.get('signal_reasons', ['无'])) if trend.get('signal_reasons') else '- 无'}
 
 **风险因素**：
@@ -1858,9 +1850,9 @@ class GeminiAnalyzer:
 
 ### 决策仪表盘要求：
 - **股票名称**：必须输出正确的中文全称（如"贵州茅台"而非"股票600519"）
-- **核心结论**：一句话说清该买/该卖/该等
-- **持仓分类建议**：空仓者怎么做 vs 持仓者怎么做
-- **具体狙击点位**：买入价、止损价、目标价（精确到分）
+- **核心结论**：一句话说明观察状态、证据边界和不确定性
+- **持仓状态参考**：未持有 vs 持有状态分别说明观察重点，不给操作指令
+- **关键观察区间**：保留关键价格区间、风险边界、上方观察区，但不得形成交易计划
 - **检查清单**：每项用 ✅/⚠️/❌ 标记
 - **消息面时间合规**：`latest_news`、`risk_alerts`、`positive_catalysts` 不得包含超出近{news_window_days}日或时间未知的信息
 
@@ -2023,15 +2015,15 @@ class GeminiAnalyzer:
                 if f == "sentiment_score":
                     lines.append("- sentiment_score: integer score from 0 to 100")
                 elif f == "operation_advice":
-                    lines.append("- operation_advice: localized action advice")
+                    lines.append("- operation_advice: localized observation status")
                 elif f == "analysis_summary":
                     lines.append("- analysis_summary: concise analysis summary")
                 elif f == "dashboard.core_conclusion.one_sentence":
-                    lines.append("- dashboard.core_conclusion.one_sentence: one-line decision")
+                    lines.append("- dashboard.core_conclusion.one_sentence: one-line observation read")
                 elif f == "dashboard.intelligence.risk_alerts":
                     lines.append("- dashboard.intelligence.risk_alerts: risk alert list (can be empty)")
                 elif f == "dashboard.battle_plan.sniper_points.stop_loss":
-                    lines.append("- dashboard.battle_plan.sniper_points.stop_loss: stop-loss level")
+                    lines.append("- dashboard.battle_plan.sniper_points.stop_loss: risk boundary note for legacy compatibility key")
             return "\n".join(lines)
 
         lines = ["### 补全要求：请在上方分析基础上补充以下必填内容，并输出完整 JSON："]
@@ -2039,15 +2031,15 @@ class GeminiAnalyzer:
             if f == "sentiment_score":
                 lines.append("- sentiment_score: 0-100 综合评分")
             elif f == "operation_advice":
-                lines.append("- operation_advice: 买入/加仓/持有/减仓/卖出/观望")
+                lines.append("- operation_advice: 观察状态（观望/仅供观察/继续跟踪/风险收缩/数据不足）")
             elif f == "analysis_summary":
                 lines.append("- analysis_summary: 综合分析摘要")
             elif f == "dashboard.core_conclusion.one_sentence":
-                lines.append("- dashboard.core_conclusion.one_sentence: 一句话决策")
+                lines.append("- dashboard.core_conclusion.one_sentence: 一句话观察结论")
             elif f == "dashboard.intelligence.risk_alerts":
                 lines.append("- dashboard.intelligence.risk_alerts: 风险警报列表（可为空数组）")
             elif f == "dashboard.battle_plan.sniper_points.stop_loss":
-                lines.append("- dashboard.battle_plan.sniper_points.stop_loss: 止损价")
+                lines.append("- dashboard.battle_plan.sniper_points.stop_loss: 风险边界说明（兼容旧字段名）")
         return "\n".join(lines)
 
     def _build_integrity_retry_prompt(
@@ -2246,7 +2238,7 @@ class GeminiAnalyzer:
         # 尝试识别关键词来判断情绪
         sentiment_score = 50
         trend = 'Sideways' if report_language == "en" else '震荡'
-        advice = 'Hold' if report_language == "en" else '持有'
+        advice = 'Observe only' if report_language == "en" else '仅供观察'
         
         text_lower = response_text.lower()
         
@@ -2260,12 +2252,10 @@ class GeminiAnalyzer:
         if positive_count > negative_count + 1:
             sentiment_score = 65
             trend = 'Bullish' if report_language == "en" else '看多'
-            advice = 'Buy' if report_language == "en" else '买入'
             decision_type = 'buy'
         elif negative_count > positive_count + 1:
             sentiment_score = 35
             trend = 'Bearish' if report_language == "en" else '看空'
-            advice = 'Sell' if report_language == "en" else '卖出'
             decision_type = 'sell'
         else:
             decision_type = 'hold'

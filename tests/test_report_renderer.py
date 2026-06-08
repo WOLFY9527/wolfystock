@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests for standard report rendering pipeline."""
 
+import json
 import sys
 import unittest
 from unittest.mock import MagicMock
@@ -12,6 +13,23 @@ except ModuleNotFoundError:
 
 from src.analyzer import AnalysisResult
 from src.services.report_renderer import build_standard_report_payload, render
+
+FORBIDDEN_OBSERVATION_RENDER_TERMS = (
+    "买入",
+    "卖出",
+    "下单",
+    "立即交易",
+    "交易建议",
+    "投资建议",
+    "止损",
+    "止盈",
+    "目标价",
+    "目标位",
+    "目标区间",
+    "仓位建议",
+    "作战计划",
+    "建仓策略",
+)
 
 
 def _make_result(
@@ -137,7 +155,7 @@ class TestReportRenderer(unittest.TestCase):
         self.assertIsNotNone(out)
         assert out is not None
         self.assertIn("### Decision Summary", out)
-        self.assertIn("### Execution Plan", out)
+        self.assertIn("### Observation Plan", out)
         self.assertIn("### Evidence", out)
         self.assertIn("#### Risks & Catalysts", out)
         self.assertIn("### Coverage / Audit", out)
@@ -148,7 +166,7 @@ class TestReportRenderer(unittest.TestCase):
         channel_summary = payload["channel_summary"]
 
         self.assertEqual(channel_summary["score"], 68)
-        self.assertEqual(channel_summary["recommendation"], "持有")
+        self.assertEqual(channel_summary["recommendation"], "仅供观察")
         self.assertEqual(channel_summary["trend"], "看多")
         self.assertEqual(channel_summary["analysis_price"], "125.30")
         self.assertEqual(channel_summary["change_amount"], "2.30")
@@ -161,7 +179,7 @@ class TestReportRenderer(unittest.TestCase):
         self.assertIsNotNone(brief_out)
         assert discord_out is not None
         assert brief_out is not None
-        self.assertIn("**评分 / 建议 / 趋势**: 68 / 持有 / 看多", discord_out)
+        self.assertIn("**评分 / 观察 / 趋势**: 68 / 仅供观察 / 看多", discord_out)
         self.assertIn("**当前价 / 涨跌**: 125.30 | 2.30 / 1.87%", discord_out)
         self.assertIn("**核心利好**: 公司获重大订单", discord_out)
         self.assertIn("**Apple (AAPL)**", brief_out)
@@ -319,8 +337,8 @@ class TestReportRenderer(unittest.TestCase):
         payload = build_standard_report_payload(r, report_language="zh")
         decision_panel = payload["decision_panel"]
 
-        self.assertEqual(decision_panel["setup_type"], "趋势延续 / 等回踩")
-        self.assertIn("技术失效位", decision_panel["stop_loss"])
+        self.assertEqual(decision_panel["setup_type"], "趋势延续观察")
+        self.assertIn("技术失效观察线", decision_panel["stop_loss"])
         self.assertIn("95.00", decision_panel["support"])
         self.assertIn("125.00", decision_panel["resistance"])
         self.assertNotIn("110", decision_panel["stop_loss"])
@@ -693,10 +711,72 @@ class TestReportRenderer(unittest.TestCase):
         )
         battle_fields = {item["label"]: item["value"] for item in payload["battle_fields"]}
 
-        self.assertIn("MA20", battle_fields["理想买入点"])
-        self.assertIn("MA20", battle_fields["仓位建议"])
-        self.assertNotIn("MA20.00", battle_fields["理想买入点"])
-        self.assertNotIn("MA20.00", battle_fields["仓位建议"])
+        self.assertIn("MA20", battle_fields["关键价格区间"])
+        self.assertIn("MA20", battle_fields["暴露变化参考"])
+        self.assertNotIn("MA20.00", battle_fields["关键价格区间"])
+        self.assertNotIn("MA20.00", battle_fields["暴露变化参考"])
+
+    def test_observation_only_report_does_not_synthesize_trading_plan(self) -> None:
+        result = _make_result(
+            dashboard={
+                "core_conclusion": {
+                    "one_sentence": "仅供观察，等待证据补齐。",
+                    "position_advice": {},
+                },
+                "battle_plan": {},
+                "intelligence": {"risk_alerts": []},
+                "data_perspective": {
+                    "trend_status": {"is_bullish": True, "trend_score": 72},
+                    "price_position": {
+                        "ma5": 123.45,
+                        "ma10": 122.12,
+                        "ma20": 120.98,
+                        "support_level": 119.11,
+                        "resistance_level": 128.99,
+                        "bias_ma5": 1.2,
+                    },
+                    "volume_analysis": {"volume_ratio": 1.3, "volume_status": "放量"},
+                },
+            },
+            trend_prediction="看多",
+        )
+        result.operation_advice = "观望"
+
+        payload = build_standard_report_payload(result, report_language="zh")
+        payload_text = json.dumps(payload, ensure_ascii=False)
+        battle_labels = [item["label"] for item in payload["battle_fields"]]
+        compact_labels = [item["label"] for item in payload["battle_plan_compact"]["cards"]]
+
+        self.assertIn("研究状态", battle_labels)
+        self.assertIn("关键价格区间", battle_labels)
+        self.assertIn("风险边界", battle_labels)
+        self.assertIn("上方观察区", battle_labels)
+        self.assertIn("关键价格区间", compact_labels)
+        self.assertEqual(payload["summary_panel"]["operation_advice"], "仅供观察")
+        self.assertEqual(payload["channel_summary"]["recommendation"], "仅供观察")
+        for forbidden in FORBIDDEN_OBSERVATION_RENDER_TERMS:
+            self.assertNotIn(forbidden, payload_text, forbidden)
+
+    def test_markdown_render_projects_template_trading_labels_to_observation_copy(self) -> None:
+        result = _make_result(
+            dashboard={
+                "core_conclusion": {"one_sentence": "仅供观察，等待证据补齐。"},
+                "battle_plan": {},
+                "intelligence": {"risk_alerts": []},
+            },
+            trend_prediction="看多",
+        )
+        result.operation_advice = "观望"
+
+        out = render("markdown", [result], summary_only=False)
+        self.assertIsNotNone(out)
+        assert out is not None
+        self.assertIn("Observation Plan", out)
+        self.assertIn("关键价格区间", out)
+        self.assertIn("风险边界", out)
+        self.assertIn("上方观察区", out)
+        for forbidden in FORBIDDEN_OBSERVATION_RENDER_TERMS:
+            self.assertNotIn(forbidden, out, forbidden)
 
     def test_extended_timestamp_is_not_reused_when_session_has_no_extended_quote(self) -> None:
         payload = build_standard_report_payload(
@@ -994,7 +1074,7 @@ class TestReportRenderer(unittest.TestCase):
         support_field = next(field for field in technical_fields if field["label"] == "支撑位")
 
         self.assertEqual(payload["summary_panel"]["ticker"], "AAPL")
-        self.assertEqual(payload["summary_panel"]["operation_advice"], "持有")
+        self.assertEqual(payload["summary_panel"]["operation_advice"], "仅供观察")
         self.assertEqual(payload["table_sections"]["market"]["title"], "行情表")
         self.assertEqual(payload["table_sections"]["market"]["fields"][0]["label"], "Analysis Price")
         self.assertEqual(payload["table_sections"]["technical"]["title"], "技术面表")
@@ -1003,9 +1083,9 @@ class TestReportRenderer(unittest.TestCase):
         self.assertEqual(payload["summary_panel"]["current_price"], "125.30")
         self.assertEqual(payload["visual_blocks"]["price_position"]["vs_ma20"], "上方")
         self.assertIn("公司获重大订单", payload["highlights"]["positive_catalysts"])
-        self.assertIn("理想买入点", [item["label"] for item in payload["battle_plan_compact"]["cards"]])
+        self.assertIn("关键价格区间", [item["label"] for item in payload["battle_plan_compact"]["cards"]])
         self.assertEqual(payload["checklist_items"][0]["status"], "warn")
-        self.assertIn(payload["decision_panel"]["setup_type"], {"突破跟随", "回踩买点", "趋势延续 / 等回踩"})
+        self.assertIn(payload["decision_panel"]["setup_type"], {"突破观察", "支撑观察", "趋势延续观察"})
         self.assertIn("（", payload["decision_panel"]["ideal_entry"])
         self.assertEqual(payload["decision_panel"]["no_position_advice"], "等待回踩确认")
         self.assertEqual(payload["reason_layer"]["top_risk"], "监管调查进展")

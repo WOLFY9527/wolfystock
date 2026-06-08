@@ -389,8 +389,8 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         self.assertIn("**当前价 / 涨跌**", merged)
         self.assertIn("**价格口径 / 会话**", merged)
         self.assertIn("**关键观察**", merged)
-        self.assertIn("**参考区间 / 观察区间 / 风险控制参考**", merged)
-        self.assertIn("**目标一区 / 目标二区 / 目标区间**", merged)
+        self.assertIn("**关键价格区间 / 参考区间 / 风险边界**", merged)
+        self.assertIn("**上方观察区**", merged)
         self.assertIn("**核心利好**", merged)
         self.assertIn("**核心风险**", merged)
         self.assertIn("**持有状态参考**", merged)
@@ -402,6 +402,9 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         self.assertNotIn("买入", merged)
         self.assertNotIn("卖出", merged)
         self.assertNotIn("止损位", merged)
+        self.assertNotIn("目标一区", merged)
+        self.assertNotIn("目标二区", merged)
+        self.assertNotIn("目标区间", merged)
 
     @mock.patch("src.notification.get_config")
     def test_generate_dashboard_report_localizes_english_fallback(self, mock_get_config: mock.MagicMock):

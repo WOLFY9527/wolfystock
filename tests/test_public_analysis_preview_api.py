@@ -90,16 +90,16 @@ class PublicAnalysisPreviewApiTestCase(unittest.TestCase):
                         "model_used": "openai/gpt-5.4",
                     },
                     "summary": {
-                        "analysis_summary": "Momentum remains constructive with earnings support.",
-                        "operation_advice": "Wait for pullback",
-                        "trend_prediction": "Bullish bias",
+                        "analysis_summary": "Observation only while evidence and risk boundaries are reviewed.",
+                        "operation_advice": "Observe only",
+                        "trend_prediction": "Constructive but unconfirmed",
                         "sentiment_score": 74,
-                        "sentiment_label": "Bullish",
+                        "sentiment_label": "Observation",
                     },
                     "strategy": {
-                        "ideal_buy": "184-186",
-                        "stop_loss": "179",
-                        "take_profit": "195-198",
+                        "ideal_buy": "Key price area 184-186",
+                        "stop_loss": "Risk boundary below 179",
+                        "take_profit": "Upper observation area 195-198",
                     },
                     "details": {
                         "standard_report": {"should_not": "leak"},
@@ -132,9 +132,32 @@ class PublicAnalysisPreviewApiTestCase(unittest.TestCase):
         self.assertEqual(payload["preview_scope"], "guest")
         self.assertEqual(payload["stock_code"], "AAPL")
         self.assertEqual(payload["stock_name"], "Apple")
-        self.assertEqual(payload["report"]["summary"]["analysis_summary"], "Momentum remains constructive with earnings support.")
+        self.assertEqual(
+            payload["report"]["summary"]["analysis_summary"],
+            "Observation only while evidence and risk boundaries are reviewed.",
+        )
         self.assertIsNone(payload["report"]["details"])
         self.assertEqual(payload["query_id"], captured_query_ids[0])
+        public_values = "\n".join(
+            str(value)
+            for section in (
+                payload["report"]["summary"],
+                payload["report"].get("strategy") or {},
+            )
+            for value in section.values()
+        ).lower()
+        for forbidden in (
+            "buy now",
+            "sell now",
+            "wait for pullback",
+            "stop loss",
+            "take profit",
+            "target price",
+            "trading advice",
+            "investment advice",
+        ):
+            self.assertNotIn(forbidden, public_values)
+        self.assertIn("observation", public_values)
 
         with self.db.get_session() as session:
             self.assertEqual(session.query(AnalysisHistory).count(), 0)
@@ -171,15 +194,15 @@ class PublicAnalysisPreviewApiTestCase(unittest.TestCase):
                     },
                     "summary": {
                         "analysis_summary": "Preview summary",
-                        "operation_advice": "Wait",
-                        "trend_prediction": "Bullish bias",
+                        "operation_advice": "Observe only",
+                        "trend_prediction": "Constructive but unconfirmed",
                         "sentiment_score": 74,
-                        "sentiment_label": "Bullish",
+                        "sentiment_label": "Observation",
                     },
                     "strategy": {
-                        "ideal_buy": "184-186",
-                        "stop_loss": "179",
-                        "take_profit": "195-198",
+                        "ideal_buy": "Key price area 184-186",
+                        "stop_loss": "Risk boundary below 179",
+                        "take_profit": "Upper observation area 195-198",
                     },
                     "details": {
                         "standard_report": {"should_not": "leak"},
