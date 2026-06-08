@@ -33,6 +33,7 @@ import { OfficialMacroAuthorityDiagnostics } from '../components/common/Official
 import { buildOfficialMacroAuthorityDiagnosticsView } from '../components/common/officialMacroAuthorityDiagnosticsData';
 import { formatDateTime, formatPercent, formatSignedNumber } from '../utils/format';
 import { cn } from '../utils/cn';
+import type { ConsumerDataQualityStatus } from '../utils/consumerDataQualityViewModel';
 import { buildDataSourcesSetupHref, buildProviderOpsSetupHref } from '../utils/productSetupSurface';
 import {
   MARKET_DECISION_NOT_READY_NOTICE,
@@ -1095,6 +1096,29 @@ type ConsumerLiquiditySummaryFact = {
   detail?: string | null;
 };
 
+type LiquidityConfidencePosture = 'normal' | 'limited' | 'low' | 'unavailable';
+type LiquidityFeatureUsability = 'full' | 'observation_only' | 'paused' | 'unavailable';
+
+type LiquiditySurfaceHealthStripView = {
+  surfaceId: 'liquidity';
+  routeId: 'liquidity-monitor';
+  status: ConsumerDataQualityStatus;
+  statusLabel: string;
+  statusVariant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+  confidencePosture: LiquidityConfidencePosture;
+  confidenceLabel: string;
+  confidenceVariant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+  headline: string;
+  lastUpdated: string;
+  asOf?: string | null;
+  featureUsability: LiquidityFeatureUsability;
+  featureUsabilityLabel: string;
+  featureUsabilityVariant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
+  boundaryCopy: string;
+  scoreLabel: string;
+  showNumericScore: boolean;
+};
+
 type ConsumerLiquidityEvidenceRowView = {
   key: string;
   label: string;
@@ -1269,6 +1293,192 @@ function buildConsumerSummaryFacts(
       detail: consumerFreshnessLabel(data.freshness.status),
     },
   ];
+}
+
+function liquidityStatusLabel(status: ConsumerDataQualityStatus): string {
+  switch (status) {
+    case 'AVAILABLE':
+      return '可用';
+    case 'UPDATING':
+      return '更新中';
+    case 'DELAYED':
+      return '最近可用';
+    case 'PARTIAL':
+      return '部分可用';
+    case 'INSUFFICIENT':
+      return '仅观察';
+    case 'PAUSED':
+      return '已暂停';
+    case 'UNAVAILABLE':
+    default:
+      return '暂不可用';
+  }
+}
+
+function liquidityStatusVariant(status: ConsumerDataQualityStatus): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
+  if (status === 'AVAILABLE') return 'success';
+  if (status === 'DELAYED' || status === 'UPDATING') return 'info';
+  if (status === 'PARTIAL' || status === 'INSUFFICIENT' || status === 'PAUSED') return 'caution';
+  return 'neutral';
+}
+
+function liquidityConfidenceLabel(posture: LiquidityConfidencePosture): string {
+  if (posture === 'normal') return '依据较完整';
+  if (posture === 'limited') return '依据有限';
+  if (posture === 'low') return '信号偏弱';
+  return '不形成判断';
+}
+
+function liquidityConfidenceVariant(posture: LiquidityConfidencePosture): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
+  if (posture === 'normal') return 'success';
+  if (posture === 'limited') return 'info';
+  if (posture === 'low') return 'caution';
+  return 'neutral';
+}
+
+function liquidityFeatureUsabilityLabel(usability: LiquidityFeatureUsability): string {
+  if (usability === 'full') return '可继续观察';
+  if (usability === 'observation_only') return '仅作观察';
+  if (usability === 'paused') return '当前已暂停';
+  return '暂不可用';
+}
+
+function liquidityFeatureUsabilityVariant(usability: LiquidityFeatureUsability): 'neutral' | 'success' | 'caution' | 'danger' | 'info' {
+  if (usability === 'full') return 'success';
+  if (usability === 'observation_only') return 'info';
+  if (usability === 'paused') return 'caution';
+  return 'neutral';
+}
+
+function buildLiquiditySurfaceStatus(
+  data: LiquidityMonitorResponse,
+  coverageSummary: LiquidityCoverageReadinessSummary,
+  readinessSummary: DecisionReadinessSummary,
+  synthesisView: LiquidityImpulseSynthesisHeaderView,
+): ConsumerDataQualityStatus {
+  const lowScoreConfidence = (data.score.confidence || 0) < 0.45;
+  const hasPartialInputs = coverageSummary.missingOrUnavailableCount > 0 || coverageSummary.observationOnlyCount > 0;
+  const noScoreGrade = coverageSummary.scoreGradeCount <= 0 && data.score.includedIndicatorCount <= 0;
+
+  if (data.score.regime === 'unavailable' || readinessSummary.state === 'unavailable') {
+    return 'UNAVAILABLE';
+  }
+  if (noScoreGrade && hasPartialInputs) {
+    return 'PAUSED';
+  }
+  if (lowScoreConfidence || synthesisView.state === 'insufficient') {
+    return 'INSUFFICIENT';
+  }
+  if (hasPartialInputs) {
+    return 'PARTIAL';
+  }
+  if (data.freshness.status === 'delayed' || data.freshness.status === 'cached' || data.freshness.status === 'stale' || data.freshness.status === 'fallback' || data.freshness.status === 'mock') {
+    return 'DELAYED';
+  }
+  return 'AVAILABLE';
+}
+
+function buildLiquidityConfidencePosture(
+  status: ConsumerDataQualityStatus,
+  data: LiquidityMonitorResponse,
+): LiquidityConfidencePosture {
+  if (status === 'UNAVAILABLE') {
+    return 'unavailable';
+  }
+  if (status === 'PAUSED' || status === 'INSUFFICIENT' || (data.score.confidence || 0) < 0.45) {
+    return 'low';
+  }
+  if (status === 'PARTIAL' || status === 'DELAYED' || status === 'UPDATING') {
+    return 'limited';
+  }
+  return 'normal';
+}
+
+function buildLiquidityFeatureUsability(status: ConsumerDataQualityStatus): LiquidityFeatureUsability {
+  if (status === 'AVAILABLE') {
+    return 'full';
+  }
+  if (status === 'PAUSED') {
+    return 'paused';
+  }
+  if (status === 'UNAVAILABLE') {
+    return 'unavailable';
+  }
+  return 'observation_only';
+}
+
+function liquidityHealthHeadline(status: ConsumerDataQualityStatus): string {
+  switch (status) {
+    case 'AVAILABLE':
+      return '流动性状态可读，可继续跟踪最新变化。';
+    case 'UPDATING':
+      return '数据更新中，稍后将自动刷新。';
+    case 'DELAYED':
+      return '已使用最近一次可用数据。';
+    case 'PARTIAL':
+      return '部分数据暂不可用，当前仅保留观察。';
+    case 'INSUFFICIENT':
+      return '当前信号偏弱，仅供观察。';
+    case 'PAUSED':
+      return '部分数据暂不可用，当前判断已暂停。';
+    case 'UNAVAILABLE':
+    default:
+      return '本模块暂不可用，请稍后重试。';
+  }
+}
+
+function liquidityHealthBoundaryCopy(status: ConsumerDataQualityStatus): string {
+  if (status === 'AVAILABLE') {
+    return '本页仅展示流动性环境，仍需结合其他页面继续跟踪。';
+  }
+  if (status === 'DELAYED') {
+    return '当前使用最近一次可用数据，等待后续刷新。';
+  }
+  if (status === 'UNAVAILABLE') {
+    return '当前不形成流动性判断，请稍后重试。';
+  }
+  if (status === 'PAUSED') {
+    return '当前判断已暂停，等待关键状态恢复。';
+  }
+  return '当前只适合作为观察，不应用作方向判断。';
+}
+
+function buildLiquiditySurfaceHealthStripView(
+  data: LiquidityMonitorResponse,
+  coverageSummary: LiquidityCoverageReadinessSummary,
+  readinessSummary: DecisionReadinessSummary,
+  synthesisView: LiquidityImpulseSynthesisHeaderView,
+): LiquiditySurfaceHealthStripView {
+  const status = buildLiquiditySurfaceStatus(data, coverageSummary, readinessSummary, synthesisView);
+  const confidencePosture = buildLiquidityConfidencePosture(status, data);
+  const featureUsability = buildLiquidityFeatureUsability(status);
+  const showNumericScore = (
+    data.score.regime !== 'unavailable'
+    && (status === 'AVAILABLE' || status === 'DELAYED')
+    && confidencePosture !== 'low'
+    && confidencePosture !== 'unavailable'
+  );
+  const asOf = data.freshness.latestAsOf || data.generatedAt || null;
+
+  return {
+    surfaceId: 'liquidity',
+    routeId: 'liquidity-monitor',
+    status,
+    statusLabel: liquidityStatusLabel(status),
+    statusVariant: liquidityStatusVariant(status),
+    confidencePosture,
+    confidenceLabel: liquidityConfidenceLabel(confidencePosture),
+    confidenceVariant: liquidityConfidenceVariant(confidencePosture),
+    headline: liquidityHealthHeadline(status),
+    lastUpdated: formatDateTime(asOf) || '待确认',
+    asOf,
+    featureUsability,
+    featureUsabilityLabel: liquidityFeatureUsabilityLabel(featureUsability),
+    featureUsabilityVariant: liquidityFeatureUsabilityVariant(featureUsability),
+    boundaryCopy: liquidityHealthBoundaryCopy(status),
+    scoreLabel: showNumericScore ? scoreLabel(data.score.value) : '--',
+    showNumericScore,
+  };
 }
 
 function buildConsumerGapSummary(
@@ -1474,17 +1684,80 @@ function buildConsumerLiquidityStatusView(
   };
 }
 
+const LiquiditySurfaceHealthStrip: React.FC<{
+  view: LiquiditySurfaceHealthStripView;
+  facts: ConsumerLiquiditySummaryFact[];
+}> = ({ view, facts }) => {
+  const mainPressure = facts.find((fact) => fact.key === 'signal');
+  const direction = facts.find((fact) => fact.key === 'direction');
+
+  return (
+    <section
+      data-testid="liquidity-surface-health-strip"
+      data-surface-id={view.surfaceId}
+      data-route-id={view.routeId}
+      data-status={view.status}
+      className="min-w-0 rounded-xl border border-white/[0.06] bg-black/10 p-3"
+    >
+      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold text-white/48">流动性格局</p>
+          <p className="mt-1 text-sm font-semibold leading-6 text-white/84">{view.headline}</p>
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-1.5 lg:justify-end">
+          <TerminalChip variant={view.statusVariant}>{view.statusLabel}</TerminalChip>
+          <TerminalChip variant={view.confidenceVariant}>{view.confidenceLabel}</TerminalChip>
+          <TerminalChip variant={view.featureUsabilityVariant}>{view.featureUsabilityLabel}</TerminalChip>
+        </div>
+      </div>
+
+      <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3 xl:grid-cols-1">
+        <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
+          <p className="text-[11px] font-medium text-white/48">流动性格局</p>
+          <p
+            data-testid="liquidity-health-score"
+            className={cn(
+              'mt-2 font-mono text-2xl font-semibold',
+              view.showNumericScore ? 'text-white/86' : 'text-white/46',
+            )}
+          >
+            {view.scoreLabel}
+          </p>
+          <p className="mt-1 text-[11px] leading-5 text-white/56">{direction?.value || '待确认'}</p>
+        </div>
+
+        <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
+          <p className="text-[11px] font-medium text-white/48">主要压力</p>
+          <p className="mt-2 break-words text-sm font-semibold text-white/84">{mainPressure?.value || '等待关键信号恢复'}</p>
+          <p className="mt-1 text-[11px] leading-5 text-white/56">{view.featureUsabilityLabel}</p>
+        </div>
+
+        <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
+          <p className="text-[11px] font-medium text-white/48">最近更新</p>
+          <p className="mt-2 break-words text-sm font-semibold text-white/84">{view.lastUpdated}</p>
+          <p className="mt-1 text-[11px] leading-5 text-white/56">{view.statusLabel}</p>
+        </div>
+      </div>
+
+      <p className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-[11px] leading-5 text-white/58">
+        {view.boundaryCopy}
+      </p>
+    </section>
+  );
+};
+
 const ConsumerLiquidityVisualEvidence: React.FC<{
   data: LiquidityMonitorResponse;
   coverageSummary: LiquidityCoverageReadinessSummary;
   readinessSummary: DecisionReadinessSummary;
   synthesisView: LiquidityImpulseSynthesisHeaderView;
   indicators: LiquidityMonitorIndicator[];
-}> = ({ data, coverageSummary, readinessSummary, synthesisView, indicators }) => {
+  surfaceHealth: LiquiditySurfaceHealthStripView;
+}> = ({ data, coverageSummary, readinessSummary, synthesisView, indicators, surfaceHealth }) => {
   const bias = buildLiquidityBiasSummary(data, readinessSummary, synthesisView);
   const coverageSegments = buildConsumerCoverageSegments(coverageSummary, indicators.length);
   const visualDrivers = buildConsumerVisualDrivers(data, indicators);
-  const postureFillPct = data.score.regime === 'unavailable'
+  const postureFillPct = !surfaceHealth.showNumericScore
     ? 0
     : clampPercent(Math.max(data.score.value || 0, 0), 0, 100);
 
@@ -1509,7 +1782,15 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
           <div className="flex items-end justify-between gap-3">
             <div>
               <p className="text-[10px] uppercase tracking-[0.24em] text-white/34">REGIME</p>
-              <p className="mt-2 font-mono text-3xl font-semibold text-white/86">{scoreLabel(data.score.value)}</p>
+              <p
+                data-testid="liquidity-visual-score"
+                className={cn(
+                  'mt-2 font-mono text-3xl font-semibold',
+                  surfaceHealth.showNumericScore ? 'text-white/86' : 'text-white/42',
+                )}
+              >
+                {surfaceHealth.scoreLabel}
+              </p>
             </div>
             <p className="text-[11px] leading-5 text-white/48">
               {coverageSummary.directionLabel === '可参考' ? '当前格局可继续跟踪' : '当前格局先保持观察'}
@@ -1866,6 +2147,7 @@ const DecisionReadinessBand: React.FC<{
   const consumerEvidenceRows = buildConsumerEvidenceRows(indicators);
   const consumerSummaryFacts = buildConsumerSummaryFacts(data, coverageSummary, summary, indicators);
   const consumerGapSummary = buildConsumerGapSummary(missing, observation, consumerView);
+  const surfaceHealth = buildLiquiditySurfaceHealthStripView(data, coverageSummary, summary, synthesisView);
 
   if (!showAdminDiagnostics) {
     return (
@@ -1899,17 +2181,9 @@ const DecisionReadinessBand: React.FC<{
 
             <div
               data-testid="liquidity-summary-strip"
-              className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1"
+              className="min-w-0"
             >
-              {consumerSummaryFacts.map((fact) => (
-                <div key={fact.key} className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
-                  <p className="text-[11px] font-medium text-white/48">{fact.label}</p>
-                  <p className="mt-2 break-words text-sm font-semibold text-white/84">{fact.value}</p>
-                  {fact.detail ? (
-                    <p className="mt-1 text-[11px] leading-5 text-white/56">{fact.detail}</p>
-                  ) : null}
-                </div>
-              ))}
+              <LiquiditySurfaceHealthStrip view={surfaceHealth} facts={consumerSummaryFacts} />
             </div>
           </div>
         </div>
@@ -1960,6 +2234,7 @@ const DecisionReadinessBand: React.FC<{
             readinessSummary={summary}
             synthesisView={synthesisView}
             indicators={indicators}
+            surfaceHealth={surfaceHealth}
           />
         </div>
 

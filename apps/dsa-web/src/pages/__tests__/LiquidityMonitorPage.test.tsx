@@ -694,6 +694,68 @@ function buildNeutralReadyPayload() {
   };
 }
 
+function buildUnavailableSurfacePayload(scoreValue = 69) {
+  return {
+    ...payload,
+    score: {
+      ...payload.score,
+      value: scoreValue,
+      regime: 'unavailable',
+      confidence: 0,
+      includedIndicatorCount: 0,
+      includedIndicatorWeight: 0,
+    },
+    freshness: {
+      ...payload.freshness,
+      status: 'unavailable',
+      weakestIndicatorFreshness: 'unavailable',
+    },
+    indicators: payload.indicators.map((indicator) => ({
+      ...indicator,
+      status: 'unavailable',
+      freshness: 'unavailable',
+      includedInScore: false,
+      scoreContribution: 0,
+      coverageDiagnostics: {
+        ...(indicator.coverageDiagnostics || {
+          indicatorId: indicator.key,
+          indicatorName: indicator.label,
+          requiredInputs: [],
+          fulfilledInputs: [],
+          missingInputs: [],
+        }),
+        configuredProviderAvailable: false,
+        realSourceAvailable: false,
+        scoreContributionAllowed: false,
+        scoreExclusionReason: 'provider_unavailable',
+        missingInputs: ['required_source'],
+      },
+    })),
+    liquidityImpulseSynthesis: {
+      ...payload.liquidityImpulseSynthesis,
+      liquidityImpulse: 'data_insufficient',
+      confidence: 0,
+      confidenceLabel: 'insufficient',
+      dominantDrivers: [],
+      counterEvidence: [],
+      dataGaps: [
+        {
+          key: 'liquidity_monitor:funding',
+          label: 'Funding',
+          reason: 'provider_unavailable',
+          scoreContributionAllowed: false,
+        },
+      ],
+      evidenceQuality: {
+        scoringEvidenceCount: 0,
+        scoringPillarCount: 0,
+        discountedEvidenceCount: 0,
+        dataGapCount: 1,
+      },
+    },
+  };
+}
+
 describe('LiquidityMonitorPage', () => {
   afterEach(() => {
     cleanup();
@@ -712,6 +774,77 @@ describe('LiquidityMonitorPage', () => {
     fireEvent.click(within(disclosure).getByRole('button', { name: '展开 技术细节' }));
     return disclosure;
   }
+
+  async function renderSurfaceHealthStrip(payloadForRender: unknown) {
+    getLiquidityMonitor.mockResolvedValueOnce(payloadForRender);
+    const rendered = render(<LiquidityMonitorPage />);
+    const strip = await screen.findByTestId('liquidity-surface-health-strip');
+    return { rendered, strip };
+  }
+
+  it('renders a compact liquidity surface health strip across consumer data states', async () => {
+    const forbiddenStripCopy = /provider|fallback|stale|proxy|cache|runtime|diagnostic|sourceAuthorityAllowed|scoreContributionAllowed|provider_unavailable|reasonCode|raw|schema|backend|数据源|提供方|缓存|运行顺序|来源覆盖|外部调用/i;
+
+    const available = await renderSurfaceHealthStrip(buildNeutralReadyPayload());
+    expect(available.strip).toHaveAttribute('data-surface-id', 'liquidity');
+    expect(available.strip).toHaveAttribute('data-route-id', 'liquidity-monitor');
+    expect(available.strip).toHaveAttribute('data-status', 'AVAILABLE');
+    expect(available.strip).toHaveTextContent('可用');
+    expect(available.strip).toHaveTextContent('依据较完整');
+    expect(available.strip).toHaveTextContent('可继续观察');
+    expect(within(available.strip).getByTestId('liquidity-health-score')).toHaveTextContent('69');
+    expect(available.strip.textContent || '').not.toMatch(forbiddenStripCopy);
+    available.rendered.unmount();
+
+    const partialPayload = {
+      ...payload,
+      score: {
+        ...payload.score,
+        confidence: 0.56,
+      },
+    };
+    const partial = await renderSurfaceHealthStrip(partialPayload);
+    expect(partial.strip).toHaveAttribute('data-status', 'PARTIAL');
+    expect(partial.strip).toHaveTextContent('部分可用');
+    expect(partial.strip).toHaveTextContent('依据有限');
+    expect(partial.strip).toHaveTextContent('仅作观察');
+    expect(partial.strip.textContent || '').not.toMatch(forbiddenStripCopy);
+    partial.rendered.unmount();
+
+    const delayed = await renderSurfaceHealthStrip({
+      ...buildNeutralReadyPayload(),
+      freshness: {
+        ...payload.freshness,
+        status: 'delayed',
+        weakestIndicatorFreshness: 'delayed',
+        latestAsOf: '2026-05-07T10:00:00+08:00',
+      },
+    });
+    expect(delayed.strip).toHaveAttribute('data-status', 'DELAYED');
+    expect(delayed.strip).toHaveTextContent('最近可用');
+    expect(delayed.strip).toHaveTextContent('依据有限');
+    expect(delayed.strip).toHaveTextContent('仅作观察');
+    expect(within(delayed.strip).getByTestId('liquidity-health-score')).toHaveTextContent('69');
+    expect(delayed.strip.textContent || '').not.toMatch(forbiddenStripCopy);
+    delayed.rendered.unmount();
+
+    const insufficient = await renderSurfaceHealthStrip(payload);
+    expect(insufficient.strip).toHaveAttribute('data-status', 'INSUFFICIENT');
+    expect(insufficient.strip).toHaveTextContent('仅观察');
+    expect(insufficient.strip).toHaveTextContent('信号偏弱');
+    expect(within(insufficient.strip).getByTestId('liquidity-health-score')).toHaveTextContent('--');
+    expect(screen.getByTestId('liquidity-visual-score')).toHaveTextContent('--');
+    expect(insufficient.strip.textContent || '').not.toMatch(forbiddenStripCopy);
+    insufficient.rendered.unmount();
+
+    const unavailable = await renderSurfaceHealthStrip(buildUnavailableSurfacePayload(69));
+    expect(unavailable.strip).toHaveAttribute('data-status', 'UNAVAILABLE');
+    expect(unavailable.strip).toHaveTextContent('暂不可用');
+    expect(unavailable.strip).toHaveTextContent('不形成判断');
+    expect(within(unavailable.strip).getByTestId('liquidity-health-score')).toHaveTextContent('--');
+    expect(screen.getByTestId('liquidity-visual-score')).toHaveTextContent('--');
+    expect(unavailable.strip.textContent || '').not.toMatch(forbiddenStripCopy);
+  });
 
   it('renders a consumer-safe first-screen summary and hides technical diagnostics by default', async () => {
     getLiquidityMonitor.mockResolvedValueOnce(payload);
