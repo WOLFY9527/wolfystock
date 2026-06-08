@@ -32,6 +32,7 @@ TARGET_MODULES = (
     pytest.param("src/services/user_alert_event_packet.py", True, id="user_alert_event_packet"),
     pytest.param("src/services/user_alert_suppression_policy.py", True, id="user_alert_suppression_policy"),
     pytest.param("src/services/user_alert_dry_run_summary.py", True, id="user_alert_dry_run_summary"),
+    pytest.param("src/services/research_packet_v1.py", True, id="research_packet_v1"),
 )
 FORBIDDEN_IMPORT_PREFIXES = {
     "api": (
@@ -42,19 +43,48 @@ FORBIDDEN_IMPORT_PREFIXES = {
     ),
     "provider/runtime": (
         "data_provider",
+        "src.providers",
+        "src.services.analysis_provider_planner",
+        "src.services.cn_hk_connect_flow_provider",
+        "src.services.cn_provider_health_service",
+        "src.services.market_overview_tickflow_breadth_provider",
+        "src.services.market_provider_operations_service",
+        "src.services.options_market_data_provider",
+        "src.services.polygon_us_breadth_provider",
+        "src.services.provider_circuit_observer",
+        "src.services.provider_fit_advisor_service",
+        "src.services.provider_plan_advisor",
+        "src.services.provider_usage_ledger",
+        "src.services.rotation_radar_quote_provider",
+        "src.services.stock_service_provider_adapter",
     ),
     "storage/repositories": (
         "src.repositories",
         "src.storage",
+        "src.storage_phase_g_observability",
+        "src.storage_postgres_bridge",
+        "src.storage_topology_report",
+        "src.database_doctor",
+        "src.database_doctor_smoke",
         "duckdb",
         "psycopg",
         "redis",
         "sqlalchemy",
         "sqlite3",
     ),
+    "analysis/report/history": (
+        "src.report_language",
+        "src.services.analysis_service",
+        "src.services.history_service",
+        "src.services.report_renderer",
+    ),
     "market-cache": (
         "src.services.market_cache",
         "src.services.market_cache_redis_backend",
+    ),
+    "cache/runtime": (
+        "src.services.observation_cache",
+        "src.services.official_macro_liquidity_cache_contracts",
     ),
     "notification": (
         "src.notification",
@@ -63,6 +93,8 @@ FORBIDDEN_IMPORT_PREFIXES = {
     "core-runtime": (
         "main",
         "src.core",
+        "src.services.litellm_runtime",
+        "src.services.task_queue",
     ),
     "frontend": (
         "apps",
@@ -115,11 +147,18 @@ def _collect_imported_modules(path: Path) -> set[str]:
         if node.level == 0:
             if node.module:
                 imported_modules.add(node.module)
+                imported_modules.update(
+                    f"{node.module}.{alias.name}" for alias in node.names if alias.name != "*"
+                )
             continue
 
         base_parts = _relative_import_base_parts(module_name, node.level)
         if node.module:
-            imported_modules.add(".".join(base_parts + node.module.split(".")))
+            imported_base = ".".join(base_parts + node.module.split("."))
+            imported_modules.add(imported_base)
+            imported_modules.update(
+                f"{imported_base}.{alias.name}" for alias in node.names if alias.name != "*"
+            )
             continue
 
         for alias in node.names:
