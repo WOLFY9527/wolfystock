@@ -3,6 +3,7 @@ import { Suspense, lazy, useEffect, useReducer } from 'react';
 import { historyApi } from '../../api/history';
 import { Drawer } from '../common/Drawer';
 import { SupportPanel } from '../common/SupportSurface';
+import { consumerSafeReportText } from '../../utils/homeReportIdentity';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
 import { localizeReportHeadingLabel, localizeReportTermLabel } from '../../utils/reportTerminology';
 import type { ReportLanguage, StandardReport } from '../../types/analysis';
@@ -95,6 +96,68 @@ const LazyReportMarkdownTechnicalDetailsRenderer = lazy(async () => {
   return { default: module.ReportMarkdownTechnicalDetailsRenderer };
 });
 
+const REPORT_MARKDOWN_INTERNAL_COPY_PATTERN =
+  /reasonCode|reasonCodes|reason_code|reason_codes|reasonFamilies|sourceTier|sourceType|source_tier|source_type|provider|trace|raw[_\s-]*(?:json|result|payload|ai[_\s-]*response)|backend|snake_case|cache|debug|runtime|diagnostic|diagnostics|fallback_cache|provider_timeout|\b[a-z]+(?:_[a-z0-9]+)+\b/i;
+
+const getObservationFallback = (language: ReportLanguage): string =>
+  language === 'en' ? 'Continue tracking' : '继续跟踪';
+
+const getSummaryFallback = (language: ReportLanguage): string =>
+  language === 'en' ? 'Report content is available for review.' : '报告内容已生成，可继续复核。';
+
+const getRiskBoundaryFallback = (language: ReportLanguage): string =>
+  language === 'en'
+    ? 'Risk boundary describes uncertainty only.'
+    : '风险边界用于说明不确定性。';
+
+const getUnstatedFallback = (language: ReportLanguage): string =>
+  language === 'en' ? 'Unstated' : '未标注';
+
+const getCoverageBoundaryText = (totalMissingFields: number, language: ReportLanguage): string => {
+  if (totalMissingFields > 0) {
+    return language === 'en'
+      ? 'Some data is temporarily unavailable; read the current view as observation only.'
+      : '部分数据暂不可用，当前解读仅供观察。';
+  }
+  return language === 'en'
+    ? 'No obvious coverage gaps were detected.'
+    : '数据覆盖未发现明显缺口。';
+};
+
+const consumerSafeMarkdownCopy = (
+  value: unknown,
+  fallback: string,
+): string => {
+  const text = String(value ?? '').trim();
+  if (!text || text === '-' || /^n\/?a$/i.test(text)) {
+    return fallback;
+  }
+  if (REPORT_MARKDOWN_INTERNAL_COPY_PATTERN.test(text)) {
+    return fallback;
+  }
+  const safeText = consumerSafeReportText(text, fallback).trim();
+  if (!safeText || safeText === '--' || REPORT_MARKDOWN_INTERNAL_COPY_PATTERN.test(safeText)) {
+    return fallback;
+  }
+  return safeText;
+};
+
+const coverageCategoryConsumerLabel = (category: MissingFieldCategory, language: ReportLanguage): string => {
+  if (category === 'integrated_unavailable') {
+    return language === 'en' ? 'Temporarily unavailable' : '本次暂未返回';
+  }
+  if (category === 'not_integrated_yet') {
+    return language === 'en' ? 'Not covered yet' : '暂不覆盖';
+  }
+  if (category === 'source_not_provided') {
+    return language === 'en' ? 'Partially unavailable' : '部分数据暂不可用';
+  }
+  if (category === 'not_applicable') {
+    return language === 'en' ? 'Not applicable now' : '本次不适用';
+  }
+  return language === 'en' ? 'Other data gaps' : '其他数据缺口';
+};
+
 const ReportMarkdownHeaderPanel: React.FC<{
   body: string;
   stockCode: string;
@@ -165,15 +228,14 @@ const ReportMarkdownStatusPanel: React.FC<{
   );
 };
 
-const ReportMarkdownLoadedContent: React.FC<{
+type ReportMarkdownLoadedContentProps = {
   captionClassName: string;
   colon: string;
-  content: string;
   coverageAudit: ReturnType<typeof buildMissingFieldAudit>;
   coverageBuckets: Array<ReturnType<typeof buildMissingFieldAudit>['buckets'][number]>;
-  coverageCategoryLabel: (category: MissingFieldCategory) => string;
   dispatch: React.Dispatch<ReportMarkdownAction>;
   executiveSummary: {
+    coverageBoundary: string;
     confidence: string;
     firstLine: string;
     keyRisk: string;
@@ -184,12 +246,67 @@ const ReportMarkdownLoadedContent: React.FC<{
   normalizedLanguage: ReportLanguage;
   state: ReportMarkdownState;
   text: ReturnType<typeof getReportText>;
+};
+
+const ReportMarkdownCoverageAuditPanel: React.FC<{
+  captionClassName: string;
+  colon: string;
+  coverageAudit: ReturnType<typeof buildMissingFieldAudit>;
+  coverageBuckets: Array<ReturnType<typeof buildMissingFieldAudit>['buckets'][number]>;
+  headingClassName: string;
+  normalizedLanguage: ReportLanguage;
+  text: ReturnType<typeof getReportText>;
 }> = ({
   captionClassName,
   colon,
   coverageAudit,
   coverageBuckets,
-  coverageCategoryLabel,
+  headingClassName,
+  normalizedLanguage,
+  text,
+}) => (
+  <SupportPanel
+    className="px-0 py-0"
+    title={normalizedLanguage === 'en' ? 'Data coverage notes' : '数据覆盖说明'}
+    body={normalizedLanguage === 'en' ? 'Grouped as product-readable data gaps.' : '按用户可读的数据缺口归类。'}
+    titleClassName={headingClassName}
+    bodyClassName="text-sm leading-6"
+    contentClassName="mt-3"
+  >
+    {coverageAudit.totalMissingFields > 0 ? (
+      <div className="space-y-3 text-xs text-secondary-text">
+        <p className={captionClassName}>
+          {text.missingFieldsTotal}{colon}{coverageAudit.totalMissingFields}
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {coverageBuckets.map((bucket) => (
+            <div key={bucket.category} className="rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/40 px-3 py-2.5">
+              <p className={captionClassName}>
+                {coverageCategoryConsumerLabel(bucket.category, normalizedLanguage)} ({bucket.entries.length})
+              </p>
+              <ul className="mt-2.5 space-y-1.5">
+                {bucket.entries.slice(0, 5).map((entry, index) => (
+                  <li key={`${entry.field}-${entry.reason}-${index}`}>
+                    <span className="font-medium text-foreground">{localizeReportTermLabel(entry.field, normalizedLanguage)}</span>
+                    <span className="text-muted-text">{colon}{localizeReportHeadingLabel(entry.reason, normalizedLanguage)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    ) : (
+      <p className="text-xs text-muted-text">{text.noMissingFields}</p>
+    )}
+  </SupportPanel>
+);
+
+const ReportMarkdownLoadedContent: React.FC<ReportMarkdownLoadedContentProps> = ({
+  captionClassName,
+  colon,
+  coverageAudit,
+  coverageBuckets,
   dispatch,
   executiveSummary,
   headingClassName,
@@ -219,43 +336,11 @@ const ReportMarkdownLoadedContent: React.FC<{
             </div>
           ))}
         </div>
+        <p className="mt-3 rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/35 px-3 py-2 text-xs leading-5 text-secondary-text">
+          {executiveSummary.coverageBoundary}
+        </p>
       </SupportPanel>
     </div>
-
-    <SupportPanel
-      className="px-5 py-4 md:px-6"
-      title={text.coverageAuditTitle}
-      body={text.coverageAuditBody}
-      titleClassName={headingClassName}
-      bodyClassName="text-sm leading-6"
-    >
-      {coverageAudit.totalMissingFields > 0 ? (
-        <div className="space-y-3 text-xs text-secondary-text">
-          <p className={captionClassName}>
-            {text.missingFieldsTotal}{colon}{coverageAudit.totalMissingFields}
-          </p>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {coverageBuckets.map((bucket) => (
-              <div key={bucket.category} className="rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/40 px-3 py-2.5">
-                <p className={captionClassName}>
-                  {coverageCategoryLabel(bucket.category)} ({bucket.entries.length})
-                </p>
-                <ul className="mt-2.5 space-y-1.5">
-                  {bucket.entries.slice(0, 5).map((entry, index) => (
-                    <li key={`${entry.field}-${entry.reason}-${index}`}>
-                      <span className="font-medium text-foreground">{localizeReportTermLabel(entry.field, normalizedLanguage)}</span>
-                      <span className="text-muted-text">{colon}{localizeReportHeadingLabel(entry.reason, normalizedLanguage)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <p className="text-xs text-muted-text">{text.noMissingFields}</p>
-      )}
-    </SupportPanel>
 
     <details
       data-testid="report-technical-evidence-details"
@@ -267,26 +352,37 @@ const ReportMarkdownLoadedContent: React.FC<{
       }}
     >
       <summary className="cursor-pointer list-none text-sm font-semibold tracking-[0.06em] text-foreground">
-        {normalizedLanguage === 'en' ? 'Technical details' : '技术细节'}
+        {normalizedLanguage === 'en' ? 'Coverage and evidence details' : '数据覆盖与证据明细'}
       </summary>
-      <div className="mt-4 mx-auto w-full max-w-[86ch]">
-        {state.hasOpenedTechnicalDetails ? (
-          <Suspense
-            fallback={(
-              <output
-                aria-live="polite"
-                aria-busy="true"
-                data-testid="report-technical-details-loading"
-                className="block rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/35 p-3 text-sm text-secondary-text"
-              >
-                {normalizedLanguage === 'en' ? 'Loading technical details…' : '正在加载技术细节…'}
-              </output>
-            )}
-          >
-            <LazyReportMarkdownTechnicalDetailsRenderer markdown={localizedMarkdownContent} />
-          </Suspense>
-        ) : null}
-      </div>
+      {state.hasOpenedTechnicalDetails ? (
+        <div className="mt-4 space-y-4" data-testid="report-coverage-audit-panel">
+          <ReportMarkdownCoverageAuditPanel
+            captionClassName={captionClassName}
+            colon={colon}
+            coverageAudit={coverageAudit}
+            coverageBuckets={coverageBuckets}
+            headingClassName={headingClassName}
+            normalizedLanguage={normalizedLanguage}
+            text={text}
+          />
+          <div className="mx-auto w-full max-w-[86ch]">
+            <Suspense
+              fallback={(
+                <output
+                  aria-live="polite"
+                  aria-busy="true"
+                  data-testid="report-technical-details-loading"
+                  className="block rounded-xl border border-[var(--theme-panel-subtle-border)] bg-base/35 p-3 text-sm text-secondary-text"
+                >
+                  {normalizedLanguage === 'en' ? 'Loading report details…' : '正在加载报告明细…'}
+                </output>
+              )}
+            >
+              <LazyReportMarkdownTechnicalDetailsRenderer markdown={localizedMarkdownContent} />
+            </Suspense>
+          </div>
+        </div>
+      ) : null}
     </details>
   </div>
 );
@@ -384,41 +480,31 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
       summaryPanel?.oneSentence
       || reasonLayer?.latestKeyUpdate
       || content.split('\n').find((line) => line.trim() && !line.trim().startsWith('#'))
-      || (normalizedLanguage === 'en' ? 'Report content is available for review.' : '报告内容已生成，可继续复核。'),
+      || getSummaryFallback(normalizedLanguage),
     ).trim();
     const observation = String(
       summaryPanel?.operationAdvice
       || decisionPanel?.keyAction
-      || (normalizedLanguage === 'en' ? 'Observation only' : '仅观察'),
+      || getObservationFallback(normalizedLanguage),
     ).trim();
     const confidence = String(
       decisionPanel?.confidence
-      || (normalizedLanguage === 'en' ? 'Unstated' : '未标注'),
+      || getUnstatedFallback(normalizedLanguage),
     ).trim();
     const keyRisk = String(
       reasonLayer?.topRisk
       || highlights?.riskAlerts?.[0]
       || decisionPanel?.riskControlStrategy
-      || (normalizedLanguage === 'en' ? 'No explicit risk item in the structured report.' : '结构化报告未给出明确风险条目。'),
+      || getRiskBoundaryFallback(normalizedLanguage),
     ).trim();
-    return { firstLine, observation, confidence, keyRisk };
+    return {
+      coverageBoundary: getCoverageBoundaryText(coverageAudit.totalMissingFields, normalizedLanguage),
+      firstLine: consumerSafeMarkdownCopy(firstLine, getSummaryFallback(normalizedLanguage)),
+      observation: consumerSafeMarkdownCopy(observation, getObservationFallback(normalizedLanguage)),
+      confidence: consumerSafeMarkdownCopy(confidence, getUnstatedFallback(normalizedLanguage)),
+      keyRisk: consumerSafeMarkdownCopy(keyRisk, getRiskBoundaryFallback(normalizedLanguage)),
+    };
   })();
-
-  const coverageCategoryLabel = (category: MissingFieldCategory): string => {
-    if (category === 'integrated_unavailable') {
-      return text.missingIntegratedUnavailable;
-    }
-    if (category === 'not_integrated_yet') {
-      return text.missingNotIntegratedYet;
-    }
-    if (category === 'source_not_provided') {
-      return text.missingSourceNotProvided;
-    }
-    if (category === 'not_applicable') {
-      return text.missingNotApplicable;
-    }
-    return text.missingOther;
-  };
 
   // Handle close with animation
   const handleClose = () => {
@@ -442,9 +528,9 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
       dispatch({ type: 'loadStarted' });
       void historyApi.getMarkdown(recordId)
         .then((markdownContent) => ({ content: markdownContent, error: null as string | null }))
-        .catch((err) => ({
+        .catch(() => ({
           content: '',
-          error: err instanceof Error ? err.message : loadReportFailedText,
+          error: loadReportFailedText,
         }))
         .then((result) => {
           if (isCancelled) {
@@ -474,10 +560,8 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
           <ReportMarkdownLoadedContent
             captionClassName={captionClassName}
             colon={colon}
-            content={content}
             coverageAudit={coverageAudit}
             coverageBuckets={coverageBuckets}
-            coverageCategoryLabel={coverageCategoryLabel}
             dispatch={dispatch}
             executiveSummary={executiveSummary}
             headingClassName={headingClassName}

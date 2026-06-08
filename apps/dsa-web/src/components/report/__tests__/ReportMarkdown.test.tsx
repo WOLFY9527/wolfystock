@@ -15,6 +15,9 @@ vi.mock('../../common/Drawer', () => ({
   Drawer: ({ children }: { children: ReactNode }) => <div data-testid="drawer-shell">{children}</div>,
 }));
 
+const forbiddenDefaultVisiblePattern =
+  /买入|卖出|建仓|调仓|止损|止盈|目标价|仓位建议|\bbuy\b|\bsell\b|\bstop(?: loss)?\b|\btarget\b|position[- ]?sizing|reasonCode|sourceTier|sourceType|raw_ai_response|provider_timeout|fallback_cache|backend snake_case/i;
+
 const openTechnicalDetails = async (label: string) => {
   const technicalDetails = await screen.findByTestId('report-technical-evidence-details');
   fireEvent.click(within(technicalDetails).getByText(label));
@@ -28,7 +31,7 @@ const openTechnicalDetails = async (label: string) => {
 };
 
 describe('ReportMarkdown', () => {
-  it('renders coverage audit categories while preserving markdown content', async () => {
+  it('keeps coverage audit behind disclosure while preserving markdown content', async () => {
     const standardReport: StandardReport = {
       tableSections: {
         technical: {
@@ -57,15 +60,21 @@ describe('ReportMarkdown', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('缺失字段')).toBeInTheDocument();
+      expect(screen.getByTestId('report-executive-summary')).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/缺失字段总数[:：]\s*5/)).toBeInTheDocument();
-    expect(screen.getAllByText(/字段待接入/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/已接入但本次记录未返回/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/当前数据源未提供/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/当前市场\/会话不适用/).length).toBeGreaterThan(0);
-    await openTechnicalDetails('技术细节');
+    expect(screen.getByTestId('report-executive-summary')).toHaveTextContent('部分数据暂不可用，当前解读仅供观察。');
+    expect(screen.queryByTestId('report-coverage-audit-panel')).not.toBeInTheDocument();
+    expect(screen.queryByText(/缺失字段总数[:：]\s*5/)).not.toBeInTheDocument();
+    expect(screen.queryByText('数据覆盖说明')).not.toBeInTheDocument();
+    await openTechnicalDetails('数据覆盖与证据明细');
+
+    const coverageAudit = screen.getByTestId('report-coverage-audit-panel');
+    expect(coverageAudit).toHaveTextContent(/缺失字段总数[:：]\s*5/);
+    expect(coverageAudit).toHaveTextContent(/暂不覆盖/);
+    expect(coverageAudit).toHaveTextContent(/本次暂未返回/);
+    expect(coverageAudit).toHaveTextContent(/部分数据暂不可用/);
+    expect(coverageAudit).toHaveTextContent(/本次不适用/);
     await waitFor(() => {
       expect(screen.getByText('决策摘要')).toBeInTheDocument();
     });
@@ -87,9 +96,12 @@ describe('ReportMarkdown', () => {
       />,
     );
 
-    await waitFor(() => {
-      expect(screen.getByText('未识别缺失字段。')).toBeInTheDocument();
-    });
+    expect(await screen.findByTestId('report-executive-summary')).toHaveTextContent('数据覆盖未发现明显缺口。');
+    expect(screen.queryByText('未识别缺失字段。')).not.toBeInTheDocument();
+
+    await openTechnicalDetails('数据覆盖与证据明细');
+
+    expect(screen.getByTestId('report-coverage-audit-panel')).toHaveTextContent('未识别缺失字段。');
   });
 
   it('leads with an executive summary and keeps technical evidence collapsed', async () => {
@@ -159,7 +171,8 @@ describe('ReportMarkdown', () => {
     );
 
     expect(await screen.findByTestId('report-executive-summary')).toHaveTextContent('执行摘要');
-    expect(screen.getByText('缺失字段')).toBeInTheDocument();
+    expect(screen.queryByTestId('report-coverage-audit-panel')).not.toBeInTheDocument();
+    expect(screen.queryByText('数据覆盖说明')).not.toBeInTheDocument();
     expect(screen.queryByText('决策摘要')).not.toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: '字段' })).not.toBeInTheDocument();
   });
@@ -175,7 +188,7 @@ describe('ReportMarkdown', () => {
       />,
     );
 
-    await openTechnicalDetails('技术细节');
+    await openTechnicalDetails('数据覆盖与证据明细');
 
     await waitFor(() => {
       expect(screen.getByText('决策摘要')).toBeInTheDocument();
@@ -183,5 +196,54 @@ describe('ReportMarkdown', () => {
     expect(screen.getByText('执行计划')).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: '字段' })).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: 'Ready' })).toBeInTheDocument();
+  });
+
+  it('keeps default summary copy consumer-safe when upstream report text is diagnostic or action-oriented', async () => {
+    render(
+      <ReportMarkdown
+        recordId={6}
+        stockName="Oracle"
+        stockCode="ORCL"
+        onClose={() => undefined}
+        standardReport={{
+          summaryPanel: {
+            oneSentence: 'reasonCode=provider_timeout sourceTier=raw_ai_response',
+            operationAdvice: '买入',
+          },
+          decisionPanel: {
+            confidence: 'sourceType=official_public',
+            riskControlStrategy: '止损 117.40',
+          },
+        }}
+        initialContent="## Raw Technical Detail\nreasonCode=provider_timeout"
+      />,
+    );
+
+    const executiveSummary = await screen.findByTestId('report-executive-summary');
+    expect(executiveSummary).toHaveTextContent('报告内容已生成，可继续复核。');
+    expect(executiveSummary).toHaveTextContent('继续跟踪');
+    expect(executiveSummary).toHaveTextContent('未标注');
+    expect(executiveSummary).toHaveTextContent('风险边界用于说明不确定性。');
+    expect(executiveSummary).not.toHaveTextContent(forbiddenDefaultVisiblePattern);
+  });
+
+  it('does not surface backend diagnostic errors as default visible copy', async () => {
+    vi.mocked(historyApi.getMarkdown).mockRejectedValueOnce(
+      new Error('provider_timeout fallback_cache sourceTier raw_ai_response'),
+    );
+
+    render(
+      <ReportMarkdown
+        recordId={7}
+        stockName="Oracle"
+        stockCode="ORCL"
+        onClose={() => undefined}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('加载报告失败')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('drawer-shell')).not.toHaveTextContent(forbiddenDefaultVisiblePattern);
   });
 });
