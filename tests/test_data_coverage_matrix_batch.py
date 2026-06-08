@@ -16,6 +16,7 @@ from src.services.data_coverage_matrix_batch import (
     DataCoverageMatrixBatchBuildError,
     build_data_coverage_matrix_batch,
 )
+from src.services.data_coverage_surface_snapshot import build_data_coverage_surface_snapshot
 
 
 def _valid_metadata(surface_id: str, field_key: str, *, provider_id: str) -> dict[str, object]:
@@ -52,6 +53,44 @@ def _fallback_metadata() -> dict[str, object]:
     return payload
 
 
+def _rotation_reviewed_metadata(provider_id: str) -> dict[str, object]:
+    payload = _valid_metadata("rotation", "rotation_score_status", provider_id=provider_id)
+    payload.update(
+        {
+            "providerLabel": "Reviewed Rotation Provider",
+            "sourceId": f"{provider_id}_rotation_source",
+            "sourceLabel": "Reviewed Rotation Source",
+            "sourceType": "authorized_derived_snapshot",
+            "sourceTier": "reviewed_internal",
+            "asOf": "2026-06-08T09:30:00Z",
+        }
+    )
+    return payload
+
+
+def _rotation_missing_review_metadata() -> dict[str, object]:
+    return {
+        "surfaceId": "rotation",
+        "fieldKey": "rotation_score_status",
+        "providerId": "rotation_review_pending",
+        "providerLabel": "Rotation Review Pending Provider",
+        "sourceId": "rotation_review_pending_source",
+        "sourceLabel": "Rotation Review Pending Source",
+        "sourceType": "authorized_derived_snapshot",
+        "sourceTier": "review_pending",
+        "freshnessState": "partial",
+        "isPartial": True,
+        "asOf": "2026-06-08T09:35:00Z",
+        "authorityGrant": True,
+        "decisionGrade": True,
+        "observationOnly": False,
+        "diagnosticOnly": False,
+        "providerRuntimeCalled": True,
+        "networkCallsEnabled": True,
+        "marketCacheMutation": True,
+    }
+
+
 def test_successful_batch_returns_valid_rows_counts_and_inert_guard_posture() -> None:
     result = build_data_coverage_matrix_batch(
         [
@@ -76,6 +115,113 @@ def test_successful_batch_returns_valid_rows_counts_and_inert_guard_posture() ->
     assert all(row["providerRuntimeCalled"] is False for row in payload["rows"])
     assert all(row["networkCallsEnabled"] is False for row in payload["rows"])
     assert all(row["marketCacheMutation"] is False for row in payload["rows"])
+
+
+def test_rotation_batch_preserves_caller_order_and_fails_closed_for_missing_reviews() -> None:
+    rows = [
+        _rotation_reviewed_metadata("rotation_reviewed"),
+        _rotation_missing_review_metadata(),
+    ]
+
+    payload = build_data_coverage_matrix_batch(rows).to_dict()
+
+    assert payload["rowCounts"] == {
+        "input": 2,
+        "built": 2,
+        "valid": 1,
+        "invalid": 1,
+        "errors": 1,
+    }
+    assert [row["surfaceId"] for row in payload["rows"]] == ["rotation", "rotation"]
+    assert [row["fieldKey"] for row in payload["rows"]] == [
+        "rotation_score_status",
+        "rotation_score_status",
+    ]
+    assert [row["providerId"] for row in payload["rows"]] == [
+        "rotation_reviewed",
+        "rotation_review_pending",
+    ]
+    assert payload["errors"][0]["rowIndex"] == 1
+    assert payload["errors"][0]["surfaceId"] == "rotation"
+    assert payload["errors"][0]["fieldKey"] == "rotation_score_status"
+    assert payload["errors"][0]["errorType"] == "validation_error"
+    assert set(payload["errors"][0]["codes"]) >= {
+        "missing_source_authority",
+        "missing_score_contribution",
+        "missing_right_to_display",
+        "degraded_partial_source",
+        "provider_runtime_side_effect",
+        "network_calls_enabled",
+        "market_cache_mutation",
+        "diagnostic_only_required",
+    }
+
+    reviewed_row, fail_closed_row = payload["rows"]
+    assert reviewed_row["sourceAuthorityAllowed"] is True
+    assert reviewed_row["scoreContributionAllowed"] is True
+    assert reviewed_row["authorityGrant"] is True
+    assert reviewed_row["decisionGrade"] is True
+    assert reviewed_row["observationOnly"] is False
+    assert reviewed_row["diagnosticOnly"] is True
+    assert reviewed_row["providerRuntimeCalled"] is False
+    assert reviewed_row["networkCallsEnabled"] is False
+    assert reviewed_row["marketCacheMutation"] is False
+
+    assert fail_closed_row["freshnessState"] == "partial"
+    assert fail_closed_row["isPartial"] is True
+    assert fail_closed_row["sourceAuthorityAllowed"] is False
+    assert fail_closed_row["scoreContributionAllowed"] is False
+    assert fail_closed_row["authorityGrant"] is False
+    assert fail_closed_row["decisionGrade"] is False
+    assert fail_closed_row["observationOnly"] is True
+    assert fail_closed_row["rightToDisplay"] == "unavailable"
+    assert fail_closed_row["diagnosticOnly"] is True
+    assert fail_closed_row["providerRuntimeCalled"] is False
+    assert fail_closed_row["networkCallsEnabled"] is False
+    assert fail_closed_row["marketCacheMutation"] is False
+
+    consumer_projection = build_data_coverage_surface_snapshot(payload["rows"]).to_dict()
+    assert consumer_projection == {
+        "snapshotVersion": "data_coverage_surface_snapshot_v1",
+        "surfaceId": "rotation",
+        "routeId": "/zh/market/rotation-radar",
+        "audience": "consumer",
+        "consumerState": "PARTIAL",
+        "confidencePosture": "PARTIAL",
+        "consumerSummary": "PARTIAL",
+        "asOf": "2026-06-08T09:35:00Z",
+        "rowCount": 2,
+        "availableRowCount": 1,
+        "limitedRowCount": 1,
+        "blockedRowCount": 0,
+        "unavailableRowCount": 0,
+    }
+    serialized_projection = json.dumps(consumer_projection, ensure_ascii=False, sort_keys=True)
+    for forbidden in (
+        "providerId",
+        "providerLabel",
+        "sourceId",
+        "sourceLabel",
+        "sourceType",
+        "sourceTier",
+        "sourceAuthorityAllowed",
+        "scoreContributionAllowed",
+        "authorityGrant",
+        "decisionGrade",
+        "rightToDisplay",
+        "freshnessState",
+        "isPartial",
+        "providerRuntimeCalled",
+        "networkCallsEnabled",
+        "marketCacheMutation",
+        "missing_source_authority",
+    ):
+        assert forbidden not in serialized_projection
+
+    with pytest.raises(DataCoverageMatrixBatchBuildError) as exc_info:
+        build_data_coverage_matrix_batch(rows, raise_on_error=True)
+
+    assert exc_info.value.result.to_dict()["rowCounts"] == payload["rowCounts"]
 
 
 def test_partial_failure_preserves_input_order_and_reports_per_row_errors_without_throwing() -> None:
