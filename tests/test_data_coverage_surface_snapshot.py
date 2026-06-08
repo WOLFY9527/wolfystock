@@ -31,14 +31,29 @@ _FORBIDDEN_CONSUMER_TERMS = (
     "source_authority_allowed",
     "score_contribution_allowed",
     "observationOnly",
+    "authorityGrant",
+    "decisionGrade",
+    "rightToDisplay",
     "reasonCode",
+    "reasonCodes",
     "reason_code",
     "providerId",
     "providerLabel",
     "sourceType",
     "sourceTier",
+    "providerRuntimeCalled",
+    "networkCallsEnabled",
+    "marketCacheMutation",
+    "provider_runtime_called",
+    "network_calls_enabled",
+    "market_cache_mutation",
     "Polygon",
     "Tushare",
+    "cache",
+    "debug",
+    "backend",
+    "options_setup_status",
+    "options_market_structure",
     "authorized_licensed_feed",
     "official_public",
     "fallback_static",
@@ -211,6 +226,65 @@ def test_rotation_degraded_rows_aggregate_to_safe_surface_snapshot() -> None:
         "unavailableRowCount": 0,
     }
     assert payload["consumerState"] in {"INSUFFICIENT", "PAUSED", "UNAVAILABLE"}
+    for forbidden in _FORBIDDEN_CONSUMER_TERMS:
+        assert forbidden not in serialized
+
+
+def test_options_degraded_rows_aggregate_to_safe_surface_snapshot() -> None:
+    snapshot = build_data_coverage_surface_snapshot(
+        [
+            _row(
+                surface_id="options",
+                route_id="/zh/options-lab",
+                field_key="options_setup_status",
+                evidence_family="options_market_structure",
+                freshness_state="fallback",
+                is_fallback=True,
+                right_to_display="limited",
+                as_of="2026-06-08T09:30:00Z",
+                last_updated="2026-06-08T09:31:00Z",
+            ),
+            _row(
+                surface_id="options",
+                route_id="/zh/options-lab",
+                field_key="options_setup_status",
+                evidence_family="options_market_structure",
+                source_authority_allowed=False,
+                score_contribution_allowed=False,
+                authority_grant=False,
+                decision_grade=False,
+                right_to_display="limited",
+                as_of="2026-06-08T09:35:00Z",
+                last_updated="2026-06-08T09:36:00Z",
+            ),
+        ]
+    )
+
+    payload = snapshot.to_dict()
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    consumer_copy = " ".join(
+        str(payload[key])
+        for key in ("consumerState", "confidencePosture", "consumerSummary")
+    )
+
+    assert payload == {
+        "snapshotVersion": DATA_COVERAGE_SURFACE_SNAPSHOT_VERSION,
+        "surfaceId": "options",
+        "routeId": "/zh/options-lab",
+        "audience": "consumer",
+        "consumerState": "INSUFFICIENT",
+        "confidencePosture": "INSUFFICIENT",
+        "consumerSummary": "INSUFFICIENT",
+        "asOf": "2026-06-08T09:35:00Z",
+        "lastUpdated": "2026-06-08T09:36:00Z",
+        "rowCount": 2,
+        "availableRowCount": 0,
+        "limitedRowCount": 0,
+        "blockedRowCount": 2,
+        "unavailableRowCount": 0,
+    }
+    assert payload["consumerState"] in {"PAUSED", "INSUFFICIENT", "UNAVAILABLE"}
+    assert "_" not in consumer_copy
     for forbidden in _FORBIDDEN_CONSUMER_TERMS:
         assert forbidden not in serialized
 
