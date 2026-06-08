@@ -38,6 +38,29 @@ def client(tmp_path):
         yield test_client
 
 
+def _assert_no_forbidden_keys(value: object, forbidden_keys: tuple[str, ...]) -> None:
+    normalized_forbidden = {
+        "".join(ch for ch in key.lower() if ch.isalnum())
+        for key in forbidden_keys
+    }
+    found: list[str] = []
+
+    def walk(node: object, path: str = "$") -> None:
+        if isinstance(node, dict):
+            for key, child in node.items():
+                normalized_key = "".join(ch for ch in str(key).lower() if ch.isalnum())
+                child_path = f"{path}.{key}"
+                if normalized_key in normalized_forbidden:
+                    found.append(child_path)
+                walk(child, child_path)
+        elif isinstance(node, list):
+            for index, child in enumerate(node):
+                walk(child, f"{path}[{index}]")
+
+    walk(value)
+    assert found == []
+
+
 def _service_response_for_api_contract() -> dict:
     result = AnalysisResult(
         code="AAPL",
@@ -334,6 +357,41 @@ def test_sync_analysis_api_preserves_home_evidence_packet_contract(client) -> No
     assert "evidence_export" not in serialized_payload
     assert "redactionPosture" not in serialized_payload
     assert "payloadClass" not in serialized_payload
+    for forbidden_marker in (
+        "researchPacketV1",
+        "researchPacket",
+        "research_packet_v1",
+        "runtimePosture",
+        "dataCoverageRows",
+        '"lanes"',
+    ):
+        assert forbidden_marker not in serialized_payload
+    _assert_no_forbidden_keys(
+        payload,
+        (
+            "researchPacketV1",
+            "researchPacket",
+            "research_packet_v1",
+            "runtimePosture",
+            "dataCoverageRows",
+            "lanes",
+            "laneInternals",
+            "laneDiagnostics",
+            "rawProviderPayload",
+            "rawSourcePayload",
+            "rawCachePayload",
+            "rawLaneInternals",
+            "providerRoute",
+            "cacheDebug",
+            "cacheKey",
+            "reasonCode",
+            "reasonFamilies",
+            "backendTrace",
+            "backendDiagnostics",
+            "internalDiagnostics",
+            "routerInternals",
+        ),
+    )
     packet = report["singleStockEvidencePacket"]
     citation_frame = report["evidenceCitationFrame"]
     provenance_frame = report["sourceProvenanceFrame"]

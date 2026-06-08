@@ -70,6 +70,28 @@ class AnalysisHistoryTestCase(unittest.TestCase):
             analysis_summary="基本面稳健，短期震荡",
         )
 
+    def _assert_no_forbidden_keys(self, value, forbidden_keys: tuple[str, ...]) -> None:
+        normalized_forbidden = {
+            "".join(ch for ch in key.lower() if ch.isalnum())
+            for key in forbidden_keys
+        }
+        found: list[str] = []
+
+        def walk(node, path: str = "$") -> None:
+            if isinstance(node, dict):
+                for key, child in node.items():
+                    normalized_key = "".join(ch for ch in str(key).lower() if ch.isalnum())
+                    child_path = f"{path}.{key}"
+                    if normalized_key in normalized_forbidden:
+                        found.append(child_path)
+                    walk(child, child_path)
+            elif isinstance(node, list):
+                for index, child in enumerate(node):
+                    walk(child, f"{path}[{index}]")
+
+        walk(value)
+        self.assertEqual(found, [])
+
     def _save_history(self, query_id: str) -> int:
         """保存一条测试历史记录并返回主键 ID。"""
         result = self._build_result()
@@ -924,6 +946,43 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertEqual(report.meta.stock_name, "贵州茅台")
         self.assertEqual(report.meta.company_name, "贵州茅台")
         self.assertTrue(report.meta.is_test)
+        payload = report.model_dump(mode="json", by_alias=True, exclude_none=True)
+        serialized_payload = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        for forbidden_marker in (
+            "researchPacketV1",
+            "researchPacket",
+            "research_packet_v1",
+            "runtimePosture",
+            "dataCoverageRows",
+            '"lanes"',
+        ):
+            self.assertNotIn(forbidden_marker, serialized_payload)
+        self._assert_no_forbidden_keys(
+            payload,
+            (
+                "researchPacketV1",
+                "researchPacket",
+                "research_packet_v1",
+                "runtimePosture",
+                "dataCoverageRows",
+                "lanes",
+                "laneInternals",
+                "laneDiagnostics",
+                "rawProviderPayload",
+                "rawSourcePayload",
+                "rawCachePayload",
+                "rawLaneInternals",
+                "providerRoute",
+                "cacheDebug",
+                "cacheKey",
+                "reasonCode",
+                "reasonFamilies",
+                "backendTrace",
+                "backendDiagnostics",
+                "internalDiagnostics",
+                "routerInternals",
+            ),
+        )
 
     def test_clean_test_history_script_deletes_only_flagged_rows(self) -> None:
         self.assertEqual(

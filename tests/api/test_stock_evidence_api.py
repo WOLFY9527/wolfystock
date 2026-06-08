@@ -55,6 +55,29 @@ def _base_payload(symbol: str = "AAPL") -> dict[str, Any]:
     }
 
 
+def _assert_no_forbidden_keys(value: Any, forbidden_keys: tuple[str, ...]) -> None:
+    normalized_forbidden = {
+        "".join(ch for ch in key.lower() if ch.isalnum())
+        for key in forbidden_keys
+    }
+    found: list[str] = []
+
+    def walk(node: Any, path: str = "$") -> None:
+        if isinstance(node, dict):
+            for key, child in node.items():
+                normalized_key = "".join(ch for ch in str(key).lower() if ch.isalnum())
+                child_path = f"{path}.{key}"
+                if normalized_key in normalized_forbidden:
+                    found.append(child_path)
+                walk(child, child_path)
+        elif isinstance(node, list):
+            for index, child in enumerate(node):
+                walk(child, f"{path}[{index}]")
+
+    walk(value)
+    assert found == []
+
+
 def test_stock_evidence_endpoint_serializes_fundamentals_summary(
     monkeypatch,
 ) -> None:
@@ -122,7 +145,24 @@ def test_stock_evidence_endpoint_does_not_fabricate_missing_fundamentals_summary
 
     assert response.status_code == 200
     packet = response.json()["items"][0]["stockEvidencePacket"]
+    assert packet["schemaVersion"] == "stock_evidence_packet_v1"
+    assert packet["symbol"] == "AAPL"
+    assert packet["notInvestmentAdvice"] is True
+    assert packet["observationOnly"] is True
     assert "fundamentalsSummary" not in packet
+    _assert_no_forbidden_keys(
+        packet,
+        (
+            "researchPacketV1",
+            "researchPacket",
+            "research_packet_v1",
+            "runtimePosture",
+            "dataCoverageRows",
+            "lanes",
+            "laneInternals",
+            "laneDiagnostics",
+        ),
+    )
 
 
 def test_stock_evidence_openapi_locks_item_metadata_schema() -> None:
@@ -311,8 +351,27 @@ def test_stock_evidence_endpoint_filters_forbidden_fundamentals_fields(
         "scoreContributionAllowed": False,
         "sourceAuthorityAllowed": False,
         "rawProviderPayload": {"token": "must-not-emit"},
+        "rawSourcePayload": {"provider": "must-not-emit"},
+        "rawCachePayload": {"cacheKey": "must-not-emit"},
+        "rawLaneInternals": {"lane": "must-not-emit"},
         "adminDiagnostics": {"providerRoute": "must-not-emit"},
         "providerRoute": "must-not-emit",
+        "cacheDebug": {"cacheKey": "must-not-emit"},
+        "reasonCode": "must-not-emit",
+        "reasonFamilies": ["must-not-emit"],
+        "backendTrace": "must-not-emit",
+        "debugRef": "must-not-emit",
+        "internalDiagnostics": {"backend": "must-not-emit"},
+        "researchPacketV1": {"raw": "must-not-emit"},
+        "researchPacket": {"raw": "must-not-emit"},
+        "research_packet_v1": {"raw": "must-not-emit"},
+        "runtimePosture": {"authorityGrant": "must-not-emit"},
+        "dataCoverageRows": [{"lane": "must-not-emit"}],
+        "lanes": {"fundamentals": {"status": "must-not-emit"}},
+        "laneInternals": {"fundamentals": "must-not-emit"},
+        "laneDiagnostics": {"fundamentals": "must-not-emit"},
+        "sourceTier": "must-not-emit",
+        "providerAuthority": "must-not-emit",
         "valuationOpinion": "must-not-emit",
         "buyAdvice": "must-not-emit",
         "sellAdvice": "must-not-emit",
@@ -334,8 +393,27 @@ def test_stock_evidence_endpoint_filters_forbidden_fundamentals_fields(
     serialized = json.dumps(summary, sort_keys=True)
     for forbidden_key in (
         "rawProviderPayload",
+        "rawSourcePayload",
+        "rawCachePayload",
+        "rawLaneInternals",
         "adminDiagnostics",
         "providerRoute",
+        "cacheDebug",
+        "reasonCode",
+        "reasonFamilies",
+        "backendTrace",
+        "debugRef",
+        "internalDiagnostics",
+        "researchPacketV1",
+        "researchPacket",
+        "research_packet_v1",
+        "runtimePosture",
+        "dataCoverageRows",
+        "lanes",
+        "laneInternals",
+        "laneDiagnostics",
+        "sourceTier",
+        "providerAuthority",
         "valuationOpinion",
         "buyAdvice",
         "sellAdvice",
