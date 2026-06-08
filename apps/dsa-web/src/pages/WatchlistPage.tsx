@@ -61,6 +61,12 @@ type WatchlistScannerLineageCue = {
   label: string;
   detail: string;
 } | null;
+type WatchlistWorkflowKey = 'discovered' | 'pendingValidation' | 'observing' | 'alertRecorded' | 'needsRefresh';
+type WatchlistWorkflowStep = {
+  key: WatchlistWorkflowKey;
+  label: string;
+  variant: ComponentProps<typeof TerminalChip>['variant'];
+};
 type WatchlistInvestorSignalView = {
   confidenceLabel: string | null;
   freshnessLabel: string | null;
@@ -411,6 +417,65 @@ function formatScannerStatus(item: WatchlistItem): string {
   if (simulationStatus === 'insufficient_history' || status === 'insufficient_history') return '数据不足';
   if (!hasScannerEvidence(item)) return '未扫描';
   return '通过筛选';
+}
+
+function getWorkflowLabel(key: WatchlistWorkflowKey, language: 'zh' | 'en'): string {
+  if (language === 'en') {
+    if (key === 'discovered') return 'Discovered';
+    if (key === 'pendingValidation') return 'Pending validation';
+    if (key === 'observing') return 'Observing';
+    if (key === 'alertRecorded') return 'Alert recorded';
+    return 'Needs refresh';
+  }
+  if (key === 'discovered') return '已发现';
+  if (key === 'pendingValidation') return '待验证';
+  if (key === 'observing') return '观察中';
+  if (key === 'alertRecorded') return '提醒记录';
+  return '需刷新';
+}
+
+function hasAlertRecordedCue(item: WatchlistItem): boolean {
+  const note = normalizeText(item.notes).toLowerCase();
+  return /\b(alert recorded|in-app alert|price alert|watchlist_price_threshold)\b|站内提醒|提醒记录|价格提醒|预警/.test(note);
+}
+
+function buildWatchlistWorkflowSteps(item: WatchlistItem, language: 'zh' | 'en'): WatchlistWorkflowStep[] {
+  const steps: WatchlistWorkflowStep[] = [];
+  const source = normalizeToken(item.source);
+  const scoreState = getScoreDisclosureState(item);
+  const hasScanner = hasScannerEvidence(item);
+  const hasBacktest = hasBacktestEvidence(item);
+  const discovered = source === 'scanner'
+    || source === 'scanner_run'
+    || Boolean(item.scannerRunId || item.scannerRank || getScannerScore(item) !== null);
+  const needsRefresh = scoreState === 'failed'
+    || scoreState === 'unknown'
+    || isStaleIntelligence(item)
+    || (!hasScanner && !hasBacktest);
+  const pendingValidation = needsRefresh
+    || scoreState === 'blocked'
+    || scoreState === 'limitedConfidence'
+    || !hasBacktest;
+  const observing = hasScanner && !needsRefresh;
+  const alertRecorded = hasAlertRecordedCue(item);
+
+  if (discovered) {
+    steps.push({ key: 'discovered', label: getWorkflowLabel('discovered', language), variant: 'neutral' });
+  }
+  if (pendingValidation) {
+    steps.push({ key: 'pendingValidation', label: getWorkflowLabel('pendingValidation', language), variant: 'caution' });
+  }
+  if (observing) {
+    steps.push({ key: 'observing', label: getWorkflowLabel('observing', language), variant: 'info' });
+  }
+  if (alertRecorded) {
+    steps.push({ key: 'alertRecorded', label: getWorkflowLabel('alertRecorded', language), variant: 'neutral' });
+  }
+  if (needsRefresh) {
+    steps.push({ key: 'needsRefresh', label: getWorkflowLabel('needsRefresh', language), variant: 'caution' });
+  }
+
+  return steps.length ? steps : [{ key: 'pendingValidation', label: getWorkflowLabel('pendingValidation', language), variant: 'caution' }];
 }
 
 function formatScannerReason(reason?: string | null, language: 'zh' | 'en' = 'zh'): string | null {
@@ -1672,6 +1737,7 @@ const WatchlistPage: React.FC = () => {
   const activeScannerReason = activeItem ? formatScannerReason(activeScanner?.reason, language) : null;
   const activeInvestorSignal = activeItem ? buildWatchlistInvestorSignalView(activeScanner?.investorSignal, language) : null;
   const activeCatalystExposures = activeItem ? buildWatchlistCatalystExposureView(activeItem.intelligence?.catalystExposures, language) : null;
+  const activeWorkflowSteps = activeItem ? buildWatchlistWorkflowSteps(activeItem, language) : [];
   const activeScannerFailure = activeItem && (activeItem.scoreError || activeScanner?.reason)
     ? sanitizeFailureReason(activeItem.scoreError || activeScanner?.reason || '', '扫描失败')
     : null;
@@ -1928,6 +1994,7 @@ const WatchlistPage: React.FC = () => {
                       : null;
                     const rowObservation = buildObservationSummary(item, language);
                     const rowNextAction = buildNextActionLabel(item, language);
+                    const workflowSteps = buildWatchlistWorkflowSteps(item, language);
                     const rowStateLine = [
                       `${copy.score} ${formatScore(score)}`,
                       typeof avgForward === 'number' ? `${copy.historyPrefix} ${formatPct(avgForward)}` : null,
@@ -2008,6 +2075,16 @@ const WatchlistPage: React.FC = () => {
                                   {batchDisplayStatus.label}
                                 </TerminalChip>
                               ) : null}
+                            </div>
+                            <div
+                              data-testid={`watchlist-row-workflow-${item.symbol}`}
+                              className="flex min-w-0 flex-wrap items-center gap-1.5"
+                              aria-label={language === 'zh' ? `${item.symbol} 研究流程` : `${item.symbol} research workflow`}
+                            >
+                              <span className="text-[11px] text-white/38">{language === 'zh' ? '研究流程' : 'Workflow'}</span>
+                              {workflowSteps.map((step) => (
+                                <TerminalChip key={step.key} variant={step.variant}>{step.label}</TerminalChip>
+                              ))}
                             </div>
                             <p className="truncate text-xs font-mono text-white/55">{rowStateLine || `${copy.score} ${formatScore(score)}`}</p>
                           </div>
@@ -2143,6 +2220,15 @@ const WatchlistPage: React.FC = () => {
                     <TerminalChip variant={activeBacktestStatusLabel === '已回测' ? 'success' : ['回测失败', '行情缺失', '服务暂不可用', '超时'].includes(activeBacktestStatusLabel) ? 'danger' : ['样本不足', '数据缺失'].includes(activeBacktestStatusLabel) ? 'caution' : 'neutral'}>
                       {activeBacktestStatusLabel}
                     </TerminalChip>
+                  </div>
+                  <div
+                    data-testid="watchlist-detail-workflow"
+                    className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5"
+                  >
+                    <span className="text-[11px] text-white/40">{language === 'zh' ? '研究流程' : 'Workflow'}</span>
+                    {activeWorkflowSteps.map((step) => (
+                      <TerminalChip key={step.key} variant={step.variant}>{step.label}</TerminalChip>
+                    ))}
                   </div>
                 </section>
 

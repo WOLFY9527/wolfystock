@@ -621,6 +621,65 @@ describe('WatchlistPage', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/zh/backtest/results/33');
   });
 
+  it('renders derived workflow strips from watchlist item fields without durable or trading wording', async () => {
+    listWatchlistItems.mockResolvedValue({
+      items: [
+        makeItem({
+          id: 30,
+          symbol: 'NVDA',
+          notes: '站内提醒已记录，仅用于观察。',
+        }),
+        makeItem({
+          id: 31,
+          symbol: 'SHOP',
+          source: 'manual',
+          scannerRunId: null,
+          scannerRank: null,
+          scannerScore: null,
+          lastScoredAt: null,
+          scoreSource: null,
+          scoreStatus: 'unknown',
+          themeId: null,
+          universeType: null,
+          intelligence: undefined,
+        }),
+      ],
+    });
+
+    renderWatchlist();
+
+    const observingWorkflow = await screen.findByTestId('watchlist-row-workflow-NVDA');
+    const pendingWorkflow = await screen.findByTestId('watchlist-row-workflow-SHOP');
+
+    expect(observingWorkflow).toHaveTextContent('研究流程');
+    expect(observingWorkflow).toHaveTextContent('已发现');
+    expect(observingWorkflow).toHaveTextContent('观察中');
+    expect(observingWorkflow).toHaveTextContent('提醒记录');
+    expect(observingWorkflow).not.toHaveTextContent('待验证');
+    expect(observingWorkflow).not.toHaveTextContent('需刷新');
+
+    expect(pendingWorkflow).toHaveTextContent('研究流程');
+    expect(pendingWorkflow).toHaveTextContent('待验证');
+    expect(pendingWorkflow).toHaveTextContent('需刷新');
+    expect(pendingWorkflow).not.toHaveTextContent('观察中');
+
+    const detailWorkflow = screen.getByTestId('watchlist-detail-workflow');
+    expect(detailWorkflow).toHaveTextContent('已发现');
+    expect(detailWorkflow).toHaveTextContent('观察中');
+    expect(detailWorkflow).toHaveTextContent('提醒记录');
+
+    fireEvent.click(screen.getByRole('button', { name: '查看详情 SHOP' }));
+
+    expect(detailWorkflow).toHaveTextContent('待验证');
+    expect(detailWorkflow).toHaveTextContent('需刷新');
+    expect(detailWorkflow).not.toHaveTextContent('观察中');
+
+    [observingWorkflow, pendingWorkflow, detailWorkflow].forEach((strip) => {
+      expect(strip).not.toHaveTextContent(/workflow_state|research_completed|invalidated|archived|source_confidence|reasonCode|reasonFamilies|provider|scannerRunId|raw diagnostics|JSON/i);
+      expect(strip).not.toHaveTextContent(/买入|卖出|加仓|减仓|下单|立即交易|止损|止盈|目标价|仓位|guaranteed|best contract|AI recommends you buy|recommend(?:ation)?|buy|sell|stop|target|position/i);
+    });
+  });
+
   it('maps raw scanner and backtest failure statuses to compact Chinese labels', async () => {
     listWatchlistItems.mockResolvedValue({
       items: [
