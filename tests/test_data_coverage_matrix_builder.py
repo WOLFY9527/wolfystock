@@ -16,9 +16,44 @@ from src.services.data_coverage_matrix_builder import (
     resolve_data_coverage_surface_registry_entry,
 )
 from src.services.data_coverage_matrix_batch import build_data_coverage_matrix_batch
-from src.services.data_coverage_matrix_contract import RightToDisplay
+from src.services.data_coverage_matrix_contract import (
+    RightToDisplay,
+    project_consumer_data_coverage,
+)
 from src.services.data_coverage_surface_registry import DATA_COVERAGE_SURFACE_REGISTRY_BY_SURFACE_FIELD
 from src.services.data_coverage_surface_snapshot import build_data_coverage_surface_snapshot
+
+
+_SINGLE_STOCK_FORBIDDEN_CONSUMER_TERMS = (
+    "provider",
+    "providerId",
+    "providerLabel",
+    "source",
+    "sourceId",
+    "sourceLabel",
+    "sourceType",
+    "sourceTier",
+    "cache",
+    "cacheStatus",
+    "cache_key",
+    "debug",
+    "backend",
+    "reasonCode",
+    "reason_code",
+    "rawDiagnostics",
+    "coverageRatio",
+    "coverage_ratio",
+    "sourceAuthorityAllowed",
+    "scoreContributionAllowed",
+    "authorityGrant",
+    "decisionGrade",
+    "rightToDisplay",
+    "consumerBadge",
+    "trustBadge",
+    "trustLabel",
+    "single_stock_summary_status",
+    "single_stock_evidence",
+)
 
 
 def test_market_overview_builder_accepts_registry_entry_and_returns_valid_row() -> None:
@@ -267,6 +302,285 @@ def test_options_adoption_proof_builds_fail_closed_row_batch_and_snapshot() -> N
         "official_public",
     ):
         assert forbidden_consumer_badge_term not in snapshot_serialized
+
+
+@pytest.mark.parametrize(
+    (
+        "metadata_overrides",
+        "expected_issue_codes",
+        "expected_freshness",
+        "expected_right_to_display",
+        "expected_consumer_state",
+        "expected_confidence_posture",
+        "expected_counts",
+    ),
+    [
+        (
+            {"freshnessState": "fresh"},
+            {
+                "missing_source_authority",
+                "missing_score_contribution",
+                "missing_right_to_display",
+                "authority_grant_without_prerequisites",
+                "decision_grade_without_prerequisites",
+            },
+            "fresh",
+            "unavailable",
+            "UNAVAILABLE",
+            "UNAVAILABLE",
+            {
+                "availableRowCount": 0,
+                "limitedRowCount": 0,
+                "blockedRowCount": 0,
+                "unavailableRowCount": 1,
+            },
+        ),
+        (
+            {
+                "freshnessState": "stale",
+                "isStale": True,
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "rightToDisplay": "granted",
+            },
+            {
+                "degraded_stale_source",
+                "authority_grant_without_prerequisites",
+                "decision_grade_without_prerequisites",
+            },
+            "stale",
+            "limited",
+            "DELAYED",
+            "PARTIAL",
+            {
+                "availableRowCount": 0,
+                "limitedRowCount": 1,
+                "blockedRowCount": 0,
+                "unavailableRowCount": 0,
+            },
+        ),
+        (
+            {
+                "freshnessState": "partial",
+                "isPartial": True,
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "rightToDisplay": "granted",
+            },
+            {
+                "degraded_partial_source",
+                "authority_grant_without_prerequisites",
+                "decision_grade_without_prerequisites",
+            },
+            "partial",
+            "limited",
+            "PARTIAL",
+            "PARTIAL",
+            {
+                "availableRowCount": 0,
+                "limitedRowCount": 1,
+                "blockedRowCount": 0,
+                "unavailableRowCount": 0,
+            },
+        ),
+        (
+            {
+                "freshnessState": "fallback",
+                "isFallback": True,
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "rightToDisplay": "granted",
+            },
+            {
+                "degraded_fallback_source",
+                "authority_grant_without_prerequisites",
+                "decision_grade_without_prerequisites",
+            },
+            "fallback",
+            "limited",
+            "PAUSED",
+            "INSUFFICIENT",
+            {
+                "availableRowCount": 0,
+                "limitedRowCount": 0,
+                "blockedRowCount": 1,
+                "unavailableRowCount": 0,
+            },
+        ),
+        (
+            {
+                "freshnessState": "unknown",
+                "sourceAuthorityAllowed": True,
+                "scoreContributionAllowed": True,
+                "rightToDisplay": "granted",
+            },
+            {
+                "unknown_freshness",
+                "authority_grant_without_prerequisites",
+                "decision_grade_without_prerequisites",
+            },
+            "unknown",
+            "limited",
+            "UPDATING",
+            "PARTIAL",
+            {
+                "availableRowCount": 0,
+                "limitedRowCount": 1,
+                "blockedRowCount": 0,
+                "unavailableRowCount": 0,
+            },
+        ),
+    ],
+)
+def test_single_stock_adoption_proof_fails_closed_through_row_batch_snapshot(
+    metadata_overrides: dict[str, object],
+    expected_issue_codes: set[str],
+    expected_freshness: str,
+    expected_right_to_display: str,
+    expected_consumer_state: str,
+    expected_confidence_posture: str,
+    expected_counts: dict[str, int],
+) -> None:
+    metadata = {
+        "surfaceId": "forbidden_override",
+        "routeId": "/should-not-win",
+        "audience": "admin",
+        "fieldKey": "wrong_field",
+        "evidenceFamily": "wrong_family",
+        "providerId": "single_stock_provider_descriptor",
+        "providerLabel": "Single Stock Provider Descriptor",
+        "sourceId": "single_stock_summary_source_descriptor",
+        "sourceLabel": "Single Stock Summary Source Descriptor",
+        "sourceType": "official_public",
+        "sourceTier": "provider_descriptor_only",
+        "asOf": "2026-06-08T09:50:00Z",
+        "authorityGrant": True,
+        "decisionGrade": True,
+        "providerRuntimeCalled": True,
+        "networkCallsEnabled": True,
+        "marketCacheMutation": True,
+        "cacheStatus": "hit",
+        "cache_key": "single_stock_summary_cache_key",
+        "coverageRatio": 1.0,
+        "reasonCode": "backend_single_stock_debug_reason",
+        "rawDiagnostics": {
+            "backend_cache_debug": "do-not-project",
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+        },
+        **metadata_overrides,
+    }
+
+    row_result = build_data_coverage_matrix_row(
+        metadata,
+        surface_id="single_stock",
+        field_key="single_stock_summary_status",
+    )
+    row = row_result.to_dict()
+    issues = {issue.code for issue in row_result.validation.issues}
+
+    assert row_result.validation.is_valid is False
+    assert expected_issue_codes <= issues
+    assert row_result.registry_entry.surface_id == "single_stock"
+    assert row_result.registry_entry.route_id == "/zh"
+    assert row_result.registry_entry.audience.value == "consumer"
+    assert row_result.registry_entry.field_key == "single_stock_summary_status"
+    assert row_result.registry_entry.evidence_family == "single_stock_evidence"
+    assert row_result.raw_contract.provider_id == "single_stock_provider_descriptor"
+    assert row_result.raw_contract.source_id == "single_stock_summary_source_descriptor"
+    assert row_result.raw_contract.provider_runtime_called is True
+    assert row_result.raw_contract.network_calls_enabled is True
+    assert row_result.raw_contract.market_cache_mutation is True
+
+    assert row["surfaceId"] == "single_stock"
+    assert row["routeId"] == "/zh"
+    assert row["audience"] == "consumer"
+    assert row["fieldKey"] == "single_stock_summary_status"
+    assert row["evidenceFamily"] == "single_stock_evidence"
+    assert row["freshnessState"] == expected_freshness
+    assert row["rightToDisplay"] == expected_right_to_display
+    assert row["rightToDisplay"] != "granted"
+    assert row["scoreContributionAllowed"] is False
+    assert row["authorityGrant"] is False
+    assert row["decisionGrade"] is False
+    assert row["observationOnly"] is True
+    assert row["diagnosticOnly"] is True
+    assert row["providerRuntimeCalled"] is False
+    assert row["networkCallsEnabled"] is False
+    assert row["marketCacheMutation"] is False
+    if "sourceAuthorityAllowed" not in metadata_overrides:
+        assert row["sourceAuthorityAllowed"] is False
+
+    batch_result = build_data_coverage_matrix_batch(
+        [
+            {
+                **metadata,
+                "surfaceId": "single_stock",
+                "fieldKey": "single_stock_summary_status",
+            }
+        ]
+    )
+    batch = batch_result.to_dict()
+
+    assert batch["rowCounts"] == {
+        "input": 1,
+        "built": 1,
+        "valid": 0,
+        "invalid": 1,
+        "errors": 1,
+    }
+    assert batch["rows"] == [row]
+    assert batch["guardPosture"] == {
+        "diagnosticOnly": True,
+        "providerRuntimeCalled": False,
+        "networkCallsEnabled": False,
+        "marketCacheMutation": False,
+    }
+    assert set(batch["errors"][0]["codes"]) >= issues
+
+    snapshot = build_data_coverage_surface_snapshot(batch["rows"]).to_dict()
+    projection = project_consumer_data_coverage(row).to_dict()
+    projection_serialized = json.dumps(projection, ensure_ascii=False, sort_keys=True)
+    snapshot_consumer_serialized = json.dumps(
+        {
+            "consumerState": snapshot["consumerState"],
+            "confidencePosture": snapshot["confidencePosture"],
+            "consumerSummary": snapshot["consumerSummary"],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    row_serialized = json.dumps(row, ensure_ascii=False, sort_keys=True)
+
+    assert snapshot["snapshotVersion"] == "data_coverage_surface_snapshot_v1"
+    assert snapshot["surfaceId"] == "single_stock"
+    assert snapshot["routeId"] == "/zh"
+    assert snapshot["audience"] == "consumer"
+    assert snapshot["consumerState"] == expected_consumer_state
+    assert snapshot["confidencePosture"] == expected_confidence_posture
+    assert snapshot["consumerSummary"] == expected_consumer_state
+    assert snapshot["asOf"] == "2026-06-08T09:50:00Z"
+    assert snapshot["rowCount"] == 1
+    for key, expected_count in expected_counts.items():
+        assert snapshot[key] == expected_count
+
+    assert projection["status"] == expected_consumer_state
+    assert projection["asOf"] == "2026-06-08T09:50:00Z"
+    assert "_" not in projection_serialized
+    assert "_" not in snapshot_consumer_serialized
+    for forbidden_term in _SINGLE_STOCK_FORBIDDEN_CONSUMER_TERMS:
+        assert forbidden_term not in projection_serialized
+        assert forbidden_term not in snapshot_consumer_serialized
+
+    for ignored_raw_term in (
+        "cacheStatus",
+        "cache_key",
+        "coverageRatio",
+        "reasonCode",
+        "rawDiagnostics",
+        "backend_cache_debug",
+    ):
+        assert ignored_raw_term not in row_serialized
 
 
 def test_liquidity_builder_lookup_preserves_registry_fields_and_fails_closed_without_explicit_reviews() -> None:
