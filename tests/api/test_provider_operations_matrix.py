@@ -294,6 +294,9 @@ def test_matrix_rows_are_diagnostic_only_and_include_missing_authorized_feeds() 
             "FRED_WRESBAL",
         ],
         "runtimeEvidence": "missing",
+        "coverageThreshold": 1.0,
+        "coverageThresholdPassed": False,
+        "coverageThresholdFailure": True,
     }
     assert {
         "missing_provider_configuration",
