@@ -44,7 +44,8 @@ export type ReportPriceChartFixtureView = {
 export type ReportPriceChartFixtures = Partial<Record<ChartViewKey, ReportPriceChartFixtureView>>;
 
 type AnnotationLine = {
-  labelKey: string;
+  label: string;
+  kind: 'support' | 'resistance' | 'entry' | 'stop' | 'target';
   value: number;
   stroke: string;
 };
@@ -304,14 +305,80 @@ const buildPath = (points: Array<{ x: number; y?: number }>): string => {
   return path.trim();
 };
 
-const resolveAnnotationLines = (decisionPanel?: StandardReportDecisionPanel): AnnotationLine[] => {
+const annotationLabel = (
+  kind: AnnotationLine['kind'],
+  language: 'zh' | 'en',
+): string => {
+  if (language === 'en') {
+    switch (kind) {
+      case 'support':
+        return 'Key price zone';
+      case 'resistance':
+        return 'Upper observation zone';
+      case 'entry':
+        return 'Reference range';
+      case 'stop':
+        return 'Risk boundary';
+      case 'target':
+        return 'Upper observation zone';
+    }
+  }
+
+  switch (kind) {
+    case 'support':
+      return '关键价格区间';
+    case 'resistance':
+      return '上方观察区';
+    case 'entry':
+      return '参考区间';
+    case 'stop':
+      return '风险边界';
+    case 'target':
+      return '上方观察区';
+  }
+};
+
+const resolveAnnotationLines = (
+  decisionPanel: StandardReportDecisionPanel | undefined,
+  language: 'zh' | 'en',
+): AnnotationLine[] => {
   const items: AnnotationLine[] = [
-    { labelKey: 'chart.support', value: decisionPanel?.supportLevel ?? NaN, stroke: 'var(--theme-chart-support)' },
-    { labelKey: 'chart.resistance', value: decisionPanel?.resistanceLevel ?? NaN, stroke: 'var(--theme-chart-resistance)' },
-    { labelKey: 'chart.entry', value: decisionPanel?.idealEntryCenter ?? NaN, stroke: 'var(--theme-chart-entry)' },
-    { labelKey: 'chart.stop', value: decisionPanel?.stopLossLevel ?? NaN, stroke: 'var(--theme-chart-stop)' },
-    { labelKey: 'chart.targetOne', value: decisionPanel?.targetOneLevel ?? NaN, stroke: 'var(--theme-chart-target)' },
-    { labelKey: 'chart.targetTwo', value: decisionPanel?.targetTwoLevel ?? NaN, stroke: 'var(--theme-chart-target-strong)' },
+    {
+      label: annotationLabel('support', language),
+      kind: 'support',
+      value: decisionPanel?.supportLevel ?? NaN,
+      stroke: 'var(--theme-chart-support)',
+    },
+    {
+      label: annotationLabel('resistance', language),
+      kind: 'resistance',
+      value: decisionPanel?.resistanceLevel ?? NaN,
+      stroke: 'var(--theme-chart-resistance)',
+    },
+    {
+      label: annotationLabel('entry', language),
+      kind: 'entry',
+      value: decisionPanel?.idealEntryCenter ?? NaN,
+      stroke: 'var(--theme-chart-entry)',
+    },
+    {
+      label: annotationLabel('stop', language),
+      kind: 'stop',
+      value: decisionPanel?.stopLossLevel ?? NaN,
+      stroke: 'var(--theme-chart-stop)',
+    },
+    {
+      label: annotationLabel('target', language),
+      kind: 'target',
+      value: decisionPanel?.targetOneLevel ?? NaN,
+      stroke: 'var(--theme-chart-target)',
+    },
+    {
+      label: annotationLabel('target', language),
+      kind: 'target',
+      value: decisionPanel?.targetTwoLevel ?? NaN,
+      stroke: 'var(--theme-chart-target-strong)',
+    },
   ];
   return items.filter((item) => isFiniteNumber(item.value));
 };
@@ -517,7 +584,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     : Math.max(visibleData.length - 1, 0);
   const activeBar = visibleData[activeIndex];
 
-  const annotationLines = resolveAnnotationLines(decisionPanel);
+  const annotationLines = resolveAnnotationLines(decisionPanel, language);
   const chartGeometry: ChartGeometry | null = (() => {
     if (size.width <= 0 || size.height <= 0) {
       return null;
@@ -557,7 +624,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
   })();
 
   const values = visibleData.flatMap((item) => [item.low, item.high]);
-  const currentAnnotationLines = resolveAnnotationLines(decisionPanel);
+  const currentAnnotationLines = resolveAnnotationLines(decisionPanel, language);
   currentAnnotationLines.forEach((item) => values.push(item.value));
   const currentAnalysisPrice = decisionPanel?.analysisPrice;
   if (isFiniteNumber(currentAnalysisPrice)) {
@@ -656,13 +723,13 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
   };
 
   const visibleAnnotationLines = annotationLines.filter((line) => {
-    if (line.labelKey === 'chart.support') {
+    if (line.kind === 'support') {
       return indicatorVisibility.support;
     }
-    if (line.labelKey === 'chart.resistance') {
+    if (line.kind === 'resistance') {
       return indicatorVisibility.resistance;
     }
-    if (line.labelKey === 'chart.entry') {
+    if (line.kind === 'entry') {
       return indicatorVisibility.entry;
     }
     return indicatorVisibility.targets;
@@ -805,10 +872,10 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     { label: t('chart.ma5'), color: 'var(--theme-chart-ma5)', key: 'ma5' as IndicatorKey },
     { label: t('chart.ma10'), color: 'var(--theme-chart-ma10)', key: 'ma10' as IndicatorKey },
     { label: t('chart.ma20'), color: 'var(--theme-chart-ma20)', key: 'ma20' as IndicatorKey },
-    { label: t('chart.support'), color: 'var(--theme-chart-support)', key: 'support' as IndicatorKey },
-    { label: t('chart.resistance'), color: 'var(--theme-chart-resistance)', key: 'resistance' as IndicatorKey },
-    { label: t('chart.entry'), color: 'var(--theme-chart-entry)', key: 'entry' as IndicatorKey },
-    { label: t('chart.targetOne'), color: 'var(--theme-chart-target)', key: 'targets' as IndicatorKey },
+    { label: annotationLabel('support', language), color: 'var(--theme-chart-support)', key: 'support' as IndicatorKey },
+    { label: annotationLabel('resistance', language), color: 'var(--theme-chart-resistance)', key: 'resistance' as IndicatorKey },
+    { label: annotationLabel('entry', language), color: 'var(--theme-chart-entry)', key: 'entry' as IndicatorKey },
+    { label: annotationLabel('target', language), color: 'var(--theme-chart-target)', key: 'targets' as IndicatorKey },
   ];
 
   const activeViewConfig = VIEW_CONFIGS.find((item) => item.key === activeView);
@@ -1055,7 +1122,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
                   {visibleAnnotationLines.map((line, index) => {
                     const y = priceY(line.value);
                     return (
-                      <g key={`${line.labelKey}-${line.value}-${index}`}>
+                      <g key={`${line.kind}-${line.value}-${index}`}>
                         <line
                           x1={chartGeometry.plotLeft}
                           x2={chartGeometry.plotRight}
@@ -1081,7 +1148,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
                           fontSize={10.5}
                           fill={line.stroke}
                         >
-                          {`${t(line.labelKey)} ${formatAxisPrice(line.value)}`}
+                          {`${line.label} ${formatAxisPrice(line.value)}`}
                         </text>
                       </g>
                     );

@@ -2,7 +2,8 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StandardReportPanel } from '../StandardReportPanel';
 import type { AnalysisReport } from '../../../types/analysis';
-import { previewChartFixtures } from '../../../dev/reportPreviewFixture';
+import { previewChartFixtures, previewReport } from '../../../dev/reportPreviewFixture';
+import { normalizeFrontendReportContract } from '../../../api/reportNormalizer';
 
 const forbiddenConsumerPanelPattern =
   /理想买入点|次优买入点|止损位|目标位|目标一区|目标二区|仓位建议|Ideal entry|Secondary entry|Stop loss|Target 1|Target 2|Position sizing/i;
@@ -360,6 +361,27 @@ describe('StandardReportPanel', () => {
     expect(panel).toHaveTextContent('关键价格区间');
     expect(panel).toHaveTextContent('风险边界');
     expect(panel).toHaveTextContent('上方观察区');
+    expect(panel).not.toHaveTextContent(forbiddenConsumerPanelPattern);
+  });
+
+  it('keeps the default preview fixture on observation-only labels in the report DOM', async () => {
+    render(
+      <StandardReportPanel
+        report={normalizeFrontendReportContract(previewReport)}
+        chartFixtures={previewChartFixtures}
+      />,
+    );
+
+    const panel = screen.getByTestId('standard-report-panel');
+    await waitFor(() => {
+      expect(screen.getAllByText('会话指标').length).toBeGreaterThan(0);
+    });
+
+    expect(panel).toHaveTextContent('关键价格区间');
+    expect(panel).toHaveTextContent('参考区间');
+    expect(panel).toHaveTextContent('风险边界');
+    expect(panel).toHaveTextContent('上方观察区');
+    expect(panel).toHaveTextContent('继续跟踪');
     expect(panel).not.toHaveTextContent(forbiddenConsumerPanelPattern);
   });
 
