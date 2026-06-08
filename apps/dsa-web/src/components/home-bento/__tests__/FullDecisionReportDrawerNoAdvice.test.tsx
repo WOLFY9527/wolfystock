@@ -140,6 +140,7 @@ function buildUnsafeReportFixture(): AnalysisReport {
 describe('FullDecisionReportDrawer no-advice guard', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('maps action fields to observation language and hides raw diagnostic fields', () => {
@@ -216,5 +217,55 @@ describe('FullDecisionReportDrawer no-advice guard', () => {
     expect(writeText.mock.calls[0]?.[0]).toContain('风险边界');
     expect(writeText.mock.calls[0]?.[0]).toContain('关键价格区间');
     expect(writeText.mock.calls[0]?.[0]).not.toMatch(forbiddenConsumerReportPattern);
+  });
+
+  it('downloads the same consumer-safe no-advice markdown report text', async () => {
+    let exportedBlob: Blob | undefined;
+    const createObjectURL = vi.fn((blob: Blob) => {
+      exportedBlob = blob;
+      return 'blob:full-report-markdown';
+    });
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+
+    render(
+      <FullDecisionReportDrawer
+        dashboard={{
+          ticker: 'ORCL',
+          decision: {
+            company: 'Oracle',
+            heroValue: '74',
+            confidenceValue: '中',
+            signalLabel: '买入',
+            scoreValue: '上行后卖出',
+            summary: '建议买入，目标价看 133.50。',
+            reasonBody: '价格仍需继续跟踪。',
+          },
+        }}
+        isOpen
+        onClose={() => undefined}
+        report={buildUnsafeReportFixture()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '导出 Markdown' }));
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(exportedBlob).toBeInstanceOf(Blob);
+
+    const markdown = await exportedBlob?.text();
+
+    expect(markdown).toContain('研究包完整度');
+    expect(markdown).toContain('参考区间');
+    expect(markdown).toContain('上方观察区');
+    expect(markdown).toContain('风险边界');
+    expect(markdown).toContain('关键价格区间');
+    expect(markdown).not.toMatch(forbiddenConsumerReportPattern);
+    expect(markdown).not.toMatch(/raw evidence|raw payload|provider|debug|cache|buy|sell|target|stop|position[- ]?sizing/i);
   });
 });
