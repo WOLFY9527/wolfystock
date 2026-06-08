@@ -141,39 +141,155 @@ def test_market_overview_adoption_proof_builds_fail_closed_row_batch_and_snapsho
     }
 
 
-def test_liquidity_builder_lookup_preserves_registry_fields_and_fails_closed_without_display_review() -> None:
+def test_liquidity_builder_lookup_preserves_registry_fields_and_fails_closed_without_explicit_reviews() -> None:
+    metadata = {
+        "surfaceId": "forbidden_override",
+        "routeId": "/should-not-win",
+        "audience": "admin",
+        "fieldKey": "wrong_field",
+        "evidenceFamily": "wrong_family",
+        "providerId": "liquidity_provider_descriptor",
+        "providerLabel": "Liquidity Provider Descriptor",
+        "sourceId": "liquidity_score_source_descriptor",
+        "sourceLabel": "Liquidity Score Source Descriptor",
+        "sourceType": "licensed_feed",
+        "sourceTier": "authorized_partner",
+        "freshnessState": "fresh",
+        "asOf": "2026-06-08T09:30:00Z",
+        "lastUpdated": "2026-06-08T09:31:00Z",
+    }
     result = build_data_coverage_matrix_row(
-        {
-            "surfaceId": "forbidden_override",
-            "routeId": "/should-not-win",
-            "fieldKey": "wrong_field",
-            "evidenceFamily": "wrong_family",
-            "providerId": "akshare_liquidity",
-            "providerLabel": "AKShare",
-            "sourceId": "cn_liquidity_feed",
-            "sourceLabel": "CN Liquidity Feed",
-            "sourceType": "licensed_feed",
-            "sourceTier": "authorized_partner",
-            "freshnessState": "fresh",
-            "sourceAuthorityAllowed": True,
-            "scoreContributionAllowed": True,
-            "authorityGrant": True,
-            "decisionGrade": True,
-        },
+        metadata,
         surface_id="liquidity",
         field_key="liquidity_score_status",
     )
 
+    row = result.to_dict()
     issues = {issue.code for issue in result.validation.issues}
 
-    assert issues >= {"missing_right_to_display", "authority_grant_without_prerequisites", "decision_grade_without_prerequisites"}
+    assert issues >= {
+        "missing_source_authority",
+        "missing_score_contribution",
+        "missing_right_to_display",
+    }
+    assert result.registry_entry.surface_id == "liquidity"
+    assert result.registry_entry.route_id == "/zh/market/liquidity-monitor"
+    assert result.registry_entry.audience.value == "consumer"
+    assert result.registry_entry.field_key == "liquidity_score_status"
+    assert result.registry_entry.evidence_family == "liquidity_monitor"
     assert result.normalized_contract.surface_id == "liquidity"
     assert result.normalized_contract.route_id == "/zh/market/liquidity-monitor"
+    assert result.normalized_contract.audience == "consumer"
+    assert result.normalized_contract.field_key == "liquidity_score_status"
+    assert result.normalized_contract.evidence_family == "liquidity_monitor"
+    assert result.normalized_contract.provider_id == "liquidity_provider_descriptor"
+    assert result.normalized_contract.source_id == "liquidity_score_source_descriptor"
+    assert result.normalized_contract.source_authority_allowed is False
     assert result.normalized_contract.right_to_display is RightToDisplay.UNAVAILABLE
     assert result.normalized_contract.score_contribution_allowed is False
     assert result.normalized_contract.authority_grant is False
     assert result.normalized_contract.decision_grade is False
     assert result.normalized_contract.observation_only is True
+    assert row["surfaceId"] == "liquidity"
+    assert row["routeId"] == "/zh/market/liquidity-monitor"
+    assert row["audience"] == "consumer"
+    assert row["fieldKey"] == "liquidity_score_status"
+    assert row["evidenceFamily"] == "liquidity_monitor"
+    assert row["sourceAuthorityAllowed"] is False
+    assert row["scoreContributionAllowed"] is False
+    assert row["authorityGrant"] is False
+    assert row["decisionGrade"] is False
+    assert row["observationOnly"] is True
+    assert row["rightToDisplay"] == "unavailable"
+    assert row["diagnosticOnly"] is True
+    assert row["providerRuntimeCalled"] is False
+    assert row["networkCallsEnabled"] is False
+    assert row["marketCacheMutation"] is False
+
+    batch = build_data_coverage_matrix_batch(
+        [
+            {
+                **metadata,
+                "surfaceId": "liquidity",
+                "fieldKey": "liquidity_score_status",
+            }
+        ]
+    ).to_dict()
+
+    assert batch["rowCounts"] == {
+        "input": 1,
+        "built": 1,
+        "valid": 0,
+        "invalid": 1,
+        "errors": 1,
+    }
+    assert batch["rows"] == [row]
+    assert batch["guardPosture"] == {
+        "diagnosticOnly": True,
+        "providerRuntimeCalled": False,
+        "networkCallsEnabled": False,
+        "marketCacheMutation": False,
+    }
+    assert set(batch["errors"][0]["codes"]) >= issues
+
+
+@pytest.mark.parametrize(
+    ("metadata", "issue_code", "expected_right_to_display"),
+    [
+        ({"freshnessState": "fallback", "isFallback": True}, "degraded_fallback_source", "limited"),
+        ({"freshnessState": "stale", "isStale": True}, "degraded_stale_source", "limited"),
+        ({"freshnessState": "partial", "isPartial": True}, "degraded_partial_source", "limited"),
+        ({"freshnessState": "synthetic", "isSynthetic": True}, "degraded_synthetic_source", "unavailable"),
+        ({"freshnessState": "unavailable", "isUnavailable": True}, "degraded_unavailable_source", "unavailable"),
+        ({"freshnessState": "unknown"}, "unknown_freshness", "limited"),
+    ],
+)
+def test_liquidity_degraded_or_unknown_states_cannot_grant_score_decision_authority_or_display(
+    metadata: dict[str, object],
+    issue_code: str,
+    expected_right_to_display: str,
+) -> None:
+    result = build_data_coverage_matrix_row(
+        {
+            "providerId": "liquidity_provider_descriptor",
+            "providerLabel": "Liquidity Provider Descriptor",
+            "sourceId": "liquidity_score_source_descriptor",
+            "sourceLabel": "Liquidity Score Source Descriptor",
+            "sourceType": "licensed_feed",
+            "sourceTier": "authorized_partner",
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "authorityGrant": True,
+            "decisionGrade": True,
+            "rightToDisplay": "granted",
+            **metadata,
+        },
+        surface_id="liquidity",
+        field_key="liquidity_score_status",
+    )
+
+    row = result.to_dict()
+    issues = {issue.code for issue in result.validation.issues}
+
+    assert result.validation.is_valid is False
+    assert issue_code in issues
+    assert "authority_grant_without_prerequisites" in issues
+    assert "decision_grade_without_prerequisites" in issues
+    assert row["surfaceId"] == "liquidity"
+    assert row["routeId"] == "/zh/market/liquidity-monitor"
+    assert row["audience"] == "consumer"
+    assert row["fieldKey"] == "liquidity_score_status"
+    assert row["evidenceFamily"] == "liquidity_monitor"
+    assert row["rightToDisplay"] == expected_right_to_display
+    assert row["rightToDisplay"] != "granted"
+    assert row["scoreContributionAllowed"] is False
+    assert row["authorityGrant"] is False
+    assert row["decisionGrade"] is False
+    assert row["observationOnly"] is True
+    assert row["diagnosticOnly"] is True
+    assert row["providerRuntimeCalled"] is False
+    assert row["networkCallsEnabled"] is False
+    assert row["marketCacheMutation"] is False
 
 
 def test_scanner_builder_lookup_fails_closed_when_score_posture_is_missing() -> None:

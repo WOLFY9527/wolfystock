@@ -146,12 +146,21 @@ def test_liquidity_fallback_row_pauses_surface_scoring() -> None:
         ]
     )
 
-    assert snapshot.consumer_state.value == "PAUSED"
-    assert snapshot.confidence_posture.value == "INSUFFICIENT"
-    assert snapshot.row_count == 1
-    assert snapshot.blocked_row_count == 1
-    assert snapshot.limited_row_count == 0
-    assert snapshot.unavailable_row_count == 0
+    assert snapshot.to_dict() == {
+        "snapshotVersion": DATA_COVERAGE_SURFACE_SNAPSHOT_VERSION,
+        "surfaceId": "liquidity",
+        "routeId": "/zh/market/liquidity-monitor",
+        "audience": "consumer",
+        "consumerState": "PAUSED",
+        "confidencePosture": "INSUFFICIENT",
+        "consumerSummary": "PAUSED",
+        "asOf": "2026-06-08T09:30:00Z",
+        "rowCount": 1,
+        "availableRowCount": 0,
+        "limitedRowCount": 0,
+        "blockedRowCount": 1,
+        "unavailableRowCount": 0,
+    }
 
 
 def test_scanner_insufficient_row_fails_closed_for_surface_snapshot() -> None:
