@@ -940,6 +940,71 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertIn("candidateSourceProvenanceFrame", detail["shortlist"][0])
         self.assertEqual(detail["shortlist"][0]["candidateSourceProvenanceFrame"]["contractVersion"], "source_provenance_v1")
 
+    def test_run_scan_documents_cn_empty_after_universe_filters_before_score_gates(self) -> None:
+        data_manager = FakeScannerDataManager()
+        data_manager.snapshot = data_manager.snapshot.copy()
+        data_manager.snapshot["amount"] = 1.0
+        data_manager.snapshot["volume"] = 1_000
+        data_manager.snapshot["turnover_rate"] = 0.1
+        service = MarketScannerService(self.db, data_manager=data_manager)
+
+        with patch.object(service, "_apply_base_scores", wraps=service._apply_base_scores) as apply_scores:
+            with patch.object(
+                service,
+                "_apply_score_caps_and_explainability",
+                wraps=service._apply_score_caps_and_explainability,
+            ) as apply_source_confidence_caps:
+                with patch.object(service, "_prepare_shortlist", wraps=service._prepare_shortlist) as prepare_shortlist:
+                    with self.assertRaisesRegex(ValueError, "扫描宇宙为空"):
+                        service.run_scan(
+                            market="cn",
+                            profile="cn_preopen_v1",
+                            shortlist_size=3,
+                            universe_limit=50,
+                            detail_limit=10,
+                        )
+
+        self.assertEqual(data_manager.daily_history_calls, [])
+        apply_scores.assert_not_called()
+        apply_source_confidence_caps.assert_not_called()
+        prepare_shortlist.assert_not_called()
+
+    def test_run_scan_documents_us_empty_after_accepted_symbol_local_filters_before_scoring(self) -> None:
+        seed_us_local_history(self.stock_repo)
+        data_manager = FakeUsScannerDataManager()
+        service = MarketScannerService(self.db, data_manager=data_manager)
+        universe_selection = service._resolve_universe_selection(
+            market="us",
+            universe_type="symbols",
+            symbols=["SOFI"],
+        )
+
+        self.assertEqual(universe_selection["accepted_symbols"], ["SOFI"])
+        self.assertEqual(universe_selection["accepted_symbols_count"], 1)
+
+        with patch.object(service, "_apply_us_scores", wraps=service._apply_us_scores) as apply_scores:
+            with patch.object(
+                service,
+                "_apply_score_caps_and_explainability",
+                wraps=service._apply_score_caps_and_explainability,
+            ) as apply_source_confidence_caps:
+                with patch.object(service, "_prepare_shortlist", wraps=service._prepare_shortlist) as prepare_shortlist:
+                    with self.assertRaisesRegex(ValueError, "扫描宇宙为空"):
+                        service.run_scan(
+                            market="us",
+                            profile="us_preopen_v1",
+                            shortlist_size=3,
+                            universe_limit=50,
+                            detail_limit=10,
+                            universe_type="symbols",
+                            symbols=["SOFI"],
+                        )
+
+        self.assertEqual(data_manager.realtime_quote_calls, [])
+        apply_scores.assert_not_called()
+        apply_source_confidence_caps.assert_not_called()
+        prepare_shortlist.assert_not_called()
+
     def test_get_run_detail_keeps_mixed_quality_shortlist_authority_fail_closed(self) -> None:
         def candidate_with_source_state(
             *,
@@ -1876,6 +1941,50 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["headline"], result["headline"])
         self.assertEqual(detail["shortlist"][0]["symbol"], "600001")
         self.assertTrue(detail["shortlist"][0]["ai_interpretation"]["available"])
+
+    def test_finalize_completed_scan_documents_shortlist_cap_keeps_evaluated_candidates_non_empty(self) -> None:
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeScannerDataManager(),
+            ai_interpretation_service=FakeScannerAiService(),
+        )
+        profile = get_scanner_profile(market="cn", profile="cn_preopen_v1")
+        evaluated_candidates = [
+            self._candidate_payload("600001", "算力龙头", 0, 86.2, "2026-04-15"),
+            self._candidate_payload("600002", "机器人核心", 0, 79.5, "2026-04-15"),
+        ]
+
+        result = service._finalize_completed_scan(
+            profile_config=profile,
+            run_started_at=datetime.fromisoformat("2026-04-16T08:40:00"),
+            run_completed_at=datetime.fromisoformat("2026-04-16T08:41:15"),
+            scope="user",
+            owner_id=service._resolve_persisted_owner_id(scope="user"),
+            resolved_shortlist_size=1,
+            universe_size=2,
+            preselected_size=2,
+            evaluated_candidates=evaluated_candidates,
+            source_summary="scanner=test",
+            universe_notes=["note"],
+            scoring_notes=["score-note"],
+            diagnostics={
+                "market": "cn",
+                "profile": profile.key,
+                "profile_label": profile.label,
+            },
+        )
+
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["evaluated_size"], 2)
+        self.assertEqual(result["shortlist_size"], 1)
+        self.assertEqual(len(result["shortlist"]), 1)
+        self.assertEqual(result["summary"]["evaluated_count"], 2)
+        self.assertEqual(result["summary"]["selected_count"], 1)
+        self.assertEqual(result["summary"]["rejected_count"], 1)
+        self.assertEqual(
+            [(item["symbol"], item["status"]) for item in result["candidates"]],
+            [("600001", "selected"), ("600002", "rejected")],
+        )
 
     def test_run_scan_ai_interpretation_remains_additive_to_ranking(self) -> None:
         baseline_service = MarketScannerService(

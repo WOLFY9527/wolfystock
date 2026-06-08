@@ -252,6 +252,41 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertEqual(status["profile"], "us_preopen_v1")
         self.assertEqual(status["today_watchlist"]["id"], detail["id"])
 
+    def test_manual_us_empty_run_persists_only_coarse_empty_reason_after_local_filters(self) -> None:
+        stock_repo = StockRepository(self.db)
+        seed_us_local_history(stock_repo)
+        data_manager = FakeUsScannerDataManager()
+        us_scanner_service = MarketScannerService(self.db, data_manager=data_manager)
+        ops_service = MarketScannerOperationsService(
+            scanner_service=us_scanner_service,
+            config=_make_config(scanner_notification_enabled=False),
+            notifier_factory=lambda: FakeNotifier(available=False),
+        )
+
+        detail = ops_service.run_manual_scan(
+            market="us",
+            profile="us_preopen_v1",
+            universe_type="symbols",
+            symbols=["SOFI"],
+            notify=False,
+        )
+
+        self.assertEqual(detail["status"], "empty")
+        self.assertEqual(detail["shortlist"], [])
+        self.assertEqual(detail["source_summary"], "scanner=empty")
+        self.assertEqual(detail["diagnostics"]["empty_reason"], "扫描宇宙为空，无法生成候选名单")
+        self.assertEqual(set(detail["diagnostics"]), {"empty_reason", "operation"})
+        self.assertNotIn("coverage_summary", detail["diagnostics"])
+        self.assertNotIn("candidate_diagnostics", detail["diagnostics"])
+        self.assertNotIn("universe_selection", detail["diagnostics"])
+        self.assertEqual(detail["accepted_symbols_count"], 0)
+        self.assertEqual(data_manager.realtime_quote_calls, [])
+
+        persisted = us_scanner_service.get_run_detail(detail["id"])
+        assert persisted is not None
+        self.assertEqual(persisted["status"], "empty")
+        self.assertEqual(persisted["diagnostics"], detail["diagnostics"])
+
     def test_manual_scan_records_scanner_run_observability_for_admin_logs(self) -> None:
         ops_service = MarketScannerOperationsService(
             scanner_service=self.scanner_service,

@@ -79,9 +79,45 @@ def test_scanner_run_response_accepts_additive_cn_blocked_scanner_context_frame(
     assert response.scannerContextFrame["universePolicy"]["type"] == "default"
 
 
-def test_scanner_run_response_accepts_additive_candidate_evidence_and_readiness_fields() -> None:
+def test_scanner_run_response_preserves_current_coarse_empty_reason_without_evidence_detail() -> None:
     response = ScannerRunDetailResponse(
         id=3,
+        market="us",
+        profile="us_preopen_v1",
+        status="empty",
+        universe_name="us_liquid",
+        shortlist_size=0,
+        universe_size=0,
+        preselected_size=0,
+        evaluated_size=0,
+        source_summary="scanner=empty",
+        diagnostics={
+            "empty_reason": "扫描宇宙为空，无法生成候选名单",
+            "operation": {
+                "trigger_mode": "manual",
+                "request_source": "api",
+                "watchlist_date": "2026-06-09",
+            },
+        },
+    )
+
+    serialized = response.model_dump()
+
+    assert serialized["status"] == "empty"
+    assert serialized["shortlist"] == []
+    assert serialized["selected"] == []
+    assert serialized["candidates"] == []
+    assert serialized["diagnostics"]["empty_reason"] == "扫描宇宙为空，无法生成候选名单"
+    assert set(serialized["diagnostics"]) == {"empty_reason", "operation"}
+    assert "coverage_summary" not in serialized["diagnostics"]
+    assert "candidate_diagnostics" not in serialized["diagnostics"]
+    assert "universe_selection" not in serialized["diagnostics"]
+    assert serialized["accepted_symbols_count"] == 0
+
+
+def test_scanner_run_response_accepts_additive_candidate_evidence_and_readiness_fields() -> None:
+    response = ScannerRunDetailResponse(
+        id=4,
         market="us",
         profile="us_preopen_v1",
         status="completed",
@@ -214,7 +250,7 @@ def test_scanner_run_response_accepts_additive_candidate_evidence_and_readiness_
 
 def test_scanner_run_response_locks_score_explainability_metadata_without_score_order_drift() -> None:
     response = ScannerRunDetailResponse(
-        id=4,
+        id=5,
         market="cn",
         profile="cn_preopen_v1",
         status="completed",
