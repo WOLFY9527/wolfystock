@@ -2,6 +2,8 @@
 
 Status: observe-only readiness packet for Backtest + Factor Lab metadata.
 
+Fixture catalog: [Backtest Factor Lab Readiness Fixtures](./factor-lab-readiness-fixtures.md)
+
 This contract defines a pure helper that aggregates caller-supplied metadata
 into a research-readiness packet. It does not run any engine, provider, cache,
 DB, API, frontend, or network path, and it does not change stored backtest
