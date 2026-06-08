@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, waitForElementToBeRem
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { analysisApi } from '../../api/analysis';
+import { marketApi } from '../../api/market';
 import { createApiError, createParsedApiError } from '../../api/error';
 import { historyApi } from '../../api/history';
 import { normalizeFrontendReportContract } from '../../api/reportNormalizer';
@@ -59,6 +60,13 @@ vi.mock('../../api/analysis', async () => {
     },
   };
 });
+
+vi.mock('../../api/market', () => ({
+  marketApi: {
+    getMarketBriefing: vi.fn(),
+  },
+  normalizeMarketBriefingConsumerCopy: <T,>(value: T) => value,
+}));
 
 vi.mock('../../hooks/useTaskStream', () => ({
   useTaskStream: vi.fn(() => ({
@@ -348,6 +356,24 @@ describe('HomeSurfacePage', () => {
     vi.clearAllMocks();
     window.localStorage.clear();
     useStockPoolStore.getState().resetDashboardState();
+    vi.mocked(marketApi.getMarketBriefing).mockResolvedValue({
+      source: 'computed',
+      sourceLabel: '公开市场摘要',
+      updatedAt: '2026-06-08T08:00:00Z',
+      asOf: '2026-06-08T08:00:00Z',
+      freshness: 'fresh',
+      isFallback: false,
+      isReliable: true,
+      items: [
+        {
+          title: '市场广度改善',
+          message: '主要宽度与资金线索继续支持观察。',
+          severity: 'positive',
+          category: 'risk',
+          confidence: 0.8,
+        },
+      ],
+    });
     vi.mocked(historyApi.getList).mockResolvedValue({
       total: 3,
       page: 1,
@@ -391,12 +417,12 @@ describe('HomeSurfacePage', () => {
     </MemoryRouter>,
   );
 
-  it('renders the guest homepage when the current surface role is guest', () => {
+  it('renders the guest homepage when the current surface role is guest', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
     renderSurface();
     const guestSurface = screen.getByTestId('guest-home-clean-search');
     const guestCommandSurface = screen.getByTestId('guest-home-command-surface');
-    const guestCapabilityStrip = screen.getByTestId('guest-home-capability-strip');
+    const guestMarketPreviewStrip = await screen.findByTestId('guest-home-market-preview-strip');
     const guestTrustStrip = screen.getByTestId('guest-home-trust-strip');
     const guestPreviewStrip = screen.getByTestId('guest-home-preview-strip');
     expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
@@ -404,23 +430,24 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByRole('heading', { name: 'WolfyStock 研究控制台' })).toBeInTheDocument();
     expect(guestCommandSurface).toBeInTheDocument();
     expect(guestCommandSurface).toHaveClass('rounded-[12px]');
-    expect(guestCapabilityStrip).toBeInTheDocument();
-    expect(guestCapabilityStrip).toHaveClass('rounded-[10px]', 'bg-[var(--wolfy-surface-input)]');
+    expect(guestMarketPreviewStrip).toBeInTheDocument();
+    expect(guestMarketPreviewStrip).toHaveClass('rounded-[10px]', 'bg-[var(--wolfy-surface-input)]');
     expect(screen.getByText('WolfyStock 是面向独立研究者与自驱投资者的股票研究工作区。你可以先查看单个标的预览，登录后再保存报告、回看历史，并继续进入组合或扫描工作台。')).toBeInTheDocument();
-    expect(guestCapabilityStrip).toHaveTextContent('登录后继续');
-    expect(guestCapabilityStrip).toHaveTextContent('保存报告');
-    expect(guestCapabilityStrip).toHaveTextContent('回看历史');
+    expect(guestMarketPreviewStrip).toHaveTextContent('当前市场观察');
+    expect(guestMarketPreviewStrip).toHaveTextContent('公开市场观察已准备');
+    expect(guestMarketPreviewStrip).toHaveTextContent('市场广度改善');
     expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/login?mode=create&redirect=%2F');
     expect(guestTrustStrip).toHaveClass('rounded-[12px]');
-    expect(guestTrustStrip).toHaveTextContent('不等于买卖建议');
+    expect(guestTrustStrip).toHaveTextContent('安全下一步');
     expect(guestPreviewStrip).toHaveClass('rounded-[12px]');
-    expect(guestPreviewStrip).toHaveTextContent('登录后下一步');
+    expect(guestPreviewStrip).toHaveTextContent('登录后可用');
     expect(guestPreviewStrip).toHaveTextContent('回到上次研究现场');
     expect(guestSurface).not.toHaveTextContent('WolfyStock 分析面板');
     expect(guestSurface.textContent).not.toMatch(GUEST_HOME_FORBIDDEN_COPY_PATTERN);
+    expect(guestSurface.textContent).not.toMatch(/\bNVDA\b|NVIDIA|TSLA|Tesla/i);
   });
 
-  it('keeps the English guest value proposition and sign-in next step visible', () => {
+  it('keeps the English guest value proposition and sign-in next step visible', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: true });
     const originalPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     window.history.replaceState(window.history.state, '', '/en');
@@ -431,12 +458,11 @@ describe('HomeSurfacePage', () => {
       const guestSurface = screen.getByTestId('guest-home-clean-search');
       expect(screen.getByRole('heading', { name: 'WolfyStock Research Console' })).toBeInTheDocument();
       expect(screen.getByText('WolfyStock is a stock research workspace for self-directed investors and research-oriented users. Start with one ticker preview now, then sign in to save reports, reopen history, and continue into portfolio or scanner workflows.')).toBeInTheDocument();
-      expect(screen.getByTestId('guest-home-capability-strip')).toHaveTextContent('Continue after sign-in');
-      expect(screen.getByTestId('guest-home-capability-strip')).toHaveTextContent('Saved reports');
-      expect(screen.getByTestId('guest-home-capability-strip')).toHaveTextContent('Saved history');
-      expect(screen.getByTestId('guest-home-preview-strip')).toHaveTextContent('What happens after sign-in');
+      expect(await screen.findByText('Public market observation ready')).toBeInTheDocument();
+      expect(screen.getByTestId('guest-home-market-preview-strip')).toHaveTextContent('Current market observation');
+      expect(screen.getByTestId('guest-home-preview-strip')).toHaveTextContent('Available after sign-in');
       expect(screen.getByTestId('guest-home-preview-strip')).toHaveTextContent('reopen the last research context');
-      expect(screen.getByTestId('guest-home-trust-strip')).toHaveTextContent('not a trading instruction');
+      expect(screen.getByTestId('guest-home-trust-strip')).toHaveTextContent('Safe next step');
       expect(screen.getByRole('link', { name: 'Create free account' })).toHaveAttribute('href', '/login?mode=create&redirect=%2F');
       expect(guestSurface.textContent).not.toMatch(GUEST_HOME_FORBIDDEN_COPY_PATTERN);
     } finally {

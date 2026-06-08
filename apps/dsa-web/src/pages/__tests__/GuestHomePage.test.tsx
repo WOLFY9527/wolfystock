@@ -4,8 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { UiPreferencesProvider } from '../../contexts/UiPreferencesContext';
 import GuestHomePage from '../GuestHomePage';
 
-const { previewMock, languageState, useAuthMock } = vi.hoisted(() => ({
+const { previewMock, marketBriefingMock, languageState, useAuthMock } = vi.hoisted(() => ({
   previewMock: vi.fn(),
+  marketBriefingMock: vi.fn(),
   languageState: { value: 'zh' as 'zh' | 'en' },
   useAuthMock: vi.fn(),
 }));
@@ -14,6 +15,13 @@ vi.mock('../../api/publicAnalysis', () => ({
   publicAnalysisApi: {
     preview: (...args: unknown[]) => previewMock(...args),
   },
+}));
+
+vi.mock('../../api/market', () => ({
+  marketApi: {
+    getMarketBriefing: (...args: unknown[]) => marketBriefingMock(...args),
+  },
+  normalizeMarketBriefingConsumerCopy: <T,>(value: T) => value,
 }));
 
 vi.mock('../../contexts/UiLanguageContext', () => ({
@@ -47,6 +55,31 @@ describe('GuestHomePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     languageState.value = 'zh';
+    marketBriefingMock.mockResolvedValue({
+      source: 'computed',
+      sourceLabel: '公开市场摘要',
+      updatedAt: '2026-06-08T08:00:00Z',
+      asOf: '2026-06-08T08:00:00Z',
+      freshness: 'fresh',
+      isFallback: false,
+      isReliable: true,
+      items: [
+        {
+          title: '市场广度改善',
+          message: '主要宽度与资金线索继续支持观察。',
+          severity: 'positive',
+          category: 'risk',
+          confidence: 0.8,
+        },
+        {
+          title: '流动性保持稳定',
+          message: '当前更适合先看结构，再决定是否继续深入。',
+          severity: 'neutral',
+          category: 'liquidity',
+          confidence: 0.72,
+        },
+      ],
+    });
     useAuthMock.mockReturnValue({
       loggedIn: false,
       isLoading: false,
@@ -81,7 +114,7 @@ describe('GuestHomePage', () => {
 
     const guestFirstScreen = screen.getByTestId('guest-home-clean-search');
     const commandSurface = screen.getByTestId('guest-home-command-surface');
-    const capabilityStrip = screen.getByTestId('guest-home-capability-strip');
+    const marketPreviewStrip = await screen.findByTestId('guest-home-market-preview-strip');
     const trustStrip = screen.getByTestId('guest-home-trust-strip');
     const previewStrip = screen.getByTestId('guest-home-preview-strip');
 
@@ -97,20 +130,20 @@ describe('GuestHomePage', () => {
     expect(screen.getByTestId('home-bento-omnibar')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '分析' })).toBeEnabled();
     expect(screen.getByText('WolfyStock 是面向独立研究者与自驱投资者的股票研究工作区。你可以先查看单个标的预览，登录后再保存报告、回看历史，并继续进入组合或扫描工作台。')).toBeInTheDocument();
-    expect(capabilityStrip).toHaveTextContent('登录后继续');
-    expect(capabilityStrip).toHaveTextContent('保存报告');
-    expect(capabilityStrip).toHaveTextContent('回看历史');
-    expect(capabilityStrip).toHaveTextContent('组合工作台');
-    expect(capabilityStrip).toHaveTextContent('全市场扫描');
+    expect(marketPreviewStrip).toHaveTextContent('当前市场观察');
+    expect(marketPreviewStrip).toHaveTextContent('公开市场观察已准备');
+    expect(marketPreviewStrip).toHaveTextContent('市场广度改善');
+    expect(marketPreviewStrip).toHaveTextContent('只用于市场观察，不构成买卖建议');
     expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/login?mode=create&redirect=%2F');
-    expect(trustStrip).toHaveTextContent('研究边界');
-    expect(trustStrip).toHaveTextContent('不等于买卖建议');
-    expect(previewStrip).toHaveTextContent('登录后下一步');
+    expect(trustStrip).toHaveTextContent('安全下一步');
+    expect(trustStrip).toHaveTextContent('先查看单个代码的研究入口');
+    expect(previewStrip).toHaveTextContent('登录后可用');
     expect(previewStrip).toHaveTextContent('回到上次研究现场');
     expect(screen.queryByTestId('guest-home-frosted-lock')).not.toBeInTheDocument();
     expect(guestFirstScreen).not.toHaveTextContent('WolfyStock 分析面板');
     expect(guestFirstScreen).not.toHaveTextContent('输入股票代码，搜索后生成 AI 分析面板。');
     expect(guestFirstScreen).not.toHaveTextContent(/买入|卖出|推荐|目标价|止损/);
+    expect(guestFirstScreen).not.toHaveTextContent(/\bNVDA\b|NVIDIA|TSLA|Tesla/i);
 
     fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'AAPL' } });
     fireEvent.submit(screen.getByTestId('home-bento-omnibar'));
@@ -135,7 +168,7 @@ describe('GuestHomePage', () => {
     expect(screen.getByTestId('home-research-context-rail')).toContainElement(screen.getAllByTestId('guest-home-frosted-lock')[1]);
   });
 
-  it('renders the English clean search funnel copy', () => {
+  it('renders the English clean search funnel copy', async () => {
     languageState.value = 'en';
     window.history.replaceState(window.history.state, '', '/en');
 
@@ -143,9 +176,25 @@ describe('GuestHomePage', () => {
 
     expect(screen.getByRole('heading', { name: 'WolfyStock Research Console' })).toBeInTheDocument();
     expect(screen.getByText('WolfyStock is a stock research workspace for self-directed investors and research-oriented users. Start with one ticker preview now, then sign in to save reports, reopen history, and continue into portfolio or scanner workflows.')).toBeInTheDocument();
-    expect(screen.getByTestId('guest-home-trust-strip')).toHaveTextContent('not a trading instruction');
+    expect(await screen.findByText('Public market observation ready')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-home-market-preview-strip')).toHaveTextContent('Current market observation');
+    expect(screen.getByTestId('guest-home-trust-strip')).toHaveTextContent('Safe next step');
     expect(screen.getByRole('button', { name: 'Analyze' })).toBeInTheDocument();
     expect(screen.queryByTestId('home-research-console')).not.toBeInTheDocument();
+  });
+
+  it('shows an honest unavailable state when the market briefing cannot be loaded', async () => {
+    languageState.value = 'en';
+    window.history.replaceState(window.history.state, '', '/en');
+    marketBriefingMock.mockRejectedValueOnce(new Error('market briefing unavailable'));
+
+    renderGuest(['/en/guest']);
+
+    const marketPreviewStrip = await screen.findByTestId('guest-home-market-preview-strip');
+    expect(marketPreviewStrip).toHaveTextContent('Current market observation');
+    expect(marketPreviewStrip).toHaveTextContent('Public market observation unavailable right now');
+    expect(marketPreviewStrip).toHaveTextContent('Sign in to open Market Overview, Scanner, and saved research history once the public snapshot comes back.');
+    expect(marketPreviewStrip).not.toHaveTextContent(/\bNVDA\b|NVIDIA|TSLA|Tesla|AAPL|Apple/i);
   });
 
   it('falls back to a local snapshot when the live preview API rate-limits', async () => {

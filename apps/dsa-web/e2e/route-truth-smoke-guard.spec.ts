@@ -532,7 +532,7 @@ async function expectGuestPreviewSurface(page: Page, forbidden: RegExp) {
   await appExpect(page).toHaveURL(/\/zh\/guest$/);
   await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible({ timeout: 15_000 });
   await appExpect(page.getByTestId('guest-home-command-surface')).toBeVisible();
-  await appExpect(page.getByTestId('guest-home-capability-strip')).toContainText(/登录后继续|Continue after sign-in/);
+  await appExpect(page.getByTestId('guest-home-market-preview-strip')).toContainText(/当前市场观察|Current market observation/);
   baseExpect(await readBodyText(page)).not.toMatch(forbidden);
   await expectRootNonEmpty(page);
   await expectNoHorizontalOverflow(page);

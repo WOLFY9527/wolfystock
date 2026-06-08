@@ -94,8 +94,8 @@ async function expectGuestPreviewSurface(page: Page) {
   await appExpect(page.getByTestId('guest-home-command-surface')).toBeVisible();
   await appExpect(page.getByTestId('guest-home-command-workflow')).toContainText(/搜索|Search/);
   await appExpect(guestSurface).toContainText(/股票研究工作区|stock research workspace/i);
-  await appExpect(page.getByTestId('guest-home-capability-strip')).toContainText(/登录后继续|Continue after sign-in/);
-  await appExpect(page.getByTestId('guest-home-preview-strip')).toContainText(/登录后下一步|What happens after sign-in/);
+  await appExpect(page.getByTestId('guest-home-market-preview-strip')).toContainText(/当前市场观察|Current market observation/);
+  await appExpect(page.getByTestId('guest-home-preview-strip')).toContainText(/登录后可用|Available after sign-in/);
   await appExpect(page.getByTestId('guest-home-registration-link')).toBeVisible();
   await expectNoGenericServerErrorShell(page);
   await expectNoVisibleRawLeakage(page);

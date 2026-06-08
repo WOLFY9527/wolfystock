@@ -247,7 +247,7 @@ async function expectGuestAdminGate(page: Page) {
   await appExpect(page).toHaveURL(/\/zh\/guest$/);
   await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible({ timeout: 15_000 });
   await appExpect(page.getByTestId('guest-home-command-surface')).toBeVisible();
-  await appExpect(page.getByTestId('guest-home-capability-strip')).toContainText('登录后继续');
+  await appExpect(page.getByTestId('guest-home-market-preview-strip')).toContainText('当前市场观察');
   await appExpect(page.getByTestId('guest-home-command-workflow')).toContainText('搜索');
   await appExpect(page.getByTestId('guest-home-command-workflow')).toContainText('分析');
   await appExpect(page.getByTestId('guest-home-command-workflow')).toContainText('观察');

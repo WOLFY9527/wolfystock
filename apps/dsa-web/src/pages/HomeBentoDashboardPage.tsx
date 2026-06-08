@@ -3,6 +3,11 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { History, Lock, MoreHorizontal, Search, Star, Upload } from 'lucide-react';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
+import {
+  marketApi,
+  normalizeMarketBriefingConsumerCopy,
+  type MarketBriefingResponse,
+} from '../api/market';
 import { publicAnalysisApi } from '../api/publicAnalysis';
 import {
   buildConsumerResearchReadinessView,
@@ -99,6 +104,19 @@ type PendingHistoryDelete =
 
 type HomeBentoDashboardPageProps = {
   isGuest?: boolean;
+};
+
+type GuestMarketSnapshotState = 'loading' | 'ready' | 'limited' | 'unavailable';
+
+type GuestMarketSnapshotView = {
+  title: string;
+  status: string;
+  summary: string;
+  state: GuestMarketSnapshotState;
+  asOf?: string;
+  sourceLabel?: string;
+  items: Array<{ title: string; message: string }>;
+  note: string;
 };
 
 const HOME_LOCAL_SURFACE_PANEL_CLASS = 'min-w-0 rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)]';
@@ -3777,6 +3795,90 @@ function formatHistoryTimestamp(value?: string, locale: DashboardLocale = 'zh'):
   return `${get('month')}/${get('day')} ${get('hour')}:${get('minute')}`;
 }
 
+function buildGuestMarketSnapshotView(
+  locale: DashboardLocale,
+  briefing: MarketBriefingResponse | null,
+  isLoading: boolean,
+  isUnavailable: boolean,
+): GuestMarketSnapshotView {
+  const isEnglish = locale === 'en';
+  const note = isEnglish
+    ? 'Public snapshot only. Observation, not a trading instruction.'
+    : '当前摘要只用于市场观察，不构成买卖建议。';
+
+  if (isLoading && !briefing) {
+    return {
+      title: isEnglish ? 'Current market observation' : '当前市场观察',
+      status: isEnglish ? 'Preparing public market observation' : '正在整理公开市场观察',
+      summary: isEnglish
+        ? 'Loading a limited market snapshot using public-safe fields only.'
+        : '正在通过可公开展示的安全字段整理有限市场快照。',
+      state: 'loading',
+      items: [],
+      note,
+    };
+  }
+
+  if (briefing) {
+    const items = briefing.items
+      .map((item) => ({
+        title: String(item.title || '').trim(),
+        message: String(item.message || '').trim(),
+      }))
+      .filter((item) => item.title || item.message)
+      .slice(0, 2);
+    const isUnavailableSnapshot = items.length === 0 && (briefing.isFallback || briefing.isReliable === false);
+    const state: GuestMarketSnapshotState = isUnavailableSnapshot
+      ? 'unavailable'
+      : (briefing.isFallback || briefing.isStale || briefing.isReliable === false ? 'limited' : 'ready');
+    const summary = String(briefing.warning || items[0]?.message || '').trim()
+      || (state === 'unavailable'
+        ? (isEnglish ? 'The guest route is showing product preview only until a public-safe market snapshot is available.' : '公开市场快照尚未可用，当前游客路由仅展示产品预览。')
+        : state === 'limited'
+        ? (isEnglish ? 'The latest available observation is visible, but current live coverage is still limited.' : '当前仅展示最近可用观察，实时覆盖仍然有限。')
+        : (isEnglish ? 'A limited public market observation is ready for the guest route.' : '游客路由已准备有限的公开市场观察。'));
+
+    return {
+      title: isEnglish ? 'Current market observation' : '当前市场观察',
+      status: state === 'unavailable'
+        ? (isEnglish ? 'Public market observation unavailable right now' : '当前未取到公开市场观察')
+        : state === 'limited'
+        ? (isEnglish ? 'Latest available market observation' : '最近可用市场观察')
+        : (isEnglish ? 'Public market observation ready' : '公开市场观察已准备'),
+      summary,
+      state,
+      asOf: formatHistoryTimestamp(briefing.asOf || briefing.updatedAt, locale),
+      sourceLabel: String(briefing.sourceLabel || '').trim() || undefined,
+      items,
+      note,
+    };
+  }
+
+  if (isUnavailable) {
+    return {
+      title: isEnglish ? 'Current market observation' : '当前市场观察',
+      status: isEnglish ? 'Public market observation unavailable right now' : '当前未取到公开市场观察',
+      summary: isEnglish
+        ? 'Sign in to open Market Overview, Scanner, and saved research history once the public snapshot comes back.'
+        : '公开市场快照暂未返回；恢复后可登录继续查看市场总览、扫描器与已保存研究历史。',
+      state: 'unavailable',
+      items: [],
+      note,
+    };
+  }
+
+  return {
+    title: isEnglish ? 'Current market observation' : '当前市场观察',
+    status: isEnglish ? 'Public market observation unavailable right now' : '当前未取到公开市场观察',
+    summary: isEnglish
+      ? 'The guest route is showing product preview only until a public-safe market snapshot is available.'
+      : '公开市场快照尚未可用，当前游客路由仅展示产品预览。',
+    state: 'unavailable',
+    items: [],
+    note,
+  };
+}
+
 function resolveHistoryGeneratedAt(historyItem: HistoryItem, locale: DashboardLocale): string {
   return formatHistoryTimestamp(historyItem.generatedAt || historyItem.createdAt, locale);
 }
@@ -5088,6 +5190,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [statusToast, setStatusToast] = useState<{ message: string; tone: 'error' | 'warning' } | null>(null);
   const [guestPreview, setGuestPreview] = useState<PublicAnalysisPreviewResponse | null>(null);
   const [guestPreviewMode, setGuestPreviewMode] = useState<'live' | 'snapshot'>('live');
+  const [guestMarketBriefing, setGuestMarketBriefing] = useState<MarketBriefingResponse | null>(null);
+  const [isGuestMarketBriefingLoading, setGuestMarketBriefingLoading] = useState(false);
+  const [isGuestMarketBriefingUnavailable, setGuestMarketBriefingUnavailable] = useState(false);
   const [guestError, setGuestError] = useState<ParsedApiError | null>(null);
   const [guestFallbackNotice, setGuestFallbackNotice] = useState<string | null>(null);
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<PendingHistoryDelete | null>(null);
@@ -5271,6 +5376,43 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   useEffect(() => {
     document.title = copy.documentTitle;
   }, [copy.documentTitle]);
+
+  useEffect(() => {
+    if (!isGuest) {
+      setGuestMarketBriefing(null);
+      setGuestMarketBriefingLoading(false);
+      setGuestMarketBriefingUnavailable(false);
+      return;
+    }
+
+    let isCancelled = false;
+    setGuestMarketBriefingLoading(true);
+    setGuestMarketBriefingUnavailable(false);
+
+    void marketApi.getMarketBriefing()
+      .then((response) => {
+        if (isCancelled) {
+          return;
+        }
+        setGuestMarketBriefing(normalizeMarketBriefingConsumerCopy(response));
+      })
+      .catch(() => {
+        if (isCancelled) {
+          return;
+        }
+        setGuestMarketBriefing(null);
+        setGuestMarketBriefingUnavailable(true);
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setGuestMarketBriefingLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isGuest]);
 
   useEffect(() => {
     if (isGuest || !activeEvidenceTicker) {
@@ -5651,6 +5793,9 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       </button>
     </>
   ) : null;
+  const guestMarketSnapshot = isGuest
+    ? buildGuestMarketSnapshotView(locale, guestMarketBriefing, isGuestMarketBriefingLoading, isGuestMarketBriefingUnavailable)
+    : null;
   const guestCommandConsoleCopy = locale === 'en'
     ? {
         eyebrow: 'Guest Research Console',
@@ -5658,13 +5803,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         subtitle: 'WolfyStock is a stock research workspace for self-directed investors and research-oriented users. Start with one ticker preview now, then sign in to save reports, reopen history, and continue into portfolio or scanner workflows.',
         commandLabel: 'Command entry',
         commandHint: 'Examples: AAPL / Tencent / 600519',
-        unlockTitle: 'Continue after sign-in',
         unlockItems: ['Saved reports', 'Saved history', 'Portfolio workspace', 'Market scanner'],
         unlockAction: 'Create free account',
-        previewTitle: 'What happens after sign-in',
-        previewBody: 'Save reports and history under your own account, reopen the last research context, and move into portfolio or scanner workflows. Guest preview stays limited to the current read-only pass.',
-        trustTitle: 'Research boundary',
-        trustBody: 'Evidence quality and data confidence directly shape conclusion strength. Guest mode stays read-only, and current output remains for research observation only, not a trading instruction.',
+        previewTitle: 'Available after sign-in',
+        previewBody: 'Save reports and history under your own account, reopen the last research context, and continue into Market Overview, portfolio, or scanner workflows.',
+        trustTitle: 'Safe next step',
+        trustBody: 'Start with one ticker preview now. Create an account only when you want saved history, broader market context, or continued workflow access.',
         workflow: ['Search', 'Analyze', 'Observe', 'Report'],
       }
     : {
@@ -5673,13 +5817,12 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         subtitle: 'WolfyStock 是面向独立研究者与自驱投资者的股票研究工作区。你可以先查看单个标的预览，登录后再保存报告、回看历史，并继续进入组合或扫描工作台。',
         commandLabel: '研究命令入口',
         commandHint: '示例：AAPL / 腾讯控股 / 600519',
-        unlockTitle: '登录后继续',
         unlockItems: ['保存报告', '回看历史', '组合工作台', '全市场扫描'],
         unlockAction: '免费创建账户',
-        previewTitle: '登录后下一步',
-        previewBody: '登录后可把报告与历史保存在自己的账户下，回到上次研究现场，并继续进入组合或扫描工作台；游客预览只保留当前只读体验。',
-        trustTitle: '研究边界',
-        trustBody: '证据质量与数据可信度会直接影响结论强度；游客模式保持只读，当前输出仅用于研究观察，不等于买卖建议。',
+        previewTitle: '登录后可用',
+        previewBody: '登录后可把报告与历史保存在自己的账户下，回到上次研究现场，并继续进入市场总览、组合或扫描工作台。',
+        trustTitle: '安全下一步',
+        trustBody: '先查看单个代码的研究入口；只有在需要保存历史、查看更广市场上下文或继续后续工作流时，再创建账户继续。',
         workflow: ['搜索', '分析', '观察', '报告'],
       };
 
@@ -5825,19 +5968,46 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   </div>
                   <aside
                     className={cn(HOME_LOCAL_INSET_PANEL_CLASS, 'px-4 py-4')}
-                    data-testid="guest-home-capability-strip"
+                    data-testid="guest-home-market-preview-strip"
+                    aria-busy={guestMarketSnapshot?.state === 'loading' ? 'true' : 'false'}
                   >
-                    <p className="text-[11px] font-medium text-white/40">{guestCommandConsoleCopy.unlockTitle}</p>
-                    <div className="mt-3 flex min-w-0 flex-wrap gap-2">
-                      {guestCommandConsoleCopy.unlockItems.map((item) => (
-                        <span
-                          key={item}
-                          className="inline-flex min-h-8 items-center rounded-full border border-white/[0.07] bg-white/[0.03] px-3 text-xs font-medium text-white/72"
-                        >
-                          {item}
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-medium text-white/40">{guestMarketSnapshot?.title}</p>
+                        <h2 className="mt-2 text-sm font-semibold text-white/88">{guestMarketSnapshot?.status}</h2>
+                      </div>
+                      {guestMarketSnapshot?.asOf ? (
+                        <span className="shrink-0 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-[10px] font-medium text-white/42">
+                          {guestMarketSnapshot.asOf}
                         </span>
-                      ))}
+                      ) : null}
                     </div>
+                    <p className="mt-2 text-sm leading-6 text-white/62">
+                      {guestMarketSnapshot?.summary}
+                    </p>
+                    {guestMarketSnapshot?.items.length ? (
+                      <div className="mt-3 grid min-w-0 gap-2.5">
+                        {guestMarketSnapshot.items.map((item) => (
+                          <div
+                            key={`${item.title}-${item.message}`}
+                            className="min-w-0 rounded-[10px] border border-white/[0.06] bg-white/[0.03] px-3 py-2.5"
+                          >
+                            <p className="text-[11px] font-medium text-white/72">{item.title}</p>
+                            {item.message ? (
+                              <p className="mt-1 text-[11px] leading-5 text-white/46">{item.message}</p>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {guestMarketSnapshot?.sourceLabel ? (
+                      <p className="mt-3 text-[11px] text-white/38">
+                        {locale === 'en' ? 'Source' : '来源'}: {guestMarketSnapshot.sourceLabel}
+                      </p>
+                    ) : null}
+                    <p className="mt-3 text-[11px] leading-5 text-white/42">
+                      {guestMarketSnapshot?.note}
+                    </p>
                     <Link
                       to={registrationPath}
                       className="mt-3 inline-flex min-h-10 items-center justify-center rounded-lg border border-[color:var(--wolfy-border-focus)] bg-[var(--wolfy-accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#8178e7]"
@@ -5867,6 +6037,16 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                   <p className="mt-2 text-sm leading-6 text-white/62">
                     {guestCommandConsoleCopy.previewBody}
                   </p>
+                  <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+                    {guestCommandConsoleCopy.unlockItems.map((item) => (
+                      <span
+                        key={item}
+                        className="inline-flex min-h-8 items-center rounded-full border border-white/[0.07] bg-white/[0.03] px-3 text-xs font-medium text-white/72"
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
                 </section>
               </div>
             </div>
