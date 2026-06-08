@@ -141,6 +141,134 @@ def test_market_overview_adoption_proof_builds_fail_closed_row_batch_and_snapsho
     }
 
 
+def test_options_adoption_proof_builds_fail_closed_row_batch_and_snapshot() -> None:
+    metadata = {
+        "providerId": "options_market_structure_provider_descriptor",
+        "providerLabel": "Options Market Structure Provider Descriptor",
+        "sourceId": "options_market_structure_source_descriptor",
+        "sourceLabel": "Options Market Structure Source Descriptor",
+        "sourceType": "official_public",
+        "sourceTier": "provider_descriptor_only",
+        "freshnessState": "fresh",
+        "asOf": "2026-06-08T09:35:00Z",
+        "authorityGrant": True,
+        "decisionGrade": True,
+    }
+
+    row_result = build_data_coverage_matrix_row(
+        metadata,
+        surface_id="options",
+        field_key="options_setup_status",
+    )
+    row = row_result.to_dict()
+    issues = {issue.code for issue in row_result.validation.issues}
+
+    assert row_result.validation.is_valid is False
+    assert issues >= {
+        "missing_source_authority",
+        "missing_score_contribution",
+        "missing_right_to_display",
+        "authority_grant_without_prerequisites",
+        "decision_grade_without_prerequisites",
+    }
+    assert row_result.registry_entry.surface_id == "options"
+    assert row_result.registry_entry.route_id == "/zh/options-lab"
+    assert row_result.registry_entry.audience.value == "consumer"
+    assert row_result.registry_entry.field_key == "options_setup_status"
+    assert row_result.registry_entry.evidence_family == "options_market_structure"
+    assert row_result.raw_contract.freshness_state.value == "fresh"
+    assert row_result.raw_contract.provider_id == "options_market_structure_provider_descriptor"
+    assert row_result.raw_contract.source_id == "options_market_structure_source_descriptor"
+    assert row_result.normalized_contract.surface_id == "options"
+    assert row_result.normalized_contract.route_id == "/zh/options-lab"
+    assert row_result.normalized_contract.audience == "consumer"
+    assert row_result.normalized_contract.field_key == "options_setup_status"
+    assert row_result.normalized_contract.evidence_family == "options_market_structure"
+    assert row_result.normalized_contract.source_authority_allowed is False
+    assert row_result.normalized_contract.right_to_display is RightToDisplay.UNAVAILABLE
+    assert row_result.normalized_contract.score_contribution_allowed is False
+    assert row_result.normalized_contract.authority_grant is False
+    assert row_result.normalized_contract.decision_grade is False
+    assert row_result.normalized_contract.observation_only is True
+    assert row["surfaceId"] == "options"
+    assert row["routeId"] == "/zh/options-lab"
+    assert row["audience"] == "consumer"
+    assert row["fieldKey"] == "options_setup_status"
+    assert row["evidenceFamily"] == "options_market_structure"
+    assert row["freshnessState"] == "fresh"
+    assert row["sourceAuthorityAllowed"] is False
+    assert row["scoreContributionAllowed"] is False
+    assert row["authorityGrant"] is False
+    assert row["decisionGrade"] is False
+    assert row["observationOnly"] is True
+    assert row["rightToDisplay"] == "unavailable"
+    assert row["diagnosticOnly"] is True
+    assert row["providerRuntimeCalled"] is False
+    assert row["networkCallsEnabled"] is False
+    assert row["marketCacheMutation"] is False
+
+    batch_result = build_data_coverage_matrix_batch(
+        [
+            {
+                **metadata,
+                "surfaceId": "options",
+                "fieldKey": "options_setup_status",
+            }
+        ]
+    )
+    batch = batch_result.to_dict()
+
+    assert batch["rowCounts"] == {
+        "input": 1,
+        "built": 1,
+        "valid": 0,
+        "invalid": 1,
+        "errors": 1,
+    }
+    assert batch["rows"] == [row]
+    assert batch["guardPosture"] == {
+        "diagnosticOnly": True,
+        "providerRuntimeCalled": False,
+        "networkCallsEnabled": False,
+        "marketCacheMutation": False,
+    }
+    assert set(batch["errors"][0]["codes"]) >= issues
+
+    snapshot = build_data_coverage_surface_snapshot(batch["rows"]).to_dict()
+
+    assert snapshot == {
+        "snapshotVersion": "data_coverage_surface_snapshot_v1",
+        "surfaceId": "options",
+        "routeId": "/zh/options-lab",
+        "audience": "consumer",
+        "consumerState": "UNAVAILABLE",
+        "confidencePosture": "UNAVAILABLE",
+        "consumerSummary": "UNAVAILABLE",
+        "asOf": "2026-06-08T09:35:00Z",
+        "rowCount": 1,
+        "availableRowCount": 0,
+        "limitedRowCount": 0,
+        "blockedRowCount": 0,
+        "unavailableRowCount": 1,
+    }
+    snapshot_serialized = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
+    for forbidden_consumer_badge_term in (
+        "consumerBadge",
+        "trustLabel",
+        "providerLabel",
+        "sourceType",
+        "sourceTier",
+        "sourceAuthorityAllowed",
+        "scoreContributionAllowed",
+        "authorityGrant",
+        "decisionGrade",
+        "rightToDisplay",
+        "options_market_structure",
+        "official_public",
+    ):
+        assert forbidden_consumer_badge_term not in snapshot_serialized
+
+
 def test_liquidity_builder_lookup_preserves_registry_fields_and_fails_closed_without_explicit_reviews() -> None:
     metadata = {
         "surfaceId": "forbidden_override",
@@ -552,6 +680,7 @@ blocked = sorted(
         or name.startswith("src.repositories")
         or name.startswith("src.services.market_overview_service")
         or name.startswith("src.services.liquidity_monitor_service")
+        or name.startswith("src.services.options_")
         or name.startswith("src.services.market_scanner_service")
         or name.startswith("src.services.rule_backtest_service")
         or name.startswith("src.services.market_cache")
