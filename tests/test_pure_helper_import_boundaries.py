@@ -12,11 +12,26 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TARGET_MODULES = (
     pytest.param("src/services/data_coverage_matrix_contract.py", False, id="data_coverage_matrix_contract"),
+    pytest.param("src/services/data_coverage_matrix_builder.py", False, id="data_coverage_matrix_builder"),
     pytest.param("src/services/backtest_factor_lab_readiness.py", False, id="backtest_factor_lab_readiness"),
+    pytest.param(
+        "src/services/backtest_factor_lab_consumer_projection.py",
+        False,
+        id="backtest_factor_lab_consumer_projection",
+    ),
     pytest.param("src/services/user_alert_evaluation.py", False, id="user_alert_evaluation"),
+    pytest.param("src/services/user_alert_dry_run_pipeline.py", False, id="user_alert_dry_run_pipeline"),
     pytest.param("src/services/data_coverage_surface_registry.py", True, id="data_coverage_surface_registry"),
+    pytest.param("src/services/data_coverage_surface_snapshot.py", True, id="data_coverage_surface_snapshot"),
+    pytest.param("src/services/data_coverage_matrix_batch.py", True, id="data_coverage_matrix_batch"),
+    pytest.param(
+        "src/services/backtest_factor_lab_report_summary.py",
+        True,
+        id="backtest_factor_lab_report_summary",
+    ),
     pytest.param("src/services/user_alert_event_packet.py", True, id="user_alert_event_packet"),
     pytest.param("src/services/user_alert_suppression_policy.py", True, id="user_alert_suppression_policy"),
+    pytest.param("src/services/user_alert_dry_run_summary.py", True, id="user_alert_dry_run_summary"),
 )
 FORBIDDEN_IMPORT_PREFIXES = {
     "api": (
