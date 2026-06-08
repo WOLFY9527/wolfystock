@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -325,6 +326,14 @@ def test_sync_analysis_api_preserves_home_evidence_packet_contract(client) -> No
     assert response.status_code == 200
     payload = response.json()
     report = payload["report"]
+    serialized_payload = json.dumps(payload, sort_keys=True)
+    assert "report_evidence_export_v1" not in serialized_payload
+    assert "reportEvidenceExport" not in serialized_payload
+    assert "report_evidence_export" not in serialized_payload
+    assert "evidenceExport" not in serialized_payload
+    assert "evidence_export" not in serialized_payload
+    assert "redactionPosture" not in serialized_payload
+    assert "payloadClass" not in serialized_payload
     packet = report["singleStockEvidencePacket"]
     citation_frame = report["evidenceCitationFrame"]
     provenance_frame = report["sourceProvenanceFrame"]
