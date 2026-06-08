@@ -6,7 +6,7 @@ import type {
   MarketOverviewDecisionSemanticsBoundaryView,
   MarketOverviewDirectionReadinessView,
   MarketOverviewTemperatureSummaryView,
-} from './MarketOverviewWorkbenchTopSurface';
+} from './marketOverviewDecisionTypes';
 import { OfficialMacroAuthorityDiagnostics } from '../common/OfficialMacroAuthorityDiagnostics';
 import { buildOfficialMacroAuthorityDiagnosticsView, type OfficialMacroAuthorityRecord } from '../common/officialMacroAuthorityDiagnosticsData';
 import { TerminalChip, TerminalDenseList, TerminalNotice, TerminalPanel, TerminalSectionHeader } from '../terminal/TerminalPrimitives';

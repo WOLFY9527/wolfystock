@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createElement, StrictMode } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,6 +13,15 @@ import { TerminalPageHeading } from '../../components/terminal/TerminalPrimitive
 import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { UI_LANGUAGE_STORAGE_KEY } from '../../i18n/core';
 import { marketIntelligenceReasonLabel } from '../../utils/marketIntelligenceGuidance';
+
+const marketOverviewTopSurfaceSource = readFileSync(
+  resolve(process.cwd(), 'src/components/market-overview/MarketOverviewWorkbenchTopSurface.tsx'),
+  'utf8',
+);
+const marketOverviewDecisionDebugDetailsSource = readFileSync(
+  resolve(process.cwd(), 'src/components/market-overview/MarketOverviewDecisionDebugDetails.tsx'),
+  'utf8',
+);
 
 const { useProductSurfaceMock } = vi.hoisted(() => ({
   useProductSurfaceMock: vi.fn(),
@@ -3382,6 +3393,12 @@ describe('MarketOverviewPage', () => {
     expect(statusStrip).toContainElement(within(details).getByTestId('market-briefing-card'));
     expect(within(details).getByTestId('market-overview-data-state-strip')).toHaveTextContent(/数据状态/);
     expect(within(details).getByTestId('market-overview-data-state-strip')).toHaveTextContent(/备用数据/);
+  });
+
+  it('keeps decision debug shared types in a neutral module', () => {
+    expect(marketOverviewDecisionDebugDetailsSource).not.toContain("from './MarketOverviewWorkbenchTopSurface'");
+    expect(marketOverviewDecisionDebugDetailsSource).toContain("from './marketOverviewDecisionTypes'");
+    expect(marketOverviewTopSurfaceSource).toContain("from './marketOverviewDecisionTypes'");
   });
 
   it('keeps VIX risk module high priority in US and global views', async () => {
