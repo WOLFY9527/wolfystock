@@ -18,6 +18,24 @@ public-safety wording.
 - [Backtest Factor Lab Readiness Contract](./factor-lab-readiness-contract.md)
 - [Frontend Visual System](../frontend/visual-system.md)
 
+## Helper Contract Index
+
+- [Backtest Factor Lab Readiness Contract](./factor-lab-readiness-contract.md)
+  - Observe-only metadata helper; no engine, provider, cache, DB, API, or
+    frontend wiring.
+- [Backtest Factor Lab Readiness Fixtures](./factor-lab-readiness-fixtures.md)
+  - Fixture catalog for caller-supplied readiness states only; not runtime or
+    professional-readiness proof.
+- [Backtest Helper Maintenance](../backtest-helper-maintenance.md)
+  - Maintenance boundary reference for additive helpers; do not widen into
+    calculation/runtime changes from this entry.
+- `tests/test_backtest_factor_lab_readiness_contract.py`
+  - Pure-helper contract coverage.
+- `tests/test_backtest_factor_lab_readiness_fixtures.py`
+  - Readiness fixture coverage.
+- `tests/test_pure_helper_import_boundaries.py`
+  - Import-boundary guard for inert helper modules.
+
 ## Current Rules
 
 - Standard historical evaluation and deterministic rule backtest are different
