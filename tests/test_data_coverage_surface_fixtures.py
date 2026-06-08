@@ -47,6 +47,21 @@ _FORBIDDEN_DOC_TERMS = (
     "authorized_licensed_feed",
     "official_public",
 )
+_FORBIDDEN_FIXTURE_COPY_TERMS = _FORBIDDEN_DOC_TERMS + (
+    "provider",
+    "source",
+    "cache",
+    "debug",
+    "backend",
+    "provider_id",
+    "source_id",
+    "cacheKey",
+    "cache_key",
+    "rawProvider",
+    "raw_provider",
+    "rawSource",
+    "raw_source",
+)
 
 _SURFACE_FIXTURE_CASES = (
     {
@@ -256,6 +271,79 @@ _SURFACE_FIXTURE_CASES = (
     },
 )
 
+_OPTIONS_SETUP_STATUS_REVIEW_FIXTURE_CASES = (
+    {
+        "fixture_state": "授权复核缺口",
+        "payload_overrides": {
+            "freshnessState": "fresh",
+            "scoreContributionAllowed": True,
+            "authorityGrant": True,
+            "decisionGrade": True,
+            "rightToDisplay": "granted",
+        },
+        "expected_status": ConsumerProductStatus.INSUFFICIENT,
+        "expected_headline": "当前信号置信度较低，仅供观察。",
+        "expected_right_to_display": RightToDisplay.GRANTED,
+        "expected_issue_codes": {
+            "missing_source_authority",
+            "score_contribution_without_source_authority",
+            "authority_grant_without_prerequisites",
+            "decision_grade_without_prerequisites",
+        },
+        "fixture_copy": (
+            "期权结构仅供观察。",
+            "授权复核缺口存在，不能作为策略结论。",
+            "当前信号置信度较低，仅供观察。",
+        ),
+    },
+    {
+        "fixture_state": "展示复核缺口",
+        "payload_overrides": {
+            "freshnessState": "fresh",
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "authorityGrant": True,
+            "decisionGrade": True,
+        },
+        "expected_status": ConsumerProductStatus.UNAVAILABLE,
+        "expected_headline": "本模块暂不可用，请稍后重试。",
+        "expected_right_to_display": RightToDisplay.UNAVAILABLE,
+        "expected_issue_codes": {
+            "missing_right_to_display",
+            "authority_grant_without_prerequisites",
+            "decision_grade_without_prerequisites",
+        },
+        "fixture_copy": (
+            "展示复核尚未完成。",
+            "本模块暂不可用，请稍后重试。",
+        ),
+    },
+    {
+        "fixture_state": "降级展示复核",
+        "payload_overrides": {
+            "freshnessState": "partial",
+            "isPartial": True,
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+            "authorityGrant": True,
+            "decisionGrade": True,
+            "rightToDisplay": "granted",
+        },
+        "expected_status": ConsumerProductStatus.PARTIAL,
+        "expected_headline": "部分数据暂不可用。",
+        "expected_right_to_display": RightToDisplay.LIMITED,
+        "expected_issue_codes": {
+            "degraded_partial_source",
+            "authority_grant_without_prerequisites",
+            "decision_grade_without_prerequisites",
+        },
+        "fixture_copy": (
+            "部分期权结构数据暂不可用。",
+            "当前仅保留观察状态。",
+        ),
+    },
+)
+
 
 def _build_payload(surface_id: str, field_key: str, overrides: dict[str, object]) -> dict[str, object]:
     entry = DATA_COVERAGE_SURFACE_REGISTRY_BY_SURFACE_FIELD[(surface_id, field_key)]
@@ -273,6 +361,12 @@ def _build_payload(surface_id: str, field_key: str, overrides: dict[str, object]
         "sourceTier": "fixture_only",
         **overrides,
     }
+
+
+def _assert_fixture_copy_is_consumer_safe(values: tuple[str, ...]) -> None:
+    copy_text = " ".join(values).lower()
+    for forbidden in _FORBIDDEN_FIXTURE_COPY_TERMS:
+        assert forbidden.lower() not in copy_text
 
 
 def test_surface_fixture_catalog_covers_every_registered_surface_once() -> None:
@@ -299,6 +393,63 @@ def test_surface_fixture_catalog_projects_consumer_safe_fail_closed_states() -> 
         assert projection.status is case["expected_status"]
         assert projection.headline == case["expected_headline"]
         assert case["expected_issue_codes"] <= issues
+
+
+def test_options_setup_status_surface_fixture_fails_closed_for_missing_or_degraded_reviews() -> None:
+    for case in _OPTIONS_SETUP_STATUS_REVIEW_FIXTURE_CASES:
+        result = build_data_coverage_matrix_batch(
+            [
+                _build_payload(
+                    "options",
+                    "options_setup_status",
+                    case["payload_overrides"],
+                )
+            ]
+        )
+        payload = result.to_dict()
+        row = payload["rows"][0]
+        error = payload["errors"][0]
+        projection = project_consumer_data_coverage(row)
+        snapshot = build_data_coverage_surface_snapshot(payload["rows"]).to_dict()
+
+        assert payload["rowCounts"] == {
+            "input": 1,
+            "built": 1,
+            "valid": 0,
+            "invalid": 1,
+            "errors": 1,
+        }
+        assert payload["guardPosture"] == {
+            "diagnosticOnly": True,
+            "providerRuntimeCalled": False,
+            "networkCallsEnabled": False,
+            "marketCacheMutation": False,
+        }
+        assert row["surfaceId"] == "options"
+        assert row["routeId"] == "/zh/options-lab"
+        assert row["fieldKey"] == "options_setup_status"
+        assert row["scoreContributionAllowed"] is False
+        assert row["authorityGrant"] is False
+        assert row["decisionGrade"] is False
+        assert row["observationOnly"] is True
+        assert row["rightToDisplay"] == case["expected_right_to_display"].value
+        assert row["diagnosticOnly"] is True
+        assert row["providerRuntimeCalled"] is False
+        assert row["networkCallsEnabled"] is False
+        assert row["marketCacheMutation"] is False
+        assert case["expected_issue_codes"] <= set(error["codes"])
+
+        assert projection.observation_only is True
+        assert projection.status is case["expected_status"]
+        assert projection.headline == case["expected_headline"]
+        assert snapshot["surfaceId"] == "options"
+        assert snapshot["routeId"] == "/zh/options-lab"
+        assert snapshot["consumerState"] == case["expected_status"].value
+        assert snapshot["availableRowCount"] == 0
+
+        _assert_fixture_copy_is_consumer_safe(
+            (*case["fixture_copy"], projection.status.value, projection.headline or "")
+        )
 
 
 def test_market_overview_fixture_builds_fail_closed_matrix_row_and_surface_snapshot() -> None:
