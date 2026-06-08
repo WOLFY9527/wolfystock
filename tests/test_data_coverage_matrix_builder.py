@@ -476,6 +476,188 @@ def test_rotation_adoption_proof_preserves_registry_fields_and_fails_closed_with
     }
 
 
+def test_watchlist_adoption_proof_maps_score_status_context_without_source_authority() -> None:
+    score_status_context = {
+        "scope": "score_refresh_recency",
+        "fresh_means": "persisted_scanner_score_refreshed",
+        "source_freshness_implied": False,
+        "source_authority_implied": False,
+    }
+    metadata = {
+        "surfaceId": "forbidden_override",
+        "routeId": "/should-not-win",
+        "audience": "admin",
+        "fieldKey": "wrong_field",
+        "evidenceFamily": "wrong_family",
+        "providerId": "watchlist_persisted_scanner_score",
+        "providerLabel": "Watchlist Persisted Scanner Score",
+        "sourceId": "watchlist_score_recency_context",
+        "sourceLabel": "Watchlist Score Recency Context",
+        "sourceType": "persisted_scanner_score_snapshot",
+        "sourceTier": "score_recency_only",
+        "asOf": "2026-06-08T09:45:00Z",
+        "scoreStatus": "fresh",
+        "scoreStatusContext": {
+            "scope": score_status_context["scope"],
+            "freshMeans": score_status_context["fresh_means"],
+            "sourceFreshnessImplied": score_status_context["source_freshness_implied"],
+            "sourceAuthorityImplied": score_status_context["source_authority_implied"],
+        },
+        "score_status_context": score_status_context,
+        "scanner_run_id": 88,
+        "reasonCode": "persisted_scanner_score_refresh",
+        "rawDiagnostics": {
+            "backend_cache_debug": "do-not-project",
+            "sourceAuthorityAllowed": True,
+            "scoreContributionAllowed": True,
+        },
+    }
+
+    result = build_data_coverage_matrix_row(
+        metadata,
+        surface_id="watchlist",
+        field_key="watchlist_readiness_status",
+    )
+    row = result.to_dict()
+    issues = {issue.code for issue in result.validation.issues}
+
+    assert score_status_context["source_freshness_implied"] is False
+    assert score_status_context["source_authority_implied"] is False
+    assert result.validation.is_valid is False
+    assert issues >= {
+        "missing_source_authority",
+        "missing_score_contribution",
+        "missing_right_to_display",
+        "unknown_freshness",
+    }
+    assert result.registry_entry.surface_id == "watchlist"
+    assert result.registry_entry.route_id == "/zh/watchlist"
+    assert result.registry_entry.audience.value == "consumer"
+    assert result.registry_entry.field_key == "watchlist_readiness_status"
+    assert result.registry_entry.evidence_family == "watchlist_candidate"
+    assert result.normalized_contract.surface_id == "watchlist"
+    assert result.normalized_contract.route_id == "/zh/watchlist"
+    assert result.normalized_contract.audience == "consumer"
+    assert result.normalized_contract.field_key == "watchlist_readiness_status"
+    assert result.normalized_contract.evidence_family == "watchlist_candidate"
+    assert result.raw_contract.freshness_state.value == "unknown"
+    assert result.normalized_contract.freshness_state.value == "unknown"
+    assert result.normalized_contract.source_authority_allowed is False
+    assert result.normalized_contract.score_contribution_allowed is False
+    assert result.normalized_contract.authority_grant is False
+    assert result.normalized_contract.decision_grade is False
+    assert result.normalized_contract.observation_only is True
+    assert result.normalized_contract.right_to_display in {RightToDisplay.UNAVAILABLE, RightToDisplay.LIMITED}
+    assert result.normalized_contract.right_to_display is RightToDisplay.UNAVAILABLE
+    assert row["surfaceId"] == "watchlist"
+    assert row["routeId"] == "/zh/watchlist"
+    assert row["audience"] == "consumer"
+    assert row["fieldKey"] == "watchlist_readiness_status"
+    assert row["evidenceFamily"] == "watchlist_candidate"
+    assert row["freshnessState"] == "unknown"
+    assert row["sourceAuthorityAllowed"] is False
+    assert row["scoreContributionAllowed"] is False
+    assert row["authorityGrant"] is False
+    assert row["decisionGrade"] is False
+    assert row["observationOnly"] is True
+    assert row["rightToDisplay"] == "unavailable"
+    assert row["diagnosticOnly"] is True
+    assert row["providerRuntimeCalled"] is False
+    assert row["networkCallsEnabled"] is False
+    assert row["marketCacheMutation"] is False
+
+    batch = build_data_coverage_matrix_batch(
+        [
+            {
+                **metadata,
+                "surfaceId": "watchlist",
+                "fieldKey": "watchlist_readiness_status",
+            }
+        ]
+    ).to_dict()
+
+    assert batch["rowCounts"] == {
+        "input": 1,
+        "built": 1,
+        "valid": 0,
+        "invalid": 1,
+        "errors": 1,
+    }
+    assert batch["rows"] == [row]
+    assert batch["guardPosture"] == {
+        "diagnosticOnly": True,
+        "providerRuntimeCalled": False,
+        "networkCallsEnabled": False,
+        "marketCacheMutation": False,
+    }
+    assert set(batch["errors"][0]["codes"]) >= issues
+
+    snapshot = build_data_coverage_surface_snapshot(batch["rows"]).to_dict()
+
+    assert snapshot == {
+        "snapshotVersion": "data_coverage_surface_snapshot_v1",
+        "surfaceId": "watchlist",
+        "routeId": "/zh/watchlist",
+        "audience": "consumer",
+        "consumerState": "UPDATING",
+        "confidencePosture": "PARTIAL",
+        "consumerSummary": "UPDATING",
+        "asOf": "2026-06-08T09:45:00Z",
+        "rowCount": 1,
+        "availableRowCount": 0,
+        "limitedRowCount": 1,
+        "blockedRowCount": 0,
+        "unavailableRowCount": 0,
+    }
+    snapshot_serialized = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
+    row_serialized = json.dumps(row, ensure_ascii=False, sort_keys=True)
+
+    for forbidden_row_leak in (
+        "scoreStatusContext",
+        "score_status_context",
+        "scanner_run_id",
+        "reasonCode",
+        "rawDiagnostics",
+        "backend_cache_debug",
+    ):
+        assert forbidden_row_leak not in row_serialized
+
+    for forbidden_projection_leak in (
+        "providerId",
+        "providerLabel",
+        "sourceId",
+        "sourceLabel",
+        "sourceType",
+        "sourceTier",
+        "sourceAuthorityAllowed",
+        "scoreContributionAllowed",
+        "authorityGrant",
+        "decisionGrade",
+        "rightToDisplay",
+        "reasonCode",
+        "reason_code",
+        "reasonFamilies",
+        "reason_families",
+        "scoreStatusContext",
+        "score_status_context",
+        "sourceFreshnessImplied",
+        "source_freshness_implied",
+        "sourceAuthorityImplied",
+        "source_authority_implied",
+        "scanner_run_id",
+        "rawDiagnostics",
+        "raw diagnostics",
+        "backend",
+        "cache",
+        "debug",
+        "watchlist_readiness_status",
+        "watchlist_candidate",
+        "persisted_scanner_score_snapshot",
+        "score_recency_only",
+    ):
+        assert forbidden_projection_leak not in snapshot_serialized
+
+
 @pytest.mark.parametrize(
     ("metadata", "issue_code", "expected_right_to_display"),
     [
