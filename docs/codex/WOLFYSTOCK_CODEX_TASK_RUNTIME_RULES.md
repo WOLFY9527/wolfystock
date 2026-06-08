@@ -62,6 +62,7 @@ Prompt efficiency rules:
 - Use exact `Allowed final diff` paths or path globs; avoid broad `docs/**` unless truly scoped.
 - Merge validation commands into the smallest faithful command group when order does not matter.
 - Use standard `Mode` names only: `CODEX-ISOLATED`, `SERIAL-MAIN`, `WORKTREE-WORKER`, `READ-ONLY-AUDIT`.
+- For no-advice, observation-only, or consumer-safe wording regressions, also read `NO_ADVICE_REGRESSION_GUARDS.md`.
 
 ## 4. Task Ledger Statuses
 
