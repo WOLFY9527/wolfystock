@@ -15,6 +15,7 @@ surfaces, scoring, ranking, thresholds, storage, or DB behavior.
 
 - `docs/data-reliability/provider-source-confidence-contract.md`
 - `docs/frontend/WOLFYSTOCK_CONSUMER_DATA_QUALITY_UX.md`
+- `docs/data-reliability/data-coverage-consumer-projection-examples.md`
 - `docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md`
 
 If these documents disagree, use the stricter rule and fail closed until a
