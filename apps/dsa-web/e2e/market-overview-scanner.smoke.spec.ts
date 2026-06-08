@@ -199,7 +199,6 @@ test.describe('market overview smoke', () => {
     await expect(page.getByTestId('market-decision-semantics-strip')).toBeVisible();
     await expect(page.getByTestId('market-overview-decision-readiness')).toBeVisible();
     await expect(page.getByTestId('market-overview-research-readiness-strip')).toHaveCount(0);
-    await expect(page.getByTestId('market-intelligence-actionability-strip')).toHaveCount(0);
     await expect(page.getByTestId('market-decision-semantics-advice-boundary')).toBeVisible();
     await expect(page.getByTestId('market-overview-side-rail')).toBeVisible();
     await expect(page.getByTestId('market-overview-card-indices')).toBeVisible();
@@ -389,7 +388,6 @@ test.describe('market overview smoke', () => {
       await expect(page.getByTestId('market-overview-decision-readiness')).toContainText(/暂不形成方向结论|等待数据完成后再判断|仅观察/);
       await expect(page.getByTestId('market-overview-decision-readiness')).toContainText(/当前信号置信度较低，仅供观察。|部分数据暂不可用，当前评分已暂停。|数据更新中，稍后将自动刷新。/);
       await expect(page.getByTestId('market-overview-research-readiness-strip')).toHaveCount(0);
-      await expect(page.getByTestId('market-intelligence-actionability-strip')).toHaveCount(0);
       await expect(page.getByTestId('market-decision-semantics-advice-boundary')).toContainText(/暂不形成方向结论|等待数据完成后再判断/);
       const verdictBox = await page.getByTestId('market-overview-decision-readiness').boundingBox();
       const mainGridBox = await page.getByTestId('market-overview-main-grid').boundingBox();

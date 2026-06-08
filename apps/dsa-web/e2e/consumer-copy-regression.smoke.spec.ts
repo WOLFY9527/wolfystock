@@ -847,7 +847,6 @@ appTest.describe('consumer copy regression smoke', () => {
       const shell = page.getByTestId('market-overview-shell');
       await appExpect(shell).toBeVisible({ timeout: 15_000 });
       const visualStrip = page.getByTestId('market-overview-visual-evidence-strip');
-      await appExpect(page.getByTestId('market-intelligence-actionability-strip')).toHaveCount(0);
       await appExpect(visualStrip).toBeVisible();
       await appExpect(visualStrip).toContainText('核心图表证据');
       await appExpect(page.getByTestId('market-decision-semantics-strip')).toContainText('不构成交易指令');

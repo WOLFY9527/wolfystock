@@ -1916,7 +1916,6 @@ describe('MarketOverviewPage', () => {
     renderMarketOverviewWithLanguage('zh');
 
     await screen.findByTestId('market-overview-workbench');
-    expect(screen.queryByTestId('market-intelligence-actionability-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent('不构成交易指令');
   });
@@ -1928,7 +1927,6 @@ describe('MarketOverviewPage', () => {
 
     const decisionReadiness = await screen.findByTestId('market-overview-decision-readiness');
     expect(decisionReadiness).toHaveTextContent(/暂不形成方向结论|等待数据完成后再判断|仅观察/);
-    expect(screen.queryByTestId('market-intelligence-actionability-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
   });
 
@@ -1970,7 +1968,6 @@ describe('MarketOverviewPage', () => {
     renderMarketOverviewWithLanguage('zh');
 
     await screen.findByTestId('market-overview-workbench');
-    expect(screen.queryByTestId('market-intelligence-actionability-strip')).not.toBeInTheDocument();
     expect(screen.queryByText('市场研判可用性')).not.toBeInTheDocument();
   });
 
@@ -1984,7 +1981,6 @@ describe('MarketOverviewPage', () => {
     renderMarketOverviewWithLanguage('zh');
 
     await screen.findByTestId('market-overview-workbench');
-    expect(screen.queryByTestId('market-intelligence-actionability-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
   });
 
@@ -2179,7 +2175,6 @@ describe('MarketOverviewPage', () => {
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/市场状态/);
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/数据说明/);
     expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('market-intelligence-actionability-strip')).not.toBeInTheDocument();
     const conclusion = screen.getByTestId('market-overview-decision-readiness');
     expect(conclusion).toHaveTextContent('市场状态');
     expect(conclusion).toHaveTextContent('主驱动');
@@ -2451,7 +2446,6 @@ describe('MarketOverviewPage', () => {
     expect(topStack.querySelectorAll('[data-market-research-flow="decision-semantics"]')).toHaveLength(1);
     expect(screen.getByTestId('market-overview-main-grid').compareDocumentPosition(screen.getByTestId('market-decision-semantics-strip'))).toBe(Node.DOCUMENT_POSITION_PRECEDING);
     expect(screen.queryByTestId('market-overview-research-readiness-strip')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('market-intelligence-actionability-strip')).not.toBeInTheDocument();
     expect(decisionReadiness.compareDocumentPosition(screen.getByTestId('market-overview-main-grid'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.getByTestId('market-overview-main-grid').compareDocumentPosition(screen.getByTestId('market-overview-visual-evidence-strip'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });

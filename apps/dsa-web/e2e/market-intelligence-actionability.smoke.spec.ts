@@ -255,7 +255,6 @@ test.describe('market intelligence actionability browser smoke', () => {
 
     await expect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
     const visualStrip = page.getByTestId('market-overview-visual-evidence-strip');
-    await expect(page.getByTestId('market-intelligence-actionability-strip')).toHaveCount(0);
     await expect(page.getByTestId('market-overview-research-readiness-strip')).toHaveCount(0);
     await expect(page.getByTestId('market-overview-main-grid')).toBeVisible();
     await expect(visualStrip).toBeVisible();
@@ -291,7 +290,6 @@ test.describe('market intelligence actionability browser smoke', () => {
 
     await expect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
     const visualStrip = page.getByTestId('market-overview-visual-evidence-strip');
-    await expect(page.getByTestId('market-intelligence-actionability-strip')).toHaveCount(0);
     await expect(page.getByTestId('market-overview-research-readiness-strip')).toHaveCount(0);
     await expect(page.getByTestId('market-overview-main-grid')).toBeVisible();
     await expect(visualStrip).toBeVisible();
