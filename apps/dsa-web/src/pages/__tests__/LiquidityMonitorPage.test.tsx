@@ -729,6 +729,7 @@ describe('LiquidityMonitorPage', () => {
     expect(screen.getByTestId('liquidity-summary-strip')).toHaveTextContent('主要压力');
     expect(screen.getByTestId('liquidity-summary-strip')).toHaveTextContent('最近更新');
     expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('流动性格局');
+    expect(within(screen.getByTestId('liquidity-visual-posture')).getByText('69')).toBeInTheDocument();
     expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('资金面线索');
     expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('压力来源');
     expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('压力走势');
@@ -996,9 +997,9 @@ describe('LiquidityMonitorPage', () => {
       ...payload,
       score: {
         ...payload.score,
-        value: 0,
+        value: 50,
         regime: 'unavailable',
-        confidence: 0,
+        confidence: 0.18,
         includedIndicatorCount: 0,
         includedIndicatorWeight: 0,
       },
@@ -1043,6 +1044,7 @@ describe('LiquidityMonitorPage', () => {
           scoringPillarCount: 0,
           discountedEvidenceCount: 0,
           dataGapCount: 1,
+          realScoringEvidenceCount: 0,
         },
       },
     });
@@ -1051,7 +1053,10 @@ describe('LiquidityMonitorPage', () => {
     await screen.findByTestId('liquidity-decision-readiness');
     await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('数据不足，暂不判断；保留最近一次流动性状态。'));
     const unavailableBand = screen.getByTestId('liquidity-decision-readiness');
+    const unavailablePosture = screen.getByTestId('liquidity-visual-posture');
     expect(unavailableBand).toHaveTextContent('数据不足，暂不判断；保留最近一次流动性状态。');
+    expect(unavailablePosture).toHaveTextContent('--');
+    expect(unavailablePosture).not.toHaveTextContent('50');
     expect(screen.getByTestId('liquidity-visual-posture')).toHaveTextContent('不可判断');
     expect(screen.getByTestId('liquidity-visual-coverage')).toHaveTextContent('待补充');
     expect(screen.getByTestId('liquidity-visual-trend')).toHaveTextContent('连续走势暂未返回，当前保持观察');

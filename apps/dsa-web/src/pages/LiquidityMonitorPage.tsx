@@ -1487,6 +1487,9 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
   const postureFillPct = data.score.regime === 'unavailable'
     ? 0
     : clampPercent(Math.max(data.score.value || 0, 0), 0, 100);
+  const postureScoreLabel = data.score.regime === 'unavailable' || readinessSummary.state === 'unavailable'
+    ? '--'
+    : scoreLabel(data.score.value);
 
   return (
     <section data-testid="liquidity-visual-evidence" className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
@@ -1509,7 +1512,7 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
           <div className="flex items-end justify-between gap-3">
             <div>
               <p className="text-[10px] uppercase tracking-[0.24em] text-white/34">REGIME</p>
-              <p className="mt-2 font-mono text-3xl font-semibold text-white/86">{scoreLabel(data.score.value)}</p>
+              <p className="mt-2 font-mono text-3xl font-semibold text-white/86">{postureScoreLabel}</p>
             </div>
             <p className="text-[11px] leading-5 text-white/48">
               {coverageSummary.directionLabel === '可参考' ? '当前格局可继续跟踪' : '当前格局先保持观察'}
