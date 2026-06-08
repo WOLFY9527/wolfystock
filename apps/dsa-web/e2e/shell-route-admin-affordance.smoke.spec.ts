@@ -258,6 +258,34 @@ async function expectGuestAdminGate(page: Page) {
   await expectNoForbiddenAffordanceText(await readVisibleText(page));
 }
 
+async function expectSignedInNonAdminAdminGate(page: Page, expectedPath: RegExp, isMobile: boolean) {
+  await appExpect(page).toHaveURL(expectedPath);
+  await appExpect(page.getByRole('heading', { name: '这个页面需要管理员账户' })).toBeVisible({ timeout: 15_000 });
+  await appExpect(page.getByTestId('shell-admin-primary-nav')).toHaveCount(0);
+  await appExpect(page.getByRole('button', { name: /独立控制台|Independent Console/i })).toHaveCount(0);
+  await appExpect(page.getByRole('link', { name: '运维总览/系统设置' })).toHaveCount(0);
+  await appExpect(page.getByRole('link', { name: '数据源与就绪度' })).toHaveCount(0);
+
+  if (isMobile) {
+    await appExpect(page.getByTestId('shell-mobile-active-route')).toBeVisible();
+    await page.getByRole('button', { name: '打开导航菜单' }).click();
+    await appExpect(page.getByRole('heading', { name: '导航菜单' })).toBeVisible();
+    await appExpect(page.getByRole('button', { name: /独立控制台|Independent Console/i })).toHaveCount(0);
+    await appExpect(page.getByRole('link', { name: '运维总览/系统设置' })).toHaveCount(0);
+    await appExpect(page.getByRole('link', { name: '数据源与就绪度' })).toHaveCount(0);
+  } else {
+    const consumerNav = page.getByTestId('shell-consumer-primary-nav');
+    await appExpect(consumerNav).toBeVisible();
+    await appExpect(consumerNav.getByRole('link', { name: '首页' })).toBeVisible();
+    await appExpect(consumerNav.getByRole('link', { name: '扫描器' })).toBeVisible();
+    await appExpect(consumerNav.getByRole('link', { name: '持仓' })).toBeVisible();
+  }
+
+  await expectRootNonEmpty(page);
+  await expectNoHorizontalOverflow(page);
+  await expectNoForbiddenAffordanceText(await readVisibleText(page));
+}
+
 async function expectAdminRedirectSurface(page: Page, isMobile: boolean) {
   await adminExpect(page).toHaveURL(/\/zh\/settings\/system$/);
   await adminExpect(page.getByTestId('system-settings-page')).toBeVisible({ timeout: 15_000 });
@@ -329,6 +357,27 @@ appTest.describe('shell route clarity smoke', () => {
       await page.goto('/zh/admin');
       await page.waitForLoadState('domcontentloaded');
       await expectGuestAdminGate(page);
+    }
+  });
+
+  appTest('keeps signed-in non-admin admin aliases on clear generic gates without empty admin navigation', async ({ page }) => {
+    const aliases = [
+      { path: '/zh/admin/system', expectedPath: /\/zh\/settings\/system$/ },
+      { path: '/zh/admin/providers', expectedPath: /\/zh\/admin\/market-providers$/ },
+      { path: '/zh/admin/evidence', expectedPath: /\/zh\/admin\/evidence-workflow$/ },
+      { path: '/zh/admin/costs', expectedPath: /\/zh\/admin\/cost-observability$/ },
+      { path: '/zh/admin/ai', expectedPath: /\/zh\/settings\/system$/ },
+    ] as const;
+
+    for (const viewport of viewports) {
+      for (const alias of aliases) {
+        await page.unrouteAll({ behavior: 'ignoreErrors' });
+        await page.setViewportSize(viewport);
+        await installSignedInProductSession(page);
+        await page.goto(alias.path);
+        await page.waitForLoadState('domcontentloaded');
+        await expectSignedInNonAdminAdminGate(page, alias.expectedPath, viewport.width < 768);
+      }
     }
   });
 });

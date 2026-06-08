@@ -256,7 +256,7 @@ function useSidebarNavView({
   }
   const hasAdminMenu = adminNavItems.length > 0;
   const adminNavGroups = groupAdminNavItems(adminNavItems, language);
-  const showAdminPrimaryNav = isAdminRoute;
+  const showAdminPrimaryNav = isAdminRoute && hasAdminMenu;
 
   const handleAdminNavigate = () => {
     setShowAdminMenu(false);

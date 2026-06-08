@@ -513,6 +513,22 @@ describe('Shell', () => {
     expect(screen.queryByRole('button', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
   });
 
+  it('hides the empty admin navigation container for non-admin users on admin-gated routes', async () => {
+    render(
+      <MemoryRouter initialEntries={['/settings/system']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByTestId('shell-admin-primary-nav')).not.toBeInTheDocument();
+    expect(screen.getByTestId('shell-consumer-primary-nav')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
+  });
+
   it('keeps the mobile navigation drawer open until the user closes it or navigates away', async () => {
     window.innerWidth = 375;
 

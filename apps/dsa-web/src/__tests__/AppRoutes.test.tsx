@@ -422,12 +422,12 @@ describe('AppContent route flows', () => {
   });
 
   it.each([
-    ['/zh/admin/system', '/zh/settings/system', '这个页面需要管理员账户'],
-    ['/zh/admin/providers', '/zh/admin/market-providers', '这个市场数据源运维页面需要管理员账户'],
-    ['/zh/admin/evidence', '/zh/admin/evidence-workflow', '这个证据工作流页面需要管理员账户'],
-    ['/zh/admin/costs', '/zh/admin/cost-observability', '这个成本观测页面需要管理员账户'],
-    ['/zh/admin/ai', '/zh/settings/system', '这个页面需要管理员账户'],
-  ])('keeps non-admin account gating unchanged for admin alias %s', async (path, expectedPath, heading) => {
+    ['/zh/admin/system', '/zh/settings/system'],
+    ['/zh/admin/providers', '/zh/admin/market-providers'],
+    ['/zh/admin/evidence', '/zh/admin/evidence-workflow'],
+    ['/zh/admin/costs', '/zh/admin/cost-observability'],
+    ['/zh/admin/ai', '/zh/settings/system'],
+  ])('keeps non-admin account gating unchanged for admin alias %s', async (path, expectedPath) => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
@@ -444,7 +444,7 @@ describe('AppContent route flows', () => {
 
     renderAtWithLocationProbe(path);
 
-    expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '这个页面需要管理员账户' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
   });
 
@@ -880,7 +880,7 @@ describe('AppContent route flows', () => {
 
     renderAt('/zh/admin/cost-observability');
 
-    expect(await screen.findByRole('heading', { name: '这个成本观测页面需要管理员账户' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '这个页面需要管理员账户' })).toBeInTheDocument();
     expect(screen.queryByText('admin-cost-observability-page')).not.toBeInTheDocument();
   });
 

@@ -5,15 +5,18 @@
 import type React from 'react';
 import { useEffect, useEffectEvent, useReducer, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, LockKeyhole, LogOut, Menu, ShieldCheck, SlidersHorizontal } from 'lucide-react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { ArrowRight, ChevronDown, LockKeyhole, LogOut, Menu, ShieldAlert, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
+import { Card } from '../common/Card';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Drawer } from '../common/Drawer';
+import { WorkspacePageHeader } from '../common/WorkspacePageHeader';
 import { SidebarNav } from './SidebarNav';
 import { ShellRailContext } from './ShellRailContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/UiLanguageContext';
+import { useProductSurface } from '../../hooks/useProductSurface';
 import type { UiLanguage } from '../../i18n/core';
 import { cn } from '../../utils/cn';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../../utils/localeRouting';
@@ -151,6 +154,73 @@ const ShellRailPanel: React.FC<{
   );
 };
 
+const ShellAdminAccountGate: React.FC<{
+  eyebrow: string;
+  title: string;
+  description: string;
+  bullets: string[];
+  statusLabel: string;
+  note: string;
+  primaryAction: { label: string; to: string };
+  secondaryAction: { label: string; to: string };
+}> = ({
+  eyebrow,
+  title,
+  description,
+  bullets,
+  statusLabel,
+  note,
+  primaryAction,
+  secondaryAction,
+}) => (
+  <div className="space-y-6">
+    <WorkspacePageHeader eyebrow={eyebrow} title={title} description={description} />
+
+    <Card className="max-w-3xl space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex size-12 items-center justify-center rounded-full border border-[hsl(var(--accent-warning-hsl)/0.32)] bg-[hsl(var(--accent-warning-hsl)/0.14)] text-[hsl(var(--accent-warning-hsl))]">
+          <ShieldAlert className="size-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+          <p className="mt-1 text-sm text-secondary-text">{description}</p>
+        </div>
+        <span className="inline-flex min-h-[28px] items-center rounded-full border border-[hsl(var(--accent-warning-hsl)/0.32)] bg-[hsl(var(--accent-warning-hsl)/0.14)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[hsl(var(--accent-warning-hsl))]">
+          {statusLabel}
+        </span>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        {bullets.map((item) => (
+          <div
+            key={item}
+            className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-3 text-sm leading-6 text-secondary-text"
+          >
+            {item}
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Link
+          to={primaryAction.to}
+          className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-[var(--theme-button-radius)] border border-transparent bg-[var(--pill-active-bg)] px-4 text-[0.75rem] text-foreground transition-colors hover:border-[var(--border-strong)]"
+        >
+          <span>{primaryAction.label}</span>
+          <ArrowRight className="size-4" />
+        </Link>
+        <Link
+          to={secondaryAction.to}
+          className="inline-flex min-h-[40px] items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 text-[0.75rem] text-secondary-text transition-colors hover:border-[var(--border-strong)] hover:text-foreground"
+        >
+          {secondaryAction.label}
+        </Link>
+      </div>
+      <p className="text-xs leading-5 text-muted-text">{note}</p>
+    </Card>
+  </div>
+);
+
 type AccountMenuCopy = {
   accountCenter: string;
   security: string;
@@ -211,9 +281,47 @@ function buildAccountPath(routeLocale: UiLanguage | null, target: string): strin
   return routeLocale ? buildLocalizedPath(target, routeLocale) : target;
 }
 
+function buildStandardAdminAccountGateCopy(language: UiLanguage, routeLocale: UiLanguage | null) {
+  const isEnglish = language === 'en';
+  const homePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
+  const settingsPath = routeLocale ? buildLocalizedPath('/settings', routeLocale) : '/settings';
+
+  return {
+    eyebrow: isEnglish ? 'Admin Only' : '仅限管理员',
+    statusLabel: isEnglish ? 'Admin Account Required' : '需要管理员账户',
+    title: isEnglish ? 'This page requires an admin account' : '这个页面需要管理员账户',
+    description: isEnglish
+      ? 'System configuration, provider controls, schedules, channels, and admin logs stay outside the regular app.'
+      : '系统配置、数据源控制、调度、通道和管理员日志仍然留在普通用户页面之外。',
+    bullets: isEnglish
+      ? [
+        'Regular users no longer see raw system controls in the default navigation.',
+        'If you expected access, sign out and re-enter with an admin account.',
+        'Personal preferences remain available in personal settings.',
+      ]
+      : [
+        '普通用户不会再在默认导航里看到原始系统控制项。',
+        '如果你本应拥有权限，请先退出当前账户，再使用管理员账户重新进入。',
+        '个人偏好仍然保留在标准设置页面。',
+      ],
+    note: isEnglish
+      ? 'Need regular tools instead? Open personal settings or return home.'
+      : '如果你要继续普通工具，请打开个人设置或返回首页。',
+    primaryAction: {
+      label: isEnglish ? 'Open personal settings' : '打开个人设置',
+      to: settingsPath,
+    },
+    secondaryAction: {
+      label: isEnglish ? 'Back home' : '返回首页',
+      to: homePath,
+    },
+  };
+}
+
 export const Shell: React.FC<ShellProps> = ({ children }) => {
   const { t, language } = useI18n();
   const { loggedIn, currentUser, logout } = useAuth();
+  const { isAdmin, isAdminAccount } = useProductSurface();
   const { pathname } = useLocation();
   const routeLocale = parseLocaleFromPathname(pathname);
   const surfacePathname = stripLocalePrefix(pathname);
@@ -257,6 +365,11 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const isMobileNavVisible = mobileNavOpen;
   const isRailVisible = hasRailContent && railOpen;
   const mobileRouteLabel = resolveMobileRouteLabel(surfacePathname, t, language);
+  const hasAdminIdentity = isAdminAccount || isAdmin || Boolean(currentUser?.isAdmin);
+  const shouldRenderStandardAdminAccountGate = loggedIn && isSystemControlRoute && !hasAdminIdentity;
+  const standardAdminAccountGateCopy = shouldRenderStandardAdminAccountGate
+    ? buildStandardAdminAccountGateCopy(language, routeLocale)
+    : null;
   const accountDisplayName = sanitizeAccountDisplayName(
     currentUser?.displayName || currentUser?.username,
     {
@@ -555,7 +668,20 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         >
           <main className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full${isSystemControlRoute ? ' p-0 shell-main-column--system-control' : isHomeRoute ? ' px-4 pt-3 pb-8 md:px-6 lg:pt-4 xl:px-8 shell-main-column--home' : ' px-6 pt-6 pb-12 md:px-8 xl:px-12'}${shellFrameOverflowClass}${isPageScrollRoute ? ' shell-main-column--page-scroll' : ''}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
             <div key={pathname} className={`theme-page-transition flex min-h-0 min-w-0 w-full flex-col${isScannerRoute || isHomeRoute ? '' : ' h-full'}${isPageScrollRoute ? ' theme-page-transition--page-scroll' : ''}${isSystemControlRoute ? ' theme-page-transition--system-control' : ''}`}>
-              {children ?? <Outlet />}
+              {shouldRenderStandardAdminAccountGate && standardAdminAccountGateCopy ? (
+                <ShellAdminAccountGate
+                  eyebrow={standardAdminAccountGateCopy.eyebrow}
+                  title={standardAdminAccountGateCopy.title}
+                  description={standardAdminAccountGateCopy.description}
+                  bullets={standardAdminAccountGateCopy.bullets}
+                  statusLabel={standardAdminAccountGateCopy.statusLabel}
+                  note={standardAdminAccountGateCopy.note}
+                  primaryAction={standardAdminAccountGateCopy.primaryAction}
+                  secondaryAction={standardAdminAccountGateCopy.secondaryAction}
+                />
+              ) : (
+                children ?? <Outlet />
+              )}
             </div>
           </main>
         </div>
