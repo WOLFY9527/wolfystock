@@ -1275,6 +1275,134 @@ describe('PortfolioPage FX refresh', () => {
     expect(risk).not.toHaveTextContent('provider_debug_payload');
   });
 
+  it('renders a collapsed consumer-safe risk exposure summary from the current snapshot only', async () => {
+    const snapshot = makeSnapshot({ includePosition: true, fxStale: true }) as ReturnType<typeof makeSnapshot> & Record<string, unknown>;
+    snapshot.analytics.exposure.byAccount = [
+      {
+        key: '1',
+        label: 'Account 1',
+        marketValue: 2200,
+        displayValue: 2200,
+        displayCurrency: 'CNY',
+        percent: 58,
+        fxStatus: 'live' as const,
+        accountId: 1,
+        accountName: 'Account 1',
+        baseCurrency: 'CNY',
+        holdingCount: 2,
+      },
+      {
+        key: '2',
+        label: 'Account 2',
+        marketValue: 1600,
+        displayValue: 1600,
+        displayCurrency: 'CNY',
+        percent: 42,
+        fxStatus: 'live' as const,
+        accountId: 2,
+        accountName: 'Account 2',
+        baseCurrency: 'CNY',
+        holdingCount: 1,
+      },
+    ];
+    snapshot.analytics.exposure.bySymbol = [
+      {
+        key: 'AAPL',
+        label: 'AAPL',
+        marketValue: 1600,
+        displayValue: 1600,
+        displayCurrency: 'USD',
+        percent: 42,
+        fxStatus: 'live' as const,
+        symbol: 'AAPL',
+        market: 'us',
+        currency: 'USD',
+        holdingCount: 1,
+      },
+    ];
+    snapshot.analytics.exposure.byCurrency = [
+      {
+        key: 'USD',
+        label: 'USD',
+        marketValue: 2500,
+        displayValue: 2500,
+        displayCurrency: 'USD',
+        percent: 66,
+        fxStatus: 'unavailable' as const,
+        nativeValue: 2500,
+        nativeCurrency: 'USD',
+        currency: 'USD',
+        holdingCount: 2,
+      },
+    ];
+    snapshot.analytics.exposure.byMarket = [
+      {
+        key: 'us',
+        label: 'US',
+        marketValue: 2500,
+        displayValue: 2500,
+        displayCurrency: 'USD',
+        percent: 66,
+        fxStatus: 'live' as const,
+        market: 'us',
+        holdingCount: 2,
+      },
+    ];
+    snapshot.analytics.risk = {
+      ...snapshot.analytics.risk,
+      largestPosition: snapshot.analytics.exposure.bySymbol[0],
+      largestCurrency: snapshot.analytics.exposure.byCurrency[0],
+      largestMarket: snapshot.analytics.exposure.byMarket[0],
+      cashPercent: 33.3333,
+      warnings: ['single_position_gt_30', 'reasonCode_backend_debug'],
+    };
+    snapshot.fxFreshnessState = 'stale';
+    snapshot.benchmarkMappingState = 'missing';
+    snapshot.portfolioRiskEvidence = {
+      limitationLabels: ['sourceAuthorityAllowed', 'reasonCode backend debug', '仅供风险观察'],
+      sourceRefs: [
+        { id: 'raw-provider-ref', provider: 'provider-a', sourceClass: 'cache_snapshot' },
+      ],
+      adminDiagnostics: {
+        provider: 'provider-a',
+        cache: 'portfolio_cache',
+        reasonCode: 'backend_debug_reason',
+      },
+    };
+    getSnapshot.mockResolvedValue(snapshot);
+
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const summary = screen.getByTestId('portfolio-risk-exposure-summary');
+    expect(summary).not.toHaveAttribute('open');
+    expect(summary).toHaveTextContent('风险暴露摘要');
+    expect(summary).toHaveTextContent('最大持仓 42.0%');
+    expect(screen.queryByTestId('portfolio-risk-exposure-summary-body')).not.toBeInTheDocument();
+
+    fireEvent.click(within(summary).getByRole('button', { name: '展开 风险暴露摘要' }));
+
+    const body = screen.getByTestId('portfolio-risk-exposure-summary-body');
+    expect(body).toHaveTextContent('最大持仓');
+    expect(body).toHaveTextContent('AAPL');
+    expect(body).toHaveTextContent('42.0%');
+    expect(body).toHaveTextContent('主币种');
+    expect(body).toHaveTextContent('USD');
+    expect(body).toHaveTextContent('66.0%');
+    expect(body).toHaveTextContent('主市场 / 账户');
+    expect(body).toHaveTextContent('美股 / Account 1');
+    expect(body).toHaveTextContent('66.0% / 58.0%');
+    expect(body).toHaveTextContent('现金占比');
+    expect(body).toHaveTextContent('33.3%');
+    expect(body).toHaveTextContent('仅基于当前页面快照汇总');
+    expect(body).toHaveTextContent('汇率可能延迟');
+    expect(body).toHaveTextContent('部分风险参考暂不可用');
+    expect(body.textContent || '').not.toMatch(
+      /sourceAuthority|reasonCode|provider|cache|debug|backend|raw|sourceRefs|execution|readiness|rebalance|reduce|increase|position[- ]?sizing|stop|target|买入|卖出|下单|调仓/i,
+    );
+  });
+
   it('renders compact portfolio evidence chips without exposing raw sync or authority internals', async () => {
     const snapshot = makeSnapshot({
       includePosition: true,

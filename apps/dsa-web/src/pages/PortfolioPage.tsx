@@ -24,6 +24,7 @@ import {
   TerminalButton,
   TerminalDenseList,
   TerminalDenseTable,
+  TerminalDisclosure,
   TerminalChip,
   TerminalEmptyState,
   TerminalGrid,
@@ -2353,9 +2354,11 @@ const PortfolioPage: React.FC = () => {
   const symbolExposureRows = sortExposureRowsByPercent(analytics?.exposure.bySymbol);
   const currencyExposureRows = sortExposureRowsByPercent(analytics?.exposure.byCurrency);
   const marketExposureRows = sortExposureRowsByPercent(analytics?.exposure.byMarket);
+  const accountExposureRows = sortExposureRowsByPercent(analytics?.exposure.byAccount);
   const topPosition = symbolExposureRows[0] || analytics?.risk.largestPosition || null;
   const topCurrency = currencyExposureRows[0] || analytics?.risk.largestCurrency || null;
   const topMarket = marketExposureRows[0] || analytics?.risk.largestMarket || null;
+  const topAccount = accountExposureRows[0] || null;
   const topPositionPercent = Number(topPosition?.percent || 0);
   const concentrationLabel = !hasHoldings || !topPosition
     ? (language === 'zh' ? '暂无持仓' : 'No holdings')
@@ -2452,6 +2455,65 @@ const PortfolioPage: React.FC = () => {
     buildTrustStateItem('holdingsLineage', snapshot?.holdingsLineageState, language),
     buildTrustStateItem('cashLedgerCompleteness', snapshot?.cashLedgerCompletenessState, language),
   ]);
+  const exposureSummaryFxTrustItem = buildTrustStateItem('fxFreshness', snapshot?.fxFreshnessState, language);
+  const exposureSummaryTrustItems = uniqueTrustItems([
+    exposureSummaryFxTrustItem,
+    !exposureSummaryFxTrustItem && (hasFxUnavailable || analytics?.risk.fxUnavailable)
+      ? { key: 'exposure-fx-unavailable', label: consumerFxLabel('missing', language), variant: 'danger' }
+      : null,
+    !exposureSummaryFxTrustItem && snapshot?.fxStale
+      ? { key: 'exposure-fx-stale', label: consumerFxLabel('stale', language), variant: 'caution' }
+      : null,
+    hasPortfolioEvidenceSummary && portfolioEvidenceSummary?.confidenceCap != null
+      ? { key: 'exposure-limited-confidence', label: limitedConfidenceLabel(language), variant: 'caution' }
+      : null,
+    buildTrustStateItem('benchmarkMapping', snapshot?.benchmarkMappingState, language),
+    buildTrustStateItem('factorMapping', snapshot?.factorMappingState, language),
+    buildTrustStateItem('holdingsLineage', snapshot?.holdingsLineageState, language),
+  ]).slice(0, 4);
+  const exposureSummaryTitle = language === 'zh' ? '风险暴露摘要' : 'Risk Exposure Summary';
+  const exposureSummaryLargestLabel = language === 'zh' ? '最大持仓' : 'Largest holding';
+  const exposureSummaryCashLabel = language === 'zh' ? '现金占比' : 'Cash percent';
+  const topMarketAccountLabel = [
+    topMarket ? formatExposureMarketLabel(topMarket, language) : null,
+    topAccount ? (topAccount.accountName || topAccount.label || topAccount.key) : null,
+  ].filter(Boolean).join(' / ') || '--';
+  const topMarketAccountPercent = [
+    topMarket ? formatPercent(topMarket.percent) : null,
+    topAccount ? formatPercent(topAccount.percent) : null,
+  ].filter(Boolean).join(' / ') || '--';
+  const exposureSummaryRows = [
+    {
+      key: 'largest-position',
+      label: exposureSummaryLargestLabel,
+      value: topPosition?.label || topPosition?.key || '--',
+      detail: formatPercent(topPosition?.percent),
+    },
+    {
+      key: 'largest-currency',
+      label: language === 'zh' ? '主币种' : 'Largest currency',
+      value: topCurrency?.label || topCurrency?.currency || topCurrency?.key || '--',
+      detail: formatPercent(topCurrency?.percent),
+    },
+    {
+      key: 'largest-market-account',
+      label: language === 'zh' ? '主市场 / 账户' : 'Largest market / account',
+      value: topMarketAccountLabel,
+      detail: topMarketAccountPercent,
+    },
+    {
+      key: 'cash-percent',
+      label: exposureSummaryCashLabel,
+      value: formatPercent(analytics?.risk.cashPercent),
+      detail: language === 'zh' ? '当前组合权益' : 'Current portfolio equity',
+    },
+  ];
+  const exposureSummaryDisclosureSummary = !hasHoldings
+    ? (language === 'zh' ? '暂无持仓，等待快照生成。' : 'No holdings yet; waiting for snapshot exposure.')
+    : `${exposureSummaryLargestLabel} ${formatPercent(topPosition?.percent)} · ${exposureSummaryCashLabel} ${formatPercent(analytics?.risk.cashPercent)}`;
+  const exposureSummaryBasisNote = language === 'zh'
+    ? '仅基于当前页面快照汇总，不展示尚未确认的行业、主题、因子或相关性分类。'
+    : 'Summarized only from the current page snapshot; unconfirmed sector, theme, factor, and correlation categories stay out of the default summary.';
   const holdingsPrimaryValue = hasHoldings
     ? (language === 'zh' ? `${positionRows.length} 项持仓` : `${positionRows.length} holdings`)
     : (language === 'zh' ? '无持仓' : 'No holdings');
@@ -2591,7 +2653,7 @@ const PortfolioPage: React.FC = () => {
       : hasFxUnavailable
         ? (language === 'zh' ? '先确认汇率与估值状态' : 'Check FX and valuation status first')
         : hasHistory
-          ? (language === 'zh' ? '继续跟踪近期活动与调仓节奏' : 'Review recent activity and rebalance pace')
+          ? (language === 'zh' ? '继续核对近期活动与组合变化' : 'Review recent activity and portfolio changes')
           : (language === 'zh' ? '继续补充记录，完善组合画像' : 'Add more records to complete the portfolio picture');
   const nextActionBody = !hasAccounts
     ? (language === 'zh'
@@ -3275,6 +3337,34 @@ const PortfolioPage: React.FC = () => {
                       <PillBadge key={warning} variant="warning" className="text-white/55">{warning}</PillBadge>
                     ))}
                   </div>
+                  <TerminalDisclosure
+                    title={exposureSummaryTitle}
+                    summary={exposureSummaryDisclosureSummary}
+                    data-testid="portfolio-risk-exposure-summary"
+                    className="border-white/[0.05] bg-white/[0.02]"
+                  >
+                    <div data-testid="portfolio-risk-exposure-summary-body" className="flex flex-col gap-3">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {exposureSummaryRows.map((item) => (
+                          <div key={item.key} className="min-w-0 rounded-xl border border-white/[0.03] bg-black/20 px-3 py-3">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{item.label}</div>
+                            <div className="mt-2 truncate text-sm font-medium text-white">{item.value}</div>
+                            <div className="mt-1 font-mono text-xs text-white/45">{item.detail}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="rounded-xl border border-white/[0.03] bg-black/20 px-3 py-2 text-xs leading-5 text-white/48">
+                        {exposureSummaryBasisNote}
+                      </p>
+                      {exposureSummaryTrustItems.length ? (
+                        <PortfolioTrustStrip
+                          title={language === 'zh' ? '数据状态' : 'Data posture'}
+                          items={exposureSummaryTrustItems}
+                          data-testid="portfolio-risk-exposure-trust-strip"
+                        />
+                      ) : null}
+                    </div>
+                  </TerminalDisclosure>
                   <PortfolioScenarioRiskPanel
                     snapshotAsOf={snapshot?.asOf}
                     positions={scenarioRiskPositions}
