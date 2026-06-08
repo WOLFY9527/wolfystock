@@ -1785,7 +1785,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(createTrade).toHaveBeenCalledWith(expect.objectContaining({ currency: 'USD' }));
     await waitFor(() => expect(getSnapshot.mock.calls.length).toBeGreaterThan(snapshotCallsBeforeSubmit));
     await waitFor(() => expect(listTrades.mock.calls.length).toBeGreaterThan(tradeCallsBeforeSubmit));
-    expect(await screen.findByTestId('portfolio-trade-feedback')).toHaveTextContent('AAPL 增加持仓已保存 · 已刷新持仓');
+    expect(await screen.findByTestId('portfolio-trade-feedback')).toHaveTextContent('AAPL 暴露增加已保存 · 已刷新持仓');
     expect(screen.getByLabelText(p('stockCode'))).toHaveValue('');
   });
 
@@ -2490,8 +2490,8 @@ describe('PortfolioPage FX refresh', () => {
     expect(container).toHaveTextContent('保存记录');
     expect(container).toHaveTextContent('记录日期');
     expect(container).toHaveTextContent('持仓变动');
-    expect(container).toHaveTextContent('增加持仓');
-    expect(container).toHaveTextContent('减少持仓');
+    expect(container).toHaveTextContent('暴露增加');
+    expect(container).toHaveTextContent('暴露减少');
     expect(container).not.toHaveTextContent('交易工作台');
     expect(container).not.toHaveTextContent('股票买卖');
     expect(container).not.toHaveTextContent('提交交易');

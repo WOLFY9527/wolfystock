@@ -37,19 +37,23 @@ import { useI18n } from '../../contexts/UiLanguageContext';
 export type RuleWizardStep = 'symbol' | 'setup' | 'strategy' | 'confirm' | 'run';
 
 type BacktestLanguage = 'zh' | 'en';
+type StrategyExample = {
+  label: string;
+  strategyText: string;
+};
 
-const STRATEGY_EXAMPLES: Record<BacktestLanguage, string[]> = {
+const STRATEGY_EXAMPLES: Record<BacktestLanguage, StrategyExample[]> = {
   zh: [
-    'MACD 金叉买入，死叉卖出',
-    '5日均线上穿20日均线买入，下穿卖出',
-    '从2025-01-01到2025-12-31，每月定投1000美元AAPL',
-    'RSI 小于 30 买入，大于 70 卖出',
+    { label: 'MACD 金叉正向信号，死叉观察解除', strategyText: 'MACD 金叉买入，死叉卖出' },
+    { label: '5日均线上穿20日均线正向信号，下穿观察解除', strategyText: '5日均线上穿20日均线买入，下穿卖出' },
+    { label: '2025 区间内每月定投 1000 美元 AAPL', strategyText: '从2025-01-01到2025-12-31，每月定投1000美元AAPL' },
+    { label: 'RSI 小于 30 正向信号，大于 70 观察解除', strategyText: 'RSI 小于 30 买入，大于 70 卖出' },
   ],
   en: [
-    'Buy on a MACD bullish crossover and sell on a bearish crossover',
-    'Buy when the 5-day moving average crosses above the 20-day average, and sell on the reverse crossover',
-    'Invest 1000 USD into AAPL every month from 2025-01-01 to 2025-12-31',
-    'Buy when RSI drops below 30 and sell when it rises above 70',
+    { label: 'MACD bullish crossover positive signal; bearish crossover releases observation', strategyText: 'Buy on a MACD bullish crossover and sell on a bearish crossover' },
+    { label: '5-day average crossover positive signal; reverse crossover releases observation', strategyText: 'Buy when the 5-day moving average crosses above the 20-day average, and sell on the reverse crossover' },
+    { label: 'Monthly 1000 USD AAPL accumulation from 2025-01-01 to 2025-12-31', strategyText: 'Invest 1000 USD into AAPL every month from 2025-01-01 to 2025-12-31' },
+    { label: 'RSI below 30 positive signal; above 70 releases observation', strategyText: 'Buy when RSI drops below 30 and sell when it rises above 70' },
   ],
 };
 
@@ -398,15 +402,15 @@ function getRiskControlRows(parsed: RuleBacktestParseResponse | null): StrategyP
   const strategySpec = getStrategyPreviewSpec(parsed);
   const controls = [
     {
-      label: '止损',
+      label: '风险退出参考',
       value: getStrategySpecValue(strategySpec, ['risk_controls', 'stop_loss_pct']),
     },
     {
-      label: '止盈',
+      label: '上方退出参考',
       value: getStrategySpecValue(strategySpec, ['risk_controls', 'take_profit_pct']),
     },
     {
-      label: '移动止损',
+      label: '移动风险退出参考',
       value: getStrategySpecValue(strategySpec, ['risk_controls', 'trailing_stop_pct']),
     },
   ];
@@ -1074,21 +1078,21 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
             onFocus={() => onStepChange('setup')}
             rows={8}
             className={`${compactInputClass} min-h-[220px] py-3 product-command-input--textarea`}
-            placeholder={language === 'en' ? 'For example: Start with 100000, buy 100 shares of ORCL every trading day from 2025-01-01 to 2025-12-31, and stop when cash runs out' : '例如：资金100000，从2025-01-01到2025-12-31，每天买100股ORCL，买到资金耗尽为止'}
+            placeholder={language === 'en' ? 'For example: Start with 100000, simulate daily ORCL exposure from 2025-01-01 to 2025-12-31, and stop when cash runs out' : '例如：资金100000，从2025-01-01到2025-12-31，每天模拟 ORCL 暴露，现金不足后停止'}
           />
         </label>
         <div className="product-chip-list wizard-example-chips">
           {STRATEGY_EXAMPLES[language].map((example) => (
             <button
-              key={example}
+              key={example.strategyText}
               type="button"
               className="product-chip product-chip--button"
               onClick={() => {
                 onStepChange('setup');
-                onStrategyTextChange(example);
+                onStrategyTextChange(example.strategyText);
               }}
             >
-              {example}
+              {example.label}
             </button>
           ))}
         </div>

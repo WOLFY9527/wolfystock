@@ -1,6 +1,7 @@
 import type React from 'react';
 import {
-  buildPointAndShootStrategyText,
+  backtestStrategyDisplayCopy,
+  buildPointAndShootStrategyDisplayText,
   getStrategyCatalogEntry,
   type BacktestLanguage,
 } from './strategyCatalog';
@@ -27,9 +28,9 @@ const NormalBacktestTemplateInsights: React.FC<NormalBacktestTemplateInsightsPro
 }) => {
   const currentTemplate = getStrategyCatalogEntry(strategyTemplate);
   const templateName = currentTemplate?.name[language] || '';
-  const templateDescription = currentTemplate?.description[language] || '';
-  const templateLogicSummary = currentTemplate?.logicSummary[language] || '';
-  const templatePreview = buildPointAndShootStrategyText(language, strategyTemplate, {
+  const templateDescription = backtestStrategyDisplayCopy(currentTemplate?.description[language] || '');
+  const templateLogicSummary = backtestStrategyDisplayCopy(currentTemplate?.logicSummary[language] || '');
+  const templatePreview = buildPointAndShootStrategyDisplayText(language, strategyTemplate, {
     code,
     startDate,
     endDate,

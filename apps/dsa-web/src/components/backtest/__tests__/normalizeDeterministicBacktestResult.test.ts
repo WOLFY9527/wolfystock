@@ -138,6 +138,8 @@ describe('normalizeDeterministicBacktestResult', () => {
     expect(normalized.viewerMeta.dailyPnlSeriesLength).toBe(3);
     expect(normalized.viewerMeta.positionSeriesLength).toBe(3);
     expect(normalized.tradeEvents.length).toBeGreaterThanOrEqual(2);
+    expect(normalized.benchmarkMeta.buyHoldLabel).toBe('当前标的持有参照');
+    expect(normalized.benchmarkMeta.buyHoldLabel).not.toMatch(/买入|卖出|buy|sell/i);
   });
 
   it('keeps stored audit rows as the primary source when secondary curves are also present', () => {

@@ -310,10 +310,7 @@ describe('StandardReportPanel', () => {
     expect(screen.getByTestId('battle-plan-grid')).toBeInTheDocument();
 
     expect(screen.getAllByText('120-121').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('等待回踩后分两笔建立底仓').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('当前动作').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('新开仓策略').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('已持仓策略').length).toBeGreaterThan(0);
+    expect(screen.queryByText('等待回踩后分两笔建立底仓')).not.toBeInTheDocument();
     expect(screen.getAllByText('条件与风控').length).toBeGreaterThan(0);
     expect(screen.getAllByText('核心风险').length).toBeGreaterThan(0);
     expect(screen.getAllByText('催化与观察条件').length).toBeGreaterThan(0);
@@ -322,7 +319,7 @@ describe('StandardReportPanel', () => {
     expect(screen.getAllByText('基本面数据').length).toBeGreaterThan(0);
     expect(screen.getAllByText('财报数据').length).toBeGreaterThan(0);
     expect(screen.getAllByText('风险、催化与情绪').length).toBeGreaterThan(0);
-    expect(screen.getByText('作战计划')).toBeInTheDocument();
+    expect(screen.getByText('观察摘要')).toBeInTheDocument();
     expect(screen.getByText('评分依据与检查项')).toBeInTheDocument();
     expect(screen.getByText('评分拆解')).toBeInTheDocument();
     expect(screen.getAllByText('核心看多因素').length).toBeGreaterThan(0);
@@ -406,7 +403,7 @@ describe('StandardReportPanel', () => {
     render(<StandardReportPanel report={report} chartFixtures={previewChartFixtures} />);
 
     const executionPanel = screen.getByTestId('decision-execution-panel');
-    expect(within(executionPanel).getAllByText('Continue tracking').length).toBeGreaterThanOrEqual(2);
+    expect(within(executionPanel).getAllByText('Continue tracking').length).toBeGreaterThanOrEqual(1);
     expect(within(executionPanel).getByText(/Medium-high/)).toBeInTheDocument();
     expect(within(executionPanel).getByText('Key price zone')).toBeInTheDocument();
     expect(within(executionPanel).getAllByText('Upper observation zone').length).toBeGreaterThanOrEqual(1);

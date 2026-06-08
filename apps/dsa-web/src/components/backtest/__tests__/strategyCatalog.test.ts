@@ -3,6 +3,9 @@ import {
   BUILT_IN_STRATEGY_CATALOG,
   POINT_AND_SHOOT_TEMPLATE_IDS,
   POINT_AND_SHOOT_TEMPLATES,
+  backtestStrategyDisplayCopy,
+  buildPointAndShootStrategyDisplayText,
+  buildPointAndShootStrategyText,
   getStrategyCatalogGroups,
 } from '../strategyCatalog';
 
@@ -88,5 +91,36 @@ describe('strategyCatalog', () => {
     expect(advancedGroup?.templates.find((template) => template.id === 'bollinger_breakout')?.executable).toBe(true);
     expect(advancedGroup?.templates.find((template) => template.id === 'volume_breakout')?.executable).toBe(false);
     expect(professionalGroup?.templates.find((template) => template.id === 'macd_rsi_combo')?.executable).toBe(true);
+  });
+
+  it('renders strategy cards and previews in observation language without changing submitted strategy text', () => {
+    const rawStrategyText = buildPointAndShootStrategyText('zh', 'moving_average_crossover', {
+      code: 'ORCL',
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+      initialCapital: '100000',
+    });
+    const displayStrategyText = buildPointAndShootStrategyDisplayText('zh', 'moving_average_crossover', {
+      code: 'ORCL',
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+      initialCapital: '100000',
+    });
+
+    expect(rawStrategyText).toContain('买入');
+    expect(rawStrategyText).toContain('卖出');
+    expect(displayStrategyText).toContain('正向信号触发');
+    expect(displayStrategyText).toContain('反向信号触发');
+    expect(displayStrategyText).not.toMatch(/买入|卖出|止损|止盈|buy|sell|stop.?loss|take.?profit/i);
+
+    const sanitizedCards = BUILT_IN_STRATEGY_CATALOG.map((template) => [
+      backtestStrategyDisplayCopy(template.description.zh),
+      backtestStrategyDisplayCopy(template.logicSummary.zh),
+      backtestStrategyDisplayCopy(template.description.en),
+      backtestStrategyDisplayCopy(template.logicSummary.en),
+      ...template.defaultParameters.map((parameter) => backtestStrategyDisplayCopy(`${parameter.label.zh} ${parameter.label.en}`)),
+    ].join(' ')).join(' ');
+
+    expect(sanitizedCards).not.toMatch(/买入|卖出|止损|止盈|buy|sell|stop.?loss|take.?profit/i);
   });
 });

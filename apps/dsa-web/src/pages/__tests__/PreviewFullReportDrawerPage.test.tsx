@@ -64,7 +64,7 @@ describe('PreviewFullReportDrawerPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'previewFullReport.openChinese') }));
 
-    await openTechnicalDetails('技术细节');
+    await openTechnicalDetails('数据覆盖与证据明细');
 
     await waitFor(() => {
       expect(screen.getByText('一、结论摘要')).toBeInTheDocument();
@@ -76,7 +76,7 @@ describe('PreviewFullReportDrawerPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: translate('zh', 'previewFullReport.openEnglish') }));
 
-    await openTechnicalDetails('Technical details');
+    await openTechnicalDetails('Coverage and evidence details');
 
     await waitFor(() => {
       expect(screen.getByText('1. Executive Summary')).toBeInTheDocument();

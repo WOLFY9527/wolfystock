@@ -7,27 +7,29 @@ import {
 
 describe('localizeReportHeadingLabel', () => {
   it('localizes execution/risk headings into English UI chrome', () => {
-    expect(localizeReportHeadingLabel('执行计划', 'en')).toBe('Execution plan');
-    expect(localizeReportHeadingLabel('当前动作', 'en')).toBe('Current action');
-    expect(localizeReportHeadingLabel('新开仓策略', 'en')).toBe('For new positions');
-    expect(localizeReportHeadingLabel('已持仓策略', 'en')).toBe('For existing positions');
+    expect(localizeReportHeadingLabel('执行计划', 'en')).toBe('Observation plan');
+    expect(localizeReportHeadingLabel('当前动作', 'en')).toBe('Current observation');
+    expect(localizeReportHeadingLabel('新开仓策略', 'en')).toBe('For new observations');
+    expect(localizeReportHeadingLabel('已持仓策略', 'en')).toBe('For existing observations');
   });
 
   it('localizes English headings into Chinese UI chrome', () => {
-    expect(localizeReportHeadingLabel('Execution Plan', 'zh')).toBe('执行计划');
-    expect(localizeReportHeadingLabel('Current Action', 'zh')).toBe('当前动作');
-    expect(localizeReportHeadingLabel('For New Positions', 'zh')).toBe('新开仓策略');
+    expect(localizeReportHeadingLabel('Execution Plan', 'zh')).toBe('观察计划');
+    expect(localizeReportHeadingLabel('Current Action', 'zh')).toBe('当前观察');
+    expect(localizeReportHeadingLabel('For New Positions', 'zh')).toBe('新观察策略');
   });
 
   it('keeps heading suffix content while translating the heading prefix', () => {
-    expect(localizeReportHeadingLabel('当前动作: 等待回踩确认', 'en')).toBe('Current action: 等待回踩确认');
-    expect(localizeReportHeadingLabel('Execution plan: wait for pullback', 'zh')).toBe('执行计划: wait for pullback');
+    expect(localizeReportHeadingLabel('当前动作: 等待回踩确认', 'en')).toBe('Current observation: 等待回踩确认');
+    expect(localizeReportHeadingLabel('Execution plan: wait for pullback', 'zh')).toBe('观察计划: wait for pullback');
   });
 
   it('localizes controlled decision values in both directions', () => {
     expect(localizeReportControlledValue('观望', 'en')).toBe('Watch');
     expect(localizeReportControlledValue('看空', 'en')).toBe('Bearish');
-    expect(localizeReportControlledValue('hold', 'zh')).toBe('持有');
+    expect(localizeReportControlledValue('hold', 'zh')).toBe('继续观察');
+    expect(localizeReportControlledValue('买入', 'zh')).toBe('正向信号');
+    expect(localizeReportControlledValue('sell', 'en')).toBe('Reverse signal');
     expect(localizeReportControlledValue('short-term range, leaning stronger', 'zh')).toBe('short-term range, leaning stronger');
   });
 

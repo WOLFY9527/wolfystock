@@ -637,19 +637,20 @@ describe('BacktestResultReport', () => {
 
     expect(screen.getByTestId('backtest-report-attribution')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-attribution-exit-reason')).toHaveTextContent('信号离场');
-    expect(screen.getByTestId('backtest-attribution-exit-reason')).toHaveTextContent('止损离场');
+    expect(screen.getByTestId('backtest-attribution-exit-reason')).toHaveTextContent('风险退出参考触发');
     expect(screen.getByTestId('backtest-attribution-month')).toHaveTextContent('2026-03');
     expect(screen.getByTestId('backtest-attribution-year')).toHaveTextContent('2026');
     expect(screen.getByTestId('backtest-attribution-holding-bucket')).toHaveTextContent('0-7 天');
 
     const timeline = screen.getByTestId('backtest-report-event-timeline');
     expect(timeline).toHaveAttribute('data-visible-events', '4');
-    expect(timeline).toHaveTextContent('模拟买入事件 / 模拟卖出事件');
+    expect(timeline).toHaveTextContent('模拟正向信号事件 / 模拟反向信号事件');
     expect(timeline).toHaveTextContent('模拟事件仅用于回测复盘，不构成交易指令。');
-    expect(within(timeline).getAllByText('模拟买入事件')).toHaveLength(2);
-    expect(within(timeline).getAllByText('模拟卖出事件')).toHaveLength(2);
+    expect(within(timeline).getAllByText('模拟正向信号事件')).toHaveLength(2);
+    expect(within(timeline).getAllByText('模拟反向信号事件')).toHaveLength(2);
     expect(within(timeline).queryByText('买入')).not.toBeInTheDocument();
     expect(within(timeline).queryByText('卖出')).not.toBeInTheDocument();
+    expect(timeline).not.toHaveTextContent(/止损|止盈|buy|sell|stop.?loss|take.?profit/i);
 
     const risk = screen.getByTestId('backtest-report-risk-diagnostics');
     expect(within(risk).getByText('最差交易')).toBeInTheDocument();

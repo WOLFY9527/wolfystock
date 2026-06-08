@@ -554,7 +554,7 @@ export function describeRuleRunNarrative(
   const benchmarkDelta = asFiniteNumber(run.excessReturnVsBenchmarkPct);
   const buyHoldDelta = asFiniteNumber(run.excessReturnVsBuyAndHoldPct);
   const relativeDelta = benchmarkDelta ?? buyHoldDelta;
-  const relativeTarget = benchmarkDelta != null ? benchmarkLabel : (language === 'en' ? 'buy and hold' : '买入持有');
+  const relativeTarget = benchmarkDelta != null ? benchmarkLabel : (language === 'en' ? 'hold reference' : '持有参照');
   let verdict = language === 'en' ? 'Near the benchmark' : '接近基准';
   if (relativeDelta != null) {
     if (relativeDelta >= 1) verdict = language === 'en' ? `Outperformed ${relativeTarget}` : `跑赢 ${relativeTarget}`;
@@ -870,7 +870,7 @@ export function getRuleScenarioPlans(run: RuleBacktestRunResponse): RuleScenario
   const benchmarkVariants = dedupeVariants([
     createScenarioRequest(run, 'Auto Benchmark', { benchmarkMode: 'auto', benchmarkCode: undefined }),
     createScenarioRequest(run, 'No Benchmark', { benchmarkMode: 'none', benchmarkCode: undefined }),
-    createScenarioRequest(run, 'Buy and Hold Benchmark', { benchmarkMode: 'same_symbol_buy_and_hold', benchmarkCode: undefined }),
+    createScenarioRequest(run, 'Hold Reference Benchmark', { benchmarkMode: 'same_symbol_buy_and_hold', benchmarkCode: undefined }),
     createScenarioRequest(run, 'Market Benchmark', {
       benchmarkMode: autoBenchmarkMode,
       benchmarkCode: undefined,

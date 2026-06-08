@@ -9,6 +9,7 @@ import {
   getPeriodicString,
   getStrategySpecValue,
 } from './shared';
+import { backtestStrategyDisplayCopy } from './strategyCatalog';
 
 type BacktestLanguage = 'zh' | 'en';
 
@@ -164,9 +165,9 @@ export function buildRuleStrategySummaryRows(
       { key: 'date_range', label: language === 'en' ? 'Date range' : '日期区间', value: `${getPeriodicString(spec, 'start_date') || startDate || '--'} -> ${getPeriodicString(spec, 'end_date') || endDate || '--'}` },
       { key: 'initial_capital', label: language === 'en' ? 'Initial capital' : '初始资金', value: formatNumber(getPeriodicNumber(spec, 'initial_capital')) },
       { key: 'frequency', label: language === 'en' ? 'Execution frequency' : '执行频率', value: formatFrequencyLabel(spec, parsedStrategy.strategyKind, language) },
-      { key: 'entry', label: language === 'en' ? 'Entry rule' : '买入条件', value: formatDraftOrderLabel(spec, language) },
+      { key: 'entry', label: language === 'en' ? 'Positive signal rule' : '正向信号条件', value: backtestStrategyDisplayCopy(formatDraftOrderLabel(spec, language)) },
       { key: 'fill_timing', label: language === 'en' ? 'Fill timing' : '成交时点', value: formatExecutionPriceBasisLabel(spec, language) },
-      { key: 'exit', label: language === 'en' ? 'Exit rule' : '卖出条件', value: formatExitPolicyLabel(spec, language) },
+      { key: 'exit', label: language === 'en' ? 'Observation release rule' : '观察解除条件', value: backtestStrategyDisplayCopy(formatExitPolicyLabel(spec, language)) },
       { key: 'cash_policy', label: language === 'en' ? 'Cash policy' : '现金策略', value: formatCashPolicyLabel(spec, language) },
       { key: 'costs', label: language === 'en' ? 'Trading costs' : '交易成本', value: language === 'en' ? `Fee ${formatNumber(getPeriodicNumber(spec, 'fee_bps'), 0)} bp / Slippage ${formatNumber(getPeriodicNumber(spec, 'slippage_bps'), 0)} bp` : `手续费 ${formatNumber(getPeriodicNumber(spec, 'fee_bps'), 0)} bp / 滑点 ${formatNumber(getPeriodicNumber(spec, 'slippage_bps'), 0)} bp` },
     ];
@@ -178,8 +179,8 @@ export function buildRuleStrategySummaryRows(
       { key: 'symbol', label: language === 'en' ? 'Ticker' : '标的', value: String(getStrategySpecValue(spec, ['symbol']) || currentCode || '--') },
       { key: 'date_range', label: language === 'en' ? 'Date range' : '日期区间', value: `${String(getStrategySpecValue(spec, ['date_range', 'start_date']) || startDate || '--')} -> ${String(getStrategySpecValue(spec, ['date_range', 'end_date']) || endDate || '--')}` },
       { key: 'initial_capital', label: language === 'en' ? 'Initial capital' : '初始资金', value: formatNumber(Number(getStrategySpecValue(spec, ['capital', 'initial_capital']) || 0)) },
-      { key: 'entry', label: language === 'en' ? 'Entry rule' : '买入条件', value: formatStrategyCondition(spec, parsedStrategy, 'entry', language) },
-      { key: 'exit', label: language === 'en' ? 'Exit rule' : '卖出条件', value: formatStrategyCondition(spec, parsedStrategy, 'exit', language) },
+      { key: 'entry', label: language === 'en' ? 'Positive signal rule' : '正向信号条件', value: backtestStrategyDisplayCopy(formatStrategyCondition(spec, parsedStrategy, 'entry', language)) },
+      { key: 'exit', label: language === 'en' ? 'Observation release rule' : '观察解除条件', value: backtestStrategyDisplayCopy(formatStrategyCondition(spec, parsedStrategy, 'exit', language)) },
       { key: 'frequency', label: language === 'en' ? 'Execution frequency' : '执行频率', value: formatExecutionFrequency(spec, language) },
       { key: 'signal_timing', label: language === 'en' ? 'Signal timing' : '信号时点', value: formatExecutionTimingValue(getStrategySpecValue(spec, ['execution', 'signal_timing']), language) },
       { key: 'fill_timing', label: language === 'en' ? 'Fill timing' : '成交时点', value: formatExecutionTimingValue(getStrategySpecValue(spec, ['execution', 'fill_timing']), language) },
@@ -191,8 +192,8 @@ export function buildRuleStrategySummaryRows(
   return [
     { key: 'strategy_family', label: language === 'en' ? 'Strategy family' : '策略族', value: getRuleStrategyTypeLabel(parsedStrategy, topLevelDetectedStrategyFamily, language) },
     { key: 'symbol', label: language === 'en' ? 'Ticker' : '标的', value: currentCode || '--' },
-    { key: 'entry', label: language === 'en' ? 'Entry rule' : '买入条件', value: parsedStrategy.summary?.entry || '--' },
-    { key: 'exit', label: language === 'en' ? 'Exit rule' : '卖出条件', value: parsedStrategy.summary?.exit || '--' },
+    { key: 'entry', label: language === 'en' ? 'Positive signal rule' : '正向信号条件', value: backtestStrategyDisplayCopy(parsedStrategy.summary?.entry || '--') },
+    { key: 'exit', label: language === 'en' ? 'Observation release rule' : '观察解除条件', value: backtestStrategyDisplayCopy(parsedStrategy.summary?.exit || '--') },
     { key: 'date_range', label: language === 'en' ? 'Date range' : '日期区间', value: `${startDate || '--'} -> ${endDate || '--'}` },
   ];
 }

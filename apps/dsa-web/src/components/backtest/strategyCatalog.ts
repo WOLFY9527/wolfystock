@@ -502,6 +502,39 @@ export const POINT_AND_SHOOT_TEMPLATES = BUILT_IN_STRATEGY_CATALOG.filter(
     template.executable && POINT_AND_SHOOT_TEMPLATE_SET.has(template.id),
 );
 
+const BACKTEST_STRATEGY_COPY_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/买入/g, '正向信号触发'],
+  [/卖出/g, '反向信号触发'],
+  [/减仓/g, '暴露收缩'],
+  [/离场/g, '观察解除'],
+  [/退出/g, '观察解除'],
+  [/入场/g, '观察触发'],
+  [/介入/g, '观察触发'],
+  [/追涨/g, '跟踪突破'],
+  [/参与/g, '观察'],
+  [/开仓/g, '开启观察'],
+  [/建仓/g, '建立观察状态'],
+  [/加仓/g, '暴露增加'],
+  [/止损/g, '风险退出参考'],
+  [/止盈/g, '上方参考'],
+  [/\bbuy(?:s|ing)?\b/gi, 'trigger a positive signal'],
+  [/\bsell(?:s|ing)?\b/gi, 'trigger a reverse signal'],
+  [/\bexit(?:s|ing)?\b/gi, 'release the observation'],
+  [/\bentries\b/gi, 'positive signal triggers'],
+  [/\bentry\b/gi, 'positive signal trigger'],
+  [/\benter(?:s|ing)?\b/gi, 'start observing'],
+  [/\btrims?\b/gi, 'tracks exposure reduction'],
+  [/\bstop[-\s]?loss\b/gi, 'fixed exit reference'],
+  [/\btake[-\s]?profit\b/gi, 'target exit reference'],
+];
+
+export function backtestStrategyDisplayCopy(value: string): string {
+  return BACKTEST_STRATEGY_COPY_REPLACEMENTS.reduce(
+    (text, [pattern, replacement]) => text.replace(pattern, replacement),
+    value,
+  );
+}
+
 export function getStrategyCatalogEntry(templateId: string): StrategyCatalogEntry | undefined {
   return BUILT_IN_STRATEGY_CATALOG.find((template) => template.id === templateId);
 }
@@ -543,4 +576,17 @@ export function buildPointAndShootStrategyText(
   return language === 'en'
     ? `Use initial capital ${resolvedCapital}. Backtest ${resolvedCode} from ${resolvedStart} to ${resolvedEnd}. ${editorText}.`
     : `初始资金 ${resolvedCapital}，回测 ${resolvedCode} 在 ${resolvedStart} 到 ${resolvedEnd} 的表现，${editorText}。`;
+}
+
+export function buildPointAndShootStrategyDisplayText(
+  language: BacktestLanguage,
+  template: NormalStrategyTemplate,
+  payload: {
+    code: string;
+    startDate: string;
+    endDate: string;
+    initialCapital: string;
+  },
+): string {
+  return backtestStrategyDisplayCopy(buildPointAndShootStrategyText(language, template, payload));
 }

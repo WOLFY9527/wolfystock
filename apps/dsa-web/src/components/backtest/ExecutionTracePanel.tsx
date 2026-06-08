@@ -76,7 +76,7 @@ const ExecutionTracePanel: React.FC<{ run: RuleBacktestRunResponse }> = ({ run }
         items={[
           { label: language === 'en' ? 'Trace source' : '轨迹来源', value: getExecutionTraceSourceLabel(trace?.source) },
           { label: language === 'en' ? 'Total rows' : '轨迹总行数', value: String(rows.length) },
-          { label: language === 'en' ? 'Key checkpoints' : '关键节点', value: String(highlightRows.length), note: language === 'en' ? 'Buys, sells, fallbacks, and exception notes' : '买卖动作 / 回退 / 异常说明' },
+          { label: language === 'en' ? 'Key checkpoints' : '关键节点', value: String(highlightRows.length), note: language === 'en' ? 'Positive/reverse signal checkpoints, fallbacks, and exception notes' : '正向/反向信号节点 / 回退 / 异常说明' },
           {
             label: language === 'en' ? 'Fallback state' : '回退提示',
             value: trace?.fallback?.runFallback ? (language === 'en' ? 'Fallback used' : '存在回退') : trace?.fallback?.traceRebuilt ? (language === 'en' ? 'Trace rebuilt' : '已回补') : (language === 'en' ? 'Standard path' : '标准路径'),

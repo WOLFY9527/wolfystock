@@ -24,7 +24,7 @@ import {
   getStrategySpecValue,
   type RuleBenchmarkMode,
 } from './shared';
-import { getStrategyCatalogGroups } from './strategyCatalog';
+import { backtestStrategyDisplayCopy, getStrategyCatalogGroups } from './strategyCatalog';
 
 type BacktestLanguage = 'zh' | 'en';
 type WorkspaceStep = 'assets' | 'strategy' | 'orders' | 'costs' | 'advanced';
@@ -130,9 +130,9 @@ function readRiskControls(parsed: RuleBacktestParseResponse | null) {
     ?? getStrategySpecValue(spec, ['riskControls', 'trailingStopPct']);
 
   return [
-    { key: 'stop-loss', label: '止损', value: stopLoss },
-    { key: 'take-profit', label: '止盈', value: takeProfit },
-    { key: 'trailing-stop', label: '移动止损', value: trailingStop },
+    { key: 'stop-loss', label: '风险退出参考', value: stopLoss },
+    { key: 'take-profit', label: '上方退出参考', value: takeProfit },
+    { key: 'trailing-stop', label: '移动风险退出参考', value: trailingStop },
   ].filter((item) => item.value != null && item.value !== '');
 }
 
@@ -618,11 +618,11 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-lg border border-white/5 bg-black/20 p-3">
-              <p className={labelClass}>{language === 'en' ? 'Buy rules' : '买入规则'}</p>
+              <p className={labelClass}>{language === 'en' ? 'Positive signal rules' : '正向信号规则'}</p>
               <p className="mt-2 text-sm text-white/72">{rulePreviewEntry}</p>
             </div>
             <div className="rounded-lg border border-white/5 bg-black/20 p-3">
-              <p className={labelClass}>{language === 'en' ? 'Sell rules' : '卖出规则'}</p>
+              <p className={labelClass}>{language === 'en' ? 'Observation release rules' : '观察解除规则'}</p>
               <p className="mt-2 text-sm text-white/72">{rulePreviewExit}</p>
             </div>
           </div>
@@ -784,16 +784,16 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
             <PlannedCapability
               title={language === 'en' ? 'Execution routing override' : '执行路由覆盖（计划中）'}
               description={language === 'en'
-                ? 'Event-driven routing, stop-loss routing, and take-profit routing are not wired into the current executor.'
-                : '事件驱动、止损路由、止盈路由尚未接入当前执行器。'}
+                ? 'Event-driven routing, fixed-exit references, and target-exit references are not wired into the current executor.'
+                : '事件驱动、风险退出参考、上方退出参考尚未接入当前执行器。'}
               testId="pro-planned-routing-overrides"
               language={language}
             />
             <PlannedCapability
-              title={language === 'en' ? 'Trailing stop route' : '追踪止损路由（计划中）'}
+              title={language === 'en' ? 'Trailing exit reference route' : '移动风险退出参考路由（计划中）'}
               description={language === 'en'
-                ? 'Trailing-stop route configuration is reserved for a future execution lane and does not trigger backend behavior today.'
-                : '追踪止损路由仅为后续执行通道预留，当前不会触发后端行为。'}
+                ? 'Trailing-exit reference configuration is reserved for a future execution lane and does not trigger backend behavior today.'
+                : '移动风险退出参考配置仅为后续执行通道预留，当前不会触发后端行为。'}
               testId="pro-planned-trailing-route"
               language={language}
             />
@@ -804,7 +804,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
               title={language === 'en' ? 'Portfolio-level guard overrides' : '组合级风控覆盖（计划中）'}
               description={language === 'en'
                 ? 'Max position, exposure, drawdown, and per-trade risk limits are not wired into this run payload.'
-                : '最大仓位、敞口、回撤、单笔风险等组合级限制尚未接入当前运行 payload。'}
+                : '最大暴露、敞口、回撤、单笔风险等组合级限制尚未接入当前运行 payload。'}
               testId="pro-planned-portfolio-guards"
               language={language}
             />
@@ -1407,7 +1407,7 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <h5 className="truncate text-base font-semibold text-white">{template.name[language]}</h5>
-                        <p className="mt-1 text-sm leading-6 text-white/60">{template.description[language]}</p>
+                        <p className="mt-1 text-sm leading-6 text-white/60">{backtestStrategyDisplayCopy(template.description[language])}</p>
                       </div>
                       <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                         template.executable
@@ -1420,11 +1420,11 @@ const ProBacktestWorkspace: React.FC<ProBacktestWorkspaceProps> = ({
                           : (language === 'en' ? 'Not supported yet' : '当前不支持')}
                       </span>
                     </div>
-                    <p className="mt-3 text-sm leading-6 text-white/70">{template.logicSummary[language]}</p>
+                    <p className="mt-3 text-sm leading-6 text-white/70">{backtestStrategyDisplayCopy(template.logicSummary[language])}</p>
                     <div className="mt-4 flex flex-wrap gap-2">
                       {template.defaultParameters.map((parameter) => (
                         <span key={`${template.id}-${parameter.key}`} className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[11px] text-white/58">
-                          {parameter.label[language]}: {parameter.value}
+                          {backtestStrategyDisplayCopy(parameter.label[language])}: {parameter.value}
                         </span>
                       ))}
                     </div>

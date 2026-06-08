@@ -465,10 +465,10 @@ describe('DeterministicBacktestResultPage', () => {
     renderResultPage();
 
     const timeline = await screen.findByTestId('backtest-report-event-timeline');
-    expect(timeline).toHaveTextContent('模拟买入事件 / 模拟卖出事件');
+    expect(timeline).toHaveTextContent('模拟正向信号事件 / 模拟反向信号事件');
     expect(timeline).toHaveTextContent('模拟事件仅用于回测复盘，不构成交易指令。');
-    expect(within(timeline).getByText('模拟买入事件')).toBeInTheDocument();
-    expect(within(timeline).getByText('模拟卖出事件')).toBeInTheDocument();
+    expect(within(timeline).getByText('模拟正向信号事件')).toBeInTheDocument();
+    expect(within(timeline).getByText('模拟反向信号事件')).toBeInTheDocument();
     expect(within(timeline).queryByText('买入')).not.toBeInTheDocument();
     expect(within(timeline).queryByText('卖出')).not.toBeInTheDocument();
   }, 10000);
@@ -1192,7 +1192,7 @@ describe('DeterministicBacktestResultPage', () => {
 
     fireEvent.mouseEnter(screen.getByTestId('dashboard-risk-controls-row-stop-loss'));
 
-    expect(screen.getByTestId('dashboard-risk-controls-hover-tooltip')).toHaveTextContent('止损阈值');
+    expect(screen.getByTestId('dashboard-risk-controls-hover-tooltip')).toHaveTextContent('风险退出参考阈值');
     expect(screen.getByTestId('dashboard-risk-controls-threshold-summary')).toHaveAttribute('data-linked-highlight', 'true');
     expect(screen.getByTestId('result-risk-controls-row-stop-loss')).toHaveAttribute('data-linked-highlight', 'true');
   });
@@ -1280,7 +1280,7 @@ describe('DeterministicBacktestResultPage', () => {
     fireEvent.focus(riskControlRow);
 
     const riskControlTooltip = screen.getByTestId('dashboard-risk-controls-hover-tooltip');
-    expect(riskControlTooltip).toHaveTextContent('止损阈值');
+    expect(riskControlTooltip).toHaveTextContent('风险退出参考阈值');
     expect(riskControlTooltip).toHaveAttribute('role', 'tooltip');
     expect(riskControlTooltip).toHaveAttribute('id', 'dashboard-risk-controls-hover-tooltip');
     expect(riskControlRow).toHaveAttribute('aria-describedby', 'dashboard-risk-controls-hover-tooltip');

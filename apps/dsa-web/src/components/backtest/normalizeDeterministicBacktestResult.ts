@@ -111,15 +111,15 @@ function btr(language: BacktestLanguage, key: string, vars?: Record<string, stri
 
 const ACTION_LABELS: Record<BacktestLanguage, Record<string, string>> = {
   zh: {
-    buy: '买入',
-    sell: '卖出',
-    accumulate: '定投买入',
+    buy: '正向信号',
+    sell: '反向信号',
+    accumulate: '定期观察触发',
     forced_close: '期末平仓',
   },
   en: {
-    buy: 'Buy',
-    sell: 'Sell',
-    accumulate: 'Accumulate',
+    buy: 'Positive signal',
+    sell: 'Reverse signal',
+    accumulate: 'Periodic observation',
     forced_close: 'Forced close',
   },
 };
@@ -195,6 +195,16 @@ function deriveActionFromTrade(trade: RuleBacktestTradeItem, side: 'entry' | 'ex
   return side === 'entry' ? 'buy' : 'sell';
 }
 
+function sanitizeBenchmarkDisplayLabel(value: string, language: BacktestLanguage): string {
+  const fallback = btr(language, 'buyAndHoldDefault');
+  const label = safeText(value) || fallback;
+  return label
+    .replace(/当前标的买入并持有|买入并持有|买入持有/g, fallback)
+    .replace(/\bBuy and Hold Benchmark\b/gi, language === 'en' ? 'Hold Reference Benchmark' : fallback)
+    .replace(/\bBuy and Hold\b/gi, language === 'en' ? 'Hold Reference' : fallback)
+    .replace(/\bbuy-and-hold\b/gi, language === 'en' ? 'hold-reference' : fallback);
+}
+
 function getBenchmarkMeta(
   run: RuleBacktestRunResponse,
   rows: DeterministicBacktestNormalizedRow[],
@@ -202,12 +212,15 @@ function getBenchmarkMeta(
 ): DeterministicBacktestBenchmarkMeta {
   const benchmarkSummary = run.benchmarkSummary || {};
   const buyHoldSummary = run.buyAndHoldSummary || null;
-  const benchmarkLabel = String(benchmarkSummary.label || btr(language, 'benchmarkFallback'));
+  const benchmarkLabel = sanitizeBenchmarkDisplayLabel(
+    String(benchmarkSummary.label || btr(language, 'benchmarkFallback')),
+    language,
+  );
   const rawBuyHoldLabel = String(buyHoldSummary?.label || '').trim();
   const buyHoldLabel = rawBuyHoldLabel
     && rawBuyHoldLabel !== btr('zh', 'buyAndHoldDefault')
     && rawBuyHoldLabel !== btr('en', 'buyAndHoldDefault')
-    ? rawBuyHoldLabel
+    ? sanitizeBenchmarkDisplayLabel(rawBuyHoldLabel, language)
     : btr(language, 'buyAndHoldDefault');
   const showBenchmark = rows.some((row) => row.benchmarkCumReturn != null) && benchmarkSummary.resolvedMode !== 'none';
   const showBuyHold = rows.some((row) => row.buyHoldCumReturn != null)

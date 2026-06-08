@@ -1202,6 +1202,7 @@ describe('UserScannerPage', () => {
     getRun.mockResolvedValue(makeCryptoDiagnosticsRun());
     renderUserScannerPage();
 
+    await screen.findByTestId('scanner-result-row-WULF');
     const band = await screen.findByTestId('scanner-conclusion-band');
     const readinessStrip = screen.getByTestId('scanner-research-readiness-strip');
     expect(band).toHaveTextContent('当前候选 WULF');
@@ -1724,6 +1725,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     expect(await screen.findByTestId('user-scanner-workspace')).toBeInTheDocument();
+    await screen.findByTestId('scanner-result-row-NVDA');
     expect(screen.getByTestId('scanner-wide-workspace-scope')).toHaveAttribute('data-workspace-width', 'near-full');
     expect(screen.getByTestId('user-scanner-workspace')).toHaveAttribute('data-terminal-primitive', 'page-shell');
     expect(screen.getByTestId('scanner-page-heading')).toHaveAttribute('data-terminal-primitive', 'dense-page-header');

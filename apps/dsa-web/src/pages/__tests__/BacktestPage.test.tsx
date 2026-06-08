@@ -1332,11 +1332,11 @@ describe('BacktestPage', () => {
 
     fireEvent.click(screen.getByTestId('pro-workflow-step-orders'));
     const riskSection = await screen.findByTestId('pro-risk-controls-summary');
-    expect(within(riskSection).getByText('止损')).toBeInTheDocument();
+    expect(within(riskSection).getByText('风险退出参考')).toBeInTheDocument();
     expect(within(riskSection).getByText('5.00%')).toBeInTheDocument();
-    expect(within(riskSection).getByText('止盈')).toBeInTheDocument();
+    expect(within(riskSection).getByText('上方退出参考')).toBeInTheDocument();
     expect(within(riskSection).getByText('10.00%')).toBeInTheDocument();
-    expect(within(riskSection).getByText('移动止损')).toBeInTheDocument();
+    expect(within(riskSection).getByText('移动风险退出参考')).toBeInTheDocument();
     expect(within(riskSection).getByText('8.00%')).toBeInTheDocument();
   });
 

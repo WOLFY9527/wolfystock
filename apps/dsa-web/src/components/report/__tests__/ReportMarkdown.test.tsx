@@ -76,11 +76,11 @@ describe('ReportMarkdown', () => {
     expect(coverageAudit).toHaveTextContent(/部分数据暂不可用/);
     expect(coverageAudit).toHaveTextContent(/本次不适用/);
     await waitFor(() => {
-      expect(screen.getByText('决策摘要')).toBeInTheDocument();
+      expect(screen.getByText('研究摘要')).toBeInTheDocument();
     });
-    expect(screen.getByText('决策摘要')).toBeInTheDocument();
-    expect(screen.getByText('执行计划')).toBeInTheDocument();
-    expect(screen.getByText('当前动作')).toBeInTheDocument();
+    expect(screen.getByText('研究摘要')).toBeInTheDocument();
+    expect(screen.getByText('观察计划')).toBeInTheDocument();
+    expect(screen.getByText('当前观察')).toBeInTheDocument();
     expect(screen.getByText(/看多因素/)).toBeInTheDocument();
   });
 
@@ -173,7 +173,7 @@ describe('ReportMarkdown', () => {
     expect(await screen.findByTestId('report-executive-summary')).toHaveTextContent('执行摘要');
     expect(screen.queryByTestId('report-coverage-audit-panel')).not.toBeInTheDocument();
     expect(screen.queryByText('数据覆盖说明')).not.toBeInTheDocument();
-    expect(screen.queryByText('决策摘要')).not.toBeInTheDocument();
+    expect(screen.queryByText('研究摘要')).not.toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: '字段' })).not.toBeInTheDocument();
   });
 
@@ -191,9 +191,9 @@ describe('ReportMarkdown', () => {
     await openTechnicalDetails('数据覆盖与证据明细');
 
     await waitFor(() => {
-      expect(screen.getByText('决策摘要')).toBeInTheDocument();
+      expect(screen.getByText('研究摘要')).toBeInTheDocument();
     });
-    expect(screen.getByText('执行计划')).toBeInTheDocument();
+    expect(screen.getByText('观察计划')).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: '字段' })).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: 'Ready' })).toBeInTheDocument();
   });
