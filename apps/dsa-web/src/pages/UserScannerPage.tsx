@@ -86,6 +86,7 @@ import type {
   ScannerReviewSummary,
   ScannerRunDetail,
   ScannerRunHistoryItem,
+  ScannerRunRequest,
   ScannerStrategySimulationResult,
   ScannerThemeSuggestion,
   ScannerTheme,
@@ -1408,6 +1409,58 @@ function officialDiagnosticHandoffCandidates(
   }, []);
 }
 
+function normalizeScannerRunMarket(value?: string | null): ScannerRunRequest['market'] | null {
+  const normalized = normalizeScannerMarket(value);
+  if (normalized === 'US') return 'us';
+  if (normalized === 'HK') return 'hk';
+  if (normalized === 'CN') return 'cn';
+  return null;
+}
+
+function normalizeScannerRunUniverseType(value?: string | null): ScannerRunRequest['universeType'] | null {
+  const normalized = normalizeRunState(value);
+  if (normalized === 'theme') return 'theme';
+  if (normalized === 'symbols' || normalized === 'custom') return 'symbols';
+  if (normalized === 'default') return 'default';
+  return null;
+}
+
+function getRunAcceptedSymbols(runDetail: ScannerRunDetail): string[] {
+  const diagnostics = isRecord(runDetail.diagnostics) ? runDetail.diagnostics : null;
+  const universeSelection = getNestedRecord(diagnostics, 'universeSelection', 'universe_selection');
+  const acceptedSymbols = getNestedStringArray(universeSelection, 'acceptedSymbols', 'accepted_symbols');
+  const themeSymbols = Array.isArray(runDetail.theme?.symbols) ? runDetail.theme.symbols : [];
+  return Array.from(new Set([...acceptedSymbols, ...themeSymbols].map((symbol) => symbol.trim().toUpperCase()).filter(Boolean)));
+}
+
+function buildScannerRetryRequest(runDetail: ScannerRunDetail | null): ScannerRunRequest | null {
+  if (!runDetail) return null;
+  const retryMarket = normalizeScannerRunMarket(runDetail.market);
+  if (!retryMarket) return null;
+  const defaults = SCANNER_PROFILE_DEFAULTS[retryMarket];
+  const defaultShortlistSize = Number.parseInt(defaults.shortlistSize, 10);
+  const defaultUniverseLimit = Number.parseInt(defaults.universeLimit, 10);
+  const defaultDetailLimit = Number.parseInt(defaults.detailLimit, 10);
+  const request: ScannerRunRequest = {
+    market: retryMarket,
+    profile: runDetail.profile || defaults.profile,
+    shortlistSize: runDetail.shortlistSize > 0 ? runDetail.shortlistSize : defaultShortlistSize,
+    universeLimit: runDetail.universeSize >= 50 ? runDetail.universeSize : defaultUniverseLimit,
+    detailLimit: runDetail.preselectedSize >= 10 ? runDetail.preselectedSize : defaultDetailLimit,
+  };
+  const universeType = normalizeScannerRunUniverseType(runDetail.universeType);
+  if (universeType === 'theme' && runDetail.themeId) {
+    request.universeType = 'theme';
+    request.themeId = runDetail.themeId;
+  } else if (universeType === 'symbols') {
+    const symbols = getRunAcceptedSymbols(runDetail);
+    if (!symbols.length) return null;
+    request.universeType = 'symbols';
+    request.symbols = symbols;
+  }
+  return request;
+}
+
 function formatWorkbenchWatchSummary(
   candidate: ScannerCandidate,
   language: 'zh' | 'en',
@@ -1833,6 +1886,7 @@ const UserScannerPage: React.FC = () => {
   const [watchlistAuthBlocked, setWatchlistAuthBlocked] = useState(false);
   const [pendingWatchlistIdentity, setPendingWatchlistIdentity] = useState<string | null>(null);
   const [pendingBatchWatchlistAction, setPendingBatchWatchlistAction] = useState<string | null>(null);
+  const [manualRecoverySymbol, setManualRecoverySymbol] = useState('');
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false);
   const [rowMoreSymbol, setRowMoreSymbol] = useState<string | null>(null);
   const [isRejectionSummaryOpen, setIsRejectionSummaryOpen] = useState(false);
@@ -1975,12 +2029,16 @@ const UserScannerPage: React.FC = () => {
     }
   }, []);
 
-  const fetchHistory = useCallback(async (page = 1, preferredRunId?: number | null) => {
+  const fetchHistory = useCallback(async (
+    page = 1,
+    preferredRunId?: number | null,
+    scopeOverride?: { market?: string; profile?: string },
+  ) => {
     setIsLoadingHistory(true);
     try {
       const response = await scannerApi.getRuns({
-        market,
-        profile,
+        market: scopeOverride?.market || market,
+        profile: scopeOverride?.profile || profile,
         page,
         limit: HISTORY_PAGE_SIZE,
       });
@@ -2021,7 +2079,33 @@ const UserScannerPage: React.FC = () => {
     void fetchHistory(1);
   }, [fetchHistory]);
 
+  const executeScannerRun = useCallback(async (request: ScannerRunRequest) => {
+    setIsRunning(true);
+    try {
+      const response = await scannerApi.run(request);
+      setRunDetail(response);
+      selectedRunIdRef.current = response.id;
+      setSelectedRunId(response.id);
+      setValidationErrors({});
+      setPageError(null);
+      await fetchHistory(1, response.id, { market: request.market, profile: request.profile });
+    } catch (error) {
+      setPageError(getParsedApiError(error));
+    } finally {
+      setIsRunning(false);
+    }
+  }, [fetchHistory]);
+
   const handleRun = useCallback(async () => {
+    const retryState = buildScannerConclusion(runDetail, language, scannerFirstRunSetupLabel).state;
+    const retryRequest = retryState === 'no-candidate' || retryState === 'insufficient'
+      ? buildScannerRetryRequest(runDetail)
+      : null;
+    if (retryRequest) {
+      await executeScannerRun(retryRequest);
+      return;
+    }
+
     const nextErrors: ScannerValidationErrors = {};
     const parsedShortlistSize = Number.parseInt(shortlistSize, 10);
     const parsedUniverseLimit = Number.parseInt(universeLimit, 10);
@@ -2051,30 +2135,26 @@ const UserScannerPage: React.FC = () => {
       setValidationErrors(nextErrors);
       return;
     }
-    setIsRunning(true);
-    try {
-      const response = await scannerApi.run({
-        market,
-        profile,
-        shortlistSize: parsedShortlistSize,
-        universeLimit: parsedUniverseLimit,
-        detailLimit: parsedDetailLimit,
-        ...(scanScope !== 'default' ? { universeType: scanScope } : {}),
-        ...(scanScope === 'theme' ? { themeId } : {}),
-        ...(scanScope === 'symbols' ? { symbols: parsedCustomSymbols } : {}),
-      });
-      setRunDetail(response);
-      selectedRunIdRef.current = response.id;
-      setSelectedRunId(response.id);
-      setValidationErrors({});
-      setPageError(null);
-      await fetchHistory(1, response.id);
-    } catch (error) {
-      setPageError(getParsedApiError(error));
-    } finally {
-      setIsRunning(false);
+    await executeScannerRun({
+      market,
+      profile,
+      shortlistSize: parsedShortlistSize,
+      universeLimit: parsedUniverseLimit,
+      detailLimit: parsedDetailLimit,
+      ...(scanScope !== 'default' ? { universeType: scanScope } : {}),
+      ...(scanScope === 'theme' ? { themeId } : {}),
+      ...(scanScope === 'symbols' ? { symbols: parsedCustomSymbols } : {}),
+    });
+  }, [customSymbolTokenCount, detailLimit, executeScannerRun, language, market, parsedCustomSymbols, profile, runDetail, scanScope, scannerFirstRunSetupLabel, selectedTheme, shortlistSize, themeId, universeLimit]);
+
+  const handleRetryCurrentRun = useCallback(async () => {
+    const retryRequest = buildScannerRetryRequest(runDetail);
+    if (retryRequest) {
+      await executeScannerRun(retryRequest);
+      return;
     }
-  }, [customSymbolTokenCount, detailLimit, fetchHistory, language, market, parsedCustomSymbols, profile, scanScope, selectedTheme, shortlistSize, themeId, universeLimit]);
+    await handleRun();
+  }, [executeScannerRun, handleRun, runDetail]);
 
   const handleGenerateTheme = useCallback(async () => {
     const label = customThemeLabel.trim();
@@ -2447,6 +2527,10 @@ const UserScannerPage: React.FC = () => {
     () => buildScannerVisualEvidenceSummary(workbenchCandidatesWithEvidence, workbenchDiagnostics, runDetail, language),
     [language, runDetail, workbenchCandidatesWithEvidence, workbenchDiagnostics],
   );
+  const manualRecoveryParsedSymbol = useMemo(
+    () => parseCustomSymbols(manualRecoverySymbol)[0] || '',
+    [manualRecoverySymbol],
+  );
   const handleAnalyzeCandidate = useCallback(async (candidate: ScannerCandidate) => {
     setPendingAnalyzeSymbol(candidate.symbol);
     setActionNotice(null);
@@ -2473,6 +2557,41 @@ const UserScannerPage: React.FC = () => {
       setPendingAnalyzeSymbol((current) => (current === candidate.symbol ? null : current));
     }
   }, [language, navigate]);
+
+  const handleAnalyzeManualRecoverySymbol = useCallback(async () => {
+    const symbol = manualRecoveryParsedSymbol;
+    if (!symbol) {
+      setActionNotice({
+        tone: 'warning',
+        message: language === 'en' ? 'Enter one symbol before starting research.' : '请先输入一个研究代码。',
+      });
+      return;
+    }
+    setPendingAnalyzeSymbol(symbol);
+    setActionNotice(null);
+    try {
+      await analysisApi.analyzeAsync({
+        stockCode: symbol,
+        reportType: 'detailed',
+        stockName: symbol,
+        originalQuery: symbol,
+        selectionSource: 'manual',
+      });
+      navigate(buildLocalizedPath('/', language));
+    } catch (error) {
+      if (error instanceof DuplicateTaskError) {
+        navigate(buildLocalizedPath('/', language));
+        return;
+      }
+      const parsedError = getParsedApiError(error);
+      setActionNotice({
+        tone: 'danger',
+        message: parsedError.message,
+      });
+    } finally {
+      setPendingAnalyzeSymbol((current) => (current === symbol ? null : current));
+    }
+  }, [language, manualRecoveryParsedSymbol, navigate]);
 
   const handleCopyText = useCallback(async (text: string, nextCopiedKey: string) => {
     try {
@@ -2624,6 +2743,68 @@ const UserScannerPage: React.FC = () => {
       setPendingBatchWatchlistAction((current) => (current === batchKey ? null : current));
     }
   }, [language, market, runDetail, trackedWatchlistIdentitySet]);
+
+  const handleTrackManualRecoverySymbol = useCallback(async () => {
+    const symbol = manualRecoveryParsedSymbol;
+    const candidateMarket = normalizeScannerRunMarket(runDetail?.market || market) || market;
+    if (!symbol) {
+      setActionNotice({
+        tone: 'warning',
+        message: language === 'en' ? 'Enter one symbol before adding it to the watchlist.' : '请先输入一个要加入观察名单的代码。',
+      });
+      return;
+    }
+
+    const candidateIdentity = getWatchlistIdentity(candidateMarket, symbol);
+    if (!candidateIdentity || trackedWatchlistIdentitySet.has(candidateIdentity)) {
+      setActionNotice({
+        tone: 'warning',
+        message: language === 'en' ? 'This symbol is already in your watchlist.' : '该代码已在观察名单中。',
+      });
+      return;
+    }
+
+    setPendingWatchlistIdentity(candidateIdentity);
+    setActionNotice(null);
+    try {
+      const savedItem = await watchlistApi.addWatchlistItem({
+        symbol,
+        market: candidateMarket,
+        name: symbol,
+        source: 'scanner',
+        themeId: runDetail?.themeId || undefined,
+        universeType: runDetail?.universeType || 'manual_recovery',
+        notes: language === 'en'
+          ? 'Scanner recovery: manually added after an empty or insufficient scan.'
+          : 'Scanner recovery 手动补充：扫描为空或证据不足后加入观察名单。',
+      });
+      setWatchlistItems((current) => {
+        const nextIdentity = getWatchlistIdentity(savedItem.market, savedItem.symbol);
+        const remaining = current.filter((item) => getWatchlistIdentity(item.market, item.symbol) !== nextIdentity);
+        return [savedItem, ...remaining];
+      });
+      setWatchlistAuthBlocked(false);
+      setActionNotice({
+        tone: 'success',
+        message: language === 'en' ? `${symbol} added to your watchlist.` : `${symbol} 已加入观察名单。`,
+      });
+    } catch (error) {
+      const parsedError = getParsedApiError(error);
+      if (parsedError.isAuthError || parsedError.status === 401 || parsedError.status === 403 || parsedError.status === 405) {
+        setWatchlistAuthBlocked(true);
+        setActionNotice({
+          tone: 'warning',
+          message: language === 'en'
+            ? 'Sign in to save symbols to your watchlist.'
+            : '请登录后再保存代码到你的观察名单。',
+        });
+      } else {
+        setActionNotice({ tone: 'danger', message: parsedError.message });
+      }
+    } finally {
+      setPendingWatchlistIdentity((current) => (current === candidateIdentity ? null : current));
+    }
+  }, [language, manualRecoveryParsedSymbol, market, runDetail, trackedWatchlistIdentitySet]);
 
   const getBacktestActionLabel = useCallback((item?: ScannerBacktestItem) => (
     item?.status === 'running' || item?.status === 'queued'
@@ -2877,6 +3058,10 @@ const UserScannerPage: React.FC = () => {
     () => buildScannerConclusion(runDetail, language, scannerFirstRunSetupLabel),
     [language, runDetail, scannerFirstRunSetupLabel],
   );
+  const scannerRetryRequest = useMemo(
+    () => buildScannerRetryRequest(runDetail),
+    [runDetail],
+  );
   const isRetryScanState = scannerConclusion.state === 'no-candidate' || scannerConclusion.state === 'insufficient';
   const scannerRunButtonLabel = isRunning
     ? t('scanner.running')
@@ -2884,6 +3069,43 @@ const UserScannerPage: React.FC = () => {
       ? (isRetryScanState ? 'Run again' : t('scanner.run'))
       : (isRetryScanState ? '重新扫描' : '启动扫描');
   const heroLatestLabel = `${language === 'en' ? 'Latest' : '最近'} ${generatedAt ? formatTimestamp(generatedAt, language) : '--'}`;
+  const showPreviewHandoff = currentSelectedCount === 0 && previewSelectedDiagnostics.length > 0;
+  const showWorkflowNextSteps = !runDetail
+    || scannerConclusion.state !== 'top-candidate'
+    || scannerConclusion.trustSummary.staleCount > 0
+    || scannerConclusion.trustSummary.partialCount > 0
+    || scannerConclusion.trustSummary.limitedCount > 0
+    || Boolean(pageErrorSummary);
+  const scannerWorkflowDetail = scannerConclusion.state === 'waiting'
+    ? (language === 'en'
+      ? 'Run the current setup first. If this route is already stale, inspect history or manually send one symbol into Watchlist or Stock Research.'
+      : '先运行当前配置。如需绕过空白入口，可查看历史，或手动把一个代码送入观察名单/个股研究。')
+    : scannerConclusion.state === 'insufficient'
+      ? (language === 'en'
+        ? 'Current evidence is not enough for a candidate handoff. Retry the same parameters, check history, or use a manual symbol while data catches up.'
+        : '当前证据不足，不能把本次结果当作候选交接。可同参数重试、查看历史，或在数据补齐前手动输入代码。')
+      : scannerConclusion.state === 'no-candidate'
+        ? (language === 'en'
+          ? 'No official candidate passed the current scan. Review the rejected mix, switch market or setup, or continue with a manual research symbol.'
+          : '当前扫描没有官方入选候选。可查看淘汰分布、换市场或配置，或用手动代码继续研究。')
+        : (language === 'en'
+          ? 'Some data is stale, partial, or limited. Keep the official candidate, but use history and Market Overview before treating it as research evidence.'
+          : '部分数据可能过期、缺失或受限。可保留官方候选，但先结合历史与 Market Overview 再作为研究证据。');
+  const scannerWorkflowStats = runDetail
+    ? (language === 'en'
+      ? `Official ${currentSelectedCount} · rejected ${runDetail.summary?.rejectedCount ?? 0} · limited ${scannerConclusion.trustSummary.limitedCount}`
+      : `官方入选 ${currentSelectedCount} · 淘汰 ${runDetail.summary?.rejectedCount ?? 0} · 数据受限 ${scannerConclusion.trustSummary.limitedCount}`)
+    : (language === 'en' ? 'No run loaded yet' : '尚未载入扫描结果');
+  const scannerMarketSwitchOptions = [
+    { value: 'cn' as const, label: t('scanner.marketCn') },
+    { value: 'us' as const, label: t('scanner.marketUs') },
+    { value: 'hk' as const, label: t('scanner.marketHk') },
+  ].filter((item) => item.value !== market);
+  const manualRecoveryMarket = normalizeScannerRunMarket(runDetail?.market || market) || market;
+  const manualRecoveryIdentity = getWatchlistIdentity(manualRecoveryMarket, manualRecoveryParsedSymbol);
+  const manualRecoveryAlreadyTracked = Boolean(manualRecoveryIdentity && trackedWatchlistIdentitySet.has(manualRecoveryIdentity));
+  const isManualRecoveryWatchlistPending = Boolean(manualRecoveryIdentity && pendingWatchlistIdentity === manualRecoveryIdentity);
+  const isManualRecoveryAnalyzePending = Boolean(manualRecoveryParsedSymbol && pendingAnalyzeSymbol === manualRecoveryParsedSymbol);
   const scannerStatusItems = [
     {
       label: language === 'en' ? 'Best candidate' : '最佳候选',
@@ -3013,6 +3235,185 @@ const UserScannerPage: React.FC = () => {
                 latestLabel={heroLatestLabel}
                 language={language}
               />
+              {showWorkflowNextSteps ? (
+                <section
+                  data-testid="scanner-workflow-next-steps"
+                  className="mx-3 rounded-xl border border-white/10 bg-white/[0.025] px-3 py-3 text-sm"
+                  aria-label={language === 'en' ? 'Scanner workflow next steps' : '扫描工作流下一步'}
+                >
+                  <div className="flex min-w-0 flex-col gap-3">
+                    <div className="flex min-w-0 flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="text-xs font-semibold text-white">
+                            {language === 'en' ? 'Next steps' : '下一步'}
+                          </span>
+                          <span className="rounded-md border border-white/10 bg-black/20 px-2 py-0.5 text-[11px] text-white/58">
+                            {scannerWorkflowStats}
+                          </span>
+                          {showPreviewHandoff ? (
+                            <span className="rounded-md border border-blue-300/20 bg-blue-300/10 px-2 py-0.5 text-[11px] text-blue-100/80">
+                              {language === 'en' ? `Preview candidates ${previewSelectedDiagnostics.length}` : `预览候选 ${previewSelectedDiagnostics.length}`}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 max-w-4xl text-xs leading-relaxed text-white/58">
+                          {scannerWorkflowDetail}
+                        </p>
+                        {showPreviewHandoff ? (
+                          <p className="mt-1 text-[11px] leading-relaxed text-white/46">
+                            {language === 'en'
+                              ? 'Preview does not change official selection or scoring.'
+                              : '预览不会改变官方入选或评分。'}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                        {runDetail ? (
+                          <TerminalButton
+                            type="button"
+                            variant="secondary"
+                            data-testid="scanner-next-step-retry"
+                            disabled={isRunning || !scannerRetryRequest}
+                            className="h-9 px-3 text-xs"
+                            onClick={() => void handleRetryCurrentRun()}
+                          >
+                            <Play className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>{language === 'en' ? 'Retry same params' : '重新运行同参数'}</span>
+                          </TerminalButton>
+                        ) : null}
+                        <TerminalButton
+                          type="button"
+                          variant="secondary"
+                          data-testid="scanner-next-step-history"
+                          className="h-9 px-3 text-xs"
+                          onClick={() => setIsHistoryDrawerOpen(true)}
+                        >
+                          <History className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span>{language === 'en' ? 'Inspect history' : '查看历史'}</span>
+                        </TerminalButton>
+                        {showPreviewHandoff ? (
+                          <TerminalButton
+                            type="button"
+                            variant="secondary"
+                            data-testid="scanner-next-step-preview"
+                            className="h-9 px-3 text-xs"
+                            onClick={() => {
+                              setCandidateFilter('pool');
+                              const firstPreview = previewSelectedDiagnostics[0];
+                              if (firstPreview?.symbol) {
+                                setInspectorSymbol(firstPreview.symbol);
+                              }
+                            }}
+                          >
+                            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>{language === 'en' ? `View preview candidates ${previewSelectedDiagnostics.length}` : `查看预览候选 ${previewSelectedDiagnostics.length}`}</span>
+                          </TerminalButton>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(260px,0.6fr)]">
+                      <div className="min-w-0 rounded-lg border border-white/8 bg-black/20 p-3">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="text-[11px] font-semibold text-white/74">
+                            {language === 'en' ? 'Switch market or setup' : '换市场或配置'}
+                          </span>
+                          <span className="text-[11px] text-white/42">
+                            {language === 'en'
+                              ? 'Market buttons reset the profile defaults; detailed setup stays in the command bar.'
+                              : '市场按钮会切换到对应默认配置；更细的 profile 和范围设置在上方命令栏调整。'}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                          {scannerMarketSwitchOptions.map((option) => (
+                            <TerminalButton
+                              key={option.value}
+                              type="button"
+                              variant="compact"
+                              data-testid={`scanner-next-step-market-${option.value}`}
+                              className="h-8 px-2.5 text-xs"
+                              onClick={() => handleMarketChange(option.value)}
+                            >
+                              <span>{language === 'en' ? `Switch to ${option.label}` : `切到${option.label}`}</span>
+                            </TerminalButton>
+                          ))}
+                          <a
+                            href={buildLocalizedPath('/watchlist', language)}
+                            className="inline-flex h-8 items-center rounded-md border border-white/10 bg-white/[0.04] px-2.5 text-xs font-medium text-white/72 hover:bg-white/[0.08] hover:text-white"
+                          >
+                            {language === 'en' ? 'Open Watchlist' : '打开 Watchlist'}
+                          </a>
+                          <a
+                            href={buildLocalizedPath('/market-overview', language)}
+                            className="inline-flex h-8 items-center rounded-md border border-white/10 bg-white/[0.04] px-2.5 text-xs font-medium text-white/72 hover:bg-white/[0.08] hover:text-white"
+                          >
+                            {language === 'en' ? 'Open Market Overview' : '打开 Market Overview'}
+                          </a>
+                        </div>
+                      </div>
+
+                      <div className="min-w-0 rounded-lg border border-white/8 bg-black/20 p-3">
+                        <label htmlFor="scanner-manual-recovery-symbol" className="text-[11px] font-semibold text-white/74">
+                          {language === 'en' ? 'Manual research symbol' : '手动补充研究代码'}
+                        </label>
+                        <p className="mt-1 text-[11px] leading-relaxed text-white/42">
+                          {language === 'en'
+                            ? 'Use one symbol when Scanner has no safe candidate. Add it to Watchlist or start Stock Research without changing Scanner ranking.'
+                            : '当扫描没有安全候选时，可手动输入一个代码，加入观察名单或启动个股研究，不改变扫描排名。'}
+                        </p>
+                        <div className="mt-2 flex min-w-0 flex-col gap-2 sm:flex-row">
+                          <input
+                            id="scanner-manual-recovery-symbol"
+                            data-testid="scanner-manual-recovery-symbol-input"
+                            value={manualRecoverySymbol}
+                            className="h-9 min-w-0 flex-1 rounded-md border border-white/10 bg-black/35 px-3 text-sm font-mono text-white outline-none placeholder:text-white/22 focus:border-indigo-300/50"
+                            onChange={(event) => setManualRecoverySymbol(event.target.value)}
+                            aria-label={language === 'en' ? 'Manual research symbol' : '手动补充研究代码'}
+                            placeholder={language === 'en' ? 'TSLA' : 'TSLA'}
+                          />
+                          <TerminalButton
+                            type="button"
+                            variant="secondary"
+                            data-testid="scanner-manual-recovery-research"
+                            className="h-9 px-3 text-xs"
+                            disabled={!manualRecoveryParsedSymbol || isManualRecoveryAnalyzePending}
+                            onClick={() => void handleAnalyzeManualRecoverySymbol()}
+                          >
+                            <Play className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>{manualRecoveryParsedSymbol ? (language === 'en' ? `Research ${manualRecoveryParsedSymbol}` : `研究 ${manualRecoveryParsedSymbol}`) : (language === 'en' ? 'Research' : '研究')}</span>
+                          </TerminalButton>
+                        </div>
+                        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                          <span className="text-[11px] text-white/42">
+                            {language === 'en' ? 'Manual Watchlist handoff' : '手动加入观察名单'}
+                          </span>
+                          <TerminalButton
+                            type="button"
+                            variant="compact"
+                            data-testid="scanner-manual-recovery-watchlist"
+                            className="h-8 px-2.5 text-xs"
+                            disabled={!manualRecoveryParsedSymbol || manualRecoveryAlreadyTracked || isManualRecoveryWatchlistPending || watchlistAuthBlocked}
+                            title={watchlistAuthBlocked
+                              ? (language === 'en' ? 'Sign in to save symbols.' : '登录后可保存代码。')
+                              : undefined}
+                            onClick={() => void handleTrackManualRecoverySymbol()}
+                          >
+                            <BookmarkPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>
+                              {manualRecoveryAlreadyTracked
+                                ? (language === 'en' ? 'Already in Watchlist' : '已在观察名单')
+                                : manualRecoveryParsedSymbol
+                                  ? (language === 'en' ? `Add to Watchlist ${manualRecoveryParsedSymbol}` : `加入观察名单 ${manualRecoveryParsedSymbol}`)
+                                  : (language === 'en' ? 'Add to Watchlist' : '加入观察名单')}
+                            </span>
+                          </TerminalButton>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              ) : null}
               <ConsumerResearchReadinessStrip
                 readiness={scannerResearchReadinessView}
                 title={language === 'en' ? 'Research readiness' : '研究就绪度'}
@@ -3410,7 +3811,7 @@ const UserScannerPage: React.FC = () => {
                       className={`grid min-h-0 flex-1 min-w-0 gap-3 px-2 py-2 ${showDetailRail ? 'xl:grid-cols-[minmax(820px,1fr)_minmax(320px,340px)]' : 'grid-cols-1'}`}
                     >
                       <div data-testid="scanner-primary-work-region" className="min-w-0">
-                        {currentSelectedCount === 0 && visibleHistorySummaries.length ? (
+                        {currentSelectedCount === 0 && candidateFilter === 'selected' && visibleHistorySummaries.length ? (
                           <ScannerHistoryFallbackPanel
                             summaries={visibleHistorySummaries}
                             emptyState={workbenchEmptyState}

@@ -76,6 +76,29 @@ const retryNoCandidateRun = {
   selected: [],
   candidates: [],
 };
+const previewNoCandidateRun = {
+  ...retryNoCandidateRun,
+  headline: 'Mock scanner no-candidate result with preview row',
+  summary: {
+    ...retryNoCandidateRun.summary,
+    evaluated_count: 3,
+    rejected_count: 3,
+  },
+  candidates: [
+    {
+      symbol: 'MARA',
+      name: 'MARA Holdings',
+      rank: 1,
+      status: 'rejected',
+      score: 61,
+      provider: 'mock',
+      reason: 'below liquidity threshold',
+      failed_rules: ['below_liquidity_threshold'],
+      missing_fields: [],
+      metrics: { return20d: 3.1, trend: 8 },
+    },
+  ],
+};
 
 async function assertScannerLaunchViewport(page: Page, viewport: { width: number; height: number }) {
   await page.setViewportSize(viewport);
@@ -275,7 +298,7 @@ test.describe('scanner launch surface', () => {
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 
-  test('keeps retry scan POST params unchanged in the workspace layout', async ({ page }) => {
+  test('retries loaded run params with a valid shortlist fallback in the workspace layout', async ({ page }) => {
     let postedRunRequest: unknown = null;
 
     await page.route('**/api/v1/auth/status', async (route) => {
@@ -330,8 +353,151 @@ test.describe('scanner launch surface', () => {
       market: 'cn',
       profile: 'cn_preopen_v1',
       shortlist_size: 5,
-      universe_limit: 300,
-      detail_limit: 60,
+      universe_limit: 320,
+      detail_limit: 72,
     }));
+  });
+
+  test('shows no-candidate next steps with preview and manual research handoff', async ({ page }) => {
+    let watchlistRequest: unknown = null;
+    let analysisRequest: unknown = null;
+
+    await page.route('**/api/v1/auth/status', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          authEnabled: true,
+          loggedIn: true,
+          passwordSet: true,
+          passwordChangeable: true,
+          setupState: 'enabled',
+          currentUser: {
+            id: 'user-1',
+            username: 'wolfy-user',
+            displayName: 'Wolfy User',
+            role: 'user',
+            isAdmin: false,
+            isAuthenticated: true,
+            transitional: false,
+            authEnabled: true,
+          },
+        }),
+      });
+    });
+    await page.route(/\/api\/v1\/scanner\/runs(?:\?.*)?$/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [{
+            id: 11,
+            market: 'cn',
+            profile: 'cn_preopen_v1',
+            profile_label: 'A-share Pre-open v1',
+            status: 'empty',
+            run_at: '2026-05-02T09:00:00Z',
+            completed_at: '2026-05-02T09:00:00Z',
+            watchlist_date: '2026-05-02',
+            trigger_mode: 'manual',
+            universe_name: 'cn_a_liquid_watchlist_v1',
+            shortlist_size: 0,
+            universe_size: 320,
+            preselected_size: 72,
+            evaluated_size: 48,
+            source_summary: 'Mocked scanner payload',
+            headline: 'Mock scanner no-candidate result with preview row',
+            universe_type: 'default',
+            theme_id: null,
+            theme_label: null,
+            requested_symbols_count: 0,
+            accepted_symbols_count: 0,
+            rejected_symbols: [],
+            top_symbols: [],
+            notification_status: 'not_attempted',
+            failure_reason: null,
+          }],
+          total: 1,
+          page: 1,
+          page_size: 20,
+        }),
+      });
+    });
+    await page.route('**/api/v1/scanner/runs/11', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(previewNoCandidateRun),
+      });
+    });
+    await page.route('**/api/v1/watchlist/items', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ items: [] }),
+        });
+        return;
+      }
+      watchlistRequest = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 2002,
+          symbol: 'TSLA',
+          market: 'cn',
+          name: 'TSLA',
+          source: 'scanner',
+          created_at: '2026-05-02T09:00:00Z',
+          updated_at: '2026-05-02T09:00:00Z',
+        }),
+      });
+    });
+    await page.route('**/api/v1/analysis/analyze', async (route) => {
+      analysisRequest = route.request().postDataJSON();
+      await route.fulfill({
+        status: 202,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          taskId: 'task-manual-tsla',
+          status: 'accepted',
+          message: 'Accepted',
+        }),
+      });
+    });
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/zh/scanner');
+    await page.waitForLoadState('domcontentloaded');
+
+    const nextSteps = page.getByTestId('scanner-workflow-next-steps');
+    await expect(nextSteps).toBeVisible({ timeout: 15_000 });
+    await expect(nextSteps).toContainText('下一步');
+    await expect(nextSteps).toContainText('换市场或配置');
+    await expect(nextSteps).toContainText('查看历史');
+    await expect(nextSteps).toContainText('手动加入观察名单');
+    await expect(nextSteps).toContainText('预览候选 1');
+    await expect(nextSteps).toContainText('预览不会改变官方入选或评分');
+    await expect(nextSteps.getByRole('link', { name: /打开 Watchlist/i })).toHaveAttribute('href', '/zh/watchlist');
+    await expect(nextSteps.getByRole('link', { name: /打开 Market Overview/i })).toHaveAttribute('href', '/zh/market-overview');
+
+    await nextSteps.getByRole('button', { name: /查看预览候选/ }).click();
+    const previewRow = page.getByTestId('scanner-candidate-row-MARA');
+    await expect(previewRow).toBeVisible();
+    await expect(previewRow).toContainText('预览');
+
+    await nextSteps.getByLabel(/手动补充研究代码/).fill('TSLA');
+    await nextSteps.getByRole('button', { name: /加入观察名单 TSLA/ }).click();
+    await expect.poll(() => JSON.stringify(watchlistRequest)).toContain('TSLA');
+    await expect(nextSteps.getByRole('button', { name: /已在观察名单|Already in Watchlist/ })).toBeVisible();
+
+    await nextSteps.getByLabel(/手动补充研究代码/).fill('TSLA');
+    await nextSteps.getByRole('button', { name: /研究 TSLA/ }).click();
+    await expect.poll(() => JSON.stringify(analysisRequest)).toContain('TSLA');
+
+    const bodyText = await page.locator('body').innerText();
+    expect(bodyText).not.toMatch(/provider|reasonCode|fallback_source|below_liquidity_threshold|raw diagnostics|payload_json/i);
+    await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 });

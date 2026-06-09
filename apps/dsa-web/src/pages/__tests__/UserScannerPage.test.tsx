@@ -928,6 +928,10 @@ function renderUserScannerPage(options: boolean | RenderUserScannerPageOptions =
           <Route path="/:locale/scanner" element={<UserScannerPage />} />
           <Route path="/" element={<div>Home Landing</div>} />
           <Route path="/:locale" element={<div>Home Landing</div>} />
+          <Route path="/watchlist" element={<div>Watchlist Landing</div>} />
+          <Route path="/:locale/watchlist" element={<div>Watchlist Landing</div>} />
+          <Route path="/market-overview" element={<div>Market Overview Landing</div>} />
+          <Route path="/:locale/market-overview" element={<div>Market Overview Landing</div>} />
           <Route path="/backtest" element={<div>Backtest Landing</div>} />
           <Route path="/:locale/backtest" element={<div>Backtest Landing</div>} />
           <Route path="/backtest/results/:runId" element={<div>Backtest Result</div>} />
@@ -1568,6 +1572,9 @@ describe('UserScannerPage', () => {
 
   it('uses a retry CTA with bounded no-candidate guidance while keeping the same run parameters', async () => {
     const noCandidateRun = makeCryptoDiagnosticsRun({
+      shortlistSize: 8,
+      universeSize: 180,
+      preselectedSize: 40,
       shortlist: [],
       selected: [],
       summary: {
@@ -1602,6 +1609,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const band = await screen.findByTestId('scanner-conclusion-band');
+    const nextSteps = await screen.findByTestId('scanner-workflow-next-steps');
     const runButton = await screen.findByRole('button', { name: '重新扫描' });
     expect(runButton).toBeEnabled();
     expect(runButton).toHaveClass('bg-[var(--wolfy-surface-input)]');
@@ -1609,18 +1617,103 @@ describe('UserScannerPage', () => {
     expect(band).toHaveTextContent('本次无可用候选，仅供观察。');
     expect(band).toHaveTextContent('当前无可用候选，先查看淘汰分布或历史记录，再决定是否重新扫描。');
     expect(band).not.toHaveTextContent('先使用候选行作为主证据');
+    expect(nextSteps).toHaveTextContent('下一步');
+    expect(nextSteps).toHaveTextContent('换市场或配置');
+    expect(nextSteps).toHaveTextContent('查看历史');
+    expect(nextSteps).toHaveTextContent('手动加入观察名单');
+    expect(nextSteps).toHaveTextContent('Market Overview');
+    expect(within(nextSteps).getByRole('link', { name: /打开 Watchlist/i })).toHaveAttribute('href', '/zh/watchlist');
+    expect(within(nextSteps).getByRole('link', { name: /打开 Market Overview/i })).toHaveAttribute('href', '/zh/market-overview');
 
-    fireEvent.click(runButton);
+    fireEvent.click(within(nextSteps).getByRole('button', { name: '重新运行同参数' }));
 
     await waitFor(() => {
       expect(runScan).toHaveBeenCalledWith({
-        market: 'cn',
-        profile: 'cn_preopen_v1',
-        shortlistSize: 5,
-        universeLimit: 300,
-        detailLimit: 60,
+        market: 'us',
+        profile: 'us_preopen_v1',
+        shortlistSize: 8,
+        universeLimit: 180,
+        detailLimit: 40,
+        universeType: 'theme',
+        themeId: 'crypto_miners',
       });
     });
+  });
+
+  it('exposes a safe limited preview and manual symbol handoff from no-candidate states', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun({
+      shortlist: [],
+      selected: [],
+      summary: {
+        universeCount: 11,
+        submittedCount: 11,
+        evaluatedCount: 3,
+        selectedCount: 0,
+        rejectedCount: 3,
+        dataFailedCount: 0,
+        skippedCount: 0,
+        errorCount: 0,
+        limitedByResultCap: false,
+      },
+      candidates: [
+        {
+          symbol: 'MARA',
+          name: 'MARA Holdings',
+          rank: 1,
+          status: 'rejected',
+          score: 61,
+          provider: 'alpaca',
+          reason: 'below liquidity threshold',
+          failedRules: ['below_liquidity_threshold'],
+          missingFields: [],
+          metrics: {},
+        },
+      ],
+    }));
+    addWatchlistItem.mockResolvedValueOnce(makeWatchlistItem({
+      id: 401,
+      symbol: 'TSLA',
+      market: 'us',
+      name: 'TSLA',
+      scannerRunId: null,
+      scannerRank: null,
+      scannerScore: null,
+    }));
+
+    const { container } = renderUserScannerPage();
+
+    const nextSteps = await screen.findByTestId('scanner-workflow-next-steps');
+    expect(nextSteps).toHaveTextContent('预览候选 1');
+    expect(nextSteps).toHaveTextContent('预览不会改变官方入选或评分');
+
+    fireEvent.click(within(nextSteps).getByRole('button', { name: /查看预览候选/ }));
+    expect(await screen.findByTestId('scanner-candidate-row-MARA')).toHaveTextContent(/预览|Preview/);
+
+    fireEvent.change(within(nextSteps).getByLabelText(/手动补充研究代码/), { target: { value: 'TSLA' } });
+    fireEvent.click(within(nextSteps).getByRole('button', { name: /加入观察名单 TSLA/ }));
+
+    await waitFor(() => {
+      expect(addWatchlistItem).toHaveBeenCalledWith(expect.objectContaining({
+        symbol: 'TSLA',
+        market: 'us',
+        name: 'TSLA',
+        source: 'scanner',
+        notes: expect.stringMatching(/Scanner recovery|手动补充/),
+      }));
+    });
+    expect(screen.getByText(/已加入观察名单/)).toBeInTheDocument();
+
+    fireEvent.change(within(nextSteps).getByLabelText(/手动补充研究代码/), { target: { value: 'TSLA' } });
+    fireEvent.click(within(nextSteps).getByRole('button', { name: /研究 TSLA/ }));
+
+    await waitFor(() => {
+      expect(analyzeAsync).toHaveBeenCalledWith(expect.objectContaining({
+        stockCode: 'TSLA',
+        originalQuery: 'TSLA',
+        selectionSource: 'manual',
+      }));
+    });
+    expect(container).not.toHaveTextContent(/provider|reasonCode|fallback_source|below_liquidity_threshold|raw diagnostics|JSON/i);
   });
 
   it('renders a scanner conclusion band when evidence is insufficient', async () => {
@@ -2613,7 +2706,7 @@ describe('UserScannerPage', () => {
     getRun.mockResolvedValue(themedRun);
     renderUserScannerPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: /美股|US/ }));
+    fireEvent.click(await within(screen.getByTestId('scanner-market-toggle')).findByRole('button', { name: /美股|US/ }));
     fireEvent.click(within(screen.getByTestId('scanner-scope-selector')).getByRole('button', { name: /主题标的池|Theme universe/i }));
     await openAdvancedControls();
     const themeSelect = await screen.findByTestId('scanner-theme-select');
