@@ -1463,11 +1463,16 @@ function marketDecisionSemanticsText(value: unknown): string {
 }
 
 const MARKET_OVERVIEW_CONSUMER_UNSAFE_PATTERN = /\b(?:REAL|MIXED|FALLBACK|REGIME|ALTERNATIVE\.?ME|YFINANCE|CBOE|BINANCE|Yahoo Finance|Binance Futures|provider|sourceTier|sourceLabel|reasonCode|diagnosticOnly|scoreContributionAllowed|sourceAuthorityAllowed|authorityGrant|raw|debug|backend|cache|schema|synthetic|mock|proxy|fallback)\b|market_regime_synthesis|Conflicts With Primary Regime|ETF flow proxy|Institutional pressure proxy|Industry breadth proxy/i;
+const MARKET_OVERVIEW_INTERNAL_TOKEN_PATTERN = /^[a-z0-9]+(?:_[a-z0-9]+)+$/i;
 
 function marketOverviewConsumerSemanticsText(value: unknown, fallback = ''): string {
   const text = marketDecisionSemanticsText(value).trim();
   if (!text) {
     return fallback;
+  }
+  if (MARKET_OVERVIEW_INTERNAL_TOKEN_PATTERN.test(text)) {
+    const reasonLabel = marketIntelligenceReasonLabel(text, 'zh');
+    return reasonLabel === '数据边界待确认' ? fallback : reasonLabel;
   }
   const projected = text
     .replace(/market_regime_synthesis/gi, '市场状态')

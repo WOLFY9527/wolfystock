@@ -1184,7 +1184,7 @@ function pickConsumerEvidenceIndicators(indicators: LiquidityMonitorIndicator[])
 
   append(indicators.filter((indicator) => indicator.coverageDiagnostics?.scoreContributionAllowed === true || indicator.includedInScore).slice(0, 2));
   append(indicators.filter((indicator) => isObservationOnlyIndicator(indicator)).slice(0, 1));
-  append(indicators.filter((indicator) => isMissingOrUnavailableIndicator(indicator)).slice(0, 2));
+  append(indicators.filter((indicator) => isMissingOrUnavailableIndicator(indicator)).slice(0, 1));
   append(indicators);
 
   return picked.slice(0, 4);
@@ -1220,7 +1220,7 @@ function buildConsumerEvidenceDetail(indicator: LiquidityMonitorIndicator): stri
   ];
   const diagnostics = indicator.coverageDiagnostics;
   if (diagnostics?.missingInputs.length) {
-    pieces.push(`待补充指标 ${diagnostics.missingInputs.length} 项`);
+    pieces.push('待补信息见下方数据状态说明');
   } else if (indicator.coverageDiagnostics?.scoreContributionAllowed === true || indicator.includedInScore) {
     pieces.push('纳入当前状态观察');
   } else if (isObservationOnlyIndicator(indicator)) {
@@ -1294,7 +1294,7 @@ function buildConsumerGapSummary(
     ? `当前仍有 ${consumerView.observableCount} 项线索可观察`
     : '当前没有稳定线索';
   if (missing.count > 0) {
-    return `${observableLead}，另有 ${missing.count} 项待补充。`;
+    return `${observableLead}，其余 ${missing.count} 项待补信息已折叠。`;
   }
   if (observation.count > 0) {
     return `${observableLead}，其中部分资金面线索暂只保留观察。`;
@@ -1608,7 +1608,7 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
               {coverageSummary.scoreGradeCount}/{Math.max(indicators.length, 1)} 项线索可参考
             </p>
             <p className="mt-1 text-[11px] leading-5 text-white/56">
-              待补充指标 {coverageSummary.missingOrUnavailableCount} 项，观察线索 {coverageSummary.observationOnlyCount} 项。
+              观察线索 {coverageSummary.observationOnlyCount} 项；其余待补信息按需展开查看。
             </p>
           </div>
           <TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.directionLabel}</TerminalChip>

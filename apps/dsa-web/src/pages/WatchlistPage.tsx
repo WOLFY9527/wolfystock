@@ -3,7 +3,6 @@ import {
   BarChart3,
   CheckSquare,
   Copy,
-  ExternalLink,
   Play,
   RefreshCw,
   Search,
@@ -1214,14 +1213,13 @@ function getCopy(language: 'zh' | 'en') {
         { label: 'Next research step', value: 'Open analysis / refresh / backtest', detail: 'Actions are explicit user research steps, not execution shortcuts.' },
       ] as WatchlistEmptyPreviewItem[],
       emptyPreviewFootnote: 'Demo sample only. It is not persisted, counted as a watchlist item, exported as user data, or used by scanner ranking.',
-      emptyScannerHelp: 'If you later need batch screening, Scanner remains available as a secondary route.',
+      emptyScannerHelp: 'Keep the first step here focused on one-symbol research and explicit save decisions.',
       savedObservationHelp: 'Saved observations are created only after you explicitly save a symbol; this preview does not create one.',
       manualResearchLabel: 'Manual research symbol',
       manualResearchPlaceholder: 'TSLA',
       manualResearchHelp: 'Primary path: start one stock research task here without adding anything to Watchlist.',
       manualResearchButton: 'Research',
       enterManualSymbol: 'Enter one symbol before starting research.',
-      openScanner: 'Open Scanner later',
       tableTitle: 'Monitoring list',
       tableDescription: 'Rows keep state, observation, and actions aligned.',
       loading: 'Loading watchlist...',
@@ -1337,14 +1335,13 @@ function getCopy(language: 'zh' | 'en') {
       { label: '下一步研究', value: '打开分析 / 刷新 / 回测', detail: '全部是用户触发的研究步骤，不是执行入口。' },
     ] as WatchlistEmptyPreviewItem[],
     emptyPreviewFootnote: '仅为演示样例；不会持久化，不计入观察名单数量，不导出为用户数据，也不会进入扫描器官方排名。',
-    emptyScannerHelp: '如果后续需要批量筛选，扫描器仍可作为辅助入口。',
+    emptyScannerHelp: '这里优先保留单标的研究与明确保存观察的路径。',
     savedObservationHelp: '保存观察只会在你明确保存代码后创建；这里的预览不会创建观察项。',
     manualResearchLabel: '手动研究代码',
     manualResearchPlaceholder: 'TSLA',
     manualResearchHelp: '首选路径：先启动一个个股研究任务，不会把代码加入观察名单。',
     manualResearchButton: '研究',
     enterManualSymbol: '请先输入一个研究代码。',
-    openScanner: '稍后打开扫描器',
     tableTitle: '监控列表',
     tableDescription: '按行查看状态、观察与操作。',
     loading: '正在加载观察列表...',
@@ -1926,8 +1923,6 @@ const WatchlistPage: React.FC = () => {
       ? 'border-amber-300/20 bg-amber-300/5 text-amber-100/80'
       : 'border-emerald-400/20 bg-emerald-400/5 text-emerald-100/80';
   const autoRefreshStatus = describeBooleanEnabled(refreshStatus?.enabled, { language });
-  const scannerPath = buildLocalizedPath('/scanner', language);
-  const hasVisibleItems = filteredItems.length > 0;
   const isWatchlistEmptyWorkspace = !isLoading && !error && items.length === 0;
   const attentionCount = watchlistConclusion.staleCount + watchlistConclusion.unknownCount + watchlistConclusion.limitedConfidenceCount;
   const monitoringStateLabel = formatMonitoringStateLabel(watchlistConclusion.tone, filteredItems.length, language);
@@ -1991,17 +1986,7 @@ const WatchlistPage: React.FC = () => {
         <DensePageHeader
           eyebrow={language === 'zh' ? '监控队列' : 'Monitoring board'}
           title={copy.title}
-          action={hasVisibleItems ? (
-            <TerminalButton
-              type="button"
-              variant="secondary"
-              className="h-9 px-3 text-xs"
-              onClick={() => navigate(scannerPath)}
-            >
-              <ExternalLink className="h-4 w-4" />
-              {copy.openScanner}
-            </TerminalButton>
-          ) : undefined}
+          action={undefined}
         />
 
         <WatchlistConclusionBand
@@ -2381,17 +2366,7 @@ const WatchlistPage: React.FC = () => {
                     ? 'mx-auto min-h-[168px] w-full max-w-3xl flex-col items-center justify-center rounded-none border-0 bg-transparent px-4 py-8 text-center sm:min-h-[188px]'
                     : 'min-h-[72px] flex-col items-start justify-start rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent px-4 py-4 sm:flex-row sm:items-center sm:justify-between'
                   }
-                  action={isWatchlistEmptyWorkspace ? undefined : (
-                    <TerminalButton
-                      type="button"
-                      variant="secondary"
-                      className="h-9 w-full px-3 text-xs sm:w-auto"
-                      onClick={() => navigate(scannerPath)}
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                      {copy.openScanner}
-                    </TerminalButton>
-                  )}
+                  action={undefined}
                 >
                   <div className="grid w-full min-w-0 gap-4">
                     <div className="space-y-1">
@@ -2468,20 +2443,7 @@ const WatchlistPage: React.FC = () => {
                           </TerminalButton>
                         </div>
                         <p className="text-[11px] leading-relaxed text-white/42">{copy.savedObservationHelp}</p>
-                        <div className="flex min-w-0 flex-wrap items-center gap-2 pt-1">
-                          <span className="text-[11px] text-white/42">
-                            {language === 'en' ? 'Secondary route:' : '辅助入口：'}
-                          </span>
-                          <TerminalButton
-                            type="button"
-                            variant="compact"
-                            className="h-8 px-2.5 text-xs"
-                            onClick={() => navigate(scannerPath)}
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                            {copy.openScanner}
-                          </TerminalButton>
-                        </div>
+                        <p className="pt-1 text-[11px] leading-relaxed text-white/42">{copy.emptyScannerHelp}</p>
                       </div>
                     ) : null}
                   </div>

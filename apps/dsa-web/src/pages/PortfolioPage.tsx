@@ -346,10 +346,29 @@ function sanitizePortfolioConsumerLabel(label: string | null | undefined, langua
   if (normalized.includes('confidence') || normalized.includes('置信')) {
     return limitedConfidenceLabel(language);
   }
+  if (
+    normalized.includes('数据不足，禁止判断')
+    || normalized.includes('禁止判断')
+    || normalized.includes('blocked')
+    || normalized.includes('forbid')
+  ) {
+    return language === 'zh' ? '数据暂不完整，待补充后评估' : 'Data is still incomplete and will be reviewed after more inputs arrive.';
+  }
   if (normalized.includes('stale') || normalized.includes('过期') || normalized.includes('expired')) {
     return language === 'zh' ? '数据可能延迟' : 'Data may be delayed';
   }
   return label || null;
+}
+
+function portfolioEvidenceVariant(
+  summary: ReturnType<typeof normalizePortfolioRiskEvidence> | null | undefined,
+): PortfolioTrustChipItem['variant'] {
+  if (summary?.posture === 'blocked') return 'caution';
+  if (summary?.tone === 'danger') return 'danger';
+  if (summary?.tone === 'warning') return 'caution';
+  if (summary?.tone === 'info') return 'info';
+  if (summary?.tone === 'success') return 'success';
+  return 'neutral';
 }
 
 function consumerTrustItemFromLabel(label: string | null | undefined, language: PortfolioLanguage, keyPrefix: string): PortfolioTrustChipItem | null {
@@ -2426,15 +2445,7 @@ const PortfolioPage: React.FC = () => {
       ? {
         key: `risk-posture-${portfolioEvidenceSummary.posture}`,
         label: sanitizePortfolioConsumerLabel(portfolioEvidenceSummary.displayLabel, language) || (language === 'zh' ? '数据状态待确认' : 'Data status pending'),
-        variant: portfolioEvidenceSummary.tone === 'danger'
-          ? 'danger'
-          : portfolioEvidenceSummary.tone === 'warning'
-            ? 'caution'
-            : portfolioEvidenceSummary.tone === 'info'
-              ? 'info'
-              : portfolioEvidenceSummary.tone === 'success'
-                ? 'success'
-                : 'neutral',
+        variant: portfolioEvidenceVariant(portfolioEvidenceSummary),
       }
       : null,
     portfolioEvidenceSummary?.confidenceCap != null

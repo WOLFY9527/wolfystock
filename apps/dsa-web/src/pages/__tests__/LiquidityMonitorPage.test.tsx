@@ -1070,7 +1070,7 @@ describe('LiquidityMonitorPage', () => {
     expect(unavailableBand).not.toHaveTextContent('数据源不可用');
     expect(unavailableBand).not.toHaveTextContent('Provider unavailable');
     expect(unavailableBand).not.toHaveTextContent('前往数据源设置');
-    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('当前没有稳定线索，另有 4 项待补充');
+    expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('当前没有稳定线索，其余 4 项待补信息已折叠');
     expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('等待刷新');
   });
 

@@ -1895,7 +1895,7 @@ describe('WatchlistPage', () => {
     expect(within(emptyState).getByText('还没有观察标的')).toBeInTheDocument();
     expect(emptyState).toHaveTextContent('当前已保存覆盖下还没有可用观察行。可先在这里手动研究一个代码，确认后再决定是否保存到观察列表。');
     expect(emptyState).toHaveTextContent('只有你明确保留观察后，已保存的候选证据与状态才会回到这里。');
-    expect(emptyState).toHaveTextContent('如果后续需要批量筛选，扫描器仍可作为辅助入口。');
+    expect(emptyState).toHaveTextContent('这里优先保留单标的研究与明确保存观察的路径。');
     const preview = within(emptyState).getByTestId('watchlist-empty-preview');
     expect(preview).toHaveTextContent('功能预览');
     expect(preview).toHaveTextContent('示例预览');
@@ -1911,19 +1911,13 @@ describe('WatchlistPage', () => {
     expect(researchPath).toHaveTextContent('首选路径：先启动一个个股研究任务，不会把代码加入观察名单。');
     expect(within(emptyState).getByLabelText('手动研究代码')).toBeInTheDocument();
     expect(emptyState).not.toHaveTextContent(/数据不足，禁止判断|买入|卖出|下单|交易|券商|broker/i);
-    expect(within(headerStrip).queryByRole('button', { name: /打开扫描器/ })).not.toBeInTheDocument();
+    expect(within(headerStrip).queryByRole('button', { name: /打开扫描器|Open Scanner/i })).not.toBeInTheDocument();
     expect(screen.queryByTestId('watchlist-compact-filter-bar')).not.toBeInTheDocument();
     expect(screen.queryByTestId('watchlist-advanced-filters')).not.toBeInTheDocument();
     expect(screen.queryByTestId('watchlist-list-header')).not.toBeInTheDocument();
     expect(screen.queryByTestId('watchlist-secondary-deck')).not.toBeInTheDocument();
     expect(screen.queryByTestId('watchlist-command-bar')).not.toBeInTheDocument();
-
-    const emptyStateScannerAction = within(emptyState).getByRole('button', { name: /稍后打开扫描器/ });
-    expect(screen.getAllByRole('button', { name: /稍后打开扫描器/ })).toHaveLength(1);
-
-    fireEvent.click(emptyStateScannerAction);
-    expect(screen.getByText('scanner')).toBeInTheDocument();
-    expect(screen.getByTestId('location')).toHaveTextContent('/zh/scanner');
+    expect(within(emptyState).queryByRole('button', { name: /稍后打开扫描器|Open Scanner later/i })).not.toBeInTheDocument();
   });
 
   it('starts manual research from the empty watchlist without creating a preview item', async () => {

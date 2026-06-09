@@ -522,9 +522,9 @@ test.describe('watchlist user alerts browser smoke', () => {
     await expect(emptyState).toContainText('不会持久化');
     await expect(emptyState).toContainText('不计入观察名单数量');
     await expect(emptyState).toContainText('不会进入扫描器官方排名');
-    await expect(emptyState).toContainText('如果后续需要批量筛选');
+    await expect(emptyState).toContainText('这里优先保留单标的研究与明确保存观察的路径');
     await expect(emptyState).toContainText('手动研究代码');
-    await expect(emptyState.getByRole('button', { name: '稍后打开扫描器' })).toBeVisible();
+    await expect(emptyState.getByRole('button', { name: /稍后打开扫描器/i })).toHaveCount(0);
     await expect(page.getByTestId('watchlist-detail-rail')).toHaveCount(0);
     await expect(page.getByTestId('watchlist-candidate-list')).toHaveCount(0);
     await expect(page.getByTestId('watchlist-secondary-deck')).toHaveCount(0);

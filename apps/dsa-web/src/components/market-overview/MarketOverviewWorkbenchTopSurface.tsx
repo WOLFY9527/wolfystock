@@ -251,7 +251,7 @@ function buildMarketNarrativeVerdict(params: {
       return {
         label: '偏弱观察',
         variant: 'caution',
-        headline: '关键证据仍待补齐，但当前压力线索更清晰。',
+        headline: '当前压力线索更清晰，关键确认仍待补齐。',
         detail: marketNarrativeCopy(summary.blockers[0] || directionalSummary.blockingDrivers[0] || statusSummary.detail || '主要压力仍待确认。'),
       };
     }
@@ -259,7 +259,7 @@ function buildMarketNarrativeVerdict(params: {
       return {
         label: '偏强观察',
         variant: 'info',
-        headline: '关键证据仍待补齐，但当前偏强线索更清晰。',
+        headline: '当前偏强线索更清晰，关键确认仍待补齐。',
         detail: marketNarrativeCopy(summary.blockers[0] || directionalSummary.supportingDrivers[0] || statusSummary.detail || '主要驱动仍在跟踪。'),
       };
     }
@@ -267,7 +267,7 @@ function buildMarketNarrativeVerdict(params: {
       return {
         label: '中性观察',
         variant: 'info',
-        headline: '关键证据仍待补齐，先按中性线索继续观察。',
+        headline: '当前已返回中性线索，关键确认仍待补齐。',
         detail: marketNarrativeCopy(summary.blockers[0] || directionalSummary.blockingDrivers[0] || directionalSummary.supportingDrivers[0] || statusSummary.detail || '等待主线进一步清晰。'),
       };
     }
@@ -277,7 +277,7 @@ function buildMarketNarrativeVerdict(params: {
     return {
       label: '数据不足',
       variant: summary.state === 'waiting' ? 'neutral' : 'caution',
-      headline: '仍能保留可见市场线索，但关键证据未补齐。',
+      headline: '已返回部分市场线索，关键证据仍待补齐。',
       detail: marketNarrativeCopy(summary.blockers[0] || statusSummary.detail || '关键证据仍待补齐。'),
     };
   }
@@ -681,16 +681,16 @@ function directionUsabilitySummary(view: MarketOverviewDecisionSemanticsView): D
     return {
       label: '部分可参考',
       variant: 'info',
-      headline: '当前方向仅可部分参考',
-      detail: `主要因为${reasonText}。`,
+      headline: '已有主线线索返回，当前先按观察路径继续跟踪。',
+      detail: `当前仍需补齐${reasonText}。`,
     };
   }
 
   return {
     label: '方向不可用',
     variant: 'caution',
-    headline: '当前不能形成可靠方向判断',
-    detail: `主要因为${reasonText}。`,
+    headline: '已返回部分市场线索，但还不能升级为可靠方向判断。',
+    detail: `当前仍需补齐${reasonText}。`,
   };
 }
 
@@ -947,7 +947,7 @@ const MarketOverviewConclusionLayer: React.FC<{
       label: '接下来观察什么',
       value: nextObservation,
       detail: summary.state === 'unavailable' || view?.insufficient
-        ? `缺少：${missingButObservable.join(' / ')}；仍可观察已返回的市场线索。`
+        ? `当前先看已返回主线；待补：${missingButObservable.join(' / ')}。`
         : '若下一项观察转弱或待补证据继续缺席，需要重新核对市场叙事。',
     },
   ];
