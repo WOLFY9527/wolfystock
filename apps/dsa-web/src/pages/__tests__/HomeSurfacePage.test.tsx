@@ -473,7 +473,7 @@ describe('HomeSurfacePage', () => {
     expect(guestMarketPreviewStrip).toHaveTextContent('当前市场观察');
     expect(guestMarketPreviewStrip).toHaveTextContent('公开市场观察已准备');
     expect(guestMarketPreviewStrip).toHaveTextContent('市场广度改善');
-    expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/login?mode=create&redirect=%2F');
+    expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/register?redirect=%2F');
     expect(guestTrustStrip).toHaveClass('rounded-[12px]');
     expect(guestTrustStrip).toHaveTextContent('安全下一步');
     expect(guestPreviewStrip).toHaveClass('rounded-[12px]');
@@ -500,7 +500,7 @@ describe('HomeSurfacePage', () => {
       expect(screen.getByTestId('guest-home-preview-strip')).toHaveTextContent('Available after sign-in');
       expect(screen.getByTestId('guest-home-preview-strip')).toHaveTextContent('reopen the last research context');
       expect(screen.getByTestId('guest-home-trust-strip')).toHaveTextContent('Safe next step');
-      expect(screen.getByRole('link', { name: 'Create free account' })).toHaveAttribute('href', '/login?mode=create&redirect=%2F');
+      expect(screen.getByRole('link', { name: 'Create free account' })).toHaveAttribute('href', '/en/register?redirect=%2Fen');
       expect(guestSurface.textContent).not.toMatch(GUEST_HOME_FORBIDDEN_COPY_PATTERN);
     } finally {
       window.history.replaceState(window.history.state, '', originalPath);

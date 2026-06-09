@@ -8,10 +8,7 @@ import { Shell } from './components/layout/Shell';
 import { PreviewShell } from './components/layout/PreviewShell';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { useI18n } from './contexts/UiLanguageContext';
-import {
-  buildRegistrationPath,
-  useProductSurface,
-} from './hooks/useProductSurface';
+import { useProductSurface } from './hooks/useProductSurface';
 import type { UiLanguage } from './i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from './utils/localeRouting';
 import { isPreviewRoutePath } from './utils/appRouteGuards';
@@ -348,7 +345,7 @@ export const AppContent: React.FC = () => {
       </div>
     );
   } else if (!isLoading) {
-    if (routePathname === '/login') {
+    if (routePathname === '/login' || routePathname === '/register') {
       const canRenderLogin = authEnabled || setupState === 'no_password' || setupState === 'password_retained';
       if (loggedIn) {
         content = <Navigate to={localizedHomePath} replace />;
@@ -397,7 +394,7 @@ export const AppContent: React.FC = () => {
               <Route path="/scanner" element={<ScannerSurfacePage />} />
               <Route path="/chat" element={<Navigate to="/market-overview" replace />} />
               <Route path="/portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
-              <Route path="/market-overview" element={<RegisteredSurfaceRoute><MarketOverviewPage /></RegisteredSurfaceRoute>} />
+              <Route path="/market-overview" element={<MarketOverviewPage />} />
               <Route path="/market/liquidity-monitor" element={<LiquidityMonitorPage />} />
               <Route path="/market/rotation-radar" element={<MarketRotationRadarPage />} />
               <Route path="/watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
@@ -434,7 +431,7 @@ export const AppContent: React.FC = () => {
               <Route path="scanner" element={<ScannerSurfacePage />} />
               <Route path="chat" element={<Navigate to="../market-overview" replace />} />
               <Route path="portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
-              <Route path="market-overview" element={<RegisteredSurfaceRoute><MarketOverviewPage /></RegisteredSurfaceRoute>} />
+              <Route path="market-overview" element={<MarketOverviewPage />} />
               <Route path="market/liquidity-monitor" element={<LiquidityMonitorPage />} />
               <Route path="market/rotation-radar" element={<MarketRotationRadarPage />} />
               <Route path="watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
@@ -457,8 +454,8 @@ export const AppContent: React.FC = () => {
             </Route>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/:locale/login" element={<LoginPage />} />
-            <Route path="/register" element={<Navigate to={buildRegistrationPath(localizedHomePath)} replace />} />
-            <Route path="/:locale/register" element={<Navigate to={buildRegistrationPath(localizedHomePath)} replace />} />
+            <Route path="/register" element={<LoginPage />} />
+            <Route path="/:locale/register" element={<LoginPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/:locale/reset-password" element={<ResetPasswordPage />} />
           </Routes>

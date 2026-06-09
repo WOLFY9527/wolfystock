@@ -33,6 +33,7 @@ describe('LoginPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState(window.history.state, '', '/login?redirect=%2Fsettings');
     useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fsettings')]);
   });
 
@@ -136,6 +137,48 @@ describe('LoginPage', () => {
     expect(screen.getByRole('heading', { name: translate('zh', 'auth.login.heroTitleCreate') })).toBeInTheDocument();
     expect(screen.getByLabelText(translate('zh', 'auth.login.usernameLabel'))).toBeInTheDocument();
     expect(screen.getByLabelText(translate('zh', 'auth.login.displayNameLabel'))).toBeInTheDocument();
+  });
+
+  it('enters create-account mode directly on the register route', async () => {
+    window.history.replaceState(window.history.state, '', '/register?redirect=%2Fscanner');
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fscanner')]);
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login: vi.fn().mockResolvedValue({ success: true }),
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    renderPage();
+
+    expect(screen.getByRole('heading', { name: translate('zh', 'auth.login.heroTitleCreate') })).toBeInTheDocument();
+    expect(screen.getByLabelText(translate('zh', 'auth.login.usernameLabel'))).toBeInTheDocument();
+    expect(screen.getByLabelText(translate('zh', 'auth.login.displayNameLabel'))).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.usernameLabel')), { target: { value: 'guest-beta-user' } });
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordLabelLogin')), { target: { value: 'passwd6' } });
+    fireEvent.change(screen.getByLabelText(translate('zh', 'auth.login.passwordConfirmLabel')), { target: { value: 'passwd6' } });
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'auth.login.submitCreate') }));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/scanner', { replace: true }));
+  });
+
+  it('keeps localized register entries in create-account mode with localized guest exits', () => {
+    window.history.replaceState(window.history.state, '', '/en/register?redirect=%2Fen%2Fmarket-overview');
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('redirect=%2Fen%2Fmarket-overview')]);
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login: vi.fn(),
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    renderPage();
+
+    expect(screen.getByRole('heading', { name: translate('en', 'auth.login.heroTitleCreate') })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: translate('en', 'auth.login.returnToGuest') }));
+
+    expect(navigate).toHaveBeenCalledWith('/en/guest', { replace: true });
   });
 
   it('syncs create mode when search params change after mount', async () => {

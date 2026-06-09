@@ -9,7 +9,7 @@ import { SettingsAlert } from '../components/settings/SettingsAlert';
 import { useAuth } from '../hooks/useAuth';
 import { resolveAuthRedirect } from '../hooks/useProductSurface';
 import { translate, type UiLanguage } from '../i18n/core';
-import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
+import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../utils/localeRouting';
 
 type LoginLanguage = UiLanguage;
 
@@ -118,8 +118,9 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const createModeRequested = searchParams.get('mode') === 'create';
   const routeLanguage = parseLocaleFromPathname(window.location.pathname);
+  const routePathname = stripLocalePrefix(window.location.pathname);
+  const createModeRequested = routePathname === '/register' || searchParams.get('mode') === 'create';
   const language: LoginLanguage = routeLanguage === 'en' ? 'en' : 'zh';
   const copy = buildLoginCopy(language);
   const homePath = routeLanguage ? buildLocalizedPath('/', routeLanguage) : '/';

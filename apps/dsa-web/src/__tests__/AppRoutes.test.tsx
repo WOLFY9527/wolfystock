@@ -84,13 +84,19 @@ vi.mock('../components/report/StandardReportPanel', async () => {
   };
 });
 
-vi.mock('../pages/HomeSurfacePage', () => ({
-  default: () => (
+vi.mock('../pages/HomeSurfacePage', () => {
+  const MockHomeSurfacePage = () => (
     <div>
-      {languageState.value === 'en' ? 'Home Workspace' : '首页工作区'}
+      {useProductSurfaceMock().isGuest
+        ? (languageState.value === 'en' ? 'Guest Preview Mode' : '游客预览模式')
+        : (languageState.value === 'en' ? 'Home Workspace' : '首页工作区')}
     </div>
-  ),
-}));
+  );
+
+  return {
+    default: MockHomeSurfacePage,
+  };
+});
 
 vi.mock('../pages/GuestHomePage', () => ({
   default: () => (
@@ -253,16 +259,40 @@ describe('AppContent route flows', () => {
     languageState.value = 'en';
   });
 
-  it('renders the Chinese home surface on the root route', async () => {
+  it('renders the Chinese guest preview on the root route for anonymous sessions', async () => {
     languageState.value = 'zh';
     renderAt('/');
-    expect(await screen.findByText('首页工作区')).toBeInTheDocument();
+    expect(await screen.findByText('游客预览模式')).toBeInTheDocument();
+    expect(screen.queryByText('login-page')).not.toBeInTheDocument();
   });
 
-  it('renders the English home surface on the /en route', async () => {
+  it('renders the English guest preview on the /en route for anonymous sessions', async () => {
     languageState.value = 'en';
     renderAt('/en');
+    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
+    expect(screen.queryByText('login-page')).not.toBeInTheDocument();
+  });
+
+  it('renders the member home workspace on the root route for signed-in sessions', async () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: false,
+      isAdminMode: false,
+      adminCapabilities: noCapabilities,
+    });
+
+    languageState.value = 'en';
+    renderAt('/');
+
     expect(await screen.findByText('Home Workspace')).toBeInTheDocument();
+    expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
   });
 
   it('renders the dedicated guest route for an anonymous session', async () => {
@@ -313,7 +343,7 @@ describe('AppContent route flows', () => {
     languageState.value = 'en';
     renderAt('/en');
 
-    expect(await screen.findByText('Home Workspace')).toBeInTheDocument();
+    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
     expect(previewReportPanelImportSpy).not.toHaveBeenCalled();
   });
 
@@ -334,8 +364,8 @@ describe('AppContent route flows', () => {
   );
 
   it.each([
-    ['/market-overview', 'auth-guard:Market Overview'],
     ['/portfolio', 'auth-guard:Portfolio'],
+    ['/watchlist', 'auth-guard:Watchlist'],
     ['/backtest', 'auth-guard:Backtest'],
   ])(
     'keeps guest access on %s and renders the route-level paywall',
@@ -348,12 +378,22 @@ describe('AppContent route flows', () => {
     },
   );
 
+  it('opens the market overview read-only preview for guest sessions', async () => {
+    renderAtWithLocationProbe('/market-overview');
+
+    expect(await screen.findByText('market-overview-page')).toBeInTheDocument();
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/market-overview');
+    expect(screen.queryByText('auth-guard:Market Overview')).not.toBeInTheDocument();
+    expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
+  });
+
   it('redirects /market to the market overview surface instead of silently falling back to Home', async () => {
     renderAtWithLocationProbe('/market');
 
-    expect(await screen.findByText('auth-guard:Market Overview')).toBeInTheDocument();
+    expect(await screen.findByText('market-overview-page')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/market-overview'));
     expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
+    expect(screen.queryByText('auth-guard:Market Overview')).not.toBeInTheDocument();
   });
 
   it('redirects /admin to the protected system surface instead of silently falling back to Home', async () => {
@@ -455,9 +495,10 @@ describe('AppContent route flows', () => {
   it('redirects legacy /chat guest access to the market overview surface', async () => {
     renderAtWithLocationProbe('/chat');
 
-    expect(await screen.findByText('auth-guard:Market Overview')).toBeInTheDocument();
+    expect(await screen.findByText('market-overview-page')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/market-overview'));
     expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
+    expect(screen.queryByText('auth-guard:Market Overview')).not.toBeInTheDocument();
   });
 
   it('redirects locale-prefixed /chat access to the localized market overview surface', async () => {
@@ -621,16 +662,17 @@ describe('AppContent route flows', () => {
   });
 
   it('supports the register route as an account-creation entry', async () => {
-    renderAt('/register?redirect=%2Fscanner');
+    renderAtWithLocationProbe('/register?redirect=%2Fscanner');
 
     expect(await screen.findByText('login-page')).toBeInTheDocument();
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/register');
   });
 
   it('supports the locale-prefixed register route as an account-creation entry', async () => {
     renderAtWithLocationProbe('/en/register?redirect=%2Fscanner');
 
     expect(await screen.findByText('login-page')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/login'));
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/en/register');
   });
 
   it.each(['/reset-password', '/zh/reset-password'])(

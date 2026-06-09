@@ -74,6 +74,7 @@ import { cn } from '../utils/cn';
 import { getToneColor } from '../utils/marketColors';
 import { createPublicAnalysisFallbackPreview } from '../utils/publicAnalysisFallback';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
+import { buildLocalizedPath, parseLocaleFromPathname } from '../utils/localeRouting';
 import { resolveHomeDashboardSelection } from './homeDashboardSelection';
 
 type DrawerMetric = {
@@ -5647,7 +5648,11 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     onClick: handleOpenHistoryDrawerClick,
     onPointerUp: handleOpenHistoryDrawerPointerUp,
   } = useSafariWarmActivation<HTMLButtonElement>(() => setHistoryDrawerOpen(true));
-  const registrationPath = '/login?mode=create&redirect=%2F';
+  const routeLocale = typeof window !== 'undefined' ? parseLocaleFromPathname(window.location.pathname) : null;
+  const registrationRedirectPath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
+  const registrationPath = routeLocale
+    ? `${buildLocalizedPath('/register', routeLocale)}?redirect=${encodeURIComponent(registrationRedirectPath)}`
+    : '/register?redirect=%2F';
   const homeChartLoadingLabel = language === 'en' ? 'Loading home price chart' : '正在加载首页价格图表';
   const recentHistoryItems = useMemo(
     () => historyItems.filter((item) => !item.isTest).slice(0, 8),

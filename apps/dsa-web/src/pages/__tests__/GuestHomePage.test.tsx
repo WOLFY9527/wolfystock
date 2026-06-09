@@ -134,7 +134,7 @@ describe('GuestHomePage', () => {
     expect(marketPreviewStrip).toHaveTextContent('公开市场观察已准备');
     expect(marketPreviewStrip).toHaveTextContent('市场广度改善');
     expect(marketPreviewStrip).toHaveTextContent('只用于市场观察，不构成买卖建议');
-    expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/login?mode=create&redirect=%2F');
+    expect(screen.getByTestId('guest-home-registration-link')).toHaveAttribute('href', '/zh/register?redirect=%2Fzh');
     expect(trustStrip).toHaveTextContent('安全下一步');
     expect(trustStrip).toHaveTextContent('先查看单个代码的研究入口');
     expect(previewStrip).toHaveTextContent('登录后可用');
@@ -163,7 +163,7 @@ describe('GuestHomePage', () => {
     expect(screen.queryByTestId('home-bento-decision-score-value')).not.toBeInTheDocument();
     expect(screen.getAllByText('趋势延续但需要等待更好的介入点。').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('guest-home-frosted-lock')).toHaveLength(2);
-    expect(screen.getAllByText('解锁完整研究框架、观察区间与技术形态解读')).toHaveLength(2);
+    expect(screen.getAllByText('解锁完整研究框架、价格观察与技术形态解读')).toHaveLength(2);
     expect(screen.getAllByRole('link', { name: '免费创建账户' })).toHaveLength(2);
     expect(screen.getByTestId('home-research-context-rail')).toContainElement(screen.getAllByTestId('guest-home-frosted-lock')[1]);
   });

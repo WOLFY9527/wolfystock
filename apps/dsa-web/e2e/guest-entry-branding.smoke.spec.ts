@@ -8,6 +8,7 @@ appTest('guest entry routes use research branding instead of AI persona copy', a
   await page.setViewportSize({ width: 1440, height: 1000 });
 
   await page.goto('/');
+  await appExpect(page).not.toHaveURL(/\/login(?:\?|$)/);
   await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible({ timeout: 15_000 });
   await appExpect(page.getByRole('heading', { name: /WolfyStock 研究控制台|WolfyStock Research Console/ })).toBeVisible();
   await appExpect(page.getByTestId('guest-home-market-preview-strip')).toContainText(/当前市场观察|Current market observation/);
@@ -16,6 +17,11 @@ appTest('guest entry routes use research branding instead of AI persona copy', a
   await baseExpect
     .poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
     .toBe(true);
+
+  await page.goto('/guest');
+  await appExpect(page).not.toHaveURL(/\/login(?:\?|$)/);
+  await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible({ timeout: 15_000 });
+  await appExpect(page.getByRole('heading', { name: /WolfyStock 研究控制台|WolfyStock Research Console/ })).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/zh/guest');
@@ -30,11 +36,24 @@ appTest('guest entry routes use research branding instead of AI persona copy', a
 
   await page.goto('/zh/login');
   await appExpect(page.getByRole('heading', { name: 'WolfyStock 账户登录' })).toBeVisible({ timeout: 15_000 });
-  await appExpect(page.getByRole('button', { name: '返回游客模式' })).toBeVisible();
+  await page.getByRole('button', { name: '返回游客模式' }).click();
+  await appExpect(page).toHaveURL(/\/zh\/guest$/);
+  await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible({ timeout: 15_000 });
   await appExpect(page.locator('body')).not.toContainText(/WOLFY AI|INITIALIZING|terminal boot/i);
   await baseExpect
     .poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
     .toBe(true);
+
+  await page.goto('/zh/register?redirect=%2Fzh%2Fmarket-overview');
+  await appExpect(page).not.toHaveURL(/\/login(?:\?|$)/);
+  await appExpect(page.getByRole('heading', { name: '创建账户' })).toBeVisible({ timeout: 15_000 });
+  await appExpect(page.getByRole('button', { name: '返回游客模式' })).toBeVisible();
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/market-overview');
+  await appExpect(page).not.toHaveURL(/\/login(?:\?|$)/);
+  await appExpect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
+  await appExpect(page.getByTestId('auth-guard-overlay')).toHaveCount(0);
 });
 
 appTest('guest first fold stays honest when the public market snapshot is unavailable', async ({ page }) => {
