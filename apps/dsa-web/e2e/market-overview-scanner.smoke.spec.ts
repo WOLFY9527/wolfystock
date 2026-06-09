@@ -490,15 +490,17 @@ test.describe('market overview smoke', () => {
       }
 
       await expect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('方向仅供观察');
-      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('部分可参考');
-      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('主驱动');
-      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('关键阻断');
-      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('信心水平');
+      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText(/偏强观察|中性观察|偏弱观察|数据不足/);
+      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('现在市场发生了什么');
+      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('为什么');
+      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('证据覆盖 / 置信度');
+      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('接下来观察什么');
       await expect(page.getByTestId('market-overview-decision-readiness')).toContainText('有限');
-      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText(/缺少充分证据|缺少评分级证据/);
+      await expect(page.getByTestId('market-overview-key-drivers')).toContainText(/指数 \/ 宽度|波动率|利率 \/ 宏观|流动性|行业 \/ 轮动/);
+      await expect(page.getByTestId('market-overview-next-observation')).toContainText(/下一观察/);
+      await expect(page.getByTestId('market-overview-decision-readiness')).toContainText(/缺少充分证据|待补/);
       await expect(page.getByTestId('market-overview-research-readiness-strip')).toHaveCount(0);
-      await expect(page.getByTestId('market-decision-semantics-advice-boundary')).toContainText('方向仅供观察');
+      await expect(page.getByTestId('market-decision-semantics-advice-boundary')).toContainText(/偏强观察|中性观察|偏弱观察|数据不足/);
       const verdictBox = await page.getByTestId('market-overview-decision-readiness').boundingBox();
       const mainGridBox = await page.getByTestId('market-overview-main-grid').boundingBox();
       expect(verdictBox).not.toBeNull();

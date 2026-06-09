@@ -8,7 +8,7 @@ const viewports = [
 
 const rawLeakPattern = /raw|debug|provider|schema|payload|trace|internal/i;
 const tradingPattern = /buy|sell|order|trade|broker|买入|卖出|下单|交易|券商/i;
-const safeVerdictPattern = /研究证据可用|仅观察|证据不足|等待证据更新|Research-ready|Observe only|Evidence insufficient|Waiting/i;
+const safeVerdictPattern = /研究证据可用|仅观察|证据不足|等待证据更新|偏强观察|中性观察|偏弱观察|数据不足|Research-ready|Observe only|Evidence insufficient|Waiting/i;
 const internalEvidenceCoveragePattern =
   /provider_timeout|sourceauthority|source_authority|fallbackorproxy|fallback_or_proxy|router|cache|credential|providerroute|partial_coverage|coverage_not_assembled|env/i;
 const optionsGateSummaryLeakPattern =
@@ -1192,13 +1192,13 @@ appTest.describe('consumer research readiness browser acceptance', () => {
       await expectNoHorizontalOverflow(page);
       const decisionReadiness = page.getByTestId('market-overview-decision-readiness');
       await appExpect(decisionReadiness).toBeVisible({ timeout: 15_000 });
-      await appExpect(decisionReadiness).toContainText(/方向仅供观察|暂不形成方向结论|等待数据完成后再判断/);
-      await appExpect(decisionReadiness).toContainText(/部分可参考|等待数据|可判断/);
+      await appExpect(decisionReadiness).toContainText(/偏强观察|中性观察|偏弱观察|数据不足/);
+      await appExpect(decisionReadiness).toContainText(/现在市场发生了什么|证据覆盖 \/ 置信度|接下来观察什么/);
       await appExpect(decisionReadiness).not.toContainText(rawLeakPattern);
       await appExpect(decisionReadiness).not.toContainText(marketOverviewProxyLabelPattern);
       await appExpect(page.getByTestId('market-overview-research-readiness-strip')).toHaveCount(0);
       await appExpect(page.getByTestId('market-decision-semantics-advice-boundary')).toContainText(
-        /方向仅供观察|仅观察|暂不形成方向结论|等待数据完成后再判断/,
+        /偏强观察|中性观察|偏弱观察|数据不足/,
       );
       expect(consoleErrors).toEqual([]);
       expect(unhandledApiRoutes).toEqual([]);
