@@ -154,6 +154,10 @@ type ScannerRunSummary = {
   runTimeLabel: string;
   errorSummary: string | null;
 };
+type ScannerHistoryResolution = {
+  hasLoaded: boolean;
+  latestRun: ScannerRunHistoryItem | null;
+};
 type ScannerTrustSummary = {
   cappedCount: number;
   fallbackCount: number;
@@ -677,6 +681,18 @@ function buildScannerRunSummary(
   };
 }
 
+function getHistorySelectedCount(item: ScannerRunHistoryItem): number {
+  const shortlistSize = getFiniteCount(item.shortlistSize);
+  if (shortlistSize != null) return shortlistSize;
+  return Array.isArray(item.topSymbols) ? item.topSymbols.length : 0;
+}
+
+function isCompletedEmptyHistoryRun(item: ScannerRunHistoryItem | null): boolean {
+  if (!item) return false;
+  const runState = normalizeRunState(item.status);
+  return (runState === 'completed' || runState === 'empty') && getHistorySelectedCount(item) === 0;
+}
+
 function buildHistoryItemSummary(
   title: string,
   item: ScannerRunHistoryItem | null,
@@ -1028,9 +1044,49 @@ function buildScannerConclusion(
   runDetail: ScannerRunDetail | null,
   language: 'zh' | 'en',
   firstRunSetupLabel: string,
+  historyResolution: ScannerHistoryResolution,
 ): ScannerConclusionModel {
   const trustSummary = buildScannerTrustSummary(runDetail);
   if (!runDetail) {
+    if (!historyResolution.hasLoaded) {
+      return {
+        state: 'waiting',
+        title: language === 'en' ? 'Loading recent scans' : '正在读取最近扫描',
+        detail: language === 'en'
+          ? 'Loading recent scanner history before deciding whether this is a first-use state or a completed run.'
+          : '正在读取最近扫描记录，以区分这是首次使用还是已有完成的扫描结果。',
+        candidateCount: 0,
+        trustSummary,
+        tone: 'neutral',
+      };
+    }
+
+    if (isCompletedEmptyHistoryRun(historyResolution.latestRun)) {
+      return {
+        state: 'no-candidate',
+        title: language === 'en' ? 'No selected candidate in this run' : '本次未形成入选候选',
+        detail: language === 'en'
+          ? 'Review data coverage, history coverage, and the rejection mix before changing scope; this does not describe the whole market.'
+          : '先看数据覆盖、历史覆盖与淘汰分布，再决定是否调整范围；这不代表市场没有机会。',
+        candidateCount: 0,
+        trustSummary,
+        tone: 'caution',
+      };
+    }
+
+    if (historyResolution.latestRun) {
+      return {
+        state: 'waiting',
+        title: language === 'en' ? 'Loading recent scan detail' : '正在载入最近扫描详情',
+        detail: language === 'en'
+          ? 'Recent run facts are available. Loading the full run detail before presenting the candidate conclusion.'
+          : '已读取最近扫描事实，正在载入完整结果详情后再展示候选结论。',
+        candidateCount: getHistorySelectedCount(historyResolution.latestRun),
+        trustSummary,
+        tone: 'neutral',
+      };
+    }
+
     return {
       state: 'waiting',
       title: language === 'en' ? 'First run: start a scan' : '首次使用：先运行一次扫描',
@@ -1161,6 +1217,7 @@ function buildScannerWorkbenchEmptyState({
   candidateFilter,
   diagnosticCandidates,
   firstRunSetupLabel,
+  historyResolution,
   language,
   pageErrorSummary,
   runDetail,
@@ -1168,6 +1225,7 @@ function buildScannerWorkbenchEmptyState({
   candidateFilter: CandidateFilter;
   diagnosticCandidates: ScannerCandidateDiagnostic[];
   firstRunSetupLabel: string;
+  historyResolution: ScannerHistoryResolution;
   language: 'zh' | 'en';
   pageErrorSummary: string | null;
   runDetail: ScannerRunDetail | null;
@@ -1182,6 +1240,33 @@ function buildScannerWorkbenchEmptyState({
   }
 
   if (!runDetail) {
+    if (!historyResolution.hasLoaded) {
+      return {
+        title: language === 'en' ? 'Loading recent scans' : '正在读取最近扫描',
+        body: language === 'en'
+          ? 'Scanner history is loading before deciding whether this route is truly unused or a completed run is being restored.'
+          : '正在读取扫描历史，以区分当前页面是首次使用，还是正在恢复已有完成的扫描结果。',
+      };
+    }
+
+    if (isCompletedEmptyHistoryRun(historyResolution.latestRun)) {
+      return {
+        title: language === 'en' ? 'No selected candidates in this run' : '本次未形成入选候选',
+        body: language === 'en'
+          ? 'The latest completed run formed no selected candidates. Open history or wait for the full run detail before changing scope.'
+          : '最近一次完成的扫描未形成入选候选。可先查看历史，或等待完整运行详情载入后再决定是否调整范围。',
+      };
+    }
+
+    if (historyResolution.latestRun) {
+      return {
+        title: language === 'en' ? 'Loading recent scan detail' : '正在载入最近扫描详情',
+        body: language === 'en'
+          ? 'Recent run facts are available. Full run detail is still loading before the candidate workspace is restored.'
+          : '已读取最近扫描事实，候选工作台正在载入完整结果详情。',
+      };
+    }
+
     return {
       title: language === 'en' ? 'No scan has run yet' : '尚未运行扫描',
       body: language === 'en'
@@ -2053,6 +2138,7 @@ const UserScannerPage: React.FC = () => {
   const [runDetail, setRunDetail] = useState<ScannerRunDetail | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
   const [historyItems, setHistoryItems] = useState<ScannerRunHistoryItem[]>([]);
+  const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -2243,11 +2329,13 @@ const UserScannerPage: React.FC = () => {
     } catch (error) {
       setHistoryError(getParsedApiError(error));
     } finally {
+      setHasLoadedHistory(true);
       setIsLoadingHistory(false);
     }
   }, [loadRun, market, profile]);
 
   useEffect(() => {
+    setHasLoadedHistory(false);
     setRunDetail(null);
     selectedRunIdRef.current = null;
     setSelectedRunId(null);
@@ -2277,7 +2365,12 @@ const UserScannerPage: React.FC = () => {
   }, [fetchHistory]);
 
   const handleRun = useCallback(async () => {
-    const retryState = buildScannerConclusion(runDetail, language, scannerFirstRunSetupLabel).state;
+    const retryState = buildScannerConclusion(
+      runDetail,
+      language,
+      scannerFirstRunSetupLabel,
+      { hasLoaded: true, latestRun: null },
+    ).state;
     const retryRequest = retryState === 'no-candidate' || retryState === 'insufficient'
       ? buildScannerRetryRequest(runDetail)
       : null;
@@ -2681,16 +2774,24 @@ const UserScannerPage: React.FC = () => {
     ? `Scanner organizes observation candidates from the current scope. Starting setup: ${scannerFirstRunSetupLabel}.`
     : `扫描器会先按当前范围整理候选与观察线索。当前起始范围：${scannerFirstRunSetupLabel}。`;
   const pageErrorSummary = pageError ? sanitizeScannerErrorSummary(pageError.message, language) || compactScannerStateLabel('failed', language) : null;
+  const historyResolution = useMemo<ScannerHistoryResolution>(
+    () => ({
+      hasLoaded: hasLoadedHistory,
+      latestRun: historyItems[0] || null,
+    }),
+    [hasLoadedHistory, historyItems],
+  );
   const workbenchEmptyState = useMemo(
     () => buildScannerWorkbenchEmptyState({
       candidateFilter,
       diagnosticCandidates,
       firstRunSetupLabel: scannerFirstRunSetupLabel,
+      historyResolution,
       language,
       pageErrorSummary,
       runDetail,
     }),
-    [candidateFilter, diagnosticCandidates, language, pageErrorSummary, runDetail, scannerFirstRunSetupLabel],
+    [candidateFilter, diagnosticCandidates, historyResolution, language, pageErrorSummary, runDetail, scannerFirstRunSetupLabel],
   );
   const visibleHistorySummaries = useMemo(
     () => [currentRunSummary, recentRunSummary, previousRunSummary]
@@ -3235,8 +3336,8 @@ const UserScannerPage: React.FC = () => {
     [language, runDetail],
   );
   const scannerConclusion = useMemo(
-    () => buildScannerConclusion(runDetail, language, scannerFirstRunSetupLabel),
-    [language, runDetail, scannerFirstRunSetupLabel],
+    () => buildScannerConclusion(runDetail, language, scannerFirstRunSetupLabel, historyResolution),
+    [historyResolution, language, runDetail, scannerFirstRunSetupLabel],
   );
   const scannerRetryRequest = useMemo(
     () => buildScannerRetryRequest(runDetail),

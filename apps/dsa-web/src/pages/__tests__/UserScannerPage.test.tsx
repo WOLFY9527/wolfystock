@@ -1571,6 +1571,27 @@ describe('UserScannerPage', () => {
     expect(band).toHaveTextContent('不代表市场没有机会');
   });
 
+  it('keeps completed-empty classification when history facts arrive before run detail', async () => {
+    getRuns.mockResolvedValue(makeHistoryResponse([
+      makeHistoryItem({
+        shortlistSize: 0,
+        topSymbols: [],
+        headline: '历史扫描：本次无入选候选',
+      }),
+    ]));
+    getRun.mockImplementation(() => new Promise(() => {}));
+
+    renderUserScannerPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent('本次未形成入选候选');
+    });
+    expect(screen.getByTestId('scanner-conclusion-band')).toHaveTextContent('候选 0');
+    expect(screen.getByTestId('scanner-conclusion-band')).not.toHaveTextContent('首次使用：先运行一次扫描');
+    expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('本次未形成入选候选');
+    expect(screen.getByTestId('scanner-workbench-empty-state')).not.toHaveTextContent('尚未运行扫描');
+  });
+
   it('uses a retry CTA with bounded no-candidate guidance while keeping the same run parameters', async () => {
     const noCandidateRun = makeCryptoDiagnosticsRun({
       shortlistSize: 8,
