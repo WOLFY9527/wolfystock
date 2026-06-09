@@ -1,3 +1,6 @@
+## 2026-06-09
+- Admin SPA deep links now add a server-side defense-in-depth fallback guard: unauthenticated direct browser requests to `/admin...` or supported localized `/zh|en/admin...` shell routes redirect to the matching guest route, while authenticated admin shell access, static assets, product routes, and API auth/RBAC JSON contracts remain unchanged.
+
 ## 2026-06-08
 - Home report/evidence zone now includes a bounded consumer-safe Research Packet panel derived only from existing frontend analysis sidecars (`researchReadiness`, coverage, citation, single-stock evidence, and provenance), with fail-closed available/partial/insufficient states, no-advice copy, and no backend/API/provider/cache/history/report-renderer behavior changes.
 - Watchlist rows and detail rail now show a compact derived research-workflow strip (`已发现` / `待验证` / `观察中` / `提醒记录` / `需刷新`) computed only from existing frontend watchlist item fields, without adding persisted workflow state or changing backend/API/schema/scanner/alert/provider/cache behavior.

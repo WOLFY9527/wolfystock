@@ -26,25 +26,40 @@ from typing import Optional, Any, Dict, Tuple
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import text
 
+from api.deps import resolve_current_user
 from api.v1 import api_v1_router
 from api.middlewares.auth import add_auth_middleware
 from api.middlewares.error_handler import add_error_handlers
 from api.security_headers import apply_security_headers
 from api.v1.schemas.common import HealthResponse
 from src.storage import get_db
-from src.auth import is_production_mode
+from src.auth import is_auth_enabled, is_production_mode
 from src.services.system_config_service import SystemConfigService
 from src.services.crypto_realtime_service import get_crypto_realtime_service, should_auto_start_crypto_realtime
 from src.services.task_queue import get_task_queue
 
 logger = logging.getLogger(__name__)
 
+_SUPPORTED_ADMIN_SPA_LOCALES = frozenset({"zh", "en"})
+
 
 def _iso_now() -> str:
     return datetime.now().isoformat()
+
+
+def _admin_spa_guest_redirect_path(full_path: str) -> Optional[str]:
+    normalized_path = f"/{str(full_path or '').lstrip('/')}".rstrip("/") or "/"
+    if normalized_path == "/admin" or normalized_path.startswith("/admin/"):
+        return "/guest"
+
+    parts = normalized_path.split("/")
+    if len(parts) >= 3 and parts[1] in _SUPPORTED_ADMIN_SPA_LOCALES and parts[2] == "admin":
+        return f"/{parts[1]}/guest"
+
+    return None
 
 
 def _add_security_headers(app: FastAPI) -> None:
@@ -339,13 +354,17 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
                     status_code=404,
                     content={"error": "not_found", "message": f"API endpoint /{full_path} not found"}
                 )
-            
+
             file_path = static_dir / full_path
             if file_path.exists() and file_path.is_file():
                 # Issue #520: Explicitly resolve MIME type to avoid
                 # browsers rejecting JS modules served as text/plain.
                 content_type, _ = mimetypes.guess_type(str(file_path))
                 return FileResponse(file_path, media_type=content_type)
+
+            admin_guest_path = _admin_spa_guest_redirect_path(full_path)
+            if admin_guest_path and is_auth_enabled() and resolve_current_user(request) is None:
+                return RedirectResponse(admin_guest_path, status_code=302)
             
             return FileResponse(static_dir / "index.html")
     
