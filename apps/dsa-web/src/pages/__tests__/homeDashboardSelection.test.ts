@@ -194,7 +194,26 @@ describe('resolveHomeDashboardSelection', () => {
     expect(result.activeTraceReport).toBe(selectedReport);
   });
 
-  it('rejects a symbol-less report when the surface already has a selected ticker', () => {
+  it('rejects a symbol-less selected report when it owns the current surface', () => {
+    const reportWithoutSymbol = buildReport('', 'blank-history');
+
+    const result = resolveHomeDashboardSelection({
+      activeTasks: [],
+      routeTaskId: null,
+      routeSymbol: null,
+      activeTicker: null,
+      pendingAnalysisTicker: null,
+      selectedReport: reportWithoutSymbol,
+      recentHistoryItems: [buildHistoryItem('')],
+      defaultTicker: 'ORCL',
+    });
+
+    expect(result.activeTraceReport).toBe(reportWithoutSymbol);
+    expect(result.activeEvidenceTicker).toBe('');
+    expect(result.reanalysisTicker).toBe('');
+  });
+
+  it('keeps a valid active ticker rerunnable when a symbol-less selected report does not own the surface', () => {
     const reportWithoutSymbol = buildReport('', 'blank-history');
 
     const result = resolveHomeDashboardSelection({
@@ -208,8 +227,10 @@ describe('resolveHomeDashboardSelection', () => {
       defaultTicker: 'ORCL',
     });
 
+    expect(result.dashboardReport).toBeNull();
     expect(result.activeTraceReport).toBeNull();
-    expect(result.reanalysisTicker).toBe('');
+    expect(result.activeEvidenceTicker).toBe('ORCL');
+    expect(result.reanalysisTicker).toBe('ORCL');
   });
 
   it('aligns the evidence ticker with the active trace report instead of a restored ticker', () => {

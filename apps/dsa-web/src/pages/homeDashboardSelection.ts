@@ -133,10 +133,21 @@ export function resolveHomeDashboardSelection(
   );
   const activeEvidenceTicker = HOME_TICKER_FORMAT_RE.test(activeEvidenceTickerCandidate) ? activeEvidenceTickerCandidate : '';
 
-  const reportTicker = normalizeHomeTickerQuery(getSymbolDisplay(activeTraceReport));
-  const reanalysisCandidate = input.selectedReport && !selectedTicker
+  const reportTickerCandidate = normalizeHomeTickerQuery(
+    activeTraceReport ? getSymbolDisplay(activeTraceReport) : '',
+  );
+  const reportTicker = HOME_TICKER_FORMAT_RE.test(reportTickerCandidate) ? reportTickerCandidate : '';
+  const selectedReportOwnsSurfaceWithoutSymbol = Boolean(
+    input.selectedReport
+    && !selectedTicker
+    && !completedTaskReport
+    && !routeSymbol
+    && !activeTicker
+    && !pendingAnalysisTicker,
+  );
+  const reanalysisCandidate = selectedReportOwnsSurfaceWithoutSymbol
     ? ''
-    : reportTicker || (activeTraceReport ? '' : effectiveTicker);
+    : reportTicker || (activeTraceReport ? '' : activeEvidenceTicker || effectiveTicker);
   const reanalysisTicker = HOME_TICKER_FORMAT_RE.test(reanalysisCandidate) ? reanalysisCandidate : '';
 
   return {
