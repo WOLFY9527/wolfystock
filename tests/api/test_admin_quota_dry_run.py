@@ -137,10 +137,20 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertFalse(payload["metadata"]["shadowPreflight"]["liveEnforcement"])
         pilot = payload["metadata"]["pilotReadiness"]
         self.assertEqual(pilot["state"], "pilot_advisory_allow")
+        self.assertEqual(pilot["pilotState"], "pilot_advisory_allow")
+        self.assertTrue(pilot["routeInScope"])
+        self.assertIsNone(pilot["reservationId"])
+        self.assertEqual(
+            pilot["providerModelContext"],
+            {"provider": None, "modelTier": None, "pricingStatus": "ok"},
+        )
+        self.assertEqual(pilot["allowReasonCode"], "pilot_disabled_advisory_allow")
+        self.assertTrue(pilot["ownerEligibility"]["eligible"])
         self.assertFalse(pilot["pilot"]["enforcementEnabled"])
         self.assertFalse(pilot["pilot"]["scopeExplicit"])
         self.assertFalse(pilot["requestBlocked"])
         self.assertFalse(pilot["liveEnforcement"])
+        self.assertIsNone(payload["reservationId"])
         self.assertFalse(pilot["invoiceReconciliation"]["enforcementWired"])
         self.assertTrue(pilot["safety"]["noExternalCalls"])
 
@@ -425,9 +435,23 @@ class AdminQuotaDryRunApiTestCase(unittest.TestCase):
         self.assertFalse(pilot["advisoryOnly"])
         self.assertTrue(pilot["requestBlocked"])
         self.assertTrue(pilot["liveEnforcement"])
+        self.assertEqual(pilot["pilotState"], "pilot_would_enforce_block")
+        self.assertTrue(pilot["routeInScope"])
+        self.assertIsNone(pilot["reservationId"])
+        self.assertIsNone(pilot["allowReasonCode"])
+        self.assertEqual(
+            pilot["providerModelContext"],
+            {
+                "provider": "openai",
+                "modelTier": "openai/gpt-4o-mini",
+                "pricingStatus": "ok",
+            },
+        )
+        self.assertTrue(pilot["ownerEligibility"]["eligible"])
         self.assertEqual(pilot["scope"]["ownerUserId"], "pilot-user")
         self.assertEqual(pilot["scope"]["provider"], "openai")
         self.assertEqual(pilot["scope"]["modelTier"], "openai/gpt-4o-mini")
+        self.assertIsNone(payload["reservationId"])
         self.assertEqual(payload["metadata"]["quotaDecisionMode"], "pilot_enforced")
         self.assertFalse(payload["metadata"]["invoiceReconciliation"]["enforcementWired"])
         self.assertFalse(payload["metadata"]["invoiceReconciliation"]["enforcementInput"])

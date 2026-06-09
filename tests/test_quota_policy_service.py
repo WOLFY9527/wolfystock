@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.services.quota_policy_service import QuotaPolicyService
 from src.storage import DatabaseManager, QuotaReservation, QuotaUsageWindow
 
@@ -307,6 +308,12 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
                 "estimateUnits",
                 "pilotEnabled",
                 "ownerInScope",
+                "routeInScope",
+                "pilotState",
+                "reservationId",
+                "providerModelContext",
+                "allowReasonCode",
+                "ownerEligibility",
                 "requestBlocked",
                 "blockReasonCode",
                 "liveEnforcement",
@@ -317,9 +324,54 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertEqual(payload["estimateUnits"], 121)
         self.assertFalse(payload["pilotEnabled"])
         self.assertTrue(payload["ownerInScope"])
+        self.assertTrue(payload["routeInScope"])
+        self.assertEqual(payload["pilotState"], "pilot_disabled")
+        self.assertIsNone(payload["reservationId"])
+        self.assertEqual(
+            payload["providerModelContext"],
+            {"provider": None, "modelTier": None, "pricingStatus": "ok"},
+        )
+        self.assertEqual(payload["allowReasonCode"], "advisory_only_would_block_not_enforced")
+        self.assertEqual(
+            payload["ownerEligibility"],
+            {
+                "eligible": True,
+                "reasonCode": None,
+                "authEnabled": True,
+                "authenticated": True,
+                "transitional": False,
+                "bootstrapAllowed": False,
+            },
+        )
         self.assertFalse(payload["requestBlocked"])
         self.assertEqual(payload["blockReasonCode"], "budget_hard_limit_exceeded")
         self.assertFalse(payload["liveEnforcement"])
+
+    def test_quota_pilot_decision_contract_requires_authenticated_non_transitional_owner(self) -> None:
+        self._seed_budget_alert_policy()
+
+        decision = self.service.build_quota_pilot_decision_contract(
+            owner_user_id=BOOTSTRAP_ADMIN_USER_ID,
+            route_family="analysis",
+            estimated_units=121,
+            pilot_enabled=True,
+            pilot_owner_user_ids=(BOOTSTRAP_ADMIN_USER_ID,),
+            live_enforcement=True,
+            owner_authenticated=False,
+            owner_transitional=True,
+            auth_enabled=False,
+        )
+
+        payload = decision.to_dict()
+        self.assertFalse(payload["ownerInScope"])
+        self.assertTrue(payload["routeInScope"])
+        self.assertEqual(payload["pilotState"], "pilot_owner_not_eligible")
+        self.assertEqual(payload["ownerEligibility"]["reasonCode"], "pilot_auth_disabled_bootstrap_not_eligible")
+        self.assertFalse(payload["ownerEligibility"]["eligible"])
+        self.assertFalse(payload["requestBlocked"])
+        self.assertFalse(payload["liveEnforcement"])
+        self.assertEqual(payload["allowReasonCode"], "pilot_owner_not_eligible_advisory_allow")
+        self.assertEqual(payload["blockReasonCode"], "pilot_auth_disabled_bootstrap_not_eligible")
 
     def test_quota_pilot_decision_contract_missing_owner_is_not_ready_not_global_enforcement(self) -> None:
         self._seed_budget_alert_policy()
@@ -337,6 +389,8 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertFalse(decision.owner_in_scope)
         self.assertFalse(decision.request_blocked)
         self.assertEqual(decision.block_reason_code, "pilot_owner_missing")
+        self.assertFalse(decision.to_dict()["ownerEligibility"]["eligible"])
+        self.assertEqual(decision.to_dict()["ownerEligibility"]["reasonCode"], "pilot_owner_missing")
         self.assertFalse(decision.live_enforcement)
 
     def test_quota_pilot_decision_contract_unknown_pricing_and_zero_cost_stay_advisory(self) -> None:
@@ -364,11 +418,16 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertTrue(unknown_pricing.owner_in_scope)
         self.assertFalse(unknown_pricing.request_blocked)
         self.assertEqual(unknown_pricing.block_reason_code, "pricing_unknown_advisory")
+        self.assertEqual(unknown_pricing.to_dict()["allowReasonCode"], "pricing_unknown_advisory_allow")
+        self.assertEqual(unknown_pricing.to_dict()["providerModelContext"]["pricingStatus"], "pricing_unknown")
+        self.assertIsNone(unknown_pricing.to_dict()["reservationId"])
         self.assertFalse(unknown_pricing.live_enforcement)
         self.assertEqual(zero_cost.estimate_units, 0)
         self.assertTrue(zero_cost.owner_in_scope)
         self.assertFalse(zero_cost.request_blocked)
         self.assertEqual(zero_cost.block_reason_code, "zero_cost_advisory")
+        self.assertEqual(zero_cost.to_dict()["allowReasonCode"], "zero_cost_advisory_allow")
+        self.assertIsNone(zero_cost.to_dict()["reservationId"])
         self.assertFalse(zero_cost.live_enforcement)
 
     def test_quota_pilot_decision_contract_can_report_explicit_test_only_live_block(self) -> None:
@@ -434,6 +493,19 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertFalse(preflight.live_enforcement)
         self.assertFalse(payload["pilot"]["enforcementEnabled"])
         self.assertFalse(payload["pilot"]["scopeExplicit"])
+        self.assertEqual(payload["pilotState"], "pilot_advisory_would_block")
+        self.assertTrue(payload["routeInScope"])
+        self.assertIsNone(payload["reservationId"])
+        self.assertEqual(
+            payload["providerModelContext"],
+            {
+                "provider": "openai",
+                "modelTier": "openai/gpt-4o-mini",
+                "pricingStatus": "ok",
+            },
+        )
+        self.assertEqual(payload["allowReasonCode"], "advisory_only_would_block_not_enforced")
+        self.assertTrue(payload["ownerEligibility"]["eligible"])
         self.assertEqual(payload["scope"]["ownerUserId"], "user-1")
         self.assertEqual(payload["scope"]["provider"], "openai")
         self.assertEqual(payload["scope"]["modelTier"], "openai/gpt-4o-mini")
@@ -462,7 +534,37 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertFalse(preflight.live_enforcement)
         self.assertFalse(payload["pilot"]["scopeExplicit"])
         self.assertFalse(payload["pilot"]["ownerScoped"])
+        self.assertFalse(payload["ownerEligibility"]["eligible"])
+        self.assertEqual(payload["ownerEligibility"]["reasonCode"], "pilot_owner_missing")
         self.assertEqual(payload["reasonCode"], "pilot_owner_scope_required")
+
+    def test_pilot_readiness_rejects_auth_disabled_transitional_bootstrap_owner_scope(self) -> None:
+        self._seed_budget_alert_policy()
+
+        preflight = self.service.classify_pilot_readiness_preflight(
+            owner_user_id=BOOTSTRAP_ADMIN_USER_ID,
+            route_family="analysis",
+            estimated_units=121,
+            pilot_enforcement_enabled=True,
+            pilot_owner_user_ids=(BOOTSTRAP_ADMIN_USER_ID,),
+            pilot_route_families=("analysis",),
+            owner_authenticated=False,
+            owner_transitional=True,
+            auth_enabled=False,
+        )
+
+        payload = preflight.to_dict()
+        self.assertEqual(preflight.state, "pilot_owner_not_eligible")
+        self.assertEqual(preflight.reason_code, "pilot_auth_disabled_bootstrap_not_eligible")
+        self.assertTrue(preflight.would_block)
+        self.assertTrue(preflight.advisory_only)
+        self.assertFalse(preflight.request_blocked)
+        self.assertFalse(preflight.live_enforcement)
+        self.assertTrue(payload["routeInScope"])
+        self.assertFalse(payload["pilot"]["scopeExplicit"])
+        self.assertFalse(payload["pilot"]["ownerEligible"])
+        self.assertEqual(payload["ownerEligibility"]["reasonCode"], "pilot_auth_disabled_bootstrap_not_eligible")
+        self.assertEqual(payload["allowReasonCode"], "pilot_owner_not_eligible_advisory_allow")
 
     def test_pilot_readiness_requires_explicit_owner_allowlist_for_enabled_pilot(self) -> None:
         self._seed_budget_alert_policy()

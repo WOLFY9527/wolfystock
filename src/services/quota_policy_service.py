@@ -114,6 +114,15 @@ class QuotaPilotReadinessPreflight:
     route_family: str
     provider: Optional[str]
     model_tier: Optional[str]
+    route_in_scope: bool
+    reservation_id: Optional[str]
+    provider_model_context: Dict[str, Optional[str]]
+    allow_reason_code: Optional[str]
+    owner_eligible: bool
+    owner_eligibility_reason_code: Optional[str]
+    owner_auth_enabled: bool
+    owner_authenticated: bool
+    owner_transitional: bool
     shadow_preflight: QuotaShadowPreflight
 
     def to_dict(self) -> Dict[str, Any]:
@@ -121,21 +130,36 @@ class QuotaPilotReadinessPreflight:
         shadow_payload["ownerUserId"] = self.owner_user_id
         return {
             "state": self.state,
+            "pilotState": self.state,
             "reasonCode": self.reason_code,
             "wouldBlock": self.would_block,
             "advisoryOnly": self.advisory_only,
             "requestBlocked": self.request_blocked,
             "liveEnforcement": self.live_enforcement,
+            "routeInScope": self.route_in_scope,
+            "reservationId": self.reservation_id,
+            "providerModelContext": self.provider_model_context,
+            "allowReasonCode": self.allow_reason_code,
             "pilot": {
                 "enforcementEnabled": self.pilot_enforcement_enabled,
                 "scopeExplicit": self.pilot_scope_explicit,
                 "ownerScoped": self.owner_scoped,
+                "ownerEligible": self.owner_eligible,
+                "routeInScope": self.route_in_scope,
             },
             "scope": {
                 "ownerUserId": self.owner_user_id,
                 "routeFamily": self.route_family,
                 "provider": self.provider,
                 "modelTier": self.model_tier,
+            },
+            "ownerEligibility": {
+                "eligible": self.owner_eligible,
+                "reasonCode": self.owner_eligibility_reason_code,
+                "authEnabled": self.owner_auth_enabled,
+                "authenticated": self.owner_authenticated,
+                "transitional": self.owner_transitional,
+                "bootstrapAllowed": False,
             },
             "shadowPreflight": shadow_payload,
             "invoiceReconciliation": {
@@ -174,6 +198,16 @@ class QuotaPilotDecisionContract:
     estimate_units: int
     pilot_enabled: bool
     owner_in_scope: bool
+    route_in_scope: bool
+    pilot_state: str
+    reservation_id: Optional[str]
+    provider_model_context: Dict[str, Optional[str]]
+    allow_reason_code: Optional[str]
+    owner_eligible: bool
+    owner_eligibility_reason_code: Optional[str]
+    owner_auth_enabled: bool
+    owner_authenticated: bool
+    owner_transitional: bool
     request_blocked: bool
     block_reason_code: Optional[str]
     live_enforcement: bool
@@ -185,6 +219,19 @@ class QuotaPilotDecisionContract:
             "estimateUnits": self.estimate_units,
             "pilotEnabled": self.pilot_enabled,
             "ownerInScope": self.owner_in_scope,
+            "routeInScope": self.route_in_scope,
+            "pilotState": self.pilot_state,
+            "reservationId": self.reservation_id,
+            "providerModelContext": self.provider_model_context,
+            "allowReasonCode": self.allow_reason_code,
+            "ownerEligibility": {
+                "eligible": self.owner_eligible,
+                "reasonCode": self.owner_eligibility_reason_code,
+                "authEnabled": self.owner_auth_enabled,
+                "authenticated": self.owner_authenticated,
+                "transitional": self.owner_transitional,
+                "bootstrapAllowed": False,
+            },
             "requestBlocked": self.request_blocked,
             "blockReasonCode": self.block_reason_code,
             "liveEnforcement": self.live_enforcement,
@@ -488,6 +535,9 @@ class QuotaPolicyService:
         pilot_owner_user_ids: Optional[Iterable[str]] = None,
         pilot_route_families: Optional[Iterable[str]] = None,
         live_enforcement: bool = False,
+        owner_authenticated: bool = True,
+        owner_transitional: bool = False,
+        auth_enabled: bool = True,
         now: Optional[datetime] = None,
     ) -> QuotaPilotDecisionContract:
         """Build an advisory-only pilot decision contract without runtime side effects."""
@@ -504,16 +554,29 @@ class QuotaPolicyService:
             for normalized in (self._normalize_optional(value) for value in (pilot_owner_user_ids or ()))
             if normalized is not None
         }
-        owner_in_scope = bool(owner_id and owner_id in allowed_owners)
+        owner_eligible, owner_eligibility_reason = self._pilot_owner_eligibility(
+            owner_id=owner_id,
+            owner_authenticated=owner_authenticated,
+            owner_transitional=owner_transitional,
+            auth_enabled=auth_enabled,
+        )
+        owner_in_scope = bool(owner_eligible and owner_id and owner_id in allowed_owners)
         allowed_routes = {
             self.classify_route_family(value)
             for value in (pilot_route_families if pilot_route_families is not None else ("analysis",))
         }
         route_in_scope = route_key in allowed_routes
+        provider_context = {
+            "provider": self._safe_context_label(provider, lowercase=True),
+            "modelTier": self._safe_context_label(model_tier, lowercase=True),
+            "pricingStatus": pricing_key,
+        }
 
         block_reason_code: Optional[str] = None
         if owner_id is None:
             block_reason_code = "pilot_owner_missing"
+        elif not owner_eligible:
+            block_reason_code = owner_eligibility_reason
         elif not owner_in_scope:
             block_reason_code = "pilot_owner_out_of_scope"
         elif not route_in_scope:
@@ -540,12 +603,42 @@ class QuotaPolicyService:
 
         can_live_enforce = bool(pilot_enabled and owner_in_scope and route_in_scope and live_enforcement)
         request_blocked = bool(can_live_enforce and shadow_would_block)
+        pilot_state = self._pilot_contract_state(
+            pilot_enabled=bool(pilot_enabled),
+            owner_id=owner_id,
+            owner_eligible=owner_eligible,
+            owner_in_scope=owner_in_scope,
+            route_in_scope=route_in_scope,
+            request_blocked=request_blocked,
+            shadow_would_block=shadow_would_block,
+        )
+        allow_reason_code = self._pilot_allow_reason_code(
+            pilot_enabled=bool(pilot_enabled),
+            owner_id=owner_id,
+            owner_eligible=owner_eligible,
+            owner_in_scope=owner_in_scope,
+            route_in_scope=route_in_scope,
+            request_blocked=request_blocked,
+            shadow_would_block=shadow_would_block,
+            pricing_status=pricing_key,
+            estimate_units=estimate_units,
+        )
         return QuotaPilotDecisionContract(
             route_key=route_key,
             owner_id=owner_id,
             estimate_units=estimate_units,
             pilot_enabled=bool(pilot_enabled),
             owner_in_scope=owner_in_scope,
+            route_in_scope=route_in_scope,
+            pilot_state=pilot_state,
+            reservation_id=None,
+            provider_model_context=provider_context,
+            allow_reason_code=allow_reason_code,
+            owner_eligible=owner_eligible,
+            owner_eligibility_reason_code=owner_eligibility_reason,
+            owner_auth_enabled=bool(auth_enabled),
+            owner_authenticated=bool(owner_authenticated),
+            owner_transitional=bool(owner_transitional),
             request_blocked=request_blocked,
             block_reason_code=block_reason_code,
             live_enforcement=bool(request_blocked),
@@ -564,6 +657,9 @@ class QuotaPolicyService:
         pilot_enforcement_enabled: bool = False,
         pilot_owner_user_ids: Optional[Iterable[str]] = None,
         pilot_route_families: Optional[Iterable[str]] = None,
+        owner_authenticated: bool = True,
+        owner_transitional: bool = False,
+        auth_enabled: bool = True,
         now: Optional[datetime] = None,
     ) -> QuotaPilotReadinessPreflight:
         """Report pilot readiness while keeping the default mode advisory-only."""
@@ -580,12 +676,18 @@ class QuotaPolicyService:
         )
         owner_key = self._normalize_optional(owner_user_id)
         owner_scoped = owner_key is not None
+        owner_eligible, owner_eligibility_reason = self._pilot_owner_eligibility(
+            owner_id=owner_key,
+            owner_authenticated=owner_authenticated,
+            owner_transitional=owner_transitional,
+            auth_enabled=auth_enabled,
+        )
         allowed_owners = {
             normalized
             for normalized in (self._normalize_optional(value) for value in (pilot_owner_user_ids or ()))
             if normalized is not None
         }
-        owner_scope_explicit = bool(owner_key and owner_key in allowed_owners)
+        owner_scope_explicit = bool(owner_eligible and owner_key and owner_key in allowed_owners)
         allowed_routes = {self.classify_route_family(value) for value in (pilot_route_families or (route_key,))}
         route_scoped = route_key in allowed_routes
         pilot_scope_explicit = owner_scope_explicit and route_scoped
@@ -593,12 +695,22 @@ class QuotaPolicyService:
         can_enforce = pilot_flag_enabled and pilot_scope_explicit
         request_blocked = bool(can_enforce and shadow.would_block)
         advisory_only = not request_blocked
+        safe_provider = self._safe_context_label(provider, lowercase=True)
+        safe_model_tier = self._safe_context_label(model_tier, lowercase=True)
+        provider_context = {
+            "provider": safe_provider,
+            "modelTier": safe_model_tier,
+            "pricingStatus": shadow.pricing_status,
+        }
 
         state = "pilot_advisory_allow"
         reason_code = shadow.reason_code
         if pilot_flag_enabled and not owner_scoped:
             state = "pilot_scope_not_ready"
             reason_code = "pilot_owner_scope_required"
+        elif pilot_flag_enabled and not owner_eligible:
+            state = "pilot_owner_not_eligible"
+            reason_code = owner_eligibility_reason
         elif pilot_flag_enabled and not allowed_owners:
             state = "pilot_scope_not_ready"
             reason_code = "pilot_owner_scope_required"
@@ -612,6 +724,17 @@ class QuotaPolicyService:
             state = "pilot_would_enforce_block"
         elif shadow.would_block:
             state = "pilot_advisory_would_block"
+        allow_reason_code = self._pilot_allow_reason_code(
+            pilot_enabled=pilot_flag_enabled,
+            owner_id=owner_key,
+            owner_eligible=owner_eligible,
+            owner_in_scope=owner_scope_explicit,
+            route_in_scope=route_scoped,
+            request_blocked=request_blocked,
+            shadow_would_block=shadow.would_block,
+            pricing_status=shadow.pricing_status,
+            estimate_units=int(shadow.budget_alert.estimated_units or 0),
+        )
 
         return QuotaPilotReadinessPreflight(
             state=state,
@@ -625,10 +748,99 @@ class QuotaPolicyService:
             owner_scoped=owner_scoped,
             owner_user_id=self._safe_context_label(owner_user_id),
             route_family=route_key,
-            provider=self._safe_context_label(provider, lowercase=True),
-            model_tier=self._safe_context_label(model_tier, lowercase=True),
+            provider=safe_provider,
+            model_tier=safe_model_tier,
+            route_in_scope=route_scoped,
+            reservation_id=None,
+            provider_model_context=provider_context,
+            allow_reason_code=allow_reason_code,
+            owner_eligible=owner_eligible,
+            owner_eligibility_reason_code=owner_eligibility_reason,
+            owner_auth_enabled=bool(auth_enabled),
+            owner_authenticated=bool(owner_authenticated),
+            owner_transitional=bool(owner_transitional),
             shadow_preflight=shadow,
         )
+
+    @staticmethod
+    def _pilot_owner_eligibility(
+        *,
+        owner_id: Optional[str],
+        owner_authenticated: bool,
+        owner_transitional: bool,
+        auth_enabled: bool,
+    ) -> Tuple[bool, Optional[str]]:
+        if owner_id is None:
+            return False, "pilot_owner_missing"
+        if not bool(auth_enabled) and bool(owner_transitional):
+            return False, "pilot_auth_disabled_bootstrap_not_eligible"
+        if bool(owner_transitional):
+            return False, "pilot_transitional_owner_not_eligible"
+        if not bool(owner_authenticated):
+            return False, "pilot_owner_not_authenticated"
+        return True, None
+
+    @staticmethod
+    def _pilot_contract_state(
+        *,
+        pilot_enabled: bool,
+        owner_id: Optional[str],
+        owner_eligible: bool,
+        owner_in_scope: bool,
+        route_in_scope: bool,
+        request_blocked: bool,
+        shadow_would_block: bool,
+    ) -> str:
+        if request_blocked:
+            return "pilot_would_enforce_block"
+        if not pilot_enabled:
+            return "pilot_disabled"
+        if owner_id is None:
+            return "pilot_scope_not_ready"
+        if not owner_eligible:
+            return "pilot_owner_not_eligible"
+        if not owner_in_scope:
+            return "pilot_owner_out_of_scope"
+        if not route_in_scope:
+            return "pilot_scope_not_ready"
+        if shadow_would_block:
+            return "pilot_advisory_would_block"
+        return "pilot_advisory_allow"
+
+    @staticmethod
+    def _pilot_allow_reason_code(
+        *,
+        pilot_enabled: bool,
+        owner_id: Optional[str],
+        owner_eligible: bool,
+        owner_in_scope: bool,
+        route_in_scope: bool,
+        request_blocked: bool,
+        shadow_would_block: bool,
+        pricing_status: str,
+        estimate_units: int,
+    ) -> Optional[str]:
+        if request_blocked:
+            return None
+        if owner_id is None:
+            return "pilot_owner_missing_advisory_allow"
+        if not owner_eligible:
+            return "pilot_owner_not_eligible_advisory_allow"
+        if not pilot_enabled:
+            if shadow_would_block:
+                return "advisory_only_would_block_not_enforced"
+            return "pilot_disabled_advisory_allow"
+        if not owner_in_scope:
+            return "pilot_owner_out_of_scope_advisory_allow"
+        if not route_in_scope:
+            return "pilot_route_out_of_scope_advisory_allow"
+        if str(pricing_status or "").lower() != "ok":
+            return "pricing_unknown_advisory_allow"
+        if int(estimate_units or 0) == 0:
+            return "zero_cost_advisory_allow"
+        if shadow_would_block:
+            return "advisory_only_would_block_not_enforced"
+        return "pilot_scope_ready_advisory_allow"
 
     def build_budget_alert_notification_intent(
         self,
