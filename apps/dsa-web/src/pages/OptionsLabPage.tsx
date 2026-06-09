@@ -114,6 +114,8 @@ const OPTIONS_NO_BROKER_COPY = '不连接外部执行通道';
 const OPTIONS_NO_PORTFOLIO_MUTATION_COPY = '不改动投资组合';
 const OPTIONS_OBSERVE_ONLY_COPY = '仅供观察，不作为结论依据';
 const OPTIONS_DEMO_BOUNDARY_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不作为结论依据。';
+const OPTIONS_DEMO_GREEKS_PLACEHOLDER = '演示待补';
+const OPTIONS_DEMO_GREEKS_EXPLANATION = '演示链未提供真实敏感度数值，仅保留结构与风险边界。';
 
 const fieldShellClass = 'group flex min-h-[4rem] min-w-0 flex-col justify-center gap-1.5 rounded-md border border-[color:var(--wolfy-border-subtle)] bg-[color:color-mix(in_srgb,var(--wolfy-surface-input)_92%,transparent)] px-3 py-2 transition-colors focus-within:border-[color:var(--wolfy-accent)]';
 const fieldClass = 'h-6 w-full border-0 bg-transparent p-0 font-mono text-sm text-[color:var(--wolfy-text-primary)] outline-none placeholder:text-[color:var(--wolfy-text-muted)]';
@@ -135,6 +137,16 @@ function ratio(value?: number | null): string {
 function number(value?: number | null, digits = 0): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
   return formatNumber(value, digits);
+}
+
+function greekNumber(value?: number | null, digits = 0): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return OPTIONS_DEMO_GREEKS_PLACEHOLDER;
+  return formatNumber(value, digits);
+}
+
+function hasAnyGreekValue(contract: OptionContract): boolean {
+  return [contract.delta, contract.theta, contract.gamma, contract.vega, contract.rho]
+    .some((value) => typeof value === 'number' && Number.isFinite(value));
 }
 
 function asArray<T>(value: T[] | null | undefined): T[] {
@@ -1642,16 +1654,22 @@ const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId:
       </TerminalEmptyState>
     ) : (
       <DataWorkbenchFrame data-testid={testId}>
+        {(() => {
+          const hasUnavailableGreekContracts = contracts.some((contract) => !hasAnyGreekValue(contract));
+
+          return (
+            <>
         <div className="max-h-[22rem] overflow-y-auto no-scrollbar md:hidden">
           <div className="grid gap-2" data-testid={`${testId}-mobile-list`}>
             {contracts.map((contract) => {
+              const hasGreekValue = hasAnyGreekValue(contract);
               const greekMetrics = [
-                { label: 'Delta', value: number(contract.delta, 2) },
-                { label: 'Theta', value: number(contract.theta, 2), className: 'text-amber-200' },
-                { label: 'Gamma', value: number(contract.gamma, 3) },
-                { label: 'Vega', value: number(contract.vega, 2) },
-                { label: 'Rho', value: number(contract.rho, 2) },
-              ].filter((metric) => metric.value !== '--');
+                { label: 'Delta', value: greekNumber(contract.delta, 2) },
+                { label: 'Theta', value: greekNumber(contract.theta, 2), className: 'text-amber-200' },
+                { label: 'Gamma', value: greekNumber(contract.gamma, 3) },
+                { label: 'Vega', value: greekNumber(contract.vega, 2) },
+                { label: 'Rho', value: greekNumber(contract.rho, 2) },
+              ];
 
               return (
                 <article
@@ -1679,7 +1697,7 @@ const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId:
                     <ChainMetric label="买价 / 卖价" value={`${money(contract.bid)} / ${money(contract.ask)}`} className="col-span-2" />
                     <ChainMetric label="IV" value={ratio(contract.impliedVolatility)} />
                     <ChainMetric label="OI / 成交量" value={`${number(contract.openInterest)} / ${number(contract.volume)}`} />
-                    {greekMetrics.length ? (
+                    {hasGreekValue ? (
                       greekMetrics.map((metric) => (
                         <ChainMetric
                           key={`${contract.contractSymbol}-${metric.label}`}
@@ -1689,9 +1707,12 @@ const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId:
                         />
                       ))
                     ) : (
-                      <ChainMetric label="Greeks" value="--" className="col-span-2" />
+                      <ChainMetric label="Greeks" value={OPTIONS_DEMO_GREEKS_PLACEHOLDER} className="col-span-2" />
                     )}
                   </div>
+                  {!hasGreekValue ? (
+                    <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{OPTIONS_DEMO_GREEKS_EXPLANATION}</p>
+                  ) : null}
                 </article>
               );
             })}
@@ -1720,8 +1741,8 @@ const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId:
                   <td className="px-3 py-2 font-mono">{money(contract.mid)}</td>
                   <td className="px-3 py-2 font-mono">{money(contract.bid)} / {money(contract.ask)}</td>
                   <td className="px-3 py-2 font-mono">{ratio(contract.impliedVolatility)}</td>
-                  <td className="px-3 py-2 font-mono">{number(contract.delta, 2)}</td>
-                  <td className="px-3 py-2 font-mono text-amber-200">{number(contract.theta, 2)}</td>
+                  <td className="px-3 py-2 font-mono">{greekNumber(contract.delta, 2)}</td>
+                  <td className="px-3 py-2 font-mono text-amber-200">{greekNumber(contract.theta, 2)}</td>
                   <td className="px-3 py-2 font-mono">{number(contract.openInterest)} / {number(contract.volume)}</td>
                   <td className="rounded-r-md px-3 py-2">
                     <Pill tone={(contract.liquidityScore || 0) >= 75 ? 'good' : 'warn'}>
@@ -1733,6 +1754,12 @@ const ChainTable: React.FC<{ title: string; contracts: OptionContract[]; testId:
             </tbody>
           </table>
         </div>
+        {hasUnavailableGreekContracts ? (
+          <p className="mt-3 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{OPTIONS_DEMO_GREEKS_EXPLANATION}</p>
+        ) : null}
+            </>
+          );
+        })()}
       </DataWorkbenchFrame>
     )}
   </section>

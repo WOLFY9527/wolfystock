@@ -2299,6 +2299,70 @@ describe('OptionsLabPage', () => {
     expect(putCard).toHaveTextContent('$3.20 / $3.50');
   });
 
+  it('renders explicit demo placeholder copy when chain Greeks are unavailable', async () => {
+    vi.mocked(optionsLabApi.getOptionChain).mockResolvedValueOnce({
+      symbol: 'TEM',
+      expiration: '2026-06-19',
+      underlying: {
+        price: 52.34,
+        changePct: 1.2,
+        source: 'fixture',
+        asOf: '2026-05-06T09:45:00-04:00',
+        freshness: 'mock',
+      },
+      calls: [
+        {
+          contractSymbol: 'TEM260619C00055000',
+          side: 'call',
+          strike: 55,
+          bid: 4.1,
+          ask: 4.35,
+          mid: 4.23,
+          volume: 830,
+          openInterest: 6120,
+          impliedVolatility: 0.54,
+          delta: null,
+          theta: null,
+          gamma: null,
+          vega: null,
+          rho: null,
+          spreadPct: 5.9,
+          moneyness: 'otm',
+          liquidityScore: 82,
+        },
+      ],
+      puts: [],
+      filtersApplied: {
+        minOpenInterest: 100,
+        maxSpreadPct: 20,
+      },
+      chainAsOf: '2026-05-06T09:45:00-04:00',
+      source: 'fixture',
+      limitations: ['provider_validation_required'],
+      metadata: {
+        readOnly: true,
+        noExternalCallsInTests: true,
+        limitations: ['mocked_frontend_shell'],
+      },
+    } as never);
+
+    renderPage();
+
+    const callsTable = await screen.findByTestId('options-lab-calls-table');
+    const callsDesktopTable = within(callsTable).getByTestId('options-lab-calls-table-desktop-table');
+    const callsMobileList = within(callsTable).getByTestId('options-lab-calls-table-mobile-list');
+    const callCard = within(callsMobileList).getByTestId('options-lab-calls-table-mobile-card-TEM260619C00055000');
+
+    expect(callCard).toHaveTextContent('Greeks');
+    expect(callCard).toHaveTextContent('演示待补');
+    expect(callCard).toHaveTextContent('演示链未提供真实敏感度数值');
+    expect(within(callCard).queryByText(/^--$/)).not.toBeInTheDocument();
+
+    expect(callsDesktopTable).toHaveTextContent('演示待补');
+    expect(callsTable).toHaveTextContent('演示链未提供真实敏感度数值');
+    expect(within(callsDesktopTable).queryByText(/^--$/)).not.toBeInTheDocument();
+  });
+
   it('keeps research-trust copy sentinels analytical and no-decision grade', () => {
     expect(optionsLabPageSource).toContain('只读观察');
     expect(optionsLabPageSource).toContain('不构成买卖建议');
