@@ -278,6 +278,136 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         for item in payload["items"]:
             self.assertNotIn("metadata", item)
 
+    def test_diagnostics_responses_drop_unsafe_refs_filters_and_exception_text(self) -> None:
+        self._as_provider_read_admin()
+        base = datetime(2026, 5, 6, 10, 0, 0)
+        unsafe_ref = (
+            "provider outage https://provider.example.test/raw?token=must-not-leak "
+            "session_id=raw-session-123 cookie=raw-cookie "
+            "raw_exception_message=ProviderError(must-not-leak)"
+        )
+        self.db.transition_provider_circuit_state(
+            provider="fmp",
+            provider_category="quote",
+            route_family="analysis",
+            to_state="open",
+            reason_bucket="network_error",
+            operator_action_ref=unsafe_ref,
+            metadata={
+                "headers": {"Authorization": "Bearer must-not-leak"},
+                "raw_response": {"session_id": "raw-session-123"},
+                "safe_summary": "provider_error_bucket",
+                "stack_trace": "Traceback raw_exception_message must-not-leak",
+            },
+            now=base,
+        )
+        self.db.update_provider_quota_window_counters(
+            provider="fmp",
+            provider_category="quote",
+            route_family="analysis",
+            window_type="hour",
+            window_start=base,
+            window_end=base + timedelta(hours=1),
+            request_delta=1,
+            rejected_delta=1,
+            metadata={
+                "request_url": "https://provider.example.test/quota?api_key=must-not-leak",
+                "cookie": "raw-cookie",
+                "safe_summary": "quota_rejected_bucket",
+            },
+        )
+        self.db.record_provider_probe_event(
+            provider="fmp",
+            provider_category="probe",
+            route_family="admin_provider_probe",
+            probe_type="synthetic_fixture",
+            probe_source="dry_run",
+            result_bucket="provider_403",
+            duration_bucket_ms=250,
+            metadata={
+                "response_body": "must-not-leak",
+                "raw_exception": "ProviderError(raw-session-123)",
+                "safe_summary": "probe_result_bucket",
+            },
+            created_at=base + timedelta(minutes=1),
+        )
+
+        unsafe_filter = "https://provider.example.test/raw?token=must-not-leak&session_id=raw-session-123"
+        responses = {
+            "states": self.client.get("/api/v1/admin/providers/circuits", params={"provider": unsafe_filter}),
+            "events": self.client.get("/api/v1/admin/providers/circuits/events", params={"provider": unsafe_filter}),
+            "quota": self.client.get("/api/v1/admin/providers/quota-windows", params={"provider": unsafe_filter}),
+            "probes": self.client.get("/api/v1/admin/providers/probe-events", params={"provider": unsafe_filter}),
+            "sla": self.client.get(
+                "/api/v1/admin/providers/sla-readiness",
+                params={"provider": unsafe_filter, "since": "2026-05-06T00:00:00"},
+            ),
+        }
+
+        for name, response in responses.items():
+            self.assertEqual(response.status_code, 200, name)
+
+        unfiltered = {
+            "states": self.client.get("/api/v1/admin/providers/circuits", params={"provider": "fmp"}),
+            "events": self.client.get("/api/v1/admin/providers/circuits/events", params={"provider": "fmp"}),
+            "quota": self.client.get("/api/v1/admin/providers/quota-windows", params={"provider": "fmp"}),
+            "probes": self.client.get("/api/v1/admin/providers/probe-events", params={"provider": "fmp"}),
+            "sla": self.client.get(
+                "/api/v1/admin/providers/sla-readiness",
+                params={"provider": "fmp", "since": "2026-05-06T00:00:00"},
+            ),
+        }
+        for name, response in unfiltered.items():
+            self.assertEqual(response.status_code, 200, name)
+
+        state = unfiltered["states"].json()["items"][0]
+        self.assertEqual(state["provider"], "fmp")
+        self.assertEqual(state["reasonBucket"], "network_error")
+        self.assertEqual(state["operatorActionRef"], "diagnostic_ref_redacted")
+        event = unfiltered["events"].json()["items"][0]
+        self.assertEqual(event["eventType"], "state_transition")
+        self.assertEqual(event["reasonBucket"], "network_error")
+        self.assertEqual(event["operatorActionRef"], "diagnostic_ref_redacted")
+        quota = unfiltered["quota"].json()["items"][0]
+        self.assertEqual(quota["requestCount"], 1)
+        self.assertEqual(quota["rejectedCount"], 1)
+        probe = unfiltered["probes"].json()["items"][0]
+        self.assertEqual(probe["probeType"], "synthetic_fixture")
+        self.assertEqual(probe["resultBucket"], "provider_403")
+        sla = next(
+            item
+            for item in unfiltered["sla"].json()["items"]
+            if item["provider"] == "fmp" and item["providerCategory"] == "quote" and item["routeFamily"] == "analysis"
+        )
+        self.assertEqual(sla["provider"], "fmp")
+        self.assertFalse(sla["liveEnforcement"])
+        self.assertFalse(sla["wouldBlockCall"])
+        self.assertEqual(sla["recentErrors"][0]["reasonBucket"], "network_error")
+
+        text = self._json_text(
+            {
+                "filtered": {key: item.json() for key, item in responses.items()},
+                "unfiltered": {key: item.json() for key, item in unfiltered.items()},
+            }
+        ).lower()
+        for forbidden in (
+            "must-not-leak",
+            "provider.example.test",
+            "https://",
+            "?token=",
+            "session_id",
+            "raw-session-123",
+            "raw-cookie",
+            "cookie=",
+            "raw_exception_message",
+            "providererror(",
+            "traceback",
+            "authorization",
+            "raw_response",
+            "response_body",
+        ):
+            self.assertNotIn(forbidden, text)
+
     def test_circuit_events_read_returns_safe_reason_buckets(self) -> None:
         self._as_provider_read_admin()
         self._seed_circuit_fixture()

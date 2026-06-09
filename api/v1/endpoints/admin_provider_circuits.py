@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -54,6 +55,20 @@ _OPTIONS_PROVIDER_CATEGORY = "options"
 _OPTIONS_ROUTE_FAMILY = "options_lab"
 _STAGED_PROVIDER_CIRCUIT_CATEGORIES = (_OPTIONS_PROVIDER_CATEGORY,)
 _STAGED_PROVIDER_CIRCUIT_ROUTE_FAMILIES = (_OPTIONS_ROUTE_FAMILY,)
+_SAFE_DIAGNOSTIC_REF_RE = re.compile(r"[^A-Za-z0-9_.:-]+")
+_UNSAFE_DIAGNOSTIC_TEXT_RE = re.compile(
+    r"(https?://|[?&][a-z0-9_.:-]+=|"
+    r"\b(?:api[-_]?key|access[-_]?token|refresh[-_]?token|session[-_]?(?:id|token|cookie)?|"
+    r"cookie|authorization|bearer|secret|password|credential|raw[-_]?(?:exception|payload|request|response)|"
+    r"request[-_]?body|response[-_]?body|headers?|stack[-_]?trace|traceback)\b\s*[:=]|"
+    r"\b(?:traceback|exception\(|providererror\())",
+    re.IGNORECASE,
+)
+
+
+def _has_unsafe_diagnostic_text(value: Any) -> bool:
+    text = str(value or "").strip()
+    return bool(text and _UNSAFE_DIAGNOSTIC_TEXT_RE.search(text))
 
 
 def _safe_limit(value: int | None) -> int:
@@ -65,8 +80,22 @@ def _safe_limit(value: int | None) -> int:
 
 
 def _safe_filter(value: str | None, *, limit: int = 64) -> str | None:
-    text = sanitize_message(str(value or "").strip().lower())[:limit]
+    raw_text = str(value or "").strip()
+    if _has_unsafe_diagnostic_text(raw_text):
+        return None
+    text = sanitize_message(raw_text.lower())[:limit]
     return text or None
+
+
+def _safe_diagnostic_ref(value: Any) -> str | None:
+    raw_text = str(value or "").strip()
+    if not raw_text:
+        return None
+    sanitized = sanitize_message(raw_text).strip()
+    if _has_unsafe_diagnostic_text(raw_text) or _has_unsafe_diagnostic_text(sanitized):
+        return "diagnostic_ref_redacted"
+    ref = _SAFE_DIAGNOSTIC_REF_RE.sub("_", sanitized).strip("_.:-")[:128]
+    return ref or "diagnostic_ref_redacted"
 
 
 def _parse_since(value: str | None) -> datetime | None:
@@ -99,7 +128,7 @@ def _state_item(row: ProviderCircuitState) -> ProviderCircuitStateItem:
         state=str(row.state or "unknown"),
         reasonBucket=row.reason_bucket,
         cooldownUntil=row.cooldown_until.isoformat() if row.cooldown_until else None,
-        operatorActionRef=row.operator_action_ref,
+        operatorActionRef=_safe_diagnostic_ref(row.operator_action_ref),
         createdAt=row.created_at.isoformat() if row.created_at else None,
         updatedAt=row.updated_at.isoformat() if row.updated_at else None,
     )
@@ -117,7 +146,7 @@ def _event_item(row: ProviderCircuitEvent) -> ProviderCircuitEventItem:
         requestCountBucket=row.request_count_bucket,
         durationBucketMs=row.duration_bucket_ms,
         failureCountBucket=row.failure_count_bucket,
-        operatorActionRef=row.operator_action_ref,
+        operatorActionRef=_safe_diagnostic_ref(row.operator_action_ref),
         createdAt=row.created_at.isoformat() if row.created_at else None,
     )
 

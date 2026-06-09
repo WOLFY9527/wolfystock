@@ -111,6 +111,57 @@ def test_metadata_sanitization_drops_sensitive_keys_and_truncates_values() -> No
     assert event["metadata"]["nested"] == {"safe": "ok"}
 
 
+def test_metadata_sanitization_drops_url_cookie_session_and_exception_text_values() -> None:
+    ledger = ProviderUsageLedger(max_events=10)
+    ledger.record(
+        ProviderUsageEvent(
+            category="quote",
+            provider="alpaca",
+            action="failure",
+            outcome="failed",
+            reason_code="raw exception https://provider.example.test/raw?token=SECRET",
+            metadata={
+                "safe_summary": "provider_error_bucket",
+                "diagnostic_ref": "probe:quote:alpaca:network_error",
+                "safe_url_like_note": "https://provider.example.test/raw?token=SECRET&session_id=raw-session",
+                "safe_cookie_note": "cookie=raw-cookie session_id=raw-session",
+                "safe_exception_note": "ProviderError(SECRET) raw_exception_message=SECRET",
+                "safe_stack_note": "Traceback (most recent call last): SECRET",
+                "nested": {
+                    "safe": "ok",
+                    "note": "Authorization: Bearer SECRET",
+                },
+            },
+        )
+    )
+
+    event = ledger.snapshot()[0]
+    dumped = json.dumps(event, sort_keys=True).lower()
+
+    assert event["metadata"] == {
+        "safe_summary": "provider_error_bucket",
+        "diagnostic_ref": "probe:quote:alpaca:network_error",
+        "nested": {"safe": "ok"},
+    }
+    assert event["reasonCode"] == "raw_exception"
+    for blocked in (
+        "secret",
+        "provider.example.test",
+        "https://",
+        "?token=",
+        "session_id",
+        "raw-session",
+        "cookie=",
+        "raw-cookie",
+        "authorization",
+        "bearer",
+        "providererror(",
+        "raw_exception_message",
+        "traceback",
+    ):
+        assert blocked not in dumped
+
+
 def test_summary_groups_by_action_provider_category_and_mode() -> None:
     ledger = ProviderUsageLedger(max_events=10)
     ledger.record(

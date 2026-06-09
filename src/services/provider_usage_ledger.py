@@ -23,7 +23,16 @@ MAX_METADATA_STRING_LENGTH = 160
 MAX_LABEL_LENGTH = 80
 MAX_SYMBOL_LENGTH = 32
 SENSITIVE_KEY_RE = re.compile(
-    r"(token|secret|password|authorization|cookie|api_key|key|header|request_body|response_body|raw|payload)",
+    r"(token|secret|password|authorization|cookie|session|api_key|key|header|"
+    r"request_body|response_body|raw|payload|url|uri|query|dsn|exception|stack|traceback)",
+    re.IGNORECASE,
+)
+UNSAFE_METADATA_TEXT_RE = re.compile(
+    r"(https?://|[?&][a-z0-9_.:-]+=|"
+    r"\b(?:authorization|bearer|cookie|session[-_]?(?:id|token|cookie)?|api[-_]?key|token|secret|password|"
+    r"credential|raw[-_]?(?:exception|payload|request|response)|request[-_]?body|response[-_]?body|headers?|"
+    r"stack[-_]?trace|traceback)\b\s*[:=]|"
+    r"\b(?:traceback|exception\(|providererror\())",
     re.IGNORECASE,
 )
 SAFE_LABEL_RE = re.compile(r"[^a-z0-9_.:-]+")
@@ -69,8 +78,10 @@ def _safe_symbol(value: Any) -> Optional[str]:
     return text[:MAX_SYMBOL_LENGTH] or None
 
 
-def _sanitize_text(value: Any) -> str:
+def _sanitize_text(value: Any) -> Optional[str]:
     text = str(value or "").strip()
+    if UNSAFE_METADATA_TEXT_RE.search(text):
+        return None
     text = re.sub(r"(?i)(token|secret|password|authorization|cookie|api[_-]?key|key)\s*[:=]\s*[^\s,;]+", r"\1=REDACTED", text)
     text = re.sub(r"(?i)\b(raw[_-]?payload|raw[_-]?response|request[_-]?body|response[_-]?body|headers?)\b[^\s,;]*", "REDACTED", text)
     if len(text) > MAX_METADATA_STRING_LENGTH:
@@ -82,7 +93,16 @@ def _safe_reason_code(value: Any) -> Optional[str]:
     label = _safe_label(value)
     if not label:
         return None
-    parts = [part for part in label.split("_") if part not in {"token", "secret", "password", "authorization", "cookie", "api", "key", "redacted"}]
+    parts = []
+    for part in label.split("_"):
+        if (
+            part in {"token", "secret", "password", "authorization", "cookie", "api", "key", "redacted", "bearer", "session"}
+            or part.startswith("http")
+            or "://" in part
+        ):
+            break
+        if part:
+            parts.append(part)
     return "_".join(parts)[:MAX_LABEL_LENGTH] or None
 
 
