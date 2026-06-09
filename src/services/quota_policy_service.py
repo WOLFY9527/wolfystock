@@ -165,6 +165,32 @@ class QuotaPilotReadinessPreflight:
         }
 
 
+@dataclass(frozen=True)
+class QuotaPilotDecisionContract:
+    """Narrow decision contract for a future owner-allowlisted quota pilot."""
+
+    route_key: str
+    owner_id: Optional[str]
+    estimate_units: int
+    pilot_enabled: bool
+    owner_in_scope: bool
+    request_blocked: bool
+    block_reason_code: Optional[str]
+    live_enforcement: bool
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "routeKey": self.route_key,
+            "ownerId": self.owner_id,
+            "estimateUnits": self.estimate_units,
+            "pilotEnabled": self.pilot_enabled,
+            "ownerInScope": self.owner_in_scope,
+            "requestBlocked": self.request_blocked,
+            "blockReasonCode": self.block_reason_code,
+            "liveEnforcement": self.live_enforcement,
+        }
+
+
 class QuotaPolicyService:
     """Budget/quota policy checks that are not wired into live providers yet."""
 
@@ -446,6 +472,83 @@ class QuotaPolicyService:
             route_family=self.classify_route_family(route_family),
             pricing_status=pricing_key,
             budget_alert=budget_alert,
+        )
+
+    def build_quota_pilot_decision_contract(
+        self,
+        *,
+        owner_user_id: Optional[str],
+        route_family: str,
+        provider: Optional[str] = None,
+        model_tier: Optional[str] = None,
+        token_estimate: Optional[int] = None,
+        estimated_units: Optional[int] = None,
+        pricing_status: str = "ok",
+        pilot_enabled: bool = False,
+        pilot_owner_user_ids: Optional[Iterable[str]] = None,
+        pilot_route_families: Optional[Iterable[str]] = None,
+        live_enforcement: bool = False,
+        now: Optional[datetime] = None,
+    ) -> QuotaPilotDecisionContract:
+        """Build an advisory-only pilot decision contract without runtime side effects."""
+        route_key = self.classify_route_family(route_family)
+        owner_id = self._normalize_optional(owner_user_id)
+        estimate_units = (
+            max(0, int(estimated_units))
+            if estimated_units is not None
+            else self.estimate_budget_units(route_family=route_key, token_estimate=token_estimate)
+        )
+        pricing_key = str(pricing_status or "pricing_unknown").strip().lower() or "pricing_unknown"
+        allowed_owners = {
+            normalized
+            for normalized in (self._normalize_optional(value) for value in (pilot_owner_user_ids or ()))
+            if normalized is not None
+        }
+        owner_in_scope = bool(owner_id and owner_id in allowed_owners)
+        allowed_routes = {
+            self.classify_route_family(value)
+            for value in (pilot_route_families if pilot_route_families is not None else ("analysis",))
+        }
+        route_in_scope = route_key in allowed_routes
+
+        block_reason_code: Optional[str] = None
+        if owner_id is None:
+            block_reason_code = "pilot_owner_missing"
+        elif not owner_in_scope:
+            block_reason_code = "pilot_owner_out_of_scope"
+        elif not route_in_scope:
+            block_reason_code = "pilot_route_out_of_scope"
+        elif pricing_key != "ok":
+            block_reason_code = "pricing_unknown_advisory"
+        elif estimate_units == 0:
+            block_reason_code = "zero_cost_advisory"
+
+        shadow_would_block = False
+        if block_reason_code is None:
+            shadow = self.classify_shadow_preflight(
+                owner_user_id=owner_id,
+                route_family=route_key,
+                provider=provider,
+                model_tier=model_tier,
+                token_estimate=token_estimate,
+                estimated_units=estimate_units,
+                pricing_status=pricing_key,
+                now=now,
+            )
+            shadow_would_block = bool(shadow.would_block)
+            block_reason_code = shadow.budget_alert.reason_code or shadow.reason_code
+
+        can_live_enforce = bool(pilot_enabled and owner_in_scope and route_in_scope and live_enforcement)
+        request_blocked = bool(can_live_enforce and shadow_would_block)
+        return QuotaPilotDecisionContract(
+            route_key=route_key,
+            owner_id=owner_id,
+            estimate_units=estimate_units,
+            pilot_enabled=bool(pilot_enabled),
+            owner_in_scope=owner_in_scope,
+            request_blocked=request_blocked,
+            block_reason_code=block_reason_code,
+            live_enforcement=bool(request_blocked),
         )
 
     def classify_pilot_readiness_preflight(

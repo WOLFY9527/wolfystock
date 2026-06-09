@@ -7,6 +7,7 @@ import os
 import sys
 import unittest
 from datetime import datetime, timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -286,6 +287,133 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertEqual(user_two.state, "would_block_soft_limit")
         self.assertTrue(user_one.to_dict()["ownerIsolation"]["otherOwnersExcluded"])
         self.assertTrue(user_two.to_dict()["ownerIsolation"]["ownerScoped"])
+
+    def test_quota_pilot_decision_contract_default_shape_is_advisory_only(self) -> None:
+        self._seed_budget_alert_policy()
+
+        decision = self.service.build_quota_pilot_decision_contract(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=121,
+            pilot_owner_user_ids=("user-1",),
+        )
+
+        payload = decision.to_dict()
+        self.assertEqual(
+            set(payload),
+            {
+                "routeKey",
+                "ownerId",
+                "estimateUnits",
+                "pilotEnabled",
+                "ownerInScope",
+                "requestBlocked",
+                "blockReasonCode",
+                "liveEnforcement",
+            },
+        )
+        self.assertEqual(payload["routeKey"], "analysis")
+        self.assertEqual(payload["ownerId"], "user-1")
+        self.assertEqual(payload["estimateUnits"], 121)
+        self.assertFalse(payload["pilotEnabled"])
+        self.assertTrue(payload["ownerInScope"])
+        self.assertFalse(payload["requestBlocked"])
+        self.assertEqual(payload["blockReasonCode"], "budget_hard_limit_exceeded")
+        self.assertFalse(payload["liveEnforcement"])
+
+    def test_quota_pilot_decision_contract_missing_owner_is_not_ready_not_global_enforcement(self) -> None:
+        self._seed_budget_alert_policy()
+
+        decision = self.service.build_quota_pilot_decision_contract(
+            owner_user_id=None,
+            route_family="analysis",
+            estimated_units=121,
+            pilot_enabled=True,
+            pilot_owner_user_ids=("user-1",),
+            live_enforcement=True,
+        )
+
+        self.assertIsNone(decision.owner_id)
+        self.assertFalse(decision.owner_in_scope)
+        self.assertFalse(decision.request_blocked)
+        self.assertEqual(decision.block_reason_code, "pilot_owner_missing")
+        self.assertFalse(decision.live_enforcement)
+
+    def test_quota_pilot_decision_contract_unknown_pricing_and_zero_cost_stay_advisory(self) -> None:
+        self._seed_budget_alert_policy()
+
+        unknown_pricing = self.service.build_quota_pilot_decision_contract(
+            owner_user_id="pilot-user",
+            route_family="analysis",
+            estimated_units=121,
+            pricing_status="pricing_unknown",
+            pilot_enabled=True,
+            pilot_owner_user_ids=("pilot-user",),
+            live_enforcement=True,
+        )
+        zero_cost = self.service.build_quota_pilot_decision_contract(
+            owner_user_id="pilot-user",
+            route_family="analysis",
+            estimated_units=0,
+            pricing_status="ok",
+            pilot_enabled=True,
+            pilot_owner_user_ids=("pilot-user",),
+            live_enforcement=True,
+        )
+
+        self.assertTrue(unknown_pricing.owner_in_scope)
+        self.assertFalse(unknown_pricing.request_blocked)
+        self.assertEqual(unknown_pricing.block_reason_code, "pricing_unknown_advisory")
+        self.assertFalse(unknown_pricing.live_enforcement)
+        self.assertEqual(zero_cost.estimate_units, 0)
+        self.assertTrue(zero_cost.owner_in_scope)
+        self.assertFalse(zero_cost.request_blocked)
+        self.assertEqual(zero_cost.block_reason_code, "zero_cost_advisory")
+        self.assertFalse(zero_cost.live_enforcement)
+
+    def test_quota_pilot_decision_contract_can_report_explicit_test_only_live_block(self) -> None:
+        self._seed_budget_alert_policy()
+
+        decision = self.service.build_quota_pilot_decision_contract(
+            owner_user_id="pilot-user",
+            route_family="analysis",
+            estimated_units=121,
+            pilot_enabled=True,
+            pilot_owner_user_ids=("pilot-user",),
+            live_enforcement=True,
+        )
+
+        self.assertTrue(decision.pilot_enabled)
+        self.assertTrue(decision.owner_in_scope)
+        self.assertTrue(decision.request_blocked)
+        self.assertEqual(decision.block_reason_code, "budget_hard_limit_exceeded")
+        self.assertTrue(decision.live_enforcement)
+
+    def test_quota_pilot_decision_contract_is_read_only_and_not_analysis_route_wired(self) -> None:
+        self._seed_budget_alert_policy()
+        with self.db.session_scope() as session:
+            before_reservations = session.query(QuotaReservation).count()
+            before_windows = session.query(QuotaUsageWindow).count()
+
+        decision = self.service.build_quota_pilot_decision_contract(
+            owner_user_id="pilot-user",
+            route_family="analysis",
+            estimated_units=121,
+            pilot_enabled=True,
+            pilot_owner_user_ids=("pilot-user",),
+            live_enforcement=True,
+        )
+
+        with self.db.session_scope() as session:
+            after_reservations = session.query(QuotaReservation).count()
+            after_windows = session.query(QuotaUsageWindow).count()
+        route_source = (Path(__file__).resolve().parents[1] / "api/v1/endpoints/analysis.py").read_text()
+        self.assertTrue(decision.request_blocked)
+        self.assertEqual(after_reservations, before_reservations)
+        self.assertEqual(after_windows, before_windows)
+        self.assertNotIn("build_quota_pilot_decision_contract", route_source)
+        self.assertNotIn("QuotaPilotDecisionContract", route_source)
+        self.assertNotIn("reserve_quota(", route_source)
 
     def test_pilot_readiness_preflight_defaults_to_advisory_disabled_enforcement(self) -> None:
         self._seed_budget_alert_policy()
