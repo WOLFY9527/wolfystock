@@ -146,6 +146,7 @@ const HOME_CHART_FALLBACK_TIMEFRAMES = ['1D', '1W', '1M'];
 const HOME_CHART_FALLBACK_INDICATORS = ['MA5', 'MA10', 'MA20', 'MA60', 'VWAP'];
 const HOME_CHART_FALLBACK_GRID_ROWS = ['price-top', 'price-upper', 'price-mid', 'volume'];
 const HOME_CHART_IDLE_TIMEOUT_MS = 240;
+const HOME_ANALYSIS_SOFT_TIMEOUT_MS = 30_000;
 const HOME_COMPLIANCE_ACTION_TEXT_PATTERN = /小仓试错|第二笔|建仓|加仓|减仓|买入|卖出|做多|做空|下单|券商|probe size|start light|add only|reduce into strength|trim rather than|buy recommendation|sell recommendation|trading recommendation|trade now|order now|broker/i;
 
 const HOME_EVIDENCE_CITATION_DOMAIN_LABELS: Record<string, { zh: string; en: string }> = {
@@ -2923,7 +2924,7 @@ type DesiredFieldSpec = {
 };
 
 const CJK_TEXT_RE = /[\u3400-\u9FFF]/;
-const TICKER_FORMAT_RE = /^[A-Z]{1,5}$|^\d{6}$/;
+const TICKER_FORMAT_RE = /^(?:[A-Z]{1,5}(?:\.(?:US|[A-Z]))?|\d{6})$/;
 const EMPTY_FIELD_VALUE = '-';
 const UNTRUSTED_SCAN_SKIP_KEYS = new Set([
   'rawResult',
@@ -5532,6 +5533,47 @@ function InPlaceListSkeleton({
   );
 }
 
+function HomeAnalysisSoftTimeoutNotice({
+  locale,
+  ticker,
+  onRetry,
+}: {
+  locale: DashboardLocale;
+  ticker: string;
+  onRetry: () => void;
+}) {
+  const isEnglish = locale === 'en';
+  return (
+    <section
+      className="mb-4 min-w-0 rounded-[10px] border border-amber-300/22 bg-amber-300/[0.075] px-4 py-3 text-amber-50/88"
+      data-testid="home-analysis-soft-timeout-notice"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">
+            {isEnglish ? 'Part of this research is still pending' : '部分内容仍在整理'}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-amber-50/68">
+            {isEnglish
+              ? `${ticker} is taking longer than usual. The current observation view is available now and will be replaced automatically when the report is ready.`
+              : `${ticker} 研究耗时较久。当前先显示可恢复观察视图，报告完成后会自动替换。`}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="inline-flex min-h-9 shrink-0 items-center justify-center rounded-[7px] border border-amber-200/24 bg-amber-200/10 px-3 text-xs font-semibold text-amber-50 transition-colors hover:bg-amber-200/16"
+          data-testid="home-analysis-soft-timeout-retry"
+          onClick={onRetry}
+        >
+          {isEnglish ? 'Retry refresh' : '重试刷新'}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function GuestPaywallOverlay({ locale, registrationPath }: { locale: DashboardLocale; registrationPath: string }) {
   return (
     <div
@@ -5597,6 +5639,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTicker, setActiveTicker] = useState<string | null>(null);
   const [pendingAnalysisTicker, setPendingAnalysisTicker] = useState<string | null>(null);
+  const [softTimedOutTaskId, setSoftTimedOutTaskId] = useState<string | null>(null);
   const [hasHydratedInitialTicker, setHasHydratedInitialTicker] = useState(false);
   const [isDashboardLoading, setDashboardLoading] = useState(false);
   const [statusToast, setStatusToast] = useState<{ message: string; tone: 'error' | 'warning' } | null>(null);
@@ -5678,14 +5721,22 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   );
   const completedTaskReport = dashboardSelection.completedTaskReport;
   const focusedTask = dashboardSelection.focusedTask;
+  const isFocusedTaskRunning = Boolean(focusedTask && (focusedTask.status === 'pending' || focusedTask.status === 'processing'));
+  const isFocusedTaskSoftTimedOut = Boolean(
+    !isGuest
+    && focusedTask?.taskId
+    && softTimedOutTaskId === focusedTask.taskId
+    && isFocusedTaskRunning,
+  );
   const isTaskAnalyzing = Boolean(
     (pendingAnalysisTicker || routeTaskId)
     && focusedTask
-    && (focusedTask.status === 'pending' || focusedTask.status === 'processing'),
+    && isFocusedTaskRunning
+    && !isFocusedTaskSoftTimedOut,
   );
   const isGuestAnalyzing = isGuest && isDashboardLoading;
-  const isHomeAnalyzing = isGuestAnalyzing || (!isGuest && (isAnalyzing || isTaskAnalyzing || Boolean(pendingAnalysisTicker && isDashboardLoading)));
-  const isBusy = isHomeAnalyzing || isDashboardLoading;
+  const isHomeAnalyzing = isGuestAnalyzing || (!isGuest && !isFocusedTaskSoftTimedOut && (isAnalyzing || isTaskAnalyzing || Boolean(pendingAnalysisTicker && isDashboardLoading)));
+  const isBusy = isHomeAnalyzing || (isDashboardLoading && !isFocusedTaskSoftTimedOut);
   const dashboardData = useMemo<DashboardPayload>(() => {
     if (traceFixtureReport) {
       return buildDashboardFromReport(locale, traceFixtureReport);
@@ -5932,6 +5983,30 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
   const focusedTaskStatus = focusedTask?.status;
 
   useEffect(() => {
+    if (isGuest || !focusedTaskId || !isFocusedTaskRunning || isFocusedTaskSoftTimedOut) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setSoftTimedOutTaskId(focusedTaskId);
+      setDashboardLoading(false);
+    }, HOME_ANALYSIS_SOFT_TIMEOUT_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [focusedTaskId, isFocusedTaskRunning, isFocusedTaskSoftTimedOut, isGuest]);
+
+  useEffect(() => {
+    if (!softTimedOutTaskId) {
+      return;
+    }
+    if (!focusedTaskId || focusedTaskId !== softTimedOutTaskId || !isFocusedTaskRunning) {
+      setSoftTimedOutTaskId(null);
+    }
+  }, [focusedTaskId, isFocusedTaskRunning, softTimedOutTaskId]);
+
+  useEffect(() => {
     if (!focusedTaskId || focusedTaskStatus === 'completed' || focusedTaskStatus === 'failed') {
       return undefined;
     }
@@ -6042,6 +6117,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
 
     setStatusToast(null);
+    setSoftTimedOutTaskId(null);
     setDashboardLoading(true);
     setActiveTicker(normalizedTicker);
     setPendingAnalysisTicker(normalizedTicker);
@@ -6116,6 +6192,19 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
     }
   };
 
+  const handleRetrySoftTimedOutAnalysis = () => {
+    setStatusToast(null);
+    setSoftTimedOutTaskId(null);
+    if (focusedTaskId) {
+      setDashboardLoading(true);
+      void refreshTaskProgress(focusedTaskId);
+      return;
+    }
+    if (pendingAnalysisTicker) {
+      void handleAnalyze(pendingAnalysisTicker);
+    }
+  };
+
   const handleHistoryClick = async (historyItem: HistoryItem) => {
     const normalizedTicker = normalizeTickerQuery(historyItem.stockCode);
     if (!normalizedTicker) {
@@ -6124,6 +6213,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
 
     setHistoryDrawerOpen(false);
     setStatusToast(null);
+    setSoftTimedOutTaskId(null);
     setPendingAnalysisTicker(null);
     clearError();
     setActiveTicker(normalizedTicker);
@@ -6628,6 +6718,13 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                           data-testid="home-bento-card-decision"
                           data-research-card="decision"
                         >
+                          {isFocusedTaskSoftTimedOut ? (
+                            <HomeAnalysisSoftTimeoutNotice
+                              locale={locale}
+                              ticker={pendingAnalysisTicker || activeTicker || readyCopy.ticker}
+                              onRetry={handleRetrySoftTimedOutAnalysis}
+                            />
+                          ) : null}
                           <div data-testid={completedTaskReport ? 'home-bento-analysis-result-card' : undefined}>
                             <HomeConclusionFirstConsole
                               locale={locale}

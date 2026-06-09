@@ -281,6 +281,8 @@ const HOME_EVIDENCE_PACKET_TRADING_COPY_PATTERN =
   /buy now|sell now|trade now|order now|broker route|买入|卖出|下单|交易|经纪商|小仓试错|第二笔|建仓|加仓|减仓|probe size|start light|add only/i;
 const HOME_PROVENANCE_INTERNAL_COPY_PATTERN =
   /provider|router|cache|credential|token|prompt|request body|raw payload|article body|sourceId|debugRef|internal|trace|stack|env/i;
+const HOME_SOFT_TIMEOUT_FORBIDDEN_COPY_PATTERN =
+  /\b(provider|debug|raw|schema|cache|fallback|broker|buy|sell|trade|order)\b|买入|卖出|下单|交易|经纪商|建仓|加仓|减仓|止损|止盈|目标价|立即交易|保证收益|稳赚/i;
 const HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN =
   /\bmixed\b|INSUFFICIENT|REAL|MIXED|FALLBACK|provider|provider_timeout|providerTrace|sourceRefId|sourceId|sourceConfidence|sourceAuthority|sourceTier|scoreContributionAllowed|sourceAuthorityAllowed|authority|freshness|fallback_cache|cache|debug|diagnostic|diagnostics|trace|router|prompt|schema|raw payload|raw_result|raw_ai_response|context_snapshot|token|credential|stack|env|reasonCode|reasonCodes|reason_code|reason_codes|one_sentence|stop_loss|standard_report|Yahoo Finance|Yfinance|Finnhub|Alpaca|FMP|Gnews|Tavily|openai|deepseek|fixture-provider|fixture-model|buy|sell|trade now|order now|broker route|buy recommendation|sell recommendation|trading recommendation|probe size|start light|add only|position sizing|Ideal buy|Secondary entry|Stop loss|Take profit|Target zone|买入|卖出|下单|交易|立即交易|建仓|加仓|减仓|止损|止盈|目标价|目标位|目标区间|仓位建议|持仓建议|空仓建议|小仓试错|第二笔/i;
 const GUEST_HOME_FORBIDDEN_COPY_PATTERN =
@@ -3518,6 +3520,31 @@ describe('HomeSurfacePage', () => {
     expect(screen.queryByText('未找到股票代码 MSFT，请检查是否退市或输入有误')).not.toBeInTheDocument();
   });
 
+  it('submits dotted US tickers through Home validation without rejecting BRK.B', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+
+    renderSurface();
+
+    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'brk.b' } });
+    fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
+
+    await waitFor(() => expect(analysisApi.analyzeAsync).toHaveBeenCalledWith({
+      stockCode: 'BRK.B',
+      reportType: 'detailed',
+      stockName: undefined,
+      originalQuery: 'BRK.B',
+      selectionSource: 'manual',
+    }));
+    expect(screen.queryByText('请输入格式正确的股票代码')).not.toBeInTheDocument();
+    expect(stocksApi.verifyTickerExists).not.toHaveBeenCalled();
+  });
+
   it('renders sparse completed reports with neutral values instead of local demo presets', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
     vi.mocked(historyApi.getList).mockResolvedValueOnce({
@@ -3686,6 +3713,187 @@ describe('HomeSurfacePage', () => {
     expect(screen.getAllByText('$104.80').length).toBeGreaterThan(0);
     expect(screen.getByTestId('home-bento-dashboard')).toBeInTheDocument();
     expect(screen.queryByText('深度分析请求已发出')).not.toBeInTheDocument();
+  });
+
+  it('exits visible loading and shows recoverable partial-pending UI after TSLA analysis soft timeout', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+    vi.mocked(analysisApi.analyzeAsync).mockResolvedValueOnce({
+      taskId: 'task-tsla-soft-timeout',
+      status: 'pending',
+      message: 'submitted',
+    });
+    vi.mocked(analysisApi.getTaskProgress).mockResolvedValue({
+      taskId: 'task-tsla-soft-timeout',
+      stockCode: 'TSLA',
+      stockName: 'Tesla',
+      status: 'processing',
+      progress: 44,
+      message: '研究仍在整理',
+      modules: [
+        { key: 'market', name: '市场识别', status: 'completed' },
+        { key: 'ai', name: '综合整理', status: 'running' },
+      ],
+    });
+
+    renderSurface();
+    await screen.findByTestId('home-research-console');
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'tsla' } });
+      fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
+
+      await flushPendingUiWork();
+      expect(screen.getByTestId('home-bento-inplace-loading-decision')).toBeInTheDocument();
+      expect(screen.getByTestId('home-research-rail-loading-stack')).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+
+      const notice = screen.getByTestId('home-analysis-soft-timeout-notice');
+      const decisionCard = screen.getByTestId('home-bento-card-decision');
+      expect(screen.queryByTestId('home-bento-inplace-loading-decision')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('home-research-rail-loading-stack')).not.toBeInTheDocument();
+      expect(screen.getByTestId('home-bento-decision-ticker')).toHaveTextContent('TSLA');
+      expect(notice).toHaveTextContent('部分内容仍在整理');
+      expect(notice).toHaveTextContent('报告完成后会自动替换');
+      expect(within(notice).getByRole('button', { name: '重试刷新' })).toBeInTheDocument();
+      expect(decisionCard.textContent).not.toMatch(HOME_SOFT_TIMEOUT_FORBIDDEN_COPY_PATTERN);
+
+      const progressCallsBeforeRetry = vi.mocked(analysisApi.getTaskProgress).mock.calls.length;
+      fireEvent.click(screen.getByTestId('home-analysis-soft-timeout-retry'));
+      await flushPendingUiWork();
+      expect(vi.mocked(analysisApi.getTaskProgress).mock.calls.length).toBeGreaterThan(progressCallsBeforeRetry);
+      expect(screen.getByTestId('home-bento-inplace-loading-decision')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('hydrates a completed late TSLA task after the soft-timeout fallback is visible', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+    vi.mocked(analysisApi.analyzeAsync).mockResolvedValueOnce({
+      taskId: 'task-tsla-late',
+      status: 'pending',
+      message: 'submitted',
+    });
+    vi.mocked(analysisApi.getTaskProgress).mockResolvedValue({
+      taskId: 'task-tsla-late',
+      stockCode: 'TSLA',
+      stockName: 'Tesla',
+      status: 'processing',
+      progress: 52,
+      message: '研究仍在整理',
+      modules: [
+        { key: 'market', name: '市场识别', status: 'completed' },
+        { key: 'ai', name: '综合整理', status: 'running' },
+      ],
+    });
+
+    renderSurface();
+    await screen.findByTestId('home-research-console');
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'tsla' } });
+      fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
+      await flushPendingUiWork();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      expect(screen.getByTestId('home-analysis-soft-timeout-notice')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    act(() => {
+      useStockPoolStore.getState().syncTaskUpdated({
+        taskId: 'task-tsla-late',
+        stockCode: 'TSLA',
+        stockName: 'Tesla',
+        status: 'completed',
+        progress: 100,
+        message: 'completed',
+        reportType: 'detailed',
+        createdAt: '2026-04-27T09:00:00Z',
+        updatedAt: '2026-04-27T09:03:00Z',
+        result: {
+          report: {
+            ...defaultHistoryReport,
+            meta: {
+              ...defaultHistoryReport.meta,
+              id: 13,
+              queryId: 'q-tsla-late',
+              stockCode: 'TSLA',
+              stockName: 'Tesla',
+            },
+            summary: {
+              ...defaultHistoryReport.summary,
+              analysisSummary: 'TSLA late report hydrated after soft timeout.',
+              trendPrediction: 'Late completion replaced the recoverable fallback.',
+              sentimentScore: 61,
+              sentimentLabel: 'Neutral',
+            },
+            strategy: {
+              idealBuy: '166.00 - 171.50',
+              stopLoss: '159.20',
+              takeProfit: '183.00',
+            },
+            details: {
+              standardReport: {
+                ...defaultHistoryReport.details.standardReport,
+                summaryPanel: {
+                  stock: 'Tesla',
+                  ticker: 'TSLA',
+                  oneSentence: 'TSLA late report hydrated after soft timeout.',
+                },
+                decisionContext: {
+                  shortTermView: 'Late completion replaced the recoverable fallback.',
+                },
+                decisionPanel: {
+                  idealEntry: '166.00 - 171.50',
+                  target: '183.00',
+                  stopLoss: '159.20',
+                  buildStrategy: 'Keep the late report as observation context.',
+                },
+                reasonLayer: {
+                  coreReasons: ['Late completion replaced the recoverable fallback.'],
+                },
+                technicalFields: [
+                  { label: 'MACD', value: '零轴下方收敛' },
+                  { label: 'MA20', value: '167.80' },
+                ],
+                fundamentalFields: [
+                  { label: '收入增速', value: '+2.7%' },
+                  { label: '自由现金流', value: '$4.0B' },
+                ],
+              },
+            },
+          },
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-bento-analysis-result-card')).toHaveTextContent('TSLA late report hydrated after soft timeout.');
+      expect(screen.getByTestId('home-bento-decision-ticker')).toHaveTextContent('TSLA');
+    });
+    expect(screen.queryByTestId('home-analysis-soft-timeout-notice')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('home-bento-inplace-loading-decision')).not.toBeInTheDocument();
   });
 
   it('renders real Home candlesticks from daily OHLC history and exposes hover OHLC values', async () => {
