@@ -33,8 +33,9 @@ describe('marketIntelligenceGuidance', () => {
   });
 
   it('uses consumer-safe reason labels for partial market data states', () => {
-    expect(marketIntelligenceReasonLabel('fallback_or_proxy_evidence', 'zh')).toBe('部分数据暂不可用');
-    expect(marketIntelligenceReasonLabel('fallback_proxy_or_observation_only_evidence_present', 'en')).toBe('Limited confidence evidence');
+    expect(marketIntelligenceReasonLabel('fallback_or_proxy_evidence', 'zh')).toBe('部分可用');
+    expect(marketIntelligenceReasonLabel('fallback_proxy_or_observation_only_evidence_present', 'en')).toBe('Background only');
+    expect(marketIntelligenceReasonLabel('score_contribution_not_allowed', 'zh')).toBe('暂不纳入评分');
 
     const labels = [
       marketIntelligenceReasonLabel('fallback_or_proxy_evidence', 'zh'),

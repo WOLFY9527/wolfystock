@@ -2884,7 +2884,7 @@ describe('MarketOverviewPage', () => {
     expect(unavailableBand).toHaveTextContent(/数据不足|偏强观察|中性观察|偏弱观察/);
     expect(unavailableBand).toHaveTextContent('证据覆盖 / 置信度');
     expect(unavailableBand).toHaveTextContent('置信度 待补');
-    expect(unavailableBand).toHaveTextContent(/关键证据未补齐|评分待恢复|数据更新中/);
+    expect(unavailableBand).toHaveTextContent(/关键证据未补齐|关键证据仍待补齐|评分待恢复|数据更新中/);
     expect(within(unavailableBand).queryByTestId('market-overview-setup-path')).not.toBeInTheDocument();
     unavailableView.unmount();
   });
@@ -3043,14 +3043,14 @@ describe('MarketOverviewPage', () => {
     const text = posturePanel.textContent || '';
 
     expect(posturePanel).toHaveTextContent(/数据不足|偏强观察|中性观察|偏弱观察/);
-    expect(posturePanel).toHaveTextContent(/关键证据未补齐|信号置信度仍偏有限|评分待恢复|数据更新中/);
+    expect(posturePanel).toHaveTextContent(/关键证据未补齐|关键证据仍待补齐|信号置信度仍偏有限|评分待恢复|数据更新中/);
     expect(posturePanel).toHaveTextContent(/待补|待确认|更新中/);
     expect(posturePanel).toHaveTextContent(/研究观察用途，不构成交易或下单指令/);
     expect(posturePanel).toHaveTextContent(/仍可观察|等待.*证据补齐|下一观察/);
     expect(posturePanel).not.toHaveTextContent('missing_scoring_pillars');
     const readinessBand = screen.getByTestId('market-overview-decision-readiness');
     expect(readinessBand).toHaveTextContent(/数据不足|偏强观察|中性观察|偏弱观察/);
-    expect(readinessBand).toHaveTextContent(/关键证据未补齐|信号置信度仍偏有限|评分待恢复|数据更新中/);
+    expect(readinessBand).toHaveTextContent(/关键证据未补齐|关键证据仍待补齐|信号置信度仍偏有限|评分待恢复|数据更新中/);
     expect(readinessBand).not.toHaveTextContent('fallback_proxy_or_observation_only_evidence_present');
     expect(screen.getByTestId('market-decision-semantics-strip')).not.toHaveTextContent('fallback_proxy_or_observation_only_evidence_present');
     expect(text).not.toMatch(/买入|卖出|买卖|加仓|减仓|仓位|看多|看空|bullish|bearish|buy|sell|target|stop|recommend|add|reduce|position-size/i);
@@ -3196,7 +3196,8 @@ describe('MarketOverviewPage', () => {
 
     render(createElement(MarketOverviewPage));
 
-    expect(await screen.findByTestId('market-decision-semantics-advice-boundary')).toHaveTextContent(/数据不足|偏强观察|中性观察|偏弱观察/);
+    expect(await screen.findByTestId('market-overview-top-verdict')).toHaveTextContent(/偏强观察|中性观察|偏弱观察/);
+    expect(screen.getByTestId('market-overview-top-verdict')).not.toHaveTextContent('数据不足');
     expect(screen.getByTestId('market-decision-semantics-strip')).toHaveTextContent(/信号置信度仍偏有限|关键证据未补齐|待补/);
     const railActionHint = screen.queryByTestId('market-overview-rail-action-hint');
     if (railActionHint) {

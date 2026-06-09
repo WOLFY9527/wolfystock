@@ -242,6 +242,36 @@ function buildMarketNarrativeVerdict(params: {
     view?.exposureBiasLabel,
     statusSummary.headline,
   ].filter(Boolean).join(' ');
+  const weakBias = /偏弱|防守|压力|risk[-_\s]?control|risk[-_\s]?off|defensive|bearish/i.test(directionText);
+  const strongBias = /偏强|偏多|偏暖|改善|修复|risk[-_\s]?on|offensive|bullish/i.test(directionText);
+  const neutralBias = /中性|均衡|balanced|neutral/i.test(directionText);
+
+  if (insufficient && summary.state === 'observe') {
+    if (weakBias) {
+      return {
+        label: '偏弱观察',
+        variant: 'caution',
+        headline: '关键证据仍待补齐，但当前压力线索更清晰。',
+        detail: marketNarrativeCopy(summary.blockers[0] || directionalSummary.blockingDrivers[0] || statusSummary.detail || '主要压力仍待确认。'),
+      };
+    }
+    if (strongBias) {
+      return {
+        label: '偏强观察',
+        variant: 'info',
+        headline: '关键证据仍待补齐，但当前偏强线索更清晰。',
+        detail: marketNarrativeCopy(summary.blockers[0] || directionalSummary.supportingDrivers[0] || statusSummary.detail || '主要驱动仍在跟踪。'),
+      };
+    }
+    if (neutralBias || directionText.trim()) {
+      return {
+        label: '中性观察',
+        variant: 'info',
+        headline: '关键证据仍待补齐，先按中性线索继续观察。',
+        detail: marketNarrativeCopy(summary.blockers[0] || directionalSummary.blockingDrivers[0] || directionalSummary.supportingDrivers[0] || statusSummary.detail || '等待主线进一步清晰。'),
+      };
+    }
+  }
 
   if (insufficient) {
     return {
@@ -251,7 +281,7 @@ function buildMarketNarrativeVerdict(params: {
       detail: marketNarrativeCopy(summary.blockers[0] || statusSummary.detail || '关键证据仍待补齐。'),
     };
   }
-  if (/偏弱|防守|压力|risk[-_\s]?control|risk[-_\s]?off|defensive|bearish/i.test(directionText)) {
+  if (weakBias) {
     return {
       label: '偏弱观察',
       variant: 'caution',
@@ -259,7 +289,7 @@ function buildMarketNarrativeVerdict(params: {
       detail: marketNarrativeCopy(directionalSummary.blockingDrivers[0] || statusSummary.detail || '主要压力仍待确认。'),
     };
   }
-  if (/偏强|偏多|偏暖|改善|修复|risk[-_\s]?on|offensive|bullish/i.test(directionText)) {
+  if (strongBias) {
     return {
       label: '偏强观察',
       variant: 'success',

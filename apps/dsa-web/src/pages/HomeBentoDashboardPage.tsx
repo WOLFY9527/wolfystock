@@ -2703,6 +2703,7 @@ function HomeFundamentalsSummaryBlock({
   const isEnglish = locale === 'en';
   const metrics = buildHomeFundamentalsMetrics(locale, summary);
   const hasStableCoverage = hasStableFundamentalsCoverage(metrics);
+  const hasObservableCoverage = metrics.length > 0;
   const sourceLabel = sanitizeFundamentalsSourceLabel(locale, summary?.source);
   const freshnessLabel = sanitizeFundamentalsFreshnessLabel(locale, summary?.freshness);
   const missingFieldsCount = summary?.missingFields.length || 0;
@@ -2710,15 +2711,22 @@ function HomeFundamentalsSummaryBlock({
     ? (isEnglish ? 'Preparing a bounded fundamentals snapshot.' : '正在整理受限基本面摘要。')
     : hasStableCoverage
       ? (isEnglish ? 'Observation only, not investment advice.' : '仅供观察，不构成投资建议。')
-      : (isEnglish ? 'Stable fundamentals summary unavailable; keep this as observation-only.' : '暂无稳定基本面摘要，当前仅作观察。');
+      : hasObservableCoverage
+        ? (isEnglish ? 'A partial fundamentals summary is available; keep it observation-only.' : '已整理部分基本面摘要，当前仅作观察。')
+        : (isEnglish ? 'Stable fundamentals summary unavailable; keep this as observation-only.' : '暂无稳定基本面摘要，当前仅作观察。');
   const stateCopy = isLoading
     ? (isEnglish ? 'Preparing summary' : '摘要整理中')
     : hasStableCoverage
       ? (isEnglish ? 'Stable fields ready' : '稳定字段已整理')
-      : (isEnglish ? 'Insufficient data' : '数据不足');
+      : hasObservableCoverage
+        ? (isEnglish ? 'Partly available' : '部分可用')
+        : (isEnglish ? 'Insufficient data' : '数据不足');
   const missingFieldsCopy = missingFieldsCount > 0
     ? (isEnglish ? `${missingFieldsCount} fields pending` : `待补充 ${missingFieldsCount} 项`)
     : (isEnglish ? 'Stable coverage ready' : '稳定覆盖已就绪');
+  const partialNoticeCopy = hasObservableCoverage && !hasStableCoverage
+    ? (isEnglish ? 'Only the steadier fields are shown for now; keep the rest as pending context.' : '当前先展示较稳定字段，其余内容仍作为待补背景。')
+    : (isEnglish ? 'Wait for more stable fields before using fundamentals as supporting context.' : '等待更多稳定字段后，再把基本面作为辅助观察材料。');
 
   return (
     <section
@@ -2755,9 +2763,9 @@ function HomeFundamentalsSummaryBlock({
         <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1">{missingFieldsCopy}</span>
       </div>
 
-      {hasStableCoverage ? (
+      {hasObservableCoverage ? (
         <div className="mt-3 grid min-w-0 grid-cols-2 gap-x-3 gap-y-2.5">
-          {metrics.map((metric) => (
+          {(hasStableCoverage ? metrics : metrics.slice(0, 4)).map((metric) => (
             <div
               key={metric.key}
               className="min-w-0 rounded-[10px] border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
@@ -2770,12 +2778,14 @@ function HomeFundamentalsSummaryBlock({
         </div>
       ) : (
         <div className="mt-3 rounded-[10px] border border-dashed border-white/[0.08] bg-white/[0.02] px-3 py-3">
-          <p className="text-xs font-medium text-white/76">{isEnglish ? 'Insufficient data' : '数据不足'}</p>
-          <p className="mt-1 text-xs leading-[1.65] text-white/56">
-            {isEnglish ? 'Wait for more stable fields before using fundamentals as supporting context.' : '等待更多稳定字段后，再把基本面作为辅助观察材料。'}
-          </p>
+          <p className="text-xs font-medium text-white/76">{stateCopy}</p>
+          <p className="mt-1 text-xs leading-[1.65] text-white/56">{partialNoticeCopy}</p>
         </div>
       )}
+
+      {hasObservableCoverage && !hasStableCoverage ? (
+        <p className="mt-3 text-[11px] leading-5 text-white/46">{partialNoticeCopy}</p>
+      ) : null}
 
       {sourceLabel ? (
         <p className="mt-3 text-[11px] text-white/40">
@@ -2963,7 +2973,7 @@ function consumerDashboardStateValue(locale: DashboardLocale, value?: string, co
     if (context === 'freshness') {
       return locale === 'en' ? 'Partly available' : '部分可用';
     }
-    return locale === 'en' ? 'Composite summary' : '综合摘要';
+    return locale === 'en' ? 'Prepared summary' : '已整理摘要';
   }
   if (normalized === 'insufficient') {
     return locale === 'en' ? 'Evidence insufficient' : '证据不足';
@@ -4612,6 +4622,10 @@ function compactTechSignalValue(locale: DashboardLocale, label: string, value: s
 
 function compactFundamentalMetricValue(locale: DashboardLocale, value: string): string {
   const compact = compactMetricSurprise(value);
+  const normalized = String(compact || '').trim().toLowerCase();
+  if (normalized === 'mixed' || normalized === 'mix') {
+    return locale === 'en' ? 'Prepared summary' : '已整理摘要';
+  }
   const productStateLabel = consumerDashboardStateValue(locale, compact);
   if (productStateLabel) {
     return productStateLabel;

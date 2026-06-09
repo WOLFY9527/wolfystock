@@ -912,15 +912,15 @@ describe('HomeSurfacePage', () => {
 
     const fundamentalsSummary = await screen.findByTestId('home-stock-fundamentals-summary');
     await waitFor(() =>
-      expect(fundamentalsSummary).toHaveTextContent(/暂无稳定基本面摘要|正在整理受限基本面摘要/),
+      expect(fundamentalsSummary).toHaveTextContent(/已整理部分基本面摘要|正在整理受限基本面摘要/),
     );
     await waitFor(() => expect(fundamentalsSummary).toHaveTextContent('待补充 4 项'));
-    expect(fundamentalsSummary).toHaveTextContent('数据不足');
+    expect(fundamentalsSummary).toHaveTextContent('部分可用');
     expect(fundamentalsSummary).toHaveTextContent('待补充 4 项');
     expect(fundamentalsSummary).toHaveTextContent('TTM');
     expect(fundamentalsSummary).toHaveTextContent('部分更新');
     expect(fundamentalsSummary).toHaveTextContent('仅作观察');
-    expect(within(fundamentalsSummary).queryByTestId('home-stock-fundamentals-metric-market-cap')).not.toBeInTheDocument();
+    expect(within(fundamentalsSummary).getByTestId('home-stock-fundamentals-metric-market-cap')).toHaveTextContent('512.3B');
     expect(fundamentalsSummary).not.toHaveTextContent(HOME_FUNDAMENTALS_FORBIDDEN_COPY_PATTERN);
   });
 
@@ -2835,7 +2835,7 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(await screen.findByTestId('home-bento-drawer-trigger-fundamentals'));
     const fundamentalsDialog = await screen.findByRole('dialog');
     expect(fundamentalsDialog).toHaveTextContent('基本面支撑');
-    expect(fundamentalsDialog).toHaveTextContent('综合摘要');
+    expect(fundamentalsDialog).toHaveTextContent('已整理摘要');
     expect(fundamentalsDialog).not.toHaveTextContent(/\bmixed\b/i);
     expect(fundamentalsDialog).not.toHaveTextContent('INSUFFICIENT');
     await closeOpenDrawer();
