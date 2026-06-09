@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App, { AppContent } from '../App';
@@ -239,6 +239,22 @@ function mockSignedInAdminWithCapabilities(adminCapabilities: AdminCapabilityFla
   });
 }
 
+function mockAuthBootstrapLoadError(refreshStatus = vi.fn()) {
+  useAuthMock.mockReturnValue({
+    authEnabled: false,
+    loggedIn: false,
+    isLoading: false,
+    loadError: {
+      title: '请求超时',
+      message: 'raw auth/status timeout detail',
+      rawMessage: 'stack trace should not render',
+    },
+    refreshStatus,
+    setupState: 'no_password',
+  });
+  return refreshStatus;
+}
+
 describe('AppContent route flows', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -329,6 +345,82 @@ describe('AppContent route flows', () => {
     renderAt('/en/guest');
     expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
   });
+
+  it('keeps the public home shell renderable when auth bootstrap status cannot be loaded', async () => {
+    const refreshStatus = mockAuthBootstrapLoadError();
+
+    languageState.value = 'en';
+    renderAt('/');
+
+    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Authentication status notice' })).toHaveTextContent(
+      'Only guest-safe content is shown until account status is confirmed.',
+    );
+    expect(screen.queryByText('api-error')).not.toBeInTheDocument();
+    expect(screen.queryByText('raw auth/status timeout detail')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refreshStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the localized public guest shell renderable when auth bootstrap status cannot be loaded', async () => {
+    mockAuthBootstrapLoadError();
+
+    languageState.value = 'zh';
+    renderAt('/zh/guest');
+
+    expect(await screen.findByText('游客预览模式')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: '认证状态提示' })).toHaveTextContent(
+      '在确认账户状态前，仅显示游客安全内容。',
+    );
+    expect(screen.queryByText('api-error')).not.toBeInTheDocument();
+  });
+
+  it.each(['/options-lab', '/options'])(
+    'keeps protected product route %s fail-closed while auth bootstrap status is unavailable',
+    async (path) => {
+      mockAuthBootstrapLoadError();
+
+      languageState.value = 'en';
+      renderAt(path);
+
+      expect(await screen.findByRole('alert', { name: 'Protected route locked' })).toHaveTextContent(
+        'Protected pages stay locked until account status is confirmed.',
+      );
+      expect(screen.queryByText('options-lab-page')).not.toBeInTheDocument();
+      expect(screen.queryByText('api-error')).not.toBeInTheDocument();
+    },
+  );
+
+  it('keeps admin routes fail-closed while auth bootstrap status is unavailable', async () => {
+    mockAuthBootstrapLoadError();
+
+    languageState.value = 'en';
+    renderAt('/settings/system');
+
+    expect(await screen.findByRole('alert', { name: 'Admin route locked' })).toHaveTextContent(
+      'Admin pages stay locked until account and capability status are confirmed.',
+    );
+    expect(screen.queryByText('system-settings-page')).not.toBeInTheDocument();
+    expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
+    expect(screen.queryByText('api-error')).not.toBeInTheDocument();
+  });
+
+  it.each(['/login', '/register'])(
+    'keeps auth entry %s from opening setup-capable forms when bootstrap status is unavailable',
+    async (path) => {
+      mockAuthBootstrapLoadError();
+
+      languageState.value = 'en';
+      renderAt(path);
+
+      expect(await screen.findByRole('alert', { name: 'Authentication entry paused' })).toHaveTextContent(
+        'Sign-in and account setup entry points stay paused until account status is confirmed.',
+      );
+      expect(screen.queryByText('login-page')).not.toBeInTheDocument();
+      expect(screen.queryByText('api-error')).not.toBeInTheDocument();
+    },
+  );
 
   it('renders the preview report route and resolves the deferred report panel', async () => {
     languageState.value = 'zh';

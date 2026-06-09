@@ -1,7 +1,6 @@
 import type React from 'react';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { ApiErrorAlert } from './components/common/ApiErrorAlert';
 import { BrandedLoadingScreen } from './components/common/BrandedLoadingScreen';
 import { ConsumerProtectedFrame } from './components/layout/ConsumerWorkspaceShell';
 import { Shell } from './components/layout/Shell';
@@ -56,6 +55,15 @@ type GateCopy = {
   note?: string;
   secondaryAction?: { label: string; to: string };
   tertiaryAction?: { label: string; to: string };
+};
+
+type AuthBootstrapRouteKind = 'public' | 'protected' | 'admin' | 'auth-entry' | 'other';
+
+type AuthBootstrapSurfaceCopy = {
+  ariaLabel: string;
+  title: string;
+  description: string;
+  actionLabel: string;
 };
 
 function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: boolean): GateCopy {
@@ -179,6 +187,141 @@ function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: bo
     };
 }
 
+function isPathMatch(pathname: string, target: string): boolean {
+  return pathname === target || pathname.startsWith(`${target}/`);
+}
+
+function isAuthEntryPath(pathname: string): boolean {
+  return pathname === '/login' || pathname === '/register' || pathname === '/reset-password';
+}
+
+function isAdminSurfacePath(pathname: string): boolean {
+  return isPathMatch(pathname, '/settings/system') || isPathMatch(pathname, '/admin');
+}
+
+function isProtectedProductPath(pathname: string): boolean {
+  return pathname === '/settings'
+    || pathname === '/options'
+    || isPathMatch(pathname, '/portfolio')
+    || isPathMatch(pathname, '/watchlist')
+    || isPathMatch(pathname, '/backtest')
+    || isPathMatch(pathname, '/options-lab');
+}
+
+function isPublicSafePath(pathname: string): boolean {
+  return pathname === '/'
+    || pathname === '/guest'
+    || pathname === '/scanner'
+    || pathname === '/guest/scanner'
+    || pathname === '/user/scanner'
+    || pathname === '/market'
+    || pathname === '/market-overview'
+    || pathname === '/liquidity'
+    || pathname === '/rotation'
+    || pathname === '/chat'
+    || pathname === '/market/liquidity-monitor'
+    || pathname === '/market/rotation-radar';
+}
+
+function getAuthBootstrapRouteKind(pathname: string): AuthBootstrapRouteKind {
+  if (isAuthEntryPath(pathname)) {
+    return 'auth-entry';
+  }
+  if (isAdminSurfacePath(pathname)) {
+    return 'admin';
+  }
+  if (isProtectedProductPath(pathname)) {
+    return 'protected';
+  }
+  if (isPublicSafePath(pathname)) {
+    return 'public';
+  }
+  return 'other';
+}
+
+function getAuthBootstrapSurfaceCopy(kind: AuthBootstrapRouteKind, language: UiLanguage): AuthBootstrapSurfaceCopy {
+  const isEnglish = language === 'en';
+
+  switch (kind) {
+    case 'public':
+      return {
+        ariaLabel: isEnglish ? 'Authentication status notice' : '认证状态提示',
+        title: isEnglish ? 'Account status is temporarily unavailable' : '账户状态暂时不可用',
+        description: isEnglish
+          ? 'Only guest-safe content is shown until account status is confirmed.'
+          : '在确认账户状态前，仅显示游客安全内容。',
+        actionLabel: isEnglish ? 'Retry' : '重试',
+      };
+    case 'protected':
+      return {
+        ariaLabel: isEnglish ? 'Protected route locked' : '受保护路由已锁定',
+        title: isEnglish ? 'Protected pages stay locked' : '受保护页面保持锁定',
+        description: isEnglish
+          ? 'Protected pages stay locked until account status is confirmed.'
+          : '在确认账户状态前，受保护页面保持锁定。',
+        actionLabel: isEnglish ? 'Retry' : '重试',
+      };
+    case 'admin':
+      return {
+        ariaLabel: isEnglish ? 'Admin route locked' : '管理员路由已锁定',
+        title: isEnglish ? 'Admin pages stay locked' : '管理员页面保持锁定',
+        description: isEnglish
+          ? 'Admin pages stay locked until account and capability status are confirmed.'
+          : '在确认账户和能力状态前，管理员页面保持锁定。',
+        actionLabel: isEnglish ? 'Retry' : '重试',
+      };
+    case 'auth-entry':
+      return {
+        ariaLabel: isEnglish ? 'Authentication entry paused' : '认证入口已暂停',
+        title: isEnglish ? 'Sign-in and setup entry points stay paused' : '登录和入口设置保持暂停',
+        description: isEnglish
+          ? 'Sign-in and account setup entry points stay paused until account status is confirmed.'
+          : '在确认账户状态前，登录和账户入口设置保持暂停。',
+        actionLabel: isEnglish ? 'Retry' : '重试',
+      };
+    default:
+      return {
+        ariaLabel: isEnglish ? 'Authentication status unavailable' : '认证状态不可用',
+        title: isEnglish ? 'Authentication status is unavailable' : '认证状态不可用',
+        description: isEnglish
+          ? 'Please retry after the account status service responds again.'
+          : '请在账户状态服务恢复后重试。',
+        actionLabel: isEnglish ? 'Retry' : '重试',
+      };
+  }
+}
+
+const AuthBootstrapStatusPanel: React.FC<{
+  kind: AuthBootstrapRouteKind;
+  language: UiLanguage;
+  onRetry: () => void;
+  compact?: boolean;
+}> = ({ kind, language, onRetry, compact = false }) => {
+  const copy = getAuthBootstrapSurfaceCopy(kind, language);
+  const isPublic = kind === 'public';
+
+  return (
+    <section
+      role={isPublic ? 'status' : 'alert'}
+      aria-label={copy.ariaLabel}
+      aria-live={isPublic ? 'polite' : 'assertive'}
+      className={compact ? 'theme-panel-glass w-full max-w-xl p-4' : 'theme-panel-glass w-full max-w-xl p-5'}
+    >
+      <div className="flex min-w-0 flex-col gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="text-sm font-semibold text-white">{copy.title}</p>
+          <p className="text-sm leading-6 text-white/70">{copy.description}</p>
+        </div>
+        <div className="flex justify-end">
+          <button type="button" className="btn-primary" onClick={onRetry}>
+            {copy.actionLabel}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+};
+
 const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const { language } = useI18n();
@@ -247,13 +390,14 @@ export const AppContent: React.FC = () => {
   const location = useLocation();
   const { authEnabled, loggedIn, isLoading, loadError, refreshStatus, setupState } = useAuth();
   const { isGuest } = useProductSurface();
-  const { setLanguage, t } = useI18n();
+  const { language, setLanguage, t } = useI18n();
   const bootStartedAt = useRef<number>(0);
   const [showBootSplash, setShowBootSplash] = useState(true);
   const [bootSplashFading, setBootSplashFading] = useState(false);
   const splashDismissed = useRef(false);
   const routeLocale = parseLocaleFromPathname(location.pathname);
   const routePathname = stripLocalePrefix(location.pathname);
+  const authBootstrapRouteKind = getAuthBootstrapRouteKind(routePathname);
   const localizedHomePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
   const localizedGuestPath = routeLocale ? buildLocalizedPath('/guest', routeLocale) : '/guest';
   const guestHomeElement = loggedIn ? <Navigate to={localizedHomePath} replace /> : <GuestHomePage />;
@@ -325,23 +469,121 @@ export const AppContent: React.FC = () => {
     };
   }, [isLoading]);
 
+  const routeTree = (
+    <Suspense fallback={<BrandedLoadingScreen text={t('app.loadingBrand')} subtext={t('app.loading')} />}>
+      <Routes>
+        <Route path="/guest/scanner" element={<Navigate to="/scanner" replace />} />
+        <Route path="/user/scanner" element={<Navigate to="/scanner" replace />} />
+        <Route path="/:locale/guest/scanner" element={<Navigate to="../scanner" replace />} />
+        <Route path="/:locale/user/scanner" element={<Navigate to="../scanner" replace />} />
+        <Route element={<Shell />}>
+          <Route path="/market" element={<Navigate to="/market-overview" replace />} />
+          <Route path="/admin" element={<Navigate to="/settings/system" replace />} />
+          <Route path="/admin/system" element={<Navigate to="/settings/system" replace />} />
+          <Route path="/admin/providers" element={<Navigate to="/admin/market-providers" replace />} />
+          <Route path="/admin/evidence" element={<Navigate to="/admin/evidence-workflow" replace />} />
+          <Route path="/admin/costs" element={<Navigate to="/admin/cost-observability" replace />} />
+          <Route path="/admin/ai" element={<Navigate to="/settings/system" replace />} />
+          <Route path="/liquidity" element={<Navigate to="/market/liquidity-monitor" replace />} />
+          <Route path="/rotation" element={<Navigate to="/market/rotation-radar" replace />} />
+          <Route path="/options" element={<Navigate to="/options-lab" replace />} />
+          <Route path="/" element={<HomeSurfacePage />} />
+          <Route path="/guest" element={guestHomeElement} />
+          <Route path="/scanner" element={<ScannerSurfacePage />} />
+          <Route path="/chat" element={<Navigate to="/market-overview" replace />} />
+          <Route path="/portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
+          <Route path="/market-overview" element={<MarketOverviewPage />} />
+          <Route path="/market/liquidity-monitor" element={<LiquidityMonitorPage />} />
+          <Route path="/market/rotation-radar" element={<MarketRotationRadarPage />} />
+          <Route path="/watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
+          <Route path="/backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
+          <Route path="/options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />
+          <Route path="/backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
+          <Route path="/backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
+          <Route path="/settings" element={<PersonalSettingsPage />} />
+          <Route path="/settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
+          <Route path="/admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
+          <Route path="/admin/evidence-workflow" element={<AdminSurfaceRoute><AdminEvidenceWorkflowPage /></AdminSurfaceRoute>} />
+          <Route path="/admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />
+          <Route path="/admin/market-providers" element={<AdminSurfaceRoute><MarketProviderOperationsPage /></AdminSurfaceRoute>} />
+          <Route path="/admin/provider-circuits" element={<AdminSurfaceRoute><AdminProviderCircuitDiagnosticsPage /></AdminSurfaceRoute>} />
+          <Route path="/admin/users" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
+          <Route path="/admin/users/:userId" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
+          <Route path="/admin/users/:userId/activity" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
+          <Route path="/admin/cost-observability" element={<AdminSurfaceRoute><AdminCostObservabilityPage /></AdminSurfaceRoute>} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Route>
+        <Route path="/:locale" element={<Shell />}>
+          <Route path="market" element={<Navigate to="../market-overview" replace />} />
+          <Route path="admin" element={<Navigate to="../settings/system" replace />} />
+          <Route path="admin/system" element={<Navigate to="../settings/system" replace />} />
+          <Route path="admin/providers" element={<Navigate to="../admin/market-providers" replace />} />
+          <Route path="admin/evidence" element={<Navigate to="../admin/evidence-workflow" replace />} />
+          <Route path="admin/costs" element={<Navigate to="../admin/cost-observability" replace />} />
+          <Route path="admin/ai" element={<Navigate to="../settings/system" replace />} />
+          <Route path="liquidity" element={<Navigate to="../market/liquidity-monitor" replace />} />
+          <Route path="rotation" element={<Navigate to="../market/rotation-radar" replace />} />
+          <Route path="options" element={<Navigate to="../options-lab" replace />} />
+          <Route index element={<HomeSurfacePage />} />
+          <Route path="guest" element={guestHomeElement} />
+          <Route path="scanner" element={<ScannerSurfacePage />} />
+          <Route path="chat" element={<Navigate to="../market-overview" replace />} />
+          <Route path="portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
+          <Route path="market-overview" element={<MarketOverviewPage />} />
+          <Route path="market/liquidity-monitor" element={<LiquidityMonitorPage />} />
+          <Route path="market/rotation-radar" element={<MarketRotationRadarPage />} />
+          <Route path="watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
+          <Route path="backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
+          <Route path="options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />
+          <Route path="backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
+          <Route path="backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
+          <Route path="settings" element={<PersonalSettingsPage />} />
+          <Route path="settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
+          <Route path="admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
+          <Route path="admin/evidence-workflow" element={<AdminSurfaceRoute><AdminEvidenceWorkflowPage /></AdminSurfaceRoute>} />
+          <Route path="admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />
+          <Route path="admin/market-providers" element={<AdminSurfaceRoute><MarketProviderOperationsPage /></AdminSurfaceRoute>} />
+          <Route path="admin/provider-circuits" element={<AdminSurfaceRoute><AdminProviderCircuitDiagnosticsPage /></AdminSurfaceRoute>} />
+          <Route path="admin/users" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
+          <Route path="admin/users/:userId" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
+          <Route path="admin/users/:userId/activity" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
+          <Route path="admin/cost-observability" element={<AdminSurfaceRoute><AdminCostObservabilityPage /></AdminSurfaceRoute>} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Route>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/:locale/login" element={<LoginPage />} />
+        <Route path="/register" element={<LoginPage />} />
+        <Route path="/:locale/register" element={<LoginPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/:locale/reset-password" element={<ResetPasswordPage />} />
+      </Routes>
+    </Suspense>
+  );
+
   let content: React.ReactNode = null;
 
   if (loadError) {
-    content = (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-base px-4">
-        <div className="theme-panel-glass w-full max-w-xl p-5">
-          <ApiErrorAlert error={loadError} />
-          <div className="mt-4 flex justify-end">
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => void refreshStatus()}
-            >
-              {t('app.retry')}
-            </button>
-          </div>
-        </div>
+    const retryAuthStatus = () => {
+      void refreshStatus();
+    };
+
+    content = authBootstrapRouteKind === 'public' ? (
+      <div className="flex min-h-screen flex-col gap-4 bg-base px-4 py-4">
+        <AuthBootstrapStatusPanel
+          kind="public"
+          language={language}
+          onRetry={retryAuthStatus}
+          compact
+        />
+        {routeTree}
+      </div>
+    ) : (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-base px-4 py-8">
+        <AuthBootstrapStatusPanel
+          kind={authBootstrapRouteKind}
+          language={language}
+          onRetry={retryAuthStatus}
+        />
       </div>
     );
   } else if (!isLoading) {
@@ -371,96 +613,7 @@ export const AppContent: React.FC = () => {
     } else if (isGuest && isGuestRestrictedPath) {
       content = <Navigate to={localizedGuestPath} replace />;
     } else {
-      content = (
-        <Suspense fallback={<BrandedLoadingScreen text={t('app.loadingBrand')} subtext={t('app.loading')} />}>
-          <Routes>
-            <Route path="/guest/scanner" element={<Navigate to="/scanner" replace />} />
-            <Route path="/user/scanner" element={<Navigate to="/scanner" replace />} />
-            <Route path="/:locale/guest/scanner" element={<Navigate to="../scanner" replace />} />
-            <Route path="/:locale/user/scanner" element={<Navigate to="../scanner" replace />} />
-            <Route element={<Shell />}>
-            <Route path="/market" element={<Navigate to="/market-overview" replace />} />
-            <Route path="/admin" element={<Navigate to="/settings/system" replace />} />
-            <Route path="/admin/system" element={<Navigate to="/settings/system" replace />} />
-            <Route path="/admin/providers" element={<Navigate to="/admin/market-providers" replace />} />
-            <Route path="/admin/evidence" element={<Navigate to="/admin/evidence-workflow" replace />} />
-            <Route path="/admin/costs" element={<Navigate to="/admin/cost-observability" replace />} />
-            <Route path="/admin/ai" element={<Navigate to="/settings/system" replace />} />
-            <Route path="/liquidity" element={<Navigate to="/market/liquidity-monitor" replace />} />
-            <Route path="/rotation" element={<Navigate to="/market/rotation-radar" replace />} />
-            <Route path="/options" element={<Navigate to="/options-lab" replace />} />
-              <Route path="/" element={<HomeSurfacePage />} />
-              <Route path="/guest" element={guestHomeElement} />
-              <Route path="/scanner" element={<ScannerSurfacePage />} />
-              <Route path="/chat" element={<Navigate to="/market-overview" replace />} />
-              <Route path="/portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
-              <Route path="/market-overview" element={<MarketOverviewPage />} />
-              <Route path="/market/liquidity-monitor" element={<LiquidityMonitorPage />} />
-              <Route path="/market/rotation-radar" element={<MarketRotationRadarPage />} />
-              <Route path="/watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
-              <Route path="/backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
-              <Route path="/options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />
-              <Route path="/backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
-              <Route path="/backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
-              <Route path="/settings" element={<PersonalSettingsPage />} />
-              <Route path="/settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
-              <Route path="/admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
-              <Route path="/admin/evidence-workflow" element={<AdminSurfaceRoute><AdminEvidenceWorkflowPage /></AdminSurfaceRoute>} />
-              <Route path="/admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />
-              <Route path="/admin/market-providers" element={<AdminSurfaceRoute><MarketProviderOperationsPage /></AdminSurfaceRoute>} />
-              <Route path="/admin/provider-circuits" element={<AdminSurfaceRoute><AdminProviderCircuitDiagnosticsPage /></AdminSurfaceRoute>} />
-              <Route path="/admin/users" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
-              <Route path="/admin/users/:userId" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
-              <Route path="/admin/users/:userId/activity" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
-              <Route path="/admin/cost-observability" element={<AdminSurfaceRoute><AdminCostObservabilityPage /></AdminSurfaceRoute>} />
-              <Route path="*" element={<NotFoundPage />} />
-            </Route>
-            <Route path="/:locale" element={<Shell />}>
-              <Route path="market" element={<Navigate to="../market-overview" replace />} />
-              <Route path="admin" element={<Navigate to="../settings/system" replace />} />
-              <Route path="admin/system" element={<Navigate to="../settings/system" replace />} />
-              <Route path="admin/providers" element={<Navigate to="../admin/market-providers" replace />} />
-              <Route path="admin/evidence" element={<Navigate to="../admin/evidence-workflow" replace />} />
-              <Route path="admin/costs" element={<Navigate to="../admin/cost-observability" replace />} />
-              <Route path="admin/ai" element={<Navigate to="../settings/system" replace />} />
-              <Route path="liquidity" element={<Navigate to="../market/liquidity-monitor" replace />} />
-              <Route path="rotation" element={<Navigate to="../market/rotation-radar" replace />} />
-              <Route path="options" element={<Navigate to="../options-lab" replace />} />
-              <Route index element={<HomeSurfacePage />} />
-              <Route path="guest" element={guestHomeElement} />
-              <Route path="scanner" element={<ScannerSurfacePage />} />
-              <Route path="chat" element={<Navigate to="../market-overview" replace />} />
-              <Route path="portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
-              <Route path="market-overview" element={<MarketOverviewPage />} />
-              <Route path="market/liquidity-monitor" element={<LiquidityMonitorPage />} />
-              <Route path="market/rotation-radar" element={<MarketRotationRadarPage />} />
-              <Route path="watchlist" element={<RegisteredSurfaceRoute><WatchlistPage /></RegisteredSurfaceRoute>} />
-              <Route path="backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
-              <Route path="options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />
-              <Route path="backtest/compare" element={<RegisteredSurfaceRoute><RuleBacktestComparePage /></RegisteredSurfaceRoute>} />
-              <Route path="backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
-              <Route path="settings" element={<PersonalSettingsPage />} />
-              <Route path="settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
-              <Route path="admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
-              <Route path="admin/evidence-workflow" element={<AdminSurfaceRoute><AdminEvidenceWorkflowPage /></AdminSurfaceRoute>} />
-              <Route path="admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />
-              <Route path="admin/market-providers" element={<AdminSurfaceRoute><MarketProviderOperationsPage /></AdminSurfaceRoute>} />
-              <Route path="admin/provider-circuits" element={<AdminSurfaceRoute><AdminProviderCircuitDiagnosticsPage /></AdminSurfaceRoute>} />
-              <Route path="admin/users" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
-              <Route path="admin/users/:userId" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
-              <Route path="admin/users/:userId/activity" element={<AdminSurfaceRoute><AdminUsersPage /></AdminSurfaceRoute>} />
-              <Route path="admin/cost-observability" element={<AdminSurfaceRoute><AdminCostObservabilityPage /></AdminSurfaceRoute>} />
-              <Route path="*" element={<NotFoundPage />} />
-            </Route>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/:locale/login" element={<LoginPage />} />
-            <Route path="/register" element={<LoginPage />} />
-            <Route path="/:locale/register" element={<LoginPage />} />
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
-            <Route path="/:locale/reset-password" element={<ResetPasswordPage />} />
-          </Routes>
-        </Suspense>
-      );
+      content = routeTree;
     }
   }
 
