@@ -411,14 +411,15 @@ appTest.describe('options public safety surface', () => {
 
       await expect(page.getByRole('heading', { name: '期权实验室' })).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('options-lab-consumer-availability')).toBeVisible();
-      await expect(page.getByTestId('options-lab-consumer-availability')).toContainText('可用性');
+      await expect(page.getByTestId('options-lab-consumer-availability')).toContainText('当前主任务');
       await expect(page.getByTestId('options-lab-decision-engine')).toBeVisible();
       await expect(page.getByTestId('options-lab-decision-engine')).toContainText('数据不足，暂不形成结论');
       await expect(page.getByTestId('options-lab-decision-engine')).toContainText('演示数据');
       await expect(page.locator('body')).toContainText('只读情景分析');
       await expect(page.locator('body')).toContainText('不构成执行指令');
-      await expect(page.getByTestId('options-lab-summary-strip')).toContainText('首个观察结构');
+      await expect(page.getByTestId('options-lab-summary-strip')).toContainText('当前可观察');
       await expect(page.getByTestId('options-lab-summary-strip')).toContainText('假设价格');
+      await expect(page.getByTestId('options-lab-readiness-gate-summary').getByRole('button', { name: /展开 完整门控与补证/ })).toHaveAttribute('aria-expanded', 'false');
       await expect(page.getByTestId('options-lab-strategy-comparison')).toContainText('观察结构样例');
       await expect(page.getByTestId('options-lab-strategy-comparison')).toContainText('样例顺序 #1');
       await expect(page.getByTestId('options-lab-strategy-comparison')).toContainText('专业结构：');

@@ -190,6 +190,16 @@ function buildGateItems(readiness: OptionsResearchReadiness): GateItem[] {
   ];
 }
 
+function compactGateItems(gateItems: GateItem[]): GateItem[] {
+  const compactKeys = new Set(['data-quality', 'decision-grade', 'boundary']);
+  return gateItems.filter((item) => compactKeys.has(item.key));
+}
+
+function detailGateItems(gateItems: GateItem[]): GateItem[] {
+  const compactKeys = new Set(['data-quality', 'decision-grade', 'boundary']);
+  return gateItems.filter((item) => !compactKeys.has(item.key));
+}
+
 const OptionsReadinessGateSummary: React.FC<OptionsReadinessGateSummaryProps> = ({
   readiness: rawReadiness,
   testId,
@@ -197,9 +207,12 @@ const OptionsReadinessGateSummary: React.FC<OptionsReadinessGateSummaryProps> = 
 }) => {
   const readiness = normalizeReadiness(rawReadiness);
   const gateItems = buildGateItems(readiness);
+  const primaryGateItems = compactGateItems(gateItems);
+  const secondaryGateItems = detailGateItems(gateItems);
   const summary = summaryLine(readiness, rawReadiness);
   const nextEvidence = humanizeNextEvidence(uniqueStrings(readiness.nextEvidenceNeeded ?? []));
   const disclosureItems = uniqueStrings(readiness.blockingReasons ?? []).map(disclosureReason);
+  const disclosureSummary = secondaryGateItems.map((item) => `${item.label}：${item.value}`).join(' · ');
 
   return (
     <section
@@ -213,7 +226,7 @@ const OptionsReadinessGateSummary: React.FC<OptionsReadinessGateSummaryProps> = 
         <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--wolfy-text-muted)]">
           门控摘要
         </span>
-        {gateItems.map((item) => (
+        {primaryGateItems.map((item) => (
           <TerminalChip key={item.key} variant={item.variant}>
             {item.label}：{item.value}
           </TerminalChip>
@@ -221,15 +234,26 @@ const OptionsReadinessGateSummary: React.FC<OptionsReadinessGateSummaryProps> = 
       </div>
       <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">{summary}</p>
       <p className="mt-1 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">{nextEvidence}</p>
-      {disclosureItems.length ? (
+      {secondaryGateItems.length || disclosureItems.length ? (
         <ConsoleDisclosure
-          title="限制与补证"
-          summary={disclosureItems.slice(0, 2).join(' · ')}
+          title="完整门控与补证"
+          summary={disclosureSummary || disclosureItems.slice(0, 2).join(' · ')}
           className="mt-3"
         >
-          <p className="text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
-            当前限制：{disclosureItems.join(' · ')}
-          </p>
+          {secondaryGateItems.length ? (
+            <div className="flex flex-wrap gap-2">
+              {secondaryGateItems.map((item) => (
+                <TerminalChip key={item.key} variant={item.variant}>
+                  {item.label}：{item.value}
+                </TerminalChip>
+              ))}
+            </div>
+          ) : null}
+          {disclosureItems.length ? (
+            <p className="text-xs leading-5 text-[color:var(--wolfy-text-secondary)]">
+              当前限制：{disclosureItems.join(' · ')}
+            </p>
+          ) : null}
           <p className="mt-2 text-xs leading-5 text-[color:var(--wolfy-text-muted)]">
             {nextEvidence}
           </p>

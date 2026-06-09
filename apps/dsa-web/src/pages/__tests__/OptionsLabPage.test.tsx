@@ -565,12 +565,15 @@ describe('OptionsLabPage', () => {
     });
     expect(screen.getByTestId('options-lab-research-readiness-strip')).toHaveTextContent('研究就绪度');
     expect(screen.getByTestId('options-lab-research-readiness-strip')).toHaveTextContent(/研究结论受限|仅观察|等待证据更新/);
+    expect(productHero).toHaveTextContent('当前主任务');
+    expect(screen.getByTestId('options-lab-consumer-availability')).toHaveTextContent('先保留输入与风险预算，等待下一次数据刷新。');
+    expect(screen.getByTestId('options-lab-consumer-availability')).toHaveTextContent('当前状态：期权数据暂不可用，情景分析已暂停。');
     const inputRegion = screen.getByTestId('options-lab-input-region');
     expect(inputRegion).toHaveTextContent('情景参数');
     expect(inputRegion).toHaveTextContent('这里仅记录研究输入，不直接形成执行结论');
     const summaryStrip = screen.getByTestId('options-lab-summary-strip');
     expect(summaryStrip).toHaveTextContent('输入情景');
-    expect(summaryStrip).toHaveTextContent('首个观察结构');
+    expect(summaryStrip).toHaveTextContent('当前可观察');
     expect(summaryStrip).toHaveTextContent('专业结构：牛市看涨价差');
     expect(summaryStrip).toHaveTextContent('风险边界');
     expect(inputRegion).toContainElement(summaryStrip);
@@ -960,15 +963,19 @@ describe('OptionsLabPage', () => {
     const summary = await screen.findByTestId('options-lab-readiness-gate-summary');
     expect(summary).toHaveTextContent('门控摘要');
     expect(summary).toHaveTextContent('数据层级：演示/延迟');
+    expect(summary).toHaveTextContent('判断等级：未通过');
+    expect(summary).toHaveTextContent('执行边界：只读无执行');
+    expect(summary).toHaveTextContent('当前仍受授权、IV / Greeks 与流动性证据限制。');
+    expect(summary).toHaveTextContent('下一步：补齐授权链路、IV / Greeks、OI / 成交量与更紧价差证据。');
+    expect(within(summary).getByRole('button', { name: /展开 完整门控与补证/ })).toHaveAttribute('aria-expanded', 'false');
+    await act(async () => {
+      within(summary).getByRole('button', { name: /展开 完整门控与补证/ }).click();
+    });
     expect(summary).toHaveTextContent('授权级别：观察级');
     expect(summary).toHaveTextContent('流动性：人工复核');
     expect(summary).toHaveTextContent('IV / Greeks：已阻断');
     expect(summary).toHaveTextContent('价差：人工复核');
     expect(summary).toHaveTextContent('情景覆盖：单合约');
-    expect(summary).toHaveTextContent('判断等级：未通过');
-    expect(summary).toHaveTextContent('执行边界：只读无执行');
-    expect(summary).toHaveTextContent('当前仍受授权、IV / Greeks 与流动性证据限制。');
-    expect(summary).toHaveTextContent('下一步：补齐授权链路、IV / Greeks、OI / 成交量与更紧价差证据。');
     expect(summary.textContent || '').not.toContain('observationOnly');
     expect(summary.textContent || '').not.toContain('manual_review');
     expect(summary.textContent || '').not.toContain('single_contract');
@@ -981,15 +988,18 @@ describe('OptionsLabPage', () => {
 
     const summary = await screen.findByTestId('options-lab-readiness-gate-summary');
     expect(summary).toHaveTextContent('数据层级：证据不足');
+    expect(summary).toHaveTextContent('判断等级：未通过');
+    expect(summary).toHaveTextContent('执行边界：只读无执行');
+    expect(summary).toHaveTextContent('当前缺少就绪度回执，先按证据不足处理。');
+    expect(summary).toHaveTextContent('下一步：补齐期权链、IV / Greeks 与流动性证据。');
+    await act(async () => {
+      within(summary).getByRole('button', { name: /展开 完整门控与补证/ }).click();
+    });
     expect(summary).toHaveTextContent('授权级别：待补证');
     expect(summary).toHaveTextContent('流动性：已阻断');
     expect(summary).toHaveTextContent('IV / Greeks：已阻断');
     expect(summary).toHaveTextContent('价差：已阻断');
     expect(summary).toHaveTextContent('情景覆盖：缺少链路');
-    expect(summary).toHaveTextContent('判断等级：未通过');
-    expect(summary).toHaveTextContent('执行边界：只读无执行');
-    expect(summary).toHaveTextContent('当前缺少就绪度回执，先按证据不足处理。');
-    expect(summary).toHaveTextContent('下一步：补齐期权链、IV / Greeks 与流动性证据。');
   });
 
   it('keeps delayed usable readiness consumer-safe and observation-bounded', async () => {
@@ -1010,14 +1020,17 @@ describe('OptionsLabPage', () => {
 
     const summary = await screen.findByTestId('options-lab-readiness-gate-summary');
     expect(summary).toHaveTextContent('数据层级：延迟可观察');
+    expect(summary).toHaveTextContent('判断等级：可用');
+    expect(summary).toHaveTextContent('执行边界：只读无执行');
+    expect(summary).toHaveTextContent('等待更高新鲜度链路');
+    await act(async () => {
+      within(summary).getByRole('button', { name: /展开 完整门控与补证/ }).click();
+    });
     expect(summary).toHaveTextContent('授权级别：授权链路');
     expect(summary).toHaveTextContent('流动性：已通过');
     expect(summary).toHaveTextContent('IV / Greeks：人工复核');
     expect(summary).toHaveTextContent('价差：已通过');
     expect(summary).toHaveTextContent('情景覆盖：单合约');
-    expect(summary).toHaveTextContent('判断等级：可用');
-    expect(summary).toHaveTextContent('执行边界：只读无执行');
-    expect(summary).toHaveTextContent('等待更高新鲜度链路');
     expect(summary.textContent || '').not.toContain('scoreGradeAllowed');
     expect(summary.textContent || '').not.toContain('manual_review');
     expect(summary.textContent || '').not.toMatch(/买入|卖出|推荐|下单|经纪商/);
@@ -2299,7 +2312,8 @@ describe('OptionsLabPage', () => {
     expect(optionsLabPageSource).toContain('观察结构样例');
     expect(optionsLabPageSource).toContain('情景参数');
     expect(optionsLabPageSource).toContain('分析结果');
-    expect(optionsLabPageSource).toContain('首个观察结构');
+    expect(optionsLabPageSource).toContain('当前主任务');
+    expect(optionsLabPageSource).toContain('当前可观察');
     expect(optionsLabPageSource).toContain('样例顺序 #');
     expect(optionsLabPageSource).toContain('情景上沿');
     expect(optionsLabPageSource).toContain('假设价格下情景估算');

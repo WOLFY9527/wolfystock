@@ -108,7 +108,6 @@ const OPTIONS_UPDATING_COPY = '数据更新中，稍后将自动刷新。';
 const OPTIONS_UNAVAILABLE_COPY = '本模块暂不可用，请稍后重试。';
 const OPTIONS_NO_CONCLUSION_COPY = '数据不足，暂不形成结论';
 const OPTIONS_SAFE_INSTRUCTION_COPY = '仅做只读情景分析，不构成执行指令。';
-const OPTIONS_READ_ONLY_BOUNDARY_COPY = '不触发执行动作，不改动现有持仓。';
 const OPTIONS_NON_ADVICE_COPY = '不构成买卖建议';
 const OPTIONS_NO_ORDER_COPY = '不会触发外部执行';
 const OPTIONS_NO_BROKER_COPY = '不连接外部执行通道';
@@ -1475,6 +1474,44 @@ function heroSummaryLine(
   return availability.explanation;
 }
 
+function heroPrimaryTask(
+  availability: ConsumerAvailabilitySummary,
+  decision: OptionsDecisionResponse | null,
+  comparison: OptionsStrategyCompareResponse | null,
+  hasChainRows: boolean,
+): string {
+  if (!hasChainRows) return '先补齐可用到期日与期权链，再进入结构样例观察。';
+  if (availability.stateKey === 'UPDATING') return '等待当前情景刷新完成，再阅读结构样例与风险边界。';
+  if (availability.stateKey === 'UNAVAILABLE' || availability.stateKey === 'PAUSED') {
+    return '先保留输入与风险预算，等待下一次数据刷新。';
+  }
+
+  const observationStrategy = firstObservationStrategy(decision, comparison);
+  if (isNonDecisionGrade(decision)) {
+    return observationStrategy
+      ? '先看首个观察结构的最大亏损、盈亏平衡与流动性。'
+      : '先完成情景输入，再等待可观察结构出现。';
+  }
+
+  if (observationStrategy) {
+    return '先复核样例顺序靠前结构的风险边界，再下钻图形与链表。';
+  }
+
+  return '先设定情景参数，再等待结构样例与风险边界生成。';
+}
+
+function heroObservationScope(
+  hasChainRows: boolean,
+  decision: OptionsDecisionResponse | null,
+  comparison: OptionsStrategyCompareResponse | null,
+): string {
+  if (!hasChainRows) return '当前可观察内容会在链表可用后显示。';
+  if (firstObservationStrategy(decision, comparison)) {
+    return '当前可先观察：结构样例、最大亏损、盈亏平衡与流动性边界。';
+  }
+  return '当前可先观察：期权链快照、风险边界与 IV 分布示意。';
+}
+
 type SummaryStripItem = {
   label: string;
   value: string;
@@ -1494,6 +1531,8 @@ const ProductHero: React.FC<{
   const underlying = summary?.underlying || chain?.underlying;
   const changeClass = metricTone(underlying?.changePct);
   const summaryLine = heroSummaryLine(availability, decision, comparison, hasChainRows);
+  const primaryTask = heroPrimaryTask(availability, decision, comparison, hasChainRows);
+  const observationScope = heroObservationScope(hasChainRows, decision, comparison);
 
   return (
     <section
@@ -1516,7 +1555,7 @@ const ProductHero: React.FC<{
           <OptionsReadinessGateSummary
             readiness={readinessGates}
             testId="options-lab-readiness-gate-summary"
-            className="mt-3"
+            className="mt-4"
           />
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <div className="min-w-0">
@@ -1544,15 +1583,15 @@ const ProductHero: React.FC<{
             <p className={cn('mt-1 text-sm', changeClass)}>{ratio(underlying?.changePct)}</p>
           </div>
           <div className={cn(innerBlockClass, 'p-3')} data-testid="options-lab-consumer-availability">
-            <p className={labelClass}>可用性</p>
+            <p className={labelClass}>当前主任务</p>
             <p className="mt-2 text-sm font-semibold text-[color:var(--wolfy-text-primary)]">
-              {availability.explanation}
+              {primaryTask}
             </p>
             <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
-              {OPTIONS_SAFE_INSTRUCTION_COPY}
+              当前状态：{availability.explanation}
             </p>
             <p className="mt-1 text-xs text-[color:var(--wolfy-text-muted)]">
-              {OPTIONS_READ_ONLY_BOUNDARY_COPY}
+              {observationScope}
             </p>
           </div>
         </div>
@@ -2626,7 +2665,7 @@ const OptionsLabPageContent: React.FC = () => {
         meta: scenarioMeta,
       },
       {
-        label: '首个观察结构',
+        label: '当前可观察',
         value: topCandidate ? '观察结构样例' : '暂无可判断结构',
         meta: candidateMeta,
       },
