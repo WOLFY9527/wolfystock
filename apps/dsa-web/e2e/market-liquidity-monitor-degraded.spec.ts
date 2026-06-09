@@ -117,6 +117,17 @@ async function installDegradedLiquidityMonitorPayload(page: Page) {
           updatedAt: '2026-05-20T09:30:00+08:00',
         },
         {
+          key: 'crypto_spot_momentum',
+          label: 'Crypto 现货动量',
+          status: 'live',
+          freshness: 'delayed',
+          includedInScore: false,
+          scoreContribution: 0,
+          scoreWeight: 0,
+          summary: '3/3 上涨 | 均值 +1.40%',
+          updatedAt: '2026-05-20T09:30:00+08:00',
+        },
+        {
           key: 'crypto_funding',
           label: 'Crypto Funding',
           status: 'unavailable',
@@ -143,23 +154,23 @@ async function installDegradedLiquidityMonitorPayload(page: Page) {
         directionScore: 0.24,
         dominantDrivers: [
           {
-            key: 'liquidity_monitor:usd_pressure',
-            label: 'DXY proxy observation',
-            pillar: 'dollar_pressure',
+            key: 'liquidity_monitor:crypto_spot_momentum',
+            label: 'Crypto 现货动量',
+            pillar: 'crypto_liquidity_beta',
             direction: 'supports_expansion',
-            signal: 0.24,
+            signal: 1,
             weight: 0.2,
-            impact: 0.05,
-            source: 'yfinance_proxy',
-            sourceTier: 'unofficial_public_api',
+            impact: 1,
+            source: 'binance',
+            sourceTier: 'exchange_public',
             trustLevel: 'usable_with_caution',
             freshness: 'delayed',
-            observationOnly: true,
+            observationOnly: false,
             scoreContributionAllowed: false,
             includedInScore: false,
-            proxyOnly: true,
-            discountReasons: ['proxy_only_discount', 'score_contribution_not_allowed'],
-            degradationReason: 'proxy_only_missing_real_source',
+            proxyOnly: false,
+            discountReasons: ['score_contribution_not_allowed'],
+            degradationReason: 'observation_only_discount',
           },
         ],
         counterEvidence: [],
@@ -248,6 +259,8 @@ test.describe('Liquidity Monitor degraded proxy-only state', () => {
         await expect(page.getByTestId('liquidity-section-metrics')).toContainText('关键指标');
         await expect(page.getByTestId('liquidity-section-observation')).toContainText('资金面与说明');
         await expect(page.getByTestId('liquidity-visual-coverage')).toContainText('资金面线索');
+        await expect(page.getByTestId('liquidity-visual-drivers')).toContainText('Crypto 现货动量');
+        await expect(page.getByTestId('liquidity-visual-drivers')).toContainText('3/3 上涨 | 均值 +1.40%');
         await expect(page.getByTestId('liquidity-context-rail')).toContainText('数据覆盖有限');
         await expect(page.getByTestId('liquidity-context-rail')).toContainText('待补充指标');
         const conclusionFontSize = await page.getByTestId('liquidity-section-overview').locator('h2').evaluate((element) => {
@@ -259,7 +272,7 @@ test.describe('Liquidity Monitor degraded proxy-only state', () => {
         await expect(page.getByTestId('liquidity-decision-readiness')).toContainText('流动性格局');
         await expect(page.getByTestId('liquidity-summary-strip')).toContainText('主要压力');
         await expect(page.getByTestId('liquidity-context-rail')).toContainText('优先恢复');
-        await expect(page.locator('body')).not.toContainText(/guaranteed|decision-grade|强结论|provider_unavailable|scoreContributionAllowed|proxy-only|Binance|official_or_authorized|yfinance_proxy|synthetic_fixture|source_confidence_contract_v1|reasonCodes|officialSeriesId|外部调用|运行顺序|缓存写入|fallback|stale|provider|runtime|backend|证据覆盖|缺失证据|观察证据|可计分证据|方法与数据限制|指标状态|待恢复|决策就绪|就绪度|置信度/i);
+        await expect(page.locator('body')).not.toContainText(/guaranteed|decision-grade|强结论|REGIME|No Clear Edge|Crypto 现货动量\s*100%|provider_unavailable|scoreContributionAllowed|proxy-only|Binance|official_or_authorized|yfinance_proxy|synthetic_fixture|source_confidence_contract_v1|reasonCodes|officialSeriesId|外部调用|运行顺序|缓存写入|fallback|stale|provider|runtime|backend|证据覆盖|缺失证据|观察证据|可计分证据|方法与数据限制|指标状态|待恢复|决策就绪|就绪度|置信度/i);
         await expect(page.getByRole('button', { name: '展开 技术细节' })).toHaveCount(0);
         await expect(page.getByTestId('liquidity-monitor-guidance-panel')).not.toContainText('流动性方向待确认');
         await expect(page.getByTestId('liquidity-monitor-guidance-panel')).not.toContainText('不升级为真实扩张或收缩结论');

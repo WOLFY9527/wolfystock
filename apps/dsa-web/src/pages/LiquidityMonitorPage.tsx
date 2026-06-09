@@ -77,6 +77,7 @@ const FRESHNESS_LABELS: Record<LiquidityMonitorFreshness, string> = {
 const INDICATOR_LABEL_OVERRIDES: Record<string, string> = {
   credit_spread: '信用利差',
   crypto_funding: 'Crypto 资金费率',
+  crypto_spot_momentum: 'Crypto 现货动量',
   us_etf_flow_proxy: '美股资金流',
   us_breadth_proxy: '美国市场广度',
   us_rates_pressure: '美国利率压力',
@@ -87,6 +88,7 @@ const INDICATOR_LABEL_OVERRIDES: Record<string, string> = {
 const EVIDENCE_ITEM_LABEL_OVERRIDES: Record<string, string> = {
   'liquidity_monitor:btc': 'BTC 流动性代理',
   'liquidity_monitor:btc_momentum': 'BTC 动量',
+  'liquidity_monitor:crypto_spot_momentum': 'Crypto 现货动量',
   'liquidity_monitor:cn_hk_flows': '中港资金流',
   'liquidity_monitor:funding': '资金费率',
   'liquidity_monitor:usd_pressure': '美元压力',
@@ -378,6 +380,8 @@ function capitalFlowFlagLabels(signal?: LiquidityCapitalFlowSignal | null): stri
 
 function impulseCodeLabel(value?: string | null): string {
   if (!value) return '待确认';
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (normalized === 'no_clear_edge' || normalized === 'neutral_edge') return '方向不明确';
   return IMPULSE_LABELS[value] || titleCaseFromSnake(value);
 }
 
@@ -1111,6 +1115,7 @@ type ConsumerLiquidityVisualDriver = {
   label: string;
   detail: string;
   emphasisPct: number;
+  valueLabel?: string;
   toneClassName: string;
   barClassName: string;
 };
@@ -1295,6 +1300,38 @@ function clampPercent(value: number, min = 8, max = 100): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function evidenceIndicatorKey(item: LiquidityImpulseSynthesisEvidenceItem): string {
+  return item.key.replace(/^liquidity_monitor:/, '');
+}
+
+function isCryptoSpotMomentumKey(value?: string | null): boolean {
+  return value === 'crypto_spot_momentum' || value === 'liquidity_monitor:crypto_spot_momentum';
+}
+
+function cryptoSpotMomentumEvidenceLine(
+  item: LiquidityImpulseSynthesisEvidenceItem,
+  indicators: LiquidityMonitorIndicator[],
+): string {
+  const indicatorKey = evidenceIndicatorKey(item);
+  const indicator = indicators.find((candidate) => candidate.key === indicatorKey);
+  const candidates = [
+    indicator?.summary,
+    item.label,
+  ];
+
+  for (const candidate of candidates) {
+    const value = String(candidate || '').trim();
+    const match = value.match(/(\d+)\s*\/\s*(\d+)\s*上涨(?:\s*\|\s*)?均值\s*([+-]?\d+(?:\.\d+)?%?)/);
+    if (match) {
+      const [, upCount, totalCount, average] = match;
+      const averageLabel = average.endsWith('%') ? average : `${average}%`;
+      return `${upCount}/${totalCount} 上涨 | 均值 ${averageLabel}`;
+    }
+  }
+
+  return '证据不足';
+}
+
 function buildConsumerCoverageSegments(
   coverageSummary: LiquidityCoverageReadinessSummary,
   indicatorCount: number,
@@ -1359,6 +1396,10 @@ function buildConsumerVisualDrivers(
       const rawValue = Math.max(Math.abs(item.impact || 0), Math.abs(item.signal || 0), 0.12);
       const emphasisPct = clampPercent((rawValue / emphasisBase) * 100, 18, 100);
       const direction = evidenceDirectionLabel(item.direction);
+      const isCryptoSpotMomentum = isCryptoSpotMomentumKey(evidenceIndicatorKey(item));
+      const cryptoSpotMomentumEvidence = isCryptoSpotMomentum
+        ? cryptoSpotMomentumEvidenceLine(item, indicators)
+        : null;
       const detailParts = [
         direction,
         item.observationOnly ? '资金面线索' : '可参考线索',
@@ -1369,8 +1410,9 @@ function buildConsumerVisualDrivers(
       return {
         key: item.key,
         label: evidenceItemDisplayLabel(item),
-        detail: detailParts.join(' · ') || '当前线索',
+        detail: cryptoSpotMomentumEvidence || detailParts.join(' · ') || '当前线索',
         emphasisPct,
+        valueLabel: cryptoSpotMomentumEvidence || undefined,
         toneClassName: contractionLike
           ? 'text-amber-100'
           : expansionLike
@@ -1511,7 +1553,7 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
         <div className="mt-3 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3">
           <div className="flex items-end justify-between gap-3">
             <div>
-              <p className="text-[10px] uppercase tracking-[0.24em] text-white/34">REGIME</p>
+              <p className="text-[10px] font-medium text-white/34">当前格局</p>
               <p className="mt-2 font-mono text-3xl font-semibold text-white/86">{postureScoreLabel}</p>
             </div>
             <p className="text-[11px] leading-5 text-white/48">
@@ -1587,7 +1629,7 @@ const ConsumerLiquidityVisualEvidence: React.FC<{
                   <p className={cn('truncate text-sm font-semibold', driver.toneClassName)}>{driver.label}</p>
                   <p className="mt-1 text-[11px] leading-5 text-white/52">{driver.detail}</p>
                 </div>
-                <span className="shrink-0 text-[11px] font-medium text-white/40">{driver.emphasisPct}%</span>
+                <span className="shrink-0 text-[11px] font-medium text-white/40">{driver.valueLabel || `${driver.emphasisPct}%`}</span>
               </div>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
                 <div

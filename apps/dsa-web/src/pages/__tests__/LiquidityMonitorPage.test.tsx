@@ -730,6 +730,8 @@ describe('LiquidityMonitorPage', () => {
     expect(screen.getByTestId('liquidity-summary-strip')).toHaveTextContent('最近更新');
     expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('流动性格局');
     expect(within(screen.getByTestId('liquidity-visual-posture')).getByText('69')).toBeInTheDocument();
+    expect(screen.getByTestId('liquidity-visual-posture')).toHaveTextContent('当前格局');
+    expect(screen.getByTestId('liquidity-visual-posture')).not.toHaveTextContent('REGIME');
     expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('资金面线索');
     expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('压力来源');
     expect(screen.getByTestId('liquidity-visual-evidence')).toHaveTextContent('压力走势');
@@ -1080,7 +1082,82 @@ describe('LiquidityMonitorPage', () => {
     expect(screen.getByTestId('liquidity-visual-posture')).toHaveTextContent('无明显方向');
     expect(screen.getByTestId('liquidity-visual-coverage')).toHaveTextContent('可参考');
     expect(screen.getByTestId('liquidity-context-rail')).toHaveTextContent('对照 Market Overview / Rotation Radar');
-    expect(screen.queryByText('No Clear Edge')).not.toBeInTheDocument();
+    expect(document.body.textContent || '').not.toContain('No Clear Edge');
+  });
+
+  it('renders crypto spot momentum with descriptive evidence instead of raw emphasis copy', async () => {
+    getLiquidityMonitor.mockResolvedValueOnce({
+      ...buildNeutralReadyPayload(),
+      indicators: buildNeutralReadyPayload().indicators.map((indicator) => (
+        indicator.key === 'crypto_funding'
+          ? {
+            ...indicator,
+            key: 'crypto_spot_momentum',
+            label: 'Crypto 现货动量',
+            summary: '3/3 上涨 | 均值 +1.40%',
+          }
+          : indicator
+      )),
+      liquidityImpulseSynthesis: {
+        ...buildNeutralReadyPayload().liquidityImpulseSynthesis,
+        dominantDrivers: [
+          {
+            key: 'liquidity_monitor:crypto_spot_momentum',
+            label: 'Crypto 现货动量',
+            pillar: 'crypto_liquidity_beta',
+            direction: 'supports_expansion',
+            signal: 1,
+            impact: 1,
+            scoreContributionAllowed: true,
+          },
+        ],
+      },
+    });
+
+    render(<LiquidityMonitorPage />);
+
+    const visualDrivers = await screen.findByTestId('liquidity-visual-drivers');
+    expect(visualDrivers).toHaveTextContent('Crypto 现货动量');
+    expect(visualDrivers).toHaveTextContent('3/3 上涨 | 均值 +1.40%');
+    expect(visualDrivers).not.toHaveTextContent('Crypto 现货动量 100%');
+    expect(visualDrivers).not.toHaveTextContent('100%');
+  });
+
+  it('renders crypto spot momentum as evidence-insufficient when descriptive inputs are missing', async () => {
+    getLiquidityMonitor.mockResolvedValueOnce({
+      ...buildNeutralReadyPayload(),
+      indicators: buildNeutralReadyPayload().indicators.map((indicator) => (
+        indicator.key === 'crypto_funding'
+          ? {
+            ...indicator,
+            key: 'crypto_spot_momentum',
+            label: 'Crypto 现货动量',
+            summary: null,
+          }
+          : indicator
+      )),
+      liquidityImpulseSynthesis: {
+        ...buildNeutralReadyPayload().liquidityImpulseSynthesis,
+        dominantDrivers: [
+          {
+            key: 'liquidity_monitor:crypto_spot_momentum',
+            label: 'Crypto 现货动量',
+            pillar: 'crypto_liquidity_beta',
+            direction: 'supports_expansion',
+            signal: 1,
+            impact: 1,
+            scoreContributionAllowed: true,
+          },
+        ],
+      },
+    });
+
+    render(<LiquidityMonitorPage />);
+
+    const visualDrivers = await screen.findByTestId('liquidity-visual-drivers');
+    expect(visualDrivers).toHaveTextContent('Crypto 现货动量');
+    expect(visualDrivers).toHaveTextContent('证据不足');
+    expect(visualDrivers).not.toHaveTextContent('100%');
   });
 
   it('renders capital flow signal as compact observation-only context without raw diagnostic fields', async () => {
