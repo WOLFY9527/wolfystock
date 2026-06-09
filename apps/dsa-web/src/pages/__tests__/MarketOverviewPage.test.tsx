@@ -23,6 +23,8 @@ const marketOverviewDecisionDebugDetailsSource = readFileSync(
   'utf8',
 );
 
+const RAW_MARKET_OVERVIEW_PROXY_LABEL_PATTERN = /ETF flow proxy|Institutional pressure proxy|Industry breadth proxy|\bproxy\b/i;
+
 const { useProductSurfaceMock } = vi.hoisted(() => ({
   useProductSurfaceMock: vi.fn(),
 }));
@@ -1889,6 +1891,32 @@ describe('MarketOverviewPage', () => {
     expect(strip.textContent || '').not.toMatch(/raw|debug|provider|cache|router|env|trace|credential|broker|trade|order|sourceAuthority|contractVersion/i);
   });
 
+  it('maps proxy indicator labels across default consumer cards and visual evidence', () => {
+    renderMarketOverviewWorkbenchWithProps({
+      panels: {
+        ...localSnapshotPayload().payload,
+        fundsFlow: {
+          ...snapshotPanel('FundsFlowCard', 'ETF_FLOW_PROXY', 'ETF flow proxy'),
+          items: [
+            snapshotPanel('FundsFlowCard', 'ETF_FLOW_PROXY', 'ETF flow proxy').items[0],
+            snapshotPanel('FundsFlowCard', 'INST_PRESSURE', 'Institutional pressure proxy').items[0],
+          ],
+        },
+        sectorRotation: snapshotPanel('SectorRotationCard', 'INDUSTRY_BREADTH', 'Industry breadth proxy'),
+      },
+    });
+
+    expect(screen.getAllByText('ETF 资金流指标').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('机构压力指标').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('market-overview-visual-evidence-strip')).toHaveTextContent('行业广度指标');
+
+    const titleText = Array.from(document.querySelectorAll<HTMLElement>('[title]'))
+      .map((node) => node.getAttribute('title') || '')
+      .join(' ');
+    const defaultConsumerText = `${document.body.textContent || ''} ${titleText}`;
+    expect(defaultConsumerText).not.toMatch(RAW_MARKET_OVERVIEW_PROXY_LABEL_PATTERN);
+  });
+
   it('lazy loads technical diagnostics only after the admin disclosure opens', async () => {
     renderMarketOverviewWorkbenchWithProps({ showAdminDiagnostics: true });
 
@@ -2596,7 +2624,7 @@ describe('MarketOverviewPage', () => {
       .join(' ');
 
     const renderedCopy = `${document.body.textContent || ''} ${footerTitles}`;
-    expect(renderedCopy).toMatch(/部分可用|延迟可用|证据不足|仅供观察/);
+    expect(renderedCopy).toMatch(/ETF 资金流指标|机构压力指标|行业广度指标|部分可用|延迟可用|证据不足|仅供观察/);
     expect(renderedCopy).not.toMatch(
       /PROVIDER ALTERNATIVE_ME|ETF flow proxy|Institutional pressure proxy|Industry breadth proxy|Rotation Non Scoring Or Taxonomy Only|Sector ETF proxy|Alternative\.me|Yahoo Finance|Binance Futures|YFINANCE|CBOE|BINANCE|REAL|MIXED|FALLBACK|provider|sourceTier|sourceLabel|reasonCode|diagnosticOnly|scoreContributionAllowed|sourceAuthorityAllowed|authorityGrant|raw|debug|backend|cache|schema|synthetic|mock|proxy|fallback/i,
     );

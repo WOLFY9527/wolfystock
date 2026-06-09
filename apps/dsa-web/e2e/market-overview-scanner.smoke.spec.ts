@@ -182,6 +182,25 @@ async function expectMarketOverviewDenseQuotesFit(page: Page) {
   expect(overflowingRows).toEqual([]);
 }
 
+async function expectNoMarketOverviewProxyLabelLeaks(page: Page) {
+  const consumerText = await page.evaluate(() => {
+    const visibleText = document.body.innerText || '';
+    const attributeText = Array.from(document.querySelectorAll<HTMLElement>('[title], [aria-label], [alt]'))
+      .map((element) => [
+        element.getAttribute('title'),
+        element.getAttribute('aria-label'),
+        element.getAttribute('alt'),
+      ].filter(Boolean).join(' '))
+      .join(' ');
+    return `${visibleText} ${attributeText}`;
+  });
+
+  expect(consumerText).toContain('ETF 资金流指标');
+  expect(consumerText).toContain('机构压力指标');
+  expect(consumerText).toContain('行业广度指标');
+  expect(consumerText).not.toMatch(/ETF flow proxy|Institutional pressure proxy|Industry breadth proxy|\bproxy\b/i);
+}
+
 test.describe('scanner smoke', () => {
   test('scanner keeps controls visible without horizontal overflow', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -379,6 +398,7 @@ test.describe('market overview smoke', () => {
       await expect(page.getByTestId('market-overview-card-indices')).toBeVisible();
       await expect(page.getByTestId('market-overview-card-volatility')).toBeVisible();
       await expect(page.getByTestId('market-overview-card-fundsFlow')).toBeVisible();
+      await expectNoMarketOverviewProxyLabelLeaks(page);
 
       const heroRowLayout = await page.evaluate(() => {
         const row = document.querySelector('[data-row-id="all-hero"]') as HTMLElement | null;
@@ -424,6 +444,7 @@ test.describe('market overview smoke', () => {
     await expect(page.getByTestId('market-overview-card-indices')).toBeVisible();
     await expect(page.getByTestId('market-overview-card-volatility')).toBeVisible();
     await expect(page.getByTestId('market-overview-card-fundsFlow')).toBeVisible();
+    await expectNoMarketOverviewProxyLabelLeaks(page);
 
     const mobileLayout = await page.evaluate(() => {
       const row = document.querySelector('[data-row-id="all-hero"]') as HTMLElement | null;

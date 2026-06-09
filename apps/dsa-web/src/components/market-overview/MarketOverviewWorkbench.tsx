@@ -1472,9 +1472,9 @@ function marketOverviewConsumerSemanticsText(value: unknown, fallback = ''): str
   const projected = text
     .replace(/market_regime_synthesis/gi, '市场状态')
     .replace(/Conflicts With Primary Regime/gi, '反向信号')
-    .replace(/ETF flow proxy/gi, '部分可用')
-    .replace(/Institutional pressure proxy/gi, '部分可用')
-    .replace(/Industry breadth proxy/gi, '部分可用')
+    .replace(/ETF flow proxy/gi, 'ETF 资金流指标')
+    .replace(/Institutional pressure proxy/gi, '机构压力指标')
+    .replace(/Industry breadth proxy/gi, '行业广度指标')
     .replace(/\bREAL\b/g, 'AVAILABLE')
     .replace(/\bMIXED\b/g, 'PARTIAL')
     .replace(/\bFALLBACK\b/g, 'DELAYED')

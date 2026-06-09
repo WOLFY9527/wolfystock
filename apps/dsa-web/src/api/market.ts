@@ -15,9 +15,9 @@ const CONSUMER_SOURCE_LABEL_MAP: Record<string, string> = {
   CBOE: '可用',
   BINANCE: '可用',
   'BINANCE FUTURES': '可用',
-  'ETF FLOW PROXY': '部分可用',
-  'INSTITUTIONAL PRESSURE PROXY': '部分可用',
-  'INDUSTRY BREADTH PROXY': '部分可用',
+  'ETF FLOW PROXY': 'ETF 资金流指标',
+  'INSTITUTIONAL PRESSURE PROXY': '机构压力指标',
+  'INDUSTRY BREADTH PROXY': '行业广度指标',
   'SECTOR ETF PROXY': '部分可用',
   REAL: '可用',
   MIXED: '部分可用',
@@ -45,7 +45,10 @@ const CONSUMER_SOURCE_LABEL_MAP: Record<string, string> = {
 const CONSUMER_SOURCE_LABEL_RULES: Array<[RegExp, string]> = [
   [/FRED\s+[A-Z0-9_]+/gi, '可用'],
   [/Yahoo Finance|YFinance|YFINANCE|CBOE|Binance Futures|Binance|Alternative\.?me/gi, '可用'],
-  [/Sector ETF proxy|ETF flow proxy|Institutional pressure proxy|Industry breadth proxy|proxy/gi, '部分可用'],
+  [/ETF flow proxy/gi, 'ETF 资金流指标'],
+  [/Institutional pressure proxy/gi, '机构压力指标'],
+  [/Industry breadth proxy/gi, '行业广度指标'],
+  [/Sector ETF proxy|proxy/gi, '部分可用'],
   [/local cache|recent cache|cache|fallback/gi, '延迟可用'],
   [/mock|synthetic/gi, '证据不足'],
   [/Rotation Non Scoring Or Taxonomy Only/gi, '轮动仅作分类参考'],
@@ -109,6 +112,7 @@ function normalizeMarketProviderHealth(providerHealth?: MarketProviderHealth | n
 function normalizeMarketOverviewItemConsumerCopy(item: MarketOverviewItem): MarketOverviewItem {
   return {
     ...item,
+    label: normalizeMarketConsumerText(item.label) || item.label,
     sourceLabel: normalizeMarketConsumerSourceLabel(item.sourceLabel, item.source) || item.sourceLabel,
     providerHealth: normalizeMarketProviderHealth(item.providerHealth) || item.providerHealth,
     warning: normalizeMarketConsumerText(item.warning) || item.warning,

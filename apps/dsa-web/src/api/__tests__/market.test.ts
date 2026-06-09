@@ -38,9 +38,9 @@ describe('market temperature evidence normalization', () => {
       ['REAL', '可用'],
       ['MIXED', '部分可用'],
       ['FALLBACK', '延迟可用'],
-      ['ETF flow proxy', '部分可用'],
-      ['Institutional pressure proxy', '部分可用'],
-      ['Industry breadth proxy', '部分可用'],
+      ['ETF flow proxy', 'ETF 资金流指标'],
+      ['Institutional pressure proxy', '机构压力指标'],
+      ['Industry breadth proxy', '行业广度指标'],
       ['Binance Futures', '可用'],
       ['local cache', '延迟可用'],
       ['synthetic fixture', '证据不足'],
@@ -81,6 +81,27 @@ describe('market temperature evidence normalization', () => {
     expect(panel.items[0].sourceLabel).toBe('延迟可用');
     expect(panel.items[0].warning).toBe('当前关键数据不足，暂不形成方向判断。');
     expect(panel.items[0].hoverDetails).toEqual(['最近可用数据仅保留市场结构观察']);
+  });
+
+  it('projects market overview proxy item labels before UI rendering', () => {
+    const panel = marketModule.normalizeMarketOverviewPanelConsumerCopy({
+      panelName: 'FundsFlowCard',
+      lastRefreshAt: '2026-06-01T09:00:00Z',
+      status: 'success',
+      source: 'mixed',
+      sourceLabel: 'MIXED',
+      items: [
+        { symbol: 'ETF_FLOW_PROXY', label: 'ETF flow proxy' },
+        { symbol: 'INST_PRESSURE', label: 'Institutional pressure proxy' },
+        { symbol: 'INDUSTRY_BREADTH', label: 'Industry breadth proxy' },
+      ],
+    });
+
+    expect(panel.items.map((item) => item.label)).toEqual([
+      'ETF 资金流指标',
+      '机构压力指标',
+      '行业广度指标',
+    ]);
   });
 
   it('preserves additive regime summary payloads from snake_case responses', async () => {

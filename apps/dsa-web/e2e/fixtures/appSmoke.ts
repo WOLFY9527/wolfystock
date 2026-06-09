@@ -1239,7 +1239,14 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
     }
 
     if (method === 'GET' && path === '/api/v1/market-overview/funds-flow') {
-      return fulfillJson(route, panel('FundsFlowCard', 'FLOW', 'Funds Flow', 82, 0.7));
+      return fulfillJson(route, {
+        ...panel('FundsFlowCard', 'ETF_FLOW_PROXY', 'ETF flow proxy', 82, 0.7),
+        items: [
+          panel('FundsFlowCard', 'ETF_FLOW_PROXY', 'ETF flow proxy', 82, 0.7).items[0],
+          panel('FundsFlowCard', 'INST_PRESSURE', 'Institutional pressure proxy', 0.07, 1.56).items[0],
+          panel('FundsFlowCard', 'INDUSTRY_BREADTH', 'Industry breadth proxy', 72, 1.4).items[0],
+        ],
+      });
     }
 
     if (method === 'GET' && path === '/api/v1/market-overview/macro') {
@@ -1287,7 +1294,7 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
 
     if (method === 'GET' && path === '/api/v1/market/sentiment') {
       return fulfillJson(route, marketSnapshot('MarketSentimentCard', [
-        { symbol: 'PUTCALL', label: 'Put/Call', value: 0.82, changePercent: -2.1 },
+        { symbol: 'INST_PRESSURE', label: 'Institutional pressure proxy', value: 0.07, changePercent: 1.56 },
       ]));
     }
 
@@ -1312,7 +1319,7 @@ async function installMockApi(page: Page, unhandledApiRoutes: string[]) {
 
     if (method === 'GET' && path === '/api/v1/market/sector-rotation') {
       return fulfillJson(route, marketSnapshot('SectorRotationCard', [
-        { symbol: 'AI', label: 'AI Hardware', value: 72, changePercent: 1.4 },
+        { symbol: 'INDUSTRY_BREADTH', label: 'Industry breadth proxy', value: 72, changePercent: 1.4 },
       ]));
     }
 
