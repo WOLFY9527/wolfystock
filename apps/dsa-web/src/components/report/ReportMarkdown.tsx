@@ -144,14 +144,146 @@ const consumerMarkdownStateCellLabel = (value: string, language: ReportLanguage)
   return null;
 };
 
-const localizeMarkdownStateTableCells = (line: string, language: ReportLanguage): string => {
+const getMarkdownBodyFallback = (language: ReportLanguage): string =>
+  language === 'en' ? 'Continue tracking while evidence is reviewed.' : '继续跟踪，等待证据复核。';
+
+const getMarkdownLinkFallback = (language: ReportLanguage): string =>
+  language === 'en' ? 'Reference material' : '研究资料';
+
+const MARKDOWN_CODE_FENCE_PATTERN = /^\s*(?:`{3,}|~{3,})/;
+const MARKDOWN_LINK_PATTERN = /(!?\[)([^\]\n]*)(\]\()([^\s)\n]+)(?:\s+"([^"\n]*)")?(\))/g;
+
+const consumerSafeMarkdownPlainText = (
+  value: unknown,
+  language: ReportLanguage,
+  fallback = getMarkdownBodyFallback(language),
+): string => {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    return '';
+  }
+  const stateLabel = consumerMarkdownStateCellLabel(text, language);
+  if (stateLabel) {
+    return stateLabel;
+  }
+  return consumerSafeMarkdownCopy(text, fallback);
+};
+
+const consumerSafeMarkdownAttribute = (value: string): string => {
+  const safeValue = consumerSafeMarkdownCopy(value, '').trim();
+  return safeValue === value.trim() ? safeValue : '';
+};
+
+const sanitizeMarkdownLinks = (value: string, language: ReportLanguage): string => (
+  value.replace(
+    MARKDOWN_LINK_PATTERN,
+    (
+      _match,
+      open: string,
+      label: string,
+      linkOpen: string,
+      url: string,
+      title: string | undefined,
+      close: string,
+    ) => {
+      const fallbackLabel = getMarkdownLinkFallback(language);
+      const safeLabel = consumerSafeMarkdownPlainText(label, language, fallbackLabel);
+      const safeUrl = consumerSafeMarkdownAttribute(url) || '#';
+      const safeTitle = title === undefined ? '' : consumerSafeMarkdownAttribute(title);
+      const titlePart = safeTitle ? ` "${safeTitle}"` : '';
+      return `${open}${safeLabel}${linkOpen}${safeUrl}${titlePart}${close}`;
+    },
+  )
+);
+
+const consumerSafeMarkdownInline = (
+  value: unknown,
+  language: ReportLanguage,
+  fallback = getMarkdownBodyFallback(language),
+): string => {
+  const linkedText = sanitizeMarkdownLinks(String(value ?? ''), language);
+  return consumerSafeMarkdownPlainText(linkedText, language, fallback);
+};
+
+const sanitizeMarkdownTableCells = (line: string, language: ReportLanguage): string => {
   if (!line.trim().startsWith('|')) {
     return line;
   }
   return line.replace(/(\|\s*)([^|\n]+?)(\s*(?=\|))/g, (match, prefix: string, cell: string, suffix: string) => {
-    const label = consumerMarkdownStateCellLabel(cell, language);
-    return label ? `${prefix}${label}${suffix}` : match;
+    const cellText = cell.trim();
+    if (/^:?-{3,}:?$/.test(cellText)) {
+      return match;
+    }
+    const safeCell = consumerSafeMarkdownInline(cellText, language);
+    return `${prefix}${safeCell}${suffix}`;
   });
+};
+
+const translateMarkdownTableHeaderLine = (line: string, language: ReportLanguage): string => {
+  if (language !== 'zh' || !line.trim().startsWith('|')) {
+    return line;
+  }
+  return line
+    .replace(/\bField\b/gi, '字段')
+    .replace(/\bValue\b/gi, '数值')
+    .replace(/\bBasis\b/gi, '口径')
+    .replace(/\bSource\b/gi, '来源')
+    .replace(/\bStatus\b/gi, '状态')
+    .replace(/\bMissing Cause\b/gi, '缺失原因')
+    .replace(/\bPriority\b/gi, '优先级');
+};
+
+const localizeAndSanitizeMarkdownLine = (line: string, language: ReportLanguage): string => {
+  const headingMatch = line.match(/^(\s{0,3}#{1,6}\s+)(.+)$/);
+  if (headingMatch?.[1] && headingMatch?.[2]) {
+    const headingText = language === 'zh'
+      ? localizeReportHeadingLabel(headingMatch[2], 'zh')
+      : headingMatch[2];
+    return `${headingMatch[1]}${consumerSafeMarkdownInline(headingText, language, getSummaryFallback(language))}`;
+  }
+
+  const bulletBoldMatch = line.match(/^(\s*(?:[-*+]|\d+[.)])\s+\*\*)([^*]+)(\*\*\s*[:：]?\s*)(.*)$/);
+  if (bulletBoldMatch?.[1] && bulletBoldMatch?.[2] && bulletBoldMatch?.[3]) {
+    const labelText = language === 'zh'
+      ? localizeReportHeadingLabel(bulletBoldMatch[2], 'zh')
+      : bulletBoldMatch[2];
+    const bodyText = bulletBoldMatch[4] || '';
+    const safeLabel = consumerSafeMarkdownInline(labelText, language);
+    const safeBody = bodyText ? consumerSafeMarkdownInline(bodyText, language) : '';
+    return `${bulletBoldMatch[1]}${safeLabel}${bulletBoldMatch[3]}${safeBody}`;
+  }
+
+  const bulletPlainMatch = line.match(/^(\s*(?:[-*+]|\d+[.)])\s+)(.+)$/);
+  if (bulletPlainMatch?.[1] && bulletPlainMatch?.[2]) {
+    const bulletText = language === 'zh'
+      ? localizeReportHeadingLabel(bulletPlainMatch[2], 'zh')
+      : bulletPlainMatch[2];
+    return `${bulletPlainMatch[1]}${consumerSafeMarkdownInline(bulletText, language)}`;
+  }
+
+  const tableLine = translateMarkdownTableHeaderLine(line, language);
+  if (tableLine.trim().startsWith('|')) {
+    return sanitizeMarkdownTableCells(tableLine, language);
+  }
+
+  return consumerSafeMarkdownInline(tableLine, language);
+};
+
+const localizeAndSanitizeMarkdownContent = (content: string, language: ReportLanguage): string => {
+  let isInsideCodeFence = false;
+  return content
+    .split('\n')
+    .map((line) => {
+      if (MARKDOWN_CODE_FENCE_PATTERN.test(line)) {
+        isInsideCodeFence = !isInsideCodeFence;
+        return line;
+      }
+      if (isInsideCodeFence) {
+        return line;
+      }
+      return localizeAndSanitizeMarkdownLine(line, language);
+    })
+    .join('\n');
 };
 
 const consumerSafeMarkdownCopy = (
@@ -453,55 +585,7 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
     return buildMissingFieldAudit(mergedEntries);
   })();
 
-  const localizedMarkdownContent = (() => {
-    if (normalizedLanguage !== 'zh') {
-      return content
-        .split('\n')
-        .map((line) => localizeMarkdownStateTableCells(line, normalizedLanguage))
-        .join('\n');
-    }
-
-    const translateTableHeaderLine = (line: string): string => {
-      if (!line.trim().startsWith('|')) {
-        return line;
-      }
-      return line
-        .replace(/\bField\b/gi, '字段')
-        .replace(/\bValue\b/gi, '数值')
-        .replace(/\bBasis\b/gi, '口径')
-        .replace(/\bSource\b/gi, '来源')
-        .replace(/\bStatus\b/gi, '状态')
-        .replace(/\bMissing Cause\b/gi, '缺失原因')
-        .replace(/\bPriority\b/gi, '优先级');
-    };
-
-    return content
-      .split('\n')
-      .map((line) => {
-        const headingMatch = line.match(/^(\s{0,3}#{1,6}\s+)(.+)$/);
-        if (headingMatch?.[1] && headingMatch?.[2]) {
-          const translatedHeading = localizeReportHeadingLabel(headingMatch[2], 'zh');
-          return `${headingMatch[1]}${translatedHeading}`;
-        }
-
-        const bulletBoldMatch = line.match(/^(\s*[-*+]\s+\*\*)([^*]+)(\*\*\s*[:：]?\s*)(.*)$/);
-        if (bulletBoldMatch?.[1] && bulletBoldMatch?.[2] && bulletBoldMatch?.[3]) {
-          const translatedLabel = localizeReportHeadingLabel(bulletBoldMatch[2], 'zh');
-          return `${bulletBoldMatch[1]}${translatedLabel}${bulletBoldMatch[3]}${bulletBoldMatch[4] || ''}`;
-        }
-
-        const bulletPlainMatch = line.match(/^(\s*[-*+]\s+)(.+)$/);
-        if (bulletPlainMatch?.[1] && bulletPlainMatch?.[2]) {
-          const translatedLabel = localizeReportHeadingLabel(bulletPlainMatch[2], 'zh');
-          if (translatedLabel !== bulletPlainMatch[2]) {
-            return `${bulletPlainMatch[1]}${translatedLabel}`;
-          }
-        }
-
-        return localizeMarkdownStateTableCells(translateTableHeaderLine(line), 'zh');
-      })
-      .join('\n');
-  })();
+  const localizedMarkdownContent = localizeAndSanitizeMarkdownContent(content, normalizedLanguage);
 
   const coverageBuckets = coverageAudit.buckets.filter((bucket) => bucket.entries.length > 0);
   const executiveSummary = (() => {

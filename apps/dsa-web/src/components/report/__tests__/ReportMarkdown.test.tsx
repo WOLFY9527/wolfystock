@@ -16,7 +16,7 @@ vi.mock('../../common/Drawer', () => ({
 }));
 
 const forbiddenDefaultVisiblePattern =
-  /买入|卖出|建仓|调仓|止损|止盈|目标价|仓位建议|\bbuy\b|\bsell\b|\bstop(?: loss)?\b|\btarget\b|position[- ]?sizing|reasonCode|sourceTier|sourceType|raw_ai_response|provider_timeout|fallback_cache|backend snake_case/i;
+  /小仓试错|第二笔|25\s*%\s*-\s*35\s*%|仓位|买入|卖出|加仓|减仓|建仓|调仓|止损|止盈|目标价|理想买入|入场|\bentry\b|\bstop loss\b|\btarget price\b|\btake profit\b|position[- ]?sizing|battle plan|sniper|\bbuy\b|\bsell\b|\bstop(?: loss)?\b|\btarget\b|reasonCode|sourceTier|sourceType|raw_ai_response|provider_timeout|fallback_cache|backend snake_case/i;
 const forbiddenRawStatePattern = /\bmixed\b|INSUFFICIENT|REAL|MIXED|FALLBACK/i;
 
 const openTechnicalDetails = async (label: string) => {
@@ -197,6 +197,48 @@ describe('ReportMarkdown', () => {
     expect(screen.getByText('观察计划')).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: '字段' })).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: 'Ready' })).toBeInTheDocument();
+  });
+
+  it('sanitizes consumer markdown body, table cells, and link attributes while preserving markdown structure', async () => {
+    render(
+      <ReportMarkdown
+        recordId={9}
+        stockName="Oracle"
+        stockCode="ORCL"
+        onClose={() => undefined}
+        initialContent={[
+          '## Decision Summary',
+          '这是一段可展示的研究摘要。',
+          '- 正常观察项: 数据中心需求回暖',
+          '- 风险动作: 小仓试错，第二笔 25%-35%，买入、卖出、加仓、减仓、建仓、止损、止盈、目标价、理想买入、入场。',
+          '',
+          '[研究资料](https://example.test/report "stop loss target price")',
+          '',
+          '| Field | Value | Status |',
+          '| --- | --- | --- |',
+          '| 观察计划 | position sizing battle plan sniper entry stop loss target price take profit | mixed |',
+          '| 研究包 | REAL | INSUFFICIENT |',
+          '| 单独动作 | 入场 | FALLBACK |',
+        ].join('\n')}
+      />,
+    );
+
+    await openTechnicalDetails('数据覆盖与证据明细');
+
+    const renderer = await screen.findByTestId('report-technical-details-renderer');
+    expect(within(renderer).getByText('研究摘要')).toBeInTheDocument();
+    expect(within(renderer).getByText('这是一段可展示的研究摘要。')).toBeInTheDocument();
+    expect(within(renderer).getByText(/正常观察项/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '研究资料' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: '字段' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '综合摘要' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '已观察数据' })).toBeInTheDocument();
+    expect(screen.getAllByRole('cell', { name: '证据不足' }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('cell', { name: '补充快照' })).toBeInTheDocument();
+    expect(renderer).not.toHaveTextContent(forbiddenDefaultVisiblePattern);
+    renderer.querySelectorAll('[title]').forEach((element) => {
+      expect(element.getAttribute('title') || '').not.toMatch(forbiddenDefaultVisiblePattern);
+    });
   });
 
   it('maps raw markdown table state cells to consumer product labels', async () => {
