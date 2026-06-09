@@ -1,4 +1,5 @@
 import type { AnalysisReport, HistoryItem, TaskInfo } from '../types/analysis';
+import { getSymbolDisplay } from '../utils/homeReportIdentity';
 
 const HOME_TICKER_ALIASES: Record<string, string> = {
   NVIDIA: 'NVDA',
@@ -59,7 +60,7 @@ export function resolveHomeDashboardSelection(
   const routeSymbol = normalizeHomeTickerQuery(input.routeSymbol);
   const activeTicker = normalizeHomeTickerQuery(input.activeTicker);
   const pendingAnalysisTicker = normalizeHomeTickerQuery(input.pendingAnalysisTicker);
-  const selectedTicker = normalizeHomeTickerQuery(input.selectedReport?.meta.stockCode);
+  const selectedTicker = normalizeHomeTickerQuery(getSymbolDisplay(input.selectedReport));
   const restoredTicker = normalizeHomeTickerQuery(input.recentHistoryItems[0]?.stockCode);
   const defaultTicker = normalizeHomeTickerQuery(input.defaultTicker);
 
@@ -132,8 +133,10 @@ export function resolveHomeDashboardSelection(
   );
   const activeEvidenceTicker = HOME_TICKER_FORMAT_RE.test(activeEvidenceTickerCandidate) ? activeEvidenceTickerCandidate : '';
 
-  const reportTicker = normalizeHomeTickerQuery(activeTraceReport?.meta.stockCode);
-  const reanalysisCandidate = reportTicker || (activeTraceReport ? '' : effectiveTicker);
+  const reportTicker = normalizeHomeTickerQuery(getSymbolDisplay(activeTraceReport));
+  const reanalysisCandidate = input.selectedReport && !selectedTicker
+    ? ''
+    : reportTicker || (activeTraceReport ? '' : effectiveTicker);
   const reanalysisTicker = HOME_TICKER_FORMAT_RE.test(reanalysisCandidate) ? reanalysisCandidate : '';
 
   return {

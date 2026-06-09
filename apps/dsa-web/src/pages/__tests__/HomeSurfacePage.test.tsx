@@ -2476,6 +2476,7 @@ describe('HomeSurfacePage', () => {
     const disabledRerun = await screen.findByRole('button', { name: '缺少股票代码' });
     expect(disabledRerun).toBeDisabled();
     expect(disabledRerun).toHaveAttribute('title', '缺少股票代码');
+    fireEvent.click(disabledRerun);
     expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
   });
 

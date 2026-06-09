@@ -209,7 +209,7 @@ describe('resolveHomeDashboardSelection', () => {
     });
 
     expect(result.activeTraceReport).toBeNull();
-    expect(result.reanalysisTicker).toBe('ORCL');
+    expect(result.reanalysisTicker).toBe('');
   });
 
   it('aligns the evidence ticker with the active trace report instead of a restored ticker', () => {
