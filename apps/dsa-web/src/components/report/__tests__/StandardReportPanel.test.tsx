@@ -7,6 +7,7 @@ import { normalizeFrontendReportContract } from '../../../api/reportNormalizer';
 
 const forbiddenConsumerPanelPattern =
   /理想买入点|次优买入点|止损位|目标位|目标一区|目标二区|仓位建议|Ideal entry|Secondary entry|Stop loss|Target 1|Target 2|Position sizing/i;
+const forbiddenRawStatePattern = /\bmixed\b|INSUFFICIENT|REAL|MIXED|FALLBACK/i;
 
 vi.mock('../../../hooks/useElementSize', () => {
   let callCount = 0;
@@ -359,6 +360,45 @@ describe('StandardReportPanel', () => {
     expect(panel).toHaveTextContent('风险边界');
     expect(panel).toHaveTextContent('上方观察区');
     expect(panel).not.toHaveTextContent(forbiddenConsumerPanelPattern);
+  });
+
+  it('maps raw report state values to consumer product labels', () => {
+    const rawStateReport: AnalysisReport = {
+      ...report,
+      details: {
+        ...report.details,
+        standardReport: {
+          ...report.details?.standardReport,
+          tableSections: {
+            ...report.details?.standardReport?.tableSections,
+            fundamental: {
+              title: '基本面表',
+              fields: [
+                { label: '基本面摘要', value: 'mixed', source: 'FMP', status: 'mixed' },
+                { label: '研究包', value: 'INSUFFICIENT', source: 'FMP', status: 'INSUFFICIENT' },
+              ],
+            },
+          },
+          highlights: {
+            ...report.details?.standardReport?.highlights,
+            socialSynthesis: undefined,
+            sentimentSummary: undefined,
+            socialTone: 'mixed',
+          },
+          reasonLayer: {
+            ...report.details?.standardReport?.reasonLayer,
+            sentimentSummary: undefined,
+          },
+        },
+      },
+    };
+
+    render(<StandardReportPanel report={rawStateReport} chartFixtures={previewChartFixtures} />);
+
+    const panel = screen.getByTestId('standard-report-panel');
+    expect(panel).toHaveTextContent('综合摘要');
+    expect(panel).toHaveTextContent('证据不足');
+    expect(panel).not.toHaveTextContent(forbiddenRawStatePattern);
   });
 
   it('keeps the default preview fixture on observation-only labels in the report DOM', async () => {

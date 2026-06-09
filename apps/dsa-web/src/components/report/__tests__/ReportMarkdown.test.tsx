@@ -17,6 +17,7 @@ vi.mock('../../common/Drawer', () => ({
 
 const forbiddenDefaultVisiblePattern =
   /买入|卖出|建仓|调仓|止损|止盈|目标价|仓位建议|\bbuy\b|\bsell\b|\bstop(?: loss)?\b|\btarget\b|position[- ]?sizing|reasonCode|sourceTier|sourceType|raw_ai_response|provider_timeout|fallback_cache|backend snake_case/i;
+const forbiddenRawStatePattern = /\bmixed\b|INSUFFICIENT|REAL|MIXED|FALLBACK/i;
 
 const openTechnicalDetails = async (label: string) => {
   const technicalDetails = await screen.findByTestId('report-technical-evidence-details');
@@ -196,6 +197,25 @@ describe('ReportMarkdown', () => {
     expect(screen.getByText('观察计划')).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: '字段' })).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: 'Ready' })).toBeInTheDocument();
+  });
+
+  it('maps raw markdown table state cells to consumer product labels', async () => {
+    render(
+      <ReportMarkdown
+        recordId={8}
+        stockName="Oracle"
+        stockCode="ORCL"
+        onClose={() => undefined}
+        initialContent={'## Decision Summary\n| Field | Value | Status |\n| --- | --- | --- |\n| 基本面摘要 | mixed | mixed |\n| 研究包 | INSUFFICIENT | INSUFFICIENT |'}
+      />,
+    );
+
+    await openTechnicalDetails('数据覆盖与证据明细');
+
+    const renderer = await screen.findByTestId('report-technical-details-renderer');
+    expect(renderer).toHaveTextContent('综合摘要');
+    expect(renderer).toHaveTextContent('证据不足');
+    expect(renderer).not.toHaveTextContent(forbiddenRawStatePattern);
   });
 
   it('keeps default summary copy consumer-safe when upstream report text is diagnostic or action-oriented', async () => {

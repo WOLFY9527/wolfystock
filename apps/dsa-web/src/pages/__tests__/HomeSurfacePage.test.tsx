@@ -275,7 +275,7 @@ const HOME_EVIDENCE_PACKET_TRADING_COPY_PATTERN =
 const HOME_PROVENANCE_INTERNAL_COPY_PATTERN =
   /provider|router|cache|credential|token|prompt|request body|raw payload|article body|sourceId|debugRef|internal|trace|stack|env/i;
 const HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN =
-  /provider|provider_timeout|providerTrace|sourceRefId|sourceId|sourceConfidence|sourceAuthority|sourceTier|scoreContributionAllowed|sourceAuthorityAllowed|authority|freshness|fallback_cache|cache|debug|diagnostic|diagnostics|trace|router|prompt|schema|raw payload|raw_result|raw_ai_response|context_snapshot|token|credential|stack|env|reasonCode|reasonCodes|reason_code|reason_codes|one_sentence|stop_loss|standard_report|Yahoo Finance|Yfinance|Finnhub|Alpaca|FMP|Gnews|Tavily|openai|deepseek|fixture-provider|fixture-model|buy|sell|trade now|order now|broker route|buy recommendation|sell recommendation|trading recommendation|probe size|start light|add only|position sizing|Ideal buy|Secondary entry|Stop loss|Take profit|Target zone|买入|卖出|下单|交易|立即交易|建仓|加仓|减仓|止损|止盈|目标价|目标位|目标区间|仓位建议|持仓建议|空仓建议|小仓试错|第二笔/i;
+  /\bmixed\b|INSUFFICIENT|REAL|MIXED|FALLBACK|provider|provider_timeout|providerTrace|sourceRefId|sourceId|sourceConfidence|sourceAuthority|sourceTier|scoreContributionAllowed|sourceAuthorityAllowed|authority|freshness|fallback_cache|cache|debug|diagnostic|diagnostics|trace|router|prompt|schema|raw payload|raw_result|raw_ai_response|context_snapshot|token|credential|stack|env|reasonCode|reasonCodes|reason_code|reason_codes|one_sentence|stop_loss|standard_report|Yahoo Finance|Yfinance|Finnhub|Alpaca|FMP|Gnews|Tavily|openai|deepseek|fixture-provider|fixture-model|buy|sell|trade now|order now|broker route|buy recommendation|sell recommendation|trading recommendation|probe size|start light|add only|position sizing|Ideal buy|Secondary entry|Stop loss|Take profit|Target zone|买入|卖出|下单|交易|立即交易|建仓|加仓|减仓|止损|止盈|目标价|目标位|目标区间|仓位建议|持仓建议|空仓建议|小仓试错|第二笔/i;
 const GUEST_HOME_FORBIDDEN_COPY_PATTERN =
   /provider|cache|debug|schema|raw payload|token|session[_\s-]?id|secret|buy now|sell now|trade now|order now|connect broker|broker CTA|guaranteed|必买|稳赚|保证收益|立即交易|提交订单|连接经纪商/i;
 const defaultStockEvidenceResponse = {
@@ -1984,7 +1984,7 @@ describe('HomeSurfacePage', () => {
 
     const panel = screen.getByTestId('home-research-packet-panel');
     expect(panel).toHaveTextContent('研究包');
-    expect(panel).toHaveTextContent('AVAILABLE');
+    expect(panel).toHaveTextContent('综合摘要');
     expect(panel).toHaveTextContent('当前研究包可用于观察性阅读。');
     expect(panel).toHaveTextContent('观察边界');
     expect(panel).toHaveTextContent('仅作为研究观察，不构成投资建议。');
@@ -2053,7 +2053,7 @@ describe('HomeSurfacePage', () => {
     await screen.findByText('Oracle Corporation');
 
     const panel = screen.getByTestId('home-research-packet-panel');
-    expect(panel).toHaveTextContent('PARTIAL');
+    expect(panel).toHaveTextContent('部分可用');
     expect(panel).toHaveTextContent('部分证据仍需补齐，当前只保留观察性阅读。');
     expect(panel).toHaveTextContent('下一步证据：补充基本面证据');
     expect(panel).toHaveTextContent('截至');
@@ -2075,9 +2075,10 @@ describe('HomeSurfacePage', () => {
     await screen.findByText('Oracle Corporation');
 
     const panel = screen.getByTestId('home-research-packet-panel');
-    expect(panel).toHaveTextContent('INSUFFICIENT');
+    expect(panel).toHaveTextContent('证据不足');
     expect(panel).toHaveTextContent('研究包证据不足，当前不能视为完整研究结论。');
     expect(panel).toHaveTextContent('下一步证据：等待完整研究侧车后再阅读。');
+    expect(panel).not.toHaveTextContent('INSUFFICIENT');
     expect(panel).not.toHaveTextContent('AVAILABLE');
     expect(panel.textContent).not.toMatch(HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN);
   });
@@ -2711,6 +2712,18 @@ describe('HomeSurfacePage', () => {
 
   it('restores observation and fundamentals drill-down drawers from the right rail', async () => {
     useProductSurfaceMock.mockReturnValue({ isGuest: false });
+    vi.mocked(historyApi.getDetail).mockResolvedValueOnce({
+      ...defaultHistoryReport,
+      details: {
+        ...defaultHistoryReport.details,
+        standardReport: {
+          ...defaultHistoryReport.details.standardReport,
+          fundamentalFields: (defaultHistoryReport.details.standardReport.fundamentalFields || []).map((field) => (
+            field.label === 'Revenue Growth' ? { ...field, value: 'mixed' } : field
+          )),
+        },
+      },
+    } as never);
     renderSurface();
 
     fireEvent.click(await screen.findByTestId('home-bento-drawer-trigger-strategy'));
@@ -2721,6 +2734,9 @@ describe('HomeSurfacePage', () => {
     fireEvent.click(await screen.findByTestId('home-bento-drawer-trigger-fundamentals'));
     const fundamentalsDialog = await screen.findByRole('dialog');
     expect(fundamentalsDialog).toHaveTextContent('基本面支撑');
+    expect(fundamentalsDialog).toHaveTextContent('综合摘要');
+    expect(fundamentalsDialog).not.toHaveTextContent(/\bmixed\b/i);
+    expect(fundamentalsDialog).not.toHaveTextContent('INSUFFICIENT');
     await closeOpenDrawer();
   });
 

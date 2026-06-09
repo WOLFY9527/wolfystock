@@ -1456,6 +1456,7 @@ type HomeResearchPacketStatus = 'AVAILABLE' | 'PARTIAL' | 'INSUFFICIENT';
 
 type HomeResearchPacketView = {
   status: HomeResearchPacketStatus;
+  statusLabel: string;
   tone: 'neutral' | 'used' | 'warning' | 'missing';
   explanation: string;
   asOfLabel: string | null;
@@ -1477,6 +1478,16 @@ const HOME_RESEARCH_PACKET_UNSAFE_COPY_PATTERN =
 
 function normalizeHomeResearchPacketStatus(value: string | undefined | null): string {
   return String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_') || 'unknown';
+}
+
+function homeResearchPacketStatusLabel(locale: DashboardLocale, status: HomeResearchPacketStatus): string {
+  const isEnglish = locale === 'en';
+  const labels: Record<HomeResearchPacketStatus, string> = {
+    AVAILABLE: isEnglish ? 'Composite summary' : '综合摘要',
+    PARTIAL: isEnglish ? 'Partly available' : '部分可用',
+    INSUFFICIENT: isEnglish ? 'Evidence insufficient' : '证据不足',
+  };
+  return labels[status];
 }
 
 function isHomeResearchPacketAvailableStatus(value: string | undefined | null): boolean {
@@ -1653,6 +1664,7 @@ function buildHomeResearchPacketView({
 
   return {
     status,
+    statusLabel: homeResearchPacketStatusLabel(locale, status),
     tone,
     explanation: explanationByStatus[status],
     asOfLabel: resolveHomeResearchPacketAsOf(locale, report, dataQualityReport),
@@ -1703,7 +1715,7 @@ function HomeResearchPacketPanel({
         <p className="text-[11px] font-semibold tracking-[0] text-white/52">
           {isEnglish ? 'Research packet' : '研究包'}
         </p>
-        <TraceBadge tone={view.tone}>{view.status}</TraceBadge>
+        <TraceBadge tone={view.tone}>{view.statusLabel}</TraceBadge>
         {view.asOfLabel ? <TraceBadge tone="neutral">{view.asOfLabel}</TraceBadge> : null}
       </div>
       <p className="mt-3 min-w-0 break-words text-sm leading-6 text-white/72">
@@ -2908,6 +2920,33 @@ function isPendingMetricValue(value?: string): boolean {
     || /字段待接入|field pending/i.test(normalized);
 }
 
+function consumerDashboardStateValue(locale: DashboardLocale, value?: string, context: 'metric' | 'source' | 'freshness' = 'metric'): string | null {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized === 'mixed' || normalized === 'mix') {
+    if (context === 'source') {
+      return locale === 'en' ? 'Multi-source blend' : '多源合并';
+    }
+    if (context === 'freshness') {
+      return locale === 'en' ? 'Partly available' : '部分可用';
+    }
+    return locale === 'en' ? 'Composite summary' : '综合摘要';
+  }
+  if (normalized === 'insufficient') {
+    return locale === 'en' ? 'Evidence insufficient' : '证据不足';
+  }
+  if (normalized === 'fallback') {
+    return locale === 'en' ? 'Supplemental snapshot' : '补充快照';
+  }
+  if (normalized === 'real') {
+    return locale === 'en' ? 'Observed data' : '已观察数据';
+  }
+  return null;
+}
+
 function sanitizeMetricValue(value?: string): string {
   return isPendingMetricValue(value) ? '-' : String(value || '').trim();
 }
@@ -2953,6 +2992,11 @@ function sanitizeFundamentalsSourceLabel(locale: DashboardLocale, source?: strin
     return null;
   }
 
+  const productStateLabel = consumerDashboardStateValue(locale, source, 'source');
+  if (productStateLabel) {
+    return productStateLabel;
+  }
+
   const normalized = source.toLowerCase();
   if (normalized.includes('filing') || normalized.includes('disclosure') || normalized.includes('earn') || normalized.includes('company')) {
     return locale === 'en' ? 'Public disclosure digest' : '公开披露整理';
@@ -2966,6 +3010,11 @@ function sanitizeFundamentalsSourceLabel(locale: DashboardLocale, source?: strin
 function sanitizeFundamentalsFreshnessLabel(locale: DashboardLocale, freshness?: string): string | null {
   if (!freshness) {
     return null;
+  }
+
+  const productStateLabel = consumerDashboardStateValue(locale, freshness, 'freshness');
+  if (productStateLabel) {
+    return productStateLabel;
   }
 
   const normalized = freshness.toLowerCase();
@@ -4303,6 +4352,10 @@ function localizeMetricValue(locale: DashboardLocale, raw: string | undefined, f
   if (!value) {
     return fallback;
   }
+  const productStateLabel = consumerDashboardStateValue(locale, value);
+  if (productStateLabel) {
+    return productStateLabel;
+  }
   if (value === '-') {
     return '-';
   }
@@ -4527,8 +4580,12 @@ function compactTechSignalValue(locale: DashboardLocale, label: string, value: s
   return compact;
 }
 
-function compactFundamentalMetricValue(value: string): string {
+function compactFundamentalMetricValue(locale: DashboardLocale, value: string): string {
   const compact = compactMetricSurprise(value);
+  const productStateLabel = consumerDashboardStateValue(locale, compact);
+  if (productStateLabel) {
+    return productStateLabel;
+  }
   if (String(compact).trim().toUpperCase() === 'N/A') {
     return 'N/A';
   }
@@ -4578,7 +4635,7 @@ function compactDashboardSignals(locale: DashboardLocale, signals: DashboardSign
 
 function compactDashboardMetrics(locale: DashboardLocale, metrics: DashboardField[]): DashboardField[] {
   return metrics.map((metric) => {
-    const compactValue = compactFundamentalMetricValue(metric.value);
+    const compactValue = compactFundamentalMetricValue(locale, metric.value);
     return {
       ...metric,
       label: localizeDashboardFieldLabel(locale, metric.label),

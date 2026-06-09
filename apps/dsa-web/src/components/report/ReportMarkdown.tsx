@@ -124,6 +124,36 @@ const getCoverageBoundaryText = (totalMissingFields: number, language: ReportLan
     : '数据覆盖未发现明显缺口。';
 };
 
+const consumerMarkdownStateCellLabel = (value: string, language: ReportLanguage): string | null => {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (normalized === 'mixed') {
+    return language === 'en' ? 'Composite summary' : '综合摘要';
+  }
+  if (normalized === 'insufficient') {
+    return language === 'en' ? 'Evidence insufficient' : '证据不足';
+  }
+  if (normalized === 'fallback') {
+    return language === 'en' ? 'Supplemental snapshot' : '补充快照';
+  }
+  if (normalized === 'real') {
+    return language === 'en' ? 'Observed data' : '已观察数据';
+  }
+  return null;
+};
+
+const localizeMarkdownStateTableCells = (line: string, language: ReportLanguage): string => {
+  if (!line.trim().startsWith('|')) {
+    return line;
+  }
+  return line.replace(/(\|\s*)([^|\n]+?)(\s*(?=\|))/g, (match, prefix: string, cell: string, suffix: string) => {
+    const label = consumerMarkdownStateCellLabel(cell, language);
+    return label ? `${prefix}${label}${suffix}` : match;
+  });
+};
+
 const consumerSafeMarkdownCopy = (
   value: unknown,
   fallback: string,
@@ -425,7 +455,10 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
 
   const localizedMarkdownContent = (() => {
     if (normalizedLanguage !== 'zh') {
-      return content;
+      return content
+        .split('\n')
+        .map((line) => localizeMarkdownStateTableCells(line, normalizedLanguage))
+        .join('\n');
     }
 
     const translateTableHeaderLine = (line: string): string => {
@@ -465,7 +498,7 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
           }
         }
 
-        return translateTableHeaderLine(line);
+        return localizeMarkdownStateTableCells(translateTableHeaderLine(line), 'zh');
       })
       .join('\n');
   })();

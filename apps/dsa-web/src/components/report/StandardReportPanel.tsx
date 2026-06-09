@@ -117,6 +117,30 @@ const softenMissingValue = (value?: string | null): string => {
   return ui('report.noFields');
 };
 
+const consumerProductStateLabel = (value?: string | null): string | null => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (normalized === 'mixed') {
+    return isEnglishUi() ? 'Composite summary' : '综合摘要';
+  }
+  if (normalized === 'insufficient') {
+    return isEnglishUi() ? 'Evidence insufficient' : '证据不足';
+  }
+  if (normalized === 'fallback') {
+    return isEnglishUi() ? 'Supplemental snapshot' : '补充快照';
+  }
+  if (normalized === 'real') {
+    return isEnglishUi() ? 'Observed data' : '已观察数据';
+  }
+  return null;
+};
+
+const softenConsumerReportValue = (value?: string | null): string => (
+  consumerProductStateLabel(value) || softenMissingValue(value)
+);
+
 const isMeaningfulMetaText = (value?: string | null): boolean => {
   const text = String(value || '').trim();
   return Boolean(text) && !isMissingDisplayText(text) && text !== '已就绪' && text !== 'ready';
@@ -646,7 +670,7 @@ const DenseTable: React.FC<{
                 <div className="space-y-1">
                   <p className={cn(getGroupLabelClass(), 'md:hidden')}>{ui('report.value')}</p>
                   <p className={cn('text-sm leading-6 break-words', isMissingDisplayText(field.value) ? 'text-muted-text' : 'text-secondary-text')}>
-                    {softenMissingValue(field.value)}
+                    {softenConsumerReportValue(field.value)}
                   </p>
                 </div>
                 {showSource ? (
@@ -658,7 +682,7 @@ const DenseTable: React.FC<{
                 {showStatus ? (
                   <div className="space-y-1">
                     <p className={cn(getGroupLabelClass(), 'md:hidden')}>{ui('report.status')}</p>
-                    <p className="text-xs leading-5 text-muted-text break-words">{isMeaningfulMetaText(field.status) ? field.status : '—'}</p>
+                    <p className="text-xs leading-5 text-muted-text break-words">{isMeaningfulMetaText(field.status) ? softenConsumerReportValue(field.status) : '—'}</p>
                   </div>
                 ) : null}
               </div>
@@ -974,7 +998,7 @@ const NewsRiskPanel: React.FC<{
   });
   const structuredSentimentFallback = collectDedupedItems({
     items: [
-      isPresentValue(highlights?.socialTone) ? joinLabelValue(ui('report.retailTone'), softenMissingValue(highlights?.socialTone)) : undefined,
+      isPresentValue(highlights?.socialTone) ? joinLabelValue(ui('report.retailTone'), softenConsumerReportValue(highlights?.socialTone)) : undefined,
       isPresentValue(highlights?.socialAttention) ? joinLabelValue(ui('report.attention'), softenMissingValue(highlights?.socialAttention)) : undefined,
       isPresentValue(highlights?.socialNarrativeFocus) ? joinLabelValue(ui('report.narrativeFocus'), softenMissingValue(highlights?.socialNarrativeFocus)) : undefined,
     ],
