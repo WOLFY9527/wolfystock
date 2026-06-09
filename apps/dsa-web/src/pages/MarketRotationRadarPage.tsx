@@ -83,6 +83,18 @@ const THEME_FLOW_REASON_LABELS: Record<string, string> = {
   source_authority_missing: '信号待确认',
   conflicting_signal_inputs: '强弱与扩散信号分化',
 };
+const ROTATION_ENGLISH_COPY_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/\bAI Applications?\b/g, 'AI 应用'],
+  [/\bAI Observation Theme\b/g, 'AI 观察主题'],
+  [/\bAI Proxy Candidate\b/g, 'AI 观察候选'],
+  [/\bSemiconductor Real Flow\b/g, '半导体确认信号'],
+  [/\bRobotics\b/g, '机器人'],
+  [/\bTheme\b/g, '主题'],
+  [/\bCluster\b/g, '主题簇'],
+  [/\bObservation\b/g, '观察'],
+  [/\bProxy Candidate\b/g, '观察候选'],
+  [/\bReal Flow\b/g, '确认信号'],
+];
 
 type CapitalRotationSummaryCard = {
   key: string;
@@ -249,7 +261,7 @@ function themeDataGaps(theme: MarketRotationTheme): string[] {
 
 function consumerThemeSubtitle(theme: MarketRotationTheme): string {
   const raw = theme.focus || theme.englishName || theme.benchmark || '';
-  const normalized = String(raw).trim();
+  const normalized = localizeRotationEnglishCopy(String(raw).trim());
   if (!normalized) {
     return '观察线索';
   }
@@ -260,6 +272,13 @@ function consumerThemeSubtitle(theme: MarketRotationTheme): string {
     return '观察线索';
   }
   return sanitizeRotationText(normalized, '观察线索');
+}
+
+function localizeRotationEnglishCopy(value: string): string {
+  return ROTATION_ENGLISH_COPY_REPLACEMENTS.reduce(
+    (current, [pattern, replacement]) => current.replace(pattern, replacement),
+    value,
+  );
 }
 
 function consumerFreshnessLabel(freshness?: string | null, isFallback?: boolean, isStale?: boolean): string {
@@ -555,7 +574,7 @@ function sanitizeTradingActionWords(value: string): string {
 }
 
 function sanitizeRotationText(value?: string | null, fallback = '数据不足，结论仅供观察'): string {
-  const text = String(value || '').trim();
+  const text = localizeRotationEnglishCopy(String(value || '').trim());
   if (!text) return fallback;
   if (isInternalRotationIssue(text)) {
     return '部分轮动数据暂不可用。';

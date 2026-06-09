@@ -1186,6 +1186,27 @@ describe('MarketRotationRadarPage', () => {
     expect(detail).not.toHaveTextContent('AI 应用 当前以主题强弱与广度变化为主');
   });
 
+  it('maps simple English theme descriptions into consumer-safe Chinese copy when a direct mapping exists', async () => {
+    const fixture = observationThemesPrimaryFixture();
+    fixture.themes = fixture.themes.map((theme, index) => (
+      index === 0
+        ? {
+            ...theme,
+            englishName: 'AI Observation Theme',
+            focus: 'AI Proxy Candidate',
+          }
+        : theme
+    ));
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(fixture);
+
+    render(<MarketRotationRadarPage />);
+
+    const detail = await screen.findByTestId('rotation-theme-detail-panel');
+    expect(detail).toHaveTextContent('AI 观察主题');
+    expect(detail).not.toHaveTextContent('AI Observation Theme');
+    expect(detail).not.toHaveTextContent('AI Proxy Candidate');
+  });
+
   it('keeps the full universe searchable and compact', async () => {
     render(<MarketRotationRadarPage />);
 
