@@ -68,6 +68,7 @@ test.describe('Backtest visual result smoke', () => {
       const pageShell = page.getByTestId('deterministic-backtest-result-page');
       const report = page.getByTestId('backtest-result-report');
       const summary = page.getByTestId('backtest-report-summary');
+      const readinessPanel = page.getByTestId('backtest-research-readiness-panel');
       const chartShell = page.getByTestId('deterministic-result-chart-shell');
       const chartWorkspace = page.getByTestId('deterministic-backtest-chart-workspace');
       const chartPanel = page.getByTestId('backtest-report-chart');
@@ -82,7 +83,12 @@ test.describe('Backtest visual result smoke', () => {
       await expect(pageShell).toBeVisible({ timeout: 15_000 });
       await expect(report).toBeVisible();
       await expect(summary).toBeVisible();
+      await expect(readinessPanel).toBeVisible();
       await expect(summary).toContainText('研究结论');
+      await expect(readinessPanel).toContainText('研究准备度 / 假设速览');
+      await expect(readinessPanel).toContainText('成本 / 滑点');
+      await expect(readinessPanel).toContainText('样本窗口');
+      await expect(readinessPanel).toContainText('复现材料');
       await expect(summary).toContainText('非真实成交记录');
       await expect(chartPanel).toBeVisible();
       await expect(chartShell).toBeVisible();
@@ -100,10 +106,9 @@ test.describe('Backtest visual result smoke', () => {
       await expect(researchReview).toContainText('反过拟合门禁');
       await expect(researchReview).toContainText('不代表样本外验证已完成');
       await expect(tradeTable).toBeVisible();
-      await expect(report).toContainText('模拟买入事件');
-      await expect(report).toContainText('模拟卖出事件');
-
-      await expect(report).toContainText('仅用于复盘模拟执行路径');
+      await expect(report).toContainText('模拟正向信号事件');
+      await expect(report).toContainText('模拟反向信号事件');
+      await expect(report).toContainText('模拟轨迹仅用于复盘路径');
       await expect(report).toContainText('模拟事件仅用于回测复盘，不构成交易指令');
       await expect(report).toContainText('不构成交易指令');
       await expect(evidenceDetails).toContainText('数据质量、执行假设和每日账本默认折叠');

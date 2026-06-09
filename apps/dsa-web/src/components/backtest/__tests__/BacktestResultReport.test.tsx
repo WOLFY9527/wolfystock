@@ -300,7 +300,7 @@ describe('BacktestResultReport', () => {
   it('renders diagnosis summary and benchmark comparisons from existing metrics', () => {
     const { rerender } = render(<BacktestResultReport run={makeRun()} mode="professional" />);
 
-    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('诊断结论');
+    expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('研究结论');
     expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('总收益');
     expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('最大回撤');
     expect(screen.getByTestId('backtest-report-result-summary')).toHaveTextContent('交易次数');
@@ -337,7 +337,15 @@ describe('BacktestResultReport', () => {
   it('renders compact observe-only readiness chips without unsupported research-grade claims', () => {
     render(<BacktestResultReport run={makeRun()} mode="professional" />);
 
+    const readinessPanel = screen.getByTestId('backtest-research-readiness-panel');
     const chips = screen.getByTestId('backtest-readiness-chips');
+    expect(readinessPanel).toHaveTextContent('研究准备度 / 假设速览');
+    expect(readinessPanel).toHaveTextContent('样本窗口');
+    expect(readinessPanel).toHaveTextContent('成本 / 滑点');
+    expect(readinessPanel).toHaveTextContent('复现材料');
+    expect(readinessPanel).toHaveTextContent('2026-03-01 -> 2026-05-03');
+    expect(readinessPanel).toHaveTextContent('2bp / 1bp');
+    expect(readinessPanel).toHaveTextContent('部分可用');
     expect(chips).toHaveTextContent('仅供观察');
     expect(chips).toHaveTextContent('观察级原型');
     expect(chips).toHaveTextContent('专业级条件未满足');
@@ -392,8 +400,8 @@ describe('BacktestResultReport', () => {
     })} mode="professional" />);
 
     const checklist = screen.getByTestId('backtest-report-research-quality-review');
-    expect(checklist).toHaveTextContent('观察复核清单');
-    expect(checklist).toHaveTextContent('诊断门禁');
+    expect(checklist).toHaveTextContent('研究复核清单');
+    expect(checklist).toHaveTextContent('反过拟合门禁');
     expect(within(checklist).getByTestId('backtest-research-review-row-readiness')).toHaveTextContent('仅供观察');
     expect(within(checklist).getByTestId('backtest-research-review-row-data-quality')).toHaveTextContent('数据质量');
     expect(within(checklist).getByTestId('backtest-research-review-row-assumptions')).toHaveTextContent('简化成本 / 滑点 2bp / 1bp');
@@ -454,7 +462,7 @@ describe('BacktestResultReport', () => {
 
     const report = screen.getByTestId('backtest-result-report');
     expect(report).toHaveTextContent('仅供观察');
-    expect(report).toHaveTextContent('仅用于观察复盘，不构成投资建议。');
+    expect(report).toHaveTextContent('结果仍仅供观察复盘。不构成投资建议');
     expect(report).toHaveTextContent('+24.60%');
     expect(report).toHaveTextContent('+19.40%');
     expect(report).not.toHaveTextContent(/研究级回测|research[-_\s]?grade|benchmark-ready|professional-ready|专业就绪|可用于历史表现评估|跑赢基准|明显跑赢|复核材料较完整|安全交易|上线|实盘/i);
@@ -496,9 +504,9 @@ describe('BacktestResultReport', () => {
     }} mode="simple" />);
 
     const report = screen.getByTestId('backtest-result-report');
-    expect(report).toHaveTextContent('本次回测结果可查看，但部分复现材料不完整，仅供观察复盘。');
-    expect(report).toHaveTextContent('回测数据质量有限，结果仅供观察复盘。');
-    expect(report).toHaveTextContent('部分辅助证据暂不可用，仅保留历史曲线观察。');
+    expect(report).toHaveTextContent('研究准备度 / 假设速览');
+    expect(report).toHaveTextContent('执行轨迹待补齐');
+    expect(report).toHaveTextContent('收盘信号 -> 次日开盘 · 1 条提示');
     expect(screen.queryByTestId('backtest-data-quality-grid')).not.toBeInTheDocument();
     expect(screen.queryByTestId('backtest-execution-assumptions-grid')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /导出执行明细 JSON/ })).not.toBeInTheDocument();
@@ -666,7 +674,7 @@ describe('BacktestResultReport', () => {
     expect(evidence).not.toHaveAttribute('open');
     expect(evidence).toHaveTextContent('复查材料');
     expect(evidence).toHaveTextContent('数据质量、执行假设和每日账本默认折叠');
-    expect(report).toHaveTextContent('诊断结论');
+    expect(report).toHaveTextContent('研究结论');
     expect(report).not.toHaveTextContent('signal_exit');
     expect(report).not.toHaveTextContent('stop_loss');
     expect(report).not.toHaveTextContent('Full metrics');
@@ -689,7 +697,7 @@ describe('BacktestResultReport', () => {
     const assumptions = screen.getByTestId('backtest-report-execution-assumptions');
     const advanced = screen.getByTestId('backtest-report-advanced-details');
 
-    expect(summary).toHaveTextContent('诊断结论');
+    expect(summary).toHaveTextContent('研究结论');
     expect(summary).toHaveTextContent('总收益');
     expect(summary).toHaveTextContent('最大回撤');
     expect(summary).toHaveTextContent('交易次数');

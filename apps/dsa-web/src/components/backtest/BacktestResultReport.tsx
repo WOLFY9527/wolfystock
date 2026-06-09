@@ -1005,7 +1005,9 @@ function DiagnosisCard({ item }: { item: DiagnosisItem }) {
 
 function getConsumerReliabilityItems({
   run,
+  normalized,
   readinessSummary,
+  researchReviewOverall,
   hasExplicitTraceRows,
   hasExplicitAssumptions,
   hasDataQualityEntries,
@@ -1013,53 +1015,92 @@ function getConsumerReliabilityItems({
   executionWarnings,
 }: {
   run: RuleBacktestRunResponse;
+  normalized: DeterministicBacktestNormalizedResult;
   readinessSummary: ReturnType<typeof normalizeBacktestReadiness>;
+  researchReviewOverall: ReturnType<typeof getResearchReviewOverall>;
   hasExplicitTraceRows: boolean;
   hasExplicitAssumptions: boolean;
   hasDataQualityEntries: boolean;
   dataQualityWarnings: string[];
   executionWarnings: string[];
 }): ConsumerReliabilityItem[] {
-  const isCompleted = run.status === 'completed';
-  const isRunning = run.status === 'queued'
-    || run.status === 'parsing'
-    || run.status === 'running'
-    || run.status === 'summarizing';
   const supportIncomplete = !hasExplicitTraceRows || !hasExplicitAssumptions || !hasDataQualityEntries;
-  const limitedConfidence = readinessSummary.posture !== 'unknown'
-    || readinessSummary.confidenceCap != null
-    || readinessSummary.limitationLabels.length > 0
-    || dataQualityWarnings.length > 0
-    || executionWarnings.length > 0;
+  const sampleStart = run.dataQuality?.actualStart || normalized.viewerMeta.firstDate || run.startDate || run.periodStart || null;
+  const sampleEnd = run.dataQuality?.actualEnd || normalized.viewerMeta.lastDate || run.endDate || run.periodEnd || null;
+  const sampleWindow = sampleStart || sampleEnd ? `${sampleStart || '--'} -> ${sampleEnd || '--'}` : '待补充';
+  const sampleBarCount = safeNumber(run.dataQuality?.barCount) ?? normalized.viewerMeta.rowCount ?? null;
+  const expectedBarCount = safeNumber(run.dataQuality?.expectedBarCount);
+  const sampleCoverage = sampleBarCount == null
+    ? null
+    : `${formatNumber(sampleBarCount, 0)}${expectedBarCount == null ? '' : ` / ${formatNumber(expectedBarCount, 0)}`} bars`;
+  const sampleFrequency = run.dataQuality?.frequency ? humanToken(run.dataQuality.frequency) : humanToken(run.timeframe);
+  const readinessHighlights = Array.from(new Set([
+    readinessSummary.displayLabel,
+    ...readinessSummary.limitationLabels,
+  ].filter((label) => label && label !== researchReviewOverall.label))).slice(0, 3);
+  const assumptionsPayload = asRecord(run.executionAssumptions) || {};
+  const signalTiming = recordValue(
+    assumptionsPayload,
+    'signalTiming',
+    'signal_timing',
+    'signalEvaluationTiming',
+    'signal_evaluation_timing',
+  );
+  const fillTiming = recordValue(
+    assumptionsPayload,
+    'fillTiming',
+    'fill_timing',
+    'entryFillTiming',
+    'entry_fill_timing',
+  );
+  const executionPath = signalTiming || fillTiming
+    ? `${humanToken(signalTiming)} -> ${humanToken(fillTiming)}`
+    : '撮合时点待补充';
+  const reproducibilityGaps = [
+    !hasExplicitTraceRows ? '执行轨迹' : '',
+    !hasDataQualityEntries ? '样本 lineage' : '',
+    !hasExplicitAssumptions ? '执行假设' : '',
+  ].filter(Boolean);
+  const reproducibilityValue = supportIncomplete ? '部分可用' : '诊断可查';
 
   return [
     {
-      key: 'availability',
-      label: '结果可用性',
-      value: isCompleted ? '可查看' : isRunning ? '生成中' : '暂不可用',
-      tone: isCompleted ? 'positive' : isRunning ? 'neutral' : 'negative',
-      note: isCompleted ? '本次回测结果可查看，仅用于观察复盘，不构成投资建议。' : isRunning ? '结果生成中，请稍后刷新。' : '当前回测结果暂不可查看。',
+      key: 'readiness',
+      label: '研究准备度',
+      value: researchReviewOverall.label,
+      tone: researchReviewOverall.tone,
+      note: readinessHighlights.length
+        ? readinessHighlights.join(' · ')
+        : '仅供观察复盘，不构成投资建议。',
+    },
+    {
+      key: 'sample-window',
+      label: '样本窗口',
+      value: sampleCoverage || sampleWindow,
+      tone: 'neutral',
+      note: [
+        sampleWindow,
+        sampleFrequency,
+        dataQualityWarnings.length ? `${dataQualityWarnings.length} 条提示` : '',
+      ].filter(Boolean).join(' · ') || '未返回样本覆盖与复权明细',
+    },
+    {
+      key: 'costs',
+      label: '成本 / 滑点',
+      value: getAssumptionCostLabel(run),
+      tone: 'neutral',
+      note: executionWarnings.length
+        ? `${executionPath} · ${executionWarnings.length} 条提示`
+        : `${executionPath} · 简化撮合口径`,
     },
     {
       key: 'reproducibility',
-      label: '复现状态',
-      value: supportIncomplete ? '部分可用' : '诊断可查',
+      label: '复现材料',
+      value: reproducibilityValue,
       tone: 'neutral',
-      note: supportIncomplete ? '本次回测结果可查看，但部分复现材料不完整，仅供观察复盘。' : '复现材料可展开复查，仍仅用于诊断观察。',
-    },
-    {
-      key: 'freshness',
-      label: '辅助证据',
-      value: supportIncomplete ? '部分可用' : '诊断可查',
-      tone: 'neutral',
-      note: supportIncomplete ? '部分辅助证据暂不可用，仅保留历史曲线观察。' : '辅助证据可按需展开复查，用于诊断限制。',
-    },
-    {
-      key: 'confidence',
-      label: '结果置信度',
-      value: limitedConfidence ? '有限置信' : '观察级',
-      tone: 'neutral',
-      note: limitedConfidence ? '回测数据质量有限，结果仅供观察复盘。' : '结果仅用于诊断观察，不构成投资建议。',
+      note: reproducibilityGaps.length
+        ? `${reproducibilityGaps.join('、')}待补齐`
+        : '轨迹、样本与执行假设可展开复查',
     },
   ];
 }
@@ -1116,8 +1157,8 @@ function ResearchQualityReviewBlock({
     <div data-testid="backtest-report-research-quality-review" className={GHOST_SECTION_CLASS}>
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className={LABEL_CLASS}>观察复核清单</p>
-          <h3 className="mt-1 text-sm font-semibold text-white">诊断门禁</h3>
+          <p className={LABEL_CLASS}>研究复核清单</p>
+          <h3 className="mt-1 text-sm font-semibold text-white">反过拟合门禁</h3>
           <p className="mt-1 text-xs leading-5 text-white/48">仅汇总已返回证据；缺失项默认进入需验证状态，不作为选模证明。</p>
         </div>
         <div className="min-w-0 sm:text-right">
@@ -1206,15 +1247,6 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
     || readinessSummary.freshnessLabel != null;
   const hasTraceRows = hasExecutionTraceRows(run);
   const hasExplicitTraceRows = Array.isArray(run.executionTrace?.rows) && run.executionTrace.rows.length > 0;
-  const consumerReliabilityItems = getConsumerReliabilityItems({
-    run,
-    readinessSummary,
-    hasExplicitTraceRows,
-    hasExplicitAssumptions,
-    hasDataQualityEntries: dataQuality.length > 0,
-    dataQualityWarnings,
-    executionWarnings,
-  });
   const researchReviewItems = getResearchQualityReviewItems({
     run,
     normalized,
@@ -1227,6 +1259,17 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
     parameterStabilityEvidence,
   });
   const researchReviewOverall = getResearchReviewOverall(researchReviewItems);
+  const consumerReliabilityItems = getConsumerReliabilityItems({
+    run,
+    normalized,
+    readinessSummary,
+    researchReviewOverall,
+    hasExplicitTraceRows,
+    hasExplicitAssumptions,
+    hasDataQualityEntries: dataQuality.length > 0,
+    dataQualityWarnings,
+    executionWarnings,
+  });
 
   const exportTrades = () => {
     downloadCsv(
@@ -1321,19 +1364,38 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             </div>
             <div className="font-mono text-xs text-white/38">{formatDateTime(run.completedAt || run.runAt)}</div>
           </div>
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="backtest-consumer-reliability-strip">
-            {consumerReliabilityItems.map((item) => <ConsumerReliabilityCard key={item.key} item={item} />)}
-          </div>
-          {showReadinessChips ? (
-            <div className="mt-4 flex flex-col gap-2" data-testid="backtest-readiness-strip">
-              <div className={LABEL_CLASS}>结果置信度</div>
-              <EvidenceChips
-                summary={readinessSummary}
-                maxLabels={5}
-                data-testid="backtest-readiness-chips"
-              />
+          <div
+            className="mt-4 rounded-xl border border-white/5 bg-black/15 p-3 sm:p-4"
+            data-testid="backtest-research-readiness-panel"
+          >
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className={LABEL_CLASS}>研究准备度 / 假设速览</p>
+                <p className="mt-1 text-xs leading-5 text-white/52">
+                  先核对样本窗口、成本口径与复现材料，再解释收益与回撤；结果仍仅供观察复盘。
+                </p>
+              </div>
+              <span className="inline-flex w-fit rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[11px] font-semibold text-white/72">
+                不构成投资建议
+              </span>
             </div>
-          ) : null}
+            <div className="mt-3 grid grid-cols-2 gap-3 xl:grid-cols-4" data-testid="backtest-consumer-reliability-strip">
+              {consumerReliabilityItems.map((item) => <ConsumerReliabilityCard key={item.key} item={item} />)}
+            </div>
+            {showReadinessChips ? (
+              <div className="mt-3 flex flex-col gap-2" data-testid="backtest-readiness-strip">
+                <div className={LABEL_CLASS}>限制标签</div>
+                <EvidenceChips
+                  summary={readinessSummary}
+                  maxLabels={5}
+                  data-testid="backtest-readiness-chips"
+                />
+              </div>
+            ) : null}
+            <p className="mt-3 text-xs leading-5 text-white/42" data-testid="backtest-readiness-footnote">
+              收益、回撤、夏普和交易次数只描述这次历史模拟；样本外、参数稳定性与复现材料需单独复核。
+            </p>
+          </div>
           <div data-testid="backtest-report-result-summary" className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <MetricCard item={{ key: 'summary-return', label: '总收益', value: signedPct(normalized.metrics.totalReturnPct), tone: toneFor(normalized.metrics.totalReturnPct) }} />
             <MetricCard item={{ key: 'summary-risk', label: '最大回撤', value: signedPct(displayDrawdown(normalized.metrics.maxDrawdownPct)), tone: 'negative' }} />
@@ -1341,7 +1403,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             <MetricCard item={{ key: 'summary-trades', label: '交易次数', value: `${normalized.metrics.tradeCount ?? 0} 次`, tone: 'neutral' }} />
             <MetricCard item={{ key: 'summary-data', label: '诊断材料', value: dataQuality.length ? `${dataQuality.length} 项` : '待补充', tone: 'neutral' }} />
             <div className="col-span-2 rounded-xl border border-white/5 bg-black/20 p-3 text-xs leading-5 text-white/50 lg:col-span-4">
-              <span className={LABEL_CLASS}>诊断结论</span>
+              <span className={LABEL_CLASS}>研究结论</span>
               <span className="ml-2">先读总收益、最大回撤、胜率、交易次数与诊断材料；曲线和风险解释只用于观察复盘，复查材料默认折叠。</span>
             </div>
           </div>

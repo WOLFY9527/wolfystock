@@ -108,7 +108,7 @@ appTest.describe('Backtest result launch research surface', () => {
       await appExpect(hero).toBeVisible({ timeout: 15_000 });
       await appExpect(kpis).toBeVisible();
       await appExpect(summary).toBeVisible();
-      await appExpect(resultSummary).toContainText('诊断结论');
+      await appExpect(resultSummary).toContainText('研究结论');
       await appExpect(resultSummary).toContainText('总收益');
       await appExpect(resultSummary).toContainText('最大回撤');
       await appExpect(resultSummary).toContainText('交易次数');
