@@ -494,10 +494,11 @@ test.describe('scanner launch surface', () => {
     const nextSteps = page.getByTestId('scanner-workflow-next-steps');
     await expect(nextSteps).toBeVisible({ timeout: 15_000 });
     await expect(nextSteps).toContainText('下一步');
+    await expect(nextSteps).toContainText('首选研究路径');
     await expect(nextSteps).toContainText('换市场或配置');
     await expect(nextSteps).toContainText('不代表市场没有机会');
     await expect(nextSteps).toContainText('查看历史');
-    await expect(nextSteps).toContainText('手动加入观察名单');
+    await expect(nextSteps).toContainText('可选保存路径');
     await expect(nextSteps).toContainText('预览候选 1');
     await expect(nextSteps).toContainText('预览不会改变官方入选或评分');
     await expect(nextSteps).toContainText('功能预览');

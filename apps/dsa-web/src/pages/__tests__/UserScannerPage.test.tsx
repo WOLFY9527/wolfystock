@@ -1643,13 +1643,15 @@ describe('UserScannerPage', () => {
     expect(nextSteps).toHaveTextContent('下一步');
     expect(nextSteps).toHaveTextContent('换市场或配置');
     expect(nextSteps).toHaveTextContent('查看历史');
-    expect(nextSteps).toHaveTextContent('手动加入观察名单');
+    expect(nextSteps).toHaveTextContent('首选研究路径');
+    expect(nextSteps).toHaveTextContent('可选保存路径');
     expect(nextSteps).toHaveTextContent('Market Overview');
     expect(nextSteps).toHaveTextContent('不代表市场没有机会');
     expect(nextSteps).toHaveTextContent('功能预览');
     expect(nextSteps).toHaveTextContent('示例预览');
     expect(nextSteps).toHaveTextContent('候选摘要');
     expect(nextSteps).toHaveTextContent('观察依据');
+    expect(nextSteps).toHaveTextContent('先研究单个代码，不改官方入选，也不触发持久化。');
     expect(nextSteps).toHaveTextContent('不会写入观察名单');
     expect(nextSteps).toHaveTextContent('不会进入官方排名或导出数据');
     expect(within(nextSteps).getByRole('link', { name: /打开 Watchlist/i })).toHaveAttribute('href', '/zh/watchlist');
@@ -1733,6 +1735,7 @@ describe('UserScannerPage', () => {
     const { container } = renderUserScannerPage();
 
     const nextSteps = await screen.findByTestId('scanner-workflow-next-steps');
+    expect(within(nextSteps).getByTestId('scanner-primary-research-path')).toHaveTextContent('首选研究路径');
     expect(nextSteps).toHaveTextContent('预览候选 1');
     expect(nextSteps).toHaveTextContent('预览不会改变官方入选或评分');
     expect(within(nextSteps).getByTestId('scanner-empty-success-preview')).toHaveTextContent('演示样例');

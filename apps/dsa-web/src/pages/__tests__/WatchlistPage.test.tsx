@@ -1870,7 +1870,7 @@ describe('WatchlistPage', () => {
     expect(await screen.findByText('NVDA 已复制')).toBeInTheDocument();
   });
 
-  it('renders a mobile-safe empty state with a single scanner action', async () => {
+  it('renders a mobile-safe empty state with manual research as the primary path', async () => {
     listWatchlistItems.mockResolvedValue({ items: [] });
 
     renderWatchlist();
@@ -1893,9 +1893,9 @@ describe('WatchlistPage', () => {
       'text-center',
     );
     expect(within(emptyState).getByText('还没有观察标的')).toBeInTheDocument();
-    expect(emptyState).toHaveTextContent('从研究扫描器添加标的到观察列表，或在那里手动补充代码。');
-    expect(emptyState).toHaveTextContent('添加后可在这里查看已保存的候选证据与状态。');
-    expect(emptyState).toHaveTextContent('扫描器仍可继续使用；当扫描器也没有候选时，可先用下方手动研究入口。');
+    expect(emptyState).toHaveTextContent('当前已保存覆盖下还没有可用观察行。可先在这里手动研究一个代码，确认后再决定是否保存到观察列表。');
+    expect(emptyState).toHaveTextContent('只有你明确保留观察后，已保存的候选证据与状态才会回到这里。');
+    expect(emptyState).toHaveTextContent('如果后续需要批量筛选，扫描器仍可作为辅助入口。');
     const preview = within(emptyState).getByTestId('watchlist-empty-preview');
     expect(preview).toHaveTextContent('功能预览');
     expect(preview).toHaveTextContent('示例预览');
@@ -1905,7 +1905,10 @@ describe('WatchlistPage', () => {
     expect(preview).toHaveTextContent('不会持久化');
     expect(preview).toHaveTextContent('不计入观察名单数量');
     expect(preview).toHaveTextContent('不会进入扫描器官方排名');
-    expect(within(emptyState).getByTestId('watchlist-empty-manual-research')).toHaveTextContent('手动研究代码');
+    const researchPath = within(emptyState).getByTestId('watchlist-empty-manual-research');
+    expect(researchPath).toHaveTextContent('首选研究路径');
+    expect(researchPath).toHaveTextContent('手动研究代码');
+    expect(researchPath).toHaveTextContent('首选路径：先启动一个个股研究任务，不会把代码加入观察名单。');
     expect(within(emptyState).getByLabelText('手动研究代码')).toBeInTheDocument();
     expect(emptyState).not.toHaveTextContent(/数据不足，禁止判断|买入|卖出|下单|交易|券商|broker/i);
     expect(within(headerStrip).queryByRole('button', { name: /打开扫描器/ })).not.toBeInTheDocument();
@@ -1915,9 +1918,8 @@ describe('WatchlistPage', () => {
     expect(screen.queryByTestId('watchlist-secondary-deck')).not.toBeInTheDocument();
     expect(screen.queryByTestId('watchlist-command-bar')).not.toBeInTheDocument();
 
-    const emptyStateScannerAction = within(emptyState).getByRole('button', { name: /打开扫描器/ });
-    expect(emptyStateScannerAction).toHaveClass('mt-2');
-    expect(screen.getAllByRole('button', { name: /打开扫描器/ })).toHaveLength(1);
+    const emptyStateScannerAction = within(emptyState).getByRole('button', { name: /稍后打开扫描器/ });
+    expect(screen.getAllByRole('button', { name: /稍后打开扫描器/ })).toHaveLength(1);
 
     fireEvent.click(emptyStateScannerAction);
     expect(screen.getByText('scanner')).toBeInTheDocument();
@@ -1930,6 +1932,7 @@ describe('WatchlistPage', () => {
     renderWatchlist();
 
     const emptyState = await screen.findByTestId('watchlist-compact-empty-state');
+    expect(within(emptyState).getByTestId('watchlist-empty-manual-research')).toHaveTextContent('首选研究路径');
     fireEvent.change(within(emptyState).getByLabelText('手动研究代码'), { target: { value: 'tsla' } });
     fireEvent.click(within(emptyState).getByRole('button', { name: /研究 TSLA/ }));
 

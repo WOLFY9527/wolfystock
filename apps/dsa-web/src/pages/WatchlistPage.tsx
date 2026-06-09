@@ -1203,8 +1203,8 @@ function getCopy(language: 'zh' | 'en') {
       copySymbol: 'Copy symbol',
       copied: 'Copied',
       emptyTitle: 'No tracked candidates yet.',
-      emptyBody: 'Add symbols from the research scanner to the watchlist, or use manual symbol entry there.',
-      emptyHelp: 'Return here to review saved candidate evidence and status.',
+      emptyBody: 'Under the current saved coverage, no watchlist rows are available yet. Start with one manual symbol research task here, then save only if you decide to keep observing it.',
+      emptyHelp: 'Saved rows return here after you explicitly keep a symbol for ongoing observation.',
       emptyPreviewEyebrow: 'Feature preview',
       emptyPreviewTitle: 'Example preview',
       emptyPreviewBody: 'A saved observation row can show source, evidence state, latest observation, and the next research step.',
@@ -1214,14 +1214,14 @@ function getCopy(language: 'zh' | 'en') {
         { label: 'Next research step', value: 'Open analysis / refresh / backtest', detail: 'Actions are explicit user research steps, not execution shortcuts.' },
       ] as WatchlistEmptyPreviewItem[],
       emptyPreviewFootnote: 'Demo sample only. It is not persisted, counted as a watchlist item, exported as user data, or used by scanner ranking.',
-      emptyScannerHelp: 'Scanner can still be useful, but manual research below is available when Scanner has no candidates.',
+      emptyScannerHelp: 'If you later need batch screening, Scanner remains available as a secondary route.',
       savedObservationHelp: 'Saved observations are created only after you explicitly save a symbol; this preview does not create one.',
       manualResearchLabel: 'Manual research symbol',
       manualResearchPlaceholder: 'TSLA',
-      manualResearchHelp: 'Start one stock research task without adding anything to Watchlist.',
+      manualResearchHelp: 'Primary path: start one stock research task here without adding anything to Watchlist.',
       manualResearchButton: 'Research',
       enterManualSymbol: 'Enter one symbol before starting research.',
-      openScanner: 'Open Scanner',
+      openScanner: 'Open Scanner later',
       tableTitle: 'Monitoring list',
       tableDescription: 'Rows keep state, observation, and actions aligned.',
       loading: 'Loading watchlist...',
@@ -1326,8 +1326,8 @@ function getCopy(language: 'zh' | 'en') {
     copySymbol: '复制代码',
     copied: '已复制',
     emptyTitle: '还没有观察标的',
-      emptyBody: '从研究扫描器添加标的到观察列表，或在那里手动补充代码。',
-    emptyHelp: '添加后可在这里查看已保存的候选证据与状态。',
+      emptyBody: '当前已保存覆盖下还没有可用观察行。可先在这里手动研究一个代码，确认后再决定是否保存到观察列表。',
+    emptyHelp: '只有你明确保留观察后，已保存的候选证据与状态才会回到这里。',
     emptyPreviewEyebrow: '功能预览',
     emptyPreviewTitle: '示例预览',
     emptyPreviewBody: '真实保存后，观察行会展示加入来源、证据状态、最近观察与下一步研究动作。',
@@ -1337,14 +1337,14 @@ function getCopy(language: 'zh' | 'en') {
       { label: '下一步研究', value: '打开分析 / 刷新 / 回测', detail: '全部是用户触发的研究步骤，不是执行入口。' },
     ] as WatchlistEmptyPreviewItem[],
     emptyPreviewFootnote: '仅为演示样例；不会持久化，不计入观察名单数量，不导出为用户数据，也不会进入扫描器官方排名。',
-    emptyScannerHelp: '扫描器仍可继续使用；当扫描器也没有候选时，可先用下方手动研究入口。',
+    emptyScannerHelp: '如果后续需要批量筛选，扫描器仍可作为辅助入口。',
     savedObservationHelp: '保存观察只会在你明确保存代码后创建；这里的预览不会创建观察项。',
     manualResearchLabel: '手动研究代码',
     manualResearchPlaceholder: 'TSLA',
-    manualResearchHelp: '启动一个个股研究任务，不会把代码加入观察名单。',
+    manualResearchHelp: '首选路径：先启动一个个股研究任务，不会把代码加入观察名单。',
     manualResearchButton: '研究',
     enterManualSymbol: '请先输入一个研究代码。',
-    openScanner: '打开扫描器',
+    openScanner: '稍后打开扫描器',
     tableTitle: '监控列表',
     tableDescription: '按行查看状态、观察与操作。',
     loading: '正在加载观察列表...',
@@ -2381,11 +2381,11 @@ const WatchlistPage: React.FC = () => {
                     ? 'mx-auto min-h-[168px] w-full max-w-3xl flex-col items-center justify-center rounded-none border-0 bg-transparent px-4 py-8 text-center sm:min-h-[188px]'
                     : 'min-h-[72px] flex-col items-start justify-start rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent px-4 py-4 sm:flex-row sm:items-center sm:justify-between'
                   }
-                  action={(
+                  action={isWatchlistEmptyWorkspace ? undefined : (
                     <TerminalButton
                       type="button"
                       variant="secondary"
-                      className={isWatchlistEmptyWorkspace ? 'mt-2 h-9 px-4 text-xs' : 'h-9 w-full px-3 text-xs sm:w-auto'}
+                      className="h-9 w-full px-3 text-xs sm:w-auto"
                       onClick={() => navigate(scannerPath)}
                     >
                       <ExternalLink className="h-4 w-4" />
@@ -2426,9 +2426,18 @@ const WatchlistPage: React.FC = () => {
                     {isWatchlistEmptyWorkspace ? (
                       <div
                         data-testid="watchlist-empty-manual-research"
-                        className="grid min-w-0 gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-black/20 px-3 py-3 text-left"
+                        data-research-path="primary"
+                        className="grid min-w-0 gap-2 rounded-xl border border-indigo-300/18 bg-indigo-300/[0.07] px-3 py-3 text-left"
                       >
-                        <label htmlFor="watchlist-empty-manual-symbol" className="text-[11px] font-semibold text-white/74">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <TerminalChip variant="info">{language === 'en' ? 'Primary research path' : '首选研究路径'}</TerminalChip>
+                          <span className="text-[11px] text-white/48">
+                            {language === 'en'
+                              ? 'Research one symbol first; save only if you explicitly want to keep monitoring it.'
+                              : '先研究单个代码；只有你明确要继续跟踪时，才再保存到观察列表。'}
+                          </span>
+                        </div>
+                        <label htmlFor="watchlist-empty-manual-symbol" className="text-[11px] font-semibold text-white/78">
                           {copy.manualResearchLabel}
                         </label>
                         <p className="text-[11px] leading-relaxed text-white/45">{copy.manualResearchHelp}</p>
@@ -2444,7 +2453,7 @@ const WatchlistPage: React.FC = () => {
                           />
                           <TerminalButton
                             type="button"
-                            variant="secondary"
+                            variant="primary"
                             data-testid="watchlist-empty-manual-research-button"
                             className="h-9 px-3 text-xs"
                             disabled={!emptyResearchParsedSymbol || isEmptyResearchPending}
@@ -2459,6 +2468,20 @@ const WatchlistPage: React.FC = () => {
                           </TerminalButton>
                         </div>
                         <p className="text-[11px] leading-relaxed text-white/42">{copy.savedObservationHelp}</p>
+                        <div className="flex min-w-0 flex-wrap items-center gap-2 pt-1">
+                          <span className="text-[11px] text-white/42">
+                            {language === 'en' ? 'Secondary route:' : '辅助入口：'}
+                          </span>
+                          <TerminalButton
+                            type="button"
+                            variant="compact"
+                            className="h-8 px-2.5 text-xs"
+                            onClick={() => navigate(scannerPath)}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            {copy.openScanner}
+                          </TerminalButton>
+                        </div>
                       </div>
                     ) : null}
                   </div>

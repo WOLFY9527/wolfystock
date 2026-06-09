@@ -515,15 +515,16 @@ test.describe('watchlist user alerts browser smoke', () => {
     const emptyState = page.getByTestId('watchlist-compact-empty-state');
     await expect(emptyState).toBeVisible({ timeout: 15_000 });
     await expect(emptyState).toContainText('还没有观察标的');
+    await expect(emptyState).toContainText('首选研究路径');
     await expect(emptyState).toContainText('功能预览');
     await expect(emptyState).toContainText('示例预览');
     await expect(emptyState).toContainText('仅为演示样例');
     await expect(emptyState).toContainText('不会持久化');
     await expect(emptyState).toContainText('不计入观察名单数量');
     await expect(emptyState).toContainText('不会进入扫描器官方排名');
-    await expect(emptyState).toContainText('扫描器仍可继续使用');
+    await expect(emptyState).toContainText('如果后续需要批量筛选');
     await expect(emptyState).toContainText('手动研究代码');
-    await expect(emptyState.getByRole('button', { name: '打开扫描器' })).toBeVisible();
+    await expect(emptyState.getByRole('button', { name: '稍后打开扫描器' })).toBeVisible();
     await expect(page.getByTestId('watchlist-detail-rail')).toHaveCount(0);
     await expect(page.getByTestId('watchlist-candidate-list')).toHaveCount(0);
     await expect(page.getByTestId('watchlist-secondary-deck')).toHaveCount(0);

@@ -1339,8 +1339,8 @@ function buildScannerEmptyPreviewItems(language: 'zh' | 'en'): ScannerEmptyPrevi
       },
       {
         label: 'Next step',
-        value: 'Save observation / start research',
-        detail: 'Actions stay user-controlled and do not change scanner ranking.',
+        value: 'Start manual research / save observation',
+        detail: 'Manual research is the primary handoff; optional save actions stay user-controlled and do not change scanner ranking.',
       },
     ];
   }
@@ -1358,8 +1358,8 @@ function buildScannerEmptyPreviewItems(language: 'zh' | 'en'): ScannerEmptyPrevi
     },
     {
       label: '下一步',
-      value: '保存观察 / 启动研究',
-      detail: '动作由用户触发，并且不改变扫描排名。',
+      value: '启动手动研究 / 保存观察',
+      detail: '手动研究是主路径；保存动作仍由用户触发，并且不改变扫描排名。',
     },
   ];
 }
@@ -3448,16 +3448,16 @@ const UserScannerPage: React.FC = () => {
     || Boolean(pageErrorSummary);
   const scannerWorkflowDetail = scannerConclusion.state === 'waiting'
     ? (language === 'en'
-      ? 'Run the current setup first. If this route is already stale, inspect history or manually send one symbol into Watchlist or Stock Research.'
-      : '先运行当前配置。如需绕过空白入口，可查看历史，或手动把一个代码送入观察名单/个股研究。')
+      ? 'Run the current setup first. If you need to keep moving before Scanner forms a usable candidate set, use the manual symbol research path below instead of bouncing between routes.'
+      : '可先运行当前配置；如果当前覆盖下还没有可用候选，可直接使用下方手动研究路径，避免在页面之间来回跳转。')
     : scannerConclusion.state === 'insufficient'
       ? (language === 'en'
-        ? 'Current evidence is not enough for a candidate handoff. This may be data or history coverage, so retry the loaded parameters, check history, or use a manual symbol while evidence catches up.'
-        : '当前证据不足，不能把本次结果当作候选交接。这可能来自数据或历史覆盖，可同参数重试、查看历史，或在证据补齐前手动输入代码。')
+        ? 'Current evidence is not enough for a candidate handoff. Retry and history remain available, but the clean primary path is manual symbol research until coverage catches up.'
+        : '当前证据不足，暂不适合从扫描结果移交候选。可重跑和查看历史，但更清晰的主路径是先手动研究单个代码，等待覆盖补齐。')
       : scannerConclusion.state === 'no-candidate'
         ? (language === 'en'
-          ? 'No official candidate formed in this run. That can reflect data/history coverage or the current market/profile/universe setup, not a market-wide conclusion.'
-          : '本次未形成官方入选候选，可能来自数据/历史覆盖或当前市场/策略/标的池设置，不代表市场没有机会。')
+          ? 'No official candidate formed in this run. That can reflect current data/history coverage or the loaded setup, not a market-wide conclusion, so use manual symbol research as the primary next step.'
+          : '本次未形成官方入选候选，可能来自当前数据/历史覆盖或本轮设置，不代表市场没有机会；下一步以手动研究单个代码为主。')
         : (language === 'en'
           ? 'Some data is stale, partial, or limited. Keep the official candidate, but use history and Market Overview before treating it as research evidence.'
           : '部分数据可能过期、缺失或受限。可保留官方候选，但先结合历史与 Market Overview 再作为研究证据。');
@@ -3686,6 +3686,79 @@ const UserScannerPage: React.FC = () => {
                     </div>
 
                     <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(260px,0.58fr)_minmax(260px,0.58fr)]">
+                      <div
+                        data-testid="scanner-primary-research-path"
+                        className="min-w-0 rounded-lg border border-indigo-300/18 bg-indigo-300/[0.07] p-3"
+                      >
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="rounded-md border border-indigo-300/25 bg-indigo-300/12 px-2 py-0.5 text-[11px] font-semibold text-indigo-100/88">
+                            {language === 'en' ? 'Primary research path' : '首选研究路径'}
+                          </span>
+                          <span className="text-[11px] text-white/48">
+                            {language === 'en'
+                              ? 'Research one symbol without changing official selection or persistence.'
+                              : '先研究单个代码，不改官方入选，也不触发持久化。'}
+                          </span>
+                        </div>
+                        <label htmlFor="scanner-manual-recovery-symbol" className="mt-3 block text-[11px] font-semibold text-white/78">
+                          {language === 'en' ? 'Manual research symbol' : '手动补充研究代码'}
+                        </label>
+                        <p className="mt-1 text-[11px] leading-relaxed text-white/50">
+                          {language === 'en'
+                            ? 'Use one symbol when the current candidate set is unavailable or empty under current coverage. This starts research only; it does not write to Watchlist unless you explicitly save it.'
+                            : '当当前覆盖下的候选集为空或暂不可用时，可先研究一个代码。这里默认只启动研究；除非你明确点击“加入观察名单”，否则不会写入观察名单。'}
+                        </p>
+                        <div className="mt-2 flex min-w-0 flex-col gap-2 sm:flex-row">
+                          <input
+                            id="scanner-manual-recovery-symbol"
+                            data-testid="scanner-manual-recovery-symbol-input"
+                            value={manualRecoverySymbol}
+                            className="h-9 min-w-0 flex-1 rounded-md border border-white/10 bg-black/35 px-3 text-sm font-mono text-white outline-none placeholder:text-white/22 focus:border-indigo-300/50"
+                            onChange={(event) => setManualRecoverySymbol(event.target.value)}
+                            aria-label={language === 'en' ? 'Manual research symbol' : '手动补充研究代码'}
+                            placeholder={language === 'en' ? 'TSLA' : 'TSLA'}
+                          />
+                          <TerminalButton
+                            type="button"
+                            variant="primary"
+                            data-testid="scanner-manual-recovery-research"
+                            className="h-9 px-3 text-xs"
+                            disabled={!manualRecoveryParsedSymbol || isManualRecoveryAnalyzePending}
+                            onClick={() => void handleAnalyzeManualRecoverySymbol()}
+                          >
+                            <Play className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>{manualRecoveryParsedSymbol ? (language === 'en' ? `Research ${manualRecoveryParsedSymbol}` : `研究 ${manualRecoveryParsedSymbol}`) : (language === 'en' ? 'Research' : '研究')}</span>
+                          </TerminalButton>
+                        </div>
+                        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                          <span className="text-[11px] text-white/44">
+                            {language === 'en'
+                              ? 'Optional save path: only keep it in Watchlist if you explicitly want to monitor it.'
+                              : '可选保存路径：只有你明确需要继续跟踪时，再加入观察名单。'}
+                          </span>
+                          <TerminalButton
+                            type="button"
+                            variant="compact"
+                            data-testid="scanner-manual-recovery-watchlist"
+                            className="h-8 px-2.5 text-xs"
+                            disabled={!manualRecoveryParsedSymbol || manualRecoveryAlreadyTracked || isManualRecoveryWatchlistPending || watchlistAuthBlocked}
+                            title={watchlistAuthBlocked
+                              ? (language === 'en' ? 'Sign in to save symbols.' : '登录后可保存代码。')
+                              : undefined}
+                            onClick={() => void handleTrackManualRecoverySymbol()}
+                          >
+                            <BookmarkPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>
+                              {manualRecoveryAlreadyTracked
+                                ? (language === 'en' ? 'Already in Watchlist' : '已在观察名单')
+                                : manualRecoveryParsedSymbol
+                                  ? (language === 'en' ? `Add to Watchlist ${manualRecoveryParsedSymbol}` : `加入观察名单 ${manualRecoveryParsedSymbol}`)
+                                  : (language === 'en' ? 'Add to Watchlist' : '加入观察名单')}
+                            </span>
+                          </TerminalButton>
+                        </div>
+                      </div>
+
                       <ScannerEmptySuccessPreview language={language} />
 
                       <div className="min-w-0 rounded-lg border border-white/8 bg-black/20 p-3">
@@ -3712,76 +3785,21 @@ const UserScannerPage: React.FC = () => {
                               <span>{language === 'en' ? `Switch to ${option.label}` : `切到${option.label}`}</span>
                             </TerminalButton>
                           ))}
+                          <span className="ml-auto text-[11px] text-white/42">
+                            {language === 'en' ? 'Secondary routes:' : '辅助入口：'}
+                          </span>
                           <a
                             href={buildLocalizedPath('/watchlist', language)}
-                            className="inline-flex h-8 items-center rounded-md border border-white/10 bg-white/[0.04] px-2.5 text-xs font-medium text-white/72 hover:bg-white/[0.08] hover:text-white"
+                            className="inline-flex h-8 items-center rounded-md px-2 text-xs font-medium text-white/60 underline decoration-white/20 underline-offset-4 hover:text-white"
                           >
                             {language === 'en' ? 'Open Watchlist' : '打开 Watchlist'}
                           </a>
                           <a
                             href={buildLocalizedPath('/market-overview', language)}
-                            className="inline-flex h-8 items-center rounded-md border border-white/10 bg-white/[0.04] px-2.5 text-xs font-medium text-white/72 hover:bg-white/[0.08] hover:text-white"
+                            className="inline-flex h-8 items-center rounded-md px-2 text-xs font-medium text-white/60 underline decoration-white/20 underline-offset-4 hover:text-white"
                           >
                             {language === 'en' ? 'Open Market Overview' : '打开 Market Overview'}
                           </a>
-                        </div>
-                      </div>
-
-                      <div className="min-w-0 rounded-lg border border-white/8 bg-black/20 p-3">
-                        <label htmlFor="scanner-manual-recovery-symbol" className="text-[11px] font-semibold text-white/74">
-                          {language === 'en' ? 'Manual research symbol' : '手动补充研究代码'}
-                        </label>
-                        <p className="mt-1 text-[11px] leading-relaxed text-white/42">
-                          {language === 'en'
-                            ? 'Use one symbol when Scanner has no safe candidate. Add it to Watchlist or start Stock Research without changing Scanner ranking.'
-                            : '当扫描没有安全候选时，可手动输入一个代码，加入观察名单或启动个股研究，不改变扫描排名。'}
-                        </p>
-                        <div className="mt-2 flex min-w-0 flex-col gap-2 sm:flex-row">
-                          <input
-                            id="scanner-manual-recovery-symbol"
-                            data-testid="scanner-manual-recovery-symbol-input"
-                            value={manualRecoverySymbol}
-                            className="h-9 min-w-0 flex-1 rounded-md border border-white/10 bg-black/35 px-3 text-sm font-mono text-white outline-none placeholder:text-white/22 focus:border-indigo-300/50"
-                            onChange={(event) => setManualRecoverySymbol(event.target.value)}
-                            aria-label={language === 'en' ? 'Manual research symbol' : '手动补充研究代码'}
-                            placeholder={language === 'en' ? 'TSLA' : 'TSLA'}
-                          />
-                          <TerminalButton
-                            type="button"
-                            variant="secondary"
-                            data-testid="scanner-manual-recovery-research"
-                            className="h-9 px-3 text-xs"
-                            disabled={!manualRecoveryParsedSymbol || isManualRecoveryAnalyzePending}
-                            onClick={() => void handleAnalyzeManualRecoverySymbol()}
-                          >
-                            <Play className="h-3.5 w-3.5" aria-hidden="true" />
-                            <span>{manualRecoveryParsedSymbol ? (language === 'en' ? `Research ${manualRecoveryParsedSymbol}` : `研究 ${manualRecoveryParsedSymbol}`) : (language === 'en' ? 'Research' : '研究')}</span>
-                          </TerminalButton>
-                        </div>
-                        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
-                          <span className="text-[11px] text-white/42">
-                            {language === 'en' ? 'Manual Watchlist handoff' : '手动加入观察名单'}
-                          </span>
-                          <TerminalButton
-                            type="button"
-                            variant="compact"
-                            data-testid="scanner-manual-recovery-watchlist"
-                            className="h-8 px-2.5 text-xs"
-                            disabled={!manualRecoveryParsedSymbol || manualRecoveryAlreadyTracked || isManualRecoveryWatchlistPending || watchlistAuthBlocked}
-                            title={watchlistAuthBlocked
-                              ? (language === 'en' ? 'Sign in to save symbols.' : '登录后可保存代码。')
-                              : undefined}
-                            onClick={() => void handleTrackManualRecoverySymbol()}
-                          >
-                            <BookmarkPlus className="h-3.5 w-3.5" aria-hidden="true" />
-                            <span>
-                              {manualRecoveryAlreadyTracked
-                                ? (language === 'en' ? 'Already in Watchlist' : '已在观察名单')
-                                : manualRecoveryParsedSymbol
-                                  ? (language === 'en' ? `Add to Watchlist ${manualRecoveryParsedSymbol}` : `加入观察名单 ${manualRecoveryParsedSymbol}`)
-                                  : (language === 'en' ? 'Add to Watchlist' : '加入观察名单')}
-                            </span>
-                          </TerminalButton>
                         </div>
                       </div>
                     </div>
