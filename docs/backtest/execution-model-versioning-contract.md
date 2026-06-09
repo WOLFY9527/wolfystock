@@ -12,6 +12,27 @@ backtest calculations.
 - Current golden results, stored results, exports, and diagnostic/readiness
   evidence must keep their present meaning unless a future versioned contract is
   approved first.
+- Current v1 regression coverage is pinned by
+  `tests/fixtures/backtest/rule_backtest_semantics_freeze_v1.json` plus the
+  focused golden tests in `tests/test_rule_backtest_compute_golden.py` and
+  `tests/test_backtest_golden_contracts.py`.
+
+## Frozen v1 Regression Surface
+
+The v1 fixture/test surface locks the current behavior for:
+
+- deterministic template normalization for `Buy when Close > MA3. Sell when
+  Close < MA3.`;
+- bar-close signals, next-bar-open fills, and terminal same-bar-close
+  force-flatten behavior;
+- bounded per-side `fee_bps` and `slippage_bps` treatment;
+- explicit-date and `lookback_bars` sample-window behavior;
+- absence of broker calls, order placement, portfolio mutation, live provider
+  requirements, and trading-system authority.
+
+Any future change that intentionally alters those semantics needs a new
+versioned fixture/contract. Existing v1 fixtures should not be overwritten to
+hide behavior drift.
 
 ## Why Versioning Is Required
 

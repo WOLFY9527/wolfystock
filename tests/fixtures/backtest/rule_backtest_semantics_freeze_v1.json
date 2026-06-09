@@ -1,0 +1,260 @@
+{
+  "fixture_kind": "rule_backtest_semantics_freeze",
+  "fixture_version": "v1",
+  "purpose": "Freeze current deterministic rule backtest v1 semantics for regression tests without authorizing engine changes.",
+  "scope": {
+    "execution_model_id": "rule_backtest_default_execution_model_v1",
+    "lane": "single_symbol_deterministic_rule_backtest",
+    "standard_historical_evaluation_lane": "out_of_scope",
+    "stored_result_semantics": "unchanged"
+  },
+  "deterministic_template_behavior": {
+    "strategy_text": "Buy when Close > MA3. Sell when Close < MA3.",
+    "expected_parse": {
+      "strategy_kind": "rule_conditions",
+      "entry_text": "Close > MA3",
+      "exit_text": "Close < MA3",
+      "max_lookback": 3,
+      "strategy_spec": {}
+    },
+    "expected_execution_model": {
+      "version": "v1",
+      "timeframe": "daily",
+      "signal_evaluation_timing": "bar_close",
+      "entry_timing": "next_bar_open",
+      "exit_timing": "next_bar_open",
+      "entry_fill_price_basis": "open",
+      "exit_fill_price_basis": "open",
+      "position_sizing": "single_position_full_notional",
+      "fee_model": "bps_per_side",
+      "slippage_model": "bps_per_side",
+      "market_rules": {
+        "trading_day_execution": "available_bars_only",
+        "terminal_bar_fill_fallback": "same_bar_close",
+        "window_end_position_handling": "force_flatten"
+      }
+    }
+  },
+  "cost_slippage_current_treatment": {
+    "source_fixture": "rule_backtest_compute_basic_long_cash.json",
+    "model": "bps_per_side",
+    "fee_bps_per_side": 2.5,
+    "slippage_bps_per_side": 1.25,
+    "expected": {
+      "final_equity": 77620.334341,
+      "total_return_pct": -22.3797,
+      "trade_count": 1,
+      "entry_price": 11.2014,
+      "exit_price": 8.698912,
+      "quantity": 8925.224191,
+      "fees": 44.403688,
+      "slippage": 22.201495,
+      "notes": "exit_signal_next_bar_open"
+    },
+    "non_goals": [
+      "spread_simulation",
+      "market_impact",
+      "partial_fills",
+      "tax_or_stamp_duty_model",
+      "volume_participation_cap"
+    ]
+  },
+  "sample_window_behavior": {
+    "cases": [
+      {
+        "case_id": "tail_window_from_lookback_bars_without_explicit_dates",
+        "inputs": {
+          "initial_capital": 100000.0,
+          "lookback_bars": 3,
+          "fee_bps": 0.0,
+          "slippage_bps": 0.0,
+          "date_window": {
+            "start_date": null,
+            "end_date": null
+          },
+          "bars": {
+            "start_date": "2024-01-01",
+            "open": [10.0, 10.0, 10.0, 11.0, 12.0, 13.0],
+            "close": [10.0, 10.0, 10.0, 11.0, 12.0, 13.0]
+          }
+        },
+        "expected": {
+          "metrics": {
+            "final_equity": 108333.333333,
+            "total_return_pct": 8.3333,
+            "benchmark_return_pct": 18.1818,
+            "buy_and_hold_return_pct": 18.1818,
+            "trade_count": 1,
+            "entry_signal_count": 1,
+            "win_count": 1,
+            "loss_count": 0,
+            "max_drawdown_pct": 0.0,
+            "bars_used": 3,
+            "lookback_bars": 3,
+            "period_start": "2024-01-04",
+            "period_end": "2024-01-06",
+            "avg_holding_bars": 2,
+            "avg_holding_calendar_days": 1
+          },
+          "selected_equity_points": [
+            {
+              "date": "2024-01-04",
+              "executed_action": null,
+              "signal_summary": "Close > MA3",
+              "position_state": "flat",
+              "exposure_pct": 0.0,
+              "total_portfolio_value": 100000.0,
+              "notes": null
+            },
+            {
+              "date": "2024-01-05",
+              "executed_action": "buy",
+              "signal_summary": null,
+              "position_state": "long",
+              "exposure_pct": 1.0,
+              "total_portfolio_value": 100000.0,
+              "notes": "entry_signal_next_bar_open"
+            },
+            {
+              "date": "2024-01-06",
+              "executed_action": "forced_close",
+              "signal_summary": null,
+              "position_state": "flat",
+              "exposure_pct": 0.0,
+              "total_portfolio_value": 108333.333333,
+              "notes": "forced_close_at_window_end"
+            }
+          ],
+          "trades": [
+            {
+              "entry_signal_date": "2024-01-04",
+              "entry_date": "2024-01-05",
+              "exit_signal_date": "2024-01-06",
+              "exit_date": "2024-01-06",
+              "entry_price": 12.0,
+              "exit_price": 13.0,
+              "return_pct": 8.3333,
+              "quantity": 8333.333333,
+              "fees": 0.0,
+              "slippage": 0.0,
+              "entry_reason": "signal_entry",
+              "exit_reason": "final_close",
+              "signal_reason": "rule_conditions",
+              "notes": "forced_close_at_window_end"
+            }
+          ]
+        }
+      },
+      {
+        "case_id": "explicit_date_window_ignores_larger_lookback_tail_selection",
+        "inputs": {
+          "initial_capital": 100000.0,
+          "lookback_bars": 20,
+          "fee_bps": 0.0,
+          "slippage_bps": 0.0,
+          "date_window": {
+            "start_date": "2024-01-04",
+            "end_date": "2024-01-06"
+          },
+          "bars": {
+            "start_date": "2024-01-01",
+            "open": [10.0, 10.0, 10.0, 11.0, 12.0, 13.0],
+            "close": [10.0, 10.0, 10.0, 11.0, 12.0, 13.0]
+          }
+        },
+        "expected": {
+          "metrics": {
+            "final_equity": 108333.333333,
+            "total_return_pct": 8.3333,
+            "benchmark_return_pct": 18.1818,
+            "buy_and_hold_return_pct": 18.1818,
+            "trade_count": 1,
+            "entry_signal_count": 1,
+            "win_count": 1,
+            "loss_count": 0,
+            "max_drawdown_pct": 0.0,
+            "bars_used": 3,
+            "lookback_bars": 20,
+            "period_start": "2024-01-04",
+            "period_end": "2024-01-06",
+            "avg_holding_bars": 2,
+            "avg_holding_calendar_days": 1
+          },
+          "selected_equity_points": [
+            {
+              "date": "2024-01-04",
+              "executed_action": null,
+              "signal_summary": "Close > MA3",
+              "position_state": "flat",
+              "exposure_pct": 0.0,
+              "total_portfolio_value": 100000.0,
+              "notes": null
+            },
+            {
+              "date": "2024-01-05",
+              "executed_action": "buy",
+              "signal_summary": null,
+              "position_state": "long",
+              "exposure_pct": 1.0,
+              "total_portfolio_value": 100000.0,
+              "notes": "entry_signal_next_bar_open"
+            },
+            {
+              "date": "2024-01-06",
+              "executed_action": "forced_close",
+              "signal_summary": null,
+              "position_state": "flat",
+              "exposure_pct": 0.0,
+              "total_portfolio_value": 108333.333333,
+              "notes": "forced_close_at_window_end"
+            }
+          ],
+          "trades": [
+            {
+              "entry_signal_date": "2024-01-04",
+              "entry_date": "2024-01-05",
+              "exit_signal_date": "2024-01-06",
+              "exit_date": "2024-01-06",
+              "entry_price": 12.0,
+              "exit_price": 13.0,
+              "return_pct": 8.3333,
+              "quantity": 8333.333333,
+              "fees": 0.0,
+              "slippage": 0.0,
+              "entry_reason": "signal_entry",
+              "exit_reason": "final_close",
+              "signal_reason": "rule_conditions",
+              "notes": "forced_close_at_window_end"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "no_order_no_broker_boundary": {
+    "runtime_paths_executed": {
+      "broker_calls_executed": false,
+      "order_placement_executed": false,
+      "portfolio_mutation_executed": false,
+      "provider_calls_required": false,
+      "live_provider_calls_required": false
+    },
+    "forbidden_output_markers": [
+      "/api/v1/broker",
+      "/api/v1/orders",
+      "broker_order_execution",
+      "order_placement",
+      "place_order",
+      "submit_order",
+      "execute_order",
+      "portfolio_mutation"
+    ]
+  },
+  "future_change_policy": {
+    "engine_behavior_change_requires_new_fixture_version": true,
+    "api_contract_change_out_of_scope": true,
+    "provider_runtime_change_out_of_scope": true,
+    "broker_or_order_execution_out_of_scope": true,
+    "frontend_redesign_out_of_scope": true
+  }
+}

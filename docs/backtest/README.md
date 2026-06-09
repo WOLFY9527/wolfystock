@@ -83,6 +83,47 @@ public-safety wording.
 - Backtest calculations and stored result semantics are protected runtime
   behavior.
 
+## Current v1 Semantics Freeze
+
+The current/default deterministic rule backtest lane is frozen as
+`rule_backtest_default_execution_model_v1`. This freeze documents and tests the
+existing behavior only; it is not a behavior upgrade and does not authorize
+engine, service, API, provider, storage, broker, or frontend changes.
+
+Frozen v1 scope:
+
+- single-symbol deterministic rule backtests;
+- bar-close signal evaluation with next-bar-open entry and exit fills;
+- terminal same-bar-close fallback when the execution window ends with an open
+  position;
+- single full-notional long position sizing;
+- bounded per-side `fee_bps` and `slippage_bps` treatment;
+- available-bars-only sample windows from explicit dates or the current
+  `lookback_bars` tail behavior;
+- stored-first readback and support-export authority.
+
+Explicit v1 non-goals:
+
+- walk-forward/OOS model selection, optimizer training, parameter sweeps, or
+  winner promotion;
+- market impact, spread simulation, partial fills, volume participation caps,
+  taxes, stamp duty, halt/limit behavior, or broker-grade execution realism;
+- live provider calls required by tests or exports;
+- broker connectivity, order placement, portfolio mutation, or live trading;
+- portfolio allocation, multi-asset rebalancing, or universe-level capital
+  allocation;
+- API contract changes, stored-result semantic changes, or frontend redesign.
+
+Regression fixtures and tests:
+
+- `tests/fixtures/backtest/rule_backtest_semantics_freeze_v1.json` is the
+  compact fixture for template parsing, cost/slippage treatment, sample-window
+  behavior, and no-order/no-broker boundaries.
+- `tests/test_rule_backtest_compute_golden.py` executes the current Python
+  engine against that fixture so behavior changes fail focused tests.
+- `tests/test_backtest_golden_contracts.py` checks that all backtest fixtures
+  remain explicit, compact, sanitized, and scoped to current v1 semantics.
+
 ## Research Validation Capability Matrix
 
 Use this matrix before opening any backtest research-validation task. It is a

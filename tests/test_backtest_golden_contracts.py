@@ -461,6 +461,114 @@ def test_rule_backtest_compute_golden_fixture_is_compact_deterministic_and_sanit
     _assert_no_live_provider_authority(payload)
 
 
+def test_rule_backtest_semantics_freeze_fixture_covers_current_v1_boundaries() -> None:
+    payload = _load_fixture("rule_backtest_semantics_freeze_v1.json")
+
+    assert payload["fixture_kind"] == "rule_backtest_semantics_freeze"
+    assert payload["fixture_version"] == "v1"
+    assert payload["scope"] == {
+        "execution_model_id": "rule_backtest_default_execution_model_v1",
+        "lane": "single_symbol_deterministic_rule_backtest",
+        "standard_historical_evaluation_lane": "out_of_scope",
+        "stored_result_semantics": "unchanged",
+    }
+
+    template = payload["deterministic_template_behavior"]
+    assert template["strategy_text"] == "Buy when Close > MA3. Sell when Close < MA3."
+    assert template["expected_parse"] == {
+        "strategy_kind": "rule_conditions",
+        "entry_text": "Close > MA3",
+        "exit_text": "Close < MA3",
+        "max_lookback": 3,
+        "strategy_spec": {},
+    }
+    assert template["expected_execution_model"]["entry_timing"] == "next_bar_open"
+    assert template["expected_execution_model"]["exit_timing"] == "next_bar_open"
+    assert template["expected_execution_model"]["position_sizing"] == "single_position_full_notional"
+    assert template["expected_execution_model"]["market_rules"] == {
+        "trading_day_execution": "available_bars_only",
+        "terminal_bar_fill_fallback": "same_bar_close",
+        "window_end_position_handling": "force_flatten",
+    }
+
+    costs = payload["cost_slippage_current_treatment"]
+    assert costs["source_fixture"] == "rule_backtest_compute_basic_long_cash.json"
+    assert costs["model"] == "bps_per_side"
+    assert costs["fee_bps_per_side"] == 2.5
+    assert costs["slippage_bps_per_side"] == 1.25
+    assert costs["expected"] == {
+        "final_equity": 77620.334341,
+        "total_return_pct": -22.3797,
+        "trade_count": 1,
+        "entry_price": 11.2014,
+        "exit_price": 8.698912,
+        "quantity": 8925.224191,
+        "fees": 44.403688,
+        "slippage": 22.201495,
+        "notes": "exit_signal_next_bar_open",
+    }
+    assert costs["non_goals"] == [
+        "spread_simulation",
+        "market_impact",
+        "partial_fills",
+        "tax_or_stamp_duty_model",
+        "volume_participation_cap",
+    ]
+
+    cases = payload["sample_window_behavior"]["cases"]
+    assert [case["case_id"] for case in cases] == [
+        "tail_window_from_lookback_bars_without_explicit_dates",
+        "explicit_date_window_ignores_larger_lookback_tail_selection",
+    ]
+    assert cases[0]["inputs"]["lookback_bars"] == 3
+    assert cases[0]["inputs"]["date_window"] == {"start_date": None, "end_date": None}
+    assert cases[0]["expected"]["metrics"]["period_start"] == "2024-01-04"
+    assert cases[0]["expected"]["metrics"]["period_end"] == "2024-01-06"
+    assert cases[0]["expected"]["metrics"]["bars_used"] == 3
+    assert cases[1]["inputs"]["lookback_bars"] == 20
+    assert cases[1]["inputs"]["date_window"] == {
+        "start_date": "2024-01-04",
+        "end_date": "2024-01-06",
+    }
+    assert cases[1]["expected"]["metrics"]["period_start"] == "2024-01-04"
+    assert cases[1]["expected"]["metrics"]["period_end"] == "2024-01-06"
+    assert cases[1]["expected"]["metrics"]["bars_used"] == 3
+    for case in cases:
+        assert case["expected"]["selected_equity_points"][-1]["executed_action"] == "forced_close"
+        assert case["expected"]["selected_equity_points"][-1]["notes"] == "forced_close_at_window_end"
+        assert case["expected"]["trades"][-1]["exit_reason"] == "final_close"
+
+    boundary = payload["no_order_no_broker_boundary"]
+    assert boundary["runtime_paths_executed"] == {
+        "broker_calls_executed": False,
+        "order_placement_executed": False,
+        "portfolio_mutation_executed": False,
+        "provider_calls_required": False,
+        "live_provider_calls_required": False,
+    }
+    assert set(boundary["forbidden_output_markers"]) == {
+        "/api/v1/broker",
+        "/api/v1/orders",
+        "broker_order_execution",
+        "order_placement",
+        "place_order",
+        "submit_order",
+        "execute_order",
+        "portfolio_mutation",
+    }
+    assert all(value is False for value in boundary["runtime_paths_executed"].values())
+
+    assert payload["future_change_policy"] == {
+        "engine_behavior_change_requires_new_fixture_version": True,
+        "api_contract_change_out_of_scope": True,
+        "provider_runtime_change_out_of_scope": True,
+        "broker_or_order_execution_out_of_scope": True,
+        "frontend_redesign_out_of_scope": True,
+    }
+    _assert_no_sensitive_public_payload(payload)
+    _assert_no_live_provider_authority(payload)
+
+
 def test_rule_backtest_shadow_cli_fixtures_are_parser_free_explicit_and_sanitized() -> None:
     expected_cases = {
         "rule_backtest_compute_shadow_cli_v1.json": {
@@ -1111,11 +1219,13 @@ def test_all_backtest_golden_fixtures_are_sanitized_and_explicitly_enumerated() 
         "rule_backtest_compute_shadow_cli_v4_ma_crossover.json",
         "rule_backtest_compare_dto.json",
         "rule_backtest_compare_heatmap_dto.json",
+        "rule_backtest_data_provenance_projection_v1.json",
         "rule_backtest_execution_model_v1_metadata.json",
         "rule_backtest_execution_trace_dto.json",
         "rule_backtest_export_index_dto.json",
         "rule_backtest_robustness_evidence_dto.json",
         "rule_backtest_result_summary_dto.json",
+        "rule_backtest_semantics_freeze_v1.json",
         "rule_backtest_support_bundle_manifest_dto.json",
         "rule_backtest_universe_job_diagnostics_dto.json",
         "rule_backtest_universe_results_dto.json",

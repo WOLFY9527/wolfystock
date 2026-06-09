@@ -162,6 +162,124 @@ def test_rule_backtest_compute_basic_long_cash_golden_fixture_matches_python_eng
     assert actual_trades == expected["trades"]
 
 
+def test_rule_backtest_semantics_freeze_fixture_matches_current_v1_engine() -> None:
+    fixture = _load_fixture("rule_backtest_semantics_freeze_v1.json")
+    template = fixture["deterministic_template_behavior"]
+    parser = RuleBacktestParser()
+    parsed = parser.parse(template["strategy_text"])
+
+    expected_parse = template["expected_parse"]
+    assert parsed.strategy_kind == expected_parse["strategy_kind"]
+    assert parsed.entry["text"] == expected_parse["entry_text"]
+    assert parsed.exit["text"] == expected_parse["exit_text"]
+    assert parsed.max_lookback == expected_parse["max_lookback"]
+    assert parsed.strategy_spec == expected_parse["strategy_spec"]
+
+    cost_freeze = fixture["cost_slippage_current_treatment"]
+    cost_source = _load_fixture(cost_freeze["source_fixture"])
+    cost_bars = _make_bars(
+        cost_source["inputs"]["bars"]["close"],
+        start=date.fromisoformat(cost_source["inputs"]["bars"]["start_date"]),
+        opens=cost_source["inputs"]["bars"]["open"],
+    )
+    cost_result = RuleBacktestEngine().run(
+        code=cost_source["inputs"]["code"],
+        parsed_strategy=parsed,
+        bars=cost_bars,
+        initial_capital=cost_source["inputs"]["initial_capital"],
+        fee_bps=cost_freeze["fee_bps_per_side"],
+        slippage_bps=cost_freeze["slippage_bps_per_side"],
+        lookback_bars=cost_source["inputs"]["lookback_bars"],
+        start_date=date.fromisoformat(cost_source["inputs"]["date_window"]["start_date"]),
+        end_date=date.fromisoformat(cost_source["inputs"]["date_window"]["end_date"]),
+    ).to_dict()
+    expected_execution_model = {
+        **template["expected_execution_model"],
+        "fee_bps_per_side": cost_freeze["fee_bps_per_side"],
+        "slippage_bps_per_side": cost_freeze["slippage_bps_per_side"],
+    }
+    assert cost_result["execution_model"] == expected_execution_model
+    assert cost_result["execution_assumptions"]["fee_model"] == cost_freeze["model"]
+    assert cost_result["execution_assumptions"]["slippage_model"] == cost_freeze["model"]
+    for key in ("final_equity", "total_return_pct", "trade_count"):
+        actual = cost_result["metrics"][key]
+        expected = cost_freeze["expected"][key]
+        if isinstance(expected, float):
+            _assert_close(actual, expected)
+        else:
+            assert actual == expected
+    assert len(cost_result["trades"]) == 1
+    cost_trade = cost_result["trades"][0]
+    for key in ("entry_price", "exit_price", "quantity", "fees", "slippage"):
+        _assert_close(cost_trade[key], cost_freeze["expected"][key])
+    for key in ("notes",):
+        assert cost_trade[key] == cost_freeze["expected"][key]
+
+    for case in fixture["sample_window_behavior"]["cases"]:
+        case_inputs = case["inputs"]
+        window_bars = _make_bars(
+            case_inputs["bars"]["close"],
+            start=date.fromisoformat(case_inputs["bars"]["start_date"]),
+            opens=case_inputs["bars"]["open"],
+        )
+        date_window = case_inputs["date_window"]
+        result = RuleBacktestEngine().run(
+            code="SAFE",
+            parsed_strategy=parsed,
+            bars=window_bars,
+            initial_capital=case_inputs["initial_capital"],
+            fee_bps=case_inputs["fee_bps"],
+            slippage_bps=case_inputs["slippage_bps"],
+            lookback_bars=case_inputs["lookback_bars"],
+            start_date=date.fromisoformat(date_window["start_date"]) if date_window["start_date"] else None,
+            end_date=date.fromisoformat(date_window["end_date"]) if date_window["end_date"] else None,
+        ).to_dict()
+
+        expected = case["expected"]
+        for key, expected_value in expected["metrics"].items():
+            actual_value = result["metrics"][key]
+            if isinstance(expected_value, float):
+                _assert_close(actual_value, expected_value)
+            else:
+                assert actual_value == expected_value
+
+        assert [
+            {
+                "date": point["date"],
+                "executed_action": point["executed_action"],
+                "signal_summary": point["signal_summary"],
+                "position_state": point["position_state"],
+                "exposure_pct": point["exposure_pct"],
+                "total_portfolio_value": point["total_portfolio_value"],
+                "notes": point["notes"],
+            }
+            for point in result["equity_curve"]
+        ] == expected["selected_equity_points"]
+        assert [
+            {
+                "entry_signal_date": trade["entry_signal_date"],
+                "entry_date": trade["entry_date"],
+                "exit_signal_date": trade["exit_signal_date"],
+                "exit_date": trade["exit_date"],
+                "entry_price": trade["entry_price"],
+                "exit_price": trade["exit_price"],
+                "return_pct": trade["return_pct"],
+                "quantity": trade["quantity"],
+                "fees": trade["fees"],
+                "slippage": trade["slippage"],
+                "entry_reason": trade["entry_reason"],
+                "exit_reason": trade["exit_reason"],
+                "signal_reason": trade["signal_reason"],
+                "notes": trade["notes"],
+            }
+            for trade in result["trades"]
+        ] == expected["trades"]
+
+        serialized_result = json.dumps(result, ensure_ascii=False, sort_keys=True).lower()
+        for marker in fixture["no_order_no_broker_boundary"]["forbidden_output_markers"]:
+            assert marker.lower() not in serialized_result
+
+
 def test_rule_backtest_shadow_cli_fixtures_match_python_engine_without_parser() -> None:
     expected_cases = {
         "rule_backtest_compute_shadow_cli_v1.json": {
