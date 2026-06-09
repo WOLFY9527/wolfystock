@@ -131,7 +131,9 @@ test.describe('portfolio empty-state CTA', () => {
     await expect(commandStrip.getByRole('button', { name: '同步数据' })).toHaveCount(0);
     await expect(emptyWorkflowColumn.getByRole('button', { name: '添加持仓' })).toHaveCount(1);
     await expect(emptyWorkflowColumn.getByRole('button', { name: '导入记录' })).toHaveCount(1);
-    await expect(emptyWorkflowColumn).toContainText('完成后可在右侧查看风险与数据说明。');
+    await expect(emptyWorkflowColumn).toContainText('首次配置路径');
+    await expect(emptyWorkflowColumn).toContainText('保存后会在下方自动展开真实持仓、风险摘要与近期活动。');
+    await expect(page.getByTestId('portfolio-preview-card')).toContainText('非持久预览');
     await expectNoHorizontalOverflow(page);
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
@@ -164,7 +166,7 @@ test.describe('portfolio empty-state CTA', () => {
     const layout = await emptyWorkflowColumn.evaluate((node) => {
       const element = node as HTMLElement;
       const startCard = element.querySelector('[data-testid="portfolio-start-card"]') as HTMLElement | null;
-      const actionRow = element.querySelector('.mt-3.flex.flex-wrap.gap-2') as HTMLElement | null;
+      const actionRow = element.querySelector('[data-testid="portfolio-empty-actions"]') as HTMLElement | null;
       const helpText = element.querySelector('[data-testid="portfolio-empty-help"]') as HTMLElement | null;
 
       if (!startCard || !actionRow || !helpText) {

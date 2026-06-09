@@ -2281,8 +2281,8 @@ const PortfolioPage: React.FC = () => {
   const viewFullHistoryLabel = language === 'zh' ? '查看全部历史' : 'View full history';
   const hideFullHistoryLabel = language === 'zh' ? '收起完整历史' : 'Hide full history';
   const portfolioEmptyStateGuidance = language === 'zh'
-    ? '持仓列表为空，添加你的第一只股票开始追踪。'
-    : 'Your holdings list is empty. Add your first stock to start tracking.';
+    ? '完成第一笔持仓或导入后，这里会显示真实持仓、估值与数据状态。'
+    : 'Once your first holding or import is saved, this area will show real holdings, valuation, and data status.';
   const formatConvertedDisplay = (value: number, nativeCurrency: string) => {
     if (nativeCurrency === displayCurrency) {
       return null;
@@ -2361,7 +2361,7 @@ const PortfolioPage: React.FC = () => {
   const topAccount = accountExposureRows[0] || null;
   const topPositionPercent = Number(topPosition?.percent || 0);
   const concentrationLabel = !hasHoldings || !topPosition
-    ? (language === 'zh' ? '暂无持仓' : 'No holdings')
+    ? (language === 'zh' ? '待生成' : 'Pending')
     : topPositionPercent < 20
       ? (language === 'zh' ? '分散' : 'Diversified')
       : topPositionPercent < 35
@@ -2377,7 +2377,7 @@ const PortfolioPage: React.FC = () => {
         ? 'text-cyan-300'
         : 'text-emerald-300';
   const concentrationDescription = !hasHoldings || !topPosition
-    ? (language === 'zh' ? '暂无持仓，保存持仓流水后生成集中度。' : 'No holdings yet. Save holding records to generate concentration.')
+    ? (language === 'zh' ? '完成首笔持仓后，系统会按真实持仓自动生成集中度与暴露判断。' : 'After the first holding is saved, concentration and exposure are generated from real positions automatically.')
     : language === 'zh'
       ? `最大持仓占 ${formatPercent(topPositionPercent)}，按持仓市值占比判定为${concentrationLabel}。`
       : `Largest holding is ${formatPercent(topPositionPercent)} of exposure, classified as ${concentrationLabel}.`;
@@ -2509,14 +2509,14 @@ const PortfolioPage: React.FC = () => {
     },
   ];
   const exposureSummaryDisclosureSummary = !hasHoldings
-    ? (language === 'zh' ? '暂无持仓，等待快照生成。' : 'No holdings yet; waiting for snapshot exposure.')
+    ? (language === 'zh' ? '完成首笔持仓后自动生成风险暴露摘要。' : 'Exposure summary appears automatically after the first holding is saved.')
     : `${exposureSummaryLargestLabel} ${formatPercent(topPosition?.percent)} · ${exposureSummaryCashLabel} ${formatPercent(analytics?.risk.cashPercent)}`;
   const exposureSummaryBasisNote = language === 'zh'
     ? '仅基于当前页面快照汇总，不展示尚未确认的行业、主题、因子或相关性分类。'
     : 'Summarized only from the current page snapshot; unconfirmed sector, theme, factor, and correlation categories stay out of the default summary.';
   const holdingsPrimaryValue = hasHoldings
     ? (language === 'zh' ? `${positionRows.length} 项持仓` : `${positionRows.length} holdings`)
-    : (language === 'zh' ? '无持仓' : 'No holdings');
+    : (language === 'zh' ? '等待首笔持仓' : 'Awaiting first holding');
   const showHeaderPortfolioActions = hasHoldings;
   const accountStateSummary = !hasActiveAccounts
     ? (language === 'zh' ? '暂无可用账户' : 'No available account')
@@ -2527,11 +2527,96 @@ const PortfolioPage: React.FC = () => {
     ? '先创建或选择账户，再添加第一笔持仓或导入历史记录。'
     : 'Create or select an account, then add the first holding or import records.';
   const portfolioEmptyHelpText = language === 'zh'
-    ? '完成后可在右侧查看风险与数据说明。'
-    : 'Then review risk and evidence on the right.';
+    ? '保存后会在下方自动展开真实持仓、风险摘要与近期活动。'
+    : 'Once saved, the real holdings, risk summary, and recent activity appear below.';
   const addHoldingActionLabel = language === 'zh' ? '添加持仓' : 'Add holding';
   const importTradesActionLabel = language === 'zh' ? '导入记录' : 'Import records';
   const manualLedgerActionLabel = language === 'zh' ? '手工记账' : 'Manual ledger';
+  const onboardingTitle = !hasAccounts
+    ? (language === 'zh' ? '创建你的首个组合' : 'Create your first portfolio')
+    : (language === 'zh' ? '开始配置首个组合' : 'Start setting up the first portfolio');
+  const onboardingBody = !hasAccounts
+    ? (language === 'zh'
+      ? '先创建一个真实组合账户，再选择手工记账或导入历史记录。保存前不会生成示例持仓、收益或建议。'
+      : 'Create a real portfolio account first, then use manual ledger or import history. No sample holdings, returns, or advice are generated before saving.')
+    : (language === 'zh'
+      ? '当前工作区已准备好接收第一笔持仓或导入历史记录；完成后会自动生成真实持仓、风险与时间线。'
+      : 'This workspace is ready for the first holding or imported history. Real holdings, risk, and timeline views appear automatically after that.');
+  const onboardingPrimaryActionLabel = !hasAccounts
+    ? copy.createAccount
+    : hasWritableAccounts
+      ? addHoldingActionLabel
+      : (language === 'zh' ? '管理账户' : 'Manage accounts');
+  const onboardingPrimaryAction = () => {
+    if (!hasAccounts || !hasWritableAccounts) {
+      openManualLedger('account');
+      return;
+    }
+    openManualLedger('trade', 'stock');
+  };
+  const onboardingSteps = [
+    {
+      key: 'account',
+      label: language === 'zh' ? '账户准备' : 'Account setup',
+      detail: hasAccounts
+        ? accountStateSummary
+        : (language === 'zh' ? '先创建一个真实组合账户' : 'Create a real portfolio account first'),
+    },
+    {
+      key: 'records',
+      label: language === 'zh' ? '首笔记录' : 'First records',
+      detail: hasWritableAccounts
+        ? (language === 'zh' ? '添加第一笔持仓或导入历史记录' : 'Add the first holding or import historical records')
+        : (language === 'zh' ? '账户可写后开放持仓与导入入口' : 'Holdings and import open once the account is writable'),
+    },
+    {
+      key: 'workspace',
+      label: language === 'zh' ? '工作区生成' : 'Workspace activation',
+      detail: language === 'zh'
+        ? '完成后自动显示持仓、风险与近期活动'
+        : 'Real holdings, risk, and recent activity appear automatically after completion',
+    },
+  ];
+  const onboardingPreviewItems = [
+    {
+      key: 'ledger',
+      label: language === 'zh' ? '持仓台账' : 'Holdings ledger',
+      detail: language === 'zh'
+        ? '展示标的、数量、估值与数据状态'
+        : 'Shows symbols, quantities, valuation, and data state',
+    },
+    {
+      key: 'risk',
+      label: language === 'zh' ? '风险摘要' : 'Risk summary',
+      detail: language === 'zh'
+        ? '展示集中度、币种/市场暴露与压力情景入口'
+        : 'Shows concentration, currency/market exposure, and scenario entry points',
+    },
+    {
+      key: 'activity',
+      label: language === 'zh' ? '近期活动' : 'Recent activity',
+      detail: language === 'zh'
+        ? '展示持仓、现金与公司行为时间线'
+        : 'Shows the timeline for holdings, cash, and corporate actions',
+    },
+  ];
+  const emptyRiskPreviewItems = [
+    {
+      key: 'position',
+      label: language === 'zh' ? '集中度' : 'Concentration',
+      detail: language === 'zh' ? '首笔持仓后生成' : 'Appears after the first holding',
+    },
+    {
+      key: 'currency',
+      label: language === 'zh' ? '币种暴露' : 'Currency exposure',
+      detail: language === 'zh' ? '按真实持仓自动汇总' : 'Aggregated from real holdings automatically',
+    },
+    {
+      key: 'market',
+      label: language === 'zh' ? '市场暴露' : 'Market exposure',
+      detail: language === 'zh' ? '按组合结构自动分类' : 'Classified from the real portfolio structure',
+    },
+  ];
   const buildHoldingTrustItems = (row: FlatPosition) => uniqueTrustItems([
     {
       key: `${row.symbol}-freshness`,
@@ -2641,11 +2726,11 @@ const PortfolioPage: React.FC = () => {
     ? (language === 'zh'
       ? `${accountStateSummary} · ${positionRows.length} 项持仓`
       : `${accountStateSummary} · ${positionRows.length} holdings`)
-    : (language === 'zh' ? '持仓列表将在保存记录后出现' : 'Holdings appear after records are saved');
+    : (language === 'zh' ? '完成首笔持仓或导入后，这里会显示真实台账。' : 'The real ledger appears here after the first holding or import is saved.');
   const valuationSnapshotNote = hasHoldings
     ? summarizePortfolioPriceAsOf(positionRows, language)?.label
       || (language === 'zh' ? '价格快照待确认' : 'Price snapshot pending')
-    : (language === 'zh' ? '暂无价格快照' : 'No price snapshot yet');
+    : (language === 'zh' ? '首笔持仓后显示价格快照' : 'Price snapshots appear after the first holding');
   const nextActionHeadline = !hasAccounts
     ? (language === 'zh' ? '先创建一个组合账户' : 'Create your first portfolio account')
     : !hasHoldings
@@ -2675,6 +2760,7 @@ const PortfolioPage: React.FC = () => {
             ? '当前组合已可观察，下一步可补录现金、公司行为或同步新数据。'
             : 'The portfolio is ready to observe. Next you can add cash flows, corporate actions, or sync new data.');
   const hasFreshValuationState = !hasFxUnavailable && !hasPriceFallback && !snapshot?.fxStale && !hasLimitedConfidence;
+  const filteredSafeRiskWarningLabels = safeRiskWarningLabels.filter((warning) => warning !== riskWarningLabels.no_holdings);
   const holdingsTableStatusLabel = language === 'zh' ? '状态' : 'Status';
 
   const handleToggleTradeActionMenu = (id: number) => {
@@ -3032,58 +3118,133 @@ const PortfolioPage: React.FC = () => {
             </div>
 
             <div data-testid="portfolio-row-summary" className="order-2 col-span-12 min-w-0">
-              <div data-testid="portfolio-summary-strip" className="flex min-w-0 flex-col gap-3">
-                <div data-testid="portfolio-summary-core-row" className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-                  <TerminalPanel as="section" data-testid="portfolio-summary-market-value-card" className="min-w-0 border-white/[0.08] bg-white/[0.035]">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{copy.totalMarketValue}</div>
-                    <div
-                      data-testid="portfolio-summary-market-value"
-                      className="mt-2 break-words font-mono text-[1.75rem] font-semibold leading-none text-white tabular-nums md:text-[2.1rem]"
-                    >
-                      {formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}
-                    </div>
-                    <div className="mt-2 text-xs leading-5 text-white/44">{holdingsHeaderNote}</div>
-                  </TerminalPanel>
-                  <TerminalPanel as="section" data-testid="portfolio-pnl-summary" className="min-w-0 border-white/[0.08] bg-white/[0.035]">
-                    <div data-testid="portfolio-pnl-total" className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{pnlLabels.total}</div>
-                    <div
-                      data-testid="portfolio-summary-pnl-value"
-                      className={`mt-2 break-words font-mono text-[1.75rem] font-semibold leading-none tabular-nums md:text-[2.1rem] ${totalPnl >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}
-                    >
-                      {totalPnlDisplay ? formatSignedMoney(totalPnlDisplay.value, displayCurrency) : formatSignedMoney(totalPnl, pnlSourceCurrency)}
-                    </div>
-                    <div className="mt-3 grid min-w-0 grid-cols-1 gap-1.5 text-xs text-white/44 sm:grid-cols-2">
-                      <span data-testid="portfolio-pnl-realized" className="min-w-0 break-words">{pnlLabels.realized} {realizedPnlDisplay ? formatSignedMoney(realizedPnlDisplay.value, displayCurrency) : formatSignedMoney(realizedPnl, pnlSourceCurrency)}</span>
-                      <span data-testid="portfolio-pnl-unrealized" className="min-w-0 break-words">{pnlLabels.unrealized} {unrealizedPnlDisplay ? formatSignedMoney(unrealizedPnlDisplay.value, displayCurrency) : formatSignedMoney(unrealizedPnl, pnlSourceCurrency)}</span>
-                    </div>
-                  </TerminalPanel>
-                </div>
+              {hasHoldings ? (
+                <div data-testid="portfolio-summary-strip" className="flex min-w-0 flex-col gap-3">
+                  <div data-testid="portfolio-summary-core-row" className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+                    <TerminalPanel as="section" data-testid="portfolio-summary-market-value-card" className="min-w-0 border-white/[0.08] bg-white/[0.035]">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{copy.totalMarketValue}</div>
+                      <div
+                        data-testid="portfolio-summary-market-value"
+                        className="mt-2 break-words font-mono text-[1.75rem] font-semibold leading-none text-white tabular-nums md:text-[2.1rem]"
+                      >
+                        {formatDisplayMoney(totalMarketValue, totalMarketValueDisplay, snapshotCurrency)}
+                      </div>
+                      <div className="mt-2 text-xs leading-5 text-white/44">{holdingsHeaderNote}</div>
+                    </TerminalPanel>
+                    <TerminalPanel as="section" data-testid="portfolio-pnl-summary" className="min-w-0 border-white/[0.08] bg-white/[0.035]">
+                      <div data-testid="portfolio-pnl-total" className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/38">{pnlLabels.total}</div>
+                      <div
+                        data-testid="portfolio-summary-pnl-value"
+                        className={`mt-2 break-words font-mono text-[1.75rem] font-semibold leading-none tabular-nums md:text-[2.1rem] ${totalPnl >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}
+                      >
+                        {totalPnlDisplay ? formatSignedMoney(totalPnlDisplay.value, displayCurrency) : formatSignedMoney(totalPnl, pnlSourceCurrency)}
+                      </div>
+                      <div className="mt-3 grid min-w-0 grid-cols-1 gap-1.5 text-xs text-white/44 sm:grid-cols-2">
+                        <span data-testid="portfolio-pnl-realized" className="min-w-0 break-words">{pnlLabels.realized} {realizedPnlDisplay ? formatSignedMoney(realizedPnlDisplay.value, displayCurrency) : formatSignedMoney(realizedPnl, pnlSourceCurrency)}</span>
+                        <span data-testid="portfolio-pnl-unrealized" className="min-w-0 break-words">{pnlLabels.unrealized} {unrealizedPnlDisplay ? formatSignedMoney(unrealizedPnlDisplay.value, displayCurrency) : formatSignedMoney(unrealizedPnl, pnlSourceCurrency)}</span>
+                      </div>
+                    </TerminalPanel>
+                  </div>
 
-                <div data-testid="portfolio-summary-aux-row" className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                  <TerminalPanel as="section" dense data-testid="portfolio-summary-cash-card" className="min-w-0">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{copy.totalCash}</div>
-                    <div data-testid="portfolio-summary-cash-value" className="mt-1.5 break-words font-mono text-base font-medium text-white tabular-nums">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</div>
-                    <div className="mt-1 text-xs leading-5 text-white/38">{language === 'zh' ? '可用于继续配置或缓冲波动。' : 'Available for new allocation or downside buffer.'}</div>
+                  <div data-testid="portfolio-summary-aux-row" className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <TerminalPanel as="section" dense data-testid="portfolio-summary-cash-card" className="min-w-0">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{copy.totalCash}</div>
+                      <div data-testid="portfolio-summary-cash-value" className="mt-1.5 break-words font-mono text-base font-medium text-white tabular-nums">{formatDisplayMoney(totalCash, totalCashDisplay, snapshotCurrency)}</div>
+                      <div className="mt-1 text-xs leading-5 text-white/38">{language === 'zh' ? '可用于继续配置或缓冲波动。' : 'Available for new allocation or downside buffer.'}</div>
+                    </TerminalPanel>
+                    <TerminalPanel as="section" dense data-testid="portfolio-summary-holdings-card" className="min-w-0">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{language === 'zh' ? '持仓' : 'Holdings'}</div>
+                      <div className="mt-1.5 break-words font-mono text-base font-medium text-white tabular-nums">{holdingsPrimaryValue}</div>
+                      <div className="mt-1 text-xs leading-5 text-white/38">{accountStateSummary}</div>
+                    </TerminalPanel>
+                    <TerminalPanel as="section" dense data-testid="portfolio-summary-risk-card" className="min-w-0">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{language === 'zh' ? '风险状态' : 'Risk state'}</div>
+                      <div className={`mt-1.5 break-words text-base font-semibold ${concentrationToneClass}`}>{concentrationLabel}</div>
+                      <div className="mt-1 text-xs leading-5 text-white/38">
+                        {`${language === 'zh' ? '最大持仓' : 'Largest'} ${formatPercent(topPositionPercent)}`}
+                      </div>
+                    </TerminalPanel>
+                    <TerminalPanel as="section" dense data-testid="portfolio-summary-status-card" className="min-w-0">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{language === 'zh' ? '状态快照' : 'Status snapshot'}</div>
+                      <div className="mt-1.5 break-words text-sm font-medium text-white/72">{valuationSnapshotNote}</div>
+                      <div className="mt-1 text-xs leading-5 text-white/38">{heroStatusChips.map((item) => item.label).join(' · ')}</div>
+                    </TerminalPanel>
+                  </div>
+                </div>
+              ) : (
+                <div data-testid="portfolio-empty-onboarding-row" className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
+                  <TerminalPanel as="section" data-testid="portfolio-empty-workflow-column" className="min-w-0 flex flex-col gap-4 border-white/[0.08] bg-white/[0.035]">
+                    <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">{language === 'zh' ? '首次配置路径' : 'First-use setup path'}</h2>
+                        <p className="mt-2 text-base font-medium text-white">{onboardingTitle}</p>
+                        <p className="mt-2 max-w-[68ch] text-sm leading-6 text-white/52">{onboardingBody}</p>
+                      </div>
+                      <TerminalChip variant="neutral">{language === 'zh' ? '真实数据接入前不生成示例收益' : 'No sample performance before real data is saved'}</TerminalChip>
+                    </div>
+                    <TerminalEmptyState
+                      data-testid="portfolio-start-card"
+                      title={language === 'zh' ? '创建或导入首个组合' : 'Create or import the first portfolio'}
+                      action={hasHistory ? <TerminalChip variant="caution" className="shrink-0">{noHoldingsHistoryNote}</TerminalChip> : undefined}
+                      className="min-h-[72px]"
+                    >
+                      {compactNoHoldingText}
+                    </TerminalEmptyState>
+                    <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
+                      {onboardingSteps.map((step, index) => (
+                        <div key={step.key} className="min-w-0 rounded-2xl border border-white/[0.05] bg-black/20 px-4 py-3">
+                          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{language === 'zh' ? `步骤 ${index + 1}` : `Step ${index + 1}`}</div>
+                          <div className="mt-2 text-sm font-medium text-white">{step.label}</div>
+                          <p className="mt-2 text-xs leading-5 text-white/45">{step.detail}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div data-testid="portfolio-empty-actions" className="flex min-w-0 flex-wrap gap-2">
+                      <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={onboardingPrimaryAction}>
+                        {onboardingPrimaryActionLabel}
+                      </TerminalButton>
+                      <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
+                        {importTradesActionLabel}
+                      </TerminalButton>
+                    </div>
+                    <p data-testid="portfolio-empty-help" className="text-xs leading-5 text-white/45">
+                      {portfolioEmptyHelpText}
+                    </p>
+                    {!hasWritableAccounts ? (
+                      <TerminalNotice variant="caution">
+                        {hasActiveAccounts
+                          ? (language === 'zh' ? '当前账户不可写，请先进入账户页调整可写账户，再继续添加持仓或导入。' : 'Current accounts are not writable. Open the account lane first, then continue with holdings or import.')
+                          : (language === 'zh' ? '暂无可写账户，请先创建账户。' : 'No writable account yet. Create an account first.')}
+                      </TerminalNotice>
+                    ) : null}
                   </TerminalPanel>
-                  <TerminalPanel as="section" dense data-testid="portfolio-summary-holdings-card" className="min-w-0">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{language === 'zh' ? '持仓' : 'Holdings'}</div>
-                    <div className="mt-1.5 break-words font-mono text-base font-medium text-white tabular-nums">{holdingsPrimaryValue}</div>
-                    <div className="mt-1 text-xs leading-5 text-white/38">{accountStateSummary}</div>
-                  </TerminalPanel>
-                  <TerminalPanel as="section" dense data-testid="portfolio-summary-risk-card" className="min-w-0">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{language === 'zh' ? '风险状态' : 'Risk state'}</div>
-                    <div className={`mt-1.5 break-words text-base font-semibold ${concentrationToneClass}`}>{concentrationLabel}</div>
-                    <div className="mt-1 text-xs leading-5 text-white/38">
-                      {hasHoldings ? `${language === 'zh' ? '最大持仓' : 'Largest'} ${formatPercent(topPositionPercent)}` : valuationSnapshotNote}
+
+                  <TerminalPanel as="section" data-testid="portfolio-preview-card" className="min-w-0 flex flex-col gap-4">
+                    <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">{language === 'zh' ? '功能预览 / 示例结构' : 'Feature preview / sample structure'}</h2>
+                        <p className="mt-2 text-sm leading-6 text-white/52">
+                          {language === 'zh'
+                            ? '以下仅展示工作区结构与信息层级，不会写入账户、生成示例持仓，也不会给出投资建议。'
+                            : 'This shows only the workspace structure and information hierarchy. It does not write to the account, generate sample holdings, or provide investment advice.'}
+                        </p>
+                      </div>
+                      <TerminalChip variant="neutral">{language === 'zh' ? '非持久预览' : 'Non-persistent preview'}</TerminalChip>
+                    </div>
+                    <div className="grid min-w-0 grid-cols-1 gap-2">
+                      {onboardingPreviewItems.map((item) => (
+                        <div key={item.key} className="min-w-0 rounded-2xl border border-white/[0.05] bg-black/20 px-4 py-3">
+                          <div className="flex min-w-0 items-center justify-between gap-3">
+                            <div className="text-sm font-medium text-white">{item.label}</div>
+                            <PillBadge variant="default" className="text-white/55">{language === 'zh' ? '完成后显示' : 'Shown after setup'}</PillBadge>
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-white/45">{item.detail}</p>
+                        </div>
+                      ))}
                     </div>
                   </TerminalPanel>
-                  <TerminalPanel as="section" dense data-testid="portfolio-summary-status-card" className="min-w-0">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{language === 'zh' ? '状态快照' : 'Status snapshot'}</div>
-                    <div className="mt-1.5 break-words text-sm font-medium text-white/72">{valuationSnapshotNote}</div>
-                    <div className="mt-1 text-xs leading-5 text-white/38">{heroStatusChips.map((item) => item.label).join(' · ')}</div>
-                  </TerminalPanel>
                 </div>
-              </div>
+              )}
             </div>
 
             <div data-testid="portfolio-row-routing" className="order-3 col-span-12 min-w-0 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(340px,5fr)] 2xl:gap-5 items-start">
@@ -3252,33 +3413,19 @@ const PortfolioPage: React.FC = () => {
                           </TerminalDenseTable>
                         </>
                     ) : (
-                      <div data-testid="portfolio-empty-workflow-column" className="min-w-0">
+                      <div data-testid="portfolio-empty-ledger-preview" className="min-w-0">
                         <TerminalEmptyState
-                          data-testid="portfolio-start-card"
-                          title={language === 'zh' ? '暂无持仓' : 'No holdings'}
+                          title={language === 'zh' ? '持仓台账将在这里显示' : 'Holdings ledger appears here'}
                           action={hasHistory ? <TerminalChip variant="caution" className="shrink-0">{noHoldingsHistoryNote}</TerminalChip> : undefined}
                           className="min-h-[72px]"
                         >
                           {portfolioEmptyStateGuidance}
                         </TerminalEmptyState>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <TerminalButton type="button" variant="primary" className="h-9 px-3" onClick={() => openManualLedger('trade', 'stock')}>
-                            {addHoldingActionLabel}
-                          </TerminalButton>
-                          <TerminalButton type="button" variant="secondary" onClick={() => openManualLedger('sync')}>
-                            {importTradesActionLabel}
-                          </TerminalButton>
-                        </div>
                         <p data-testid="portfolio-empty-help" className="mt-2 text-xs leading-5 text-white/45">
-                          {portfolioEmptyHelpText}
+                          {language === 'zh'
+                            ? '完成首笔持仓或导入后，这里会展示真实数量、估值、价格快照与数据状态。'
+                            : 'After the first holding or import is saved, this area shows real quantity, valuation, pricing snapshot, and data state.'}
                         </p>
-                        {!hasWritableAccounts ? (
-                          <TerminalNotice variant="caution" className="mt-3">
-                            {hasActiveAccounts
-                              ? (language === 'zh' ? '当前账户不可写，请选择具体可写账户。' : 'Current accounts are not writable. Select a writable account.')
-                              : (language === 'zh' ? '暂无可写账户，请先创建账户。' : 'No writable account yet. Create an account first.')}
-                          </TerminalNotice>
-                        ) : null}
                       </div>
                     )}
                   </div>
@@ -3305,38 +3452,62 @@ const PortfolioPage: React.FC = () => {
                       </PillBadge>
                     </span>
                   </div>
-                  <div data-testid="portfolio-risk-overview" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '最大持仓' : 'Largest Position'}</div>
-                      <div className="mt-2 truncate text-sm text-white">{topPosition?.label || '--'}</div>
-                      <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topPosition?.percent)}</div>
-                    </div>
-                    <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '主币种' : 'Primary Currency'}</div>
-                      <div className="mt-2 truncate text-sm text-white">{topCurrency?.label || '--'}</div>
-                      <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topCurrency?.percent)}</div>
-                    </div>
-                    <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '主市场' : 'Primary Market'}</div>
-                      <div className="mt-2 truncate text-sm text-white">{formatExposureMarketLabel(topMarket, language)}</div>
-                      <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topMarket?.percent)}</div>
-                    </div>
-                  </div>
-                  <div data-testid="portfolio-concentration-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '持仓集中度' : 'Concentration'}</div>
-                      <div className={`font-mono text-xs ${hasHoldings ? concentrationToneClass : 'text-white/35'}`}>{formatPercent(topPosition?.percent)}</div>
-                    </div>
-                    <p className="mt-2 text-xs leading-5 text-white/45">{concentrationDescription}</p>
-                  </div>
-                  <div data-testid="portfolio-risk-hints" className="flex flex-wrap gap-1.5">
-                    {(riskHintTexts.length ? riskHintTexts : [language === 'zh' ? '暂无显著集中风险' : 'No notable concentration risk']).map((hint) => (
-                      <PillBadge key={hint} variant="default" className="text-white/55">{hint}</PillBadge>
-                    ))}
-                    {safeRiskWarningLabels.map((warning) => (
-                      <PillBadge key={warning} variant="warning" className="text-white/55">{warning}</PillBadge>
-                    ))}
-                  </div>
+                  {hasHoldings ? (
+                    <>
+                      <div data-testid="portfolio-risk-overview" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '最大持仓' : 'Largest Position'}</div>
+                          <div className="mt-2 truncate text-sm text-white">{topPosition?.label || '--'}</div>
+                          <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topPosition?.percent)}</div>
+                        </div>
+                        <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '主币种' : 'Primary Currency'}</div>
+                          <div className="mt-2 truncate text-sm text-white">{topCurrency?.label || '--'}</div>
+                          <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topCurrency?.percent)}</div>
+                        </div>
+                        <div className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '主市场' : 'Primary Market'}</div>
+                          <div className="mt-2 truncate text-sm text-white">{formatExposureMarketLabel(topMarket, language)}</div>
+                          <div className="mt-1 font-mono text-xs text-white/45">{formatPercent(topMarket?.percent)}</div>
+                        </div>
+                      </div>
+                      <div data-testid="portfolio-concentration-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '持仓集中度' : 'Concentration'}</div>
+                          <div className={`font-mono text-xs ${concentrationToneClass}`}>{formatPercent(topPosition?.percent)}</div>
+                        </div>
+                        <p className="mt-2 text-xs leading-5 text-white/45">{concentrationDescription}</p>
+                      </div>
+                      <div data-testid="portfolio-risk-hints" className="flex flex-wrap gap-1.5">
+                        {(riskHintTexts.length ? riskHintTexts : [language === 'zh' ? '暂无显著集中风险' : 'No notable concentration risk']).map((hint) => (
+                          <PillBadge key={hint} variant="default" className="text-white/55">{hint}</PillBadge>
+                        ))}
+                        {filteredSafeRiskWarningLabels.map((warning) => (
+                          <PillBadge key={warning} variant="warning" className="text-white/55">{warning}</PillBadge>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div data-testid="portfolio-risk-overview" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        {emptyRiskPreviewItems.map((item) => (
+                          <div key={item.key} className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{item.label}</div>
+                            <div className="mt-2 text-sm font-medium text-white">{language === 'zh' ? '等待首笔持仓' : 'Awaiting first holding'}</div>
+                            <div className="mt-1 text-xs leading-5 text-white/45">{item.detail}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div data-testid="portfolio-concentration-drilldown" className="rounded-xl border border-white/[0.02] bg-black/20 p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">{language === 'zh' ? '风险工作区说明' : 'Risk workspace note'}</div>
+                        <p className="mt-2 text-xs leading-5 text-white/45">{concentrationDescription}</p>
+                      </div>
+                      <div data-testid="portfolio-risk-hints" className="flex flex-wrap gap-1.5">
+                        <PillBadge variant="default" className="text-white/55">{language === 'zh' ? '首笔持仓后自动生成' : 'Generated after the first holding'}</PillBadge>
+                        {hasHistory ? <PillBadge variant="warning" className="text-white/55">{noHoldingsHistoryNote}</PillBadge> : null}
+                      </div>
+                    </>
+                  )}
                   <TerminalDisclosure
                     title={exposureSummaryTitle}
                     summary={exposureSummaryDisclosureSummary}
@@ -3365,11 +3536,19 @@ const PortfolioPage: React.FC = () => {
                       ) : null}
                     </div>
                   </TerminalDisclosure>
-                  <PortfolioScenarioRiskPanel
-                    snapshotAsOf={snapshot?.asOf}
-                    positions={scenarioRiskPositions}
-                    onRunScenario={(payload) => portfolioApi.projectScenarioRisk(payload)}
-                  />
+                  {hasHoldings ? (
+                    <PortfolioScenarioRiskPanel
+                      snapshotAsOf={snapshot?.asOf}
+                      positions={scenarioRiskPositions}
+                      onRunScenario={(payload) => portfolioApi.projectScenarioRisk(payload)}
+                    />
+                  ) : (
+                    <TerminalNotice variant="neutral">
+                      {language === 'zh'
+                        ? '压力情景入口会在持仓出现后启用，并只基于真实可见持仓做观察性估算。'
+                        : 'Scenario entry becomes available after holdings exist and only runs observational estimates on visible real positions.'}
+                    </TerminalNotice>
+                  )}
                 </TerminalPanel>
 
                 <TerminalPanel as="section" data-testid="portfolio-valuation-panel" className="min-w-0 flex flex-col gap-4">

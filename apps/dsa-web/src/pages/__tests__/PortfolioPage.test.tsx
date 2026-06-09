@@ -581,22 +581,26 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByTestId('portfolio-total-assets-value')).toHaveClass('text-white');
     expect(screen.getByTestId('portfolio-command-strip')).toContainElement(screen.getByTestId('portfolio-display-currency-select'));
     expect(screen.queryByTestId('portfolio-row-macro')).not.toBeInTheDocument();
-    const summaryStrip = screen.getByTestId('portfolio-summary-strip');
-    const summaryCoreRow = screen.getByTestId('portfolio-summary-core-row');
-    const summaryAuxRow = screen.getByTestId('portfolio-summary-aux-row');
-    expect(summaryStrip).toHaveClass('flex', 'flex-col', 'gap-3');
-    expect(summaryCoreRow).toHaveClass('grid', 'xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]');
-    expect(summaryAuxRow).toHaveClass('grid', 'sm:grid-cols-2', 'xl:grid-cols-4');
-    expect(summaryStrip).toHaveTextContent(translate('zh', 'portfolio.totalCash'));
-    expect(summaryStrip).toHaveTextContent(translate('zh', 'portfolio.totalMarketValue'));
-    expect(within(summaryAuxRow).getByTestId('portfolio-summary-holdings-card')).toHaveTextContent('无持仓');
-    expect(within(summaryAuxRow).getByTestId('portfolio-summary-risk-card')).toHaveTextContent('暂无持仓');
-    expect(within(summaryAuxRow).getByTestId('portfolio-summary-status-card')).toHaveTextContent('暂无价格快照');
-    expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('已实现盈亏');
-    expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('未实现盈亏');
-    expect(screen.getByTestId('portfolio-pnl-summary')).toHaveTextContent('总盈亏');
+    expect(screen.queryByTestId('portfolio-summary-strip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-summary-core-row')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-summary-aux-row')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-pnl-summary')).not.toBeInTheDocument();
+    const onboardingRow = screen.getByTestId('portfolio-empty-onboarding-row');
+    const onboardingWorkflow = screen.getByTestId('portfolio-empty-workflow-column');
+    const onboardingPreview = screen.getByTestId('portfolio-preview-card');
+    expect(onboardingRow).toHaveClass('grid', 'grid-cols-1', 'xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]');
+    expect(onboardingWorkflow).toHaveTextContent('首次配置路径');
+    expect(onboardingWorkflow).toHaveTextContent('创建或导入首个组合');
+    expect(onboardingWorkflow).toHaveTextContent('真实数据接入前不生成示例收益');
+    expect(onboardingWorkflow).toHaveTextContent('保存后会在下方自动展开真实持仓、风险摘要与近期活动。');
+    expect(onboardingPreview).toHaveTextContent('功能预览 / 示例结构');
+    expect(onboardingPreview).toHaveTextContent('非持久预览');
+    expect(onboardingPreview).toHaveTextContent('持仓台账');
+    expect(onboardingPreview).toHaveTextContent('风险摘要');
+    expect(onboardingPreview).toHaveTextContent('近期活动');
     expect(screen.getByTestId('portfolio-exposure-card')).toHaveTextContent('暂无持仓，保存持仓流水后生成盈亏与资产配置。');
-    expect(screen.getByTestId('portfolio-risk-card')).toHaveTextContent('暂无持仓');
+    expect(screen.getByTestId('portfolio-risk-card')).toHaveTextContent('待生成');
+    expect(screen.getByTestId('portfolio-risk-card')).toHaveTextContent('压力情景入口会在持仓出现后启用');
     expect((await screen.findAllByText(translate('zh', 'portfolio.fxStale'))).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: '手工记账台' })).toBeInTheDocument();
     expect(screen.getAllByText('手工记账入口').length).toBeGreaterThan(0);
@@ -645,16 +649,15 @@ describe('PortfolioPage FX refresh', () => {
     expect(costMethodSelect.closest('.select-field__control')?.querySelector('.select-field__value')).toHaveTextContent(translate('zh', 'portfolio.costFifo'));
     expect(within(costMethodSelect).getByRole('option', { name: translate('zh', 'portfolio.costFifo') })).toBeInTheDocument();
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
-    const holdingsPanel = screen.getByTestId('portfolio-empty-workflow-column');
+    const holdingsPanel = screen.getByTestId('portfolio-empty-ledger-preview');
     const tradeStationSection = screen.getByRole('heading', { name: /手工记账台|Trade Station/ }).closest('section');
-    expect(Boolean(totalAssetsCard.compareDocumentPosition(summaryStrip) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(summaryCoreRow.compareDocumentPosition(summaryAuxRow) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(summaryStrip.compareDocumentPosition(holdingsPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(totalAssetsCard.compareDocumentPosition(onboardingRow) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(onboardingRow.compareDocumentPosition(holdingsPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(totalAssetsCard.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(holdingsPanel.compareDocumentPosition(tradeStationSection as Element) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
-  it('renders the mobile empty portfolio order as hero, summary, holdings, risk, notes, recent activity, trade station', async () => {
+  it('renders the mobile empty portfolio order as hero, onboarding, holdings, risk, notes, recent activity, trade station', async () => {
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
 
     render(<PortfolioPage />);
@@ -662,22 +665,21 @@ describe('PortfolioPage FX refresh', () => {
     await waitForInitialLoad();
 
     const totalAssetsCard = screen.getByTestId('portfolio-total-assets-card');
-    const summaryStrip = screen.getByTestId('portfolio-summary-strip');
-    const pnlSummary = screen.getByTestId('portfolio-pnl-summary');
+    const onboardingRow = screen.getByTestId('portfolio-empty-onboarding-row');
     const startCard = screen.getByTestId('portfolio-start-card');
     const riskCard = screen.getByTestId('portfolio-risk-card');
     const dataNotes = screen.getByTestId('portfolio-data-notes');
     const tradeStationSection = screen.getByRole('heading', { name: /手工记账台|Trade Station/ }).closest('section') as HTMLElement;
     const recentActivity = screen.getByTestId('portfolio-recent-activity');
 
-    expect(Boolean(totalAssetsCard.compareDocumentPosition(summaryStrip) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(summaryStrip.compareDocumentPosition(startCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(totalAssetsCard.compareDocumentPosition(onboardingRow) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(onboardingRow.compareDocumentPosition(startCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(startCard.compareDocumentPosition(riskCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(riskCard.compareDocumentPosition(dataNotes) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(dataNotes.compareDocumentPosition(recentActivity) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(recentActivity.compareDocumentPosition(tradeStationSection) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(screen.queryByTestId('portfolio-history-full')).not.toBeInTheDocument();
-    expect(pnlSummary).toBeInTheDocument();
+    expect(screen.queryByTestId('portfolio-pnl-summary')).not.toBeInTheDocument();
   });
 
   it('renders the main RiskConsole as a two-column holdings and risk workspace on desktop', async () => {
@@ -728,12 +730,13 @@ describe('PortfolioPage FX refresh', () => {
     expect(workflowColumn).not.toContainElement(recentActivity);
     expect(workflowColumn).toHaveClass('min-w-0');
     expect(startCard).not.toHaveClass('xl:min-h-[300px]', 'min-h-[520px]');
-    expect(within(startCard).getByText('暂无持仓')).toBeInTheDocument();
-    expect(within(startCard).getByText('持仓列表为空，添加你的第一只股票开始追踪。')).toBeInTheDocument();
+    expect(within(startCard).getByText('创建或导入首个组合')).toBeInTheDocument();
+    expect(within(startCard).getByText('先创建或选择账户，再添加第一笔持仓或导入历史记录。')).toBeInTheDocument();
     expect(within(startCard).getByText('历史记录存在，当前无持仓')).toBeInTheDocument();
     expect(within(startCard).queryByText('活跃账户')).not.toBeInTheDocument();
     expect(within(startCard).queryByText('可写账户')).not.toBeInTheDocument();
     expect(within(startCard).queryByText(/active accounts|writable accounts/i)).not.toBeInTheDocument();
+    expect(workflowColumn).toHaveTextContent('保存后会在下方自动展开真实持仓、风险摘要与近期活动。');
     expect(within(recentActivity).getByText('历史记录存在，当前无持仓')).toBeInTheDocument();
     expect(within(recentActivity).getByText('AAPL')).toBeInTheDocument();
     expect(within(recentActivity).getByText(/2026-03-18/)).toBeInTheDocument();
@@ -777,11 +780,14 @@ describe('PortfolioPage FX refresh', () => {
     const startCard = screen.getByTestId('portfolio-start-card');
     expect(startCard).toHaveAttribute('data-terminal-primitive', 'empty-state');
     expect(startCard).toHaveClass('min-h-[72px]');
-    expect(startCard).toHaveTextContent('持仓列表为空，添加你的第一只股票开始追踪。');
+    expect(startCard).toHaveTextContent('创建或导入首个组合');
+    expect(startCard).toHaveTextContent('先创建或选择账户，再添加第一笔持仓或导入历史记录。');
     const emptyWorkflowColumn = screen.getByTestId('portfolio-empty-workflow-column');
     expect(within(emptyWorkflowColumn).getByRole('button', { name: '添加持仓' })).toBeInTheDocument();
     expect(within(emptyWorkflowColumn).getByRole('button', { name: '导入记录' })).toBeInTheDocument();
-    expect(emptyWorkflowColumn).toHaveTextContent('完成后可在右侧查看风险与数据说明。');
+    expect(emptyWorkflowColumn).toHaveTextContent('保存后会在下方自动展开真实持仓、风险摘要与近期活动。');
+    expect(screen.getByTestId('portfolio-preview-card')).toHaveTextContent('功能预览 / 示例结构');
+    expect(screen.getByTestId('portfolio-preview-card')).toHaveTextContent('非持久预览');
     expect(emptyWorkflowColumn).not.toHaveTextContent(/数据不足，禁止判断|买入|卖出|下单|券商|broker/i);
     expect(startCard).not.toHaveClass('min-h-[300px]', 'min-h-[520px]', 'xl:min-h-[300px]');
     expect(within(startCard).queryByText('活跃账户')).not.toBeInTheDocument();
@@ -2335,7 +2341,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(getLeftTabButton('Sync')).toBeInTheDocument();
     expect(screen.getByTestId('portfolio-current-holdings-panel')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'History ↗' })).not.toBeInTheDocument();
-    expect(within(screen.getByTestId('portfolio-start-card')).getByText('No holdings')).toBeInTheDocument();
+    expect(within(screen.getByTestId('portfolio-start-card')).getByText('Create or import the first portfolio')).toBeInTheDocument();
     expect(openFxPanel('en')).toBeInTheDocument();
 
     fireEvent.click(getLeftTabButton('Sync'));
@@ -2476,7 +2482,7 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.queryByRole('heading', { name: /Current Holdings/i })).not.toBeInTheDocument();
     expect(screen.getByTestId('portfolio-start-card')).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'portfolio.manualTrade'))).toBeInTheDocument();
-    expect(within(screen.getByTestId('portfolio-start-card')).getByText('暂无持仓')).toBeInTheDocument();
+    expect(within(screen.getByTestId('portfolio-start-card')).getByText('创建或导入首个组合')).toBeInTheDocument();
   });
 
   it('frames the default portfolio editor as a manual ledger without trade or order wording', async () => {
