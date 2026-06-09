@@ -6,6 +6,9 @@ shopt -s nocasematch
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BASE_REF="${RELEASE_SECRET_SCAN_BASE_REF:-origin/main}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+LOCAL_ONLY=0
+FILES_FROM=""
 
 cd "${ROOT_DIR}"
 
@@ -17,8 +20,61 @@ STAGED_FILES="${TMP_DIR}/staged_files.txt"
 WORKTREE_FILES="${TMP_DIR}/worktree_files.txt"
 UNTRACKED_FILES="${TMP_DIR}/untracked_files.txt"
 FINDINGS="${TMP_DIR}/findings.txt"
+FILES_FROM_LIST="${TMP_DIR}/files_from.txt"
 
-touch "${BRANCH_FILES}" "${STAGED_FILES}" "${WORKTREE_FILES}" "${UNTRACKED_FILES}" "${FINDINGS}"
+touch "${BRANCH_FILES}" "${STAGED_FILES}" "${WORKTREE_FILES}" "${UNTRACKED_FILES}" "${FINDINGS}" "${FILES_FROM_LIST}"
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/release_secret_scan.sh [--local-only] [--files-from PATH] [--base-ref REF]
+
+Conservative release secret scan. By default, scans committed branch changes from
+the release base ref plus staged, unstaged, and untracked text files. Findings are
+redacted; inspect the reported file and line locally.
+
+Options:
+  --local-only       Scan only staged, unstaged, and untracked files.
+  --files-from PATH  Scan only newline-delimited paths from PATH ("-" for stdin).
+                     Paths are still filtered to skip generated/static/binary,
+                     build, cache, dependency, and other non-source artifacts.
+  --base-ref REF     Override RELEASE_SECRET_SCAN_BASE_REF/origin/main.
+  -h, --help         Show this help text.
+EOF
+}
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --local-only)
+      LOCAL_ONLY=1
+      shift
+      ;;
+    --files-from)
+      if [[ "$#" -lt 2 ]]; then
+        echo "[FAIL] --files-from requires a path" >&2
+        exit 2
+      fi
+      FILES_FROM="$2"
+      shift 2
+      ;;
+    --base-ref)
+      if [[ "$#" -lt 2 ]]; then
+        echo "[FAIL] --base-ref requires a ref" >&2
+        exit 2
+      fi
+      BASE_REF="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "[FAIL] unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
 
 print_step() {
   echo "==> release-secret-scan: $1"
@@ -26,6 +82,14 @@ print_step() {
 
 base_ref_available() {
   git rev-parse --verify "${BASE_REF}" >/dev/null 2>&1
+}
+
+collect_files() {
+  "${PYTHON_BIN}" "${ROOT_DIR}/scripts/validation_changed_files.py" \
+    --base-ref "${BASE_REF}" \
+    --scope secret \
+    --format lines \
+    "$@"
 }
 
 skip_path() {
@@ -290,21 +354,27 @@ scan_git_blob() {
 collect_changed_files() {
   print_step "collect changed files"
 
-  if base_ref_available; then
-    git diff --name-only --diff-filter=ACMRTUXB "${BASE_REF}..HEAD" >"${BRANCH_FILES}"
-    echo "[INFO] Included committed changes from ${BASE_REF}..HEAD"
-  else
-    echo "[WARN] ${BASE_REF} is not available; committed-change scan skipped" >&2
+  if [[ -n "${FILES_FROM}" ]]; then
+    collect_files --files-from "${FILES_FROM}" --existing >"${FILES_FROM_LIST}"
+    echo "[INFO] Included explicit files from ${FILES_FROM}"
+    echo "[INFO]   files-from: $(wc -l <"${FILES_FROM_LIST}" | tr -d ' ')"
+    return 0
   fi
 
-  git diff --cached --name-only --diff-filter=ACMRTUXB >"${STAGED_FILES}"
-  git diff --name-only --diff-filter=ACMRTUXB >"${WORKTREE_FILES}"
-  git ls-files --others --exclude-standard >"${UNTRACKED_FILES}"
+  if [[ "${LOCAL_ONLY}" -eq 0 ]]; then
+    if base_ref_available; then
+      collect_files --mode branch-release >"${BRANCH_FILES}"
+      echo "[INFO] Included committed changes from ${BASE_REF}..HEAD"
+    else
+      echo "[WARN] ${BASE_REF} is not available; committed-change scan skipped" >&2
+    fi
+  else
+    echo "[INFO] --local-only enabled; committed branch changes are not scanned in this run"
+  fi
 
-  sort -u "${BRANCH_FILES}" -o "${BRANCH_FILES}"
-  sort -u "${STAGED_FILES}" -o "${STAGED_FILES}"
-  sort -u "${WORKTREE_FILES}" -o "${WORKTREE_FILES}"
-  sort -u "${UNTRACKED_FILES}" -o "${UNTRACKED_FILES}"
+  collect_files --mode staged >"${STAGED_FILES}"
+  collect_files --mode worktree >"${WORKTREE_FILES}"
+  collect_files --mode untracked >"${UNTRACKED_FILES}"
 
   echo "[INFO]   ${BASE_REF}..HEAD: $(wc -l <"${BRANCH_FILES}" | tr -d ' ')"
   echo "[INFO]   staged: $(wc -l <"${STAGED_FILES}" | tr -d ' ')"
@@ -314,6 +384,16 @@ collect_changed_files() {
 
 scan_changed_files() {
   print_step "scan changed text files"
+
+  if [[ -n "${FILES_FROM}" ]]; then
+    local file_path
+    while IFS= read -r file_path; do
+      [[ -n "${file_path}" ]] || continue
+      [[ -f "${file_path}" ]] || continue
+      scan_file_content "files-from" "${file_path}" "${file_path}"
+    done <"${FILES_FROM_LIST}"
+    return 0
+  fi
 
   local file_path
   while IFS= read -r file_path; do
@@ -342,6 +422,13 @@ scan_changed_files() {
 print_step "preflight"
 echo "[INFO] Root: ${ROOT_DIR}"
 echo "[INFO] Base ref: ${BASE_REF}"
+if [[ "${LOCAL_ONLY}" -eq 1 ]]; then
+  echo "[INFO] Mode: local-only"
+elif [[ -n "${FILES_FROM}" ]]; then
+  echo "[INFO] Mode: files-from"
+else
+  echo "[INFO] Mode: release default"
+fi
 echo "[INFO] This is a lightweight release smoke check, not a full enterprise DLP scanner."
 echo "[INFO] Findings are redacted; inspect the reported file and line locally."
 

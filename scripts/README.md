@@ -43,9 +43,15 @@ are not the main required CI gate:
   usage: run a named scenario only; it executes the app, so prefer targeted
   modes over `all`.
 - `ci_gate_fast.sh`: faster changed-file-focused iteration gate. Safe usage:
-  local feedback loop only; it explicitly does not replace `ci_gate.sh`.
+  local feedback loop only; it explicitly does not replace `ci_gate.sh`. It
+  uses `validation_changed_files.py` and escalates unknown, lock/workflow, or
+  protected-domain classifications to `ci_gate.sh`.
 - `ci_gate_profile.sh`: measures gate runtime. Safe usage: profiling helper
   only; do not use it as evidence that the real gate passed.
+- `validation_changed_files.py`: shared changed-file collector for local
+  validation tiers. It can emit line/NUL/shell/JSON output, filter by validation
+  scope, run a command with selected files appended via `--exec`, and skips
+  generated/static/binary/build/cache/dependency artifacts by default.
 - `dev_start_backend.sh`: local backend launcher that prefers a repo-local
   virtualenv and can restart a busy port only when explicitly asked. Safe
   usage: developer startup helper, not a deployment entrypoint.
@@ -95,9 +101,12 @@ sanitized operator evidence flows. They should be run deliberately and with the
 relevant runbook context:
 
 - `release_secret_scan.sh`: release-oriented secret scan across branch diff,
-  staged files, worktree files, and untracked text files. Safe usage: local
-  pre-release or pre-push credential check; it scans text content and exits
-  non-zero on findings, but does not rewrite files.
+  staged files, worktree files, and untracked text files by default. Safe usage:
+  local pre-release or pre-push credential check; it scans text content and
+  exits non-zero on findings, but does not rewrite files. Inner-loop modes:
+  `--local-only` scans only staged/unstaged/untracked files, and
+  `--files-from <path>` scans an explicit newline-delimited file list after the
+  same generated/static/binary/build/cache exclusions.
 - `security_scan.sh`: broader local security wrapper around secret scanning,
   Bandit, optional dependency audit, and optional container scanning. Note:
   `.github/workflows/security-scan.yml` currently runs GitHub-native tools
@@ -145,6 +154,11 @@ Recommended usage order for local validation:
 
 - `./scripts/release_secret_scan.sh`
   Purpose: focused credential/secret hygiene check before release or push.
+  Use `--local-only` only for local changed-file iterations; omit it for
+  release, landing, or branch review.
+- `python3 scripts/validation_changed_files.py --mode active --format json`
+  Purpose: inspect the active changed-file set and its conservative validation
+  classification before selecting a tier.
 - `./scripts/release_gate_summary.sh`
   Purpose: summarize release evidence posture without mutating release state.
 
@@ -158,8 +172,21 @@ under this directory, but they are part of the same tooling surface:
   `apps/dsa-web/scripts/check-design-constitution.mjs`.
   Purpose: Node-based design constitution scan over frontend source files, with
   some checks delegated to `scripts/check_frontend_design_constitution.py`.
+  Changed-file mode is available through `npm run check:design:changed` or
+  `node scripts/check-design-constitution.mjs --files <app-relative files>`.
 - `python scripts/check_frontend_design_constitution.py`
   Purpose: Python-side design constitution guard used by the frontend scanner.
+  Changed-file mode is available through `--files <repo-relative files>` or
+  `--files-from <path>`.
+- `npm run lint:changed`
+  Purpose: lint changed frontend JavaScript/TypeScript files only. ESLint cache
+  is written under `node_modules/.cache/eslint/changed`, not as a committed repo
+  cache file.
+- `npm run test:related -- <app-relative-source-or-test-file>`
+  Purpose: run Vitest related mode for explicit frontend source/test files.
+- `npm run typecheck` and `npm run build:quiet`
+  Purpose: run TypeScript project checks and a quieter Vite build that still
+  returns non-zero and prints failures.
 - `npm run test:smoke`
   From `apps/dsa-web/package.json`, runs
   `apps/dsa-web/scripts/run-smoke.sh`.
@@ -200,8 +227,9 @@ helper" is to check who calls it:
   Calls `scripts/build-all.ps1` on Windows and `scripts/build-all-macos.sh` on
   macOS.
 - `apps/dsa-web/package.json`
-  Exposes `npm run check:design` and `npm run test:smoke`, which point into
-  `apps/dsa-web/scripts/`.
+  Exposes frontend validation scripts such as `lint:changed`,
+  `test:related`, `check:design:changed`, `typecheck`, `build:quiet`,
+  `check:design`, and `test:smoke`.
 - `.github/workflows/security-scan.yml`
   Watches `scripts/security_scan.sh` in path filters but currently uses
   GitHub-native scanners directly rather than invoking the local wrapper.
@@ -219,6 +247,7 @@ helper" is to check who calls it:
 - `ci_gate_fast.sh`
 - `ci_gate_profile.sh`
 - Root `test.sh`
+- `validation_changed_files.py`
 
 ### Frontend verification
 

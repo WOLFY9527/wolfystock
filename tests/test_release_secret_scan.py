@@ -5,6 +5,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_SOURCE = REPO_ROOT / "scripts" / "release_secret_scan.sh"
+COLLECTOR_SOURCE = REPO_ROOT / "scripts" / "validation_changed_files.py"
 
 
 def _run(cmd, cwd: Path, **kwargs):
@@ -16,6 +17,7 @@ def _init_repo(tmp_path: Path) -> Path:
     repo.mkdir()
     (repo / "scripts").mkdir()
     shutil.copy2(SCRIPT_SOURCE, repo / "scripts" / "release_secret_scan.sh")
+    shutil.copy2(COLLECTOR_SOURCE, repo / "scripts" / "validation_changed_files.py")
 
     _run(["git", "init", "-b", "main"], repo, check=True)
     _run(["git", "config", "user.email", "codex@example.com"], repo, check=True)
@@ -27,8 +29,8 @@ def _init_repo(tmp_path: Path) -> Path:
     return repo
 
 
-def _scan(repo: Path):
-    return _run(["bash", "scripts/release_secret_scan.sh"], repo)
+def _scan(repo: Path, *args: str):
+    return _run(["bash", "scripts/release_secret_scan.sh", *args], repo)
 
 
 def test_release_secret_scan_flags_worktree_api_key(tmp_path):
@@ -163,3 +165,50 @@ def test_release_secret_scan_flags_committed_branch_bearer_token(tmp_path):
     assert "bearer token" in result.stdout
     assert token_value not in result.stdout
     assert token_value not in result.stderr
+
+
+def test_release_secret_scan_local_only_skips_committed_branch_changes(tmp_path):
+    repo = _init_repo(tmp_path)
+    token_value = "tok_" + ("c" * 32)
+    (repo / "docs.md").write_text(f"Authorization: Bearer {token_value}\n", encoding="utf-8")
+    _run(["git", "add", "docs.md"], repo, check=True)
+    _run(["git", "commit", "-m", "add docs"], repo, check=True)
+
+    default_result = _scan(repo)
+    local_only_result = _scan(repo, "--local-only")
+
+    assert default_result.returncode == 1
+    assert local_only_result.returncode == 0
+    assert "local-only" in local_only_result.stdout
+
+
+def test_release_secret_scan_files_from_scans_only_listed_files(tmp_path):
+    repo = _init_repo(tmp_path)
+    key_value = "sk-" + ("C" * 40)
+    (repo / "safe.txt").write_text("SAFE_VALUE=example\n", encoding="utf-8")
+    (repo / "secret.txt").write_text(f"OPENAI_API_KEY={key_value}\n", encoding="utf-8")
+    file_list = repo / "files.txt"
+    file_list.write_text("safe.txt\n", encoding="utf-8")
+
+    result = _scan(repo, "--files-from", str(file_list))
+
+    assert result.returncode == 0
+    assert "files-from" in result.stdout
+    assert key_value not in result.stdout
+    assert key_value not in result.stderr
+
+
+def test_release_secret_scan_files_from_skips_generated_static_paths(tmp_path):
+    repo = _init_repo(tmp_path)
+    key_value = "sk-" + ("D" * 40)
+    generated = repo / "generated" / "config.txt"
+    generated.parent.mkdir()
+    generated.write_text(f"OPENAI_API_KEY={key_value}\n", encoding="utf-8")
+    file_list = repo / "files.txt"
+    file_list.write_text("generated/config.txt\n", encoding="utf-8")
+
+    result = _scan(repo, "--files-from", str(file_list))
+
+    assert result.returncode == 0
+    assert key_value not in result.stdout
+    assert key_value not in result.stderr

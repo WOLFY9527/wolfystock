@@ -240,6 +240,31 @@ bash scripts/release_secret_scan.sh
 
 Run TypeScript separately only when shared interfaces/routes/types changed or build is insufficient.
 
+Changed-file validation tiers may be used for local iteration when the prompt
+allows focused validation:
+
+```bash
+# collect/classify current active changes
+python3 scripts/validation_changed_files.py --mode active --format json
+
+# frontend changed-file loop
+npm --prefix apps/dsa-web run lint:changed
+npm --prefix apps/dsa-web run test:related -- <app-relative-source-or-test-file>
+npm --prefix apps/dsa-web run check:design:changed
+npm --prefix apps/dsa-web run typecheck
+npm --prefix apps/dsa-web run build:quiet
+./scripts/release_secret_scan.sh --local-only
+
+# conservative fast gate; escalates protected/unknown/full-gate risk to ci_gate.sh
+./scripts/ci_gate_fast.sh
+```
+
+Do not use changed-file tiers as release evidence when protected domains,
+unknown classifications, lockfiles, workflows, shared contracts, API schemas,
+auth/RBAC, provider/cache/runtime behavior, or storage semantics are touched.
+Release and batch landing still require the full release-safe secret scan:
+`./scripts/release_secret_scan.sh` without `--local-only`.
+
 Windows frontend / React Doctor parity:
 
 ```text

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from pathlib import Path
 import re
@@ -448,6 +449,47 @@ def iter_files() -> list[Path]:
     return sorted(files)
 
 
+def normalize_candidate_file(value: str) -> Path | None:
+    raw = value.strip()
+    if not raw:
+        return None
+    path = Path(raw)
+    if not path.is_absolute():
+        path = ROOT / raw
+    try:
+        resolved = path.resolve()
+        relative = resolved.relative_to(ROOT).as_posix()
+    except ValueError:
+        return None
+    if relative.startswith("apps/dsa-web/src/") is False:
+        return None
+    if resolved.suffix not in {".tsx", ".ts"}:
+        return None
+    if "__tests__" in relative or relative.endswith(".test.tsx") or relative.endswith(".test.ts"):
+        return None
+    if not resolved.is_file():
+        return None
+    return resolved
+
+
+def read_files_from(path: str) -> list[str]:
+    if path == "-":
+        return sys.stdin.read().splitlines()
+    file_path = Path(path)
+    if not file_path.is_absolute():
+        file_path = ROOT / file_path
+    return file_path.read_text(encoding="utf-8").splitlines()
+
+
+def iter_limited_files(files: list[str], files_from: list[str]) -> list[Path]:
+    candidates: list[str] = []
+    candidates.extend(files)
+    for file_list in files_from:
+        candidates.extend(read_files_from(file_list))
+    normalized = [path for path in (normalize_candidate_file(value) for value in candidates) if path is not None]
+    return sorted(set(normalized))
+
+
 def line_number(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
 
@@ -635,17 +677,34 @@ def scan_text(path: str, text: str) -> ScanResult:
     return ScanResult(findings=findings)
 
 
-def scan_project() -> ScanResult:
+def scan_project(files: list[Path] | None = None) -> ScanResult:
     findings: list[Finding] = []
-    for path in iter_files():
+    paths = iter_files() if files is None else files
+    for path in paths:
         findings.extend(scan_text(rel(path), path.read_text(encoding="utf-8")).findings)
     return ScanResult(findings=findings)
 
 
-def main() -> int:
-    result = scan_project()
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="WolfyStock frontend design constitution guard.",
+        epilog=(
+            "By default this scans all guarded frontend page/component files. "
+            "Use --files/--files-from for changed-file validation tiers."
+        ),
+    )
+    parser.add_argument("--files", nargs="*", default=None, help="limit scan to these repo-relative or absolute files")
+    parser.add_argument("--files-from", action="append", default=[], help="read newline-delimited file paths from PATH, or '-' for stdin")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    limited_files = iter_limited_files(args.files or [], args.files_from) if args.files is not None or args.files_from else None
+    result = scan_project(limited_files)
+    files_scanned = len(iter_files()) if limited_files is None else len(limited_files)
     print("WolfyStock frontend design constitution guard")
-    print(f"Files scanned: {len(iter_files())}")
+    print(f"Files scanned: {files_scanned}")
     if not result.findings:
         print("PASS: no blocking design-constitution violations found.")
         return 0

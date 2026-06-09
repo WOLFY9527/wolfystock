@@ -81,6 +81,19 @@ const DEVELOPER_DETAIL_MARKERS = [
   'Raw Diagnostics',
 ];
 
+function printHelp() {
+  console.log(`Usage: node scripts/check-design-constitution.mjs [--files <path...>] [--files-from PATH]
+
+WolfyStock design constitution guard. By default, scans all frontend source
+files. Use --files or --files-from for changed-file validation tiers.
+
+Options:
+  --files <path...>    Limit scan to explicit app-relative, repo-relative, or absolute files.
+  --files-from PATH    Read newline-delimited file paths from PATH ("-" for stdin).
+  -h, --help           Show this help text.
+`);
+}
+
 function shouldScanFile(relativePath) {
   const parts = relativePath.split(path.sep);
   if (parts.some((part) => EXCLUDED_PARTS.has(part))) {
@@ -90,6 +103,50 @@ function shouldScanFile(relativePath) {
     return false;
   }
   return SCANNED_EXTENSIONS.has(path.extname(relativePath));
+}
+
+function readFilesFrom(filePath) {
+  if (filePath === '-') {
+    return fs.readFileSync(0, 'utf8').split(/\r?\n/);
+  }
+  const resolved = path.isAbsolute(filePath) ? filePath : path.resolve(ROOT_DIR, filePath);
+  return fs.readFileSync(resolved, 'utf8').split(/\r?\n/);
+}
+
+function normalizeCandidateFile(candidate, rootDir = ROOT_DIR) {
+  const raw = candidate.trim();
+  if (!raw) {
+    return null;
+  }
+
+  let absolutePath;
+  if (path.isAbsolute(raw)) {
+    absolutePath = raw;
+  } else if (raw.split(/[\\/]/).slice(0, 2).join('/') === 'apps/dsa-web') {
+    absolutePath = path.resolve(rootDir, '..', '..', raw);
+  } else {
+    absolutePath = path.resolve(rootDir, raw);
+  }
+
+  const relativePath = path.relative(rootDir, absolutePath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return null;
+  }
+  if (!shouldScanFile(relativePath)) {
+    return null;
+  }
+  if (!fs.existsSync(absolutePath) || !fs.statSync(absolutePath).isFile()) {
+    return null;
+  }
+  return absolutePath;
+}
+
+function listLimitedSourceFiles({ files = [], filesFrom = [], rootDir = ROOT_DIR } = {}) {
+  const candidates = [...files];
+  for (const fileList of filesFrom) {
+    candidates.push(...readFilesFrom(fileList));
+  }
+  return [...new Set(candidates.map((candidate) => normalizeCandidateFile(candidate, rootDir)).filter(Boolean))].sort();
 }
 
 function listSourceFiles(dir = SRC_DIR) {
@@ -298,16 +355,16 @@ export function scanSourceText({ relativePath, text }) {
   return { blocking, warnings };
 }
 
-export function scanProject({ rootDir = ROOT_DIR } = {}) {
+export function scanProject({ rootDir = ROOT_DIR, files = null } = {}) {
   const sourceDir = path.join(rootDir, 'src');
-  const files = listSourceFiles(sourceDir);
+  const scanFiles = files ?? listSourceFiles(sourceDir);
   const result = {
     filesScanned: 0,
     blocking: [],
     warnings: [],
   };
 
-  for (const file of files) {
+  for (const file of scanFiles) {
     const relativePath = path.relative(rootDir, file);
     const text = fs.readFileSync(file, 'utf8');
     const fileResult = scanSourceText({ relativePath, text });
@@ -360,13 +417,77 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function parseCliArgs(argv) {
+  const result = {
+    help: false,
+    files: [],
+    filesFrom: [],
+    hasFileLimit: false,
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === '-h' || arg === '--help') {
+      result.help = true;
+      continue;
+    }
+    if (arg === '--files-from') {
+      const value = argv[index + 1];
+      if (!value) {
+        throw new Error('--files-from requires a path');
+      }
+      result.filesFrom.push(value);
+      result.hasFileLimit = true;
+      index += 1;
+      continue;
+    }
+    if (arg === '--files') {
+      result.hasFileLimit = true;
+      for (let next = index + 1; next < argv.length; next += 1) {
+        if (argv[next].startsWith('-')) {
+          index = next - 1;
+          break;
+        }
+        result.files.push(argv[next]);
+        index = next;
+      }
+      continue;
+    }
+    throw new Error(`unknown argument: ${arg}`);
+  }
+
+  return result;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const result = scanProject();
+  let cli;
+  try {
+    cli = parseCliArgs(process.argv.slice(2));
+  } catch (error) {
+    console.error(`[design-guard] ${error.message}`);
+    printHelp();
+    process.exit(2);
+  }
+
+  if (cli.help) {
+    printHelp();
+    process.exit(0);
+  }
+
+  const limitedFiles = cli.hasFileLimit ? listLimitedSourceFiles(cli) : null;
+  const result = scanProject({ files: limitedFiles });
   printReport(result);
   const pythonGuard = path.resolve(ROOT_DIR, '..', '..', 'scripts', 'check_frontend_design_constitution.py');
   let pythonExitCode = 0;
   if (fs.existsSync(pythonGuard)) {
-    const pythonResult = spawnSync('python3', [pythonGuard], {
+    const pythonArgs = [pythonGuard];
+    if (limitedFiles) {
+      pythonArgs.push(
+        '--files',
+        ...limitedFiles.map((file) => path.join('apps/dsa-web', path.relative(ROOT_DIR, file)).split(path.sep).join('/')),
+      );
+    }
+    const pythonResult = spawnSync('python3', pythonArgs, {
       cwd: path.resolve(ROOT_DIR, '..', '..'),
       encoding: 'utf8',
       stdio: 'pipe',

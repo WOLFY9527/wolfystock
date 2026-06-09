@@ -24,6 +24,73 @@ git diff --check
 Run broader tests only when the changed surface, shared primitive, API contract,
 or release risk warrants it.
 
+## Validation Tiers
+
+Changed-file tooling is an iteration accelerator, not a release waiver. The
+shared collector is:
+
+```bash
+python3 scripts/validation_changed_files.py --mode active --format lines
+```
+
+It filters generated/static/binary/build/cache/dependency artifacts by default.
+Use `--scope frontend-lint`, `--scope frontend-related`, `--scope design`,
+`--scope python`, `--scope docs`, or `--scope secret` to feed focused tools.
+
+Recommended tier commands:
+
+```bash
+# copy-only/docs
+git diff --check
+./scripts/release_secret_scan.sh --local-only
+
+# frontend-component
+npm --prefix apps/dsa-web run lint:changed
+npm --prefix apps/dsa-web run test:related -- <app-relative-source-or-test-file>
+npm --prefix apps/dsa-web run check:design:changed
+npm --prefix apps/dsa-web run typecheck
+npm --prefix apps/dsa-web run build:quiet
+./scripts/release_secret_scan.sh --local-only
+
+# frontend-shared
+npm --prefix apps/dsa-web run lint:changed
+npm --prefix apps/dsa-web run test:related:changed
+npm --prefix apps/dsa-web run check:design:changed
+npm --prefix apps/dsa-web run typecheck
+npm --prefix apps/dsa-web run build:quiet
+./scripts/release_secret_scan.sh --local-only
+
+# backend-report
+python3 -m py_compile <changed_python_files>
+python3 -m pytest -q <focused_report_tests>
+git diff --check
+./scripts/release_secret_scan.sh --local-only
+
+# protected-domain
+./scripts/ci_gate_fast.sh
+# If the fast gate classifies protected/unknown/full-gate risk, it escalates to:
+./scripts/ci_gate.sh
+./scripts/release_secret_scan.sh
+
+# batch-land
+./scripts/ci_gate_fast.sh
+git diff --check
+./scripts/release_secret_scan.sh
+
+# release-gate
+./scripts/ci_gate.sh
+npm --prefix apps/dsa-web run lint
+npm --prefix apps/dsa-web run build
+npm --prefix apps/dsa-web run check:design
+./scripts/release_secret_scan.sh
+```
+
+`build:quiet` still fails on TypeScript or Vite errors; it only reduces noisy
+successful Vite output. `release_secret_scan.sh` defaults to the release-safe
+branch + staged + working tree + untracked scan. Use `--local-only` only for
+inner-loop validation, and `--files-from <path>` only when a caller already has
+a reviewed changed-file list.
+
 ## Standard Playwright Invocation
 
 When frontend E2E validation is needed, run Playwright through the app-local

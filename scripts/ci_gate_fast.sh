@@ -6,6 +6,43 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BASE_REF="${CI_GATE_BASE_REF:-origin/main}"
 MAX_FOCUSED_TESTS="${CI_GATE_FAST_MAX_TESTS:-24}"
+COLLECTOR="${ROOT_DIR}/scripts/validation_changed_files.py"
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/ci_gate_fast.sh [--base-ref REF]
+
+Changed-file-focused local iteration gate. This script is intentionally
+conservative: unknown classifications, lock/workflow risk, or protected-domain
+changes escalate to ./scripts/ci_gate.sh instead of narrowing validation.
+
+Options:
+  --base-ref REF  Override CI_GATE_BASE_REF/origin/main.
+  -h, --help      Show this help text.
+EOF
+}
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --base-ref)
+      if [[ "$#" -lt 2 ]]; then
+        echo "[fast-gate] --base-ref requires a ref" >&2
+        exit 2
+      fi
+      BASE_REF="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "[fast-gate] unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
 
 cd "${ROOT_DIR}"
 
@@ -32,8 +69,11 @@ GATE_FILES="${TMP_DIR}/gate_files.txt"
 PYTHON_FILES_LIST="${TMP_DIR}/python_files.txt"
 FOCUSED_TESTS_LIST="${TMP_DIR}/focused_tests.txt"
 DOC_TEXT_FILES_LIST="${TMP_DIR}/doc_text_files.txt"
+CLASSIFICATION_JSON="${TMP_DIR}/classification.json"
+FRONTEND_RELATED_FILES_LIST="${TMP_DIR}/frontend_related_files.txt"
+FRONTEND_DESIGN_FILES_LIST="${TMP_DIR}/frontend_design_files.txt"
 
-touch "${CHANGED_ALL}" "${BRANCH_CHANGED}" "${LOCAL_CHANGED}" "${CHANGED_SORTED}" "${GATE_FILES}" "${PYTHON_FILES_LIST}" "${FOCUSED_TESTS_LIST}" "${DOC_TEXT_FILES_LIST}"
+touch "${CHANGED_ALL}" "${BRANCH_CHANGED}" "${LOCAL_CHANGED}" "${CHANGED_SORTED}" "${GATE_FILES}" "${PYTHON_FILES_LIST}" "${FOCUSED_TESTS_LIST}" "${DOC_TEXT_FILES_LIST}" "${FRONTEND_RELATED_FILES_LIST}" "${FRONTEND_DESIGN_FILES_LIST}"
 
 print_step() {
   echo "==> fast-gate: $1"
@@ -63,22 +103,68 @@ base_ref_available() {
   git rev-parse --verify "${BASE_REF}" >/dev/null 2>&1
 }
 
+json_field() {
+  local dotted_path="$1"
+  "${PYTHON_BIN}" - "${CLASSIFICATION_JSON}" "${dotted_path}" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+value = payload
+for part in sys.argv[2].split("."):
+    value = value[part]
+if isinstance(value, bool):
+    print("true" if value else "false")
+elif isinstance(value, list):
+    for item in value:
+        print(item)
+else:
+    print(value)
+PY
+}
+
+run_full_gate_fallback_if_needed() {
+  local has_protected
+  local has_unknown
+  local has_full_gate
+  local tier
+
+  has_protected="$(json_field "classification.hasProtectedDomain")"
+  has_unknown="$(json_field "classification.hasUnknown")"
+  has_full_gate="$(json_field "classification.hasFullGateRisk")"
+  tier="$(json_field "classification.tier")"
+  echo "[INFO] Fast-gate tier classification: ${tier}"
+
+  if [[ "${has_protected}" == "true" ]]; then
+    echo "[WARN] Protected-domain files detected; escalating to ./scripts/ci_gate.sh"
+    json_field "classification.protectedFiles" | sed 's/^/[WARN]   /'
+    run_step "full ci_gate.sh fallback (protected-domain)" ./scripts/ci_gate.sh
+    exit 0
+  fi
+
+  if [[ "${has_unknown}" == "true" ]]; then
+    echo "[WARN] Unknown changed-file classification; escalating to ./scripts/ci_gate.sh"
+    json_field "classification.unknownFiles" | sed 's/^/[WARN]   /'
+    run_step "full ci_gate.sh fallback (unknown classification)" ./scripts/ci_gate.sh
+    exit 0
+  fi
+
+  if [[ "${has_full_gate}" == "true" ]]; then
+    echo "[WARN] Full-gate risk files detected; escalating to ./scripts/ci_gate.sh"
+    json_field "classification.fullGateFiles" | sed 's/^/[WARN]   /'
+    run_step "full ci_gate.sh fallback (full-gate risk)" ./scripts/ci_gate.sh
+    exit 0
+  fi
+}
+
 collect_changed_files() {
   print_step "collect changed files"
 
-  if base_ref_available; then
-    git diff --name-only --diff-filter=ACMRTUXB "${BASE_REF}...HEAD" >>"${BRANCH_CHANGED}"
-    echo "[INFO] Included committed changes from ${BASE_REF}...HEAD"
-  else
-    echo "[WARN] ${BASE_REF} is not available; committed-change detection skipped"
-  fi
+  "${PYTHON_BIN}" "${COLLECTOR}" --base-ref "${BASE_REF}" --mode branch --format lines >"${BRANCH_CHANGED}"
+  "${PYTHON_BIN}" "${COLLECTOR}" --base-ref "${BASE_REF}" --mode local --format lines >"${LOCAL_CHANGED}"
+  "${PYTHON_BIN}" "${COLLECTOR}" --base-ref "${BASE_REF}" --mode active --format lines >"${GATE_FILES}"
+  "${PYTHON_BIN}" "${COLLECTOR}" --base-ref "${BASE_REF}" --mode active --format json >"${CLASSIFICATION_JSON}"
 
-  git diff --name-only --diff-filter=ACMRTUXB >>"${LOCAL_CHANGED}"
-  git diff --cached --name-only --diff-filter=ACMRTUXB >>"${LOCAL_CHANGED}"
-  git ls-files --others --exclude-standard >>"${LOCAL_CHANGED}"
-
-  sort -u "${BRANCH_CHANGED}" -o "${BRANCH_CHANGED}"
-  sort -u "${LOCAL_CHANGED}" -o "${LOCAL_CHANGED}"
   cat "${BRANCH_CHANGED}" "${LOCAL_CHANGED}" >"${CHANGED_ALL}"
   sort -u "${CHANGED_ALL}" | sed '/^$/d' >"${CHANGED_SORTED}"
 
@@ -93,13 +179,11 @@ collect_changed_files() {
   echo "[INFO]   staged/unstaged/untracked: ${local_count}"
 
   if [[ "${local_count}" -gt 0 ]]; then
-    cp "${LOCAL_CHANGED}" "${GATE_FILES}"
     echo "[INFO] Active local changes detected; gating the staged/unstaged/untracked set for this iteration."
     if [[ "${branch_count}" -gt 0 ]]; then
       echo "[INFO] Branch-ahead files are detected for awareness but left to a clean-branch fast run or the full gate."
     fi
   else
-    cp "${BRANCH_CHANGED}" "${GATE_FILES}"
     echo "[INFO] No active local changes; gating committed changes from ${BASE_REF}...HEAD."
   fi
 
@@ -203,14 +287,53 @@ run_frontend_checks() {
     return 1
   fi
 
-  print_step "frontend checks"
-  (
-    cd apps/dsa-web
-    npm run lint --if-present
-    npm run test --if-present
-    npm run build --if-present
-  )
-  echo "[PASS] frontend lint/test/build"
+  print_step "frontend checks (changed-file tier)"
+
+  run_step "frontend lint changed" env VALIDATION_BASE_REF="${BASE_REF}" npm --prefix apps/dsa-web run lint:changed
+
+  "${PYTHON_BIN}" "${COLLECTOR}" \
+    --base-ref "${BASE_REF}" \
+    --mode active \
+    --scope design \
+    --existing \
+    --relative-to apps/dsa-web \
+    --format lines >"${FRONTEND_DESIGN_FILES_LIST}"
+
+  local design_files=()
+  local file_path
+  while IFS= read -r file_path; do
+    design_files+=("${file_path}")
+  done <"${FRONTEND_DESIGN_FILES_LIST}"
+
+  if [[ "${#design_files[@]}" -eq 0 ]]; then
+    skip_step "frontend design guard changed" "no changed frontend design source files"
+  else
+    run_step "frontend design guard changed (${#design_files[@]} files)" \
+      env VALIDATION_BASE_REF="${BASE_REF}" npm --prefix apps/dsa-web run check:design -- --files "${design_files[@]}"
+  fi
+
+  "${PYTHON_BIN}" "${COLLECTOR}" \
+    --base-ref "${BASE_REF}" \
+    --mode active \
+    --scope frontend-related \
+    --existing \
+    --relative-to apps/dsa-web \
+    --format lines >"${FRONTEND_RELATED_FILES_LIST}"
+
+  local related_files=()
+  while IFS= read -r file_path; do
+    related_files+=("${file_path}")
+  done <"${FRONTEND_RELATED_FILES_LIST}"
+
+  if [[ "${#related_files[@]}" -eq 0 ]]; then
+    skip_step "frontend related tests" "no changed frontend files for Vitest related mode"
+  else
+    run_step "frontend related tests (${#related_files[@]} files)" \
+      env VALIDATION_BASE_REF="${BASE_REF}" npm --prefix apps/dsa-web run test:related -- "${related_files[@]}"
+  fi
+
+  run_step "frontend typecheck" env VALIDATION_BASE_REF="${BASE_REF}" npm --prefix apps/dsa-web run typecheck
+  run_step "frontend quiet build" env VALIDATION_BASE_REF="${BASE_REF}" npm --prefix apps/dsa-web run build:quiet
 }
 
 docs_changed() {
@@ -273,6 +396,7 @@ echo "[INFO] Python: ${PYTHON_BIN}"
 echo "[INFO] This fast gate is for iteration only. Run ./scripts/ci_gate.sh before final push or release."
 
 collect_changed_files
+run_full_gate_fallback_if_needed
 run_python_checks
 run_frontend_checks
 run_docs_checks
