@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
@@ -154,6 +155,25 @@ def test_endpoint_preserves_market_cache_event_summary_as_diagnostic_read_only_m
     assert "decision" not in str(summary).lower()
 
 
+def test_endpoint_items_include_optional_trust_evidence_snapshot_contract() -> None:
+    app = FastAPI()
+    app.include_router(market_provider_operations.router, prefix="/api/v1/admin")
+    app.dependency_overrides[get_current_user] = _admin_user
+    client = TestClient(app)
+    payload = _service([]).get_operations(window="24h")
+
+    with patch(
+        "api.v1.endpoints.market_provider_operations.MarketProviderOperationsService",
+        return_value=SimpleNamespace(get_operations=lambda *, window="24h": payload),
+    ):
+        response = client.get("/api/v1/admin/market-providers/operations")
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["trustEvidence"]["contractVersion"] == "trust_evidence_snapshot_v1"
+    assert item["trustEvidence"]["surfaceKey"] == "market_provider_operations"
+
+
 def test_aggregator_does_not_call_external_providers_or_cache_refresh() -> None:
     market_cache.set(
         "crypto",
@@ -176,6 +196,64 @@ def test_aggregator_does_not_call_external_providers_or_cache_refresh() -> None:
     crypto = next(item for item in payload["items"] if item["cacheKey"] == "crypto")
     assert crypto["provider"] == "binance"
     assert payload["metadata"]["externalProviderCalls"] is False
+
+
+def test_trust_evidence_consumer_fields_do_not_leak_raw_provider_debug_or_reason_text() -> None:
+    market_cache.set(
+        "sentiment",
+        {
+            "providerHealth": {
+                "provider": "polygon providerRuntime routeRejected",
+                "status": "partial",
+                "errorSummary": "fallback_source cache_stale /api/v1/admin/raw",
+            },
+            "source": "yfinance_proxy",
+            "sourceType": "providerRuntime",
+            "freshness": "cache_stale",
+            "fallbackUsed": True,
+            "isStale": True,
+            "isPartial": True,
+            "reasonCode": "routeRejected",
+            "updatedAt": "2026-05-06T10:00:00+08:00",
+            "warning": "fallback_used providerRuntime /api/v1/admin/debug",
+            "items": [{"symbol": "SPY", "score": 60}],
+        },
+        ttl_seconds=30,
+    )
+
+    payload = _service([]).get_operations(window="24h")
+
+    trust_evidence = next(item for item in payload["items"] if item["cacheKey"] == "sentiment")[
+        "trustEvidence"
+    ]
+    consumer_projection = {
+        key: trust_evidence[key]
+        for key in (
+            "contractVersion",
+            "surfaceKey",
+            "entityKey",
+            "availabilityState",
+            "freshnessState",
+            "sourceClass",
+            "consumerState",
+            "consumerMessageKey",
+            "consumerBadgeKeys",
+        )
+    }
+    serialized = json.dumps(consumer_projection, ensure_ascii=False)
+
+    assert trust_evidence["contractVersion"] == "trust_evidence_snapshot_v1"
+    for forbidden in (
+        "polygon",
+        "providerRuntime",
+        "routeRejected",
+        "fallback_source",
+        "cache_stale",
+        "fallback_used",
+        "yfinance_proxy",
+        "/api/v1/admin",
+    ):
+        assert forbidden not in serialized
 
 
 def test_operations_summary_cache_reuses_projection_within_ttl() -> None:

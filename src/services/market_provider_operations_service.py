@@ -18,6 +18,7 @@ from src.services.llm_instrumentation import snapshot_llm_event_counters
 from src.services.market_cache import MARKET_CACHE_TTLS, SAFE_MARKET_CACHE_PANEL_KEYS, MarketCache, market_cache
 from src.services.market_data_source_registry import resolve_source_label
 from src.services.system_config_provider_projection import project_tickflow_entitlement_health
+from src.services.trust_evidence_projection import build_trust_evidence_snapshot_v1
 from src.storage import DatabaseManager
 from src.utils.security import sanitize_message
 
@@ -339,6 +340,19 @@ class MarketProviderOperationsService:
         as_of = self._safe_public_text(payload.get("asOf") or payload.get("last_update") or (snapshot.get("as_of") if isinstance(snapshot, dict) else None))
         updated_at = self._safe_public_text(payload.get("updatedAt") or payload.get("last_update") or payload.get("last_refresh_at") or (snapshot.get("updated_at") if isinstance(snapshot, dict) else None))
         last_successful_time = self._parse_time(last_successful or as_of or updated_at)
+        trust_evidence = self._trust_evidence_snapshot(
+            panel=panel,
+            payload=payload,
+            generated_at=now,
+            as_of=last_successful_time,
+            status=status,
+            freshness=freshness,
+            source=source,
+            is_fallback=is_fallback,
+            is_stale=is_stale,
+            is_refreshing=is_refreshing,
+            is_from_snapshot=is_from_snapshot,
+        )
         return {
             "provider": source,
             "sourceLabel": self._provider_source_label(source, payload.get("sourceLabel")),
@@ -361,8 +375,193 @@ class MarketProviderOperationsService:
             "fallbackUsed": bool(is_fallback or payload.get("fallbackUsed") or payload.get("fallback_used")),
             "warning": self._safe_error(payload.get("warning")),
             "errorSummary": self._safe_error(provider_health.get("errorSummary") or payload.get("lastError") or payload.get("refreshError") or (snapshot.get("last_error") if isinstance(snapshot, dict) else None)),
+            "trustEvidence": trust_evidence,
             "adminLogDrillThrough": self._drillthrough(category=None, provider=source, query=panel.endpoint),
         }
+
+    @classmethod
+    def _trust_evidence_snapshot(
+        cls,
+        *,
+        panel: MarketProviderPanel,
+        payload: Dict[str, Any],
+        generated_at: datetime,
+        as_of: Optional[datetime],
+        status: str,
+        freshness: Optional[str],
+        source: str,
+        is_fallback: bool,
+        is_stale: bool,
+        is_refreshing: bool,
+        is_from_snapshot: bool,
+    ) -> Dict[str, Any]:
+        is_partial = status == "partial" or bool(payload.get("isPartial") or payload.get("partial"))
+        is_synthetic = cls._trust_evidence_is_synthetic(source=source, freshness=freshness)
+        has_fallback = bool(is_fallback or status == "fallback")
+        availability_state, consumer_state, message_key = cls._trust_evidence_availability(
+            status=status,
+            is_refreshing=is_refreshing,
+            is_fallback=has_fallback,
+            is_stale=is_stale,
+            is_partial=is_partial,
+            is_synthetic=is_synthetic,
+        )
+        freshness_state = cls._trust_evidence_freshness(
+            status=status,
+            freshness=freshness,
+            is_fallback=has_fallback,
+            is_stale=is_stale,
+            is_from_snapshot=is_from_snapshot,
+            is_synthetic=is_synthetic,
+        )
+        source_class = cls._trust_evidence_source_class(
+            payload.get("sourceType"),
+            source=source,
+            is_fallback=has_fallback,
+            is_from_snapshot=is_from_snapshot,
+            is_synthetic=is_synthetic,
+        )
+        snapshot = build_trust_evidence_snapshot_v1(
+            surface_key="market_provider_operations",
+            entity_key=f"market_provider_operations:{panel.cache_key}",
+            generated_at=generated_at,
+            as_of=as_of,
+            availability_state=availability_state,
+            freshness_state=freshness_state,
+            source_class=source_class,
+            has_fallback=has_fallback,
+            is_stale=is_stale,
+            is_partial=is_partial,
+            is_synthetic=is_synthetic,
+            is_admin_only_detail=False,
+            consumer_state=consumer_state,
+            consumer_message_key=message_key,
+            consumer_badge_keys=cls._trust_evidence_badges(
+                consumer_state=consumer_state,
+                freshness_state=freshness_state,
+                has_fallback=has_fallback,
+                is_stale=is_stale,
+                is_partial=is_partial,
+                is_synthetic=is_synthetic,
+            ),
+            admin_diagnostic_refs=(f"trust-evidence:market-provider-operations:{panel.cache_key}",),
+        )
+        return snapshot.model_dump(mode="json")
+
+    @staticmethod
+    def _trust_evidence_availability(
+        *,
+        status: str,
+        is_refreshing: bool,
+        is_fallback: bool,
+        is_stale: bool,
+        is_partial: bool,
+        is_synthetic: bool,
+    ) -> Tuple[str, str, str]:
+        if status in {"unavailable", "error"}:
+            return "unavailable", "UNAVAILABLE", "trust_evidence.unavailable"
+        if is_refreshing or status == "refreshing":
+            return "updating", "UPDATING", "trust_evidence.updating"
+        if is_synthetic:
+            return "observation_only", "OBSERVATION_ONLY", "trust_evidence.observation_only"
+        if is_fallback or status == "fallback":
+            return "partial", "PARTIAL", "trust_evidence.fallback"
+        if is_partial or status == "partial":
+            return "partial", "PARTIAL", "trust_evidence.partial"
+        if is_stale or status == "stale":
+            return "delayed", "DELAYED", "trust_evidence.stale"
+        return "available", "AVAILABLE", "trust_evidence.available"
+
+    @staticmethod
+    def _trust_evidence_freshness(
+        *,
+        status: str,
+        freshness: Optional[str],
+        is_fallback: bool,
+        is_stale: bool,
+        is_from_snapshot: bool,
+        is_synthetic: bool,
+    ) -> str:
+        normalized = str(freshness or "").strip().lower()
+        if is_synthetic or normalized == "mock":
+            return "synthetic"
+        if is_fallback or status == "fallback" or normalized == "fallback":
+            return "fallback"
+        if is_stale or status == "stale" or normalized == "stale":
+            return "stale"
+        if status in {"unavailable", "error"}:
+            return "unavailable"
+        if normalized == "live":
+            return "live"
+        if normalized in {"fresh", "delayed", "cached", "partial"}:
+            return normalized
+        if normalized == "cache" or status == "cache" or is_from_snapshot:
+            return "cached"
+        if status == "partial":
+            return "partial"
+        return "unknown"
+
+    @staticmethod
+    def _trust_evidence_source_class(
+        source_type: Any,
+        *,
+        source: str,
+        is_fallback: bool,
+        is_from_snapshot: bool,
+        is_synthetic: bool,
+    ) -> str:
+        if is_synthetic:
+            return "synthetic"
+        normalized_type = str(source_type or "").strip().lower()
+        if normalized_type:
+            if "official" in normalized_type:
+                return "official_public"
+            if "licensed" in normalized_type or "authorized" in normalized_type:
+                return "licensed_authorized"
+            if "proxy" in normalized_type or normalized_type in {"public", "public_api", "api"}:
+                return "public_proxy"
+            if "cache" in normalized_type:
+                return "local_cache"
+        normalized_source = str(source or "").strip().lower()
+        if normalized_source in {"mock"}:
+            return "synthetic"
+        if is_fallback or is_from_snapshot or normalized_source in {"fallback", "cached"}:
+            return "local_cache"
+        return "unknown"
+
+    @staticmethod
+    def _trust_evidence_is_synthetic(*, source: str, freshness: Optional[str]) -> bool:
+        normalized_source = str(source or "").strip().lower()
+        normalized_freshness = str(freshness or "").strip().lower()
+        return normalized_source == "mock" or normalized_freshness == "mock"
+
+    @staticmethod
+    def _trust_evidence_badges(
+        *,
+        consumer_state: str,
+        freshness_state: str,
+        has_fallback: bool,
+        is_stale: bool,
+        is_partial: bool,
+        is_synthetic: bool,
+    ) -> Tuple[str, ...]:
+        if consumer_state == "UNAVAILABLE":
+            return ("source_unavailable",)
+        if is_synthetic:
+            return ("observation_only",)
+
+        badges: List[str] = []
+        if freshness_state == "delayed":
+            badges.append("source_delayed")
+        if is_stale:
+            badges.append("source_stale")
+        if is_partial:
+            badges.append("source_partial")
+        if has_fallback:
+            badges.append("source_fallback")
+        if not badges:
+            badges.append("source_current")
+        return tuple(badges)
 
     def _read_market_events(self, window: str) -> List[Dict[str, Any]]:
         events_by_id: Dict[str, Dict[str, Any]] = {}

@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from src.schemas.trust_evidence import TrustEvidenceSnapshotV1
+
 
 class MarketProviderOperationsWindowModel(BaseModel):
     key: str = "24h"
@@ -59,6 +61,7 @@ class MarketProviderOperationItemModel(BaseModel):
     fallbackUsed: bool = False
     warning: Optional[str] = None
     errorSummary: Optional[str] = None
+    trustEvidence: Optional[TrustEvidenceSnapshotV1] = None
     adminLogDrillThrough: AdminLogDrillThroughModel
 
 
