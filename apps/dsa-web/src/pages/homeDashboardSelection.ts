@@ -110,14 +110,17 @@ export function resolveHomeDashboardSelection(
   );
 
   const activeTraceReport = (() => {
-    const traceTicker = routeSymbol || activeTicker || selectedTicker || '';
+    const traceTicker = routeSymbol || activeTicker || pendingAnalysisTicker || selectedTicker || '';
     if (completedTaskReport && traceTicker && completedTaskTicker === traceTicker) {
       return completedTaskReport;
     }
     if (input.selectedReport && (!traceTicker || selectedTicker === traceTicker)) {
       return input.selectedReport;
     }
-    return completedTaskReport || input.selectedReport || null;
+    if (!traceTicker) {
+      return completedTaskReport || input.selectedReport || null;
+    }
+    return null;
   })();
 
   const activeEvidenceTickerCandidate = normalizeHomeTickerQuery(

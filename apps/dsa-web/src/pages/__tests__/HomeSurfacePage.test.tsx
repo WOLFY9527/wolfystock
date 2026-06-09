@@ -1119,6 +1119,14 @@ describe('HomeSurfacePage', () => {
     expect(screen.getByTestId('home-research-header-strip')).toHaveTextContent('重新分析');
     expect(screen.queryByText('查看完整判断')).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: '复制报告' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(String(writeText.mock.calls[0][0])).toContain('研究包完整度');
+    expect(String(writeText.mock.calls[0][0])).toContain('WolfyStock Research Report');
+    expect(String(writeText.mock.calls[0][0])).not.toContain('Wolfy AI Equity Research');
+    expect(String(writeText.mock.calls[0][0])).not.toMatch(/投资结论|Ideal buy|Stop loss|Position sizing|reasonCode|sourceRefId|raw_result|raw_ai_response|context_snapshot/i);
+    writeText.mockClear();
+
     fireEvent.click(screen.getByRole('button', { name: '完整报告' }));
 
     const report = await screen.findByTestId('home-bento-full-report-drawer');
@@ -1145,7 +1153,7 @@ describe('HomeSurfacePage', () => {
     expect(within(report).getAllByText('--').length).toBeGreaterThan(0);
 
     fireEvent.click(within(report).getByRole('button', { name: '复制报告' }));
-    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
     expect(String(writeText.mock.calls[0][0])).toContain('研究包完整度');
     expect(String(writeText.mock.calls[0][0])).toContain('WolfyStock Research Report');
     expect(String(writeText.mock.calls[0][0])).not.toContain('Wolfy AI Equity Research');

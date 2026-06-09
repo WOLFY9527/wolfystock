@@ -16,6 +16,7 @@ import {
   getCompanyDisplayName,
   getCompanyWithTicker,
   getSymbolDisplay,
+  normalizeFullReportBrand,
   readObjectField,
 } from '../../utils/homeReportIdentity';
 
@@ -70,7 +71,6 @@ type ReportIdentity = {
   dataStatus: string;
 };
 
-const LEGACY_REPORT_BRAND = 'Wolfy AI Equity Research';
 const REPORT_BRAND = 'WolfyStock Research Report';
 
 function TraceBadge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'used' | 'warning' | 'missing' }) {
@@ -209,8 +209,14 @@ function buildReportIdentity(report: AnalysisReport | null, dashboard?: Dashboar
   };
 }
 
-function normalizeReportBrand(markdown: string): string {
-  return markdown.replaceAll(LEGACY_REPORT_BRAND, REPORT_BRAND);
+function normalizeTicker(value: unknown): string {
+  return String(value || '').trim().toUpperCase();
+}
+
+function hasReportIdentityMismatch(report: AnalysisReport | null, dashboard: DashboardPayload): boolean {
+  const dashboardTicker = normalizeTicker(dashboard.ticker);
+  const reportTicker = normalizeTicker(getSymbolDisplay(report));
+  return Boolean(report && dashboardTicker && reportTicker && dashboardTicker !== reportTicker);
 }
 
 function buildFullReportSections(report: AnalysisReport | null, dashboard: DashboardPayload): FullReportSection[] {
@@ -374,9 +380,37 @@ const FullDecisionReportDrawer: React.FC<FullDecisionReportDrawerProps> = ({
   report,
 }) => {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const identityMismatch = hasReportIdentityMismatch(report, dashboard);
+  if (identityMismatch) {
+    const currentTicker = normalizeTicker(dashboard.ticker) || '--';
+    return (
+      <Drawer
+        isOpen={isOpen}
+        onClose={onClose}
+        title="完整报告"
+        width="max-w-[min(100vw,65rem)]"
+        zIndex={90}
+        bodyClassName="overflow-x-hidden"
+      >
+        <article
+          className="min-w-0 space-y-4 rounded-l-[28px] border border-amber-300/18 bg-[#080B10]/92 p-4 text-white shadow-2xl sm:p-7"
+          data-testid="home-bento-full-report-drawer"
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100/60">REPORT UNAVAILABLE</p>
+          <h2 className="break-words text-2xl font-semibold tracking-[0] text-white">报告暂不可用</h2>
+          <p className="max-w-2xl break-words text-sm leading-6 text-white/68">
+            当前选择标的为 {currentTicker}，历史报告身份不一致，已停止展示这份报告内容。
+          </p>
+          <p className="rounded-xl border border-amber-300/18 bg-amber-300/8 px-3 py-2 text-sm text-amber-50/82">
+            请重新打开对应历史记录，或重新分析当前标的。
+          </p>
+        </article>
+      </Drawer>
+    );
+  }
   const sections = buildFullReportSections(report, dashboard);
   const identity = buildReportIdentity(report, dashboard);
-  const markdown = normalizeReportBrand(buildInstitutionalReportMarkdown(report));
+  const markdown = normalizeFullReportBrand(buildInstitutionalReportMarkdown(report));
   const summarySection = sections.find((section) => section.id === 'summary');
   const riskSection = sections.find((section) => section.id === 'risks');
   const observationSection = sections.find((section) => section.id === 'observation-plan');

@@ -301,6 +301,92 @@ class AnalysisHistoryTestCase(unittest.TestCase):
             "持久化标准报告应被原样返回",
         )
 
+    def test_history_detail_rejects_persisted_report_with_mismatched_symbol(self) -> None:
+        """History detail should not attach stale AAPL payloads to an ORCL history row."""
+        result = AnalysisResult(
+            code="ORCL",
+            name="Oracle",
+            sentiment_score=52,
+            trend_prediction="Neutral",
+            operation_advice="Observe",
+            analysis_summary="ORCL row summary",
+        )
+
+        saved = self.db.save_analysis_history(
+            result=result,
+            query_id="query_mismatched_persisted_report_001",
+            report_type="detailed",
+            news_content="news",
+            context_snapshot=None,
+            save_snapshot=False,
+        )
+        self.assertEqual(saved, 1)
+
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(
+                AnalysisHistory.query_id == "query_mismatched_persisted_report_001"
+            ).first()
+            if row is None:
+                self.fail("未找到保存的历史记录")
+            row.raw_result = json.dumps({
+                "code": "AAPL",
+                "name": "Apple",
+                "persisted_report": {
+                    "meta": {
+                        "query_id": "query_mismatched_persisted_report_001",
+                        "stock_code": "AAPL",
+                        "stock_name": "Apple",
+                        "report_type": "detailed",
+                        "created_at": "2026-06-07T08:00:00Z",
+                    },
+                    "summary": {
+                        "analysis_summary": "AAPL stale report content",
+                        "operation_advice": "Buy",
+                        "trend_prediction": "Bullish",
+                        "sentiment_score": 88,
+                    },
+                    "strategy": {
+                        "ideal_buy": "AAPL entry",
+                        "stop_loss": "AAPL stop loss",
+                        "take_profit": "AAPL target price",
+                    },
+                    "details": {
+                        "standard_report": {
+                            "summary_panel": {
+                                "stock": "Apple",
+                                "ticker": "AAPL",
+                                "one_sentence": "AAPL stale report content",
+                            },
+                        },
+                    },
+                },
+                "dashboard": {
+                    "summary": {
+                        "ticker": "AAPL",
+                        "one_sentence": "AAPL stale dashboard content",
+                    },
+                },
+            })
+            record_id = row.id
+            session.commit()
+
+        detail = HistoryService(self.db).get_history_detail_by_id(record_id)
+        self.assertIsNotNone(detail)
+        self.assertEqual(detail.get("stock_code"), "ORCL")
+        self.assertEqual(detail.get("analysis_summary"), "ORCL row summary")
+        self.assertNotIn("AAPL", json.dumps(detail, ensure_ascii=False))
+        self.assertEqual(detail.get("raw_result"), {})
+        self.assertEqual(
+            detail.get("standard_report", {}).get("summary_panel", {}).get("ticker"),
+            "ORCL",
+        )
+
+        if get_history_detail is not None:
+            report = get_history_detail(str(record_id), db_manager=self.db)
+            payload = report.model_dump(mode="json", by_alias=True, exclude_none=True)
+            self.assertEqual(payload["meta"]["stock_code"], "ORCL")
+            self.assertNotIn("AAPL", json.dumps(payload, ensure_ascii=False))
+
     def test_attach_persisted_report_enriches_canonical_payload_and_exposes_generated_at(self) -> None:
         result = self._build_result()
         saved = self.db.save_analysis_history(

@@ -66,6 +66,7 @@ import {
   buildInstitutionalReportMarkdown,
   getCompanyDisplayName,
   getCompanyWithTicker,
+  normalizeFullReportBrand,
   normalizeCompanyNameCandidate,
   readObjectField,
 } from '../utils/homeReportIdentity';
@@ -4886,7 +4887,7 @@ function buildDrawerPayload(locale: DashboardLocale, dashboard: DashboardPayload
             })),
             {
               label: dashboard.strategy.positionLabel,
-              value: isEnglish ? 'Staggered Sizing' : '分批仓位',
+              value: isEnglish ? 'Staggered Observation' : '分批观察',
               details: dashboard.strategy.positionBody,
               tone: 'neutral',
             },
@@ -6040,7 +6041,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
       if (!navigator.clipboard?.writeText) {
         throw new Error('clipboard_unavailable');
       }
-      await navigator.clipboard.writeText(buildInstitutionalReportMarkdown(activeTraceReport));
+      await navigator.clipboard.writeText(normalizeFullReportBrand(buildInstitutionalReportMarkdown(activeTraceReport)));
       setMainCopyState('copied');
     } catch {
       setMainCopyState('failed');

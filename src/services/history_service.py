@@ -79,6 +79,59 @@ def _resolve_history_display_names(
     return stock_name, company_name
 
 
+def _normalize_history_stock_code(value: Any) -> str:
+    return str(value or "").strip().upper()
+
+
+def _first_nested_mapping(value: Any, path: tuple[str, ...]) -> Dict[str, Any]:
+    current = value
+    for key in path:
+        if not isinstance(current, dict):
+            return {}
+        current = current.get(key)
+    return current if isinstance(current, dict) else {}
+
+
+def _collect_payload_stock_codes(raw_result: Any, persisted_report: Any, persisted_meta: Dict[str, Any]) -> List[str]:
+    candidates: List[Any] = [
+        persisted_meta.get("stock_code"),
+        persisted_meta.get("symbol"),
+        persisted_meta.get("ticker"),
+    ]
+    if isinstance(raw_result, dict):
+        candidates.extend([
+            raw_result.get("code"),
+            raw_result.get("stock_code"),
+            raw_result.get("symbol"),
+            raw_result.get("ticker"),
+            _first_nested_mapping(raw_result, ("dashboard", "summary")).get("ticker"),
+            _first_nested_mapping(raw_result, ("dashboard", "summary")).get("stock_code"),
+        ])
+    if isinstance(persisted_report, dict):
+        standard_report = _first_nested_mapping(persisted_report, ("details", "standard_report"))
+        candidates.extend([
+            _first_nested_mapping(standard_report, ("summary_panel",)).get("ticker"),
+            _first_nested_mapping(standard_report, ("summaryPanel",)).get("ticker"),
+        ])
+
+    result: List[str] = []
+    for candidate in candidates:
+        normalized = _normalize_history_stock_code(candidate)
+        if normalized and normalized not in result:
+            result.append(normalized)
+    return result
+
+
+def _payload_symbol_mismatches_record(raw_result: Any, persisted_report: Any, persisted_meta: Dict[str, Any], record_code: Any) -> bool:
+    normalized_record_code = _normalize_history_stock_code(record_code)
+    if not normalized_record_code:
+        return False
+    return any(
+        candidate != normalized_record_code
+        for candidate in _collect_payload_stock_codes(raw_result, persisted_report, persisted_meta)
+    )
+
+
 def _first_present(*values: Any) -> Any:
     for value in values:
         if value is None:
@@ -1041,6 +1094,16 @@ class HistoryService:
         context_snapshot = self._parse_context_snapshot(record.context_snapshot)
         persisted_report = raw_result.get("persisted_report") if isinstance(raw_result, dict) else None
         persisted_meta = persisted_report.get("meta") if isinstance(persisted_report, dict) and isinstance(persisted_report.get("meta"), dict) else {}
+        if _payload_symbol_mismatches_record(raw_result, persisted_report, persisted_meta, record.code):
+            logger.warning(
+                "Ignoring mismatched history report payload for record_id=%s record_code=%s payload_codes=%s",
+                getattr(record, "id", None),
+                record.code,
+                _collect_payload_stock_codes(raw_result, persisted_report, persisted_meta),
+            )
+            raw_result = {}
+            persisted_report = None
+            persisted_meta = {}
         persisted_summary = persisted_report.get("summary") if isinstance(persisted_report, dict) and isinstance(persisted_report.get("summary"), dict) else {}
         persisted_strategy = persisted_report.get("strategy") if isinstance(persisted_report, dict) and isinstance(persisted_report.get("strategy"), dict) else {}
         persisted_details = persisted_report.get("details") if isinstance(persisted_report, dict) and isinstance(persisted_report.get("details"), dict) else {}
@@ -1185,7 +1248,7 @@ class HistoryService:
         return {
             "id": record.id,
             "query_id": record.query_id,
-            "stock_code": persisted_meta.get("stock_code") or record.code,
+            "stock_code": record.code or persisted_meta.get("stock_code"),
             "stock_name": stock_name,
             "company_name": company_name,
             "report_type": persisted_meta.get("report_type") or record.report_type,

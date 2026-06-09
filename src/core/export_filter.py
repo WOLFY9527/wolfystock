@@ -10,10 +10,19 @@ _SNAKE_CASE_RE = re.compile(r"\b[a-z]+(?:_[a-z0-9]+)+\b")
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 
 _CHINESE_REPLACEMENTS: tuple[tuple[str, str], ...] = (
+    ("小仓试错", "小范围观察"),
+    ("第二笔", "后续观察点"),
+    ("强行交易", "强行行动"),
+    ("强烈买入", "强烈观察"),
+    ("买入信号", "正向观察信号"),
+    ("卖出信号", "风险观察信号"),
     ("理想买入点", "观察价位一"),
     ("次优买入点", "观察价位二"),
     ("止损位", "风险边界"),
     ("止损说明", "风险边界说明"),
+    ("止损", "风险边界"),
+    ("止盈", "上方观察"),
+    ("目标价", "观察区间"),
     ("目标一区", "观察区间一"),
     ("目标二区", "观察区间二"),
     ("目标区间", "观察区间"),
@@ -27,6 +36,11 @@ _CHINESE_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     ("作战计划", "观察计划"),
     ("狙击点位", "关键观察位"),
     ("买点", "观察点"),
+    ("仓位建议", "暴露比例说明"),
+    ("仓位", "暴露比例"),
+    ("加仓", "增加观察"),
+    ("减仓", "减少观察"),
+    ("建仓", "建立观察状态"),
     ("买入", "观察"),
     ("卖出", "观察风险"),
     ("建议", "观察"),
@@ -41,6 +55,7 @@ _CHINESE_REPLACEMENTS: tuple[tuple[str, str], ...] = (
 )
 
 _PHRASE_REPLACEMENTS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"25\s*%\s*-\s*35\s*%", re.IGNORECASE), "bounded range"),
     (re.compile(r"\bmissing\s+field\s+audit\b", re.IGNORECASE), "Research Data Boundaries"),
     (re.compile(r"\bfull\s+truth\b", re.IGNORECASE), "consumer summary"),
     (re.compile(r"\bintegrated_unavailable\b", re.IGNORECASE), "data coverage note"),
@@ -57,6 +72,9 @@ _PHRASE_REPLACEMENTS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bprovider\s+runtime\b", re.IGNORECASE), "data source note"),
     (re.compile(r"\bprovider\b", re.IGNORECASE), "data source"),
     (re.compile(r"\bposition\s+sizing\b", re.IGNORECASE), "exposure context"),
+    (re.compile(r"\bbattle\s+plan\b", re.IGNORECASE), "observation plan"),
+    (re.compile(r"\bsniper\b", re.IGNORECASE), "key observation"),
+    (re.compile(r"\bentry\b", re.IGNORECASE), "observation point"),
     (re.compile(r"\btarget\s+price\b", re.IGNORECASE), "observation range"),
     (re.compile(r"\btake\s+profit\b", re.IGNORECASE), "upside scenario"),
     (re.compile(r"\bstop[-\s]+loss\b", re.IGNORECASE), "risk boundary"),

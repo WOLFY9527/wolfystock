@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { AnalysisReport } from '../../types/analysis';
-import { buildInstitutionalReportMarkdown } from '../homeReportIdentity';
+import { buildInstitutionalReportMarkdown, consumerSafeReportText } from '../homeReportIdentity';
 
 const forbiddenConsumerReportPattern =
-  /投资结论|买入|卖出|理想买点|次级买点|止损|止盈|目标价|目标位|目标区间|仓位建议|\bAction\b|Ideal buy|Secondary entry|Stop loss|Take profit|Target 1|Target 2|Target zone|Position sizing|holding advice|empty-position advice|reasonCode|sourceRefId|raw_result|raw_ai_response|context_snapshot|raw_result_marker|raw_ai_response_marker|context_snapshot_marker|provider_timeout|fallback_cache|Yahoo Finance|Finnhub|backend snake_case/i;
+  /小仓试错|第二笔|25%-35%|强行交易|投资结论|买入|卖出|理想买点|次级买点|止损|止盈|目标价|目标位|目标区间|仓位建议|仓位|\bAction\b|Ideal buy|Secondary entry|Stop loss|Take profit|Target 1|Target 2|Target zone|Position sizing|battle plan|sniper|holding advice|empty-position advice|reasonCode|sourceRefId|raw_result|raw_ai_response|context_snapshot|raw_result_marker|raw_ai_response_marker|context_snapshot_marker|provider_timeout|fallback_cache|Yahoo Finance|Finnhub|backend snake_case/i;
 
 function buildUnsafeReportFixture(): AnalysisReport {
   return {
@@ -92,11 +92,11 @@ function buildUnsafeReportFixture(): AnalysisReport {
           stopLoss: '117.40（止损）',
           target: '133.50（目标价）',
           positionSizing: '仓位建议 20%',
-          buildStrategy: '回踩后买入并加仓。',
-          riskControlStrategy: '跌破后止损。',
+          buildStrategy: '小仓试错，第二笔在确认后加仓。',
+          riskControlStrategy: '25%-35% 仓位，跌破后止损，避免强行交易。',
           noPositionAdvice: '空仓建议等待理想买点。',
           holderAdvice: '持仓建议继续加仓。',
-          executionReminders: ['不要把 provider_timeout 暴露给消费者。'],
+          executionReminders: ['不要强行交易，也不要把 provider_timeout 暴露给消费者。'],
         },
         reasonLayer: {
           coreReasons: ['价格仍需继续跟踪。'],
@@ -115,7 +115,7 @@ function buildUnsafeReportFixture(): AnalysisReport {
             { label: '仓位建议', value: '20%' },
           ],
           notes: [
-            { label: 'entry', value: '买入后持有。' },
+            { label: 'entry', value: 'battle plan sniper entry: 买入后持有。' },
           ],
         },
         coverageNotes: {
@@ -144,6 +144,13 @@ function buildUnsafeReportFixture(): AnalysisReport {
 }
 
 describe('buildInstitutionalReportMarkdown no-advice guard', () => {
+  it('projects isolated legacy full-report action phrases to observation copy', () => {
+    const projected = consumerSafeReportText('小仓试错，第二笔 25%-35%，避免强行交易。');
+
+    expect(projected).toBe('当前研究包仍不完整，仅支持继续跟踪。');
+    expect(projected).not.toMatch(forbiddenConsumerReportPattern);
+  });
+
   it('maps action report fields to observation language and suppresses raw fields', () => {
     const markdown = buildInstitutionalReportMarkdown(buildUnsafeReportFixture());
 

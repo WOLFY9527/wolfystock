@@ -194,7 +194,7 @@ describe('resolveHomeDashboardSelection', () => {
     expect(result.activeTraceReport).toBe(selectedReport);
   });
 
-  it('disables rerun when the active report exists but has no usable stock code', () => {
+  it('rejects a symbol-less report when the surface already has a selected ticker', () => {
     const reportWithoutSymbol = buildReport('', 'blank-history');
 
     const result = resolveHomeDashboardSelection({
@@ -208,8 +208,8 @@ describe('resolveHomeDashboardSelection', () => {
       defaultTicker: 'ORCL',
     });
 
-    expect(result.activeTraceReport).toBe(reportWithoutSymbol);
-    expect(result.reanalysisTicker).toBe('');
+    expect(result.activeTraceReport).toBeNull();
+    expect(result.reanalysisTicker).toBe('ORCL');
   });
 
   it('aligns the evidence ticker with the active trace report instead of a restored ticker', () => {
@@ -226,7 +226,29 @@ describe('resolveHomeDashboardSelection', () => {
       defaultTicker: 'ORCL',
     });
 
-    expect(result.activeTraceReport).toBe(selectedReport);
-    expect(result.activeEvidenceTicker).toBe('TSLA');
+    expect(result.dashboardReport).toBeNull();
+    expect(result.activeTraceReport).toBeNull();
+    expect(result.activeEvidenceTicker).toBe('ORCL');
+    expect(result.reanalysisTicker).toBe('ORCL');
+  });
+
+  it('does not silently attach an AAPL history report to the selected ORCL surface', () => {
+    const selectedReport = buildReport('AAPL', 'history-aapl');
+
+    const result = resolveHomeDashboardSelection({
+      activeTasks: [],
+      routeTaskId: null,
+      routeSymbol: null,
+      activeTicker: 'ORCL',
+      pendingAnalysisTicker: null,
+      selectedReport,
+      recentHistoryItems: [buildHistoryItem('AAPL')],
+      defaultTicker: 'ORCL',
+    });
+
+    expect(result.effectiveTicker).toBe('ORCL');
+    expect(result.dashboardReport).toBeNull();
+    expect(result.activeTraceReport).toBeNull();
+    expect(result.activeEvidenceTicker).toBe('ORCL');
   });
 });

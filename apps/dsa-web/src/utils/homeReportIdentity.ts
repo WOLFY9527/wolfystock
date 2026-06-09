@@ -4,12 +4,14 @@ const EMPTY_FIELD_VALUE = '-';
 const EMPTY_DISPLAY_VALUE = '--';
 const CONSUMER_REPORT_OBSERVATION_FALLBACK = '当前研究包仍不完整，仅支持继续跟踪。';
 const CONSUMER_REPORT_DATA_GAP_FALLBACK = '数据不足，仅支持情景参考。';
+const LEGACY_FULL_REPORT_BRAND = 'Wolfy AI Equity Research';
+const CONSUMER_FULL_REPORT_BRAND = 'WolfyStock Research Report';
 
 const CONSUMER_REPORT_INTERNAL_PATTERN =
   /reasonCode|reasonCodes|reason_code|reason_codes|reasonFamilies|sourceRefId|sourceRefIds|source_ref_id|source_ref_ids|raw_result|rawResult|raw_ai_response|rawAiResponse|context_snapshot|contextSnapshot|rawPayload|raw_payload|rawRows|provider|backend|debug|diagnostic|diagnostics|trace|schema|cache|payload|prompt|model|fallback_cache|provider_timeout|synthetic_fixture|snake_case|\b[a-z]+(?:_[a-z0-9]+)+\b/i;
 
 const CONSUMER_REPORT_ACTION_PATTERN =
-  /投资结论|理想买点|理想买入|理想买入点|次级买点|二次买入|次优买入|次优买点|回踩买点|突破买点|分批试仓|试仓|目标价|目标位|目标区间|目标一区|目标二区|止损|止损位|止损线|止盈|止盈目标|仓位建议|持仓建议|空仓建议|建议\s*(买入|卖出|加仓|减仓|持有)|买入|卖出|加仓|减仓|建仓|开仓|平仓|减持|\bAction\b|Ideal buy|Ideal entry|Pullback entry|Secondary buy|Secondary entry|Stop loss|Take profit|\bTarget\b|Target 1|Target 2|Target zone|Position sizing|Entry strategy|Risk control strategy|holding advice|empty-position advice|empty-position|holding-position|\bbuy\b|\bsell\b|\badd(?:ing)?\b|\breduce\b|\bentry\b|\bexit\b|\baccumulate\b|\bscale(?:\s|-)?in\b|\bbuild(?:ing)? position\b|\bstop(?: loss)?\b|\btake profit\b|\btarget(?: price| zone)?\b|\bposition sizing\b/i;
+  /小仓试错|第二笔|强行交易|25\s*%\s*-\s*35\s*%|投资结论|理想买点|理想买入|理想买入点|次级买点|二次买入|次优买入|次优买点|回踩买点|突破买点|分批试仓|试仓|目标价|目标位|目标区间|目标一区|目标二区|止损|止损位|止损线|止盈|止盈目标|仓位建议|仓位|持仓建议|空仓建议|建议\s*(买入|卖出|加仓|减仓|持有)|强烈买入|买入信号|卖出信号|买入|卖出|加仓|减仓|建仓|开仓|平仓|减持|\bAction\b|Ideal buy|Ideal entry|Pullback entry|Secondary buy|Secondary entry|Stop loss|Take profit|\bTarget\b|Target 1|Target 2|Target zone|Target price|Position sizing|Entry strategy|Risk control strategy|Battle plan|Sniper|holding advice|empty-position advice|empty-position|holding-position|\bbuy\b|\bsell\b|\badd(?:ing)?\b|\breduce\b|\bentry\b|\bexit\b|\baccumulate\b|\bscale(?:\s|-)?in\b|\bbuild(?:ing)? position\b|\bstop(?: loss)?\b|\btake profit\b|\btarget(?: price| zone)?\b|\bposition sizing\b|\bbattle plan\b|\bsniper\b/i;
 
 const CONSUMER_REPORT_PRICE_TOKEN_PATTERN =
   /(?:[$¥€￥]\s*)?\d+(?:,\d{3})*(?:\.\d+)?(?:\s*(?:-|–|—|~|至|到)\s*(?:[$¥€￥]\s*)?\d+(?:,\d{3})*(?:\.\d+)?)?/g;
@@ -112,6 +114,10 @@ export function consumerSafeReportStatus(value: unknown): string {
   if (normalized === 'missing' || normalized === 'error' || normalized === 'unavailable') return '数据不足';
   if (normalized === 'unknown' || !normalized) return '状态待确认';
   return consumerSafeReportText(value, '状态待确认') || '状态待确认';
+}
+
+export function normalizeFullReportBrand(markdown: string): string {
+  return markdown.replaceAll(LEGACY_FULL_REPORT_BRAND, CONSUMER_FULL_REPORT_BRAND);
 }
 
 function isPlaceholderName(value: string): boolean {

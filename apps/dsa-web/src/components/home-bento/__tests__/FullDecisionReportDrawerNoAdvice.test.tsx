@@ -11,7 +11,7 @@ vi.mock('../../common/Drawer', () => ({
 }));
 
 const forbiddenConsumerReportPattern =
-  /投资结论|买入|卖出|理想买点|次级买点|止损|止盈|目标价|目标位|目标区间|仓位建议|\bAction\b|Ideal buy|Secondary entry|Stop loss|Take profit|Target 1|Target 2|Target zone|Position sizing|holding advice|empty-position advice|reasonCode|sourceRefId|raw_result|raw_ai_response|context_snapshot|raw_result_marker|raw_ai_response_marker|context_snapshot_marker|provider_timeout|fallback_cache|Yahoo Finance|Finnhub|backend snake_case/i;
+  /小仓试错|第二笔|25%-35%|强行交易|投资结论|买入|卖出|理想买点|次级买点|止损|止盈|目标价|目标位|目标区间|仓位建议|仓位|\bAction\b|Ideal buy|Secondary entry|Stop loss|Take profit|Target 1|Target 2|Target zone|Position sizing|battle plan|sniper|holding advice|empty-position advice|reasonCode|sourceRefId|raw_result|raw_ai_response|context_snapshot|raw_result_marker|raw_ai_response_marker|context_snapshot_marker|provider_timeout|fallback_cache|Yahoo Finance|Finnhub|backend snake_case/i;
 
 function buildUnsafeReportFixture(): AnalysisReport {
   return {
@@ -86,11 +86,11 @@ function buildUnsafeReportFixture(): AnalysisReport {
           stopLoss: '117.40（止损）',
           target: '133.50（目标价）',
           positionSizing: '仓位建议 20%',
-          buildStrategy: '回踩后买入并加仓。',
-          riskControlStrategy: '跌破后止损。',
+          buildStrategy: '小仓试错，第二笔在确认后加仓。',
+          riskControlStrategy: '25%-35% 仓位，跌破后止损，避免强行交易。',
           noPositionAdvice: '空仓建议等待理想买点。',
           holderAdvice: '持仓建议继续加仓。',
-          executionReminders: ['不要把 provider_timeout 暴露给消费者。'],
+          executionReminders: ['不要强行交易，也不要把 provider_timeout 暴露给消费者。'],
         },
         reasonLayer: {
           coreReasons: ['价格仍需继续跟踪。'],
@@ -109,7 +109,7 @@ function buildUnsafeReportFixture(): AnalysisReport {
             { label: '仓位建议', value: '20%' },
           ],
           notes: [
-            { label: 'entry', value: '买入后持有。' },
+            { label: 'entry', value: 'battle plan sniper entry: 买入后持有。' },
           ],
         },
         coverageNotes: {
@@ -135,6 +135,23 @@ function buildUnsafeReportFixture(): AnalysisReport {
       reasonCodes: ['provider_timeout'],
     },
   };
+}
+
+function buildMismatchedReportFixture(): AnalysisReport {
+  const report = JSON.parse(JSON.stringify(buildUnsafeReportFixture())) as AnalysisReport;
+  report.meta.stockCode = 'AAPL';
+  report.meta.stockName = 'Apple';
+  report.meta.companyName = 'Apple';
+  report.summary.analysisSummary = 'AAPL stale report content 小仓试错';
+  if (report.details?.standardReport?.summaryPanel) {
+    report.details.standardReport.summaryPanel.stock = 'Apple';
+    report.details.standardReport.summaryPanel.ticker = 'AAPL';
+    report.details.standardReport.summaryPanel.oneSentence = 'AAPL stale report content 小仓试错';
+  }
+  if (report.decisionTrace) {
+    report.decisionTrace.symbol = 'AAPL';
+  }
+  return report;
 }
 
 describe('FullDecisionReportDrawer no-advice guard', () => {
@@ -177,6 +194,39 @@ describe('FullDecisionReportDrawer no-advice guard', () => {
     expect(report).toHaveTextContent('117.40');
     expect(report).toHaveTextContent('133.50');
     expect(report).not.toHaveTextContent(forbiddenConsumerReportPattern);
+  });
+
+  it('refuses to render a report that does not match the current dashboard ticker', () => {
+    render(
+      <FullDecisionReportDrawer
+        dashboard={{
+          ticker: 'ORCL',
+          decision: {
+            company: 'Oracle',
+            heroValue: '74',
+            confidenceValue: '中',
+            signalLabel: '继续跟踪',
+            scoreValue: '情景参考',
+            summary: 'Oracle current surface.',
+            reasonBody: '价格仍需继续跟踪。',
+          },
+        }}
+        isOpen
+        onClose={() => undefined}
+        report={buildMismatchedReportFixture()}
+      />,
+    );
+
+    const report = screen.getByTestId('home-bento-full-report-drawer');
+
+    expect(report).toHaveTextContent('报告暂不可用');
+    expect(report).toHaveTextContent('ORCL');
+    expect(report).not.toHaveTextContent('AAPL');
+    expect(report).not.toHaveTextContent('AAPL stale report content');
+    expect(report).not.toHaveTextContent(forbiddenConsumerReportPattern);
+    expect(within(report).queryByRole('button', { name: '复制报告' })).not.toBeInTheDocument();
+    expect(within(report).queryByRole('button', { name: '导出 Markdown' })).not.toBeInTheDocument();
+    expect(within(report).queryByRole('button', { name: '导出 PDF' })).not.toBeInTheDocument();
   });
 
   it('copies consumer-safe markdown when exporting the report text', async () => {
@@ -267,5 +317,48 @@ describe('FullDecisionReportDrawer no-advice guard', () => {
     expect(markdown).toContain('关键价格区间');
     expect(markdown).not.toMatch(forbiddenConsumerReportPattern);
     expect(markdown).not.toMatch(/raw evidence|raw payload|provider|debug|cache|buy|sell|target|stop|position[- ]?sizing/i);
+  });
+
+  it('prints consumer-safe markdown for PDF export', async () => {
+    const print = vi.fn();
+    const close = vi.fn();
+    const focus = vi.fn();
+    const write = vi.fn();
+    const originalOpen = window.open;
+    vi.spyOn(window, 'open').mockImplementation(() => ({
+      document: {
+        write,
+        close,
+      },
+      focus,
+      print,
+    } as unknown as Window));
+
+    render(
+      <FullDecisionReportDrawer
+        dashboard={{
+          ticker: 'ORCL',
+          decision: {
+            company: 'Oracle',
+            heroValue: '74',
+            confidenceValue: '中',
+            signalLabel: '买入',
+            scoreValue: '上行后卖出',
+            summary: '建议买入，目标价看 133.50。',
+            reasonBody: '价格仍需继续跟踪。',
+          },
+        }}
+        isOpen
+        onClose={() => undefined}
+        report={buildUnsafeReportFixture()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '导出 PDF' }));
+
+    expect(window.open).not.toBe(originalOpen);
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(String(write.mock.calls[0]?.[0])).toContain('研究包完整度');
+    expect(String(write.mock.calls[0]?.[0])).not.toMatch(forbiddenConsumerReportPattern);
   });
 });
