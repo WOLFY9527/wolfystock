@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import warnings
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -260,6 +260,35 @@ def test_unauthenticated_admin_routes_fail_closed_with_sanitized_errors() -> Non
         for response in responses:
             assert response.json() == {"error": "unauthorized", "message": "Login required"}
             _assert_public_surface_safe(response.json())
+    finally:
+        client.close()
+        _reset_auth_globals()
+
+
+def test_market_briefing_public_preview_reaches_optional_user_endpoint_when_auth_enabled(monkeypatch) -> None:
+    _reset_auth_globals()
+    client = _auth_guarded_client()
+    service = MagicMock()
+    service.get_market_briefing.return_value = {
+        "source": "fallback",
+        "updatedAt": "2026-06-09T00:00:00Z",
+        "items": [],
+        "isFallback": True,
+        "freshness": "fallback",
+    }
+    monkeypatch.setattr("api.v1.endpoints.market.MarketOverviewService", lambda: service)
+    try:
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
+            response = client.get("/api/v1/market/market-briefing")
+            write_probe = client.post("/api/v1/market/market-briefing", json={})
+            adjacent_market_read = client.get("/api/v1/market/temperature")
+
+        assert response.status_code == 200
+        assert response.json()["source"] == "fallback"
+        assert write_probe.status_code == 401
+        assert adjacent_market_read.status_code == 401
+        service.get_market_briefing.assert_called_once()
+        assert service.get_market_briefing.call_args.kwargs["actor"]["actor_type"] == "anonymous"
     finally:
         client.close()
         _reset_auth_globals()

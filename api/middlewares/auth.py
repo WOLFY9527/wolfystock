@@ -36,13 +36,19 @@ EXEMPT_PATHS = frozenset({
     "/openapi.json",
 })
 
+PUBLIC_PREVIEW_GET_PATHS = frozenset({
+    "/api/v1/market/market-briefing",
+})
+
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 
-def _path_exempt(path: str) -> bool:
+def _path_exempt(path: str, method: str) -> bool:
     """Check if path is exempt from auth."""
     normalized = path.rstrip("/") or "/"
-    return normalized in EXEMPT_PATHS
+    if normalized in EXEMPT_PATHS:
+        return True
+    return method.upper() == "GET" and normalized in PUBLIC_PREVIEW_GET_PATHS
 
 
 def _origin_from_value(value: str | None) -> str | None:
@@ -114,7 +120,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not is_auth_enabled():
             return await call_next(request)
 
-        if _path_exempt(path):
+        if _path_exempt(path, request.method):
             return await call_next(request)
 
         if not path.startswith("/api/v1/"):
