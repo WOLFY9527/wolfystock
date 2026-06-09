@@ -635,6 +635,18 @@ describe('MarketProviderOperationsPage', () => {
     expect(topSummary).not.toHaveTextContent('official_public.fed_liquidity');
     expect(topSummary).not.toHaveTextContent('missing_provider_configuration');
     expect(topSummary).not.toHaveTextContent('TUSHARE_TOKEN');
+    const betaChecklist = screen.getByTestId('market-provider-beta-readiness-checklist');
+    expect(betaChecklist).toHaveTextContent('数据源配置');
+    expect(betaChecklist).toHaveTextContent('本地样本与缓存');
+    expect(betaChecklist).toHaveTextContent('降级 / 备用观察');
+    expect(betaChecklist).toHaveTextContent('仅观察来源');
+    expect(betaChecklist).toHaveTextContent('备用 2');
+    expect(betaChecklist).toHaveTextContent('过期 0');
+    expect(betaChecklist).toHaveTextContent('部分 0');
+    expect(betaChecklist).toHaveTextContent('失败 1');
+    expect(betaChecklist).toHaveTextContent('需补齐 5 项');
+    expect(betaChecklist).toHaveTextContent('就绪状态 部分就绪');
+    expect(betaChecklist).toHaveTextContent('先沿现有凭据、授权 feed、缓存与 provider 配置路径补齐，再回本页确认。');
     const actionQueue = screen.getByTestId('market-provider-action-queue');
     expect(actionQueue).toHaveTextContent('L1 行动队列');
     expect(actionQueue).toHaveTextContent('优先处理少量阻断和注意项');
@@ -747,6 +759,15 @@ describe('MarketProviderOperationsPage', () => {
 
     expect(await screen.findByText('数据源配置清单')).toBeInTheDocument();
     const checklist = screen.getByTestId('market-provider-setup-checklist');
+    const betaChecklist = screen.getByTestId('market-provider-beta-readiness-checklist');
+    expect(checklist).toHaveTextContent('Beta readiness');
+    expect(betaChecklist).toHaveTextContent('需补齐 5 项');
+    expect(betaChecklist).toHaveTextContent('Fed Liquidity');
+    expect(betaChecklist).toHaveTextContent('Tushare Pro');
+    expect(betaChecklist).toHaveTextContent('本地样本与缓存');
+    expect(betaChecklist).toHaveTextContent('需要缓存 5 条契约');
+    expect(betaChecklist).toHaveTextContent('降级 / 备用观察');
+    expect(betaChecklist).toHaveTextContent('仅观察来源');
     expect(checklist).toHaveTextContent('只读展示现有数据源缺口会影响哪些产品面');
     expect(checklist).toHaveTextContent('Market Overview');
     expect(checklist).toHaveTextContent('Liquidity Monitor');

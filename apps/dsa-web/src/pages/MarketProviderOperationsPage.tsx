@@ -536,6 +536,14 @@ type SetupChecklistEntry = {
   safeNextStep: string;
   badges: SetupChecklistBadge[];
 };
+type BetaReadinessChecklistItem = {
+  key: string;
+  title: string;
+  detail: string;
+  nextStep: string;
+  severity: DisclosureSeverity;
+  badges: SetupChecklistBadge[];
+};
 type ProviderOpsActionQueueItem = {
   key: string;
   title: string;
@@ -1029,6 +1037,91 @@ function buildSetupChecklistEntries(
   return entries;
 }
 
+function betaReadinessStatusSeverity(status?: string | null): DisclosureSeverity {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (normalized === 'missing' || normalized === 'misconfigured') return 'blocked';
+  if (normalized === 'partial') return 'warning';
+  if (normalized === 'ready') return 'ok';
+  return 'info';
+}
+
+function buildBetaReadinessChecklistItems(
+  items: MarketProviderOperationItem[],
+  rows: ProviderOperationsMatrixRow[],
+  checks: MarketDataReadinessCheck[],
+  topSummary: ProviderOpsTopSummaryData,
+  summary: MarketProviderOperationsSummary,
+  readinessStatus?: string | null,
+): BetaReadinessChecklistItem[] {
+  const blockedSetupCount = rows.filter(matrixRowHasMissingSetup).length;
+  const nonReadyChecks = checks.filter((check) => shouldIncludeChecklistReadinessCheck(check));
+  const cacheRequiredCount = rows.filter((row) => matrixCacheRequired(row)).length;
+  const degradedSignals = summary.fallbackCount + summary.partialCount + summary.staleCount + summary.unavailableCount + summary.errorCount + summary.failureCount;
+  const fallbackSignals = summary.fallbackCount + summary.fallbackEventCount;
+  const staleSignals = summary.staleCount + summary.staleEventCount;
+  const liveReadyCount = items.filter(operationItemIsAvailable).length;
+  const observeOnlyCount = topSummary.diagnosticSources.length;
+  const representativeStatus = readinessStatusLabel(readinessStatus || 'missing');
+  const firstReadinessAction = nonReadyChecks[0] ? readinessCheckGuidance(nonReadyChecks[0]) : '继续保持本地样本与缓存覆盖处于只读可验证状态。';
+
+  return [
+    {
+      key: 'setup',
+      title: '数据源配置',
+      detail: blockedSetupCount > 0 || topSummary.missingSources.length > 0
+        ? `待补齐 ${formatNumber(topSummary.missingSources.length || blockedSetupCount, 0)} 项：${formatReadableList(topSummary.missingSources, '当前未见配置缺口')}`
+        : '当前没有新增配置阻断项，可继续沿现有来源契约观察。',
+      nextStep: blockedSetupCount > 0 || topSummary.missingSources.length > 0
+        ? '先沿现有凭据、授权 feed、缓存与 provider 配置路径补齐，再回本页确认。'
+        : '保持只读观察，不新增数据源或运行时调用。',
+      severity: blockedSetupCount > 0 || topSummary.missingSources.length > 0 ? 'blocked' : 'ok',
+      badges: [
+        { label: `需补齐 ${formatNumber(topSummary.missingSources.length || blockedSetupCount, 0)} 项`, variant: blockedSetupCount > 0 || topSummary.missingSources.length > 0 ? 'danger' : 'success' },
+        { label: `可用 ${formatNumber(liveReadyCount, 0)} 项`, variant: liveReadyCount > 0 ? 'success' : 'neutral' },
+      ],
+    },
+    {
+      key: 'readiness',
+      title: '本地样本与缓存',
+      detail: `就绪状态 ${representativeStatus} · readiness 检查 ${formatNumber(nonReadyChecks.length, 0)} 项待关注 · 需要缓存 ${formatNumber(cacheRequiredCount, 0)} 条契约`,
+      nextStep: firstReadinessAction,
+      severity: betaReadinessStatusSeverity(readinessStatus),
+      badges: [
+        { label: representativeStatus, variant: readinessStatus === 'ready' ? 'success' : readinessStatus === 'partial' ? 'caution' : 'danger' },
+        { label: `检查 ${formatNumber(nonReadyChecks.length, 0)} 项`, variant: nonReadyChecks.length ? 'caution' : 'success' },
+      ],
+    },
+    {
+      key: 'degraded',
+      title: '降级 / 备用观察',
+      detail: `备用 ${formatNumber(fallbackSignals, 0)} · 过期 ${formatNumber(staleSignals, 0)} · 部分 ${formatNumber(summary.partialCount, 0)} · 失败 ${formatNumber(summary.failureCount + summary.errorCount, 0)}`,
+      nextStep: degradedSignals > 0
+        ? '先核对 fallback、stale、partial 与失败路径，再通过 Admin Logs / 熔断页确认是否仍适合 beta 观察。'
+        : '当前未见明显降级信号，继续保持只读观测。',
+      severity: degradedSignals > 0 ? 'warning' : 'ok',
+      badges: [
+        { label: `降级 ${formatNumber(degradedSignals, 0)}`, variant: degradedSignals > 0 ? 'caution' : 'success' },
+        { label: summary.refreshingCount > 0 ? `刷新中 ${formatNumber(summary.refreshingCount, 0)}` : '无刷新阻塞', variant: summary.refreshingCount > 0 ? 'info' : 'neutral' },
+      ],
+    },
+    {
+      key: 'observe',
+      title: '仅观察来源',
+      detail: observeOnlyCount > 0
+        ? `${formatNumber(observeOnlyCount, 0)} 项仅用于诊断/观察：${formatReadableList(topSummary.diagnosticSources, '暂无仅观察项')}`
+        : '当前没有额外仅观察来源置顶到 beta checklist。',
+      nextStep: observeOnlyCount > 0
+        ? '把这些来源当作 beta 期间的说明与覆盖线索，不把它们提升成默认结论证据。'
+        : '继续沿现有 source-confidence gates 解释数据可用性。',
+      severity: observeOnlyCount > 0 ? 'info' : 'ok',
+      badges: [
+        { label: `仅观察 ${formatNumber(observeOnlyCount, 0)} 项`, variant: observeOnlyCount > 0 ? 'info' : 'success' },
+        { label: `影响页 ${formatNumber(topSummary.affectedSurfaces.length, 0)} 个`, variant: 'neutral' },
+      ],
+    },
+  ];
+}
+
 function buildProviderActionQueue(
   items: MarketProviderOperationItem[],
   rows: ProviderOperationsMatrixRow[],
@@ -1429,8 +1522,20 @@ const ProviderSetupChecklistPanel: React.FC<{
   checks: MarketDataReadinessCheck[];
   isLoading: boolean;
   surfaceFocus: ProductSetupSurface | null;
-}> = ({ rows, checks, isLoading, surfaceFocus }) => {
+  topSummary: ProviderOpsTopSummaryData;
+  summary: MarketProviderOperationsSummary;
+  operationItems: MarketProviderOperationItem[];
+  readinessStatus?: string | null;
+}> = ({ rows, checks, isLoading, surfaceFocus, topSummary, summary, operationItems, readinessStatus }) => {
   const entries = buildSetupChecklistEntries(rows, checks);
+  const betaReadinessItems = buildBetaReadinessChecklistItems(
+    operationItems,
+    rows,
+    checks,
+    topSummary,
+    summary,
+    readinessStatus,
+  );
   const groups: Array<{ surface: string; items: SetupChecklistEntry[]; severity: DisclosureSeverity }> = [];
 
   for (const surface of CHECKLIST_SURFACE_ORDER) {
@@ -1454,7 +1559,7 @@ const ProviderSetupChecklistPanel: React.FC<{
     <TerminalNestedBlock data-testid="market-provider-setup-checklist" className="mt-4 bg-black/10 px-3 py-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">配置动作</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/34">Beta readiness</p>
           <p className="mt-1 text-sm font-semibold text-white/82">数据源配置清单</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -1465,6 +1570,31 @@ const ProviderSetupChecklistPanel: React.FC<{
       <p className="mt-2 text-[11px] leading-5 text-white/48">
         只读展示现有数据源缺口会影响哪些产品面、缺少哪类依赖，以及下一步应沿哪个既有配置路径处理；仅用于诊断/观察/配置指引，是否进入评分仍由既有 source-confidence gates 决定。
       </p>
+      <div data-testid="market-provider-beta-readiness-checklist" className="mt-3 grid gap-2">
+        {betaReadinessItems.map((item) => (
+          <div
+            key={item.key}
+            data-testid={`market-provider-beta-readiness-${item.key}`}
+            className="grid min-w-0 gap-2 rounded-md border border-white/[0.06] bg-white/[0.025] px-3 py-2.5 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.25fr)]"
+          >
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <TerminalChip variant={disclosureSeverityVariant(item.severity)}>{disclosureSeverityLabel(item.severity)}</TerminalChip>
+                <p className="min-w-0 truncate text-xs font-semibold text-white/84">{item.title}</p>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {item.badges.map((badge) => (
+                  <TerminalChip key={`${item.key}-${badge.label}`} variant={badge.variant}>{badge.label}</TerminalChip>
+                ))}
+              </div>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] leading-5 text-white/56">{item.detail}</p>
+              <p className="mt-1 text-[11px] leading-5 text-white/66">下一步：{item.nextStep}</p>
+            </div>
+          </div>
+        ))}
+      </div>
       {surfaceFocus ? (
         <div
           data-testid="market-provider-setup-surface-focus"
@@ -1535,7 +1665,10 @@ const ProviderOperationsMatrixPanel: React.FC<{
   isReadinessLoading: boolean;
   error: ParsedApiError | null;
   surfaceFocus: ProductSetupSurface | null;
-}> = ({ response, readiness, isLoading, isReadinessLoading, error, surfaceFocus }) => {
+  topSummary: ProviderOpsTopSummaryData;
+  opsSummary: MarketProviderOperationsSummary;
+  operationItems: MarketProviderOperationItem[];
+}> = ({ response, readiness, isLoading, isReadinessLoading, error, surfaceFocus, topSummary, opsSummary, operationItems }) => {
   const rows = response?.rows ?? EMPTY_PROVIDER_MATRIX_ROWS;
   const summary = response?.summary ?? MATRIX_SUMMARY_DEFAULTS;
   const checks = readiness?.checks ?? EMPTY_READINESS_CHECKS;
@@ -1573,7 +1706,16 @@ const ProviderOperationsMatrixPanel: React.FC<{
 
       {!isLoading && (rows.length || checks.length) ? (
         <>
-          <ProviderSetupChecklistPanel rows={rows} checks={checks} isLoading={isLoading || isReadinessLoading} surfaceFocus={surfaceFocus} />
+          <ProviderSetupChecklistPanel
+            rows={rows}
+            checks={checks}
+            isLoading={isLoading || isReadinessLoading}
+            surfaceFocus={surfaceFocus}
+            topSummary={topSummary}
+            summary={opsSummary}
+            operationItems={operationItems}
+            readinessStatus={readiness?.readinessStatus}
+          />
         </>
       ) : null}
 
@@ -2360,6 +2502,9 @@ const MarketProviderOperationsPage: React.FC = () => {
               isReadinessLoading={isReadinessLoading}
               error={matrixError}
               surfaceFocus={surfaceFocus}
+              topSummary={topSummary}
+              opsSummary={summary}
+              operationItems={items}
             />
             <AdminOpsSectionHeading
               dataTestId="market-provider-section-readiness"
