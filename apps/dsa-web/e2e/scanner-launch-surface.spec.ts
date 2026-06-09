@@ -346,6 +346,26 @@ test.describe('scanner launch surface', () => {
 
     await expect(page.getByTestId('scanner-summary-rail')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('scanner-command-panel')).toBeVisible();
+    const runFacts = page.getByTestId('scanner-run-facts');
+    await expect(runFacts).toBeVisible();
+    await expect(runFacts).toContainText('运行事实');
+    await expect(runFacts).toContainText('市场');
+    await expect(runFacts).toContainText('A股');
+    await expect(runFacts).toContainText('策略');
+    await expect(runFacts).toContainText('A-share Pre-open');
+    await expect(runFacts).toContainText('运行时间');
+    await expect(runFacts).toContainText('完成时间');
+    await expect(runFacts).toContainText('观察日期');
+    await expect(runFacts).toContainText('标的池');
+    await expect(runFacts).toContainText('320');
+    await expect(runFacts).toContainText('预筛');
+    await expect(runFacts).toContainText('72');
+    await expect(runFacts).toContainText('评估');
+    await expect(runFacts).toContainText('48');
+    await expect(runFacts).toContainText('入选');
+    await expect(runFacts).toContainText('0');
+    await expect(runFacts).not.toContainText(/provider|reasonCode|below_threshold|raw/i);
+    await expect(page.getByTestId('scanner-history-scope-hint')).toContainText('个人历史仅基于当前账号可访问的扫描记录');
     await expect(page.getByRole('button', { name: '重新扫描' })).toBeEnabled();
     await page.getByRole('button', { name: '重新扫描' }).click();
 
@@ -475,6 +495,7 @@ test.describe('scanner launch surface', () => {
     await expect(nextSteps).toBeVisible({ timeout: 15_000 });
     await expect(nextSteps).toContainText('下一步');
     await expect(nextSteps).toContainText('换市场或配置');
+    await expect(nextSteps).toContainText('不代表市场没有机会');
     await expect(nextSteps).toContainText('查看历史');
     await expect(nextSteps).toContainText('手动加入观察名单');
     await expect(nextSteps).toContainText('预览候选 1');

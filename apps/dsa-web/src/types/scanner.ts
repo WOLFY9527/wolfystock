@@ -481,7 +481,7 @@ export interface ScannerRunDetail {
   requestedSymbolsCount: number;
   acceptedSymbolsCount: number;
   rejectedSymbols: string[];
-  diagnostics: Record<string, unknown>;
+  diagnostics: ScannerRunDiagnostics;
   scannerContextFrame?: ScannerContextFrame | null;
   theme?: ScannerThemeDiagnostics;
   summary?: ScannerSummaryDiagnostics;

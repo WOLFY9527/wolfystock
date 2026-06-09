@@ -81,6 +81,7 @@ import type {
   ScannerCandidate,
   ScannerCandidateDiagnostic,
   ScannerCandidateDiagnosticStatus,
+  ScannerCoverageSummary,
   ScannerCandidateOutcome,
   ScannerLabeledValue,
   ScannerReviewSummary,
@@ -117,6 +118,7 @@ const LazyScannerBacktestLab = lazy(async () => {
 });
 
 const {
+  getRunCoverageSummary,
   getRunProviderDiagnostics,
   hasRunDiagnosticsContent,
 } = ScannerDiagnosticsPanel;
@@ -172,6 +174,10 @@ type ScannerConclusionModel = {
 };
 type ScannerWorkbenchEmptyState = {
   title: string;
+  body: string;
+};
+type ScannerSafeEmptyReason = {
+  label: string;
   body: string;
 };
 type ScannerVisualSummaryBarSegment = {
@@ -625,6 +631,7 @@ function getRunDataStatusLabel(runDetail: ScannerRunDetail, language: 'zh' | 'en
   const failureReason = normalizeRunState(runDetail.failureReason);
   const failedCount = getRunSummaryCount(runDetail, 'dataFailedCount', 0) + getRunSummaryCount(runDetail, 'errorCount', 0);
   const selectedCount = getRunSummaryCount(runDetail, 'selectedCount', runDetail.shortlist?.length || 0);
+  const rejectedCount = getRunSummaryCount(runDetail, 'rejectedCount', 0);
   const providerText = [
     provider?.fallbackOccurred ? 'fallback' : null,
     provider?.providerFailureCount ? 'provider_error' : null,
@@ -635,6 +642,7 @@ function getRunDataStatusLabel(runDetail: ScannerRunDetail, language: 'zh' | 'en
   ].filter(Boolean).join(' ');
   const text = normalizeRunState([status, failureReason, providerText].join(' '));
   if (status === 'empty' || selectedCount === 0 && runDetail.status === 'empty') return compactScannerStateLabel('no_candidates', language);
+  if (selectedCount === 0 && rejectedCount > 0) return compactScannerStateLabel('no_candidates', language);
   if (failedCount > 0 && provider?.providerFailureCount) return compactScannerStateLabel('provider_error', language);
   if (failedCount > 0) return compactScannerStateLabel('insufficient_data', language);
   if (text.includes('provider_error') || text.includes('provider_down')) return compactScannerStateLabel('provider_error', language);
@@ -688,6 +696,120 @@ function buildHistoryItemSummary(
     runTimeLabel: formatTimestamp(item.runAt || item.completedAt, language),
     errorSummary: sanitizeScannerErrorSummary(item.failureReason, language),
   };
+}
+
+function getFiniteCount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function formatScannerCount(value: number | null): string {
+  return value == null ? '--' : String(value);
+}
+
+function getRunCoverageCount(
+  coverage: ScannerCoverageSummary | null,
+  key: keyof ScannerCoverageSummary,
+): number | null {
+  return getFiniteCount(coverage?.[key]);
+}
+
+function getScannerRunFactCounts(runDetail: ScannerRunDetail | null): {
+  universe: number | null;
+  preselected: number | null;
+  evaluated: number | null;
+  selected: number | null;
+} {
+  if (!runDetail) {
+    return {
+      universe: null,
+      preselected: null,
+      evaluated: null,
+      selected: null,
+    };
+  }
+  const coverage = getRunCoverageSummary(runDetail);
+  return {
+    universe: getFiniteCount(runDetail.universeSize)
+      ?? getRunCoverageCount(coverage, 'inputUniverseSize')
+      ?? getFiniteCount(runDetail.summary?.universeCount),
+    preselected: getFiniteCount(runDetail.preselectedSize)
+      ?? getRunCoverageCount(coverage, 'eligibleAfterUniverseFetch')
+      ?? getRunCoverageCount(coverage, 'eligibleAfterLiquidityFilter'),
+    evaluated: getFiniteCount(runDetail.summary?.evaluatedCount)
+      ?? getFiniteCount(runDetail.evaluatedSize)
+      ?? getRunCoverageCount(coverage, 'rankedCandidateCount'),
+    selected: getFiniteCount(runDetail.summary?.selectedCount)
+      ?? getFiniteCount(runDetail.shortlist?.length),
+  };
+}
+
+function getRunMarketDisplayLabel(value: string | null | undefined, language: 'zh' | 'en'): string {
+  const normalized = normalizeScannerRunMarket(value);
+  return normalized ? getScannerMarketLabel(normalized, language) : String(value || '--').toUpperCase();
+}
+
+function buildScannerRunFactItems(runDetail: ScannerRunDetail | null, language: 'zh' | 'en'): ScannerLabeledValue[] {
+  if (!runDetail) return [];
+  const counts = getScannerRunFactCounts(runDetail);
+  const profileLabel = sanitizeScannerProfileLabel(runDetail.profileLabel || runDetail.profile);
+  const items: ScannerLabeledValue[] = [
+    {
+      label: language === 'en' ? 'Market' : '市场',
+      value: getRunMarketDisplayLabel(runDetail.market, language),
+    },
+    {
+      label: language === 'en' ? 'Profile' : '策略',
+      value: profileLabel || '--',
+    },
+  ];
+
+  if (runDetail.runAt) {
+    items.push({
+      label: language === 'en' ? 'Run time' : '运行时间',
+      value: formatTimestamp(runDetail.runAt, language),
+    });
+  }
+  if (runDetail.completedAt) {
+    items.push({
+      label: language === 'en' ? 'Completed' : '完成时间',
+      value: formatTimestamp(runDetail.completedAt, language),
+    });
+  }
+  if (runDetail.watchlistDate) {
+    items.push({
+      label: language === 'en' ? 'Watchlist date' : '观察日期',
+      value: formatDateOnly(runDetail.watchlistDate, language),
+    });
+  }
+
+  [
+    { label: language === 'en' ? 'Universe' : '标的池', value: counts.universe },
+    { label: language === 'en' ? 'Preselected' : '预筛', value: counts.preselected },
+    { label: language === 'en' ? 'Evaluated' : '评估', value: counts.evaluated },
+    { label: language === 'en' ? 'Selected' : '入选', value: counts.selected },
+  ].forEach((item) => {
+    if (item.value != null) {
+      items.push({
+        label: item.label,
+        value: formatScannerCount(item.value),
+      });
+    }
+  });
+
+  return items;
+}
+
+function buildScannerHistoryScopeHint(
+  runDetail: ScannerRunDetail | null,
+  market: 'cn' | 'us' | 'hk',
+  profile: string,
+  language: 'zh' | 'en',
+): string {
+  const runMarket = normalizeScannerRunMarket(runDetail?.market) || market;
+  const runProfile = sanitizeScannerProfileLabel(runDetail?.profileLabel || runDetail?.profile || profile);
+  return language === 'en'
+    ? `Personal history is scoped to scanner runs available to this account; this view is loaded around ${getScannerMarketLabel(runMarket, language)} · ${runProfile || '--'}.`
+    : `个人历史仅基于当前账号可访问的扫描记录；本视图按 ${getScannerMarketLabel(runMarket, language)} · ${runProfile || '--'} 加载。`;
 }
 
 function getCandidateDiagnostics(runDetail: ScannerRunDetail | null): ScannerCandidateDiagnostic[] {
@@ -952,10 +1074,10 @@ function buildScannerConclusion(
   if (selectedCount <= 0 || !topCandidate) {
     return {
       state: 'no-candidate',
-      title: language === 'en' ? 'No usable candidate' : '本次无可用候选',
+      title: language === 'en' ? 'No selected candidate in this run' : '本次未形成入选候选',
       detail: language === 'en'
-        ? 'Continue observing the rejection mix and the next scan before treating this pool as evidence.'
-        : '继续观察淘汰分布与下一次扫描变化，再将候选池视为证据。',
+        ? 'Review data coverage, history coverage, and the rejection mix before changing scope; this does not describe the whole market.'
+        : '先看数据覆盖、历史覆盖与淘汰分布，再决定是否调整范围；这不代表市场没有机会。',
       candidateCount: selectedCount,
       trustSummary,
       tone: 'caution',
@@ -972,6 +1094,66 @@ function buildScannerConclusion(
     candidateCount: selectedCount,
     trustSummary,
     tone: trustSummary.limitedCount > 0 ? 'caution' : 'success',
+  };
+}
+
+function buildScannerSafeEmptyReason({
+  diagnosticCandidates,
+  language,
+  runDetail,
+}: {
+  diagnosticCandidates: ScannerCandidateDiagnostic[];
+  language: 'zh' | 'en';
+  runDetail: ScannerRunDetail;
+}): ScannerSafeEmptyReason {
+  const counts = getScannerRunFactCounts(runDetail);
+  const coverage = getRunCoverageSummary(runDetail);
+  const stateText = [
+    runDetail.status,
+    runDetail.failureReason,
+    coverage?.likelyBottleneck,
+    coverage?.likelyBottleneckLabel,
+    ...diagnosticCandidates.flatMap((candidate) => [
+      candidate.status,
+      candidate.reason,
+      ...(candidate.failedRules || []),
+      ...(candidate.missingFields || []),
+    ]),
+  ].map(normalizeRunState).join(' ');
+  const hasCoverageGap = /history|quote|data|missing|insufficient|unavailable|limited|provider|snapshot/.test(stateText)
+    || counts.evaluated === 0
+    || (counts.universe != null && counts.evaluated != null && counts.evaluated < counts.universe);
+  const hasRunScopeGap = runDetail.universeType === 'theme'
+    || runDetail.universeType === 'symbols'
+    || runDetail.universeType === 'custom'
+    || (runDetail.acceptedSymbolsCount > 0 && runDetail.acceptedSymbolsCount < runDetail.requestedSymbolsCount);
+  const countSummary = language === 'en'
+    ? `Universe ${formatScannerCount(counts.universe)} · preselected ${formatScannerCount(counts.preselected)} · evaluated ${formatScannerCount(counts.evaluated)} · selected ${formatScannerCount(counts.selected)}.`
+    : `标的池 ${formatScannerCount(counts.universe)} · 预筛 ${formatScannerCount(counts.preselected)} · 评估 ${formatScannerCount(counts.evaluated)} · 入选 ${formatScannerCount(counts.selected)}。`;
+
+  if (hasCoverageGap) {
+    return {
+      label: language === 'en' ? 'Data/history coverage limited' : '数据/历史覆盖不足',
+      body: language === 'en'
+        ? `${countSummary} This run did not form selected candidates; it may reflect data coverage, history coverage, or temporarily insufficient evidence rather than a market-wide conclusion. Retry the same parameters later, inspect limited-data rows, or try another market/profile.`
+        : `${countSummary} 本次未形成入选候选，可能与数据覆盖、历史覆盖或暂时证据不足有关，不代表市场没有机会。可稍后同参数重试、查看数据受限行，或尝试其他市场/策略。`,
+    };
+  }
+
+  if (hasRunScopeGap) {
+    return {
+      label: language === 'en' ? 'Current run settings produced no selection' : '当前运行设置未形成候选',
+      body: language === 'en'
+        ? `${countSummary} The current market/profile/universe setup produced no selected candidates. Review the rejection mix, retry the loaded parameters, or switch market/profile before drawing a broader conclusion.`
+        : `${countSummary} 当前市场/策略/标的池设置未形成入选候选。先查看淘汰分布，可同参数重试，或切换市场/策略后再比较。`,
+    };
+  }
+
+  return {
+    label: language === 'en' ? 'Evidence insufficient for handoff' : '证据不足，未形成交接候选',
+    body: language === 'en'
+      ? `${countSummary} The current run did not produce an official handoff candidate. Use history, retry, or adjust market/profile; do not treat this as proof that the market has no opportunities.`
+      : `${countSummary} 当前运行没有形成官方交接候选。可查看历史、同参数重试或调整市场/策略；不要把它理解为市场没有机会。`,
   };
 }
 
@@ -1020,20 +1202,18 @@ function buildScannerWorkbenchEmptyState({
       || (failedCount > 0 && rejectedCount === 0));
 
   if (evidenceInsufficient) {
+    const safeReason = buildScannerSafeEmptyReason({ diagnosticCandidates, language, runDetail });
     return {
-      title: language === 'en' ? 'Limited data or evidence insufficient' : '数据受限或证据不足',
-      body: language === 'en'
-        ? 'Switch the candidate view to Limited data to inspect row-level notes; retry later or open history.'
-        : '切换候选视图到数据受限，查看行级说明；可稍后重试或打开历史记录。',
+      title: safeReason.label,
+      body: safeReason.body,
     };
   }
 
   if (selectedCount === 0 && diagnosticCandidates.length > 0) {
+    const safeReason = buildScannerSafeEmptyReason({ diagnosticCandidates, language, runDetail });
     return {
-      title: language === 'en' ? 'No selected candidates' : '本次无入选候选',
-      body: language === 'en'
-        ? 'No candidates match the current filter. Try widening the filter.'
-        : '当前筛选条件下无可用候选，尝试扩大筛选范围。',
+      title: language === 'en' ? 'No selected candidates in this run' : '本次未形成入选候选',
+      body: safeReason.body,
     };
   }
 
@@ -3082,12 +3262,12 @@ const UserScannerPage: React.FC = () => {
       : '先运行当前配置。如需绕过空白入口，可查看历史，或手动把一个代码送入观察名单/个股研究。')
     : scannerConclusion.state === 'insufficient'
       ? (language === 'en'
-        ? 'Current evidence is not enough for a candidate handoff. Retry the same parameters, check history, or use a manual symbol while data catches up.'
-        : '当前证据不足，不能把本次结果当作候选交接。可同参数重试、查看历史，或在数据补齐前手动输入代码。')
+        ? 'Current evidence is not enough for a candidate handoff. This may be data or history coverage, so retry the loaded parameters, check history, or use a manual symbol while evidence catches up.'
+        : '当前证据不足，不能把本次结果当作候选交接。这可能来自数据或历史覆盖，可同参数重试、查看历史，或在证据补齐前手动输入代码。')
       : scannerConclusion.state === 'no-candidate'
         ? (language === 'en'
-          ? 'No official candidate passed the current scan. Review the rejected mix, switch market or setup, or continue with a manual research symbol.'
-          : '当前扫描没有官方入选候选。可查看淘汰分布、换市场或配置，或用手动代码继续研究。')
+          ? 'No official candidate formed in this run. That can reflect data/history coverage or the current market/profile/universe setup, not a market-wide conclusion.'
+          : '本次未形成官方入选候选，可能来自数据/历史覆盖或当前市场/策略/标的池设置，不代表市场没有机会。')
         : (language === 'en'
           ? 'Some data is stale, partial, or limited. Keep the official candidate, but use history and Market Overview before treating it as research evidence.'
           : '部分数据可能过期、缺失或受限。可保留官方候选，但先结合历史与 Market Overview 再作为研究证据。');
@@ -3159,6 +3339,8 @@ const UserScannerPage: React.FC = () => {
       value: currentRunSummary?.failedCount ?? ((runDetail?.summary?.dataFailedCount ?? 0) + (runDetail?.summary?.errorCount ?? 0)),
     },
   ];
+  const scannerRunFactItems = buildScannerRunFactItems(runDetail, language);
+  const scannerHistoryScopeHint = buildScannerHistoryScopeHint(runDetail, market, profile, language);
 
   return (
     <>
@@ -4176,6 +4358,22 @@ const UserScannerPage: React.FC = () => {
                       ))}
                     </div>
 
+                    {scannerRunFactItems.length ? (
+                      <section data-testid="scanner-run-facts" className="grid min-w-0 gap-2 border-b border-white/10 pb-3">
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-white/38">
+                          {language === 'en' ? 'Run facts' : '运行事实'}
+                        </p>
+                        <dl className="grid min-w-0 gap-1.5 text-xs">
+                          {scannerRunFactItems.map((item) => (
+                            <div key={`${item.label}-${item.value}`} className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                              <dt className="text-white/38">{item.label}</dt>
+                              <dd className="truncate text-right font-mono text-white/72">{item.value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </section>
+                    ) : null}
+
                     <dl className="grid min-w-0 gap-2 text-xs" data-testid="scanner-summary-rail-context">
                       {scannerRailItems.map((item) => (
                         <div key={item.label} className="grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)] gap-2 border-b border-white/8 pb-2 last:border-b-0 last:pb-0">
@@ -4184,6 +4382,9 @@ const UserScannerPage: React.FC = () => {
                         </div>
                       ))}
                     </dl>
+                    <p data-testid="scanner-history-scope-hint" className="rounded-lg border border-white/8 bg-white/[0.02] px-2.5 py-2 text-[11px] leading-relaxed text-white/50">
+                      {scannerHistoryScopeHint}
+                    </p>
                   </div>
                 </WolfyShellSurface>
 		          </div>

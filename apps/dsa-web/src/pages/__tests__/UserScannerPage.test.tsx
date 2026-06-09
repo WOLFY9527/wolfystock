@@ -1565,9 +1565,10 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const band = await screen.findByTestId('scanner-conclusion-band');
-    expect(band).toHaveTextContent('本次无可用候选');
+    expect(band).toHaveTextContent('本次未形成入选候选');
     expect(band).toHaveTextContent('候选 0');
-    expect(band).toHaveTextContent('继续观察淘汰分布');
+    expect(band).toHaveTextContent('数据覆盖、历史覆盖与淘汰分布');
+    expect(band).toHaveTextContent('不代表市场没有机会');
   });
 
   it('uses a retry CTA with bounded no-candidate guidance while keeping the same run parameters', async () => {
@@ -1614,6 +1615,7 @@ describe('UserScannerPage', () => {
     expect(runButton).toBeEnabled();
     expect(runButton).toHaveClass('bg-[var(--wolfy-surface-input)]');
     expect(runButton).not.toHaveClass('bg-[var(--wolfy-accent)]');
+    expect(band).toHaveTextContent('本次未形成入选候选');
     expect(band).toHaveTextContent('本次无可用候选，仅供观察。');
     expect(band).toHaveTextContent('当前无可用候选，先查看淘汰分布或历史记录，再决定是否重新扫描。');
     expect(band).not.toHaveTextContent('先使用候选行作为主证据');
@@ -1622,8 +1624,29 @@ describe('UserScannerPage', () => {
     expect(nextSteps).toHaveTextContent('查看历史');
     expect(nextSteps).toHaveTextContent('手动加入观察名单');
     expect(nextSteps).toHaveTextContent('Market Overview');
+    expect(nextSteps).toHaveTextContent('不代表市场没有机会');
     expect(within(nextSteps).getByRole('link', { name: /打开 Watchlist/i })).toHaveAttribute('href', '/zh/watchlist');
     expect(within(nextSteps).getByRole('link', { name: /打开 Market Overview/i })).toHaveAttribute('href', '/zh/market-overview');
+    const runFacts = await screen.findByTestId('scanner-run-facts');
+    expect(runFacts).toHaveTextContent('运行事实');
+    expect(runFacts).toHaveTextContent('市场');
+    expect(runFacts).toHaveTextContent('美股');
+    expect(runFacts).toHaveTextContent('策略');
+    expect(runFacts).toHaveTextContent('US Pre-open Scanner');
+    expect(runFacts).toHaveTextContent('运行时间');
+    expect(runFacts).toHaveTextContent('完成时间');
+    expect(runFacts).toHaveTextContent('观察日期');
+    expect(runFacts).toHaveTextContent('标的池');
+    expect(runFacts).toHaveTextContent('180');
+    expect(runFacts).toHaveTextContent('预筛');
+    expect(runFacts).toHaveTextContent('40');
+    expect(runFacts).toHaveTextContent('评估');
+    expect(runFacts).toHaveTextContent('3');
+    expect(runFacts).toHaveTextContent('入选');
+    expect(runFacts).toHaveTextContent('0');
+    expect(runFacts).not.toHaveTextContent(/provider|reasonCode|below_liquidity_threshold|raw/i);
+    expect(screen.getByTestId('scanner-history-scope-hint')).toHaveTextContent('个人历史仅基于当前账号可访问的扫描记录');
+    expect(screen.getByTestId('scanner-history-scope-hint')).toHaveTextContent('美股');
 
     fireEvent.click(within(nextSteps).getByRole('button', { name: '重新运行同参数' }));
 
@@ -1701,7 +1724,7 @@ describe('UserScannerPage', () => {
         notes: expect.stringMatching(/Scanner recovery|手动补充/),
       }));
     });
-    expect(screen.getByText(/已加入观察名单/)).toBeInTheDocument();
+    expect(await within(nextSteps).findByRole('button', { name: /已在观察名单|Already in Watchlist/ })).toBeInTheDocument();
 
     fireEvent.change(within(nextSteps).getByLabelText(/手动补充研究代码/), { target: { value: 'TSLA' } });
     fireEvent.click(within(nextSteps).getByRole('button', { name: /研究 TSLA/ }));
@@ -2581,11 +2604,13 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     await waitFor(() => {
-      expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('当前筛选条件下无可用候选，尝试扩大筛选范围。');
+      expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('本次未形成入选候选');
     });
     const emptyState = screen.getByTestId('scanner-workbench-empty-state');
     expect(screen.getByTestId('scanner-empty-history-fallback')).toBeInTheDocument();
-    expect(emptyState).toHaveTextContent('本次无入选候选');
+    expect(emptyState).toHaveTextContent('可能与数据覆盖、历史覆盖或暂时证据不足有关');
+    expect(emptyState).toHaveTextContent('不代表市场没有机会');
+    expect(emptyState).toHaveTextContent('同参数重试');
     expect(emptyState).not.toHaveTextContent(/买入|卖出|下单|交易|券商|broker|provider|cache/i);
     expect(screen.getByTestId('scanner-candidate-filters')).toBeInTheDocument();
     expect(screen.getByTestId('scanner-ranked-sortbar')).toBeInTheDocument();
@@ -2642,12 +2667,13 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     await waitFor(() => {
-      expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('数据受限或证据不足');
+      expect(screen.getByTestId('scanner-workbench-empty-state')).toHaveTextContent('数据/历史覆盖不足');
     });
     const emptyState = screen.getByTestId('scanner-workbench-empty-state');
-    expect(emptyState).toHaveTextContent('切换候选视图到数据受限');
-    expect(emptyState).toHaveTextContent('查看行级说明');
-    expect(emptyState).toHaveTextContent(/稍后重试或打开历史/);
+    expect(emptyState).toHaveTextContent('数据覆盖、历史覆盖或暂时证据不足');
+    expect(emptyState).toHaveTextContent('不代表市场没有机会');
+    expect(emptyState).toHaveTextContent('查看数据受限行');
+    expect(emptyState).not.toHaveTextContent(/not_enough_history|provider|raw|reasonCode/i);
   });
 
   it('renders fetch-failure guidance without exposing raw scanner details', async () => {
