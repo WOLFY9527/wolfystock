@@ -327,8 +327,9 @@ test.describe('secondary consumer copy smoke', () => {
 
     try {
       await expect(page.getByRole('heading', { name: '流动性监测' })).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByTestId('liquidity-summary-strip')).toContainText('仅观察');
-      await expect(page.getByTestId('liquidity-context-rail')).toContainText('数据不足，暂不形成结论');
+      await expect(page.getByTestId('liquidity-summary-strip')).toContainText('仍可观察');
+      await expect(page.getByTestId('liquidity-context-rail')).toContainText('当前边界');
+      await expect(page.getByTestId('liquidity-context-rail')).toContainText('当前主要线索已返回');
       await expectNoForbiddenTerms(page, forbiddenInternalPattern);
       await expectNoForbiddenTerms(page, forbiddenTradingPattern, allowedBoundaryTerms);
       await expectNoHorizontalOverflow(page);

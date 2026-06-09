@@ -1001,10 +1001,10 @@ function buildLiquidityBiasSummary(
 ): LiquidityBiasSummary {
   if (readinessSummary.state === 'unavailable' || data.score.regime === 'unavailable') {
     return {
-      label: '不可判断',
-      variant: 'danger',
-      toneClassName: 'text-rose-200',
-      detail: '可用线索不足，暂不判断偏宽松或偏收紧。',
+      label: '仅观察',
+      variant: 'info',
+      toneClassName: 'text-cyan-100',
+      detail: '关键线索不足，当前不判断偏宽松或偏收紧。',
     };
   }
 
@@ -1083,6 +1083,9 @@ type ConsumerLiquidityStatusView = {
   availabilityLabel: '正常' | '观察中' | '暂不可用';
   availabilityVariant: 'success' | 'info' | 'neutral';
   regimeLabel: LiquidityBiasSummary['label'];
+  heroTitle: string;
+  observableCount: number;
+  observableChipLabel: string;
   freshnessChipLabel: string;
   freshnessVariant: 'neutral' | 'success' | 'caution' | 'danger' | 'info';
   headline: string;
@@ -1250,22 +1253,28 @@ function buildConsumerEvidenceRows(indicators: LiquidityMonitorIndicator[]): Con
 function buildConsumerSummaryFacts(
   data: LiquidityMonitorResponse,
   coverageSummary: LiquidityCoverageReadinessSummary,
-  readinessSummary: DecisionReadinessSummary,
   indicators: LiquidityMonitorIndicator[],
 ): ConsumerLiquiditySummaryFact[] {
   const topSignal = topConsumerSignalLabel(data, indicators);
+  const observableNames = topIndicatorNames(indicators, (indicator) => indicator.status !== 'unavailable', 3);
+  const observableCount = indicators.filter((indicator) => indicator.status !== 'unavailable').length;
+  const observableValue = topSignal || observableNames[0] || '等待关键信号恢复';
   return [
     {
-      key: 'direction',
-      label: '流动性格局',
-      value: buildLiquidityBiasSummary(data, readinessSummary, buildLiquidityImpulseSynthesisView(data.liquidityImpulseSynthesis)).label,
-      detail: coverageSummary.directionLabel === '可参考' ? '可继续跟踪' : '当前方向仅供观察',
+      key: 'observable',
+      label: '仍可观察',
+      value: observableValue,
+      detail: topSignal ? '当前最先影响状态的资金面线索' : observableNames.length ? observableNames.join('、') : '当前没有稳定线索',
     },
     {
-      key: 'signal',
-      label: '主要压力',
-      value: topSignal || '等待关键信号恢复',
-      detail: topSignal ? '当前最先影响状态的资金面线索' : '当前没有稳定主线索',
+      key: 'dimensions',
+      label: '可观察维度',
+      value: observableCount > 0 ? `${observableCount} 项` : '等待恢复',
+      detail: observableNames.length
+        ? `${observableNames.join('、')} 等线索已返回`
+        : coverageSummary.directionLabel === '可参考'
+          ? '当前主要线索已返回'
+          : '等待更多线索返回',
     },
     {
       key: 'updated',
@@ -1281,16 +1290,19 @@ function buildConsumerGapSummary(
   observation: LiquidityIndicatorBucketSummary,
   consumerView: ConsumerLiquidityStatusView,
 ): string {
+  const observableLead = consumerView.observableCount > 0
+    ? `当前仍有 ${consumerView.observableCount} 项线索可观察`
+    : '当前没有稳定线索';
   if (missing.count > 0) {
-    return `数据覆盖有限，当前方向仅供观察；待补充指标 ${missing.count} 项。`;
+    return `${observableLead}，另有 ${missing.count} 项待补充。`;
   }
   if (observation.count > 0) {
-    return '数据覆盖有限，当前方向仅供观察；部分资金面线索暂只保留观察。';
+    return `${observableLead}，其中部分资金面线索暂只保留观察。`;
   }
   if (consumerView.availabilityLabel === '暂不可用') {
-    return '数据覆盖有限，当前方向仅供观察；等待更多资金面线索恢复。';
+    return `${observableLead}，等待更多资金面线索恢复。`;
   }
-  return '当前没有新增限制，继续跟踪后续变化。';
+  return '当前主要线索已返回，继续跟踪后续变化。';
 }
 
 function clampPercent(value: number, min = 8, max = 100): number {
@@ -1462,6 +1474,7 @@ function buildConsumerLiquidityStatusView(
     || synthesisView.state !== 'ready'
     || (data.score.confidence || 0) < 0.45;
   const topSignal = topConsumerSignalLabel(data, indicators);
+  const observableCount = indicators.filter((indicator) => indicator.status !== 'unavailable').length;
   const scoringPaused = limitedConfidence
     || coverageSummary.missingOrUnavailableCount > 0
     || coverageSummary.observationOnlyCount > 0
@@ -1481,11 +1494,19 @@ function buildConsumerLiquidityStatusView(
         : data.freshness.status === 'stale' || data.freshness.status === 'fallback' || data.freshness.status === 'mock'
           ? '已使用最近一次可用数据'
           : '暂不可用';
+  const heroTitle = availabilityLabel === '正常'
+    ? bias.label
+    : topSignal
+      ? `先看${topSignal}`
+      : '仍可观察的资金面线索';
 
   return {
     availabilityLabel,
     availabilityVariant: availabilityLabel === '正常' ? 'success' : availabilityLabel === '观察中' ? 'info' : 'neutral',
     regimeLabel: bias.label,
+    heroTitle,
+    observableCount,
+    observableChipLabel: observableCount > 0 ? `${observableCount} 项可观察` : '等待线索恢复',
     freshnessChipLabel: consumerFreshnessLabel(data.freshness.status),
     freshnessVariant: chipVariantForFreshness(data.freshness.status),
     headline: availabilityLabel === '暂不可用'
@@ -1909,7 +1930,7 @@ const DecisionReadinessBand: React.FC<{
   ];
   const consumerView = buildConsumerLiquidityStatusView(data, coverageSummary, summary, synthesisView, indicators);
   const consumerEvidenceRows = buildConsumerEvidenceRows(indicators);
-  const consumerSummaryFacts = buildConsumerSummaryFacts(data, coverageSummary, summary, indicators);
+  const consumerSummaryFacts = buildConsumerSummaryFacts(data, coverageSummary, indicators);
   const consumerGapSummary = buildConsumerGapSummary(missing, observation, consumerView);
 
   if (!showAdminDiagnostics) {
@@ -1929,15 +1950,16 @@ const DecisionReadinessBand: React.FC<{
             <div className="min-w-0 rounded-xl border border-cyan-200/14 bg-[radial-gradient(circle_at_top_left,rgba(103,232,249,0.10),transparent_34%),rgba(255,255,255,0.035)] p-4 shadow-[0_18px_60px_rgba(3,7,18,0.22)] md:p-5">
               <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-cyan-100/70">当前状态 · 流动性格局</p>
+                  <p className="text-[11px] font-semibold text-cyan-100/70">当前观察 · 流动性格局</p>
                   <h2 className="mt-2 text-[26px] font-semibold leading-tight text-white/94 md:text-3xl">
-                    {consumerView.regimeLabel}
+                    {consumerView.heroTitle}
                   </h2>
                   <p className="mt-3 max-w-3xl text-sm leading-6 text-white/68">{consumerView.headline}</p>
                 </div>
                 <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
                   <TerminalChip variant={consumerView.availabilityVariant}>{consumerView.availabilityLabel}</TerminalChip>
                   <TerminalChip variant={consumerView.freshnessVariant}>{consumerView.freshnessChipLabel}</TerminalChip>
+                  <TerminalChip variant="neutral">{consumerView.observableChipLabel}</TerminalChip>
                 </div>
               </div>
             </div>
@@ -1963,7 +1985,7 @@ const DecisionReadinessBand: React.FC<{
           <div className="flex min-w-0 flex-col gap-2 border-b border-white/[0.06] pb-3 md:flex-row md:items-end md:justify-between">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold text-white/54">关键指标</p>
-              <p className="mt-1 text-sm leading-6 text-white/62">先看资金面线索，再按美元压力、利率压力、波动压力与信用压力判断当前状态。</p>
+              <p className="mt-1 text-sm leading-6 text-white/62">先看已返回的资金面线索、更新时间和仍在变化的压力维度，再判断当前状态。</p>
             </div>
             <TerminalChip variant={coverageSummary.stateChipVariant}>{coverageSummary.directionLabel}</TerminalChip>
           </div>
@@ -1975,8 +1997,8 @@ const DecisionReadinessBand: React.FC<{
             >
               <div className="flex min-w-0 items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-medium text-white/48">关键指标</p>
-                  <p className="mt-1 text-[11px] leading-5 text-white/56">按资金面线索、美元压力、利率压力、波动压力与信用压力查看当前状态。</p>
+                  <p className="text-[11px] font-medium text-white/48">仍可观察的线索</p>
+                  <p className="mt-1 text-[11px] leading-5 text-white/56">优先看已返回的资金面线索、最近更新时间，以及哪些维度还在持续更新。</p>
                 </div>
               </div>
               <div className="mt-3 grid gap-2">
@@ -2041,7 +2063,7 @@ const DecisionReadinessBand: React.FC<{
               className="grid min-w-0 gap-3 self-start"
             >
               <div className="min-w-0 rounded-lg border border-white/[0.06] bg-black/10 p-3">
-                <p className="text-[11px] font-medium text-white/48">状态限制</p>
+                <p className="text-[11px] font-medium text-white/48">当前边界</p>
                 <p className="mt-2 text-sm leading-6 text-white/76">{consumerGapSummary}</p>
                 <p className="mt-2 text-[11px] leading-5 text-white/48">
                   {missing.count > 0 ? `待补充指标：${missing.namesLine}` : '当前没有新增限制，继续观察后续变化。'}
