@@ -191,9 +191,15 @@ describe('GuestHomePage', () => {
     renderGuest(['/en/guest']);
 
     const marketPreviewStrip = await screen.findByTestId('guest-home-market-preview-strip');
+    await waitFor(() => {
+      expect(marketPreviewStrip).toHaveTextContent('Public market observation unavailable right now');
+    });
+
     expect(marketPreviewStrip).toHaveTextContent('Current market observation');
     expect(marketPreviewStrip).toHaveTextContent('Public market observation unavailable right now');
     expect(marketPreviewStrip).toHaveTextContent('Sign in to open Market Overview, Scanner, and saved research history once the public snapshot comes back.');
+    expect(marketPreviewStrip).not.toHaveTextContent('Preparing public market observation');
+    expect(marketPreviewStrip).not.toHaveTextContent('Loading a limited market snapshot using public-safe fields only');
     expect(marketPreviewStrip).not.toHaveTextContent(/\bNVDA\b|NVIDIA|TSLA|Tesla|AAPL|Apple/i);
   });
 
