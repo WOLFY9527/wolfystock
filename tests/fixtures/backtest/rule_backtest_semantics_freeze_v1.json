@@ -35,6 +35,34 @@
       }
     }
   },
+  "parser_default_template_behavior": {
+    "strategy_text": "5日均线上穿20日均线买入",
+    "expected_parse": {
+      "version": "v1",
+      "strategy_kind": "moving_average_crossover",
+      "normalized_text": "MA5 上穿 MA20 买入，MA5 下穿 MA20 卖出。",
+      "needs_confirmation": true,
+      "max_lookback": 20,
+      "ambiguity_codes": [
+        "default_fast_ma_type",
+        "default_slow_ma_type",
+        "default_reverse_exit"
+      ],
+      "summary": {
+        "entry": "买入条件：MA5 上穿 MA20",
+        "exit": "卖出条件：MA5 下穿 MA20",
+        "strategy": "均线交叉策略"
+      },
+      "setup": {
+        "indicator_family": "moving_average",
+        "fast_period": 5,
+        "slow_period": 20,
+        "fast_type": "simple",
+        "slow_type": "simple"
+      },
+      "strategy_spec": {}
+    }
+  },
   "cost_slippage_current_treatment": {
     "source_fixture": "rule_backtest_compute_basic_long_cash.json",
     "model": "bps_per_side",

@@ -490,6 +490,33 @@ def test_rule_backtest_semantics_freeze_fixture_covers_current_v1_boundaries() -
         "terminal_bar_fill_fallback": "same_bar_close",
         "window_end_position_handling": "force_flatten",
     }
+    parser_defaults = payload["parser_default_template_behavior"]
+    assert parser_defaults["strategy_text"] == "5日均线上穿20日均线买入"
+    assert parser_defaults["expected_parse"] == {
+        "version": "v1",
+        "strategy_kind": "moving_average_crossover",
+        "normalized_text": "MA5 上穿 MA20 买入，MA5 下穿 MA20 卖出。",
+        "needs_confirmation": True,
+        "max_lookback": 20,
+        "ambiguity_codes": [
+            "default_fast_ma_type",
+            "default_slow_ma_type",
+            "default_reverse_exit",
+        ],
+        "summary": {
+            "entry": "买入条件：MA5 上穿 MA20",
+            "exit": "卖出条件：MA5 下穿 MA20",
+            "strategy": "均线交叉策略",
+        },
+        "setup": {
+            "indicator_family": "moving_average",
+            "fast_period": 5,
+            "slow_period": 20,
+            "fast_type": "simple",
+            "slow_type": "simple",
+        },
+        "strategy_spec": {},
+    }
 
     costs = payload["cost_slippage_current_treatment"]
     assert costs["source_fixture"] == "rule_backtest_compute_basic_long_cash.json"

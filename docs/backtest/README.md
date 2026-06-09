@@ -16,6 +16,7 @@ public-safety wording.
 - [Backtest Quant Capability Audit](../audits/backtest-quant-capability-audit.md)
 - [Backtest / Portfolio Public Safety Audit](../audits/backtest-portfolio-public-safety-audit.md)
 - [Backtest Factor Lab Readiness Contract](./factor-lab-readiness-contract.md)
+- [Backtest Execution Model Versioning Contract](./execution-model-versioning-contract.md)
 - [Frontend Visual System](../frontend/visual-system.md)
 
 ## Helper Contract Index
@@ -93,6 +94,8 @@ engine, service, API, provider, storage, broker, or frontend changes.
 Frozen v1 scope:
 
 - single-symbol deterministic rule backtests;
+- deterministic parser defaults for supported rule-condition and moving-average
+  crossover templates;
 - bar-close signal evaluation with next-bar-open entry and exit fills;
 - terminal same-bar-close fallback when the execution window ends with an open
   position;
@@ -117,8 +120,8 @@ Explicit v1 non-goals:
 Regression fixtures and tests:
 
 - `tests/fixtures/backtest/rule_backtest_semantics_freeze_v1.json` is the
-  compact fixture for template parsing, cost/slippage treatment, sample-window
-  behavior, and no-order/no-broker boundaries.
+  compact fixture for template parsing, parser defaults, cost/slippage
+  treatment, sample-window behavior, and no-order/no-broker boundaries.
 - `tests/test_rule_backtest_compute_golden.py` executes the current Python
   engine against that fixture so behavior changes fail focused tests.
 - `tests/test_backtest_golden_contracts.py` checks that all backtest fixtures

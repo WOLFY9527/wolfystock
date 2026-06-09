@@ -23,6 +23,9 @@ The v1 fixture/test surface locks the current behavior for:
 
 - deterministic template normalization for `Buy when Close > MA3. Sell when
   Close < MA3.`;
+- moving-average crossover parser defaults, including current reverse-exit
+  defaulting, confirmation-required state, and ambiguity codes when no explicit
+  reverse exit is supplied;
 - bar-close signals, next-bar-open fills, and terminal same-bar-close
   force-flatten behavior;
 - bounded per-side `fee_bps` and `slippage_bps` treatment;

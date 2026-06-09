@@ -175,6 +175,19 @@ def test_rule_backtest_semantics_freeze_fixture_matches_current_v1_engine() -> N
     assert parsed.max_lookback == expected_parse["max_lookback"]
     assert parsed.strategy_spec == expected_parse["strategy_spec"]
 
+    parser_defaults = fixture["parser_default_template_behavior"]
+    parsed_defaults = parser.parse(parser_defaults["strategy_text"]).to_dict()
+    expected_defaults = parser_defaults["expected_parse"]
+    assert parsed_defaults["version"] == expected_defaults["version"]
+    assert parsed_defaults["strategy_kind"] == expected_defaults["strategy_kind"]
+    assert parsed_defaults["normalized_text"] == expected_defaults["normalized_text"]
+    assert parsed_defaults["needs_confirmation"] is expected_defaults["needs_confirmation"]
+    assert parsed_defaults["max_lookback"] == expected_defaults["max_lookback"]
+    assert [item["code"] for item in parsed_defaults["ambiguities"]] == expected_defaults["ambiguity_codes"]
+    assert parsed_defaults["summary"] == expected_defaults["summary"]
+    assert parsed_defaults["setup"] == expected_defaults["setup"]
+    assert parsed_defaults["strategy_spec"] == expected_defaults["strategy_spec"]
+
     cost_freeze = fixture["cost_slippage_current_treatment"]
     cost_source = _load_fixture(cost_freeze["source_fixture"])
     cost_bars = _make_bars(
