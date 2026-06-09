@@ -6,6 +6,7 @@ import { marketApi } from '../../api/market';
 import { createApiError, createParsedApiError } from '../../api/error';
 import { historyApi } from '../../api/history';
 import { normalizeFrontendReportContract } from '../../api/reportNormalizer';
+import { publicAnalysisApi } from '../../api/publicAnalysis';
 import { stockEvidenceApi } from '../../api/stockEvidence';
 import { UiPreferencesProvider } from '../../contexts/UiPreferencesContext';
 import { stocksApi } from '../../api/stocks';
@@ -66,6 +67,12 @@ vi.mock('../../api/market', () => ({
     getMarketBriefing: vi.fn(),
   },
   normalizeMarketBriefingConsumerCopy: <T,>(value: T) => value,
+}));
+
+vi.mock('../../api/publicAnalysis', () => ({
+  publicAnalysisApi: {
+    preview: vi.fn(),
+  },
 }));
 
 vi.mock('../../hooks/useTaskStream', () => ({
@@ -278,6 +285,8 @@ const HOME_RESEARCH_PACKET_FORBIDDEN_COPY_PATTERN =
   /\bmixed\b|INSUFFICIENT|REAL|MIXED|FALLBACK|provider|provider_timeout|providerTrace|sourceRefId|sourceId|sourceConfidence|sourceAuthority|sourceTier|scoreContributionAllowed|sourceAuthorityAllowed|authority|freshness|fallback_cache|cache|debug|diagnostic|diagnostics|trace|router|prompt|schema|raw payload|raw_result|raw_ai_response|context_snapshot|token|credential|stack|env|reasonCode|reasonCodes|reason_code|reason_codes|one_sentence|stop_loss|standard_report|Yahoo Finance|Yfinance|Finnhub|Alpaca|FMP|Gnews|Tavily|openai|deepseek|fixture-provider|fixture-model|buy|sell|trade now|order now|broker route|buy recommendation|sell recommendation|trading recommendation|probe size|start light|add only|position sizing|Ideal buy|Secondary entry|Stop loss|Take profit|Target zone|买入|卖出|下单|交易|立即交易|建仓|加仓|减仓|止损|止盈|目标价|目标位|目标区间|仓位建议|持仓建议|空仓建议|小仓试错|第二笔/i;
 const GUEST_HOME_FORBIDDEN_COPY_PATTERN =
   /provider|cache|debug|schema|raw payload|token|session[_\s-]?id|secret|buy now|sell now|trade now|order now|connect broker|broker CTA|guaranteed|必买|稳赚|保证收益|立即交易|提交订单|连接经纪商/i;
+const GUEST_PREVIEW_PRICE_ZONE_FORBIDDEN_COPY_PATTERN =
+  /理想买入|入场|止损|止盈|目标价|买入|卖出|加仓|建仓|target price|entry|stop loss|take profit/i;
 const defaultStockEvidenceResponse = {
   symbols: ['ORCL'],
   items: [
@@ -407,6 +416,32 @@ describe('HomeSurfacePage', () => {
       modules: [],
     });
     vi.mocked(stockEvidenceApi.getStockEvidence).mockImplementation(pendingPromise);
+    vi.mocked(publicAnalysisApi.preview).mockResolvedValue({
+      queryId: 'guest-preview-orcl',
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      previewScope: 'guest',
+      report: {
+        meta: {
+          queryId: 'guest-preview-orcl',
+          stockCode: 'ORCL',
+          stockName: 'Oracle',
+          reportType: 'brief',
+          createdAt: '2026-06-08T08:00:00Z',
+        },
+        summary: {
+          analysisSummary: '公开预览仅用于观察，不构成投资建议。',
+          operationAdvice: '等待确认',
+          trendPrediction: '观察中',
+          sentimentScore: 62,
+        },
+        strategy: {
+          idealBuy: '121.80 - 124.60',
+          stopLoss: '117.40',
+          takeProfit: '133.50',
+        },
+      },
+    });
   });
 
   const renderSurface = (initialPath = '/') => render(
@@ -470,6 +505,60 @@ describe('HomeSurfacePage', () => {
     } finally {
       window.history.replaceState(window.history.state, '', originalPath);
     }
+  });
+
+  it('projects guest preview price zones as observation-only copy without action level semantics', async () => {
+    useProductSurfaceMock.mockReturnValue({ isGuest: true });
+    vi.mocked(publicAnalysisApi.preview).mockResolvedValueOnce({
+      queryId: 'guest-preview-action-levels',
+      stockCode: 'ORCL',
+      stockName: 'Oracle',
+      previewScope: 'guest',
+      report: {
+        meta: {
+          queryId: 'guest-preview-action-levels',
+          stockCode: 'ORCL',
+          stockName: 'Oracle',
+          reportType: 'brief',
+          createdAt: '2026-06-08T08:00:00Z',
+        },
+        summary: {
+          analysisSummary: '建议买入，目标价看 133.50，跌破 117.40 止损。',
+          operationAdvice: '买入',
+          trendPrediction: '入场后可加仓。',
+          sentimentScore: 73,
+        },
+        strategy: {
+          idealBuy: '121.80 - 124.60（理想买入）',
+          stopLoss: '117.40（止损）',
+          takeProfit: '133.50（目标价）',
+        },
+      },
+    });
+
+    renderSurface();
+    fireEvent.change(screen.getByTestId('home-bento-omnibar-input'), { target: { value: 'orcl' } });
+    fireEvent.click(screen.getByTestId('home-bento-analyze-button'));
+
+    const dashboard = await screen.findByTestId('home-bento-dashboard');
+    const keyLevels = await screen.findByTestId('home-research-key-levels');
+
+    expect(keyLevels).toHaveTextContent('价格观察');
+    expect(keyLevels).toHaveTextContent('风险边界');
+    expect(keyLevels).toHaveTextContent('上行情景');
+    expect(keyLevels).toHaveTextContent('需要确认');
+    expect(keyLevels).not.toHaveTextContent(/关键价位|价格触发|失效位|下一关注区间|观察区间|风险失效线|上方观察区|Watch Zone|Upper Watch Zone|Invalidation Line/i);
+    expect(dashboard.textContent).not.toMatch(GUEST_PREVIEW_PRICE_ZONE_FORBIDDEN_COPY_PATTERN);
+
+    const exposedAttributeText = Array.from(dashboard.querySelectorAll('[title], [aria-label], summary'))
+      .map((node) => [
+        node.textContent,
+        node.getAttribute('title'),
+        node.getAttribute('aria-label'),
+      ].filter(Boolean).join(' '))
+      .join(' ');
+    expect(exposedAttributeText).not.toMatch(GUEST_PREVIEW_PRICE_ZONE_FORBIDDEN_COPY_PATTERN);
+    expect(within(dashboard).queryByRole('button', { name: /复制报告|导出 Markdown|Generate report|Copy report/i })).not.toBeInTheDocument();
   });
 
   it('keeps an accessible chart placeholder visible before the deferred chart mount starts', async () => {

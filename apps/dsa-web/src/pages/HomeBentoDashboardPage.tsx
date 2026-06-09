@@ -2185,6 +2185,12 @@ function metricValueClass(metric: DashboardField, convention: ReturnType<typeof 
 }
 
 function getMetricLabelForStrip(locale: DashboardLocale, label: string): string {
+  if (label === '价格观察' || label === '风险边界' || label === '上行情景') {
+    return label;
+  }
+  if (label === 'Price Observation' || label === 'Risk Boundary' || label === 'Upside Scenario') {
+    return label;
+  }
   if (label === '观察区间' || label === '建仓区间') {
     return '价格触发';
   }
@@ -2206,8 +2212,20 @@ function getMetricLabelForStrip(locale: DashboardLocale, label: string): string 
   return locale === 'en' ? label : label;
 }
 
-function buildLinearLevelMetrics(metrics: DashboardField[], locale: DashboardLocale): DashboardField[] {
-  const slots = locale === 'en'
+function buildLinearLevelMetrics(metrics: DashboardField[], locale: DashboardLocale, isGuestPreview = false): DashboardField[] {
+  const slots = isGuestPreview
+    ? locale === 'en'
+      ? [
+          { aliases: ['price observation', 'watch zone', 'entry zone'], fallback: { label: 'Price Observation', value: EMPTY_FIELD_VALUE, tone: 'neutral' as const } },
+          { aliases: ['risk boundary', 'invalidation line', 'stop'], fallback: { label: 'Risk Boundary', value: EMPTY_FIELD_VALUE, tone: 'neutral' as const } },
+          { aliases: ['upside scenario', 'upper watch zone', 'target'], fallback: { label: 'Upside Scenario', value: EMPTY_FIELD_VALUE, tone: 'neutral' as const } },
+        ]
+      : [
+          { aliases: ['价格观察', '观察区间', '建仓区间'], fallback: { label: '价格观察', value: EMPTY_FIELD_VALUE, tone: 'neutral' as const } },
+          { aliases: ['风险边界', '风险失效线', '止损位'], fallback: { label: '风险边界', value: EMPTY_FIELD_VALUE, tone: 'neutral' as const } },
+          { aliases: ['上行情景', '上方观察区', '目标位'], fallback: { label: '上行情景', value: EMPTY_FIELD_VALUE, tone: 'neutral' as const } },
+        ]
+    : locale === 'en'
     ? [
         { aliases: ['watch zone', 'entry zone'], fallback: { label: 'Watch Zone', value: EMPTY_FIELD_VALUE, tone: 'neutral' as const } },
         { aliases: ['invalidation line', 'stop'], fallback: { label: 'Invalidation Line', value: EMPTY_FIELD_VALUE, tone: 'neutral' as const } },
@@ -2249,12 +2267,14 @@ function buildChartConclusionCopy(locale: DashboardLocale, signals: DashboardSig
 function LinearKeyLevelsStrip({
   metrics,
   locale,
+  isGuestPreview = false,
 }: {
   metrics: DashboardField[];
   locale: DashboardLocale;
+  isGuestPreview?: boolean;
 }) {
   const { marketColorConvention } = useUiPreferences();
-  const levels = buildLinearLevelMetrics(metrics, locale);
+  const levels = buildLinearLevelMetrics(metrics, locale, isGuestPreview);
   return (
     <div
       data-testid="home-research-key-levels"
@@ -2263,7 +2283,11 @@ function LinearKeyLevelsStrip({
       className="home-research-key-level-strip grid min-w-0 overflow-hidden rounded-[12px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-input)] text-xs sm:grid-cols-[7rem_repeat(3,minmax(0,1fr))]"
     >
       <div className="home-research-key-level-label flex min-w-0 items-center border-b border-[color:var(--wolfy-divider)] px-3.5 py-2.5 sm:border-b-0 sm:border-r">
-        <span className="truncate text-sm font-semibold text-white/88">{locale === 'en' ? 'Key levels' : '关键价位'}</span>
+        <span className="truncate text-sm font-semibold text-white/88">
+          {isGuestPreview
+            ? (locale === 'en' ? 'Price observation' : '价格观察')
+            : (locale === 'en' ? 'Key levels' : '关键价位')}
+        </span>
       </div>
       {levels.map((metric, index) => (
         <div
@@ -2485,7 +2509,11 @@ function LinearObservationPanel({
         data-rail-section="current-action"
       >
         <div className="flex min-w-0 items-center justify-between gap-3">
-          <p className="text-sm font-semibold tracking-[0] text-white">{isEnglish ? 'Current action' : '当前动作'}</p>
+          <p className="text-sm font-semibold tracking-[0] text-white">
+            {isGuest
+              ? (isEnglish ? 'Current observation' : '当前观察')
+              : (isEnglish ? 'Current action' : '当前动作')}
+          </p>
           <button
             ref={openStrategyButtonRef}
             type="button"
@@ -4832,6 +4860,24 @@ function buildStrategyMetricDetails(locale: DashboardLocale, label: string, valu
     return EMPTY_FIELD_VALUE;
   }
 
+  if (key === '价格观察' || key === 'priceobservation') {
+    return isEnglish
+      ? `Treat ${value} as a price observation that still needs confirmation before it becomes useful research context.`
+      : `${value} 仅表示价格观察仍需确认，当前只作为研究上下文。`;
+  }
+
+  if (key === '上行情景' || key === 'upsidescenario') {
+    return isEnglish
+      ? `${value} marks an upside scenario to review against new evidence before the preview can be upgraded.`
+      : `${value} 仅表示上行情景需要结合新证据复核，预览阶段保持观察。`;
+  }
+
+  if (key === '风险边界' || key === 'riskboundary') {
+    return isEnglish
+      ? `${value} marks a risk boundary for rechecking the research context while evidence remains incomplete.`
+      : `${value} 仅表示风险边界需要复核，证据不完整时保持观察。`;
+  }
+
   if (key === '观察区间' || key === '建仓区间' || key === 'entryzone' || key === 'watchzone') {
     return isEnglish
       ? `Use ${value} as the preferred observation band. Treat it as a readiness condition, not an instruction.`
@@ -5110,6 +5156,21 @@ function buildDashboardFromReport(locale: DashboardLocale, report: AnalysisRepor
   });
 }
 
+function buildGuestPriceObservationMetrics(locale: DashboardLocale): DashboardField[] {
+  const pending = locale === 'en' ? 'Needs confirmation' : '需要确认';
+  return locale === 'en'
+    ? [
+        { label: 'Price Observation', value: pending, tone: 'neutral' },
+        { label: 'Risk Boundary', value: pending, tone: 'neutral' },
+        { label: 'Upside Scenario', value: pending, tone: 'neutral' },
+      ]
+    : [
+        { label: '价格观察', value: pending, tone: 'neutral' },
+        { label: '风险边界', value: pending, tone: 'neutral' },
+        { label: '上行情景', value: pending, tone: 'neutral' },
+      ];
+}
+
 function buildGuestDashboardFromPreview(
   locale: DashboardLocale,
   preview: PublicAnalysisPreviewResponse,
@@ -5164,13 +5225,11 @@ function buildGuestDashboardFromPreview(
     },
     strategy: {
       ...seed.strategy,
-      metrics: seed.strategy.metrics.map((metric) => ({
-        ...metric,
-        value: metric.value === EMPTY_FIELD_VALUE ? (locale === 'en' ? 'Unlock after account creation' : '创建账户后解锁') : metric.value,
-      })),
+      metrics: buildGuestPriceObservationMetrics(locale),
+      detailLabel: locale === 'en' ? 'Observation notes' : '观察说明',
       positionBody: locale === 'en'
-        ? 'Observation bands, risk boundaries, and pacing notes unlock after a free account is created.'
-        : '观察区间、风险边界与跟踪节奏会在免费创建账户后解锁。',
+        ? 'Price observations, risk boundaries, and pacing notes need the complete research packet after sign-in.'
+        : '价格观察、风险边界与跟踪节奏需要登录后结合完整研究包确认。',
     },
   });
 }
@@ -5481,8 +5540,8 @@ function GuestPaywallOverlay({ locale, registrationPath }: { locale: DashboardLo
       <Lock className="h-7 w-7 text-white/85 drop-shadow-[0_0_14px_rgba(99,102,241,0.55)]" />
       <p className="mt-4 max-w-xs text-sm font-medium leading-6 text-white/80">
         {locale === 'en'
-          ? 'Unlock the full research framework, watch zones, and technical context.'
-          : '解锁完整研究框架、观察区间与技术形态解读'}
+          ? 'Unlock the full research framework, price observations, and technical context.'
+          : '解锁完整研究框架、价格观察与技术形态解读'}
       </p>
       <Link
         to={registrationPath}
@@ -6583,7 +6642,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
                             />
 
                             <div className="mt-2.5" data-testid="home-bento-research-state-row">
-                              <LinearKeyLevelsStrip metrics={readyCopy.strategy.metrics} locale={locale} />
+                              <LinearKeyLevelsStrip metrics={readyCopy.strategy.metrics} locale={locale} isGuestPreview={Boolean(isGuest)} />
                             </div>
                           </div>
                         </div>

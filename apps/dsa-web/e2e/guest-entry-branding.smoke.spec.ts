@@ -1,6 +1,9 @@
 import { expect as baseExpect } from '@playwright/test';
 import { expect as appExpect, test as appTest } from './fixtures/appSmoke';
 
+const GUEST_PRICE_ZONE_FORBIDDEN_COPY_PATTERN =
+  /理想买入|入场|止损|止盈|目标价|买入|卖出|加仓|建仓|target price|entry|stop loss|take profit/i;
+
 appTest('guest entry routes use research branding instead of AI persona copy', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
 
@@ -102,7 +105,12 @@ appTest('guest search falls back to a bounded research snapshot when preview sta
   await appExpect(page.getByText('实时预览当前不可用，已切换到本地研究快照。')).toBeVisible({ timeout: 8_000 });
   await appExpect(page.getByTestId('home-research-console')).toBeVisible();
   await appExpect(page.getByTestId('home-research-score-strip')).toContainText('6.3');
+  await appExpect(page.getByTestId('home-research-key-levels')).toContainText('价格观察');
+  await appExpect(page.getByTestId('home-research-key-levels')).toContainText('风险边界');
+  await appExpect(page.getByTestId('home-research-key-levels')).toContainText('上行情景');
+  await appExpect(page.getByTestId('home-research-key-levels')).toContainText('需要确认');
   await appExpect(page.locator('body')).not.toContainText(/实时诱饵|WOLFY AI|唤醒 AI/i);
+  await appExpect(page.getByTestId('home-bento-dashboard')).not.toContainText(GUEST_PRICE_ZONE_FORBIDDEN_COPY_PATTERN);
   await baseExpect
     .poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
     .toBe(true);
