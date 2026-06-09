@@ -1646,6 +1646,12 @@ describe('UserScannerPage', () => {
     expect(nextSteps).toHaveTextContent('手动加入观察名单');
     expect(nextSteps).toHaveTextContent('Market Overview');
     expect(nextSteps).toHaveTextContent('不代表市场没有机会');
+    expect(nextSteps).toHaveTextContent('功能预览');
+    expect(nextSteps).toHaveTextContent('示例预览');
+    expect(nextSteps).toHaveTextContent('候选摘要');
+    expect(nextSteps).toHaveTextContent('观察依据');
+    expect(nextSteps).toHaveTextContent('不会写入观察名单');
+    expect(nextSteps).toHaveTextContent('不会进入官方排名或导出数据');
     expect(within(nextSteps).getByRole('link', { name: /打开 Watchlist/i })).toHaveAttribute('href', '/zh/watchlist');
     expect(within(nextSteps).getByRole('link', { name: /打开 Market Overview/i })).toHaveAttribute('href', '/zh/market-overview');
     const runFacts = await screen.findByTestId('scanner-run-facts');
@@ -1729,6 +1735,8 @@ describe('UserScannerPage', () => {
     const nextSteps = await screen.findByTestId('scanner-workflow-next-steps');
     expect(nextSteps).toHaveTextContent('预览候选 1');
     expect(nextSteps).toHaveTextContent('预览不会改变官方入选或评分');
+    expect(within(nextSteps).getByTestId('scanner-empty-success-preview')).toHaveTextContent('演示样例');
+    expect(within(nextSteps).getByTestId('scanner-empty-success-preview')).not.toHaveTextContent(/买入|卖出|下单|交易|target|entry|stop|take-profit/i);
 
     fireEvent.click(within(nextSteps).getByRole('button', { name: /查看预览候选/ }));
     expect(await screen.findByTestId('scanner-candidate-row-MARA')).toHaveTextContent(/预览|Preview/);

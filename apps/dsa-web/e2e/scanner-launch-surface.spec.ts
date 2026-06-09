@@ -500,6 +500,11 @@ test.describe('scanner launch surface', () => {
     await expect(nextSteps).toContainText('手动加入观察名单');
     await expect(nextSteps).toContainText('预览候选 1');
     await expect(nextSteps).toContainText('预览不会改变官方入选或评分');
+    await expect(nextSteps).toContainText('功能预览');
+    await expect(nextSteps).toContainText('示例预览');
+    await expect(nextSteps).toContainText('此演示样例不是实时扫描结果');
+    await expect(nextSteps).toContainText('不会写入观察名单');
+    await expect(nextSteps).toContainText('不会进入官方排名或导出数据');
     await expect(nextSteps.getByRole('link', { name: /打开 Watchlist/i })).toHaveAttribute('href', '/zh/watchlist');
     await expect(nextSteps.getByRole('link', { name: /打开 Market Overview/i })).toHaveAttribute('href', '/zh/market-overview');
 

@@ -180,6 +180,11 @@ type ScannerWorkbenchEmptyState = {
   title: string;
   body: string;
 };
+type ScannerEmptyPreviewItem = {
+  label: string;
+  value: string;
+  detail: string;
+};
 type ScannerSafeEmptyReason = {
   label: string;
   body: string;
@@ -1317,6 +1322,90 @@ function buildScannerWorkbenchEmptyState({
       ? 'Switch the candidate view, inspect limited-data rows, or adjust market, universe, detailed review, and shortlist controls in the top command bar.'
       : '切换候选视图、查看数据受限行，或在顶部命令栏调整市场、范围、评估深度与候选上限。',
   };
+}
+
+function buildScannerEmptyPreviewItems(language: 'zh' | 'en'): ScannerEmptyPreviewItem[] {
+  if (language === 'en') {
+    return [
+      {
+        label: 'Candidate summary',
+        value: 'Symbol / name / score band',
+        detail: 'Successful runs show the compact candidate identity and observation strength.',
+      },
+      {
+        label: 'Evidence view',
+        value: 'Why now / data state / risk note',
+        detail: 'Rows explain why the symbol is worth further research without turning it into advice.',
+      },
+      {
+        label: 'Next step',
+        value: 'Save observation / start research',
+        detail: 'Actions stay user-controlled and do not change scanner ranking.',
+      },
+    ];
+  }
+
+  return [
+    {
+      label: '候选摘要',
+      value: '代码 / 名称 / 评分区间',
+      detail: '成功扫描会先展示候选身份与观察强度。',
+    },
+    {
+      label: '观察依据',
+      value: '当前原因 / 数据状态 / 风险提示',
+      detail: '按行解释为什么值得继续研究，但不转成投资建议。',
+    },
+    {
+      label: '下一步',
+      value: '保存观察 / 启动研究',
+      detail: '动作由用户触发，并且不改变扫描排名。',
+    },
+  ];
+}
+
+function ScannerEmptySuccessPreview({
+  language,
+  compact = false,
+}: {
+  language: 'zh' | 'en';
+  compact?: boolean;
+}) {
+  const previewItems = buildScannerEmptyPreviewItems(language);
+  return (
+    <div
+      data-testid="scanner-empty-success-preview"
+      className={`min-w-0 rounded-lg border border-white/8 bg-black/20 ${compact ? 'px-3 py-2 text-left' : 'p-3'}`}
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="rounded-md border border-indigo-300/20 bg-indigo-300/10 px-2 py-0.5 text-[11px] font-semibold text-indigo-100/86">
+          {language === 'en' ? 'Feature preview' : '功能预览'}
+        </span>
+        <span className="text-[11px] text-white/42">
+          {language === 'en' ? 'Example preview only' : '示例预览'}
+        </span>
+      </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-white/54">
+        {language === 'en'
+          ? 'When a scan has usable candidates, the workbench shows the following structure.'
+          : '当扫描形成可继续观察的候选时，工作台通常会展示这些信息。'}
+      </p>
+      <div className={`mt-2 grid min-w-0 gap-2 ${compact ? '' : 'lg:grid-cols-3'}`}>
+        {previewItems.map((item) => (
+          <div key={item.label} className="min-w-0 rounded-md border border-white/8 bg-white/[0.025] px-2.5 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/36">{item.label}</p>
+            <p className="mt-1 text-xs font-medium text-white/76">{item.value}</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-white/45">{item.detail}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-white/42">
+        {language === 'en'
+          ? 'This demo sample is not live scanner output, is not saved to Watchlist, and is not included in official ranking or export data.'
+          : '此演示样例不是实时扫描结果，不会写入观察名单，也不会进入官方排名或导出数据。'}
+      </p>
+    </div>
+  );
 }
 
 function buildVisualSummarySegments(
@@ -3596,7 +3685,9 @@ const UserScannerPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(260px,0.6fr)]">
+                    <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(260px,0.58fr)_minmax(260px,0.58fr)]">
+                      <ScannerEmptySuccessPreview language={language} />
+
                       <div className="min-w-0 rounded-lg border border-white/8 bg-black/20 p-3">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
                           <span className="text-[11px] font-semibold text-white/74">
@@ -4205,7 +4296,10 @@ const UserScannerPage: React.FC = () => {
                             title={workbenchEmptyState.title}
                             className="m-0 min-h-[120px]"
                           >
-                            {workbenchEmptyState.body}
+                            <div className="grid min-w-0 gap-3">
+                              <p>{workbenchEmptyState.body}</p>
+                              <ScannerEmptySuccessPreview language={language} compact />
+                            </div>
                           </CompactEmptyRow>
                         )}
 

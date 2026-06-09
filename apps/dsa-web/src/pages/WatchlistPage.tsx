@@ -105,6 +105,11 @@ type WatchlistConclusionModel = {
   limitedConfidenceCount: number;
   tone: 'success' | 'caution' | 'neutral';
 };
+type WatchlistEmptyPreviewItem = {
+  label: string;
+  value: string;
+  detail: string;
+};
 type BatchProgress = {
   kind: 'scan' | 'backtest';
   total: number;
@@ -121,6 +126,11 @@ const ROW_SELECTION_BUTTON_CLASS = 'inline-flex h-[32px] w-[32px] shrink-0 items
 
 function normalizeText(value?: string | null): string {
   return String(value || '').trim();
+}
+
+function parseManualResearchSymbol(value: string): string {
+  const token = normalizeText(value).split(/[\s,，;；]+/u)[0] || '';
+  return token.toUpperCase().replace(/[^A-Z0-9._-]/g, '').slice(0, 24);
 }
 
 function terminalChipVariant(tone: DisplayStatusTone): React.ComponentProps<typeof TerminalChip>['variant'] {
@@ -1091,6 +1101,15 @@ function buildWatchlistAnalysisPath(item: WatchlistItem, taskId: string, languag
   return buildLocalizedPath(`/?${params.toString()}`, language);
 }
 
+function buildWatchlistManualResearchPath(symbol: string, language: 'zh' | 'en', taskId?: string | null): string {
+  const params = new URLSearchParams({
+    symbol,
+    source: 'watchlist_empty',
+  });
+  if (taskId) params.set('task_id', taskId);
+  return buildLocalizedPath(`/?${params.toString()}`, language);
+}
+
 function getCopy(language: 'zh' | 'en') {
   if (language === 'en') {
     return {
@@ -1186,6 +1205,22 @@ function getCopy(language: 'zh' | 'en') {
       emptyTitle: 'No tracked candidates yet.',
       emptyBody: 'Add symbols from the research scanner to the watchlist, or use manual symbol entry there.',
       emptyHelp: 'Return here to review saved candidate evidence and status.',
+      emptyPreviewEyebrow: 'Feature preview',
+      emptyPreviewTitle: 'Example preview',
+      emptyPreviewBody: 'A saved observation row can show source, evidence state, latest observation, and the next research step.',
+      emptyPreviewItems: [
+        { label: 'Saved observation', value: 'Symbol / market / source', detail: 'Real rows appear only after the user saves a symbol.' },
+        { label: 'Evidence state', value: 'Research score / data state', detail: 'State labels explain freshness and limits without making a recommendation.' },
+        { label: 'Next research step', value: 'Open analysis / refresh / backtest', detail: 'Actions are explicit user research steps, not execution shortcuts.' },
+      ] as WatchlistEmptyPreviewItem[],
+      emptyPreviewFootnote: 'Demo sample only. It is not persisted, counted as a watchlist item, exported as user data, or used by scanner ranking.',
+      emptyScannerHelp: 'Scanner can still be useful, but manual research below is available when Scanner has no candidates.',
+      savedObservationHelp: 'Saved observations are created only after you explicitly save a symbol; this preview does not create one.',
+      manualResearchLabel: 'Manual research symbol',
+      manualResearchPlaceholder: 'TSLA',
+      manualResearchHelp: 'Start one stock research task without adding anything to Watchlist.',
+      manualResearchButton: 'Research',
+      enterManualSymbol: 'Enter one symbol before starting research.',
       openScanner: 'Open Scanner',
       tableTitle: 'Monitoring list',
       tableDescription: 'Rows keep state, observation, and actions aligned.',
@@ -1293,6 +1328,22 @@ function getCopy(language: 'zh' | 'en') {
     emptyTitle: '还没有观察标的',
       emptyBody: '从研究扫描器添加标的到观察列表，或在那里手动补充代码。',
     emptyHelp: '添加后可在这里查看已保存的候选证据与状态。',
+    emptyPreviewEyebrow: '功能预览',
+    emptyPreviewTitle: '示例预览',
+    emptyPreviewBody: '真实保存后，观察行会展示加入来源、证据状态、最近观察与下一步研究动作。',
+    emptyPreviewItems: [
+      { label: '保存观察', value: '代码 / 市场 / 加入路径', detail: '只有用户明确保存后，真实观察行才会出现。' },
+      { label: '证据状态', value: '研究评分 / 数据状态', detail: '状态标签说明时效与限制，不给出推荐。' },
+      { label: '下一步研究', value: '打开分析 / 刷新 / 回测', detail: '全部是用户触发的研究步骤，不是执行入口。' },
+    ] as WatchlistEmptyPreviewItem[],
+    emptyPreviewFootnote: '仅为演示样例；不会持久化，不计入观察名单数量，不导出为用户数据，也不会进入扫描器官方排名。',
+    emptyScannerHelp: '扫描器仍可继续使用；当扫描器也没有候选时，可先用下方手动研究入口。',
+    savedObservationHelp: '保存观察只会在你明确保存代码后创建；这里的预览不会创建观察项。',
+    manualResearchLabel: '手动研究代码',
+    manualResearchPlaceholder: 'TSLA',
+    manualResearchHelp: '启动一个个股研究任务，不会把代码加入观察名单。',
+    manualResearchButton: '研究',
+    enterManualSymbol: '请先输入一个研究代码。',
     openScanner: '打开扫描器',
     tableTitle: '监控列表',
     tableDescription: '按行查看状态、观察与操作。',
@@ -1389,6 +1440,8 @@ const WatchlistPage: React.FC = () => {
   const [batchProgress, setBatchProgress] = useState<BatchProgress>(null);
   const [isBatchBacktesting, setIsBatchBacktesting] = useState(false);
   const [isBatchScanning, setIsBatchScanning] = useState(false);
+  const [emptyResearchSymbol, setEmptyResearchSymbol] = useState('');
+  const [isEmptyResearchPending, setIsEmptyResearchPending] = useState(false);
   const [backtestSessionKeys, setBacktestSessionKeys] = useState<Set<string>>(() => new Set());
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [useSelectedScope, setUseSelectedScope] = useState(false);
@@ -1570,6 +1623,10 @@ const WatchlistPage: React.FC = () => {
     ? copy.emptyFilteredSet
     : `${useSelectedScope && selectedItems.length > 0 ? copy.scopeSelected : copy.scopeFiltered} ${actionItems.length} ${language === 'zh' ? '个标的' : 'symbols'}`;
   const isActionDisabled = actionItems.length === 0 || isBatchBacktesting || isBatchScanning;
+  const emptyResearchParsedSymbol = useMemo(
+    () => parseManualResearchSymbol(emptyResearchSymbol),
+    [emptyResearchSymbol],
+  );
   const watchlistConclusion = useMemo(
     () => buildWatchlistConclusion(filteredItems, language),
     [filteredItems, language],
@@ -1609,6 +1666,36 @@ const WatchlistPage: React.FC = () => {
       setPendingAnalyzeId((current) => (current === item.id ? null : current));
     }
   }, [copy.analyzeStarted, language, navigate]);
+
+  const handleEmptyManualResearch = useCallback(async () => {
+    const symbol = emptyResearchParsedSymbol;
+    if (!symbol) {
+      setNotice({ tone: 'warning', message: copy.enterManualSymbol });
+      return;
+    }
+
+    setIsEmptyResearchPending(true);
+    setNotice(null);
+    try {
+      const response = await analysisApi.analyzeAsync({
+        stockCode: symbol,
+        reportType: 'detailed',
+        stockName: symbol,
+        originalQuery: symbol,
+        selectionSource: 'manual',
+      });
+      const taskId = extractAcceptedTaskId(response);
+      navigate(buildWatchlistManualResearchPath(symbol, language, taskId));
+    } catch (err) {
+      if (err instanceof DuplicateTaskError) {
+        navigate(buildWatchlistManualResearchPath(symbol, language, err.existingTaskId));
+        return;
+      }
+      setNotice({ tone: 'danger', message: getParsedApiError(err).message });
+    } finally {
+      setIsEmptyResearchPending(false);
+    }
+  }, [copy.enterManualSymbol, emptyResearchParsedSymbol, language, navigate]);
 
   const handleRemove = useCallback(async (item: WatchlistItem) => {
     setPendingRemoveId(item.id);
@@ -2291,7 +2378,7 @@ const WatchlistPage: React.FC = () => {
                   data-testid="watchlist-compact-empty-state"
                   title={copy.emptyTitle}
                   className={isWatchlistEmptyWorkspace
-                    ? 'mx-auto min-h-[168px] w-full max-w-2xl flex-col items-center justify-center rounded-none border-0 bg-transparent px-4 py-8 text-center sm:min-h-[188px]'
+                    ? 'mx-auto min-h-[168px] w-full max-w-3xl flex-col items-center justify-center rounded-none border-0 bg-transparent px-4 py-8 text-center sm:min-h-[188px]'
                     : 'min-h-[72px] flex-col items-start justify-start rounded-none border-x-0 border-b-0 border-t border-[color:var(--wolfy-divider)] bg-transparent px-4 py-4 sm:flex-row sm:items-center sm:justify-between'
                   }
                   action={(
@@ -2306,9 +2393,74 @@ const WatchlistPage: React.FC = () => {
                     </TerminalButton>
                   )}
                 >
-                  <div className="space-y-1">
+                  <div className="grid w-full min-w-0 gap-4">
+                    <div className="space-y-1">
                     <p>{copy.emptyBody}</p>
                     <p className="text-[11px] text-white/45">{copy.emptyHelp}</p>
+                    <p className="text-[11px] text-white/45">{copy.emptyScannerHelp}</p>
+                    </div>
+
+                    {isWatchlistEmptyWorkspace ? (
+                      <div
+                        data-testid="watchlist-empty-preview"
+                        className="grid min-w-0 gap-3 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-[var(--wolfy-surface-input)] px-3 py-3 text-left"
+                      >
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <TerminalChip variant="info">{copy.emptyPreviewEyebrow}</TerminalChip>
+                          <span className="text-[11px] font-semibold text-white/72">{copy.emptyPreviewTitle}</span>
+                        </div>
+                        <p className="text-xs leading-5 text-white/58">{copy.emptyPreviewBody}</p>
+                        <div className="grid min-w-0 gap-2 md:grid-cols-3">
+                          {copy.emptyPreviewItems.map((item) => (
+                            <div key={item.label} className="min-w-0 rounded-lg border border-white/8 bg-black/20 px-2.5 py-2">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">{item.label}</p>
+                              <p className="mt-1 text-xs font-medium text-white/76">{item.value}</p>
+                              <p className="mt-1 text-[11px] leading-relaxed text-white/45">{item.detail}</p>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-[11px] leading-relaxed text-white/42">{copy.emptyPreviewFootnote}</p>
+                      </div>
+                    ) : null}
+
+                    {isWatchlistEmptyWorkspace ? (
+                      <div
+                        data-testid="watchlist-empty-manual-research"
+                        className="grid min-w-0 gap-2 rounded-xl border border-[color:var(--wolfy-border-subtle)] bg-black/20 px-3 py-3 text-left"
+                      >
+                        <label htmlFor="watchlist-empty-manual-symbol" className="text-[11px] font-semibold text-white/74">
+                          {copy.manualResearchLabel}
+                        </label>
+                        <p className="text-[11px] leading-relaxed text-white/45">{copy.manualResearchHelp}</p>
+                        <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+                          <input
+                            id="watchlist-empty-manual-symbol"
+                            data-testid="watchlist-empty-manual-symbol-input"
+                            value={emptyResearchSymbol}
+                            className="h-9 min-w-0 flex-1 rounded-md border border-white/10 bg-black/35 px-3 text-sm font-mono text-white outline-none placeholder:text-white/22 focus:border-indigo-300/50"
+                            onChange={(event) => setEmptyResearchSymbol(event.target.value)}
+                            aria-label={copy.manualResearchLabel}
+                            placeholder={copy.manualResearchPlaceholder}
+                          />
+                          <TerminalButton
+                            type="button"
+                            variant="secondary"
+                            data-testid="watchlist-empty-manual-research-button"
+                            className="h-9 px-3 text-xs"
+                            disabled={!emptyResearchParsedSymbol || isEmptyResearchPending}
+                            onClick={() => void handleEmptyManualResearch()}
+                          >
+                            <Play className="h-3.5 w-3.5" aria-hidden="true" />
+                            {isEmptyResearchPending
+                              ? copy.analyzing
+                              : emptyResearchParsedSymbol
+                                ? `${copy.manualResearchButton} ${emptyResearchParsedSymbol}`
+                                : copy.manualResearchButton}
+                          </TerminalButton>
+                        </div>
+                        <p className="text-[11px] leading-relaxed text-white/42">{copy.savedObservationHelp}</p>
+                      </div>
+                    ) : null}
                   </div>
                 </CompactEmptyRow>
               )}

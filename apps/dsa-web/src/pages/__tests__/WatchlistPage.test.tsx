@@ -1889,12 +1889,24 @@ describe('WatchlistPage', () => {
       'sm:items-center',
       'rounded-none',
       'border-0',
-      'max-w-2xl',
+      'max-w-3xl',
       'text-center',
     );
     expect(within(emptyState).getByText('还没有观察标的')).toBeInTheDocument();
     expect(emptyState).toHaveTextContent('从研究扫描器添加标的到观察列表，或在那里手动补充代码。');
     expect(emptyState).toHaveTextContent('添加后可在这里查看已保存的候选证据与状态。');
+    expect(emptyState).toHaveTextContent('扫描器仍可继续使用；当扫描器也没有候选时，可先用下方手动研究入口。');
+    const preview = within(emptyState).getByTestId('watchlist-empty-preview');
+    expect(preview).toHaveTextContent('功能预览');
+    expect(preview).toHaveTextContent('示例预览');
+    expect(preview).toHaveTextContent('保存观察');
+    expect(preview).toHaveTextContent('证据状态');
+    expect(preview).toHaveTextContent('下一步研究');
+    expect(preview).toHaveTextContent('不会持久化');
+    expect(preview).toHaveTextContent('不计入观察名单数量');
+    expect(preview).toHaveTextContent('不会进入扫描器官方排名');
+    expect(within(emptyState).getByTestId('watchlist-empty-manual-research')).toHaveTextContent('手动研究代码');
+    expect(within(emptyState).getByLabelText('手动研究代码')).toBeInTheDocument();
     expect(emptyState).not.toHaveTextContent(/数据不足，禁止判断|买入|卖出|下单|交易|券商|broker/i);
     expect(within(headerStrip).queryByRole('button', { name: /打开扫描器/ })).not.toBeInTheDocument();
     expect(screen.queryByTestId('watchlist-compact-filter-bar')).not.toBeInTheDocument();
@@ -1910,6 +1922,30 @@ describe('WatchlistPage', () => {
     fireEvent.click(emptyStateScannerAction);
     expect(screen.getByText('scanner')).toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/zh/scanner');
+  });
+
+  it('starts manual research from the empty watchlist without creating a preview item', async () => {
+    listWatchlistItems.mockResolvedValue({ items: [] });
+
+    renderWatchlist();
+
+    const emptyState = await screen.findByTestId('watchlist-compact-empty-state');
+    fireEvent.change(within(emptyState).getByLabelText('手动研究代码'), { target: { value: 'tsla' } });
+    fireEvent.click(within(emptyState).getByRole('button', { name: /研究 TSLA/ }));
+
+    await waitFor(() => {
+      expect(analyzeAsync).toHaveBeenCalledWith(expect.objectContaining({
+        stockCode: 'TSLA',
+        reportType: 'detailed',
+        stockName: 'TSLA',
+        originalQuery: 'TSLA',
+        selectionSource: 'manual',
+      }));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/zh?symbol=TSLA');
+    });
+    expect(listWatchlistItems).toHaveBeenCalledTimes(1);
   });
 
   it('keeps batch actions and auto refresh in compact product-labeled rows', async () => {

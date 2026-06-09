@@ -474,4 +474,74 @@ test.describe('watchlist user alerts browser smoke', () => {
 
     await expectNoHorizontalOverflow(page);
   });
+
+  test('empty watchlist shows non-persistent preview and manual research path', async ({ page }) => {
+    let watchlistPostCount = 0;
+    let analysisPayload: JsonRecord | null = null;
+
+    await page.route('**/api/v1/watchlist/items', async (route) => {
+      if (route.request().method() !== 'GET') {
+        watchlistPostCount += 1;
+        await fulfillJson(route, { error: 'not expected' }, 405);
+        return;
+      }
+      await fulfillJson(route, { items: [] });
+    });
+    await page.route('**/api/v1/user-alerts/**', async (route) => {
+      await fulfillJson(route, { items: [] });
+    });
+    await page.route('**/api/v1/analysis/analyze', async (route) => {
+      analysisPayload = route.request().postDataJSON() as JsonRecord;
+      await fulfillJson(route, {
+        taskId: 'task-empty-tsla',
+        status: 'accepted',
+        message: 'Accepted',
+      }, 202);
+    });
+    await page.route('**/api/v1/stocks/*/evidence**', async (route) => {
+      await fulfillJson(route, {
+        symbols: ['TSLA'],
+        items: [],
+        meta: {
+          generated_at: '2026-06-09T08:00:00Z',
+          source: null,
+        },
+      });
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page, '/zh/watchlist');
+
+    const emptyState = page.getByTestId('watchlist-compact-empty-state');
+    await expect(emptyState).toBeVisible({ timeout: 15_000 });
+    await expect(emptyState).toContainText('还没有观察标的');
+    await expect(emptyState).toContainText('功能预览');
+    await expect(emptyState).toContainText('示例预览');
+    await expect(emptyState).toContainText('仅为演示样例');
+    await expect(emptyState).toContainText('不会持久化');
+    await expect(emptyState).toContainText('不计入观察名单数量');
+    await expect(emptyState).toContainText('不会进入扫描器官方排名');
+    await expect(emptyState).toContainText('扫描器仍可继续使用');
+    await expect(emptyState).toContainText('手动研究代码');
+    await expect(emptyState.getByRole('button', { name: '打开扫描器' })).toBeVisible();
+    await expect(page.getByTestId('watchlist-detail-rail')).toHaveCount(0);
+    await expect(page.getByTestId('watchlist-candidate-list')).toHaveCount(0);
+    await expect(page.getByTestId('watchlist-secondary-deck')).toHaveCount(0);
+
+    await emptyState.getByLabel('手动研究代码').fill('TSLA');
+    await emptyState.getByRole('button', { name: '研究 TSLA' }).click();
+
+    await expect.poll(() => analysisPayload).toMatchObject({
+      stock_code: 'TSLA',
+      report_type: 'detailed',
+      stock_name: 'TSLA',
+      original_query: 'TSLA',
+      selection_source: 'manual',
+    });
+    expect(watchlistPostCount).toBe(0);
+
+    const bodyText = await page.locator('body').innerText();
+    expect(bodyText).not.toMatch(/买入|卖出|下单|立即交易|保证收益|best contract|AI recommends you buy/i);
+    await expectNoHorizontalOverflow(page);
+  });
 });
