@@ -1,59 +1,18 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
-import { createMockAdminUser, createMockAuthStatus } from '../src/test-utils/adminAuthHarness';
+import { createMockProductAuthStatus, createMockProductUser } from '../src/test-utils/productAuthHarness';
+import { expectNoConsumerRawLeakage } from './fixtures/consumerRawLeakageGuard';
 
 const consumerRoutes = [
+  { path: '/zh' },
   { path: '/zh/market-overview' },
   { path: '/zh/market/liquidity-monitor' },
   { path: '/zh/market/rotation-radar' },
   { path: '/zh/scanner' },
   { path: '/zh/watchlist' },
   { path: '/zh/portfolio' },
-  { path: '/zh/options-lab' },
 ] as const;
 
-const forbiddenVocabularyPatterns = [
-  /\bsourceAuthorityAllowed\b/i,
-  /\bscoreContributionAllowed\b/i,
-  /\bsourceTier\b/i,
-  /\bsourceLabel\b/i,
-  /\bauthorityGrant\b/i,
-  /\bdiagnosticOnly\b/i,
-  /\breasonCode\b/i,
-  /\bmarket_regime_synthesis\b/i,
-  /\bConflicts With Primary Regime\b/i,
-  /\bALTERNATIVE\.?ME\b/i,
-  /\bYFINANCE\b/i,
-  /\bCBOE\b/i,
-  /\bBINANCE\b/i,
-  /\bYahoo Finance\b/i,
-  /\bBinance Futures\b/i,
-  /\bETF flow proxy\b/i,
-  /\bInstitutional pressure proxy\b/i,
-  /\bIndustry breadth proxy\b/i,
-  /\b(?:REAL|MIXED|FALLBACK|REGIME)\b/,
-  /(?:^|[\s:/(])(?:real|mixed|fallback)(?:$|[\s:)/])/i,
-  /\braw\s+payload\b/i,
-  /\braw\s+json\b/i,
-  /\bprovider\s+trace\b/i,
-  /\bprovider\b/i,
-  /\bbackend\b/i,
-  /\bruntime\b/i,
-  /\bcache\b/i,
-  /\bschema\b/i,
-  /\braw\b/i,
-  /\bdebug\b/i,
-  /\bmock\b/i,
-  /\bproxy\b/i,
-  /\bsynthetic\b/i,
-  /\bMarketCache\b/i,
-  /\bsynthetic_fixture\b/i,
-  /\bfallback_static\b/i,
-  /\bofficial_public\b/i,
-  /\b(?:[A-Z][A-Za-z0-9]+){1,3}Provider\b/,
-  /\b(?:source|score|reason|provider|fallback|synthetic|official|cache|market_cache|runtime|schema|raw|debug)_[a-z0-9_]+\b/i,
-] as const;
-
-const adminUser = createMockAdminUser({ displayName: 'Playwright Admin' });
+const productUser = createMockProductUser({ displayName: 'Playwright User' });
 
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
   await route.fulfill({
@@ -63,7 +22,7 @@ async function fulfillJson(route: Route, payload: unknown, status = 200) {
   });
 }
 
-async function installAdminAuth(page: Page) {
+async function installProductAuth(page: Page) {
   let isLoggedIn = false;
 
   await page.route('**/api/v1/auth/status**', async (route) => {
@@ -78,7 +37,7 @@ async function installAdminAuth(page: Page) {
       });
       return;
     }
-    await fulfillJson(route, createMockAuthStatus(adminUser));
+    await fulfillJson(route, createMockProductAuthStatus(productUser));
   });
 
   await page.route('**/api/v1/auth/me**', async (route) => {
@@ -86,12 +45,12 @@ async function installAdminAuth(page: Page) {
       await fulfillJson(route, { error: 'not_authenticated' }, 401);
       return;
     }
-    await fulfillJson(route, adminUser);
+    await fulfillJson(route, productUser);
   });
 
   await page.route('**/api/v1/auth/login**', async (route) => {
     isLoggedIn = true;
-    await fulfillJson(route, { ok: true, currentUser: adminUser });
+    await fulfillJson(route, { ok: true, currentUser: productUser });
   });
 
   await page.route('**/api/v1/auth/logout**', async (route) => {
@@ -119,13 +78,13 @@ async function installAdminAuth(page: Page) {
   });
 }
 
-async function signInAsAdmin(page: Page, redirectPath: string) {
+async function signInAsProduct(page: Page, redirectPath: string) {
   await page.goto(`/login?redirect=${encodeURIComponent(redirectPath)}`);
   await page.waitForLoadState('domcontentloaded');
 
   const username = page.locator('#username');
   if (await username.isVisible().catch(() => false)) {
-    await username.fill('admin');
+    await username.fill('wolfy-user');
   }
 
   await expect(page.locator('#password')).toBeVisible({ timeout: 15_000 });
@@ -137,54 +96,10 @@ async function signInAsAdmin(page: Page, redirectPath: string) {
   ]);
 }
 
-async function collectVisibleAccessibleText(page: Page) {
-  return page.evaluate(() => {
-    const isVisible = (element: Element) => {
-      const html = element as HTMLElement;
-      if (html.hidden || element.getAttribute('aria-hidden') === 'true') {
-        return false;
-      }
-      const style = window.getComputedStyle(html);
-      if (style.display === 'none' || style.visibility === 'hidden') {
-        return false;
-      }
-      const rect = html.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0;
-    };
-
-    const texts = new Set<string>();
-    for (const element of Array.from(document.querySelectorAll('body, body *'))) {
-      if (!isVisible(element)) {
-        continue;
-      }
-      for (const attribute of ['aria-label', 'title', 'alt', 'placeholder']) {
-        const value = element.getAttribute(attribute)?.trim();
-        if (value) {
-          texts.add(value);
-        }
-      }
-    }
-    return Array.from(texts).join('\n');
-  });
-}
-
-async function expectNoForbiddenVocabulary(page: Page, routePath: string) {
-  const bodyText = await page.locator('body').innerText();
-  const accessibleText = await collectVisibleAccessibleText(page);
-  const combinedText = `${bodyText}\n${accessibleText}`;
-
-  for (const pattern of forbiddenVocabularyPatterns) {
-    expect(
-      combinedText,
-      `consumer route ${routePath} leaked forbidden vocabulary matching ${pattern}`,
-    ).not.toMatch(pattern);
-  }
-}
-
 test('consumer routes keep backend/provider/debug vocabulary out of default copy', async ({ page }) => {
   test.slow();
-  await installAdminAuth(page);
-  await signInAsAdmin(page, consumerRoutes[0].path);
+  await installProductAuth(page);
+  await signInAsProduct(page, consumerRoutes[0].path);
 
   for (const route of consumerRoutes) {
     await test.step(route.path, async () => {
@@ -192,7 +107,7 @@ test('consumer routes keep backend/provider/debug vocabulary out of default copy
       await page.waitForLoadState('domcontentloaded');
       await expect(page).toHaveURL(new RegExp(`${route.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[?#])`));
       await expect.poll(async () => page.locator('body').innerText().then((text) => text.trim().length)).toBeGreaterThan(0);
-      await expectNoForbiddenVocabulary(page, route.path);
+      await expectNoConsumerRawLeakage(page.locator('body'), { label: route.path });
     });
   }
 });
