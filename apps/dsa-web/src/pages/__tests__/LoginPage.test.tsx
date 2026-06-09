@@ -289,6 +289,9 @@ describe('LoginPage', () => {
     expect(screen.getByRole('heading', { name: translate('en', 'auth.login.heroTitleLogin') })).toBeInTheDocument();
     expect(screen.queryByText(translate('en', 'auth.login.continueAfterLogin'))).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: translate('en', 'auth.login.returnToGuest') })).toBeInTheDocument();
+    expect(screen.getByText('WolfyStock Research OS')).toBeInTheDocument();
+    expect(screen.getByText('Guest preview ready')).toBeInTheDocument();
+    expect(screen.getByText('Need the read-only route first?')).toBeInTheDocument();
     expect(screen.getByLabelText(translate('en', 'auth.login.passwordLabelLogin'))).toBeInTheDocument();
     expect(screen.getByPlaceholderText(translate('en', 'auth.login.usernamePlaceholderLogin'))).toHaveAttribute('placeholder', 'Enter email or username');
     expect(screen.getByLabelText(translate('en', 'auth.login.usernameLabel'))).toHaveClass(
@@ -311,13 +314,38 @@ describe('LoginPage', () => {
       'active:scale-95',
     );
     expect(screen.getByRole('button', { name: translate('en', 'auth.login.returnToGuest') })).toHaveClass(
-      'mt-6',
-      'text-xs',
-      'text-white/30',
-      'hover:text-white/60',
+      'min-h-[44px]',
+      'rounded-full',
+      'border',
+      'bg-white/[0.06]',
     );
     expect(screen.getByRole('button', { name: translate('en', 'auth.login.submitLogin') })).toBeInTheDocument();
-    expectNoRawI18nKeys(container);
+    expectNoRawI18nKeys(container, {
+      patterns: [
+        /\bauth\.login\.[A-Za-z0-9_]+/i,
+        /\bnavigation\.[A-Za-z0-9_]+/,
+        /\broutes\.[A-Za-z0-9_]+/,
+        /\bnav\.[A-Za-z0-9_]+/,
+      ],
+    });
+  });
+
+  it('keeps the guest return visible but secondary in Chinese login mode', () => {
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('')]);
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      login: vi.fn(),
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    renderPage();
+
+    expect(screen.getByText('WolfyStock 研究工作台')).toBeInTheDocument();
+    expect(screen.getByText('游客预览已就绪')).toBeInTheDocument();
+    expect(screen.getByText('需要先回到只读游客路由？')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('zh', 'auth.login.submitLogin') })).toHaveClass('bg-white', 'text-black');
+    expect(screen.getByRole('button', { name: translate('zh', 'auth.login.returnToGuest') })).toHaveClass('bg-white/[0.06]', 'border');
   });
 
   it('keeps login input adornments from sharing text space', () => {

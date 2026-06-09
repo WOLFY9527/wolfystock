@@ -15,6 +15,13 @@ type LoginLanguage = UiLanguage;
 
 type LoginCopy = {
   documentTitle: string;
+  shellProductName: string;
+  shellProductTagline: string;
+  shellGuestStatus: string;
+  shellGuestHintLogin: string;
+  shellGuestHintCreate: string;
+  shellGuestHintSetup: string;
+  shellReturnHint: string;
   heroEyebrow: string;
   heroTitleSetup: string;
   heroTitleCreate: string;
@@ -67,6 +74,13 @@ function auth(language: LoginLanguage, key: string, vars?: Record<string, string
 function buildLoginCopy(language: LoginLanguage): LoginCopy {
   return {
     documentTitle: auth(language, 'documentTitle'),
+    shellProductName: language === 'en' ? 'WolfyStock Research OS' : 'WolfyStock 研究工作台',
+    shellProductTagline: language === 'en' ? 'Guest preview remains available while you sign in.' : '登录前仍可回到游客预览继续观察。',
+    shellGuestStatus: language === 'en' ? 'Guest preview ready' : '游客预览已就绪',
+    shellGuestHintLogin: language === 'en' ? 'Sign in to reopen saved research context and personal settings.' : '登录后可继续上次研究现场，并恢复个人偏好。',
+    shellGuestHintCreate: language === 'en' ? 'Create an account to save research context, alerts, and delivery targets.' : '注册后可保存研究上下文、提醒与通知目标。',
+    shellGuestHintSetup: language === 'en' ? 'Finish the initial setup, or return to the guest route to keep exploring public-safe previews.' : '完成初始化后即可启用账号，也可以先返回游客路由继续查看公开预览。',
+    shellReturnHint: language === 'en' ? 'Need the read-only route first?' : '需要先回到只读游客路由？',
     heroEyebrow: auth(language, 'heroEyebrow'),
     heroTitleSetup: auth(language, 'heroTitleSetup'),
     heroTitleCreate: auth(language, 'heroTitleCreate'),
@@ -109,7 +123,7 @@ function buildLoginCopy(language: LoginLanguage): LoginCopy {
     returnToGuest: auth(language, 'returnToGuest'),
     toggleToLogin: auth(language, 'toggleToLogin'),
     toggleToCreate: auth(language, 'toggleToCreate'),
-    forgotPassword: auth(language, 'forgotPassword'),
+    forgotPassword: language === 'en' ? 'Forgot password?' : '忘记密码？',
   };
 }
 
@@ -150,6 +164,11 @@ const LoginPage: React.FC = () => {
   }
 
   const isCreateUserMode = authEnabled && !isAdminBootstrap && !isAuthReenable && createUser;
+  const guestHint = isAdminBootstrap
+    ? copy.shellGuestHintSetup
+    : isCreateUserMode
+      ? copy.shellGuestHintCreate
+      : copy.shellGuestHintLogin;
 
   useEffect(() => {
     document.title = copy.documentTitle;
@@ -200,12 +219,37 @@ const LoginPage: React.FC = () => {
 
       <div className="auth-shell auth-shell--panel-only">
         <section className="auth-panel theme-panel-glass">
+          <div className="flex items-start justify-between gap-4 rounded-[20px] border border-white/10 bg-white/[0.03] px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-white/40">{copy.heroEyebrow}</p>
+              <p className="mt-2 text-sm font-semibold text-white/92">{copy.shellProductName}</p>
+              <p className="mt-1 text-xs leading-6 text-white/55">{copy.shellProductTagline}</p>
+            </div>
+            <span className="inline-flex shrink-0 items-center rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-100/85">
+              {copy.shellGuestStatus}
+            </span>
+          </div>
+
           <div className="auth-panel__header">
             <p className="label-uppercase text-secondary-text">{copy.heroEyebrow}</p>
             <h1 className="auth-panel__title">
               <span>{isAdminBootstrap ? copy.heroTitleSetup : isCreateUserMode ? copy.heroTitleCreate : copy.heroTitleLogin}</span>
             </h1>
             <p className="auth-panel__body">{isAdminBootstrap ? copy.heroBodySetup : isCreateUserMode ? copy.heroBodyCreate : copy.heroBodyLogin}</p>
+            <div className="mt-4 rounded-[18px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] px-4 py-3">
+              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/42">{copy.shellReturnHint}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-white/16 bg-white/[0.06] px-4 text-sm font-semibold text-white transition hover:border-white/24 hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => navigate(guestPath, { replace: true })}
+                  disabled={isSubmitting}
+                >
+                  {copy.returnToGuest}
+                </button>
+                <p className="flex-1 text-xs leading-6 text-white/52">{guestHint}</p>
+              </div>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit} className="auth-form">
@@ -312,14 +356,6 @@ const LoginPage: React.FC = () => {
               </button>
             ) : null}
 
-            <button
-              type="button"
-              className="mt-6 text-xs text-white/30 hover:text-white/60 transition-colors cursor-pointer"
-              onClick={() => navigate(guestPath, { replace: true })}
-              disabled={isSubmitting}
-            >
-              {copy.returnToGuest}
-            </button>
           </form>
         </section>
       </div>
