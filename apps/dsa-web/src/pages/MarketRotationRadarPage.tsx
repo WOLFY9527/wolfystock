@@ -141,6 +141,19 @@ type RotationMatrixStageMeta = {
   key: MarketRotationStage;
   label: string;
 };
+type RotationFamilyView = {
+  familyKey: string;
+  familyName: string;
+  item: MarketRotationFamilyRollupItem;
+  themeCount: number;
+  signalThemeCount: number;
+  averageRotationScore: number | null;
+  averageConfidence: number | null;
+  reasonLabels: string[];
+  preview: string;
+  collapsedByDefault: boolean;
+  hasUsefulSignal: boolean;
+};
 
 const ROTATION_MATRIX_STAGE_ORDER: RotationMatrixStageMeta[] = [
   { key: 'confirmed_rotation', label: '确认轮动' },
@@ -407,6 +420,11 @@ function themeFlowEvidenceLines(signal?: MarketRotationTheme['themeFlowSignal'] 
   ];
 }
 
+function parseRotationMetric(value?: number | string | null): number | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 function resolveRotationFamilyRollup(payload: MarketRotationRadarResponse): MarketRotationFamilyRollupItem[] {
   const summaryRollup = Array.isArray(payload.summary.rotationFamilyRollup) ? payload.summary.rotationFamilyRollup : [];
   if (summaryRollup.length) {
@@ -465,6 +483,106 @@ function themeConfidenceSummary(theme?: MarketRotationTheme): string {
 function themeRelativeStrengthValue(theme?: MarketRotationTheme): number | null {
   const raw = theme?.relativeStrength?.averageRelativeStrengthPercent;
   return Number.isFinite(Number(raw)) ? Number(raw) : null;
+}
+
+function themeHasUsefulFamilySignal(theme?: MarketRotationTheme): boolean {
+  if (!theme || isTaxonomyOnlyTheme(theme)) {
+    return false;
+  }
+  const rotationScore = parseRotationMetric(theme.rotationScore) || 0;
+  const confidence = parseRotationMetric(theme.confidence) || 0;
+  return resolveSignalType(theme) !== 'insufficient_evidence'
+    && resolveEvidenceQuality(theme) !== 'insufficient'
+    && theme.stage !== 'weak_or_no_signal'
+    && (rotationScore > 0 || confidence > 0);
+}
+
+function resolveFamilyThemes(item: MarketRotationFamilyRollupItem, themes: MarketRotationTheme[]): MarketRotationTheme[] {
+  const ids = [...(item.themeIds || []), ...(item.leaderThemeIds || [])];
+  if (!ids.length) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const themeById = new Map(themes.map((theme) => [theme.id, theme]));
+  return ids.reduce<MarketRotationTheme[]>((acc, id) => {
+    const normalizedId = String(id || '').trim();
+    if (!normalizedId || seen.has(normalizedId)) {
+      return acc;
+    }
+    const theme = themeById.get(normalizedId);
+    if (!theme) {
+      return acc;
+    }
+    seen.add(normalizedId);
+    acc.push(theme);
+    return acc;
+  }, []);
+}
+
+function buildRotationFamilyViews(payload: MarketRotationRadarResponse): RotationFamilyView[] {
+  const rollup = resolveRotationFamilyRollup(payload);
+  const themes = payload.themes || [];
+
+  return rollup
+    .map((item, index) => {
+      const familyThemes = resolveFamilyThemes(item, themes);
+      const familyName = String(item.familyName || item.familyId || `家族 ${index + 1}`).trim();
+      const familyKey = item.familyId
+        || item.themeIds?.join('|')
+        || item.leaderThemeIds?.join('|')
+        || familyName;
+      const signalThemeCount = parseRotationMetric(item.signalThemeCount) ?? familyThemes.filter(themeHasUsefulFamilySignal).length;
+      const themeCount = parseRotationMetric(item.themeCount) ?? familyThemes.length;
+      const averageRotationScore = parseRotationMetric(item.averageRotationScore);
+      const averageConfidence = parseRotationMetric(item.averageConfidence);
+      const hasUsefulSignal = familyThemes.some(themeHasUsefulFamilySignal)
+        || signalThemeCount > 0
+        || Boolean(item.themeFlowSignal?.themeFlowState && (averageRotationScore || 0) > 0 && (averageConfidence || 0) > 0);
+      const collapsedByDefault = !hasUsefulSignal && (
+        familyThemes.length
+          ? familyThemes.every((theme) => isTaxonomyOnlyTheme(theme) || resolveEvidenceQuality(theme) === 'insufficient' || theme.stage === 'weak_or_no_signal')
+          : signalThemeCount <= 0 && (averageRotationScore || 0) <= 0 && (averageConfidence || 0) <= 0
+      );
+      return {
+        familyKey,
+        familyName,
+        item,
+        themeCount,
+        signalThemeCount,
+        averageRotationScore,
+        averageConfidence,
+        reasonLabels: themeFlowReasonLabels(item.themeFlowSignal),
+        preview: sanitizeRotationText(
+          item.themeFlowSignal?.explanation,
+          collapsedByDefault
+            ? `${familyName} 当前多为零信号或数据不足，默认折叠保留查阅入口。`
+            : `${familyName} 当前仅保留家族级观察。`,
+        ),
+        collapsedByDefault,
+        hasUsefulSignal,
+      };
+    })
+    .sort((a, b) => {
+      if (a.collapsedByDefault !== b.collapsedByDefault) {
+        return a.collapsedByDefault ? 1 : -1;
+      }
+      if (a.hasUsefulSignal !== b.hasUsefulSignal) {
+        return a.hasUsefulSignal ? -1 : 1;
+      }
+      if (b.signalThemeCount !== a.signalThemeCount) {
+        return b.signalThemeCount - a.signalThemeCount;
+      }
+      if ((b.averageRotationScore || 0) !== (a.averageRotationScore || 0)) {
+        return (b.averageRotationScore || 0) - (a.averageRotationScore || 0);
+      }
+      if ((b.averageConfidence || 0) !== (a.averageConfidence || 0)) {
+        return (b.averageConfidence || 0) - (a.averageConfidence || 0);
+      }
+      if (b.themeCount !== a.themeCount) {
+        return b.themeCount - a.themeCount;
+      }
+      return a.familyName.localeCompare(b.familyName, 'zh-Hans-CN');
+    });
 }
 
 function isObservationTheme(theme?: MarketRotationTheme): theme is MarketRotationTheme {
@@ -1256,10 +1374,11 @@ const ConsumerDisclosure: React.FC<{
   testId: string;
   title: string;
   summary: string;
+  defaultOpen?: boolean;
   className?: string;
   children: React.ReactNode;
-}> = ({ testId, title, summary, className, children }) => {
-  const [open, setOpen] = useState(false);
+}> = ({ testId, title, summary, defaultOpen = false, className, children }) => {
+  const [open, setOpen] = useState(defaultOpen);
 
   return (
     <div
@@ -1287,6 +1406,44 @@ const ConsumerDisclosure: React.FC<{
       </div>
       {open ? <div className="mt-2">{children}</div> : null}
     </div>
+  );
+};
+
+const RotationFamilyRow: React.FC<{ view: RotationFamilyView }> = ({ view }) => {
+  const signal = view.item.themeFlowSignal;
+  const stateLabel = formatThemeFlowState(signal?.themeFlowState);
+  const summary = [
+    stateLabel,
+    `${Math.max(0, view.signalThemeCount)}/${Math.max(view.themeCount, 0)} 个有信号`,
+    view.averageConfidence !== null ? `信号 ${formatThemeFlowConfidence(signal)}` : null,
+    view.averageRotationScore !== null ? `均分 ${Math.round(view.averageRotationScore)}` : null,
+  ].filter(Boolean).join(' · ');
+
+  return (
+    <ConsumerDisclosure
+      testId={`rotation-family-rollup-row-${view.familyKey}`}
+      title={view.familyName}
+      summary={summary || '家族级观察'}
+      className="bg-black/5 px-3 py-2.5"
+    >
+      <div className="grid gap-3 text-[11px] leading-5 text-white/58">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <TerminalChip variant={themeFlowChipVariant(signal?.themeFlowState)}>
+            {stateLabel}
+          </TerminalChip>
+          <TerminalChip variant={view.hasUsefulSignal ? 'info' : 'neutral'}>
+            {view.hasUsefulSignal ? '优先观察' : '低信号'}
+          </TerminalChip>
+          {view.reasonLabels.map((label) => <TerminalChip key={`${view.familyKey}-${label}`}>{label}</TerminalChip>)}
+        </div>
+        <p>{view.preview}</p>
+        <div className="grid gap-1 text-[10px] leading-5 text-white/48">
+          {themeFlowEvidenceLines(signal).map((line, lineIndex) => (
+            <p key={`${view.familyKey}-family-flow-evidence-${lineIndex}`}>{line}</p>
+          ))}
+        </div>
+      </div>
+    </ConsumerDisclosure>
   );
 };
 
@@ -1343,7 +1500,9 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
         : consumerFreshnessLabel(payload.freshness, payload.isFallback, payload.isStale),
     },
   ];
-  const familyRollup = resolveRotationFamilyRollup(payload);
+  const familyViews = buildRotationFamilyViews(payload);
+  const spotlightFamilies = familyViews.filter((view) => !view.collapsedByDefault);
+  const collapsedFamilies = familyViews.filter((view) => view.collapsedByDefault);
 
   return (
     <TerminalPanel
@@ -1377,7 +1536,7 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
         ))}
       </div>
 
-      {familyRollup.length ? (
+      {familyViews.length ? (
         <div
           data-testid="rotation-family-flow-rollup"
           className="mt-4 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3"
@@ -1385,48 +1544,58 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-medium text-white/48">家族流向观察</p>
-              <p className="mt-2 text-[11px] leading-5 text-white/60">优先看家族级轮动方向，信号待确认时只作为走势分化观察。</p>
+              <p className="mt-2 text-[11px] leading-5 text-white/60">首屏优先保留有信号家族；零信号或数据不足家族默认下沉，避免同质化长列表占满首屏。</p>
             </div>
-            <span className="shrink-0 rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/48">摘要优先</span>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <span className="rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/48">摘要优先</span>
+              <span className="rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/48">
+                {spotlightFamilies.length} 个优先观察
+              </span>
+              {collapsedFamilies.length ? (
+                <span className="rounded-md border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/48">
+                  {collapsedFamilies.length} 个默认折叠
+                </span>
+              ) : null}
+            </div>
           </div>
-          <div className="mt-3 max-h-72 overflow-y-auto no-scrollbar">
-            <DenseRows>
-              {familyRollup.map((item, index) => {
-                const signal = item.themeFlowSignal;
-                const familyName = String(item.familyName || item.familyId || `家族 ${index + 1}`).trim();
-                const reasonLabels = themeFlowReasonLabels(signal);
-                const familyKey = item.familyId
-                  || item.themeIds?.join('|')
-                  || item.leaderThemeIds?.join('|')
-                  || familyName;
-                return (
-                  <div key={familyKey} className="px-3 py-3">
+          {spotlightFamilies.length ? (
+            <div className="mt-3 max-h-72 overflow-y-auto no-scrollbar">
+              <DenseRows>
+                {spotlightFamilies.map((view) => (
+                  <RotationFamilyRow key={view.familyKey} view={view} />
+                ))}
+              </DenseRows>
+            </div>
+          ) : (
+            <div className="mt-3 rounded-lg border border-dashed border-white/[0.08] px-3 py-3 text-[11px] leading-5 text-white/52">
+              当前没有需要首屏优先展开的家族，先保留低信号家族的查阅入口。
+            </div>
+          )}
+          {collapsedFamilies.length ? (
+            <ConsumerDisclosure
+              testId="rotation-family-rollup-collapsed"
+              title="查看低信号家族"
+              summary={`${collapsedFamilies.length} 个默认折叠 · 零信号或数据不足优先下沉`}
+              className="mt-3 bg-black/5"
+            >
+              <div className="grid gap-2">
+                {collapsedFamilies.map((view) => (
+                  <div
+                    key={view.familyKey}
+                    data-testid={`rotation-family-rollup-collapsed-row-${view.familyKey}`}
+                    className="rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
+                  >
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <p className="min-w-0 text-sm font-semibold text-white/84">{familyName}</p>
-                      <TerminalChip variant={themeFlowChipVariant(signal?.themeFlowState)}>
-                        {formatThemeFlowState(signal?.themeFlowState)}
-                      </TerminalChip>
-                      <span className="text-[11px] font-medium text-white/58">信号 {formatThemeFlowConfidence(signal)}</span>
+                      <p className="min-w-0 text-sm font-semibold text-white/80">{view.familyName}</p>
+                      <TerminalChip variant="neutral">{formatThemeFlowState(view.item.themeFlowSignal?.themeFlowState)}</TerminalChip>
+                      <span className="text-[10px] text-white/42">{Math.max(0, view.signalThemeCount)}/{Math.max(view.themeCount, 0)} 个有信号</span>
                     </div>
-                    <p className="mt-2 text-[11px] leading-5 text-white/58">
-                      {sanitizeRotationText(signal?.explanation, `${familyName} 当前仅保留家族级观察。`)}
-                    </p>
-                    <div className="mt-2 grid gap-1 text-[10px] leading-5 text-white/48">
-                      {themeFlowEvidenceLines(signal).map((line, lineIndex) => (
-                        <p key={`${familyKey}-family-flow-evidence-${lineIndex}`}>{line}</p>
-                      ))}
-                    </div>
-                    {reasonLabels.length ? (
-                      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] leading-5 text-white/46">
-                        <span className="text-[10px] font-medium text-white/40">观察项</span>
-                        <span>{reasonLabels.join(' / ')}</span>
-                      </div>
-                    ) : null}
+                    <p className="mt-1 text-[11px] leading-5 text-white/56">{view.preview}</p>
                   </div>
-                );
-              })}
-            </DenseRows>
-          </div>
+                ))}
+              </div>
+            </ConsumerDisclosure>
+          ) : null}
         </div>
       ) : null}
 

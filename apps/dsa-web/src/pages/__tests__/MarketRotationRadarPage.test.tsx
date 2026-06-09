@@ -820,6 +820,67 @@ function insufficientEvidenceFixture(): MarketRotationRadarResponse {
   return fixture;
 }
 
+function zeroSignalFamilyFixture(): MarketRotationRadarResponse {
+  const fixture = radarFixture();
+  const zeroSignalTheme: MarketRotationRadarResponse['themes'][number] = {
+    ...fixture.themes[0],
+    id: 'zero_signal_defensive',
+    name: '低信号防御',
+    englishName: 'Defensive Zero Signal',
+    focus: 'provider debug trace',
+    rotationScore: 0,
+    confidence: 0,
+    signalType: 'insufficient_evidence',
+    flowEvidenceType: 'none',
+    flowLanguageAllowed: false,
+    sourceAuthorityAllowed: false,
+    evidenceQuality: 'insufficient',
+    dataGaps: ['true_flow_data_missing', 'source_authority_rejected'],
+    stage: 'weak_or_no_signal',
+    stageExplanation: 'provider cache debug trace',
+    riskLabels: ['stale_or_incomplete_windows'],
+    riskExplanations: ['信号暂未形成。'],
+    relativeStrength: {},
+    volume: { averageRelativeVolume: null, availableMemberCount: 0, label: '待确认' },
+    breadth: {
+      observedMembers: 0,
+      configuredMembers: 3,
+      coveragePercent: 0,
+      percentUp: null,
+      percentOutperformingBenchmark: null,
+    },
+    synchronization: { sameDirectionPercent: null, aboveVwapPercent: null, persistencePercent: null, label: '待确认' },
+    leadership: { leadershipConcentrationPercent: null, broadParticipationPercent: null, topMembers: [] },
+    themeFlowSignal: undefined,
+    evidence: ['provider runtime trace'],
+    alertCandidates: [],
+  };
+  fixture.themes = [fixture.themes[0], zeroSignalTheme];
+  fixture.summary = {
+    ...fixture.summary,
+    rotationFamilyRollup: [
+      ...(fixture.summary.rotationFamilyRollup || []),
+      {
+        familyId: 'defensive_zero',
+        familyName: '低信号防御',
+        themeIds: ['zero_signal_defensive'],
+        themeNames: ['低信号防御'],
+        leaderThemeIds: ['zero_signal_defensive'],
+        themeCount: 1,
+        signalThemeCount: 0,
+        averageRotationScore: 0,
+        averageConfidence: 0,
+        themeFlowSignal: null,
+      },
+    ],
+  };
+  fixture.consumerEvidenceSnapshot = {
+    ...fixture.consumerEvidenceSnapshot,
+    rotationFamilyRollup: fixture.summary.rotationFamilyRollup || [],
+  };
+  return fixture;
+}
+
 function realFlowConfirmedFixture(): MarketRotationRadarResponse {
   const fixture = radarFixture();
   const confirmed: MarketRotationRadarResponse['themes'][number] = {
@@ -956,10 +1017,11 @@ describe('MarketRotationRadarPage', () => {
     expect(familyRollup).toHaveTextContent('家族流向观察');
     expect(familyRollup).toHaveTextContent('AI / 软件');
     expect(familyRollup).toHaveTextContent('领涨观察');
-    expect(familyRollup).toHaveTextContent('信号 68%');
-    expect(familyRollup).toHaveTextContent('领涨主题 AI 应用。');
-    expect(familyRollup).toHaveTextContent('平均相对强弱 +2.80%');
-    expect(familyRollup).toHaveTextContent('观察项');
+    expect(familyRollup).toHaveTextContent('2 个优先观察');
+    const familyRow = screen.getByTestId('rotation-family-rollup-row-ai');
+    expect(familyRow).toHaveTextContent('1/1 个有信号');
+    expect(within(familyRow).getByRole('button', { name: '展开 AI / 软件' })).toHaveAttribute('aria-expanded', 'false');
+    expect(familyRow).not.toHaveTextContent('领涨主题 AI 应用。');
 
     const mechanics = screen.getByTestId('rotation-radar-mechanics-details');
     expect(mechanics).toHaveAttribute('data-terminal-primitive', 'disclosure');
@@ -1080,6 +1142,28 @@ describe('MarketRotationRadarPage', () => {
     expect(familyRollup).toHaveTextContent('防御');
     expect(familyRollup).toHaveTextContent('轮动切换');
     expect(familyRollup.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
+  });
+
+  it('collapses zero-signal families behind a dedicated disclosure by default', async () => {
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(zeroSignalFamilyFixture());
+
+    render(<MarketRotationRadarPage />);
+
+    const familyRollup = await screen.findByTestId('rotation-family-flow-rollup');
+    const collapsedDisclosure = screen.getByTestId('rotation-family-rollup-collapsed');
+    expect(familyRollup).toHaveTextContent('查看低信号家族');
+    expect(collapsedDisclosure).toHaveTextContent('1 个默认折叠');
+    expect(within(collapsedDisclosure).getByRole('button', { name: '展开 查看低信号家族' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('rotation-family-rollup-collapsed-row-defensive_zero')).not.toBeInTheDocument();
+
+    fireEvent.click(within(collapsedDisclosure).getByRole('button', { name: '展开 查看低信号家族' }));
+
+    const collapsedRow = screen.getByTestId('rotation-family-rollup-collapsed-row-defensive_zero');
+    expect(collapsedRow).toHaveTextContent('低信号防御');
+    expect(collapsedRow).toHaveTextContent('0/1 个有信号');
+    expect(collapsedRow).toHaveTextContent('默认折叠保留查阅入口');
+    expect(collapsedRow.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
+    expect(collapsedRow.textContent || '').not.toMatch(forbiddenTradingActionPattern);
   });
 
   it('keeps theme flow observation collapsed by default and consumer-safe when expanded', async () => {
