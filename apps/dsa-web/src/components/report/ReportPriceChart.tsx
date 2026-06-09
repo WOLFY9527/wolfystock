@@ -1001,7 +1001,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
         <div className="theme-chart-legend flex flex-wrap items-center gap-2.5">
           {legendItems.map((item) => (
             <button
-              key={item.label}
+              key={item.key}
               type="button"
               className={cn('theme-chart-legend-item !min-h-[40px] md:!min-h-[34px]', !indicatorVisibility[item.key] && 'opacity-45')}
               onClick={() => setIndicatorVisibility((current) => ({ ...current, [item.key]: !current[item.key] }))}

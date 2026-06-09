@@ -25,6 +25,25 @@ const consumerDiagnosticLeakPattern =
   /alpaca|alpaca_etf_authority_spine|Alpaca SIP|bounded_etf_authority_active|missing_required_windows|ineligible_bounded_etf|entitlement|reasonCodes?|reasonFamilies|sourceAuthorityAllowed|scoreContributionAllowed|observationOnly|local_taxonomy|taxonomy-only|fallback_static|synthetic_fixture|official_public|authorized_licensed_feed|public_proxy|unofficial_proxy|provider|quote provider|提供方运维|数据源设置|原始来源|原因代码|ETF 权威|ETF 代理|权威来源|权威检查|权威可计分|可计分证据|代理缺口|代理过期|代理完整|proxy_quote_missing|proxy_stale|backend|raw_payload|provider_payload|debug|trace/i;
 const consumerMetadataLeakPattern =
   /schema[_\s-]?version|reasonCodes?|sourceAuthorityAllowed|scoreContributionAllowed|providerState|runtime|cache|debug|trace|internal|synthetic|partial_source|raw_payload|provider_payload/i;
+const reactDuplicateKeyPattern = /Encountered two children with the same key/i;
+
+function collectReactDuplicateKeyWarnings() {
+  const messages: string[] = [];
+  const originalError = console.error;
+  const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+    const message = args.map((arg) => String(arg)).join(' ');
+    if (reactDuplicateKeyPattern.test(message)) {
+      messages.push(message);
+      return;
+    }
+    originalError(...args);
+  });
+
+  return {
+    messages,
+    restore: () => spy.mockRestore(),
+  };
+}
 
 type ThemeFlowSignalFixture = NonNullable<NonNullable<MarketRotationRadarResponse['themes'][number]['themeFlowSignal']>> & {
   leadershipEvidence?: string | null;
@@ -1083,6 +1102,37 @@ describe('MarketRotationRadarPage', () => {
     expect(themeFlow).toHaveTextContent('信号待确认');
     expect(themeFlow.textContent || '').not.toMatch(consumerDiagnosticLeakPattern);
     expect(themeFlow.textContent || '').not.toMatch(forbiddenTradingActionPattern);
+  });
+
+  it('does not emit duplicate React keys when theme flow evidence lines share visible text', async () => {
+    const fixture = radarFixture();
+    fixture.themes = fixture.themes.map((theme, index) => (
+      index === 0
+        ? {
+            ...theme,
+            themeFlowSignal: buildThemeFlowSignalFixture({
+              leadershipEvidence: 'sourceAuthorityAllowed provider_state',
+              breadthEvidence: 'reasonCodes cache_runtime',
+              relativeStrengthEvidence: 'debug trace synthetic',
+            }),
+          }
+        : theme
+    ));
+    vi.mocked(marketRotationApi.getRotationRadar).mockResolvedValueOnce(fixture);
+    const duplicateKeyGuard = collectReactDuplicateKeyWarnings();
+
+    try {
+      render(<MarketRotationRadarPage />);
+
+      const detail = await screen.findByTestId('rotation-theme-detail-panel');
+      const themeFlow = within(detail).getByTestId('rotation-theme-flow-signal');
+      fireEvent.click(within(themeFlow).getByRole('button', { name: '展开 查看主题流向观察' }));
+
+      expect(themeFlow).toHaveTextContent('部分轮动数据暂不可用。');
+      expect(duplicateKeyGuard.messages).toEqual([]);
+    } finally {
+      duplicateKeyGuard.restore();
+    }
   });
 
   it('uses observation themes as the primary view when headline gates have no eligible themes', async () => {

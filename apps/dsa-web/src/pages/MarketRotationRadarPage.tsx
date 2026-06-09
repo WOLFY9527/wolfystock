@@ -1412,7 +1412,9 @@ const RotationGuidancePanel: React.FC<{ payload: MarketRotationRadarResponse }> 
                       {sanitizeRotationText(signal?.explanation, `${familyName} 当前仅保留家族级观察。`)}
                     </p>
                     <div className="mt-2 grid gap-1 text-[10px] leading-5 text-white/48">
-                      {themeFlowEvidenceLines(signal).map((line) => <p key={`${familyName}-${line}`}>{line}</p>)}
+                      {themeFlowEvidenceLines(signal).map((line, lineIndex) => (
+                        <p key={`${familyKey}-family-flow-evidence-${lineIndex}`}>{line}</p>
+                      ))}
                     </div>
                     {reasonLabels.length ? (
                       <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] leading-5 text-white/46">
@@ -1740,7 +1742,9 @@ const ThemeDetailPanel: React.FC<{
               <div>
                 <p className="font-semibold text-white/74">支持证据</p>
                 <div className="mt-1 grid gap-1">
-                  {themeFlowEvidenceLines(theme.themeFlowSignal).map((line) => <p key={`${theme.id}-${line}`}>· {line}</p>)}
+                  {themeFlowEvidenceLines(theme.themeFlowSignal).map((line, lineIndex) => (
+                    <p key={`${theme.id}-theme-flow-evidence-${lineIndex}`}>· {line}</p>
+                  ))}
                 </div>
               </div>
               {themeFlowReasonLabels(theme.themeFlowSignal).length ? (

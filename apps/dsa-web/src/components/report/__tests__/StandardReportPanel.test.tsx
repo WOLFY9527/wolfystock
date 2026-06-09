@@ -8,6 +8,25 @@ import { normalizeFrontendReportContract } from '../../../api/reportNormalizer';
 const forbiddenConsumerPanelPattern =
   /理想买入点|次优买入点|止损位|目标位|目标一区|目标二区|仓位建议|Ideal entry|Secondary entry|Stop loss|Target 1|Target 2|Position sizing/i;
 const forbiddenRawStatePattern = /\bmixed\b|INSUFFICIENT|REAL|MIXED|FALLBACK/i;
+const reactDuplicateKeyPattern = /Encountered two children with the same key/i;
+
+function collectReactDuplicateKeyWarnings() {
+  const messages: string[] = [];
+  const originalError = console.error;
+  const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+    const message = args.map((arg) => String(arg)).join(' ');
+    if (reactDuplicateKeyPattern.test(message)) {
+      messages.push(message);
+      return;
+    }
+    originalError(...args);
+  });
+
+  return {
+    messages,
+    restore: () => spy.mockRestore(),
+  };
+}
 
 vi.mock('../../../hooks/useElementSize', () => {
   let callCount = 0;
@@ -420,6 +439,23 @@ describe('StandardReportPanel', () => {
     expect(panel).toHaveTextContent('上方观察区');
     expect(panel).toHaveTextContent('继续跟踪');
     expect(panel).not.toHaveTextContent(forbiddenConsumerPanelPattern);
+  });
+
+  it('does not emit duplicate React keys for translated chart legend labels', async () => {
+    const duplicateKeyGuard = collectReactDuplicateKeyWarnings();
+
+    try {
+      render(<StandardReportPanel report={report} chartFixtures={previewChartFixtures} />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText('会话指标').length).toBeGreaterThan(0);
+      });
+
+      expect(screen.getAllByText('上方观察区').length).toBeGreaterThan(0);
+      expect(duplicateKeyGuard.messages).toEqual([]);
+    } finally {
+      duplicateKeyGuard.restore();
+    }
   });
 
   it('localizes controlled summary values in English mode without changing the report structure', () => {
