@@ -509,11 +509,17 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
 
         out = service.generate_single_stock_report(result)
 
-        self.assertIn("Core Conclusion", out)
+        self.assertIn("Research Conclusion", out)
         self.assertIn("Observation Ranges", out)
         self.assertIn("Neutral Assessment", out)
-        self.assertNotIn("Action Levels", out)
-        self.assertNotIn("Stop Loss", out)
+        self.assertIn(
+            "AI-generated research reference only. Not personalized financial guidance.",
+            out,
+        )
+        self.assertNotRegex(
+            out,
+            r"(?i)\b(core conclusion|decision|buy|sell|hold|entry|stop loss|target price|position sizing)\b",
+        )
 
     @mock.patch("src.notification.get_config")
     def test_history_compare_context_uses_cache(self, mock_get_config: mock.MagicMock):
