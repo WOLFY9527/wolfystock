@@ -341,8 +341,8 @@ test.describe('watchlist user alerts browser smoke', () => {
     await mapper.getByLabel('杠杆倍数 / 方向').fill('2');
     await mapper.getByLabel('正股/指数参考价').fill('100');
     await mapper.getByLabel('ETF 参考价').fill('10');
-    await mapper.getByLabel('正股/指数目标价').fill('110');
-    await mapper.getByLabel('ETF 目标价').fill('11');
+    await mapper.getByLabel('正股/指数情景上沿').fill('110');
+    await mapper.getByLabel('ETF 情景上沿').fill('11');
 
     await expect(mapper.getByTestId('leveraged-etf-forward-output')).toContainText('NVDL');
     await expect(mapper.getByTestId('leveraged-etf-forward-output')).toContainText('12.00');
@@ -445,19 +445,19 @@ test.describe('watchlist user alerts browser smoke', () => {
 
     const catalystExposures = detailRail.getByTestId('watchlist-catalyst-exposures');
     await expandDisclosure(catalystExposures);
-    await expect(catalystExposures).toContainText('Fundamental snapshot exposure');
-    await expect(catalystExposures).toContainText('Stored news catalyst proxy');
-    await expect(catalystExposures).toContainText('Official macro cache/status exposure');
+    await expect(catalystExposures).toContainText('基本面线索');
+    await expect(catalystExposures).toContainText('已保存新闻线索');
+    await expect(catalystExposures).toContainText('宏观背景线索');
     await expect(catalystExposures).not.toContainText('Extra hidden exposure');
-    await expect(catalystExposures).toContainText('仅观察');
-    await expect(catalystExposures).toContainText('延迟快照');
-    await expect(catalystExposures).toContainText('代理线索');
-    await expect(catalystExposures).toContainText('陈旧证据');
+    await expect(catalystExposures).toContainText('仅供观察');
+    await expect(catalystExposures).toContainText('更新延迟');
+    await expect(catalystExposures).toContainText('线索待确认');
+    await expect(catalystExposures).toContainText('较旧线索');
     await expect(catalystExposures).toContainText('时间范围 2026Q2');
     await expect(catalystExposures).toContainText('观察时间');
     await expect(catalystExposures).toContainText('发布时间');
-    await expect(catalystExposures).toContainText('非财报日历主张');
-    await expect(catalystExposures).toContainText('已保存新闻，仅作线索');
+    await expect(catalystExposures).toContainText('日程仍待确认');
+    await expect(catalystExposures).toContainText('仅作线索');
     await expect(catalystExposures).toContainText('仅展示最近保存的线索');
     await expect(catalystExposures).not.toContainText('raw_provider_payload');
     await expect(catalystExposures).not.toContainText('admin_diagnostics');

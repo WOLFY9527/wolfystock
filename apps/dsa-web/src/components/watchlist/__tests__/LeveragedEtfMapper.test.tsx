@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { portfolioApi } from '../../../api/portfolio';
 import { stocksApi } from '../../../api/stocks';
@@ -33,15 +33,19 @@ vi.mock('../../../api/portfolio', () => ({
   },
 }));
 
-function expandMapper() {
-  render(<LeveragedEtfMapper defaultUnderlyingSymbol="NVDA" />);
+function expandMapper(language: 'zh' | 'en' = 'zh') {
+  render(<LeveragedEtfMapper defaultUnderlyingSymbol="NVDA" language={language} />);
   const disclosure = screen.getByTestId('leveraged-etf-mapper');
-  const toggle = within(disclosure).getByRole('button', { name: '展开 杠杆 ETF 映射' });
+  const toggleName = language === 'zh' ? '展开 杠杆 ETF 映射' : '展开 Leveraged ETF Mapper';
+  const expandedName = language === 'zh' ? '收起 杠杆 ETF 映射' : '收起 Leveraged ETF Mapper';
+  const toggle = within(disclosure).getByRole('button', { name: toggleName });
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
   fireEvent.click(toggle);
-  expect(within(disclosure).getByRole('button', { name: '收起 杠杆 ETF 映射' })).toHaveAttribute('aria-expanded', 'true');
+  expect(within(disclosure).getByRole('button', { name: expandedName })).toHaveAttribute('aria-expanded', 'true');
   return disclosure;
 }
+
+const forbiddenLeveragedEtfActionTerms = /目标价|入场|止损|止盈|买入|卖出|加仓|减仓|建仓|target price|\bentry\b|stop loss|take profit/i;
 
 describe('leveragedEtfMapperMath', () => {
   it('calculates the forward ETF estimate from an underlying target', () => {
@@ -78,6 +82,15 @@ describe('leveragedEtfMapperMath', () => {
 });
 
 describe('LeveragedEtfMapper', () => {
+  it('keeps expanded consumer copy free of action-level trading terms', () => {
+    const zhDisclosure = expandMapper();
+    expect(zhDisclosure.innerHTML).not.toMatch(forbiddenLeveragedEtfActionTerms);
+
+    cleanup();
+    const enDisclosure = expandMapper('en');
+    expect(enDisclosure.innerHTML).not.toMatch(forbiddenLeveragedEtfActionTerms);
+  });
+
   it('renders bounded warning copy and calculates both manual scenarios', () => {
     const disclosure = expandMapper();
 
@@ -92,11 +105,11 @@ describe('LeveragedEtfMapper', () => {
     fireEvent.change(screen.getByLabelText('杠杆倍数 / 方向'), { target: { value: '2' } });
     fireEvent.change(screen.getByLabelText('正股/指数参考价'), { target: { value: '100' } });
     fireEvent.change(screen.getByLabelText('ETF 参考价'), { target: { value: '10' } });
-    fireEvent.change(screen.getByLabelText('正股/指数目标价'), { target: { value: '110' } });
-    fireEvent.change(screen.getByLabelText('ETF 目标价'), { target: { value: '11' } });
-    fireEvent.change(screen.getByLabelText('ETF 入场观察价'), { target: { value: '9.5' } });
-    fireEvent.change(screen.getByLabelText('ETF 止损观察价'), { target: { value: '8.5' } });
-    fireEvent.change(screen.getByLabelText('ETF 止盈观察价'), { target: { value: '12' } });
+    fireEvent.change(screen.getByLabelText('正股/指数情景上沿'), { target: { value: '110' } });
+    fireEvent.change(screen.getByLabelText('ETF 情景上沿'), { target: { value: '11' } });
+    fireEvent.change(screen.getByLabelText('ETF 观察区间'), { target: { value: '9.5' } });
+    fireEvent.change(screen.getByLabelText('ETF 风险边界'), { target: { value: '8.5' } });
+    fireEvent.change(screen.getByLabelText('ETF 波动上沿'), { target: { value: '12' } });
 
     expect(screen.getByTestId('leveraged-etf-forward-output')).toHaveTextContent('NVDL');
     expect(screen.getByTestId('leveraged-etf-forward-output')).toHaveTextContent('12.00');
@@ -112,7 +125,7 @@ describe('LeveragedEtfMapper', () => {
     fireEvent.change(screen.getByLabelText('杠杆倍数 / 方向'), { target: { value: '0' } });
     fireEvent.change(screen.getByLabelText('正股/指数参考价'), { target: { value: '-100' } });
     fireEvent.change(screen.getByLabelText('ETF 参考价'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('正股/指数目标价'), { target: { value: '110' } });
+    fireEvent.change(screen.getByLabelText('正股/指数情景上沿'), { target: { value: '110' } });
 
     expect(screen.getByText('杠杆倍数不能为 0。')).toBeInTheDocument();
     expect(screen.getByText('正股/指数参考价必须大于 0。')).toBeInTheDocument();
@@ -128,7 +141,7 @@ describe('LeveragedEtfMapper', () => {
     fireEvent.change(screen.getByLabelText('ETF 代码'), { target: { value: 'TQQQ' } });
     fireEvent.change(screen.getByLabelText('正股/指数参考价'), { target: { value: '450' } });
     fireEvent.change(screen.getByLabelText('ETF 参考价'), { target: { value: '70' } });
-    fireEvent.change(screen.getByLabelText('正股/指数目标价'), { target: { value: '465' } });
+    fireEvent.change(screen.getByLabelText('正股/指数情景上沿'), { target: { value: '465' } });
 
     expect(stocksApi.getQuote).not.toHaveBeenCalled();
     expect(watchlistApi.listWatchlistItems).not.toHaveBeenCalled();
