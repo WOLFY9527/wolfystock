@@ -11,6 +11,7 @@ from typing import Any, Iterable
 from api.v1.schemas.backtest import (
     RuleBacktestCompareResponse,
     RuleBacktestExecutionTraceExportResponse,
+    RuleBacktestOOSParameterReadinessExportResponse,
     RuleBacktestRobustnessEvidenceExportResponse,
     RuleBacktestRunResponse,
     RuleBacktestSupportBundleManifestResponse,
@@ -18,6 +19,7 @@ from api.v1.schemas.backtest import (
     RuleBacktestUniverseJobDiagnostics,
     RuleBacktestUniverseResultsResponse,
 )
+from src.services.rule_backtest_support_exports import build_oos_parameter_readiness_export
 
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "backtest"
@@ -77,6 +79,14 @@ FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS = (
     "auto-tune",
     "grid_search",
     "grid search",
+)
+OOS_PARAMETER_READINESS_FORBIDDEN_SELECTION_TERMS = (
+    "recommended",
+    "selected_strategy",
+    "optimized_parameters",
+    "decision-ready",
+    "portfolio_allocation",
+    "ranking_signal",
 )
 FACTOR_LAB_DIMENSION_STATE_VALUES = {"available", "missing", "ambiguous"}
 FACTOR_LAB_TRACKED_DIMENSIONS = (
@@ -169,6 +179,61 @@ def _assert_no_robustness_optimizer_semantics(value: Any) -> None:
     serialized = json.dumps(value, ensure_ascii=False, sort_keys=True).lower()
     for term in FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS:
         assert term not in serialized
+
+
+def _build_oos_parameter_readiness_fixture_run() -> dict[str, Any]:
+    return {
+        "id": 7001,
+        "code": "000001",
+        "status": "completed",
+        "timeframe": "daily",
+        "period_start": "2024-01-01",
+        "period_end": "2024-01-08",
+        "summary": {
+            "robustness_analysis": {
+                "state": "research_prototype",
+                "source": "summary.robustness_analysis",
+                "configuration": {
+                    "walk_forward": {
+                        "train_window": 4,
+                        "test_window": 2,
+                        "step": 2,
+                        "max_windows": 2,
+                    },
+                },
+                "walk_forward": {
+                    "analysis_mode": "diagnostic_replay",
+                    "window_count": 2,
+                    "windows": [
+                        {
+                            "window_index": 1,
+                            "state": "completed",
+                            "train_start": "2024-01-01",
+                            "train_end": "2024-01-04",
+                            "test_start": "2024-01-05",
+                            "test_end": "2024-01-06",
+                            "metrics": {
+                                "total_return_pct": 1.0,
+                                "max_drawdown_pct": 1.5,
+                                "win_rate_pct": 50.0,
+                                "trade_count": 2,
+                            },
+                        },
+                        {
+                            "window_index": 2,
+                            "state": "no_result",
+                            "train_start": "2024-01-03",
+                            "train_end": "2024-01-06",
+                            "test_start": "2024-01-07",
+                            "test_end": "2024-01-08",
+                            "metrics": {},
+                        },
+                    ],
+                    "diagnostics": ["fixture_walk_forward_diagnostic"],
+                },
+            }
+        },
+    }
 
 
 def _extract_dimension_state(metadata: dict[str, Any], dimension_id: str) -> str | None:
@@ -903,6 +968,101 @@ def test_robustness_evidence_export_fixture_freezes_stored_payload_shape() -> No
     _assert_no_robustness_optimizer_semantics(evidence)
 
 
+def test_oos_parameter_readiness_export_fixture_freezes_stored_first_diagnostic_boundary() -> None:
+    payload = _load_fixture("rule_backtest_oos_parameter_readiness_export.json")
+
+    export = RuleBacktestOOSParameterReadinessExportResponse(**payload).model_dump()
+    projected = RuleBacktestOOSParameterReadinessExportResponse(
+        **build_oos_parameter_readiness_export(_build_oos_parameter_readiness_fixture_run())
+    ).model_dump()
+
+    assert projected == export
+    assert export["export_kind"] == "rule_backtest_oos_parameter_readiness"
+    assert export["version"] == "v1"
+    assert export["source"] == "stored_rule_backtest_support_projection"
+    assert export["read_mode"] == "stored_first"
+    assert export["stored_first"] is True
+    assert export["diagnostic_only"] is True
+    assert export["decision_grade"] is False
+    assert export["overall_state"] == "partial"
+
+    oos_readiness = export["oos_readiness"]
+    oos_evidence = oos_readiness["evidence"]
+    assert oos_readiness["state"] == "partial"
+    assert oos_readiness["source"] == "stored_robustness_analysis.walk_forward"
+    assert oos_readiness["read_mode"] == "stored_first"
+    assert oos_readiness["diagnostic_only"] is True
+    assert oos_readiness["decision_grade"] is False
+    assert oos_evidence["contract_kind"] == "backtest_walk_forward_oos_diagnostic_evidence"
+    assert oos_evidence["read_mode"] == "stored_first"
+    assert oos_evidence["diagnostic_only"] is True
+    assert oos_evidence["decision_grade"] is False
+    assert oos_evidence["oos_result_summary"] == {
+        "state": "partial",
+        "completed_fold_count": 1,
+        "missing_result_fold_count": 1,
+        "metric_keys": ["total_return_pct", "max_drawdown_pct", "win_rate_pct", "trade_count"],
+        "metric_aggregates": {
+            "total_return_pct": {"count": 1, "min": 1.0, "max": 1.0, "mean": 1.0},
+            "max_drawdown_pct": {"count": 1, "min": 1.5, "max": 1.5, "mean": 1.5},
+            "win_rate_pct": {"count": 1, "min": 50.0, "max": 50.0, "mean": 50.0},
+            "trade_count": {"count": 1, "min": 2.0, "max": 2.0, "mean": 2.0},
+        },
+    }
+    assert oos_evidence["coverage"] == {
+        "available_fold_count": 1,
+        "missing_fold_count": 0,
+        "skipped_fold_count": 1,
+        "diagnostics": ["fixture_walk_forward_diagnostic", "fold_2_state_no_result"],
+    }
+    assert oos_evidence["authority"] == {
+        "input_mode": "stored_robustness_analysis_walk_forward",
+        "adapter_execution_count": 0,
+        "new_strategy_execution_count": 0,
+        "provider_calls_executed": False,
+        "engine_math_changed": False,
+        "strategy_parameters_mutated": False,
+        "optimizer_executed": False,
+        "parameter_sweep_executed": False,
+    }
+
+    parameter_readiness = export["parameter_readiness"]
+    assert parameter_readiness == {
+        "state": "unavailable",
+        "source": "compare_summary_unavailable",
+        "read_mode": "stored_first",
+        "projection_source": "stored_first_no_compare_summary",
+        "availability_reason": "stored_compare_summary_missing",
+        "diagnostic_only": True,
+        "decision_grade": False,
+        "evidence": None,
+    }
+    assert export["guardrails"] == {
+        "engine_reexecuted": False,
+        "strategy_execution_count": 0,
+        "optimizer_executed": False,
+        "parameter_sweep_executed": False,
+        "provider_calls_executed": False,
+        "winner_promotion": False,
+        "engine_math_changed": False,
+    }
+    assert export["limitations"] == [
+        "diagnostic_readiness_projection_only",
+        "not_a_runtime_oos_or_parameter_stability_engine",
+        "no_strategy_execution",
+        "no_optimizer_execution",
+        "no_parameter_sweep_execution",
+        "no_winner_promotion",
+        "no_provider_calls",
+    ]
+
+    _assert_no_sensitive_public_payload(export)
+    _assert_no_live_provider_authority(export)
+    serialized = json.dumps(export, ensure_ascii=False, sort_keys=True).lower()
+    for term in OOS_PARAMETER_READINESS_FORBIDDEN_SELECTION_TERMS:
+        assert term not in serialized
+
+
 def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_boundary() -> None:
     export_index = RuleBacktestSupportExportIndexResponse(
         **_load_fixture("rule_backtest_export_index_dto.json")
@@ -1250,6 +1410,7 @@ def test_all_backtest_golden_fixtures_are_sanitized_and_explicitly_enumerated() 
         "rule_backtest_execution_model_v1_metadata.json",
         "rule_backtest_execution_trace_dto.json",
         "rule_backtest_export_index_dto.json",
+        "rule_backtest_oos_parameter_readiness_export.json",
         "rule_backtest_robustness_evidence_dto.json",
         "rule_backtest_result_summary_dto.json",
         "rule_backtest_semantics_freeze_v1.json",

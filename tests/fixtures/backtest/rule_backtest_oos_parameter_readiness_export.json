@@ -1,0 +1,226 @@
+{
+  "export_kind": "rule_backtest_oos_parameter_readiness",
+  "version": "v1",
+  "run_id": 7001,
+  "code": "000001",
+  "status": "completed",
+  "timeframe": "daily",
+  "source": "stored_rule_backtest_support_projection",
+  "read_mode": "stored_first",
+  "stored_first": true,
+  "diagnostic_only": true,
+  "decision_grade": false,
+  "overall_state": "partial",
+  "oos_readiness": {
+    "state": "partial",
+    "evidence_state": "partial",
+    "source": "stored_robustness_analysis.walk_forward",
+    "read_mode": "stored_first",
+    "availability_reason": "stored_walk_forward_oos_evidence_partial",
+    "diagnostic_only": true,
+    "decision_grade": false,
+    "evidence": {
+      "contract_kind": "backtest_walk_forward_oos_diagnostic_evidence",
+      "contract_version": "v1",
+      "state": "partial",
+      "source": "stored_robustness_analysis.walk_forward",
+      "read_mode": "stored_first",
+      "diagnostic_only": true,
+      "decision_grade": false,
+      "source_run_id": 7001,
+      "source_run_ids": [
+        7001
+      ],
+      "configuration": {
+        "train_window": 4,
+        "test_window": 2,
+        "step": 2,
+        "metric_keys": [
+          "total_return_pct",
+          "max_drawdown_pct",
+          "win_rate_pct",
+          "trade_count"
+        ],
+        "window_unit": "bars",
+        "max_windows": 2,
+        "max_folds": 2
+      },
+      "fold_order": [
+        "wf_oos_fold_0001_train_20240101_20240104_test_20240105_20240106",
+        "wf_oos_fold_0002_train_20240103_20240106_test_20240107_20240108"
+      ],
+      "folds": [
+        {
+          "fold_id": "wf_oos_fold_0001_train_20240101_20240104_test_20240105_20240106",
+          "fold_index": 1,
+          "state": "completed",
+          "train_window": {
+            "start_date": "2024-01-01",
+            "end_date": "2024-01-04",
+            "size": 4
+          },
+          "test_window": {
+            "start_date": "2024-01-05",
+            "end_date": "2024-01-06",
+            "size": 2
+          },
+          "metrics": {
+            "total_return_pct": 1.0,
+            "max_drawdown_pct": 1.5,
+            "win_rate_pct": 50.0,
+            "trade_count": 2.0
+          }
+        },
+        {
+          "fold_id": "wf_oos_fold_0002_train_20240103_20240106_test_20240107_20240108",
+          "fold_index": 2,
+          "state": "no_result",
+          "train_window": {
+            "start_date": "2024-01-03",
+            "end_date": "2024-01-06",
+            "size": 4
+          },
+          "test_window": {
+            "start_date": "2024-01-07",
+            "end_date": "2024-01-08",
+            "size": 2
+          },
+          "metrics": {}
+        }
+      ],
+      "fold_results": [
+        {
+          "fold_id": "wf_oos_fold_0001_train_20240101_20240104_test_20240105_20240106",
+          "fold_index": 1,
+          "state": "completed",
+          "train_window": {
+            "start_date": "2024-01-01",
+            "end_date": "2024-01-04",
+            "size": 4
+          },
+          "test_window": {
+            "start_date": "2024-01-05",
+            "end_date": "2024-01-06",
+            "size": 2
+          },
+          "metrics": {
+            "total_return_pct": 1.0,
+            "max_drawdown_pct": 1.5,
+            "win_rate_pct": 50.0,
+            "trade_count": 2.0
+          }
+        },
+        {
+          "fold_id": "wf_oos_fold_0002_train_20240103_20240106_test_20240107_20240108",
+          "fold_index": 2,
+          "state": "no_result",
+          "train_window": {
+            "start_date": "2024-01-03",
+            "end_date": "2024-01-06",
+            "size": 4
+          },
+          "test_window": {
+            "start_date": "2024-01-07",
+            "end_date": "2024-01-08",
+            "size": 2
+          },
+          "metrics": {}
+        }
+      ],
+      "oos_result_summary": {
+        "state": "partial",
+        "completed_fold_count": 1,
+        "missing_result_fold_count": 1,
+        "metric_keys": [
+          "total_return_pct",
+          "max_drawdown_pct",
+          "win_rate_pct",
+          "trade_count"
+        ],
+        "metric_aggregates": {
+          "total_return_pct": {
+            "count": 1,
+            "min": 1.0,
+            "max": 1.0,
+            "mean": 1.0
+          },
+          "max_drawdown_pct": {
+            "count": 1,
+            "min": 1.5,
+            "max": 1.5,
+            "mean": 1.5
+          },
+          "win_rate_pct": {
+            "count": 1,
+            "min": 50.0,
+            "max": 50.0,
+            "mean": 50.0
+          },
+          "trade_count": {
+            "count": 1,
+            "min": 2.0,
+            "max": 2.0,
+            "mean": 2.0
+          }
+        }
+      },
+      "coverage": {
+        "available_fold_count": 1,
+        "missing_fold_count": 0,
+        "skipped_fold_count": 1,
+        "diagnostics": [
+          "fixture_walk_forward_diagnostic",
+          "fold_2_state_no_result"
+        ]
+      },
+      "reproducibility": {
+        "config_hash_sha256": "aeb3145135f063a3615d6f9ae296660a51a7d68e12b66a6a95204107d3228358",
+        "input_ordering": "stored_walk_forward_window_index_ascending",
+        "fold_id_policy": "stable_from_window_bounds",
+        "result_ordering": "fold_index_ascending"
+      },
+      "authority": {
+        "input_mode": "stored_robustness_analysis_walk_forward",
+        "adapter_execution_count": 0,
+        "new_strategy_execution_count": 0,
+        "provider_calls_executed": false,
+        "engine_math_changed": false,
+        "strategy_parameters_mutated": false,
+        "optimizer_executed": false,
+        "parameter_sweep_executed": false
+      },
+      "code": "000001",
+      "timeframe": "daily",
+      "period_start": "2024-01-01",
+      "period_end": "2024-01-08"
+    }
+  },
+  "parameter_readiness": {
+    "state": "unavailable",
+    "source": "compare_summary_unavailable",
+    "read_mode": "stored_first",
+    "projection_source": "stored_first_no_compare_summary",
+    "availability_reason": "stored_compare_summary_missing",
+    "diagnostic_only": true,
+    "decision_grade": false,
+    "evidence": null
+  },
+  "guardrails": {
+    "engine_reexecuted": false,
+    "strategy_execution_count": 0,
+    "optimizer_executed": false,
+    "parameter_sweep_executed": false,
+    "provider_calls_executed": false,
+    "winner_promotion": false,
+    "engine_math_changed": false
+  },
+  "limitations": [
+    "diagnostic_readiness_projection_only",
+    "not_a_runtime_oos_or_parameter_stability_engine",
+    "no_strategy_execution",
+    "no_optimizer_execution",
+    "no_parameter_sweep_execution",
+    "no_winner_promotion",
+    "no_provider_calls"
+  ]
+}
