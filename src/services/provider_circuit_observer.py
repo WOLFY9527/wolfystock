@@ -277,6 +277,52 @@ class ProviderCircuitObserver:
             "market_cache_behavior_changed": False,
         }
 
+    def build_admin_enforcement_projection(
+        self,
+        *,
+        provider: str,
+        provider_category: Optional[str] = None,
+        route_family: Optional[str] = None,
+        controlled_provider_categories: Optional[set[str] | tuple[str, ...] | list[str]] = None,
+        controlled_route_families: Optional[set[str] | tuple[str, ...] | list[str]] = None,
+        now: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        """Project staged admin-only enforcement status without live blocking."""
+        normalized_provider = self.db._normalize_provider_label(provider)
+        normalized_category = self.db._normalize_provider_dimension(provider_category, 64)
+        normalized_route = self.db._normalize_provider_dimension(route_family, 64)
+        state = self.db.get_provider_circuit_state(
+            provider=normalized_provider,
+            provider_category=normalized_category,
+            route_family=normalized_route,
+        )
+        state_name = str((state or {}).get("state") or "closed")
+        reason_bucket = (state or {}).get("reason_bucket")
+        would_block_if_enforced = state_name in self._BLOCKING_STATES and self._cooldown_allows_block(state, now=now)
+        scope_matched = self._controlled_scope_matches(
+            provider_category=normalized_category,
+            route_family=normalized_route,
+            controlled_provider_categories=controlled_provider_categories,
+            controlled_route_families=controlled_route_families,
+        )
+
+        return {
+            "provider": normalized_provider,
+            "provider_category": normalized_category,
+            "route_family": normalized_route,
+            "circuit_state": state_name,
+            "scope_matched": scope_matched,
+            "live_enforcement": False,
+            "would_block_call": False,
+            "would_block_if_enforced": would_block_if_enforced,
+            "enforcement_block_reason_code": reason_bucket if would_block_if_enforced else None,
+            "would_change_provider_order": False,
+            "would_change_fallback_behavior": False,
+            "no_external_calls": True,
+            "provider_behavior_changed": False,
+            "market_cache_behavior_changed": False,
+        }
+
     def build_sla_readiness_diagnostics(
         self,
         *,
@@ -286,6 +332,8 @@ class ProviderCircuitObserver:
         observed_since: Optional[datetime] = None,
         now: Optional[datetime] = None,
         limit: int = 50,
+        controlled_provider_categories: Optional[set[str] | tuple[str, ...] | list[str]] = None,
+        controlled_route_families: Optional[set[str] | tuple[str, ...] | list[str]] = None,
     ) -> Dict[str, Any]:
         """Summarize stored provider observations for launch planning only."""
         safe_limit = max(1, min(int(limit or 50), 200))
@@ -336,6 +384,30 @@ class ProviderCircuitObserver:
         )
         advisory_bucket = recent_errors[0]["reasonBucket"] if recent_errors else "success"
         preflight = self.classify_preflight_state(result_bucket=advisory_bucket)
+        projection = self.build_admin_enforcement_projection(
+            provider=normalized_provider,
+            provider_category=normalized_category,
+            route_family=normalized_route,
+            controlled_provider_categories=controlled_provider_categories,
+            controlled_route_families=controlled_route_families,
+            now=reference_time,
+        )
+        preflight.update(
+            {
+                "scope_matched": projection["scope_matched"],
+                "live_enforcement": False,
+                "would_block_call": False,
+                "would_block_if_enforced": bool(
+                    preflight["would_block_if_enforced"] or projection["would_block_if_enforced"]
+                ),
+                "enforcement_block_reason_code": (
+                    projection["enforcement_block_reason_code"]
+                    or preflight["enforcement_block_reason_code"]
+                ),
+                "would_change_provider_order": False,
+                "would_change_fallback_behavior": False,
+            }
+        )
 
         return {
             "provider": normalized_provider,

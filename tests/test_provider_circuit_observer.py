@@ -344,7 +344,7 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
         self.assertFalse(decision["would_change_fallback_behavior"])
         self.assertTrue(decision["no_external_calls"])
 
-    def test_controlled_enforcement_requires_explicit_matching_scope(self) -> None:
+    def test_admin_enforcement_projection_requires_explicit_matching_scope(self) -> None:
         self.db.transition_provider_circuit_state(
             provider="tradier",
             provider_category="options",
@@ -354,25 +354,22 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
             now=datetime(2026, 5, 6, 15, 0, 0),
         )
 
-        decision = self.observer.build_controlled_enforcement_decision(
+        decision = self.observer.build_admin_enforcement_projection(
             provider="tradier",
             provider_category="options",
             route_family="options_lab",
-            controlled_enforcement_enabled=True,
             controlled_provider_categories=("options",),
             controlled_route_families=("analysis",),
             now=datetime(2026, 5, 6, 15, 30, 0),
         )
 
-        self.assertEqual(decision["controlled_enforcement_status"], "scope_not_enabled")
-        self.assertTrue(decision["controlled_enforcement_enabled"])
-        self.assertFalse(decision["controlled_scope_matched"])
+        self.assertFalse(decision["scope_matched"])
         self.assertFalse(decision["live_enforcement"])
         self.assertFalse(decision["would_block_call"])
         self.assertTrue(decision["would_block_if_enforced"])
         self.assertEqual(decision["enforcement_block_reason_code"], "provider_429")
 
-    def test_controlled_enforcement_enabled_for_scoped_block_returns_enforceable_decision_only(self) -> None:
+    def test_admin_enforcement_projection_for_scoped_block_returns_advisory_only(self) -> None:
         self.db.transition_provider_circuit_state(
             provider="tradier",
             provider_category="options",
@@ -383,21 +380,18 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
         )
 
         with patch("requests.sessions.Session.request") as request_mock:
-            decision = self.observer.build_controlled_enforcement_decision(
+            decision = self.observer.build_admin_enforcement_projection(
                 provider="tradier",
                 provider_category="options",
                 route_family="options_lab",
-                controlled_enforcement_enabled=True,
                 controlled_provider_categories=("options",),
                 controlled_route_families=("options_lab",),
                 now=datetime(2026, 5, 6, 15, 30, 0),
             )
 
-        self.assertEqual(decision["controlled_enforcement_status"], "blocked")
-        self.assertTrue(decision["controlled_enforcement_enabled"])
-        self.assertTrue(decision["controlled_scope_matched"])
-        self.assertTrue(decision["live_enforcement"])
-        self.assertTrue(decision["would_block_call"])
+        self.assertTrue(decision["scope_matched"])
+        self.assertFalse(decision["live_enforcement"])
+        self.assertFalse(decision["would_block_call"])
         self.assertTrue(decision["would_block_if_enforced"])
         self.assertEqual(decision["enforcement_block_reason_code"], "auth_or_key_invalid")
         self.assertFalse(decision["would_change_provider_order"])
@@ -405,6 +399,42 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
         self.assertFalse(decision["provider_behavior_changed"])
         self.assertFalse(decision["market_cache_behavior_changed"])
         request_mock.assert_not_called()
+
+    def test_sla_readiness_projection_marks_matching_scope_without_live_block(self) -> None:
+        with patch("requests.sessions.Session.request") as request_mock:
+            self.observer.record_observation(
+                provider="tradier",
+                provider_category="options",
+                route_family="options_lab",
+                result_bucket="auth_or_key_invalid",
+                observed_at=datetime(2026, 5, 6, 15, 0, 0),
+                metadata={
+                    "safe_label": "projection",
+                    "request_body": "must-not-leak",
+                    "stack_trace": "Traceback must-not-leak",
+                },
+            )
+            diagnostics = self.observer.build_sla_readiness_diagnostics(
+                provider="tradier",
+                provider_category="options",
+                route_family="options_lab",
+                now=datetime(2026, 5, 6, 15, 30, 0),
+                controlled_provider_categories=("options",),
+                controlled_route_families=("options_lab",),
+            )
+
+        projection = diagnostics["circuitPreflight"]
+        self.assertTrue(projection["scope_matched"])
+        self.assertFalse(projection["live_enforcement"])
+        self.assertFalse(projection["would_block_call"])
+        self.assertTrue(projection["would_block_if_enforced"])
+        self.assertEqual(projection["enforcement_block_reason_code"], "auth_or_key_invalid")
+        self.assertTrue(diagnostics["noExternalCalls"])
+        self.assertFalse(diagnostics["liveEnforcement"])
+        request_mock.assert_not_called()
+        text = str(diagnostics).lower()
+        for blocked in ("must-not-leak", "request_body", "stack_trace", "traceback"):
+            self.assertNotIn(blocked, text)
 
     def test_controlled_enforcement_decision_does_not_mutate_circuit_rows_when_disabled(self) -> None:
         self.db.transition_provider_circuit_state(

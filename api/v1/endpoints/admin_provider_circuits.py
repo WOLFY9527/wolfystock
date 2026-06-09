@@ -52,6 +52,8 @@ _REDACTION_NOTES = [
 ]
 _OPTIONS_PROVIDER_CATEGORY = "options"
 _OPTIONS_ROUTE_FAMILY = "options_lab"
+_STAGED_PROVIDER_CIRCUIT_CATEGORIES = (_OPTIONS_PROVIDER_CATEGORY,)
+_STAGED_PROVIDER_CIRCUIT_ROUTE_FAMILIES = (_OPTIONS_ROUTE_FAMILY,)
 
 
 def _safe_limit(value: int | None) -> int:
@@ -229,6 +231,7 @@ def _sla_item_from_diagnostics(
         ),
         circuitAdvisoryState=str(circuit.get("preflight_state") or "healthy"),
         circuitStateCandidate=str(circuit.get("state_candidate") or "closed"),
+        scopeMatched=bool(circuit.get("scope_matched") is True),
         liveEnforcement=False,
         wouldBlockCall=False,
         wouldBlockIfEnforced=bool(circuit.get("would_block_if_enforced") is True),
@@ -466,6 +469,8 @@ def get_provider_sla_readiness(
                 route_family=_OPTIONS_ROUTE_FAMILY,
                 observed_since=since_dt,
                 limit=safe_limit,
+                controlled_provider_categories=_STAGED_PROVIDER_CIRCUIT_CATEGORIES,
+                controlled_route_families=_STAGED_PROVIDER_CIRCUIT_ROUTE_FAMILIES,
             )
             items.append(_sla_item_from_diagnostics(diagnostics, preflight=preflight))
 
@@ -485,6 +490,8 @@ def get_provider_sla_readiness(
             route_family=observed_route,
             observed_since=since_dt,
             limit=safe_limit,
+            controlled_provider_categories=_STAGED_PROVIDER_CIRCUIT_CATEGORIES,
+            controlled_route_families=_STAGED_PROVIDER_CIRCUIT_ROUTE_FAMILIES,
         )
         items.append(_sla_item_from_diagnostics(diagnostics))
 

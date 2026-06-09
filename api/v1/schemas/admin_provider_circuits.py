@@ -118,6 +118,7 @@ class ProviderSlaReadinessItem(_AdminProviderCircuitModel):
     trend_summary: ProviderSlaTrendSummaryItem = Field(default_factory=ProviderSlaTrendSummaryItem, alias="trendSummary")
     circuit_advisory_state: str = Field(default="healthy", alias="circuitAdvisoryState")
     circuit_state_candidate: str = Field(default="closed", alias="circuitStateCandidate")
+    scope_matched: bool = Field(default=False, alias="scopeMatched")
     live_enforcement: bool = Field(default=False, alias="liveEnforcement")
     would_block_call: bool = Field(default=False, alias="wouldBlockCall")
     would_block_if_enforced: bool = Field(default=False, alias="wouldBlockIfEnforced")

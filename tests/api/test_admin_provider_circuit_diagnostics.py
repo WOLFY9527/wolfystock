@@ -474,6 +474,7 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertEqual(fmp["trendSummary"]["latestObservationAt"], "2026-05-06T10:15:00")
         self.assertEqual(fmp["credentialState"], "unknown")
         self.assertEqual(fmp["circuitAdvisoryState"], "open_candidate")
+        self.assertFalse(fmp["scopeMatched"])
         self.assertFalse(fmp["liveEnforcement"])
         self.assertFalse(fmp["wouldBlockCall"])
         self.assertTrue(fmp["wouldBlockIfEnforced"])
@@ -611,10 +612,61 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertTrue(item["wouldBlockIfEnforced"])
         self.assertEqual(item["enforcementBlockReasonCode"], "auth_or_key_invalid")
         self.assertEqual(item["circuitAdvisoryState"], "degraded")
+        self.assertTrue(item["scopeMatched"])
         self.assertFalse(item["wouldChangeProviderOrder"])
         self.assertFalse(item["wouldChangeFallbackBehavior"])
         text = self._json_text(response.json()).lower()
         for blocked in ("api_key", "api token", "token", "secret", "password", "placeholder"):
+            self.assertNotIn(blocked, text)
+
+    def test_sla_readiness_endpoint_projects_scoped_block_without_live_enforcement_or_side_effects(self) -> None:
+        self._as_provider_read_admin()
+        self.db.transition_provider_circuit_state(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="open",
+            reason_bucket="timeout",
+            cooldown_until=datetime(2026, 5, 6, 11, 0, 0),
+            metadata={
+                "safe_label": "projection",
+                "url": "https://provider.example.test/raw?api_key=must-not-leak",
+                "headers": "must-not-leak",
+                "stack_trace": "Traceback must-not-leak",
+            },
+            now=datetime(2026, 5, 6, 10, 30, 0),
+        )
+
+        def forbidden(*_args, **_kwargs):
+            raise AssertionError("admin projection must not call provider/cache/llm paths")
+
+        with (
+            patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
+            patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
+            patch("src.services.scanner_ai_service.ScannerAiInterpretationService.interpret_shortlist", side_effect=forbidden),
+            patch("requests.sessions.Session.request", side_effect=forbidden),
+        ):
+            response = self.client.get(
+                "/api/v1/admin/providers/sla-readiness",
+                params={"provider": "tradier", "since": "2026-05-06T00:00:00"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        item = payload["items"][0]
+        self.assertEqual(item["provider"], "tradier")
+        self.assertEqual(item["providerCategory"], "options")
+        self.assertEqual(item["routeFamily"], "options_lab")
+        self.assertTrue(item["scopeMatched"])
+        self.assertFalse(item["liveEnforcement"])
+        self.assertFalse(item["wouldBlockCall"])
+        self.assertTrue(item["wouldBlockIfEnforced"])
+        self.assertEqual(item["enforcementBlockReasonCode"], "timeout")
+        self.assertFalse(item["providerBehaviorChanged"])
+        self.assertFalse(item["marketCacheBehaviorChanged"])
+        self.assertTrue(item["noExternalCalls"])
+        text = self._json_text(payload).lower()
+        for blocked in ("must-not-leak", "https://provider.example", "traceback must-not-leak"):
             self.assertNotIn(blocked, text)
 
     def test_sla_readiness_diagnostics_do_not_mutate_state_or_send_notifications(self) -> None:
