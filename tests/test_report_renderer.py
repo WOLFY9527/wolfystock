@@ -31,6 +31,21 @@ FORBIDDEN_OBSERVATION_RENDER_TERMS = (
     "建仓策略",
 )
 
+FORBIDDEN_ENGLISH_ACTION_RENDER_TERMS = (
+    "Open a starter position",
+    "Hold and trail the stop",
+    "Buy",
+    "Decision Dashboard",
+    "Decision Summary",
+    "Stock Analysis Report",
+    "Ideal buy",
+    "Stop loss",
+    "target price",
+    "position sizing",
+    "battle plan",
+    "sniper",
+)
+
 
 def _make_result(
     *,
@@ -154,11 +169,12 @@ class TestReportRenderer(unittest.TestCase):
         out = render("markdown", [_make_result()], summary_only=False)
         self.assertIsNotNone(out)
         assert out is not None
-        self.assertIn("### Decision Summary", out)
+        self.assertIn("### Research Summary", out)
         self.assertIn("### Observation Plan", out)
         self.assertIn("### Evidence", out)
         self.assertIn("#### Risks & Catalysts", out)
         self.assertIn("### Coverage / Audit", out)
+        self.assertNotIn("### Decision Summary", out)
 
     def test_channel_summary_drives_brief_and_discord_rendering(self) -> None:
         result = _make_result()
@@ -1234,7 +1250,8 @@ class TestReportRenderer(unittest.TestCase):
         out = render("markdown", [_make_result()], summary_only=True)
         self.assertIsNotNone(out)
         assert out is not None
-        self.assertIn("分析结果摘要", out)
+        self.assertIn("研究摘要", out)
+        self.assertNotIn("分析结果摘要", out)
         self.assertNotIn("### Top Overview", out)
 
     def test_english_report_uses_english_title_labels(self) -> None:
@@ -1242,8 +1259,10 @@ class TestReportRenderer(unittest.TestCase):
         out = render("markdown", [r], summary_only=True)
         self.assertIsNotNone(out)
         assert out is not None
-        self.assertIn("Decision Dashboard", out)
-        self.assertIn("Stock Analysis Report", out)
+        self.assertIn("Research Observation Dashboard", out)
+        self.assertIn("Stock Research Observation Report", out)
+        for forbidden in FORBIDDEN_ENGLISH_ACTION_RENDER_TERMS:
+            self.assertNotIn(forbidden, out, forbidden)
 
 
 if __name__ == "__main__":

@@ -1090,13 +1090,32 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         markdown = HistoryService(self.db).get_markdown_report(str(record_id))
 
         self.assertIsNotNone(markdown)
-        self.assertIn("Stock Analysis Report", markdown)
-        self.assertIn("Decision Summary", markdown)
+        self.assertIn("Stock Research Observation Report", markdown)
+        self.assertIn("Research Summary", markdown)
+        self.assertIn("Observation Plan", markdown)
         self.assertIn("Score / Observation / Trend", markdown)
         self.assertIn("News Published (BJT)", markdown)
         self.assertNotIn("新闻发布时间（北京时间）", markdown)
         self.assertIn("Unnamed Stock (AAPL)", markdown)
-        self.assertIn("Decision Dashboard", markdown)
+        self.assertIn("Research Observation Dashboard", markdown)
+        self.assertIn("Continue observing until the research packet is complete.", markdown)
+        self.assertIn("Continue tracking the risk boundary.", markdown)
+        forbidden_markdown_terms = (
+            "Open a starter position",
+            "Hold and trail the stop",
+            "Buy",
+            "Decision Dashboard",
+            "Decision Summary",
+            "Stock Analysis Report",
+            "Ideal buy",
+            "Stop loss",
+            "target price",
+            "position sizing",
+            "battle plan",
+            "sniper",
+        )
+        for term in forbidden_markdown_terms:
+            self.assertNotIn(term, markdown, term)
 
     def test_history_detail_localizes_english_summary_fields(self) -> None:
         """History detail should localize summary enums for English reports."""
@@ -1135,7 +1154,8 @@ class AnalysisHistoryTestCase(unittest.TestCase):
 
         self.assertEqual(report.meta.report_language, "en")
         self.assertEqual(report.meta.stock_name, "Unnamed Stock")
-        self.assertEqual(report.summary.operation_advice, "Buy")
+        self.assertEqual(report.summary.operation_advice, "Positive observation")
+        self.assertNotIn("Buy", report.summary.operation_advice)
         self.assertEqual(report.summary.trend_prediction, "Bullish")
         self.assertEqual(report.summary.sentiment_label, "Bullish")
 

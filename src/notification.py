@@ -144,6 +144,8 @@ _NOTIFICATION_VISIBLE_REGEX_REPLACEMENTS = tuple(
     for pattern, replacement in (
         (r"\bnot\s+investment\s+advice\b", "not personalized financial guidance"),
         (r"\binvestment\s+advice\b", "personalized financial guidance"),
+        (r"\bopen\s+a\s+starter\s+position\.?", "Continue observing until the research packet is complete."),
+        (r"\bhold\s+and\s+trail\s+the\s+stop\.?", "Continue tracking the risk boundary."),
         (r"\bstrong\s+buy\b", "High Assessment"),
         (r"\bstrong\s+sell\b", "Low Assessment"),
         (r"\bstop[\s-]?loss\b", "Risk Control Reference"),

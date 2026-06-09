@@ -97,6 +97,8 @@ _VISIBLE_COPY_REPLACEMENTS = (
     ("建仓", "关注变化"),
 )
 _VISIBLE_COPY_REGEX_REPLACEMENTS = (
+    (re.compile(r"\bopen\s+a\s+starter\s+position\.?", re.IGNORECASE), "Continue observing until the research packet is complete."),
+    (re.compile(r"\bhold\s+and\s+trail\s+the\s+stop\.?", re.IGNORECASE), "Continue tracking the risk boundary."),
     (re.compile(r"\bstop[\s-]?loss\b", re.IGNORECASE), "Risk Boundary"),
     (re.compile(r"\btake[\s-]?profit\b", re.IGNORECASE), "Upper Observation"),
     (re.compile(r"\btarget\s+price\b", re.IGNORECASE), "Upper Observation"),

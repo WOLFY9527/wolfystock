@@ -444,6 +444,8 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         self.assertIn("Observation Ranges", out)
         self.assertIn("Positive Assessment", out)
         self.assertNotIn("Action Levels", out)
+        self.assertNotIn("Open a starter position", out)
+        self.assertNotIn("Hold and trail the stop", out)
         self.assertNotIn("Buy", out)
         self.assertNotIn("Stop Loss", out)
 
