@@ -13,6 +13,7 @@ const internalEvidenceCoveragePattern =
   /provider_timeout|sourceauthority|source_authority|fallbackorproxy|fallback_or_proxy|router|cache|credential|providerroute|partial_coverage|coverage_not_assembled|env/i;
 const optionsGateSummaryLeakPattern =
   /raw|internal|debug|provider|cache|router|env|sourceAuthority|providerRoute|provider_timeout/i;
+const marketOverviewProxyLabelPattern = /ETF flow proxy|Institutional pressure proxy|Industry breadth proxy|\bproxy\b/i;
 const forbiddenUnsafeTradingPattern =
   /买入按钮|立即交易|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy|must buy|must sell|buy now|sell now|place order|you should buy|you should sell/i;
 
@@ -1189,7 +1190,16 @@ appTest.describe('consumer research readiness browser acceptance', () => {
       await appExpect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
       await expectRootNonEmpty(page);
       await expectNoHorizontalOverflow(page);
-      await expectSafeReadinessStrip(page, 'market-overview-research-readiness-strip');
+      const decisionReadiness = page.getByTestId('market-overview-decision-readiness');
+      await appExpect(decisionReadiness).toBeVisible({ timeout: 15_000 });
+      await appExpect(decisionReadiness).toContainText(/方向仅供观察|暂不形成方向结论|等待数据完成后再判断/);
+      await appExpect(decisionReadiness).toContainText(/部分可参考|等待数据|可判断/);
+      await appExpect(decisionReadiness).not.toContainText(rawLeakPattern);
+      await appExpect(decisionReadiness).not.toContainText(marketOverviewProxyLabelPattern);
+      await appExpect(page.getByTestId('market-overview-research-readiness-strip')).toHaveCount(0);
+      await appExpect(page.getByTestId('market-decision-semantics-advice-boundary')).toContainText(
+        /方向仅供观察|仅观察|暂不形成方向结论|等待数据完成后再判断/,
+      );
       expect(consoleErrors).toEqual([]);
       expect(unhandledApiRoutes).toEqual([]);
     }
@@ -1318,18 +1328,18 @@ appTest.describe('Options Lab readiness browser acceptance', () => {
       await appExpect(scenarioEvidence).toContainText('价差：人工复核');
       await appExpect(scenarioEvidence).toContainText('假设摘要');
       await appExpect(scenarioEvidence).toContainText('当前来自判断回执');
-      await appExpect(scenarioEvidence).toContainText('方向：上涨情景');
-      await appExpect(scenarioEvidence).toContainText('目标价：$65.00');
+      await appExpect(scenarioEvidence).toContainText('方向：上行情景假设');
+      await appExpect(scenarioEvidence).toContainText('假设价格：$65.00');
       await appExpect(scenarioEvidence).toContainText('目标日：2026-08-21');
       await appExpect(scenarioEvidence).toContainText('收益证据');
       await appExpect(scenarioEvidence).toContainText('预期波动：$5.20');
       await appExpect(scenarioEvidence).toContainText('预期波动幅度：9.9%');
-      await appExpect(scenarioEvidence).toContainText('目标情景收益：$577.00');
+      await appExpect(scenarioEvidence).toContainText('假设价格下情景估算：$577.00');
       await appExpect(scenarioEvidence).toContainText('波动来源：平值跨式中间价');
       await appExpect(scenarioEvidence).toContainText('风险证据');
       await appExpect(scenarioEvidence).toContainText('权利金风险：$230.00');
       await appExpect(scenarioEvidence).toContainText('最大亏损：$230.00');
-      await appExpect(scenarioEvidence).toContainText('最大收益：$500.00');
+      await appExpect(scenarioEvidence).toContainText('情景上沿：$500.00');
       await appExpect(scenarioEvidence).toContainText('盈亏平衡：$57.30');
       await appExpect(scenarioEvidence).toContainText('缺失证据');
       await appExpect(scenarioEvidence).toContainText('授权链路待补证');
