@@ -126,11 +126,13 @@ describe('Shell', () => {
     expect(screen.queryByRole('button', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '决策台' })).not.toBeInTheDocument();
-    expect(document.querySelector('.shell-content-frame')).toHaveClass('shell-content-frame--wide');
+    expect(document.querySelector('.theme-shell')).toHaveClass('theme-shell--consumer', 'theme-shell--page-scroll');
+    expect(document.querySelector('.shell-content-frame')).toHaveClass('shell-content-frame--wide', 'shell-content-frame--consumer', 'shell-content-frame--page-scroll');
     expect(document.querySelector('.shell-content-frame--chat')).toBeNull();
-    expect(document.querySelector('.shell-main-column')).toHaveClass('px-6', 'pt-6', 'pb-12', 'md:px-8', 'xl:px-12');
+    expect(document.querySelector('.shell-main-column')).toHaveClass('p-0', 'shell-main-column--consumer', 'shell-main-column--page-scroll');
     expect(document.querySelector('.shell-main-column--chat')).toBeNull();
-    expect(document.querySelector('.theme-page-transition')).toHaveClass('h-full', 'min-h-0');
+    expect(document.querySelector('.theme-page-transition')).toHaveClass('min-h-0', 'theme-page-transition--page-scroll');
+    expect(document.querySelector('.theme-page-transition')).not.toHaveClass('h-full');
     expect(document.querySelector('.theme-page-transition--chat')).toBeNull();
   });
 
@@ -565,14 +567,20 @@ describe('Shell', () => {
     );
 
     expect(document.querySelector('.theme-shell--scanner')).not.toBeNull();
+    expect(document.querySelector('.theme-shell--consumer')).not.toBeNull();
+    expect(document.querySelector('.theme-shell--page-scroll')).not.toBeNull();
     expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--scanner')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--consumer')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--page-scroll')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame')).toHaveClass('flex', 'w-full', 'min-w-0');
     expect(document.querySelector('.shell-main-column--scanner')).not.toBeNull();
-    expect(document.querySelector('.shell-main-column')).toHaveClass('relative', 'w-full', 'min-w-0', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12');
+    expect(document.querySelector('.shell-main-column')).toHaveClass('relative', 'w-full', 'min-w-0', 'p-0', 'shell-main-column--consumer', 'shell-main-column--page-scroll');
     expect(document.documentElement.dataset.scannerShell).toBe('true');
     expect(document.body.dataset.scannerShell).toBe('true');
+    expect(document.documentElement.dataset.pageScrollShell).toBe('true');
+    expect(document.body.dataset.pageScrollShell).toBe('true');
   });
 
   it('adds wide-shell modifiers for the home route without enabling backtest mode', () => {
@@ -587,11 +595,14 @@ describe('Shell', () => {
     );
 
     expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
+    expect(document.querySelector('.theme-shell--consumer')).not.toBeNull();
     expect(document.querySelector('.theme-shell--home')).not.toBeNull();
     expect(document.querySelector('.theme-shell--page-scroll')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--consumer')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--home')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--page-scroll')).not.toBeNull();
+    expect(document.querySelector('.shell-main-column--consumer')).not.toBeNull();
     expect(document.querySelector('.shell-main-column--home')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--backtest')).toBeNull();
   });
@@ -608,12 +619,18 @@ describe('Shell', () => {
     );
 
     expect(document.querySelector('.theme-shell--market-overview')).not.toBeNull();
+    expect(document.querySelector('.theme-shell--consumer')).not.toBeNull();
+    expect(document.querySelector('.theme-shell--page-scroll')).not.toBeNull();
     expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--consumer')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--page-scroll')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
-    expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'flex-1', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12');
+    expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'flex-1', 'p-0', 'shell-main-column--consumer', 'shell-main-column--page-scroll');
     expect(document.querySelector('.shell-main-column')).not.toHaveClass('mx-auto', 'max-w-[1600px]');
     expect(document.documentElement.dataset.marketOverviewShell).toBe('true');
     expect(document.body.dataset.marketOverviewShell).toBe('true');
+    expect(document.documentElement.dataset.pageScrollShell).toBe('true');
+    expect(document.body.dataset.pageScrollShell).toBe('true');
   });
 
   it('uses the full-width workspace lane for the localized watchlist route', () => {
@@ -630,8 +647,12 @@ describe('Shell', () => {
     const primaryNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.watchlist') })).toHaveClass('is-active');
     expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
+    expect(document.querySelector('.theme-shell--consumer')).not.toBeNull();
+    expect(document.querySelector('.theme-shell--page-scroll')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--consumer')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--page-scroll')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
-    expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'flex-1', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12');
+    expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'flex-1', 'p-0', 'shell-main-column--consumer', 'shell-main-column--page-scroll');
     expect(document.querySelector('.shell-content-frame--scanner')).toBeNull();
     expect(document.querySelector('.theme-shell--market-overview')).toBeNull();
     expect(document.querySelector('.shell-content-frame--backtest')).toBeNull();
@@ -726,10 +747,14 @@ describe('Shell', () => {
     );
 
     expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
+    expect(document.querySelector('.theme-shell--consumer')).not.toBeNull();
+    expect(document.querySelector('.theme-shell--page-scroll')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--backtest')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--consumer')).not.toBeNull();
+    expect(document.querySelector('.shell-content-frame--page-scroll')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame')).toHaveClass('flex', 'w-full', 'min-w-0');
-    expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'flex-1', 'px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12');
+    expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'flex-1', 'p-0', 'shell-main-column--consumer', 'shell-main-column--page-scroll');
     expect(document.querySelector('.shell-main-column')).not.toHaveClass('mx-auto', 'max-w-[1600px]');
   });
 
@@ -747,7 +772,9 @@ describe('Shell', () => {
     expect(document.querySelector('.shell-masthead')).toHaveClass('w-full');
     expect(document.querySelector('.shell-masthead__inner')).toHaveClass('w-full');
     expect(document.querySelector('.theme-shell')).toHaveClass('min-h-screen');
-    expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'px-4', 'md:px-6', 'xl:px-8', 'pt-3', 'pb-8', 'min-h-0', 'min-w-0', 'shell-main-column--home', 'shell-main-column--page-scroll');
+    expect(document.querySelector('.theme-shell')).toHaveClass('theme-shell--consumer', 'theme-shell--page-scroll');
+    expect(document.querySelector('.shell-content-frame')).toHaveClass('shell-content-frame--consumer', 'shell-content-frame--page-scroll');
+    expect(document.querySelector('.shell-main-column')).toHaveClass('w-full', 'flex-1', 'flex', 'flex-col', 'p-0', 'min-h-0', 'min-w-0', 'shell-main-column--consumer', 'shell-main-column--home', 'shell-main-column--page-scroll');
     expect(document.querySelector('.theme-page-transition')).toHaveClass('w-full', 'min-w-0', 'theme-page-transition--page-scroll');
     expect(document.querySelector('.theme-page-transition')).not.toHaveClass('h-full');
     expect(document.documentElement).toHaveAttribute('data-page-scroll-shell', 'true');

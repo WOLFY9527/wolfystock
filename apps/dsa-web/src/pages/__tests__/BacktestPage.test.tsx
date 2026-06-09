@@ -930,12 +930,16 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-bento-page')).toHaveClass('w-full', 'flex-1', 'min-w-0', 'min-h-0', 'bg-transparent');
     expect(screen.getByTestId('backtest-bento-page')).not.toHaveClass('px-6', 'md:px-8', 'xl:px-12', 'pt-6', 'pb-12', 'max-w-[1600px]');
     expect(screen.getByTestId('backtest-bento-page')).not.toHaveClass('container', 'mx-auto', 'max-w-[1600px]');
+    expect(pageShell.parentElement).toHaveAttribute('data-workspace-width', 'near-full');
+    expect(pageShell.parentElement).toHaveClass('consumer-workspace-scope', 'workspace-width-near-full', '[--wolfy-consumer-shell-max:1880px]');
     expect(pageShell).toHaveClass(
+      'consumer-page-shell',
       'w-full',
-      '[--wolfy-consumer-shell-max:1880px]',
       'max-w-[var(--wolfy-consumer-shell-max,1880px)]',
       'mx-auto',
       'px-4',
+      'py-5',
+      'md:py-6',
       'xl:px-8',
       'flex',
       'flex-col',

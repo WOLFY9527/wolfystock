@@ -1,5 +1,6 @@
 import { expect as baseExpect } from '@playwright/test';
 import { expect as appExpect, test as appTest } from './fixtures/appSmoke';
+import { captureShellVisualEvidence } from './fixtures/shellVisualEvidence';
 
 const GUEST_PRICE_ZONE_FORBIDDEN_COPY_PATTERN =
   /理想买入|入场|止损|止盈|目标价|买入|卖出|加仓|建仓|target price|entry|stop loss|take profit/i;
@@ -22,6 +23,7 @@ appTest('guest entry routes use research branding instead of AI persona copy', a
   await appExpect(page).not.toHaveURL(/\/login(?:\?|$)/);
   await appExpect(page.getByTestId('guest-home-clean-search')).toBeVisible({ timeout: 15_000 });
   await appExpect(page.getByRole('heading', { name: /WolfyStock 研究控制台|WolfyStock Research Console/ })).toBeVisible();
+  await captureShellVisualEvidence(page, 'guest', { width: 1440, height: 1000 });
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/zh/guest');
@@ -33,6 +35,7 @@ appTest('guest entry routes use research branding instead of AI persona copy', a
   await baseExpect
     .poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
     .toBe(true);
+  await captureShellVisualEvidence(page, 'guest', { width: 390, height: 844 });
 
   await page.goto('/zh/login');
   await appExpect(page.getByRole('heading', { name: 'WolfyStock 账户登录' })).toBeVisible({ timeout: 15_000 });

@@ -127,7 +127,7 @@ const HOME_LOCAL_INSET_PANEL_CLASS = 'min-w-0 rounded-[10px] border border-[colo
 const HOME_LOCAL_RAIL_CARD_CLASS =
   'home-research-rail-card min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-3.5 md:px-5 md:py-4';
 const HOME_LOCAL_STAGE_CLASS =
-  'home-research-stage mx-auto flex w-full max-w-[1880px] min-w-0 flex-col gap-4 px-3 py-3 sm:px-4 xl:px-6 2xl:px-8';
+  'home-research-stage mx-auto flex w-full max-w-[var(--wolfy-consumer-shell-max,1880px)] min-w-0 flex-col gap-[var(--wolfy-consumer-shell-gap,1rem)] px-[var(--wolfy-consumer-shell-gutter,1rem)] py-[var(--wolfy-consumer-shell-padding-block,1rem)]';
 const HOME_LOCAL_FIXED_GRID_CLASS = 'home-research-fixed-grid w-full min-w-0 gap-4 overflow-visible';
 const HOME_LOCAL_HEADER_STRIP_CLASS =
   'mb-4 min-w-0 rounded-[10px] border border-[color:var(--wolfy-divider)] bg-[var(--wolfy-surface-panel)] px-4 py-4 md:px-5';

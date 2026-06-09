@@ -1,5 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures/appSmoke';
+import { captureShellVisualEvidence } from './fixtures/shellVisualEvidence';
 
 async function expectMinTapHeight(locator: Locator, minHeight: number) {
   const box = await locator.boundingBox();
@@ -242,6 +243,7 @@ test.describe('scanner smoke', () => {
     await page.waitForLoadState('domcontentloaded');
     await expectWatchlistLaunchSurface(page);
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await captureShellVisualEvidence(page, 'watchlist', { width: 1440, height: 1000 });
   });
 
   test('scanner and watchlist stay usable on mobile launch viewport', async ({ page }) => {
@@ -271,6 +273,7 @@ test.describe('scanner smoke', () => {
     await expect(page.getByRole('heading', { name: /观察列表|watchlist/i })).toBeVisible();
     await expect(page.getByTestId('watchlist-page')).toContainText(/观察列表|watchlist/i);
     await expect.poll(async () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await captureShellVisualEvidence(page, 'watchlist', { width: 390, height: 844 });
   });
 
   test('scanner copy and export actions are clickable without console errors', async ({ page }) => {

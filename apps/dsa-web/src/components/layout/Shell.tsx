@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 import { ArrowRight, ChevronDown, LockKeyhole, LogOut, Menu, ShieldAlert, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
+import { Button } from '../common/Button';
 import { Card } from '../common/Card';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Drawer } from '../common/Drawer';
@@ -331,20 +332,23 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const isLiquidityMonitorRoute = surfacePathname.startsWith('/market/liquidity-monitor');
   const isRotationRadarRoute = surfacePathname.startsWith('/market/rotation-radar');
   const isScannerRoute = surfacePathname.startsWith('/scanner');
+  const isWatchlistRoute = surfacePathname.startsWith('/watchlist');
+  const isPortfolioRoute = surfacePathname.startsWith('/portfolio');
+  const isOptionsLabRoute = surfacePathname.startsWith('/options-lab');
   const isSystemControlRoute = isAdminOpsRoute(surfacePathname);
-  const isPageScrollRoute = isHomeRoute;
-  const shellViewportClass = isScannerRoute || isHomeRoute ? 'min-h-screen' : 'h-full min-h-0';
-  const shellFrameOverflowClass = '';
-  const isWideRoute = surfacePathname === '/'
+  const isConsumerShellRoute = isHomeRoute
     || isBacktestRoute
-    || surfacePathname.startsWith('/scanner')
-    || surfacePathname.startsWith('/portfolio')
-    || surfacePathname.startsWith('/watchlist')
     || isMarketOverviewRoute
     || isLiquidityMonitorRoute
     || isRotationRadarRoute
-    || surfacePathname.startsWith('/options-lab')
-    || isSystemControlRoute;
+    || isScannerRoute
+    || isWatchlistRoute
+    || isPortfolioRoute
+    || isOptionsLabRoute;
+  const isPageScrollRoute = isConsumerShellRoute;
+  const shellViewportClass = isPageScrollRoute ? 'min-h-screen' : 'h-full min-h-0';
+  const shellFrameOverflowClass = '';
+  const isWideRoute = isConsumerShellRoute || isSystemControlRoute;
   const isDesktop = useIsDesktopViewport();
   const previousPathnameRef = useRef(pathname);
   const didInitializeViewportRef = useRef(false);
@@ -620,7 +624,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   return (
     <ShellRailContext.Provider value={railContextValue}>
       <div
-        className={`theme-shell ${shellViewportClass} flex flex-col text-foreground${isPageScrollRoute ? ' theme-shell--page-scroll' : ''}${isHomeRoute ? ' theme-shell--home' : ''}${isScannerRoute ? ' theme-shell--scanner' : ''}${isWideRoute ? ' theme-shell--wide' : ''}${isMarketOverviewRoute ? ' theme-shell--market-overview' : ''}`}
+        className={`theme-shell ${shellViewportClass} flex flex-col text-foreground${isConsumerShellRoute ? ' theme-shell--consumer' : ''}${isPageScrollRoute ? ' theme-shell--page-scroll' : ''}${isHomeRoute ? ' theme-shell--home' : ''}${isScannerRoute ? ' theme-shell--scanner' : ''}${isWideRoute ? ' theme-shell--wide' : ''}${isMarketOverviewRoute ? ' theme-shell--market-overview' : ''}`}
         data-layout={isDesktop ? 'desktop' : 'mobile'}
       >
         <header className="shell-masthead shrink-0 w-full">
@@ -664,10 +668,10 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         </header>
 
         <div
-          className={`shell-content-frame relative flex flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isPageScrollRoute ? ' shell-content-frame--page-scroll' : ''}${isHomeRoute ? ' shell-content-frame--home' : ''}${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}${isSystemControlRoute ? ' shell-content-frame--system-control' : ''}`}
+          className={`shell-content-frame relative flex flex-1 min-h-0 min-w-0 w-full${shellFrameOverflowClass}${isConsumerShellRoute ? ' shell-content-frame--consumer' : ''}${isPageScrollRoute ? ' shell-content-frame--page-scroll' : ''}${isHomeRoute ? ' shell-content-frame--home' : ''}${isBacktestRoute ? ' shell-content-frame--backtest' : ''}${isScannerRoute ? ' shell-content-frame--scanner' : ''}${isWideRoute ? ' shell-content-frame--wide' : ''}${isSystemControlRoute ? ' shell-content-frame--system-control' : ''}`}
         >
-          <main className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full${isSystemControlRoute ? ' p-0 shell-main-column--system-control' : isHomeRoute ? ' px-4 pt-3 pb-8 md:px-6 lg:pt-4 xl:px-8 shell-main-column--home' : ' px-6 pt-6 pb-12 md:px-8 xl:px-12'}${shellFrameOverflowClass}${isPageScrollRoute ? ' shell-main-column--page-scroll' : ''}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
-            <div key={pathname} className={`theme-page-transition flex min-h-0 min-w-0 w-full flex-col${isScannerRoute || isHomeRoute ? '' : ' h-full'}${isPageScrollRoute ? ' theme-page-transition--page-scroll' : ''}${isSystemControlRoute ? ' theme-page-transition--system-control' : ''}`}>
+          <main className={`theme-main-lane shell-main-column relative flex flex-1 flex-col min-h-0 min-w-0 w-full${isSystemControlRoute ? ' p-0 shell-main-column--system-control' : isConsumerShellRoute ? ' p-0 shell-main-column--consumer' : ' px-6 pt-6 pb-12 md:px-8 xl:px-12'}${shellFrameOverflowClass}${isPageScrollRoute ? ' shell-main-column--page-scroll' : ''}${isHomeRoute ? ' shell-main-column--home' : ''}${isScannerRoute ? ' shell-main-column--scanner' : ''}`}>
+            <div key={pathname} className={`theme-page-transition flex min-h-0 min-w-0 w-full flex-col${isPageScrollRoute ? '' : ' h-full'}${isPageScrollRoute ? ' theme-page-transition--page-scroll' : ''}${isSystemControlRoute ? ' theme-page-transition--system-control' : ''}`}>
               {shouldRenderStandardAdminAccountGate && standardAdminAccountGateCopy ? (
                 <ShellAdminAccountGate
                   eyebrow={standardAdminAccountGateCopy.eyebrow}
@@ -752,14 +756,16 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                   </NavLink>
                 ))}
                 <div className="my-1 h-px bg-[var(--wolfy-divider)]" />
-                <button
+                <Button
                   type="button"
                   ref={(node) => {
                     accountMenuItemRefs.current[accountMenuItems.length] = node;
                   }}
                   role="menuitem"
                   tabIndex={-1}
-                  className="flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-red-200/80 transition-colors hover:bg-red-500/10 hover:text-red-100"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full min-w-0 !justify-start gap-3 rounded-xl border-0 bg-transparent px-3 text-left text-sm font-normal text-red-200/80 hover:bg-red-500/10 hover:text-red-100"
                   onClick={() => {
                     closeAccountMenu();
                     setShowLogoutConfirm(true);
@@ -767,7 +773,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                 >
                   <LogOut className="size-4 shrink-0 text-red-200/70" />
                   <span className="truncate">{accountCopy.logout}</span>
-                </button>
+                </Button>
               </div>
             ) : null}
           </div>,

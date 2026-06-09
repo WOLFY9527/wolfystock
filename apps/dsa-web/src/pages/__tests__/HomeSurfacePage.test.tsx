@@ -646,7 +646,16 @@ describe('HomeSurfacePage', () => {
     expect(root.getAttribute('style') || '').not.toContain('radial-gradient');
     expect(main).toHaveClass('w-full', 'flex-1', 'min-w-0', 'flex', 'flex-col', 'min-h-0');
     expect(main.firstElementChild).toBe(stage);
-    expect(stage).toHaveClass('home-research-stage', 'mx-auto', 'w-full', 'max-w-[1880px]', 'min-w-0', 'gap-4', 'px-3', '2xl:px-8');
+    expect(stage).toHaveClass(
+      'home-research-stage',
+      'mx-auto',
+      'w-full',
+      'max-w-[var(--wolfy-consumer-shell-max,1880px)]',
+      'min-w-0',
+      'gap-[var(--wolfy-consumer-shell-gap,1rem)]',
+      'px-[var(--wolfy-consumer-shell-gutter,1rem)]',
+      'py-[var(--wolfy-consumer-shell-padding-block,1rem)]',
+    );
     expect(stage).not.toHaveClass('lg:w-[96vw]', 'lg:max-w-[1840px]');
     expect(stage.contains(commandBar)).toBe(true);
     expect(stage.contains(researchConsole)).toBe(true);

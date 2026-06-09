@@ -14,6 +14,7 @@ import {
   installPortfolioSmokeHarness,
   visibleOwnerPortfolioSentinels,
 } from './fixtures/portfolioSmoke';
+import { captureShellVisualEvidence } from './fixtures/shellVisualEvidence';
 
 const productAuthFixture = await import('./fixtures/productAuth').catch(() => null);
 
@@ -86,7 +87,11 @@ async function expectRootNonEmpty(page: Page) {
 }
 
 async function expectForbiddenTradingWordingAbsent(page: Page) {
-  await expect(page.locator('body')).not.toContainText(
+  const consumerText = await page.locator('body').innerText();
+  const noAdviceNormalizedText = consumerText
+    .replace(/不构成交易或下单指令/g, '不构成交易指令')
+    .replace(/不会提交订单、不会连接券商或改动组合持仓/g, '不会连接券商或改动组合持仓');
+  expect(noAdviceNormalizedText).not.toMatch(
     /买入按钮|下单|立即交易|必买|稳赚|保证收益|guaranteed|best contract|AI recommends you buy|must buy|must sell|buy now|sell now|place order|you should buy|you should sell/i,
   );
 }
@@ -249,6 +254,7 @@ appTest.describe('public launch route smoke', () => {
       await page.waitForLoadState('domcontentloaded');
       await appExpect(page.getByTestId('home-bento-dashboard')).toBeVisible({ timeout: 15_000 });
       await assertPublicShell(page);
+      await captureShellVisualEvidence(page, 'home', viewport);
     }
   });
 
@@ -262,6 +268,7 @@ appTest.describe('public launch route smoke', () => {
       await page.waitForLoadState('domcontentloaded');
       await appExpect(page.getByTestId('market-overview-shell')).toBeVisible({ timeout: 15_000 });
       await assertPublicShell(page);
+      await captureShellVisualEvidence(page, 'market-overview', viewport);
     }
   });
 
@@ -317,6 +324,7 @@ appTest.describe('public launch route smoke', () => {
       await appExpect(page.getByTestId('scanner-command-panel')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('scanner-results-panel')).toBeVisible({ timeout: 15_000 });
       await assertProductShell(page);
+      await captureShellVisualEvidence(page, 'scanner', viewport);
 
       await page.setViewportSize(viewport);
       await installAuthenticatedAppSmokeSession(page);
@@ -326,6 +334,7 @@ appTest.describe('public launch route smoke', () => {
       await appExpect(page.getByTestId('backtest-subnav')).toBeVisible({ timeout: 15_000 });
       await appExpect(page.getByTestId('backtest-v1-page')).toBeVisible({ timeout: 15_000 });
       await assertProductShell(page);
+      await captureShellVisualEvidence(page, 'backtest', viewport);
 
       await page.setViewportSize(viewport);
       await installAuthenticatedAppSmokeSession(page);
@@ -369,6 +378,7 @@ if (productAuthFixture) {
         await appExpect(page.getByTestId('options-lab-strategy-comparison')).toBeVisible();
         await expectForbiddenTradingWordingAbsent(page);
         await assertProductShell(page);
+        await captureShellVisualEvidence(page, 'options-lab', viewport);
 
         expect(harness.requests.count('GET', '/api/v1/auth/status')).toBeGreaterThan(0);
         expect(harness.requests.count('GET', '/api/v1/options/underlyings/TEM/summary')).toBeGreaterThan(0);
@@ -397,6 +407,7 @@ if (productAuthFixture) {
           ...forbiddenPortfolioLaunchLanguage,
         ]);
         await assertProductShell(page);
+        await captureShellVisualEvidence(page, 'portfolio', viewport);
 
         expect(harness.requests.count('GET', '/api/v1/auth/status')).toBeGreaterThan(0);
         expect(harness.requests.count('GET', '/api/v1/portfolio/snapshot')).toBeGreaterThan(0);

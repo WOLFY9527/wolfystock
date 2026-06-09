@@ -36,7 +36,8 @@ import {
   useSafariWarmActivation,
 } from '../hooks/useSafariInteractionReady';
 import { translate } from '../i18n/core';
-import { TerminalPageHeading, TerminalPageShell } from '../components/terminal/TerminalPrimitives';
+import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
+import { TerminalPageHeading } from '../components/terminal/TerminalPrimitives';
 
 const HISTORICAL_PAGE_SIZE = 20;
 const HISTORY_PAGE_SIZE = 10;
@@ -1366,77 +1367,78 @@ const BacktestPage: React.FC = () => {
       aria-live={shouldGuardA11y ? (isSafariReady ? 'polite' : 'off') : undefined}
       className={getSafariReadySurfaceClassName(isSafariReady, 'w-full flex-1 min-w-0 min-h-0 bg-transparent')}
     >
-      <TerminalPageShell
-        data-testid="backtest-page-shell"
-        className="flex-1 min-w-0 min-h-0 [--wolfy-consumer-shell-max:1880px] max-w-[var(--wolfy-consumer-shell-max,1880px)] mx-auto px-4 py-5 md:py-6 xl:px-8"
-      >
-        <TerminalPageHeading
-          data-testid="backtest-page-heading"
-          title={language === 'en' ? 'Backtest' : '回测'}
-        />
-        <div
-          data-testid="backtest-subnav"
-          className={`w-full ${configPanelRadiusClass} border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-sm`}
+      <ConsumerWorkspaceScope className="min-h-0 flex-1">
+        <ConsumerWorkspacePageShell
+          data-testid="backtest-page-shell"
+          className="flex-1 min-w-0 min-h-0"
         >
-          <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <nav
-              className="flex min-w-0 items-center gap-4 overflow-x-auto no-scrollbar"
-              aria-label={bt(language, 'page.moduleTabsLabel')}
-            >
-              {moduleTabs}
-            </nav>
-            <nav
-              className="flex min-w-0 items-center gap-4 overflow-x-auto no-scrollbar xl:justify-end"
-              aria-label={bt(language, 'page.controlModeLabel')}
-            >
-              {controlModeTabs}
-            </nav>
-          </div>
-        </div>
-        <section
-          data-testid="backtest-research-boundary"
-          aria-label={researchBoundaryTitle}
-          className={`w-full ${configPanelRadiusClass} border border-amber-300/15 bg-amber-300/[0.07] px-4 py-4 text-sm text-amber-50 backdrop-blur-sm`}
-        >
-          <div className="flex min-w-0 flex-col gap-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-100/75">
-                {researchBoundaryTitle}
-              </span>
+          <TerminalPageHeading
+            data-testid="backtest-page-heading"
+            title={language === 'en' ? 'Backtest' : '回测'}
+          />
+          <div
+            data-testid="backtest-subnav"
+            className={`w-full ${configPanelRadiusClass} border border-white/5 bg-white/[0.02] px-4 py-3 backdrop-blur-sm`}
+          >
+            <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <nav
+                className="flex min-w-0 items-center gap-4 overflow-x-auto no-scrollbar"
+                aria-label={bt(language, 'page.moduleTabsLabel')}
+              >
+                {moduleTabs}
+              </nav>
+              <nav
+                className="flex min-w-0 items-center gap-4 overflow-x-auto no-scrollbar xl:justify-end"
+                aria-label={bt(language, 'page.controlModeLabel')}
+              >
+                {controlModeTabs}
+              </nav>
             </div>
-            <ul className="grid gap-2 md:grid-cols-3">
-              {researchBoundaryItems.map((item) => (
-                <li
-                  key={item}
-                  className={`${configInsetRadiusClass} border border-amber-50/10 bg-black/10 px-3 py-2 leading-6 text-amber-50/95`}
-                >
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <p className="leading-6 text-amber-50/78">
-              {researchBoundaryEventNote}
-            </p>
           </div>
-        </section>
-
-        <main
-          data-testid="backtest-v1-page"
-          className="w-full flex-1 min-w-0 flex flex-col gap-6 bg-transparent"
-        >
-        {scannerHandoff ? (
-          <section className={`${configPanelRadiusClass} border border-sky-400/15 bg-sky-400/10 px-4 py-3 text-sm text-sky-50`}>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold">{language === 'en' ? 'From scanner' : '来自扫描器'}</span>
-              <span>{scannerHandoff.symbol}</span>
-              {scannerHandoff.market ? <span className="text-sky-100/75">· {scannerHandoff.market}</span> : null}
-              {scannerHandoff.scannerRunId ? <span className="text-sky-100/75">· {bt(language, 'scannerRunMeta', { runId: scannerHandoff.scannerRunId })}</span> : null}
-              {scannerHandoff.scannerRank ? <span className="text-sky-100/75">· {bt(language, 'scannerRankMeta', { rank: scannerHandoff.scannerRank })}</span> : null}
-              {scannerHandoff.scannerProfile ? <span className="text-sky-100/75">· {scannerHandoff.scannerProfile}</span> : null}
+          <section
+            data-testid="backtest-research-boundary"
+            aria-label={researchBoundaryTitle}
+            className={`w-full ${configPanelRadiusClass} border border-amber-300/15 bg-amber-300/[0.07] px-4 py-4 text-sm text-amber-50 backdrop-blur-sm`}
+          >
+            <div className="flex min-w-0 flex-col gap-3">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-100/75">
+                  {researchBoundaryTitle}
+                </span>
+              </div>
+              <ul className="grid gap-2 md:grid-cols-3">
+                {researchBoundaryItems.map((item) => (
+                  <li
+                    key={item}
+                    className={`${configInsetRadiusClass} border border-amber-50/10 bg-black/10 px-3 py-2 leading-6 text-amber-50/95`}
+                  >
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <p className="leading-6 text-amber-50/78">
+                {researchBoundaryEventNote}
+              </p>
             </div>
           </section>
-        ) : null}
-        <LazyMotion features={domAnimation}>
+
+          <main
+            data-testid="backtest-v1-page"
+            className="w-full flex-1 min-w-0 flex flex-col gap-6 bg-transparent"
+          >
+            {scannerHandoff ? (
+              <section className={`${configPanelRadiusClass} border border-sky-400/15 bg-sky-400/10 px-4 py-3 text-sm text-sky-50`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold">{language === 'en' ? 'From scanner' : '来自扫描器'}</span>
+                  <span>{scannerHandoff.symbol}</span>
+                  {scannerHandoff.market ? <span className="text-sky-100/75">· {scannerHandoff.market}</span> : null}
+                  {scannerHandoff.scannerRunId ? <span className="text-sky-100/75">· {bt(language, 'scannerRunMeta', { runId: scannerHandoff.scannerRunId })}</span> : null}
+                  {scannerHandoff.scannerRank ? <span className="text-sky-100/75">· {bt(language, 'scannerRankMeta', { rank: scannerHandoff.scannerRank })}</span> : null}
+                  {scannerHandoff.scannerProfile ? <span className="text-sky-100/75">· {scannerHandoff.scannerProfile}</span> : null}
+                </div>
+              </section>
+            ) : null}
+            <LazyMotion features={domAnimation}>
           <AnimatePresence mode="wait" initial={false}>
             <m.div
               key={activeModule === 'rule' ? `${activeModule}-${controlPanelMode}` : activeModule}
@@ -1621,9 +1623,10 @@ const BacktestPage: React.FC = () => {
               </Suspense>
             </m.div>
           </AnimatePresence>
-        </LazyMotion>
-        </main>
-      </TerminalPageShell>
+            </LazyMotion>
+          </main>
+        </ConsumerWorkspacePageShell>
+      </ConsumerWorkspaceScope>
     </div>
   );
 };
