@@ -6212,7 +6212,7 @@ const HomeBentoDashboardPage: React.FC<HomeBentoDashboardPageProps> = ({ isGuest
         eyebrow: 'Guest Research Console',
         title: 'WolfyStock Research Console',
         subtitle: 'WolfyStock is a stock research workspace for self-directed investors and research-oriented users. Start with one ticker preview now, then sign in to save reports, reopen history, and continue into portfolio or scanner workflows.',
-        commandLabel: 'Command entry',
+        commandLabel: 'Command input',
         commandHint: 'Examples: AAPL / Tencent / 600519',
         unlockItems: ['Saved reports', 'Saved history', 'Portfolio workspace', 'Market scanner'],
         unlockAction: 'Create free account',
