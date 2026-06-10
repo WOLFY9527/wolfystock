@@ -34,6 +34,24 @@ evidence.
 - Do not treat this checklist as public-launch evidence or live-enforcement
   approval.
 
+## Offline Validator
+
+Operators can run the offline checker against a sanitized JSON artifact, or a
+directory of sanitized JSON artifacts:
+
+```bash
+python3 scripts/quota_reserve_release_operator_evidence_check.py \
+  <sanitized-quota-reserve-release-evidence.json-or-directory>
+```
+
+The checker validates sanitized local evidence against the categories in this
+checklist. It must not be pointed at live systems and does not call runtime
+APIs, route handlers, storage, quota services, providers, auth, or live
+credentials. A passing result means the evidence packet is ready for manual
+internal/private-beta review only. It does not approve public launch, live
+quota enforcement, reservation consume wiring, route blocking, or runtime
+behavior changes.
+
 ## Required Evidence Sections
 
 ### 1. Config Snapshot
