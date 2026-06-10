@@ -19,6 +19,8 @@ from src.storage import DatabaseManager, ProviderCircuitEvent, ProviderQuotaWind
 class ProviderCircuitObserver:
     """Record sanitized provider circuit observations through storage helpers."""
 
+    DEFAULT_OFF_LABEL = "provider_circuit_live_enforcement_default_off"
+    ROLLBACK_LABEL = "no_runtime_change_to_rollback"
     RESULT_BUCKETS = {
         "success",
         "timeout",
@@ -210,6 +212,7 @@ class ProviderCircuitObserver:
             "result_bucket": bucket,
             "preflight_state": preflight_state,
             "state_candidate": state_candidate,
+            **self._advisory_only_contract(),
             "live_enforcement": False,
             "would_block_call": False,
             "would_block_if_enforced": would_block_if_enforced,
@@ -240,23 +243,21 @@ class ProviderCircuitObserver:
         )
         state_name = str((state or {}).get("state") or "closed")
         reason_bucket = (state or {}).get("reason_bucket")
-        would_block = state_name in self._BLOCKING_STATES and self._cooldown_allows_block(state, now=now)
+        would_block_if_enforced = self._state_would_block_if_enforced(state, state_name=state_name, now=now)
         scope_matched = self._controlled_scope_matches(
             provider_category=normalized_category,
             route_family=normalized_route,
             controlled_provider_categories=controlled_provider_categories,
             controlled_route_families=controlled_route_families,
         )
-        explicit_enforcement = bool(controlled_enforcement_enabled and scope_matched)
-        would_block_call = bool(explicit_enforcement and would_block)
         if not controlled_enforcement_enabled:
             status = "disabled_by_default"
         elif not scope_matched:
             status = "scope_not_enabled"
-        elif would_block_call:
-            status = "blocked"
+        elif would_block_if_enforced:
+            status = "advisory_only_would_block_not_enforced"
         else:
-            status = "allowed"
+            status = "advisory_only_allow"
 
         return {
             "provider": normalized_provider,
@@ -266,10 +267,14 @@ class ProviderCircuitObserver:
             "controlled_enforcement_enabled": bool(controlled_enforcement_enabled),
             "controlled_scope_matched": scope_matched,
             "controlled_enforcement_status": status,
-            "live_enforcement": would_block_call,
-            "would_block_call": would_block_call,
-            "would_block_if_enforced": would_block,
-            "enforcement_block_reason_code": reason_bucket if would_block else None,
+            **self._advisory_only_contract(),
+            "live_enforcement": False,
+            "would_block_call": False,
+            "would_block_if_enforced": would_block_if_enforced,
+            "enforcement_block_reason_code": (
+                self._safe_enforcement_reason_code(reason_bucket) if would_block_if_enforced else None
+            ),
+            **self._half_open_projection(state),
             "would_change_provider_order": False,
             "would_change_fallback_behavior": False,
             "no_external_calls": True,
@@ -298,7 +303,7 @@ class ProviderCircuitObserver:
         )
         state_name = str((state or {}).get("state") or "closed")
         reason_bucket = (state or {}).get("reason_bucket")
-        would_block_if_enforced = state_name in self._BLOCKING_STATES and self._cooldown_allows_block(state, now=now)
+        would_block_if_enforced = self._state_would_block_if_enforced(state, state_name=state_name, now=now)
         scope_matched = self._controlled_scope_matches(
             provider_category=normalized_category,
             route_family=normalized_route,
@@ -312,10 +317,14 @@ class ProviderCircuitObserver:
             "route_family": normalized_route,
             "circuit_state": state_name,
             "scope_matched": scope_matched,
+            **self._advisory_only_contract(),
             "live_enforcement": False,
             "would_block_call": False,
             "would_block_if_enforced": would_block_if_enforced,
-            "enforcement_block_reason_code": reason_bucket if would_block_if_enforced else None,
+            "enforcement_block_reason_code": (
+                self._safe_enforcement_reason_code(reason_bucket) if would_block_if_enforced else None
+            ),
+            **self._half_open_projection(state),
             "would_change_provider_order": False,
             "would_change_fallback_behavior": False,
             "no_external_calls": True,
@@ -529,6 +538,43 @@ class ProviderCircuitObserver:
         if not categories or not routes:
             return False
         return str(provider_category or "").lower() in categories and str(route_family or "").lower() in routes
+
+    @classmethod
+    def _advisory_only_contract(cls) -> Dict[str, Any]:
+        return {
+            "advisory_only": True,
+            "default_off_label": cls.DEFAULT_OFF_LABEL,
+            "rollback_label": cls.ROLLBACK_LABEL,
+            "no_external_calls": True,
+            "provider_behavior_changed": False,
+            "market_cache_behavior_changed": False,
+        }
+
+    @classmethod
+    def _safe_enforcement_reason_code(cls, reason_bucket: Any) -> Optional[str]:
+        bucket = str(reason_bucket or "").strip().lower()
+        return bucket if bucket in cls.FAILURE_BUCKETS else None
+
+    @staticmethod
+    def _half_open_projection(state: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        sample_limit = max(0, int((state or {}).get("half_open_sample_limit") or 0))
+        sample_count = max(0, int((state or {}).get("half_open_sample_count") or 0))
+        return {
+            "half_open_sample_limit": sample_limit,
+            "half_open_sample_count": sample_count,
+            "half_open_sample_limit_reached": bool(sample_limit and sample_count >= sample_limit),
+        }
+
+    def _state_would_block_if_enforced(
+        self,
+        state: Optional[Dict[str, Any]],
+        *,
+        state_name: str,
+        now: Optional[datetime],
+    ) -> bool:
+        if state_name == "half_open":
+            return self._half_open_projection(state)["half_open_sample_limit_reached"]
+        return state_name in self._BLOCKING_STATES and self._cooldown_allows_block(state, now=now)
 
     @staticmethod
     def _cooldown_allows_block(state: Optional[Dict[str, Any]], *, now: Optional[datetime]) -> bool:

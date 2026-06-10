@@ -95,6 +95,22 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
     def _json_text(payload: object) -> str:
         return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
+    @staticmethod
+    def _sla_item(
+        payload: dict,
+        *,
+        provider: str,
+        provider_category: str | None,
+        route_family: str | None,
+    ) -> dict:
+        return next(
+            item
+            for item in payload["items"]
+            if item["provider"] == provider
+            and item.get("providerCategory") == provider_category
+            and item.get("routeFamily") == route_family
+        )
+
     def _seed_circuit_fixture(self) -> datetime:
         base = datetime(2026, 5, 6, 10, 0, 0)
         self.db.transition_provider_circuit_state(
@@ -584,7 +600,7 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertTrue(payload["metadata"]["readOnly"])
         self.assertTrue(payload["metadata"]["noExternalCalls"])
         self.assertFalse(payload["metadata"]["liveEnforcement"])
-        fmp = payload["items"][0]
+        fmp = self._sla_item(payload, provider="fmp", provider_category="quote", route_family="analysis")
         self.assertEqual(fmp["provider"], "fmp")
         self.assertEqual(fmp["providerCategory"], "quote")
         self.assertEqual(fmp["routeFamily"], "analysis")
@@ -627,10 +643,16 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         request_mock.assert_not_called()
-        item = response.json()["items"][0]
+        item = self._sla_item(
+            response.json(),
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+        )
         self.assertEqual(item["provider"], "tradier")
         self.assertEqual(item["readinessState"], "missing_credentials")
         self.assertEqual(item["credentialState"], "missing_credentials")
+        self.assertEqual(item["reasonCode"], "options_provider_credentials_missing")
         self.assertFalse(item["credentialsPresent"])
         self.assertEqual(item["credentialContract"]["state"], "missing")
         self.assertEqual(item["credentialContract"]["requiredCredentialCount"], 1)
@@ -657,10 +679,16 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         request_mock.assert_not_called()
-        item = response.json()["items"][0]
+        item = self._sla_item(
+            response.json(),
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+        )
         self.assertEqual(item["provider"], "tradier")
         self.assertEqual(item["readinessState"], "live_credentials_present_live_calls_disabled")
         self.assertEqual(item["credentialState"], "live_credentials_present_live_calls_disabled")
+        self.assertEqual(item["reasonCode"], "options_provider_live_calls_disabled")
         self.assertTrue(item["liveProvidersEnabled"])
         self.assertTrue(item["providerEnabled"])
         self.assertTrue(item["credentialsPresent"])
@@ -688,10 +716,16 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         request_mock.assert_not_called()
-        item = response.json()["items"][0]
+        item = self._sla_item(
+            response.json(),
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+        )
         self.assertEqual(item["provider"], "tradier")
         self.assertEqual(item["readinessState"], "malformed_credentials")
         self.assertEqual(item["credentialState"], "malformed_credentials")
+        self.assertEqual(item["reasonCode"], "options_provider_credentials_malformed")
         self.assertFalse(item["credentialsPresent"])
         self.assertEqual(item["credentialContract"]["state"], "malformed")
         self.assertEqual(item["credentialContract"]["invalidCredentialCount"], 1)
@@ -727,7 +761,12 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         request_mock.assert_not_called()
-        item = response.json()["items"][0]
+        item = self._sla_item(
+            response.json(),
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+        )
         self.assertEqual(item["provider"], "tradier")
         self.assertEqual(item["readinessState"], "partial_credentials")
         self.assertEqual(item["credentialState"], "partial_credentials")
@@ -783,7 +822,7 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        item = payload["items"][0]
+        item = self._sla_item(payload, provider="tradier", provider_category="options", route_family="options_lab")
         self.assertEqual(item["provider"], "tradier")
         self.assertEqual(item["providerCategory"], "options")
         self.assertEqual(item["routeFamily"], "options_lab")
@@ -797,6 +836,105 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertTrue(item["noExternalCalls"])
         text = self._json_text(payload).lower()
         for blocked in ("must-not-leak", "https://provider.example", "traceback must-not-leak"):
+            self.assertNotIn(blocked, text)
+
+    def test_sla_readiness_endpoint_separates_scoped_and_unscoped_items_by_dimensions(self) -> None:
+        self._as_provider_read_admin()
+        observer = ProviderCircuitObserver(db=self.db)
+        self.db.transition_provider_circuit_state(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="open",
+            reason_bucket="timeout",
+            cooldown_until=datetime(2026, 5, 6, 11, 0, 0),
+            now=datetime(2026, 5, 6, 10, 30, 0),
+        )
+        observer.record_observation(
+            provider="tradier",
+            provider_category="quote",
+            route_family="analysis",
+            result_bucket="operator_disabled",
+            observed_at=datetime(2026, 5, 6, 10, 40, 0),
+            metadata={
+                "safe_label": "route_mismatch",
+                "request_body": "must-not-leak",
+                "url": "https://provider.example.test/raw?token=must-not-leak",
+            },
+        )
+
+        with patch("requests.sessions.Session.request") as request_mock:
+            response = self.client.get(
+                "/api/v1/admin/providers/sla-readiness",
+                params={"provider": "tradier", "since": "2026-05-06T00:00:00"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        request_mock.assert_not_called()
+        payload = response.json()
+        scoped = self._sla_item(payload, provider="tradier", provider_category="options", route_family="options_lab")
+        unscoped = self._sla_item(payload, provider="tradier", provider_category="quote", route_family="analysis")
+        self.assertTrue(scoped["scopeMatched"])
+        self.assertFalse(scoped["liveEnforcement"])
+        self.assertFalse(scoped["wouldBlockCall"])
+        self.assertTrue(scoped["wouldBlockIfEnforced"])
+        self.assertEqual(scoped["enforcementBlockReasonCode"], "timeout")
+        self.assertTrue(scoped["noExternalCalls"])
+        self.assertFalse(scoped["providerBehaviorChanged"])
+        self.assertFalse(scoped["marketCacheBehaviorChanged"])
+        self.assertFalse(unscoped["scopeMatched"])
+        self.assertFalse(unscoped["liveEnforcement"])
+        self.assertFalse(unscoped["wouldBlockCall"])
+        self.assertTrue(unscoped["wouldBlockIfEnforced"])
+        self.assertEqual(unscoped["enforcementBlockReasonCode"], "operator_disabled")
+        self.assertEqual(unscoped["circuitStateCandidate"], "disabled_by_operator")
+        self.assertTrue(unscoped["noExternalCalls"])
+        self.assertFalse(unscoped["wouldChangeProviderOrder"])
+        self.assertFalse(unscoped["wouldChangeFallbackBehavior"])
+        text = self._json_text(payload).lower()
+        for blocked in ("must-not-leak", "request_body", "provider.example", "?token="):
+            self.assertNotIn(blocked, text)
+
+    def test_sla_readiness_endpoint_keeps_every_item_advisory_only(self) -> None:
+        self._as_provider_read_admin()
+        observer = ProviderCircuitObserver(db=self.db)
+        self.db.transition_provider_circuit_state(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="provider_quota_depleted",
+            reason_bucket="provider_429",
+            now=datetime(2026, 5, 6, 10, 30, 0),
+        )
+        observer.record_observation(
+            provider="fmp",
+            provider_category="quote",
+            route_family="analysis",
+            result_bucket="operator_disabled",
+            observed_at=datetime(2026, 5, 6, 10, 45, 0),
+        )
+
+        response = self.client.get("/api/v1/admin/providers/sla-readiness", params={"since": "2026-05-06T00:00:00"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        allowed_reason_codes = set(ProviderCircuitObserver.RESULT_BUCKETS)
+        for item in payload["items"]:
+            with self.subTest(provider=item["provider"], category=item.get("providerCategory"), route=item.get("routeFamily")):
+                self.assertFalse(item["liveEnforcement"])
+                self.assertFalse(item["wouldBlockCall"])
+                self.assertTrue(item["noExternalCalls"])
+                self.assertFalse(item["providerBehaviorChanged"])
+                self.assertFalse(item["marketCacheBehaviorChanged"])
+                self.assertFalse(item["wouldChangeProviderOrder"])
+                self.assertFalse(item["wouldChangeFallbackBehavior"])
+                reason_code = item.get("enforcementBlockReasonCode")
+                if reason_code is not None:
+                    self.assertIn(reason_code, allowed_reason_codes)
+                for recent_error in item["recentErrors"]:
+                    self.assertIn(recent_error["reasonBucket"], allowed_reason_codes)
+        text = self._json_text(payload).lower()
+        for blocked in ("api_key", "access_token", "authorization", "raw_payload", "https://"):
             self.assertNotIn(blocked, text)
 
     def test_sla_readiness_diagnostics_do_not_mutate_state_or_send_notifications(self) -> None:

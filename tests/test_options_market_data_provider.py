@@ -1644,10 +1644,14 @@ def test_controlled_circuit_block_evidence_does_not_make_live_provider_available
             with pytest.raises(OptionsProviderUnavailable) as exc_info:
                 provider.get_chain("TEM")
 
-        assert decision["controlled_enforcement_status"] == "blocked"
-        assert decision["would_block_call"] is True
+        assert decision["controlled_enforcement_status"] == "advisory_only_would_block_not_enforced"
+        assert decision["live_enforcement"] is False
+        assert decision["would_block_call"] is False
         assert decision["would_block_if_enforced"] is True
         assert decision["enforcement_block_reason_code"] == "timeout"
+        assert decision["advisory_only"] is True
+        assert decision["default_off_label"] == "provider_circuit_live_enforcement_default_off"
+        assert decision["rollback_label"] == "no_runtime_change_to_rollback"
         assert exc_info.value.code == "options_provider_dry_run_not_enabled"
         request_mock.assert_not_called()
     finally:

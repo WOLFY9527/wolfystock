@@ -28,6 +28,18 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         DatabaseManager.reset_instance()
 
+    def _assert_advisory_only_projection(self, payload: dict) -> None:
+        self.assertTrue(payload["advisory_only"])
+        self.assertEqual(payload["default_off_label"], "provider_circuit_live_enforcement_default_off")
+        self.assertEqual(payload["rollback_label"], "no_runtime_change_to_rollback")
+        self.assertFalse(payload["live_enforcement"])
+        self.assertFalse(payload["would_block_call"])
+        self.assertFalse(payload["would_change_provider_order"])
+        self.assertFalse(payload["would_change_fallback_behavior"])
+        self.assertTrue(payload["no_external_calls"])
+        self.assertFalse(payload["provider_behavior_changed"])
+        self.assertFalse(payload["market_cache_behavior_changed"])
+
     def test_timeout_observation_records_dry_run_failure_counter_and_event_only(self) -> None:
         observed_at = datetime(2026, 5, 6, 10, 15, 30)
 
@@ -168,10 +180,9 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
 
         self.assertEqual(result["preflight_state"], "healthy")
         self.assertEqual(result["state_candidate"], "closed")
-        self.assertFalse(result["live_enforcement"])
-        self.assertFalse(result["would_block_call"])
-        self.assertFalse(result["would_change_provider_order"])
-        self.assertFalse(result["would_change_fallback_behavior"])
+        self._assert_advisory_only_projection(result)
+        self.assertFalse(result["would_block_if_enforced"])
+        self.assertIsNone(result["enforcement_block_reason_code"])
 
     def test_preflight_state_classifies_quota_and_auth_buckets_as_degraded_candidates(self) -> None:
         quota_result = self.observer.classify_preflight_state(result_bucket="provider_429")
@@ -194,6 +205,16 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
         self.assertEqual(error_result["state_candidate"], "open")
         self.assertFalse(timeout_result["would_block_call"])
         self.assertFalse(error_result["would_change_provider_order"])
+
+    def test_preflight_state_projects_failure_buckets_without_live_blocking(self) -> None:
+        for bucket in sorted(self.observer.FAILURE_BUCKETS):
+            with self.subTest(bucket=bucket):
+                result = self.observer.classify_preflight_state(result_bucket=bucket)
+
+                self._assert_advisory_only_projection(result)
+                self.assertTrue(result["would_block_if_enforced"])
+                self.assertEqual(result["enforcement_block_reason_code"], bucket)
+                self.assertIn(result["enforcement_block_reason_code"], self.observer.RESULT_BUCKETS)
 
     def test_record_observation_returns_matching_preflight_state_without_durable_transition(self) -> None:
         result = self.observer.record_observation(
@@ -336,13 +357,39 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
         self.assertEqual(decision["controlled_enforcement_status"], "disabled_by_default")
         self.assertFalse(decision["controlled_enforcement_enabled"])
         self.assertFalse(decision["controlled_scope_matched"])
-        self.assertFalse(decision["live_enforcement"])
-        self.assertFalse(decision["would_block_call"])
+        self._assert_advisory_only_projection(decision)
         self.assertTrue(decision["would_block_if_enforced"])
         self.assertEqual(decision["enforcement_block_reason_code"], "timeout")
-        self.assertFalse(decision["would_change_provider_order"])
-        self.assertFalse(decision["would_change_fallback_behavior"])
-        self.assertTrue(decision["no_external_calls"])
+
+    def test_controlled_enforcement_decision_stays_advisory_when_enabled_scope_matches(self) -> None:
+        self.db.transition_provider_circuit_state(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="open",
+            reason_bucket="timeout",
+            cooldown_until=datetime(2026, 5, 6, 16, 0, 0),
+            now=datetime(2026, 5, 6, 15, 0, 0),
+        )
+
+        with patch("requests.sessions.Session.request") as request_mock:
+            decision = self.observer.build_controlled_enforcement_decision(
+                provider="tradier",
+                provider_category="options",
+                route_family="options_lab",
+                controlled_enforcement_enabled=True,
+                controlled_provider_categories=("options",),
+                controlled_route_families=("options_lab",),
+                now=datetime(2026, 5, 6, 15, 30, 0),
+            )
+
+        self.assertTrue(decision["controlled_enforcement_enabled"])
+        self.assertTrue(decision["controlled_scope_matched"])
+        self.assertEqual(decision["controlled_enforcement_status"], "advisory_only_would_block_not_enforced")
+        self._assert_advisory_only_projection(decision)
+        self.assertTrue(decision["would_block_if_enforced"])
+        self.assertEqual(decision["enforcement_block_reason_code"], "timeout")
+        request_mock.assert_not_called()
 
     def test_admin_enforcement_projection_requires_explicit_matching_scope(self) -> None:
         self.db.transition_provider_circuit_state(
@@ -364,8 +411,7 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
         )
 
         self.assertFalse(decision["scope_matched"])
-        self.assertFalse(decision["live_enforcement"])
-        self.assertFalse(decision["would_block_call"])
+        self._assert_advisory_only_projection(decision)
         self.assertTrue(decision["would_block_if_enforced"])
         self.assertEqual(decision["enforcement_block_reason_code"], "provider_429")
 
@@ -390,15 +436,66 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
             )
 
         self.assertTrue(decision["scope_matched"])
-        self.assertFalse(decision["live_enforcement"])
-        self.assertFalse(decision["would_block_call"])
+        self._assert_advisory_only_projection(decision)
         self.assertTrue(decision["would_block_if_enforced"])
         self.assertEqual(decision["enforcement_block_reason_code"], "auth_or_key_invalid")
-        self.assertFalse(decision["would_change_provider_order"])
-        self.assertFalse(decision["would_change_fallback_behavior"])
-        self.assertFalse(decision["provider_behavior_changed"])
-        self.assertFalse(decision["market_cache_behavior_changed"])
         request_mock.assert_not_called()
+
+    def test_admin_enforcement_projection_respects_expired_cooldown_as_non_blocking_advisory(self) -> None:
+        self.db.transition_provider_circuit_state(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="open",
+            reason_bucket="timeout",
+            cooldown_until=datetime(2026, 5, 6, 15, 0, 0),
+            now=datetime(2026, 5, 6, 14, 30, 0),
+        )
+
+        decision = self.observer.build_admin_enforcement_projection(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            controlled_provider_categories=("options",),
+            controlled_route_families=("options_lab",),
+            now=datetime(2026, 5, 6, 15, 30, 0),
+        )
+
+        self.assertTrue(decision["scope_matched"])
+        self._assert_advisory_only_projection(decision)
+        self.assertFalse(decision["would_block_if_enforced"])
+        self.assertIsNone(decision["enforcement_block_reason_code"])
+
+    def test_admin_enforcement_projection_marks_half_open_sample_limit_as_advisory_only(self) -> None:
+        self.db.transition_provider_circuit_state(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="half_open",
+            reason_bucket="timeout",
+            half_open_started_at=datetime(2026, 5, 6, 15, 0, 0),
+            half_open_sample_limit=2,
+            half_open_sample_count=2,
+            now=datetime(2026, 5, 6, 15, 0, 0),
+        )
+
+        decision = self.observer.build_admin_enforcement_projection(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            controlled_provider_categories=("options",),
+            controlled_route_families=("options_lab",),
+            now=datetime(2026, 5, 6, 15, 30, 0),
+        )
+
+        self.assertEqual(decision["circuit_state"], "half_open")
+        self.assertTrue(decision["scope_matched"])
+        self._assert_advisory_only_projection(decision)
+        self.assertTrue(decision["would_block_if_enforced"])
+        self.assertEqual(decision["enforcement_block_reason_code"], "timeout")
+        self.assertTrue(decision["half_open_sample_limit_reached"])
+        self.assertEqual(decision["half_open_sample_limit"], 2)
+        self.assertEqual(decision["half_open_sample_count"], 2)
 
     def test_sla_readiness_projection_marks_matching_scope_without_live_block(self) -> None:
         with patch("requests.sessions.Session.request") as request_mock:
@@ -425,8 +522,7 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
 
         projection = diagnostics["circuitPreflight"]
         self.assertTrue(projection["scope_matched"])
-        self.assertFalse(projection["live_enforcement"])
-        self.assertFalse(projection["would_block_call"])
+        self._assert_advisory_only_projection(projection)
         self.assertTrue(projection["would_block_if_enforced"])
         self.assertEqual(projection["enforcement_block_reason_code"], "auth_or_key_invalid")
         self.assertTrue(diagnostics["noExternalCalls"])
