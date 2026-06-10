@@ -80,6 +80,33 @@ ORDINARY_USER_FORBIDDEN_SURFACES = (
     ("provider_circuits", "GET", "/api/v1/admin/providers/circuits"),
     ("market_provider_operations", "GET", "/api/v1/admin/market-providers/operations"),
 )
+CAPABILITY_GATED_DIAGNOSTIC_SURFACES = (
+    ("storage_summary", "GET", "/api/v1/admin/logs/storage/summary"),
+    ("cost_ledger", "GET", "/api/v1/admin/cost/llm-ledger-summary"),
+    ("quota_dry_run", "POST", "/api/v1/admin/cost/quota-dry-run"),
+    ("provider_quota_windows", "GET", "/api/v1/admin/providers/quota-windows"),
+    ("provider_sla_readiness", "GET", "/api/v1/admin/providers/sla-readiness"),
+    ("provider_operations_matrix", "GET", "/api/v1/admin/providers/operations-matrix"),
+    ("provider_usage_ledger", "GET", "/api/v1/admin/provider-usage-ledger"),
+    ("market_provider_operations", "GET", "/api/v1/admin/market-providers/operations"),
+    ("market_provider_fit_advisor", "GET", "/api/v1/market/provider-fit-advisor"),
+)
+QUOTA_DRY_RUN_REQUEST = {
+    "ownerUserId": "ordinary-user",
+    "routeFamily": "analysis",
+    "provider": "openai",
+    "modelTier": "standard",
+    "tokenEstimate": 100,
+    "estimatedUnits": 1,
+    "enforcementMode": "dry_run",
+    "operation": "estimate",
+    "pricingStatus": "ok",
+}
+LEGACY_ROLE_ONLY_ADMIN_ROUTE_COUNTS = {
+    "agent.py": 1,
+    "scanner.py": 3,
+    "usage.py": 1,
+}
 
 
 def _reset_auth_globals() -> None:
@@ -152,6 +179,13 @@ def _set_cookie_for_user(client: TestClient, db: DatabaseManager, *, user_id: st
     )
 
 
+def _request_capability_diagnostic_surface(client: TestClient, method: str, path: str):
+    kwargs = {}
+    if path == "/api/v1/admin/cost/quota-dry-run":
+        kwargs["json"] = QUOTA_DRY_RUN_REQUEST
+    return client.request(method, path, **kwargs)
+
+
 def test_unauthenticated_users_cannot_access_private_api_surfaces(auth_release_client) -> None:
     client, _ = auth_release_client
 
@@ -182,6 +216,90 @@ def test_ordinary_users_cannot_access_admin_release_surfaces(auth_release_client
         _assert_public_error_safe(response.json(), dict(response.headers))
 
 
+def test_ordinary_users_are_denied_before_capability_details_on_diagnostics(auth_release_client) -> None:
+    client, db = auth_release_client
+    _set_cookie_for_user(client, db, user_id="ordinary-user", role=ROLE_USER)
+
+    results = {
+        label: _request_capability_diagnostic_surface(client, method, path)
+        for label, method, path in CAPABILITY_GATED_DIAGNOSTIC_SURFACES
+    }
+
+    assert {label: response.status_code for label, response in results.items()} == {
+        label: 403 for label, *_ in CAPABILITY_GATED_DIAGNOSTIC_SURFACES
+    }
+    for label, response in results.items():
+        assert response.json()["detail"]["error"] == "admin_required", label
+        assert "admin_capability_required" not in response.text
+        _assert_public_error_safe(response.json(), dict(response.headers))
+
+
+def test_admin_without_matching_capabilities_cannot_access_diagnostic_surfaces(
+    auth_release_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db = auth_release_client
+    monkeypatch.setenv("WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED", "false")
+    _set_cookie_for_user(client, db, user_id="admin-without-capabilities", role=ROLE_ADMIN)
+
+    results = {
+        label: _request_capability_diagnostic_surface(client, method, path)
+        for label, method, path in CAPABILITY_GATED_DIAGNOSTIC_SURFACES
+    }
+
+    assert {label: response.status_code for label, response in results.items()} == {
+        label: 403 for label, *_ in CAPABILITY_GATED_DIAGNOSTIC_SURFACES
+    }
+    for label, response in results.items():
+        assert response.json()["detail"]["error"] == "admin_capability_required", label
+        _assert_public_error_safe(response.json(), dict(response.headers))
+
+
+def test_auth_disabled_mode_exposes_transitional_admin_and_is_not_public_safe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _reset_auth_globals()
+    DatabaseManager.reset_instance()
+    db_path = tmp_path / "auth-disabled-surface.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setattr(auth, "_get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(auth, "_is_auth_enabled_from_env", lambda: False)
+    auth._auth_enabled = False
+
+    DatabaseManager(db_url=f"sqlite:///{db_path}")
+    app = FastAPI()
+    add_auth_middleware(app)
+    app.include_router(api_v1_router)
+    client = TestClient(app)
+    try:
+        storage = client.get("/api/v1/admin/logs/storage/summary")
+        provider = client.get("/api/v1/admin/providers/circuits")
+        usage = client.get("/api/v1/usage/summary")
+
+        evidence = {
+            "authDisabledPublicIngressSafe": False,
+            "surfaceClassification": "launch_blocker",
+            "storageStatus": storage.status_code,
+            "providerStatus": provider.status_code,
+            "usageStatus": usage.status_code,
+            "transitionalAdminObserved": all(response.status_code == 200 for response in (storage, provider, usage)),
+        }
+        assert evidence == {
+            "authDisabledPublicIngressSafe": False,
+            "surfaceClassification": "launch_blocker",
+            "storageStatus": 200,
+            "providerStatus": 200,
+            "usageStatus": 200,
+            "transitionalAdminObserved": True,
+        }
+        _assert_public_error_safe(evidence)
+    finally:
+        client.close()
+        DatabaseManager.reset_instance()
+        _reset_auth_globals()
+
+
 def test_adjacent_admin_capabilities_do_not_unlock_cost_or_provider_routes(
     auth_release_client,
     monkeypatch: pytest.MonkeyPatch,
@@ -210,6 +328,17 @@ def test_adjacent_admin_capabilities_do_not_unlock_cost_or_provider_routes(
         denied_provider.json(),
         denied_market_provider_operations.json(),
     )
+
+
+def test_role_only_legacy_admin_routes_are_launch_blockers() -> None:
+    endpoint_dir = REPO_ROOT / "api" / "v1" / "endpoints"
+    actual_counts = {
+        path.name: count
+        for path in endpoint_dir.glob("*.py")
+        if (count := path.read_text(encoding="utf-8").count("Depends(require_admin_user)"))
+    }
+
+    assert actual_counts == LEGACY_ROLE_ONLY_ADMIN_ROUTE_COUNTS
 
 
 def test_auth_401_403_and_429_errors_and_logs_are_sanitized(

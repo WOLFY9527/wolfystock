@@ -110,6 +110,7 @@ EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS = {
     "admin.activity.read": 1,
     "admin.logs.read": 8,
     "admin.logs.write": 1,
+    "admin.ops.status": 1,
     "admin.notifications.read": 2,
     "admin.notifications.write": 5,
     "admin.cost.read": 4,
@@ -128,6 +129,79 @@ FRONTEND_ADMIN_READ_CAPABILITY_LABELS = {
     "ops:notifications:read",
     "ops:providers:read",
     "ops:system_config:read",
+}
+SURFACE_CLASSIFICATION_VOCABULARY = {
+    "public_static_docs",
+    "authenticated_member",
+    "admin_role_only_legacy",
+    "admin_capability_required",
+    "operator_diagnostic",
+    "debug_or_schema_surface",
+    "unclassified",
+}
+DOCS_AND_SCHEMA_ROUTE_CLASSIFICATIONS = {
+    ("GET", "/docs"): "public_static_docs",
+    ("GET", "/redoc"): "public_static_docs",
+    ("GET", "/openapi.json"): "debug_or_schema_surface",
+}
+EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
+    ("GET", "/api/v1/market/data-readiness"): "operator_diagnostic",
+    ("GET", "/api/v1/market/cn-provider-health"): "operator_diagnostic",
+    ("GET", "/api/v1/market/provider-fit-advisor"): "admin_capability_required",
+    ("GET", "/api/v1/agent/status"): "operator_diagnostic",
+    ("GET", "/api/v1/agent/models"): "operator_diagnostic",
+    ("GET", "/api/v1/agent/provider-health"): "operator_diagnostic",
+    ("GET", "/api/v1/agent/skills"): "unclassified",
+    ("POST", "/api/v1/agent/chat"): "authenticated_member",
+    ("GET", "/api/v1/agent/chat/sessions"): "authenticated_member",
+    ("GET", "/api/v1/agent/chat/sessions/{session_id}"): "authenticated_member",
+    ("DELETE", "/api/v1/agent/chat/sessions/{session_id}"): "authenticated_member",
+    ("POST", "/api/v1/agent/chat/stream"): "authenticated_member",
+    ("POST", "/api/v1/agent/chat/send"): "admin_role_only_legacy",
+    ("POST", "/api/v1/user-alerts/rules/{rule_id}/dry-run"): "authenticated_member",
+    ("POST", "/api/v1/scanner/run"): "authenticated_member",
+    ("GET", "/api/v1/scanner/runs"): "authenticated_member",
+    ("GET", "/api/v1/scanner/strategy-simulation"): "authenticated_member",
+    ("GET", "/api/v1/scanner/runs/{run_id}"): "authenticated_member",
+    ("GET", "/api/v1/scanner/watchlists/today"): "admin_role_only_legacy",
+    ("GET", "/api/v1/scanner/watchlists/recent"): "admin_role_only_legacy",
+    ("GET", "/api/v1/scanner/status"): "admin_role_only_legacy",
+    ("GET", "/api/v1/scanner/themes"): "unclassified",
+    ("POST", "/api/v1/scanner/themes"): "unclassified",
+    ("GET", "/api/v1/usage/summary"): "admin_role_only_legacy",
+    ("GET", "/api/v1/admin/logs/storage/summary"): "admin_capability_required",
+    ("GET", "/api/v1/admin/ops/status"): "admin_capability_required",
+    ("GET", "/api/v1/admin/cost/duplicate-summary"): "admin_capability_required",
+    ("POST", "/api/v1/admin/cost/quota-dry-run"): "admin_capability_required",
+    ("GET", "/api/v1/admin/cost/llm-ledger-summary"): "admin_capability_required",
+    ("GET", "/api/v1/admin/providers/quota-windows"): "admin_capability_required",
+    ("GET", "/api/v1/admin/providers/sla-readiness"): "admin_capability_required",
+    ("GET", "/api/v1/admin/providers/operations-matrix"): "admin_capability_required",
+    ("GET", "/api/v1/admin/provider-usage-ledger"): "admin_capability_required",
+    ("GET", "/api/v1/admin/market-providers/operations"): "admin_capability_required",
+    ("GET", "/api/v1/quant/duckdb/health"): "admin_capability_required",
+    ("GET", "/api/v1/system/config"): "admin_capability_required",
+}
+EXPECTED_OPERATOR_DIAGNOSTIC_ROUTE_CLASSIFICATIONS = {
+    ("GET", "/api/v1/market/data-readiness"),
+    ("GET", "/api/v1/market/cn-provider-health"),
+    ("GET", "/api/v1/agent/status"),
+    ("GET", "/api/v1/agent/models"),
+    ("GET", "/api/v1/agent/provider-health"),
+}
+EXPECTED_LEGACY_ROUTE_SURFACE_CLASSIFICATIONS = {
+    ("POST", "/api/v1/agent/chat/send"),
+    ("GET", "/api/v1/scanner/watchlists/today"),
+    ("GET", "/api/v1/scanner/watchlists/recent"),
+    ("GET", "/api/v1/scanner/status"),
+    ("GET", "/api/v1/usage/summary"),
+}
+UNWRAPPED_REGISTERED_ROUTE_EXCEPTIONS = {
+    "market_overview": {
+        "path": "/market-overview",
+        "localized_path": "market-overview",
+        "test_probe": "queryByText('auth-guard:Market Overview')",
+    },
 }
 AUTH_ROUTE_REQUEST_GUARD_MARKERS = (
     "resolve_current_user(request)",
@@ -258,6 +332,23 @@ def _route_matches_group(route: dict[str, str | None], group: dict[str, Any]) ->
     if group["capability_label"] != route["capability_label"]:
         return False
     return re.match(group["path_pattern"], route["path"] or "") is not None
+
+
+def _classification_signature(entry: dict[str, Any]) -> tuple[str, str]:
+    return (str(entry["method"]), str(entry["path"]))
+
+
+def _surface_classification_entries(fixture: dict[str, Any]) -> list[dict[str, Any]]:
+    return list(fixture["route_surface_classifications"])
+
+
+def _surface_classification_by_signature(
+    fixture: dict[str, Any],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    entries = _surface_classification_entries(fixture)
+    by_signature = {_classification_signature(entry): entry for entry in entries}
+    assert len(by_signature) == len(entries)
+    return by_signature
 
 
 def _matched_route_signatures(
@@ -549,6 +640,96 @@ def test_control_plane_route_inventory_fails_closed_without_explicit_classificat
     assert classified_route_signatures == live_control_plane_signatures
 
 
+def test_backend_route_surface_classification_vocabulary_and_no_go_markers_are_explicit() -> None:
+    fixture = _load_json(BACKEND_FIXTURE)
+    entries = _surface_classification_entries(fixture)
+
+    assert set(fixture["surface_classification_vocabulary"]) == SURFACE_CLASSIFICATION_VOCABULARY
+    assert entries
+
+    for entry in entries:
+        classification = entry["surface_classification"]
+        assert classification in SURFACE_CLASSIFICATION_VOCABULARY
+        assert set(entry) == {
+            "route_id",
+            "path",
+            "method",
+            "surface_classification",
+            "auth_dependency_label",
+            "capability_label",
+            "no_go_marker",
+            "transitional_note",
+        }
+        if classification in {"unclassified", "operator_diagnostic", "debug_or_schema_surface"}:
+            marker = entry.get("no_go_marker")
+            assert marker and "TODO/NO-GO" in marker, entry["route_id"]
+        if classification in {"public_static_docs", "debug_or_schema_surface"}:
+            assert not entry["path"].startswith("/api/v1/"), entry["route_id"]
+
+
+def test_backend_route_surface_classification_covers_target_live_surfaces() -> None:
+    fixture = _load_json(BACKEND_FIXTURE)
+    live_routes = _collect_live_routes()
+    classifications = _surface_classification_by_signature(fixture)
+
+    required_live_signatures = {
+        signature
+        for signature in live_routes
+        if signature in EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS
+        or signature[1].startswith("/api/v1/agent/")
+        or signature[1].startswith("/api/v1/scanner/")
+        or signature[1] == "/api/v1/usage/summary"
+        or signature[1] in {
+            "/api/v1/market/data-readiness",
+            "/api/v1/market/cn-provider-health",
+            "/api/v1/market/provider-fit-advisor",
+        }
+    }
+    expected_signatures = set(EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS) | set(DOCS_AND_SCHEMA_ROUTE_CLASSIFICATIONS)
+
+    assert set(classifications) == expected_signatures
+    assert required_live_signatures == set(EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS)
+
+    for signature, expected_classification in EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS.items():
+        entry = classifications[signature]
+        live = live_routes[signature]
+        expected_dependency = entry["auth_dependency_label"]
+        assert entry["surface_classification"] == expected_classification
+        assert live["auth_dependency_label"] == (None if expected_dependency == "public" else expected_dependency)
+        assert live["capability_label"] == entry["capability_label"]
+
+
+def test_docs_openapi_and_operator_diagnostic_surfaces_are_not_product_routes() -> None:
+    fixture = _load_json(BACKEND_FIXTURE)
+    classifications = _surface_classification_by_signature(fixture)
+
+    for signature, expected_classification in DOCS_AND_SCHEMA_ROUTE_CLASSIFICATIONS.items():
+        entry = classifications[signature]
+        assert entry["surface_classification"] == expected_classification
+        assert entry["auth_dependency_label"] == "public"
+        assert entry["capability_label"] is None
+
+    for signature in EXPECTED_OPERATOR_DIAGNOSTIC_ROUTE_CLASSIFICATIONS:
+        entry = classifications[signature]
+        assert entry["surface_classification"] == "operator_diagnostic"
+        assert entry["auth_dependency_label"] == "public"
+        assert "NO-GO" in entry["no_go_marker"]
+
+    for signature in EXPECTED_LEGACY_ROUTE_SURFACE_CLASSIFICATIONS:
+        entry = classifications[signature]
+        assert entry["surface_classification"] == "admin_role_only_legacy"
+        assert entry["auth_dependency_label"] == "admin_user"
+        assert "NO-GO" in entry["no_go_marker"]
+
+    api_v1_doc_like_labels = [
+        entry
+        for entry in classifications.values()
+        if entry["path"].startswith("/api/v1/")
+        and entry["surface_classification"] in {"public_static_docs", "debug_or_schema_surface"}
+    ]
+    assert api_v1_doc_like_labels == []
+
+
 def test_backend_write_only_capabilities_do_not_leak_into_frontend_read_route_flags() -> None:
     frontend_fixture = _load_json(FRONTEND_FIXTURE)
     frontend_capability_labels = {
@@ -637,6 +818,15 @@ def test_frontend_route_inventory_matches_admin_capability_map_and_wrapper_bound
             assert expected_flag in capability_source
 
     for entry in fixture["registered_surface_routes"]:
+        if entry["route_id"] in UNWRAPPED_REGISTERED_ROUTE_EXCEPTIONS:
+            expected = UNWRAPPED_REGISTERED_ROUTE_EXCEPTIONS[entry["route_id"]]
+            assert entry["path"] == expected["path"]
+            assert entry["localized_path"] == expected["localized_path"]
+            assert f'path="{entry["path"]}"' in app_source
+            assert f'path="{entry["localized_path"]}"' in app_source
+            assert entry["path"] not in registered_wrapped_paths
+            assert entry["localized_path"] not in registered_wrapped_paths
+            continue
         assert entry["path"] in registered_wrapped_paths
         assert entry["localized_path"] in registered_wrapped_paths
 
@@ -657,6 +847,10 @@ def test_frontend_guest_paywall_and_admin_gate_boundaries_are_represented_in_exi
     auth_guard_test_source = AUTH_GUARD_TEST_TSX.read_text(encoding="utf-8")
 
     for entry in fixture["guest_paywall_routes"]:
+        if entry["route_id"] in UNWRAPPED_REGISTERED_ROUTE_EXCEPTIONS:
+            expected = UNWRAPPED_REGISTERED_ROUTE_EXCEPTIONS[entry["route_id"]]
+            assert expected["test_probe"] in app_routes_test_source
+            continue
         assert entry["test_probe"] in app_routes_test_source or entry["test_probe"] in auth_guard_test_source
 
     assert "/settings/system" in app_routes_test_source

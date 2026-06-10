@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import warnings
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from fastapi import FastAPI
@@ -66,10 +67,32 @@ FORBIDDEN_ADVICE_MARKERS = (
     "立即买入",
     "立即卖出",
 )
+REPO_ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ROUTE_CLASSIFICATION_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "auth" / "backend_route_capability_inventory.json"
+DOCS_AND_SCHEMA_CLASSIFICATIONS = {
+    ("GET", "/docs"): "public_static_docs",
+    ("GET", "/redoc"): "public_static_docs",
+    ("GET", "/openapi.json"): "debug_or_schema_surface",
+}
+DIAGNOSTIC_ROUTES_EXCLUDED_FROM_SAFE_BYPASS = {
+    ("GET", "/api/v1/market/data-readiness"),
+    ("GET", "/api/v1/market/cn-provider-health"),
+    ("GET", "/api/v1/agent/status"),
+    ("GET", "/api/v1/agent/models"),
+    ("GET", "/api/v1/agent/provider-health"),
+}
 
 
 def _json_text(payload: object) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
+def _route_surface_classifications() -> dict[tuple[str, str], str]:
+    fixture = json.loads(BACKEND_ROUTE_CLASSIFICATION_FIXTURE.read_text(encoding="utf-8"))
+    return {
+        (entry["method"], entry["path"]): entry["surface_classification"]
+        for entry in fixture["route_surface_classifications"]
+    }
 
 
 def _assert_public_surface_safe(payload: object) -> None:
@@ -243,6 +266,27 @@ def test_launch_surface_route_inventory_remains_stable_and_fixture_safe() -> Non
     }
 
     assert expected_matrix_routes <= routes
+
+
+def test_docs_openapi_and_backend_diagnostics_have_explicit_surface_classification() -> None:
+    classifications = _route_surface_classifications()
+
+    for signature, expected in DOCS_AND_SCHEMA_CLASSIFICATIONS.items():
+        assert classifications[signature] == expected
+
+    assert classifications[("POST", "/api/v1/agent/chat")] == "authenticated_member"
+    assert classifications[("GET", "/api/v1/admin/logs/storage/summary")] == "admin_capability_required"
+    assert classifications[("POST", "/api/v1/admin/cost/quota-dry-run")] == "admin_capability_required"
+    assert classifications[("GET", "/api/v1/market/data-readiness")] == "operator_diagnostic"
+    assert classifications[("GET", "/api/v1/agent/provider-health")] == "operator_diagnostic"
+
+    api_routes_with_doc_labels = [
+        signature
+        for signature, classification in classifications.items()
+        if signature[1].startswith("/api/v1/")
+        and classification in {"public_static_docs", "debug_or_schema_surface"}
+    ]
+    assert api_routes_with_doc_labels == []
 
 
 def test_unauthenticated_admin_routes_fail_closed_with_sanitized_errors() -> None:
@@ -428,6 +472,7 @@ def test_public_api_abuse_limiter_safe_market_read_allowlist_is_narrow() -> None
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/market/sentiment")
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/admin/users")
     assert not limiter._is_safe_read_bypass("GET", "/api/v1/options/underlyings/TEM/summary")
+    assert DIAGNOSTIC_ROUTES_EXCLUDED_FROM_SAFE_BYPASS.isdisjoint(limiter._SAFE_READ_BYPASS_ROUTES)
 
 
 def test_hot_public_bucket_allows_safe_market_get_routes_to_serve_fallback_payloads(monkeypatch) -> None:

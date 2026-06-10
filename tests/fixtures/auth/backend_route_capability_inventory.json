@@ -65,7 +65,7 @@
     },
     {
       "route_id": "portfolio.member_surface",
-      "path_pattern": "^/api/v1/portfolio/(?:accounts(?:/\\{account_id\\})?|fx-rate(?:/refresh)?|broker-connections(?:/\\{connection_id\\})?|sync/ibkr|trades(?:/\\{trade_id\\})?|cash-ledger(?:/\\{entry_id\\})?|corporate-actions(?:/\\{action_id\\})?|snapshot|imports/(?:parse|brokers|commit|csv/parse|csv/brokers|csv/commit)|fx/refresh|risk|scenario-risk)$",
+      "path_pattern": "^/api/v1/portfolio/(?:accounts(?:/\\{account_id\\})?|fx-rate(?:/refresh)?|broker-connections(?:/\\{connection_id\\})?|sync/ibkr|trades(?:/\\{trade_id\\})?|cash-ledger(?:/\\{entry_id\\})?|corporate-actions(?:/\\{action_id\\})?|snapshot|history|imports/(?:parse|brokers|commit|csv/parse|csv/brokers|csv/commit)|fx/refresh|risk|scenario-risk)$",
       "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"],
       "surface": "portfolio",
       "auth_dependency_label": "authenticated_user",
@@ -74,7 +74,7 @@
     },
     {
       "route_id": "user_alerts.member_surface",
-      "path_pattern": "^/api/v1/user-alerts/(?:rules(?:/\\{rule_id\\})?|events)$",
+      "path_pattern": "^/api/v1/user-alerts/(?:rules(?:/\\{rule_id\\}(?:/dry-run)?)?|events)$",
       "methods": ["GET", "POST", "PATCH", "DELETE"],
       "surface": "user_alerts",
       "auth_dependency_label": "authenticated_user",
@@ -181,6 +181,15 @@
       "transitional_note": null
     },
     {
+      "route_id": "admin.ops.status",
+      "path_pattern": "^/api/v1/admin/ops/status$",
+      "methods": ["GET"],
+      "surface": "admin_ops_status",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:logs:read",
+      "transitional_note": null
+    },
+    {
       "route_id": "admin.notifications.read",
       "path_pattern": "^/api/v1/admin/(?:notification-channels|notifications)$",
       "methods": ["GET"],
@@ -215,6 +224,15 @@
       "auth_dependency_label": "admin_capability",
       "capability_label": "ops:providers:read",
       "transitional_note": null
+    },
+    {
+      "route_id": "market.provider_fit_advisor",
+      "path_pattern": "^/api/v1/market/provider-fit-advisor$",
+      "methods": ["GET"],
+      "surface": "market_provider_fit_advisor",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "transitional_note": "Deprecated hidden provider-fit diagnostic route under the market namespace; capability-gated and not public-safe."
     },
     {
       "route_id": "system.config.read",
@@ -280,6 +298,407 @@
       "auth_dependency_label": "public",
       "capability_label": null,
       "transitional_note": "Public auth status probe should not silently become protected."
+    }
+  ],
+  "surface_classification_vocabulary": [
+    "public_static_docs",
+    "authenticated_member",
+    "admin_role_only_legacy",
+    "admin_capability_required",
+    "operator_diagnostic",
+    "debug_or_schema_surface",
+    "unclassified"
+  ],
+  "route_surface_classifications": [
+    {
+      "route_id": "docs.swagger_ui",
+      "path": "/docs",
+      "method": "GET",
+      "surface_classification": "public_static_docs",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": "Static API documentation is app-level and explicitly separated from authenticated product routes."
+    },
+    {
+      "route_id": "docs.redoc",
+      "path": "/redoc",
+      "method": "GET",
+      "surface_classification": "public_static_docs",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": "Static API documentation is app-level and explicitly separated from authenticated product routes."
+    },
+    {
+      "route_id": "docs.openapi_schema",
+      "path": "/openapi.json",
+      "method": "GET",
+      "surface_classification": "debug_or_schema_surface",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: public schema exposure must be accepted as a launch decision before broad public ingress.",
+      "transitional_note": "Schema exposure is not an authenticated product route."
+    },
+    {
+      "route_id": "market.data_readiness",
+      "path": "/api/v1/market/data-readiness",
+      "method": "GET",
+      "surface_classification": "operator_diagnostic",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: operator readiness diagnostics are not public-ingress safe while route-level auth remains absent.",
+      "transitional_note": "Fixture-only classification; no route guard is changed by this inventory."
+    },
+    {
+      "route_id": "market.cn_provider_health",
+      "path": "/api/v1/market/cn-provider-health",
+      "method": "GET",
+      "surface_classification": "operator_diagnostic",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: provider-health diagnostics are not public-ingress safe while route-level auth remains absent.",
+      "transitional_note": "Fixture-only classification; no provider runtime behavior is changed by this inventory."
+    },
+    {
+      "route_id": "market.provider_fit_advisor",
+      "path": "/api/v1/market/provider-fit-advisor",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Hidden deprecated diagnostic route remains explicit because it lives outside the /admin route prefix."
+    },
+    {
+      "route_id": "agent.status",
+      "path": "/api/v1/agent/status",
+      "method": "GET",
+      "surface_classification": "operator_diagnostic",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: agent readiness metadata is not public-ingress safe while route-level auth remains absent.",
+      "transitional_note": "Classifies readiness metadata only; no agent behavior changes."
+    },
+    {
+      "route_id": "agent.models",
+      "path": "/api/v1/agent/models",
+      "method": "GET",
+      "surface_classification": "operator_diagnostic",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: model/provider topology metadata is not public-ingress safe while route-level auth remains absent.",
+      "transitional_note": "Classifies readiness metadata only; no agent behavior changes."
+    },
+    {
+      "route_id": "agent.provider_health",
+      "path": "/api/v1/agent/provider-health",
+      "method": "GET",
+      "surface_classification": "operator_diagnostic",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: provider readiness metadata is not public-ingress safe while route-level auth remains absent.",
+      "transitional_note": "Classifies readiness metadata only; no agent behavior changes."
+    },
+    {
+      "route_id": "agent.skills",
+      "path": "/api/v1/agent/skills",
+      "method": "GET",
+      "surface_classification": "unclassified",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: decide whether agent skill discovery is public metadata, member-only product metadata, or operator diagnostic metadata.",
+      "transitional_note": "Listed explicitly so unknown agent metadata is not silently treated as safe."
+    },
+    {
+      "route_id": "agent.chat",
+      "path": "/api/v1/agent/chat",
+      "method": "POST",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "agent.chat_sessions",
+      "path": "/api/v1/agent/chat/sessions",
+      "method": "GET",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "agent.chat_session_detail",
+      "path": "/api/v1/agent/chat/sessions/{session_id}",
+      "method": "GET",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "agent.chat_session_delete",
+      "path": "/api/v1/agent/chat/sessions/{session_id}",
+      "method": "DELETE",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "agent.chat_stream",
+      "path": "/api/v1/agent/chat/stream",
+      "method": "POST",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "agent.admin_send",
+      "path": "/api/v1/agent/chat/send",
+      "method": "POST",
+      "surface_classification": "admin_role_only_legacy",
+      "auth_dependency_label": "admin_user",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: migrate legacy admin role-only send route to an explicit capability before broad public admin exposure.",
+      "transitional_note": "Legacy admin-only route without an explicit capability dependency."
+    },
+    {
+      "route_id": "user_alerts.rule_dry_run",
+      "path": "/api/v1/user-alerts/rules/{rule_id}/dry-run",
+      "method": "POST",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": "Owner-scoped dry-run evaluates caller-supplied local data and does not send alerts."
+    },
+    {
+      "route_id": "scanner.run",
+      "path": "/api/v1/scanner/run",
+      "method": "POST",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "scanner.runs",
+      "path": "/api/v1/scanner/runs",
+      "method": "GET",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "scanner.strategy_simulation",
+      "path": "/api/v1/scanner/strategy-simulation",
+      "method": "GET",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "scanner.run_detail",
+      "path": "/api/v1/scanner/runs/{run_id}",
+      "method": "GET",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": null
+    },
+    {
+      "route_id": "scanner.watchlists_today",
+      "path": "/api/v1/scanner/watchlists/today",
+      "method": "GET",
+      "surface_classification": "admin_role_only_legacy",
+      "auth_dependency_label": "admin_user",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: migrate legacy scanner admin route to an explicit capability before broad public admin exposure.",
+      "transitional_note": "Legacy admin scanner endpoint still depends on coarse admin gating."
+    },
+    {
+      "route_id": "scanner.watchlists_recent",
+      "path": "/api/v1/scanner/watchlists/recent",
+      "method": "GET",
+      "surface_classification": "admin_role_only_legacy",
+      "auth_dependency_label": "admin_user",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: migrate legacy scanner admin route to an explicit capability before broad public admin exposure.",
+      "transitional_note": "Legacy admin scanner endpoint still depends on coarse admin gating."
+    },
+    {
+      "route_id": "scanner.status",
+      "path": "/api/v1/scanner/status",
+      "method": "GET",
+      "surface_classification": "admin_role_only_legacy",
+      "auth_dependency_label": "admin_user",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: migrate legacy scanner admin status route to an explicit capability before broad public admin exposure.",
+      "transitional_note": "Legacy admin scanner endpoint still depends on coarse admin gating."
+    },
+    {
+      "route_id": "scanner.themes_get",
+      "path": "/api/v1/scanner/themes",
+      "method": "GET",
+      "surface_classification": "unclassified",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: decide whether scanner theme metadata is public-safe or member-only before broad public ingress.",
+      "transitional_note": "Listed explicitly so public scanner metadata is not silently treated as safe."
+    },
+    {
+      "route_id": "scanner.themes_post",
+      "path": "/api/v1/scanner/themes",
+      "method": "POST",
+      "surface_classification": "unclassified",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: unsafe-method scanner theme generation route needs an explicit public-ingress decision.",
+      "transitional_note": "Listed explicitly so public scanner metadata is not silently treated as safe."
+    },
+    {
+      "route_id": "usage.admin_summary",
+      "path": "/api/v1/usage/summary",
+      "method": "GET",
+      "surface_classification": "admin_role_only_legacy",
+      "auth_dependency_label": "admin_user",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: migrate usage summary from coarse admin role to an explicit capability before broad public admin exposure.",
+      "transitional_note": "Usage summary is still admin-role gated instead of explicit capability gated."
+    },
+    {
+      "route_id": "admin.logs.storage_summary",
+      "path": "/api/v1/admin/logs/storage/summary",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:logs:read",
+      "no_go_marker": null,
+      "transitional_note": "Storage diagnostics are admin-capability gated and not a public surface."
+    },
+    {
+      "route_id": "admin.ops.status",
+      "path": "/api/v1/admin/ops/status",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:logs:read",
+      "no_go_marker": null,
+      "transitional_note": "Ops status is admin-capability gated and not a public or member route."
+    },
+    {
+      "route_id": "admin.cost.duplicate_summary",
+      "path": "/api/v1/admin/cost/duplicate-summary",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "cost:observability:read",
+      "no_go_marker": null,
+      "transitional_note": "Cost diagnostics are admin-capability gated and not a public surface."
+    },
+    {
+      "route_id": "admin.cost.quota_dry_run",
+      "path": "/api/v1/admin/cost/quota-dry-run",
+      "method": "POST",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "cost:observability:read",
+      "no_go_marker": null,
+      "transitional_note": "Quota diagnostic dry-run is admin-capability gated and not live route blocking."
+    },
+    {
+      "route_id": "admin.cost.llm_ledger_summary",
+      "path": "/api/v1/admin/cost/llm-ledger-summary",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "cost:observability:read",
+      "no_go_marker": null,
+      "transitional_note": "Ledger diagnostics are admin-capability gated and not a public surface."
+    },
+    {
+      "route_id": "admin.providers.quota_windows",
+      "path": "/api/v1/admin/providers/quota-windows",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Provider quota diagnostics are admin-capability gated and not a public surface."
+    },
+    {
+      "route_id": "admin.providers.sla_readiness",
+      "path": "/api/v1/admin/providers/sla-readiness",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Provider readiness diagnostics are admin-capability gated and not a public surface."
+    },
+    {
+      "route_id": "admin.providers.operations_matrix",
+      "path": "/api/v1/admin/providers/operations-matrix",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Provider operations diagnostics are admin-capability gated and not a public surface."
+    },
+    {
+      "route_id": "admin.provider_usage_ledger",
+      "path": "/api/v1/admin/provider-usage-ledger",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Provider usage diagnostics are admin-capability gated and not a public surface."
+    },
+    {
+      "route_id": "admin.market_providers_operations",
+      "path": "/api/v1/admin/market-providers/operations",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:providers:read",
+      "no_go_marker": null,
+      "transitional_note": "Market provider operations diagnostics are admin-capability gated and not a public surface."
+    },
+    {
+      "route_id": "quant.duckdb.health",
+      "path": "/api/v1/quant/duckdb/health",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "quant:admin:read",
+      "no_go_marker": null,
+      "transitional_note": "Backend quant storage diagnostics are admin-capability gated and not a public surface."
+    },
+    {
+      "route_id": "system.config",
+      "path": "/api/v1/system/config",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:system_config:read",
+      "no_go_marker": null,
+      "transitional_note": "System configuration read model is admin-capability gated and not a public surface."
     }
   ],
   "request_guarded_auth_routes": [
