@@ -20,6 +20,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import re
 import secrets
 from datetime import datetime
@@ -55,10 +56,11 @@ from api.v1.schemas.history import (
     ReportStrategy,
     ReportDetails,
 )
-from src.config import Config
+from src.config import Config, parse_env_bool
 from src.config import resolve_litellm_model_selection
 from src.repositories.analysis_repo import AnalysisRepository
 from src.report_language import get_localized_stock_name, normalize_report_language
+from src.services.quota_policy_service import QuotaPolicyService
 from src.services.name_to_code_resolver import resolve_name_to_code
 from src.services.stock_code_utils import is_code_like
 from src.services.task_queue import (
@@ -80,8 +82,18 @@ router = APIRouter()
 
 _SUPPORTED_FREE_TEXT_RE = re.compile(r"^[A-Za-z0-9.*\-+\u3400-\u9fff\s]+$")
 _GUEST_SESSION_ID_RE = re.compile(r"^[a-f0-9]{32}$")
+_QUOTA_IDEMPOTENCY_PART_RE = re.compile(r"[^A-Za-z0-9_.:-]+")
 GUEST_SESSION_COOKIE_NAME = "wolfystock_guest_session"
 GUEST_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24
+QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED_ENV = (
+    "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED"
+)
+QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS_ENV = (
+    "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS"
+)
+_QUOTA_ANALYSIS_SYNC_ROUTE_FAMILY = "analysis"
+_QUOTA_ANALYSIS_SYNC_ROUTE_KEY = "api.v1.analysis.analyze"
+_QUOTA_ANALYSIS_SYNC_IDEMPOTENCY_PREFIX = "quota:analysis_sync_single_stock:v1"
 
 
 def _invalid_analysis_input_error() -> HTTPException:
@@ -199,6 +211,145 @@ def _guest_actor(guest_session_id: str, query_id: str) -> Dict[str, Any]:
 
 def _guest_bucket_hash(guest_session_id: str) -> str:
     return hashlib.sha256(f"wolfystock-guest:{guest_session_id}".encode("utf-8")).hexdigest()
+
+
+def _quota_env_owner_allowlist() -> set[str]:
+    raw_value = str(os.getenv(QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS_ENV) or "")
+    return {token.strip() for token in raw_value.split(",") if token.strip()}
+
+
+def _quota_analysis_sync_pilot_enabled() -> bool:
+    return parse_env_bool(
+        os.getenv(QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED_ENV),
+        default=False,
+    )
+
+
+def _is_single_stock_sync_request(request: AnalyzeRequest, stock_code: str) -> bool:
+    if bool(getattr(request, "async_mode", False)):
+        return False
+    request_codes = []
+    if getattr(request, "stock_code", None):
+        request_codes.append(str(request.stock_code).strip())
+    for code in getattr(request, "stock_codes", None) or ():
+        if str(code or "").strip():
+            request_codes.append(str(code).strip())
+    if len(request_codes) > 1:
+        return False
+    return bool(str(stock_code or "").strip())
+
+
+def _analysis_sync_quota_pilot_in_scope(
+    *,
+    request: AnalyzeRequest,
+    stock_code: str,
+    current_user: CurrentUser | object | None,
+    owner_id: Optional[str],
+) -> bool:
+    if not _is_single_stock_sync_request(request, stock_code):
+        return False
+    if not owner_id:
+        return False
+    if not bool(getattr(current_user, "auth_enabled", False)):
+        return False
+    if not bool(getattr(current_user, "is_authenticated", False)):
+        return False
+    if bool(getattr(current_user, "transitional", False)):
+        return False
+    if not _quota_analysis_sync_pilot_enabled():
+        return False
+    return owner_id in _quota_env_owner_allowlist()
+
+
+def _quota_idempotency_part(value: object, *, default: str = "none") -> str:
+    text = str(value if value is not None else "").strip()
+    if not text:
+        return default
+    sanitized = _QUOTA_IDEMPOTENCY_PART_RE.sub("_", text).strip("._:-")
+    return (sanitized or default)[:128]
+
+
+def _analysis_sync_quota_idempotency_key(
+    *,
+    owner_id: str,
+    stock_code: str,
+    request: AnalyzeRequest,
+    query_id: str,
+) -> str:
+    research_mode = getattr(request, "research_mode", None)
+    research_mode_value = getattr(research_mode, "value", research_mode)
+    fields = (
+        _QUOTA_ANALYSIS_SYNC_IDEMPOTENCY_PREFIX,
+        f"route_family:{_QUOTA_ANALYSIS_SYNC_ROUTE_FAMILY}",
+        f"route_key:{_QUOTA_ANALYSIS_SYNC_ROUTE_KEY}",
+        "mode:sync",
+        f"owner:{_quota_idempotency_part(owner_id)}",
+        f"stock:{_quota_idempotency_part(canonical_stock_code(stock_code))}",
+        f"report_type:{_quota_idempotency_part(getattr(request, 'report_type', None), default='detailed')}",
+        f"force_refresh:{1 if bool(getattr(request, 'force_refresh', False)) else 0}",
+        f"research_mode:{_quota_idempotency_part(research_mode_value)}",
+        f"query_id:{_quota_idempotency_part(query_id)}",
+    )
+    return "|".join(fields)
+
+
+def _try_reserve_analysis_sync_quota_pilot(
+    *,
+    stock_code: str,
+    request: AnalyzeRequest,
+    current_user: CurrentUser | object | None,
+    owner_id: Optional[str],
+    query_id: str,
+) -> Optional[str]:
+    if not _analysis_sync_quota_pilot_in_scope(
+        request=request,
+        stock_code=stock_code,
+        current_user=current_user,
+        owner_id=owner_id,
+    ):
+        return None
+
+    try:
+        service = QuotaPolicyService(enforcement_enabled=True)
+        reserve = getattr(service, "reserve_quota")
+        decision = reserve(
+            owner_user_id=owner_id,
+            route_family=_QUOTA_ANALYSIS_SYNC_ROUTE_FAMILY,
+            idempotency_key=_analysis_sync_quota_idempotency_key(
+                owner_id=str(owner_id),
+                stock_code=stock_code,
+                request=request,
+                query_id=query_id,
+            ),
+        )
+    except Exception as exc:
+        logger.warning("Quota analysis sync reserve pilot failed open: %s", exc, exc_info=True)
+        return None
+
+    reservation_id = str(getattr(decision, "reservation_id", "") or "").strip()
+    status = str(getattr(decision, "status", "") or "").strip().lower()
+    if bool(getattr(decision, "allowed", False)) and status == "reserved" and reservation_id:
+        return reservation_id
+    return None
+
+
+def _release_analysis_sync_quota_pilot_reservation(reservation_id: Optional[str]) -> None:
+    normalized_id = str(reservation_id or "").strip()
+    if not normalized_id:
+        return
+    try:
+        service = QuotaPolicyService(enforcement_enabled=True)
+        release = getattr(service, "release_reservation")
+        release(reservation_id=normalized_id)
+    except Exception as exc:
+        logger.warning("Quota analysis sync release pilot failed open: %s", exc, exc_info=True)
+
+
+def _analysis_sync_quota_execution_metadata(reservation_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    normalized_id = str(reservation_id or "").strip()
+    if not normalized_id:
+        return None
+    return {"quota_route_pilot": {"reservation_id": normalized_id}}
 
 
 # ============================================================
@@ -584,16 +735,26 @@ def _handle_sync_analysis(
     if owner_id:
         analyze_kwargs["owner_id"] = owner_id
     execution_logs = ExecutionLogService()
-    execution_id = execution_logs.start_analysis_execution(
-        symbol=stock_code,
-        analysis_type=request.report_type,
-        user_id=owner_id,
-        request_id=query_id,
-        task_id=query_id,
-        stock_name=getattr(request, "stock_name", None),
-    )
+    execution_id = None
+    quota_reservation_id: Optional[str] = None
     
     try:
+        quota_reservation_id = _try_reserve_analysis_sync_quota_pilot(
+            stock_code=stock_code,
+            request=request,
+            current_user=current_user,
+            owner_id=owner_id,
+            query_id=query_id,
+        )
+        execution_id = execution_logs.start_analysis_execution(
+            symbol=stock_code,
+            analysis_type=request.report_type,
+            user_id=owner_id,
+            request_id=query_id,
+            task_id=query_id,
+            stock_name=getattr(request, "stock_name", None),
+            metadata=_analysis_sync_quota_execution_metadata(quota_reservation_id),
+        )
         service = AnalysisService()
         result = service.analyze_stock(**analyze_kwargs)
 
@@ -687,20 +848,21 @@ def _handle_sync_analysis(
         raise
     except Exception as e:
         logger.error(f"分析失败: {e}", exc_info=True)
-        execution_logs.add_execution_step(
-            execution_id=execution_id,
-            name="ai_analysis",
-            label="AI 分析",
-            status="failed",
-            error_type=type(e).__name__,
-            error_message=str(e),
-            critical=True,
-        )
-        execution_logs.finish_analysis_execution(
-            execution_id=execution_id,
-            status="failed",
-            query_id=query_id,
-        )
+        if execution_id is not None:
+            execution_logs.add_execution_step(
+                execution_id=execution_id,
+                name="ai_analysis",
+                label="AI 分析",
+                status="failed",
+                error_type=type(e).__name__,
+                error_message=str(e),
+                critical=True,
+            )
+            execution_logs.finish_analysis_execution(
+                execution_id=execution_id,
+                status="failed",
+                query_id=query_id,
+            )
         raise HTTPException(
             status_code=500,
             detail={
@@ -708,6 +870,8 @@ def _handle_sync_analysis(
                 "message": f"分析过程发生错误: {str(e)}"
             }
         )
+    finally:
+        _release_analysis_sync_quota_pilot_reservation(quota_reservation_id)
 
 
 # ============================================================
