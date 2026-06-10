@@ -230,6 +230,37 @@ def test_rejects_unsafe_parameter_paths_before_engine_execution() -> None:
     assert engine.calls == 0
 
 
+def test_rejects_request_identity_fields_before_engine_execution() -> None:
+    plan = _plan({"strategy_spec.signal.fast_period": [2], "strategy_spec.signal.slow_period": [5]})
+    request_bundle = copy.deepcopy(plan["parameter_grid_request_bundle"])
+    request_bundle["requests"][0]["external_run_id"] = "stored-run-42"
+    request_bundle["requests"][0]["request_id"] = "client-request-42"
+    engine = _BombEngine()
+
+    result = run_bounded_parameter_grid_diagnostic(
+        parameter_grid_request_bundle=request_bundle,
+        parameter_grid_descriptor=plan["parameter_grid_descriptor"],
+        parameter_stability_plan=plan,
+        parsed_strategy=_parsed_strategy(),
+        bars=_make_bars(),
+        code="SAFE",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 12),
+        lookback_bars=4,
+        initial_capital=10000.0,
+        fee_bps=0.0,
+        slippage_bps=0.0,
+        engine=engine,
+    )
+
+    assert result["state"] == "rejected"
+    assert result["failClosedReasonCode"] == "request_identity_fields_not_allowed"
+    assert result["failClosedDiagnostics"]["fieldName"] == "external_run_id"
+    assert result["failClosedDiagnostics"]["requestIndex"] == 1
+    assert result["gridExecutionCount"] == 0
+    assert engine.calls == 0
+
+
 def test_zero_timeout_budget_fails_closed_before_engine_execution() -> None:
     plan = _plan({"strategy_spec.signal.fast_period": [2], "strategy_spec.signal.slow_period": [4]})
     engine = _BombEngine()
@@ -255,6 +286,33 @@ def test_zero_timeout_budget_fails_closed_before_engine_execution() -> None:
     assert result["timeout"]["exhausted"] is True
     assert result["gridExecutionCount"] == 0
     assert engine.calls == 0
+
+
+def test_runner_surface_does_not_synthesize_external_or_stored_run_identity() -> None:
+    plan = _plan({"strategy_spec.signal.fast_period": [3], "strategy_spec.signal.slow_period": [5]})
+
+    result = run_bounded_parameter_grid_diagnostic(
+        parameter_stability_plan=plan,
+        parsed_strategy=_parsed_strategy(),
+        bars=_make_bars(),
+        code="SAFE",
+        start_date=date(2024, 1, 1),
+        end_date=date(2024, 1, 10),
+        lookback_bars=20,
+        initial_capital=100000.0,
+        fee_bps=2.5,
+        slippage_bps=1.25,
+    )
+
+    assert result["state"] == "completed"
+    assert result["executionSemantics"]["storageMutation"] is False
+    assert result["executionSemantics"]["storedRunIdentityCreated"] is False
+    assert all("externalRunId" not in item for item in result["requestResults"])
+    assert all("runId" not in item for item in result["requestResults"])
+
+    surface_rows = list(result["parameterStabilitySurface"]["metric_surface"]["rows"] or [])
+    assert surface_rows
+    assert all(row["external_run_id"] is None for row in surface_rows)
 
 
 def test_runner_does_not_call_service_storage_provider_or_market_cache_paths() -> None:
@@ -332,5 +390,19 @@ def test_runner_source_does_not_import_service_storage_provider_or_market_cache_
         "get_or_refresh",
         "save_run",
         "save_trades",
+    ):
+        assert forbidden not in source
+
+
+def test_runner_source_does_not_expose_public_api_or_schema_surface() -> None:
+    source = inspect.getsource(runner_module)
+
+    for forbidden in (
+        "api.v1",
+        "/api/v1/backtest",
+        "schemas.backtest",
+        "BacktestRunRequest",
+        "BacktestRunResponse",
+        "router",
     ):
         assert forbidden not in source

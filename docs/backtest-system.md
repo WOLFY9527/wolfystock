@@ -66,6 +66,11 @@
   results。它不会执行真实策略回测、不会做隐藏 optimizer、不会自动提升 winner、
   不会选择 live strategy、不会修改 engine math、不会调用 provider，也不会做组合
   allocation backtest。
+- bounded parameter grid runner 当前仍是 `RuleBacktestService` 内部的
+  diagnostic-only helper：它只在调用方已提供 bars/parsed strategy 的前提下做
+  bounded 单标的重放，不暴露新的 API/schema/frontend surface，不生成持久化
+  run identity，也不会把 `request_id`、`external_run_id` 或 `planned_run_id`
+  升级成可存储的 public run 语义。
 - 当前 robustness analysis 在未显式传入 `robustness_config` 时，默认仍会产
   生 stored robustness evidence：walk-forward 默认
   `train_window=24 / test_window=12 / step=12 / max_windows=4`，monte-carlo

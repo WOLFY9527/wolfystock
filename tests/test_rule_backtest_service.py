@@ -678,6 +678,108 @@ class RuleBacktestTestCase(unittest.TestCase):
         ):
             mocked.assert_not_called()
 
+    def test_bounded_parameter_grid_internal_helper_rejects_request_identity_fields_without_storage_side_effects(self) -> None:
+        service = RuleBacktestService(self.db)
+        strategy_text = "5日均线上穿20日均线买入，下穿卖出"
+        parsed = service._dict_to_parsed_strategy(
+            service.parse_strategy(
+                strategy_text,
+                code="SAFE",
+                start_date="2024-01-01",
+                end_date="2024-01-15",
+                initial_capital=100000.0,
+            ),
+            strategy_text,
+        )
+        bars = self._make_bars([10.0 + (index * 0.2) for index in range(15)])
+        plan = build_parameter_stability_plan(
+            strategy_id="safe-grid",
+            dataset_id="supplied-bars-v1",
+            base_parameters={
+                "strategy_spec.signal.fast_type": "simple",
+                "strategy_spec.signal.slow_type": "simple",
+            },
+            parameter_grid={
+                "strategy_spec.signal.fast_period": [5],
+                "strategy_spec.signal.slow_period": [20],
+            },
+            metric_keys=["total_return_pct", "max_drawdown_pct"],
+            primary_metric="total_return_pct",
+            risk_metric="max_drawdown_pct",
+            min_completed_runs=1,
+            max_combinations=10,
+            overflow_policy="reject",
+        )
+        request_bundle = copy.deepcopy(plan["parameter_grid_request_bundle"])
+        request_bundle["requests"][0]["external_run_id"] = "stored-run-42"
+        request_bundle["requests"][0]["request_id"] = "client-request-42"
+
+        with patch.object(
+            service,
+            "_ensure_market_history",
+            side_effect=AssertionError("should not ensure history"),
+        ) as ensure_mock, patch.object(
+            service,
+            "_store_result",
+            side_effect=AssertionError("should not store result"),
+        ) as store_mock, patch.object(
+            service,
+            "_build_ai_summary",
+            side_effect=AssertionError("should not build ai summary"),
+        ) as ai_summary_mock, patch.object(
+            service.repo,
+            "save_run",
+            side_effect=AssertionError("should not save run"),
+        ) as save_run_mock, patch.object(
+            service.repo,
+            "update_run",
+            side_effect=AssertionError("should not update run"),
+        ) as update_run_mock, patch.object(
+            service.repo,
+            "save_trades",
+            side_effect=AssertionError("should not save trades"),
+        ) as save_trades_mock, patch.object(
+            service.stock_repo,
+            "save_dataframe",
+            side_effect=AssertionError("should not save dataframe"),
+        ) as save_dataframe_mock, patch(
+            "src.services.rule_backtest_service.fetch_daily_history_with_local_us_fallback",
+            side_effect=AssertionError("should not fetch provider history"),
+        ) as fetch_history_mock:
+            result = service._run_bounded_parameter_grid_diagnostic_with_supplied_bars(
+                parsed_strategy=parsed,
+                bars=bars,
+                code="SAFE",
+                start_date=date(2024, 1, 1),
+                end_date=date(2024, 1, 15),
+                lookback_bars=20,
+                initial_capital=100000.0,
+                fee_bps=2.5,
+                slippage_bps=1.25,
+                parameter_grid_descriptor=plan["parameter_grid_descriptor"],
+                parameter_grid_request_bundle=request_bundle,
+                parameter_stability_plan=plan,
+            )
+
+        self.assertEqual(result["state"], "rejected")
+        self.assertEqual(result["failClosedReasonCode"], "request_identity_fields_not_allowed")
+        self.assertTrue(result["diagnosticOnly"])
+        self.assertFalse(result["executionSemantics"]["providerCallsExecuted"])
+        self.assertFalse(result["executionSemantics"]["marketCacheAccessed"])
+        self.assertFalse(result["executionSemantics"]["storageMutation"])
+        self.assertEqual(result["gridExecutionCount"], 0)
+        for mocked in (
+            ensure_mock,
+            store_mock,
+            ai_summary_mock,
+            save_run_mock,
+            update_run_mock,
+            save_trades_mock,
+            save_dataframe_mock,
+            fetch_history_mock,
+        ):
+            mocked.assert_not_called()
+
     def test_submit_backtest_rejects_unknown_execution_model_before_job_write(self) -> None:
         service = RuleBacktestService(self.db)
 

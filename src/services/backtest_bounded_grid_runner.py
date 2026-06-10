@@ -17,6 +17,7 @@ DEFAULT_MAX_GRID_COMBINATIONS = 10
 DEFAULT_OVERFLOW_POLICY = "reject"
 SAFE_PARAMETER_PATH_PREFIXES = ("strategy_spec.signal.", "strategy_spec.risk.")
 _DESCRIPTOR_FLAGS = ("optimizer_executed", "winner_promotion", "decision_grade")
+_FORBIDDEN_REQUEST_IDENTITY_FIELDS = ("external_run_id", "request_id", "run_id", "single_run_id")
 
 
 def run_bounded_parameter_grid_diagnostic(
@@ -132,7 +133,6 @@ def run_bounded_parameter_grid_diagnostic(
             {
                 "planned_run_id": planned_run_id,
                 "state": run_state,
-                "external_run_id": f"bounded_grid:{planned_run_id}",
                 "metrics": metrics,
             }
         )
@@ -219,6 +219,7 @@ def _base_result(
             "providerCallsExecuted": False,
             "marketCacheAccessed": False,
             "storageMutation": False,
+            "storedRunIdentityCreated": False,
             "apiBehaviorChanged": False,
             "optimizerExecuted": False,
             "winnerPromotion": False,
@@ -300,6 +301,13 @@ def _validate_runner_inputs(
         for flag in _DESCRIPTOR_FLAGS:
             if request.get(flag, False) is not False:
                 return {"reasonCode": "request_decision_flags_not_safe", "flag": flag}
+        for field_name in _FORBIDDEN_REQUEST_IDENTITY_FIELDS:
+            if request.get(field_name) not in (None, ""):
+                return {
+                    "reasonCode": "request_identity_fields_not_allowed",
+                    "fieldName": field_name,
+                    "requestIndex": int(request.get("request_index") or 0),
+                }
     return None
 
 
