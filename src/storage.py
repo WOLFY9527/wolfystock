@@ -2551,6 +2551,10 @@ class DatabaseManager:
             self._add_column_if_missing(conn, "quota_reservations", "request_idempotency_key_hash", "VARCHAR(128)")
             self._add_column_if_missing(conn, "quota_reservations", "reason_code", "VARCHAR(64)")
             self._add_column_if_missing(conn, "quota_reservations", "metadata_json", "TEXT")
+            # Backfill logical quota identities before creating the unique index.
+            # Existing rows get the new column default first; indexing that default
+            # would report false duplicates and skip the non-destructive backfill.
+            self._backfill_quota_usage_window_identity_keys(conn)
             self._add_column_if_missing(conn, "model_pricing_policies", "source_label", "VARCHAR(128)")
             self._add_column_if_missing(conn, "model_pricing_policies", "source_url", "VARCHAR(500)")
             self._add_column_if_missing(conn, "model_pricing_policies", "metadata_json", "TEXT")
@@ -2937,7 +2941,6 @@ class DatabaseManager:
 
             self._backfill_market_scanner_ownership(conn, bootstrap_user_id=bootstrap_user_id)
             self._backfill_conversation_sessions(conn, bootstrap_user_id=bootstrap_user_id)
-            self._backfill_quota_usage_window_identity_keys(conn)
 
     @staticmethod
     def _quota_identity_component(value: Any, *, lowercase: bool = False, limit: int = 64) -> str:

@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import sys
+import tempfile
 import unittest
 from datetime import datetime, timedelta
 
@@ -67,6 +69,99 @@ class QuotaStorageIdempotencyTestCase(unittest.TestCase):
                     )
                 )
                 session.flush()
+
+    def test_migration_backfills_quota_window_identity_before_unique_index(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = os.path.join(tmpdir, "quota.sqlite3")
+            conn = sqlite3.connect(db_path)
+            try:
+                conn.execute(
+                    """
+                    CREATE TABLE quota_usage_windows (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        owner_user_id VARCHAR(64),
+                        route_family VARCHAR(64),
+                        provider VARCHAR(64),
+                        model_tier VARCHAR(64),
+                        window_type VARCHAR(16) NOT NULL,
+                        window_start DATETIME NOT NULL,
+                        window_end DATETIME NOT NULL,
+                        reserved_units INTEGER NOT NULL DEFAULT 0,
+                        consumed_units INTEGER NOT NULL DEFAULT 0,
+                        request_count INTEGER NOT NULL DEFAULT 0,
+                        updated_at DATETIME NOT NULL
+                    )
+                    """
+                )
+                conn.executemany(
+                    """
+                    INSERT INTO quota_usage_windows (
+                        owner_user_id,
+                        route_family,
+                        provider,
+                        model_tier,
+                        window_type,
+                        window_start,
+                        window_end,
+                        reserved_units,
+                        consumed_units,
+                        request_count,
+                        updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        (
+                            None,
+                            "analysis",
+                            None,
+                            None,
+                            "daily",
+                            "2026-06-10 00:00:00.000000",
+                            "2026-06-11 00:00:00.000000",
+                            3,
+                            0,
+                            1,
+                            "2026-06-10 00:00:00.000000",
+                        ),
+                        (
+                            "user-1",
+                            "analysis",
+                            None,
+                            None,
+                            "daily",
+                            "2026-06-10 00:00:00.000000",
+                            "2026-06-11 00:00:00.000000",
+                            5,
+                            0,
+                            1,
+                            "2026-06-10 00:00:00.000000",
+                        ),
+                    ],
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+            DatabaseManager.reset_instance()
+            db = DatabaseManager(db_url=f"sqlite:///{db_path}")
+            with db.session_scope() as session:
+                rows = (
+                    session.query(QuotaUsageWindow)
+                    .filter_by(route_family="analysis", window_type="daily")
+                    .all()
+                )
+                identities = {row.window_identity_key for row in rows}
+
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(len(identities), 2)
+            with db._engine.connect() as index_conn:
+                index_names = {
+                    row["name"]
+                    for row in index_conn.exec_driver_sql(
+                        "PRAGMA index_list(quota_usage_windows)"
+                    ).mappings()
+                }
+            self.assertIn("ux_quota_window_identity", index_names)
 
     def _reserve(self, *, estimated_units: int = 10):
         result = self.service.reserve_quota(
