@@ -197,6 +197,39 @@ describe('evidenceDisplay', () => {
     ]));
   });
 
+  it('maps private-beta runtime boundary terms into consistent safe labels', () => {
+    const normalized = normalizeScannerEvidence({
+      evidencePacket: {
+        userFacingLabels: [
+          'observe_only',
+          'read_only_projection',
+          'advisory_only_contract',
+          'dry_run_preview',
+          'quota_dry_run',
+          'delivery_disabled',
+          'liveEnforcement=false',
+          'wouldBlockCall=false',
+          'noExternalCalls=true',
+          'synthetic_or_fixture_data_not_decision_grade',
+        ],
+      },
+    });
+
+    const text = [normalized.displayLabel, ...normalized.limitationLabels].join(' ');
+    expect(normalized.displayLabel).toBe('仅供观察');
+    expect(normalized.limitationLabels).toEqual(expect.arrayContaining([
+      '只读',
+      '仅提示',
+      '试运行',
+      '不发送',
+      '保持观察边界',
+      '不改变数据通路',
+      '不触发外部动作',
+      '演示数据',
+    ]));
+    expect(text).not.toMatch(/read_only_projection|advisory_only_contract|quota|provider|delivery_disabled|liveEnforcement|wouldBlockCall|noExternalCalls|synthetic_or_fixture/i);
+  });
+
   it('preserves reason codes and diagnostics in admin mode when requested', () => {
     const normalized = normalizeScannerEvidence({
       evidencePacket: {

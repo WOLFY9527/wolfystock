@@ -160,3 +160,45 @@ None recorded yet.
   admin/operator, and validation coverage lanes.
 - No runtime behavior, backend behavior, provider behavior, auth/session/RBAC,
   DB, broker/order, quota enforcement, or notification sending changed.
+
+### 2026-06-11 - unify consumer safety surfaces
+
+- Extended `trustDisclosure.ts` with stable private-beta boundary buckets for
+  read-only, advisory-only, dry-run, no-send, no-live-quota,
+  no-provider-blocking, fixture/demo, and no-advice states.
+- Kept consumer-visible labels generic where the backend term is operational:
+  `no-live-quota` resolves to `保持观察边界`,
+  `no-provider-blocking` resolves to `不改变数据通路`, and
+  `noExternalCalls=true` resolves to `不触发外部动作`.
+- Added a bounded allowlist for the new private-beta term mappings so unrelated
+  `advisory`, quota, provider, or runtime words are not surfaced by substring
+  accident.
+- Extended `evidenceDisplay.ts` tests and added `trustDisclosure.test.ts` to
+  lock these mappings and prevent raw boundary terms such as
+  `read_only_projection`, `quota_dry_run`, `liveEnforcement=false`,
+  `wouldBlockCall=false`, and `synthetic_or_fixture_data_not_decision_grade`
+  from appearing in consumer labels.
+
+Validation:
+
+```bash
+npm --prefix apps/dsa-web run test -- src/utils/__tests__/trustDisclosure.test.ts src/utils/__tests__/evidenceDisplay.test.ts
+npm --prefix apps/dsa-web run typecheck
+npm --prefix apps/dsa-web run build
+git diff --check
+./scripts/release_secret_scan.sh --local-only
+```
+
+Result: all commands completed successfully. Vite build still reports the
+pre-existing large chunk warning.
+
+Boundary confirmation:
+
+- No public launch approval.
+- No live quota enforcement, reservation consume/blocking, or route blocking.
+- No provider runtime enforcement, provider order/fallback/cache changes, or
+  provider blocking.
+- No auth/session/RBAC runtime changes.
+- No DB migration, cleanup, restore, or PITR execution.
+- No broker/order/trade paths.
+- No external notification sending.
