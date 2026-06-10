@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, Optional, Tuple
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from src.storage import DatabaseManager, QuotaReservation, QuotaUsageWindow
 
@@ -919,12 +920,14 @@ class QuotaPolicyService:
         estimated_units: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None,
         expires_at: Optional[datetime] = None,
+        idempotency_key: Optional[str] = None,
         now: Optional[datetime] = None,
     ) -> QuotaDecision:
         if not self.enforcement_enabled:
             return QuotaDecision(allowed=True, status="disabled")
         current_time = now or datetime.now()
         route_key = self.classify_route_family(route_family)
+        owner_key = self._normalize_optional(owner_user_id)
         provider_key = self._normalize_optional(provider, lowercase=True)
         model_key = self._normalize_optional(model_tier, lowercase=True)
         units = max(
@@ -944,9 +947,68 @@ class QuotaPolicyService:
         if token_cap is not None and int(token_estimate or 0) > token_cap:
             return self._reject("token_cap_exceeded")
 
+        request_hash = self.db.quota_reservation_idempotency_hash(
+            idempotency_key=idempotency_key,
+            owner_user_id=owner_key,
+            route_family=route_key,
+            provider=provider_key,
+            model_tier=model_key,
+        )
+
+        for attempt in range(2):
+            try:
+                return self._reserve_quota_once(
+                    owner_user_id=owner_key,
+                    route_family=route_key,
+                    provider=provider_key,
+                    model_tier=model_key,
+                    token_estimate=token_estimate,
+                    units=units,
+                    policies=policies,
+                    metadata=metadata,
+                    expires_at=expires_at,
+                    now=current_time,
+                    request_idempotency_key_hash=request_hash,
+                )
+            except IntegrityError:
+                replay = self._replay_reservation_by_idempotency_hash(
+                    request_idempotency_key_hash=request_hash,
+                    now=current_time,
+                )
+                if replay is not None:
+                    return replay
+                if attempt == 0:
+                    continue
+                raise
+
+        return self._reject("budget_exceeded")
+
+    def _reserve_quota_once(
+        self,
+        *,
+        owner_user_id: Optional[str],
+        route_family: str,
+        provider: Optional[str],
+        model_tier: Optional[str],
+        token_estimate: Optional[int],
+        units: int,
+        policies: Iterable[Dict[str, Any]],
+        metadata: Optional[Dict[str, Any]],
+        expires_at: Optional[datetime],
+        now: datetime,
+        request_idempotency_key_hash: Optional[str],
+    ) -> QuotaDecision:
         with self.db.session_scope() as session:
-            daily_start, daily_end = self._window_bounds("daily", current_time)
-            monthly_start, monthly_end = self._window_bounds("monthly", current_time)
+            replay = self._replay_reservation_by_idempotency_hash(
+                session=session,
+                request_idempotency_key_hash=request_idempotency_key_hash,
+                now=now,
+            )
+            if replay is not None:
+                return replay
+
+            daily_start, daily_end = self._window_bounds("daily", now)
+            monthly_start, monthly_end = self._window_bounds("monthly", now)
 
             if self._budget_exceeded(
                 session=session,
@@ -975,7 +1037,7 @@ class QuotaPolicyService:
                 route_requests = self._request_count(
                     session=session,
                     owner_user_id=None,
-                    route_family=route_key,
+                    route_family=route_family,
                     window_type="daily",
                     window_start=daily_start,
                 )
@@ -983,18 +1045,19 @@ class QuotaPolicyService:
                     return self._reject("route_cap_exceeded")
 
             reservation_id = f"qres_{uuid.uuid4().hex}"
-            expires = expires_at or current_time + timedelta(minutes=15)
+            expires = expires_at or now + timedelta(minutes=15)
             row = QuotaReservation(
                 reservation_id=reservation_id,
-                owner_user_id=self._normalize_optional(owner_user_id),
-                route_family=route_key,
-                provider=provider_key,
-                model_tier=model_key,
+                owner_user_id=owner_user_id,
+                route_family=route_family,
+                provider=provider,
+                model_tier=model_tier,
+                request_idempotency_key_hash=request_idempotency_key_hash,
                 estimated_units=units,
                 status="reserved",
                 metadata_json=self.db._safe_json_dumps(self.db._sanitize_quota_metadata(metadata or {})),
-                created_at=current_time,
-                updated_at=current_time,
+                created_at=now,
+                updated_at=now,
                 expires_at=expires,
             )
             session.add(row)
@@ -1005,32 +1068,32 @@ class QuotaPolicyService:
                 owner_window = self._get_or_create_window(
                     session=session,
                     owner_user_id=owner_user_id,
-                    route_family=route_key,
-                    provider=provider_key,
-                    model_tier=model_key,
+                    route_family=route_family,
+                    provider=provider,
+                    model_tier=model_tier,
                     window_type=window_type,
                     window_start=start,
                     window_end=end,
-                    now=current_time,
+                    now=now,
                 )
                 owner_window.reserved_units = int(owner_window.reserved_units or 0) + units
                 owner_window.request_count = int(owner_window.request_count or 0) + 1
-                owner_window.updated_at = current_time
+                owner_window.updated_at = now
 
                 route_window = self._get_or_create_window(
                     session=session,
                     owner_user_id=None,
-                    route_family=route_key,
-                    provider=provider_key,
-                    model_tier=model_key,
+                    route_family=route_family,
+                    provider=provider,
+                    model_tier=model_tier,
                     window_type=window_type,
                     window_start=start,
                     window_end=end,
-                    now=current_time,
+                    now=now,
                 )
                 route_window.reserved_units = int(route_window.reserved_units or 0) + units
                 route_window.request_count = int(route_window.request_count or 0) + 1
-                route_window.updated_at = current_time
+                route_window.updated_at = now
 
             return QuotaDecision(
                 allowed=True,
@@ -1038,6 +1101,49 @@ class QuotaPolicyService:
                 reservation_id=reservation_id,
                 estimated_units=units,
             )
+
+    def _replay_reservation_by_idempotency_hash(
+        self,
+        *,
+        request_idempotency_key_hash: Optional[str],
+        now: datetime,
+        session: Optional[Any] = None,
+    ) -> Optional[QuotaDecision]:
+        if not request_idempotency_key_hash:
+            return None
+        if session is None:
+            with self.db.session_scope() as replay_session:
+                return self._replay_reservation_by_idempotency_hash(
+                    session=replay_session,
+                    request_idempotency_key_hash=request_idempotency_key_hash,
+                    now=now,
+                )
+
+        row = session.execute(
+            select(QuotaReservation)
+            .where(QuotaReservation.request_idempotency_key_hash == request_idempotency_key_hash)
+            .limit(1)
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+
+        reservation_id = str(row.reservation_id or "").strip()
+        status = str(row.status or "").strip().lower()
+        if status == "reserved" and row.expires_at <= now:
+            return self._expire_reserved_reservation(
+                session=session,
+                row=row,
+                reservation_id=reservation_id,
+                now=now,
+            )
+        if status == "reserved":
+            return QuotaDecision(
+                allowed=True,
+                status="reserved",
+                reservation_id=reservation_id,
+                estimated_units=int(row.estimated_units or 0),
+            )
+        return self._terminal_reservation_decision(row=row, reservation_id=reservation_id)
 
     def consume_reservation(
         self,
@@ -1316,25 +1422,16 @@ class QuotaPolicyService:
         now: datetime,
     ) -> QuotaUsageWindow:
         owner_key = self._normalize_optional(owner_user_id)
+        identity = self.db.quota_window_identity_values(
+            owner_user_id=owner_key,
+            route_family=route_family,
+            provider=provider,
+            model_tier=model_tier,
+        )
         query = select(QuotaUsageWindow).where(
-            QuotaUsageWindow.route_family == route_family,
+            QuotaUsageWindow.window_identity_key == identity["window_identity_key"],
             QuotaUsageWindow.window_type == window_type,
             QuotaUsageWindow.window_start == window_start,
-        )
-        query = query.where(
-            QuotaUsageWindow.owner_user_id.is_(None)
-            if owner_key is None
-            else QuotaUsageWindow.owner_user_id == owner_key
-        )
-        query = query.where(
-            QuotaUsageWindow.provider.is_(None)
-            if provider is None
-            else QuotaUsageWindow.provider == provider
-        )
-        query = query.where(
-            QuotaUsageWindow.model_tier.is_(None)
-            if model_tier is None
-            else QuotaUsageWindow.model_tier == model_tier
         )
         row = session.execute(query.limit(1)).scalar_one_or_none()
         if row is not None:
@@ -1348,6 +1445,7 @@ class QuotaPolicyService:
             window_start=window_start,
             window_end=window_end,
             updated_at=now,
+            **identity,
         )
         session.add(row)
         return row
@@ -1361,29 +1459,31 @@ class QuotaPolicyService:
         now: datetime,
     ) -> None:
         estimated_units = int(row.estimated_units or 0)
+        owner_identity = self.db.quota_window_identity_values(
+            owner_user_id=row.owner_user_id,
+            route_family=row.route_family,
+            provider=row.provider,
+            model_tier=row.model_tier,
+        )
+        route_identity = self.db.quota_window_identity_values(
+            owner_user_id=None,
+            route_family=row.route_family,
+            provider=row.provider,
+            model_tier=row.model_tier,
+        )
+        identity_keys = {
+            owner_identity["window_identity_key"],
+            route_identity["window_identity_key"],
+        }
         for window_type, window_start in (
             ("daily", self._window_bounds("daily", row.created_at)[0]),
             ("monthly", self._window_bounds("monthly", row.created_at)[0]),
         ):
             windows_query = select(QuotaUsageWindow).where(
-                QuotaUsageWindow.route_family == row.route_family,
+                QuotaUsageWindow.window_identity_key.in_(identity_keys),
                 QuotaUsageWindow.window_type == window_type,
                 QuotaUsageWindow.window_start == window_start,
             )
-            if row.owner_user_id is None:
-                windows_query = windows_query.where(QuotaUsageWindow.owner_user_id.is_(None))
-            else:
-                windows_query = windows_query.where(
-                    or_(QuotaUsageWindow.owner_user_id == row.owner_user_id, QuotaUsageWindow.owner_user_id.is_(None))
-                )
-            if row.provider is None:
-                windows_query = windows_query.where(QuotaUsageWindow.provider.is_(None))
-            else:
-                windows_query = windows_query.where(QuotaUsageWindow.provider == row.provider)
-            if row.model_tier is None:
-                windows_query = windows_query.where(QuotaUsageWindow.model_tier.is_(None))
-            else:
-                windows_query = windows_query.where(QuotaUsageWindow.model_tier == row.model_tier)
             for window in session.execute(windows_query).scalars().all():
                 window.reserved_units = max(0, int(window.reserved_units or 0) - estimated_units)
                 window.consumed_units = int(window.consumed_units or 0) + consumed_units

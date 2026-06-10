@@ -734,6 +734,7 @@ class QuotaUsageWindow(Base):
     route_family = Column(String(64), index=True)
     provider = Column(String(64), index=True)
     model_tier = Column(String(64), index=True)
+    window_identity_key = Column(String(512), nullable=False, default="", index=True)
     window_type = Column(String(16), nullable=False, index=True)
     window_start = Column(DateTime, nullable=False, index=True)
     window_end = Column(DateTime, nullable=False, index=True)
@@ -746,6 +747,7 @@ class QuotaUsageWindow(Base):
         Index('ix_quota_window_owner_type_start', 'owner_user_id', 'window_type', 'window_start'),
         Index('ix_quota_window_route_type_start', 'route_family', 'window_type', 'window_start'),
         Index('ix_quota_window_provider_type_start', 'provider', 'model_tier', 'window_type', 'window_start'),
+        Index('ux_quota_window_identity', 'window_identity_key', 'window_type', 'window_start', unique=True),
     )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -775,6 +777,7 @@ class QuotaReservation(Base):
     route_family = Column(String(64), index=True)
     provider = Column(String(64), index=True)
     model_tier = Column(String(64), index=True)
+    request_idempotency_key_hash = Column(String(128), index=True)
     estimated_units = Column(Integer, nullable=False, default=0)
     status = Column(String(16), nullable=False, index=True)
     reason_code = Column(String(64), index=True)
@@ -787,6 +790,7 @@ class QuotaReservation(Base):
         Index('ix_quota_reservation_owner_status_created', 'owner_user_id', 'status', 'created_at'),
         Index('ix_quota_reservation_route_status_created', 'route_family', 'status', 'created_at'),
         Index('ix_quota_reservation_status_expires', 'status', 'expires_at'),
+        Index('ux_quota_reservation_request_idempotency', 'request_idempotency_key_hash', unique=True),
     )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -2537,11 +2541,13 @@ class DatabaseManager:
             self._add_column_if_missing(conn, "quota_policy_definitions", "metadata_json", "TEXT")
             self._add_column_if_missing(conn, "quota_usage_windows", "provider", "VARCHAR(64)")
             self._add_column_if_missing(conn, "quota_usage_windows", "model_tier", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "quota_usage_windows", "window_identity_key", "VARCHAR(512) NOT NULL DEFAULT ''")
             self._add_column_if_missing(conn, "quota_usage_windows", "reserved_units", "INTEGER NOT NULL DEFAULT 0")
             self._add_column_if_missing(conn, "quota_usage_windows", "consumed_units", "INTEGER NOT NULL DEFAULT 0")
             self._add_column_if_missing(conn, "quota_usage_windows", "request_count", "INTEGER NOT NULL DEFAULT 0")
             self._add_column_if_missing(conn, "quota_reservations", "provider", "VARCHAR(64)")
             self._add_column_if_missing(conn, "quota_reservations", "model_tier", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "quota_reservations", "request_idempotency_key_hash", "VARCHAR(128)")
             self._add_column_if_missing(conn, "quota_reservations", "reason_code", "VARCHAR(64)")
             self._add_column_if_missing(conn, "quota_reservations", "metadata_json", "TEXT")
             self._add_column_if_missing(conn, "model_pricing_policies", "source_label", "VARCHAR(128)")
@@ -2755,6 +2761,12 @@ class DatabaseManager:
                 "quota_usage_windows",
                 "provider, model_tier, window_type, window_start",
             )
+            self._create_unique_index_if_missing(
+                conn,
+                "ux_quota_window_identity",
+                "quota_usage_windows",
+                "window_identity_key, window_type, window_start",
+            )
             self._create_index_if_missing(
                 conn,
                 "ix_quota_reservation_owner_status_created",
@@ -2772,6 +2784,12 @@ class DatabaseManager:
                 "ix_quota_reservation_status_expires",
                 "quota_reservations",
                 "status, expires_at",
+            )
+            self._create_unique_index_if_missing(
+                conn,
+                "ux_quota_reservation_request_idempotency",
+                "quota_reservations",
+                "request_idempotency_key_hash",
             )
             self._create_index_if_missing(
                 conn,
@@ -2918,6 +2936,114 @@ class DatabaseManager:
 
             self._backfill_market_scanner_ownership(conn, bootstrap_user_id=bootstrap_user_id)
             self._backfill_conversation_sessions(conn, bootstrap_user_id=bootstrap_user_id)
+            self._backfill_quota_usage_window_identity_keys(conn)
+
+    @staticmethod
+    def _quota_identity_component(value: Any, *, lowercase: bool = False, limit: int = 64) -> str:
+        text = str(value or "").strip()
+        if lowercase:
+            text = text.lower()
+        return text[:limit] if text else ""
+
+    @classmethod
+    def _quota_identity_segment(cls, label: str, value: str) -> str:
+        return f"{label}:{len(value)}:{value}"
+
+    @classmethod
+    def quota_window_identity_values(
+        cls,
+        *,
+        owner_user_id: Optional[str],
+        route_family: Optional[str],
+        provider: Optional[str],
+        model_tier: Optional[str],
+    ) -> Dict[str, str]:
+        parts = (
+            cls._quota_identity_segment(
+                "owner",
+                cls._quota_identity_component(owner_user_id),
+            ),
+            cls._quota_identity_segment(
+                "route",
+                cls._quota_identity_component(route_family, lowercase=True),
+            ),
+            cls._quota_identity_segment(
+                "provider",
+                cls._quota_identity_component(provider, lowercase=True),
+            ),
+            cls._quota_identity_segment(
+                "model",
+                cls._quota_identity_component(model_tier, lowercase=True),
+            ),
+        )
+        return {"window_identity_key": "qwin_scope_v1|" + "|".join(parts)}
+
+    @classmethod
+    def quota_reservation_idempotency_hash(
+        cls,
+        *,
+        idempotency_key: Optional[str],
+        owner_user_id: Optional[str],
+        route_family: Optional[str],
+        provider: Optional[str],
+        model_tier: Optional[str],
+    ) -> Optional[str]:
+        request_key = str(idempotency_key or "").strip()
+        if not request_key:
+            return None
+        payload = {
+            "version": 1,
+            "request_key": request_key,
+            "scope": cls.quota_window_identity_values(
+                owner_user_id=owner_user_id,
+                route_family=route_family,
+                provider=provider,
+                model_tier=model_tier,
+            )["window_identity_key"],
+        }
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return "qres_req_v1:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    def _backfill_quota_usage_window_identity_keys(self, conn) -> None:
+        rows = conn.exec_driver_sql(
+            """
+            SELECT id, owner_user_id, route_family, provider, model_tier
+            FROM quota_usage_windows
+            """
+        ).mappings().all()
+        for row in rows:
+            identity = self.quota_window_identity_values(
+                owner_user_id=row["owner_user_id"],
+                route_family=row["route_family"],
+                provider=row["provider"],
+                model_tier=row["model_tier"],
+            )
+            conn.exec_driver_sql(
+                """
+                UPDATE quota_usage_windows
+                SET window_identity_key = :window_identity_key
+                WHERE id = :row_id
+                """,
+                {
+                    "window_identity_key": identity["window_identity_key"],
+                    "row_id": row["id"],
+                },
+            )
+
+        duplicate = conn.exec_driver_sql(
+            """
+            SELECT window_identity_key, window_type, window_start, COUNT(*) AS row_count
+            FROM quota_usage_windows
+            GROUP BY window_identity_key, window_type, window_start
+            HAVING COUNT(*) > 1
+            LIMIT 1
+            """
+        ).fetchone()
+        if duplicate is not None:
+            raise RuntimeError(
+                "duplicate quota usage window identity rows found; "
+                "manual non-destructive merge is required before adding the unique index"
+            )
 
     @staticmethod
     def _table_columns(conn, table_name: str) -> set[str]:

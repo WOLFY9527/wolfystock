@@ -912,6 +912,106 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertFalse(second.allowed)
         self.assertEqual(second.reason_code, "route_cap_exceeded")
 
+    def test_same_reservation_idempotency_key_replays_without_double_reserving(self) -> None:
+        self.db.upsert_quota_policy(
+            policy_key="route-cap",
+            scope_type="route",
+            route_family="analysis",
+            request_cap=1,
+        )
+
+        first = self.service.reserve_quota(
+            owner_user_id="user-1",
+            route_family="analysis",
+            provider="OpenAI",
+            model_tier="GPT-4O-Mini",
+            estimated_units=10,
+            idempotency_key="request-123",
+        )
+        second = self.service.reserve_quota(
+            owner_user_id="user-1",
+            route_family="analysis",
+            provider="openai",
+            model_tier="gpt-4o-mini",
+            estimated_units=10,
+            idempotency_key="request-123",
+        )
+
+        self.assertTrue(first.allowed)
+        self.assertTrue(second.allowed)
+        self.assertEqual(second.status, "reserved")
+        self.assertEqual(second.reservation_id, first.reservation_id)
+        self._assert_reservation_window_counts(
+            first.reservation_id,
+            reserved_units=10,
+            consumed_units=0,
+        )
+        with self.db.session_scope() as session:
+            rows = session.query(QuotaReservation).all()
+            self.assertEqual(len(rows), 1)
+            self.assertIsNotNone(rows[0].request_idempotency_key_hash)
+
+    def test_different_reservation_idempotency_keys_remain_separate(self) -> None:
+        first = self.service.reserve_quota(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=10,
+            idempotency_key="request-123",
+        )
+        second = self.service.reserve_quota(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=10,
+            idempotency_key="request-456",
+        )
+
+        self.assertTrue(first.allowed)
+        self.assertTrue(second.allowed)
+        self.assertNotEqual(second.reservation_id, first.reservation_id)
+        self._assert_reservation_window_counts(
+            first.reservation_id,
+            reserved_units=20,
+            consumed_units=0,
+        )
+        with self.db.session_scope() as session:
+            rows = session.query(QuotaReservation).all()
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(len({row.request_idempotency_key_hash for row in rows}), 2)
+
+    def test_different_reservation_idempotency_key_remains_subject_to_policy(self) -> None:
+        self.db.upsert_quota_policy(
+            policy_key="route-cap",
+            scope_type="route",
+            route_family="analysis",
+            request_cap=1,
+        )
+
+        first = self.service.reserve_quota(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=10,
+            idempotency_key="request-123",
+        )
+        second = self.service.reserve_quota(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=10,
+            idempotency_key="request-456",
+        )
+
+        self.assertTrue(first.allowed)
+        self.assertFalse(second.allowed)
+        self.assertEqual(second.reason_code, "route_cap_exceeded")
+        self.assertIsNone(second.reservation_id)
+        self._assert_reservation_window_counts(
+            first.reservation_id,
+            reserved_units=10,
+            consumed_units=0,
+        )
+        with self.db.session_scope() as session:
+            rows = session.query(QuotaReservation).all()
+            self.assertEqual(len(rows), 1)
+
     def test_reservation_create_consume(self) -> None:
         result = self.service.reserve_quota(owner_user_id="user-1", route_family="analysis")
 
