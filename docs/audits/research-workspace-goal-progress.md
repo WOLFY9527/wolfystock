@@ -40,7 +40,7 @@ flowchart LR
 ## Checkpoints
 
 - [x] `checkpoint(research): map workflow`
-- [ ] `checkpoint(research): connect scanner and watchlist`
+- [x] `checkpoint(research): connect scanner and watchlist`
 - [ ] `checkpoint(research): connect portfolio and backtest`
 - [ ] `checkpoint(research): connect options scenarios`
 - [ ] `feat(research): add workspace v1`
@@ -65,3 +65,8 @@ flowchart LR
 - Mapped current routes and mutation boundaries.
 - Confirmed the first implementation should stay frontend-only unless a missing read-only projection becomes necessary.
 - Confirmed no provider runtime/fallback/cache/scoring, backtest math, options ranking, portfolio accounting, auth/RBAC/session behavior is in scope.
+- Added shared read-only research workspace route handoff helpers and a consumer-safe workflow panel.
+- Connected Scanner to downstream Watchlist, Portfolio, Backtest, and Options routes with symbol/market/run context query parameters.
+- Connected Watchlist route query intake so scanner handoffs can filter and explain existing or missing observation records without creating watchlist items.
+- Validation: `npm --prefix apps/dsa-web run test -- src/components/research/__tests__/ResearchWorkspaceFlowPanel.test.tsx src/pages/__tests__/UserScannerPage.test.tsx src/pages/__tests__/WatchlistPage.test.tsx` passed with 3 files and 148 tests.
+- Validation: `git diff --check` passed for the Scanner/Watchlist slice.

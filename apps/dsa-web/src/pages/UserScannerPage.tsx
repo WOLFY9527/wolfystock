@@ -23,6 +23,7 @@ import {
 import { scannerApi } from '../api/scanner';
 import { watchlistApi } from '../api/watchlist';
 import ConsumerResearchReadinessStrip from '../components/common/ConsumerResearchReadinessStrip';
+import ResearchWorkspaceFlowPanel from '../components/research/ResearchWorkspaceFlowPanel';
 import { ScannerActionButton as ActionButton } from '../components/scanner/ScannerActionButton';
 import ScannerTopDownContextStrip from '../components/scanner/ScannerTopDownContextStrip';
 import {
@@ -3531,6 +3532,49 @@ const UserScannerPage: React.FC = () => {
   ];
   const scannerRunFactItems = buildScannerRunFactItems(runDetail, language);
   const scannerHistoryScopeHint = buildScannerHistoryScopeHint(runDetail, market, profile, language);
+  const researchWorkflowCandidate = activeDetailCandidate || sortedCandidates[0] || previewHandoffCandidates[0] || currentFilterHandoffCandidates[0] || null;
+  const researchWorkflowSymbol = normalizeCandidateSymbol(researchWorkflowCandidate?.symbol) || manualRecoveryParsedSymbol;
+  const researchWorkflowMarket = normalizeScannerMarket(runDetail?.market || market);
+  const researchWorkflowKnownEvidence = [
+    researchWorkflowSymbol
+      ? (language === 'en' ? `Candidate in focus: ${researchWorkflowSymbol}` : `当前候选：${researchWorkflowSymbol}`)
+      : null,
+    runDetail
+      ? (language === 'en'
+        ? `Scanner coverage loaded for ${scannerScopeLabel}`
+        : `已载入扫描范围：${scannerScopeLabel}`)
+      : null,
+    currentSelectedCount > 0
+      ? (language === 'en' ? `${currentSelectedCount} official candidates available` : `官方入选 ${currentSelectedCount} 个`)
+      : null,
+    scannerResearchReadinessView.summaryLine,
+  ];
+  const researchWorkflowMissingEvidence = [
+    researchWorkflowSymbol
+      ? (language === 'en' ? 'Watchlist observation record needs review' : '观察列表记录待核对')
+      : (language === 'en' ? 'Select or enter a symbol before downstream review' : '先选择或输入一个代码再进入下游核验'),
+    researchWorkflowSymbol ? (language === 'en' ? 'Portfolio exposure context needs review' : '组合暴露上下文待核对') : null,
+    researchWorkflowSymbol ? (language === 'en' ? 'Backtest validation and options scenario context need review' : '回测验证与期权情景上下文待核验') : null,
+  ];
+  const researchWorkflowStateNotes = [
+    scannerDataStateLabel,
+    scannerConclusion.trustSummary.staleCount > 0
+      ? (language === 'en' ? 'Latest available scanner context may need freshness review' : '扫描上下文使用最近一次可用数据，需复核时间')
+      : null,
+    scannerConclusion.trustSummary.partialCount > 0
+      ? (language === 'en' ? 'Some candidate evidence is still incomplete' : '部分候选证据仍待补齐')
+      : null,
+    scannerConclusion.trustSummary.limitedCount > 0
+      ? (language === 'en' ? 'Confidence is capped for observation' : '当前置信度受限，仅供观察')
+      : null,
+  ];
+  const researchWorkflowNextSteps = [
+    researchWorkflowSymbol
+      ? (language === 'en' ? 'Open Watchlist to observe the existing record or empty state' : '打开观察列表，查看该代码的现有记录或空状态')
+      : (language === 'en' ? 'Run scanner or use manual symbol research first' : '先运行扫描或使用手动代码研究'),
+    researchWorkflowSymbol ? (language === 'en' ? 'Review portfolio exposure before validation' : '先查看组合是否已有暴露，再进入验证') : null,
+    researchWorkflowSymbol ? (language === 'en' ? 'Use Backtest and Options only as read-only context' : '回测与期权仅作为只读上下文核验') : null,
+  ];
 
   return (
     <>
@@ -3811,6 +3855,24 @@ const UserScannerPage: React.FC = () => {
                 title={language === 'en' ? 'Research readiness' : '研究就绪度'}
                 testId="scanner-research-readiness-strip"
                 className="mx-3"
+              />
+              <ResearchWorkspaceFlowPanel
+                language={language}
+                current="scanner"
+                symbol={researchWorkflowSymbol}
+                market={researchWorkflowMarket}
+                source="scanner"
+                scannerRunId={runDetail?.id}
+                scannerRank={researchWorkflowCandidate?.rank}
+                scannerProfile={runDetail?.profile || profile}
+                themeId={runDetail?.themeId || themeId}
+                universeType={runDetail?.universeType || scanScope}
+                knownEvidence={researchWorkflowKnownEvidence}
+                missingEvidence={researchWorkflowMissingEvidence}
+                stateNotes={researchWorkflowStateNotes}
+                nextSteps={researchWorkflowNextSteps}
+                className="mx-3"
+                testId="scanner-research-workspace-flow"
               />
               {scannerTopDownContextView ? (
                 <ScannerTopDownContextStrip

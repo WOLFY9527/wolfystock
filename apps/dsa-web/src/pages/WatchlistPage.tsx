@@ -8,7 +8,7 @@ import {
   Search,
   Trash2,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import { backtestApi } from '../api/backtest';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
@@ -37,6 +37,7 @@ import {
   TerminalNotice,
   TerminalPanel,
 } from '../components/terminal/TerminalPrimitives';
+import ResearchWorkspaceFlowPanel from '../components/research/ResearchWorkspaceFlowPanel';
 import UserAlertsRailPanel from '../components/user-alerts/UserAlertsRailPanel';
 import LeveragedEtfMapper from '../components/watchlist/LeveragedEtfMapper';
 import { useI18n } from '../contexts/UiLanguageContext';
@@ -46,6 +47,7 @@ import type { WatchlistCatalystExposure, WatchlistItem, WatchlistScannerLineageV
 import type { RuleBacktestRunResponse } from '../types/backtest';
 import { describeBooleanEnabled, describeDisplayStatus, type DisplayStatusTone } from '../utils/displayStatus';
 import { buildLocalizedPath } from '../utils/localeRouting';
+import { parseResearchWorkspaceSearch } from '../utils/researchWorkspaceRoute';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 
 type SortKey = 'newest' | 'scannerScore' | 'backtestReturn' | 'historicalHitRate' | 'recentlyScored' | 'recentlyBacktested' | 'symbol' | 'market';
@@ -1414,9 +1416,11 @@ function WatchlistConclusionBand({
 
 const WatchlistPage: React.FC = () => {
   const navigate = useNavigate();
+  const { search: routeSearch } = useLocation();
   const { language } = useI18n();
   const { isGuest } = useProductSurface();
   const copy = getCopy(language);
+  const routeContext = useMemo(() => parseResearchWorkspaceSearch(routeSearch), [routeSearch]);
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<ParsedApiError | null>(null);
@@ -1448,6 +1452,18 @@ const WatchlistPage: React.FC = () => {
   useEffect(() => {
     document.title = language === 'en' ? 'Watchlist - WolfyStock' : '观察列表 - WolfyStock';
   }, [language]);
+
+  useEffect(() => {
+    if (routeContext.symbol) {
+      setQuery(routeContext.symbol);
+    }
+    if (routeContext.market) {
+      setMarketFilter(routeContext.market.toLowerCase());
+    }
+    if (routeContext.source === 'scanner') {
+      setSourceFilter('scanner');
+    }
+  }, [routeContext.market, routeContext.source, routeContext.symbol]);
 
   useEffect(() => {
     if (isGuest) return;
@@ -1964,6 +1980,47 @@ const WatchlistPage: React.FC = () => {
   const activeHasEvidence = activeItem
     ? hasScannerEvidence(activeItem) || activeSimulation?.status === 'ready' || hasBacktestEvidence(activeItem)
     : false;
+  const watchlistWorkflowSymbol = activeItem?.symbol || routeContext.symbol || null;
+  const watchlistWorkflowMarket = activeItem?.market || routeContext.market || null;
+  const watchlistWorkflowKnownEvidence = [
+    activeItem
+      ? (language === 'zh' ? `观察项已存在：${activeItem.symbol}` : `Observed item exists: ${activeItem.symbol}`)
+      : watchlistWorkflowSymbol
+        ? (language === 'zh' ? `当前筛选代码：${watchlistWorkflowSymbol}` : `Current filtered symbol: ${watchlistWorkflowSymbol}`)
+        : null,
+    activeObservationSummary !== copy.noEvidence ? activeObservationSummary : null,
+    activeScannerLineageView?.summary,
+    activeItem && hasBacktestMetrics(activeItem)
+      ? activeBacktestSummary
+      : null,
+  ];
+  const watchlistWorkflowMissingEvidence = [
+    !activeItem && watchlistWorkflowSymbol
+      ? (language === 'zh' ? '当前观察列表未识别到该代码记录' : 'No matching observation record is visible in Watchlist')
+      : null,
+    activeItem && !hasBacktestEvidence(activeItem)
+      ? (language === 'zh' ? '回测验证待补充' : 'Backtest validation is still missing')
+      : null,
+    watchlistWorkflowSymbol
+      ? (language === 'zh' ? '组合暴露与期权情景待核对' : 'Portfolio exposure and options scenario context need review')
+      : null,
+  ];
+  const watchlistWorkflowStateNotes = [
+    activeItem ? formatScoreDisclosureFreshness(activeItem, activeLatestTime, language) : null,
+    activeScannerLineageView?.freshnessLabel,
+    activeBacktestStatusLabel && activeBacktestStatusLabel !== '--' ? activeBacktestStatusLabel : null,
+  ];
+  const watchlistWorkflowNextSteps = [
+    watchlistWorkflowSymbol
+      ? (language === 'zh' ? '查看组合暴露，确认是否已有持仓上下文' : 'Review portfolio exposure to check existing holding context')
+      : null,
+    watchlistWorkflowSymbol
+      ? (language === 'zh' ? '进入回测验证历史规则表现' : 'Open Backtest for historical rule validation')
+      : null,
+    watchlistWorkflowSymbol
+      ? (language === 'zh' ? '进入期权实验室，仅查看情景准备度' : 'Open Options Lab for scenario readiness only')
+      : null,
+  ];
   const runtimeStatusLabel = batchProgress
     ? `${batchProgress.completed}/${batchProgress.total}`
     : isBatchBacktesting
@@ -2001,6 +2058,27 @@ const WatchlistPage: React.FC = () => {
           ariaLabel="watchlist summary"
           items={statusItems}
         />
+
+        {watchlistWorkflowSymbol ? (
+          <ResearchWorkspaceFlowPanel
+            language={language}
+            current="watchlist"
+            symbol={watchlistWorkflowSymbol}
+            market={watchlistWorkflowMarket}
+            source={routeContext.source || 'watchlist'}
+            origin={routeContext.origin}
+            scannerRunId={activeItem?.scannerRunId || routeContext.scannerRunId}
+            scannerRank={activeItem?.scannerRank || routeContext.scannerRank}
+            themeId={activeItem?.themeId || routeContext.themeId}
+            universeType={activeItem?.universeType || routeContext.universeType}
+            watchlistItemId={activeItem?.id || routeContext.watchlistItemId}
+            knownEvidence={watchlistWorkflowKnownEvidence}
+            missingEvidence={watchlistWorkflowMissingEvidence}
+            stateNotes={watchlistWorkflowStateNotes}
+            nextSteps={watchlistWorkflowNextSteps}
+            testId="watchlist-research-workspace-flow"
+          />
+        ) : null}
 
         {notice ? (
           <TerminalNotice className={noticeClassName} role="status">
