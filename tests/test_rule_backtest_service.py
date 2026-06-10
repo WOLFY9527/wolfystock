@@ -7417,6 +7417,84 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("benchmark_summary", detail)
         self.assertIn("audit_rows", detail)
 
+    def test_submitted_backtest_can_remain_nonterminal_when_background_task_is_lost(self) -> None:
+        service = RuleBacktestService(self.db)
+        strategy_text = "Buy when Close > MA3. Sell when Close < MA3."
+
+        submitted = service.submit_backtest(
+            code="600519",
+            strategy_text=strategy_text,
+            start_date="2024-01-08",
+            end_date="2024-01-18",
+            lookback_bars=20,
+            confirmed=True,
+        )
+
+        status = service.get_run_status(submitted["id"])
+        detail = service.get_run(submitted["id"])
+
+        self.assertEqual(submitted["status"], "parsing")
+        self.assertIsNotNone(status)
+        self.assertIsNotNone(detail)
+        assert status is not None
+        assert detail is not None
+        self.assertEqual(status["status"], "parsing")
+        self.assertEqual(detail["status"], "parsing")
+        self.assertIsNone(status["completed_at"])
+        self.assertIsNone(detail["completed_at"])
+        self.assertIsNone(status["run_diagnostics"]["terminal_status"])
+        self.assertEqual(status["run_diagnostics"]["current_status"], "parsing")
+        self.assertIsNone(status["run_timing"]["finished_at"])
+        self.assertIsNone(status["run_timing"]["failed_at"])
+        self.assertIsNone(status["run_timing"]["cancelled_at"])
+        self.assertFalse(status["artifact_availability"]["has_trade_rows"])
+        self.assertFalse(status["artifact_availability"]["has_equity_curve"])
+        self.assertEqual(status["readback_integrity"]["source"], "stored_status_summary")
+        self.assertEqual(status["readback_integrity"]["integrity_level"], "stored_complete")
+
+    def test_cancel_terminal_completed_run_preserves_stored_result(self) -> None:
+        service = RuleBacktestService(self.db)
+        strategy_text = "Buy when Close > MA3. Sell when Close < MA3."
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            submitted = service.submit_backtest(
+                code="600519",
+                strategy_text=strategy_text,
+                start_date="2024-01-08",
+                end_date="2024-01-18",
+                lookback_bars=20,
+                confirmed=True,
+            )
+            service.process_submitted_run(submitted["id"])
+
+        before = service.get_run(submitted["id"])
+        self.assertIsNotNone(before)
+        assert before is not None
+
+        with patch.object(
+            service.repo,
+            "update_run",
+            side_effect=AssertionError("terminal cancel must not mutate stored run"),
+        ):
+            cancel_status = service.cancel_run(submitted["id"])
+
+        self.assertIsNotNone(cancel_status)
+        assert cancel_status is not None
+        self.assertEqual(cancel_status["status"], "completed")
+        self.assertEqual(cancel_status["completed_at"], before["completed_at"])
+        self.assertIsNone(cancel_status["no_result_reason"])
+        self.assertNotEqual(cancel_status["status"], "cancelled")
+
+        after = service.get_run(submitted["id"])
+        self.assertIsNotNone(after)
+        assert after is not None
+        self.assertEqual(after["status"], "completed")
+        self.assertEqual(after["completed_at"], before["completed_at"])
+        self.assertEqual(after["trade_count"], before["trade_count"])
+        self.assertEqual(after["total_return_pct"], before["total_return_pct"])
+        self.assertEqual(after["result_authority"]["read_mode"], before["result_authority"]["read_mode"])
+        self.assertEqual(after["run_diagnostics"]["terminal_status"], "completed")
+
     def test_failed_and_cancelled_runs_expose_structured_run_diagnostics(self) -> None:
         service = RuleBacktestService(self.db)
         strategy_text = "Buy when Close > MA3. Sell when Close < MA3."

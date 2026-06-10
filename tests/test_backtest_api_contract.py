@@ -1424,6 +1424,31 @@ class BacktestApiContractTestCase(unittest.TestCase):
         service.run_backtest.assert_not_called()
         self.assertEqual(len(background_tasks.tasks), 1)
         background_task = background_tasks.tasks[0]
+        self.assertIs(background_task.func, service.process_submitted_run)
+        self.assertEqual(background_task.args, (123,))
+        self.assertEqual(background_task.kwargs, {})
+        self.assertEqual(json.loads(json.dumps(list(background_task.args))), [123])
+
+    def test_run_rule_backtest_async_background_task_is_process_local_contract(self) -> None:
+        request = RuleBacktestRunRequest(
+            code="600519",
+            strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            wait_for_completion=False,
+            confirmed=True,
+        )
+        background_tasks = BackgroundTasks()
+        service = MagicMock()
+        service.submit_backtest.return_value = self._rule_run_payload(status="parsing")
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = run_rule_backtest(request, background_tasks, db_manager=MagicMock())
+
+        self.assertEqual(response.status, "parsing")
+        service.submit_backtest.assert_called_once()
+        service.run_backtest.assert_not_called()
+        self.assertEqual(len(background_tasks.tasks), 1)
+        background_task = background_tasks.tasks[0]
+        self.assertIs(background_task.func, service.process_submitted_run)
         self.assertEqual(background_task.args, (123,))
         self.assertEqual(background_task.kwargs, {})
         self.assertEqual(json.loads(json.dumps(list(background_task.args))), [123])

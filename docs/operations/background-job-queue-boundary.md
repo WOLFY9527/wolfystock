@@ -7,16 +7,22 @@ Status: boundary note only. No first-class brokered job queue is implemented or 
 - T-646 concluded that a real queue implementation is still premature.
 - T-647 locked the first safe future boundary with contract tests around backtest job JSON-safe serialization, idempotent stored readback, and local-only universe-job execution.
 - Current async/background behavior remains process-local or route/script-specific, not a general broker/worker system.
-- This note does not change WS2/SSE topology, durable polling fallback, runtime
-  constraints, or launch gates; see
-  `docs/operations/queue-ws2-metrics-production-readiness.md` for the current
-  process-local queue/SSE posture.
+- T-1405/T-1421 keep durable async recovery as production/multi-instance **NO-GO**. Durable rows, progress events, and the synthetic worker prototype are contract evidence, not launch approval.
+
+## Production deployment boundary
+
+- Current public-safe runtime posture is a single API process, or sticky routing with accepted task visibility limits.
+- Sticky routing can reduce user-facing task/SSE confusion, but it is not durable recovery and does not replace owner-scoped durable polling.
+- Multi-instance public deployment remains **NO-GO** until an approved durable worker/queue integration can recover production analysis and rule-backtest work after process-local loss.
+- Staging acceptance must prove API A/B route switching, worker lease/retry/failure behavior, owner isolation, polling replay, and sanitized operator evidence before this boundary can move.
 
 ## Existing mechanisms today
 
 - MarketCache uses in-process `ThreadPoolExecutor`/`Future` refreshes plus existing TTL, SWR, and cold-start de-duplication semantics.
 - Rule backtest async submit uses FastAPI `BackgroundTasks` for `process_submitted_run`; it is request-path scoped, not an external worker.
 - Rule backtest universe jobs persist DB-backed run/job state and compact symbol rows; execution remains stored, sequential, and local-data-only.
+- Analysis async submit uses process-local `AnalysisTaskQueue` futures. Durable task rows can support owner-scoped status/polling and active duplicate protection, but they do not recreate lost futures or resume production analysis execution.
+- The WS2 durable worker prototype is fixture-backed synthetic coverage. It must not be presented as production analysis/backtest route recovery.
 - Admin log cleanup is an explicit `POST /api/v1/admin/logs/cleanup` maintenance action with dry-run / preview-first semantics; it is not an automatic queue consumer.
 - Prewarm, diagnostics, and backfill-like operator surfaces are script-only or explicitly invoked maintenance paths, not a shared job queue layer.
 

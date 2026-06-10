@@ -364,6 +364,52 @@ class DurableTaskWorkerPrototypeTestCase(unittest.TestCase):
         self.assertNotIn("api_key", serialized)
         self.assertNotIn("not-a-real-key", serialized)
 
+    def test_default_synthetic_worker_ignores_production_analysis_rows(self) -> None:
+        self.db.create_durable_task_state(
+            task_id="task-production-analysis",
+            owner_user_id="user-a",
+            task_type="analysis",
+            route_family="/api/v1/analysis",
+            status="queued",
+            current_step="Queued by production analysis route",
+            metadata={"stock_code": "AAPL.US"},
+        )
+        worker = DurableTaskWorkerPrototype(db=self.db, worker_id="worker-a")
+
+        result = worker.run_once()
+        state = self.db.get_durable_task_state(task_id="task-production-analysis", owner_user_id="user-a")
+        events = self.db.list_durable_task_progress_events(
+            task_id="task-production-analysis",
+            owner_user_id="user-a",
+        )
+
+        self.assertEqual(result.status, "idle")
+        self.assertEqual(state["status"], "queued")
+        self.assertIsNone(state["lease_owner"])
+        self.assertEqual(state["attempt_count"], 0)
+        self.assertEqual(events, [])
+
+    def test_synthetic_worker_override_is_fixture_completion_not_analysis_recovery(self) -> None:
+        self.db.create_durable_task_state(
+            task_id="task-analysis-fixture-override",
+            owner_user_id="user-a",
+            task_type="analysis",
+            route_family="/api/v1/analysis",
+            status="queued",
+            current_step="Queued by production analysis route",
+            metadata={"stock_code": "AAPL.US"},
+        )
+        worker = DurableTaskWorkerPrototype(db=self.db, worker_id="worker-a", task_type="analysis")
+
+        result = worker.run_once()
+        state = self.db.get_durable_task_state(task_id="task-analysis-fixture-override", owner_user_id="user-a")
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(state["task_type"], "analysis")
+        self.assertEqual(state["status"], "completed")
+        self.assertEqual(state["metadata"]["result_ref"], "fixture:ws2-synthetic")
+        self.assertIsNone(state["metadata"].get("query_id"))
+
     def test_dependency_manifests_do_not_add_external_worker_stack(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         manifests = [

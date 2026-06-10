@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 from concurrent.futures import Future
+from datetime import datetime, timedelta
 import tempfile
 import unittest
 from pathlib import Path
+
+from sqlalchemy import text
 
 from src.services.task_queue import AnalysisTaskQueue, TaskInfo, _dedupe_stock_code_key
 from src.storage import DatabaseManager
@@ -54,6 +57,56 @@ class DbBackedAnalysisTaskDedupeTestCase(unittest.TestCase):
         self.assertEqual(len(duplicates_again), 1)
         self.assertEqual(duplicates_again[0].stock_code, "600519.SH")
         self.assertEqual(duplicates_again[0].existing_task_id, accepted[0].task_id)
+
+    def test_stale_active_durable_row_blocks_retry_until_terminalized(self) -> None:
+        stale_started_at = datetime.now() - timedelta(hours=6)
+        stale = self.db.create_durable_task_state(
+            task_id="task-stale-active",
+            owner_user_id="user-a",
+            task_type="analysis",
+            route_family="/api/v1/analysis",
+            status="processing",
+            progress=55,
+            current_step="Process-local worker disappeared before terminal state",
+            dedupe_key=_dedupe_stock_code_key("AAPL.US", "user-a"),
+            metadata={"stock_code": "AAPL.US"},
+        )
+        with self.db._engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    UPDATE durable_task_states
+                    SET started_at = :stale_at, updated_at = :stale_at
+                    WHERE task_id = :task_id
+                    """
+                ),
+                {"stale_at": stale_started_at, "task_id": stale["task_id"]},
+            )
+
+        retry_queue = self._new_queue()
+        accepted, duplicates = retry_queue.submit_tasks_batch(["AAPL.US"], owner_id="user-a")
+
+        self.assertEqual(accepted, [])
+        self.assertEqual(len(duplicates), 1)
+        self.assertEqual(duplicates[0].existing_task_id, "task-stale-active")
+
+        terminalized = self.db.mark_durable_task_failed(
+            task_id="task-stale-active",
+            owner_user_id="user-a",
+            error_code="process_local_lost",
+            error_summary="Operator terminalized stale process-local analysis task",
+        )
+        terminalized_retry_queue = self._new_queue()
+        accepted_after_terminal, duplicates_after_terminal = terminalized_retry_queue.submit_tasks_batch(
+            ["AAPL.US"],
+            owner_id="user-a",
+        )
+
+        self.assertIsNotNone(terminalized)
+        self.assertEqual(terminalized["status"], "failed")
+        self.assertEqual(len(accepted_after_terminal), 1)
+        self.assertEqual(duplicates_after_terminal, [])
+        self.assertNotEqual(accepted_after_terminal[0].task_id, "task-stale-active")
 
     def test_completed_and_failed_durable_tasks_allow_new_run(self) -> None:
         first_queue = self._new_queue()

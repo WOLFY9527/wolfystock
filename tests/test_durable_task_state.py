@@ -517,6 +517,53 @@ class DurableTaskStateTestCase(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertNotIn("user-a", json.dumps(ctx.exception.detail))
 
+    def test_production_analysis_durable_state_does_not_resume_lost_future(self) -> None:
+        self.db.create_durable_task_state(
+            task_id="task-lost-process-local-future",
+            owner_user_id="user-a",
+            task_type="analysis",
+            route_family="/api/v1/analysis",
+            status="processing",
+            progress=44,
+            current_step="Process-local analysis future lost",
+            metadata={"stock_code": "AAPL.US", "stock_name": "Apple"},
+        )
+        original_instance = AnalysisTaskQueue._instance
+        AnalysisTaskQueue._instance = None
+        queue = None
+        try:
+            queue = AnalysisTaskQueue(max_workers=1)
+            self.assertEqual(queue._tasks, {})
+            self.assertEqual(queue._futures, {})
+            self.assertEqual(queue._analyzing_stocks, {})
+
+            with patch("api.v1.endpoints.analysis.get_task_queue", return_value=queue):
+                status = get_analysis_status(
+                    "task-lost-process-local-future",
+                    current_user=SimpleNamespace(user_id="user-a"),
+                )
+                poll = poll_analysis_task_progress(
+                    "task-lost-process-local-future",
+                    current_user=SimpleNamespace(user_id="user-a"),
+                )
+        finally:
+            queue = AnalysisTaskQueue._instance
+            if queue is not None and queue is not original_instance:
+                executor = getattr(queue, "_executor", None)
+                if executor is not None and hasattr(executor, "shutdown"):
+                    executor.shutdown(wait=False, cancel_futures=True)
+            AnalysisTaskQueue._instance = original_instance
+
+        self.assertEqual(status.status, "processing")
+        self.assertEqual(status.progress, 44)
+        self.assertIsNone(status.result)
+        self.assertEqual(poll.task.status, "processing")
+        self.assertFalse(poll.terminal)
+        self.assertIsNotNone(queue)
+        self.assertEqual(queue._tasks, {})
+        self.assertEqual(queue._futures, {})
+        self.assertEqual(queue._analyzing_stocks, {})
+
     def test_process_local_queue_and_sse_contract_remains_present(self) -> None:
         original_instance = AnalysisTaskQueue._instance
         AnalysisTaskQueue._instance = None
