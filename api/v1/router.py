@@ -15,6 +15,7 @@ from api.v1.endpoints import (
     admin_cost,
     admin_logs,
     admin_notifications,
+    admin_ops_status,
     admin_portfolio,
     admin_provider_circuits,
     admin_provider_operations_matrix,
@@ -91,6 +92,12 @@ router.include_router(
     admin_notifications.router,
     prefix="/admin",
     tags=["AdminNotifications"]
+)
+
+router.include_router(
+    admin_ops_status.router,
+    prefix="/admin",
+    tags=["AdminOpsStatus"]
 )
 
 router.include_router(
