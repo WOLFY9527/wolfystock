@@ -161,6 +161,63 @@ describe('Shell', () => {
     expect(within(primaryNav).queryByRole('link', { name: 'Decision Desk' })).not.toBeInTheDocument();
   });
 
+  it('groups the consumer navigation around the private-beta workflow', async () => {
+    render(
+      <MemoryRouter initialEntries={['/market-overview']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const primaryNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
+    expect(within(primaryNav).getByTestId('shell-consumer-nav-group-start')).toHaveTextContent('起点');
+    expect(within(primaryNav).getByTestId('shell-consumer-nav-group-markets')).toHaveTextContent('市场');
+    expect(within(primaryNav).getByTestId('shell-consumer-nav-group-research')).toHaveTextContent('研究');
+    expect(within(primaryNav).getByTestId('shell-consumer-nav-group-account')).toHaveTextContent('账户');
+    expect(within(primaryNav).getByTestId('shell-consumer-nav-group-validate')).toHaveTextContent('验证');
+
+    const marketGroup = within(primaryNav).getByTestId('shell-consumer-nav-group-markets');
+    expect(within(marketGroup).getByRole('link', { name: '市场总览' })).toHaveClass('is-active');
+    expect(within(marketGroup).getByRole('link', { name: '流动性监测' })).toHaveAttribute('href', '/market/liquidity-monitor');
+    expect(within(marketGroup).getByRole('link', { name: '轮动雷达' })).toHaveAttribute('href', '/market/rotation-radar');
+  });
+
+  it('marks member-only consumer links as locked for guests without hiding discovery routes', () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: false,
+      currentUser: null,
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const primaryNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
+    const researchGroup = within(primaryNav).getByTestId('shell-consumer-nav-group-research');
+    const accountGroup = within(primaryNav).getByTestId('shell-consumer-nav-group-account');
+    const validateGroup = within(primaryNav).getByTestId('shell-consumer-nav-group-validate');
+
+    expect(within(researchGroup).getByRole('link', { name: '扫描器' })).toBeInTheDocument();
+    expect(within(researchGroup).getByRole('link', { name: '观察列表' })).toBeInTheDocument();
+    expect(within(accountGroup).getByRole('link', { name: '持仓' })).toBeInTheDocument();
+    expect(within(validateGroup).getByRole('link', { name: '回测' })).toBeInTheDocument();
+    expect(within(validateGroup).getByRole('link', { name: '期权实验室' })).toBeInTheDocument();
+    expect(researchGroup).toHaveTextContent('需要登录');
+    expect(accountGroup).toHaveTextContent('需要登录');
+    expect(validateGroup).toHaveTextContent('需要登录');
+  });
+
   it('highlights the localized liquidity monitor nav item independently from market overview', async () => {
     render(
       <MemoryRouter initialEntries={['/zh/market/liquidity-monitor']}>
@@ -205,6 +262,42 @@ describe('Shell', () => {
     expect(overviewLink).not.toHaveClass('is-active');
     expect(document.querySelector('.theme-shell--wide')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--wide')).not.toBeNull();
+  });
+
+  it('preserves locale for brand and settings utility links', async () => {
+    render(
+      <MemoryRouter initialEntries={['/zh/watchlist']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('link', { name: 'WolfyStock' })).toHaveAttribute('href', '/zh');
+    const actionIsland = await screen.findByTestId('shell-header-utility-island');
+    expect(within(actionIsland).getByRole('link', { name: '设置' })).toHaveAttribute('href', '/zh/settings');
+  });
+
+  it('renders a shared consumer route story with evidence boundary and next-step links', () => {
+    render(
+      <MemoryRouter initialEntries={['/zh/market/rotation-radar']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const story = screen.getByTestId('consumer-route-story');
+    expect(story).toHaveTextContent('市场');
+    expect(story).toHaveTextContent('从主题扩散和退潮中找到下一批研究对象');
+    expect(story).toHaveTextContent('证据边界');
+    expect(story).toHaveTextContent('不形成交易建议');
+    expect(within(story).getByRole('link', { name: /运行扫描器/ })).toHaveAttribute('href', '/zh/scanner');
+    expect(within(story).getByRole('link', { name: '返回市场总览' })).toHaveAttribute('href', '/zh/market-overview');
   });
 
   it('localizes market navigation labels consistently in English mode', async () => {

@@ -13,6 +13,7 @@ import { Card } from '../common/Card';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Drawer } from '../common/Drawer';
 import { WorkspacePageHeader } from '../common/WorkspacePageHeader';
+import { ConsumerRouteStory } from './ConsumerRouteStory';
 import { SidebarNav } from './SidebarNav';
 import { ShellRailContext } from './ShellRailContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -684,7 +685,10 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                   secondaryAction={standardAdminAccountGateCopy.secondaryAction}
                 />
               ) : (
-                children ?? <Outlet />
+                <>
+                  {isConsumerShellRoute ? <ConsumerRouteStory /> : null}
+                  {children ?? <Outlet />}
+                </>
               )}
             </div>
           </main>

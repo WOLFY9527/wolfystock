@@ -1,0 +1,109 @@
+# Consumer App 2 Goal Progress
+
+Status: active frontend-first rebuild tracker.
+
+## Goal
+
+Rebuild WolfyStock consumer routes into a coherent private-beta app while preserving existing APIs and backend contracts.
+
+Protected boundaries for this goal:
+
+- No backend runtime semantics, provider order/cache/fallback, quota enforcement, auth/RBAC/session behavior, DB schema, broker/order/trade behavior, or external notification sending changes.
+- No public-launch claim and no trading/execution path.
+- Route work stays frontend-first under `apps/dsa-web/` plus this audit tracker.
+
+## Route Hierarchy
+
+Current route model is stable and will be preserved:
+
+- Start: `/`, `/guest`
+- Markets: `/market-overview`, `/market/liquidity-monitor`, `/market/rotation-radar`
+- Research: `/scanner`, `/watchlist`
+- Account: `/portfolio`
+- Validate: `/backtest`, `/backtest/compare`, `/backtest/results/:runId`, `/options-lab`
+- Auth entry: `/login`, `/register`, `/reset-password`
+- Legacy aliases: `/market`, `/liquidity`, `/rotation`, `/options`, `/guest/scanner`, `/user/scanner`
+
+## Initial IA Gaps
+
+- Navigation was a flat list even though market routes already have `/market/*` hierarchy.
+- Primary nav order jumped from Scanner to Portfolio before broader market context.
+- Guest users saw protected modules as normal links without an upfront locked/member-only signal.
+- Scanner was classified as public-safe for auth bootstrap but still gated for guest feature access.
+- Some shell links preserved neither locale nor route hierarchy consistently.
+- Page first screens had strong local content, but route purpose, evidence boundary, and next-step copy were not shared across pages.
+
+## Checkpoints
+
+### checkpoint(consumer): map app ia gaps
+
+Status: implemented locally.
+
+Implemented output:
+
+- This audit tracker.
+- Frontend-only route metadata describing Start, Markets, Research, Account, Validate in `apps/dsa-web/src/components/layout/consumerAppNavigation.ts`.
+- Main shell/nav update that keeps routes stable while exposing grouped IA in `apps/dsa-web/src/components/layout/SidebarNav.tsx`.
+- Shared consumer route story band for page purpose, next step, evidence boundary, and no-advice wording in `apps/dsa-web/src/components/layout/ConsumerRouteStory.tsx`.
+- Locale-preserving brand and settings utility links.
+- Guest-visible locked affordances for signed-in consumer modules without hiding links or changing route guards.
+
+Validation target:
+
+- Focused Shell tests.
+- `git diff --check`.
+- `./scripts/release_secret_scan.sh --local-only`.
+
+Evidence so far:
+
+- `npm --prefix apps/dsa-web run test -- src/components/layout/__tests__/Shell.test.tsx` passed: 35 tests before the new assertions.
+- `npm --prefix apps/dsa-web run test -- src/components/layout/__tests__/Shell.test.tsx` passed after new IA assertions: 39 tests.
+- `npm --prefix apps/dsa-web run typecheck` passed.
+- `npm --prefix apps/dsa-web run lint:changed` passed.
+- `npm --prefix apps/dsa-web run check:design:changed` passed.
+- `npm --prefix apps/dsa-web run build:quiet` passed with the existing Vite chunk-size warning.
+- `git diff --check` passed after adding intent-to-add for new files.
+- `./scripts/release_secret_scan.sh --local-only` passed.
+
+Next verification before the first checkpoint:
+
+- Stage only the IA/shell/audit files.
+- Commit `checkpoint(consumer): map app ia gaps`.
+- Run full `./scripts/release_secret_scan.sh` after the checkpoint commit and before push.
+
+## Validation Asset Audit
+
+Recommended bounded validation set for this goal:
+
+- Shell/route IA: `npm --prefix apps/dsa-web run test -- src/components/layout/__tests__/Shell.test.tsx src/__tests__/AppRoutes.test.tsx`
+- Route slices as touched: focused page tests under `apps/dsa-web/src/pages/__tests__/`.
+- Build gates: `npm --prefix apps/dsa-web run lint:changed`, `npm --prefix apps/dsa-web run check:design:changed`, `npm --prefix apps/dsa-web run typecheck`, `npm --prefix apps/dsa-web run build:quiet`.
+- Bounded Playwright: app-local `npm --prefix apps/dsa-web run test:e2e -- <route specs> --workers=1` with a task-owned `DSA_WEB_PLAYWRIGHT_PORT`.
+
+Known smoke gaps to consider while routing slices continue:
+
+- `/backtest` launch has broad smoke coverage but no dedicated launch spec.
+- `/login` and `/register` have unit and shared smoke coverage but no dedicated auth-entry smoke file.
+- `/market/liquidity-monitor` has degraded/copy-safety coverage but no dedicated healthy canonical route smoke.
+- Portfolio broker sync smoke is opt-in and should stay out of default bounded validation unless explicitly in scope.
+
+## Route-by-Route Worklist
+
+- Home: keep existing research command center, add shared route purpose and market/scanner next-step entry.
+- Market Overview: preserve API polling and local snapshot behavior, make it the Markets landing route.
+- Liquidity: preserve degraded-state copy and use it as a market subroute.
+- Rotation: preserve observation-only theme language and connect it to Scanner as the next research step.
+- Scanner: preserve guest gating and run semantics; clarify it is a signed-in research workflow.
+- Watchlist: preserve alert/list behavior; position as candidate follow-up, not trading list.
+- Portfolio: preserve manual ledger/snapshot behavior; confirm no live order path is added.
+- Backtest: preserve deterministic and legacy lanes; position as validation before action.
+- Options: preserve read-only scenario language and no execution affordance.
+- Login/Register: preserve auth behavior; keep guest return path and private-beta account story.
+
+## Validation Plan
+
+- Unit/component: `npm --prefix apps/dsa-web run test -- src/components/layout/__tests__/Shell.test.tsx`
+- Build gates: `npm --prefix apps/dsa-web run typecheck`, `npm --prefix apps/dsa-web run build:quiet`
+- Design/lint: `npm --prefix apps/dsa-web run check:design:changed`, `npm --prefix apps/dsa-web run lint:changed`
+- Bounded smoke: app-local Playwright on touched consumer routes at desktop and `390x844`
+- Always: `git diff --check`, `./scripts/release_secret_scan.sh`

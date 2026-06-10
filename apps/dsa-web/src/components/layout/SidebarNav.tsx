@@ -18,6 +18,7 @@ import {
   Gauge,
   Globe,
   Home,
+  LockKeyhole,
   LogIn,
   LogOut,
   Radar,
@@ -36,6 +37,12 @@ import { cn } from '../../utils/cn';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../../utils/localeRouting';
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import {
+  CONSUMER_NAV_GROUPS,
+  CONSUMER_NAV_ITEMS,
+  type ConsumerNavItem,
+  type ConsumerNavItemKey,
+} from './consumerAppNavigation';
 
 type SidebarNavProps = {
   layout?: 'header' | 'drawer';
@@ -44,11 +51,7 @@ type SidebarNavProps = {
   hasArchive?: boolean;
 };
 
-type NavItem = {
-  key: string;
-  labelKey?: string;
-  label?: string;
-  to: string;
+type NavItem = ConsumerNavItem & {
   icon: React.ComponentType<{ className?: string }>;
 };
 
@@ -83,9 +86,10 @@ type AdminNavCopy = {
 const BrandWordmark: React.FC<{
   onNavigate?: () => void;
   className?: string;
-}> = ({ onNavigate, className }) => (
+  to?: string;
+}> = ({ onNavigate, className, to = '/' }) => (
   <NavLink
-    to="/"
+    to={to}
     end
     onClick={onNavigate}
     aria-label="WolfyStock"
@@ -98,17 +102,22 @@ const BrandWordmark: React.FC<{
   </NavLink>
 );
 
-const NAV_ITEMS: NavItem[] = [
-  { key: 'home', labelKey: 'nav.home', to: '/', icon: Home },
-  { key: 'scanner', labelKey: 'nav.scanner', to: '/scanner', icon: Radar },
-  { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', icon: BriefcaseBusiness },
-  { key: 'market-overview', labelKey: 'nav.marketOverview', to: '/market-overview', icon: Activity },
-  { key: 'liquidity-monitor', labelKey: 'nav.liquidityMonitor', to: '/market/liquidity-monitor', icon: Gauge },
-  { key: 'rotation-radar', labelKey: 'nav.rotationRadar', to: '/market/rotation-radar', icon: Waves },
-  { key: 'watchlist', labelKey: 'nav.watchlist', to: '/watchlist', icon: ListChecks },
-  { key: 'backtest', labelKey: 'nav.backtest', to: '/backtest', icon: TestTubeDiagonal },
-  { key: 'options-lab', labelKey: 'nav.optionsLab', to: '/options-lab', icon: FlaskConical },
-];
+const NAV_ICON_BY_KEY: Record<ConsumerNavItemKey, React.ComponentType<{ className?: string }>> = {
+  home: Home,
+  'market-overview': Activity,
+  'liquidity-monitor': Gauge,
+  'rotation-radar': Waves,
+  scanner: Radar,
+  watchlist: ListChecks,
+  portfolio: BriefcaseBusiness,
+  backtest: TestTubeDiagonal,
+  'options-lab': FlaskConical,
+};
+
+const NAV_ITEMS: NavItem[] = CONSUMER_NAV_ITEMS.map((item) => ({
+  ...item,
+  icon: NAV_ICON_BY_KEY[item.key],
+}));
 
 const HEADER_UTILITY_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-white/42 transition-colors hover:text-white/78';
 const HEADER_UTILITY_DANGER_TEXT_CLASS = 'px-2.5 py-1 text-[11px] font-medium text-white/38 transition-colors hover:text-red-300/90';
@@ -225,6 +234,8 @@ function useSidebarNavView({
   const signInLabel = t('nav.signIn');
   const consoleLabel = t('nav.independentConsole');
   const signInPath = buildLoginPath(location.pathname + location.search);
+  const homePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
+  const settingsPath = routeLocale ? buildLocalizedPath('/settings', routeLocale) : '/settings';
   const consolePath = routeLocale ? buildLocalizedPath('/settings/system', routeLocale) : '/settings/system';
   const adminLogsPath = routeLocale ? buildLocalizedPath('/admin/logs', routeLocale) : '/admin/logs';
   const evidenceWorkflowPath = routeLocale ? buildLocalizedPath('/admin/evidence-workflow', routeLocale) : '/admin/evidence-workflow';
@@ -289,9 +300,13 @@ function useSidebarNavView({
     };
   }, [showAdminMenu]);
 
-  const navLinks = NAV_ITEMS.map(({ key, labelKey, label: fixedLabel, to, icon: Icon }) => {
-    const label = fixedLabel ?? t(labelKey || key);
+  const buildConsumerNavLink = ({ key, labelKey, to, icon: Icon, requiresAuth }: NavItem) => {
+    const label = t(labelKey);
     const linkTarget = routeLocale ? buildLocalizedPath(to, routeLocale) : to;
+    const isLockedForGuest = Boolean(isGuest && requiresAuth);
+    const lockDescriptionId = isLockedForGuest ? `shell-nav-lock-${layout}-${key}` : undefined;
+    const lockLabel = language === 'en' ? 'Sign in required' : '需要登录';
+
     return (
       <NavLink
         key={key}
@@ -299,6 +314,7 @@ function useSidebarNavView({
         end={to === '/'}
         onClick={onNavigate}
         aria-label={label}
+        aria-describedby={lockDescriptionId}
         className={({ isActive }) => cn(
           isDrawer
             ? 'shell-drawer-link'
@@ -316,8 +332,36 @@ function useSidebarNavView({
         ) : null}
         <span className={isDrawer ? 'shell-nav-item__label' : 'shell-header-link__label'}>
           <NavLabel label={label} />
+          {isLockedForGuest ? (
+            <span className="shell-nav-lock" aria-hidden="true">
+              <LockKeyhole className="size-3" />
+              <span>{lockLabel}</span>
+            </span>
+          ) : null}
         </span>
+        {lockDescriptionId ? <span id={lockDescriptionId} className="sr-only">{lockLabel}</span> : null}
       </NavLink>
+    );
+  };
+
+  const navLinks = CONSUMER_NAV_GROUPS.map((group) => {
+    const items = NAV_ITEMS.filter((item) => item.group === group.key);
+    if (!items.length) {
+      return null;
+    }
+    return (
+      <div
+        key={group.key}
+        data-testid={`shell-consumer-nav-group-${group.key}`}
+        className={isDrawer ? 'shell-drawer-link-group' : 'shell-header-link-group'}
+      >
+        <p className={isDrawer ? 'shell-drawer-group-label' : 'shell-header-group-label'}>
+          {group.label[language]}
+        </p>
+        <div className={isDrawer ? 'shell-drawer-group-links' : 'shell-header-group-links'}>
+          {items.map(buildConsumerNavLink)}
+        </div>
+      </div>
     );
   });
 
@@ -403,7 +447,7 @@ function useSidebarNavView({
 
   const settingsAction = !isGuest ? (
     <NavLink
-      to="/settings"
+      to={settingsPath}
       onClick={onNavigate}
       className={({ isActive }) => cn(
         isDrawer ? 'shell-drawer-action' : HEADER_UTILITY_TEXT_CLASS,
@@ -564,7 +608,7 @@ function useSidebarNavView({
   const navBody = isDrawer ? (
     <div className="shell-drawer-nav">
       <div className="shell-drawer-brand">
-        <BrandWordmark onNavigate={onNavigate} />
+        <BrandWordmark onNavigate={onNavigate} to={homePath} />
         <span className="shell-drawer-note">{t('nav.terminal')}</span>
       </div>
       <nav className="shell-drawer-links" aria-label={primaryNavLabel} data-testid={primaryNavTestId}>
@@ -582,7 +626,7 @@ function useSidebarNavView({
   ) : (
     <div className="shell-header-nav">
       <div className="shell-header-brand">
-        <BrandWordmark />
+        <BrandWordmark to={homePath} />
       </div>
       <nav className="shell-header-links" aria-label={primaryNavLabel} data-testid={primaryNavTestId}>
         {primaryNavLinks}
