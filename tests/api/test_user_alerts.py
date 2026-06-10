@@ -113,6 +113,17 @@ _EVENT_LIST_RESPONSE_KEYS = {
     "offset",
     "items",
 }
+_DRY_RUN_RESPONSE_KEYS = {
+    "dryRun",
+    "noSend",
+    "outboundAttempted",
+    "liveOutbound",
+    "localOnly",
+    "suppressedLocalRecord",
+    "evaluation",
+    "suppression",
+    "eventPacket",
+}
 
 
 def _reset_auth_globals() -> None:
@@ -430,6 +441,205 @@ class UserAlertsApiTestCase(unittest.TestCase):
         self.assertFalse(packet["liveOutbound"])
         self.assertEqual(packet["eventType"], "user.alert_dry_run_evaluation")
         self.assertEqual(packet["safeMetadata"]["subject"], "NVDA")
+
+    def test_owner_can_dry_run_rule_with_caller_supplied_context_without_send_or_persisting_events(
+        self,
+    ) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+        observed_at = datetime.now(timezone.utc)
+        created = self.client.post(
+            "/api/v1/user-alerts/rules",
+            json={
+                "symbol": "nvda",
+                "direction": "above",
+                "thresholdPrice": 125.5,
+                "enabled": True,
+            },
+        ).json()
+        before_events = self.client.get("/api/v1/user-alerts/events").json()
+        self.assertEqual(before_events["total"], 0)
+
+        with (
+            patch("data_provider.base.DataFetcherManager.get_realtime_quote") as get_quote,
+            patch("src.services.notification_service.NotificationService.emit_event") as emit_event,
+            patch("src.services.notification_service.NotificationDeliveryClient.send_webhook") as send_webhook,
+        ):
+            response = self.client.post(
+                f"/api/v1/user-alerts/rules/{created['id']}/dry-run",
+                json={
+                    "observedPrice": 130.0,
+                    "observedAt": observed_at.isoformat(),
+                    "freshness": {"status": "fresh", "maxAgeMinutes": 120},
+                    "suppression": {
+                        "muted": False,
+                        "snoozedUntil": None,
+                        "cooldownStartedAt": None,
+                        "cooldownSeconds": None,
+                        "previousFingerprint": "older-local-fingerprint",
+                        "previousTimeBucket": "202606080900",
+                    },
+                },
+            )
+            after_events = self.client.get("/api/v1/user-alerts/events").json()
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        _assert_response_keys(self, payload, _DRY_RUN_RESPONSE_KEYS)
+        self.assertTrue(payload["dryRun"])
+        self.assertTrue(payload["noSend"])
+        self.assertFalse(payload["outboundAttempted"])
+        self.assertFalse(payload["liveOutbound"])
+        self.assertTrue(payload["localOnly"])
+        self.assertFalse(payload["suppressedLocalRecord"])
+
+        evaluation = payload["evaluation"]
+        self.assertEqual(evaluation["state"], "condition_observed")
+        self.assertTrue(evaluation["conditionObserved"])
+        self.assertFalse(evaluation["providerRuntimeCalled"])
+        self.assertFalse(evaluation["networkCallsEnabled"])
+        self.assertFalse(evaluation["marketCacheMutation"])
+        self.assertEqual(evaluation["subject"], "NVDA")
+        self.assertEqual(evaluation["observedPrice"], 130.0)
+        self.assertEqual(evaluation["freshnessStatus"], "fresh")
+        self.assertEqual(payload["suppression"]["state"], "allowed")
+        self.assertIsNotNone(payload["eventPacket"])
+
+        self.assertEqual(after_events, before_events)
+        get_quote.assert_not_called()
+        emit_event.assert_not_called()
+        send_webhook.assert_not_called()
+
+    def test_dry_run_rule_is_owner_scoped(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+        created = self.client.post(
+            "/api/v1/user-alerts/rules",
+            json={"symbol": "AAPL", "direction": "below", "thresholdPrice": 150},
+        ).json()
+
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-2", "bob")
+        response = self.client.post(
+            f"/api/v1/user-alerts/rules/{created['id']}/dry-run",
+            json={
+                "observedPrice": 149.0,
+                "observedAt": datetime.now(timezone.utc).isoformat(),
+                "freshness": {"status": "fresh"},
+            },
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.client.get("/api/v1/user-alerts/events").json()["total"], 0)
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+        self.assertEqual(self.client.get("/api/v1/user-alerts/events").json()["total"], 0)
+
+    def test_dry_run_requires_current_user(self) -> None:
+        client = self._make_auth_enabled_client()
+        response = client.post(
+            "/api/v1/user-alerts/rules/1/dry-run",
+            json={
+                "observedPrice": 130.0,
+                "observedAt": datetime.now(timezone.utc).isoformat(),
+                "freshness": {"status": "fresh"},
+            },
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "unauthorized")
+        client.close()
+
+    def test_dry_run_rejects_transitional_current_user(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+            user_id="bootstrap",
+            username="bootstrap",
+            display_name="Bootstrap",
+            role="user",
+            is_admin=False,
+            is_authenticated=False,
+            transitional=True,
+            auth_enabled=False,
+        )
+
+        response = self.client.post(
+            "/api/v1/user-alerts/rules/1/dry-run",
+            json={
+                "observedPrice": 130.0,
+                "observedAt": datetime.now(timezone.utc).isoformat(),
+                "freshness": {"status": "fresh"},
+            },
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "unauthorized")
+
+    def test_dry_run_stale_freshness_remains_blocked(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+        created = self.client.post(
+            "/api/v1/user-alerts/rules",
+            json={"symbol": "MSFT", "direction": "above", "thresholdPrice": 425.0},
+        ).json()
+
+        response = self.client.post(
+            f"/api/v1/user-alerts/rules/{created['id']}/dry-run",
+            json={
+                "observedPrice": 430.0,
+                "observedAt": datetime.now(timezone.utc).isoformat(),
+                "freshness": {"status": "stale"},
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["dryRun"])
+        self.assertTrue(payload["noSend"])
+        self.assertFalse(payload["outboundAttempted"])
+        self.assertFalse(payload["liveOutbound"])
+        self.assertTrue(payload["localOnly"])
+        self.assertEqual(payload["evaluation"]["state"], "blocked_insufficient_data")
+        self.assertFalse(payload["evaluation"]["conditionObserved"])
+
+    def test_dry_run_requires_freshness_context(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+        created = self.client.post(
+            "/api/v1/user-alerts/rules",
+            json={"symbol": "MSFT", "direction": "above", "thresholdPrice": 425.0},
+        ).json()
+
+        response = self.client.post(
+            f"/api/v1/user-alerts/rules/{created['id']}/dry-run",
+            json={
+                "observedPrice": 430.0,
+                "observedAt": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+
+    def test_dry_run_rejects_raw_or_incomplete_suppression_context(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+        created = self.client.post(
+            "/api/v1/user-alerts/rules",
+            json={"symbol": "MSFT", "direction": "above", "thresholdPrice": 425.0},
+        ).json()
+
+        raw_freshness = self.client.post(
+            f"/api/v1/user-alerts/rules/{created['id']}/dry-run",
+            json={
+                "observedPrice": 430.0,
+                "observedAt": datetime.now(timezone.utc).isoformat(),
+                "freshness": {"status": "fresh", "providerTrace": {"raw": "must-not-leak"}},
+            },
+        )
+        self.assertEqual(raw_freshness.status_code, 422)
+
+        incomplete_cooldown = self.client.post(
+            f"/api/v1/user-alerts/rules/{created['id']}/dry-run",
+            json={
+                "observedPrice": 430.0,
+                "observedAt": datetime.now(timezone.utc).isoformat(),
+                "freshness": {"status": "fresh"},
+                "suppression": {"cooldownSeconds": 60},
+            },
+        )
+        self.assertEqual(incomplete_cooldown.status_code, 422)
 
     def test_event_payload_is_sanitized_in_app_only_and_owner_scoped(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")

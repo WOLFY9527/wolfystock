@@ -3,16 +3,30 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from decimal import Decimal
 import re
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.utils.symbol_normalization import canonical_stock_code
 
 
 UserAlertRuleType = Literal["watchlist_price_threshold"]
 UserAlertDirection = Literal["above", "below"]
+UserAlertDryRunFreshnessStatus = Literal[
+    "fresh",
+    "live",
+    "cached",
+    "delayed",
+    "stale",
+    "partial",
+    "fallback",
+    "synthetic",
+    "unavailable",
+    "unknown",
+]
 
 
 class _UserAlertSchema(BaseModel):
@@ -127,3 +141,56 @@ class UserAlertEventListResponse(_UserAlertSchema):
     limit: int = 100
     offset: int = 0
     items: List[UserAlertEventModel] = Field(default_factory=list)
+
+
+class UserAlertDryRunFreshnessInput(_UserAlertSchema):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    status: UserAlertDryRunFreshnessStatus
+    max_age_minutes: Optional[int] = Field(None, ge=1, alias="maxAgeMinutes")
+
+
+class UserAlertDryRunSuppressionContext(_UserAlertSchema):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    muted: bool = False
+    snoozed_until: Optional[datetime] = Field(None, alias="snoozedUntil")
+    cooldown_started_at: Optional[datetime] = Field(None, alias="cooldownStartedAt")
+    cooldown_seconds: Optional[int] = Field(None, ge=1, alias="cooldownSeconds")
+    previous_fingerprint: Optional[str] = Field(None, min_length=1, max_length=256, alias="previousFingerprint")
+    previous_time_bucket: Optional[str] = Field(None, min_length=1, max_length=32, alias="previousTimeBucket")
+
+    @model_validator(mode="after")
+    def _validate_policy_pairs(self):
+        cooldown_values = (self.cooldown_started_at, self.cooldown_seconds)
+        if any(value is not None for value in cooldown_values) and not all(
+            value is not None for value in cooldown_values
+        ):
+            raise ValueError("cooldownStartedAt and cooldownSeconds must be provided together")
+        duplicate_values = (self.previous_fingerprint, self.previous_time_bucket)
+        if any(value is not None for value in duplicate_values) and not all(
+            value is not None for value in duplicate_values
+        ):
+            raise ValueError("previousFingerprint and previousTimeBucket must be provided together")
+        return self
+
+
+class UserAlertDryRunRequest(_UserAlertSchema):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    observed_price: Decimal = Field(..., gt=0, alias="observedPrice")
+    observed_at: datetime = Field(..., alias="observedAt")
+    freshness: UserAlertDryRunFreshnessInput
+    suppression: Optional[UserAlertDryRunSuppressionContext] = None
+
+
+class UserAlertDryRunResponse(_UserAlertSchema):
+    dry_run: Literal[True] = Field(True, alias="dryRun")
+    no_send: Literal[True] = Field(True, alias="noSend")
+    outbound_attempted: Literal[False] = Field(False, alias="outboundAttempted")
+    live_outbound: Literal[False] = Field(False, alias="liveOutbound")
+    local_only: Literal[True] = Field(True, alias="localOnly")
+    suppressed_local_record: bool = Field(False, alias="suppressedLocalRecord")
+    evaluation: Dict[str, Any]
+    suppression: Dict[str, Any]
+    event_packet: Optional[Dict[str, Any]] = Field(None, alias="eventPacket")

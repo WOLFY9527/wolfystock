@@ -49,6 +49,7 @@ class UserAlertDryRunPipelineTestCase(unittest.TestCase):
         )
 
         self.assertTrue(result["dryRun"])
+        self.assertTrue(result["noSend"])
         self.assertFalse(result["outboundAttempted"])
         self.assertFalse(result["liveOutbound"])
         self.assertTrue(result["localOnly"])
@@ -111,6 +112,28 @@ class UserAlertDryRunPipelineTestCase(unittest.TestCase):
         self.assertEqual(result["suppression"]["state"], "suppressed_muted")
         self.assertIsNone(result["eventPacket"])
         self.assertFalse(result["suppressedLocalRecord"])
+
+    def test_stale_freshness_stays_blocked_and_local_only(self) -> None:
+        result = build_user_alert_dry_run_pipeline_result(
+            rule=self.rule,
+            observed_price=130.0,
+            observed_at=self.now,
+            freshness={"status": "stale"},
+            suppression=self.suppression,
+            now=self.now,
+            recorded_at=self.recorded_at,
+        )
+
+        self.assertTrue(result["dryRun"])
+        self.assertTrue(result["noSend"])
+        self.assertFalse(result["outboundAttempted"])
+        self.assertFalse(result["liveOutbound"])
+        self.assertTrue(result["localOnly"])
+        self.assertFalse(result["suppressedLocalRecord"])
+        self.assertEqual(result["evaluation"]["state"], "blocked_insufficient_data")
+        self.assertFalse(result["evaluation"]["conditionObserved"])
+        self.assertEqual(result["suppression"]["state"], "not_applicable")
+        self.assertIsNotNone(result["eventPacket"])
 
     def test_history_like_suppressed_preview_does_not_emit_record_by_default(self) -> None:
         result = build_user_alert_dry_run_pipeline_result(
