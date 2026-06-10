@@ -127,6 +127,52 @@ SCANNER_CONTEXT_BLOCKED_TOKENS = (
     "failed",
     "error",
 )
+SCANNER_CONSUMER_REASON_COPY = {
+    "selected": {
+        "label": "已进入本轮观察名单",
+        "next": "继续跟踪后续数据确认。",
+    },
+    "score_fit": {
+        "label": "综合条件未进入本轮观察名单",
+        "next": "等待趋势、动量或流动性条件改善后再复核。",
+    },
+    "liquidity": {
+        "label": "流动性未达到本轮观察要求",
+        "next": "观察成交额和成交量改善后再复核。",
+    },
+    "history_coverage": {
+        "label": "历史行情覆盖不足",
+        "next": "等待更多历史行情覆盖后再复核。",
+    },
+    "price_range": {
+        "label": "价格区间不符合本轮观察要求",
+        "next": "等待价格回到本轮观察范围后再复核。",
+    },
+    "trend_fit": {
+        "label": "趋势结构尚未满足观察条件",
+        "next": "等待均线和趋势结构改善后再复核。",
+    },
+    "momentum_fit": {
+        "label": "动量延续不足",
+        "next": "等待动量信号重新确认后再复核。",
+    },
+    "universe_scope": {
+        "label": "不在本轮扫描范围",
+        "next": "确认代码、市场和主题范围后再重新扫描。",
+    },
+    "input_validation": {
+        "label": "输入信息不完整",
+        "next": "补充或修正输入后再重新扫描。",
+    },
+    "other": {
+        "label": "未达到本轮观察条件",
+        "next": "保留为观察线索，等待后续扫描复核。",
+    },
+}
+SCANNER_CONSUMER_CURRENT_FRESHNESS = frozenset({"fresh", "live", "realtime", "cached", "complete"})
+SCANNER_CONSUMER_DELAYED_FRESHNESS = frozenset({"delayed", "t_plus_1_or_delayed", "t+1", "recent"})
+SCANNER_CONSUMER_AGED_FRESHNESS = frozenset({"stale", "aged", "expired"})
+SCANNER_CONSUMER_PARTIAL_FRESHNESS = frozenset({"partial", "fallback", "fallback_static"})
 SCANNER_CONTEXT_SUPPORTIVE_REGIMES = frozenset(
     {
         "risk_on",
@@ -1654,6 +1700,147 @@ class MarketScannerService:
             diagnostics["cn_provider_observation"] = observation
             candidate["_diagnostics"] = diagnostics
 
+    @staticmethod
+    def _consumer_reason_bucket(
+        *,
+        status: str,
+        reason: Optional[str],
+        failed_rules: Sequence[str],
+        missing_fields: Sequence[str],
+    ) -> str:
+        tokens = " ".join(
+            str(item or "").strip().lower()
+            for item in [status, reason, *failed_rules, *missing_fields]
+            if str(item or "").strip()
+        )
+        if status == "selected":
+            return "selected"
+        if status == "data_failed" or "not_enough_history" in tokens or "missing price history" in tokens:
+            return "history_coverage"
+        if "history" in tokens and ("missing" in tokens or "insufficient" in tokens):
+            return "history_coverage"
+        if "below_score_threshold" in tokens:
+            return "score_fit"
+        if any(marker in tokens for marker in ("liquidity", "volume", "amount", "turnover")):
+            return "liquidity"
+        if "price" in tokens:
+            return "price_range"
+        if any(marker in tokens for marker in ("trend", "ma20", "ma60")):
+            return "trend_fit"
+        if "momentum" in tokens:
+            return "momentum_fit"
+        if any(marker in tokens for marker in ("unsupported_market", "benchmark_symbol_skipped", "duplicate_symbol")):
+            return "universe_scope"
+        if any(marker in tokens for marker in ("invalid_payload", "invalid", "payload")):
+            return "input_validation"
+        return "other"
+
+    @staticmethod
+    def _consumer_freshness_category(value: Any, *, fallback: str = "unknown") -> str:
+        freshness = str(value or "").strip().lower()
+        if not freshness or freshness == "unknown":
+            return fallback
+        if freshness in SCANNER_CONSUMER_CURRENT_FRESHNESS:
+            return "current"
+        if freshness in SCANNER_CONSUMER_DELAYED_FRESHNESS:
+            return "delayed"
+        if freshness in SCANNER_CONSUMER_AGED_FRESHNESS:
+            return "aged"
+        if freshness in SCANNER_CONSUMER_PARTIAL_FRESHNESS:
+            return "partial"
+        if freshness in {"unavailable", "missing", "insufficient"}:
+            return "insufficient"
+        return "unknown"
+
+    @staticmethod
+    def _consumer_source_confidence_bucket(
+        *,
+        status: str,
+        score: Optional[float],
+        reason_bucket: str,
+        ranked_candidate: Optional[Mapping[str, Any]],
+    ) -> str:
+        if status == "data_failed" or reason_bucket == "history_coverage" or score is None:
+            return "insufficient"
+        diagnostics = dict((ranked_candidate or {}).get("_diagnostics") or {})
+        score_explainability = dict(diagnostics.get("score_explainability") or {})
+        source_confidence = dict(score_explainability.get("source_confidence") or {})
+        if not source_confidence:
+            return "score_grade" if status in {"selected", "rejected", "evaluated"} else "unknown"
+        if source_confidence.get("isUnavailable") or source_confidence.get("isSynthetic"):
+            return "insufficient"
+        score_allowed = source_confidence.get("scoreContributionAllowed")
+        if score_allowed is True and not source_confidence.get("capReason"):
+            return "score_grade"
+        if (
+            score_allowed is False
+            or source_confidence.get("observationOnly")
+            or source_confidence.get("isFallback")
+            or source_confidence.get("isStale")
+            or source_confidence.get("isPartial")
+            or source_confidence.get("proxyOnly")
+        ):
+            return "limited"
+        return "unknown"
+
+    def _build_candidate_consumer_projection(
+        self,
+        candidate: Mapping[str, Any],
+        *,
+        ranked_candidate: Optional[Mapping[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        status = str(candidate.get("status") or "skipped")
+        score = candidate.get("score")
+        failed_rules = [str(item) for item in candidate.get("failed_rules") or []]
+        missing_fields = [str(item) for item in candidate.get("missing_fields") or []]
+        reason_bucket = self._consumer_reason_bucket(
+            status=status,
+            reason=str(candidate.get("reason") or ""),
+            failed_rules=failed_rules,
+            missing_fields=missing_fields,
+        )
+        copy = SCANNER_CONSUMER_REASON_COPY[reason_bucket]
+        source_bucket = self._consumer_source_confidence_bucket(
+            status=status,
+            score=score if score is None else _safe_float(score),
+            reason_bucket=reason_bucket,
+            ranked_candidate=ranked_candidate,
+        )
+        diagnostics = dict((ranked_candidate or {}).get("_diagnostics") or {})
+        score_explainability = dict(diagnostics.get("score_explainability") or {})
+        source_confidence = dict(score_explainability.get("source_confidence") or {})
+        freshness_category = self._consumer_freshness_category(
+            source_confidence.get("freshness"),
+            fallback="insufficient" if source_bucket == "insufficient" else "unknown",
+        )
+        if source_bucket == "score_grade":
+            data_quality_state = "ready"
+            confidence_category = "high"
+        elif source_bucket == "limited":
+            data_quality_state = "limited"
+            confidence_category = "limited"
+        elif source_bucket == "insufficient":
+            data_quality_state = "insufficient"
+            confidence_category = "insufficient"
+        else:
+            data_quality_state = "unknown"
+            confidence_category = "unknown"
+        consumer_diagnostics = {
+            "reasonBucket": reason_bucket,
+            "reasonLabel": copy["label"],
+            "nextEvidence": copy["next"],
+            "sourceConfidenceBucket": source_bucket,
+            "confidenceCategory": confidence_category,
+            "freshnessCategory": freshness_category,
+            "dataQualityState": data_quality_state,
+        }
+        return {
+            "consumerReasonBucket": reason_bucket,
+            "consumerReasonLabel": copy["label"],
+            "consumerNextEvidence": copy["next"],
+            "consumerDiagnostics": consumer_diagnostics,
+        }
+
     def _rejection_rules_for_candidate(self, candidate: Dict[str, Any], selected_cutoff: float) -> List[str]:
         components = dict(candidate.get("_component_scores") or {})
         failed_rules: List[str] = []
@@ -1742,6 +1929,7 @@ class MarketScannerService:
                 base.setdefault("missing_fields", [])
                 base.setdefault("metrics", {})
             base["rank"] = index
+            base.update(self._build_candidate_consumer_projection(base, ranked_candidate=ranked))
             candidates.append(base)
 
         counts = {

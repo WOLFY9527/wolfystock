@@ -29,6 +29,17 @@ FORBIDDEN_PUBLIC_TERMS = (
     "stack_trace",
     "traceback",
 )
+FORBIDDEN_CONSUMER_REJECTION_TERMS = (
+    "fixture_local_history",
+    "fixture_local_quote",
+    "fixture_local_snapshot",
+    "liquidity_below_profile_minimum",
+    "missing_history",
+    "history.close",
+    "history.volume",
+    "provider_payload",
+    "raw_payload",
+)
 SCANNER_RUN_REQUIRED_KEYS = {
     "id",
     "market",
@@ -175,6 +186,23 @@ def test_scanner_diagnostic_candidates_freeze_bounded_failure_semantics() -> Non
     assert diagnostics_by_status["data_failed"]["failed_rules"] == []
     assert diagnostics_by_status["data_failed"]["missing_fields"] == ["history.close", "history.volume"]
     assert diagnostics_by_status["data_failed"]["score"] is None
+    for status, expected_bucket in (("rejected", "liquidity"), ("data_failed", "history_coverage")):
+        item = diagnostics_by_status[status]
+        assert item["consumerReasonBucket"] == expected_bucket
+        assert item["consumerReasonLabel"]
+        assert item["consumerNextEvidence"]
+        assert item["consumerDiagnostics"]["reasonBucket"] == expected_bucket
+        assert item["consumerDiagnostics"]["sourceConfidenceBucket"]
+        public_text = json.dumps(
+            {
+                "consumerReasonBucket": item["consumerReasonBucket"],
+                "consumerReasonLabel": item["consumerReasonLabel"],
+                "consumerNextEvidence": item["consumerNextEvidence"],
+                "consumerDiagnostics": item["consumerDiagnostics"],
+            },
+            ensure_ascii=False,
+        ).lower()
+        assert not any(term in public_text for term in FORBIDDEN_CONSUMER_REJECTION_TERMS)
 
 
 def test_scanner_to_backtest_handoff_fixture_is_prefill_contract_only() -> None:

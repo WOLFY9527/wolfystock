@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ScannerRunRequest(BaseModel):
@@ -287,6 +287,12 @@ class ScannerConsumerDiagnosticsMetadata(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     status: Optional[str] = None
+    reasonBucket: Optional[str] = None
+    reasonLabel: Optional[str] = None
+    nextEvidence: Optional[str] = None
+    sourceConfidenceBucket: Optional[str] = None
+    confidenceCategory: Optional[str] = None
+    freshnessCategory: Optional[str] = None
     scoreGradeAllowed: Optional[bool] = None
     scoreConfidence: Optional[float] = None
     capReason: Optional[str] = None
@@ -321,6 +327,133 @@ def _lock_candidate_diagnostics_metadata(value: Dict[str, Any]) -> Dict[str, Any
             payload["evidence_packet"],
         )
     return payload
+
+
+_SCANNER_CONSUMER_REASON_COPY: Dict[str, Dict[str, str]] = {
+    "selected": {
+        "label": "已进入本轮观察名单",
+        "next": "继续跟踪后续数据确认。",
+    },
+    "score_fit": {
+        "label": "综合条件未进入本轮观察名单",
+        "next": "等待趋势、动量或流动性条件改善后再复核。",
+    },
+    "liquidity": {
+        "label": "流动性未达到本轮观察要求",
+        "next": "观察成交额和成交量改善后再复核。",
+    },
+    "history_coverage": {
+        "label": "历史行情覆盖不足",
+        "next": "等待更多历史行情覆盖后再复核。",
+    },
+    "price_range": {
+        "label": "价格区间不符合本轮观察要求",
+        "next": "等待价格回到本轮观察范围后再复核。",
+    },
+    "trend_fit": {
+        "label": "趋势结构尚未满足观察条件",
+        "next": "等待均线和趋势结构改善后再复核。",
+    },
+    "momentum_fit": {
+        "label": "动量延续不足",
+        "next": "等待动量信号重新确认后再复核。",
+    },
+    "universe_scope": {
+        "label": "不在本轮扫描范围",
+        "next": "确认代码、市场和主题范围后再重新扫描。",
+    },
+    "input_validation": {
+        "label": "输入信息不完整",
+        "next": "补充或修正输入后再重新扫描。",
+    },
+    "other": {
+        "label": "未达到本轮观察条件",
+        "next": "保留为观察线索，等待后续扫描复核。",
+    },
+}
+
+
+def _candidate_diagnostic_reason_bucket(
+    *,
+    status: str,
+    reason: Optional[str],
+    failed_rules: List[str],
+    missing_fields: List[str],
+) -> str:
+    tokens = " ".join(
+        str(item or "").strip().lower()
+        for item in [status, reason, *failed_rules, *missing_fields]
+        if str(item or "").strip()
+    )
+    if status == "selected":
+        return "selected"
+    if status == "data_failed" or "not_enough_history" in tokens or "missing price history" in tokens:
+        return "history_coverage"
+    if "history" in tokens and ("missing" in tokens or "insufficient" in tokens):
+        return "history_coverage"
+    if "below_score_threshold" in tokens:
+        return "score_fit"
+    if any(marker in tokens for marker in ("liquidity", "volume", "amount", "turnover")):
+        return "liquidity"
+    if "price" in tokens:
+        return "price_range"
+    if any(marker in tokens for marker in ("trend", "ma20", "ma60")):
+        return "trend_fit"
+    if "momentum" in tokens:
+        return "momentum_fit"
+    if any(marker in tokens for marker in ("unsupported_market", "benchmark_symbol_skipped", "duplicate_symbol")):
+        return "universe_scope"
+    if any(marker in tokens for marker in ("invalid_payload", "invalid", "payload")):
+        return "input_validation"
+    return "other"
+
+
+def _candidate_source_confidence_bucket(status: str, score: Optional[float], reason_bucket: str) -> str:
+    if status == "data_failed" or reason_bucket == "history_coverage" or score is None:
+        return "insufficient"
+    if status in {"selected", "rejected", "evaluated"}:
+        return "score_grade"
+    return "unknown"
+
+
+def _build_candidate_diagnostic_consumer_projection(
+    *,
+    status: str,
+    score: Optional[float],
+    reason: Optional[str],
+    failed_rules: List[str],
+    missing_fields: List[str],
+) -> Dict[str, Any]:
+    reason_bucket = _candidate_diagnostic_reason_bucket(
+        status=status,
+        reason=reason,
+        failed_rules=failed_rules,
+        missing_fields=missing_fields,
+    )
+    copy = _SCANNER_CONSUMER_REASON_COPY[reason_bucket]
+    source_bucket = _candidate_source_confidence_bucket(status, score, reason_bucket)
+    if source_bucket == "score_grade":
+        data_quality_state = "ready"
+        confidence_category = "high"
+    elif source_bucket == "limited":
+        data_quality_state = "limited"
+        confidence_category = "limited"
+    elif source_bucket == "insufficient":
+        data_quality_state = "insufficient"
+        confidence_category = "insufficient"
+    else:
+        data_quality_state = "unknown"
+        confidence_category = "unknown"
+    freshness_category = "insufficient" if source_bucket == "insufficient" else "unknown"
+    return {
+        "reasonBucket": reason_bucket,
+        "reasonLabel": copy["label"],
+        "nextEvidence": copy["next"],
+        "sourceConfidenceBucket": source_bucket,
+        "confidenceCategory": confidence_category,
+        "freshnessCategory": freshness_category,
+        "dataQualityState": data_quality_state,
+    }
 
 
 class ScannerCandidateResponse(BaseModel):
@@ -391,7 +524,40 @@ class ScannerCandidateDiagnosticsResponse(BaseModel):
     failed_rules: List[str] = Field(default_factory=list)
     missing_fields: List[str] = Field(default_factory=list)
     metrics: Dict[str, Any] = Field(default_factory=dict)
+    consumerReasonBucket: Optional[str] = None
+    consumerReasonLabel: Optional[str] = None
+    consumerNextEvidence: Optional[str] = None
+    consumerDiagnostics: Dict[str, Any] = Field(default_factory=dict)
     cn_provider_observation: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("consumerDiagnostics")
+    @classmethod
+    def _validate_consumer_diagnostics(cls, value: Dict[str, Any]) -> Dict[str, Any]:
+        return _dump_metadata_model(ScannerConsumerDiagnosticsMetadata, value)
+
+    @model_validator(mode="after")
+    def _populate_consumer_projection(self) -> "ScannerCandidateDiagnosticsResponse":
+        projection = _build_candidate_diagnostic_consumer_projection(
+            status=str(self.status or "skipped"),
+            score=self.score,
+            reason=self.reason,
+            failed_rules=list(self.failed_rules or []),
+            missing_fields=list(self.missing_fields or []),
+        )
+        if not self.consumerReasonBucket:
+            self.consumerReasonBucket = str(projection["reasonBucket"])
+        if not self.consumerReasonLabel:
+            self.consumerReasonLabel = str(projection["reasonLabel"])
+        if not self.consumerNextEvidence:
+            self.consumerNextEvidence = str(projection["nextEvidence"])
+        consumer_diagnostics = dict(self.consumerDiagnostics or {})
+        for key, value in projection.items():
+            consumer_diagnostics.setdefault(key, value)
+        self.consumerDiagnostics = _dump_metadata_model(
+            ScannerConsumerDiagnosticsMetadata,
+            consumer_diagnostics,
+        )
+        return self
 
 
 class ScannerRunDetailResponse(BaseModel):

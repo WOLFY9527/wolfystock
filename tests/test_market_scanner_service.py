@@ -3079,6 +3079,27 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         rejected = [item for item in result["candidates"] if item["status"] == "rejected"]
         self.assertGreaterEqual(len(rejected), 1)
         self.assertTrue(all(item["reason"] or item["failed_rules"] for item in rejected))
+        for item in rejected:
+            self.assertEqual(item["consumerReasonBucket"], "score_fit")
+            self.assertTrue(item["consumerReasonLabel"])
+            self.assertTrue(item["consumerNextEvidence"])
+            self.assertEqual(item["consumerDiagnostics"]["reasonBucket"], "score_fit")
+            self.assertIn(item["consumerDiagnostics"]["sourceConfidenceBucket"], {"score_grade", "limited"})
+        for symbol in ("CIFR", "BITF"):
+            projection = candidate_map[symbol]
+            self.assertEqual(projection["consumerReasonBucket"], "history_coverage")
+            self.assertEqual(projection["consumerDiagnostics"]["dataQualityState"], "insufficient")
+            self.assertEqual(projection["consumerDiagnostics"]["sourceConfidenceBucket"], "insufficient")
+            public_text = str(
+                {
+                    "consumerReasonBucket": projection["consumerReasonBucket"],
+                    "consumerReasonLabel": projection["consumerReasonLabel"],
+                    "consumerNextEvidence": projection["consumerNextEvidence"],
+                    "consumerDiagnostics": projection["consumerDiagnostics"],
+                }
+            ).lower()
+            for unsafe_term in ("missing price history", "not_enough_history", "unavailable", "raw_payload"):
+                self.assertNotIn(unsafe_term, public_text)
         self.assertEqual(len(data_manager.daily_history_calls), 0)
         self.assertEqual(len(data_manager.realtime_quote_calls), 9)
 

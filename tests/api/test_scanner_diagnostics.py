@@ -7,6 +7,38 @@ from src.storage import DatabaseManager
 from tests.test_market_scanner_service import FakeUsScannerDataManager, seed_crypto_miner_local_history
 
 
+UNSAFE_CONSUMER_DIAGNOSTIC_TERMS = (
+    "alpaca",
+    "history_only_us_scan",
+    "missing price history",
+    "not_enough_history",
+    "below_score_threshold",
+    "provider_payload",
+    "raw_payload",
+)
+
+
+def _assert_consumer_rejection_projection_is_safe(candidate: dict) -> None:
+    assert candidate["consumerReasonBucket"]
+    assert candidate["consumerReasonLabel"]
+    assert candidate["consumerNextEvidence"]
+    assert candidate["consumerDiagnostics"]["reasonBucket"] == candidate["consumerReasonBucket"]
+    assert candidate["consumerDiagnostics"]["reasonLabel"] == candidate["consumerReasonLabel"]
+    assert candidate["consumerDiagnostics"]["nextEvidence"] == candidate["consumerNextEvidence"]
+    assert candidate["consumerDiagnostics"]["sourceConfidenceBucket"]
+    assert candidate["consumerDiagnostics"]["freshnessCategory"]
+    public_text = str(
+        {
+            "consumerReasonBucket": candidate["consumerReasonBucket"],
+            "consumerReasonLabel": candidate["consumerReasonLabel"],
+            "consumerNextEvidence": candidate["consumerNextEvidence"],
+            "consumerDiagnostics": candidate["consumerDiagnostics"],
+        }
+    ).lower()
+    for term in UNSAFE_CONSUMER_DIAGNOSTIC_TERMS:
+        assert term not in public_text
+
+
 def test_crypto_mining_scan_returns_full_candidate_diagnostics() -> None:
     DatabaseManager.reset_instance()
     db = DatabaseManager(db_url="sqlite:///:memory:")
@@ -64,6 +96,14 @@ def test_crypto_mining_scan_returns_full_candidate_diagnostics() -> None:
         assert candidate_by_status["data_failed"]["score"] is None
         assert candidate_by_status["data_failed"]["missing_fields"]
         assert candidate_by_status["data_failed"]["metrics"] == {}
+        rejected = [item for item in result["candidates"] if item["status"] == "rejected"]
+        data_failed = [item for item in result["candidates"] if item["status"] == "data_failed"]
+        assert rejected
+        assert data_failed
+        assert {item["consumerReasonBucket"] for item in rejected} == {"score_fit"}
+        assert {item["consumerReasonBucket"] for item in data_failed} == {"history_coverage"}
+        for item in rejected + data_failed:
+            _assert_consumer_rejection_projection_is_safe(item)
         assert len(data_manager.realtime_quote_calls) == 9
     finally:
         DatabaseManager.reset_instance()
