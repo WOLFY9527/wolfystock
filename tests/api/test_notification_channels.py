@@ -191,6 +191,42 @@ class NotificationChannelsTestCase(unittest.TestCase):
         self.assertEqual(self.delivery.webhook_calls, [])
         self.assertEqual(event["delivery_status"], "no_channels")
 
+    def test_channel_opt_out_update_suppresses_matching_delivery(self) -> None:
+        channel = self.service.create_channel(
+            name="ops webhook",
+            type="webhook",
+            enabled=True,
+            severity_min="warning",
+            event_types=["admin_logs.storage"],
+            config={"webhook_url": "https://hooks.example.test/opt-out"},
+        )
+        updated = self.service.update_channel(channel["id"], enabled=False)
+
+        class ExplodingSystemNotifier:
+            def __init__(self, *_args, **_kwargs):
+                raise AssertionError("system notification sender should not be constructed")
+
+        with (
+            patch("urllib.request.urlopen", side_effect=AssertionError("network call attempted")) as mock_urlopen,
+            patch("src.services.notification_service.SystemNotificationService", ExplodingSystemNotifier),
+        ):
+            event = self.service.emit_event(
+                event_type="admin_logs.storage",
+                severity="critical",
+                title="Storage critical",
+                message="Disabled route should stay local",
+                payload={"owner_user_id": "user-1"},
+                fingerprint="storage:opt-out-disabled",
+            )
+
+        self.assertFalse(updated["enabled"])
+        self.assertEqual(event["delivery_status"], "no_channels")
+        self.assertEqual(self.delivery.webhook_calls, [])
+        mock_urlopen.assert_not_called()
+        listed = self.service.list_channels()[0]
+        self.assertEqual(listed["last_status"], "disabled")
+        self.assertIsNone(listed["last_sent_at"])
+
     def test_default_delivery_requires_explicit_opt_in_route_and_target(self) -> None:
         event = self.service.emit_event(
             event_type="admin_logs.storage",
@@ -223,7 +259,14 @@ class NotificationChannelsTestCase(unittest.TestCase):
             )
 
     def test_default_rehearsal_path_makes_no_external_network_call(self) -> None:
-        with patch("urllib.request.urlopen", side_effect=AssertionError("network call attempted")) as mock_urlopen:
+        class ExplodingSystemNotifier:
+            def __init__(self, *_args, **_kwargs):
+                raise AssertionError("system notification sender should not be constructed")
+
+        with (
+            patch("urllib.request.urlopen", side_effect=AssertionError("network call attempted")) as mock_urlopen,
+            patch("src.services.notification_service.SystemNotificationService", ExplodingSystemNotifier),
+        ):
             event = self.service.emit_event(
                 event_type="notifications.staging_rehearsal",
                 severity="warning",
@@ -234,6 +277,36 @@ class NotificationChannelsTestCase(unittest.TestCase):
             )
 
         self.assertEqual(event["delivery_status"], "no_channels")
+        self.assertEqual(self.delivery.webhook_calls, [])
+        mock_urlopen.assert_not_called()
+
+    def test_available_system_channels_are_not_default_user_delivery_without_opt_in(self) -> None:
+        send_calls: list[str] = []
+
+        class FakeSystemNotifier:
+            def get_available_channels(self):
+                return [SimpleNamespace(value="email"), SimpleNamespace(value="discord")]
+
+            def send(self, content: str, **_kwargs) -> bool:
+                send_calls.append(content)
+                raise AssertionError("system notification sender should not be called")
+
+        with (
+            patch("urllib.request.urlopen", side_effect=AssertionError("network call attempted")) as mock_urlopen,
+            patch("src.services.notification_service.SystemNotificationService", FakeSystemNotifier),
+        ):
+            self.assertEqual(self.service.list_system_channels(), ["email", "discord"])
+            event = self.service.emit_event(
+                event_type="user.notification.contract",
+                severity="warning",
+                title="User notification contract",
+                message="System channels are available but not user opt-in targets",
+                payload={"owner_user_id": "user-1", "dry_run": True},
+                fingerprint="user-notification:no-default-system-channel",
+            )
+
+        self.assertEqual(event["delivery_status"], "no_channels")
+        self.assertEqual(send_calls, [])
         self.assertEqual(self.delivery.webhook_calls, [])
         mock_urlopen.assert_not_called()
 
@@ -386,12 +459,76 @@ class NotificationChannelsTestCase(unittest.TestCase):
             self.assertEqual(payload["trade_order"]["symbol"], "AAPL")
             self.assertEqual(payload["portfolio_mutation"]["action"], "rebalance")
 
+    def test_api_channel_and_event_surfaces_do_not_expose_raw_notification_secrets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = DatabaseManager(db_url=f"sqlite:///{tmpdir}/notification_channels.sqlite?check_same_thread=False")
+            service = NotificationService(db=db, delivery_client=FakeDeliveryClient())
+            service.create_channel(
+                name="ops webhook",
+                type="webhook",
+                enabled=True,
+                severity_min="warning",
+                event_types=["admin_logs.storage"],
+                config={
+                    "webhook_url": "https://user:pass@hooks.example.test/services/raw/path",
+                    "token": "route-token",
+                    "provider_credentials": {"password": "provider-password"},
+                },
+            )
+            service.emit_event(
+                event_type="admin_logs.storage",
+                severity="critical",
+                title="Storage critical",
+                message="Storage threshold exceeded",
+                payload={
+                    "token": "raw-token",
+                    "authorization": "Bearer raw-bearer",
+                    "webhook_url": "https://hooks.example.test/services/event/path",
+                    "session_cookie": "raw-cookie",
+                    "provider_credentials": {"password": "payload-provider-password"},
+                },
+                fingerprint="storage:api-redaction",
+            )
+            class FakeSystemNotifier:
+                def get_available_channels(self):
+                    return []
+
+            with (
+                patch("api.v1.endpoints.admin_notifications.NotificationService", return_value=service),
+                patch("src.services.notification_service.SystemNotificationService", FakeSystemNotifier),
+            ):
+                channels = admin_notifications.list_notification_channels(_=_admin_user())
+                events = admin_notifications.list_notifications(
+                    event_type=None,
+                    severity=None,
+                    include_acknowledged=True,
+                    limit=100,
+                    offset=0,
+                    _=_admin_user(),
+                )
+
+        combined = f"{channels.model_dump_json()} {events.model_dump_json()}"
+        for leaked in (
+            "route-token",
+            "user:pass",
+            "/services/raw/path",
+            "provider-password",
+            "raw-token",
+            "raw-bearer",
+            "/services/event/path",
+            "raw-cookie",
+            "payload-provider-password",
+        ):
+            self.assertNotIn(leaked, combined)
+
     def test_existing_system_channel_sends_through_configured_notifier(self) -> None:
         sent_messages: list[str] = []
+        allowlists: list[list[str]] = []
 
         class FakeSystemNotifier:
             def __init__(self, *, channel_allowlist=None, **_kwargs):
                 self.channel_allowlist = list(channel_allowlist or [])
+                allowlists.append(list(self.channel_allowlist))
 
             def send(self, content: str, **_kwargs) -> bool:
                 sent_messages.append(content)
@@ -420,6 +557,7 @@ class NotificationChannelsTestCase(unittest.TestCase):
         self.assertEqual(len(sent_messages), 1)
         self.assertIn("AnalysisFailed", sent_messages[0])
         self.assertIn("analysis failed", sent_messages[0])
+        self.assertEqual(allowlists, [["discord"]])
 
     def test_delete_system_channel_rule_only_unbinds_log_notification_association(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -449,10 +587,12 @@ class NotificationChannelsTestCase(unittest.TestCase):
 
     def test_execution_log_warning_triggers_matching_system_channel_once(self) -> None:
         sent_messages: list[str] = []
+        allowlists: list[list[str]] = []
 
         class FakeSystemNotifier:
             def __init__(self, *, channel_allowlist=None, **_kwargs):
                 self.channel_allowlist = list(channel_allowlist or [])
+                allowlists.append(list(self.channel_allowlist))
 
             def send(self, content: str, **_kwargs) -> bool:
                 sent_messages.append(content)
@@ -500,6 +640,7 @@ class NotificationChannelsTestCase(unittest.TestCase):
         events = self.service.list_events(event_type="admin_logs.event")["items"]
         self.assertEqual(len(events), 1)
         self.assertEqual(len(sent_messages), 1)
+        self.assertEqual(allowlists, [["email"]])
         self.assertEqual(events[0]["severity"], "warning")
 
     def test_test_channel_uses_mock_delivery(self) -> None:

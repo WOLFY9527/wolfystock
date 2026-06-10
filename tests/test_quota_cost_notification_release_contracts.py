@@ -83,6 +83,11 @@ def test_audit_cli_offline_outputs_bounded_json_contract() -> None:
     assert payload["quotaPosture"]["dryRunNoSpend"] is True
     assert payload["costPosture"]["missingPricingPolicyNoSpend"] is True
     assert payload["notificationPosture"]["noChannelsNoSend"] is True
+    assert payload["notificationPosture"]["dryRunNoSend"] is True
+    assert payload["notificationPosture"]["deliveryCalls"] == 0
+    payload_text = json.dumps(payload, ensure_ascii=False, sort_keys=True).lower()
+    for unsupported_claim in ("durable", "outbox", "retry", "exactly_once", "exactly-once"):
+        assert unsupported_claim not in payload_text
     assert "must-not-leak" not in result.stdout.lower()
 
 
@@ -96,13 +101,16 @@ def test_audit_default_cli_remains_offline_without_live_paths() -> None:
         patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
         patch("src.services.scanner_ai_service.ScannerAiInterpretationService.interpret_shortlist", side_effect=forbidden),
         patch("src.services.llm_cost_ledger_service.LlmCostLedgerService.preflight_invoice_reconciliation", side_effect=forbidden),
+        patch("src.services.notification_service.NotificationService._deliver_to_channel", side_effect=forbidden),
         patch("src.services.notification_service.NotificationDeliveryClient.send_webhook", side_effect=forbidden),
         patch("src.services.notification_service.SystemNotificationService.send", side_effect=forbidden),
+        patch("urllib.request.urlopen", side_effect=forbidden),
     ):
         payload = audit.run_offline_audit()
 
     assert payload["liveCallsExecuted"] is False
     assert payload["notificationsSent"] is False
+    assert payload["notificationPosture"]["deliveryCalls"] == 0
     assert payload["quotaPosture"]["dryRunNoSpend"] is True
     assert payload["notificationPosture"]["dryRunNoSend"] is True
 
@@ -206,9 +214,31 @@ def test_notification_contracts_do_not_send_on_no_channel_dry_run_or_failure() -
         event_types=["release.notification_safety"],
         config={"webhook_url": "https://hooks.example.test/services/must-not-leak", "token": "must-not-leak"},
     )
-    dry_run = service.test_channel(channel["id"], dry_run=True)
+    with (
+        patch("src.services.notification_service.NotificationService._deliver_to_channel", side_effect=AssertionError("dry-run should not dispatch delivery")),
+        patch("src.services.notification_service.NotificationDeliveryClient.send_webhook", side_effect=AssertionError("dry-run should not send webhook")),
+        patch("src.services.notification_service.SystemNotificationService.send", side_effect=AssertionError("dry-run should not send system notification")),
+    ):
+        dry_run = service.test_channel(channel["id"], dry_run=True)
     assert dry_run["success"] is True
     assert dry_run["dry_run"] is True
+    assert dry_run["target_summary"] == "webhook:configured"
+    assert delivery.webhook_calls == []
+    assert dry_run["channel"]["last_tested_at"] is not None
+    assert dry_run["channel"]["last_sent_at"] is None
+    assert dry_run["channel"]["last_triggered_at"] is None
+
+    duplicate = service.emit_event(
+        event_type="release.notification_safety",
+        severity="warning",
+        title="Repeated release notification safety",
+        message="Repeated no-channel event should reuse the best-effort dedupe window",
+        payload={"dry_run": True},
+        fingerprint="release:no-channel",
+    )
+    assert duplicate["id"] == no_channel_event["id"]
+    assert duplicate["deduped"] is True
+    assert service.list_events(event_type="release.notification_safety")["total"] == 1
     assert delivery.webhook_calls == []
 
     failing = NotificationService(

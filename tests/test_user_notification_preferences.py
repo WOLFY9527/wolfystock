@@ -9,7 +9,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -22,6 +23,7 @@ import src.auth as auth
 from api.app import create_app
 from src.config import Config
 from src.core.pipeline import StockAnalysisPipeline
+from src.enums import ReportType
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.notification import NotificationChannel, NotificationService
 from src.services.task_queue import _build_configured_execution_summary
@@ -265,6 +267,90 @@ class UserNotificationPreferencesTestCase(unittest.TestCase):
         system_notifier = NotificationService()
         self.assertIn(NotificationChannel.EMAIL, system_notifier.get_available_channels())
         self.assertIn(NotificationChannel.DISCORD, system_notifier.get_available_channels())
+
+    def test_no_user_opt_in_does_not_fall_back_to_system_outbound_channels(self) -> None:
+        system_notifier = NotificationService()
+        self.assertIn(NotificationChannel.EMAIL, system_notifier.get_available_channels())
+        self.assertIn(NotificationChannel.DISCORD, system_notifier.get_available_channels())
+
+        user_pipeline = StockAnalysisPipeline(owner_id=self.user_id)
+        self.assertEqual(user_pipeline.notifier.get_available_channels(), [])
+
+        with (
+            patch.object(user_pipeline.notifier, "send_to_context", return_value=False) as send_to_context,
+            patch.object(user_pipeline.notifier, "send_to_email", side_effect=AssertionError("email send attempted")) as send_to_email,
+            patch.object(user_pipeline.notifier, "send_to_discord", side_effect=AssertionError("discord send attempted")) as send_to_discord,
+            patch.object(user_pipeline.notifier, "send_to_wechat", side_effect=AssertionError("wechat send attempted")) as send_to_wechat,
+            patch.object(user_pipeline.notifier, "send_to_feishu", side_effect=AssertionError("feishu send attempted")) as send_to_feishu,
+            patch.object(user_pipeline.notifier, "send_to_telegram", side_effect=AssertionError("telegram send attempted")) as send_to_telegram,
+            patch.object(user_pipeline.notifier, "send_to_custom", side_effect=AssertionError("custom send attempted")) as send_to_custom,
+        ):
+            sent = user_pipeline.notifier.send("user-owned notification should stay local")
+
+        self.assertFalse(sent)
+        send_to_context.assert_called_once()
+        for sender in (
+            send_to_email,
+            send_to_discord,
+            send_to_wechat,
+            send_to_feishu,
+            send_to_telegram,
+            send_to_custom,
+        ):
+            sender.assert_not_called()
+
+    def test_disabled_user_preferences_do_not_call_single_stock_outbound_sender(self) -> None:
+        self.db.upsert_user_notification_preferences(
+            self.user_id,
+            email="alice@example.com",
+            enabled=False,
+            channel="multi",
+            discord_webhook="https://discord.com/api/webhooks/123/token",
+            discord_enabled=False,
+        )
+        user_pipeline = StockAnalysisPipeline(owner_id=self.user_id)
+
+        with patch.object(user_pipeline.notifier, "send", side_effect=AssertionError("user outbound send attempted")) as send:
+            notification_result = user_pipeline._notify_single_stock_result(
+                code="600519",
+                result=SimpleNamespace(code="600519"),
+                report_type=ReportType.SIMPLE,
+            )
+
+        self.assertEqual(notification_result["attempted"], False)
+        self.assertEqual(notification_result["status"], "not_configured")
+        self.assertEqual(notification_result["channels"], [])
+        send.assert_not_called()
+
+    def test_aggregate_notification_for_user_without_opt_in_skips_outbound_senders(self) -> None:
+        user_pipeline = StockAnalysisPipeline(owner_id=self.user_id)
+        self.assertFalse(user_pipeline.notifier.is_available())
+
+        with (
+            patch.object(user_pipeline, "_generate_aggregate_report", return_value="aggregate report"),
+            patch.object(user_pipeline.notifier, "send_to_context", side_effect=AssertionError("context send attempted")) as send_to_context,
+            patch.object(user_pipeline.notifier, "send_to_email", side_effect=AssertionError("email send attempted")) as send_to_email,
+            patch.object(user_pipeline.notifier, "send_to_discord", side_effect=AssertionError("discord send attempted")) as send_to_discord,
+            patch.object(user_pipeline.notifier, "send_to_wechat", side_effect=AssertionError("wechat send attempted")) as send_to_wechat,
+            patch.object(user_pipeline.notifier, "send_to_feishu", side_effect=AssertionError("feishu send attempted")) as send_to_feishu,
+            patch.object(user_pipeline.notifier, "send_to_telegram", side_effect=AssertionError("telegram send attempted")) as send_to_telegram,
+            patch.object(user_pipeline.notifier, "send_to_custom", side_effect=AssertionError("custom send attempted")) as send_to_custom,
+        ):
+            user_pipeline._send_notifications(
+                [SimpleNamespace(code="600519")],
+                ReportType.SIMPLE,
+            )
+
+        for sender in (
+            send_to_context,
+            send_to_email,
+            send_to_discord,
+            send_to_wechat,
+            send_to_feishu,
+            send_to_telegram,
+            send_to_custom,
+        ):
+            sender.assert_not_called()
 
 
 if __name__ == "__main__":
