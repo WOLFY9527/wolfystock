@@ -13,11 +13,12 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from statistics import mean, pstdev
 from types import SimpleNamespace
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from src.core.rule_backtest_engine import ExecutionModelConfig, ParsedStrategy, RuleBacktestEngine, RuleBacktestParser, _safe_float
 from src.repositories.rule_backtest_repo import RuleBacktestRepository
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
+from src.services.backtest_bounded_grid_runner import run_bounded_parameter_grid_diagnostic
 from src.services.backtest_parameter_stability import build_parameter_stability_evidence_from_compare_summary
 from src.services.backtest_professional_readiness import build_backtest_professional_readiness
 from src.services.rule_backtest_execution_model_registry import (
@@ -2041,6 +2042,44 @@ class RuleBacktestService:
     @staticmethod
     def _resolve_execution_model_request(execution_model: Optional[Any]) -> Dict[str, Any]:
         return resolve_rule_backtest_execution_model_request(execution_model)
+
+    def _run_bounded_parameter_grid_diagnostic_with_supplied_bars(
+        self,
+        *,
+        parsed_strategy: ParsedStrategy,
+        bars: Sequence[Any],
+        code: str,
+        start_date: Any,
+        end_date: Any,
+        lookback_bars: int,
+        initial_capital: float,
+        fee_bps: float,
+        slippage_bps: float,
+        parameter_grid_descriptor: Mapping[str, Any],
+        parameter_grid_request_bundle: Mapping[str, Any],
+        parameter_stability_plan: Optional[Mapping[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        normalized_start_date, normalized_end_date = self._normalize_date_range(
+            start_date=start_date,
+            end_date=end_date,
+        )
+        runner_kwargs: Dict[str, Any] = {
+            "parameter_grid_request_bundle": parameter_grid_request_bundle,
+            "parameter_grid_descriptor": parameter_grid_descriptor,
+            "parsed_strategy": parsed_strategy,
+            "bars": bars,
+            "code": str(code or "").strip(),
+            "start_date": normalized_start_date,
+            "end_date": normalized_end_date,
+            "lookback_bars": int(lookback_bars),
+            "initial_capital": float(initial_capital),
+            "fee_bps": float(fee_bps),
+            "slippage_bps": float(slippage_bps),
+            "engine": self.engine,
+        }
+        if parameter_stability_plan is not None:
+            runner_kwargs["parameter_stability_plan"] = parameter_stability_plan
+        return run_bounded_parameter_grid_diagnostic(**runner_kwargs)
 
     def _execute_rule_backtest(
         self,
