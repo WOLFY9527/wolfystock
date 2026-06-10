@@ -15,11 +15,15 @@ from api.v1.schemas.backtest import (
     RuleBacktestRobustnessEvidenceExportResponse,
     RuleBacktestRunResponse,
     RuleBacktestSupportBundleManifestResponse,
+    RuleBacktestSupportBundleReproducibilityManifestResponse,
     RuleBacktestSupportExportIndexResponse,
     RuleBacktestUniverseJobDiagnostics,
     RuleBacktestUniverseResultsResponse,
 )
-from src.services.rule_backtest_support_exports import build_oos_parameter_readiness_export
+from src.services.rule_backtest_support_exports import (
+    build_oos_parameter_readiness_export,
+    build_support_bundle_reproducibility_manifest,
+)
 
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "backtest"
@@ -1070,6 +1074,14 @@ def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_bou
     manifest = RuleBacktestSupportBundleManifestResponse(
         **_load_fixture("rule_backtest_support_bundle_manifest_dto.json")
     ).model_dump()
+    reproducibility = RuleBacktestSupportBundleReproducibilityManifestResponse(
+        **_load_fixture("rule_backtest_support_bundle_reproducibility_manifest_dto.json")
+    ).model_dump()
+    projected_reproducibility = RuleBacktestSupportBundleReproducibilityManifestResponse(
+        **build_support_bundle_reproducibility_manifest(
+            _load_fixture("rule_backtest_result_summary_dto.json")
+        )
+    ).model_dump()
     reproducibility_authority_projection = {
         domain_name: {
             "source": domain_payload["source"],
@@ -1142,10 +1154,43 @@ def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_bou
     assert manifest["artifact_counts"]["execution_trace_rows_count"] > 0
     assert not ({"trades", "equity_curve", "audit_rows", "execution_trace"} & set(manifest))
 
+    assert projected_reproducibility == reproducibility
+    assert reproducibility["manifest_version"] == "v1"
+    assert reproducibility["manifest_kind"] == "rule_backtest_reproducibility_manifest"
+    assert reproducibility["run"]["id"] == export_index["run_id"]
+    assert reproducibility["run"]["status"] == export_index["status"]
+    assert reproducibility["run_timing"] == manifest["run_timing"]
+    assert reproducibility["run_diagnostics"] == manifest["run_diagnostics"]
+    assert reproducibility["artifact_availability"] == manifest["artifact_availability"]
+    assert reproducibility["readback_integrity"] == manifest["readback_integrity"]
+    assert reproducibility["result_authority"]["contract_version"] == manifest["result_authority"]["contract_version"]
+    assert reproducibility["result_authority"]["read_mode"] == "stored_first"
+    for domain_name, domain_payload in reproducibility_authority_projection.items():
+        assert reproducibility["result_authority"]["domains"][domain_name] == domain_payload
+    assert reproducibility["result_authority"]["domains"]["trade_rows"] == {
+        "source": "stored_rule_backtest_trades",
+        "completeness": "complete",
+        "state": "available",
+    }
+    fingerprint = reproducibility["execution_assumptions_fingerprint"]
+    assert set(fingerprint) == {"source", "completeness", "summary_text", "hash_sha256"}
+    assert fingerprint["source"] == "summary.execution_assumptions_snapshot"
+    assert fingerprint["completeness"] == "complete"
+    assert isinstance(fingerprint["hash_sha256"], str)
+    assert len(fingerprint["hash_sha256"]) == 64
+    assert reproducibility["dataset_lineage"]["source"] == "fixture_local_history"
+    assert reproducibility["dataset_lineage"]["dataset_version"] == "unknown"
+    assert not (
+        {"trades", "equity_curve", "audit_rows", "execution_trace", "artifact_counts"}
+        & set(reproducibility)
+    )
+
     _assert_no_sensitive_public_payload(export_index)
     _assert_no_sensitive_public_payload(manifest)
+    _assert_no_sensitive_public_payload(reproducibility)
     _assert_no_live_provider_authority(export_index)
     _assert_no_live_provider_authority(manifest)
+    _assert_no_live_provider_authority(reproducibility)
 
 
 def test_factor_lab_readiness_packet_stays_observe_only_and_outside_support_export_boundary() -> None:
@@ -1415,6 +1460,7 @@ def test_all_backtest_golden_fixtures_are_sanitized_and_explicitly_enumerated() 
         "rule_backtest_result_summary_dto.json",
         "rule_backtest_semantics_freeze_v1.json",
         "rule_backtest_support_bundle_manifest_dto.json",
+        "rule_backtest_support_bundle_reproducibility_manifest_dto.json",
         "rule_backtest_universe_job_diagnostics_dto.json",
         "rule_backtest_universe_results_dto.json",
     }
