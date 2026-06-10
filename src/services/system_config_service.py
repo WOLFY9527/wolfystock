@@ -231,11 +231,13 @@ class SystemConfigService:
             if not state:
                 return None
             metadata = state.get("metadata") if isinstance(state.get("metadata"), dict) else {}
+            from src.services.durable_runtime_contracts import normalize_durable_runtime_status
+
             return {
                 "task_id": state.get("task_id") or task_id,
                 "stock_code": metadata.get("stock_code") or "",
                 "stock_name": metadata.get("stock_name"),
-                "status": state.get("status") or "pending",
+                "status": normalize_durable_runtime_status(state.get("status")),
                 "progress": int(state.get("progress") or 0),
                 "message": state.get("current_step"),
                 "updated_at": state.get("updated_at"),

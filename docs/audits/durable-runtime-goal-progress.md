@@ -187,6 +187,8 @@ Acceptance:
 
 ### Slice 2: Task State Machine
 
+Status: complete.
+
 Planned files:
 
 - Add `src/services/durable_runtime_contracts.py` for v1 prototype constants,
@@ -198,6 +200,23 @@ Acceptance:
 - tests prove claim/lease/heartbeat/complete/fail/retry/recover semantics;
 - no migration required;
 - stored states remain backward compatible with existing WS2 tests.
+
+Implemented:
+
+- `src/services/durable_runtime_contracts.py`
+- `tests/test_durable_runtime_contracts.py`
+- `tests/test_durable_runtime_progress_projection.py`
+- durable fallback status projection in `api/v1/endpoints/analysis.py`
+- durable fallback progress projection in `src/services/system_config_service.py`
+
+Validation:
+
+- `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m pytest -p no:cacheprovider tests/test_durable_runtime_contracts.py tests/test_durable_runtime_progress_projection.py tests/test_durable_task_state.py tests/test_system_config_service.py tests/test_analysis_api_contract.py -q`
+  passed with 130 tests.
+- `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m py_compile src/services/durable_runtime_contracts.py src/services/system_config_service.py api/v1/endpoints/analysis.py`
+  passed.
+- `git diff --check` passed.
+- `./scripts/release_secret_scan.sh --local-only` passed.
 
 ### Slice 3: Synthetic Worker Prototype
 
