@@ -82,6 +82,16 @@ contracts, and focused frontend tests listed above. Any surface that needs
 stronger labeling without touching forbidden runtime behavior is tracked in
 `docs/audits/private-beta-goal-progress.md`.
 
+Private-beta surface fix applied in this pack:
+
+- `apps/dsa-web/src/pages/AdminProviderCircuitDiagnosticsPage.tsx` now labels
+  provider circuit signals as read-only/advisory review evidence and explicitly
+  states that the page does not execute provider blocking or change provider
+  fallback/MarketCache behavior.
+- `apps/dsa-web/src/pages/__tests__/AdminProviderCircuitDiagnosticsPage.test.tsx`
+  freezes the no-provider-blocking copy and keeps the existing collapsed,
+  secret-free diagnostics assertions.
+
 ## Consumer Surface Review
 
 Consumer-facing private-beta surfaces must avoid:
