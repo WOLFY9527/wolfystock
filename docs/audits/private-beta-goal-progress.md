@@ -75,6 +75,41 @@ Safe candidate fixes to inspect next:
      or advice-like language;
    - validation: affected frontend tests plus bounded route smoke if changed.
 
+## Slice 2: Align Provider Circuit Safety Labels
+
+Status: validated.
+
+Files:
+
+- `apps/dsa-web/src/pages/AdminProviderCircuitDiagnosticsPage.tsx`
+- `apps/dsa-web/src/pages/__tests__/AdminProviderCircuitDiagnosticsPage.test.tsx`
+- `docs/audits/private-beta-readiness.md`
+- `docs/audits/private-beta-goal-progress.md`
+
+Safe change:
+
+- Reworded provider circuit diagnostics so private-beta admins see
+  advisory-only/read-only provider readiness signals instead of wording that
+  implies active provider blocking.
+- Added explicit `不执行 provider blocking` and no fallback/MarketCache behavior
+  change language.
+- Kept diagnostics collapsed and secret/raw-provider assertions intact.
+
+Validation:
+
+- `npm run test -- AdminProviderCircuitDiagnosticsPage.test.tsx` passed: 1 file,
+  8 tests.
+- `npm run typecheck` passed.
+- `npm run build` passed with the existing Vite chunk-size warning.
+- `npm run test:e2e -- e2e/no-secret-critical-surface.smoke.spec.ts -g "provider diagnostics uses mocked read-only APIs without raw provider detail leakage"` passed.
+
+Decision:
+
+- This fix is safe for private beta because it is copy/test-only on an existing
+  admin surface.
+- It does not enable provider runtime enforcement, provider blocking, provider
+  order/fallback/cache changes, public launch, or any external calls.
+
 ## Approval-Required Follow-Ups
 
 These are not implemented in this goal unless explicitly approved:
@@ -90,5 +125,7 @@ These are not implemented in this goal unless explicitly approved:
 
 ## Checkpoints
 
-- Slice 1 commit: pending final hash.
-- Slice 1 push: pending.
+- Slice 1 commit: `aa22766c checkpoint(private-beta): reconcile readiness evidence`.
+- Slice 1 push: pushed to `origin/codex/goal-private-beta-candidate`.
+- Slice 2 commit: pending.
+- Slice 2 push: pending.
