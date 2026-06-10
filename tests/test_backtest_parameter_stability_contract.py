@@ -121,6 +121,156 @@ def test_parameter_grid_expansion_is_deterministic_and_diagnostic_only() -> None
     }
 
 
+def test_bounded_parameter_grid_descriptor_and_request_bundle_truncate_deterministically() -> None:
+    plan = build_parameter_stability_plan(
+        strategy_id="ma-cross-fixture",
+        dataset_id="fixture-bars-v1",
+        base_parameters={"strategy_spec.signal.fast_type": "simple"},
+        parameter_grid={
+            "strategy_spec.signal.slow_period": [50, 20],
+            "strategy_spec.signal.fast_period": [10, 5],
+            "strategy_spec.risk.stop_loss_pct": [2, 1],
+        },
+        metric_keys=["total_return_pct", "max_drawdown_pct"],
+        max_combinations=5,
+        overflow_policy="truncate",
+    )
+
+    descriptor = plan["parameter_grid_descriptor"]
+    request_bundle = plan["parameter_grid_request_bundle"]
+
+    assert descriptor["contract_kind"] == "backtest_parameter_grid_descriptor_request_bundle"
+    assert descriptor["contract_version"] == PARAMETER_STABILITY_CONTRACT_VERSION
+    assert descriptor["state"] == "truncated"
+    assert descriptor["diagnostic_only"] is True
+    assert descriptor["execution_count"] == 0
+    assert descriptor["optimizer_executed"] is False
+    assert descriptor["winner_promotion"] is False
+    assert descriptor["decision_grade"] is False
+    assert descriptor["boundedness"] == {
+        "max_combinations": 5,
+        "requested_combinations": 8,
+        "accepted_combinations": 5,
+        "overflow_policy": "truncate",
+        "truncated": True,
+        "rejected": False,
+        "reason_code": "max_combinations_truncated",
+    }
+    assert descriptor["parameter_ordering"] == "parameter_key_ascending"
+    assert descriptor["value_ordering"] == "canonical_value_ascending"
+    assert descriptor["request_bundle_id"] == request_bundle["request_bundle_id"]
+    assert len(descriptor["grid_descriptor_hash_sha256"]) == 64
+    assert plan["grid_spec"]["requested_grid_size"] == 8
+    assert plan["grid_spec"]["grid_size"] == 5
+    assert [row["parameter_values"] for row in plan["grid_runs"]] == [
+        {
+            "strategy_spec.risk.stop_loss_pct": 1,
+            "strategy_spec.signal.fast_period": 5,
+            "strategy_spec.signal.slow_period": 20,
+        },
+        {
+            "strategy_spec.risk.stop_loss_pct": 1,
+            "strategy_spec.signal.fast_period": 5,
+            "strategy_spec.signal.slow_period": 50,
+        },
+        {
+            "strategy_spec.risk.stop_loss_pct": 1,
+            "strategy_spec.signal.fast_period": 10,
+            "strategy_spec.signal.slow_period": 20,
+        },
+        {
+            "strategy_spec.risk.stop_loss_pct": 1,
+            "strategy_spec.signal.fast_period": 10,
+            "strategy_spec.signal.slow_period": 50,
+        },
+        {
+            "strategy_spec.risk.stop_loss_pct": 2,
+            "strategy_spec.signal.fast_period": 5,
+            "strategy_spec.signal.slow_period": 20,
+        },
+    ]
+    assert request_bundle["state"] == "truncated"
+    assert request_bundle["execution_count"] == 0
+    assert request_bundle["optimizer_executed"] is False
+    assert request_bundle["winner_promotion"] is False
+    assert request_bundle["decision_grade"] is False
+    assert request_bundle["requests"] == [
+        {
+            "request_index": row["grid_index"],
+            "planned_run_id": row["planned_run_id"],
+            "parameter_values": row["parameter_values"],
+            "execution_count": 0,
+            "optimizer_executed": False,
+            "winner_promotion": False,
+            "decision_grade": False,
+        }
+        for row in plan["grid_runs"]
+    ]
+
+    shuffled = build_parameter_stability_plan(
+        strategy_id="ma-cross-fixture",
+        dataset_id="fixture-bars-v1",
+        base_parameters={"strategy_spec.signal.fast_type": "simple"},
+        parameter_grid={
+            "strategy_spec.risk.stop_loss_pct": [1, 2],
+            "strategy_spec.signal.fast_period": [5, 10],
+            "strategy_spec.signal.slow_period": [20, 50],
+        },
+        metric_keys=["max_drawdown_pct", "total_return_pct"],
+        max_combinations=5,
+        overflow_policy="truncate",
+    )
+    assert shuffled["parameter_grid_descriptor"] == descriptor
+    assert shuffled["parameter_grid_request_bundle"] == request_bundle
+
+
+def test_bounded_parameter_grid_descriptor_can_reject_over_limit_without_requests() -> None:
+    plan = build_parameter_stability_plan(
+        strategy_id="ma-cross-fixture",
+        dataset_id="fixture-bars-v1",
+        parameter_grid={
+            "strategy_spec.signal.fast_period": [5, 10],
+            "strategy_spec.signal.slow_period": [20, 50],
+        },
+        max_combinations=3,
+        overflow_policy="reject",
+    )
+
+    descriptor = plan["parameter_grid_descriptor"]
+    request_bundle = plan["parameter_grid_request_bundle"]
+
+    assert plan["state"] == "insufficient_data"
+    assert plan["grid_spec"]["requested_grid_size"] == 4
+    assert plan["grid_spec"]["grid_size"] == 0
+    assert plan["grid_runs"] == []
+    assert plan["insufficient_data"] == {
+        "reason_code": "max_combinations_rejected",
+        "max_combinations": 3,
+        "requested_combinations": 4,
+        "available_grid_points": 0,
+    }
+    assert descriptor["state"] == "rejected"
+    assert descriptor["boundedness"] == {
+        "max_combinations": 3,
+        "requested_combinations": 4,
+        "accepted_combinations": 0,
+        "overflow_policy": "reject",
+        "truncated": False,
+        "rejected": True,
+        "reason_code": "max_combinations_rejected",
+    }
+    assert descriptor["execution_count"] == 0
+    assert descriptor["optimizer_executed"] is False
+    assert descriptor["winner_promotion"] is False
+    assert descriptor["decision_grade"] is False
+    assert request_bundle["state"] == "rejected"
+    assert request_bundle["requests"] == []
+    assert request_bundle["execution_count"] == 0
+    assert request_bundle["optimizer_executed"] is False
+    assert request_bundle["winner_promotion"] is False
+    assert request_bundle["decision_grade"] is False
+
+
 def test_stable_run_ids_and_ordering_ignore_input_order_and_change_with_values() -> None:
     ordered_plan = _build_plan(
         parameter_grid={

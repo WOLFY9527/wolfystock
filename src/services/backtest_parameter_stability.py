@@ -15,6 +15,7 @@ from typing import Any, Mapping, Sequence
 PARAMETER_STABILITY_CONTRACT_VERSION = "v1"
 PARAMETER_STABILITY_CONTRACT_KIND = "backtest_parameter_stability_surface_scaffold"
 PARAMETER_STABILITY_EVIDENCE_CONTRACT_KIND = "backtest_parameter_stability_diagnostic_evidence"
+PARAMETER_GRID_DESCRIPTOR_CONTRACT_KIND = "backtest_parameter_grid_descriptor_request_bundle"
 
 DEFAULT_PARAMETER_STABILITY_METRIC_KEYS = (
     "total_return_pct",
@@ -78,6 +79,8 @@ def build_parameter_stability_plan(
     risk_metric: str | None = None,
     robust_region: Mapping[str, Any] | None = None,
     min_completed_runs: int | None = None,
+    max_combinations: int | None = None,
+    overflow_policy: str = "truncate",
 ) -> dict[str, Any]:
     """Build a deterministic parameter grid plan without running a strategy."""
 
@@ -96,12 +99,18 @@ def build_parameter_stability_plan(
     resolved_robust_region = _normalize_robust_region(raw_spec.get("robust_region"))
     resolved_min_completed_runs = _positive_int(raw_spec.get("min_completed_runs"), "min_completed_runs")
     base_parameter_payload = _normalize_mapping(base_parameters)
+    boundedness = _resolve_grid_boundedness(
+        parameter_specs=parameter_specs,
+        max_combinations=max_combinations,
+        overflow_policy=overflow_policy,
+    )
 
     grid_runs = _build_grid_runs(
         strategy_id=strategy_id,
         dataset_id=dataset_id,
         base_parameters=base_parameter_payload,
         parameter_specs=parameter_specs,
+        max_runs=int(boundedness["accepted_combinations"]),
     )
     grid_spec_payload = {
         "parameters": [
@@ -109,15 +118,37 @@ def build_parameter_stability_plan(
             for spec in parameter_specs
         ],
         "parameter_count": len(parameter_specs),
+        "requested_grid_size": int(boundedness["requested_combinations"]),
         "grid_size": len(grid_runs),
+        "max_combinations": boundedness["max_combinations"],
+        "overflow_policy": boundedness["overflow_policy"],
         "metric_keys": resolved_metric_keys,
         "primary_metric": resolved_primary_metric,
         "risk_metric": resolved_risk_metric,
         "robust_region": resolved_robust_region,
         "min_completed_runs": resolved_min_completed_runs,
     }
-    insufficient_data = _plan_insufficient_data(parameter_specs=parameter_specs, grid_runs=grid_runs)
+    insufficient_data = _plan_insufficient_data(
+        parameter_specs=parameter_specs,
+        grid_runs=grid_runs,
+        boundedness=boundedness,
+    )
     state = "insufficient_data" if insufficient_data else "ready"
+    parameter_grid_descriptor = _build_parameter_grid_descriptor(
+        strategy_id=strategy_id,
+        dataset_id=dataset_id,
+        base_parameters=base_parameter_payload,
+        parameter_specs=parameter_specs,
+        boundedness=boundedness,
+    )
+    parameter_grid_request_bundle = _build_parameter_grid_request_bundle(
+        descriptor=parameter_grid_descriptor,
+        strategy_id=strategy_id,
+        dataset_id=dataset_id,
+        base_parameters=base_parameter_payload,
+        boundedness=boundedness,
+        grid_runs=grid_runs,
+    )
 
     return {
         "contract_kind": PARAMETER_STABILITY_CONTRACT_KIND,
@@ -129,6 +160,8 @@ def build_parameter_stability_plan(
         "base_parameters": base_parameter_payload,
         "grid_spec": grid_spec_payload,
         "grid_runs": grid_runs,
+        "parameter_grid_descriptor": parameter_grid_descriptor,
+        "parameter_grid_request_bundle": parameter_grid_request_bundle,
         "insufficient_data": insufficient_data,
         "execution_semantics": _execution_semantics(),
         "reproducibility": _build_reproducibility_metadata(
@@ -343,10 +376,13 @@ def build_parameter_stability_contract_metadata() -> dict[str, Any]:
     return {
         "contract_kind": PARAMETER_STABILITY_CONTRACT_KIND,
         "contract_version": PARAMETER_STABILITY_CONTRACT_VERSION,
+        "parameter_grid_descriptor_contract_kind": PARAMETER_GRID_DESCRIPTOR_CONTRACT_KIND,
         "diagnostic_only": True,
         "parameter_grid_expansion": "deterministic_cartesian_product",
         "parameter_ordering": "parameter_key_ascending",
         "value_ordering": "canonical_value_ascending",
+        "bounded_grid_policy": "max_combinations_with_truncate_or_reject_overflow",
+        "request_bundle_policy": "deterministic_non_executing_request_descriptors",
         "run_id_policy": "stable_sha256_from_strategy_dataset_base_parameters_and_parameter_values",
         "result_source": "caller_supplied_results_only",
         "hidden_optimizer_executed": False,
@@ -824,20 +860,175 @@ def _normalize_mapping(value: Mapping[str, Any] | None) -> dict[str, Any]:
     return copy.deepcopy(dict(value))
 
 
+def _resolve_grid_boundedness(
+    *,
+    parameter_specs: Sequence[Mapping[str, Any]],
+    max_combinations: int | None,
+    overflow_policy: str,
+) -> dict[str, Any]:
+    requested_combinations = _requested_grid_combination_count(parameter_specs)
+    resolved_max_combinations = (
+        _positive_int(max_combinations, "max_combinations")
+        if max_combinations is not None
+        else int(requested_combinations)
+    )
+    normalized_policy = str(overflow_policy or "truncate").strip().lower()
+    if normalized_policy not in {"truncate", "reject"}:
+        raise ValueError("overflow_policy must be 'truncate' or 'reject'.")
+
+    if requested_combinations > resolved_max_combinations:
+        if normalized_policy == "reject":
+            accepted_combinations = 0
+            reason_code = "max_combinations_rejected"
+            truncated = False
+            rejected = True
+        else:
+            accepted_combinations = resolved_max_combinations
+            reason_code = "max_combinations_truncated"
+            truncated = True
+            rejected = False
+    else:
+        accepted_combinations = requested_combinations
+        reason_code = None
+        truncated = False
+        rejected = False
+
+    return {
+        "max_combinations": int(resolved_max_combinations),
+        "requested_combinations": int(requested_combinations),
+        "accepted_combinations": int(accepted_combinations),
+        "overflow_policy": normalized_policy,
+        "truncated": truncated,
+        "rejected": rejected,
+        "reason_code": reason_code,
+    }
+
+
+def _requested_grid_combination_count(parameter_specs: Sequence[Mapping[str, Any]]) -> int:
+    if not parameter_specs:
+        return 0
+    count = 1
+    for spec in parameter_specs:
+        values = list(spec.get("values") or [])
+        if not values:
+            return 0
+        count *= len(values)
+    return count
+
+
+def _build_parameter_grid_descriptor(
+    *,
+    strategy_id: str,
+    dataset_id: str | None,
+    base_parameters: Mapping[str, Any],
+    parameter_specs: Sequence[Mapping[str, Any]],
+    boundedness: Mapping[str, Any],
+) -> dict[str, Any]:
+    descriptor_core = {
+        "contract_kind": PARAMETER_GRID_DESCRIPTOR_CONTRACT_KIND,
+        "contract_version": PARAMETER_STABILITY_CONTRACT_VERSION,
+        "strategy_id": str(strategy_id),
+        "dataset_id": dataset_id,
+        "base_parameters": _json_safe(base_parameters),
+        "parameters": [
+            {
+                "parameter_key": str(spec.get("parameter_key")),
+                "values": copy.deepcopy(list(spec.get("values") or [])),
+            }
+            for spec in parameter_specs
+        ],
+        "boundedness": copy.deepcopy(dict(boundedness)),
+        "parameter_ordering": "parameter_key_ascending",
+        "value_ordering": "canonical_value_ascending",
+    }
+    request_bundle_id = _build_parameter_grid_request_bundle_id(descriptor_core)
+    descriptor = {
+        **descriptor_core,
+        "state": _bounded_grid_state(boundedness),
+        "diagnostic_only": True,
+        "request_bundle_id": request_bundle_id,
+        "execution_count": 0,
+        "optimizer_executed": False,
+        "winner_promotion": False,
+        "decision_grade": False,
+    }
+    descriptor["grid_descriptor_hash_sha256"] = hashlib.sha256(
+        _canonical_json(descriptor).encode("utf-8")
+    ).hexdigest()
+    return descriptor
+
+
+def _build_parameter_grid_request_bundle(
+    *,
+    descriptor: Mapping[str, Any],
+    strategy_id: str,
+    dataset_id: str | None,
+    base_parameters: Mapping[str, Any],
+    boundedness: Mapping[str, Any],
+    grid_runs: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "contract_kind": PARAMETER_GRID_DESCRIPTOR_CONTRACT_KIND,
+        "contract_version": PARAMETER_STABILITY_CONTRACT_VERSION,
+        "request_bundle_id": str(descriptor.get("request_bundle_id") or ""),
+        "state": str(descriptor.get("state") or _bounded_grid_state(boundedness)),
+        "diagnostic_only": True,
+        "strategy_id": str(strategy_id),
+        "dataset_id": dataset_id,
+        "base_parameters": _json_safe(base_parameters),
+        "boundedness": copy.deepcopy(dict(boundedness)),
+        "requests": [
+            {
+                "request_index": int(row.get("grid_index") or 0),
+                "planned_run_id": str(row.get("planned_run_id") or ""),
+                "parameter_values": copy.deepcopy(dict(row.get("parameter_values") or {})),
+                "execution_count": 0,
+                "optimizer_executed": False,
+                "winner_promotion": False,
+                "decision_grade": False,
+            }
+            for row in grid_runs
+        ],
+        "execution_count": 0,
+        "optimizer_executed": False,
+        "winner_promotion": False,
+        "decision_grade": False,
+        "execution_semantics": _execution_semantics(),
+    }
+
+
+def _build_parameter_grid_request_bundle_id(descriptor_core: Mapping[str, Any]) -> str:
+    digest = hashlib.sha256(_canonical_json(descriptor_core).encode("utf-8")).hexdigest()[:16]
+    return f"bt_param_grid_bundle_{digest}"
+
+
+def _bounded_grid_state(boundedness: Mapping[str, Any]) -> str:
+    if boundedness.get("rejected"):
+        return "rejected"
+    if boundedness.get("truncated"):
+        return "truncated"
+    return "ready"
+
+
 def _build_grid_runs(
     *,
     strategy_id: str,
     dataset_id: str | None,
     base_parameters: Mapping[str, Any],
     parameter_specs: Sequence[Mapping[str, Any]],
+    max_runs: int | None = None,
 ) -> list[dict[str, Any]]:
     if not parameter_specs or any(not spec.get("values") for spec in parameter_specs):
+        return []
+    if max_runs is not None and int(max_runs) <= 0:
         return []
 
     keys = [str(spec["parameter_key"]) for spec in parameter_specs]
     value_sets = [list(spec.get("values") or []) for spec in parameter_specs]
     grid_runs: list[dict[str, Any]] = []
     for zero_based_index, values in enumerate(product(*value_sets)):
+        if max_runs is not None and zero_based_index >= int(max_runs):
+            break
         parameter_values = {key: copy.deepcopy(value) for key, value in zip(keys, values)}
         planned_run_id = _build_planned_run_id(
             strategy_id=strategy_id,
@@ -880,7 +1071,15 @@ def _plan_insufficient_data(
     *,
     parameter_specs: Sequence[Mapping[str, Any]],
     grid_runs: Sequence[Mapping[str, Any]],
+    boundedness: Mapping[str, Any],
 ) -> dict[str, Any]:
+    if boundedness.get("rejected"):
+        return {
+            "reason_code": "max_combinations_rejected",
+            "max_combinations": int(boundedness.get("max_combinations") or 0),
+            "requested_combinations": int(boundedness.get("requested_combinations") or 0),
+            "available_grid_points": 0,
+        }
     if not parameter_specs:
         return {
             "reason_code": "parameter_grid_empty",
@@ -1299,6 +1498,7 @@ def _canonical_json(value: Any) -> str:
 
 
 __all__ = [
+    "PARAMETER_GRID_DESCRIPTOR_CONTRACT_KIND",
     "PARAMETER_STABILITY_CONTRACT_KIND",
     "PARAMETER_STABILITY_EVIDENCE_CONTRACT_KIND",
     "PARAMETER_STABILITY_CONTRACT_VERSION",
