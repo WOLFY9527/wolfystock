@@ -220,6 +220,8 @@ Validation:
 
 ### Slice 3: Synthetic Worker Prototype
 
+Status: complete.
+
 Planned files:
 
 - Add `src/services/durable_runtime_v1.py` as the prototype worker/adapters
@@ -234,6 +236,22 @@ Acceptance:
 - fixture stages emit safe progress events;
 - retries are bounded by `max_attempts`;
 - terminal writes require the active lease.
+
+Implemented:
+
+- `src/services/durable_runtime_v1.py`
+- `tests/test_durable_runtime_v1_worker.py`
+
+Validation:
+
+- `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m pytest -p no:cacheprovider tests/test_durable_runtime_v1_worker.py -q`
+  passed with 4 tests.
+- `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m pytest -p no:cacheprovider tests/test_durable_runtime_v1_worker.py tests/test_durable_runtime_contracts.py tests/test_durable_runtime_progress_projection.py tests/test_ws2_durable_task_worker.py -q`
+  passed with 32 tests.
+- `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m py_compile src/services/durable_runtime_v1.py src/services/durable_runtime_contracts.py src/services/system_config_service.py api/v1/endpoints/analysis.py`
+  passed.
+- `git diff --check` passed.
+- `./scripts/release_secret_scan.sh --local-only` passed.
 
 ### Slice 4: Recovery and Owner Tests
 
