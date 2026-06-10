@@ -45,6 +45,7 @@ const AdminProviderCircuitDiagnosticsPage = lazy(() => import('./pages/AdminProv
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
 const AdminCostObservabilityPage = lazy(() => import('./pages/AdminCostObservabilityPage'));
 const AdminEvidenceWorkflowPage = lazy(() => import('./pages/AdminEvidenceWorkflowPage'));
+const AdminLaunchCockpitPage = lazy(() => import('./pages/AdminLaunchCockpitPage'));
 
 type GateCopy = {
   eyebrow: string;
@@ -69,9 +70,11 @@ type AuthBootstrapSurfaceCopy = {
 function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: boolean): GateCopy {
   const isEnglish = language === 'en';
 
-  if (pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/evidence-workflow') || pathname.startsWith('/admin/notifications') || pathname.startsWith('/admin/market-providers') || pathname.startsWith('/admin/provider-circuits') || pathname.startsWith('/admin/users') || pathname.startsWith('/admin/cost-observability')) {
+  if (pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/evidence-workflow') || pathname.startsWith('/admin/launch-cockpit') || pathname.startsWith('/admin/notifications') || pathname.startsWith('/admin/market-providers') || pathname.startsWith('/admin/provider-circuits') || pathname.startsWith('/admin/users') || pathname.startsWith('/admin/cost-observability')) {
     const surfaceName = pathname.startsWith('/admin/cost-observability')
       ? (isEnglish ? 'cost observability' : '成本观测')
+      : pathname.startsWith('/admin/launch-cockpit')
+      ? (isEnglish ? 'launch cockpit' : '发布驾驶舱')
       : pathname.startsWith('/admin/evidence-workflow')
       ? (isEnglish ? 'evidence workflow' : '证据工作流')
       : pathname.startsWith('/admin/provider-circuits')
@@ -479,6 +482,7 @@ export const AppContent: React.FC = () => {
         <Route element={<Shell />}>
           <Route path="/market" element={<Navigate to="/market-overview" replace />} />
           <Route path="/admin" element={<Navigate to="/settings/system" replace />} />
+          <Route path="/admin/ops" element={<Navigate to="/admin/launch-cockpit" replace />} />
           <Route path="/admin/system" element={<Navigate to="/settings/system" replace />} />
           <Route path="/admin/providers" element={<Navigate to="/admin/market-providers" replace />} />
           <Route path="/admin/evidence" element={<Navigate to="/admin/evidence-workflow" replace />} />
@@ -502,6 +506,7 @@ export const AppContent: React.FC = () => {
           <Route path="/backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
           <Route path="/settings" element={<PersonalSettingsPage />} />
           <Route path="/settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
+          <Route path="/admin/launch-cockpit" element={<AdminSurfaceRoute><AdminLaunchCockpitPage /></AdminSurfaceRoute>} />
           <Route path="/admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
           <Route path="/admin/evidence-workflow" element={<AdminSurfaceRoute><AdminEvidenceWorkflowPage /></AdminSurfaceRoute>} />
           <Route path="/admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />
@@ -516,6 +521,7 @@ export const AppContent: React.FC = () => {
         <Route path="/:locale" element={<Shell />}>
           <Route path="market" element={<Navigate to="../market-overview" replace />} />
           <Route path="admin" element={<Navigate to="../settings/system" replace />} />
+          <Route path="admin/ops" element={<Navigate to="../admin/launch-cockpit" replace />} />
           <Route path="admin/system" element={<Navigate to="../settings/system" replace />} />
           <Route path="admin/providers" element={<Navigate to="../admin/market-providers" replace />} />
           <Route path="admin/evidence" element={<Navigate to="../admin/evidence-workflow" replace />} />
@@ -539,6 +545,7 @@ export const AppContent: React.FC = () => {
           <Route path="backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
           <Route path="settings" element={<PersonalSettingsPage />} />
           <Route path="settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
+          <Route path="admin/launch-cockpit" element={<AdminSurfaceRoute><AdminLaunchCockpitPage /></AdminSurfaceRoute>} />
           <Route path="admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
           <Route path="admin/evidence-workflow" element={<AdminSurfaceRoute><AdminEvidenceWorkflowPage /></AdminSurfaceRoute>} />
           <Route path="admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />

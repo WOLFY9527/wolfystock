@@ -178,6 +178,10 @@ vi.mock('../pages/AdminEvidenceWorkflowPage', () => ({
   default: () => <div>admin-evidence-workflow-page</div>,
 }));
 
+vi.mock('../pages/AdminLaunchCockpitPage', () => ({
+  default: () => <div>admin-launch-cockpit-page</div>,
+}));
+
 vi.mock('../pages/LoginPage', () => ({
   default: () => <div>login-page</div>,
 }));
@@ -514,16 +518,19 @@ describe('AppContent route flows', () => {
     ['/admin/system', '/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
     ['/admin/providers', '/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
     ['/admin/evidence', '/admin/evidence-workflow', { ...noCapabilities, canReadOpsLogs: true }, 'admin-evidence-workflow-page'],
+    ['/admin/ops', '/admin/launch-cockpit', { ...noCapabilities, canReadOpsLogs: true }, 'admin-launch-cockpit-page'],
     ['/admin/costs', '/admin/cost-observability', { ...noCapabilities, canReadCostObservability: true }, 'admin-cost-observability-page'],
     ['/admin/ai', '/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
     ['/zh/admin/system', '/zh/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
     ['/zh/admin/providers', '/zh/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
     ['/zh/admin/evidence', '/zh/admin/evidence-workflow', { ...noCapabilities, canReadOpsLogs: true }, 'admin-evidence-workflow-page'],
+    ['/zh/admin/ops', '/zh/admin/launch-cockpit', { ...noCapabilities, canReadOpsLogs: true }, 'admin-launch-cockpit-page'],
     ['/zh/admin/costs', '/zh/admin/cost-observability', { ...noCapabilities, canReadCostObservability: true }, 'admin-cost-observability-page'],
     ['/zh/admin/ai', '/zh/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
     ['/en/admin/system', '/en/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
     ['/en/admin/providers', '/en/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
     ['/en/admin/evidence', '/en/admin/evidence-workflow', { ...noCapabilities, canReadOpsLogs: true }, 'admin-evidence-workflow-page'],
+    ['/en/admin/ops', '/en/admin/launch-cockpit', { ...noCapabilities, canReadOpsLogs: true }, 'admin-launch-cockpit-page'],
     ['/en/admin/costs', '/en/admin/cost-observability', { ...noCapabilities, canReadCostObservability: true }, 'admin-cost-observability-page'],
     ['/en/admin/ai', '/en/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
   ])(
@@ -561,6 +568,7 @@ describe('AppContent route flows', () => {
     ['/zh/admin/system', '/zh/settings/system'],
     ['/zh/admin/providers', '/zh/admin/market-providers'],
     ['/zh/admin/evidence', '/zh/admin/evidence-workflow'],
+    ['/zh/admin/ops', '/zh/admin/launch-cockpit'],
     ['/zh/admin/costs', '/zh/admin/cost-observability'],
     ['/zh/admin/ai', '/zh/settings/system'],
   ])('keeps non-admin account gating unchanged for admin alias %s', async (path, expectedPath) => {
@@ -937,6 +945,7 @@ describe('AppContent route flows', () => {
 
   it.each([
     ['/zh/admin/logs', { ...noCapabilities, canReadOpsLogs: true }, 'admin-logs-page'],
+    ['/zh/admin/launch-cockpit', { ...noCapabilities, canReadOpsLogs: true }, 'admin-launch-cockpit-page'],
     ['/zh/admin/notifications', { ...noCapabilities, canReadNotifications: true }, 'admin-notifications-page'],
     ['/zh/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
     ['/zh/admin/provider-circuits', { ...noCapabilities, canReadProviders: true }, 'admin-provider-circuit-diagnostics-page'],

@@ -40,6 +40,7 @@ function resolveRailDescription(t: (key: string) => string): string {
 function isAdminOpsRoute(pathname: string): boolean {
   return pathname.startsWith('/settings/system')
     || pathname.startsWith('/admin/logs')
+    || pathname.startsWith('/admin/launch-cockpit')
     || pathname.startsWith('/admin/evidence-workflow')
     || pathname.startsWith('/admin/notifications')
     || pathname.startsWith('/admin/market-providers')
@@ -55,6 +56,9 @@ function resolveAdminOpsRouteLabel(pathname: string, language: string): string |
   }
   if (pathname.startsWith('/admin/market-providers')) {
     return isEnglish ? 'Data Sources & Readiness' : '数据源与就绪度';
+  }
+  if (pathname.startsWith('/admin/launch-cockpit')) {
+    return isEnglish ? 'Private Beta Launch Cockpit' : '私测发布驾驶舱';
   }
   if (pathname.startsWith('/admin/provider-circuits')) {
     return isEnglish ? 'Circuit Diagnostics' : '熔断诊断';
