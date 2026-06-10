@@ -190,6 +190,87 @@ def test_admin_ops_status_returns_read_only_advisory_markers(app: FastAPI, monke
     _assert_no_sensitive_markers(payload)
 
 
+def test_admin_ops_status_includes_private_beta_launch_cockpit_no_go_view(app: FastAPI) -> None:
+    app.state.task_queue = _TaskQueueFixture()
+
+    with _client(app, _ops_admin) as client:
+        response = client.get("/api/v1/admin/ops/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    cockpit = payload["launchCockpit"]
+    assert cockpit["contract"] == "admin_ops_launch_cockpit_v1"
+    assert cockpit["readOnly"] is True
+    assert cockpit["advisoryOnly"] is True
+    assert cockpit["noExternalCalls"] is True
+    assert cockpit["publicLaunchApproved"] is False
+    assert cockpit["publicLaunchNoGo"] is True
+    assert cockpit["liveEnforcement"] is False
+    assert cockpit["runtimeBehaviorChanged"] is False
+    assert cockpit["approvalRequired"] is True
+    assert cockpit["unsafeActionStates"] == {
+        "quotaLiveBlockingEnabled": False,
+        "providerCircuitBlockingEnabled": False,
+        "mfaEnforcementEnabled": False,
+        "rbacFallbackRemoved": False,
+        "dbMigrationOrRestoreRun": False,
+        "cleanupOrDeleteRun": False,
+        "notificationSendEnabled": False,
+        "providerLiveCallsEnabled": False,
+        "productionConfigChanged": False,
+    }
+
+    domain_keys = {item["domainKey"] for item in cockpit["domains"]}
+    assert domain_keys == {
+        "security_rbac_mfa",
+        "quota_cost",
+        "provider_reliability",
+        "storage_restore",
+        "ws2_async",
+        "notifications",
+        "portfolio_backtest",
+        "route_classification",
+        "frontend_private_beta_safety",
+    }
+    assert cockpit["summaryCounts"]["domainCount"] == len(domain_keys)
+    assert cockpit["summaryCounts"]["publicLaunchNoGoCount"] == len(domain_keys)
+    assert cockpit["summaryCounts"]["realEvidenceMissingCount"] >= 8
+    assert cockpit["summaryCounts"]["approvalRequiredCount"] == len(domain_keys)
+
+    by_domain = {item["domainKey"]: item for item in cockpit["domains"]}
+    security = by_domain["security_rbac_mfa"]
+    assert security["foundationLanded"] is True
+    assert security["evidenceToolingPresent"] is True
+    assert security["realOperatorEvidenceMissing"] is True
+    assert security["approvalRequired"] is True
+    assert security["publicLaunchNoGo"] is True
+    assert security["readOnly"] is True
+    assert security["liveEnforcement"] is False
+    assert "scripts/security_mfa_operator_evidence_check.py" in security["evidenceRefs"]
+    assert security["detailRoute"] == "/admin/users"
+
+    quota = by_domain["quota_cost"]
+    assert quota["safeNextActions"]
+    assert quota["detailRoute"] == "/admin/cost-observability"
+    assert quota["followUpProposals"][0]["approvalNeeded"] is True
+    assert "api/v1/endpoints/analysis.py" in quota["followUpProposals"][0]["likelyFiles"]
+
+    provider = by_domain["provider_reliability"]
+    assert provider["providerRuntimeChanged"] is False
+    assert provider["externalActionsEnabled"] is False
+    assert provider["detailRoute"] == "/admin/provider-circuits"
+
+    route = by_domain["route_classification"]
+    assert route["realOperatorEvidenceMissing"] is False
+    assert route["blockerRefs"]
+    assert "tests/fixtures/auth/backend_route_capability_inventory.json" in route["evidenceRefs"]
+
+    blockers = cockpit["blockers"]
+    assert any(blocker["blockerKey"] == "public_launch_no_go" for blocker in blockers)
+    assert all(blocker["publicLaunchNoGo"] is True for blocker in blockers)
+    _assert_no_sensitive_markers(payload)
+
+
 def test_admin_ops_status_does_not_call_provider_status_surfaces(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:
     app.state.task_queue = _TaskQueueFixture()
     monkeypatch.setattr(

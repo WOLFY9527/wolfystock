@@ -43,6 +43,72 @@ class AdminOpsAdvisoryVsEnforcement(_AdminOpsStatusModel):
     consumer_visible: bool = Field(default=False, alias="consumerVisible")
 
 
+class AdminOpsCockpitFollowUpProposal(_AdminOpsStatusModel):
+    proposal_key: str = Field(alias="proposalKey")
+    title: str
+    approval_needed: bool = Field(default=True, alias="approvalNeeded")
+    likely_files: List[str] = Field(default_factory=list, alias="likelyFiles")
+    risk: str
+    validation: List[str] = Field(default_factory=list)
+
+
+class AdminOpsCockpitDomain(_AdminOpsStatusModel):
+    domain_key: str = Field(alias="domainKey")
+    label: str
+    status: str
+    status_label: str = Field(alias="statusLabel")
+    detail_route: str = Field(alias="detailRoute")
+    foundation_landed: bool = Field(alias="foundationLanded")
+    evidence_tooling_present: bool = Field(alias="evidenceToolingPresent")
+    real_operator_evidence_missing: bool = Field(alias="realOperatorEvidenceMissing")
+    approval_required: bool = Field(alias="approvalRequired")
+    public_launch_no_go: bool = Field(alias="publicLaunchNoGo")
+    read_only: bool = Field(default=True, alias="readOnly")
+    advisory_only: bool = Field(default=True, alias="advisoryOnly")
+    no_external_calls: bool = Field(default=True, alias="noExternalCalls")
+    live_enforcement: bool = Field(default=False, alias="liveEnforcement")
+    runtime_behavior_changed: bool = Field(default=False, alias="runtimeBehaviorChanged")
+    provider_runtime_changed: bool = Field(default=False, alias="providerRuntimeChanged")
+    external_actions_enabled: bool = Field(default=False, alias="externalActionsEnabled")
+    evidence_refs: List[str] = Field(default_factory=list, alias="evidenceRefs")
+    blocker_refs: List[str] = Field(default_factory=list, alias="blockerRefs")
+    safe_next_actions: List[str] = Field(default_factory=list, alias="safeNextActions")
+    limitations: List[str] = Field(default_factory=list)
+    follow_up_proposals: List[AdminOpsCockpitFollowUpProposal] = Field(
+        default_factory=list,
+        alias="followUpProposals",
+    )
+
+
+class AdminOpsCockpitBlocker(_AdminOpsStatusModel):
+    blocker_key: str = Field(alias="blockerKey")
+    title: str
+    severity: str
+    public_launch_no_go: bool = Field(default=True, alias="publicLaunchNoGo")
+    approval_required: bool = Field(default=True, alias="approvalRequired")
+    affected_domains: List[str] = Field(default_factory=list, alias="affectedDomains")
+    evidence_refs: List[str] = Field(default_factory=list, alias="evidenceRefs")
+    next_action: str = Field(alias="nextAction")
+
+
+class AdminOpsLaunchCockpit(_AdminOpsStatusModel):
+    contract: str = "admin_ops_launch_cockpit_v1"
+    read_only: bool = Field(default=True, alias="readOnly")
+    advisory_only: bool = Field(default=True, alias="advisoryOnly")
+    no_external_calls: bool = Field(default=True, alias="noExternalCalls")
+    public_launch_approved: bool = Field(default=False, alias="publicLaunchApproved")
+    public_launch_no_go: bool = Field(default=True, alias="publicLaunchNoGo")
+    live_enforcement: bool = Field(default=False, alias="liveEnforcement")
+    runtime_behavior_changed: bool = Field(default=False, alias="runtimeBehaviorChanged")
+    approval_required: bool = Field(default=True, alias="approvalRequired")
+    summary_counts: Dict[str, int] = Field(default_factory=dict, alias="summaryCounts")
+    unsafe_action_states: Dict[str, bool] = Field(default_factory=dict, alias="unsafeActionStates")
+    domains: List[AdminOpsCockpitDomain] = Field(default_factory=list)
+    blockers: List[AdminOpsCockpitBlocker] = Field(default_factory=list)
+    safe_next_actions: List[str] = Field(default_factory=list, alias="safeNextActions")
+    limitations: List[str] = Field(default_factory=list)
+
+
 class AdminOpsStatusResponse(_AdminOpsStatusModel):
     generated_at: str = Field(alias="generatedAt")
     read_only: bool = Field(default=True, alias="readOnly")
@@ -56,4 +122,5 @@ class AdminOpsStatusResponse(_AdminOpsStatusModel):
     storage_readiness_summary: AdminOpsStatusSection = Field(alias="storageReadinessSummary")
     task_queue_status_summary: AdminOpsStatusSection = Field(alias="taskQueueStatusSummary")
     admin_log_evidence_summary: AdminOpsStatusSection = Field(alias="adminLogEvidenceSummary")
+    launch_cockpit: AdminOpsLaunchCockpit = Field(alias="launchCockpit")
     metadata: Dict[str, Any] = Field(default_factory=dict)

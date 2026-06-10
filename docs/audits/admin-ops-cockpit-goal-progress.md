@@ -106,8 +106,8 @@ inventing missing task labels.
 
 | Checkpoint | Commit | Status | Notes |
 | --- | --- | --- | --- |
-| `checkpoint(admin-ops): map readiness cockpit` | pending | In progress | Initial audit map and implementation plan. |
-| `checkpoint(admin-ops): add sanitized status surfaces` | pending | Pending | Backend projection/schema/tests. |
+| `checkpoint(admin-ops): map readiness cockpit` | `cece18b1` | Complete | Initial audit map and implementation plan. Validation: `git diff --check`; `./scripts/release_secret_scan.sh --local-only`. |
+| `checkpoint(admin-ops): add sanitized status surfaces` | pending | In progress | Backend `launchCockpit` projection/schema/tests. Focused validation: `pytest -p no:cacheprovider tests/api/test_admin_ops_status.py`; `python -m py_compile api/v1/endpoints/admin_ops_status.py api/v1/schemas/admin_ops_status.py src/services/admin_ops_status_service.py`. |
 | `checkpoint(admin-ops): add evidence and blocker view` | pending | Pending | Frontend route/page/navigation. |
 | `checkpoint(admin-ops): add cockpit validation` | pending | Pending | Focused validation and smoke evidence. |
 | `feat(admin-ops): add private beta launch cockpit` | pending | Pending | Final squash/checkpoint closeout commit. |

@@ -53,6 +53,7 @@ class AdminOpsStatusService:
             "storageReadinessSummary": self._safe_source(self._build_storage_readiness_summary),
             "taskQueueStatusSummary": self._safe_source(lambda: self._build_task_queue_status_summary(app_state)),
             "adminLogEvidenceSummary": self._safe_source(self._build_admin_log_evidence_summary),
+            "launchCockpit": self._build_launch_cockpit(),
             "metadata": {
                 "contract": "admin_ops_status_snapshot_v1",
                 "gatingCapability": "ops:logs:read",
@@ -78,6 +79,7 @@ class AdminOpsStatusService:
                     "execution_log_sessions",
                     "execution_log_events",
                     "admin_log_retention_policy",
+                    "admin_ops_launch_cockpit_projection",
                 ],
             },
         }
@@ -317,3 +319,518 @@ class AdminOpsStatusService:
             },
             limitations=["admin_log_evidence_only", "cleanup_requires_separate_write_capability"],
         )
+
+    @staticmethod
+    def _follow_up(
+        *,
+        proposal_key: str,
+        title: str,
+        likely_files: list[str],
+        risk: str,
+        validation: list[str],
+    ) -> Dict[str, Any]:
+        return {
+            "proposalKey": proposal_key,
+            "title": title,
+            "approvalNeeded": True,
+            "likelyFiles": likely_files,
+            "risk": risk,
+            "validation": validation,
+        }
+
+    @staticmethod
+    def _cockpit_domain(
+        *,
+        domain_key: str,
+        label: str,
+        status: str,
+        status_label: str,
+        detail_route: str,
+        foundation_landed: bool,
+        evidence_tooling_present: bool,
+        real_operator_evidence_missing: bool,
+        evidence_refs: list[str],
+        blocker_refs: list[str],
+        safe_next_actions: list[str],
+        limitations: list[str],
+        follow_up_proposals: list[Dict[str, Any]] | None = None,
+    ) -> Dict[str, Any]:
+        return {
+            "domainKey": domain_key,
+            "label": label,
+            "status": status,
+            "statusLabel": status_label,
+            "detailRoute": detail_route,
+            "foundationLanded": foundation_landed,
+            "evidenceToolingPresent": evidence_tooling_present,
+            "realOperatorEvidenceMissing": real_operator_evidence_missing,
+            "approvalRequired": True,
+            "publicLaunchNoGo": True,
+            "readOnly": True,
+            "advisoryOnly": True,
+            "noExternalCalls": True,
+            "liveEnforcement": False,
+            "runtimeBehaviorChanged": False,
+            "providerRuntimeChanged": False,
+            "externalActionsEnabled": False,
+            "evidenceRefs": evidence_refs,
+            "blockerRefs": blocker_refs,
+            "safeNextActions": safe_next_actions,
+            "limitations": limitations,
+            "followUpProposals": follow_up_proposals or [],
+        }
+
+    def _build_launch_cockpit(self) -> Dict[str, Any]:
+        domains = [
+            self._cockpit_domain(
+                domain_key="security_rbac_mfa",
+                label="Security / RBAC / MFA",
+                status="approval_required_no_go",
+                status_label="Foundation and tooling present; staged operator evidence missing",
+                detail_route="/admin/users",
+                foundation_landed=True,
+                evidence_tooling_present=True,
+                real_operator_evidence_missing=True,
+                evidence_refs=[
+                    "scripts/admin_rbac_route_inventory.py",
+                    "scripts/security_mfa_operator_evidence_check.py",
+                    "tests/api/test_auth_rbac_release_contracts.py",
+                    "tests/test_security_mfa_operator_evidence_check.py",
+                ],
+                blocker_refs=[
+                    "docs/audits/public-launch-gap-register.md#securityrbac",
+                    "docs/audits/index-security-rbac-mfa.md",
+                ],
+                safe_next_actions=[
+                    "Review route inventory and sanitized MFA/RBAC operator evidence.",
+                    "Keep MFA enforcement and RBAC fallback changes behind separate approval.",
+                ],
+                limitations=[
+                    "real_staged_mfa_pilot_evidence_missing",
+                    "rbac_fallback_disable_not_approved",
+                ],
+                follow_up_proposals=[
+                    self._follow_up(
+                        proposal_key="security_rbac_operator_acceptance",
+                        title="Run staged MFA/RBAC acceptance with sanitized operator artifacts",
+                        likely_files=[
+                            "scripts/security_mfa_operator_evidence_check.py",
+                            "scripts/admin_rbac_route_inventory.py",
+                            "tests/api/test_auth_rbac_release_contracts.py",
+                        ],
+                        risk="admin_access_lockout_or_overbroad_admin_access",
+                        validation=[
+                            "focused auth/RBAC API tests",
+                            "sanitized operator evidence validator",
+                            "route inventory review",
+                        ],
+                    ),
+                ],
+            ),
+            self._cockpit_domain(
+                domain_key="quota_cost",
+                label="Quota / Cost",
+                status="advisory_no_go",
+                status_label="Advisory helpers present; live quota enforcement not approved",
+                detail_route="/admin/cost-observability",
+                foundation_landed=True,
+                evidence_tooling_present=True,
+                real_operator_evidence_missing=True,
+                evidence_refs=[
+                    "src/services/quota_policy_service.py",
+                    "scripts/quota_reserve_release_operator_evidence_check.py",
+                    "tests/test_quota_policy_service.py",
+                    "tests/test_quota_reserve_release_operator_evidence_check.py",
+                ],
+                blocker_refs=[
+                    "docs/audits/public-launch-gap-register.md#costquota",
+                    "docs/audits/quota-reserve-release-operator-evidence-checklist.md",
+                ],
+                safe_next_actions=[
+                    "Inspect cost observability and quota evidence without creating reservations.",
+                    "Keep route-boundary live blocking out of this cockpit.",
+                ],
+                limitations=[
+                    "live_route_enforcement_missing",
+                    "real_budget_operator_evidence_missing",
+                ],
+                follow_up_proposals=[
+                    self._follow_up(
+                        proposal_key="quota_route_pilot_approval",
+                        title="Pilot one low-risk quota route only after explicit approval",
+                        likely_files=[
+                            "api/v1/endpoints/analysis.py",
+                            "src/services/quota_policy_service.py",
+                            "tests/api/test_analysis_quota_route_pilot.py",
+                        ],
+                        risk="public_usage_without_hard_spend_caps",
+                        validation=[
+                            "reserve/release lifecycle tests",
+                            "rollback flag proof",
+                            "sanitized quota operator artifact",
+                        ],
+                    ),
+                ],
+            ),
+            self._cockpit_domain(
+                domain_key="provider_reliability",
+                label="Provider Reliability",
+                status="diagnostic_no_go",
+                status_label="Diagnostics present; provider runtime enforcement not approved",
+                detail_route="/admin/provider-circuits",
+                foundation_landed=True,
+                evidence_tooling_present=True,
+                real_operator_evidence_missing=True,
+                evidence_refs=[
+                    "src/services/provider_circuit_observer.py",
+                    "scripts/provider_sla_licensing_evidence_check.py",
+                    "scripts/provider_operator_evidence_check.py",
+                    "tests/api/test_admin_provider_circuit_diagnostics.py",
+                ],
+                blocker_refs=[
+                    "docs/audits/public-launch-gap-register.md#provider-reliability",
+                    "docs/audits/index-provider-data-options.md",
+                ],
+                safe_next_actions=[
+                    "Review provider SLA diagnostics and licensing evidence status.",
+                    "Keep provider order, fallback, retry, timeout, and cache behavior unchanged.",
+                ],
+                limitations=[
+                    "real_entitlement_evidence_missing",
+                    "provider_circuit_enforcement_pilot_not_approved",
+                ],
+                follow_up_proposals=[
+                    self._follow_up(
+                        proposal_key="provider_entitlement_evidence_acceptance",
+                        title="Attach provider entitlement and degraded-state operator evidence",
+                        likely_files=[
+                            "scripts/provider_sla_licensing_evidence_check.py",
+                            "scripts/provider_operator_evidence_check.py",
+                            "tests/test_provider_sla_licensing_evidence_check.py",
+                        ],
+                        risk="provider_exhaustion_or_unlicensed_data_visibility",
+                        validation=[
+                            "sanitized provider evidence validator",
+                            "admin provider diagnostic tests",
+                            "no external provider calls from cockpit",
+                        ],
+                    ),
+                ],
+            ),
+            self._cockpit_domain(
+                domain_key="storage_restore",
+                label="Storage / Restore",
+                status="tooling_no_go",
+                status_label="Readiness helpers present; real restore/PITR evidence missing",
+                detail_route="/admin/evidence-workflow",
+                foundation_landed=True,
+                evidence_tooling_present=True,
+                real_operator_evidence_missing=True,
+                evidence_refs=[
+                    "scripts/storage_migration_readiness_report.py",
+                    "scripts/isolated_pg_restore_smoke.py",
+                    "scripts/restore_pitr_operator_evidence_check.py",
+                    "docs/audits/storage-migration-readiness.md",
+                ],
+                blocker_refs=[
+                    "docs/audits/public-launch-gap-register.md#dbdeployment",
+                    "docs/audits/index-db-ws2-deployment.md",
+                ],
+                safe_next_actions=[
+                    "Review report-only storage readiness and restore evidence requirements.",
+                    "Do not run restore, PITR, migrations, cleanup, or deletion from cockpit.",
+                ],
+                limitations=[
+                    "real_isolated_postgres_restore_missing",
+                    "retention_tiers_not_accepted",
+                ],
+                follow_up_proposals=[
+                    self._follow_up(
+                        proposal_key="restore_pitr_operator_drill",
+                        title="Run isolated restore/PITR drill outside cockpit after approval",
+                        likely_files=[
+                            "scripts/isolated_pg_restore_smoke.py",
+                            "scripts/restore_pitr_operator_evidence_check.py",
+                            "docs/audits/storage-migration-readiness.md",
+                        ],
+                        risk="data_loss_or_unproven_recovery",
+                        validation=[
+                            "isolated restore smoke output",
+                            "sanitized restore/PITR evidence validator",
+                            "post-restore owner-isolation smoke",
+                        ],
+                    ),
+                ],
+            ),
+            self._cockpit_domain(
+                domain_key="ws2_async",
+                label="WS2 / Async Runtime",
+                status="limited_no_go",
+                status_label="Durable/synthetic contracts present; multi-instance acceptance missing",
+                detail_route="/admin/evidence-workflow",
+                foundation_landed=False,
+                evidence_tooling_present=True,
+                real_operator_evidence_missing=True,
+                evidence_refs=[
+                    "docs/operations/background-job-queue-boundary.md",
+                    "scripts/ws2_multi_instance_smoke.py",
+                    "scripts/ws2_sse_operator_decision_check.py",
+                    "tests/test_ws2_durable_task_worker.py",
+                ],
+                blocker_refs=[
+                    "docs/audits/public-launch-gap-register.md#ws2multi-instance",
+                    "docs/audits/index-db-ws2-deployment.md",
+                ],
+                safe_next_actions=[
+                    "Record process-local SSE limitations and durable polling expectations.",
+                    "Treat synthetic worker evidence as non-production evidence.",
+                ],
+                limitations=[
+                    "process_local_sse_limitation",
+                    "staging_api_ab_worker_smoke_missing",
+                ],
+                follow_up_proposals=[
+                    self._follow_up(
+                        proposal_key="ws2_multi_instance_acceptance",
+                        title="Produce staging WS2/API A-B acceptance evidence after approval",
+                        likely_files=[
+                            "scripts/ws2_multi_instance_smoke.py",
+                            "scripts/ws2_sse_operator_decision_check.py",
+                            "docs/operations/background-job-queue-boundary.md",
+                        ],
+                        risk="lost_task_visibility_under_multi_instance_routing",
+                        validation=[
+                            "synthetic smoke",
+                            "staging operator artifact",
+                            "durable polling replay proof",
+                        ],
+                    ),
+                ],
+            ),
+            self._cockpit_domain(
+                domain_key="notifications",
+                label="Notifications",
+                status="no_send_no_go",
+                status_label="No-send contracts present; delivery rehearsal missing",
+                detail_route="/admin/notifications",
+                foundation_landed=False,
+                evidence_tooling_present=True,
+                real_operator_evidence_missing=True,
+                evidence_refs=[
+                    "tests/api/test_notification_channels.py",
+                    "tests/test_quota_cost_notification_release_contracts.py",
+                    "tests/test_user_notification_preferences.py",
+                ],
+                blocker_refs=[
+                    "docs/audits/public-launch-readiness-master.md#manual-release-criteria",
+                    "docs/audits/operator-evidence-real-runbook.md",
+                ],
+                safe_next_actions=[
+                    "Review channel coverage and recent events without testing or sending.",
+                    "Keep acknowledgement, create, delete, and test-send actions on detail pages.",
+                ],
+                limitations=[
+                    "real_delivery_rehearsal_missing",
+                    "external_sends_not_approved",
+                ],
+                follow_up_proposals=[
+                    self._follow_up(
+                        proposal_key="notification_delivery_rehearsal",
+                        title="Run delivery rehearsal outside cockpit with explicit approval",
+                        likely_files=[
+                            "api/v1/endpoints/admin_notifications.py",
+                            "tests/api/test_notification_channels.py",
+                            "docs/audits/operator-evidence-real-runbook.md",
+                        ],
+                        risk="operators_miss_critical_launch_events",
+                        validation=[
+                            "notification channel API tests",
+                            "sanitized delivery artifact",
+                            "no-send cockpit regression",
+                        ],
+                    ),
+                ],
+            ),
+            self._cockpit_domain(
+                domain_key="portfolio_backtest",
+                label="Portfolio / Backtest",
+                status="partial_no_go",
+                status_label="Read-only/stored-first evidence present; staged safety proof missing",
+                detail_route="/admin/evidence-workflow",
+                foundation_landed=False,
+                evidence_tooling_present=True,
+                real_operator_evidence_missing=True,
+                evidence_refs=[
+                    "tests/api/test_portfolio_history.py",
+                    "tests/api/test_portfolio_owner_isolation.py",
+                    "tests/test_backtest_api_contract.py",
+                    "docs/backtest-system.md",
+                ],
+                blocker_refs=[
+                    "docs/audits/public-launch-gap-register.md#portfoliobacktest",
+                    "docs/audits/backtest-portfolio-public-safety-audit.md",
+                ],
+                safe_next_actions=[
+                    "Review stored-first backtest and portfolio owner-isolation evidence.",
+                    "Keep accounting formulas and backtest engine behavior unchanged.",
+                ],
+                limitations=[
+                    "broader_accounting_invariant_evidence_missing",
+                    "staged_owner_isolation_smoke_missing",
+                ],
+                follow_up_proposals=[
+                    self._follow_up(
+                        proposal_key="portfolio_backtest_staged_safety",
+                        title="Attach staged portfolio/backtest owner-isolation and export evidence",
+                        likely_files=[
+                            "tests/api/test_portfolio_owner_isolation.py",
+                            "tests/test_backtest_api_contract.py",
+                            "docs/audits/backtest-portfolio-public-safety-audit.md",
+                        ],
+                        risk="cross_user_financial_data_or_misleading_backtest_output",
+                        validation=[
+                            "owner A/B authenticated smoke",
+                            "support export readback checks",
+                            "no-advice browser evidence",
+                        ],
+                    ),
+                ],
+            ),
+            self._cockpit_domain(
+                domain_key="route_classification",
+                label="Route Classification",
+                status="foundation_ready_review_required",
+                status_label="Route inventory frozen; release approval still external",
+                detail_route="/admin/evidence-workflow",
+                foundation_landed=True,
+                evidence_tooling_present=True,
+                real_operator_evidence_missing=False,
+                evidence_refs=[
+                    "scripts/admin_rbac_route_inventory.py",
+                    "tests/fixtures/auth/backend_route_capability_inventory.json",
+                    "tests/test_auth_route_capability_inventory.py",
+                    "tests/api/test_public_api_surface_safety.py",
+                ],
+                blocker_refs=[
+                    "docs/audits/public-launch-readiness-master.md#manual-release-criteria",
+                    "docs/audits/deployment-readiness-checklist.md",
+                ],
+                safe_next_actions=[
+                    "Compare backend route inventory against admin capability expectations.",
+                    "Keep route classification as release evidence, not release approval.",
+                ],
+                limitations=[
+                    "manual_release_review_still_required",
+                    "frontend_route_smoke_not_complete_for_every_admin_surface",
+                ],
+            ),
+            self._cockpit_domain(
+                domain_key="frontend_private_beta_safety",
+                label="Frontend / Private-Beta Safety",
+                status="surface_review_no_go",
+                status_label="Admin surfaces exist; bounded private-beta smoke still required",
+                detail_route="/settings/system",
+                foundation_landed=False,
+                evidence_tooling_present=True,
+                real_operator_evidence_missing=True,
+                evidence_refs=[
+                    "apps/dsa-web/e2e/admin-ops-launch-surfaces.spec.ts",
+                    "apps/dsa-web/e2e/readiness-browser-acceptance.smoke.spec.ts",
+                    "apps/dsa-web/src/__tests__/AppRoutes.test.tsx",
+                    "docs/release/small-private-beta-release-checklist.md",
+                ],
+                blocker_refs=[
+                    "docs/audits/public-launch-gap-register.md#highest-risk-blockers",
+                    "docs/audits/public-launch-readiness-master.md",
+                ],
+                safe_next_actions=[
+                    "Run bounded admin cockpit smoke with mocked/safe data.",
+                    "Keep private-beta readiness distinct from public launch approval.",
+                ],
+                limitations=[
+                    "bounded_browser_evidence_pending",
+                    "public_launch_approval_external",
+                ],
+            ),
+        ]
+
+        blockers = [
+            {
+                "blockerKey": "public_launch_no_go",
+                "title": "Public launch remains NO-GO",
+                "severity": "critical",
+                "publicLaunchNoGo": True,
+                "approvalRequired": True,
+                "affectedDomains": [domain["domainKey"] for domain in domains],
+                "evidenceRefs": [
+                    "docs/audits/public-launch-readiness-master.md",
+                    "docs/audits/public-launch-gap-register.md",
+                ],
+                "nextAction": "Collect missing real operator evidence and complete manual release review outside cockpit.",
+            },
+            {
+                "blockerKey": "real_operator_evidence_missing",
+                "title": "Real target-environment operator evidence is missing",
+                "severity": "high",
+                "publicLaunchNoGo": True,
+                "approvalRequired": True,
+                "affectedDomains": [
+                    domain["domainKey"]
+                    for domain in domains
+                    if domain["realOperatorEvidenceMissing"]
+                ],
+                "evidenceRefs": [
+                    "docs/audits/operator-evidence-real-runbook.md",
+                    "docs/audits/launch-acceptance-evidence-pack.md",
+                ],
+                "nextAction": "Use existing validators on sanitized operator artifacts after approval.",
+            },
+        ]
+
+        return {
+            "contract": "admin_ops_launch_cockpit_v1",
+            "readOnly": True,
+            "advisoryOnly": True,
+            "noExternalCalls": True,
+            "publicLaunchApproved": False,
+            "publicLaunchNoGo": True,
+            "liveEnforcement": False,
+            "runtimeBehaviorChanged": False,
+            "approvalRequired": True,
+            "summaryCounts": {
+                "domainCount": len(domains),
+                "foundationLandedCount": sum(1 for domain in domains if domain["foundationLanded"]),
+                "evidenceToolingPresentCount": sum(
+                    1 for domain in domains if domain["evidenceToolingPresent"]
+                ),
+                "realEvidenceMissingCount": sum(
+                    1 for domain in domains if domain["realOperatorEvidenceMissing"]
+                ),
+                "approvalRequiredCount": sum(1 for domain in domains if domain["approvalRequired"]),
+                "publicLaunchNoGoCount": sum(1 for domain in domains if domain["publicLaunchNoGo"]),
+                "blockerCount": len(blockers),
+            },
+            "unsafeActionStates": {
+                "quotaLiveBlockingEnabled": False,
+                "providerCircuitBlockingEnabled": False,
+                "mfaEnforcementEnabled": False,
+                "rbacFallbackRemoved": False,
+                "dbMigrationOrRestoreRun": False,
+                "cleanupOrDeleteRun": False,
+                "notificationSendEnabled": False,
+                "providerLiveCallsEnabled": False,
+                "productionConfigChanged": False,
+            },
+            "domains": domains,
+            "blockers": blockers,
+            "safeNextActions": [
+                "Open domain detail pages for read-only evidence review.",
+                "Record missing operator evidence and approval-required follow-ups.",
+                "Keep private-beta readiness separate from public launch approval.",
+            ],
+            "limitations": [
+                "cockpit_does_not_execute_validators",
+                "cockpit_does_not_approve_public_launch",
+                "cockpit_does_not_change_runtime_behavior",
+            ],
+        }
