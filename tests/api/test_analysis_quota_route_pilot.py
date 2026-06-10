@@ -224,12 +224,77 @@ def test_reservation_success_releases_on_success(monkeypatch: pytest.MonkeyPatch
     assert calls["reserve"][0]["owner_user_id"] == "pilot-user"
     assert calls["reserve"][0]["route_family"] == "analysis"
     assert calls["release"] == [{"reservation_id": "qres_success"}]
-    assert _FakeExecutionLogs.instances[0].started[0]["metadata"] == {
-        "quota_route_pilot": {"reservation_id": "qres_success"}
+    metadata = _FakeExecutionLogs.instances[0].started[0]["metadata"]
+    assert metadata == {
+        "quota_route_pilot": {
+            "advisory_mode": True,
+            "reserve_attempted": True,
+            "reserve_succeeded": True,
+        }
     }
+    serialized = json.dumps(metadata, sort_keys=True)
+    assert "qres_success" not in serialized
+    assert "reservation_id" not in serialized
+    assert "idempotency" not in serialized.lower()
+    assert "pilot-user" not in serialized
+    assert "Apple" not in serialized
+    assert "original_query" not in serialized
+
+
+def test_reservation_metadata_omits_raw_request_and_secret_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_pilot(monkeypatch)
+    calls = _install_quota_service(monkeypatch)
+
+    _run_sync(
+        monkeypatch,
+        stock_name="Apple SECRET_STOCK_NAME",
+        original_query="raw user text SECRET_ORIGINAL_QUERY",
+        report_type="brief",
+        force_refresh=True,
+        researchMode="deep",
+    )
+
+    metadata = _FakeExecutionLogs.instances[0].started[0]["metadata"]
+    serialized = json.dumps(metadata, sort_keys=True)
+    idempotency_key = calls["reserve"][0]["idempotency_key"]
+    assert calls["release"] == [{"reservation_id": "qres_success"}]
+    assert "qres_success" not in serialized
+    assert idempotency_key not in serialized
+    assert "idempotency" not in serialized.lower()
+    assert "pilot-user" not in serialized
+    assert "SECRET_STOCK_NAME" not in serialized
+    assert "SECRET_ORIGINAL_QUERY" not in serialized
+    assert "cookie" not in serialized.lower()
+    assert "token" not in serialized.lower()
+    assert "prompt" not in serialized.lower()
 
 
 def test_reservation_success_releases_on_http_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    _enable_pilot(monkeypatch)
+    calls = _install_quota_service(monkeypatch)
+    _install_sync_dependencies(
+        monkeypatch,
+        service_exception=HTTPException(
+            status_code=503,
+            detail={"error": "upstream_unavailable"},
+        ),
+    )
+
+    request = AnalyzeRequest(stock_code="AAPL", async_mode=False)
+    with pytest.raises(HTTPException) as exc_info:
+        analysis._handle_sync_analysis("AAPL", request, _pilot_user())
+
+    assert exc_info.value.status_code == 503
+    assert calls["release"] == [{"reservation_id": "qres_success"}]
+    metadata = _FakeExecutionLogs.instances[0].started[0]["metadata"]
+    serialized = json.dumps(metadata, sort_keys=True)
+    assert "qres_success" not in serialized
+    assert "reservation_id" not in serialized
+
+
+def test_reservation_success_releases_when_result_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
     _enable_pilot(monkeypatch)
     calls = _install_quota_service(monkeypatch)
     _install_sync_dependencies(monkeypatch, service_result=None)
@@ -240,6 +305,10 @@ def test_reservation_success_releases_on_http_exception(monkeypatch: pytest.Monk
 
     assert exc_info.value.status_code == 500
     assert calls["release"] == [{"reservation_id": "qres_success"}]
+    metadata = _FakeExecutionLogs.instances[0].started[0]["metadata"]
+    serialized = json.dumps(metadata, sort_keys=True)
+    assert "qres_success" not in serialized
+    assert "reservation_id" not in serialized
 
 
 def test_reservation_success_releases_on_generic_exception(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -253,6 +322,10 @@ def test_reservation_success_releases_on_generic_exception(monkeypatch: pytest.M
 
     assert exc_info.value.status_code == 500
     assert calls["release"] == [{"reservation_id": "qres_success"}]
+    metadata = _FakeExecutionLogs.instances[0].started[0]["metadata"]
+    serialized = json.dumps(metadata, sort_keys=True)
+    assert "qres_success" not in serialized
+    assert "reservation_id" not in serialized
 
 
 def test_reservation_failure_does_not_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -345,11 +345,16 @@ def _release_analysis_sync_quota_pilot_reservation(reservation_id: Optional[str]
         logger.warning("Quota analysis sync release pilot failed open: %s", exc, exc_info=True)
 
 
-def _analysis_sync_quota_execution_metadata(reservation_id: Optional[str]) -> Optional[Dict[str, Any]]:
-    normalized_id = str(reservation_id or "").strip()
-    if not normalized_id:
+def _analysis_sync_quota_execution_metadata(*, reserve_succeeded: bool) -> Optional[Dict[str, Any]]:
+    if not reserve_succeeded:
         return None
-    return {"quota_route_pilot": {"reservation_id": normalized_id}}
+    return {
+        "quota_route_pilot": {
+            "advisory_mode": True,
+            "reserve_attempted": True,
+            "reserve_succeeded": True,
+        }
+    }
 
 
 # ============================================================
@@ -753,7 +758,9 @@ def _handle_sync_analysis(
             request_id=query_id,
             task_id=query_id,
             stock_name=getattr(request, "stock_name", None),
-            metadata=_analysis_sync_quota_execution_metadata(quota_reservation_id),
+            metadata=_analysis_sync_quota_execution_metadata(
+                reserve_succeeded=bool(quota_reservation_id)
+            ),
         )
         service = AnalysisService()
         result = service.analyze_stock(**analyze_kwargs)
