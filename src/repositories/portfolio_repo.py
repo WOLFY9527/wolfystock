@@ -1533,6 +1533,52 @@ class PortfolioRepository:
             cutoff_ordinal = as_of.toordinal() - lookback_days
             return [row for row in rows if row.snapshot_date.toordinal() >= cutoff_ordinal]
 
+    def list_daily_snapshot_history(
+        self,
+        *,
+        account_id: Optional[int] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+        cost_method: str,
+        limit: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> List[PortfolioDailySnapshot]:
+        """Load stored daily snapshot rows for read-only history projection."""
+        if limit <= 0:
+            raise ValueError("limit must be greater than 0")
+
+        with self.db.get_session() as session:
+            query = select(PortfolioDailySnapshot)
+            conditions = [PortfolioDailySnapshot.cost_method == cost_method]
+            if account_id is not None:
+                conditions.append(PortfolioDailySnapshot.account_id == account_id)
+            if date_from is not None:
+                conditions.append(PortfolioDailySnapshot.snapshot_date >= date_from)
+            if date_to is not None:
+                conditions.append(PortfolioDailySnapshot.snapshot_date <= date_to)
+            query = query.where(and_(*conditions))
+
+            if not include_all_owners:
+                query = query.join(
+                    PortfolioAccount,
+                    PortfolioAccount.id == PortfolioDailySnapshot.account_id,
+                ).where(
+                    and_(
+                        PortfolioAccount.owner_id == self.db.require_user_id(owner_id),
+                        PortfolioAccount.is_active.is_(True),
+                    )
+                )
+
+            rows = session.execute(
+                query.order_by(
+                    PortfolioDailySnapshot.snapshot_date.desc(),
+                    PortfolioDailySnapshot.account_id.desc(),
+                    PortfolioDailySnapshot.id.desc(),
+                ).limit(limit)
+            ).scalars().all()
+            return list(reversed(rows))
+
     def get_cached_snapshot_bundle(
         self,
         *,

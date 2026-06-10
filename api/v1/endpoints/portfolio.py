@@ -35,6 +35,9 @@ from api.v1.schemas.portfolio import (
     PortfolioImportTradeItem,
     PortfolioIbkrSyncRequest,
     PortfolioIbkrSyncResponse,
+    PortfolioHistoryCoverage,
+    PortfolioHistoryResponse,
+    PortfolioHistorySnapshotItem,
     PortfolioRiskResponse,
     PortfolioScenarioRiskRequest,
     PortfolioScenarioRiskResponse,
@@ -45,6 +48,7 @@ from api.v1.schemas.portfolio import (
     PortfolioTradeUpdateRequest,
 )
 from src.services.fx_rate_service import default_fx_rate_service
+from src.repositories.portfolio_repo import PortfolioRepository
 from src.services.portfolio_import_service import PortfolioImportService
 from src.services.portfolio_ibkr_sync_service import PortfolioIbkrSyncError, PortfolioIbkrSyncService
 from src.services.portfolio_risk_service import PortfolioRiskService
@@ -185,6 +189,75 @@ def _build_import_parse_response(parsed: dict) -> PortfolioImportParseResponse:
         warnings=list(parsed.get("warnings", [])),
         metadata=dict(parsed.get("metadata", {})),
         errors=list(parsed.get("errors", [])),
+    )
+
+
+def _normalize_cost_method(cost_method: str) -> str:
+    method = str(cost_method or "").strip().lower()
+    if method not in {"fifo", "avg"}:
+        raise ValueError("cost_method must be fifo or avg")
+    return method
+
+
+def _date_to_str(value: Optional[date]) -> Optional[str]:
+    return value.isoformat() if value is not None else None
+
+
+def _datetime_to_str(value: object) -> Optional[str]:
+    if value is None:
+        return None
+    isoformat = getattr(value, "isoformat", None)
+    if callable(isoformat):
+        return isoformat()
+    return str(value)
+
+
+def _serialize_history_item(row: object) -> PortfolioHistorySnapshotItem:
+    return PortfolioHistorySnapshotItem(
+        account_id=int(getattr(row, "account_id")),
+        snapshot_date=_date_to_str(getattr(row, "snapshot_date")),
+        cost_method=str(getattr(row, "cost_method")),
+        base_currency=str(getattr(row, "base_currency")),
+        total_cash=float(getattr(row, "total_cash")),
+        total_market_value=float(getattr(row, "total_market_value")),
+        total_equity=float(getattr(row, "total_equity")),
+        realized_pnl=float(getattr(row, "realized_pnl")),
+        unrealized_pnl=float(getattr(row, "unrealized_pnl")),
+        fee_total=float(getattr(row, "fee_total")),
+        tax_total=float(getattr(row, "tax_total")),
+        fx_stale=bool(getattr(row, "fx_stale")),
+        created_at=_datetime_to_str(getattr(row, "created_at", None)),
+        updated_at=_datetime_to_str(getattr(row, "updated_at", None)),
+    )
+
+
+def _build_history_coverage(
+    *,
+    items: list[PortfolioHistorySnapshotItem],
+    date_from: Optional[date],
+    date_to: Optional[date],
+) -> PortfolioHistoryCoverage:
+    point_count = len(items)
+    warnings: list[str] = []
+    if point_count == 0:
+        warnings.append("history_no_stored_snapshots")
+    elif point_count < 2:
+        warnings.append("history_insufficient_points")
+
+    insufficient_data = point_count < 2
+    account_ids = {item.account_id for item in items}
+    snapshot_dates = [item.snapshot_date for item in items]
+    return PortfolioHistoryCoverage(
+        status="insufficient_data" if insufficient_data else "available",
+        point_count=point_count,
+        insufficient_data=insufficient_data,
+        sparse=insufficient_data,
+        warnings=warnings,
+        requested_date_from=_date_to_str(date_from),
+        requested_date_to=_date_to_str(date_to),
+        first_snapshot_date=snapshot_dates[0] if snapshot_dates else None,
+        last_snapshot_date=snapshot_dates[-1] if snapshot_dates else None,
+        account_count=len(account_ids),
     )
 
 
@@ -875,6 +948,57 @@ def get_snapshot(
         raise _bad_request(exc)
     except Exception as exc:
         raise _internal_error("Get snapshot failed", exc)
+
+
+@router.get(
+    "/history",
+    response_model=PortfolioHistoryResponse,
+    responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="List stored portfolio snapshot history",
+)
+def list_history(
+    account_id: Optional[int] = Query(None, description="Optional account id"),
+    date_from: Optional[date] = Query(None, description="Snapshot date from"),
+    date_to: Optional[date] = Query(None, description="Snapshot date to"),
+    cost_method: str = Query("fifo", description="Cost method: fifo or avg"),
+    limit: int = Query(100, ge=1, le=100),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioHistoryResponse:
+    repo = PortfolioRepository()
+    try:
+        method = _normalize_cost_method(cost_method)
+        if date_from is not None and date_to is not None and date_from > date_to:
+            raise ValueError("date_from must be earlier than or equal to date_to")
+        if account_id is not None and repo.get_account(account_id, owner_id=current_user.user_id) is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "not_found", "message": f"Account not found: {account_id}"},
+            )
+        rows = repo.list_daily_snapshot_history(
+            account_id=account_id,
+            date_from=date_from,
+            date_to=date_to,
+            cost_method=method,
+            limit=limit,
+            owner_id=current_user.user_id,
+        )
+        items = [_serialize_history_item(row) for row in rows]
+        return PortfolioHistoryResponse(
+            account_id=account_id,
+            cost_method=method,
+            date_from=_date_to_str(date_from),
+            date_to=_date_to_str(date_to),
+            limit=limit,
+            total=len(items),
+            items=items,
+            coverage=_build_history_coverage(items=items, date_from=date_from, date_to=date_to),
+        )
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise _bad_request(exc)
+    except Exception as exc:
+        raise _internal_error("List portfolio history failed", exc)
 
 
 @router.post(

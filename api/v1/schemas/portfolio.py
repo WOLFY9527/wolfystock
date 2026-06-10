@@ -408,6 +408,57 @@ class PortfolioSnapshotResponse(BaseModel):
     accounts: List[PortfolioAccountSnapshot] = Field(default_factory=list)
 
 
+class PortfolioHistorySnapshotItem(BaseModel):
+    account_id: int
+    snapshot_date: str
+    cost_method: str
+    base_currency: str
+    total_cash: float
+    total_market_value: float
+    total_equity: float
+    realized_pnl: float
+    unrealized_pnl: float
+    fee_total: float
+    tax_total: float
+    fx_stale: bool
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class PortfolioHistoryCoverage(BaseModel):
+    status: Literal["available", "insufficient_data"]
+    point_count: int
+    insufficient_data: bool
+    sparse: bool
+    warnings: List[str] = Field(default_factory=list)
+    requested_date_from: Optional[str] = None
+    requested_date_to: Optional[str] = None
+    first_snapshot_date: Optional[str] = None
+    last_snapshot_date: Optional[str] = None
+    account_count: int = 0
+
+
+class PortfolioHistoryMetadata(BaseModel):
+    stored_snapshot_only: bool = True
+    no_backfill: bool = True
+    no_accounting_replay: bool = True
+    no_provider_runtime: bool = True
+    source_table: str = "portfolio_daily_snapshots"
+
+
+class PortfolioHistoryResponse(BaseModel):
+    read_model_type: str = "portfolio_history_readonly_v1"
+    account_id: Optional[int] = None
+    cost_method: str
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
+    limit: int
+    total: int
+    items: List[PortfolioHistorySnapshotItem] = Field(default_factory=list)
+    coverage: PortfolioHistoryCoverage
+    metadata: PortfolioHistoryMetadata = Field(default_factory=PortfolioHistoryMetadata)
+
+
 class PortfolioImportTradeItem(BaseModel):
     trade_date: str
     symbol: str

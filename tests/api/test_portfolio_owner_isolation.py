@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -27,6 +28,7 @@ from src.storage import (
     PortfolioBrokerConnection,
     PortfolioCashLedger,
     PortfolioCorporateAction,
+    PortfolioDailySnapshot,
     PortfolioTrade,
 )
 
@@ -215,6 +217,38 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
         )
         self.assertEqual(action.status_code, 200)
         return int(trade.json()["id"])
+
+    def _seed_daily_snapshot(
+        self,
+        *,
+        account_id: int,
+        snapshot_date: str,
+        total_equity: float,
+        secret: str,
+    ) -> None:
+        with self.db.get_session() as session:
+            session.add(
+                PortfolioDailySnapshot(
+                    account_id=account_id,
+                    snapshot_date=date.fromisoformat(snapshot_date),
+                    cost_method="fifo",
+                    base_currency="USD",
+                    total_cash=1000.0,
+                    total_market_value=total_equity - 1000.0,
+                    total_equity=total_equity,
+                    unrealized_pnl=10.0,
+                    realized_pnl=5.0,
+                    fee_total=0.0,
+                    tax_total=0.0,
+                    fx_stale=False,
+                    payload=json.dumps({"secret": secret}),
+                )
+            )
+            session.commit()
+
+    def _snapshot_count(self) -> int:
+        with self.db.get_session() as session:
+            return int(session.query(PortfolioDailySnapshot).count())
 
     def test_user_read_paths_are_owner_scoped_and_read_only(self) -> None:
         alice_account = self._create_account(self.alice_client, "Alice Main")
@@ -455,6 +489,54 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
             ],
         )
         self.assertEqual(self._portfolio_counts(), before)
+
+    def test_history_read_is_owner_scoped_and_read_only(self) -> None:
+        alice_account = self._create_account(self.alice_client, "Alice History")
+        bob_account = self._create_account(self.bob_client, "Bob History")
+        self._seed_daily_snapshot(
+            account_id=alice_account,
+            snapshot_date="2026-01-02",
+            total_equity=1234.0,
+            secret="ALICE_HISTORY_SECRET",
+        )
+        self._seed_daily_snapshot(
+            account_id=bob_account,
+            snapshot_date="2026-01-02",
+            total_equity=999999.0,
+            secret="BOB_HISTORY_SECRET",
+        )
+        before_count = self._snapshot_count()
+
+        with patch(
+            "src.services.portfolio_ibkr_sync_service.PortfolioIbkrSyncService.sync_read_only_account_state",
+            side_effect=AssertionError("sync called"),
+        ), patch(
+            "src.services.portfolio_import_service.PortfolioImportService.commit_import_records",
+            side_effect=AssertionError("import commit called"),
+        ), patch(
+            "src.services.portfolio_service.PortfolioService.refresh_fx_rates",
+            side_effect=AssertionError("fx refresh called"),
+        ):
+            history = self.alice_client.get(
+                "/api/v1/portfolio/history",
+                params={"date_from": "2026-01-01", "date_to": "2026-01-03", "limit": 100},
+            )
+            cross_owner = self.alice_client.get(
+                "/api/v1/portfolio/history",
+                params={"account_id": bob_account, "date_from": "2026-01-01", "date_to": "2026-01-03"},
+            )
+
+        self.assertEqual(history.status_code, 200)
+        history_text = self._json_text(history)
+        self.assertIn("1234", history_text)
+        self.assertNotIn("999999", history_text)
+        self.assertNotIn("ALICE_HISTORY_SECRET", history_text)
+        self.assertNotIn("BOB_HISTORY_SECRET", history_text)
+        self.assertTrue(all(item["account_id"] == alice_account for item in history.json()["items"]))
+        self.assertEqual(cross_owner.status_code, 404)
+        self.assertNotIn("999999", self._json_text(cross_owner))
+        self.assertNotIn("BOB_HISTORY_SECRET", self._json_text(cross_owner))
+        self.assertEqual(self._snapshot_count(), before_count)
 
     def test_import_idempotency_stays_with_authenticated_owner(self) -> None:
         alice_account = self._create_account(self.alice_client, "Alice Import")
