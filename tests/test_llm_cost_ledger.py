@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from src.services.llm_identity_semantics import build_llm_identity_contract
 from src.services.llm_cost_ledger_service import LlmCostLedgerService
 from src.services.quota_policy_service import QuotaPolicyService
-from src.storage import DatabaseManager, LLMCostLedger, ModelPricingPolicy, QuotaReservation
+from src.storage import DatabaseManager, LLMCostLedger, ModelPricingPolicy, QuotaReservation, QuotaUsageWindow
 
 
 def _fresh_db() -> DatabaseManager:
@@ -612,6 +612,57 @@ class LlmCostLedgerServiceTestCase(unittest.TestCase):
         with self.db.session_scope() as session:
             row = session.query(QuotaReservation).filter_by(reservation_id=reservation.reservation_id).one()
             self.assertEqual(row.status, "consumed")
+
+    def test_ledger_helper_does_not_double_reconcile_terminal_reservation(self) -> None:
+        self._seed_policy()
+        reservation = self._reserve_quota(estimated_units=10)
+
+        first = self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            quota_reservation_id=reservation.reservation_id,
+            request_hash="terminal-reconcile-1",
+        )
+        second = self.service.reconcile_usage(
+            owner_user_id="user-a",
+            route_family="analysis",
+            call_type="analysis",
+            provider="openai",
+            model="openai/gpt-4o-mini",
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            total_tokens=2_000,
+            quota_reservation_id=reservation.reservation_id,
+            request_hash="terminal-reconcile-2",
+        )
+
+        self.assertEqual(first.status, "ok")
+        self.assertIsNotNone(first.quota_reconciliation)
+        self.assertEqual(first.quota_reconciliation.result_code, "reconciled_consumed")
+        self.assertEqual(second.status, "ok")
+        self.assertIsNotNone(second.quota_reconciliation)
+        self.assertEqual(second.quota_reconciliation.result_code, "reservation_already_terminal")
+        with self.db.session_scope() as session:
+            rows = session.query(LLMCostLedger).order_by(LLMCostLedger.request_hash).all()
+            self.assertEqual(len(rows), 2)
+            reservation_row = session.query(QuotaReservation).filter_by(
+                reservation_id=reservation.reservation_id
+            ).one()
+            self.assertEqual(reservation_row.status, "consumed")
+            owner_windows = session.query(QuotaUsageWindow).filter_by(
+                owner_user_id="user-a",
+                route_family="analysis",
+            ).all()
+            self.assertEqual(
+                {(int(row.reserved_units or 0), int(row.consumed_units or 0)) for row in owner_windows},
+                {(0, 10)},
+            )
 
     def test_quota_reconciliation_failure_does_not_change_ledger_write_result(self) -> None:
         self._seed_policy()

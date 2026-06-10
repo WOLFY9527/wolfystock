@@ -259,7 +259,11 @@ class QuotaPolicyService:
         "token_cap_exceeded",
         "route_cap_exceeded",
         "reservation_expired",
+        "reservation_already_terminal",
+        "reservation_missing",
     }
+
+    TERMINAL_RESERVATION_STATUSES = {"consumed", "released", "expired"}
 
     ROUTE_WEIGHTS = {
         "guest_preview": 1,
@@ -1045,7 +1049,7 @@ class QuotaPolicyService:
         current_time = now or datetime.now()
         normalized_id = str(reservation_id or "").strip()
         if not normalized_id:
-            return self._reject("reservation_expired", status="expired")
+            return self._missing_reservation_decision(reservation_id=None)
         with self.db.session_scope() as session:
             row = session.execute(
                 select(QuotaReservation)
@@ -1053,12 +1057,17 @@ class QuotaPolicyService:
                 .limit(1)
             ).scalar_one_or_none()
             if row is None:
-                return self._reject("reservation_expired", status="expired")
-            if row.status != "reserved" or row.expires_at <= current_time:
-                row.status = "expired"
-                row.reason_code = "reservation_expired"
-                row.updated_at = current_time
-                return self._reject("reservation_expired", status="expired", reservation_id=normalized_id)
+                return self._missing_reservation_decision(reservation_id=normalized_id)
+            status = str(row.status or "").strip().lower()
+            if status != "reserved":
+                return self._terminal_reservation_decision(row=row, reservation_id=normalized_id)
+            if row.expires_at <= current_time:
+                return self._expire_reserved_reservation(
+                    session=session,
+                    row=row,
+                    reservation_id=normalized_id,
+                    now=current_time,
+                )
 
             consumed_units = max(0, int(actual_units if actual_units is not None else row.estimated_units or 0))
             self._move_reserved_units(session=session, row=row, consumed_units=consumed_units, now=current_time)
@@ -1080,7 +1089,7 @@ class QuotaPolicyService:
         current_time = now or datetime.now()
         normalized_id = str(reservation_id or "").strip()
         if not normalized_id:
-            return self._reject("reservation_expired", status="expired")
+            return self._missing_reservation_decision(reservation_id=None)
         with self.db.session_scope() as session:
             row = session.execute(
                 select(QuotaReservation)
@@ -1088,12 +1097,17 @@ class QuotaPolicyService:
                 .limit(1)
             ).scalar_one_or_none()
             if row is None:
-                return self._reject("reservation_expired", status="expired")
-            if row.status != "reserved" or row.expires_at <= current_time:
-                row.status = "expired"
-                row.reason_code = "reservation_expired"
-                row.updated_at = current_time
-                return self._reject("reservation_expired", status="expired", reservation_id=normalized_id)
+                return self._missing_reservation_decision(reservation_id=normalized_id)
+            status = str(row.status or "").strip().lower()
+            if status != "reserved":
+                return self._terminal_reservation_decision(row=row, reservation_id=normalized_id)
+            if row.expires_at <= current_time:
+                return self._expire_reserved_reservation(
+                    session=session,
+                    row=row,
+                    reservation_id=normalized_id,
+                    now=current_time,
+                )
 
             self._move_reserved_units(session=session, row=row, consumed_units=0, now=current_time)
             row.status = "released"
@@ -1104,6 +1118,49 @@ class QuotaPolicyService:
                 reservation_id=normalized_id,
                 estimated_units=int(row.estimated_units or 0),
             )
+
+    def _missing_reservation_decision(self, *, reservation_id: Optional[str]) -> QuotaDecision:
+        return QuotaDecision(
+            allowed=False,
+            status="missing",
+            reason_code="reservation_missing",
+            reservation_id=reservation_id,
+        )
+
+    def _terminal_reservation_decision(
+        self,
+        *,
+        row: QuotaReservation,
+        reservation_id: str,
+    ) -> QuotaDecision:
+        status = str(row.status or "expired").strip().lower() or "expired"
+        reason_code = "reservation_expired" if status == "expired" else "reservation_already_terminal"
+        return QuotaDecision(
+            allowed=False,
+            status=status,
+            reason_code=reason_code,
+            reservation_id=reservation_id,
+            estimated_units=int(row.estimated_units or 0),
+        )
+
+    def _expire_reserved_reservation(
+        self,
+        *,
+        session: Any,
+        row: QuotaReservation,
+        reservation_id: str,
+        now: datetime,
+    ) -> QuotaDecision:
+        self._move_reserved_units(session=session, row=row, consumed_units=0, now=now)
+        row.status = "expired"
+        row.reason_code = "reservation_expired"
+        row.updated_at = now
+        return self._reject(
+            "reservation_expired",
+            status="expired",
+            reservation_id=reservation_id,
+            estimated_units=int(row.estimated_units or 0),
+        )
 
     def _matching_policies(
         self,

@@ -126,6 +126,55 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
             metadata={"daily_soft_limit_units": 100},
         )
 
+    def _reservation_window_counts(self, reservation_id: str):
+        with self.db.session_scope() as session:
+            reservation = session.query(QuotaReservation).filter_by(reservation_id=reservation_id).one()
+            query = session.query(QuotaUsageWindow).filter(
+                QuotaUsageWindow.route_family == reservation.route_family,
+            )
+            if reservation.owner_user_id is None:
+                query = query.filter(QuotaUsageWindow.owner_user_id.is_(None))
+            else:
+                query = query.filter(
+                    (QuotaUsageWindow.owner_user_id == reservation.owner_user_id)
+                    | (QuotaUsageWindow.owner_user_id.is_(None))
+                )
+            if reservation.provider is None:
+                query = query.filter(QuotaUsageWindow.provider.is_(None))
+            else:
+                query = query.filter(QuotaUsageWindow.provider == reservation.provider)
+            if reservation.model_tier is None:
+                query = query.filter(QuotaUsageWindow.model_tier.is_(None))
+            else:
+                query = query.filter(QuotaUsageWindow.model_tier == reservation.model_tier)
+            rows = query.all()
+            return sorted(
+                [
+                    (
+                        row.owner_user_id,
+                        row.window_type,
+                        int(row.reserved_units or 0),
+                        int(row.consumed_units or 0),
+                    )
+                    for row in rows
+                ],
+                key=lambda item: (item[0] or "", item[1]),
+            )
+
+    def _assert_reservation_window_counts(
+        self,
+        reservation_id: str,
+        *,
+        reserved_units: int,
+        consumed_units: int,
+    ) -> None:
+        counts = self._reservation_window_counts(reservation_id)
+        self.assertEqual(len(counts), 4)
+        self.assertEqual(
+            {(reserved, consumed) for _owner, _window, reserved, consumed in counts},
+            {(reserved_units, consumed_units)},
+        )
+
     def test_budget_alert_dry_run_under_budget(self) -> None:
         self._seed_budget_alert_policy()
 
@@ -878,6 +927,31 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
             row = session.query(QuotaReservation).filter_by(reservation_id=result.reservation_id).one()
             self.assertEqual(row.status, "consumed")
 
+    def test_double_consume_terminal_idempotent_does_not_double_move_units(self) -> None:
+        result = self.service.reserve_quota(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=10,
+        )
+
+        first = self.service.consume_reservation(reservation_id=result.reservation_id, actual_units=7)
+        second = self.service.consume_reservation(reservation_id=result.reservation_id, actual_units=9)
+
+        self.assertTrue(first.allowed)
+        self.assertEqual(first.status, "consumed")
+        self.assertFalse(second.allowed)
+        self.assertEqual(second.status, "consumed")
+        self.assertEqual(second.reason_code, "reservation_already_terminal")
+        self._assert_reservation_window_counts(
+            result.reservation_id,
+            reserved_units=0,
+            consumed_units=7,
+        )
+        with self.db.session_scope() as session:
+            row = session.query(QuotaReservation).filter_by(reservation_id=result.reservation_id).one()
+            self.assertEqual(row.status, "consumed")
+            self.assertIsNone(row.reason_code)
+
     def test_reservation_create_release(self) -> None:
         result = self.service.reserve_quota(owner_user_id="user-1", route_family="analysis")
 
@@ -890,10 +964,82 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
             row = session.query(QuotaReservation).filter_by(reservation_id=result.reservation_id).one()
             self.assertEqual(row.status, "released")
 
+    def test_double_release_terminal_idempotent_does_not_double_move_units(self) -> None:
+        result = self.service.reserve_quota(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=10,
+        )
+
+        first = self.service.release_reservation(reservation_id=result.reservation_id)
+        second = self.service.release_reservation(reservation_id=result.reservation_id)
+
+        self.assertTrue(first.allowed)
+        self.assertEqual(first.status, "released")
+        self.assertFalse(second.allowed)
+        self.assertEqual(second.status, "released")
+        self.assertEqual(second.reason_code, "reservation_already_terminal")
+        self._assert_reservation_window_counts(
+            result.reservation_id,
+            reserved_units=0,
+            consumed_units=0,
+        )
+        with self.db.session_scope() as session:
+            row = session.query(QuotaReservation).filter_by(reservation_id=result.reservation_id).one()
+            self.assertEqual(row.status, "released")
+            self.assertIsNone(row.reason_code)
+
+    def test_consume_after_release_keeps_released_terminal_state(self) -> None:
+        result = self.service.reserve_quota(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=10,
+        )
+
+        released = self.service.release_reservation(reservation_id=result.reservation_id)
+        consumed = self.service.consume_reservation(reservation_id=result.reservation_id, actual_units=8)
+
+        self.assertTrue(released.allowed)
+        self.assertFalse(consumed.allowed)
+        self.assertEqual(consumed.status, "released")
+        self.assertEqual(consumed.reason_code, "reservation_already_terminal")
+        self._assert_reservation_window_counts(
+            result.reservation_id,
+            reserved_units=0,
+            consumed_units=0,
+        )
+        with self.db.session_scope() as session:
+            row = session.query(QuotaReservation).filter_by(reservation_id=result.reservation_id).one()
+            self.assertEqual(row.status, "released")
+
+    def test_release_after_consume_keeps_consumed_terminal_state(self) -> None:
+        result = self.service.reserve_quota(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=10,
+        )
+
+        consumed = self.service.consume_reservation(reservation_id=result.reservation_id, actual_units=8)
+        released = self.service.release_reservation(reservation_id=result.reservation_id)
+
+        self.assertTrue(consumed.allowed)
+        self.assertFalse(released.allowed)
+        self.assertEqual(released.status, "consumed")
+        self.assertEqual(released.reason_code, "reservation_already_terminal")
+        self._assert_reservation_window_counts(
+            result.reservation_id,
+            reserved_units=0,
+            consumed_units=8,
+        )
+        with self.db.session_scope() as session:
+            row = session.query(QuotaReservation).filter_by(reservation_id=result.reservation_id).one()
+            self.assertEqual(row.status, "consumed")
+
     def test_expired_reservation_cannot_be_consumed(self) -> None:
         result = self.service.reserve_quota(
             owner_user_id="user-1",
             route_family="analysis",
+            estimated_units=10,
             expires_at=datetime.now() - timedelta(seconds=1),
         )
 
@@ -902,6 +1048,51 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
         self.assertFalse(consumed.allowed)
         self.assertEqual(consumed.reason_code, "reservation_expired")
         self.assertEqual(consumed.status, "expired")
+        self._assert_reservation_window_counts(
+            result.reservation_id,
+            reserved_units=0,
+            consumed_units=0,
+        )
+
+    def test_releasing_expired_reserved_reservation_reclaims_capacity_once(self) -> None:
+        result = self.service.reserve_quota(
+            owner_user_id="user-1",
+            route_family="analysis",
+            estimated_units=10,
+            expires_at=datetime.now() - timedelta(seconds=1),
+        )
+
+        first = self.service.release_reservation(reservation_id=result.reservation_id)
+        second = self.service.release_reservation(reservation_id=result.reservation_id)
+
+        self.assertFalse(first.allowed)
+        self.assertEqual(first.status, "expired")
+        self.assertEqual(first.reason_code, "reservation_expired")
+        self.assertFalse(second.allowed)
+        self.assertEqual(second.status, "expired")
+        self.assertEqual(second.reason_code, "reservation_expired")
+        self._assert_reservation_window_counts(
+            result.reservation_id,
+            reserved_units=0,
+            consumed_units=0,
+        )
+        with self.db.session_scope() as session:
+            row = session.query(QuotaReservation).filter_by(reservation_id=result.reservation_id).one()
+            self.assertEqual(row.status, "expired")
+            self.assertEqual(row.reason_code, "reservation_expired")
+
+    def test_missing_reservation_returns_explicit_safe_code(self) -> None:
+        consumed = self.service.consume_reservation(reservation_id="qres_missing")
+        released = self.service.release_reservation(reservation_id="")
+
+        self.assertFalse(consumed.allowed)
+        self.assertEqual(consumed.status, "missing")
+        self.assertEqual(consumed.reason_code, "reservation_missing")
+        self.assertEqual(consumed.reservation_id, "qres_missing")
+        self.assertFalse(released.allowed)
+        self.assertEqual(released.status, "missing")
+        self.assertEqual(released.reason_code, "reservation_missing")
+        self.assertIsNone(released.reservation_id)
 
     def test_safe_rejection_reason_codes(self) -> None:
         allowed_codes = {
@@ -911,6 +1102,8 @@ class QuotaPolicyServiceTestCase(unittest.TestCase):
             "token_cap_exceeded",
             "route_cap_exceeded",
             "reservation_expired",
+            "reservation_already_terminal",
+            "reservation_missing",
         }
 
         for code in allowed_codes:
