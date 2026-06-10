@@ -1130,11 +1130,13 @@ class QuotaPolicyService:
         reservation_id = str(row.reservation_id or "").strip()
         status = str(row.status or "").strip().lower()
         if status == "reserved" and row.expires_at <= now:
-            return self._expire_reserved_reservation(
-                session=session,
-                row=row,
-                reservation_id=reservation_id,
-                now=now,
+            return self._reservation_decision_from_transition(
+                self.db.transition_quota_reservation_terminal_cas(
+                    session=session,
+                    reservation_id=reservation_id,
+                    terminal_status="expired",
+                    now=now,
+                )
             )
         if status == "reserved":
             return QuotaDecision(
@@ -1156,35 +1158,16 @@ class QuotaPolicyService:
         normalized_id = str(reservation_id or "").strip()
         if not normalized_id:
             return self._missing_reservation_decision(reservation_id=None)
-        with self.db.session_scope() as session:
-            row = session.execute(
-                select(QuotaReservation)
-                .where(QuotaReservation.reservation_id == normalized_id)
-                .limit(1)
-            ).scalar_one_or_none()
-            if row is None:
-                return self._missing_reservation_decision(reservation_id=normalized_id)
-            status = str(row.status or "").strip().lower()
-            if status != "reserved":
-                return self._terminal_reservation_decision(row=row, reservation_id=normalized_id)
-            if row.expires_at <= current_time:
-                return self._expire_reserved_reservation(
-                    session=session,
-                    row=row,
-                    reservation_id=normalized_id,
-                    now=current_time,
-                )
-
-            consumed_units = max(0, int(actual_units if actual_units is not None else row.estimated_units or 0))
-            self._move_reserved_units(session=session, row=row, consumed_units=consumed_units, now=current_time)
-            row.status = "consumed"
-            row.updated_at = current_time
-            return QuotaDecision(
-                allowed=True,
-                status="consumed",
+        consumed_units = max(0, int(actual_units)) if actual_units is not None else None
+        return self._reservation_decision_from_transition(
+            self.db.transition_quota_reservation_terminal_cas(
                 reservation_id=normalized_id,
-                estimated_units=int(row.estimated_units or 0),
+                terminal_status="consumed",
+                consumed_units=consumed_units,
+                now=current_time,
+                expire_reserved_before=current_time,
             )
+        )
 
     def release_reservation(
         self,
@@ -1196,34 +1179,14 @@ class QuotaPolicyService:
         normalized_id = str(reservation_id or "").strip()
         if not normalized_id:
             return self._missing_reservation_decision(reservation_id=None)
-        with self.db.session_scope() as session:
-            row = session.execute(
-                select(QuotaReservation)
-                .where(QuotaReservation.reservation_id == normalized_id)
-                .limit(1)
-            ).scalar_one_or_none()
-            if row is None:
-                return self._missing_reservation_decision(reservation_id=normalized_id)
-            status = str(row.status or "").strip().lower()
-            if status != "reserved":
-                return self._terminal_reservation_decision(row=row, reservation_id=normalized_id)
-            if row.expires_at <= current_time:
-                return self._expire_reserved_reservation(
-                    session=session,
-                    row=row,
-                    reservation_id=normalized_id,
-                    now=current_time,
-                )
-
-            self._move_reserved_units(session=session, row=row, consumed_units=0, now=current_time)
-            row.status = "released"
-            row.updated_at = current_time
-            return QuotaDecision(
-                allowed=True,
-                status="released",
+        return self._reservation_decision_from_transition(
+            self.db.transition_quota_reservation_terminal_cas(
                 reservation_id=normalized_id,
-                estimated_units=int(row.estimated_units or 0),
+                terminal_status="released",
+                now=current_time,
+                expire_reserved_before=current_time,
             )
+        )
 
     def _missing_reservation_decision(self, *, reservation_id: Optional[str]) -> QuotaDecision:
         return QuotaDecision(
@@ -1249,23 +1212,33 @@ class QuotaPolicyService:
             estimated_units=int(row.estimated_units or 0),
         )
 
-    def _expire_reserved_reservation(
-        self,
-        *,
-        session: Any,
-        row: QuotaReservation,
-        reservation_id: str,
-        now: datetime,
-    ) -> QuotaDecision:
-        self._move_reserved_units(session=session, row=row, consumed_units=0, now=now)
-        row.status = "expired"
-        row.reason_code = "reservation_expired"
-        row.updated_at = now
-        return self._reject(
-            "reservation_expired",
-            status="expired",
+    def _reservation_decision_from_transition(self, transition: Dict[str, Any]) -> QuotaDecision:
+        reservation = transition.get("reservation") or {}
+        reservation_id = transition.get("reservation_id")
+        status = str(transition.get("status") or reservation.get("status") or "missing").strip().lower()
+        estimated_units = int(reservation.get("estimated_units") or 0)
+        if status == "missing":
+            return self._missing_reservation_decision(reservation_id=reservation_id)
+        if bool(transition.get("transitioned")) and status in {"consumed", "released"}:
+            return QuotaDecision(
+                allowed=True,
+                status=status,
+                reservation_id=reservation_id,
+                estimated_units=estimated_units,
+            )
+        if status == "expired":
+            return self._reject(
+                "reservation_expired",
+                status="expired",
+                reservation_id=reservation_id,
+                estimated_units=estimated_units,
+            )
+        return QuotaDecision(
+            allowed=False,
+            status=status,
+            reason_code="reservation_already_terminal",
             reservation_id=reservation_id,
-            estimated_units=int(row.estimated_units or 0),
+            estimated_units=estimated_units,
         )
 
     def _matching_policies(
@@ -1449,45 +1422,6 @@ class QuotaPolicyService:
         )
         session.add(row)
         return row
-
-    def _move_reserved_units(
-        self,
-        *,
-        session: Any,
-        row: QuotaReservation,
-        consumed_units: int,
-        now: datetime,
-    ) -> None:
-        estimated_units = int(row.estimated_units or 0)
-        owner_identity = self.db.quota_window_identity_values(
-            owner_user_id=row.owner_user_id,
-            route_family=row.route_family,
-            provider=row.provider,
-            model_tier=row.model_tier,
-        )
-        route_identity = self.db.quota_window_identity_values(
-            owner_user_id=None,
-            route_family=row.route_family,
-            provider=row.provider,
-            model_tier=row.model_tier,
-        )
-        identity_keys = {
-            owner_identity["window_identity_key"],
-            route_identity["window_identity_key"],
-        }
-        for window_type, window_start in (
-            ("daily", self._window_bounds("daily", row.created_at)[0]),
-            ("monthly", self._window_bounds("monthly", row.created_at)[0]),
-        ):
-            windows_query = select(QuotaUsageWindow).where(
-                QuotaUsageWindow.window_identity_key.in_(identity_keys),
-                QuotaUsageWindow.window_type == window_type,
-                QuotaUsageWindow.window_start == window_start,
-            )
-            for window in session.execute(windows_query).scalars().all():
-                window.reserved_units = max(0, int(window.reserved_units or 0) - estimated_units)
-                window.consumed_units = int(window.consumed_units or 0) + consumed_units
-                window.updated_at = now
 
     def _reject(
         self,

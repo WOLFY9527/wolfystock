@@ -39,6 +39,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Text,
     select,
+    update,
     and_,
     or_,
     delete,
@@ -3003,6 +3004,189 @@ class DatabaseManager:
         }
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return "qres_req_v1:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _quota_accounting_window_bounds(window_type: str, now: datetime) -> Tuple[datetime, datetime]:
+        if window_type == "monthly":
+            start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            if start.month == 12:
+                end = start.replace(year=start.year + 1, month=1)
+            else:
+                end = start.replace(month=start.month + 1)
+            return start, end
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return start, start + timedelta(days=1)
+
+    def _move_quota_reserved_units_for_terminal_transition(
+        self,
+        *,
+        session: Session,
+        row: QuotaReservation,
+        consumed_units: int,
+        now: datetime,
+    ) -> None:
+        estimated_units = max(0, int(row.estimated_units or 0))
+        owner_identity = self.quota_window_identity_values(
+            owner_user_id=row.owner_user_id,
+            route_family=row.route_family,
+            provider=row.provider,
+            model_tier=row.model_tier,
+        )
+        route_identity = self.quota_window_identity_values(
+            owner_user_id=None,
+            route_family=row.route_family,
+            provider=row.provider,
+            model_tier=row.model_tier,
+        )
+        identity_keys = {
+            owner_identity["window_identity_key"],
+            route_identity["window_identity_key"],
+        }
+        created_at = row.created_at or now
+        for window_type, window_start in (
+            ("daily", self._quota_accounting_window_bounds("daily", created_at)[0]),
+            ("monthly", self._quota_accounting_window_bounds("monthly", created_at)[0]),
+        ):
+            windows_query = select(QuotaUsageWindow).where(
+                QuotaUsageWindow.window_identity_key.in_(identity_keys),
+                QuotaUsageWindow.window_type == window_type,
+                QuotaUsageWindow.window_start == window_start,
+            )
+            for window in session.execute(windows_query).scalars().all():
+                window.reserved_units = max(0, int(window.reserved_units or 0) - estimated_units)
+                window.consumed_units = int(window.consumed_units or 0) + max(0, int(consumed_units or 0))
+                window.updated_at = now
+
+    def transition_quota_reservation_terminal_cas(
+        self,
+        *,
+        reservation_id: Optional[str],
+        terminal_status: str,
+        consumed_units: Optional[int] = None,
+        reason_code: Optional[str] = None,
+        now: Optional[datetime] = None,
+        expire_reserved_before: Optional[datetime] = None,
+        session: Optional[Session] = None,
+    ) -> Dict[str, Any]:
+        """Move one reserved quota reservation to a terminal state using a CAS update."""
+        normalized_id = sanitize_message(str(reservation_id or "").strip())[:64]
+        requested_status = str(terminal_status or "").strip().lower()
+        if requested_status not in {"consumed", "released", "expired"}:
+            raise ValueError("terminal_status must be consumed, released, or expired")
+        current_time = now or datetime.now()
+        if not normalized_id:
+            return {
+                "transitioned": False,
+                "status": "missing",
+                "reservation_id": None,
+                "reservation": None,
+            }
+        if session is None:
+            with self.session_scope() as scoped_session:
+                return self.transition_quota_reservation_terminal_cas(
+                    session=scoped_session,
+                    reservation_id=normalized_id,
+                    terminal_status=requested_status,
+                    consumed_units=consumed_units,
+                    reason_code=reason_code,
+                    now=current_time,
+                    expire_reserved_before=expire_reserved_before,
+                )
+
+        row = session.execute(
+            select(QuotaReservation)
+            .where(QuotaReservation.reservation_id == normalized_id)
+            .limit(1)
+        ).scalar_one_or_none()
+        if row is None:
+            return {
+                "transitioned": False,
+                "status": "missing",
+                "reservation_id": normalized_id,
+                "reservation": None,
+            }
+
+        current_status = str(row.status or "").strip().lower()
+        if current_status != "reserved":
+            return {
+                "transitioned": False,
+                "status": current_status or "expired",
+                "reservation_id": normalized_id,
+                "reservation": row.to_dict(),
+            }
+
+        target_status = requested_status
+        target_reason = reason_code if reason_code else None
+        if expire_reserved_before is not None and row.expires_at <= expire_reserved_before:
+            target_status = "expired"
+            target_reason = "reservation_expired"
+        if target_status == "expired":
+            target_reason = "reservation_expired"
+
+        estimated_units = max(0, int(row.estimated_units or 0))
+        terminal_consumed_units = 0
+        if target_status == "consumed":
+            terminal_consumed_units = (
+                max(0, int(consumed_units))
+                if consumed_units is not None
+                else estimated_units
+            )
+
+        cas_filters = [
+            QuotaReservation.reservation_id == normalized_id,
+            QuotaReservation.status == "reserved",
+        ]
+        if expire_reserved_before is not None:
+            if target_status == "expired":
+                cas_filters.append(QuotaReservation.expires_at <= expire_reserved_before)
+            else:
+                cas_filters.append(QuotaReservation.expires_at > expire_reserved_before)
+
+        result = session.execute(
+            update(QuotaReservation)
+            .where(*cas_filters)
+            .values(
+                status=target_status,
+                reason_code=target_reason,
+                updated_at=current_time,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        rowcount = result.rowcount
+        if rowcount is None or rowcount < 0:
+            raise RuntimeError("quota reservation CAS transition rowcount unavailable")
+        if rowcount != 1:
+            session.expire(row)
+            fresh = session.execute(
+                select(QuotaReservation)
+                .where(QuotaReservation.reservation_id == normalized_id)
+                .limit(1)
+            ).scalar_one_or_none()
+            reservation = fresh.to_dict() if fresh is not None else None
+            status = str((reservation or {}).get("status") or "missing").strip().lower()
+            return {
+                "transitioned": False,
+                "status": status,
+                "reservation_id": normalized_id,
+                "reservation": reservation,
+            }
+
+        self._move_quota_reserved_units_for_terminal_transition(
+            session=session,
+            row=row,
+            consumed_units=terminal_consumed_units,
+            now=current_time,
+        )
+        payload = row.to_dict()
+        payload["status"] = target_status
+        payload["reason_code"] = target_reason
+        payload["updated_at"] = current_time.isoformat()
+        return {
+            "transitioned": True,
+            "status": target_status,
+            "reservation_id": normalized_id,
+            "reservation": payload,
+        }
 
     def _backfill_quota_usage_window_identity_keys(self, conn) -> None:
         rows = conn.exec_driver_sql(
