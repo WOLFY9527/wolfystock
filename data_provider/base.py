@@ -16,6 +16,7 @@
 
 import logging
 import random
+import re
 import time
 from threading import BoundedSemaphore, RLock, Thread
 from abc import ABC, abstractmethod
@@ -66,6 +67,21 @@ def summarize_exception(exc: Exception) -> Tuple[str, str]:
 
 
 ETF_PREFIXES = ("51", "52", "56", "58", "15", "16", "18")
+PROVIDER_ROUTE_EVIDENCE_CONTRACT_VERSION = "provider_route_evidence_v1"
+_ROUTE_EVIDENCE_UNSAFE_TEXT_RE = re.compile(
+    r"(api[-_ ]?key|token|secret|password|authorization|bearer|credential|"
+    r"raw[-_ ]?(payload|response|body)|request[-_ ]?body|response[-_ ]?body|"
+    r"headers?|https?://|providerRuntime|routeRejected|cache_stale)",
+    re.IGNORECASE,
+)
+_ROUTE_EVIDENCE_SAFE_LABEL_RE = re.compile(r"[^a-z0-9_.:-]+")
+_ROUTE_EVIDENCE_META_PROVIDERS = {
+    "market_route",
+    "market_realtime",
+    "market_history",
+    "source_1",
+}
+_ROUTE_EVIDENCE_PROVIDER_CALL_ACTIONS = {"attempting", "succeeded", "failed"}
 
 
 def _is_us_market(code: str) -> bool:
@@ -151,6 +167,248 @@ def classify_cn_snapshot_failure(fetcher_name: str, error_type: str, error_reaso
             return "efinance_dependency_unavailable"
         return "efinance_snapshot_fetch_failed"
     return "snapshot_fetch_failed"
+
+
+def build_provider_route_evidence_contract(
+    *,
+    provider_family: Any,
+    route_family: Any,
+    trace_entries: Optional[List[Dict[str, Any]]] = None,
+    source_confidence: Optional[Dict[str, Any]] = None,
+    mixed_source_provenance: Optional[List[Dict[str, Any]]] = None,
+    cache_summary: Optional[Dict[str, Any]] = None,
+    provider_calls_executed: Optional[bool] = None,
+) -> Dict[str, Any]:
+    """Project already-collected provider trace metadata into a sanitized contract."""
+
+    normalized_trace = [
+        _normalize_route_trace_entry(item, idx)
+        for idx, item in enumerate(trace_entries or [])
+        if isinstance(item, dict)
+    ]
+    normalized_trace = [item for item in normalized_trace if item is not None]
+    source_payload = source_confidence if isinstance(source_confidence, dict) else {}
+    cache_payload = cache_summary if isinstance(cache_summary, dict) else {}
+    cache = _provider_route_cache_summary(cache_payload)
+    freshness = _provider_route_freshness(source_payload)
+    calls_executed = (
+        bool(provider_calls_executed)
+        if provider_calls_executed is not None
+        else _provider_route_calls_executed(normalized_trace)
+    )
+    provenance = _provider_route_mixed_source_provenance(
+        normalized_trace=normalized_trace,
+        explicit_provenance=mixed_source_provenance,
+    )
+    primary = provenance[0]["providerFamily"] if provenance else None
+    supplemental = [
+        item["providerFamily"]
+        for item in provenance[1:]
+        if item.get("providerFamily") and item.get("providerFamily") != primary
+    ]
+    mixed_source = bool(supplemental)
+    fallback_observed = bool(freshness["isFallback"] or cache["fallback"])
+    fallback_state = "mixed_source" if mixed_source else ("fallback" if fallback_observed else "none")
+
+    return {
+        "contractVersion": PROVIDER_ROUTE_EVIDENCE_CONTRACT_VERSION,
+        "diagnosticOnly": True,
+        "advisoryOnly": True,
+        "liveEnforcement": False,
+        "noExternalCalls": True,
+        "externalProviderCalls": False,
+        "providerRuntimeChanged": False,
+        "marketCacheMutation": False,
+        "providerFamily": _sanitize_provider_route_label(provider_family),
+        "routeFamily": _sanitize_provider_route_label(route_family),
+        "providerCallsExecuted": calls_executed,
+        "sourceAuthority": {
+            "state": _sanitize_provider_route_label(
+                source_payload.get("sourceAuthorityState") or source_payload.get("state") or "advisory_only"
+            ),
+            "allowed": False,
+            "reasonCode": "advisory_only",
+        },
+        "freshness": freshness,
+        "fallback": {
+            "state": fallback_state,
+            "mixedSource": mixed_source,
+            "fallbackObserved": fallback_observed,
+            "primaryProviderFamily": primary,
+            "supplementalProviderFamilies": _dedupe_route_labels(supplemental),
+        },
+        "cache": cache,
+        "routeTrace": normalized_trace,
+        "mixedSourceProvenance": provenance,
+    }
+
+
+def _normalize_route_trace_entry(item: Dict[str, Any], idx: int) -> Optional[Dict[str, Any]]:
+    provider = _sanitize_provider_route_label(item.get("provider") or f"source_{idx + 1}")
+    if not provider:
+        return None
+    return {
+        "sequence": _positive_int(item.get("sequence"), idx + 1),
+        "providerFamily": provider,
+        "action": _sanitize_provider_route_label(item.get("action") or "unknown"),
+        "outcome": _sanitize_provider_route_label(item.get("outcome") or "unknown"),
+        "status": _sanitize_provider_route_label(item.get("status") or item.get("outcome") or "unknown"),
+        "reasonCode": _sanitize_optional_provider_route_label(item.get("reason")),
+    }
+
+
+def _provider_route_mixed_source_provenance(
+    *,
+    normalized_trace: List[Dict[str, Any]],
+    explicit_provenance: Optional[List[Dict[str, Any]]],
+) -> List[Dict[str, Any]]:
+    if isinstance(explicit_provenance, list):
+        provenance: List[Dict[str, Any]] = []
+        for idx, item in enumerate(explicit_provenance):
+            if not isinstance(item, dict):
+                continue
+            provider = _sanitize_provider_route_label(item.get("provider") or item.get("providerFamily") or "")
+            if not provider:
+                continue
+            provenance.append(
+                {
+                    "providerFamily": provider,
+                    "role": _sanitize_provider_route_role(item.get("role"), idx),
+                    "outcome": _sanitize_provider_route_label(item.get("outcome") or "unknown"),
+                    "status": _sanitize_provider_route_label(item.get("status") or item.get("outcome") or "unknown"),
+                    "reasonCode": _sanitize_optional_provider_route_label(item.get("reason") or item.get("reasonCode")),
+                }
+            )
+        return provenance
+
+    provenance = []
+    seen: set[str] = set()
+    for item in normalized_trace:
+        provider = item.get("providerFamily")
+        if not provider or provider in seen or provider in _ROUTE_EVIDENCE_META_PROVIDERS:
+            continue
+        if item.get("action") not in {"succeeded", "completed"}:
+            continue
+        seen.add(provider)
+        provenance.append(
+            {
+                "providerFamily": provider,
+                "role": "primary" if not provenance else "supplemental",
+                "outcome": item.get("outcome") or "unknown",
+                "status": item.get("status") or "unknown",
+                "reasonCode": item.get("reasonCode"),
+            }
+        )
+    return provenance
+
+
+def _provider_route_freshness(source_confidence: Dict[str, Any]) -> Dict[str, Any]:
+    freshness = _sanitize_provider_route_label(source_confidence.get("freshness") or "unknown")
+    if freshness == "diagnostic_ref_redacted":
+        freshness = "unknown"
+    return {
+        "state": freshness,
+        "asOf": _safe_route_evidence_timestamp(source_confidence.get("asOf")),
+        "isFallback": _route_evidence_bool(source_confidence.get("isFallback")),
+        "isStale": _route_evidence_bool(source_confidence.get("isStale")),
+    }
+
+
+def _provider_route_cache_summary(cache_summary: Dict[str, Any]) -> Dict[str, Any]:
+    hit = _route_evidence_bool(cache_summary.get("hit") or cache_summary.get("cacheHit"))
+    stale = _route_evidence_bool(cache_summary.get("stale") or cache_summary.get("cacheStale"))
+    fallback = _route_evidence_bool(cache_summary.get("fallback") or cache_summary.get("cacheFallback"))
+    known = any(key in cache_summary for key in ("hit", "cacheHit", "stale", "cacheStale", "fallback", "cacheFallback"))
+    if hit and stale:
+        state = "hit_stale"
+    elif hit:
+        state = "hit"
+    elif stale:
+        state = "stale"
+    elif fallback:
+        state = "fallback"
+    elif known:
+        state = "miss"
+    else:
+        state = "unknown"
+    return {
+        "known": known,
+        "hit": hit,
+        "stale": stale,
+        "fallback": fallback,
+        "state": state,
+    }
+
+
+def _provider_route_calls_executed(normalized_trace: List[Dict[str, Any]]) -> bool:
+    return any(
+        item.get("action") in _ROUTE_EVIDENCE_PROVIDER_CALL_ACTIONS
+        and item.get("providerFamily") not in _ROUTE_EVIDENCE_META_PROVIDERS
+        for item in normalized_trace
+    )
+
+
+def _sanitize_provider_route_role(value: Any, idx: int) -> str:
+    role = _sanitize_provider_route_label(value or "")
+    if role in {"primary", "supplemental", "fallback", "observation"}:
+        return role
+    return "primary" if idx == 0 else "supplemental"
+
+
+def _sanitize_optional_provider_route_label(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    label = _sanitize_provider_route_label(value)
+    return label or None
+
+
+def _sanitize_provider_route_label(value: Any) -> str:
+    text = "" if value is None else str(value).strip()
+    if not text:
+        return "unknown"
+    if _ROUTE_EVIDENCE_UNSAFE_TEXT_RE.search(text):
+        return "diagnostic_ref_redacted"
+    lowered = text.lower()
+    lowered = _ROUTE_EVIDENCE_SAFE_LABEL_RE.sub("_", lowered).strip("_.:-")
+    return lowered[:80] or "unknown"
+
+
+def _safe_route_evidence_timestamp(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or _ROUTE_EVIDENCE_UNSAFE_TEXT_RE.search(text):
+        return None
+    return text[:80]
+
+
+def _route_evidence_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return False
+
+
+def _positive_int(value: Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _dedupe_route_labels(values: List[str]) -> List[str]:
+    result: List[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
 
 
 class DataSourceUnavailableError(DataFetchError):

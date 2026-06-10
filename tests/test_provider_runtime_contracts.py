@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import tempfile
+import json
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
-from data_provider.base import DataFetchError, DataFetcherManager
+from data_provider.base import DataFetchError, DataFetcherManager, build_provider_route_evidence_contract
 from data_provider.realtime_types import RealtimeSource, UnifiedRealtimeQuote
 from src.repositories.stock_repo import StockRepository
 from src.services.agent_stock_evidence_service import StockEvidenceService
@@ -91,6 +92,281 @@ def _realtime_config(*, enabled: bool, priority: str = "efinance,akshare_em,tush
 def _in_memory_db() -> DatabaseManager:
     DatabaseManager.reset_instance()
     return DatabaseManager(db_url="sqlite:///:memory:")
+
+
+def test_provider_route_evidence_contract_normalizes_trace_and_mixed_source_provenance() -> None:
+    contract = build_provider_route_evidence_contract(
+        provider_family="market_realtime",
+        route_family="cn_realtime_quote",
+        trace_entries=[
+            {
+                "sequence": 1,
+                "provider": "market_route",
+                "action": "selected",
+                "outcome": "ok",
+                "status": "ok",
+                "message": "CN market route selected: efinance -> akshare_em -> tushare",
+            },
+            {
+                "sequence": 2,
+                "provider": "efinance",
+                "action": "succeeded",
+                "outcome": "partial",
+                "status": "partial",
+                "reason": "supplement_required",
+                "message": "raw provider response ignored",
+            },
+            {
+                "sequence": 3,
+                "provider": "akshare_em",
+                "action": "succeeded",
+                "outcome": "partial",
+                "status": "partial",
+                "message": "Supplemented fields from raw payload",
+            },
+            {
+                "sequence": 4,
+                "provider": "efinance",
+                "action": "completed",
+                "outcome": "ok",
+                "status": "ok",
+                "reason": "accepted_with_partial_fields",
+            },
+        ],
+        source_confidence={
+            "freshness": "fallback",
+            "asOf": "2026-06-10T09:30:00+08:00",
+            "isFallback": True,
+            "isStale": True,
+            "sourceAuthorityState": "diagnostic_observation_only",
+        },
+        cache_summary={"hit": True, "stale": True, "fallback": False},
+    )
+
+    assert contract["contractVersion"] == "provider_route_evidence_v1"
+    assert contract["diagnosticOnly"] is True
+    assert contract["advisoryOnly"] is True
+    assert contract["liveEnforcement"] is False
+    assert contract["externalProviderCalls"] is False
+    assert contract["providerRuntimeChanged"] is False
+    assert contract["marketCacheMutation"] is False
+    assert contract["providerFamily"] == "market_realtime"
+    assert contract["routeFamily"] == "cn_realtime_quote"
+    assert contract["providerCallsExecuted"] is True
+    assert contract["sourceAuthority"] == {
+        "state": "diagnostic_observation_only",
+        "allowed": False,
+        "reasonCode": "advisory_only",
+    }
+    assert contract["freshness"] == {
+        "state": "fallback",
+        "asOf": "2026-06-10T09:30:00+08:00",
+        "isFallback": True,
+        "isStale": True,
+    }
+    assert contract["fallback"] == {
+        "state": "mixed_source",
+        "mixedSource": True,
+        "fallbackObserved": True,
+        "primaryProviderFamily": "efinance",
+        "supplementalProviderFamilies": ["akshare_em"],
+    }
+    assert contract["cache"] == {
+        "known": True,
+        "hit": True,
+        "stale": True,
+        "fallback": False,
+        "state": "hit_stale",
+    }
+    assert contract["routeTrace"] == [
+        {
+            "sequence": 1,
+            "providerFamily": "market_route",
+            "action": "selected",
+            "outcome": "ok",
+            "status": "ok",
+            "reasonCode": None,
+        },
+        {
+            "sequence": 2,
+            "providerFamily": "efinance",
+            "action": "succeeded",
+            "outcome": "partial",
+            "status": "partial",
+            "reasonCode": "supplement_required",
+        },
+        {
+            "sequence": 3,
+            "providerFamily": "akshare_em",
+            "action": "succeeded",
+            "outcome": "partial",
+            "status": "partial",
+            "reasonCode": None,
+        },
+        {
+            "sequence": 4,
+            "providerFamily": "efinance",
+            "action": "completed",
+            "outcome": "ok",
+            "status": "ok",
+            "reasonCode": "accepted_with_partial_fields",
+        },
+    ]
+    assert contract["mixedSourceProvenance"] == [
+        {
+            "providerFamily": "efinance",
+            "role": "primary",
+            "outcome": "partial",
+            "status": "partial",
+            "reasonCode": "supplement_required",
+        },
+        {
+            "providerFamily": "akshare_em",
+            "role": "supplemental",
+            "outcome": "partial",
+            "status": "partial",
+            "reasonCode": None,
+        },
+    ]
+
+
+def test_provider_route_evidence_contract_sanitizes_mixed_source_without_raw_payload_leakage() -> None:
+    contract = build_provider_route_evidence_contract(
+        provider_family="market realtime api_key=SECRET",
+        route_family="cn quote route",
+        trace_entries=[
+            {
+                "sequence": 1,
+                "provider": "https://provider.example.test/feed?token=SECRET",
+                "action": "failed",
+                "outcome": "failed",
+                "status": "failed",
+                "reason": "raw_response api_key=SECRET close=123.45",
+                "message": "Bearer SECRET raw payload should never be copied",
+                "rawPayload": {"close": 123.45, "token": "SECRET"},
+                "credentials": {"apiKey": "SECRET"},
+            },
+            {
+                "sequence": 2,
+                "provider": "safe_provider",
+                "action": "succeeded",
+                "outcome": "ok",
+                "status": "ok",
+                "reason": "accepted",
+                "payload": {"price": 123.45},
+            },
+        ],
+        source_confidence={
+            "freshness": "fresh",
+            "asOf": "2026-06-10T09:30:00+08:00",
+            "rawPayload": {"token": "SECRET"},
+        },
+        mixed_source_provenance=[
+            {
+                "provider": "unsafe provider token=SECRET",
+                "role": "primary",
+                "outcome": "ok",
+                "rawPayload": {"token": "SECRET"},
+            },
+            {
+                "provider": "safe_provider",
+                "role": "supplemental",
+                "outcome": "partial",
+                "responseBody": "close=123.45 token=SECRET",
+            },
+        ],
+    )
+
+    serialized = json.dumps(contract, ensure_ascii=False, sort_keys=True)
+    for forbidden in (
+        "SECRET",
+        "api_key",
+        "token",
+        "Bearer",
+        "raw payload",
+        "rawPayload",
+        "responseBody",
+        "credentials",
+        "123.45",
+        "provider.example.test",
+    ):
+        assert forbidden not in serialized
+    assert contract["providerFamily"] == "diagnostic_ref_redacted"
+    assert contract["routeTrace"][0]["providerFamily"] == "diagnostic_ref_redacted"
+    assert contract["routeTrace"][0]["reasonCode"] == "diagnostic_ref_redacted"
+    assert contract["mixedSourceProvenance"][0]["providerFamily"] == "diagnostic_ref_redacted"
+    assert contract["mixedSourceProvenance"][1]["providerFamily"] == "safe_provider"
+
+
+def test_provider_route_evidence_contract_defaults_to_advisory_and_does_not_execute_runtime_calls() -> None:
+    provider_call = MagicMock(side_effect=AssertionError("provider call executed"))
+    cache_refresh = MagicMock(side_effect=AssertionError("cache refresh executed"))
+
+    runtime_guards = [
+        patch.object(DataFetcherManager, "_get_alpaca_fetcher", side_effect=AssertionError("alpaca called")),
+        patch.object(DataFetcherManager, "_get_twelve_data_fetcher", side_effect=AssertionError("twelve data called")),
+        patch.object(DataFetcherManager, "_get_tickflow_fetcher", side_effect=AssertionError("tickflow called")),
+        patch.object(DataFetcherManager, "_get_cached_cn_stock_list", side_effect=AssertionError("stock cache read")),
+        patch.object(DataFetcherManager, "_put_cached_cn_stock_list", side_effect=AssertionError("stock cache write")),
+        patch.object(DataFetcherManager, "_get_cached_cn_realtime_snapshot", side_effect=AssertionError("snapshot cache read")),
+        patch.object(DataFetcherManager, "_put_cached_cn_realtime_snapshot", side_effect=AssertionError("snapshot cache write")),
+        patch.object(DataFetcherManager, "get_realtime_quote", side_effect=AssertionError("realtime called")),
+        patch.object(DataFetcherManager, "get_daily_data", side_effect=AssertionError("daily called")),
+    ]
+    with (
+        runtime_guards[0] as alpaca_guard,
+        runtime_guards[1] as twelve_data_guard,
+        runtime_guards[2] as tickflow_guard,
+        runtime_guards[3] as stock_cache_read_guard,
+        runtime_guards[4] as stock_cache_write_guard,
+        runtime_guards[5] as snapshot_cache_read_guard,
+        runtime_guards[6] as snapshot_cache_write_guard,
+        runtime_guards[7] as realtime_guard,
+        runtime_guards[8] as daily_guard,
+    ):
+        contract = build_provider_route_evidence_contract(
+            provider_family="market_realtime",
+            route_family="us_realtime_quote",
+            trace_entries=[
+                {
+                    "sequence": 1,
+                    "provider": "alpaca",
+                    "action": "skipped",
+                    "outcome": "not_configured",
+                    "status": "not_configured",
+                    "reason": "provider_not_configured",
+                    "runtimeCall": provider_call,
+                }
+            ],
+            cache_summary={
+                "hit": False,
+                "stale": False,
+                "fallback": False,
+                "refresh": cache_refresh,
+            },
+        )
+
+    provider_call.assert_not_called()
+    cache_refresh.assert_not_called()
+    for guard in (
+        alpaca_guard,
+        twelve_data_guard,
+        tickflow_guard,
+        stock_cache_read_guard,
+        stock_cache_write_guard,
+        snapshot_cache_read_guard,
+        snapshot_cache_write_guard,
+        realtime_guard,
+        daily_guard,
+    ):
+        guard.assert_not_called()
+    assert contract["advisoryOnly"] is True
+    assert contract["liveEnforcement"] is False
+    assert contract["sourceAuthority"]["allowed"] is False
+    assert contract["providerCallsExecuted"] is False
+    assert contract["externalProviderCalls"] is False
+    assert contract["providerRuntimeChanged"] is False
+    assert contract["marketCacheMutation"] is False
 
 
 def test_realtime_quote_disabled_returns_none_with_normalized_trace_shape() -> None:
