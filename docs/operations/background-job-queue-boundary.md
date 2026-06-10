@@ -7,6 +7,10 @@ Status: boundary note only. No first-class brokered job queue is implemented or 
 - T-646 concluded that a real queue implementation is still premature.
 - T-647 locked the first safe future boundary with contract tests around backtest job JSON-safe serialization, idempotent stored readback, and local-only universe-job execution.
 - Current async/background behavior remains process-local or route/script-specific, not a general broker/worker system.
+- This note does not change WS2/SSE topology, durable polling fallback, runtime
+  constraints, or launch gates; see
+  `docs/operations/queue-ws2-metrics-production-readiness.md` for the current
+  process-local queue/SSE posture.
 
 ## Existing mechanisms today
 

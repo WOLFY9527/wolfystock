@@ -16,7 +16,8 @@ WolfyStock has several important foundations in place: stronger password KDF
 storage, recent admin reauth source plus a narrow pilot, admin MFA backend
 scaffold with encrypted-secret and disabled-by-default enforcement pilot
 guards, capability-based RBAC helpers and migrated route families, durable
-task/progress state, synthetic worker prototype, cost ledger foundations,
+task/progress state, synthetic worker prototype, safe offline WS2
+multi-instance smoke preflight tooling, cost ledger foundations,
 quota enforcement pilot-readiness preflight, provider circuit
 storage/diagnostics/dry-run observation, DB index Batch A, local backup/restore
 dry-run preflight, secret-scan/admin harness coverage, and fixture-backed
@@ -123,6 +124,10 @@ Status:
 - [x] Owner-scoped durable status and polling fallback exist.
 - [x] Synthetic worker prototype can claim/lease fixture-backed tasks, write
   progress, retry bounded transient failures, and complete/fail safely.
+- [x] Safe offline WS2 multi-instance smoke preflight exists through
+  `python3 scripts/ws2_multi_instance_smoke.py --synthetic`; it uses disposable
+  SQLite and synthetic durable task helpers only, does not call staging, and
+  does not change API/SSE/worker semantics.
 - [x] Current process-local `AnalysisTaskQueue` and SSE remain the default.
 
 Remaining blockers:
@@ -131,10 +136,11 @@ Remaining blockers:
   treated as cross-instance reliable.
 - [ ] Current public-safe deployment assumption is still single API process, or
   sticky routing with accepted task visibility limits.
-- [ ] Staging multi-instance smoke is required before public multi-user launch.
-- [ ] Smoke must prove API A submit, worker lease, API B durable read, polling
-  replay, owner isolation, lease expiry recovery, retry/failure safety, and
-  sanitized degraded readiness.
+- [ ] Accepted staging multi-instance smoke evidence is required before public
+  multi-user launch.
+- [ ] Accepted smoke must prove API A submit, worker lease, API B durable read,
+  polling replay, owner isolation, lease expiry recovery, retry/failure safety,
+  and sanitized degraded readiness.
 - [ ] External SSE replay/cutover remains future work.
 - [ ] No production queue/broker cutover has been approved.
 
@@ -401,8 +407,9 @@ The following must all be true before public multi-user deployment:
 - [ ] Real operator-produced artifacts for the domain-local validator
   categories are attached and accepted by reviewers for the target environment.
 - [ ] Staging smoke passes through HTTPS reverse proxy on synthetic users/data.
-- [ ] WS2 multi-instance smoke passes or deployment is explicitly constrained to
-  single API process with documented SSE/task limitations.
+- [ ] Accepted WS2 staging multi-instance smoke passes or deployment is
+  explicitly constrained to single API process with documented SSE/task
+  limitations.
 - [ ] Backend `:8000` is not directly exposed to the public internet.
 - [ ] Public ingress exposes only 80/443, redirects HTTP to HTTPS, and forwards
   to a private/local backend port.
