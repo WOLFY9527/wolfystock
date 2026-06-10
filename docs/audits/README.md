@@ -45,6 +45,7 @@ Provider, data quality, and Options:
 - `provider-data-incident-runbook.md`
 - `market-data-provider-upgrade-decision-matrix.md`
 - `data-quality-user-disclosure-policy.md`
+- `data-trust-evidence-goal-progress.md`
 - `data-pipeline-r2-progressive-enrichment.md`
 - `options-provider-adapter-contract.md`
 - `options-lab-phase0-design.md`
