@@ -22,6 +22,7 @@ except ModuleNotFoundError:
 import src.auth as auth
 from api.app import create_app
 from src.config import Config
+from src.repositories.portfolio_repo import PortfolioRepository
 from src.storage import (
     DatabaseManager,
     PortfolioAccount,
@@ -546,6 +547,74 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
         self.assertEqual(cross_owner.status_code, 404)
         self.assertNotIn("999999", self._json_text(cross_owner))
         self.assertNotIn("BOB_HISTORY_SECRET", self._json_text(cross_owner))
+        self.assertEqual(self._snapshot_count(), before_count)
+
+    def test_risk_drawdown_history_uses_authenticated_owner_context(self) -> None:
+        alice_account = self._create_account(self.alice_client, "Alice Risk Drawdown")
+        bob_account = self._create_account(self.bob_client, "Bob Risk Drawdown")
+        bootstrap_account = PortfolioRepository(db_manager=self.db).create_account(
+            name="Bootstrap Risk Drawdown",
+            broker="Demo",
+            market="us",
+            base_currency="USD",
+            owner_id=self.db.get_default_owner_id(),
+        )
+        self._seed_daily_snapshot(
+            account_id=alice_account,
+            snapshot_date="2026-01-02",
+            total_equity=1000.0,
+            secret="ALICE_RISK_HISTORY_SECRET",
+        )
+        self._seed_daily_snapshot(
+            account_id=alice_account,
+            snapshot_date="2026-01-03",
+            total_equity=800.0,
+            secret="ALICE_RISK_HISTORY_SECRET",
+        )
+        self._seed_daily_snapshot(
+            account_id=bob_account,
+            snapshot_date="2026-01-02",
+            total_equity=9000.0,
+            secret="BOB_RISK_HISTORY_SECRET",
+        )
+        self._seed_daily_snapshot(
+            account_id=bob_account,
+            snapshot_date="2026-01-03",
+            total_equity=100.0,
+            secret="BOB_RISK_HISTORY_SECRET",
+        )
+        self._seed_daily_snapshot(
+            account_id=int(bootstrap_account.id),
+            snapshot_date="2026-01-02",
+            total_equity=5000.0,
+            secret="BOOTSTRAP_RISK_HISTORY_SECRET",
+        )
+        self._seed_daily_snapshot(
+            account_id=int(bootstrap_account.id),
+            snapshot_date="2026-01-03",
+            total_equity=500.0,
+            secret="BOOTSTRAP_RISK_HISTORY_SECRET",
+        )
+        before_count = self._snapshot_count()
+
+        response = self.alice_client.get(
+            "/api/v1/portfolio/risk",
+            params={"as_of": "2026-01-03", "cost_method": "fifo"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIsNone(payload["account_id"])
+        self.assertEqual(
+            [item["account_id"] for item in payload["account_attribution"]["top_accounts"]],
+            [alice_account],
+        )
+        self.assertEqual(payload["drawdown"]["series_points"], 2)
+        self.assertAlmostEqual(payload["drawdown"]["max_drawdown_pct"], 20.0, places=6)
+        self.assertNotIn("Bob Risk Drawdown", self._json_text(response))
+        self.assertNotIn("Bootstrap Risk Drawdown", self._json_text(response))
+        self.assertNotIn("BOB_RISK_HISTORY_SECRET", self._json_text(response))
+        self.assertNotIn("BOOTSTRAP_RISK_HISTORY_SECRET", self._json_text(response))
         self.assertEqual(self._snapshot_count(), before_count)
 
     def test_import_idempotency_stays_with_authenticated_owner(self) -> None:

@@ -28,10 +28,16 @@ class PortfolioRiskService:
         config: Optional[Config] = None,
         board_lookup: Optional[PortfolioRiskBoardLookup] = None,
     ):
-        self.repo = repo or PortfolioRepository()
+        self.repo = repo or getattr(portfolio_service, "repo", None) or PortfolioRepository()
         self.portfolio_service = portfolio_service or PortfolioService(repo=self.repo)
         self.config = config or get_config()
         self._board_lookup = board_lookup or PortfolioRiskBoardLookup()
+
+    def _owner_kwargs(self) -> Dict[str, Any]:
+        return {
+            "owner_id": getattr(self.portfolio_service, "owner_id", None),
+            "include_all_owners": bool(getattr(self.portfolio_service, "include_all_owners", False)),
+        }
 
     def get_risk_report(
         self,
@@ -142,6 +148,7 @@ class PortfolioRiskService:
             cost_method=cost_method,
             account_id=account_id,
             lookback_days=lookback_days,
+            **self._owner_kwargs(),
         )
         if account_id is not None:
             existing_dates = {row.snapshot_date for row in existing_rows if int(row.account_id) == int(account_id)}
@@ -182,12 +189,20 @@ class PortfolioRiskService:
     ) -> date:
         window_start = as_of_date - timedelta(days=lookback_days)
         if account_id is not None:
-            first_activity = self.repo.get_first_activity_date(account_id=account_id, as_of=as_of_date)
+            first_activity = self.repo.get_first_activity_date(
+                account_id=account_id,
+                as_of=as_of_date,
+                **self._owner_kwargs(),
+            )
             return max(window_start, first_activity or as_of_date)
 
         first_activity_candidates: List[date] = []
         for account in self.portfolio_service.list_accounts(include_inactive=False):
-            first_activity = self.repo.get_first_activity_date(account_id=int(account["id"]), as_of=as_of_date)
+            first_activity = self.repo.get_first_activity_date(
+                account_id=int(account["id"]),
+                as_of=as_of_date,
+                **self._owner_kwargs(),
+            )
             if first_activity is not None:
                 first_activity_candidates.append(first_activity)
         if not first_activity_candidates:
@@ -623,6 +638,7 @@ class PortfolioRiskService:
             cost_method=cost_method,
             account_id=account_id,
             lookback_days=lookback_days,
+            **self._owner_kwargs(),
         )
         if not rows:
             return {
