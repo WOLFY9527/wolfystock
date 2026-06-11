@@ -28,6 +28,9 @@ from src.storage import AdminUserRole, DatabaseManager
 
 AUDIT_SCRIPT = REPO_ROOT / "scripts" / "auth_rbac_release_audit.py"
 AUDIT_DOC = REPO_ROOT / "docs" / "audits" / "auth-rbac-release-security-guide.md"
+BACKEND_ROUTE_CLASSIFICATION_FIXTURE = (
+    REPO_ROOT / "tests" / "fixtures" / "auth" / "backend_route_capability_inventory.json"
+)
 AUDIT_EXPECTED_CAPABILITY_MARKERS = {
     "admin_users": (
         'require_admin_capability("users:read")',
@@ -110,6 +113,107 @@ LEGACY_ROLE_ONLY_ADMIN_ROUTE_COUNTS = {
     "scanner.py": 3,
     "usage.py": 1,
 }
+ANONYMOUS_DENIAL_MATRIX_SURFACES = (
+    (
+        "agent_chat_sessions_member",
+        "GET",
+        "/api/v1/agent/chat/sessions",
+        "/api/v1/agent/chat/sessions",
+        "authenticated_member",
+        "authenticated_user",
+        None,
+    ),
+    (
+        "scanner_runs_member",
+        "GET",
+        "/api/v1/scanner/runs",
+        "/api/v1/scanner/runs",
+        "authenticated_member",
+        "authenticated_user",
+        None,
+    ),
+    (
+        "scanner_strategy_simulation_member",
+        "GET",
+        "/api/v1/scanner/strategy-simulation",
+        "/api/v1/scanner/strategy-simulation",
+        "authenticated_member",
+        "authenticated_user",
+        None,
+    ),
+    (
+        "scanner_status_legacy_admin",
+        "GET",
+        "/api/v1/scanner/status",
+        "/api/v1/scanner/status",
+        "admin_role_only_legacy",
+        "admin_user",
+        None,
+    ),
+    (
+        "scanner_watchlist_today_legacy_admin",
+        "GET",
+        "/api/v1/scanner/watchlists/today",
+        "/api/v1/scanner/watchlists/today",
+        "admin_role_only_legacy",
+        "admin_user",
+        None,
+    ),
+    (
+        "usage_summary_legacy_admin",
+        "GET",
+        "/api/v1/usage/summary",
+        "/api/v1/usage/summary",
+        "admin_role_only_legacy",
+        "admin_user",
+        None,
+    ),
+    (
+        "system_config_capability_admin",
+        "GET",
+        "/api/v1/system/config",
+        "/api/v1/system/config",
+        "admin_capability_required",
+        "admin_capability",
+        None,
+    ),
+    (
+        "admin_ops_status_capability_admin",
+        "GET",
+        "/api/v1/admin/ops/status",
+        "/api/v1/admin/ops/status",
+        "admin_capability_required",
+        "admin_capability",
+        None,
+    ),
+    (
+        "provider_quota_windows_capability_admin",
+        "GET",
+        "/api/v1/admin/providers/quota-windows",
+        "/api/v1/admin/providers/quota-windows",
+        "admin_capability_required",
+        "admin_capability",
+        None,
+    ),
+    (
+        "market_provider_fit_advisor_capability_admin",
+        "GET",
+        "/api/v1/market/provider-fit-advisor",
+        "/api/v1/market/provider-fit-advisor",
+        "admin_capability_required",
+        "admin_capability",
+        None,
+    ),
+    (
+        "quota_dry_run_capability_admin",
+        "POST",
+        "/api/v1/admin/cost/quota-dry-run",
+        "/api/v1/admin/cost/quota-dry-run",
+        "admin_capability_required",
+        "admin_capability",
+        QUOTA_DRY_RUN_REQUEST,
+    ),
+)
 
 
 def _reset_auth_globals() -> None:
@@ -161,6 +265,14 @@ def _json_text(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
 
+def _backend_surface_classifications_by_signature() -> dict[tuple[str, str], dict[str, object]]:
+    fixture = json.loads(BACKEND_ROUTE_CLASSIFICATION_FIXTURE.read_text(encoding="utf-8"))
+    entries = fixture["route_surface_classifications"]
+    by_signature = {(entry["method"], entry["path"]): entry for entry in entries}
+    assert len(by_signature) == len(entries)
+    return by_signature
+
+
 def _assert_public_error_safe(*parts: object) -> None:
     text = "\n".join(_json_text(part) if not isinstance(part, str) else part for part in parts).lower()
     for marker in FORBIDDEN_ERROR_MARKERS:
@@ -199,6 +311,42 @@ def test_unauthenticated_users_cannot_access_private_api_surfaces(auth_release_c
 
     assert [response.status_code for response in responses] == [401] * len(PRIVATE_SURFACES)
     for response in responses:
+        assert response.json() == {"error": "unauthorized", "message": "Login required"}
+        _assert_public_error_safe(response.json(), dict(response.headers))
+
+
+def test_anonymous_denial_matrix_matches_sensitive_route_inventory(auth_release_client) -> None:
+    client, _ = auth_release_client
+    inventory = _backend_surface_classifications_by_signature()
+
+    responses = {}
+    for index, (
+        label,
+        method,
+        inventory_path,
+        request_path,
+        expected_classification,
+        expected_auth_dependency,
+        request_json,
+    ) in enumerate(ANONYMOUS_DENIAL_MATRIX_SURFACES, start=10):
+        entry = inventory[(method, inventory_path)]
+        assert entry["surface_classification"] == expected_classification, label
+        assert entry["auth_dependency_label"] == expected_auth_dependency, label
+        if expected_auth_dependency == "admin_capability":
+            assert entry["capability_label"], label
+        if expected_classification == "admin_role_only_legacy":
+            assert entry["capability_label"] is None, label
+            assert "TODO/NO-GO" in str(entry["no_go_marker"]), label
+
+        kwargs = {"headers": {"X-Forwarded-For": f"203.0.113.{index}"}}
+        if request_json is not None:
+            kwargs["json"] = request_json
+        responses[label] = client.request(method, request_path, **kwargs)
+
+    assert {label: response.status_code for label, response in responses.items()} == {
+        surface[0]: 401 for surface in ANONYMOUS_DENIAL_MATRIX_SURFACES
+    }
+    for response in responses.values():
         assert response.json() == {"error": "unauthorized", "message": "Login required"}
         _assert_public_error_safe(response.json(), dict(response.headers))
 
