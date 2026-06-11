@@ -1114,12 +1114,31 @@ describe('MarketProviderOperationsPage', () => {
   });
 
   it('renders unified drill-through controls to logs, circuits, cost, and evidence surfaces', async () => {
-    getOperations.mockResolvedValue(populatedPayload);
+    getOperations.mockResolvedValue({
+      ...populatedPayload,
+      adminLogDrillThrough: {
+        ...populatedPayload.adminLogDrillThrough,
+        query: {
+          tab: 'business',
+          query: 'market provider',
+          since: '24h',
+          provider: 'fallback token=SECRET',
+          source: 'quote',
+          trace: 'trace-should-not-render',
+        },
+        eventId: 'evt-1 token=SECRET',
+      },
+    });
 
     render(<MarketProviderOperationsPage />);
 
     await screen.findByTestId('market-provider-l0-overview-strip');
-    expect(screen.getByRole('link', { name: /查看相关日志/i })).toHaveAttribute('href', '/zh/admin/logs?query=market%20provider&since=24h');
+    const adminLogHrefs = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href^="/zh/admin/logs"]'))
+      .map((link) => link.getAttribute('href') || '');
+    expect(adminLogHrefs).toContain('/zh/admin/logs?tab=business&query=market%20provider%20fallback%20quote&since=24h&eventId=evt-1');
+    for (const href of adminLogHrefs) {
+      expect(href).not.toMatch(/provider=|source=|trace|token|SECRET/i);
+    }
     expect(screen.getByRole('link', { name: /查看熔断与配额/i })).toHaveAttribute('href', '/zh/admin/provider-circuits?provider=fallback&since=24h');
     expect(screen.getByRole('link', { name: /查看成本观测/i })).toHaveAttribute('href', '/zh/admin/cost-observability?window=24h&area=provider');
     expect(screen.getByRole('link', { name: /查看证据工作流/i })).toHaveAttribute('href', '/zh/admin/evidence-workflow?ref=provider_bundle#schema-ref');

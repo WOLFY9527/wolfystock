@@ -66,6 +66,8 @@ const COMPARE_CHART_STRIP_KEYS = [
   'excessReturnVsBenchmarkPct',
 ] as const;
 
+const SAFE_UNKNOWN_COMPARE_FIELD_LABEL = '比较字段需复核';
+
 function parseRunIdsParam(value: string | null): number[] {
   if (!value) return [];
   const orderedIds: number[] = [];
@@ -201,6 +203,30 @@ function normalizeCompareKey(value: string): string {
     .replace(/[^a-z0-9]+/g, '');
 }
 
+function tokenizeCompareKey(value?: string | null): string[] {
+  return String(value || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[^A-Za-z0-9]+/)
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isInternalLookingCompareKey(...values: Array<string | null | undefined>): boolean {
+  const internalTokens = new Set([
+    'authority',
+    'contract',
+    'diagnostic',
+    'diagnostics',
+    'executed',
+    'payload',
+    'provider',
+    'stack',
+    'trace',
+  ]);
+
+  return values.some((value) => tokenizeCompareKey(value).some((token) => internalTokens.has(token)));
+}
+
 function formatSensitivityLabel(key: string): string {
   const labels: Record<string, string> = {
     'strategy_spec.signal.fast_period': '快线周期',
@@ -224,6 +250,7 @@ function formatSensitivityLabel(key: string): string {
     period_window: '回测区间',
   };
   if (labels[key]) return labels[key];
+  if (isInternalLookingCompareKey(key)) return SAFE_UNKNOWN_COMPARE_FIELD_LABEL;
 
   const fallback = key.split('.').at(-1) || key;
   return fallback.replaceAll('_', ' ').replaceAll(/([a-z0-9])([A-Z])/g, '$1 $2');
@@ -670,6 +697,7 @@ function MetricDeltaTable({ metricDeltas }: { metricDeltas: Record<string, RuleB
 
 function formatMetricLabel(metricKey: string, fallback?: string): string {
   return COMPARE_METRIC_LABELS[metricKey]
+    || (isInternalLookingCompareKey(metricKey, fallback) ? SAFE_UNKNOWN_COMPARE_FIELD_LABEL : null)
     || (fallback || metricKey)
       .replaceAll('_', ' ')
       .replaceAll(/([a-z0-9])([A-Z])/g, '$1 $2');

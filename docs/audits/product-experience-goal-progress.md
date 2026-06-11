@@ -283,17 +283,9 @@ git diff --check
 
 Follow-up proposals recorded, no protected runtime approval implied:
 
-- Admin drill-through href sanitization: Market Provider Operations can still
-  carry raw admin-log query parameters inside hrefs. Likely files:
-  `apps/dsa-web/src/pages/MarketProviderOperationsPage.tsx` or shared
-  `AdminDrillThroughStrip` helpers. Risk: link construction only; no admin
-  route, auth, or provider behavior change.
-- Backtest result exports and compare labels: trade CSV rows, assumption lists,
-  warning text, and compare sensitivity labels can still expose unknown
-  backend-style keys when expanded or exported locally. Likely files:
-  `apps/dsa-web/src/components/backtest/BacktestResultReport.tsx`,
-  `apps/dsa-web/src/components/backtest/shared.tsx`, and
-  `apps/dsa-web/src/pages/RuleBacktestComparePage.tsx`. Risk: frontend label
+- Backtest assumption list labels: expanded assumption lists can still expose
+  unknown backend-style keys or values. Likely file:
+  `apps/dsa-web/src/components/backtest/shared.tsx`. Risk: frontend label
   projection only; no engine/export contract change.
 - Backtest support export API payload projection: if downloaded JSON/CSV
   artifacts themselves must be consumer-safe, add a read-only projection helper
@@ -411,6 +403,52 @@ reports the pre-existing Vite large chunk warning.
 Boundary confirmation:
 
 - Frontend display labels and tests only.
+- No public launch approval.
+- No live quota enforcement, reservation consume/blocking, or route blocking.
+- No provider runtime enforcement, provider order/fallback/cache changes, or
+  provider blocking.
+- No auth/session/RBAC runtime changes.
+- No DB migration, cleanup, restore, or PITR execution.
+- No broker/order/trade paths or order execution behavior.
+- No external notification sending.
+
+### 2026-06-11 - sanitize admin drill-through and Backtest exports
+
+- Sanitized Market Provider Operations Admin Logs drill-through hrefs so raw
+  `provider`, `source`, `trace`, token, and secret-like parameters are not
+  emitted as standalone query keys. Safe search terms are merged into the
+  allowlisted `query` parameter and IDs are reduced to safe code characters.
+- Updated Backtest result CSV export rows so trade reason fields reuse safe
+  labels and unknown internal-looking reason tokens become redacted research
+  labels instead of raw backend codes.
+- Updated Backtest result warning text so unknown internal-looking warning
+  codes/messages are shown as generic support-safe copy.
+- Updated Backtest compare metric and sensitivity labels so unknown
+  internal-looking fields render as `比较字段需复核` instead of title-casing
+  backend keys.
+
+Validation:
+
+```bash
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/MarketProviderOperationsPage.test.tsx
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/RuleBacktestComparePage.test.tsx
+npm --prefix apps/dsa-web run test -- src/components/backtest/__tests__/BacktestResultReport.test.tsx
+npm --prefix apps/dsa-web run typecheck
+npm --prefix apps/dsa-web run build
+WOLFYSTOCK_ADMIN_OPS_ROUTE_FILTER=market-providers DSA_WEB_PLAYWRIGHT_PORT=4190 npm --prefix apps/dsa-web run test:e2e -- admin-ops-launch-surfaces.spec.ts --project=chromium --workers=1
+DSA_WEB_PLAYWRIGHT_PORT=4191 npm --prefix apps/dsa-web run test:e2e -- backtest-visual-result.smoke.spec.ts --project=chromium --workers=1
+```
+
+Result: all commands completed successfully. The first
+MarketProviderOperations test retry failed because the assertion selected the
+shared drill-through strip instead of the local sanitized Admin Logs link; the
+selector was narrowed to all `/zh/admin/logs` hrefs before the successful run.
+The Playwright web server still reports the pre-existing Vite large chunk
+warning.
+
+Boundary confirmation:
+
+- Frontend link construction, display labels, local CSV text, and tests only.
 - No public launch approval.
 - No live quota enforcement, reservation consume/blocking, or route blocking.
 - No provider runtime enforcement, provider order/fallback/cache changes, or

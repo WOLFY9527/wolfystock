@@ -123,6 +123,18 @@ describe('RuleBacktestComparePage', () => {
             unavailableRunIds: [202],
             deltas: [{ runId: 101, value: 10, deltaVsBaseline: 0 }],
           },
+          provider_calls_executed: {
+            label: 'provider_calls_executed',
+            state: 'partial',
+            baselineRunId: 101,
+            baselineValue: 0,
+            availableRunIds: [101, 202],
+            unavailableRunIds: [],
+            deltas: [
+              { runId: 101, value: 0, deltaVsBaseline: 0 },
+              { runId: 202, value: 1, deltaVsBaseline: 1 },
+            ],
+          },
         },
       },
       robustnessSummary: {
@@ -202,7 +214,7 @@ describe('RuleBacktestComparePage', () => {
         strategyFamilyValues: ['moving_average_crossover'],
         strategyTypeValues: ['moving_average_crossover'],
         sharedParameterKeys: ['strategy_spec.execution.signal_timing'],
-        differingParameterKeys: ['strategy_spec.signal.fast_period'],
+        differingParameterKeys: ['strategy_spec.signal.fast_period', 'strategy_spec.diagnostics.authorityScope'],
         missingParameterKeys: ['strategy_spec.signal.slow_type'],
         sharedParameters: {
           'strategy_spec.execution.signal_timing': 'bar_close',
@@ -214,6 +226,14 @@ describe('RuleBacktestComparePage', () => {
             values: [
               { runId: 101, value: 10 },
               { runId: 202, value: 20 },
+            ],
+          },
+          'strategy_spec.diagnostics.authorityScope': {
+            state: 'different_parameter',
+            availableRunIds: [101, 202],
+            values: [
+              { runId: 101, value: 'stored_compare_derived_heatmap_only' },
+              { runId: 202, value: 'provider_runtime_scope' },
             ],
           },
         },
@@ -449,6 +469,7 @@ describe('RuleBacktestComparePage', () => {
     expect(screen.getByTestId('compare-chart-strip-annualizedReturnPct-202')).toHaveAttribute('data-state', 'unavailable');
     expect(screen.getByTestId('compare-sensitivity-grid')).toBeInTheDocument();
     expect(screen.getByTestId('compare-sensitivity-row-strategy-spec-signal-fast-period')).toBeInTheDocument();
+    expect(screen.getByTestId('compare-sensitivity-row-strategy-spec-diagnostics-authorityscope')).toBeInTheDocument();
     expect(screen.getByTestId('compare-sensitivity-row-lookback-bars')).toBeInTheDocument();
     expect(screen.getByTestId('compare-sensitivity-row-strategy-spec-signal-slow-type')).toBeInTheDocument();
     expect(screen.getByTestId('compare-cost-slippage-panel')).toBeInTheDocument();
@@ -461,7 +482,8 @@ describe('RuleBacktestComparePage', () => {
     expect(pageShell).not.toHaveTextContent(/研究级回测|research[-_\s]?grade|benchmark-ready|professional-ready|可用于历史表现评估|跑赢基准|明显跑赢/i);
     expect(screen.queryByText('执行次数 0')).not.toBeInTheDocument();
     expect(screen.queryByText('未触发数据调用')).not.toBeInTheDocument();
-    expect(pageShell).not.toHaveTextContent(/stored_rule_backtest_runs|stored_projection_only|providerCallsExecuted|executionCount|authorityScope|sourceState|trace JSON|helper metadata|后端判定|字段分组|AI \//i);
+    expect(screen.getAllByText('比较字段需复核').length).toBeGreaterThanOrEqual(2);
+    expect(pageShell).not.toHaveTextContent(/stored_rule_backtest_runs|stored_projection_only|providerCallsExecuted|provider calls executed|executionCount|authorityScope|authority Scope|sourceState|trace JSON|helper metadata|后端判定|字段分组|AI \//i);
     expect(screen.getByTestId('compare-heatmap-cell-0-0')).toHaveAttribute('data-state', 'available');
     expect(screen.getByTestId('compare-heatmap-cell-0-1')).toHaveAttribute('data-state', 'missing');
     expect(screen.getByTestId('compare-heatmap-cell-1-0')).toHaveAttribute('data-state', 'ambiguous');

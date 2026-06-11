@@ -589,6 +589,98 @@ describe('BacktestResultReport', () => {
     revokeObjectUrlMock.mockRestore();
   });
 
+  it('sanitizes trade CSV reasons and expanded internal-looking warnings', async () => {
+    const createObjectUrlMock = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
+    const clickMock = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const revokeObjectUrlMock = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+
+    render(<BacktestResultReport run={makeRun({
+      dataQuality: {
+        ...makeRun().dataQuality!,
+        warnings: [
+          { severity: 'warning', message: 'authorityScope trace payload provider_calls_executed' },
+          { code: 'adjustment_status_unknown', severity: 'info', message: 'Adjustment status unknown.' },
+        ],
+      },
+      executionAssumptions: {
+        ...makeRun().executionAssumptions,
+        warnings: [
+          { code: 'provider_calls_executed', severity: 'warning', message: 'provider_calls_executed trace payload' },
+          { code: 'market_rules_not_modeled', severity: 'info', message: 'Limit and halt handling are not modeled.' },
+        ],
+      },
+      trades: [
+        {
+          code: 'ORCL',
+          tradeIndex: 1,
+          entryDate: '2026-03-04',
+          exitDate: '2026-04-10',
+          entryPrice: 103,
+          exitPrice: 141,
+          quantity: 900,
+          grossPnl: 34200,
+          netPnl: 34184,
+          fees: 16,
+          slippage: 6,
+          returnPct: 36.89,
+          holdingDays: 37,
+          entryReason: 'signal_entry',
+          exitReason: 'stop_loss',
+          signalReason: 'signal_entry',
+          entryRule: {},
+          exitRule: {},
+          entryIndicators: {},
+          exitIndicators: {},
+        },
+        {
+          code: 'ORCL',
+          tradeIndex: 2,
+          entryDate: '2026-04-11',
+          exitDate: '2026-04-18',
+          entryPrice: 142,
+          exitPrice: 139,
+          quantity: 200,
+          grossPnl: -600,
+          netPnl: -610,
+          fees: 10,
+          slippage: 4,
+          returnPct: -2.1,
+          holdingDays: 7,
+          exitReason: 'authorityScope',
+          signalReason: 'provider_calls_executed',
+          entryRule: {},
+          exitRule: {},
+          entryIndicators: {},
+          exitIndicators: {},
+        },
+      ],
+    })} mode="simple" />);
+
+    fireEvent.click(screen.getByRole('button', { name: '导出交易CSV' }));
+    const blob = createObjectUrlMock.mock.calls[0]?.[0];
+    expect(blob).toBeInstanceOf(Blob);
+    const csv = await (blob as Blob).text();
+    expect(csv).toContain('风险退出参考触发');
+    expect(csv).toContain('信号入场');
+    expect(csv).toContain('回测原因已脱敏');
+    expect(csv).not.toMatch(/stop_loss|signal_entry|provider_calls_executed|provider calls executed|authorityScope|trace|payload/);
+
+    fireEvent.click(screen.getByRole('button', { name: /数据质量/ }));
+    fireEvent.click(screen.getByRole('button', { name: /执行假设/ }));
+    const dataQualityPanel = screen.getByTestId('backtest-report-data-quality');
+    const assumptionsPanel = screen.getByTestId('backtest-report-execution-assumptions');
+    expect(dataQualityPanel).toHaveTextContent('诊断提示已记录，详情需结合复查材料确认。');
+    expect(dataQualityPanel).toHaveTextContent('复权状态未知');
+    expect(dataQualityPanel).not.toHaveTextContent(/authorityScope|provider_calls_executed|provider calls executed|trace|payload/);
+    expect(assumptionsPanel).toHaveTextContent('诊断提示已记录，详情需结合复查材料确认。');
+    expect(assumptionsPanel).toHaveTextContent('涨跌停/停牌未建模');
+    expect(assumptionsPanel).not.toHaveTextContent(/authorityScope|provider_calls_executed|provider calls executed|trace|payload/);
+
+    createObjectUrlMock.mockRestore();
+    clickMock.mockRestore();
+    revokeObjectUrlMock.mockRestore();
+  });
+
   it('renders trade attribution, event timeline, and risk diagnostics from existing payloads', () => {
     render(<BacktestResultReport run={makeRun({
       trades: [
