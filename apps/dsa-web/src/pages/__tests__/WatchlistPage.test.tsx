@@ -6,8 +6,9 @@ import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import type { WatchlistItem, WatchlistScannerLineageV1 } from '../../types/watchlist';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
 
-const { listWatchlistItems, removeWatchlistItem, refreshScores, getRefreshStatus, runRuleBacktest, analyzeAsync, useProductSurfaceMock } = vi.hoisted(() => ({
+const { listWatchlistItems, addWatchlistItem, removeWatchlistItem, refreshScores, getRefreshStatus, runRuleBacktest, analyzeAsync, useProductSurfaceMock } = vi.hoisted(() => ({
   listWatchlistItems: vi.fn(),
+  addWatchlistItem: vi.fn(),
   removeWatchlistItem: vi.fn(),
   refreshScores: vi.fn(),
   getRefreshStatus: vi.fn(),
@@ -25,7 +26,7 @@ const { listRules, createRule, updateRule } = vi.hoisted(() => ({
 vi.mock('../../api/watchlist', () => ({
   watchlistApi: {
     listWatchlistItems,
-    addWatchlistItem: vi.fn(),
+    addWatchlistItem,
     removeWatchlistItem,
     refreshScores,
     getRefreshStatus,
@@ -357,6 +358,29 @@ describe('WatchlistPage', () => {
     expect(contextSelect.closest('.select-field__control')?.querySelector('.select-field__overlay')).toHaveAttribute('aria-hidden', 'true');
     expect(contextSelect.closest('.select-field__control')?.querySelector('.select-field__value')).toHaveTextContent('全部');
     expect(listWatchlistItems).toHaveBeenCalledTimes(1);
+  });
+
+  it('filters scanner handoff routes to existing watchlist records without writes', async () => {
+    renderWatchlist('/watchlist?symbol=TSM&market=HK&source=scanner');
+
+    const row = await screen.findByTestId('watchlist-row-TSM');
+    expect(row).toBeInTheDocument();
+    expect(screen.queryByTestId('watchlist-row-NVDA')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('watchlist-row-600519')).not.toBeInTheDocument();
+
+    const panel = await screen.findByTestId('watchlist-research-workspace-flow');
+    expect(panel).toHaveTextContent('TSM');
+    expect(panel).not.toHaveTextContent(/Run #|Rank #|scannerRunId|watchlistItemId|provider|cache|runtime|debug/i);
+    for (const link of within(panel).getAllByRole('link')) {
+      expect(link).toHaveAttribute('href', expect.not.stringMatching(/scannerRunId|scannerRank|watchlistItemId|themeId|universeType|provider|cache|runtime|debug/i));
+    }
+
+    expect(addWatchlistItem).not.toHaveBeenCalled();
+    expect(refreshScores).not.toHaveBeenCalled();
+    expect(runRuleBacktest).not.toHaveBeenCalled();
+    expect(analyzeAsync).not.toHaveBeenCalled();
+    expect(createRule).not.toHaveBeenCalled();
+    expect(updateRule).not.toHaveBeenCalled();
   });
 
   it('uses terminal primitives for the page shell, command actions, and row status material', async () => {
@@ -1834,7 +1858,7 @@ describe('WatchlistPage', () => {
     expect(screen.getByTestId('watchlist-row-NVDA')).toHaveTextContent('96.0');
   });
 
-  it('navigates to backtest with scanner and watchlist metadata', async () => {
+  it('navigates to backtest with consumer-safe scanner context only', async () => {
     renderWatchlist();
     const row = await screen.findByTestId('watchlist-row-NVDA');
 
@@ -1844,10 +1868,8 @@ describe('WatchlistPage', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/zh/backtest?');
     expect(screen.getByTestId('location')).toHaveTextContent('symbol=NVDA');
     expect(screen.getByTestId('location')).toHaveTextContent('source=scanner');
-    expect(screen.getByTestId('location')).toHaveTextContent('origin=watchlist');
-    expect(screen.getByTestId('location')).toHaveTextContent('watchlistItemId=1');
-    expect(screen.getByTestId('location')).toHaveTextContent('scannerRunId=42');
-    expect(screen.getByTestId('location')).toHaveTextContent('themeId=ai-momentum');
+    expect(screen.getByTestId('location')).toHaveTextContent('market=US');
+    expect(screen.getByTestId('location')).not.toHaveTextContent(/origin|watchlistItemId|scannerRunId|scannerRank|themeId|universeType|provider|cache|runtime|debug/i);
   });
 
   it('removes a candidate through the delete API and drops the row', async () => {
