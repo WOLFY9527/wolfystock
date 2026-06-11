@@ -149,7 +149,18 @@ Use bounded Playwright smoke after route-impacting changes. Candidate specs:
 
 ## Follow-Up Proposals Requiring Approval
 
-None recorded yet.
+- Backtest support export API payload projection: if downloaded JSON/CSV
+  artifacts themselves must be consumer-safe, add a read-only projection helper
+  and tests. Approval needed because that changes the support artifact
+  contract.
+
+## Non-Approval Follow-Ups
+
+- Consumer raw-leakage smoke coverage: extend
+  `consumer-copy-forbidden-vocabulary.smoke.spec.ts` to include Backtest,
+  Options, and auth routes with mocked fixtures. This is test-only, but it
+  should be done carefully because those routes currently depend on separate
+  specialized smoke fixtures.
 
 ## Checkpoint Log
 
@@ -281,15 +292,6 @@ git diff --check
 ./scripts/release_secret_scan.sh --local-only
 ```
 
-Follow-up proposals recorded, no protected runtime approval implied:
-
-- Backtest support export API payload projection: if downloaded JSON/CSV
-  artifacts themselves must be consumer-safe, add a read-only projection helper
-  and tests. Approval needed because that changes the support artifact contract.
-- Consumer raw-leakage smoke coverage: extend
-  `consumer-copy-forbidden-vocabulary.smoke.spec.ts` to include Backtest,
-  Options, and auth routes with mocked fixtures.
-
 Boundary confirmation:
 
 - Frontend copy, tests, and smoke expectations only.
@@ -407,6 +409,91 @@ Boundary confirmation:
 - No DB migration, cleanup, restore, or PITR execution.
 - No broker/order/trade paths or order execution behavior.
 - No external notification sending.
+
+### 2026-06-11 - final integration summary
+
+Final checkpoint commits on the branch:
+
+- `a77dd7da checkpoint(product): audit experience gaps`
+- `88093684 checkpoint(product): unify consumer safety surfaces`
+- `e37f8029 checkpoint(product): unify admin operator surfaces`
+- `cb93eee5 checkpoint(product): add route smoke evidence`
+- `0685f045 fix(product): sanitize liquidity reason labels`
+- `0c5bfaaf fix(product): sanitize operator diagnostics labels`
+- `51f06a5f fix(product): sanitize backtest and admin links`
+- `c5807b59 fix(product): sanitize backtest assumption labels`
+
+Routes and surfaces reviewed or changed:
+
+- Consumer/shared safety: `trustDisclosure.ts`, `evidenceDisplay.ts`, and
+  route smoke expectations for Home, Market Overview, Scanner, Watchlist,
+  Portfolio, Settings/auth shell headings, Liquidity, Rotation, Options, and
+  Backtest.
+- Liquidity: unknown coverage/evidence reason fallbacks now use generic
+  consumer copy.
+- Backtest: default workspace copy, support disclosure labels, result CSV
+  reason labels, warning labels, compare labels, and shared assumption list
+  fallbacks now avoid raw backend fields and execution/trade advice.
+- Admin/operator: Notifications, Admin Logs, Market Provider Operations, and
+  admin route smoke expectations now keep diagnostics behind operator
+  affordances and avoid raw default-row leakage.
+
+Final validation evidence accumulated:
+
+```bash
+npm --prefix apps/dsa-web run test -- src/utils/__tests__/trustDisclosure.test.ts src/utils/__tests__/evidenceDisplay.test.ts
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/AdminNotificationsPage.test.tsx
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/BacktestPage.test.tsx -t "defaults to the point-and-shoot normal workspace"
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/MarketProviderOperationsPage.test.tsx
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/LiquidityMonitorPage.test.tsx
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/AdminLogsPage.test.tsx
+npm --prefix apps/dsa-web run test -- src/components/backtest/__tests__/BacktestSupportExportsDisclosure.test.tsx
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/RuleBacktestComparePage.test.tsx
+npm --prefix apps/dsa-web run test -- src/components/backtest/__tests__/BacktestResultReport.test.tsx
+npm --prefix apps/dsa-web run test -- src/components/backtest/__tests__/DeterministicBacktestResultView.test.tsx
+npm --prefix apps/dsa-web run typecheck
+npm --prefix apps/dsa-web run build
+DSA_WEB_PLAYWRIGHT_PORT=4174 npm --prefix apps/dsa-web run test:e2e -- consumer-copy-regression.smoke.spec.ts secondary-consumer-copy.smoke.spec.ts
+WOLFYSTOCK_ADMIN_OPS_ROUTE_FILTER=logs,cost,evidence,market-providers,provider-circuits DSA_WEB_PLAYWRIGHT_PORT=4175 npm --prefix apps/dsa-web run test:e2e -- admin-ops-launch-surfaces.spec.ts
+CI=1 DSA_WEB_PLAYWRIGHT_PORT=4187 npm --prefix apps/dsa-web run test:e2e -- semantic-route-headings.spec.ts --project=chromium --reporter=list
+DSA_WEB_PLAYWRIGHT_PORT=4178 npm --prefix apps/dsa-web run test:e2e -- market-liquidity-monitor-degraded.spec.ts --project=chromium --workers=1
+WOLFYSTOCK_ADMIN_OPS_ROUTE_FILTER=logs DSA_WEB_PLAYWRIGHT_PORT=4188 npm --prefix apps/dsa-web run test:e2e -- admin-ops-launch-surfaces.spec.ts --project=chromium --workers=1
+DSA_WEB_PLAYWRIGHT_PORT=4189 npm --prefix apps/dsa-web run test:e2e -- backtest-visual-result.smoke.spec.ts --project=chromium --workers=1
+WOLFYSTOCK_ADMIN_OPS_ROUTE_FILTER=market-providers DSA_WEB_PLAYWRIGHT_PORT=4190 npm --prefix apps/dsa-web run test:e2e -- admin-ops-launch-surfaces.spec.ts --project=chromium --workers=1
+DSA_WEB_PLAYWRIGHT_PORT=4191 npm --prefix apps/dsa-web run test:e2e -- backtest-visual-result.smoke.spec.ts --project=chromium --workers=1
+DSA_WEB_PLAYWRIGHT_PORT=4192 npm --prefix apps/dsa-web run test:e2e -- backtest-visual-result.smoke.spec.ts --project=chromium --workers=1
+git diff --check
+./scripts/release_secret_scan.sh --local-only
+```
+
+Known validation notes:
+
+- Vite build consistently reports the pre-existing large chunk warning.
+- Earlier red retries were resolved before commit: one Backtest page broad
+  test exposed unrelated existing result-heading expectations, one Playwright
+  retry exposed an unused `shortIdentifier`, and one Market Provider test
+  selected the wrong duplicate Admin Logs link.
+
+Remaining inconsistent surfaces:
+
+- Downloaded Backtest support artifact payloads can still contain raw contract
+  fields by design; changing those payloads requires approval because it alters
+  the support export contract.
+- `consumer-copy-forbidden-vocabulary.smoke.spec.ts` still does not directly
+  include Backtest, Options, and auth routes; those routes are covered by
+  specialized route smoke today.
+
+Final boundary confirmation:
+
+- Public launch remains not approved.
+- Live quota enforcement, reservation consume/blocking, and route blocking
+  remain not enabled.
+- Provider runtime enforcement, provider order/fallback/cache changes, and
+  provider blocking remain unchanged.
+- Global MFA and auth/session/RBAC runtime behavior remain unchanged.
+- DB migration, cleanup, restore, and PITR execution remain untouched.
+- Broker/order/trade paths remain untouched.
+- External notification sending remains disabled/not executed.
 
 ### 2026-06-11 - sanitize Backtest assumption list fallbacks
 
