@@ -53,6 +53,14 @@ def test_production_config_readiness_accepts_sanitized_contract() -> None:
     }
     checks = {check["id"]: check for check in evidence["checks"]}
     assert checks["required_launch_config_names"]["status"] == "pass"
+    assert checks["admin_auth_enabled_for_public_deploy"]["status"] == "pass"
+    assert checks["admin_auth_enabled_for_public_deploy"]["evidence"] == {
+        "flagName": "ADMIN_AUTH_ENABLED",
+        "state": "enabled",
+        "authDisabledPublicIngressSafe": False,
+        "runtimeDefaultChanged": False,
+        "valuesIncluded": False,
+    }
     assert checks["mfa_rollout_mode_explicit"]["evidence"]["mode"] == "disabled"
     assert checks["rbac_coarse_fallback_disable_flag"]["evidence"]["state"] == "disabled"
     assert checks["quota_enforcement_mode_explicit"]["evidence"]["mode"] == "pilot"
@@ -71,6 +79,36 @@ def test_production_config_readiness_missing_required_config_is_no_go() -> None:
     assert "APP_ENV" in checks["required_launch_config_names"]["evidence"]["missingNames"]
     assert checks["provider_live_credential_contract"]["status"] == "fail"
     assert checks["quota_enforcement_mode_explicit"]["evidence"]["mode"] == "missing"
+
+
+def test_production_config_readiness_auth_disabled_is_public_no_go(tmp_path: Path) -> None:
+    contract = json.loads(READY_FIXTURE.read_text(encoding="utf-8"))
+    contract["flags"]["ADMIN_AUTH_ENABLED"] = "false"
+    contract_path = tmp_path / "auth-disabled-contract.json"
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+
+    result = _run_preflight("--contract", str(contract_path))
+
+    assert result.returncode == 1
+    evidence = _output(result)
+    assert evidence["finalStatus"] == "NO-GO"
+    checks = {check["id"]: check for check in evidence["checks"]}
+    assert checks["admin_auth_enabled_for_public_deploy"]["status"] == "fail"
+    assert checks["admin_auth_enabled_for_public_deploy"]["evidence"] == {
+        "flagName": "ADMIN_AUTH_ENABLED",
+        "state": "disabled",
+        "authDisabledPublicIngressSafe": False,
+        "runtimeDefaultChanged": False,
+        "valuesIncluded": False,
+    }
+
+
+def test_production_config_readiness_missing_admin_auth_is_public_no_go() -> None:
+    result = _run_preflight("--contract", str(MISSING_FIXTURE))
+
+    checks = {check["id"]: check for check in _output(result)["checks"]}
+    assert checks["admin_auth_enabled_for_public_deploy"]["status"] == "fail"
+    assert checks["admin_auth_enabled_for_public_deploy"]["evidence"]["state"] == "missing_or_invalid"
 
 
 def test_production_config_readiness_reports_global_mfa_scope_as_fail_closed(tmp_path: Path) -> None:

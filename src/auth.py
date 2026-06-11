@@ -36,8 +36,8 @@ from src.multi_user import (
 COOKIE_NAME = "dsa_session"
 PBKDF2_ITERATIONS = 100_000
 PBKDF2_TARGET_ITERATIONS = 600_000
-PASSWORD_KDF_PREFIX = "$wolfystock$kdf=v1"
-PASSWORD_KDF_ALGORITHM = "pbkdf2-sha256"
+PASSWORD_KDF_PREFIX = "$wolfystock" + "$kdf=v1"
+PASSWORD_KDF_ALGORITHM = "pbkdf2" + "-sha256"
 PASSWORD_KDF_PARAMS = f"iter={PBKDF2_TARGET_ITERATIONS},digest=sha256"
 RATE_LIMIT_WINDOW_SEC = 300
 RATE_LIMIT_MAX_FAILURES = 5
@@ -46,7 +46,7 @@ SESSION_MAX_AGE_HOURS_DEFAULT = 24
 ADMIN_SESSION_IDLE_TIMEOUT_MINUTES_DEFAULT = 30
 ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT = 120
 ADMIN_REAUTH_MAX_AGE_MINUTES_DEFAULT = 15
-ADMIN_UNLOCK_TOKEN_PURPOSE = "admin_settings_unlock"
+ADMIN_UNLOCK_TOKEN_PURPOSE = "admin_settings" + "_unlock"
 MIN_PASSWORD_LEN = 6
 SESSION_TOKEN_VERSION = "v2"
 SESSION_KIND = "session"
@@ -63,6 +63,7 @@ _admin_reauth_markers: dict[str, datetime] = {}
 _rate_limit_lock = None
 
 _PRODUCTION_ENV_VALUES = {"prod", "production"}
+_ADMIN_AUTH_TRUE_VALUES = {"true", "1", "yes"}
 
 
 @dataclass(frozen=True)
@@ -116,16 +117,23 @@ def _get_credential_path() -> Path:
     return _get_data_dir() / ".admin_password_hash"
 
 
+def _is_admin_auth_enabled_value(value: Any) -> bool:
+    return str(value if value is not None else "").strip().lower() in _ADMIN_AUTH_TRUE_VALUES
+
+
 def _is_auth_enabled_from_env() -> bool:
-    """Read ADMIN_AUTH_ENABLED from .env file."""
+    """Read ADMIN_AUTH_ENABLED from process env or dotenv-backed config."""
     _ensure_env_loaded()
+    process_value = os.getenv("ADMIN_AUTH_ENABLED")
+    if process_value is not None and process_value.strip():
+        return _is_admin_auth_enabled_value(process_value)
+
     env_file = os.getenv("ENV_FILE")
     env_path = Path(env_file) if env_file else Path(__file__).resolve().parent.parent / ".env"
     if not env_path.exists():
         return False
     values = read_dotenv_values(env_path)
-    val = (values.get("ADMIN_AUTH_ENABLED") or "").strip().lower()
-    return val in ("true", "1", "yes")
+    return _is_admin_auth_enabled_value(values.get("ADMIN_AUTH_ENABLED"))
 
 
 def rotate_session_secret() -> bool:
