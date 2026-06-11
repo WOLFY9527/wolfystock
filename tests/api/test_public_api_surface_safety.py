@@ -261,6 +261,7 @@ def test_launch_surface_route_inventory_remains_stable_and_fixture_safe() -> Non
         ("GET", "/api/v1/scanner/themes"),
         ("POST", "/api/v1/scanner/themes"),
         ("GET", "/api/v1/admin/users"),
+        ("GET", "/api/v1/admin/mission-control"),
         ("GET", "/api/v1/admin/providers/circuits"),
         ("GET", "/api/v1/admin/logs/storage/summary"),
     }
@@ -276,6 +277,7 @@ def test_docs_openapi_and_backend_diagnostics_have_explicit_surface_classificati
 
     assert classifications[("POST", "/api/v1/agent/chat")] == "authenticated_member"
     assert classifications[("GET", "/api/v1/admin/logs/storage/summary")] == "admin_capability_required"
+    assert classifications[("GET", "/api/v1/admin/mission-control")] == "admin_capability_required"
     assert classifications[("POST", "/api/v1/admin/cost/quota-dry-run")] == "admin_capability_required"
     assert classifications[("GET", "/api/v1/market/data-readiness")] == "operator_diagnostic"
     assert classifications[("GET", "/api/v1/agent/provider-health")] == "operator_diagnostic"

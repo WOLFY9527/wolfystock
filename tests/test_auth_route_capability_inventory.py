@@ -111,6 +111,7 @@ EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS = {
     "admin.logs.read": 8,
     "admin.logs.write": 1,
     "admin.ops.status": 1,
+    "admin.mission_control": 1,
     "admin.notifications.read": 2,
     "admin.notifications.write": 5,
     "admin.cost.read": 4,
@@ -171,6 +172,7 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/usage/summary"): "admin_role_only_legacy",
     ("GET", "/api/v1/admin/logs/storage/summary"): "admin_capability_required",
     ("GET", "/api/v1/admin/ops/status"): "admin_capability_required",
+    ("GET", "/api/v1/admin/mission-control"): "admin_capability_required",
     ("GET", "/api/v1/admin/cost/duplicate-summary"): "admin_capability_required",
     ("POST", "/api/v1/admin/cost/quota-dry-run"): "admin_capability_required",
     ("GET", "/api/v1/admin/cost/llm-ledger-summary"): "admin_capability_required",
@@ -556,6 +558,7 @@ def test_admin_observability_route_inventory_keeps_capabilities_and_transitional
     quant_duckdb_write = groups["quant.duckdb.write"]
     admin_logs_read = groups["admin.logs.read"]
     admin_logs_write = groups["admin.logs.write"]
+    admin_mission_control = groups["admin.mission_control"]
     admin_users_read = groups["admin.users.read"]
     admin_users_activity_read = groups["admin.users.activity_read"]
     admin_activity_read = groups["admin.activity.read"]
@@ -580,6 +583,9 @@ def test_admin_observability_route_inventory_keeps_capabilities_and_transitional
     assert admin_logs_read["capability_label"] == "ops:logs:read"
     assert admin_logs_write["auth_dependency_label"] == "admin_capability"
     assert admin_logs_write["capability_label"] == "ops:logs:write"
+    assert admin_mission_control["auth_dependency_label"] == "admin_capability"
+    assert admin_mission_control["capability_label"] == "ops:logs:read"
+    assert admin_mission_control["transitional_note"] is None
     assert provider_observability["auth_dependency_label"] == "admin_capability"
     assert provider_observability["capability_label"] == "ops:providers:read"
     assert provider_observability["transitional_note"] is None

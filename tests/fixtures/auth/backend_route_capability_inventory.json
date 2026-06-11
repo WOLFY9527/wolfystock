@@ -190,6 +190,15 @@
       "transitional_note": null
     },
     {
+      "route_id": "admin.mission_control",
+      "path_pattern": "^/api/v1/admin/mission-control$",
+      "methods": ["GET"],
+      "surface": "admin_mission_control",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:logs:read",
+      "transitional_note": null
+    },
+    {
       "route_id": "admin.notifications.read",
       "path_pattern": "^/api/v1/admin/(?:notification-channels|notifications)$",
       "methods": ["GET"],
@@ -599,6 +608,16 @@
       "capability_label": "ops:logs:read",
       "no_go_marker": null,
       "transitional_note": "Ops status is admin-capability gated and not a public or member route."
+    },
+    {
+      "route_id": "admin.mission_control",
+      "path": "/api/v1/admin/mission-control",
+      "method": "GET",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:logs:read",
+      "no_go_marker": null,
+      "transitional_note": "Mission control posture is admin-capability gated and not a public or member route."
     },
     {
       "route_id": "admin.cost.duplicate_summary",

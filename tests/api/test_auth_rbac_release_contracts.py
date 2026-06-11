@@ -67,6 +67,7 @@ PRIVATE_SURFACES = (
     ("GET", "/api/v1/backtest/runs"),
     ("GET", "/api/v1/admin/users"),
     ("GET", "/api/v1/admin/logs/storage/summary"),
+    ("GET", "/api/v1/admin/mission-control"),
     ("GET", "/api/v1/admin/cost/llm-ledger-summary"),
     ("GET", "/api/v1/admin/providers/circuits"),
     ("GET", "/api/v1/admin/market-providers/operations"),
@@ -77,12 +78,14 @@ ORDINARY_USER_FORBIDDEN_SURFACES = (
     ("admin_logs", "GET", "/api/v1/admin/logs/storage/summary"),
     ("cost_observability", "GET", "/api/v1/admin/cost/llm-ledger-summary"),
     ("evidence_workflow_audit_drillthrough", "GET", "/api/v1/admin/logs?query=evidence%20workflow"),
+    ("mission_control", "GET", "/api/v1/admin/mission-control"),
     ("provider_circuits", "GET", "/api/v1/admin/providers/circuits"),
     ("market_provider_operations", "GET", "/api/v1/admin/market-providers/operations"),
 )
 CAPABILITY_GATED_DIAGNOSTIC_SURFACES = (
     ("storage_summary", "GET", "/api/v1/admin/logs/storage/summary"),
     ("cost_ledger", "GET", "/api/v1/admin/cost/llm-ledger-summary"),
+    ("mission_control", "GET", "/api/v1/admin/mission-control"),
     ("quota_dry_run", "POST", "/api/v1/admin/cost/quota-dry-run"),
     ("provider_quota_windows", "GET", "/api/v1/admin/providers/quota-windows"),
     ("provider_sla_readiness", "GET", "/api/v1/admin/providers/sla-readiness"),
