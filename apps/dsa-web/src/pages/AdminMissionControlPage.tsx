@@ -103,7 +103,6 @@ const AdminMissionControlPage: React.FC = () => {
 
   useEffect(() => {
     let active = true;
-    setState((current) => ({ ...current, loading: true, error: null }));
     adminMissionControlApi.getSnapshot()
       .then((data) => {
         if (active) setState({ loading: false, error: null, data });
