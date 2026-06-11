@@ -36,7 +36,8 @@ Implemented foundations already present:
 - `DurableTaskWorkerPrototype` is a fixture-backed worker for
   `ws2_synthetic_fixture` tasks.
 - `build_durable_runtime_envelope()` keeps synthetic guard fields authoritative
-  and drops unsafe secret/internal `extra_metadata` keys.
+  and recursively drops unsafe secret/internal `extra_metadata` keys, including
+  obvious API-key, token, password, credential, and private-key variants.
 - `AnalysisTaskQueue` and `/api/v1/analysis/tasks/stream` SSE remain
   process-local.
 
@@ -83,7 +84,11 @@ Additional envelope metadata is optional and bounded. The envelope builder drops
 synthetic guard overrides and secret/internal metadata keys such as `api_key`,
 `token`, `secret`, `prompt`, `raw_*`, `session`, `webhook`, `url`,
 `provider_payload`, `stack`, `trace`, `debug`, `authorization`, and `cookie`,
-including common nested and camelCase variants.
+including common nested and camelCase variants. Post-fix sanitizer hardening
+also drops obvious API-key, password, credential, and private-key variants such
+as `client_api_key`, `xApiKey`, nested `clientApiKey`, `privateKey`,
+`private_key`, `password`, `credential`, `credentials`, `accessKey`, and
+`secretKey` through dict, list, and tuple metadata structures.
 
 ### State Machine
 
@@ -308,6 +313,13 @@ Acceptance:
 
 Final evidence for this branch checkpoint:
 
+- Post-fix sanitizer hardening evidence:
+  - RED: `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m pytest -p no:cacheprovider tests/test_durable_runtime_contracts.py::DurableRuntimeContractsTestCase::test_extra_metadata_drops_secret_key_variants_recursively -q`
+    failed before the sanitizer change because nested `accessKey` survived.
+  - GREEN: the same focused test passed after the sanitizer change.
+  - GREEN: `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m pytest -p no:cacheprovider tests/test_durable_runtime_contracts.py -q`
+    passed with 7 tests, covering safe nested metadata and synthetic guard
+    authority.
 - `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m pytest -p no:cacheprovider tests/test_durable_runtime_contracts.py tests/test_durable_runtime_progress_projection.py tests/test_durable_runtime_v1_worker.py tests/test_durable_runtime_v1_recovery.py tests/test_durable_task_state.py tests/test_ws2_durable_task_worker.py tests/test_system_config_service.py tests/test_analysis_api_contract.py -q`
 - `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m py_compile src/services/durable_runtime_contracts.py src/services/durable_runtime_v1.py src/services/system_config_service.py api/v1/endpoints/analysis.py`
 - `git diff --check origin/main..HEAD`

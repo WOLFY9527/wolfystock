@@ -176,6 +176,74 @@ class DurableRuntimeContractsTestCase(unittest.TestCase):
             with self.subTest(blocked_value=blocked_value):
                 self.assertNotIn(blocked_value, serialized)
 
+    def test_extra_metadata_drops_secret_key_variants_recursively(self) -> None:
+        envelope = build_durable_runtime_envelope(
+            job_kind="analysis_fixture",
+            fixture_name="synthetic_success",
+            symbol="AAPL",
+            extra_metadata={
+                "selection_source": "manual",
+                "client_api_key": "leak-client-api-key",
+                "xApiKey": "leak-x-api-key",
+                "privateKey": "leak-private-key",
+                "password": "leak-password",
+                "credentials": {"username": "leak-credential-user"},
+                "safe_context": {
+                    "display_name": "fixture display",
+                    "clientApiKey": "leak-nested-client-api-key",
+                    "credential": "leak-nested-credential",
+                    "private_key": "leak-nested-private-key",
+                    "children": [
+                        {
+                            "name": "keep list child",
+                            "accessKey": "leak-list-access-key",
+                        },
+                        (
+                            {
+                                "note": "keep tuple note",
+                                "secretKey": "leak-tuple-secret-key",
+                            },
+                        ),
+                    ],
+                },
+            },
+        )
+
+        self.assertEqual(envelope["selection_source"], "manual")
+        self.assertEqual(envelope["safe_context"]["display_name"], "fixture display")
+        self.assertEqual(envelope["safe_context"]["children"][0], {"name": "keep list child"})
+        self.assertEqual(envelope["safe_context"]["children"][1], [{"note": "keep tuple note"}])
+
+        serialized = json.dumps(envelope, sort_keys=True)
+        for blocked_key in (
+            "client_api_key",
+            "xApiKey",
+            "clientApiKey",
+            "privateKey",
+            "password",
+            "credentials",
+            "credential",
+            "private_key",
+            "accessKey",
+            "secretKey",
+        ):
+            with self.subTest(blocked_key=blocked_key):
+                self.assertNotIn(blocked_key, serialized)
+        for blocked_value in (
+            "leak-client-api-key",
+            "leak-x-api-key",
+            "leak-private-key",
+            "leak-password",
+            "leak-credential-user",
+            "leak-nested-client-api-key",
+            "leak-nested-credential",
+            "leak-nested-private-key",
+            "leak-list-access-key",
+            "leak-tuple-secret-key",
+        ):
+            with self.subTest(blocked_value=blocked_value):
+                self.assertNotIn(blocked_value, serialized)
+
 
 if __name__ == "__main__":
     unittest.main()

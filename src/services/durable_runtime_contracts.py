@@ -45,11 +45,26 @@ _UNSAFE_METADATA_KEY_COMPACTS = frozenset(
         "providerpayload",
     }
 )
+_UNSAFE_METADATA_KEY_COMPACT_MARKERS = frozenset(
+    {
+        "accesskey",
+        "apikey",
+        "credential",
+        "credentials",
+        "password",
+        "privatekey",
+        "secretkey",
+    }
+)
 _UNSAFE_METADATA_KEY_PARTS = frozenset(
     {
         "authorization",
+        "credential",
+        "credentials",
         "cookie",
         "debug",
+        "password",
+        "private",
         "prompt",
         "secret",
         "session",
@@ -92,6 +107,10 @@ def _is_unsafe_extra_metadata_key(key: object) -> bool:
     if normalized == "raw" or normalized.startswith("raw_") or compact.startswith("raw"):
         return True
     if normalized in _UNSAFE_METADATA_KEY_EXACT or compact in _UNSAFE_METADATA_KEY_COMPACTS:
+        return True
+    if any(marker in compact for marker in _UNSAFE_METADATA_KEY_COMPACT_MARKERS):
+        return True
+    if "key" in parts and parts.intersection({"access", "api", "private", "secret"}):
         return True
     return bool(parts.intersection(_UNSAFE_METADATA_KEY_PARTS))
 
