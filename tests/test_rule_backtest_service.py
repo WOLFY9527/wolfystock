@@ -19,6 +19,7 @@ from src.config import Config
 from src.core.rule_backtest_engine import RuleBacktestEngine, RuleBacktestParser
 from src.services.backtest_parameter_stability import build_parameter_stability_plan
 from src.services.backtest_professional_readiness import build_backtest_professional_readiness
+from src.services import rule_backtest_service as rule_backtest_service_module
 from src.services.rule_backtest_support_exports import (
     build_execution_assumptions_fingerprint,
     build_execution_trace_export_csv_text,
@@ -1897,6 +1898,110 @@ class RuleBacktestTestCase(unittest.TestCase):
             3.0,
         )
         self.assertIn("sharpe_ratio", response["summary"]["metrics"])
+
+    def test_custom_benchmark_context_uses_stored_rows_without_provider_or_market_cache(self) -> None:
+        self._allow_market_history_fetch()
+        service = RuleBacktestService(self.db)
+        self._seed_history("SPY", [100.0, 101.0, 103.0, 102.0, 104.0, 106.0])
+        selection = service._resolve_benchmark_selection(
+            instrument_code="600519",
+            benchmark_mode="custom_code",
+            benchmark_code="SPY",
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": self._temp_dir.name,
+                "US_STOCK_PARQUET_DIR": self._temp_dir.name,
+            },
+            clear=False,
+        ), patch(
+            "src.services.us_history_helper.DataFetcherManager",
+            side_effect=AssertionError("benchmark context must not instantiate provider fallback"),
+        ) as manager_cls, patch(
+            "src.services.rule_backtest_service.fetch_daily_history_with_local_us_fallback",
+            wraps=rule_backtest_service_module.fetch_daily_history_with_local_us_fallback,
+        ) as fetch_mock, patch(
+            "src.services.market_cache.MarketCache.get_or_refresh",
+            side_effect=AssertionError("benchmark context must not read MarketCache"),
+        ) as market_cache:
+            curve, summary, reason = service._load_external_benchmark_context(
+                selection=selection,
+                window_start=date(2024, 1, 1),
+                window_end=date(2024, 1, 6),
+            )
+
+        manager_cls.assert_not_called()
+        market_cache.assert_not_called()
+        fetch_mock.assert_called_once()
+        self.assertEqual(fetch_mock.call_args.args[0], "SPY")
+        self.assertEqual(fetch_mock.call_args.kwargs["allow_provider_fallback"], False)
+        self.assertEqual(fetch_mock.call_args.kwargs["log_context"], "[rule-backtest date-range history]")
+        self.assertIsNone(reason)
+        self.assertGreater(len(curve), 0)
+        self.assertEqual(summary["resolved_mode"], "custom_code")
+        self.assertEqual(summary["code"], "SPY")
+        self.assertFalse(summary["fallback_used"])
+        self.assertIsNotNone(summary["return_pct"])
+
+    def test_auto_benchmark_missing_external_series_falls_back_without_provider_or_market_cache(self) -> None:
+        self._allow_market_history_fetch()
+        service = RuleBacktestService(self.db)
+        parser = RuleBacktestParser()
+        parsed = parser.parse("Buy when Close > MA3. Sell when Close < MA3.")
+        engine = RuleBacktestEngine()
+
+        with self.db.get_session() as session:
+            bars = session.query(StockDaily).filter(StockDaily.code == "600519").order_by(StockDaily.date).all()
+
+        result = engine.run(
+            code="600519",
+            parsed_strategy=parsed,
+            bars=bars,
+            initial_capital=100000.0,
+            fee_bps=0.0,
+            lookback_bars=20,
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOCAL_US_PARQUET_DIR": self._temp_dir.name,
+                "US_STOCK_PARQUET_DIR": self._temp_dir.name,
+            },
+            clear=False,
+        ), patch(
+            "src.services.us_history_helper.DataFetcherManager",
+            side_effect=AssertionError("auto benchmark fallback must not instantiate provider fallback"),
+        ) as manager_cls, patch(
+            "src.services.rule_backtest_service.fetch_daily_history_with_local_us_fallback",
+            wraps=rule_backtest_service_module.fetch_daily_history_with_local_us_fallback,
+        ) as fetch_mock, patch(
+            "src.services.market_cache.MarketCache.get_or_refresh",
+            side_effect=AssertionError("auto benchmark fallback must not read MarketCache"),
+        ) as market_cache:
+            service._apply_benchmark_context(
+                result,
+                instrument_code="600519",
+                benchmark_mode="auto",
+                benchmark_code=None,
+                start_date=None,
+                end_date=None,
+            )
+
+        manager_cls.assert_not_called()
+        market_cache.assert_not_called()
+        fetch_mock.assert_called_once()
+        self.assertEqual(fetch_mock.call_args.args[0], "000300")
+        self.assertEqual(fetch_mock.call_args.kwargs["allow_provider_fallback"], False)
+        self.assertEqual(fetch_mock.call_args.kwargs["log_context"], "[rule-backtest date-range history]")
+        self.assertEqual(result.benchmark_summary["requested_mode"], "auto")
+        self.assertEqual(result.benchmark_summary["resolved_mode"], "same_symbol_buy_and_hold")
+        self.assertTrue(result.benchmark_summary["auto_resolved"])
+        self.assertTrue(result.benchmark_summary["fallback_used"])
+        self.assertIn("沪深300", result.benchmark_summary["unavailable_reason"])
+        self.assertGreater(len(result.benchmark_curve), 0)
 
     def test_engine_honors_explicit_start_end_date_window(self) -> None:
         parser = RuleBacktestParser()
