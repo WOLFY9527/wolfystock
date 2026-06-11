@@ -90,6 +90,14 @@ Added tests cover:
 - explicit opt-in packet emission
 - raw query/source/debug/prompt/provider-payload/stack/internal diagnostic leakage guards
 - API history schema hydration from `details.analysis_result`
+- legacy `IntelligenceReportPacketV2` hydration drops or rewrites `sourceId`, `source_id`,
+  provider, route, debug, and internal source identifier variants before exposing hydrated
+  top-level or `meta.intelligencePacket` packets
+
+Post-fix local validation on 2026-06-11:
+
+- `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m pytest -p no:cacheprovider tests/test_intelligence_report_packet.py tests/test_analysis_api_contract.py tests/services/test_analysis_research_readiness_projection.py -q` - 67 passed
+- `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m py_compile src/services/intelligence_report_packet.py src/services/analysis_service.py api/v1/schemas/analysis.py api/v1/schemas/history.py api/v1/schemas/home_evidence.py` - passed
 
 ## Remaining Quality Gaps
 

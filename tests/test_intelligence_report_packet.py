@@ -154,6 +154,20 @@ def _combined_text(value: object) -> str:
     return json.dumps(value, ensure_ascii=False).lower()
 
 
+def _walk_dict_keys(value: object) -> list[str]:
+    if isinstance(value, dict):
+        keys = [str(key) for key in value]
+        for item in value.values():
+            keys.extend(_walk_dict_keys(item))
+        return keys
+    if isinstance(value, list):
+        keys: list[str] = []
+        for item in value:
+            keys.extend(_walk_dict_keys(item))
+        return keys
+    return []
+
+
 def test_intelligence_report_packet_helper_is_pure_and_json_safe() -> None:
     imports = _helper_imports()
     assert all(not module.startswith(FORBIDDEN_IMPORT_PREFIXES) for module in imports)
@@ -188,6 +202,7 @@ def test_ready_packet_exposes_required_structured_sections() -> None:
     assert packet["sourceAuthority"]["state"] == "scoreGradeAllowed"
     assert packet["freshness"]["floor"] == "fresh"
     assert [item["domain"] for item in packet["evidence"]] == ["technicals", "fundamentals"]
+    assert [item["sourceId"] for item in packet["evidence"]] == ["source-technicals", "source-fundamentals"]
 
 
 def test_unsafe_evidence_cannot_be_promoted_to_high_confidence_conclusion() -> None:
@@ -351,10 +366,36 @@ def test_history_report_schema_hydrates_intelligence_packet_from_analysis_result
         **packet,
         "debugRef": "analysis:q-schema-packet",
         "query_id": "q-schema-packet",
+        "sourceId": "fmp",
+        "source_id": "polygon_us_grouped_daily",
+        "sourceRef": "provider-id:fmp",
+        "providerId": "fmp",
+        "route_id": "polygon_us_grouped_daily",
         "thesis": {
             **packet["thesis"],
             "debugRef": "analysis:q-schema-packet",
-            "summary": "Prompt: q-schema-packet provider_payload_ref=payload-456 Traceback stack trace",
+            "sourceId": "fmp",
+            "summary": (
+                "Prompt: q-schema-packet provider_payload_ref=payload-456 "
+                "Traceback stack trace sourceId=fmp source_id=polygon_us_grouped_daily"
+            ),
+        },
+        "evidence": [
+            {
+                "id": "legacy-evidence-1",
+                "domain": "fundamentals",
+                "summary": "Legacy evidence references sourceId=fmp.",
+                "sourceId": "fmp",
+                "source_id": "polygon_us_grouped_daily",
+                "provider_id": "fmp",
+                "routeId": "polygon_us_grouped_daily",
+            }
+        ],
+        "freshness": {
+            **packet["freshness"],
+            "staleSources": ["fmp"],
+            "fallbackOrProxySources": ["polygon_us_grouped_daily"],
+            "debug_id": "fmp",
         },
     }
 
@@ -387,10 +428,20 @@ def test_history_report_schema_hydrates_intelligence_packet_from_analysis_result
     assert report.meta.intelligencePacket.packetState == "ready"
     serialized = json.dumps(report.intelligencePacket.model_dump(), ensure_ascii=False).lower()
     meta_serialized = json.dumps(report.meta.intelligencePacket.model_dump(), ensure_ascii=False).lower()
+    hydrated_keys = {key.lower() for key in _walk_dict_keys(report.intelligencePacket.model_dump())}
+    meta_hydrated_keys = {key.lower() for key in _walk_dict_keys(report.meta.intelligencePacket.model_dump())}
     assert "debugref" not in serialized
     assert "q-schema-packet" not in serialized
     assert "provider_payload" not in serialized
     assert "payload-456" not in serialized
     assert "traceback" not in serialized
     assert "stack trace" not in serialized
+    assert "sourceid" not in hydrated_keys
+    assert "source_id" not in hydrated_keys
+    assert "fmp" not in serialized
+    assert "polygon_us_grouped_daily" not in serialized
     assert "debugref" not in meta_serialized
+    assert "sourceid" not in meta_hydrated_keys
+    assert "source_id" not in meta_hydrated_keys
+    assert "fmp" not in meta_serialized
+    assert "polygon_us_grouped_daily" not in meta_serialized
