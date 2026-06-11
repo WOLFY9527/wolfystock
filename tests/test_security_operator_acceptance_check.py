@@ -42,9 +42,20 @@ def _accepted_artifact() -> dict:
         },
         "rbacFallbackDisable": {
             **base_section,
+            "disableSwitchExplicit": True,
             "fallbackDisabled": True,
+            "routeInventoryComplete": True,
+            "coarseFallbackDisabledOrExceptionAccepted": True,
+            "backendAdminRoutesExplicitCapabilities": True,
+            "frontendAdminGatesCapabilityBased": True,
+            "frontendAdminMissingCapabilitiesFailClosed": True,
             "legacyAdminDenied": True,
             "explicitCapabilitiesAccepted": True,
+            "explicitCapabilityPayloadsPassWithoutFallback": True,
+            "legacyMissingCapabilityUsersFailClosed": True,
+            "rollbackPlanRecorded": True,
+            "auditEvidenceSanitized": True,
+            "runtimeDefaultUnchanged": True,
             "runtimeBehaviorChanged": False,
         },
         "breakGlassRecovery": {
@@ -79,6 +90,21 @@ def test_security_operator_acceptance_accepts_sanitized_artifact(tmp_path: Path)
     assert checks["artifact_contains_no_sensitive_or_raw_payload_values"]["status"] == "pass"
     assert checks["mfa_admin_pilot_uses_sanitized_role_labels"]["status"] == "pass"
     assert checks["rbac_fallback_disable_is_explicit"]["status"] == "pass"
+    assert checks["rbac_fallback_off_operator_pilot_evidence"]["status"] == "pass"
+    assert checks["rbac_fallback_off_operator_pilot_evidence"]["evidence"] == {
+        "missingFields": [],
+        "disableSwitchExplicit": True,
+        "routeInventoryComplete": True,
+        "coarseFallbackDisabledOrExceptionAccepted": True,
+        "backendAdminRoutesExplicitCapabilities": True,
+        "frontendAdminGatesCapabilityBased": True,
+        "frontendAdminMissingCapabilitiesFailClosed": True,
+        "explicitCapabilityPayloadsPassWithoutFallback": True,
+        "legacyMissingCapabilityUsersFailClosed": True,
+        "rollbackPlanRecorded": True,
+        "auditEvidenceSanitized": True,
+        "runtimeDefaultUnchanged": True,
+    }
     assert checks["launch_approval_claims_absent"]["status"] == "pass"
 
 
@@ -130,6 +156,38 @@ def test_security_operator_acceptance_requires_rbac_fallback_disabled_true(tmp_p
     checks = {check["id"]: check for check in _json(result)["checks"]}
     assert checks["rbac_fallback_disable_is_explicit"]["status"] == "fail"
     assert checks["rbac_fallback_disable_is_explicit"]["evidence"]["fallbackDisabled"] is False
+
+
+def test_security_operator_acceptance_requires_complete_rbac_fallback_off_pilot_evidence(tmp_path: Path) -> None:
+    required_fields = (
+        "disableSwitchExplicit",
+        "routeInventoryComplete",
+        "coarseFallbackDisabledOrExceptionAccepted",
+        "backendAdminRoutesExplicitCapabilities",
+        "frontendAdminGatesCapabilityBased",
+        "frontendAdminMissingCapabilitiesFailClosed",
+        "explicitCapabilityPayloadsPassWithoutFallback",
+        "legacyMissingCapabilityUsersFailClosed",
+        "rollbackPlanRecorded",
+        "auditEvidenceSanitized",
+        "runtimeDefaultUnchanged",
+    )
+
+    for field in required_fields:
+        payload = _accepted_artifact()
+        payload["rbacFallbackDisable"][field] = False
+        artifact_path = tmp_path / f"rbac-fallback-off-missing-{field}.json"
+        artifact_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        result = _run_helper(artifact_path)
+
+        assert result.returncode == 1, field
+        checks = {check["id"]: check for check in _json(result)["checks"]}
+        check = checks["rbac_fallback_off_operator_pilot_evidence"]
+        assert check["status"] == "fail"
+        assert field in check["evidence"]["missingFields"]
+        assert "raw-session-id" not in result.stdout
+        assert "raw-password" not in result.stdout
 
 
 def test_security_operator_acceptance_requires_sanitized_role_labels_only(tmp_path: Path) -> None:

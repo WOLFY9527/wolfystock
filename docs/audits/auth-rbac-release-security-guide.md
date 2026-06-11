@@ -24,6 +24,12 @@ No runtime auth/RBAC behavior is changed by this audit. The script reads source
 files only, performs no network calls, does not read environment values, does
 not open databases, and does not update launch acceptance shared files.
 
+Fallback-off RBAC pilot evidence is validated separately through
+`python3 scripts/security_operator_acceptance_check.py --artifact <sanitized-security-operator-artifact.json>`.
+That operator artifact is a manual-review input only; it does not flip
+`WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED`, approve public launch, or
+replace the offline audit above.
+
 ## Manual Review Scope
 
 Review these surfaces before launch:

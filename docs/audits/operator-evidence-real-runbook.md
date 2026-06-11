@@ -80,10 +80,18 @@ Run the domain validators for every artifact collected:
 ```bash
 python3 scripts/provider_operator_evidence_check.py "$EVIDENCE_DIR/provider_operator_evidence.json"
 python3 scripts/restore_pitr_operator_evidence_check.py "$EVIDENCE_DIR/restore_pitr_operator_evidence.json"
-python3 scripts/security_operator_acceptance_check.py "$EVIDENCE_DIR/security_operator_acceptance.json"
+python3 scripts/security_operator_acceptance_check.py --artifact "$EVIDENCE_DIR/security_operator_acceptance.json"
 python3 scripts/quota_operator_evidence_check.py "$EVIDENCE_DIR/quota_budget_operator_evidence.json"
 python3 scripts/staging_ingress_operator_evidence_check.py "$EVIDENCE_DIR/staging_ingress_operator_evidence.json"
 ```
+
+For the security artifact, `rbacFallbackDisable` must be accepted only when the
+sanitized record shows fallback disabled for the pilot, complete route
+inventory, explicit backend capability classification, frontend fail-closed
+capability gates, explicit allow, legacy/missing fail-closed denial, rollback,
+sanitized audit evidence, and unchanged runtime defaults. This is pilot
+evidence; it does not change the production/default fallback value or approve
+public launch.
 
 If present, also validate advisory artifacts:
 

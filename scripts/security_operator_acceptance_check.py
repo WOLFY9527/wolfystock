@@ -33,6 +33,19 @@ REQUIRED_SECTION_FIELDS = (
     "sampledControls",
     "evidenceRedactionVersion",
 )
+RBAC_FALLBACK_OFF_OPERATOR_PILOT_FIELDS = (
+    "disableSwitchExplicit",
+    "routeInventoryComplete",
+    "coarseFallbackDisabledOrExceptionAccepted",
+    "backendAdminRoutesExplicitCapabilities",
+    "frontendAdminGatesCapabilityBased",
+    "frontendAdminMissingCapabilitiesFailClosed",
+    "explicitCapabilityPayloadsPassWithoutFallback",
+    "legacyMissingCapabilityUsersFailClosed",
+    "rollbackPlanRecorded",
+    "auditEvidenceSanitized",
+    "runtimeDefaultUnchanged",
+)
 SAFE_PLACEHOLDERS = {
     "",
     "***",
@@ -279,6 +292,14 @@ def _mfa_role_label_issues(artifact: dict[str, Any]) -> list[str]:
     return issues
 
 
+def _rbac_fallback_off_operator_pilot_missing_fields(section: dict[str, Any]) -> list[str]:
+    return [
+        field
+        for field in RBAC_FALLBACK_OFF_OPERATOR_PILOT_FIELDS
+        if section.get(field) is not True
+    ]
+
+
 def _build_summary(artifact: dict[str, Any]) -> dict[str, Any]:
     section_issues = _section_completion_issues(artifact)
     unsafe_findings = _find_unsafe_values(artifact)
@@ -288,6 +309,7 @@ def _build_summary(artifact: dict[str, Any]) -> dict[str, Any]:
     rbac_section = artifact.get("rbacFallbackDisable") if isinstance(artifact.get("rbacFallbackDisable"), dict) else {}
     mfa_section = artifact.get("mfaAdminPilot") if isinstance(artifact.get("mfaAdminPilot"), dict) else {}
     fallback_disabled = rbac_section.get("fallbackDisabled")
+    rbac_pilot_missing_fields = _rbac_fallback_off_operator_pilot_missing_fields(rbac_section)
 
     checks = [
         {
@@ -321,6 +343,14 @@ def _build_summary(artifact: dict[str, Any]) -> dict[str, Any]:
             "status": _status(fallback_disabled is True),
             "evidence": {
                 "fallbackDisabled": fallback_disabled is True,
+            },
+        },
+        {
+            "id": "rbac_fallback_off_operator_pilot_evidence",
+            "status": _status(fallback_disabled is True and not rbac_pilot_missing_fields),
+            "evidence": {
+                "missingFields": rbac_pilot_missing_fields,
+                **{field: rbac_section.get(field) is True for field in RBAC_FALLBACK_OFF_OPERATOR_PILOT_FIELDS},
             },
         },
         {
