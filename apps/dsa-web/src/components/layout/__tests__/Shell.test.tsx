@@ -7,6 +7,14 @@ import { ThemeProvider } from '../../theme/ThemeProvider';
 import { expectNoRawI18nKeys } from '../../../test-utils/i18nRawKeySentinel';
 import { Shell } from '../Shell';
 import { ShellRailContext } from '../ShellRailContext';
+import {
+  CONSUMER_NAV_GROUPS,
+  CONSUMER_NAV_ITEMS,
+  ROUTE_STORIES,
+  getConsumerGroupLabel,
+  resolveConsumerNavItem,
+  resolveConsumerRouteStory,
+} from '../consumerAppNavigation';
 import { setAdminSurfaceMode } from '../../../hooks/useProductSurface';
 import { useStockPoolStore } from '../../../stores/stockPoolStore';
 
@@ -160,6 +168,59 @@ describe('Shell', () => {
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.backtest') })).toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: '决策台' })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: 'Decision Desk' })).not.toBeInTheDocument();
+  });
+
+  it('keeps consumer IA metadata grouped around the private-beta workflow without shell wiring', () => {
+    expect(CONSUMER_NAV_GROUPS.map((group) => group.key)).toEqual([
+      'start',
+      'markets',
+      'research',
+      'account',
+      'validate',
+    ]);
+    expect(getConsumerGroupLabel('markets', 'zh')).toBe('市场');
+    expect(getConsumerGroupLabel('validate', 'en')).toBe('Validate');
+
+    expect(CONSUMER_NAV_ITEMS.map((item) => [item.key, item.group, item.to, Boolean(item.requiresAuth)])).toEqual([
+      ['home', 'start', '/', false],
+      ['market-overview', 'markets', '/market-overview', false],
+      ['liquidity-monitor', 'markets', '/market/liquidity-monitor', false],
+      ['rotation-radar', 'markets', '/market/rotation-radar', false],
+      ['scanner', 'research', '/scanner', true],
+      ['watchlist', 'research', '/watchlist', true],
+      ['portfolio', 'account', '/portfolio', true],
+      ['backtest', 'validate', '/backtest', true],
+      ['options-lab', 'validate', '/options-lab', true],
+    ]);
+  });
+
+  it('resolves consumer nav metadata and treats guest preview as the Home surface', () => {
+    expect(resolveConsumerNavItem('/guest')?.key).toBe('home');
+    expect(resolveConsumerRouteStory('/guest')?.routeKey).toBe('home');
+    expect(resolveConsumerRouteStory('/guest')?.copy.zh.eyebrow).toBe('首页 / 研究起点');
+
+    expect(resolveConsumerNavItem('/market/liquidity-monitor')?.key).toBe('liquidity-monitor');
+    expect(resolveConsumerNavItem('/market/liquidity-monitor/depth')?.key).toBe('liquidity-monitor');
+    expect(resolveConsumerNavItem('/market/rotation-radar')?.group).toBe('markets');
+    expect(resolveConsumerNavItem('/options-lab')?.group).toBe('validate');
+    expect(resolveConsumerNavItem('/unknown')).toBeNull();
+  });
+
+  it('keeps route stories aligned with every consumer nav item and no-advice boundaries', () => {
+    expect(ROUTE_STORIES.map((story) => story.routeKey)).toEqual(CONSUMER_NAV_ITEMS.map((item) => item.key));
+
+    for (const story of ROUTE_STORIES) {
+      const item = CONSUMER_NAV_ITEMS.find((navItem) => navItem.key === story.routeKey);
+      expect(item).toBeDefined();
+      expect(story.group).toBe(item?.group);
+      expect(story.copy.zh.evidence).toContain('证据边界');
+      expect(story.copy.en.evidence).toContain('Evidence boundary');
+      expect(story.copy.zh.boundary).not.toMatch(/买入|下单|必买|稳赚|保证收益/);
+      expect(story.copy.en.boundary).not.toMatch(/guaranteed|best contract|AI recommends you buy/i);
+    }
+
+    expect(resolveConsumerRouteStory('/market/rotation-radar')?.primaryTo).toBe('/scanner');
+    expect(resolveConsumerRouteStory('/backtest')?.secondaryTo).toBe('/watchlist');
   });
 
   it('highlights the localized liquidity monitor nav item independently from market overview', async () => {
