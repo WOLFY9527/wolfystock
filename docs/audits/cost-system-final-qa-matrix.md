@@ -106,7 +106,7 @@ These are not blockers for the current docs-only QA matrix, but they are blocker
 
 | Gap | Blocker status | Required next step |
 | --- | --- | --- |
-| Live enforcement pilot | Open | Select one low-risk route boundary, create reservation before LLM execution, pass `quota_reservation_id`, and verify non-breaking block/release behavior behind an explicit flag. |
+| Live enforcement pilot | Partial | A default-off, owner-allowlisted sync single-stock analysis pilot can reserve before route execution, block only that route on quota rejection, consume estimated route units after success, and release on analysis failure. Public launch and global spend-cap readiness still require accepted staging/operator evidence, admin visibility, owner/guest accounting acceptance, and invoice reconciliation. |
 | Provider invoice reconciliation | Open | Compare ledger estimates against provider invoices/exported usage and document tolerances, currency handling, and mismatch workflow. |
 | Pricing update governance | Open | Define reviewed price-update cadence, source verification evidence, owner, and stale-policy alerts. |
 | Budget alerting | Open | Add warning thresholds and admin/user-facing alerts before monthly/daily exhaustion. |

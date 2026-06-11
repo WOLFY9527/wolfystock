@@ -11,11 +11,14 @@ from fastapi import HTTPException
 from api.deps import CurrentUser
 from api.v1.endpoints import analysis
 from api.v1.schemas.analysis import AnalyzeRequest
+from src.services.quota_policy_service import QuotaPolicyService as RealQuotaPolicyService
+from src.storage import DatabaseManager, QuotaReservation, QuotaUsageWindow
 
 
 PILOT_ENABLED_ENV = "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED"
 PILOT_OWNER_ALLOWLIST_ENV = "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS"
 PILOT_ROLLBACK_ENV = "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED"
+PILOT_ENFORCEMENT_ENV = "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_ENFORCEMENT_PILOT_ENABLED"
 _DEFAULT_SERVICE_RESULT = object()
 
 
@@ -84,9 +87,10 @@ def _install_quota_service(
     *,
     reserve_decision: SimpleNamespace | None = None,
     reserve_exception: Exception | None = None,
+    consume_exception: Exception | None = None,
     release_exception: Exception | None = None,
 ) -> dict[str, list]:
-    calls: dict[str, list] = {"init": [], "reserve": [], "release": []}
+    calls: dict[str, list] = {"init": [], "reserve": [], "consume": [], "release": []}
     decision = reserve_decision or SimpleNamespace(
         allowed=True,
         status="reserved",
@@ -109,6 +113,12 @@ def _install_quota_service(
             if release_exception is not None:
                 raise release_exception
             return SimpleNamespace(allowed=True, status="released", reservation_id=kwargs.get("reservation_id"))
+
+        def consume_reservation(self, **kwargs):
+            calls["consume"].append(kwargs)
+            if consume_exception is not None:
+                raise consume_exception
+            return SimpleNamespace(allowed=True, status="consumed", reservation_id=kwargs.get("reservation_id"))
 
     monkeypatch.setattr(analysis, "QuotaPolicyService", FakeQuotaPolicyService, raising=False)
     return calls
@@ -150,6 +160,36 @@ def _enable_pilot(monkeypatch: pytest.MonkeyPatch, *, owners: str = "pilot-user"
     monkeypatch.setenv(PILOT_OWNER_ALLOWLIST_ENV, owners)
 
 
+def _fresh_quota_db() -> DatabaseManager:
+    DatabaseManager.reset_instance()
+    return DatabaseManager(db_url="sqlite:///:memory:")
+
+
+def _install_real_quota_service(monkeypatch: pytest.MonkeyPatch, db: DatabaseManager) -> None:
+    class BoundQuotaPolicyService(RealQuotaPolicyService):
+        def __init__(self, **kwargs) -> None:
+            super().__init__(db=db, **kwargs)
+
+    monkeypatch.setattr(analysis, "QuotaPolicyService", BoundQuotaPolicyService, raising=False)
+
+
+def _quota_window_counts(db: DatabaseManager) -> list[tuple[str | None, str, int, int]]:
+    with db.session_scope() as session:
+        rows = session.query(QuotaUsageWindow).all()
+        return sorted(
+            [
+                (
+                    row.owner_user_id,
+                    row.window_type,
+                    int(row.reserved_units or 0),
+                    int(row.consumed_units or 0),
+                )
+                for row in rows
+            ],
+            key=lambda item: (item[0] or "", item[1]),
+        )
+
+
 def _run_sync(monkeypatch: pytest.MonkeyPatch, current_user: CurrentUser | None = None, **request_overrides):
     _install_sync_dependencies(
         monkeypatch,
@@ -187,6 +227,20 @@ def test_out_of_scope_owner_is_noop(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert response.stock_code == "AAPL"
     assert calls["reserve"] == []
+    assert calls["release"] == []
+
+
+def test_enforcement_flag_alone_is_default_non_enforcing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(PILOT_ENABLED_ENV, raising=False)
+    monkeypatch.setenv(PILOT_ENFORCEMENT_ENV, "true")
+    monkeypatch.setenv(PILOT_OWNER_ALLOWLIST_ENV, "pilot-user")
+    calls = _install_quota_service(monkeypatch)
+
+    response = _run_sync(monkeypatch)
+
+    assert response.stock_code == "AAPL"
+    assert calls["reserve"] == []
+    assert calls["consume"] == []
     assert calls["release"] == []
 
 
@@ -264,10 +318,98 @@ def test_reservation_success_releases_on_success(monkeypatch: pytest.MonkeyPatch
     assert "original_query" not in serialized
 
 
+def test_enforcement_pilot_consumes_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    _enable_pilot(monkeypatch)
+    monkeypatch.setenv(PILOT_ENFORCEMENT_ENV, "true")
+    calls = _install_quota_service(monkeypatch)
+
+    response = _run_sync(monkeypatch)
+
+    assert response.stock_code == "AAPL"
+    assert calls["reserve"][0]["owner_user_id"] == "pilot-user"
+    assert calls["consume"] == [{"reservation_id": "qres_success"}]
+    assert calls["release"] == []
+    metadata = _FakeExecutionLogs.instances[0].started[0]["metadata"]
+    assert metadata == {
+        "quota_route_pilot": {
+            "advisory_mode": False,
+            "reserve_attempted": True,
+            "reserve_succeeded": True,
+            "consume_on_success_required": True,
+            "release_on_failure_required": True,
+            "live_enforcement": True,
+            "rollback_enabled": False,
+        }
+    }
+    serialized = json.dumps(metadata, sort_keys=True)
+    assert "qres_success" not in serialized
+    assert "reservation_id" not in serialized
+    assert "idempotency" not in serialized.lower()
+    assert "pilot-user" not in serialized
+
+
+def test_enforcement_pilot_real_quota_service_consumes_reserved_units(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = _fresh_quota_db()
+    _install_real_quota_service(monkeypatch, db)
+    _enable_pilot(monkeypatch)
+    monkeypatch.setenv(PILOT_ENFORCEMENT_ENV, "true")
+
+    try:
+        response = _run_sync(monkeypatch)
+
+        assert response.stock_code == "AAPL"
+        with db.session_scope() as session:
+            reservations = session.query(QuotaReservation).all()
+            assert len(reservations) == 1
+            assert reservations[0].route_family == "analysis"
+            assert reservations[0].status == "consumed"
+        counts = _quota_window_counts(db)
+        assert len(counts) == 4
+        assert {(reserved, consumed) for _owner, _window, reserved, consumed in counts} == {(0, 5)}
+    finally:
+        DatabaseManager.reset_instance()
+
+
+def test_enforcement_pilot_consume_failure_releases_and_keeps_success_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_pilot(monkeypatch)
+    monkeypatch.setenv(PILOT_ENFORCEMENT_ENV, "true")
+    calls = _install_quota_service(
+        monkeypatch,
+        consume_exception=RuntimeError("token=must-not-leak qres_secret_123"),
+    )
+
+    response = _run_sync(monkeypatch)
+
+    assert response.stock_code == "AAPL"
+    assert calls["consume"] == [{"reservation_id": "qres_success"}]
+    assert calls["release"] == [{"reservation_id": "qres_success"}]
+
+
 def test_reserve_only_default_does_not_thread_reservation_to_cost_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _enable_pilot(monkeypatch)
+    _install_quota_service(monkeypatch)
+    service_calls = _install_sync_dependencies(monkeypatch)
+
+    request = AnalyzeRequest(stock_code="AAPL", async_mode=False)
+    response = analysis._handle_sync_analysis("AAPL", request, _pilot_user())
+
+    assert response.stock_code == "AAPL"
+    assert service_calls
+    reservation_kwarg = "quota_" + "reservation_id"
+    assert reservation_kwarg not in service_calls[0]
+
+
+def test_enforcement_pilot_does_not_thread_reservation_to_cost_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_pilot(monkeypatch)
+    monkeypatch.setenv(PILOT_ENFORCEMENT_ENV, "true")
     _install_quota_service(monkeypatch)
     service_calls = _install_sync_dependencies(monkeypatch)
 
@@ -331,6 +473,60 @@ def test_reservation_success_releases_on_http_exception(monkeypatch: pytest.Monk
     serialized = json.dumps(metadata, sort_keys=True)
     assert "qres_success" not in serialized
     assert "reservation_id" not in serialized
+
+
+def test_enforcement_pilot_releases_on_http_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    _enable_pilot(monkeypatch)
+    monkeypatch.setenv(PILOT_ENFORCEMENT_ENV, "true")
+    calls = _install_quota_service(monkeypatch)
+    _install_sync_dependencies(
+        monkeypatch,
+        service_exception=HTTPException(
+            status_code=503,
+            detail={"error": "upstream_unavailable"},
+        ),
+    )
+
+    request = AnalyzeRequest(stock_code="AAPL", async_mode=False)
+    with pytest.raises(HTTPException) as exc_info:
+        analysis._handle_sync_analysis("AAPL", request, _pilot_user())
+
+    assert exc_info.value.status_code == 503
+    assert calls["consume"] == []
+    assert calls["release"] == [{"reservation_id": "qres_success"}]
+
+
+def test_enforcement_pilot_real_quota_service_releases_reserved_units_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = _fresh_quota_db()
+    _install_real_quota_service(monkeypatch, db)
+    _enable_pilot(monkeypatch)
+    monkeypatch.setenv(PILOT_ENFORCEMENT_ENV, "true")
+    _install_sync_dependencies(
+        monkeypatch,
+        service_exception=HTTPException(
+            status_code=503,
+            detail={"error": "upstream_unavailable"},
+        ),
+    )
+
+    try:
+        request = AnalyzeRequest(stock_code="AAPL", async_mode=False)
+        with pytest.raises(HTTPException) as exc_info:
+            analysis._handle_sync_analysis("AAPL", request, _pilot_user())
+
+        assert exc_info.value.status_code == 503
+        with db.session_scope() as session:
+            reservations = session.query(QuotaReservation).all()
+            assert len(reservations) == 1
+            assert reservations[0].route_family == "analysis"
+            assert reservations[0].status == "released"
+        counts = _quota_window_counts(db)
+        assert len(counts) == 4
+        assert {(reserved, consumed) for _owner, _window, reserved, consumed in counts} == {(0, 0)}
+    finally:
+        DatabaseManager.reset_instance()
 
 
 def test_reservation_success_releases_when_result_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -426,6 +622,39 @@ def test_reservation_failure_fails_open(monkeypatch: pytest.MonkeyPatch) -> None
     assert calls["release"] == []
 
 
+def test_enforcement_pilot_blocks_when_reservation_rejects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_pilot(monkeypatch)
+    monkeypatch.setenv(PILOT_ENFORCEMENT_ENV, "true")
+    calls = _install_quota_service(
+        monkeypatch,
+        reserve_decision=SimpleNamespace(
+            allowed=False,
+            status="budget_exceeded",
+            reason_code="budget_exceeded",
+            reservation_id=None,
+            estimated_units=5,
+        ),
+    )
+    service_calls = _install_sync_dependencies(monkeypatch)
+
+    request = AnalyzeRequest(stock_code="AAPL", async_mode=False)
+    with pytest.raises(HTTPException) as exc_info:
+        analysis._handle_sync_analysis("AAPL", request, _pilot_user())
+
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.detail == {
+        "error": "quota_pilot_blocked",
+        "message": "当前分析额度试点限制，请稍后重试或联系管理员",
+        "reasonCode": "budget_exceeded",
+    }
+    assert calls["reserve"]
+    assert calls["consume"] == []
+    assert calls["release"] == []
+    assert service_calls == []
+
+
 def test_reservation_exception_fails_open(monkeypatch: pytest.MonkeyPatch) -> None:
     _enable_pilot(monkeypatch)
     calls = _install_quota_service(monkeypatch, reserve_exception=RuntimeError("quota down"))
@@ -441,6 +670,7 @@ def test_rollback_flag_disables_route_pilot_even_when_allowlisted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _enable_pilot(monkeypatch)
+    monkeypatch.setenv(PILOT_ENFORCEMENT_ENV, "true")
     monkeypatch.setenv(PILOT_ROLLBACK_ENV, "true")
     calls = _install_quota_service(monkeypatch)
 
@@ -547,12 +777,16 @@ def test_quota_reserve_release_static_boundary_is_sync_analysis_only() -> None:
     async_section = analysis_source.split("def _handle_async_analysis_batch", 1)[1].split("def _handle_sync_analysis", 1)[0]
 
     assert "reserve_quota" in analysis_source
+    assert "consume_reservation" in analysis_source
     assert "release_reservation" in analysis_source
     assert "_try_reserve_analysis_sync_quota_pilot" in sync_section
+    assert "_consume_analysis_sync_quota_pilot_reservation" in sync_section
     assert "_release_analysis_sync_quota_pilot_reservation" in sync_section
     assert "reserve_quota" not in preview_section
+    assert "consume_reservation" not in preview_section
     assert "release_reservation" not in preview_section
     assert "reserve_quota" not in async_section
+    assert "consume_reservation" not in async_section
     assert "release_reservation" not in async_section
 
     for relative in (
@@ -566,4 +800,5 @@ def test_quota_reserve_release_static_boundary_is_sync_analysis_only() -> None:
     ):
         source = (repo_root / relative).read_text(encoding="utf-8")
         assert "reserve_quota" not in source
+        assert "consume_reservation" not in source
         assert "release_reservation" not in source

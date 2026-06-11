@@ -5,9 +5,10 @@ Scope: internal/private-beta evidence checklist for the default-off quota
 reserve/release advisory pilot on authenticated sync single-stock analysis.
 
 This checklist is for evidence-gathering only. It does not approve public
-launch, does not approve live quota enforcement, and does not approve
-reservation consume wiring. Public launch remains **NO-GO**. Consume and live
-enforcement remain **NO-GO**.
+launch, broad/global quota enforcement, or provider quota enforcement. Public
+launch remains **NO-GO**. The only blocking/consume behavior in scope is the
+separately default-off, explicitly owner-allowlisted sync single-stock analysis
+route pilot.
 
 ## Pilot Boundaries That Must Already Be True
 
@@ -17,8 +18,13 @@ Collect evidence only if all of the following are true:
 - Owner access is controlled by an explicit allowlist.
 - Eligibility is limited to auth-enabled, authenticated, non-transitional,
   sync, single-stock analysis only.
-- The pilot is reserve-only with guaranteed release on every path.
-- Reserve and release remain fail-open advisory semantics.
+- Without the separate enforcement flag, the pilot is reserve-only with
+  guaranteed release on every path.
+- With the separate enforcement flag, quota rejection may block only the
+  authenticated sync single-stock analysis route; success consumes estimated
+  route units and analysis failure releases the reservation.
+- Reserve/release/consume helper failures do not imply public launch approval or
+  broad spend-cap readiness.
 - API response shape does not change.
 - Execution metadata does not expose raw reservation IDs.
 
@@ -31,7 +37,7 @@ evidence.
 - Use sanitized excerpts only.
 - Prefer booleans, bounded labels, counts, timestamps, route labels, and reason
   codes.
-- Do not treat this checklist as public-launch evidence or live-enforcement
+- Do not treat this checklist as public-launch evidence or broad enforcement
   approval.
 
 ## Offline Validator
@@ -48,9 +54,8 @@ The checker validates sanitized local evidence against the categories in this
 checklist. It must not be pointed at live systems and does not call runtime
 APIs, route handlers, storage, quota services, providers, auth, or live
 credentials. A passing result means the evidence packet is ready for manual
-internal/private-beta review only. It does not approve public launch, live
-quota enforcement, reservation consume wiring, route blocking, or runtime
-behavior changes.
+internal/private-beta review only. It does not approve public launch, quota
+enforcement expansion, provider quota enforcement, or broad spend-cap readiness.
 
 ## Required Evidence Sections
 
@@ -72,7 +77,8 @@ Allowed proof examples:
 
 Provide one sanitized sync single-stock success case proving:
 
-- an eligible authenticated request entered advisory reserve/release handling;
+- an eligible authenticated request entered the configured reserve/release or
+  enforcement-pilot handling;
 - the analysis still completed successfully;
 - response shape stayed unchanged;
 - the evidence is from synthetic or private-beta usage only.
@@ -82,7 +88,7 @@ Provide one sanitized sync single-stock success case proving:
 Provide a sanitized case where reserve fails and prove:
 
 - the analysis request still proceeded;
-- no blocking/consume behavior occurred;
+- no consume behavior occurred and no route outside the pilot was blocked;
 - user-visible response behavior remained unchanged except for internal
   advisory evidence.
 
@@ -100,7 +106,8 @@ Provide a sanitized case where release fails and prove:
 
 - the failure is recorded as advisory warning/evidence only;
 - the user response is not mutated to include quota internals;
-- no blocking or consume behavior is introduced.
+- no route outside the pilot is blocked and no consume behavior is introduced by
+  the release failure.
 
 ### 6. Execution-Log Metadata Safety Proof
 
@@ -151,17 +158,19 @@ Do not capture or attach any of the following:
 Stop collection and reject the evidence packet if any of the following occurs:
 
 - reserve or release appears outside sync analysis;
-- any consume or blocking behavior appears;
+- any consume or blocking behavior appears outside the default-off sync
+  single-stock analysis pilot;
 - response shape exposes quota fields;
 - raw identifiers or secrets appear in logs or evidence;
 - auth-disabled, transitional, guest, async, scanner, agent, or options paths
   become eligible;
 - protected code, config, or deployment changes are required.
 
-## Future Live-Enforcement Blockers
+## Future Broad-Enforcement Blockers
 
-This checklist does not close live-enforcement readiness. Future live
-enforcement remains blocked until all of the following are accepted:
+This checklist does not close broad live-enforcement readiness. Future expansion
+outside the single-route pilot remains blocked until all of the following are
+accepted:
 
 - stable client retry and request identity;
 - reservation ID propagation into the quota ledger;
@@ -183,13 +192,13 @@ Use precise wording throughout the packet:
 Do not use wording that implies:
 
 - public launch approval;
-- live quota enforcement approval;
-- consume approval;
-- route-blocking approval.
+- broad live quota enforcement approval;
+- provider quota enforcement approval;
+- route-blocking approval outside the single-route pilot.
 
 ## Expected Outcome
 
 If every section above is satisfied with sanitized excerpts only, the result is
 an internal/private-beta evidence packet for manual review. The result is still
-not public launch approval, still not consume approval, and still not live
-quota enforcement approval.
+not public launch approval, not provider quota enforcement approval, and not
+broad live quota enforcement approval.

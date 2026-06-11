@@ -165,15 +165,19 @@ Status:
 - [x] Quota enforcement pilot-readiness preflight exists as advisory-only
   reporting with explicit owner scope, sanitized provider/model context, and
   invoice reconciliation marked non-enforcement-wired.
+- [x] A default-off, owner-allowlisted sync single-stock analysis route pilot
+  can block only that route on quota rejection, consume estimated route units
+  after success, and release on analysis failure when explicitly enabled.
 
 Remaining blockers:
 
-- [ ] Live route-boundary quota enforcement is not enabled.
+- [ ] Accepted staging/operator evidence for the default-off route pilot is not
+  complete, and broad/global quota enforcement remains disabled.
 - [ ] Ledger writes remain observational and best-effort; failures must not
   change user-visible LLM behavior.
 - [ ] Some legacy/system usage can still write null-owner rows for backward
   compatibility.
-- [ ] Budget burn-down UI, policy editing, live enforcement pilot, and
+- [ ] Budget burn-down UI, policy editing, broad enforcement expansion, and
   retention/aggregation policy remain future work.
 - [ ] Provider quota buckets are not yet live enforcement.
 

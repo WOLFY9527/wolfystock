@@ -96,6 +96,9 @@ QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS_ENV = (
 QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED_ENV = (
     "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED"
 )
+QUOTA_ANALYSIS_SYNC_ENFORCEMENT_PILOT_ENABLED_ENV = (
+    "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_ENFORCEMENT_PILOT_ENABLED"
+)
 _QUOTA_ANALYSIS_SYNC_ROUTE_FAMILY = "analysis"
 _QUOTA_ANALYSIS_SYNC_ROUTE_KEY = "api.v1.analysis.analyze"
 _QUOTA_ANALYSIS_SYNC_IDEMPOTENCY_PREFIX = "quota:analysis_sync_single_stock:v1"
@@ -116,6 +119,8 @@ class _QuotaAnalysisSyncPilotReservation:
     reservation_id: Optional[str]
     reserve_attempted: bool = False
     reserve_succeeded: bool = False
+    live_enforcement: bool = False
+    request_blocked: bool = False
     reason_code: Optional[str] = None
 
 
@@ -255,6 +260,13 @@ def _quota_analysis_sync_pilot_rollback_enabled() -> bool:
     )
 
 
+def _quota_analysis_sync_enforcement_pilot_enabled() -> bool:
+    return parse_env_bool(
+        os.getenv(QUOTA_ANALYSIS_SYNC_ENFORCEMENT_PILOT_ENABLED_ENV),
+        default=False,
+    )
+
+
 def _quota_safe_reason_code(value: object) -> str:
     reason = str(value or "").strip().lower()
     return reason if reason in _QUOTA_RESERVE_FAILURE_SAFE_REASON_CODES else "budget_exceeded"
@@ -353,6 +365,7 @@ def _try_reserve_analysis_sync_quota_pilot(
     ):
         return _QuotaAnalysisSyncPilotReservation(reservation_id=None)
 
+    live_enforcement = _quota_analysis_sync_enforcement_pilot_enabled()
     try:
         service = QuotaPolicyService(enforcement_enabled=True)
         reserve = getattr(service, "reserve_quota")
@@ -374,6 +387,7 @@ def _try_reserve_analysis_sync_quota_pilot(
         return _QuotaAnalysisSyncPilotReservation(
             reservation_id=None,
             reserve_attempted=True,
+            live_enforcement=False,
             reason_code="reserve_exception",
         )
 
@@ -384,12 +398,49 @@ def _try_reserve_analysis_sync_quota_pilot(
             reservation_id=reservation_id,
             reserve_attempted=True,
             reserve_succeeded=True,
+            live_enforcement=live_enforcement,
         )
     return _QuotaAnalysisSyncPilotReservation(
         reservation_id=None,
         reserve_attempted=True,
+        live_enforcement=live_enforcement,
+        request_blocked=live_enforcement,
         reason_code=_quota_safe_reason_code(getattr(decision, "reason_code", None) or status),
     )
+
+
+def _raise_if_analysis_sync_quota_pilot_blocked(
+    reservation: _QuotaAnalysisSyncPilotReservation,
+) -> None:
+    if not reservation.request_blocked:
+        return
+    raise HTTPException(
+        status_code=429,
+        detail={
+            "error": "quota_pilot_blocked",
+            "message": "当前分析额度试点限制，请稍后重试或联系管理员",
+            "reasonCode": _quota_safe_reason_code(reservation.reason_code),
+        },
+    )
+
+
+def _consume_analysis_sync_quota_pilot_reservation(reservation_id: Optional[str]) -> bool:
+    normalized_id = str(reservation_id or "").strip()
+    if not normalized_id:
+        return False
+    try:
+        service = QuotaPolicyService(enforcement_enabled=True)
+        consume = getattr(service, "consume_reservation")
+        decision = consume(reservation_id=normalized_id)
+    except Exception as exc:
+        logger.warning(
+            "Quota analysis sync consume pilot failed open: %s",
+            _quota_safe_exception_summary(exc),
+        )
+        return False
+
+    status = str(getattr(decision, "status", "") or "").strip().lower()
+    return status == "consumed"
 
 
 def _release_analysis_sync_quota_pilot_reservation(reservation_id: Optional[str]) -> None:
@@ -413,6 +464,18 @@ def _analysis_sync_quota_execution_metadata(
 ) -> Optional[Dict[str, Any]]:
     if not reservation.reserve_succeeded:
         return None
+    if reservation.live_enforcement:
+        return {
+            "quota_route_pilot": {
+                "advisory_mode": False,
+                "reserve_attempted": True,
+                "reserve_succeeded": True,
+                "consume_on_success_required": True,
+                "release_on_failure_required": True,
+                "live_enforcement": True,
+                "rollback_enabled": False,
+            }
+        }
     return {
         "quota_route_pilot": {
             "advisory_mode": True,
@@ -585,6 +648,7 @@ def preview_analysis(
         },
         400: {"description": "请求参数错误", "model": ErrorResponse},
         409: {"description": "股票正在分析中，拒绝重复提交", "model": DuplicateTaskErrorResponse},
+        429: {"description": "额度试点限制", "model": ErrorResponse},
         500: {"description": "分析失败", "model": ErrorResponse},
     },
     summary="触发股票分析",
@@ -810,6 +874,7 @@ def _handle_sync_analysis(
     execution_logs = ExecutionLogService()
     execution_id = None
     quota_reservation = _QuotaAnalysisSyncPilotReservation(reservation_id=None)
+    quota_reservation_terminal_handled = False
     
     try:
         quota_reservation = _try_reserve_analysis_sync_quota_pilot(
@@ -819,6 +884,7 @@ def _handle_sync_analysis(
             owner_id=owner_id,
             query_id=query_id,
         )
+        _raise_if_analysis_sync_quota_pilot_blocked(quota_reservation)
         execution_id = execution_logs.start_analysis_execution(
             symbol=stock_code,
             analysis_type=request.report_type,
@@ -907,6 +973,11 @@ def _handle_sync_analysis(
                 "report_generated_at": enhanced.get("report_generated_at"),
             }
 
+        if quota_reservation.live_enforcement:
+            quota_reservation_terminal_handled = _consume_analysis_sync_quota_pilot_reservation(
+                quota_reservation.reservation_id
+            )
+
         return AnalysisResultResponse(
             query_id=resolved_query_id,
             stock_code=result.get("stock_code", stock_code),
@@ -946,7 +1017,8 @@ def _handle_sync_analysis(
             }
         )
     finally:
-        _release_analysis_sync_quota_pilot_reservation(quota_reservation.reservation_id)
+        if not quota_reservation_terminal_handled:
+            _release_analysis_sync_quota_pilot_reservation(quota_reservation.reservation_id)
 
 
 # ============================================================
