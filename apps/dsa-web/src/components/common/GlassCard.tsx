@@ -6,7 +6,8 @@ type GlassCardProps = React.HTMLAttributes<HTMLElement> & {
   children: React.ReactNode;
 };
 
-const GLASS_CARD_BASE_CLASS = 'rounded-[24px] border border-white/5 bg-white/[0.02] backdrop-blur-sm';
+// Radius aligned to the shared --wolfy-radius-lg (16px) so glass surfaces match Card/SectionShell.
+const GLASS_CARD_BASE_CLASS = 'rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur-sm';
 
 export const GlassCard: React.FC<GlassCardProps> = ({
   as: Component = 'div',

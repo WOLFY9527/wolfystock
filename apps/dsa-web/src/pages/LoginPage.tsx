@@ -2,6 +2,7 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/common/Button';
+import { BrandLogo } from '../components/common/BrandLogo';
 import { Input } from '../components/common/Input';
 import type { ParsedApiError } from '../api/error';
 import { isParsedApiError } from '../api/error';
@@ -219,37 +220,23 @@ const LoginPage: React.FC = () => {
 
       <div className="auth-shell auth-shell--panel-only">
         <section className="auth-panel theme-panel-glass">
-          <div className="flex items-start justify-between gap-4 rounded-[20px] border border-white/10 bg-white/[0.03] px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-white/40">{copy.heroEyebrow}</p>
-              <p className="mt-2 text-sm font-semibold text-white/92">{copy.shellProductName}</p>
-              <p className="mt-1 text-xs leading-6 text-white/55">{copy.shellProductTagline}</p>
-            </div>
-            <span className="inline-flex shrink-0 items-center rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-100/85">
+          <div className="flex items-center justify-between gap-3">
+            <span className="inline-flex min-w-0 items-center gap-2.5">
+              <BrandLogo className="size-7 shrink-0" />
+              <span className="truncate text-sm font-semibold tracking-tight text-white/90">{copy.shellProductName}</span>
+            </span>
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-emerald-200/80">
+              <span className="size-1.5 rounded-full bg-emerald-300/90" aria-hidden="true" />
               {copy.shellGuestStatus}
             </span>
           </div>
 
           <div className="auth-panel__header">
-            <p className="label-uppercase text-secondary-text">{copy.heroEyebrow}</p>
+            <p className="label-uppercase text-white/40">{copy.heroEyebrow}</p>
             <h1 className="auth-panel__title">
               <span>{isAdminBootstrap ? copy.heroTitleSetup : isCreateUserMode ? copy.heroTitleCreate : copy.heroTitleLogin}</span>
             </h1>
             <p className="auth-panel__body">{isAdminBootstrap ? copy.heroBodySetup : isCreateUserMode ? copy.heroBodyCreate : copy.heroBodyLogin}</p>
-            <div className="mt-4 rounded-[18px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] px-4 py-3">
-              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/42">{copy.shellReturnHint}</p>
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-white/16 bg-white/[0.06] px-4 text-sm font-semibold text-white transition hover:border-white/24 hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={() => navigate(guestPath, { replace: true })}
-                  disabled={isSubmitting}
-                >
-                  {copy.returnToGuest}
-                </button>
-                <p className="flex-1 text-xs leading-6 text-white/52">{guestHint}</p>
-              </div>
-            </div>
           </div>
 
           <form onSubmit={handleSubmit} className="auth-form">
@@ -330,7 +317,7 @@ const LoginPage: React.FC = () => {
               type="submit"
               variant="primary"
               size="xl"
-              className="w-full mt-2 py-3 bg-white text-black font-bold text-sm rounded-xl hover:bg-white/90 active:scale-95 transition-all justify-center"
+              className="w-full mt-2 justify-center"
               disabled={isSubmitting}
               isLoading={isSubmitting}
               loadingText={isAdminBootstrap ? copy.loadingTextSetup : isCreateUserMode ? copy.loadingTextCreate : copy.loadingTextLogin}
@@ -355,6 +342,18 @@ const LoginPage: React.FC = () => {
                 {isCreateUserMode ? copy.toggleToLogin : copy.toggleToCreate}
               </button>
             ) : null}
+
+            <p className="mt-1 text-center text-xs leading-6 text-white/45">
+              {guestHint}{' '}
+              <button
+                type="button"
+                className="font-medium text-white/70 underline-offset-2 transition-colors hover:text-white hover:underline disabled:opacity-60"
+                onClick={() => navigate(guestPath, { replace: true })}
+                disabled={isSubmitting}
+              >
+                {copy.returnToGuest}
+              </button>
+            </p>
 
           </form>
         </section>
