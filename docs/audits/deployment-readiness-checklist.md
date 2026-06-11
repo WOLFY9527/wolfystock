@@ -243,6 +243,10 @@ Remaining blockers:
 - [x] A sanitized real-drill evidence artifact contract exists and is validated
   only as externally supplied evidence; the checker does not execute restore
   commands by default.
+- [x] The operator evidence runbook now separates dry-run preflight,
+  externally executed isolated restore/PITR drill evidence, restore/PITR
+  operator bundle evidence, and manual review so templates/checkers are not
+  mistaken for completed real restore acceptance.
 - [x] Admin log retention tiers are explicit and test-backed:
   `admin_logs_standard`, `admin_logs_minimum_protected`, and
   `admin_logs_storage_pressure`.
@@ -260,7 +264,9 @@ Remaining blockers:
   and attachable JSON evidence.
 - [ ] Isolated PostgreSQL backup/restore execution is still missing.
 - [ ] Real isolated PostgreSQL restore/PITR evidence is still pending until an
-  accepted sanitized evidence artifact is supplied.
+  accepted sanitized artifact from a real isolated drill is supplied; generated
+  templates, dry-run preflight output, and validator success alone do not close
+  this blocker.
 - [ ] Real HTTPS staging ingress smoke evidence is still missing; the new
   preflight must be run against a synthetic staging URL with explicit opt-in.
 - [ ] Encrypted backup infrastructure, PITR execution, restore smoke, and
@@ -459,7 +465,10 @@ The following must all be true before public multi-user deployment:
 - [ ] Backup/restore dry-run preflight passes with fresh synthetic or sanitized
   metadata and a temp-only restore target.
 - [ ] Real isolated PostgreSQL backup/restore drill passes in an isolated
-  environment.
+  environment, with accepted restore/PITR operator evidence from the real drill.
+- [ ] Restore/PITR evidence attachments include only sanitized validator output,
+  manifests, and review references; raw command output, DSNs, env values, backup
+  paths, SQL, row data, dumps, and tracebacks are not attached.
 - [ ] Rollback plan is written, including last-good commit/image, DB restore
   decision point, health checks, and owner-isolation smoke.
 - [ ] Retention dry-run reports exist for high-growth domains; the policy-only

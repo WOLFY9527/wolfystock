@@ -82,6 +82,9 @@ def _restore_pitr_template() -> dict[str, Any]:
         "rpoObservedSeconds": 0,
         "rtoObservedSeconds": 0,
         "outcome": "needs-review",
+        "reviewOnly": True,
+        "publicLaunchReady": False,
+        "launchApproved": False,
         "evidenceRedactionVersion": "restore-pitr-redaction-v1",
         "localGeneration": {
             "checkerRanRestoreCommands": False,

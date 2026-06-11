@@ -98,9 +98,13 @@ LAUNCH_GO_STRING_PATTERNS = (
 LAUNCH_GO_KEYS = {
     "launchapproved",
     "launchgo",
+    "launchready",
     "go",
     "goliveapproved",
+    "productionready",
+    "publiclaunchready",
     "releaseapproved",
+    "releaseready",
 }
 REQUIRED_FIELDS = (
     "drillId",

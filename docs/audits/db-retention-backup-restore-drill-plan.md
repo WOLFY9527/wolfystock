@@ -90,7 +90,7 @@ production readiness.
 | Backtest artifacts | Backtest run summaries, exports, traces, reproducibility artifact families | Partial. Artifact growth is known, but cleanup and size policy are not accepted. | Separation between durable result history and disposable generated files, plus capacity reporting. | Keep deterministic run summaries and reproducibility inputs longer; only generated bulky exports become previewable cleanup candidates. | Do not alter strategy math, replay determinism, or introduce live provider calls/backfill into backtest flows. |
 | Guest/cache metadata | Guest session/cache metadata and lightweight temporary state families | Partial. Short-lived posture is suggested, but no owner/domain contract is accepted. | Isolation boundary, retention clock source, abuse/security summary needs, and size/capacity budget. | Keep very short TTL candidates preview-only, separated from authenticated user data and any durable artifacts. | Do not change MarketCache/runtime cache semantics, cross-user isolation, rate-limit posture, or provider freshness behavior. |
 | Portfolio artifacts | Portfolio accounts, trades, ledger, holdings, lots, snapshots, FX, and user export/import artifact families | Preserve-by-default. Financial source-of-truth records are intentionally outside broad TTL cleanup. | Narrow artifact-only policy for large derived exports/import payloads if ever needed; no broad retention contract for accounting records. | Keep accounting records indefinite by default; only explicitly scoped, non-authoritative generated exports may later get separate size-based review. | Do not add broad TTL/delete policy, alter accounting correctness, or use cleanup to repair portfolio state. |
-| Release evidence artifacts | Review-support evidence packs, draft artifacts, manual acceptance/external record linkage | Preserve-by-default and manual/external. Not a retention-automation target in this pass. | Accepted owner/locator contract for draft vs accepted evidence and any manual archive handoff. | Keep Codex-generated evidence as review-support only, with manual/external acceptance remaining outside runtime retention policy. | Do not mark evidence approved, GO, or production-ready; do not imply accepted evidence is repo-authoritative. |
+| Release evidence artifacts | Review-support evidence packs, draft artifacts, manual acceptance/external record linkage | Preserve-by-default and manual/external. Not a retention-automation target in this pass. | Accepted owner/locator contract for draft vs accepted evidence and any manual archive handoff. | Keep Codex-generated evidence as review-support only, with manual/external acceptance remaining outside runtime retention policy. | Do not mark evidence approved, GO, or ready for production; do not imply accepted evidence is repo-authoritative. |
 | Temporary/generated diagnostics | Temp reports, generated diagnostics, ad hoc debug artifacts, non-authoritative summaries | Partial. Known as potential cleanup surface, but no compact lifecycle contract exists. | Classification rules, size thresholds, owner tagging, and default expiry/reporting policy. | Prefer bounded/generated artifacts with preview-only cleanup and explicit exclusions for anything referenced by accepted summaries. | Do not let temporary cleanup touch source-of-truth rows, accepted evidence, or runtime debugging behavior. |
 | DB/deployment readiness | Deployment runbooks, backup metadata, restore drill evidence, retention-job planning surfaces | Deferred. Broader DB/deployment retention remains blocked on accepted owner/domain lifecycle contracts. | Accepted domain matrix, approved backup retention policy, isolated restore evidence cadence, and destructive cleanup governance. | Keep this as docs/runbook planning until owner/domain contracts and drill evidence are accepted in a later task. | Do not introduce DB migration, table rewrite, delete/update SQL, VACUUM, cleanup job enablement, or production-readiness claims. |
 
@@ -316,6 +316,28 @@ files, run migrations, or mutate backup infrastructure. Without
 Real restore/PITR execution: pending (no real evidence artifact supplied)
 ```
 
+Operator evidence should follow this review path:
+
+1. Run the dry-run preflight with fresh synthetic or sanitized metadata and a
+   temp-only restore target.
+2. Execute the isolated PostgreSQL restore/PITR drill outside the repo helper
+   path, using operator-controlled infrastructure and no production overwrite.
+3. Produce the snake_case `wolfystock_restore_drill_evidence_v1` real-drill
+   summary for `backup_restore_drill_check.sh --real-restore-evidence`.
+4. Produce the camelCase
+   `wolfystock_restore_pitr_operator_evidence_input_v1` bundle artifact for
+   `scripts/restore_pitr_operator_evidence_check.py --artifact`.
+5. Attach only sanitized validator outputs, manifests, and review references to
+   release evidence. Do not attach raw command output, hostnames, env values,
+   DSNs, backup paths, SQL, row data, dumps, or tracebacks.
+
+These contracts are not interchangeable. The real-drill artifact proves the
+externally executed restore/PITR summary shape; the operator artifact proves the
+sanitized review bundle shape. Template output, dry-run preflight output, and
+validator `EVIDENCE-READY` output are review plumbing only. They do not prove
+this repository executed a restore, do not approve public launch, and do not
+close the launch gate without accepted real isolated restore/PITR evidence.
+
 Accepted real-drill evidence must use
 `schema_version=wolfystock_restore_drill_evidence_v1` and include:
 
@@ -453,7 +475,9 @@ This plan is accepted when:
 - Staging restore drill passes.
 - PITR drill passes or the production platform limitation is explicitly documented.
 - Verification checklist evidence is captured without secrets.
-- Public deployment checklist is updated from **NO-GO** only after drills and retention dry-run reports pass.
+- Public deployment checklist is updated from **NO-GO** only after real
+  isolated restore/PITR evidence, reviewer acceptance, and retention dry-run
+  reports pass.
 
 ## 11. Validation for This Document
 
