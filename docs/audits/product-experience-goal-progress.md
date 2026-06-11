@@ -283,10 +283,6 @@ git diff --check
 
 Follow-up proposals recorded, no protected runtime approval implied:
 
-- Backtest assumption list labels: expanded assumption lists can still expose
-  unknown backend-style keys or values. Likely file:
-  `apps/dsa-web/src/components/backtest/shared.tsx`. Risk: frontend label
-  projection only; no engine/export contract change.
 - Backtest support export API payload projection: if downloaded JSON/CSV
   artifacts themselves must be consumer-safe, add a read-only projection helper
   and tests. Approval needed because that changes the support artifact contract.
@@ -399,6 +395,46 @@ DSA_WEB_PLAYWRIGHT_PORT=4189 npm --prefix apps/dsa-web run test:e2e -- backtest-
 
 Result: all commands completed successfully. The Playwright web server still
 reports the pre-existing Vite large chunk warning.
+
+Boundary confirmation:
+
+- Frontend display labels and tests only.
+- No public launch approval.
+- No live quota enforcement, reservation consume/blocking, or route blocking.
+- No provider runtime enforcement, provider order/fallback/cache changes, or
+  provider blocking.
+- No auth/session/RBAC runtime changes.
+- No DB migration, cleanup, restore, or PITR execution.
+- No broker/order/trade paths or order execution behavior.
+- No external notification sending.
+
+### 2026-06-11 - sanitize Backtest assumption list fallbacks
+
+- Updated shared Backtest `AssumptionList` rendering so known assumption keys
+  keep translated labels, unknown non-internal keys use a generic execution
+  assumption label, and unknown internal-looking keys are skipped.
+- Sanitized assumption values so objects, arrays containing internal-looking
+  text, trace/stack/payload-like values, and provider/authority/contract
+  tokens render as safe review copy rather than backend field names.
+- Added a focused Deterministic Backtest view test that proves
+  `provider_calls_executed`, `authorityScope`, `contractKind`,
+  `diagnosticOnly`, `decisionGrade`, `payload`, `trace`, and `stack` do not
+  leak while the known `entry_fill_timing` label remains useful.
+
+Validation:
+
+```bash
+npm --prefix apps/dsa-web run test -- src/components/backtest/__tests__/DeterministicBacktestResultView.test.tsx
+npm --prefix apps/dsa-web run typecheck
+npm --prefix apps/dsa-web run build
+DSA_WEB_PLAYWRIGHT_PORT=4192 npm --prefix apps/dsa-web run test:e2e -- backtest-visual-result.smoke.spec.ts --project=chromium --workers=1
+git diff --check
+./scripts/release_secret_scan.sh --local-only
+```
+
+Result: command completed successfully. A worker also ran ESLint for the two
+touched files and reported exit 0. The Playwright web server still reports the
+pre-existing Vite large chunk warning.
 
 Boundary confirmation:
 
