@@ -1,0 +1,60 @@
+{
+  "artifactVersion": "wolfystock_ws2_target_environment_evidence_v1",
+  "validationProfile": "PROFILE_DURABLE_PROTECTED",
+  "evidenceClass": "target-environment",
+  "targetEnvironmentLabel": "staging-environment-label",
+  "runId": "ws2-target-evidence-run-0001",
+  "operator": "sanitized-operator-label",
+  "capturedAt": "1970-01-01T00:00:00Z",
+  "submittedAt": "1970-01-01T00:00:00Z",
+  "completedAt": "1970-01-01T00:00:00Z",
+  "reviewerAcceptanceStatus": "needs-review",
+  "reviewerLabel": "review-ticket-label",
+  "evidenceRedactionVersion": "ws2_target_environment_evidence_redaction_v1",
+  "evidenceBoundary": {
+    "syntheticLocalDryRunEvidence": false,
+    "ciSyntheticEvidence": false,
+    "targetEnvironmentEvidence": false,
+    "acceptedStagingEvidence": false,
+    "publicLaunchApproval": false
+  },
+  "topology": {
+    "apiAInstanceLabel": "api-a",
+    "apiBInstanceLabel": "api-b",
+    "workerLabel": "worker-a",
+    "storageLabel": "target-durable-storage",
+    "sseBroadcastScope": "process-local",
+    "durablePollingBaseline": true,
+    "externalSseReplayImplemented": false,
+    "productionQueueBrokerCutover": false
+  },
+  "checks": {
+    "apiASubmitTransportExercised": false,
+    "workerLeaseAcquired": false,
+    "progressPersisted": false,
+    "apiBDurablePollingReadback": false,
+    "retryFailureSafetyVerified": false,
+    "ownerIsolationVerified": false,
+    "sanitizedFailureOutputVerified": false,
+    "sseLimitationRecorded": true,
+    "durablePollingBaselineRecorded": true
+  },
+  "summaries": {
+    "apiASubmitTransport": "Awaiting operator-filled API A submit evidence.",
+    "workerLease": "Awaiting operator-filled worker lease evidence.",
+    "progressPersistence": "Awaiting operator-filled durable progress evidence.",
+    "apiBDurablePolling": "Awaiting operator-filled API B polling evidence.",
+    "retryFailureSafety": "Awaiting operator-filled retry and failure safety evidence.",
+    "ownerIsolation": "Awaiting operator-filled owner isolation evidence.",
+    "sanitizedFailureOutput": "Awaiting operator-filled sanitized failure evidence.",
+    "sseLimitation": "Process-local SSE limitation remains recorded; durable polling is the baseline.",
+    "reviewNotes": "Template only; replace placeholders with sanitized target-run summaries before review."
+  },
+  "templatePlaceholders": {
+    "replaceBeforeReview": [
+      "staging-environment-label",
+      "review-ticket-label",
+      "sanitized-operator-label"
+    ]
+  }
+}

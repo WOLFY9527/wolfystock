@@ -111,6 +111,11 @@ Other generated artifacts, such as config snapshot, WS2/SSE, and manual review
 record files, remain useful review attachments but may be reported as advisory
 by the bundle checker.
 
+The WS2 target-environment template is maintained as a standalone review
+template at `docs/audits/ws2-target-environment-evidence-template.json`.
+Operators should copy it into the evidence directory, replace placeholders with
+sanitized API A/B run summaries, and leave `publicLaunchApproval=false`.
+
 ## Run Validators
 
 Run the domain validators for every artifact collected:
@@ -138,6 +143,7 @@ If present, also validate advisory artifacts:
 
 ```bash
 python3 scripts/ws2_sse_operator_decision_check.py "$EVIDENCE_DIR/ws2_sse_operator_decision_evidence.json"
+python3 scripts/ws2_target_environment_evidence_check.py "$EVIDENCE_DIR/ws2_target_environment_evidence.json"
 python3 scripts/config_snapshot_evidence_check.py "$EVIDENCE_DIR/config_snapshot_evidence.json"
 python3 scripts/manual_release_approval_evidence_check.py \
   --artifact "$EVIDENCE_DIR/manual_release_approval_review_record.json"
