@@ -81,6 +81,9 @@ Provide one sanitized sync single-stock success case proving:
   enforcement-pilot handling;
 - the analysis still completed successfully;
 - response shape stayed unchanged;
+- route consumption evidence, when the enforcement flag is enabled, represents
+  route-estimated pilot units only and is not billing-authoritative actual
+  provider cost;
 - the evidence is from synthetic or private-beta usage only.
 
 ### 3. Reserve Failure Fail-Open Case
@@ -130,7 +133,41 @@ Provide sanitized before/after proof that:
 - no reserved units remain leaked after completion or failure;
 - the observed window returns to the expected post-release state.
 
-### 8. Rollback Proof
+### 8. Cost Ledger Reservation Evidence
+
+Provide sanitized cost-ledger linkage evidence proving:
+
+- the `llm_cost_ledger` field and `persist_llm_usage`/reconciliation seam can
+  carry a `quota_reservation_id` when explicitly supplied;
+- current route-pilot evidence states whether the sync analysis path propagated
+  a reservation id into cost/accounting records;
+- current route-pilot success consumption is route-estimated pilot consumption,
+  not billing-authoritative actual provider cost;
+- billing-authoritative actual-provider-cost consume has not been accepted;
+- exactly-once actual-cost consume is not accepted until a single terminal
+  transition owner is selected for the route and ledger reconciliation path;
+- raw reservation ids remain absent from responses, execution metadata, logs,
+  and operator evidence.
+
+Allowed bounded fields include:
+
+- `ledgerFieldAvailable=true`;
+- `routeReservationIdPropagated=true|false`;
+- `routeEstimatedUnitsOnly=true`;
+- `billingAuthoritativeActualProviderCost=false`;
+- `terminalTransitionOwner=not_wired|route_pilot_estimated_units|cost_ledger_reconciliation`;
+- `exactOnceActualCostConsumeAccepted=false`;
+- `rawReservationIdAbsent=true`;
+- `runtimeBehaviorChanged=false`;
+- `publicLaunchApproval=false`.
+
+If `routeReservationIdPropagated=false`, the packet may still be useful
+evidence for the current pilot boundary, but it must remain **NO-GO** for
+billing-authoritative consume. If `routeReservationIdPropagated=true`, the
+packet must also prove the route does not independently consume/release the
+same reservation, or the evidence must be rejected as ambiguous.
+
+### 9. Rollback Proof
 
 Provide sanitized rollback proof by either:
 
@@ -145,6 +182,7 @@ changing API response shape.
 Do not capture or attach any of the following:
 
 - raw `reservation_id`
+- raw `quota_reservation_id`
 - idempotency key or idempotency hash
 - owner allowlist values
 - raw owner, user, session, cookie, token, header, or body data
@@ -164,6 +202,9 @@ Stop collection and reject the evidence packet if any of the following occurs:
 - raw identifiers or secrets appear in logs or evidence;
 - auth-disabled, transitional, guest, async, scanner, agent, or options paths
   become eligible;
+- the route and cost ledger both attempt to own terminal consume/release for
+  the same reservation id;
+- LLM-attempt success is treated as billing-authoritative final request success;
 - protected code, config, or deployment changes are required.
 
 ## Future Broad-Enforcement Blockers
@@ -173,8 +214,11 @@ outside the single-route pilot remains blocked until all of the following are
 accepted:
 
 - stable client retry and request identity;
-- reservation ID propagation into the quota ledger;
-- exact-once consume tied to actual cost result;
+- a single accepted terminal transition owner for reservation consume/release;
+- reservation ID propagation into the quota ledger without double terminal
+  transitions;
+- exact-once consume tied to final request success and billing-authoritative
+  actual cost result;
 - crash and timeout reconciliation;
 - admin read-only pilot status;
 - rollback and staging evidence;

@@ -51,6 +51,7 @@ Out of scope for this QA pass: runtime code, frontend implementation, schema cha
 | Provider/model summaries | Admin ledger summary returns provider/model rollups. | Covered | Admin API returns `byProviderModel` rows with provider and model dimensions. |
 | Route summaries | Admin ledger summary returns route-family rollups. | Covered | Admin API returns `byRouteFamily` rows with route family dimensions. |
 | Pricing snapshot | Ledger row stores the pricing policy key and sanitized pricing snapshot used for the estimate. | Covered | `reconcile_usage(...)` stores `pricing_policy_key` and `pricing_snapshot`. |
+| Reservation id field | Ledger rows can store a bounded `quota_reservation_id` when it is explicitly supplied to the ledger seam. | Covered at seam; not route-propagated | `LLMCostLedger.quota_reservation_id`, `persist_llm_usage(..., quota_reservation_id=...)`, and `LlmCostLedgerService.reconcile_usage(...)` support the field. Current sync analysis route-pilot evidence must still distinguish this seam from route-estimated consumption, because the route pilot does not make actual provider-cost accounting billing-authoritative. |
 | Best-effort observer | Ledger write failure cannot change user-visible LLM success behavior. | Covered by design | WS2-R4C notes define ledger observer as best-effort after legacy `llm_usage` persistence. |
 
 ## 3. Owner Context Matrix
@@ -106,7 +107,7 @@ These are not blockers for the current docs-only QA matrix, but they are blocker
 
 | Gap | Blocker status | Required next step |
 | --- | --- | --- |
-| Live enforcement pilot | Partial | A default-off, owner-allowlisted sync single-stock analysis pilot can reserve before route execution, block only that route on quota rejection, consume estimated route units after success, and release on analysis failure. Public launch and global spend-cap readiness still require accepted staging/operator evidence, admin visibility, owner/guest accounting acceptance, and invoice reconciliation. |
+| Live enforcement pilot | Partial | A default-off, owner-allowlisted sync single-stock analysis pilot can reserve before route execution, block only that route on quota rejection, consume estimated route units after success, and release on analysis failure. T-1474 evidence distinguishes that route-estimated consumption from the cost-ledger `quota_reservation_id` seam. Public launch and global spend-cap readiness still require accepted staging/operator evidence, admin visibility, owner/guest accounting acceptance, a single terminal transition owner for route/ledger reconciliation, and invoice reconciliation. |
 | Provider invoice reconciliation | Open | Compare ledger estimates against provider invoices/exported usage and document tolerances, currency handling, and mismatch workflow. |
 | Pricing update governance | Open | Define reviewed price-update cadence, source verification evidence, owner, and stale-policy alerts. |
 | Budget alerting | Open | Add warning thresholds and admin/user-facing alerts before monthly/daily exhaustion. |

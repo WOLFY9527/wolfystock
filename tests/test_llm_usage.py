@@ -210,6 +210,33 @@ class TestPersistUsageHelper(unittest.TestCase):
             self.assertEqual(row.route_family, "agent")
             self.assertEqual(row.call_type, "agent")
 
+    def test_persist_usage_records_quota_reservation_id_only_when_explicitly_supplied(self):
+        persist_llm_usage(
+            {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18},
+            "openai/gpt-4o-mini",
+            call_type="analysis",
+            owner_user_id="user-owner",
+            route_family="analysis",
+            quota_reservation_id="qres_cost_ledger_link",
+            request_hash="cost-ledger-link",
+        )
+        persist_llm_usage(
+            {"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7},
+            "openai/gpt-4o-mini",
+            call_type="analysis",
+            owner_user_id="user-owner",
+            route_family="analysis",
+            request_hash="cost-ledger-no-link",
+        )
+
+        with self.db.session_scope() as session:
+            rows = session.query(LLMCostLedger).order_by(LLMCostLedger.request_hash).all()
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[0].request_hash, "cost-ledger-link")
+            self.assertEqual(rows[0].quota_reservation_id, "qres_cost_ledger_link")
+            self.assertEqual(rows[1].request_hash, "cost-ledger-no-link")
+            self.assertIsNone(rows[1].quota_reservation_id)
+
     def test_persist_usage_allows_null_owner_global_usage(self):
         persist_llm_usage(
             {"prompt_tokens": 4, "completion_tokens": 6, "total_tokens": 10},

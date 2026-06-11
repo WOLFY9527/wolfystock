@@ -22,6 +22,7 @@ SECTION_IDS = (
     "releaseFailureFailOpen",
     "executionLogMetadataSafety",
     "quotaWindowBeforeAfter",
+    "costLedgerReservationEvidence",
     "rollbackProof",
 )
 
@@ -96,6 +97,18 @@ def _valid_artifact() -> dict[str, object]:
                 },
                 "aggregateOnly": True,
                 "reservedUnitsLeaked": False,
+            },
+            "costLedgerReservationEvidence": {
+                "routeLabel": "sync_single_stock_only",
+                "ledgerFieldAvailable": True,
+                "routeReservationIdPropagated": False,
+                "routeEstimatedUnitsOnly": True,
+                "billingAuthoritativeActualProviderCost": False,
+                "terminalTransitionOwner": "route_pilot_estimated_units",
+                "exactOnceActualCostConsumeAccepted": False,
+                "rawReservationIdAbsent": True,
+                "runtimeBehaviorChanged": False,
+                "publicLaunchApproval": False,
             },
             "rollbackProof": {
                 "pilotDisabled": True,
@@ -356,6 +369,24 @@ def test_aggregate_only_quota_window_summary_passes(tmp_path: Path) -> None:
     assert result.returncode == 0
     payload = _stdout_json(result)
     assert payload["checks"]["quotaWindowAggregateOnly"] is True  # type: ignore[index]
+
+
+def test_cost_ledger_reservation_evidence_requires_no_billing_authority_claim(tmp_path: Path) -> None:
+    artifact = _valid_artifact()
+    sections = artifact["sections"]
+    assert isinstance(sections, dict)
+    section = sections["costLedgerReservationEvidence"]
+    assert isinstance(section, dict)
+    section["billingAuthoritativeActualProviderCost"] = True
+    section["publicLaunchApproval"] = True
+    path = _write_json(tmp_path, artifact)
+
+    result = _run_validator(path)
+
+    assert result.returncode == 1
+    reason_codes = _reason_codes(_stdout_json(result))
+    assert "billing_authority_claim_forbidden" in reason_codes
+    assert "public_launch_approval_forbidden" in reason_codes
 
 
 def test_script_does_not_import_or_call_runtime_quota_storage_route_modules() -> None:

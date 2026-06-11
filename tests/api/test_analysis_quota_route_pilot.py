@@ -12,7 +12,7 @@ from api.deps import CurrentUser
 from api.v1.endpoints import analysis
 from api.v1.schemas.analysis import AnalyzeRequest
 from src.services.quota_policy_service import QuotaPolicyService as RealQuotaPolicyService
-from src.storage import DatabaseManager, QuotaReservation, QuotaUsageWindow
+from src.storage import DatabaseManager, LLMCostLedger, QuotaReservation, QuotaUsageWindow
 
 
 PILOT_ENABLED_ENV = "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED"
@@ -365,6 +365,7 @@ def test_enforcement_pilot_real_quota_service_consumes_reserved_units(
             assert len(reservations) == 1
             assert reservations[0].route_family == "analysis"
             assert reservations[0].status == "consumed"
+            assert session.query(LLMCostLedger).count() == 0
         counts = _quota_window_counts(db)
         assert len(counts) == 4
         assert {(reserved, consumed) for _owner, _window, reserved, consumed in counts} == {(0, 5)}
