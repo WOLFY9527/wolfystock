@@ -61,6 +61,44 @@ identifiers, cookies, sessions, DSNs, provider payloads, database dumps, private
 keys, or raw tracebacks. Use
 `docs/audits/operator-evidence-redaction-checklist.md` before validation.
 
+## Restore/PITR Evidence Path
+
+For PostgreSQL restore/PITR, keep three contracts separate:
+
+- `scripts/backup_restore_drill_check.sh --real-restore-evidence` validates the
+  snake_case `wolfystock_restore_drill_evidence_v1` artifact produced after an
+  externally executed isolated restore/PITR drill.
+- `scripts/restore_pitr_operator_evidence_check.py --artifact` validates the
+  camelCase `wolfystock_restore_pitr_operator_evidence_input_v1` operator
+  review artifact in the evidence bundle.
+- `scripts/isolated_pg_restore_smoke.py --artifact` validates the separate
+  isolated restore smoke wrapper contract and always keeps
+  `publicLaunchReady=false`.
+
+Recommended sequence:
+
+1. Run the dry-run preflight with fresh synthetic or sanitized metadata and a
+   temp-only restore target.
+2. Have an operator execute the real isolated PostgreSQL restore/PITR drill
+   outside this repo helper path.
+3. Convert the operator observations into sanitized artifacts only.
+4. Validate both the real-drill summary and operator evidence artifacts.
+5. Attach the sanitized outputs to the release evidence bundle for manual
+   review.
+
+Generated restore/PITR templates are review placeholders only. They intentionally
+start with `outcome=needs-review`, `restoreCommandExecuted=false`,
+`publicLaunchReady=false`, and `launchApproved=false`; they should validate as
+`NO-GO` until an operator fills them from a real isolated drill.
+
+Do not capture raw DSNs, env values, backup paths, database dumps, raw SQL,
+hostnames, user rows, stack traces, or command output. Use bounded labels,
+counts, checksums, timestamps, and sanitized ticket references instead.
+
+Validator success only means the sanitized artifact is ready for manual review.
+It is not public launch approval, does not prove this tool executed a restore,
+and does not close the `real_isolated_postgresql_restore_pitr` gate by itself.
+
 The bundle checker currently treats these files as required:
 
 - `provider_operator_evidence.json`
@@ -79,7 +117,8 @@ Run the domain validators for every artifact collected:
 
 ```bash
 python3 scripts/provider_operator_evidence_check.py "$EVIDENCE_DIR/provider_operator_evidence.json"
-python3 scripts/restore_pitr_operator_evidence_check.py "$EVIDENCE_DIR/restore_pitr_operator_evidence.json"
+python3 scripts/restore_pitr_operator_evidence_check.py \
+  --artifact "$EVIDENCE_DIR/restore_pitr_operator_evidence.json"
 python3 scripts/security_operator_acceptance_check.py "$EVIDENCE_DIR/security_operator_acceptance.json"
 python3 scripts/quota_operator_evidence_check.py "$EVIDENCE_DIR/quota_budget_operator_evidence.json"
 python3 scripts/staging_ingress_operator_evidence_check.py "$EVIDENCE_DIR/staging_ingress_operator_evidence.json"

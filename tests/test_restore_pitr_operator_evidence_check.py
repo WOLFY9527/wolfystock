@@ -152,6 +152,21 @@ def test_restore_pitr_operator_evidence_rejects_launch_approval_claim(tmp_path: 
     assert checks["artifact_does_not_claim_launch_approval"]["status"] == "fail"
 
 
+def test_restore_pitr_operator_evidence_rejects_public_launch_ready_claim(tmp_path: Path) -> None:
+    payload = _accepted_artifact()
+    payload["publicLaunchReady"] = True
+    path = tmp_path / "public-launch-ready-evidence.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_helper("--artifact", str(path))
+
+    assert result.returncode == 1
+    evidence = _output(result)
+    assert evidence["launchApproved"] is False
+    checks = {check["id"]: check for check in evidence["checks"]}
+    assert checks["artifact_does_not_claim_launch_approval"]["status"] == "fail"
+
+
 def test_restore_pitr_operator_evidence_rejects_needs_review_outcome(tmp_path: Path) -> None:
     payload = _accepted_artifact()
     payload["outcome"] = "needs-review"
