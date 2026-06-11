@@ -25,6 +25,10 @@ from src.services.provider_circuit_observer import ProviderCircuitObserver
 from src.storage import DatabaseManager
 
 
+PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED_ENV = "WOLFYSTOCK_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED"
+PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENV = "WOLFYSTOCK_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENABLED"
+
+
 def _admin_with_provider_read() -> CurrentUser:
     return CurrentUser(
         user_id=BOOTSTRAP_ADMIN_USER_ID,
@@ -68,6 +72,8 @@ def _regular_user() -> CurrentUser:
 
 class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        os.environ.pop(PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED_ENV, None)
+        os.environ.pop(PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENV, None)
         DatabaseManager.reset_instance()
         self.temp_dir = tempfile.TemporaryDirectory()
         self.db_path = Path(self.temp_dir.name) / "provider_circuit_api.db"
@@ -77,6 +83,8 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.client = TestClient(self.app)
 
     def tearDown(self) -> None:
+        os.environ.pop(PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED_ENV, None)
+        os.environ.pop(PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENV, None)
         self.client.close()
         self.app.dependency_overrides.clear()
         DatabaseManager.reset_instance()
@@ -499,7 +507,10 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
             patch("src.storage.DatabaseManager.transition_provider_circuit_state", side_effect=forbidden),
             patch("src.storage.DatabaseManager.update_provider_quota_window_counters", side_effect=forbidden),
             patch("src.storage.DatabaseManager.record_provider_probe_event", side_effect=forbidden),
-            patch("src.services.provider_circuit_observer.ProviderCircuitObserver.record_observation", side_effect=forbidden),
+            patch(
+                "src.services.provider_circuit_observer.ProviderCircuitObserver.record_observation",
+                side_effect=forbidden,
+            ),
             patch("src.notification.NotificationService.send", side_effect=forbidden),
             patch("requests.sessions.Session.request", side_effect=forbidden),
         ):
@@ -812,7 +823,10 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         with (
             patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
             patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
-            patch("src.services.scanner_ai_service.ScannerAiInterpretationService.interpret_shortlist", side_effect=forbidden),
+            patch(
+                "src.services.scanner_ai_service.ScannerAiInterpretationService.interpret_shortlist",
+                side_effect=forbidden,
+            ),
             patch("requests.sessions.Session.request", side_effect=forbidden),
         ):
             response = self.client.get(
@@ -859,6 +873,7 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         payload = response.json()
         for item in payload["items"]:
             self.assertNotIn("runtimePilot", item)
+            self.assertNotIn("adminProbePilotEvidence", item)
 
     def test_sla_readiness_runtime_pilot_opt_in_is_advisory_sanitized_and_offline(self) -> None:
         self._as_provider_read_admin()
@@ -886,7 +901,10 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
             patch("src.storage.DatabaseManager.transition_provider_circuit_state", side_effect=forbidden),
             patch("src.storage.DatabaseManager.update_provider_quota_window_counters", side_effect=forbidden),
             patch("src.storage.DatabaseManager.record_provider_probe_event", side_effect=forbidden),
-            patch("src.services.provider_circuit_observer.ProviderCircuitObserver.record_observation", side_effect=forbidden),
+            patch(
+                "src.services.provider_circuit_observer.ProviderCircuitObserver.record_observation",
+                side_effect=forbidden,
+            ),
             patch("src.services.quota_policy_service.QuotaPolicyService.evaluate_quota", side_effect=forbidden),
             patch("src.services.quota_policy_service.QuotaPolicyService.reserve_quota", side_effect=forbidden),
             patch("src.services.quota_policy_service.QuotaPolicyService.consume_reservation", side_effect=forbidden),
@@ -894,7 +912,10 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
             patch("src.notification.NotificationService.send", side_effect=forbidden),
             patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
             patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
-            patch("src.services.scanner_ai_service.ScannerAiInterpretationService.interpret_shortlist", side_effect=forbidden),
+            patch(
+                "src.services.scanner_ai_service.ScannerAiInterpretationService.interpret_shortlist",
+                side_effect=forbidden,
+            ),
             patch("requests.sessions.Session.request", side_effect=forbidden),
         ):
             response = self.client.get(
@@ -996,6 +1017,213 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertTrue(runtime_pilot["noExternalCalls"])
         self.assertFalse(runtime_pilot["providerBehaviorChanged"])
         self.assertFalse(runtime_pilot["marketCacheBehaviorChanged"])
+
+    def test_sla_readiness_admin_probe_pilot_evidence_is_bounded_sanitized_and_opt_in(self) -> None:
+        self._as_provider_read_admin()
+        os.environ[PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED_ENV] = "true"
+        os.environ.pop(PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENV, None)
+        self.db.transition_provider_circuit_state(
+            provider="fmp",
+            provider_category="data_source_validation",
+            route_family="admin_provider_probe",
+            to_state="provider_quota_depleted",
+            reason_bucket="provider_429",
+            metadata={
+                "safe_label": "admin_probe_pilot",
+                "url": "https://provider.example.test/raw?api_key=must-not-leak",
+                "headers": {"Authorization": "Bearer must-not-leak"},
+                "raw_payload": "must-not-leak",
+                "stack_trace": "Traceback must-not-leak",
+            },
+            now=datetime(2026, 5, 6, 10, 30, 0),
+        )
+
+        def forbidden(*_args, **_kwargs):
+            raise AssertionError("admin probe pilot evidence must stay read-only and offline")
+
+        with (
+            patch("src.storage.DatabaseManager.transition_provider_circuit_state", side_effect=forbidden),
+            patch("src.storage.DatabaseManager.update_provider_quota_window_counters", side_effect=forbidden),
+            patch("src.storage.DatabaseManager.record_provider_probe_event", side_effect=forbidden),
+            patch(
+                "src.services.provider_circuit_observer.ProviderCircuitObserver.record_observation",
+                side_effect=forbidden,
+            ),
+            patch("src.services.quota_policy_service.QuotaPolicyService.evaluate_quota", side_effect=forbidden),
+            patch("src.services.quota_policy_service.QuotaPolicyService.reserve_quota", side_effect=forbidden),
+            patch("src.services.quota_policy_service.QuotaPolicyService.consume_reservation", side_effect=forbidden),
+            patch("src.services.quota_policy_service.QuotaPolicyService.release_reservation", side_effect=forbidden),
+            patch("src.notification.NotificationService.send", side_effect=forbidden),
+            patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
+            patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
+            patch(
+                "src.services.scanner_ai_service.ScannerAiInterpretationService.interpret_shortlist",
+                side_effect=forbidden,
+            ),
+            patch("requests.sessions.Session.request", side_effect=forbidden),
+        ):
+            response = self.client.get(
+                "/api/v1/admin/providers/sla-readiness",
+                params={
+                    "provider": "fmp",
+                    "routeFamily": "admin_provider_probe",
+                    "since": "2026-05-06T00:00:00",
+                    "adminProbePilotEvidence": "true",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        item = self._sla_item(
+            payload,
+            provider="fmp",
+            provider_category="data_source_validation",
+            route_family="admin_provider_probe",
+        )
+        evidence = item["adminProbePilotEvidence"]
+        self.assertEqual(evidence["contractVersion"], "provider_admin_probe_pilot_evidence_v1")
+        self.assertTrue(evidence["pilotEnabled"])
+        self.assertFalse(evidence["rollbackEnabled"])
+        self.assertEqual(evidence["selectedBoundary"], "/config/data-source/test-builtin")
+        self.assertEqual(evidence["apiRoute"], "/api/v1/system/config/data-source/test-builtin")
+        self.assertTrue(evidence["selectedBoundaryOnly"])
+        self.assertEqual(evidence["providerCategory"], "data_source_validation")
+        self.assertEqual(evidence["routeFamily"], "admin_provider_probe")
+        self.assertEqual(evidence["lastDecisionCategory"], "blocked")
+        self.assertTrue(evidence["scopeMatched"])
+        self.assertTrue(evidence["liveEnforcement"])
+        self.assertTrue(evidence["wouldBlockCall"])
+        self.assertTrue(evidence["wouldBlockIfEnforced"])
+        self.assertEqual(evidence["enforcementBlockReasonCode"], "provider_429")
+        self.assertFalse(evidence["wouldChangeProviderOrder"])
+        self.assertFalse(evidence["wouldChangeFallbackBehavior"])
+        self.assertTrue(evidence["noExternalCalls"])
+        self.assertTrue(evidence["adminProbeBehaviorChanged"])
+        self.assertFalse(evidence["globalProviderBehaviorChanged"])
+        self.assertFalse(evidence["marketCacheBehaviorChanged"])
+        self.assertFalse(evidence["quotaEnforcementChanged"])
+        self.assertFalse(evidence["authRbacSessionChanged"])
+        self.assertFalse(evidence["notificationSendEnabled"])
+        self.assertFalse(evidence["publicLaunchReady"])
+        self.assertEqual(evidence["defaultOffLabel"], "provider_circuit_admin_probe_pilot_default_off")
+        self.assertEqual(
+            evidence["rollbackLabel"],
+            "WOLFYSTOCK_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENABLED",
+        )
+        self.assertIn("provider_admin_probe_pilot_evidence", ",".join(payload["metadata"]["dataSources"]))
+        text = self._json_text(payload).lower()
+        for blocked in (
+            "must-not-leak",
+            "https://provider.example",
+            "api_key",
+            "authorization",
+            "raw_payload",
+            "traceback",
+        ):
+            self.assertNotIn(blocked, text)
+
+    def test_sla_readiness_admin_probe_pilot_evidence_shows_default_off_and_rollback(self) -> None:
+        self._as_provider_read_admin()
+        self.db.transition_provider_circuit_state(
+            provider="fmp",
+            provider_category="data_source_validation",
+            route_family="admin_provider_probe",
+            to_state="open",
+            reason_bucket="timeout",
+            now=datetime(2026, 5, 6, 10, 30, 0),
+        )
+
+        response = self.client.get(
+            "/api/v1/admin/providers/sla-readiness",
+            params={
+                "provider": "fmp",
+                "routeFamily": "admin_provider_probe",
+                "since": "2026-05-06T00:00:00",
+                "adminProbePilotEvidence": "true",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        default_off_item = self._sla_item(
+            response.json(),
+            provider="fmp",
+            provider_category="data_source_validation",
+            route_family="admin_provider_probe",
+        )
+        default_off_evidence = default_off_item["adminProbePilotEvidence"]
+        self.assertFalse(default_off_evidence["pilotEnabled"])
+        self.assertFalse(default_off_evidence["rollbackEnabled"])
+        self.assertEqual(default_off_evidence["lastDecisionCategory"], "disabled_by_default")
+        self.assertFalse(default_off_evidence["liveEnforcement"])
+        self.assertFalse(default_off_evidence["wouldBlockCall"])
+        self.assertTrue(default_off_evidence["wouldBlockIfEnforced"])
+        self.assertFalse(default_off_evidence["adminProbeBehaviorChanged"])
+        self.assertFalse(default_off_evidence["globalProviderBehaviorChanged"])
+        self.assertFalse(default_off_evidence["marketCacheBehaviorChanged"])
+
+        os.environ[PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED_ENV] = "true"
+        os.environ[PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENV] = "true"
+        rollback_response = self.client.get(
+            "/api/v1/admin/providers/sla-readiness",
+            params={
+                "provider": "fmp",
+                "routeFamily": "admin_provider_probe",
+                "since": "2026-05-06T00:00:00",
+                "adminProbePilotEvidence": "true",
+            },
+        )
+
+        self.assertEqual(rollback_response.status_code, 200)
+        rollback_item = self._sla_item(
+            rollback_response.json(),
+            provider="fmp",
+            provider_category="data_source_validation",
+            route_family="admin_provider_probe",
+        )
+        rollback_evidence = rollback_item["adminProbePilotEvidence"]
+        self.assertTrue(rollback_evidence["pilotEnabled"])
+        self.assertTrue(rollback_evidence["rollbackEnabled"])
+        self.assertEqual(rollback_evidence["lastDecisionCategory"], "disabled_by_rollback")
+        self.assertFalse(rollback_evidence["liveEnforcement"])
+        self.assertFalse(rollback_evidence["wouldBlockCall"])
+        self.assertTrue(rollback_evidence["wouldBlockIfEnforced"])
+        self.assertEqual(rollback_evidence["enforcementBlockReasonCode"], "timeout")
+        self.assertFalse(rollback_evidence["adminProbeBehaviorChanged"])
+        self.assertFalse(rollback_evidence["globalProviderBehaviorChanged"])
+        self.assertFalse(rollback_evidence["marketCacheBehaviorChanged"])
+
+    def test_sla_readiness_admin_probe_pilot_evidence_omits_out_of_scope_dimensions(self) -> None:
+        self._as_provider_read_admin()
+        observer = ProviderCircuitObserver(db=self.db)
+        observer.record_observation(
+            provider="fmp",
+            provider_category="quote",
+            route_family="analysis",
+            result_bucket="operator_disabled",
+            observed_at=datetime(2026, 5, 6, 10, 45, 0),
+            metadata={
+                "safe_label": "out_of_scope",
+                "url": "https://provider.example.test/raw?token=must-not-leak",
+                "raw_payload": "must-not-leak",
+            },
+        )
+
+        response = self.client.get(
+            "/api/v1/admin/providers/sla-readiness",
+            params={
+                "provider": "fmp",
+                "routeFamily": "analysis",
+                "since": "2026-05-06T00:00:00",
+                "adminProbePilotEvidence": "true",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        item = self._sla_item(response.json(), provider="fmp", provider_category="quote", route_family="analysis")
+        self.assertNotIn("adminProbePilotEvidence", item)
+        text = self._json_text(response.json()).lower()
+        for blocked in ("must-not-leak", "provider.example", "?token=", "raw_payload"):
+            self.assertNotIn(blocked, text)
 
     def test_sla_readiness_endpoint_separates_scoped_and_unscoped_items_by_dimensions(self) -> None:
         self._as_provider_read_admin()

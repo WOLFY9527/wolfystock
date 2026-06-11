@@ -120,6 +120,35 @@ class ProviderRuntimePilotItem(_AdminProviderCircuitModel):
     rollback_label: str = Field(alias="rollbackLabel")
 
 
+class ProviderAdminProbePilotEvidenceItem(_AdminProviderCircuitModel):
+    contract_version: str = Field(alias="contractVersion")
+    pilot_enabled: bool = Field(default=False, alias="pilotEnabled")
+    rollback_enabled: bool = Field(default=False, alias="rollbackEnabled")
+    selected_boundary: str = Field(alias="selectedBoundary")
+    api_route: str = Field(alias="apiRoute")
+    selected_boundary_only: bool = Field(default=True, alias="selectedBoundaryOnly")
+    provider_category: str = Field(alias="providerCategory")
+    route_family: str = Field(alias="routeFamily")
+    last_decision_category: str = Field(alias="lastDecisionCategory")
+    scope_matched: bool = Field(default=False, alias="scopeMatched")
+    live_enforcement: bool = Field(default=False, alias="liveEnforcement")
+    would_block_call: bool = Field(default=False, alias="wouldBlockCall")
+    would_block_if_enforced: bool = Field(default=False, alias="wouldBlockIfEnforced")
+    enforcement_block_reason_code: Optional[str] = Field(default=None, alias="enforcementBlockReasonCode")
+    would_change_provider_order: bool = Field(default=False, alias="wouldChangeProviderOrder")
+    would_change_fallback_behavior: bool = Field(default=False, alias="wouldChangeFallbackBehavior")
+    no_external_calls: bool = Field(default=True, alias="noExternalCalls")
+    admin_probe_behavior_changed: bool = Field(default=False, alias="adminProbeBehaviorChanged")
+    global_provider_behavior_changed: bool = Field(default=False, alias="globalProviderBehaviorChanged")
+    market_cache_behavior_changed: bool = Field(default=False, alias="marketCacheBehaviorChanged")
+    quota_enforcement_changed: bool = Field(default=False, alias="quotaEnforcementChanged")
+    auth_rbac_session_changed: bool = Field(default=False, alias="authRbacSessionChanged")
+    notification_send_enabled: bool = Field(default=False, alias="notificationSendEnabled")
+    public_launch_ready: bool = Field(default=False, alias="publicLaunchReady")
+    default_off_label: str = Field(alias="defaultOffLabel")
+    rollback_label: str = Field(alias="rollbackLabel")
+
+
 class ProviderSlaReadinessItem(_AdminProviderCircuitModel):
     provider: str
     provider_category: Optional[str] = Field(default=None, alias="providerCategory")
@@ -160,6 +189,11 @@ class ProviderSlaReadinessItem(_AdminProviderCircuitModel):
     runtime_pilot: Optional[ProviderRuntimePilotItem] = Field(
         default=None,
         alias="runtimePilot",
+        exclude_if=_exclude_none,
+    )
+    admin_probe_pilot_evidence: Optional[ProviderAdminProbePilotEvidenceItem] = Field(
+        default=None,
+        alias="adminProbePilotEvidence",
         exclude_if=_exclude_none,
     )
 

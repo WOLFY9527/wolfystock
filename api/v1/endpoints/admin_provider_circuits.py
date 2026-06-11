@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime, timedelta
 from typing import Any
@@ -26,6 +27,7 @@ from api.v1.schemas.admin_provider_circuits import (
     ProviderSlaReadinessResponse,
     ProviderSlaTrendSummaryItem,
 )
+from src.config import parse_env_bool
 from src.services.options_market_data_provider import (
     LIVE_OPTIONS_PROVIDER_NAMES,
     OptionsLiveProviderConfig,
@@ -58,6 +60,13 @@ _STAGED_PROVIDER_CIRCUIT_ROUTE_FAMILIES = (_OPTIONS_ROUTE_FAMILY,)
 _RUNTIME_PILOT_CONTRACT_VERSION = "provider_reliability_runtime_v1"
 _RUNTIME_PILOT_DEFAULT_OFF_LABEL = "provider_reliability_runtime_pilot_default_off"
 _RUNTIME_PILOT_ROLLBACK_LABEL = "provider_reliability_runtime_pilot_disable_flag"
+_ADMIN_PROBE_PILOT_EVIDENCE_CONTRACT_VERSION = "provider_admin_probe_pilot_evidence_v1"
+_ADMIN_PROBE_PILOT_ENABLED_ENV = "WOLFYSTOCK_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED"
+_ADMIN_PROBE_PILOT_ROLLBACK_ENV = "WOLFYSTOCK_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENABLED"
+_ADMIN_PROBE_PROVIDER_CATEGORY = "data_source_validation"
+_ADMIN_PROBE_ROUTE_FAMILY = "admin_provider_probe"
+_ADMIN_PROBE_SELECTED_BOUNDARY = "/config/data-source/test-builtin"
+_ADMIN_PROBE_API_ROUTE = "/api/v1/system/config/data-source/test-builtin"
 _SAFE_DIAGNOSTIC_REF_RE = re.compile(r"[^A-Za-z0-9_.:-]+")
 _UNSAFE_DIAGNOSTIC_TEXT_RE = re.compile(
     r"(https?://|[?&][a-z0-9_.:-]+=|"
@@ -215,6 +224,7 @@ def _sla_item_from_diagnostics(
     *,
     preflight: dict[str, Any] | None = None,
     runtime_pilot: dict[str, Any] | None = None,
+    admin_probe_pilot_evidence: dict[str, Any] | None = None,
 ) -> ProviderSlaReadinessItem:
     preflight = preflight or {}
     sla = dict(diagnostics.get("sla") or {})
@@ -275,6 +285,7 @@ def _sla_item_from_diagnostics(
         providerBehaviorChanged=False,
         marketCacheBehaviorChanged=False,
         runtimePilot=runtime_pilot,
+        adminProbePilotEvidence=admin_probe_pilot_evidence,
     )
 
 
@@ -313,6 +324,65 @@ def _runtime_pilot_projection(
         "tradeableData": False,
         "defaultOffLabel": _RUNTIME_PILOT_DEFAULT_OFF_LABEL,
         "rollbackLabel": _RUNTIME_PILOT_ROLLBACK_LABEL,
+    }
+
+
+def _admin_probe_pilot_evidence_projection(
+    observer: ProviderCircuitObserver,
+    *,
+    provider: str,
+    provider_category: str | None,
+    route_family: str | None,
+) -> dict[str, Any] | None:
+    if provider_category != _ADMIN_PROBE_PROVIDER_CATEGORY or route_family != _ADMIN_PROBE_ROUTE_FAMILY:
+        return None
+
+    pilot_enabled = parse_env_bool(os.getenv(_ADMIN_PROBE_PILOT_ENABLED_ENV), default=False)
+    rollback_enabled = parse_env_bool(os.getenv(_ADMIN_PROBE_PILOT_ROLLBACK_ENV), default=False)
+    decision = observer.build_low_risk_enforcement_pilot_decision(
+        provider=provider,
+        provider_category=_ADMIN_PROBE_PROVIDER_CATEGORY,
+        route_family=_ADMIN_PROBE_ROUTE_FAMILY,
+        pilot_enabled=pilot_enabled,
+        rollback_enabled=rollback_enabled,
+        controlled_provider_categories=(_ADMIN_PROBE_PROVIDER_CATEGORY,),
+        controlled_route_families=(_ADMIN_PROBE_ROUTE_FAMILY,),
+    )
+    reason_code = decision.get("enforcement_block_reason_code")
+    if reason_code not in ProviderCircuitObserver.FAILURE_BUCKETS:
+        reason_code = None
+
+    return {
+        "contractVersion": _ADMIN_PROBE_PILOT_EVIDENCE_CONTRACT_VERSION,
+        "pilotEnabled": bool(decision.get("pilot_enabled") is True),
+        "rollbackEnabled": bool(decision.get("rollback_enabled") is True),
+        "selectedBoundary": _ADMIN_PROBE_SELECTED_BOUNDARY,
+        "apiRoute": _ADMIN_PROBE_API_ROUTE,
+        "selectedBoundaryOnly": True,
+        "providerCategory": _ADMIN_PROBE_PROVIDER_CATEGORY,
+        "routeFamily": _ADMIN_PROBE_ROUTE_FAMILY,
+        "lastDecisionCategory": str(decision.get("pilot_status") or "unknown"),
+        "scopeMatched": bool(decision.get("scope_matched") is True),
+        "liveEnforcement": bool(decision.get("live_enforcement") is True),
+        "wouldBlockCall": bool(decision.get("would_block_call") is True),
+        "wouldBlockIfEnforced": bool(decision.get("would_block_if_enforced") is True),
+        "enforcementBlockReasonCode": reason_code,
+        "wouldChangeProviderOrder": False,
+        "wouldChangeFallbackBehavior": False,
+        "noExternalCalls": True,
+        "adminProbeBehaviorChanged": bool(decision.get("provider_behavior_changed") is True),
+        "globalProviderBehaviorChanged": False,
+        "marketCacheBehaviorChanged": False,
+        "quotaEnforcementChanged": False,
+        "authRbacSessionChanged": False,
+        "notificationSendEnabled": False,
+        "publicLaunchReady": False,
+        "defaultOffLabel": str(
+            decision.get("default_off_label") or ProviderCircuitObserver.LOW_RISK_ADMIN_PROBE_DEFAULT_OFF_LABEL
+        ),
+        "rollbackLabel": str(
+            decision.get("rollback_label") or ProviderCircuitObserver.LOW_RISK_ADMIN_PROBE_ROLLBACK_LABEL
+        ),
     }
 
 
@@ -523,6 +593,7 @@ def get_provider_sla_readiness(
         default=False,
         alias="runtimePilotFallbackEvaluationEnabled",
     ),
+    admin_probe_pilot_evidence: bool = Query(default=False, alias="adminProbePilotEvidence"),
     _: CurrentUser = Depends(require_admin_capability("ops:providers:read")),
 ) -> ProviderSlaReadinessResponse:
     safe_provider = _safe_filter(provider)
@@ -533,6 +604,7 @@ def get_provider_sla_readiness(
     live_config = OptionsLiveProviderConfig.from_env()
     items: list[ProviderSlaReadinessItem] = []
     include_runtime_pilot = bool(runtime_pilot_enabled or runtime_pilot_fallback_evaluation_enabled)
+    include_admin_probe_pilot_evidence = bool(admin_probe_pilot_evidence)
 
     include_options = safe_route in (None, _OPTIONS_ROUTE_FAMILY)
     option_providers = sorted(LIVE_OPTIONS_PROVIDER_NAMES)
@@ -559,7 +631,24 @@ def get_provider_sla_readiness(
                 if include_runtime_pilot
                 else None
             )
-            items.append(_sla_item_from_diagnostics(diagnostics, preflight=preflight, runtime_pilot=runtime_pilot))
+            admin_probe_evidence = (
+                _admin_probe_pilot_evidence_projection(
+                    observer,
+                    provider=provider_name,
+                    provider_category=_OPTIONS_PROVIDER_CATEGORY,
+                    route_family=_OPTIONS_ROUTE_FAMILY,
+                )
+                if include_admin_probe_pilot_evidence
+                else None
+            )
+            items.append(
+                _sla_item_from_diagnostics(
+                    diagnostics,
+                    preflight=preflight,
+                    runtime_pilot=runtime_pilot,
+                    admin_probe_pilot_evidence=admin_probe_evidence,
+                )
+            )
 
     for observed_provider, observed_category, observed_route in _observed_provider_dimensions(
         provider=safe_provider,
@@ -589,14 +678,33 @@ def get_provider_sla_readiness(
             if include_runtime_pilot
             else None
         )
-        items.append(_sla_item_from_diagnostics(diagnostics, runtime_pilot=runtime_pilot))
+        admin_probe_evidence = (
+            _admin_probe_pilot_evidence_projection(
+                observer,
+                provider=observed_provider,
+                provider_category=observed_category,
+                route_family=observed_route,
+            )
+            if include_admin_probe_pilot_evidence
+            else None
+        )
+        items.append(
+            _sla_item_from_diagnostics(
+                diagnostics,
+                runtime_pilot=runtime_pilot,
+                admin_probe_pilot_evidence=admin_probe_evidence,
+            )
+        )
 
     filters = {"provider": safe_provider, "routeFamily": safe_route, "since": since or since_dt.isoformat()}
+    data_sources = "provider_quota_windows,provider_circuit_events,options_live_provider_preflight"
+    if include_admin_probe_pilot_evidence:
+        data_sources = f"{data_sources},provider_admin_probe_pilot_evidence"
     return ProviderSlaReadinessResponse(
         generatedAt=datetime.now().isoformat(),
         items=items[:safe_limit],
         metadata=_metadata(
-            table="provider_quota_windows,provider_circuit_events,options_live_provider_preflight",
+            table=data_sources,
             limit=safe_limit,
             filters=filters,
         ),
