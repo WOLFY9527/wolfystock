@@ -3862,11 +3862,6 @@ const UserScannerPage: React.FC = () => {
                 symbol={researchWorkflowSymbol}
                 market={researchWorkflowMarket}
                 source="scanner"
-                scannerRunId={runDetail?.id}
-                scannerRank={researchWorkflowCandidate?.rank}
-                scannerProfile={runDetail?.profile || profile}
-                themeId={runDetail?.themeId || themeId}
-                universeType={runDetail?.universeType || scanScope}
                 knownEvidence={researchWorkflowKnownEvidence}
                 missingEvidence={researchWorkflowMissingEvidence}
                 stateNotes={researchWorkflowStateNotes}

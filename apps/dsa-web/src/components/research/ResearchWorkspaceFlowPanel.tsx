@@ -1,5 +1,6 @@
 import type React from 'react';
 import { BarChart3, BookmarkCheck, BriefcaseBusiness, FlaskConical, Search } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import type { UiLanguage } from '../../i18n/core';
 import { cn } from '../../utils/cn';
 import {
@@ -19,13 +20,6 @@ type ResearchWorkspaceFlowPanelProps = {
   symbol?: string | null;
   market?: string | null;
   source?: ResearchWorkspaceSource | null;
-  origin?: ResearchWorkspaceSource | null;
-  scannerRunId?: string | number | null;
-  scannerRank?: string | number | null;
-  scannerProfile?: string | null;
-  themeId?: string | null;
-  universeType?: string | null;
-  watchlistItemId?: string | number | null;
   title?: string;
   summary?: string;
   knownEvidence?: Array<string | null | undefined>;
@@ -66,7 +60,7 @@ const SAFE_COPY = {
     latestAvailable: '已使用最近一次可用数据，需复核时间。',
     localSample: '本地验证样例，仅用于界面验证。',
     limitedConfidence: '当前置信度受限，仅供观察。',
-    hidden: '内部细节已隐藏，仅展示消费者可用证据。',
+    hidden: '技术细节已隐藏，仅展示消费者可用证据。',
   },
   en: {
     title: 'Research workflow',
@@ -84,7 +78,7 @@ const SAFE_COPY = {
     latestAvailable: 'Using latest available data; verify the timestamp.',
     localSample: 'Local validation sample for interface verification only.',
     limitedConfidence: 'Confidence is capped; observation only.',
-    hidden: 'Internal details are hidden; consumer evidence only.',
+    hidden: 'Technical details are hidden; consumer evidence only.',
   },
 } as const;
 
@@ -135,13 +129,6 @@ export default function ResearchWorkspaceFlowPanel({
   symbol,
   market,
   source,
-  origin,
-  scannerRunId,
-  scannerRank,
-  scannerProfile,
-  themeId,
-  universeType,
-  watchlistItemId,
   title,
   summary,
   knownEvidence,
@@ -155,18 +142,10 @@ export default function ResearchWorkspaceFlowPanel({
   const normalizedSymbol = normalizeResearchWorkspaceSymbol(symbol);
   const normalizedMarket = normalizeResearchWorkspaceMarket(market);
   const normalizedSource = normalizeResearchWorkspaceSource(source) || current;
-  const normalizedOrigin = normalizeResearchWorkspaceSource(origin);
   const routeContext: ResearchWorkspaceRouteContext = {
     symbol: normalizedSymbol,
     market: normalizedMarket,
     source: normalizedSource,
-    origin: normalizedOrigin,
-    scannerRunId,
-    scannerRank,
-    scannerProfile,
-    themeId,
-    universeType,
-    watchlistItemId,
   };
   const knownLines = safeEvidenceLines(knownEvidence, ui.noKnown, language);
   const missingLines = safeEvidenceLines(missingEvidence, ui.noMissing, language);
@@ -202,9 +181,9 @@ export default function ResearchWorkspaceFlowPanel({
               const isCurrent = step.key === current;
               const label = language === 'en' ? step.en : step.zh;
               return (
-                <a
+                <Link
                   key={step.key}
-                  href={buildResearchWorkspacePath(step.key, language, routeContext)}
+                  to={buildResearchWorkspacePath(step.key, language, routeContext)}
                   aria-current={isCurrent ? 'page' : undefined}
                   className={cn(
                     'inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors',
@@ -216,7 +195,7 @@ export default function ResearchWorkspaceFlowPanel({
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   <span className="truncate">{isCurrent ? label : `${ui.open} ${label}`}</span>
-                </a>
+                </Link>
               );
             })}
           </nav>

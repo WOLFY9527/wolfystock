@@ -13,8 +13,6 @@ describe('ResearchWorkspaceFlowPanel', () => {
           symbol="nvda"
           market="us"
           source="scanner"
-          scannerRunId={42}
-          scannerRank={1}
           knownEvidence={['Scanner candidate formed']}
           missingEvidence={['Portfolio exposure not reviewed']}
           nextSteps={['Review exposure before validation']}
@@ -30,8 +28,9 @@ describe('ResearchWorkspaceFlowPanel', () => {
 
     const backtestLink = screen.getByTestId('research-workspace-link-backtest');
     expect(backtestLink).toHaveAttribute('href', expect.stringContaining('/en/backtest?'));
-    expect(backtestLink).toHaveAttribute('href', expect.stringContaining('scannerRunId=42'));
-    expect(backtestLink).toHaveAttribute('href', expect.stringContaining('scannerRank=1'));
+    for (const link of screen.getAllByRole('link')) {
+      expect(link).toHaveAttribute('href', expect.not.stringMatching(/scannerRunId|scannerRank|watchlistItemId|themeId|universeType|debug|runtime|cache|provider/i));
+    }
   });
 
   it('sanitizes internal evidence vocabulary before rendering consumer copy', () => {
@@ -50,10 +49,10 @@ describe('ResearchWorkspaceFlowPanel', () => {
     );
 
     const panel = screen.getByTestId('research-workspace-flow');
-    expect(within(panel).getByText('Internal details are hidden; consumer evidence only.')).toBeInTheDocument();
+    expect(within(panel).getByText('Technical details are hidden; consumer evidence only.')).toBeInTheDocument();
     expect(within(panel).getByText('Using latest available data; verify the timestamp.')).toBeInTheDocument();
     expect(within(panel).getByText('Local validation sample for interface verification only.')).toBeInTheDocument();
     expect(within(panel).getByText('Confidence is capped; observation only.')).toBeInTheDocument();
-    expect(panel).not.toHaveTextContent(/provider|cache|fallback|raw|json|diagnostic/i);
+    expect(panel).not.toHaveTextContent(/provider|cache|fallback|raw|json|diagnostic|debug|runtime|internal/i);
   });
 });

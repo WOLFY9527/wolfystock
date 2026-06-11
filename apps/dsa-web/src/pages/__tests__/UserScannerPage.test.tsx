@@ -1565,7 +1565,7 @@ describe('UserScannerPage', () => {
     renderUserScannerPage();
 
     const band = await screen.findByTestId('scanner-conclusion-band');
-    expect(band).toHaveTextContent('本次未形成入选候选');
+    await waitFor(() => expect(band).toHaveTextContent('本次未形成入选候选'));
     expect(band).toHaveTextContent('候选 0');
     expect(band).toHaveTextContent('数据覆盖、历史覆盖与淘汰分布');
     expect(band).toHaveTextContent('不代表市场没有机会');
@@ -3267,6 +3267,27 @@ describe('UserScannerPage', () => {
     fireEvent.click(within(screen.getByTestId('scanner-candidate-filters')).getByRole('button', { name: /数据受限|Limited data/i }));
     expect(within(more).getByRole('button', { name: /加入当前筛选|Add filtered/i })).toBeDisabled();
     expect(addWatchlistItem).not.toHaveBeenCalled();
+  });
+
+  it('exposes scanner research handoff links without raw IDs or internal metadata', async () => {
+    const themedRun = makeCryptoDiagnosticsRun({ id: 42 });
+    getRun.mockResolvedValue(themedRun);
+
+    renderUserScannerPage();
+
+    const panel = await screen.findByTestId('scanner-research-workspace-flow');
+    expect(panel).toHaveTextContent('WULF');
+    expect(panel).not.toHaveTextContent(/Run #|Rank #|scannerRunId|watchlistItemId|provider|cache|runtime|debug/i);
+
+    const watchlistLink = within(panel).getByTestId('research-workspace-link-watchlist');
+    expect(watchlistLink).toHaveAttribute('href', expect.stringContaining('/watchlist?'));
+    expect(watchlistLink).toHaveAttribute('href', expect.stringContaining('symbol=WULF'));
+    expect(watchlistLink).toHaveAttribute('href', expect.stringContaining('market=US'));
+    expect(watchlistLink).toHaveAttribute('href', expect.stringContaining('source=scanner'));
+
+    for (const link of within(panel).getAllByRole('link')) {
+      expect(link).toHaveAttribute('href', expect.not.stringMatching(/scannerRunId|scannerRank|watchlistItemId|themeId|universeType|provider|cache|runtime|debug/i));
+    }
   });
 
   it('keeps action buttons from changing row inspector selection', async () => {

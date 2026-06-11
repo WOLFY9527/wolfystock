@@ -47,7 +47,11 @@ import type { WatchlistCatalystExposure, WatchlistItem, WatchlistScannerLineageV
 import type { RuleBacktestRunResponse } from '../types/backtest';
 import { describeBooleanEnabled, describeDisplayStatus, type DisplayStatusTone } from '../utils/displayStatus';
 import { buildLocalizedPath } from '../utils/localeRouting';
-import { parseResearchWorkspaceSearch } from '../utils/researchWorkspaceRoute';
+import {
+  buildResearchWorkspacePath,
+  normalizeResearchWorkspaceSource,
+  parseResearchWorkspaceSearch,
+} from '../utils/researchWorkspaceRoute';
 import { sanitizeUserFacingDataIssue } from '../utils/userFacingDataIssues';
 
 type SortKey = 'newest' | 'scannerScore' | 'backtestReturn' | 'historicalHitRate' | 'recentlyScored' | 'recentlyBacktested' | 'symbol' | 'market';
@@ -1069,19 +1073,12 @@ function buildBacktestIntelligence(run: RuleBacktestRunResponse): NonNullable<Wa
 }
 
 function buildBacktestPath(item: WatchlistItem, language: 'zh' | 'en'): string {
-  const params = new URLSearchParams({
-    symbol: item.symbol,
-    source: 'scanner',
-    origin: 'watchlist',
-    watchlistItemId: String(item.id),
-  });
   const market = normalizeMarket(item.market);
-  if (market) params.set('market', market);
-  if (item.scannerRunId) params.set('scannerRunId', String(item.scannerRunId));
-  if (item.scannerRank) params.set('scannerRank', String(item.scannerRank));
-  if (item.themeId) params.set('themeId', item.themeId);
-  if (item.universeType) params.set('universeType', item.universeType);
-  return buildLocalizedPath(`/backtest?${params.toString()}`, language);
+  return buildResearchWorkspacePath('backtest', language, {
+    symbol: item.symbol,
+    market,
+    source: normalizeResearchWorkspaceSource(item.source) || 'watchlist',
+  });
 }
 
 function extractAcceptedTaskId(response: Awaited<ReturnType<typeof analysisApi.analyzeAsync>>): string | null {
@@ -2010,6 +2007,7 @@ const WatchlistPage: React.FC = () => {
     activeScannerLineageView?.freshnessLabel,
     activeBacktestStatusLabel && activeBacktestStatusLabel !== '--' ? activeBacktestStatusLabel : null,
   ];
+  const watchlistWorkflowSource = routeContext.source || normalizeResearchWorkspaceSource(activeItem?.source) || 'watchlist';
   const watchlistWorkflowNextSteps = [
     watchlistWorkflowSymbol
       ? (language === 'zh' ? '查看组合暴露，确认是否已有持仓上下文' : 'Review portfolio exposure to check existing holding context')
@@ -2065,13 +2063,7 @@ const WatchlistPage: React.FC = () => {
             current="watchlist"
             symbol={watchlistWorkflowSymbol}
             market={watchlistWorkflowMarket}
-            source={routeContext.source || 'watchlist'}
-            origin={routeContext.origin}
-            scannerRunId={activeItem?.scannerRunId || routeContext.scannerRunId}
-            scannerRank={activeItem?.scannerRank || routeContext.scannerRank}
-            themeId={activeItem?.themeId || routeContext.themeId}
-            universeType={activeItem?.universeType || routeContext.universeType}
-            watchlistItemId={activeItem?.id || routeContext.watchlistItemId}
+            source={watchlistWorkflowSource}
             knownEvidence={watchlistWorkflowKnownEvidence}
             missingEvidence={watchlistWorkflowMissingEvidence}
             stateNotes={watchlistWorkflowStateNotes}
