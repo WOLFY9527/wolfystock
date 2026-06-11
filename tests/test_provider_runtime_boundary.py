@@ -328,6 +328,7 @@ def test_provider_usage_event_sanitization_matches_boundary_fixture() -> None:
     actual = _usage_event_payload()
 
     assert actual == fixture
+    assert "reasonCode" not in actual
     dumped = json.dumps(actual, sort_keys=True).lower()
     assert "secret" not in dumped
     assert "authorization" not in dumped
