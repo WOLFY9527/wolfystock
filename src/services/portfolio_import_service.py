@@ -187,6 +187,7 @@ class PortfolioImportService:
     ) -> Dict[str, Any]:
         broker_norm = self._normalize_broker(broker)
         if broker_norm != IBKR_BROKER:
+            self._require_import_account(account_id)
             base = self.commit_trade_records(
                 account_id=account_id,
                 broker=broker_norm,
@@ -210,6 +211,12 @@ class PortfolioImportService:
             dry_run=dry_run,
             broker_connection_id=broker_connection_id,
         )
+
+    def _require_import_account(self, account_id: int) -> Dict[str, Any]:
+        account = self.portfolio_service.get_account(account_id, include_inactive=True)
+        if account is None:
+            raise ValueError(f"Account not found: {account_id}")
+        return account
 
     def parse_trade_csv(
         self,

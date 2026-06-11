@@ -128,6 +128,16 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
 """
         return xml_text.encode("utf-8")
 
+    @staticmethod
+    def _huatai_csv_bytes(symbol: str, trade_uid: str) -> bytes:
+        csv_text = "\n".join(
+            [
+                "成交日期,证券代码,买卖标志,成交数量,成交价格,手续费,印花税,币种,成交编号",
+                f"2026-01-02,{symbol},买入,10,100,0,0,USD,{trade_uid}",
+            ]
+        )
+        return (csv_text + "\n").encode("utf-8")
+
     def _portfolio_counts(self) -> dict[str, int]:
         with self.db.get_session() as session:
             return {
@@ -576,6 +586,49 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
         self.assertEqual(alice_trades.json()["total"], 0)
         self.assertEqual(bob_trades.json()["total"], 1)
         self.assertNotIn("MSFT", self._json_text(alice_trades))
+
+    def test_non_ibkr_import_dry_run_does_not_probe_wrong_owner_duplicates(self) -> None:
+        alice_account = self._create_account(self.alice_client, "Alice CSV Import")
+        bob_account = self._create_account(self.bob_client, "Bob CSV Import")
+
+        first = self.bob_client.post(
+            "/api/v1/portfolio/imports/csv/commit",
+            data={"account_id": str(bob_account), "broker": "huatai", "dry_run": "false"},
+            files={"file": ("huatai.csv", self._huatai_csv_bytes("MSFT", "BOB-CSV-1"), "text/csv")},
+        )
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.json()["account_id"], bob_account)
+        self.assertEqual(first.json()["inserted_count"], 1)
+
+        bob_dry_run = self.bob_client.post(
+            "/api/v1/portfolio/imports/csv/commit",
+            data={"account_id": str(bob_account), "broker": "huatai", "dry_run": "true"},
+            files={"file": ("huatai.csv", self._huatai_csv_bytes("MSFT", "BOB-CSV-1"), "text/csv")},
+        )
+        self.assertEqual(bob_dry_run.status_code, 200)
+        self.assertEqual(bob_dry_run.json()["account_id"], bob_account)
+        self.assertEqual(bob_dry_run.json()["duplicate_count"], 1)
+        self.assertEqual(bob_dry_run.json()["inserted_count"], 0)
+
+        for endpoint in ("/api/v1/portfolio/imports/csv/commit", "/api/v1/portfolio/imports/commit"):
+            with self.subTest(endpoint=endpoint):
+                rejected = self.alice_client.post(
+                    endpoint,
+                    data={"account_id": str(bob_account), "broker": "huatai", "dry_run": "true"},
+                    files={"file": ("huatai.csv", self._huatai_csv_bytes("MSFT", "BOB-CSV-1"), "text/csv")},
+                )
+                self.assertEqual(rejected.status_code, 400)
+                rejected_text = self._json_text(rejected)
+                self.assertNotIn("duplicate_count", rejected_text)
+                self.assertNotIn("inserted_count", rejected_text)
+                self.assertNotIn("MSFT", rejected_text)
+
+        alice_trades = self.alice_client.get("/api/v1/portfolio/trades", params={"account_id": alice_account})
+        bob_trades = self.bob_client.get("/api/v1/portfolio/trades", params={"account_id": bob_account})
+        self.assertEqual(alice_trades.status_code, 200)
+        self.assertEqual(bob_trades.status_code, 200)
+        self.assertEqual(alice_trades.json()["total"], 0)
+        self.assertEqual(bob_trades.json()["total"], 1)
 
 
 if __name__ == "__main__":

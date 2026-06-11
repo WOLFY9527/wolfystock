@@ -18,6 +18,7 @@ from sqlalchemy import select
 
 from src.config import Config
 from src.repositories.portfolio_repo import PortfolioBusyError, PortfolioRepository
+from src.services.portfolio_import_service import PortfolioImportService
 from src.services.portfolio_risk_service import PortfolioRiskService
 from src.services.portfolio_service import PortfolioConflictError, PortfolioOversellError, PortfolioService
 from src.storage import (
@@ -2342,6 +2343,49 @@ class PortfolioServiceTestCase(unittest.TestCase):
                 with self.assertRaises(PortfolioBusyError):
                     with repo.portfolio_write_session():
                         pass
+
+
+class PortfolioImportServiceOwnerGuardTestCase(unittest.TestCase):
+    def test_non_ibkr_commit_requires_account_before_duplicate_probes(self) -> None:
+        class MissingAccountPortfolioService:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def get_account(self, account_id, *, include_inactive=False):
+                self.calls.append((account_id, include_inactive))
+                return None
+
+        class DuplicateProbeRepo:
+            def has_trade_uid(self, account_id, trade_uid):
+                raise AssertionError("trade_uid duplicate probe should be unreachable")
+
+            def has_trade_dedup_hash(self, account_id, dedup_hash):
+                raise AssertionError("dedup_hash duplicate probe should be unreachable")
+
+        portfolio_service = MissingAccountPortfolioService()
+        importer = PortfolioImportService(portfolio_service=portfolio_service, repo=DuplicateProbeRepo())
+
+        with self.assertRaisesRegex(ValueError, "Account not found: 99"):
+            importer.commit_import_records(
+                account_id=99,
+                broker="huatai",
+                parsed_payload={
+                    "records": [
+                        {
+                            "trade_date": date(2026, 1, 2),
+                            "symbol": "MSFT",
+                            "side": "buy",
+                            "quantity": 10,
+                            "price": 100,
+                            "trade_uid": "probe-trade",
+                            "dedup_hash": "probe-hash",
+                        }
+                    ],
+                },
+                dry_run=True,
+            )
+
+        self.assertEqual(portfolio_service.calls, [(99, True)])
 
 
 if __name__ == "__main__":
