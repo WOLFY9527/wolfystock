@@ -305,6 +305,77 @@ describe('AdminNotificationsPage', () => {
     expect(screen.getByTestId('notification-notice-raw-diagnostics')).not.toHaveAttribute('open');
   });
 
+  it('keeps unknown delivery diagnostics in the collapsed operator disclosure', async () => {
+    uiLanguageState.current = 'zh';
+    testChannel.mockResolvedValueOnce({
+      success: false,
+      errorCode: 'unmapped_delivery_failure',
+      error: 'internal_delivery_failure: diagnostic_ref=ops_123',
+      diagnostics: {
+        reasonCode: 'internal_delivery_failure',
+        providerPayload: { status: 502 },
+      },
+      channel: channels[1],
+    });
+
+    render(<AdminNotificationsPage />);
+
+    const webhookRow = await screen.findByTestId('notification-channel-2');
+    fireEvent.click(within(webhookRow).getByRole('button', { name: '测试发送' }));
+
+    expect(await screen.findByText('通知投递失败。')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (content, element) => element?.tagName?.toLowerCase() === 'li' && (element.textContent?.includes('请先展开下方运维诊断') ?? false),
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        (content, element) => element?.tagName?.toLowerCase() === 'li' && (element.textContent?.includes('internal_delivery_failure') ?? false),
+      ),
+    ).not.toBeInTheDocument();
+
+    const disclosure = screen.getByTestId('notification-notice-raw-diagnostics');
+    expect(disclosure).toHaveAttribute('data-terminal-primitive', 'disclosure');
+    expect(disclosure).not.toHaveAttribute('open');
+    expect(screen.queryByText(/internal_delivery_failure/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/providerPayload/)).not.toBeInTheDocument();
+
+    fireEvent.click(within(disclosure).getByRole('button', { name: /展开/ }));
+    expect(disclosure).toHaveTextContent('internal_delivery_failure');
+    expect(disclosure).toHaveTextContent('providerPayload');
+  });
+
+  it('sanitizes persisted channel diagnostics in the rule list', async () => {
+    uiLanguageState.current = 'zh';
+    listChannels.mockResolvedValueOnce({
+      items: [
+        channels[0],
+        {
+          ...channels[1],
+          lastError: 'internal_delivery_failure: diagnostic_ref=ops_456',
+          lastErrorSummary: 'internal_delivery_failure backend_field=providerPayload',
+          lastErrorCode: 'unmapped_delivery_failure',
+          lastErrorDiagnostics: {
+            reasonCode: 'internal_delivery_failure',
+            providerPayload: { status: 502 },
+            backendFieldName: 'last_error_diagnostics',
+          },
+        },
+      ],
+      availableSystemChannels: ['discord', 'email'],
+    });
+
+    render(<AdminNotificationsPage />);
+
+    const webhookRow = await screen.findByTestId('notification-channel-2');
+    expect(within(webhookRow).getByText('通知投递失败。')).toBeInTheDocument();
+    expect(screen.queryByTestId('notification-notice-raw-diagnostics')).not.toBeInTheDocument();
+    expect(screen.queryByText(/internal_delivery_failure/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/providerPayload/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/last_error_diagnostics/)).not.toBeInTheDocument();
+  });
+
   it('shows localized english ssl delivery diagnostics when webhook verification fails', async () => {
     uiLanguageState.current = 'en';
     testChannel.mockResolvedValueOnce({

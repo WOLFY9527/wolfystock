@@ -202,3 +202,43 @@ Boundary confirmation:
 - No DB migration, cleanup, restore, or PITR execution.
 - No broker/order/trade paths.
 - No external notification sending.
+
+### 2026-06-11 - unify admin operator surfaces
+
+- Updated `AdminNotificationsPage` so unknown delivery failures use a stable
+  operator-facing summary instead of rendering backend diagnostics as normal
+  notice bullets.
+- Added `diagnosticDetails` to the local notice model. Raw delivery messages
+  and structured diagnostics are available only inside the existing
+  `notification-notice-raw-diagnostics` disclosure, which remains collapsed by
+  default.
+- Added regression tests that prove unknown diagnostics are absent from the
+  default DOM for both transient test-send failures and persisted channel
+  failure summaries. Transient diagnostics become visible only after the
+  operator opens the disclosure.
+
+Validation:
+
+```bash
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/AdminNotificationsPage.test.tsx
+npm --prefix apps/dsa-web run typecheck
+npm --prefix apps/dsa-web run build
+git diff --check
+./scripts/release_secret_scan.sh --local-only
+```
+
+Result: all commands completed successfully. Vite build still reports the
+pre-existing large chunk warning.
+
+Boundary confirmation:
+
+- Admin/operator copy only; no notification send path was executed outside the
+  existing mocked frontend test.
+- No public launch approval.
+- No live quota enforcement, reservation consume/blocking, or route blocking.
+- No provider runtime enforcement, provider order/fallback/cache changes, or
+  provider blocking.
+- No auth/session/RBAC runtime changes.
+- No DB migration, cleanup, restore, or PITR execution.
+- No broker/order/trade paths.
+- No external notification sending.

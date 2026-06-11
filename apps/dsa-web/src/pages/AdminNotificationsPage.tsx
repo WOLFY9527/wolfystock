@@ -55,6 +55,7 @@ type StatusNotice = {
   message: string;
   details?: string[];
   rawMessage?: string | null;
+  diagnosticDetails?: string | null;
 };
 
 const INITIAL_DRAFT: ChannelDraft = {
@@ -114,6 +115,9 @@ function formatDeliveryError(
   if (!rawMessage) {
     return null;
   }
+  const diagnosticDetails = diagnostics && Object.keys(diagnostics).length > 0
+    ? JSON.stringify(diagnostics, null, 2)
+    : null;
 
   const troubleshooting = Array.isArray(diagnostics?.troubleshooting)
     ? diagnostics.troubleshooting.flatMap((item) => {
@@ -188,11 +192,14 @@ function formatDeliveryError(
 
   return {
     tone: 'danger',
-    message: rawMessage,
+    message: language === 'en'
+      ? 'Notification delivery failed.'
+      : '通知投递失败。',
     rawMessage,
-    details: diagnostics && Object.keys(diagnostics).length > 0
-      ? [JSON.stringify(diagnostics)]
-      : undefined,
+    details: language === 'en'
+      ? ['Review the collapsed operator diagnostics before retrying this route.']
+      : ['请先展开下方运维诊断并核对后，再重试该路由。'],
+    diagnosticDetails,
   };
 }
 
@@ -543,14 +550,19 @@ function acknowledgedLabel(value: string | null | undefined, language: 'zh' | 'e
               ))}
             </ul>
           ) : null}
-          {notice.rawMessage && notice.rawMessage !== notice.message ? (
+          {(notice.rawMessage && notice.rawMessage !== notice.message) || notice.diagnosticDetails ? (
             <TerminalDisclosure
               data-testid="notification-notice-raw-diagnostics"
               title={text('L4 sanitized delivery diagnostics: error summary / channel state', 'L4 已脱敏投递诊断：错误摘要 / 渠道状态')}
               summary={text('Collapsed by default · sanitized message only', '默认收起 · 仅显示脱敏消息')}
               className="mt-3"
             >
-              <pre className="whitespace-pre-wrap break-words text-[11px] leading-5 text-white/55">{notice.rawMessage}</pre>
+              <pre className="whitespace-pre-wrap break-words text-[11px] leading-5 text-white/55">
+                {[
+                  notice.rawMessage && notice.rawMessage !== notice.message ? notice.rawMessage : null,
+                  notice.diagnosticDetails,
+                ].filter(Boolean).join('\n\n')}
+              </pre>
             </TerminalDisclosure>
           ) : null}
         </TerminalNotice>
