@@ -35,6 +35,7 @@ from src.storage import DatabaseManager  # noqa: E402
 
 
 SCHEMA_VERSION = "wolfystock_ws2_multi_instance_smoke_preflight_v1"
+VALIDATION_PROFILE = "PROFILE_DURABLE_PROTECTED"
 PASS_STATUS = "preflight-pass-review-required"
 FAIL_STATUS = "preflight-fail-review-required"
 DRY_RUN_STATUS = "dry-run-review-required"
@@ -149,6 +150,7 @@ def _base_summary(
     network_opt_in = _network_opt_in_enabled()
     return {
         "schemaVersion": SCHEMA_VERSION,
+        "validationProfile": VALIDATION_PROFILE,
         "generatedAt": _now_iso(),
         "preflightStatus": status,
         "mode": mode,
@@ -165,6 +167,23 @@ def _base_summary(
         "sseBroadcastScope": "process-local",
         "pollingFallbackAccepted": True,
         "multiInstanceRiskAccepted": False,
+        "evidenceBoundary": {
+            "acceptedStagingEvidence": False,
+            "durablePollingBaseline": True,
+            "liveStagingCallsImplemented": False,
+            "publicLaunchReady": False,
+            "sseCrossInstanceReliable": False,
+            "targetEnvironmentEvidence": False,
+        },
+        "sseLimitation": {
+            "broadcastScope": "process-local",
+            "durableFallback": "durable-task-polling",
+            "externalReplayImplemented": False,
+            "operatorMessage": (
+                "process-local SSE is not cross-instance reliable; "
+                "durable polling remains the multi-instance baseline"
+            ),
+        },
         "summary": "Offline WS2 multi-instance smoke preflight using disposable SQLite and sanitized evidence only.",
         "payloadPolicy": {
             "credentialValuesIncluded": False,
@@ -190,10 +209,15 @@ def build_dry_run_summary(*, staging_base_url: str | None = None) -> dict[str, A
 def _api_a_submit(topology: _SyntheticTopology) -> dict[str, Any]:
     created = topology.create_synthetic_task("ws2-preflight-api-a")
     return {
+        "apiInstance": "api-a",
+        "submitPath": "synthetic-durable-state-helper",
+        "transportExercised": False,
+        "targetEnvironmentEvidence": False,
         "storedStatus": created["status"],
         "taskType": created["task_type"],
         "ownerScoped": bool(created.get("owner_user_id")),
         "durableRowCreated": True,
+        "externalCallsExecuted": False,
     }
 
 
@@ -207,6 +231,29 @@ def _worker_lease(topology: _SyntheticTopology) -> dict[str, Any]:
         lease_seconds=60,
         now=claimed_at,
     )
+    progress_event_recorded = False
+    if first_claim is not None:
+        worker_a_db.heartbeat_durable_task_state(
+            task_id="ws2-preflight-active-lease",
+            worker_id="worker-a",
+            lease_seconds=60,
+            progress=25,
+            current_step="Synthetic lease progress",
+            now=claimed_at + timedelta(seconds=5),
+        )
+        worker_a_db.append_durable_task_progress_event(
+            task_id="ws2-preflight-active-lease",
+            owner_user_id="owner-a",
+            event_type="progress",
+            stage="worker-lease",
+            progress=25,
+            message="Synthetic lease progress",
+        )
+        progress_events = worker_a_db.list_durable_task_progress_events(
+            task_id="ws2-preflight-active-lease",
+            owner_user_id="owner-a",
+        )
+        progress_event_recorded = any(event.get("event_type") == "progress" for event in progress_events)
     worker_b_db = topology.open_instance_db()
     second_claim = worker_b_db.claim_next_durable_task_state(
         worker_id="worker-b",
@@ -223,6 +270,8 @@ def _worker_lease(topology: _SyntheticTopology) -> dict[str, Any]:
         "duplicateActiveLeaseBlocked": second_claim is None,
         "storedStatus": durable["status"] if durable else "missing",
         "attemptCount": int((durable or {}).get("attempt_count") or 0),
+        "progressPersisted": int((durable or {}).get("progress") or 0) == 25,
+        "progressEventRecorded": progress_event_recorded,
     }
 
 
@@ -233,6 +282,11 @@ def _api_b_durable_read(topology: _SyntheticTopology) -> dict[str, Any]:
     status = topology.status_from_fresh_api_instance("ws2-preflight-api-b", "owner-a")
     poll = topology.poll_from_fresh_api_instance("ws2-preflight-api-b", "owner-a", after_sequence=1, limit=3)
     return {
+        "apiInstance": "api-b",
+        "submittedApiInstance": "api-a",
+        "processMemoryShared": False,
+        "pollingFallbackUsed": True,
+        "transportExercised": False,
         "workerResult": worker_result.status,
         "visibleStatus": status.status,
         "visibleProgress": status.progress,
@@ -252,6 +306,9 @@ def _polling_replay(topology: _SyntheticTopology) -> dict[str, Any]:
         limit=2,
     )
     return {
+        "apiInstance": "api-b",
+        "afterSequence": 1,
+        "durablePollingBaseline": True,
         "replaySequences": [event.sequence for event in replay.events],
         "latestSequence": replay.latest_sequence,
         "terminal": replay.terminal,
@@ -279,6 +336,8 @@ def _owner_isolation(topology: _SyntheticTopology) -> dict[str, Any]:
         "crossOwnerStatusCode": status_code,
         "crossOwnerPollStatusCode": poll_code,
         "ownerHidden": status_code == 404 and poll_code == 404,
+        "ownerValueIncluded": False,
+        "syntheticOwnerIsolationRepresented": True,
     }
 
 
@@ -333,17 +392,31 @@ def _lease_expiry_retry(topology: _SyntheticTopology) -> dict[str, Any]:
         "staleWorkerWriteRejected": stale_complete is None,
         "recoveredStatus": final_status.status,
         "terminalWriteAccepted": recovered_complete is not None,
+        "leaseExpirySimulated": True,
     }
 
 
 def _failure_safety(topology: _SyntheticTopology) -> dict[str, Any]:
     topology.create_synthetic_task(
+        "ws2-preflight-retry-cap",
+        failure_mode="transient",
+        transient_failures_remaining=3,
+        max_attempts=2,
+    )
+    worker = DurableTaskWorkerPrototype(db=topology.open_instance_db(), worker_id="worker-a")
+    retry_results = [worker.run_once(), worker.run_once()]
+    retry_state = DatabaseManager.get_instance().get_durable_task_state(
+        task_id="ws2-preflight-retry-cap",
+        owner_user_id="owner-a",
+    )
+
+    topology.create_synthetic_task(
         "ws2-preflight-failed",
         failure_mode="non_retryable",
         api_key="not-a-real-key",
     )
-    worker = DurableTaskWorkerPrototype(db=topology.open_instance_db(), worker_id="worker-a")
-    result = worker.run_once()
+    failure_worker = DurableTaskWorkerPrototype(db=topology.open_instance_db(), worker_id="worker-a")
+    result = failure_worker.run_once()
     poll = topology.poll_from_fresh_api_instance("ws2-preflight-failed", "owner-a")
     failure_events = [event for event in poll.events if event.event_type == "failed"]
     safe_failure_code = None
@@ -357,6 +430,12 @@ def _failure_safety(topology: _SyntheticTopology) -> dict[str, Any]:
         "safeFailureCode": safe_failure_code,
         "failureEventRecorded": bool(failure_events),
         "credentialValueIncluded": False,
+        "retryStatuses": [item.status for item in retry_results],
+        "retryCapEnforced": (
+            (retry_state or {}).get("status") == "failed"
+            and int((retry_state or {}).get("attempt_count") or 0) == 2
+            and (retry_state or {}).get("error_code") == "transient_synthetic_error"
+        ),
     }
 
 
@@ -376,7 +455,12 @@ def _evidence_passes(check_id: str, evidence: dict[str, Any]) -> bool:
     if check_id == "api_a_submit":
         return evidence.get("storedStatus") == "queued" and evidence.get("durableRowCreated") is True
     if check_id == "worker_lease":
-        return evidence.get("firstLeaseClaimed") is True and evidence.get("duplicateActiveLeaseBlocked") is True
+        return (
+            evidence.get("firstLeaseClaimed") is True
+            and evidence.get("duplicateActiveLeaseBlocked") is True
+            and evidence.get("progressPersisted") is True
+            and evidence.get("progressEventRecorded") is True
+        )
     if check_id == "api_b_durable_read":
         return evidence.get("workerResult") == "completed" and evidence.get("visibleStatus") == "completed"
     if check_id == "polling_replay":
@@ -396,6 +480,8 @@ def _evidence_passes(check_id: str, evidence: dict[str, Any]) -> bool:
             and evidence.get("failedTaskPollable") is True
             and evidence.get("terminal") is True
             and evidence.get("safeFailureCode") == "non_retryable_synthetic_error"
+            and evidence.get("retryStatuses") == ["retry_queued", "failed"]
+            and evidence.get("retryCapEnforced") is True
         )
     return False
 

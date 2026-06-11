@@ -75,6 +75,7 @@ def test_dry_run_outputs_planned_offline_multi_instance_checks() -> None:
     assert result.returncode == 0, result.stderr
     payload = _stdout_json(result)
     assert payload["schemaVersion"] == "wolfystock_ws2_multi_instance_smoke_preflight_v1"
+    assert payload["validationProfile"] == "PROFILE_DURABLE_PROTECTED"
     assert payload["preflightStatus"] == "dry-run-review-required"
     assert payload["mode"] == "dry-run"
     assert payload["manualReviewRequired"] is True
@@ -82,6 +83,20 @@ def test_dry_run_outputs_planned_offline_multi_instance_checks() -> None:
     assert payload["networkCallsExecuted"] is False
     assert payload["stagingCallsEnabled"] is False
     assert payload["storageMode"] == "disposable-sqlite"
+    assert payload["evidenceBoundary"] == {
+        "acceptedStagingEvidence": False,
+        "durablePollingBaseline": True,
+        "liveStagingCallsImplemented": False,
+        "publicLaunchReady": False,
+        "sseCrossInstanceReliable": False,
+        "targetEnvironmentEvidence": False,
+    }
+    assert payload["sseLimitation"] == {
+        "broadcastScope": "process-local",
+        "durableFallback": "durable-task-polling",
+        "externalReplayImplemented": False,
+        "operatorMessage": "process-local SSE is not cross-instance reliable; durable polling remains the multi-instance baseline",
+    }
     assert payload["payloadPolicy"] == {
         "credentialValuesIncluded": False,
         "rawBodiesIncluded": False,
@@ -101,6 +116,7 @@ def test_synthetic_preflight_runs_disposable_smoke_and_sanitized_evidence() -> N
     payload = _stdout_json(result)
     assert payload["preflightStatus"] == "preflight-pass-review-required"
     assert payload["mode"] == "synthetic"
+    assert payload["validationProfile"] == "PROFILE_DURABLE_PROTECTED"
     assert payload["manualReviewRequired"] is True
     assert payload["runtimeBehaviorChanged"] is False
     assert payload["networkCallsExecuted"] is False
@@ -112,12 +128,26 @@ def test_synthetic_preflight_runs_disposable_smoke_and_sanitized_evidence() -> N
     assert {check["id"] for check in checks} == EXPECTED_CHECK_IDS
     assert {check["status"] for check in checks} == {"pass"}
     evidence_by_id = {check["id"]: check["evidence"] for check in checks}
+    assert evidence_by_id["api_a_submit"]["apiInstance"] == "api-a"
+    assert evidence_by_id["api_a_submit"]["transportExercised"] is False
+    assert evidence_by_id["api_a_submit"]["targetEnvironmentEvidence"] is False
     assert evidence_by_id["api_a_submit"]["storedStatus"] == "queued"
+    assert evidence_by_id["worker_lease"]["progressPersisted"] is True
+    assert evidence_by_id["worker_lease"]["progressEventRecorded"] is True
     assert evidence_by_id["worker_lease"]["duplicateActiveLeaseBlocked"] is True
+    assert evidence_by_id["api_b_durable_read"]["apiInstance"] == "api-b"
+    assert evidence_by_id["api_b_durable_read"]["processMemoryShared"] is False
+    assert evidence_by_id["api_b_durable_read"]["pollingFallbackUsed"] is True
     assert evidence_by_id["api_b_durable_read"]["visibleStatus"] == "completed"
+    assert evidence_by_id["polling_replay"]["durablePollingBaseline"] is True
     assert evidence_by_id["polling_replay"]["replaySequences"] == [2, 3]
+    assert evidence_by_id["owner_isolation"]["ownerValueIncluded"] is False
+    assert evidence_by_id["owner_isolation"]["syntheticOwnerIsolationRepresented"] is True
     assert evidence_by_id["owner_isolation"]["crossOwnerStatusCode"] == 404
+    assert evidence_by_id["lease_expiry_retry"]["leaseExpirySimulated"] is True
     assert evidence_by_id["lease_expiry_retry"]["reclaimedAttemptCount"] == 2
+    assert evidence_by_id["failure_safety"]["retryCapEnforced"] is True
+    assert evidence_by_id["failure_safety"]["retryStatuses"] == ["retry_queued", "failed"]
     assert evidence_by_id["failure_safety"]["failedTaskPollable"] is True
     assert evidence_by_id["failure_safety"]["safeFailureCode"] == "non_retryable_synthetic_error"
     _assert_bounded_sanitized_output(result)
