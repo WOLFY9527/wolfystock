@@ -1,3 +1,6 @@
+## 2026-06-11
+- Provider SLA readiness diagnostics now expose the `runtimePilot` advisory projection only when `runtimePilotEnabled=true` or `runtimePilotFallbackEvaluationEnabled=true` is passed. Default readiness items omit `runtimePilot`; opt-in output is admin-only, read-only, sanitized, and does not enable provider runtime execution, blocking, provider order/fallback/cache changes, quota enforcement, DB writes, broker/order/trade paths, notification sends, or frontend behavior.
+
 ## 2026-06-09
 - Admin SPA deep links now add a server-side defense-in-depth fallback guard: unauthenticated direct browser requests to `/admin...` or supported localized `/zh|en/admin...` shell routes redirect to the matching guest route, while authenticated admin shell access, static assets, product routes, and API auth/RBAC JSON contracts remain unchanged.
 

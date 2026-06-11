@@ -8,6 +8,10 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
+def _exclude_none(value: Any) -> bool:
+    return value is None
+
+
 class _AdminProviderCircuitModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -91,6 +95,31 @@ class ProviderSlaTrendSummaryItem(_AdminProviderCircuitModel):
     latest_observation_at: Optional[str] = Field(default=None, alias="latestObservationAt")
 
 
+class ProviderRuntimePilotItem(_AdminProviderCircuitModel):
+    contract_version: str = Field(alias="contractVersion")
+    pilot_enabled: bool = Field(default=False, alias="pilotEnabled")
+    fallback_evaluation_enabled: bool = Field(default=False, alias="fallbackEvaluationEnabled")
+    scope_matched: bool = Field(default=False, alias="scopeMatched")
+    advisory_only: bool = Field(default=True, alias="advisoryOnly")
+    production_enforcement_enabled: bool = Field(default=False, alias="productionEnforcementEnabled")
+    live_enforcement: bool = Field(default=False, alias="liveEnforcement")
+    would_block_call: bool = Field(default=False, alias="wouldBlockCall")
+    would_block_if_enforced: bool = Field(default=False, alias="wouldBlockIfEnforced")
+    pilot_would_block: bool = Field(default=False, alias="pilotWouldBlock")
+    pilot_would_fallback: bool = Field(default=False, alias="pilotWouldFallback")
+    enforcement_block_reason_code: Optional[str] = Field(default=None, alias="enforcementBlockReasonCode")
+    would_change_provider_order: bool = Field(default=False, alias="wouldChangeProviderOrder")
+    would_change_fallback_behavior: bool = Field(default=False, alias="wouldChangeFallbackBehavior")
+    no_external_calls: bool = Field(default=True, alias="noExternalCalls")
+    provider_behavior_changed: bool = Field(default=False, alias="providerBehaviorChanged")
+    market_cache_behavior_changed: bool = Field(default=False, alias="marketCacheBehaviorChanged")
+    broker_order_path_enabled: bool = Field(default=False, alias="brokerOrderPathEnabled")
+    portfolio_mutation_path_enabled: bool = Field(default=False, alias="portfolioMutationPathEnabled")
+    tradeable_data: bool = Field(default=False, alias="tradeableData")
+    default_off_label: str = Field(alias="defaultOffLabel")
+    rollback_label: str = Field(alias="rollbackLabel")
+
+
 class ProviderSlaReadinessItem(_AdminProviderCircuitModel):
     provider: str
     provider_category: Optional[str] = Field(default=None, alias="providerCategory")
@@ -128,6 +157,11 @@ class ProviderSlaReadinessItem(_AdminProviderCircuitModel):
     no_external_calls: bool = Field(default=True, alias="noExternalCalls")
     provider_behavior_changed: bool = Field(default=False, alias="providerBehaviorChanged")
     market_cache_behavior_changed: bool = Field(default=False, alias="marketCacheBehaviorChanged")
+    runtime_pilot: Optional[ProviderRuntimePilotItem] = Field(
+        default=None,
+        alias="runtimePilot",
+        exclude_if=_exclude_none,
+    )
 
 
 class ProviderCircuitDiagnosticsMetadata(_AdminProviderCircuitModel):

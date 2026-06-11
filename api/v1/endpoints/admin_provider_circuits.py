@@ -55,6 +55,9 @@ _OPTIONS_PROVIDER_CATEGORY = "options"
 _OPTIONS_ROUTE_FAMILY = "options_lab"
 _STAGED_PROVIDER_CIRCUIT_CATEGORIES = (_OPTIONS_PROVIDER_CATEGORY,)
 _STAGED_PROVIDER_CIRCUIT_ROUTE_FAMILIES = (_OPTIONS_ROUTE_FAMILY,)
+_RUNTIME_PILOT_CONTRACT_VERSION = "provider_reliability_runtime_v1"
+_RUNTIME_PILOT_DEFAULT_OFF_LABEL = "provider_reliability_runtime_pilot_default_off"
+_RUNTIME_PILOT_ROLLBACK_LABEL = "provider_reliability_runtime_pilot_disable_flag"
 _SAFE_DIAGNOSTIC_REF_RE = re.compile(r"[^A-Za-z0-9_.:-]+")
 _UNSAFE_DIAGNOSTIC_TEXT_RE = re.compile(
     r"(https?://|[?&][a-z0-9_.:-]+=|"
@@ -211,6 +214,7 @@ def _sla_item_from_diagnostics(
     diagnostics: dict[str, Any],
     *,
     preflight: dict[str, Any] | None = None,
+    runtime_pilot: dict[str, Any] | None = None,
 ) -> ProviderSlaReadinessItem:
     preflight = preflight or {}
     sla = dict(diagnostics.get("sla") or {})
@@ -270,7 +274,46 @@ def _sla_item_from_diagnostics(
         noExternalCalls=True,
         providerBehaviorChanged=False,
         marketCacheBehaviorChanged=False,
+        runtimePilot=runtime_pilot,
     )
+
+
+def _runtime_pilot_projection(
+    diagnostics: dict[str, Any],
+    *,
+    pilot_enabled: bool,
+    fallback_evaluation_enabled: bool,
+) -> dict[str, Any]:
+    circuit = dict(diagnostics.get("circuitPreflight") or {})
+    scope_matched = bool(circuit.get("scope_matched") is True)
+    would_block_if_enforced = bool(circuit.get("would_block_if_enforced") is True)
+    reason_code = circuit.get("enforcement_block_reason_code")
+    if reason_code not in ProviderCircuitObserver.FAILURE_BUCKETS:
+        reason_code = None
+    return {
+        "contractVersion": _RUNTIME_PILOT_CONTRACT_VERSION,
+        "pilotEnabled": bool(pilot_enabled),
+        "fallbackEvaluationEnabled": bool(fallback_evaluation_enabled),
+        "scopeMatched": scope_matched,
+        "advisoryOnly": True,
+        "productionEnforcementEnabled": False,
+        "liveEnforcement": False,
+        "wouldBlockCall": False,
+        "wouldBlockIfEnforced": would_block_if_enforced,
+        "pilotWouldBlock": bool(pilot_enabled and scope_matched and would_block_if_enforced),
+        "pilotWouldFallback": bool(fallback_evaluation_enabled and scope_matched and would_block_if_enforced),
+        "enforcementBlockReasonCode": reason_code,
+        "wouldChangeProviderOrder": False,
+        "wouldChangeFallbackBehavior": False,
+        "noExternalCalls": True,
+        "providerBehaviorChanged": False,
+        "marketCacheBehaviorChanged": False,
+        "brokerOrderPathEnabled": False,
+        "portfolioMutationPathEnabled": False,
+        "tradeableData": False,
+        "defaultOffLabel": _RUNTIME_PILOT_DEFAULT_OFF_LABEL,
+        "rollbackLabel": _RUNTIME_PILOT_ROLLBACK_LABEL,
+    }
 
 
 def _observed_provider_dimensions(
@@ -475,6 +518,11 @@ def get_provider_sla_readiness(
     routeFamily: str | None = Query(default=None),
     since: str | None = Query(default=None),
     limit: int = Query(default=50),
+    runtime_pilot_enabled: bool = Query(default=False, alias="runtimePilotEnabled"),
+    runtime_pilot_fallback_evaluation_enabled: bool = Query(
+        default=False,
+        alias="runtimePilotFallbackEvaluationEnabled",
+    ),
     _: CurrentUser = Depends(require_admin_capability("ops:providers:read")),
 ) -> ProviderSlaReadinessResponse:
     safe_provider = _safe_filter(provider)
@@ -484,6 +532,7 @@ def get_provider_sla_readiness(
     observer = ProviderCircuitObserver()
     live_config = OptionsLiveProviderConfig.from_env()
     items: list[ProviderSlaReadinessItem] = []
+    include_runtime_pilot = bool(runtime_pilot_enabled or runtime_pilot_fallback_evaluation_enabled)
 
     include_options = safe_route in (None, _OPTIONS_ROUTE_FAMILY)
     option_providers = sorted(LIVE_OPTIONS_PROVIDER_NAMES)
@@ -501,7 +550,16 @@ def get_provider_sla_readiness(
                 controlled_provider_categories=_STAGED_PROVIDER_CIRCUIT_CATEGORIES,
                 controlled_route_families=_STAGED_PROVIDER_CIRCUIT_ROUTE_FAMILIES,
             )
-            items.append(_sla_item_from_diagnostics(diagnostics, preflight=preflight))
+            runtime_pilot = (
+                _runtime_pilot_projection(
+                    diagnostics,
+                    pilot_enabled=runtime_pilot_enabled,
+                    fallback_evaluation_enabled=runtime_pilot_fallback_evaluation_enabled,
+                )
+                if include_runtime_pilot
+                else None
+            )
+            items.append(_sla_item_from_diagnostics(diagnostics, preflight=preflight, runtime_pilot=runtime_pilot))
 
     for observed_provider, observed_category, observed_route in _observed_provider_dimensions(
         provider=safe_provider,
@@ -522,7 +580,16 @@ def get_provider_sla_readiness(
             controlled_provider_categories=_STAGED_PROVIDER_CIRCUIT_CATEGORIES,
             controlled_route_families=_STAGED_PROVIDER_CIRCUIT_ROUTE_FAMILIES,
         )
-        items.append(_sla_item_from_diagnostics(diagnostics))
+        runtime_pilot = (
+            _runtime_pilot_projection(
+                diagnostics,
+                pilot_enabled=runtime_pilot_enabled,
+                fallback_evaluation_enabled=runtime_pilot_fallback_evaluation_enabled,
+            )
+            if include_runtime_pilot
+            else None
+        )
+        items.append(_sla_item_from_diagnostics(diagnostics, runtime_pilot=runtime_pilot))
 
     filters = {"provider": safe_provider, "routeFamily": safe_route, "since": since or since_dt.isoformat()}
     return ProviderSlaReadinessResponse(
