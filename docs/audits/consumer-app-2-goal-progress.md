@@ -98,6 +98,21 @@ Validation evidence:
 - Source copy scan: `rg -n "\b(buy|sell|broker|orders?|trading|execution|advice|guidance)\b|买入|卖出|交易|执行|券商|订单|委托|建议" apps/dsa-web/src/components/layout/consumerAppNavigation.ts` returned no matches.
 - Git whitespace, secret scan, final status, commit, and push evidence are reported in the task closeout.
 
+### post-main-sync integration validation
+
+Status: evidence recorded after syncing `codex/goal-consumer-app-2` with current `origin/main`.
+
+Integration evidence:
+
+- The branch was synced with current `origin/main` in merge commit `b0a07e79` (`merge: sync consumer app 2 with current main`).
+- Final diff no longer reverts Product Experience/private-beta/research workflow docs or Admin Provider advisory-only safety copy.
+- Full `./scripts/release_secret_scan.sh` was executed after the sync and passed.
+- Shell/AppRoutes, typecheck, lint:changed, check:design:changed, build:quiet, and bounded Playwright guest-entry/copy smoke passed.
+
+Protected boundary confirmation:
+
+- Consumer App 2 remains frontend-first and does not change backend/API/provider/cache/fallback/quota/auth/DB/broker/notification behavior.
+
 ## Validation Asset Audit
 
 Recommended bounded validation set for this goal:
