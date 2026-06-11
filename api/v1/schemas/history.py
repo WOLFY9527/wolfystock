@@ -20,6 +20,7 @@ from api.v1.schemas.home_evidence import (
     HomeResearchReadiness,
     HomeSingleStockEvidencePacket,
     HomeSourceProvenanceFrame,
+    IntelligenceReportPacketV2,
     validate_home_evidence_field,
 )
 
@@ -169,6 +170,11 @@ class ReportMeta(BaseModel):
         description="Home 来源溯源框架（可选）",
         exclude_if=_exclude_none,
     )
+    intelligencePacket: Optional[IntelligenceReportPacketV2] = Field(
+        None,
+        description="Intelligence Report Engine v2 结构化研究包（可选）",
+        exclude_if=_exclude_none,
+    )
 
 
 class ReportSummary(BaseModel):
@@ -268,6 +274,11 @@ class AnalysisReport(BaseModel):
     sourceProvenanceFrame: Optional[HomeSourceProvenanceFrame] = Field(
         None,
         description="Home 来源溯源框架（可选）",
+        exclude_if=_exclude_none,
+    )
+    intelligencePacket: Optional[IntelligenceReportPacketV2] = Field(
+        None,
+        description="Intelligence Report Engine v2 结构化研究包（可选）",
         exclude_if=_exclude_none,
     )
 

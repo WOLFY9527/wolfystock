@@ -47,6 +47,80 @@ from data_provider.realtime_types import RealtimeSource
 
 
 class AnalysisApiContractTestCase(unittest.TestCase):
+    def _intelligence_packet_result(self) -> SimpleNamespace:
+        return SimpleNamespace(
+            code="TSLA",
+            name="Tesla",
+            query_id="q-intel-default-off",
+            current_price=171.22,
+            change_pct=2.41,
+            model_used="openai/gpt-4.1-mini",
+            analysis_summary="等待证据确认。",
+            operation_advice="持有",
+            trend_prediction="震荡偏强",
+            sentiment_score=64,
+            news_summary="news",
+            technical_analysis="tech",
+            fundamental_analysis="fundamental",
+            risk_warning="risk",
+            report_language="zh",
+            decision_type="hold",
+            confidence_level="中",
+            dashboard={
+                "battle_plan": {},
+                "decision_context": {},
+                "structured_analysis": {
+                    "technicals": {
+                        "status": "ok",
+                        "source": "alpha-source-123",
+                        "sourceTier": "score_grade",
+                        "freshness": "fresh",
+                        "scoreContributionAllowed": True,
+                        "raw_payload": {"provider_payload_ref": "payload-456"},
+                        "prompt": "Prompt: hidden system prompt",
+                    },
+                    "sentiment_analysis": {
+                        "status": "partial",
+                        "source": "debug-source-456",
+                        "sourceTier": "observation_only",
+                        "freshness": "fallback",
+                        "fallbackOrProxy": True,
+                        "scoreContributionAllowed": False,
+                        "stack_trace": "Traceback: secret stack trace",
+                        "internal_diagnostics": "internal_diagnostic_token=diag-secret",
+                    },
+                    "data_quality_report": {
+                        "dataQualityTier": "analysis_grade",
+                        "requiredAvailable": True,
+                        "confidenceCap": 80,
+                        "missingRequiredDomains": [],
+                        "importantDomainsMissing": [],
+                        "scoreSuppressed": False,
+                    },
+                },
+            },
+            runtime_execution={
+                "data": {
+                    "market": {
+                        "status": "ok",
+                        "source": "alpha-source-123",
+                        "freshness": "fresh",
+                        "provider_payload_ref": "payload-456",
+                    },
+                    "sentiment": {
+                        "status": "fallback",
+                        "source": "debug-source-456",
+                        "freshness": "fallback",
+                        "final_reason": "Traceback token=secret",
+                    },
+                },
+                "steps": [],
+            },
+            raw_response={"content": "visible"},
+            notification_result={"status": "ok"},
+            get_sniper_points=lambda: {},
+        )
+
     def test_report_type_full_maps_to_full_pipeline_mode(self) -> None:
         service = object.__new__(AnalysisService)
         pipeline_instance = MagicMock()
@@ -559,6 +633,61 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertNotIn("guest-cookie", serialized)
         self.assertNotIn("trace-123", serialized)
         self.assertNotIn("hidden system prompt", serialized)
+
+    def test_build_report_payload_does_not_emit_intelligence_packet_by_default(self) -> None:
+        service = AnalysisService()
+        result = self._intelligence_packet_result()
+
+        payload = service._build_report_payload(
+            result,
+            query_id="q-intel-default-off",
+            report_type="detailed",
+        )
+        response = service._build_analysis_response(result, "q-intel-default-off", report_type="detailed")
+
+        for report_payload in (payload, response["report"]):
+            self.assertNotIn("intelligencePacket", report_payload)
+            self.assertNotIn("intelligencePacket", report_payload["meta"])
+            self.assertNotIn("intelligencePacket", report_payload["details"]["analysis_result"])
+            standard_report = report_payload["details"].get("standard_report")
+            if isinstance(standard_report, dict):
+                self.assertNotIn("intelligencePacket", standard_report)
+
+    def test_build_report_payload_emits_sanitized_intelligence_packet_only_when_opted_in(self) -> None:
+        service = AnalysisService()
+        result = self._intelligence_packet_result()
+
+        payload = service._build_report_payload(
+            result,
+            query_id="q-intel-opt-in-raw",
+            report_type="detailed",
+            include_intelligence_packet=True,
+        )
+
+        packet = payload["intelligencePacket"]
+        self.assertEqual(payload["meta"]["intelligencePacket"], packet)
+        self.assertEqual(payload["details"]["analysis_result"]["intelligencePacket"], packet)
+        standard_report = payload["details"].get("standard_report")
+        if isinstance(standard_report, dict):
+            self.assertEqual(standard_report["intelligencePacket"], packet)
+        self.assertEqual(json.loads(json.dumps(packet, ensure_ascii=False)), packet)
+
+        serialized = json.dumps(packet, ensure_ascii=False).lower()
+        for forbidden in (
+            "q-intel-opt-in-raw",
+            "alpha-source-123",
+            "debug-source-456",
+            "debugref",
+            "hidden system prompt",
+            "provider_payload",
+            "payload-456",
+            "traceback",
+            "stack trace",
+            "internal_diagnostic",
+            "diag-secret",
+            "token=secret",
+        ):
+            self.assertNotIn(forbidden, serialized)
 
     def test_build_report_payload_includes_decision_trace_metadata(self) -> None:
         service = AnalysisService()
