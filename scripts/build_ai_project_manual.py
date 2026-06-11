@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
@@ -9,13 +10,14 @@ import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Sequence
 
 
 ROOT = Path(__file__).resolve().parent.parent
 MANUAL_PATH = ROOT / "docs" / "AI_PROJECT_MANUAL.md"
 MANIFEST_PATH = ROOT / "docs" / "AI_PROJECT_MANUAL_SOURCES.json"
 GENERATOR_PATH = "scripts/build_ai_project_manual.py"
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2
 SCHEMA_VERSION = 1
 
 PRUNED_DIR_NAMES = {
@@ -79,6 +81,14 @@ class ManualSection:
     source_paths: tuple[str, ...]
     update_trigger: str
     validation: str
+
+
+@dataclass(frozen=True)
+class GeneratedOutputs:
+    manual: str
+    manifest_text: str
+    source_count: int
+    discovery: dict[str, object]
 
 
 SOURCE_REFS = [
@@ -427,6 +437,13 @@ def rel_path(path: Path) -> str:
     return path.relative_to(ROOT).as_posix()
 
 
+def display_path(path: Path) -> str:
+    try:
+        return path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def is_safe_placeholder(value: str) -> bool:
     normalized = value.strip().strip("\"'").strip()
     lower = normalized.lower()
@@ -538,7 +555,6 @@ def exclusion_reason(path: str) -> str | None:
 
 def discover_markdown_files() -> dict[str, object]:
     discovered: list[str] = []
-    pruned_dirs: list[str] = []
     for dirpath, dirnames, filenames in os.walk(ROOT):
         dirnames[:] = sorted(dirnames)
         filenames = sorted(filenames)
@@ -546,7 +562,6 @@ def discover_markdown_files() -> dict[str, object]:
         for dirname in dirnames:
             child = Path(dirpath) / dirname
             if should_prune_dir(child):
-                pruned_dirs.append(rel_path(child))
                 continue
             kept_dirs.append(dirname)
         dirnames[:] = kept_dirs
@@ -574,7 +589,7 @@ def discover_markdown_files() -> dict[str, object]:
         "candidateMarkdownAfterPolicy": len(candidates),
         "includedSourceCount": len(included_paths),
         "excludedByReason": dict(sorted(excluded.items())),
-        "prunedDirectories": sorted(pruned_dirs),
+        "prunedDirectoryNames": sorted(PRUNED_DIR_NAMES),
     }
 
 
@@ -609,6 +624,7 @@ def build_manual(source_meta: dict[str, dict[str, object]], discovery: dict[str,
         "> GENERATED FILE. DO NOT EDIT DIRECTLY.",
         ">",
         f"> Edit source docs or `{GENERATOR_PATH}`, then run `python {GENERATOR_PATH}`.",
+        f"> Check freshness with `python {GENERATOR_PATH} --check`.",
         "",
         "Status: generated AI maintenance onboarding manual.",
         "Audience: Codex workers, review agents, integrators, and humans assigning AI work.",
@@ -692,6 +708,7 @@ def build_manifest(source_meta: dict[str, dict[str, object]], discovery: dict[st
         "generator": {
             "path": GENERATOR_PATH,
             "version": GENERATOR_VERSION,
+            "sha256": sha256_bytes((ROOT / GENERATOR_PATH).read_bytes()),
             "deterministic": True,
             "callsExternalServices": False,
             "requiresApiKeys": False,
@@ -724,20 +741,69 @@ def write_text_if_changed(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def main() -> int:
+def build_generated_outputs() -> GeneratedOutputs:
     source_meta = {source.path: source_metadata(source) for source in SOURCE_REFS}
     discovery = discover_markdown_files()
     manual = build_manual(source_meta, discovery) + "\n"
     manual_sha256 = hashlib.sha256(manual.encode("utf-8")).hexdigest()
     manifest = build_manifest(source_meta, discovery, manual_sha256)
     manifest_text = json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    return GeneratedOutputs(
+        manual=manual,
+        manifest_text=manifest_text,
+        source_count=len(source_meta),
+        discovery=discovery,
+    )
 
-    write_text_if_changed(MANUAL_PATH, manual)
-    write_text_if_changed(MANIFEST_PATH, manifest_text)
+
+def check_generated_outputs(outputs: GeneratedOutputs) -> int:
+    expected = {
+        MANUAL_PATH: outputs.manual,
+        MANIFEST_PATH: outputs.manifest_text,
+    }
+    stale_paths: list[str] = []
+    for path, content in expected.items():
+        if not path.exists() or path.read_text(encoding="utf-8") != content:
+            stale_paths.append(display_path(path))
+
+    if stale_paths:
+        print("[manual-generator] generated AI project manual is stale", file=sys.stderr)
+        for path in stale_paths:
+            print(f"[manual-generator] stale output: {path}", file=sys.stderr)
+        print(f"[manual-generator] run: python {GENERATOR_PATH}", file=sys.stderr)
+        return 1
+
+    print("[manual-generator] generated AI project manual is fresh")
+    print(f"included_sources={outputs.source_count} markdown_discovered={outputs.discovery['markdownDiscovered']}")
+    return 0
+
+
+def write_generated_outputs(outputs: GeneratedOutputs) -> None:
+    write_text_if_changed(MANUAL_PATH, outputs.manual)
+    write_text_if_changed(MANIFEST_PATH, outputs.manifest_text)
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Build or check the generated WolfyStock AI project manual.")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="verify generated manual and source manifest are current without writing files",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(argv)
+    outputs = build_generated_outputs()
+    if args.check:
+        return check_generated_outputs(outputs)
+
+    write_generated_outputs(outputs)
 
     print(f"generated {MANUAL_PATH.relative_to(ROOT).as_posix()}")
     print(f"generated {MANIFEST_PATH.relative_to(ROOT).as_posix()}")
-    print(f"included_sources={len(source_meta)} markdown_discovered={discovery['markdownDiscovered']}")
+    print(f"included_sources={outputs.source_count} markdown_discovered={outputs.discovery['markdownDiscovered']}")
     return 0
 
 
