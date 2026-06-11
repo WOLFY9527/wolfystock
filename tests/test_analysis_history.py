@@ -1074,6 +1074,147 @@ class AnalysisHistoryTestCase(unittest.TestCase):
             ),
         )
 
+    @patch("src.auth.is_auth_enabled", return_value=False)
+    def test_history_detail_api_omits_raw_debug_containers(self, mock_auth) -> None:
+        """History detail API should project safe report fields without raw/debug containers."""
+        if TestClient is None or create_app is None:
+            self.skipTest("fastapi is not installed in this test environment")
+
+        query_id = "query_history_raw_container_sanitizer_001"
+        saved = self.db.save_analysis_history(
+            result=self._build_result(),
+            query_id=query_id,
+            report_type="detailed",
+            news_content="新闻摘要",
+            context_snapshot={
+                "enhanced_context": {
+                    "market_timestamp": "2026-03-27T09:35:00-04:00",
+                    "report_generated_at": "2026-03-27T21:35:00+08:00",
+                },
+                "raw_provider_payload": "CONTEXT_RAW_PAYLOAD_SHOULD_NOT_LEAK",
+            },
+            save_snapshot=True,
+        )
+        self.assertEqual(saved, 1)
+
+        with self.db.session_scope() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.query_id == query_id).first()
+            if row is None:
+                self.fail("未找到保存的历史记录")
+            row.raw_result = json.dumps({
+                "code": "600519",
+                "model_used": "fixture-model",
+                "raw_ai_response": {
+                    "content": "RAW_AI_RESPONSE_SHOULD_NOT_LEAK",
+                    "hidden_reasoning": "HIDDEN_REASONING_SHOULD_NOT_LEAK",
+                },
+                "persisted_report": {
+                    "meta": {
+                        "query_id": query_id,
+                        "stock_code": "600519",
+                        "stock_name": "贵州茅台",
+                        "company_name": "贵州茅台",
+                        "report_type": "detailed",
+                        "report_language": "zh",
+                    },
+                    "summary": {
+                        "analysis_summary": "安全摘要仍应返回",
+                        "operation_advice": "继续跟踪",
+                        "trend_prediction": "震荡偏强",
+                        "sentiment_score": 72,
+                    },
+                    "strategy": {
+                        "ideal_buy": "1680 - 1705",
+                        "stop_loss": "1628",
+                    },
+                    "details": {
+                        "news_summary": "安全新闻摘要",
+                        "raw_ai_response": {
+                            "content": "PERSISTED_RAW_AI_SHOULD_NOT_LEAK",
+                            "traceback": "TRACEBACK_SHOULD_NOT_LEAK",
+                        },
+                        "standard_report": {
+                            "summary_panel": {
+                                "ticker": "600519",
+                                "one_sentence": "安全标准报告摘要",
+                            },
+                            "technical_fields": [
+                                {"label": "MACD", "value": "金叉后放量", "source": "历史报告"},
+                            ],
+                            "debug_schema": {"traceback": "TRACEBACK_SHOULD_NOT_LEAK"},
+                            "provider_payload_ref": "PROVIDER_PAYLOAD_REF_SHOULD_NOT_LEAK",
+                            "internal_diagnostics": "token=HISTORY_DETAIL_SHOULD_NOT_LEAK",
+                        },
+                    },
+                },
+            }, ensure_ascii=False)
+            record_id = row.id
+
+        static_dir = Path(self._temp_dir.name) / "empty-static"
+        static_dir.mkdir(exist_ok=True)
+        client = TestClient(create_app(static_dir=static_dir))
+
+        response = client.get(f"/api/v1/history/{record_id}")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        details = payload.get("details") or {}
+
+        self.assertEqual(payload["summary"]["analysis_summary"], "安全摘要仍应返回")
+        self.assertEqual(payload["strategy"]["ideal_buy"], "1680 - 1705")
+        self.assertEqual(details.get("news_content"), "安全新闻摘要")
+        self.assertEqual(
+            details.get("standard_report", {}).get("summary_panel", {}).get("one_sentence"),
+            "安全标准报告摘要",
+        )
+        for raw_container in (
+            "raw_result",
+            "rawResult",
+            "raw_ai_response",
+            "rawAiResponse",
+            "context_snapshot",
+            "contextSnapshot",
+        ):
+            self.assertNotIn(raw_container, details)
+
+        serialized_payload = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        for forbidden_marker in (
+            "RAW_AI_RESPONSE_SHOULD_NOT_LEAK",
+            "PERSISTED_RAW_AI_SHOULD_NOT_LEAK",
+            "HIDDEN_REASONING_SHOULD_NOT_LEAK",
+            "CONTEXT_RAW_PAYLOAD_SHOULD_NOT_LEAK",
+            "TRACEBACK_SHOULD_NOT_LEAK",
+            "PROVIDER_PAYLOAD_REF_SHOULD_NOT_LEAK",
+            "HISTORY_DETAIL_SHOULD_NOT_LEAK",
+            "raw_ai_response",
+            "context_snapshot",
+            "provider_payload_ref",
+            "internal_diagnostics",
+        ):
+            self.assertNotIn(forbidden_marker, serialized_payload)
+        self._assert_no_forbidden_keys(
+            payload,
+            (
+                "raw_result",
+                "rawResult",
+                "raw_ai_response",
+                "rawAiResponse",
+                "context_snapshot",
+                "contextSnapshot",
+                "rawProviderPayload",
+                "provider_payload_ref",
+                "debug_schema",
+                "traceback",
+                "internal_diagnostics",
+            ),
+        )
+
+        with self.db.get_session() as session:
+            persisted_row = session.query(AnalysisHistory).filter(AnalysisHistory.id == record_id).first()
+            if persisted_row is None:
+                self.fail("未找到保存的历史记录")
+            self.assertIn("RAW_AI_RESPONSE_SHOULD_NOT_LEAK", persisted_row.raw_result or "")
+            self.assertIn("CONTEXT_RAW_PAYLOAD_SHOULD_NOT_LEAK", persisted_row.context_snapshot or "")
+
     def test_clean_test_history_script_deletes_only_flagged_rows(self) -> None:
         self.assertEqual(
             self.db.save_analysis_history(

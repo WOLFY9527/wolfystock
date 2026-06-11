@@ -224,6 +224,17 @@ class ReportDetails(BaseModel):
         return self
 
 
+class HistoryReportDetails(BaseModel):
+    """历史详情 API 安全投影，不暴露持久化 raw/debug 容器。"""
+
+    news_content: Optional[str] = Field(None, description="新闻摘要")
+    analysis_result: Optional[Any] = Field(None, description="结构化分析结果（API 恢复镜像）")
+    standard_report: Optional[Any] = Field(None, description="统一标准报告安全投影（JSON）")
+    data_quality_report: Optional[Any] = Field(None, description="研究关键数据质量报告（可选）")
+    financial_report: Optional[Any] = Field(None, description="结构化财报摘要（来自 fundamental_context）")
+    dividend_metrics: Optional[Any] = Field(None, description="结构化分红指标（含 TTM 口径）")
+
+
 class AnalysisReport(BaseModel):
     """完整分析报告"""
 
@@ -285,8 +296,8 @@ class AnalysisReport(BaseModel):
     @model_validator(mode="after")
     def _hydrate_home_evidence_contracts(self) -> "AnalysisReport":
         analysis_result = None
-        if isinstance(self.details, ReportDetails):
-            analysis_result = self.details.analysis_result
+        if self.details is not None and hasattr(self.details, "analysis_result"):
+            analysis_result = getattr(self.details, "analysis_result")
         elif isinstance(self.details, dict):
             analysis_result = self.details.get("analysis_result")
 
@@ -306,6 +317,12 @@ class AnalysisReport(BaseModel):
                     setattr(self.meta, field_name, getattr(self, field_name))
 
         return self
+
+
+class HistoryAnalysisReport(AnalysisReport):
+    """历史详情 API 响应模型，复用报告主体但收窄 details 投影。"""
+
+    details: Optional[HistoryReportDetails] = Field(None, description="详情区")
 
 
 class MarkdownReportResponse(BaseModel):
