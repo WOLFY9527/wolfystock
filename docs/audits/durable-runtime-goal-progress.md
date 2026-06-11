@@ -31,8 +31,12 @@ Implemented foundations already present:
   process-local queue has no task.
 - `/api/v1/analysis/status/{task_id}/poll` returns owner-scoped durable state
   and replayable progress events.
+- `/api/v1/analysis/tasks/{task_id}/progress` durable fallback normalizes stored
+  states before response validation and remains owner scoped.
 - `DurableTaskWorkerPrototype` is a fixture-backed worker for
   `ws2_synthetic_fixture` tasks.
+- `build_durable_runtime_envelope()` keeps synthetic guard fields authoritative
+  and drops unsafe secret/internal `extra_metadata` keys.
 - `AnalysisTaskQueue` and `/api/v1/analysis/tasks/stream` SSE remain
   process-local.
 
@@ -46,13 +50,9 @@ Known foundation gaps that remain outside this prototype slice:
   not a separately accepted distributed queue contract with fencing tokens;
 - retry has a bounded attempt cap but no accepted retry-after/backoff or
   dead-letter policy;
-- lease expiry can be reclaimed, but there is no production supervisor/reaper
-  runbook yet;
+- lease expiry recovery is covered by prototype tests, but there is no
+  production supervisor/reaper runbook yet;
 - failure reason codes are safe prototype strings, not a final production enum;
-- `/api/v1/analysis/tasks/{task_id}/progress` durable fallback currently needs
-  the same stored-state normalization used by `/status/{task_id}` before it can
-  safely expose `queued`, `leased`, or `waiting_retry` rows through its stricter
-  response schema;
 - durable rows do not recreate lost process-local futures.
 
 ## Durable Runtime v1 Design
@@ -78,6 +78,12 @@ The task row remains the source of truth for:
 - status, progress, current step;
 - attempts, max attempts, lease owner, lease expiry;
 - sanitized metadata and terminal error summary.
+
+Additional envelope metadata is optional and bounded. The envelope builder drops
+synthetic guard overrides and secret/internal metadata keys such as `api_key`,
+`token`, `secret`, `prompt`, `raw_*`, `session`, `webhook`, `url`,
+`provider_payload`, `stack`, `trace`, `debug`, `authorization`, and `cookie`,
+including common nested and camelCase variants.
 
 ### State Machine
 
@@ -216,7 +222,7 @@ Validation:
 - `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m py_compile src/services/durable_runtime_contracts.py src/services/system_config_service.py api/v1/endpoints/analysis.py`
   passed.
 - `git diff --check` passed.
-- `./scripts/release_secret_scan.sh --local-only` passed.
+- Secret scan evidence superseded by the final full branch scan in Slice 5.
 
 ### Slice 3: Synthetic Worker Prototype
 
@@ -251,9 +257,11 @@ Validation:
 - `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m py_compile src/services/durable_runtime_v1.py src/services/durable_runtime_contracts.py src/services/system_config_service.py api/v1/endpoints/analysis.py`
   passed.
 - `git diff --check` passed.
-- `./scripts/release_secret_scan.sh --local-only` passed.
+- Secret scan evidence superseded by the final full branch scan in Slice 5.
 
 ### Slice 4: Recovery and Owner Tests
+
+Status: complete.
 
 Planned files:
 
@@ -267,7 +275,24 @@ Acceptance:
 - crashed/stalled worker can be recovered after lease expiry;
 - stale worker cannot overwrite terminal state.
 
+Implemented:
+
+- `tests/test_durable_runtime_v1_recovery.py` covers fresh API-process status
+  visibility, owner-isolated not-found responses, bounded polling replay after
+  `after_sequence`, expired lease recovery, stale-worker rejection, and
+  sanitized terminal failure polling.
+- `tests/test_durable_runtime_progress_projection.py` covers shared durable
+  status normalization for `/status/{task_id}`, `/status/{task_id}/poll`, and
+  `/api/v1/analysis/tasks/{task_id}/progress`.
+
+Validation:
+
+- Covered by the final focused pytest command in Slice 5.
+
 ### Slice 5: Docs and Final Verification
+
+Status: complete for this guarded prototype checkpoint. Production cutover
+remains disabled.
 
 Planned files:
 
@@ -280,6 +305,15 @@ Acceptance:
 - changed Python files compile;
 - diff check and secret scan pass;
 - final report lists prototype-only behavior and exact cutover blockers.
+
+Final evidence for this branch checkpoint:
+
+- `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m pytest -p no:cacheprovider tests/test_durable_runtime_contracts.py tests/test_durable_runtime_progress_projection.py tests/test_durable_runtime_v1_worker.py tests/test_durable_runtime_v1_recovery.py tests/test_durable_task_state.py tests/test_ws2_durable_task_worker.py tests/test_system_config_service.py tests/test_analysis_api_contract.py -q`
+- `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m py_compile src/services/durable_runtime_contracts.py src/services/durable_runtime_v1.py src/services/system_config_service.py api/v1/endpoints/analysis.py`
+- `git diff --check origin/main..HEAD`
+- `./scripts/release_secret_scan.sh`
+  - full branch scan mode; covers committed branch changes from
+    `origin/main..HEAD` plus staged, unstaged, and untracked text files.
 
 ## Production Cutover Status
 
@@ -313,19 +347,25 @@ Cutover blockers:
 Focused commands for this goal:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -p no:cacheprovider \
+PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m pytest -p no:cacheprovider \
+  tests/test_durable_runtime_contracts.py \
+  tests/test_durable_runtime_progress_projection.py \
+  tests/test_durable_runtime_v1_worker.py \
+  tests/test_durable_runtime_v1_recovery.py \
   tests/test_durable_task_state.py \
   tests/test_ws2_durable_task_worker.py \
-  tests/test_ws2_multi_instance_preflight.py \
-  tests/test_ws2_sse_topology.py
+  tests/test_system_config_service.py \
+  tests/test_analysis_api_contract.py \
+  -q
 
-PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m py_compile \
-  src/services/durable_task_worker.py \
-  api/v1/endpoints/analysis.py \
-  api/v1/schemas/analysis.py
+PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m py_compile \
+  src/services/durable_runtime_contracts.py \
+  src/services/durable_runtime_v1.py \
+  src/services/system_config_service.py \
+  api/v1/endpoints/analysis.py
 
-git diff --check
-./scripts/release_secret_scan.sh --local-only
+git diff --check origin/main..HEAD
+./scripts/release_secret_scan.sh
 ```
 
 If new tests or modules are added, include them in the focused pytest and

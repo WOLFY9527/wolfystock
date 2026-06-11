@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 
 from src.services.durable_runtime_contracts import (
@@ -53,6 +54,7 @@ class DurableRuntimeContractsTestCase(unittest.TestCase):
         self.assertFalse(envelope["production_cutover_enabled"])
         self.assertFalse(DURABLE_RUNTIME_PRODUCTION_CUTOVER_ENABLED)
         self.assertNotEqual(DURABLE_RUNTIME_V1_SYNTHETIC_TASK_TYPE, "analysis")
+        self.assertEqual(envelope["selection_source"], "manual")
 
     def test_envelope_rejects_live_or_unknown_job_kinds(self) -> None:
         for job_kind in ("analysis", "backtest", "provider_live", "unknown"):
@@ -74,18 +76,105 @@ class DurableRuntimeContractsTestCase(unittest.TestCase):
         envelope = build_durable_runtime_envelope(
             job_kind="backtest_fixture",
             fixture_name="synthetic_backtest",
+            symbol="AAPL",
             extra_metadata={
                 "runtime_schema": "production_runtime",
+                "runtimeSchema": "production_runtime_camel",
                 "task_type": "analysis",
+                "job_kind": "analysis",
+                "fixture_name": "live_backtest",
                 "source": "live_provider",
                 "production_cutover_enabled": True,
+                "symbol": "MSFT",
             },
         )
 
         self.assertEqual(envelope["runtime_schema"], DURABLE_RUNTIME_V1_SCHEMA)
         self.assertEqual(envelope["task_type"], DURABLE_RUNTIME_V1_SYNTHETIC_TASK_TYPE)
+        self.assertEqual(envelope["job_kind"], "backtest_fixture")
+        self.assertEqual(envelope["fixture_name"], "synthetic_backtest")
         self.assertEqual(envelope["source"], "synthetic_fixture")
+        self.assertEqual(envelope["symbol"], "AAPL")
         self.assertFalse(envelope["production_cutover_enabled"])
+        self.assertNotIn("runtimeSchema", envelope)
+
+    def test_extra_metadata_drops_unsafe_internal_and_secret_keys(self) -> None:
+        envelope = build_durable_runtime_envelope(
+            job_kind="analysis_fixture",
+            fixture_name="synthetic_success",
+            symbol="AAPL",
+            extra_metadata={
+                "selection_source": "manual",
+                "api_key": "leak-api-key",
+                "accessToken": "leak-token",
+                "client_secret": "leak-secret",
+                "prompt_override": "leak-prompt",
+                "raw_payload": "leak-raw",
+                "session_id": "leak-session",
+                "webhookUrl": "leak-webhook-url",
+                "providerPayload": {"safe": "nope"},
+                "stackTrace": "leak-stack-trace",
+                "debug_info": "leak-debug",
+                "authorization_header": "leak-auth",
+                "cookie": "leak-cookie",
+                "safe_context": {
+                    "display_name": "fixture display",
+                    "trace_id": "leak-nested-trace",
+                    "nested": {
+                        "note": "keep nested note",
+                        "raw_response": "leak-nested-raw",
+                    },
+                },
+                "events": [
+                    {"name": "prepare", "provider_payload": "leak-list-provider"},
+                    {"name": "execute", "detail": "keep list detail"},
+                ],
+            },
+        )
+
+        self.assertEqual(envelope["selection_source"], "manual")
+        self.assertEqual(envelope["safe_context"]["display_name"], "fixture display")
+        self.assertEqual(envelope["safe_context"]["nested"]["note"], "keep nested note")
+        self.assertEqual(envelope["events"], [{"name": "prepare"}, {"name": "execute", "detail": "keep list detail"}])
+
+        serialized = json.dumps(envelope, sort_keys=True)
+        for blocked_key in (
+            "api_key",
+            "accessToken",
+            "client_secret",
+            "prompt_override",
+            "raw_payload",
+            "session_id",
+            "webhookUrl",
+            "providerPayload",
+            "stackTrace",
+            "debug_info",
+            "authorization_header",
+            "cookie",
+            "trace_id",
+            "raw_response",
+            "provider_payload",
+        ):
+            with self.subTest(blocked_key=blocked_key):
+                self.assertNotIn(blocked_key, serialized)
+        for blocked_value in (
+            "leak-api-key",
+            "leak-token",
+            "leak-secret",
+            "leak-prompt",
+            "leak-raw",
+            "leak-session",
+            "leak-webhook-url",
+            "leak-stack-trace",
+            "leak-debug",
+            "leak-auth",
+            "leak-cookie",
+            "leak-nested-trace",
+            "leak-nested-raw",
+            "leak-list-provider",
+        ):
+            with self.subTest(blocked_value=blocked_value):
+                self.assertNotIn(blocked_value, serialized)
 
 
 if __name__ == "__main__":
