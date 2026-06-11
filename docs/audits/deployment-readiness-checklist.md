@@ -38,8 +38,9 @@ remaining blockers are operational and safety-critical:
   not cross-instance reliable.
 - Cost/quota remains mostly observational and dry-run; live budget enforcement
   is not enabled.
-- Provider circuits are visible in storage/API diagnostics, but runtime provider
-  fallback/order/enforcement behavior has not changed.
+- Provider circuits are visible in storage/API diagnostics and advisory admin
+  surfaces, but runtime provider fallback/order/enforcement behavior has not
+  changed and target-environment degraded/SLA evidence remains missing.
 - DB readiness has a local dry-run backup/restore preflight and admin-log
   retention/storage policy evidence, but still lacks an isolated PostgreSQL
   restore/PITR drill and full retention tiers for non-log high-growth domains.
@@ -190,8 +191,8 @@ Status:
   windows, and probe events.
 - [x] Provider circuit dry-run observer exists for synthetic bounded observation
   buckets.
-- [x] Provider SLA/readiness diagnostics are present as bounded admin/provider
-  evidence.
+- [x] Provider SLA/readiness diagnostics and Launch Cockpit/admin provider
+  surfaces are present as bounded advisory operator visibility.
 - [x] Diagnostics responses omit raw provider payloads, URLs/query strings,
   credentials, cookies, raw session ids, exception text, stack traces, and
   internal storage details.
@@ -201,15 +202,19 @@ Remaining blockers:
 - [ ] No runtime provider call site is integrated for enforcement.
 - [ ] No provider ordering, fallback, retry, timeout, in-flight, sufficiency, or
   MarketCache behavior change has landed.
-- [ ] Frontend provider circuit dashboard surfacing remains future work.
+- [ ] Existing Launch Cockpit/admin provider surfaces do not prove provider
+  entitlement, staging degraded behavior, live circuit enforcement, provider
+  order/fallback/cache behavior, or public launch readiness.
 - [ ] Provider circuit enforcement pilot remains separately required.
-- [ ] Diagnostics/counters must be validated in staging without live credential
-  leakage before launch.
+- [ ] Provider SLA/degraded target-environment evidence and live-credential
+  redaction proof remain missing before launch.
 
 Go/no-go:
 
 - **NO-GO** for public scale until provider exhaustion behavior is measured in
-  staging and an approved degraded/enforcement policy exists.
+  staging and an approved degraded/enforcement policy exists. Launch Cockpit
+  and admin diagnostics are advisory visibility only; neither they nor Mission
+  Control approve launch.
 
 ## 7. DB readiness gates
 
