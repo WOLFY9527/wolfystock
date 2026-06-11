@@ -91,6 +91,64 @@ class ProviderSlaTrendSummaryItem(_AdminProviderCircuitModel):
     latest_observation_at: Optional[str] = Field(default=None, alias="latestObservationAt")
 
 
+class ProviderRuntimePilotDiagnosticsItem(_AdminProviderCircuitModel):
+    provider: str
+    provider_category: Optional[str] = Field(default=None, alias="providerCategory")
+    route_family: Optional[str] = Field(default=None, alias="routeFamily")
+    circuit_state: str = Field(default="closed", alias="circuitState")
+    reason_bucket: Optional[str] = Field(default=None, alias="reasonBucket")
+    health_status: str = Field(default="healthy", alias="healthStatus")
+    sufficiency_status: str = Field(default="sufficient", alias="sufficiencyStatus")
+    degraded_status: str = Field(default="none", alias="degradedStatus")
+    cooldown_active: bool = Field(default=False, alias="cooldownActive")
+    half_open_sample_limit: int = Field(default=0, alias="halfOpenSampleLimit")
+    half_open_sample_count: int = Field(default=0, alias="halfOpenSampleCount")
+
+
+class ProviderRuntimePilotItem(_AdminProviderCircuitModel):
+    contract_version: str = Field(default="provider_reliability_runtime_v1", alias="contractVersion")
+    provider: str
+    provider_category: Optional[str] = Field(default=None, alias="providerCategory")
+    route_family: Optional[str] = Field(default=None, alias="routeFamily")
+    circuit_state: str = Field(default="closed", alias="circuitState")
+    health_status: str = Field(default="healthy", alias="healthStatus")
+    cooldown_active: bool = Field(default=False, alias="cooldownActive")
+    cooldown_until: Optional[str] = Field(default=None, alias="cooldownUntil")
+    half_open_sample_limit: int = Field(default=0, alias="halfOpenSampleLimit")
+    half_open_sample_count: int = Field(default=0, alias="halfOpenSampleCount")
+    half_open_sample_limit_reached: bool = Field(default=False, alias="halfOpenSampleLimitReached")
+    half_open_sample_allowed: bool = Field(default=False, alias="halfOpenSampleAllowed")
+    fallback_evaluation_enabled: bool = Field(default=False, alias="fallbackEvaluationEnabled")
+    would_fallback_if_enforced: bool = Field(default=False, alias="wouldFallbackIfEnforced")
+    pilot_would_fallback: bool = Field(default=False, alias="pilotWouldFallback")
+    sufficiency_status: str = Field(default="sufficient", alias="sufficiencyStatus")
+    degraded_status: str = Field(default="none", alias="degradedStatus")
+    pilot_enabled: bool = Field(default=False, alias="pilotEnabled")
+    scope_matched: bool = Field(default=False, alias="scopeMatched")
+    decision_status: str = Field(default="disabled_by_default", alias="decisionStatus")
+    production_enforcement_enabled: bool = Field(default=False, alias="productionEnforcementEnabled")
+    live_enforcement: bool = Field(default=False, alias="liveEnforcement")
+    would_block_call: bool = Field(default=False, alias="wouldBlockCall")
+    would_block_if_enforced: bool = Field(default=False, alias="wouldBlockIfEnforced")
+    pilot_would_block: bool = Field(default=False, alias="pilotWouldBlock")
+    enforcement_block_reason_code: Optional[str] = Field(default=None, alias="enforcementBlockReasonCode")
+    would_change_provider_order: bool = Field(default=False, alias="wouldChangeProviderOrder")
+    would_change_fallback_behavior: bool = Field(default=False, alias="wouldChangeFallbackBehavior")
+    no_external_calls: bool = Field(default=True, alias="noExternalCalls")
+    provider_behavior_changed: bool = Field(default=False, alias="providerBehaviorChanged")
+    market_cache_behavior_changed: bool = Field(default=False, alias="marketCacheBehaviorChanged")
+    default_off_label: str = Field(
+        default="provider_reliability_runtime_pilot_default_off",
+        alias="defaultOffLabel",
+    )
+    rollback_label: str = Field(
+        default="provider_reliability_runtime_pilot_disable_flag",
+        alias="rollbackLabel",
+    )
+    diagnostic_ref: Optional[str] = Field(default=None, alias="diagnosticRef")
+    sanitized_diagnostics: ProviderRuntimePilotDiagnosticsItem = Field(alias="sanitizedDiagnostics")
+
+
 class ProviderSlaReadinessItem(_AdminProviderCircuitModel):
     provider: str
     provider_category: Optional[str] = Field(default=None, alias="providerCategory")
@@ -128,6 +186,7 @@ class ProviderSlaReadinessItem(_AdminProviderCircuitModel):
     no_external_calls: bool = Field(default=True, alias="noExternalCalls")
     provider_behavior_changed: bool = Field(default=False, alias="providerBehaviorChanged")
     market_cache_behavior_changed: bool = Field(default=False, alias="marketCacheBehaviorChanged")
+    runtime_pilot: ProviderRuntimePilotItem = Field(alias="runtimePilot")
 
 
 class ProviderCircuitDiagnosticsMetadata(_AdminProviderCircuitModel):

@@ -1,3 +1,6 @@
+## 2026-06-11
+- Provider SLA readiness diagnostics now include an admin-only `runtimePilot` posture projection for Provider Reliability Runtime v1. The additive DTO is guarded by explicit query flags, defaults off, reports would-block/would-fallback evidence for the staged options provider path, and keeps live enforcement, provider order/fallback behavior, MarketCache behavior, and public launch posture unchanged.
+
 ## 2026-06-09
 - Admin SPA deep links now add a server-side defense-in-depth fallback guard: unauthenticated direct browser requests to `/admin...` or supported localized `/zh|en/admin...` shell routes redirect to the matching guest route, while authenticated admin shell access, static assets, product routes, and API auth/RBAC JSON contracts remain unchanged.
 

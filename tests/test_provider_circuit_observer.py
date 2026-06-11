@@ -40,6 +40,19 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
         self.assertFalse(payload["provider_behavior_changed"])
         self.assertFalse(payload["market_cache_behavior_changed"])
 
+    def _assert_runtime_pilot_never_changes_provider_behavior(self, payload: dict) -> None:
+        self.assertEqual(payload["contract_version"], "provider_reliability_runtime_v1")
+        self.assertFalse(payload["production_enforcement_enabled"])
+        self.assertFalse(payload["live_enforcement"])
+        self.assertFalse(payload["would_block_call"])
+        self.assertFalse(payload["would_change_provider_order"])
+        self.assertFalse(payload["would_change_fallback_behavior"])
+        self.assertTrue(payload["no_external_calls"])
+        self.assertFalse(payload["provider_behavior_changed"])
+        self.assertFalse(payload["market_cache_behavior_changed"])
+        self.assertEqual(payload["default_off_label"], "provider_reliability_runtime_pilot_default_off")
+        self.assertEqual(payload["rollback_label"], "provider_reliability_runtime_pilot_disable_flag")
+
     def test_timeout_observation_records_dry_run_failure_counter_and_event_only(self) -> None:
         observed_at = datetime(2026, 5, 6, 10, 15, 30)
 
@@ -555,6 +568,208 @@ class ProviderCircuitObserverTestCase(unittest.TestCase):
         self.assertTrue(decision["would_block_if_enforced"])
         with self.db.session_scope() as session:
             self.assertEqual(session.query(ProviderCircuitEvent).count(), state_count)
+
+    def test_runtime_pilot_policy_projects_timeout_429_403_and_5xx_buckets_without_enforcement(self) -> None:
+        cases = (
+            ("timeout", "open", "cooldown_active", "fallback_advised", "insufficient"),
+            ("provider_429", "provider_quota_depleted", "quota_depleted", "quota_depleted", "insufficient"),
+            ("provider_403", "disabled_by_operator", "operator_disabled", "operator_disabled", "insufficient"),
+            ("provider_5xx", "open", "cooldown_active", "fallback_advised", "insufficient"),
+        )
+        for index, (bucket, state, health, degraded, sufficiency) in enumerate(cases):
+            provider = f"tradier-{index}"
+            with self.subTest(bucket=bucket):
+                self.db.transition_provider_circuit_state(
+                    provider=provider,
+                    provider_category="options",
+                    route_family="options_lab",
+                    to_state=state,
+                    reason_bucket=bucket,
+                    cooldown_until=datetime(2026, 5, 6, 16, 0, 0),
+                    now=datetime(2026, 5, 6, 15, 0, 0),
+                )
+
+                decision = self.observer.build_runtime_pilot_decision(
+                    provider=provider,
+                    provider_category="options",
+                    route_family="options_lab",
+                    pilot_enabled=True,
+                    fallback_evaluation_enabled=True,
+                    pilot_provider_categories=("options",),
+                    pilot_route_families=("options_lab",),
+                    now=datetime(2026, 5, 6, 15, 30, 0),
+                )
+
+                self._assert_runtime_pilot_never_changes_provider_behavior(decision)
+                self.assertTrue(decision["pilot_enabled"])
+                self.assertTrue(decision["scope_matched"])
+                self.assertEqual(decision["health_status"], health)
+                self.assertEqual(decision["degraded_status"], degraded)
+                self.assertEqual(decision["sufficiency_status"], sufficiency)
+                self.assertTrue(decision["would_block_if_enforced"])
+                self.assertTrue(decision["pilot_would_block"])
+                self.assertTrue(decision["would_fallback_if_enforced"])
+                self.assertTrue(decision["pilot_would_fallback"])
+                self.assertEqual(decision["enforcement_block_reason_code"], bucket)
+
+    def test_runtime_pilot_cooldown_and_half_open_sampling_are_evaluation_only(self) -> None:
+        self.db.transition_provider_circuit_state(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="open",
+            reason_bucket="timeout",
+            cooldown_until=datetime(2026, 5, 6, 15, 0, 0),
+            now=datetime(2026, 5, 6, 14, 0, 0),
+        )
+        expired_cooldown = self.observer.build_runtime_pilot_decision(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            pilot_enabled=True,
+            fallback_evaluation_enabled=True,
+            pilot_provider_categories=("options",),
+            pilot_route_families=("options_lab",),
+            now=datetime(2026, 5, 6, 15, 30, 0),
+        )
+
+        self._assert_runtime_pilot_never_changes_provider_behavior(expired_cooldown)
+        self.assertEqual(expired_cooldown["health_status"], "half_open_ready")
+        self.assertTrue(expired_cooldown["half_open_sample_allowed"])
+        self.assertFalse(expired_cooldown["would_block_if_enforced"])
+        self.assertFalse(expired_cooldown["pilot_would_block"])
+        self.assertEqual(expired_cooldown["degraded_status"], "recovery_sampling")
+
+        self.db.transition_provider_circuit_state(
+            provider="polygon",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="half_open",
+            reason_bucket="provider_5xx",
+            half_open_started_at=datetime(2026, 5, 6, 15, 10, 0),
+            half_open_sample_limit=2,
+            half_open_sample_count=2,
+            now=datetime(2026, 5, 6, 15, 10, 0),
+        )
+        sample_limited = self.observer.build_runtime_pilot_decision(
+            provider="polygon",
+            provider_category="options",
+            route_family="options_lab",
+            pilot_enabled=True,
+            fallback_evaluation_enabled=True,
+            pilot_provider_categories=("options",),
+            pilot_route_families=("options_lab",),
+            now=datetime(2026, 5, 6, 15, 30, 0),
+        )
+
+        self._assert_runtime_pilot_never_changes_provider_behavior(sample_limited)
+        self.assertEqual(sample_limited["health_status"], "half_open_sample_limited")
+        self.assertEqual(sample_limited["half_open_sample_limit"], 2)
+        self.assertEqual(sample_limited["half_open_sample_count"], 2)
+        self.assertTrue(sample_limited["half_open_sample_limit_reached"])
+        self.assertFalse(sample_limited["half_open_sample_allowed"])
+        self.assertTrue(sample_limited["pilot_would_block"])
+        self.assertTrue(sample_limited["pilot_would_fallback"])
+
+    def test_runtime_pilot_scope_and_rollback_flags_suppress_pilot_actions(self) -> None:
+        self.db.transition_provider_circuit_state(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="open",
+            reason_bucket="timeout",
+            cooldown_until=datetime(2026, 5, 6, 16, 0, 0),
+            now=datetime(2026, 5, 6, 15, 0, 0),
+        )
+
+        out_of_scope = self.observer.build_runtime_pilot_decision(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            pilot_enabled=True,
+            fallback_evaluation_enabled=True,
+            pilot_provider_categories=("quote",),
+            pilot_route_families=("analysis",),
+            now=datetime(2026, 5, 6, 15, 30, 0),
+        )
+        rolled_back = self.observer.build_runtime_pilot_decision(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            pilot_enabled=False,
+            fallback_evaluation_enabled=True,
+            pilot_provider_categories=("options",),
+            pilot_route_families=("options_lab",),
+            now=datetime(2026, 5, 6, 15, 30, 0),
+        )
+
+        self.assertEqual(out_of_scope["decision_status"], "scope_not_enabled")
+        self.assertFalse(out_of_scope["scope_matched"])
+        self.assertTrue(out_of_scope["would_block_if_enforced"])
+        self.assertFalse(out_of_scope["pilot_would_block"])
+        self.assertFalse(out_of_scope["pilot_would_fallback"])
+        self.assertEqual(rolled_back["decision_status"], "disabled_by_default")
+        self.assertTrue(rolled_back["scope_matched"])
+        self.assertFalse(rolled_back["pilot_enabled"])
+        self.assertTrue(rolled_back["would_block_if_enforced"])
+        self.assertFalse(rolled_back["pilot_would_block"])
+        self.assertFalse(rolled_back["pilot_would_fallback"])
+        self._assert_runtime_pilot_never_changes_provider_behavior(out_of_scope)
+        self._assert_runtime_pilot_never_changes_provider_behavior(rolled_back)
+
+    def test_runtime_pilot_diagnostics_are_sanitized_and_do_not_mutate_or_call_live_paths(self) -> None:
+        self.db.transition_provider_circuit_state(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="disabled_by_operator",
+            reason_bucket="auth_or_key_invalid",
+            operator_action_ref=(
+                "provider outage https://provider.example.test/raw?token=must-not-leak "
+                "raw_exception_message=ProviderError(must-not-leak)"
+            ),
+            metadata={
+                "api_key": "must-not-leak",
+                "headers": {"Authorization": "Bearer must-not-leak"},
+                "raw_payload": {"token": "must-not-leak"},
+                "safe_label": "runtime_pilot_fixture",
+            },
+            now=datetime(2026, 5, 6, 15, 0, 0),
+        )
+        with self.db.session_scope() as session:
+            event_count = session.query(ProviderCircuitEvent).count()
+
+        with patch("requests.sessions.Session.request") as request_mock:
+            decision = self.observer.build_runtime_pilot_decision(
+                provider="tradier",
+                provider_category="options",
+                route_family="options_lab",
+                pilot_enabled=True,
+                fallback_evaluation_enabled=True,
+                pilot_provider_categories=("options",),
+                pilot_route_families=("options_lab",),
+                now=datetime(2026, 5, 6, 15, 30, 0),
+            )
+
+        self._assert_runtime_pilot_never_changes_provider_behavior(decision)
+        self.assertEqual(decision["diagnostic_ref"], "diagnostic_ref_redacted")
+        self.assertEqual(decision["sanitized_diagnostics"]["reasonBucket"], "auth_or_key_invalid")
+        text = str(decision).lower()
+        for blocked in (
+            "must-not-leak",
+            "provider.example.test",
+            "https://",
+            "token",
+            "api_key",
+            "authorization",
+            "raw_payload",
+            "raw_exception",
+            "providererror",
+        ):
+            self.assertNotIn(blocked, text)
+        request_mock.assert_not_called()
+        with self.db.session_scope() as session:
+            self.assertEqual(session.query(ProviderCircuitEvent).count(), event_count)
 
 
 if __name__ == "__main__":

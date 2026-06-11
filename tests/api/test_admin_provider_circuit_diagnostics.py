@@ -796,7 +796,7 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
             route_family="options_lab",
             to_state="open",
             reason_bucket="timeout",
-            cooldown_until=datetime(2026, 5, 6, 11, 0, 0),
+            cooldown_until=datetime.now() + timedelta(minutes=30),
             metadata={
                 "safe_label": "projection",
                 "url": "https://provider.example.test/raw?api_key=must-not-leak",
@@ -834,8 +834,91 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertFalse(item["providerBehaviorChanged"])
         self.assertFalse(item["marketCacheBehaviorChanged"])
         self.assertTrue(item["noExternalCalls"])
+        runtime_pilot = item["runtimePilot"]
+        self.assertEqual(runtime_pilot["contractVersion"], "provider_reliability_runtime_v1")
+        self.assertFalse(runtime_pilot["pilotEnabled"])
+        self.assertTrue(runtime_pilot["scopeMatched"])
+        self.assertFalse(runtime_pilot["productionEnforcementEnabled"])
+        self.assertFalse(runtime_pilot["liveEnforcement"])
+        self.assertFalse(runtime_pilot["wouldBlockCall"])
+        self.assertTrue(runtime_pilot["wouldBlockIfEnforced"])
+        self.assertFalse(runtime_pilot["pilotWouldBlock"])
+        self.assertFalse(runtime_pilot["pilotWouldFallback"])
+        self.assertEqual(runtime_pilot["defaultOffLabel"], "provider_reliability_runtime_pilot_default_off")
+        self.assertEqual(runtime_pilot["rollbackLabel"], "provider_reliability_runtime_pilot_disable_flag")
         text = self._json_text(payload).lower()
         for blocked in ("must-not-leak", "https://provider.example", "traceback must-not-leak"):
+            self.assertNotIn(blocked, text)
+
+    def test_sla_readiness_endpoint_runtime_pilot_flags_project_would_block_without_enforcement(self) -> None:
+        self._as_provider_read_admin()
+        self.db.transition_provider_circuit_state(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="open",
+            reason_bucket="timeout",
+            cooldown_until=datetime.now() + timedelta(minutes=30),
+            operator_action_ref=(
+                "provider outage https://provider.example.test/raw?token=must-not-leak "
+                "raw_exception_message=ProviderError(must-not-leak)"
+            ),
+            metadata={
+                "headers": {"Authorization": "Bearer must-not-leak"},
+                "raw_payload": {"token": "must-not-leak"},
+                "safe_label": "runtime_pilot_admin_fixture",
+            },
+            now=datetime(2026, 5, 6, 10, 30, 0),
+        )
+
+        with patch("requests.sessions.Session.request") as request_mock:
+            response = self.client.get(
+                "/api/v1/admin/providers/sla-readiness",
+                params={
+                    "provider": "tradier",
+                    "since": "2026-05-06T00:00:00",
+                    "runtimePilotEnabled": "true",
+                    "runtimePilotFallbackEvaluationEnabled": "true",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        request_mock.assert_not_called()
+        payload = response.json()
+        item = self._sla_item(payload, provider="tradier", provider_category="options", route_family="options_lab")
+        runtime_pilot = item["runtimePilot"]
+        self.assertTrue(runtime_pilot["pilotEnabled"])
+        self.assertTrue(runtime_pilot["scopeMatched"])
+        self.assertEqual(runtime_pilot["decisionStatus"], "pilot_would_block_if_promoted")
+        self.assertEqual(runtime_pilot["healthStatus"], "cooldown_active")
+        self.assertEqual(runtime_pilot["degradedStatus"], "fallback_advised")
+        self.assertEqual(runtime_pilot["sufficiencyStatus"], "insufficient")
+        self.assertTrue(runtime_pilot["fallbackEvaluationEnabled"])
+        self.assertTrue(runtime_pilot["wouldFallbackIfEnforced"])
+        self.assertTrue(runtime_pilot["pilotWouldFallback"])
+        self.assertTrue(runtime_pilot["wouldBlockIfEnforced"])
+        self.assertTrue(runtime_pilot["pilotWouldBlock"])
+        self.assertFalse(runtime_pilot["productionEnforcementEnabled"])
+        self.assertFalse(runtime_pilot["liveEnforcement"])
+        self.assertFalse(runtime_pilot["wouldBlockCall"])
+        self.assertFalse(runtime_pilot["wouldChangeProviderOrder"])
+        self.assertFalse(runtime_pilot["wouldChangeFallbackBehavior"])
+        self.assertTrue(runtime_pilot["noExternalCalls"])
+        self.assertFalse(runtime_pilot["providerBehaviorChanged"])
+        self.assertFalse(runtime_pilot["marketCacheBehaviorChanged"])
+        self.assertEqual(runtime_pilot["diagnosticRef"], "diagnostic_ref_redacted")
+        self.assertEqual(runtime_pilot["sanitizedDiagnostics"]["reasonBucket"], "timeout")
+        text = self._json_text(payload).lower()
+        for blocked in (
+            "must-not-leak",
+            "provider.example.test",
+            "https://",
+            "?token=",
+            "authorization",
+            "raw_payload",
+            "raw_exception",
+            "providererror",
+        ):
             self.assertNotIn(blocked, text)
 
     def test_sla_readiness_endpoint_separates_scoped_and_unscoped_items_by_dimensions(self) -> None:

@@ -13,6 +13,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from sqlalchemy import desc, select
 
+from src.services.provider_reliability_runtime import build_provider_reliability_runtime_decision
 from src.storage import DatabaseManager, ProviderCircuitEvent, ProviderQuotaWindow
 
 
@@ -281,6 +282,39 @@ class ProviderCircuitObserver:
             "provider_behavior_changed": False,
             "market_cache_behavior_changed": False,
         }
+
+    def build_runtime_pilot_decision(
+        self,
+        *,
+        provider: str,
+        provider_category: Optional[str] = None,
+        route_family: Optional[str] = None,
+        pilot_enabled: bool = False,
+        fallback_evaluation_enabled: bool = False,
+        pilot_provider_categories: Optional[set[str] | tuple[str, ...] | list[str]] = None,
+        pilot_route_families: Optional[set[str] | tuple[str, ...] | list[str]] = None,
+        now: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        """Build a guarded runtime pilot decision without runtime enforcement."""
+        normalized_provider = self.db._normalize_provider_label(provider)
+        normalized_category = self.db._normalize_provider_dimension(provider_category, 64)
+        normalized_route = self.db._normalize_provider_dimension(route_family, 64)
+        state = self.db.get_provider_circuit_state(
+            provider=normalized_provider,
+            provider_category=normalized_category,
+            route_family=normalized_route,
+        )
+        return build_provider_reliability_runtime_decision(
+            provider=normalized_provider,
+            provider_category=normalized_category,
+            route_family=normalized_route,
+            circuit_state=state,
+            pilot_enabled=pilot_enabled,
+            fallback_evaluation_enabled=fallback_evaluation_enabled,
+            pilot_provider_categories=pilot_provider_categories,
+            pilot_route_families=pilot_route_families,
+            now=now,
+        )
 
     def build_admin_enforcement_projection(
         self,

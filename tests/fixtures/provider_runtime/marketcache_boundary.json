@@ -48,6 +48,29 @@
     "sourceLabel": "Fallback Snapshot",
     "sourceType": null,
     "status": "refreshing",
+    "trustEvidence": {
+      "adminDiagnosticRefs": [
+        "trust-evidence:market-provider-operations:crypto"
+      ],
+      "asOf": "2026-05-06T10:00:00+08:00",
+      "availabilityState": "updating",
+      "consumerBadgeKeys": [
+        "source_fallback"
+      ],
+      "consumerMessageKey": "trust_evidence.updating",
+      "consumerState": "UPDATING",
+      "contractVersion": "trust_evidence_snapshot_v1",
+      "entityKey": "market_provider_operations:crypto",
+      "freshnessState": "fallback",
+      "generatedAt": "2026-05-12T01:00:00+08:00",
+      "hasFallback": true,
+      "isAdminOnlyDetail": false,
+      "isPartial": false,
+      "isStale": false,
+      "isSynthetic": false,
+      "sourceClass": "local_cache",
+      "surfaceKey": "market_provider_operations"
+    },
     "updatedAt": "2026-05-06T10:00:00+08:00",
     "warning": null
   },
