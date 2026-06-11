@@ -62,6 +62,9 @@ Finding categories include:
 - `private_key`
 - `raw_body_or_log`
 - `credential_url`
+- `endpoint_url`
+- `broker_order_identity`
+- `account_metadata`
 - `path_traversal`
 - `approval_wording`
 
