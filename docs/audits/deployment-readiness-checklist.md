@@ -413,14 +413,16 @@ The following must all be true before public multi-user deployment:
 - [ ] Backend `:8000` is not directly exposed to the public internet.
 - [ ] Public ingress exposes only 80/443, redirects HTTP to HTTPS, and forwards
   to a private/local backend port.
-- [ ] Production `.env` uses `APP_ENV=production`, `ADMIN_AUTH_ENABLED=true`,
-  explicit `CORS_ALLOW_ALL=false`, explicit CORS/CSRF origins, trusted proxy
+- [ ] Production config source (`.env`, `ENV_FILE`, or process environment)
+  uses `APP_ENV=production`, `ADMIN_AUTH_ENABLED=true`, explicit
+  `CORS_ALLOW_ALL=false`, explicit CORS/CSRF origins, trusted proxy
   settings only behind a trusted proxy, explicit
   `WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_SCOPE=admin_only`, explicit
   `WOLFYSTOCK_QUOTA_ENFORCEMENT_MODE`, and explicit default-off opt-in flags
   for `WOLFYSTOCK_BACKUP_PITR_EXECUTION_ENABLED` plus
   `WOLFYSTOCK_STAGING_INGRESS_SMOKE`; attach sanitized production config
-  preflight JSON rather than raw `.env` values.
+  preflight JSON rather than raw env values. Missing or false
+  `ADMIN_AUTH_ENABLED` remains local/dev-only and public deployment **NO-GO**.
 - [ ] Secrets audit confirms no real API keys, provider credentials, cookies,
   session ids, broker credentials, webhook URLs, password hashes, raw prompts,
   raw provider payloads, or stack traces are present in logs, admin diagnostics,

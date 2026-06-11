@@ -142,6 +142,22 @@ def _required_flags_check(flags: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _admin_auth_enabled_check(flags: dict[str, Any]) -> dict[str, Any]:
+    auth_enabled = _flag_bool(flags, "ADMIN_AUTH_ENABLED")
+    state = "enabled" if auth_enabled is True else "disabled" if auth_enabled is False else "missing_or_invalid"
+    return {
+        "id": "admin_auth_enabled_for_public_deploy",
+        "status": _status(auth_enabled is True),
+        "evidence": {
+            "flagName": "ADMIN_AUTH_ENABLED",
+            "state": state,
+            "authDisabledPublicIngressSafe": False,
+            "runtimeDefaultChanged": False,
+            "valuesIncluded": False,
+        },
+    }
+
+
 def _security_posture_checks(flags: dict[str, Any]) -> list[dict[str, Any]]:
     mfa_enabled = _flag_bool(flags, "WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED")
     break_glass = _flag_bool(flags, "WOLFYSTOCK_MFA_LOGIN_BREAK_GLASS_ENABLED")
@@ -271,6 +287,7 @@ def build_readiness(contract: dict[str, Any]) -> dict[str, Any]:
     secret_presence = contract.get("secretPresence") if isinstance(contract.get("secretPresence"), dict) else {}
     checks = [
         _required_flags_check(flags),
+        _admin_auth_enabled_check(flags),
         *_security_posture_checks(flags),
         _provider_credential_check(secret_presence),
         _quota_check(flags),

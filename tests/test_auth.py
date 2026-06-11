@@ -279,6 +279,41 @@ class AuthSetPasswordTestCase(unittest.TestCase):
             auth._auth_enabled = None
             self.assertTrue(auth._is_auth_enabled_from_env())
 
+    def test_is_auth_enabled_from_env_respects_explicit_false_env_file(self) -> None:
+        custom_env = self.data_dir / "custom.env"
+        custom_env.write_text("ADMIN_AUTH_ENABLED=false\n", encoding="utf-8")
+
+        with patch.dict(os.environ, {"ENV_FILE": str(custom_env)}, clear=True):
+            auth._auth_enabled = None
+            self.assertFalse(auth._is_auth_enabled_from_env())
+
+    def test_is_auth_enabled_from_env_supports_process_env_only_deployments(self) -> None:
+        missing_env = self.data_dir / "missing.env"
+
+        with patch.dict(
+            os.environ,
+            {"ADMIN_AUTH_ENABLED": "true", "ENV_FILE": str(missing_env)},
+            clear=True,
+        ):
+            auth._auth_enabled = None
+            self.assertTrue(auth._is_auth_enabled_from_env())
+
+    def test_is_auth_enabled_from_env_treats_missing_sources_as_local_dev_disabled(self) -> None:
+        missing_env = self.data_dir / "missing.env"
+
+        with patch.dict(os.environ, {"ENV_FILE": str(missing_env)}, clear=True):
+            auth._auth_enabled = None
+            self.assertFalse(auth._is_auth_enabled_from_env())
+
+    def test_env_example_documents_production_admin_auth_enabled(self) -> None:
+        env_example = Path(__file__).resolve().parents[1] / ".env.example"
+        text = env_example.read_text(encoding="utf-8")
+
+        self.assertIn("ADMIN_AUTH_ENABLED=true", text)
+        self.assertIn("生产、Docker、云服务器部署必须通过 .env、ENV_FILE 或 process env 显式保持 true", text)
+        self.assertIn("auth-disabled mode 不是 public-safe", text)
+        self.assertIn("process env", text)
+
     def test_refresh_auth_state_clears_session_secret_cache(self) -> None:
         def run():
             first_secret = auth.create_session()
