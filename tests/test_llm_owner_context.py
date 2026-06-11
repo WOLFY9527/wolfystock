@@ -211,25 +211,6 @@ class LlmOwnerContextPropagationTestCase(unittest.TestCase):
         )
         self.assertNotEqual(analysis_kwargs["request_hash"], market_kwargs["request_hash"])
 
-    def test_quota_reservation_id_is_threaded_to_usage_persistence_when_provided(self) -> None:
-        analyzer = GeminiAnalyzer.__new__(GeminiAnalyzer)
-
-        with patch("src.analyzer.persist_llm_usage") as mock_persist:
-            analyzer._persist_llm_attempt_usage(
-                usage={"prompt_tokens": 6, "completion_tokens": 7, "total_tokens": 13},
-                model_used="openai/gpt-4o-mini",
-                call_type="analysis",
-                owner_user_id="user-owner-1",
-                route_family="analysis",
-                quota_reservation_id="qres_known_cost",
-            )
-
-        self.assertEqual(mock_persist.call_count, 1)
-        kwargs = mock_persist.call_args.kwargs
-        self.assertEqual(kwargs["quota_reservation_id"], "qres_known_cost")
-        self.assertEqual(kwargs["owner_user_id"], "user-owner-1")
-        self.assertEqual(kwargs["route_family"], "analysis")
-
     def test_pricing_unknown_writes_safe_row_without_raw_prompt_or_payload(self) -> None:
         analyzer = GeminiAnalyzer.__new__(GeminiAnalyzer)
         analyzer._call_litellm = MagicMock(

@@ -96,12 +96,6 @@ QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS_ENV = (
 QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED_ENV = (
     "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED"
 )
-QUOTA_ANALYSIS_SYNC_RESERVE_FAILURE_POLICY_ENV = (
-    "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_FAILURE_POLICY"
-)
-QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED_ENV = (
-    "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED"
-)
 _QUOTA_ANALYSIS_SYNC_ROUTE_FAMILY = "analysis"
 _QUOTA_ANALYSIS_SYNC_ROUTE_KEY = "api.v1.analysis.analyze"
 _QUOTA_ANALYSIS_SYNC_IDEMPOTENCY_PREFIX = "quota:analysis_sync_single_stock:v1"
@@ -122,7 +116,6 @@ class _QuotaAnalysisSyncPilotReservation:
     reservation_id: Optional[str]
     reserve_attempted: bool = False
     reserve_succeeded: bool = False
-    fail_closed: bool = False
     reason_code: Optional[str] = None
 
 
@@ -262,18 +255,6 @@ def _quota_analysis_sync_pilot_rollback_enabled() -> bool:
     )
 
 
-def _quota_analysis_sync_known_cost_consume_enabled() -> bool:
-    return parse_env_bool(
-        os.getenv(QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED_ENV),
-        default=False,
-    )
-
-
-def _quota_analysis_sync_reserve_failure_policy() -> str:
-    normalized = str(os.getenv(QUOTA_ANALYSIS_SYNC_RESERVE_FAILURE_POLICY_ENV) or "fail_open").strip().lower()
-    return "fail_closed" if normalized == "fail_closed" else "fail_open"
-
-
 def _quota_safe_reason_code(value: object) -> str:
     reason = str(value or "").strip().lower()
     return reason if reason in _QUOTA_RESERVE_FAILURE_SAFE_REASON_CODES else "budget_exceeded"
@@ -393,7 +374,6 @@ def _try_reserve_analysis_sync_quota_pilot(
         return _QuotaAnalysisSyncPilotReservation(
             reservation_id=None,
             reserve_attempted=True,
-            fail_closed=_quota_analysis_sync_reserve_failure_policy() == "fail_closed",
             reason_code="reserve_exception",
         )
 
@@ -408,7 +388,6 @@ def _try_reserve_analysis_sync_quota_pilot(
     return _QuotaAnalysisSyncPilotReservation(
         reservation_id=None,
         reserve_attempted=True,
-        fail_closed=_quota_analysis_sync_reserve_failure_policy() == "fail_closed",
         reason_code=_quota_safe_reason_code(getattr(decision, "reason_code", None) or status),
     )
 
@@ -431,7 +410,6 @@ def _release_analysis_sync_quota_pilot_reservation(reservation_id: Optional[str]
 def _analysis_sync_quota_execution_metadata(
     *,
     reservation: _QuotaAnalysisSyncPilotReservation,
-    known_cost_consume_enabled: bool,
 ) -> Optional[Dict[str, Any]]:
     if not reservation.reserve_succeeded:
         return None
@@ -440,7 +418,8 @@ def _analysis_sync_quota_execution_metadata(
             "advisory_mode": True,
             "reserve_attempted": True,
             "reserve_succeeded": True,
-            "known_cost_consume_enabled": bool(known_cost_consume_enabled),
+            "release_required": True,
+            "live_enforcement": False,
             "rollback_enabled": False,
         }
     }
@@ -840,20 +819,6 @@ def _handle_sync_analysis(
             owner_id=owner_id,
             query_id=query_id,
         )
-        if quota_reservation.fail_closed:
-            raise HTTPException(
-                status_code=429,
-                detail={
-                    "error": "quota_pilot_reserve_failed",
-                    "message": "Quota pilot reserve failed for this private-beta route.",
-                    "reasonCode": quota_reservation.reason_code,
-                },
-            )
-        known_cost_consume_enabled = bool(
-            quota_reservation.reserve_succeeded and _quota_analysis_sync_known_cost_consume_enabled()
-        )
-        if known_cost_consume_enabled and quota_reservation.reservation_id:
-            analyze_kwargs["quota_reservation_id"] = quota_reservation.reservation_id
         execution_id = execution_logs.start_analysis_execution(
             symbol=stock_code,
             analysis_type=request.report_type,
@@ -863,7 +828,6 @@ def _handle_sync_analysis(
             stock_name=getattr(request, "stock_name", None),
             metadata=_analysis_sync_quota_execution_metadata(
                 reservation=quota_reservation,
-                known_cost_consume_enabled=known_cost_consume_enabled,
             ),
         )
         service = AnalysisService()

@@ -1145,7 +1145,6 @@ class GeminiAnalyzer:
         owner_user_id: Optional[str] = None,
         guest_bucket_hash: Optional[str] = None,
         route_family: str = "analysis",
-        quota_reservation_id: Optional[str] = None,
         progress_callback: Optional[Callable[[str, int, str], None]] = None,
     ) -> AnalysisResult:
         """
@@ -1268,7 +1267,6 @@ class GeminiAnalyzer:
                     owner_user_id=owner_user_id,
                     guest_bucket_hash=guest_bucket_hash,
                     route_family=route_family,
-                    quota_reservation_id=quota_reservation_id,
                     identity=llm_identity,
                 )
                 llm_elapsed = time.perf_counter() - llm_started_at
@@ -1368,7 +1366,6 @@ class GeminiAnalyzer:
         guest_bucket_hash: Optional[str] = None,
         route_family: Optional[str] = None,
         stock_code: Optional[str] = None,
-        quota_reservation_id: Optional[str] = None,
         identity: Optional[LlmIdentityContract] = None,
     ) -> None:
         usage_payload = usage or {}
@@ -1381,7 +1378,6 @@ class GeminiAnalyzer:
                 owner_user_id=owner_user_id,
                 guest_bucket_hash=guest_bucket_hash,
                 route_family=route_family or call_type,
-                quota_reservation_id=quota_reservation_id,
                 request_hash=identity.billable_attempt_hash if identity else None,
                 metadata=identity.to_ledger_metadata() if identity else None,
             )

@@ -200,8 +200,6 @@ def test_admin_ops_status_reports_quota_pilot_flags_without_raw_ids(
     monkeypatch.setenv("WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED", "true")
     monkeypatch.setenv("WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED", "false")
     monkeypatch.setenv("WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS", "owner-alpha,owner-beta")
-    monkeypatch.setenv("WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_FAILURE_POLICY", "fail_closed")
-    monkeypatch.setenv("WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED", "true")
 
     with _client(app, _ops_admin) as client:
         response = client.get("/api/v1/admin/ops/status")
@@ -217,12 +215,13 @@ def test_admin_ops_status_reports_quota_pilot_flags_without_raw_ids(
     assert pilot["rollbackEnabled"] is False
     assert pilot["ownerAllowlistConfigured"] is True
     assert pilot["ownerAllowlistCountBucket"] == "2-10"
-    assert pilot["reserveFailurePolicy"] == "fail_closed"
-    assert pilot["knownCostConsumeFlagEnabled"] is True
-    assert pilot["knownCostConsumePropagationEnabled"] is True
+    assert pilot["reserveFailureBehavior"] == "fail_open"
+    assert pilot["reserveFailuresBlockRequests"] is False
+    assert pilot["consumePropagationEnabled"] is False
     assert pilot["defaultLiveEnforcement"] is False
     assert pilot["publicLaunchApproval"] is False
     assert pilot["providerBillingAuthority"] is False
+    assert pilot["billingAuthority"] is False
     assert pilot["rawReservationIdsExposed"] is False
     assert pilot["idempotencyMaterialExposed"] is False
     assert pilot["ownerAllowlistValuesExposed"] is False

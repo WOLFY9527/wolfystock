@@ -31,8 +31,8 @@ until route-boundary quota and provider-circuit enforcement pilots are accepted.
   governance and cost E2E QA runbook.
 - `docs/audits/cost-system-final-qa-matrix.md`: current QA matrix for completed
   cost-system surfaces.
-- `docs/audits/quota-enforcement-goal-progress.md`: guarded private-beta
-  quota enforcement v1 pilot status, flags, tests, and remaining NO-GO
+- `docs/audits/quota-enforcement-goal-progress.md`: advisory-only
+  reserve/release pilot salvage status, flags, tests, and remaining NO-GO
   blockers.
 - `docs/audits/ws2-multi-user-runtime-cost-control-design.md`: architecture
   baseline for multi-user runtime, quotas, ledger observation, and provider
@@ -75,10 +75,11 @@ until route-boundary quota and provider-circuit enforcement pilots are accepted.
 See `docs/audits/public-launch-readiness-master.md` and
 `docs/audits/public-launch-gap-register.md`.
 
-- Live quota enforcement is not enabled by default. A guarded private-beta
-  single-stock sync analysis route pilot exists behind explicit flags, owner
-  allowlist, rollback, and fail-open defaults; public-launch enforcement remains
-  **NO-GO**.
+- Live quota enforcement is not enabled. A guarded private-beta single-stock
+  sync analysis route reserve/release pilot exists behind explicit flags, owner
+  allowlist, rollback, and fail-open defaults; it does not block requests,
+  consume known costs, or grant billing authority. Public-launch enforcement
+  remains **NO-GO**.
 - Budget burn-down alerts and user/admin warning surfaces remain future work.
 - Provider invoice/export reconciliation is not accepted as
   billing-authoritative.

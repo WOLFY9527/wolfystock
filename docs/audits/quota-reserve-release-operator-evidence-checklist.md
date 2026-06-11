@@ -18,10 +18,8 @@ Collect evidence only if all of the following are true:
 - Eligibility is limited to auth-enabled, authenticated, non-transitional,
   sync, single-stock analysis only.
 - The pilot is reserve/release by default with guaranteed release on every path.
-- Known-cost consume propagation is disabled by default and requires its own
-  explicit guarded flag.
-- Reserve and release remain fail-open advisory semantics unless the private-beta
-  reserve failure policy is explicitly set to `fail_closed` for block testing.
+- Known-cost consume propagation is not part of this pilot.
+- Reserve and release remain fail-open advisory semantics.
 - API response shape does not change.
 - Execution metadata does not expose raw reservation IDs.
 
@@ -53,7 +51,7 @@ APIs, route handlers, storage, quota services, providers, auth, or live
 credentials. A passing result means the evidence packet is ready for manual
 internal/private-beta review only. It does not approve public launch, live
 quota enforcement, broad reservation consume wiring, route blocking, or runtime
-behavior changes outside explicitly guarded private-beta flags.
+behavior changes outside the route-local advisory reserve/release pilot.
 
 ## Required Evidence Sections
 
@@ -150,26 +148,12 @@ Do not capture or attach any of the following:
 - raw exception text or stack traces
 - credentials or secrets
 
-### 9. Optional Known-Cost Consume Propagation Proof
-
-Only collect this section when
-`WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED=true` is explicitly
-approved for the private-beta run. Provide sanitized proof that:
-
-- reservation identity is passed only through the backend persistence seam;
-- known-cost consume is tied to priced LLM usage;
-- route response shape, execution metadata, admin status, and logs do not expose
-  raw reservation IDs;
-- the route `finally` release still runs for failures before known-cost usage is
-  persisted.
-
 ## Stop / Reject Evidence
 
 Stop collection and reject the evidence packet if any of the following occurs:
 
 - reserve or release appears outside sync analysis;
-- unexpected consume or blocking behavior appears outside the explicit
-  private-beta flags;
+- any consume or blocking behavior appears;
 - response shape exposes quota fields;
 - raw identifiers or secrets appear in logs or evidence;
 - auth-disabled, transitional, guest, async, scanner, agent, or options paths
@@ -182,7 +166,7 @@ This checklist does not close live-enforcement readiness. Future live
 enforcement remains blocked until all of the following are accepted:
 
 - stable client retry and request identity;
-- accepted known-cost consume propagation evidence across staged failures;
+- accepted consume propagation design and evidence across staged failures;
 - crash and timeout reconciliation;
 - admin read-only pilot status in the target environment;
 - rollback and staging evidence;

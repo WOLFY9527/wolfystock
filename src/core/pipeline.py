@@ -399,7 +399,6 @@ class StockAnalysisPipeline:
         query_id: str,
         progress_callback: Optional[Callable[[str, int, str], None]] = None,
         research_mode: Optional[str] = None,
-        quota_reservation_id: Optional[str] = None,
     ) -> Optional[AnalysisResult]:
         """
         分析单只股票（增强版：含量比、换手率、筹码分析、多维度情报）
@@ -1015,7 +1014,6 @@ class StockAnalysisPipeline:
                 owner_user_id=self.owner_id,
                 guest_bucket_hash=self.guest_bucket_hash,
                 route_family="guest_preview" if self.guest_bucket_hash else "analysis",
-                quota_reservation_id=quota_reservation_id,
                 progress_callback=progress_callback,
             )
             if result:
@@ -4642,7 +4640,6 @@ class StockAnalysisPipeline:
         analysis_query_id: Optional[str] = None,
         progress_callback: Optional[Callable[[str, int, str], None]] = None,
         research_mode: Optional[str] = None,
-        quota_reservation_id: Optional[str] = None,
     ) -> Optional[AnalysisResult]:
         """
         处理单只股票的完整流程
@@ -4694,7 +4691,6 @@ class StockAnalysisPipeline:
                 query_id=effective_query_id,
                 progress_callback=progress_callback,
                 research_mode=research_mode,
-                quota_reservation_id=quota_reservation_id,
             )
             
             if result:

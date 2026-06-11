@@ -37,12 +37,6 @@ class AdminOpsStatusService:
     _QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED_ENV = (
         "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED"
     )
-    _QUOTA_ANALYSIS_SYNC_RESERVE_FAILURE_POLICY_ENV = (
-        "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_FAILURE_POLICY"
-    )
-    _QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED_ENV = (
-        "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED"
-    )
 
     def build_status(self, *, app_state: object | None = None) -> Dict[str, Any]:
         generated_at = datetime.now()
@@ -263,12 +257,6 @@ class AdminOpsStatusService:
             os.getenv(self._QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED_ENV),
             default=False,
         )
-        known_cost_consume_enabled = parse_env_bool(
-            os.getenv(self._QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED_ENV),
-            default=False,
-        )
-        raw_policy = str(os.getenv(self._QUOTA_ANALYSIS_SYNC_RESERVE_FAILURE_POLICY_ENV) or "fail_open").strip().lower()
-        reserve_failure_policy = "fail_closed" if raw_policy == "fail_closed" else "fail_open"
         owner_allowlist = {
             token.strip()
             for token in str(os.getenv(self._QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS_ENV) or "").split(",")
@@ -292,12 +280,13 @@ class AdminOpsStatusService:
             "rollbackEnabled": rollback_enabled,
             "ownerAllowlistConfigured": bool(owner_allowlist),
             "ownerAllowlistCountBucket": self._count_bucket(len(owner_allowlist)),
-            "reserveFailurePolicy": reserve_failure_policy,
-            "knownCostConsumeFlagEnabled": known_cost_consume_enabled,
-            "knownCostConsumePropagationEnabled": effective_enabled and known_cost_consume_enabled,
+            "reserveFailureBehavior": "fail_open",
+            "reserveFailuresBlockRequests": False,
+            "consumePropagationEnabled": False,
             "defaultLiveEnforcement": False,
             "publicLaunchApproval": False,
             "providerBillingAuthority": False,
+            "billingAuthority": False,
             "eligibleOnlyWhenAuthEnabled": True,
             "eligibleOnlyWhenAuthenticated": True,
             "eligibleOnlyWhenNonTransitional": True,
@@ -309,8 +298,6 @@ class AdminOpsStatusService:
                 self._QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED_ENV,
                 self._QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED_ENV,
                 self._QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS_ENV,
-                self._QUOTA_ANALYSIS_SYNC_RESERVE_FAILURE_POLICY_ENV,
-                self._QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED_ENV,
             ],
         }
 

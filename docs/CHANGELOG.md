@@ -1,5 +1,5 @@
 ## 2026-06-11
-- Added a guarded, default-off quota enforcement v1 private-beta pilot path for authenticated sync single-stock analysis: route reserve/release remains fail-open by default, optional fail-closed reserve blocking and known-cost consume propagation require explicit flags, admin ops status exposes only sanitized pilot evidence, and public-launch enforcement remains NO-GO.
+- Added a guarded, default-off advisory quota reserve/release pilot path for authenticated sync single-stock analysis: reserve and release fail open, response shape stays unchanged, no blocking or known-cost consume propagation is included, admin ops status exposes only sanitized pilot evidence, and public-launch enforcement remains NO-GO.
 
 ## 2026-06-09
 - Admin SPA deep links now add a server-side defense-in-depth fallback guard: unauthenticated direct browser requests to `/admin...` or supported localized `/zh|en/admin...` shell routes redirect to the matching guest route, while authenticated admin shell access, static assets, product routes, and API auth/RBAC JSON contracts remain unchanged.

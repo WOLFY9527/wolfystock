@@ -1,12 +1,13 @@
-# Quota & Billing Enforcement V1 Pilot Progress
+# Quota Advisory Reserve/Release Pilot Salvage
 
 Date: 2026-06-11
-Status: guarded private-beta pilot architecture, disabled by default
+Status: advisory-only salvage, disabled by default
 
-This note tracks the current quota enforcement v1 goal. It separates dry-run
-diagnostics, guarded private-beta route pilot behavior, and future public-launch
-enforcement. It is not public-launch approval and it is not a provider billing
-authority statement.
+This note replaces the broader quota and billing enforcement checkpoint for
+this branch. The merge candidate is limited to a route-local reserve/release
+pilot and sanitized admin evidence. It is not public-launch approval, not live
+quota enforcement, not a billing-authority statement, not consume wiring, and
+not route blocking.
 
 ## Current Boundary
 
@@ -15,56 +16,40 @@ authority statement.
 - Eligible request shape: authenticated, auth-enabled, non-transitional, sync,
   single-stock analysis only.
 - Explicitly out of scope: guest, auth-disabled bootstrap, transitional users,
-  async analysis, scanner, agent/chat, options, provider circuit, market cache,
-  portfolio, broker/order, frontend consumer spend caps, public launch.
+  async analysis, scanner, agent/chat, options, provider runtime/cache/fallback,
+  market cache, portfolio, broker/order, external notification sending,
+  frontend consumer spend caps, public launch.
 
 ## Flag Contract
 
-All flags default to disabled or fail-open posture:
+Only these pilot controls are part of this salvage branch:
 
 - `WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED=false`
 - `WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS=`
 - `WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED=false`
-- `WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_FAILURE_POLICY=fail_open`
-- `WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED=false`
 
 Pilot entry requires both
 `WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED=true` and an
 explicit owner allowlist match. The rollback flag immediately makes the route
 out of scope even if the pilot flag and owner allowlist are configured.
 
-## State Model
+## Advisory Pilot Behavior
 
-### Dry-Run
+When the pilot flag and owner allowlist match, the sync single-stock route
+attempts reserve before analysis and releases in a `finally` path when a
+reservation was created. Reserve failure, reserve exceptions, and release
+failure are advisory and fail open. They must not change the original analysis
+success or error behavior.
 
-Dry-run surfaces remain read-only diagnostics. They do not create reservations,
-consume reservations, release reservations, call providers, call LLMs, or block
-routes. `POST /api/v1/admin/cost/quota-dry-run` remains diagnostic evidence and
-must keep `liveEnforcement=false`.
+The response shape remains unchanged. Responses must not expose reservation
+IDs, idempotency material, owner values, session IDs, tokens, provider payloads,
+or raw exceptions.
 
-### Private-Beta Pilot
+This salvage branch intentionally does not pass reservation identity into
+`AnalysisService`, the pipeline, the analyzer, LLM usage persistence, or ledger
+reconciliation. Known-cost consume propagation is not included.
 
-The private-beta pilot is guarded and route-local. When the pilot flag and owner
-allowlist match, the sync single-stock route attempts reserve before analysis and
-releases in a `finally` path. Reserve failure defaults to fail-open. A
-fail-closed reserve failure block is available only through the explicit
-`WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_FAILURE_POLICY=fail_closed` flag.
-
-Known-cost consume propagation is separate and default-off. When
-`WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED=true`, a successful
-route reservation is passed into the LLM usage persistence seam so the existing
-cost-ledger reservation reconciliation can consume on priced usage. If usage
-pricing is not known or analysis fails before usage persistence, the route-level
-`finally` release remains the cleanup path.
-
-### Public-Launch Enforcement
-
-Public-launch enforcement remains NO-GO. This pilot does not approve broad route
-blocking, public spend caps, provider billing authority, invoice-authoritative
-reconciliation, provider circuit enforcement, or frontend consumer spend-cap
-claims.
-
-## Operator Evidence
+## Admin Evidence
 
 Operators can inspect pilot posture without raw IDs through
 `GET /api/v1/admin/ops/status` under `quotaCostAdvisoryStatusSummary.summary`
@@ -74,9 +59,9 @@ The status exposes only bounded evidence:
 
 - route boundary label;
 - pilot status label;
-- booleans for configured/effective enablement, rollback, known-cost consume
-  flag state, effective known-cost consume propagation, and public
-  launch/provider billing authority disclaimers;
+- booleans for configured/effective enablement, rollback, advisory reserve
+  failure behavior, consume propagation disabled, public launch disabled,
+  live enforcement disabled, and provider/billing authority disabled;
 - owner allowlist configured boolean and count bucket;
 - flag names;
 - explicit `rawReservationIdsExposed=false`,
@@ -85,19 +70,16 @@ The status exposes only bounded evidence:
 
 It must not expose raw reservation IDs, idempotency keys or hashes, owner
 allowlist values, session IDs, tokens, raw exception text, provider payloads, or
-secrets.
+secrets. The status endpoint remains read-only and must not call reserve,
+release, consume, provider runtime, external HTTP, notification, or cleanup
+paths.
 
 ## Implemented Contract Tests
 
 - Success reserve/release keeps response shape unchanged and omits raw
   reservation or idempotency material from execution metadata.
-- Default reserve-only pilot does not pass reservation IDs to the known-cost
-  cost path.
-- Explicit known-cost consume flag threads the reservation ID only through the
-  backend persistence seam.
-- Reserve failure defaults fail-open.
-- Reserve failure and reserve exception can fail-closed only with explicit
-  policy flag.
+- Route analysis calls do not receive reservation identity.
+- Reserve failure and reserve exception fail open.
 - Release failure fails open and preserves original success/error behavior.
 - Retry identity is deterministic and built only from bounded route fields.
 - Rollback flag disables pilot eligibility.
@@ -109,7 +91,9 @@ secrets.
 ## Remaining NO-GO Blockers
 
 - No public-launch approval.
+- No live enforcement.
 - No broad route enforcement or global quota blocking.
+- No consume propagation.
 - No consumer-facing spend-cap claim.
 - No provider invoice or provider billing authority claim.
 - No crash/timeout reconciliation beyond route-level release and existing
@@ -124,8 +108,7 @@ Any one of the following returns the route to out-of-scope behavior:
 
 - leave `WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED=false`;
 - remove the owner from `WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS`;
-- set `WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED=true`;
-- leave `WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED=false` to keep
-  known-cost consume propagation disabled.
+- set `WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED=true`.
 
-Live enforcement is not enabled by default.
+Live enforcement, consume propagation, and request blocking are not enabled by
+this branch.
