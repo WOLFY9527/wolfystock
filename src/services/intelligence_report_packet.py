@@ -36,6 +36,49 @@ _UNSAFE_TEXT_PATTERNS = tuple(pattern for pattern, _replacement in _UNSAFE_TEXT_
 _DEGRADED_FRESHNESS = {"stale", "fallback", "synthetic", "unavailable", "unknown"}
 _SOURCE_AUTHORITY_SCORE_GRADE = {"scoregradeallowed", "score_grade", "scoregrade", "trusted_public"}
 _COUNTER_DOMAINS = ("valuation", "risk", "macro", "sentiment", "news")
+_SAFE_DOMAIN_LABELS = {
+    "pricehistory": "priceHistory",
+    "price_history": "priceHistory",
+    "market_data": "marketData",
+    "technical": "technicals",
+    "technicals": "technicals",
+    "fundamental": "fundamentals",
+    "fundamentals": "fundamentals",
+    "earnings": "earnings",
+    "filings": "filings",
+    "news": "news",
+    "catalyst": "catalysts",
+    "catalysts": "catalysts",
+    "sentiment": "sentiment",
+    "valuation": "valuation",
+    "risk": "risk",
+    "macro": "macro",
+    "sector_theme": "sectorTheme",
+    "sectortheme": "sectorTheme",
+    "macro_liquidity": "macroLiquidity",
+    "macroliquidity": "macroLiquidity",
+    "liquidity_context": "liquidityContext",
+    "liquiditycontext": "liquidityContext",
+    "general": "general",
+}
+_INTERNAL_TEXT_REPLACEMENTS = (
+    (re.compile(r"\bdebug[_\s-]?ref\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "reference label"),
+    (re.compile(r"\braw[_\s-]?prompt\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "input text"),
+    (re.compile(r"\bprompt\s*:\s*[^.;\n]+", re.IGNORECASE), "input text"),
+    (re.compile(r"\bprovider[_\s-]?payload(?:[_\s-]?ref)?\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "internal reference"),
+    (re.compile(r"\bpayload[-_:][A-Za-z0-9_.:-]+", re.IGNORECASE), "internal reference"),
+    (re.compile(r"\btraceback\b(?:\s*\([^)]*\))?", re.IGNORECASE), "diagnostic trace"),
+    (re.compile(r"\bstack\s+trace\b", re.IGNORECASE), "diagnostic trace"),
+    (re.compile(r"\bmost recent call last\b", re.IGNORECASE), "diagnostic trace"),
+    (re.compile(r"\binternal[_\s-]?diagnostic(?:[_\s-]?token)?\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "internal note"),
+    (re.compile(r"\bdiag[-_][A-Za-z0-9_.:-]+", re.IGNORECASE), "internal note"),
+    (re.compile(r"\bquery[-_][A-Za-z0-9_.:-]+", re.IGNORECASE), "request reference"),
+    (re.compile(r"\bsourceid\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "source label"),
+    (re.compile(r"\b[A-Za-z]+-source-\d+[A-Za-z0-9_.:-]*\b", re.IGNORECASE), "source label"),
+    (re.compile(r"\b(?:authorization|bearer)\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "credential marker"),
+    (re.compile(r"\btoken\s*=\s*[\w:./-]+", re.IGNORECASE), "credential marker"),
+    (re.compile(r"\bsecret[-_][A-Za-z0-9_.:-]+\b", re.IGNORECASE), "credential marker"),
+)
 
 
 def build_intelligence_report_packet_v2(value: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -87,7 +130,6 @@ def build_intelligence_report_packet_v2(value: Mapping[str, Any] | None) -> dict
         "freshness": freshness,
         "scenarioRisks": _build_scenario_risks(standard_report),
         "nextVerificationSteps": _next_verification_steps(readiness, missing_data),
-        "debugRef": _sanitize_debug_ref(_get(payload, "debugRef", "debug_ref")),
     }
     return packet
 
@@ -126,17 +168,17 @@ def _build_evidence_items(
     cited = _list_of_mappings(_get(citation_frame, "citedEvidence", "cited_evidence"))
     items: list[dict[str, Any]] = []
     for index, item in enumerate(cited):
-        domain = _text(_get(item, "domain"), default="general")
+        domain = _safe_domain(_get(item, "domain"), default="general")
         source = _source_for_domain(domain, source_frame)
         items.append(
             {
-                "id": _sanitize_ref(_get(item, "id"), fallback=f"evidence-{index + 1}"),
+                "id": f"evidence-{index + 1}",
                 "domain": domain,
                 "summary": _consumer_text(
-                    _get(item, "summary", "label", "sourceId", "source_id", "id"),
+                    _get(item, "summary", "label"),
                     f"{domain} evidence referenced.",
                 ),
-                "sourceId": _sanitize_ref(_get(item, "sourceId", "source_id") or _get(source, "sourceId", "source_id")),
+                "sourceId": _source_public_label(source, fallback_index=index + 1, domain=domain),
                 "authority": _text(_get(source, "authorityTier", "authority_tier"), default="unknown"),
                 "freshness": _text(_get(source, "freshnessState", "freshness_state"), default="unknown"),
             }
@@ -165,7 +207,7 @@ def _build_counter_evidence(
 
     coverage = _list_of_mappings(_get(citation_frame, "domainCoverage", "domain_coverage"))
     for item in coverage:
-        domain = _text(_get(item, "domain"), default="")
+        domain = _safe_domain(_get(item, "domain"), default="")
         status = _text(_get(item, "status"), default="").lower()
         if domain in _COUNTER_DOMAINS or status in {"observe_only", "blocked", "missing"}:
             items.append(
@@ -223,10 +265,10 @@ def _build_freshness(
     floor = _text(_get(readiness, "freshnessFloor", "freshness_floor"), default="")
     if not floor:
         floor = _freshness_from_sources(source_frame)
-    stale_sources = _string_list(_get(data_quality, "staleSources", "stale_sources"))
+    stale_sources = _public_source_labels_from_values(_get(data_quality, "staleSources", "stale_sources"))
     fallback_sources = [
-        _sanitize_ref(_get(item, "sourceId", "source_id"), fallback="unknown_source")
-        for item in source_frame
+        _source_public_label(item, fallback_index=index + 1)
+        for index, item in enumerate(source_frame)
         if _bool(_get(item, "fallbackOrProxy", "fallback_or_proxy"))
     ]
     return {
@@ -339,21 +381,39 @@ def _consumer_text(value: Any, fallback: str) -> str:
     text = " ".join(str(value or "").split())
     if not text or text.lower() in {"none", "null", "nan", "n/a", "na", "-"}:
         text = fallback
+    for pattern, replacement in _INTERNAL_TEXT_REPLACEMENTS:
+        text = pattern.sub(replacement, text)
     for pattern, replacement in _UNSAFE_TEXT_REPLACEMENTS:
         text = pattern.sub(replacement, text)
     return text[:420]
 
 
-def _sanitize_ref(value: Any, fallback: str = "unknown") -> str:
-    text = str(value or "").strip()
-    normalized = "_".join(part for part in re.split(r"[^A-Za-z0-9]+", text) if part)
-    return (normalized or fallback)[:80]
+def _safe_domain(value: Any, *, default: str) -> str:
+    normalized = _normalize_key(value)
+    if not normalized:
+        return default
+    return _SAFE_DOMAIN_LABELS.get(normalized, default)
 
 
-def _sanitize_debug_ref(value: Any) -> str:
-    text = _sanitize_ref(value, fallback="analysis_unknown")
-    parts = [part for part in text.split("_") if part.lower() not in {"raw", "payload", "prompt", "secret", "token"}]
-    return "analysis:" + "-".join(parts[:4]) if parts else "analysis:unknown"
+def _source_public_label(
+    source: Mapping[str, Any],
+    *,
+    fallback_index: int,
+    domain: str | None = None,
+) -> str:
+    label_domain = domain or _safe_domain(_get(source, "evidenceDomain", "evidence_domain"), default="")
+    if label_domain:
+        return f"source-{_normalize_key(label_domain) or fallback_index}"
+    return f"source-{fallback_index}"
+
+
+def _public_source_labels_from_values(value: Any) -> list[str]:
+    labels: list[str] = []
+    for index, item in enumerate(_iterable(value), start=1):
+        domain = _safe_domain(item, default="")
+        label = f"source-{_normalize_key(domain)}" if domain else f"source-{index}"
+        _append_unique(labels, label)
+    return labels
 
 
 def _dedupe_text(values: Iterable[Any]) -> list[Any]:

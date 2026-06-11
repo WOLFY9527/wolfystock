@@ -8,11 +8,12 @@ Upgrade WolfyStock report output from freeform text-first reports to structured,
 
 - Backend report/evidence composition only.
 - Additive DTO/report contract fields only.
-- Frontend structured packet display only.
-- Documentation and focused regression coverage.
+- History/schema hydration when a packet is already present.
+- Documentation and focused backend regression coverage.
 
 Out of scope:
 
+- Frontend display, `reportNormalizer`, `StandardReportPanel`, and `FullDecisionReportDrawer` adoption.
 - Provider runtime changes.
 - AI model routing, quota, or cost enforcement changes.
 - Broker, order, trade, or personalized investment-advice behavior.
@@ -22,9 +23,10 @@ Out of scope:
 
 - `checkpoint(report): design evidence packet v2` - complete.
 - `checkpoint(report): add safe composer tests` - complete.
-- `checkpoint(report): add frontend report display` - complete.
-- `checkpoint(report): add regression evidence` - in progress.
-- final `feat(report): add intelligence report engine v2` - pending final validation.
+- `checkpoint(report): backend packet composer/schema/history hydration salvage` - complete.
+- `checkpoint(report): add focused backend regression evidence` - complete.
+- `checkpoint(report): add frontend report display` - deferred.
+- final `feat(report): add intelligence report engine v2` - experimental / not merge-ready as a broad goal.
 
 ## Contract
 
@@ -44,14 +46,16 @@ Structured packet sections:
 - `scenarioRisks`
 - `nextVerificationSteps`
 
-The packet is emitted as `intelligencePacket` on:
+When the internal opt-in guard is enabled, the packet is emitted as `intelligencePacket` on:
 
 - report top-level payload
 - `report.meta`
 - `report.details.analysis_result`
 - `report.details.standard_report`
 
-The API history schema also hydrates `intelligencePacket` from `details.analysis_result` to the top level and meta, matching the existing Home evidence sidecar pattern.
+Runtime emission is guarded and default-off. `_build_report_payload` and normal `_build_analysis_response` behavior do not emit `intelligencePacket` unless the explicit internal opt-in guard is enabled. When opt-in is enabled, these locations receive an advisory, JSON-safe packet.
+
+The API history schema also hydrates `intelligencePacket` from `details.analysis_result` to the top level and meta when a packet is already present, matching the existing Home evidence sidecar pattern. This hydration is additive and does not imply frontend display completion.
 
 ## Safety Rules
 
@@ -60,15 +64,19 @@ The API history schema also hydrates `intelligencePacket` from `details.analysis
 - Unsafe conclusion text is sanitized before consumer display.
 - Observation-only, stale, fallback, missing, synthetic, or non-score-grade evidence caps confidence and prevents high-confidence conclusions.
 - Provider/source metadata is consumed only from existing readiness/provenance sidecars.
+- Raw query IDs, raw source IDs, debug refs, prompts, provider payload refs, stack traces, secrets, and internal diagnostic tokens are not emitted in the packet fields.
 - The builder imports no provider clients, HTTP clients, runtime config, model routing, or LiteLLM modules.
 
 ## Frontend Display
 
-Structured packet UI is rendered through whitelist fields, not raw Markdown:
+Deferred. No frontend completion is claimed in this backend salvage checkpoint.
 
-- `StandardReportPanel` shows an Intelligence packet panel before the chart.
-- `FullDecisionReportDrawer` adds a compact structured packet section to the full report.
-- `reportNormalizer` camelizes and extracts `intelligencePacket` from top-level, meta, standard report, details, analysis result, raw result, persisted report, and nested report payload paths.
+Deferred frontend work includes:
+
+- `reportNormalizer` packet extraction and normalization.
+- `StandardReportPanel` structured packet display.
+- `FullDecisionReportDrawer` structured packet display.
+- Browser/responsive validation for any future UI adoption.
 
 ## Regression Evidence
 
@@ -78,13 +86,14 @@ Added tests cover:
 - required v2 structured sections
 - unsafe text and unsafe evidence cannot become high-confidence conclusions
 - missing/stale/fallback evidence caps confidence
+- default-off runtime emission from `_build_report_payload` / normal analysis responses
+- explicit opt-in packet emission
+- raw query/source/debug/prompt/provider-payload/stack/internal diagnostic leakage guards
 - API history schema hydration from `details.analysis_result`
-- frontend normalizer snake/camel packet extraction
-- frontend structured packet rendering without legacy trade-plan labels
 
 ## Remaining Quality Gaps
 
 - Full report quality still depends on upstream evidence sidecars being populated consistently.
 - The v2 packet is a normalized projection; it does not improve provider coverage or source authority by itself.
 - Existing legacy strategy fields remain for compatibility and must continue to pass consumer-safe projection tests.
-- Broader browser smoke is still useful after final build validation to inspect responsive layout and copy density.
+- Frontend display remains deferred and requires a separate scoped implementation with browser smoke.

@@ -702,6 +702,7 @@ class AnalysisService:
         *,
         query_id: str,
         report_type: str,
+        include_intelligence_packet: bool = False,
     ) -> Dict[str, Any]:
         """Build the canonical report payload from an AnalysisResult."""
         generated_at = to_beijing_iso8601(datetime.utcnow())
@@ -829,28 +830,30 @@ class AnalysisService:
             ),
             query_id=query_id,
         )
-        intelligence_packet = build_intelligence_report_packet_v2(
-            {
-                "symbol": getattr(result, "code", None),
-                "market": self._market_from_symbol(getattr(result, "code", "")).lower(),
-                "standardReport": standard_report or {},
-                "researchReadiness": research_readiness,
-                "evidenceCoverageFrame": evidence_coverage_frame,
-                "singleStockEvidencePacket": single_stock_evidence_packet,
-                "evidenceCitationFrame": evidence_citation_frame,
-                "sourceProvenanceFrame": source_provenance_frame,
-                "dataQualityReport": data_quality_report or {},
-                "debugRef": f"analysis:{query_id}",
-            }
-        )
-        if isinstance(standard_report, dict):
-            standard_report["intelligencePacket"] = intelligence_packet
+        intelligence_packet = None
+        if include_intelligence_packet:
+            intelligence_packet = build_intelligence_report_packet_v2(
+                {
+                    "symbol": getattr(result, "code", None),
+                    "market": self._market_from_symbol(getattr(result, "code", "")).lower(),
+                    "standardReport": standard_report or {},
+                    "researchReadiness": research_readiness,
+                    "evidenceCoverageFrame": evidence_coverage_frame,
+                    "singleStockEvidencePacket": single_stock_evidence_packet,
+                    "evidenceCitationFrame": evidence_citation_frame,
+                    "sourceProvenanceFrame": source_provenance_frame,
+                    "dataQualityReport": data_quality_report or {},
+                }
+            )
+            if isinstance(standard_report, dict):
+                standard_report["intelligencePacket"] = intelligence_packet
         analysis_result["researchReadiness"] = research_readiness
         analysis_result["evidenceCoverageFrame"] = evidence_coverage_frame
         analysis_result["singleStockEvidencePacket"] = single_stock_evidence_packet
         analysis_result["evidenceCitationFrame"] = evidence_citation_frame
         analysis_result["sourceProvenanceFrame"] = source_provenance_frame
-        analysis_result["intelligencePacket"] = intelligence_packet
+        if intelligence_packet is not None:
+            analysis_result["intelligencePacket"] = intelligence_packet
         decision_trace = self._build_decision_trace(
             result,
             query_id=query_id,
@@ -876,7 +879,6 @@ class AnalysisService:
                 "singleStockEvidencePacket": single_stock_evidence_packet,
                 "evidenceCitationFrame": evidence_citation_frame,
                 "sourceProvenanceFrame": source_provenance_frame,
-                "intelligencePacket": intelligence_packet,
             },
             "summary": {
                 "analysis_summary": result.analysis_summary,
@@ -911,12 +913,13 @@ class AnalysisService:
             "singleStockEvidencePacket": single_stock_evidence_packet,
             "evidenceCitationFrame": evidence_citation_frame,
             "sourceProvenanceFrame": source_provenance_frame,
-            "intelligencePacket": intelligence_packet,
         }
         payload["meta"]["researchReadiness"] = research_readiness
         payload["meta"]["evidenceCitationFrame"] = evidence_citation_frame
         payload["meta"]["sourceProvenanceFrame"] = source_provenance_frame
-        payload["meta"]["intelligencePacket"] = intelligence_packet
+        if intelligence_packet is not None:
+            payload["intelligencePacket"] = intelligence_packet
+            payload["meta"]["intelligencePacket"] = intelligence_packet
         if data_quality_report:
             payload["dataQualityReport"] = data_quality_report
             payload["meta"]["dataQualityReport"] = data_quality_report
@@ -1888,6 +1891,8 @@ class AnalysisService:
         result: Any,
         query_id: str,
         report_type: str = "detailed",
+        *,
+        include_intelligence_packet: bool = False,
     ) -> Dict[str, Any]:
         """
         构建分析响应
@@ -1907,6 +1912,7 @@ class AnalysisService:
             result,
             query_id=resolved_query_id,
             report_type=report_type,
+            include_intelligence_packet=include_intelligence_packet,
         )
         runtime_execution = self._attach_report_delivery_runtime(
             getattr(result, "runtime_execution", None),

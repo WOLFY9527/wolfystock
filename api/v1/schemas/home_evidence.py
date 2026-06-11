@@ -6,9 +6,57 @@ emitted and consumed across Home/analysis boundaries. They are schema locks, not
 runtime provenance generators.
 """
 
+import re
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter, model_serializer
+from pydantic import BaseModel, ConfigDict, TypeAdapter, model_serializer, model_validator
+
+
+_INTELLIGENCE_PACKET_DROP_KEYS = {
+    "debugref",
+    "debug_ref",
+    "queryid",
+    "query_id",
+    "rawqueryid",
+    "raw_query_id",
+}
+_INTELLIGENCE_PACKET_TEXT_REPLACEMENTS = (
+    (re.compile(r"\bdebug[_\s-]?ref\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "reference label"),
+    (re.compile(r"\braw[_\s-]?prompt\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "input text"),
+    (re.compile(r"\bprompt\s*:\s*[^.;\n]+", re.IGNORECASE), "input text"),
+    (re.compile(r"\bprovider[_\s-]?payload(?:[_\s-]?ref)?\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "internal reference"),
+    (re.compile(r"\bpayload[-_:][A-Za-z0-9_.:-]+", re.IGNORECASE), "internal reference"),
+    (re.compile(r"\btraceback\b(?:\s*\([^)]*\))?", re.IGNORECASE), "diagnostic trace"),
+    (re.compile(r"\bstack\s+trace\b", re.IGNORECASE), "diagnostic trace"),
+    (re.compile(r"\bmost recent call last\b", re.IGNORECASE), "diagnostic trace"),
+    (re.compile(r"\binternal[_\s-]?diagnostic(?:[_\s-]?token)?\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "internal note"),
+    (re.compile(r"\bdiag[-_][A-Za-z0-9_.:-]+", re.IGNORECASE), "internal note"),
+    (re.compile(r"\bquery[-_][A-Za-z0-9_.:-]+", re.IGNORECASE), "request reference"),
+    (re.compile(r"\bsourceid\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "source label"),
+    (re.compile(r"\b[A-Za-z]+-source-\d+[A-Za-z0-9_.:-]*\b", re.IGNORECASE), "source label"),
+    (re.compile(r"\b(?:authorization|bearer)\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "credential marker"),
+    (re.compile(r"\btoken\s*=\s*[\w:./-]+", re.IGNORECASE), "credential marker"),
+    (re.compile(r"\bsecret[-_][A-Za-z0-9_.:-]+\b", re.IGNORECASE), "credential marker"),
+)
+
+
+def _sanitize_intelligence_packet_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        sanitized: Dict[str, Any] = {}
+        for key, item in value.items():
+            normalized_key = re.sub(r"[^a-z0-9_]+", "", str(key).lower())
+            if normalized_key in _INTELLIGENCE_PACKET_DROP_KEYS:
+                continue
+            sanitized[key] = _sanitize_intelligence_packet_value(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_intelligence_packet_value(item) for item in value]
+    if isinstance(value, str):
+        text = value
+        for pattern, replacement in _INTELLIGENCE_PACKET_TEXT_REPLACEMENTS:
+            text = pattern.sub(replacement, text)
+        return text
+    return value
 
 
 class _HomeEvidenceBase(BaseModel):
@@ -152,6 +200,11 @@ class IntelligenceReportPacketFreshness(_HomeEvidenceBase):
 
 
 class IntelligenceReportPacketV2(_HomeEvidenceBase):
+    @model_validator(mode="before")
+    @classmethod
+    def _sanitize_legacy_internal_refs(cls, value: Any) -> Any:
+        return _sanitize_intelligence_packet_value(value)
+
     contractVersion: Optional[str] = None
     packetState: Optional[str] = None
     consumerActionBoundary: Optional[str] = None
@@ -165,7 +218,6 @@ class IntelligenceReportPacketV2(_HomeEvidenceBase):
     freshness: Optional[IntelligenceReportPacketFreshness] = None
     scenarioRisks: Optional[List[str]] = None
     nextVerificationSteps: Optional[List[str]] = None
-    debugRef: Optional[str] = None
 
 
 HomeEvidenceCoverageFrame = Dict[str, HomeEvidenceCoverageDomain]

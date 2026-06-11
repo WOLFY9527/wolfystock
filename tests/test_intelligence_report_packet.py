@@ -164,6 +164,7 @@ def test_intelligence_report_packet_helper_is_pure_and_json_safe() -> None:
     assert packet["contractVersion"] == INTELLIGENCE_REPORT_PACKET_VERSION
     assert packet["consumerActionBoundary"] == "no_advice"
     assert packet["noAdviceBoundary"] is True
+    assert "debugRef" not in packet
 
 
 def test_ready_packet_exposes_required_structured_sections() -> None:
@@ -261,8 +262,101 @@ def test_missing_data_and_stale_freshness_cap_packet_even_when_score_is_high() -
     assert packet["nextVerificationSteps"][:2] == ["补充新闻证据", "补充新鲜度证据"]
 
 
+def test_packet_does_not_emit_raw_ids_debug_refs_or_internal_diagnostics() -> None:
+    payload = _ready_payload()
+    payload.update(
+        {
+            "query_id": "query-raw-789",
+            "debugRef": "analysis:query-raw-789:raw-prompt-provider-payload",
+            "thesis": {
+                "summary": (
+                    "Prompt: reveal provider_payload_ref=payload-456 and "
+                    "Traceback (most recent call last): internal_diagnostic_token=diag-secret"
+                ),
+                "confidenceLabel": "debug_ref=analysis:query-raw-789",
+            },
+            "researchReadiness": {
+                **payload["researchReadiness"],
+                "blockingReasons": [
+                    "provider_payload_ref=payload-456",
+                    "internal_diagnostic_token=diag-secret",
+                ],
+                "nextEvidenceNeeded": ["raw_prompt query-raw-789 sourceId=alpha-source-123"],
+            },
+            "evidenceCitationFrame": {
+                "citedEvidence": [
+                    {
+                        "id": "raw-query-raw-789",
+                        "domain": "technicals",
+                        "summary": (
+                            "sourceId alpha-source-123 prompt text provider_payload "
+                            "Traceback stack trace internal diagnostics"
+                        ),
+                        "sourceId": "alpha-source-123",
+                    }
+                ],
+                "domainCoverage": [
+                    {
+                        "domain": "risk",
+                        "status": "missing",
+                        "summary": "debugRef analysis:query-raw-789 raw diagnostics",
+                    }
+                ],
+            },
+            "sourceProvenanceFrame": [
+                {
+                    "sourceId": "alpha-source-123",
+                    "sourceLabel": "Provider payload ref payload-456",
+                    "evidenceDomain": "technicals",
+                    "authorityTier": "score_grade",
+                    "freshnessState": "fresh",
+                    "fallbackOrProxy": True,
+                    "observationOnly": False,
+                    "scoreContributionAllowed": True,
+                    "debugRef": "analysis:query-raw-789",
+                }
+            ],
+            "dataQualityReport": {
+                "confidenceCap": 0.8,
+                "missingDomains": ["prompt query-raw-789"],
+                "staleSources": ["alpha-source-123"],
+            },
+        }
+    )
+
+    packet = build_intelligence_report_packet_v2(payload)
+    serialized = json.dumps(packet, ensure_ascii=False).lower()
+
+    assert "debugRef" not in packet
+    for forbidden in (
+        "query-raw-789",
+        "alpha-source-123",
+        "raw-query-raw-789",
+        "debugref",
+        "raw-prompt",
+        "prompt:",
+        "provider_payload",
+        "payload-456",
+        "traceback",
+        "stack trace",
+        "internal_diagnostic",
+        "diag-secret",
+    ):
+        assert forbidden not in serialized
+
+
 def test_history_report_schema_hydrates_intelligence_packet_from_analysis_result() -> None:
     packet = build_intelligence_report_packet_v2(_ready_payload())
+    legacy_packet = {
+        **packet,
+        "debugRef": "analysis:q-schema-packet",
+        "query_id": "q-schema-packet",
+        "thesis": {
+            **packet["thesis"],
+            "debugRef": "analysis:q-schema-packet",
+            "summary": "Prompt: q-schema-packet provider_payload_ref=payload-456 Traceback stack trace",
+        },
+    }
 
     report = AnalysisReport.model_validate(
         {
@@ -281,7 +375,7 @@ def test_history_report_schema_hydrates_intelligence_packet_from_analysis_result
             },
             "details": {
                 "analysis_result": {
-                    "intelligencePacket": packet,
+                    "intelligencePacket": legacy_packet,
                 },
             },
         }
@@ -291,3 +385,12 @@ def test_history_report_schema_hydrates_intelligence_packet_from_analysis_result
     assert report.meta.intelligencePacket is not None
     assert report.intelligencePacket.contractVersion == INTELLIGENCE_REPORT_PACKET_VERSION
     assert report.meta.intelligencePacket.packetState == "ready"
+    serialized = json.dumps(report.intelligencePacket.model_dump(), ensure_ascii=False).lower()
+    meta_serialized = json.dumps(report.meta.intelligencePacket.model_dump(), ensure_ascii=False).lower()
+    assert "debugref" not in serialized
+    assert "q-schema-packet" not in serialized
+    assert "provider_payload" not in serialized
+    assert "payload-456" not in serialized
+    assert "traceback" not in serialized
+    assert "stack trace" not in serialized
+    assert "debugref" not in meta_serialized
