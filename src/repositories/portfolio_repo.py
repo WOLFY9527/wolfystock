@@ -1126,9 +1126,31 @@ class PortfolioRepository:
         ).scalars().all()
         return list(rows)
 
-    def get_first_activity_date(self, *, account_id: int, as_of: date) -> Optional[date]:
+    def get_first_activity_date(
+        self,
+        *,
+        account_id: int,
+        as_of: date,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[date]:
         """Return earliest event date (trade/cash/corporate action) for one account."""
         with self.db.get_session() as session:
+            if not include_all_owners:
+                account_owner_id = self.db.require_user_id(owner_id)
+                account_exists = session.execute(
+                    select(PortfolioAccount.id)
+                    .where(
+                        and_(
+                            PortfolioAccount.id == account_id,
+                            PortfolioAccount.owner_id == account_owner_id,
+                        )
+                    )
+                    .limit(1)
+                ).scalar_one_or_none()
+                if account_exists is None:
+                    return None
+
             first_trade = session.execute(
                 select(func.min(PortfolioTrade.trade_date)).where(
                     and_(
