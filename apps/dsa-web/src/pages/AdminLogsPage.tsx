@@ -1199,13 +1199,20 @@ function operatorEventTypeLabel(value: unknown, locale: AdminLogsLanguage): stri
   return looksLikeInternalToken(raw) ? (locale === 'zh' ? '运维事件' : 'Operator event') : safe;
 }
 
+function hasNonAsciiText(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint !== undefined && codePoint > 0x7f;
+  });
+}
+
 function operatorEventNameLabel(value: unknown, locale: AdminLogsLanguage): string {
   const raw = safeOperatorText(value, '');
   if (!raw) return locale === 'zh' ? '运维事件' : 'Operator event';
   const safe = operatorSafeText(raw, locale, '');
   if (safe && safe !== raw) return safe;
   const unsafeWords = /\b(api|backend|debug|diagnostic|payload|prompt|reasoncode|request|route|stack|trace)\b/i;
-  if ((/[^\x00-\x7F]/.test(raw) || /\s/.test(raw)) && !unsafeWords.test(raw)) return safe || raw;
+  if ((hasNonAsciiText(raw) || /\s/.test(raw)) && !unsafeWords.test(raw)) return safe || raw;
   const label = operatorDefaultTokenLabel(raw, locale, { zh: '运维事件', en: 'Operator event' });
   return label || (locale === 'zh' ? '运维事件' : 'Operator event');
 }

@@ -135,8 +135,6 @@ const AdminLaunchCockpitPage: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    setIsLoading(true);
-    setLoadFailed(false);
     adminOpsStatusApi.getStatus()
       .then((payload) => {
         if (!cancelled) {
