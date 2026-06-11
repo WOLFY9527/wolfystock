@@ -54,6 +54,11 @@ Excluded:
 
 Retention must be preview-first. Every future cleanup implementation should support dry-run output before deletion: matched row counts, oldest/newest candidate rows, estimated bytes where production-safe, policy version, protected-row reasons, and whether actual delete is allowed.
 
+`docs/audits/high-growth-retention-tier-policy.md` is the artifact-class
+policy companion for this DB-focused plan. It separates regulatory/accounting
+evidence, debugging logs, user-uploaded/imported data, generated
+analysis/report data, and ephemeral caches without authorizing cleanup.
+
 | Domain | Proposed default retention | Long-lived summary / archive | Deletion posture | Public readiness note |
 | --- | --- | --- | --- | --- |
 | Admin logs | 365 days minimum for security/admin/audit events; 90-180 days for routine operational noise if separable | Monthly immutable audit summary, backup/restore drill events, admin write/deny/security aggregates | Security-sensitive events should be fail-closed and preserved longer than routine logs | Existing admin log retention/capacity cleanup is a foundation, but policy needs explicit production acceptance. |

@@ -41,9 +41,10 @@ remaining blockers are operational and safety-critical:
 - Provider circuits are visible in storage/API diagnostics and advisory admin
   surfaces, but runtime provider fallback/order/enforcement behavior has not
   changed and target-environment degraded/SLA evidence remains missing.
-- DB readiness has a local dry-run backup/restore preflight and admin-log
-  retention/storage policy evidence, but still lacks an isolated PostgreSQL
-  restore/PITR drill and full retention tiers for non-log high-growth domains.
+- DB readiness has a local dry-run backup/restore preflight, admin-log
+  retention/storage policy evidence, and a policy-only high-growth retention
+  tier matrix, but still lacks an isolated PostgreSQL restore/PITR drill and
+  accepted dry-run reports for non-log high-growth domains.
 - Options Lab remains analysis-only with fixture/synthetic data; no real
   provider adapter or broker/order path exists.
 - Data Pipeline R2 progressive enrichment is not a late async merge path yet.
@@ -264,9 +265,14 @@ Remaining blockers:
   preflight must be run against a synthetic staging URL with explicit opt-in.
 - [ ] Encrypted backup infrastructure, PITR execution, restore smoke, and
   rollback runbook must be documented and exercised before public onboarding.
-- [ ] Retention tiers are still missing for task progress, terminal task state,
-  LLM usage, scanner/backtest artifacts, provider counters, guest/cache
-  metadata, and future Options cache rows.
+- [x] Policy-only high-growth retention tiers now exist in
+  `docs/audits/high-growth-retention-tier-policy.md` for task progress,
+  terminal task state, LLM usage, scanner/backtest artifacts, provider
+  counters, guest/cache metadata, future Options cache rows, portfolio
+  imports/import previews, research/report packets, frontend build artifacts,
+  and CI artifacts.
+- [ ] Accepted retention dry-run reports and cleanup approval are still missing
+  for non-admin-log high-growth domains.
 - [ ] Non-admin-log retention cleanup must be preview-first and
   owner/domain-aware.
 - [ ] Public production should treat PostgreSQL as the durable multi-user
@@ -456,7 +462,8 @@ The following must all be true before public multi-user deployment:
   environment.
 - [ ] Rollback plan is written, including last-good commit/image, DB restore
   decision point, health checks, and owner-isolation smoke.
-- [ ] Retention dry-run reports exist for high-growth domains.
+- [ ] Retention dry-run reports exist for high-growth domains; the policy-only
+  tier matrix does not satisfy this gate by itself.
 - [ ] Cost/quota enforcement status is explicitly labeled in user/admin-facing
   docs and UI so observability is not mistaken for a spending cap.
 - [ ] Deployment docs distinguish single-instance/private-beta rehearsal from
