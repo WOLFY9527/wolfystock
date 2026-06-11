@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 
@@ -65,6 +66,59 @@ from src.utils.security import sanitize_message
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+IMPORT_ARTIFACT_REDACTED = "<redacted>"
+_IMPORT_ARTIFACT_URL_RE = re.compile(r"\bhttps?://[^\s\"'<>]+", re.IGNORECASE)
+_IMPORT_ARTIFACT_SENSITIVE_TEXT_RE = re.compile(
+    r"\b(?:broker[-_\s]?account[-_\s]?(?:ref|id|label|name)|account[-_\s]?(?:ref|label)|"
+    r"order[-_\s]?(?:id|ref)|request[-_\s]?id|exec(?:ution)?[-_\s]?id|trade[-_\s]?uid|"
+    r"dedup[-_\s]?hash|file[-_\s]?fingerprint|import[-_\s]?fingerprint|raw[-_\s]?payload)\b"
+    r"\s*[:=]?",
+    re.IGNORECASE,
+)
+_IMPORT_ARTIFACT_SENSITIVE_KEY_MARKERS = (
+    "account_label",
+    "account_name",
+    "account_ref",
+    "accountlabel",
+    "accountname",
+    "accountref",
+    "broker_account",
+    "brokeraccount",
+    "connection_name",
+    "dedup_hash",
+    "deduphash",
+    "execution_id",
+    "executionid",
+    "exec_id",
+    "execid",
+    "file_fingerprint",
+    "filefingerprint",
+    "fingerprint",
+    "import_fingerprint",
+    "importfingerprint",
+    "order_id",
+    "order_ref",
+    "orderid",
+    "orderref",
+    "broker_payload",
+    "brokerpayload",
+    "execution_payload",
+    "executionpayload",
+    "raw_",
+    "raw_payload",
+    "rawpayload",
+    "request_payload",
+    "requestpayload",
+    "response_payload",
+    "responsepayload",
+    "request_id",
+    "requestid",
+    "token",
+    "trade_uid",
+    "tradeuid",
+    "url",
+)
 
 
 def _get_portfolio_service(current_user: CurrentUser) -> PortfolioService:
@@ -150,6 +204,7 @@ def _serialize_import_record(item: dict) -> PortfolioImportTradeItem:
         payload["trade_date"] = trade_date.isoformat()
     else:
         payload["trade_date"] = str(trade_date)
+    payload = _sanitize_import_artifact_value(payload)
     return PortfolioImportTradeItem(**payload)
 
 
@@ -160,7 +215,7 @@ def _serialize_import_cash_entry(item: dict) -> dict:
         payload["event_date"] = event_date.isoformat()
     else:
         payload["event_date"] = str(event_date)
-    return payload
+    return _sanitize_import_artifact_value(payload)
 
 
 def _serialize_import_corporate_action(item: dict) -> dict:
@@ -170,7 +225,41 @@ def _serialize_import_corporate_action(item: dict) -> dict:
         payload["effective_date"] = effective_date.isoformat()
     else:
         payload["effective_date"] = str(effective_date)
-    return payload
+    return _sanitize_import_artifact_value(payload)
+
+
+def _is_import_artifact_sensitive_key(key: Any) -> bool:
+    normalized = str(key or "").strip().lower().replace("-", "_").replace(" ", "_")
+    compact = normalized.replace("_", "")
+    return any(marker in normalized or marker in compact for marker in _IMPORT_ARTIFACT_SENSITIVE_KEY_MARKERS)
+
+
+def _sanitize_import_artifact_text(value: str) -> str:
+    text = sanitize_message(str(value or ""))
+    if _IMPORT_ARTIFACT_URL_RE.search(text) or _IMPORT_ARTIFACT_SENSITIVE_TEXT_RE.search(text):
+        return IMPORT_ARTIFACT_REDACTED
+    return text
+
+
+def _sanitize_import_artifact_value(value: Any, *, force_redact: bool = False) -> Any:
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, child in value.items():
+            key_text = str(key)
+            sanitized[key_text] = _sanitize_import_artifact_value(
+                child,
+                force_redact=force_redact or _is_import_artifact_sensitive_key(key_text),
+            )
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_import_artifact_value(item, force_redact=force_redact) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_import_artifact_value(item, force_redact=force_redact) for item in value)
+    if force_redact:
+        return IMPORT_ARTIFACT_REDACTED
+    if isinstance(value, str):
+        return _sanitize_import_artifact_text(value)
+    return value
 
 
 def _build_import_parse_response(parsed: dict) -> PortfolioImportParseResponse:
@@ -186,10 +275,18 @@ def _build_import_parse_response(parsed: dict) -> PortfolioImportParseResponse:
         corporate_actions=[
             _serialize_import_corporate_action(item) for item in parsed.get("corporate_actions", [])
         ],
-        warnings=list(parsed.get("warnings", [])),
-        metadata=dict(parsed.get("metadata", {})),
-        errors=list(parsed.get("errors", [])),
+        warnings=_sanitize_import_artifact_value(list(parsed.get("warnings", []))),
+        metadata=_sanitize_import_artifact_value(dict(parsed.get("metadata", {}))),
+        errors=_sanitize_import_artifact_value(list(parsed.get("errors", []))),
     )
+
+
+def _build_import_commit_response(result: dict) -> PortfolioImportCommitResponse:
+    payload = dict(result)
+    payload["warnings"] = _sanitize_import_artifact_value(list(payload.get("warnings", [])))
+    payload["metadata"] = _sanitize_import_artifact_value(dict(payload.get("metadata", {})))
+    payload["errors"] = _sanitize_import_artifact_value(list(payload.get("errors", [])))
+    return PortfolioImportCommitResponse(**payload)
 
 
 def _normalize_cost_method(cost_method: str) -> str:
@@ -1064,7 +1161,7 @@ def commit_broker_import(
             dry_run=dry_run,
             broker_connection_id=broker_connection_id,
         )
-        return PortfolioImportCommitResponse(**result)
+        return _build_import_commit_response(result)
     except PortfolioConflictError as exc:
         raise _conflict_error(error="conflict", message=str(exc))
     except ValueError as exc:
@@ -1134,7 +1231,7 @@ def commit_csv_import(
             parsed_payload=parsed,
             dry_run=dry_run,
         )
-        return PortfolioImportCommitResponse(**result)
+        return _build_import_commit_response(result)
     except PortfolioConflictError as exc:
         raise _conflict_error(error="conflict", message=str(exc))
     except ValueError as exc:

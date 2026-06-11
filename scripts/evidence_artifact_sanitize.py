@@ -93,13 +93,17 @@ RAW_KEY_MARKERS = (
 BROKER_ORDER_IDENTITY_KEY_MARKERS = (
     "account_id",
     "account_ref",
+    "account_number",
     "accountid",
+    "accountnumber",
     "accountref",
     "broker_account_id",
     "broker_account_ref",
+    "broker_account_number",
     "broker_order_id",
     "broker_position_ref",
     "brokeraccountid",
+    "brokeraccountnumber",
     "brokeraccountref",
     "brokerorderid",
     "brokerpositionref",
@@ -108,7 +112,11 @@ BROKER_ORDER_IDENTITY_KEY_MARKERS = (
     "execution_id",
     "executionid",
     "order_id",
+    "order_ref",
     "orderid",
+    "orderref",
+    "perm_id",
+    "permid",
     "request_id",
     "requestid",
     "trade_id",
@@ -132,9 +140,13 @@ ACCOUNT_METADATA_KEY_MARKERS = (
 )
 ENDPOINT_URL_KEY_MARKERS = (
     "api_base_url",
+    "api_url",
     "apibaseurl",
+    "apiurl",
     "base_url",
     "baseurl",
+    "broker_api_url",
+    "brokerapiurl",
     "broker_url",
     "brokerurl",
     "callback_url",
@@ -181,6 +193,13 @@ RAW_VALUE_PATTERN = re.compile(
     r"\b(?:raw[-_\s]?(?:request|response|payload|log)|raw[-_\s]?request[-_\s]?body|"
     r"raw[-_\s]?response[-_\s]?body|debug[-_\s]?(?:payload|trace)|provider[-_\s]?payload|"
     r"stack trace|stacktrace|traceback|db dump|database dump)\b",
+    re.IGNORECASE,
+)
+BROKER_ORDER_IDENTITY_VALUE_PATTERN = re.compile(
+    r"\b(?:broker[-_\s]?account[-_\s]?(?:ref|id|number|label)|"
+    r"account[-_\s]?(?:ref|number|label)|order[-_\s]?(?:id|ref)|"
+    r"request[-_\s]?id|execution[-_\s]?id|exec[-_\s]?id|perm[-_\s]?id|trade[-_\s]?uid)\b"
+    r"\s*[:=]\s*\S+",
     re.IGNORECASE,
 )
 CREDENTIAL_URL_PATTERNS = (
@@ -267,6 +286,8 @@ def _string_matches(value: str) -> list[UnsafeMatch]:
             break
     if RAW_VALUE_PATTERN.search(value):
         matches.append(UnsafeMatch("raw_body_or_log", "raw_or_debug_value"))
+    if BROKER_ORDER_IDENTITY_VALUE_PATTERN.search(value):
+        matches.append(UnsafeMatch("broker_order_identity", "broker_order_identity_value"))
     if any(pattern.search(value) for pattern in CREDENTIAL_URL_PATTERNS):
         matches.append(UnsafeMatch("credential_url", "credential_url_value"))
     elif ENDPOINT_URL_PATTERN.search(value):

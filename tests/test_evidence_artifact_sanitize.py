@@ -199,3 +199,57 @@ def test_broker_order_artifact_ids_payloads_urls_and_tokens_are_redacted(tmp_pat
     assert summary["summary"]["countsByCategory"]["account_metadata"] == 1
     assert summary["summary"]["countsByCategory"]["endpoint_url"] == 1
     assert summary["summary"]["countsByCategory"]["raw_body_or_log"] == 1
+
+
+def test_broker_import_export_alias_fields_are_redacted(tmp_path: Path) -> None:
+    result, output = _sanitize(
+        tmp_path,
+        {
+            "brokerApiUrl": "https://broker.example.invalid/api?token=fixture-url-token-must-not-leak",
+            "accountNumber": "fixture-account-number-must-not-leak",
+            "orderRef": "fixture-order-ref-must-not-leak",
+            "permId": "fixture-perm-id-must-not-leak",
+        },
+    )
+
+    assert result.returncode == 0
+    sanitized = json.loads(output.read_text(encoding="utf-8"))
+    assert sanitized["brokerApiUrl"] == REDACTED
+    assert sanitized["accountNumber"] == REDACTED
+    assert sanitized["orderRef"] == REDACTED
+    assert sanitized["permId"] == REDACTED
+
+    combined = _combined(result, output)
+    for raw_value in (
+        "broker.example.invalid",
+        "fixture-url-token-must-not-leak",
+        "fixture-account-number-must-not-leak",
+        "fixture-order-ref-must-not-leak",
+        "fixture-perm-id-must-not-leak",
+    ):
+        assert raw_value not in combined
+
+    stdout = result.stdout
+    for raw_field in ("brokerApiUrl", "accountNumber", "orderRef", "permId"):
+        assert raw_field not in stdout
+
+
+def test_broker_import_export_freeform_identifiers_are_redacted(tmp_path: Path) -> None:
+    raw_note = (
+        "broker account ref=fixture-broker-account-ref-must-not-leak; "
+        "order id=fixture-order-id-must-not-leak; "
+        "request id=fixture-request-id-must-not-leak; "
+        "account label=fixture-account-label-must-not-leak"
+    )
+
+    result, output = _sanitize(tmp_path, {"operatorNote": raw_note})
+
+    assert result.returncode == 0
+    sanitized = json.loads(output.read_text(encoding="utf-8"))
+    assert sanitized["operatorNote"] == REDACTED
+    combined = _combined(result, output)
+    assert raw_note not in combined
+    assert "fixture-broker-account-ref-must-not-leak" not in combined
+    assert "fixture-order-id-must-not-leak" not in combined
+    assert "fixture-request-id-must-not-leak" not in combined
+    assert "fixture-account-label-must-not-leak" not in combined

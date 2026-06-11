@@ -33,3 +33,9 @@ def test_key_and_path_helpers_normalize_without_exposing_directories() -> None:
     assert normalize_key("Raw Request-Body") == "raw_request_body"
     assert compact_key("Launch Approved!") == "launchapproved"
     assert path_label(Path("/tmp/operator/unsafe-artifact.json")) == "unsafe-artifact.json"
+
+
+def test_path_label_redacts_broker_order_account_artifact_names() -> None:
+    assert path_label(Path("/tmp/operator/brokerAccountRef-U1234567.json")) == "[redacted]"
+    assert path_label(Path("/tmp/operator/order-id-fixture-must-not-leak.json")) == "[redacted]"
+    assert path_label(Path("/tmp/operator/execution_id-fixture-must-not-leak.json")) == "[redacted]"

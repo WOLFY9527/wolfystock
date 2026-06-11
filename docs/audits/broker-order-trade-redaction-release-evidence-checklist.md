@@ -16,6 +16,8 @@ exposure until target-environment evidence is accepted separately.
 Covered by this evidence slice:
 
 - Offline operator evidence artifact sanitization for broker/order/trade JSON.
+- Portfolio import preview and commit API response redaction for broker file
+  artifacts, including IBKR XML and legacy broker CSV imports.
 - User-owned broker connection metadata redaction for secret-like sync metadata.
 - Admin portfolio safe projections for summary, holdings, activity, account
   detail, and related audit metadata.
@@ -29,8 +31,9 @@ Explicitly not covered:
 - Provider ordering, fallback, cache behavior, auth/RBAC/session behavior,
   database migrations, frontend redesign, notification delivery, or public
   launch approval.
-- Browser-visible release-candidate proof, full log export proof, sync/import
-  failure proof, and final release-candidate export proof.
+- Full browser-visible release-candidate proof, full log export proof,
+  owner-visible broker connection/sync/ledger field classification, and final
+  release-candidate export proof.
 
 ## Synthetic Fixture Policy
 
@@ -49,6 +52,9 @@ Explicitly not covered:
 | Surface | Evidence | Redaction guarantee |
 | --- | --- | --- |
 | Offline operator evidence JSON | `tests/test_evidence_artifact_sanitize.py::test_broker_order_artifact_ids_payloads_urls_and_tokens_are_redacted` | `brokerAccountRef`, `accountId`, `orderId`, `requestId`, `accountMetadata`, broker endpoint URL fields, `executionPayload`, and token/header fields are replaced with `<redacted>` or bounded findings; raw values and raw sensitive field names are absent from stdout and sanitized output. |
+| Offline import/export artifact aliases | `tests/test_evidence_artifact_sanitize.py::test_broker_import_export_alias_fields_are_redacted`; `tests/test_evidence_artifact_sanitize.py::test_broker_import_export_freeform_identifiers_are_redacted`; `tests/test_evidence_safety.py::test_path_label_redacts_broker_order_account_artifact_names` | Broker import/export-style aliases such as `brokerApiUrl`, `accountNumber`, `orderRef`, `permId`, free-form broker/order/request/account-label text, and broker/order/account artifact filenames are redacted without echoing raw labels or values in sanitizer output. |
+| Member portfolio import preview responses | `tests/test_portfolio_api.py::PortfolioApiTestCase::test_broker_import_preview_and_commit_redact_browser_artifact_identifiers`; `tests/test_portfolio_api.py::PortfolioApiTestCase::test_csv_import_preview_and_commit_redact_trade_ids_and_fingerprints` | `/api/v1/portfolio/imports/parse` and `/api/v1/portfolio/imports/csv/parse` preserve normalized trade/cash/corporate-action shape while redacting raw broker account refs, execution/order/request IDs, trade UIDs, dedup hashes, import fingerprints, broker URLs, tokens, and account labels from browser/API response artifacts. |
+| Member portfolio import commit responses | `tests/test_portfolio_api.py::PortfolioApiTestCase::test_broker_import_preview_and_commit_redact_browser_artifact_identifiers`; `tests/test_portfolio_api.py::PortfolioApiTestCase::test_csv_import_preview_and_commit_redact_trade_ids_and_fingerprints` | `/api/v1/portfolio/imports/commit`, duplicate-import commit responses, and `/api/v1/portfolio/imports/csv/commit` redact commit metadata and errors/warnings without changing commit, dedup, broker-connection linking, or dry-run semantics. |
 | User/member broker connection metadata | `tests/test_portfolio_api.py::PortfolioApiTestCase::test_broker_connection_read_payload_redacts_sensitive_metadata` | Secret-like `sync_metadata` values such as API key, nested token, and bearer text are masked in create/list responses. Existing member response contract still includes the user-provided `broker_account_ref`; that is not public-launch acceptance. |
 | Member IBKR sync error path | `tests/test_portfolio_api.py::PortfolioApiTestCase::test_ibkr_sync_endpoint_sanitizes_secret_like_error_text` | Secret-like session text returned by the broker sync service is masked before API error output. |
 | Admin portfolio safe projections | `tests/api/test_admin_portfolio.py::AdminPortfolioApiTestCase::test_admin_portfolio_export_redaction_matrix_excludes_raw_payloads_and_secrets` | Admin summary, holdings, activity, and account-detail outputs omit raw broker account refs, position refs, import fingerprints, trade UIDs, dedup hashes, raw payload JSON, sync metadata JSON, broker URLs, request/order IDs, execution payloads, tokens, and broker account labels. Broker account references are projected only as bounded hash handles such as `acct_<hash-prefix>`. |
@@ -59,11 +65,15 @@ Explicitly not covered:
 Before any broader release reviewer can consider this area ready, attach
 sanitized evidence for all of the following:
 
-- [ ] Target release branch uses only synthetic broker/order/trade redaction
+- [x] Current automated evidence uses only synthetic broker/order/trade redaction
   fixtures in automated tests.
-- [ ] Offline artifact sanitizer rejects or redacts broker account IDs, order
+- [x] Offline artifact sanitizer rejects or redacts broker account IDs, order
   IDs, request IDs, execution IDs, account metadata, tokens, endpoint URLs, and
   raw broker/execution payloads.
+- [x] Portfolio import preview and commit API responses redact broker refs,
+  order/execution/request IDs, import fingerprints, raw payload markers,
+  broker URLs, tokens, account labels, trade UIDs, and dedup hashes from
+  response artifacts while preserving import execution semantics.
 - [ ] User/member API surfaces are classified by response contract, including
   whether a field is owner-visible metadata or public/admin-safe metadata.
 - [ ] Admin-safe broker/portfolio surfaces expose bounded hash handles or counts
@@ -72,9 +82,11 @@ sanitized evidence for all of the following:
   review labels only.
 - [ ] Browser-visible panels and release-candidate exports have no raw broker
   account/order/request IDs, raw broker URLs, raw payloads, tokens, or account
-  labels.
+  labels. Current API response redaction is browser-like evidence only, not a
+  full DOM/release-candidate export pass.
 - [ ] Sync/import failure paths sanitize exception text, request context, and
-  broker payload summaries.
+  broker payload summaries beyond the targeted import response warnings/errors
+  covered here.
 - [ ] `scripts/release_secret_scan.sh` passes on the release candidate.
 - [ ] Any remaining raw owner-visible broker reference behavior is explicitly
   documented as not public/admin-safe and not a launch approval.
@@ -84,7 +96,8 @@ sanitized evidence for all of the following:
 This evidence slice does not close the broker/order/trade launch blocker.
 Public launch remains **NO-GO** until reviewers accept target-environment,
 release-candidate evidence for API, logs, reports, browser DOM, exports,
-sync/import failures, and operator evidence packets.
+full sync/import failure paths, owner-visible field classification, and
+operator evidence packets.
 
 Stop future work and request a separate scoped decision if proving a boundary
 would require real broker credentials, live broker payloads, a broad
