@@ -70,6 +70,7 @@ type AdminNavGroup = {
 
 type AdminNavCopy = {
   menuLabel: string;
+  missionControl: string;
   system: string;
   marketProviders: string;
   providerCircuits: string;
@@ -117,6 +118,7 @@ const ADMIN_NAV_GROUP_ORDER: AdminNavGroupKey[] = ['trust', 'evidence', 'dataOps
 function isAdminOpsRoute(pathname: string): boolean {
   const routePathname = stripLocalePrefix(pathname);
   return routePathname.startsWith('/settings/system')
+    || routePathname.startsWith('/admin/mission-control')
     || routePathname.startsWith('/admin/logs')
     || routePathname.startsWith('/admin/evidence-workflow')
     || routePathname.startsWith('/admin/notifications')
@@ -130,6 +132,7 @@ function resolveAdminNavCopy(language: string): AdminNavCopy {
   if (language === 'en') {
     return {
       menuLabel: 'Admin/Ops navigation',
+      missionControl: 'Mission Control',
       system: 'Ops Overview / System Settings',
       marketProviders: 'Data Sources & Readiness',
       providerCircuits: 'Circuit Diagnostics',
@@ -143,6 +146,7 @@ function resolveAdminNavCopy(language: string): AdminNavCopy {
 
   return {
     menuLabel: 'Admin/Ops 运维导航',
+    missionControl: 'Mission Control',
     system: '运维总览/系统设置',
     marketProviders: '数据源与就绪度',
     providerCircuits: '熔断诊断',
@@ -226,6 +230,7 @@ function useSidebarNavView({
   const consoleLabel = t('nav.independentConsole');
   const signInPath = buildLoginPath(location.pathname + location.search);
   const consolePath = routeLocale ? buildLocalizedPath('/settings/system', routeLocale) : '/settings/system';
+  const missionControlPath = routeLocale ? buildLocalizedPath('/admin/mission-control', routeLocale) : '/admin/mission-control';
   const adminLogsPath = routeLocale ? buildLocalizedPath('/admin/logs', routeLocale) : '/admin/logs';
   const evidenceWorkflowPath = routeLocale ? buildLocalizedPath('/admin/evidence-workflow', routeLocale) : '/admin/evidence-workflow';
   const notificationsPath = routeLocale ? buildLocalizedPath('/admin/notifications', routeLocale) : '/admin/notifications';
@@ -238,6 +243,7 @@ function useSidebarNavView({
     adminNavItems.push({ key: 'system', label: adminNavCopy.system, to: consolePath, icon: ShieldCheck, group: 'trust' });
   }
   if (canReadOpsLogs) {
+    adminNavItems.push({ key: 'mission-control', label: adminNavCopy.missionControl, to: missionControlPath, icon: Gauge, group: 'trust' });
     adminNavItems.push({ key: 'logs', label: adminNavCopy.logs, to: adminLogsPath, icon: Activity, group: 'evidence' });
     adminNavItems.push({ key: 'evidence', label: adminNavCopy.evidence, to: evidenceWorkflowPath, icon: FileCheck2, group: 'evidence' });
   }

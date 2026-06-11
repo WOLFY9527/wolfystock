@@ -58,6 +58,9 @@ export function canAccessAdminPath(pathname: string, flags: AdminCapabilityFlags
   if (pathname === '/admin/logs' || pathname.startsWith('/admin/logs/')) {
     return capabilityFlags.canReadOpsLogs;
   }
+  if (pathname === '/admin/mission-control' || pathname.startsWith('/admin/mission-control/')) {
+    return capabilityFlags.canReadOpsLogs;
+  }
   if (pathname === '/admin/evidence-workflow' || pathname.startsWith('/admin/evidence-workflow/')) {
     return capabilityFlags.canReadOpsLogs;
   }

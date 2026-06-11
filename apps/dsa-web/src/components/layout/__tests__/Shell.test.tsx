@@ -722,6 +722,7 @@ describe('Shell', () => {
 
     const adminNav = await screen.findByTestId('shell-admin-primary-nav');
     expect(within(adminNav).getByRole('link', { name: '运维总览/系统设置' })).toBeInTheDocument();
+    expect(within(adminNav).getByRole('link', { name: 'Mission Control' })).toBeInTheDocument();
     expect(within(adminNav).getByRole('link', { name: '数据源与就绪度' })).toHaveClass('is-active');
     expect(within(adminNav).getByRole('link', { name: '熔断诊断' })).toBeInTheDocument();
     expect(within(adminNav).getByRole('link', { name: '系统日志' })).toBeInTheDocument();
@@ -911,6 +912,7 @@ describe('Shell', () => {
     expect(within(adminMenu).getByTestId('shell-admin-utility-group-evidence')).toHaveTextContent('事件 / Evidence');
     expect(within(adminMenu).getByTestId('shell-admin-utility-group-dataOps')).toHaveTextContent('数据运行 / Data Ops');
     expect(within(adminMenu).getByTestId('shell-admin-utility-group-support')).toHaveTextContent('用户支持 / Support');
+    expect(screen.getByRole('link', { name: 'Mission Control' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '数据源与就绪度' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '系统日志' })).toBeInTheDocument();
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.logout') })).toBeInTheDocument();
@@ -988,6 +990,7 @@ describe('Shell', () => {
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
     expect(within(actionIsland).queryByRole('button', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
     const adminNav = await screen.findByTestId('shell-admin-primary-nav');
+    expect(within(adminNav).getByRole('link', { name: 'Mission Control' })).toBeInTheDocument();
     expect(within(adminNav).getByRole('link', { name: '证据复核' })).toBeInTheDocument();
     expect(within(adminNav).getByRole('link', { name: '系统日志' })).toHaveClass('is-active');
     expect(within(adminNav).queryByRole('link', { name: 'Evidence Review' })).not.toBeInTheDocument();
@@ -1033,6 +1036,7 @@ describe('Shell', () => {
     expect(within(adminNav).getByRole('link', { name: '成本观测' })).toBeInTheDocument();
     expect(within(adminNav).getByRole('link', { name: '用户治理' })).toBeInTheDocument();
     expect(within(adminNav).getByRole('link', { name: '通知通道' })).toBeInTheDocument();
+    expect(within(adminNav).queryByRole('link', { name: 'Mission Control' })).not.toBeInTheDocument();
     expect(within(adminNav).queryByRole('link', { name: '证据复核' })).not.toBeInTheDocument();
     expect(within(adminNav).queryByRole('link', { name: '系统日志' })).not.toBeInTheDocument();
   });

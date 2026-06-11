@@ -178,6 +178,10 @@ vi.mock('../pages/AdminEvidenceWorkflowPage', () => ({
   default: () => <div>admin-evidence-workflow-page</div>,
 }));
 
+vi.mock('../pages/AdminMissionControlPage', () => ({
+  default: () => <div>admin-mission-control-page</div>,
+}));
+
 vi.mock('../pages/LoginPage', () => ({
   default: () => <div>login-page</div>,
 }));
@@ -699,13 +703,16 @@ describe('AppContent route flows', () => {
     },
   );
 
-  it('redirects locale-prefixed guest settings access to the locale guest page', async () => {
+  it.each(['/en/settings/system', '/en/admin/mission-control'])(
+    'redirects locale-prefixed guest admin access %s to the locale guest page',
+    async (path) => {
     languageState.value = 'en';
-    renderAtWithLocationProbe('/en/settings/system');
+    renderAtWithLocationProbe(path);
 
     expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/en/guest'));
-  });
+    },
+  );
 
   it('keeps locale-prefixed guest portfolio access on the same route and renders the paywall', async () => {
     languageState.value = 'en';
@@ -942,6 +949,7 @@ describe('AppContent route flows', () => {
     ['/zh/admin/provider-circuits', { ...noCapabilities, canReadProviders: true }, 'admin-provider-circuit-diagnostics-page'],
     ['/zh/admin/cost-observability', { ...noCapabilities, canReadCostObservability: true }, 'admin-cost-observability-page'],
     ['/zh/admin/evidence-workflow', { ...noCapabilities, canReadOpsLogs: true }, 'admin-evidence-workflow-page'],
+    ['/zh/admin/mission-control', { ...noCapabilities, canReadOpsLogs: true }, 'admin-mission-control-page'],
     ['/zh/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
   ])('renders %s only with its matching capability', async (path, adminCapabilities, pageText) => {
     useAuthMock.mockReturnValue({
@@ -972,6 +980,15 @@ describe('AppContent route flows', () => {
     expect(screen.queryByText('admin-evidence-workflow-page')).not.toBeInTheDocument();
   });
 
+  it('blocks mission control access when admin ops-log capability is absent', async () => {
+    mockSignedInAdminWithCapabilities(noCapabilities);
+
+    renderAt('/zh/admin/mission-control');
+
+    expect(await screen.findByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeInTheDocument();
+    expect(screen.queryByText('admin-mission-control-page')).not.toBeInTheDocument();
+  });
+
   it.each([
     ['system config', { ...noCapabilities, canReadSystemConfig: true }],
     ['provider operations', { ...noCapabilities, canReadProviders: true }],
@@ -996,6 +1013,15 @@ describe('AppContent route flows', () => {
     renderAt('/zh/admin/evidence-workflow');
 
     await waitFor(() => expect(screen.getByText('admin-evidence-workflow-page')).toBeInTheDocument());
+    expect(screen.queryByRole('heading', { name: '这个管理页面需要对应管理员能力' })).not.toBeInTheDocument();
+  });
+
+  it('renders mission control with ops logs read as the only admin capability', async () => {
+    mockSignedInAdminWithCapabilities({ ...noCapabilities, canReadOpsLogs: true });
+
+    renderAt('/zh/admin/mission-control');
+
+    await waitFor(() => expect(screen.getByText('admin-mission-control-page')).toBeInTheDocument());
     expect(screen.queryByRole('heading', { name: '这个管理页面需要对应管理员能力' })).not.toBeInTheDocument();
   });
 
