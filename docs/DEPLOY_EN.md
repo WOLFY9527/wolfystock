@@ -109,7 +109,29 @@ Minimum baseline:
 - SSE / WebSocket paths need HTTP/1.1 upgrade support and a longer `proxy_read_timeout`.
 - Cache static assets at the proxy if needed, but do not apply shared caching to API responses.
 
-### 4.3 Post-Start Checks
+### 4.3 Public Env Flag Release Matrix
+
+This table documents release-review semantics only; it does not change runtime
+defaults. Public launch remains **NO-GO** until target-environment evidence for
+HTTPS ingress, sanitized config snapshot, restore/PITR, WS2/SSE, auth/RBAC/MFA,
+provider, quota, and the final release gate is accepted.
+
+| Flag / feature | Current behavior | Classification | Launch evidence required |
+| --- | --- | --- | --- |
+| `APP_ENV` | Explicit `production` enables production security semantics; local/dev may be empty or non-production. | **GATED** | Sanitized production config contract and config snapshot evidence for the target environment, without raw `.env` or secret values. |
+| `VITE_API_URL` | Frontend defaults to same-origin API; explicit value only for split static frontend/API deployments. | **GATED** | Evidence that the built frontend points to the intended HTTPS API origin, CORS/CSRF origins match, and backend `:8000` is not directly public. |
+| `PUBLIC_API_ABUSE_LIMIT_*` | Process-local public API error-burst limiter with bounded knobs; not quota, billing, auth, or distributed rate-limit enforcement. | **SAFE** | Sanitized limiter config/snapshot evidence labeled `processLocal`; do not present it as live quota enforcement. |
+| `CRYPTO_REALTIME_ENABLED` | Realtime crypto SSE background connection is enabled by default; `false` uses REST/cache fallback. | **AMBIGUOUS** | Target-env decision for outbound Binance/WebSocket access, degraded behavior, or explicit realtime disablement. |
+| `SEARXNG_PUBLIC_INSTANCES_ENABLED` | Discovers public SearXNG instances when `SEARXNG_BASE_URLS` is empty. | **NO-GO** | Public launch must use vetted self-hosted endpoints, explicitly disable public discovery, or attach a separately accepted operator risk decision. |
+
+Classification meanings:
+
+- **SAFE**: bounded and test-backed locally, but still requires target-env evidence.
+- **GATED**: must be explicit and matched by target-env evidence.
+- **AMBIGUOUS**: acceptable for local/private use, but needs an operator decision before public launch.
+- **NO-GO**: launch remains **NO-GO** if target-env evidence is missing, raw secrets would be needed, or the flag is used to imply provider/quota/auth live enforcement approval.
+
+### 4.4 Post-Start Checks
 
 ```bash
 # Liveness: confirms the process is responding
@@ -119,7 +141,7 @@ curl -fsS http://127.0.0.1:8000/api/health/live
 curl -fsS http://127.0.0.1:8000/api/health/ready
 ```
 
-### 4.4 WS1 Baseline Capture (Pre-deployment)
+### 4.5 WS1 Baseline Capture (Pre-deployment)
 
 > Goal: baseline capture and validation only. No optimization or architecture refactor.
 
@@ -141,7 +163,7 @@ python3 scripts/ws1_baseline_capture.py \
 # 3) Baseline output is written to reports/ws1_baseline/baseline_<UTC timestamp>.json
 ```
 
-### 4.5 Canonical clean-checkout smoke (repo-committed scripts only)
+### 4.6 Canonical clean-checkout smoke (repo-committed scripts only)
 
 ```bash
 # Clean-checkout example
@@ -155,7 +177,7 @@ python3 scripts/smoke_backtest_standard.py
 python3 scripts/smoke_backtest_rule.py
 ```
 
-### 4.6 Target-host queue/SSE single-process validation checklist
+### 4.7 Target-host queue/SSE single-process validation checklist
 
 ```bash
 # 1) Start single-process API on target host
@@ -188,7 +210,7 @@ curl -N "http://127.0.0.1:8000/api/v1/analysis/tasks/stream?task_id=${TASK_ID}" 
 curl -fsS "http://127.0.0.1:8000/api/v1/analysis/status/${TASK_ID}"
 ```
 
-### 4.7 Rollback checklist (WS1 deployment validation path)
+### 4.8 Rollback checklist (WS1 deployment validation path)
 
 ```bash
 # A. Stop the new version
@@ -336,12 +358,16 @@ If you also need scheduled analysis, run `--schedule` as a separate service inst
 | `GEMINI_API_KEY` | Required for AI analysis | [Google AI Studio](https://aistudio.google.com/) |
 | `ADMIN_AUTH_ENABLED` | Admin authentication; must stay `true` in production | `.env.example` |
 | `APP_ENV` | Set explicitly to `production` for public or formal rehearsal environments | `.env.example` |
+| `VITE_API_URL` | Needed only for split frontend/API deployments; same-origin API is the default | Frontend build environment |
 
 ### Optional Configuration
 
 | Config Item | Default | Description |
 |--------|--------|------|
 | `STOCK_LIST` | `600519,300750,002594` | Watchlist / scheduled analysis targets |
+| `PUBLIC_API_ABUSE_LIMIT_*` | See `docs/audits/public-api-abuse-limiter-operator-note.md` | Process-local public API error-burst limiter; not quota/live enforcement |
+| `CRYPTO_REALTIME_ENABLED` | `true` | Crypto SSE realtime background connection; record outbound/disablement decision before public launch |
+| `SEARXNG_PUBLIC_INSTANCES_ENABLED` | `true` | Discover public instances when no self-hosted SearXNG is configured; record acceptance or disablement before public launch |
 | `SCHEDULE_ENABLED` | `false` | Enable scheduled tasks |
 | `SCHEDULE_TIME` | `18:00` | Daily execution time |
 | `MARKET_REVIEW_ENABLED` | `true` | Enable market review |
@@ -515,6 +541,8 @@ Add these Secrets:
 | `TAVILY_API_KEYS` | Tavily Search API Key | Recommended |
 | `MINIMAX_API_KEYS` | MiniMax Coding Plan Web Search | Optional |
 | `SERPAPI_API_KEYS` | SerpAPI Key | Optional |
+| `SEARXNG_BASE_URLS` | Self-hosted SearXNG instances; when empty, public instance discovery is the default fallback | Optional |
+| `SEARXNG_PUBLIC_INSTANCES_ENABLED` | Whether to discover public instances from `searx.space` when `SEARXNG_BASE_URLS` is empty (default `true`) | Optional |
 | `TUSHARE_TOKEN` | Tushare Token | Optional |
 | `GEMINI_MODEL` | Model name (default gemini-2.0-flash) | Optional |
 
