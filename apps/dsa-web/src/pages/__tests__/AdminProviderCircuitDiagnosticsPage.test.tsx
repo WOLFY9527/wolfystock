@@ -181,16 +181,17 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(getDiagnostics).toHaveBeenCalledWith({ limit: 50 });
 
     expect(await screen.findByText('L0 运行判定')).toBeInTheDocument();
-    expect(screen.getByText('数据源熔断需要管理员处理')).toBeInTheDocument();
+    expect(screen.getByText('数据源熔断需要管理员复核')).toBeInTheDocument();
     const verdict = screen.getByTestId('provider-circuit-operational-verdict');
     expect(within(verdict).getByText('BLOCKED')).toBeInTheDocument();
-    expect(within(verdict).getByText('按下方动作列表先处理阻断项')).toBeInTheDocument();
+    expect(within(verdict).getByText('按下方动作列表先复核门禁信号')).toBeInTheDocument();
+    expect(within(verdict).getByText('不执行 provider blocking；若未来启用门禁，相关调用应暂缓。')).toBeInTheDocument();
 
     const summaryMetrics = screen.getByTestId('provider-circuit-summary-metrics');
     expect(summaryMetrics.querySelectorAll('[data-terminal-primitive="nested-block"]')).toHaveLength(4);
     expect(within(summaryMetrics).getByText('熔断状态')).toBeInTheDocument();
     expect(within(summaryMetrics).getByText('1 打开')).toBeInTheDocument();
-    expect(within(summaryMetrics).getByText('SLA 阻断')).toBeInTheDocument();
+    expect(within(summaryMetrics).getByText('SLA 门禁信号')).toBeInTheDocument();
     expect(within(summaryMetrics).getByText('1 观察')).toBeInTheDocument();
     expect(within(summaryMetrics).getByText('配额压力')).toBeInTheDocument();
     expect(within(summaryMetrics).getByText('2 拒绝')).toBeInTheDocument();
@@ -247,7 +248,7 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(screen.getByText('熔断状态与当前门禁')).toBeInTheDocument();
     expect(screen.getByText('SLA / 凭证就绪')).toBeInTheDocument();
     expect(screen.getByText('熔断事件、配额窗口与探测事件')).toBeInTheDocument();
-    expect(screen.getAllByText('当前为诊断观测，不会改变数据源 fallback 或 MarketCache 行为。').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('当前为诊断观测，不会执行 provider blocking，也不会改变数据源 fallback 或 MarketCache 行为。').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Provider 429').length).toBeGreaterThan(0);
     expect(screen.getByText('SLA / 凭证就绪')).toBeInTheDocument();
     expect(screen.getByText('已配置')).toBeInTheDocument();
@@ -259,9 +260,9 @@ describe('AdminProviderCircuitDiagnosticsPage', () => {
     expect(screen.getByText('探测事件')).toBeInTheDocument();
     expect(screen.getByText('只读诊断').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
     expect(screen.getByText('不触发外部调用')).toBeInTheDocument();
-    expect(screen.getByText('不执行熔断门禁')).toBeInTheDocument();
+    expect(screen.getByText('不执行 provider blocking')).toBeInTheDocument();
     expect(screen.getByText('不触发外部调用').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
-    expect(screen.getByText('不执行熔断门禁').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
+    expect(screen.getByText('不执行 provider blocking').closest('[data-terminal-primitive="chip"]')).not.toBeNull();
     expect(
       screen
         .getAllByText(/个状态快照|只读快照/)
