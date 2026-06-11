@@ -311,6 +311,7 @@
   ],
   "surface_classification_vocabulary": [
     "public_static_docs",
+    "public_fixture_analysis",
     "authenticated_member",
     "admin_role_only_legacy",
     "admin_capability_required",
@@ -588,6 +589,76 @@
       "capability_label": null,
       "no_go_marker": "TODO/NO-GO: migrate usage summary from coarse admin role to an explicit capability before broad public admin exposure.",
       "transitional_note": "Usage summary is still admin-role gated instead of explicit capability gated."
+    },
+    {
+      "route_id": "options.underlying_summary",
+      "path": "/api/v1/options/underlyings/{symbol}/summary",
+      "method": "GET",
+      "surface_classification": "public_fixture_analysis",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
+      "transitional_note": "Route-local public API contract is tested without app-level auth middleware; frontend /options-lab remains gated by RegisteredSurfaceRoute."
+    },
+    {
+      "route_id": "options.expirations",
+      "path": "/api/v1/options/underlyings/{symbol}/expirations",
+      "method": "GET",
+      "surface_classification": "public_fixture_analysis",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
+      "transitional_note": "Route-local public API contract is tested without app-level auth middleware; frontend /options-lab remains gated by RegisteredSurfaceRoute."
+    },
+    {
+      "route_id": "options.chain",
+      "path": "/api/v1/options/underlyings/{symbol}/chain",
+      "method": "GET",
+      "surface_classification": "public_fixture_analysis",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
+      "transitional_note": "Route-local public API contract is tested without app-level auth middleware; frontend /options-lab remains gated by RegisteredSurfaceRoute."
+    },
+    {
+      "route_id": "options.analyze",
+      "path": "/api/v1/options/analyze",
+      "method": "POST",
+      "surface_classification": "public_fixture_analysis",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
+      "transitional_note": "Route-local public API contract is tested without app-level auth middleware; frontend /options-lab remains gated by RegisteredSurfaceRoute."
+    },
+    {
+      "route_id": "options.decision_evaluate",
+      "path": "/api/v1/options/decision/evaluate",
+      "method": "POST",
+      "surface_classification": "public_fixture_analysis",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
+      "transitional_note": "Route-local public API contract is tested without app-level auth middleware; frontend /options-lab remains gated by RegisteredSurfaceRoute."
+    },
+    {
+      "route_id": "options.scenario",
+      "path": "/api/v1/options/scenario",
+      "method": "POST",
+      "surface_classification": "public_fixture_analysis",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
+      "transitional_note": "Route-local public API contract is tested without app-level auth middleware; frontend /options-lab remains gated by RegisteredSurfaceRoute."
+    },
+    {
+      "route_id": "options.strategy_compare",
+      "path": "/api/v1/options/strategies/compare",
+      "method": "POST",
+      "surface_classification": "public_fixture_analysis",
+      "auth_dependency_label": "public",
+      "capability_label": null,
+      "no_go_marker": "TODO/NO-GO: route-local Options API remains fixture/demo analysis only; production Options decisioning needs accepted real provider evidence before public launch.",
+      "transitional_note": "Route-local public API contract is tested without app-level auth middleware; frontend /options-lab remains gated by RegisteredSurfaceRoute."
     },
     {
       "route_id": "admin.logs.storage_summary",
