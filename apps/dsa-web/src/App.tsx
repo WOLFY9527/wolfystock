@@ -46,6 +46,7 @@ const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
 const AdminCostObservabilityPage = lazy(() => import('./pages/AdminCostObservabilityPage'));
 const AdminEvidenceWorkflowPage = lazy(() => import('./pages/AdminEvidenceWorkflowPage'));
 const AdminMissionControlPage = lazy(() => import('./pages/AdminMissionControlPage'));
+const AdminLaunchCockpitPage = lazy(() => import('./pages/AdminLaunchCockpitPage'));
 
 type GateCopy = {
   eyebrow: string;
@@ -70,9 +71,11 @@ type AuthBootstrapSurfaceCopy = {
 function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: boolean): GateCopy {
   const isEnglish = language === 'en';
 
-  if (pathname.startsWith('/admin/mission-control') || pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/evidence-workflow') || pathname.startsWith('/admin/notifications') || pathname.startsWith('/admin/market-providers') || pathname.startsWith('/admin/provider-circuits') || pathname.startsWith('/admin/users') || pathname.startsWith('/admin/cost-observability')) {
+  if (pathname.startsWith('/admin/launch-cockpit') || pathname.startsWith('/admin/mission-control') || pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/evidence-workflow') || pathname.startsWith('/admin/notifications') || pathname.startsWith('/admin/market-providers') || pathname.startsWith('/admin/provider-circuits') || pathname.startsWith('/admin/users') || pathname.startsWith('/admin/cost-observability')) {
     const surfaceName = pathname.startsWith('/admin/cost-observability')
       ? (isEnglish ? 'cost observability' : '成本观测')
+      : pathname.startsWith('/admin/launch-cockpit')
+      ? (isEnglish ? 'launch cockpit' : 'Launch Cockpit')
       : pathname.startsWith('/admin/mission-control')
       ? (isEnglish ? 'mission control' : 'Mission Control')
       : pathname.startsWith('/admin/evidence-workflow')
@@ -452,6 +455,8 @@ export const AppContent: React.FC = () => {
     || routePathname.startsWith('/admin/ai/')
     || routePathname === '/admin/logs'
     || routePathname.startsWith('/admin/logs/')
+    || routePathname === '/admin/launch-cockpit'
+    || routePathname.startsWith('/admin/launch-cockpit/')
     || routePathname === '/admin/mission-control'
     || routePathname.startsWith('/admin/mission-control/')
     || routePathname === '/admin/evidence-workflow'
@@ -540,6 +545,7 @@ export const AppContent: React.FC = () => {
           <Route path="/backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
           <Route path="/settings" element={<PersonalSettingsPage />} />
           <Route path="/settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
+          <Route path="/admin/launch-cockpit" element={<AdminSurfaceRoute><AdminLaunchCockpitPage /></AdminSurfaceRoute>} />
           <Route path="/admin/mission-control" element={<AdminSurfaceRoute><AdminMissionControlPage /></AdminSurfaceRoute>} />
           <Route path="/admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
           <Route path="/admin/evidence-workflow" element={<AdminSurfaceRoute><AdminEvidenceWorkflowPage /></AdminSurfaceRoute>} />
@@ -578,6 +584,7 @@ export const AppContent: React.FC = () => {
           <Route path="backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
           <Route path="settings" element={<PersonalSettingsPage />} />
           <Route path="settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
+          <Route path="admin/launch-cockpit" element={<AdminSurfaceRoute><AdminLaunchCockpitPage /></AdminSurfaceRoute>} />
           <Route path="admin/mission-control" element={<AdminSurfaceRoute><AdminMissionControlPage /></AdminSurfaceRoute>} />
           <Route path="admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
           <Route path="admin/evidence-workflow" element={<AdminSurfaceRoute><AdminEvidenceWorkflowPage /></AdminSurfaceRoute>} />
