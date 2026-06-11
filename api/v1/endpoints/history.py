@@ -11,7 +11,7 @@
 
 import logging
 import re
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends, Body
 
@@ -23,11 +23,11 @@ from api.v1.schemas.history import (
     DeleteHistoryResponse,
     NewsIntelItem,
     NewsIntelResponse,
-    AnalysisReport,
     ReportMeta,
     ReportSummary,
     ReportStrategy,
-    ReportDetails,
+    HistoryReportDetails,
+    HistoryAnalysisReport,
     MarkdownReportResponse,
 )
 from api.v1.schemas.common import ErrorResponse
@@ -47,6 +47,89 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 _NUMBER_TOKEN_RE = re.compile(r"-?\d+(?:\.\d+)?")
+_HISTORY_DETAIL_SENSITIVE_KEY_MARKERS = (
+    "rawresult",
+    "rawairesponse",
+    "contextsnapshot",
+    "rawproviderpayload",
+    "rawsourcepayload",
+    "rawcachepayload",
+    "rawmodelresponse",
+    "rawresponse",
+    "rawprompt",
+    "providerpayload",
+    "payloadref",
+    "debug",
+    "diagnostic",
+    "backendtrace",
+    "routerinternal",
+    "traceback",
+    "stacktrace",
+    "traceid",
+    "requestid",
+    "sessionid",
+    "token",
+    "secret",
+    "cookie",
+    "credential",
+    "apikey",
+    "password",
+    "hiddenreasoning",
+    "internalreasoning",
+    "chainofthought",
+    "sourceref",
+    "sourceid",
+)
+_HISTORY_DETAIL_SENSITIVE_VALUE_MARKERS = (
+    "raw_ai_response",
+    "raw provider payload",
+    "raw_provider_payload",
+    "provider payload",
+    "provider_payload",
+    "payload_ref",
+    "payload-",
+    "traceback",
+    "stack trace",
+    "token=",
+    "cookie=",
+    "secret",
+    "password",
+    "api_key",
+    "apikey",
+    "hidden reasoning",
+    "hidden system prompt",
+    "internal_diagnostic",
+)
+
+
+def _normalized_history_detail_key(key: object) -> str:
+    return "".join(ch for ch in str(key).lower() if ch.isalnum())
+
+
+def _is_history_detail_sensitive_key(key: object) -> bool:
+    normalized = _normalized_history_detail_key(key)
+    return any(marker in normalized for marker in _HISTORY_DETAIL_SENSITIVE_KEY_MARKERS)
+
+
+def _sanitize_history_detail_public_payload(value: Any) -> Any:
+    """Drop raw/debug keys and redact secret-like values at the history API seam."""
+    if isinstance(value, dict):
+        sanitized = {}
+        for key, item in value.items():
+            if _is_history_detail_sensitive_key(key):
+                continue
+            sanitized[str(key)] = _sanitize_history_detail_public_payload(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_history_detail_public_payload(item) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize_history_detail_public_payload(item) for item in value]
+    if isinstance(value, str):
+        lowered = value.lower()
+        if any(marker in lowered for marker in _HISTORY_DETAIL_SENSITIVE_VALUE_MARKERS):
+            return "[redacted]"
+        return value
+    return value
 
 
 def _resolve_owner_id(current_user: object | None) -> str | None:
@@ -214,7 +297,7 @@ def delete_history_records(
 
 @router.get(
     "/{record_id}",
-    response_model=AnalysisReport,
+    response_model=HistoryAnalysisReport,
     responses={
         200: {"description": "报告详情"},
         404: {"description": "报告不存在", "model": ErrorResponse},
@@ -227,7 +310,7 @@ def get_history_detail(
     record_id: str,
     db_manager: DatabaseManager = Depends(get_database_manager),
     current_user: CurrentUser = Depends(get_current_user),
-) -> AnalysisReport:
+) -> HistoryAnalysisReport:
     """
     获取历史报告详情
     
@@ -374,23 +457,20 @@ def get_history_detail(
             fallback_fundamental_payload=fallback_fundamental,
         )
 
-        details = ReportDetails(
+        details = HistoryReportDetails(
             news_content=result.get("news_content"),
-            raw_result=result.get("raw_result"),
-            analysis_result=result.get("analysis_result"),
-            raw_ai_response=result.get("raw_ai_response"),
-            context_snapshot=result.get("context_snapshot"),
-            standard_report=result.get("standard_report"),
+            analysis_result=_sanitize_history_detail_public_payload(result.get("analysis_result")),
+            standard_report=_sanitize_history_detail_public_payload(result.get("standard_report")),
             financial_report=extracted_fundamental.get("financial_report"),
             dividend_metrics=extracted_fundamental.get("dividend_metrics"),
         )
         
-        return AnalysisReport(
+        return HistoryAnalysisReport(
             meta=meta,
             summary=summary,
             strategy=strategy,
             details=details,
-            decision_trace=result.get("decision_trace"),
+            decision_trace=_sanitize_history_detail_public_payload(result.get("decision_trace")),
             report_quality=result.get("report_quality"),
         )
         
