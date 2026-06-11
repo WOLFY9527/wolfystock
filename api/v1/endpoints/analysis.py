@@ -23,6 +23,7 @@ import logging
 import os
 import re
 import secrets
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, Union, Dict, Any
 
@@ -74,6 +75,7 @@ from src.utils.data_processing import (
     parse_json_field,
     extract_fundamental_detail_fields,
 )
+from src.utils.security import sanitize_message
 from src.utils.symbol_normalization import canonical_stock_code, normalize_stock_code
 
 logger = logging.getLogger(__name__)
@@ -91,9 +93,30 @@ QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED_ENV = (
 QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS_ENV = (
     "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS"
 )
+QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED_ENV = (
+    "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED"
+)
 _QUOTA_ANALYSIS_SYNC_ROUTE_FAMILY = "analysis"
 _QUOTA_ANALYSIS_SYNC_ROUTE_KEY = "api.v1.analysis.analyze"
 _QUOTA_ANALYSIS_SYNC_IDEMPOTENCY_PREFIX = "quota:analysis_sync_single_stock:v1"
+_QUOTA_RAW_RESERVATION_RE = re.compile(r"\bqres_[A-Za-z0-9._:-]+\b", re.IGNORECASE)
+_QUOTA_RAW_IDEMPOTENCY_RE = re.compile(r"\bquota:analysis_sync_single_stock:v[0-9][^\s,;]*", re.IGNORECASE)
+_QUOTA_RESERVE_FAILURE_SAFE_REASON_CODES = {
+    "budget_exceeded",
+    "quota_disabled",
+    "global_kill_switch",
+    "token_cap_exceeded",
+    "route_cap_exceeded",
+    "reserve_exception",
+}
+
+
+@dataclass(frozen=True)
+class _QuotaAnalysisSyncPilotReservation:
+    reservation_id: Optional[str]
+    reserve_attempted: bool = False
+    reserve_succeeded: bool = False
+    reason_code: Optional[str] = None
 
 
 def _invalid_analysis_input_error() -> HTTPException:
@@ -225,6 +248,25 @@ def _quota_analysis_sync_pilot_enabled() -> bool:
     )
 
 
+def _quota_analysis_sync_pilot_rollback_enabled() -> bool:
+    return parse_env_bool(
+        os.getenv(QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED_ENV),
+        default=False,
+    )
+
+
+def _quota_safe_reason_code(value: object) -> str:
+    reason = str(value or "").strip().lower()
+    return reason if reason in _QUOTA_RESERVE_FAILURE_SAFE_REASON_CODES else "budget_exceeded"
+
+
+def _quota_safe_exception_summary(exc: Exception) -> str:
+    message = sanitize_message(str(exc))[:160]
+    message = _QUOTA_RAW_RESERVATION_RE.sub("qres_redacted", message)
+    message = _QUOTA_RAW_IDEMPOTENCY_RE.sub("quota_idempotency_redacted", message)
+    return message or type(exc).__name__
+
+
 def _is_single_stock_sync_request(request: AnalyzeRequest, stock_code: str) -> bool:
     if bool(getattr(request, "async_mode", False)):
         return False
@@ -255,6 +297,8 @@ def _analysis_sync_quota_pilot_in_scope(
     if not bool(getattr(current_user, "is_authenticated", False)):
         return False
     if bool(getattr(current_user, "transitional", False)):
+        return False
+    if _quota_analysis_sync_pilot_rollback_enabled():
         return False
     if not _quota_analysis_sync_pilot_enabled():
         return False
@@ -300,14 +344,14 @@ def _try_reserve_analysis_sync_quota_pilot(
     current_user: CurrentUser | object | None,
     owner_id: Optional[str],
     query_id: str,
-) -> Optional[str]:
+) -> _QuotaAnalysisSyncPilotReservation:
     if not _analysis_sync_quota_pilot_in_scope(
         request=request,
         stock_code=stock_code,
         current_user=current_user,
         owner_id=owner_id,
     ):
-        return None
+        return _QuotaAnalysisSyncPilotReservation(reservation_id=None)
 
     try:
         service = QuotaPolicyService(enforcement_enabled=True)
@@ -323,14 +367,29 @@ def _try_reserve_analysis_sync_quota_pilot(
             ),
         )
     except Exception as exc:
-        logger.warning("Quota analysis sync reserve pilot failed open: %s", exc, exc_info=True)
-        return None
+        logger.warning(
+            "Quota analysis sync reserve pilot failed open: %s",
+            _quota_safe_exception_summary(exc),
+        )
+        return _QuotaAnalysisSyncPilotReservation(
+            reservation_id=None,
+            reserve_attempted=True,
+            reason_code="reserve_exception",
+        )
 
     reservation_id = str(getattr(decision, "reservation_id", "") or "").strip()
     status = str(getattr(decision, "status", "") or "").strip().lower()
     if bool(getattr(decision, "allowed", False)) and status == "reserved" and reservation_id:
-        return reservation_id
-    return None
+        return _QuotaAnalysisSyncPilotReservation(
+            reservation_id=reservation_id,
+            reserve_attempted=True,
+            reserve_succeeded=True,
+        )
+    return _QuotaAnalysisSyncPilotReservation(
+        reservation_id=None,
+        reserve_attempted=True,
+        reason_code=_quota_safe_reason_code(getattr(decision, "reason_code", None) or status),
+    )
 
 
 def _release_analysis_sync_quota_pilot_reservation(reservation_id: Optional[str]) -> None:
@@ -342,17 +401,26 @@ def _release_analysis_sync_quota_pilot_reservation(reservation_id: Optional[str]
         release = getattr(service, "release_reservation")
         release(reservation_id=normalized_id)
     except Exception as exc:
-        logger.warning("Quota analysis sync release pilot failed open: %s", exc, exc_info=True)
+        logger.warning(
+            "Quota analysis sync release pilot failed open: %s",
+            _quota_safe_exception_summary(exc),
+        )
 
 
-def _analysis_sync_quota_execution_metadata(*, reserve_succeeded: bool) -> Optional[Dict[str, Any]]:
-    if not reserve_succeeded:
+def _analysis_sync_quota_execution_metadata(
+    *,
+    reservation: _QuotaAnalysisSyncPilotReservation,
+) -> Optional[Dict[str, Any]]:
+    if not reservation.reserve_succeeded:
         return None
     return {
         "quota_route_pilot": {
             "advisory_mode": True,
             "reserve_attempted": True,
             "reserve_succeeded": True,
+            "release_required": True,
+            "live_enforcement": False,
+            "rollback_enabled": False,
         }
     }
 
@@ -741,10 +809,10 @@ def _handle_sync_analysis(
         analyze_kwargs["owner_id"] = owner_id
     execution_logs = ExecutionLogService()
     execution_id = None
-    quota_reservation_id: Optional[str] = None
+    quota_reservation = _QuotaAnalysisSyncPilotReservation(reservation_id=None)
     
     try:
-        quota_reservation_id = _try_reserve_analysis_sync_quota_pilot(
+        quota_reservation = _try_reserve_analysis_sync_quota_pilot(
             stock_code=stock_code,
             request=request,
             current_user=current_user,
@@ -759,7 +827,7 @@ def _handle_sync_analysis(
             task_id=query_id,
             stock_name=getattr(request, "stock_name", None),
             metadata=_analysis_sync_quota_execution_metadata(
-                reserve_succeeded=bool(quota_reservation_id)
+                reservation=quota_reservation,
             ),
         )
         service = AnalysisService()
@@ -878,7 +946,7 @@ def _handle_sync_analysis(
             }
         )
     finally:
-        _release_analysis_sync_quota_pilot_reservation(quota_reservation_id)
+        _release_analysis_sync_quota_pilot_reservation(quota_reservation.reservation_id)
 
 
 # ============================================================
