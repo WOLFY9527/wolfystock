@@ -838,6 +838,165 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         for blocked in ("must-not-leak", "https://provider.example", "traceback must-not-leak"):
             self.assertNotIn(blocked, text)
 
+    def test_sla_readiness_default_omits_runtime_pilot_projection(self) -> None:
+        self._as_provider_read_admin()
+        self.db.transition_provider_circuit_state(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="open",
+            reason_bucket="timeout",
+            cooldown_until=datetime(2026, 5, 6, 11, 0, 0),
+            now=datetime(2026, 5, 6, 10, 30, 0),
+        )
+
+        response = self.client.get(
+            "/api/v1/admin/providers/sla-readiness",
+            params={"provider": "tradier", "since": "2026-05-06T00:00:00"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        for item in payload["items"]:
+            self.assertNotIn("runtimePilot", item)
+
+    def test_sla_readiness_runtime_pilot_opt_in_is_advisory_sanitized_and_offline(self) -> None:
+        self._as_provider_read_admin()
+        self.db.transition_provider_circuit_state(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="open",
+            reason_bucket="timeout",
+            cooldown_until=datetime(2026, 5, 6, 11, 0, 0),
+            metadata={
+                "safe_label": "runtime_pilot_projection",
+                "url": "https://provider.example.test/raw?api_key=must-not-leak",
+                "headers": {"Authorization": "Bearer must-not-leak"},
+                "raw_response": "must-not-leak",
+                "stack_trace": "Traceback must-not-leak",
+            },
+            now=datetime(2026, 5, 6, 10, 30, 0),
+        )
+
+        def forbidden(*_args, **_kwargs):
+            raise AssertionError("runtime pilot projection must stay read-only and offline")
+
+        with (
+            patch("src.storage.DatabaseManager.transition_provider_circuit_state", side_effect=forbidden),
+            patch("src.storage.DatabaseManager.update_provider_quota_window_counters", side_effect=forbidden),
+            patch("src.storage.DatabaseManager.record_provider_probe_event", side_effect=forbidden),
+            patch("src.services.provider_circuit_observer.ProviderCircuitObserver.record_observation", side_effect=forbidden),
+            patch("src.services.quota_policy_service.QuotaPolicyService.evaluate_quota", side_effect=forbidden),
+            patch("src.services.quota_policy_service.QuotaPolicyService.reserve_quota", side_effect=forbidden),
+            patch("src.services.quota_policy_service.QuotaPolicyService.consume_reservation", side_effect=forbidden),
+            patch("src.services.quota_policy_service.QuotaPolicyService.release_reservation", side_effect=forbidden),
+            patch("src.notification.NotificationService.send", side_effect=forbidden),
+            patch("src.services.market_cache.MarketCache.get_or_refresh", side_effect=forbidden),
+            patch("src.analyzer.GeminiAnalyzer.analyze", side_effect=forbidden),
+            patch("src.services.scanner_ai_service.ScannerAiInterpretationService.interpret_shortlist", side_effect=forbidden),
+            patch("requests.sessions.Session.request", side_effect=forbidden),
+        ):
+            response = self.client.get(
+                "/api/v1/admin/providers/sla-readiness",
+                params={
+                    "provider": "tradier",
+                    "since": "2026-05-06T00:00:00",
+                    "runtimePilotEnabled": "true",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        item = self._sla_item(payload, provider="tradier", provider_category="options", route_family="options_lab")
+        self.assertFalse(item["liveEnforcement"])
+        self.assertFalse(item["wouldBlockCall"])
+        self.assertTrue(item["wouldBlockIfEnforced"])
+        self.assertFalse(item["wouldChangeProviderOrder"])
+        self.assertFalse(item["wouldChangeFallbackBehavior"])
+        self.assertTrue(item["noExternalCalls"])
+        self.assertFalse(item["providerBehaviorChanged"])
+        self.assertFalse(item["marketCacheBehaviorChanged"])
+        self.assertFalse(item["brokerOrderPathEnabled"])
+        self.assertFalse(item["portfolioMutationPathEnabled"])
+        self.assertFalse(item["tradeableData"])
+        runtime_pilot = item["runtimePilot"]
+        self.assertEqual(runtime_pilot["contractVersion"], "provider_reliability_runtime_v1")
+        self.assertTrue(runtime_pilot["pilotEnabled"])
+        self.assertFalse(runtime_pilot["fallbackEvaluationEnabled"])
+        self.assertTrue(runtime_pilot["scopeMatched"])
+        self.assertTrue(runtime_pilot["advisoryOnly"])
+        self.assertFalse(runtime_pilot["productionEnforcementEnabled"])
+        self.assertFalse(runtime_pilot["liveEnforcement"])
+        self.assertFalse(runtime_pilot["wouldBlockCall"])
+        self.assertTrue(runtime_pilot["wouldBlockIfEnforced"])
+        self.assertTrue(runtime_pilot["pilotWouldBlock"])
+        self.assertFalse(runtime_pilot["pilotWouldFallback"])
+        self.assertEqual(runtime_pilot["enforcementBlockReasonCode"], "timeout")
+        self.assertFalse(runtime_pilot["wouldChangeProviderOrder"])
+        self.assertFalse(runtime_pilot["wouldChangeFallbackBehavior"])
+        self.assertTrue(runtime_pilot["noExternalCalls"])
+        self.assertFalse(runtime_pilot["providerBehaviorChanged"])
+        self.assertFalse(runtime_pilot["marketCacheBehaviorChanged"])
+        self.assertFalse(runtime_pilot["brokerOrderPathEnabled"])
+        self.assertFalse(runtime_pilot["portfolioMutationPathEnabled"])
+        self.assertFalse(runtime_pilot["tradeableData"])
+        self.assertEqual(runtime_pilot["defaultOffLabel"], "provider_reliability_runtime_pilot_default_off")
+        self.assertEqual(runtime_pilot["rollbackLabel"], "provider_reliability_runtime_pilot_disable_flag")
+        text = self._json_text(payload).lower()
+        for blocked in (
+            "must-not-leak",
+            "https://provider.example",
+            "api_key",
+            "authorization",
+            "raw_response",
+            "traceback",
+        ):
+            self.assertNotIn(blocked, text)
+
+    def test_sla_readiness_runtime_pilot_fallback_evaluation_flag_opt_in(self) -> None:
+        self._as_provider_read_admin()
+        self.db.transition_provider_circuit_state(
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+            to_state="open",
+            reason_bucket="timeout",
+            cooldown_until=datetime(2026, 5, 6, 11, 0, 0),
+            now=datetime(2026, 5, 6, 10, 30, 0),
+        )
+
+        response = self.client.get(
+            "/api/v1/admin/providers/sla-readiness",
+            params={
+                "provider": "tradier",
+                "since": "2026-05-06T00:00:00",
+                "runtimePilotFallbackEvaluationEnabled": "true",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        item = self._sla_item(
+            response.json(),
+            provider="tradier",
+            provider_category="options",
+            route_family="options_lab",
+        )
+        runtime_pilot = item["runtimePilot"]
+        self.assertFalse(runtime_pilot["pilotEnabled"])
+        self.assertTrue(runtime_pilot["fallbackEvaluationEnabled"])
+        self.assertTrue(runtime_pilot["scopeMatched"])
+        self.assertTrue(runtime_pilot["advisoryOnly"])
+        self.assertFalse(runtime_pilot["liveEnforcement"])
+        self.assertFalse(runtime_pilot["wouldBlockCall"])
+        self.assertFalse(runtime_pilot["pilotWouldBlock"])
+        self.assertTrue(runtime_pilot["pilotWouldFallback"])
+        self.assertFalse(runtime_pilot["wouldChangeProviderOrder"])
+        self.assertFalse(runtime_pilot["wouldChangeFallbackBehavior"])
+        self.assertTrue(runtime_pilot["noExternalCalls"])
+        self.assertFalse(runtime_pilot["providerBehaviorChanged"])
+        self.assertFalse(runtime_pilot["marketCacheBehaviorChanged"])
+
     def test_sla_readiness_endpoint_separates_scoped_and_unscoped_items_by_dimensions(self) -> None:
         self._as_provider_read_admin()
         observer = ProviderCircuitObserver(db=self.db)
