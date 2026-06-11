@@ -12,6 +12,7 @@ operations dashboards, or admin frontend UX contracts.
 - [Audit Index](../audits/README.md)
 - [Security/RBAC/MFA Index](../audits/index-security-rbac-mfa.md)
 - [Cost/Quota/Observability Index](../audits/index-cost-quota-observability.md)
+- [Quota Enforcement V1 Pilot Progress](../audits/quota-enforcement-goal-progress.md)
 - [DB/WS2/Deployment Index](../audits/index-db-ws2-deployment.md)
 - [Provider/Data/Options Index](../audits/index-provider-data-options.md)
 - [Auth/RBAC Release Security Guide](../audits/auth-rbac-release-security-guide.md)

@@ -17,6 +17,8 @@ from src.storage import DatabaseManager
 
 FORBIDDEN_RESPONSE_MARKERS = (
     "raw-owner-user-id",
+    "owner-alpha",
+    "owner-beta",
     "owner_user_id",
     "raw-session-id",
     "session_id",
@@ -187,6 +189,45 @@ def test_admin_ops_status_returns_read_only_advisory_markers(app: FastAPI, monke
     assert "dataSources" in payload["metadata"]
     assert "redaction" in payload["metadata"]
     assert payload["metadata"]["mutationPaths"] == []
+    _assert_no_sensitive_markers(payload)
+
+
+def test_admin_ops_status_reports_quota_pilot_flags_without_raw_ids(
+    app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app.state.task_queue = _TaskQueueFixture()
+    monkeypatch.setenv("WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED", "true")
+    monkeypatch.setenv("WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED", "false")
+    monkeypatch.setenv("WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS", "owner-alpha,owner-beta")
+
+    with _client(app, _ops_admin) as client:
+        response = client.get("/api/v1/admin/ops/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    summary = payload["quotaCostAdvisoryStatusSummary"]["summary"]
+    pilot = summary["analysisSyncRoutePilot"]
+    assert pilot["routeBoundary"] == "api.v1.analysis.analyze.sync_single_stock"
+    assert pilot["pilotStatus"] == "guarded_private_beta_enabled"
+    assert pilot["enabled"] is True
+    assert pilot["effectiveEnabled"] is True
+    assert pilot["rollbackEnabled"] is False
+    assert pilot["ownerAllowlistConfigured"] is True
+    assert pilot["ownerAllowlistCountBucket"] == "2-10"
+    assert pilot["reserveFailureBehavior"] == "fail_open"
+    assert pilot["reserveFailuresBlockRequests"] is False
+    assert pilot["consumePropagationEnabled"] is False
+    assert pilot["defaultLiveEnforcement"] is False
+    assert pilot["publicLaunchApproval"] is False
+    assert pilot["providerBillingAuthority"] is False
+    assert pilot["billingAuthority"] is False
+    assert pilot["rawReservationIdsExposed"] is False
+    assert pilot["idempotencyMaterialExposed"] is False
+    assert pilot["ownerAllowlistValuesExposed"] is False
+    assert "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED" in pilot["flagNames"]
+    assert "owner-alpha" not in response.text
+    assert "owner-beta" not in response.text
     _assert_no_sensitive_markers(payload)
 
 

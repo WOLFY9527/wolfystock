@@ -15,6 +15,7 @@ from api.v1.schemas.analysis import AnalyzeRequest
 
 PILOT_ENABLED_ENV = "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED"
 PILOT_OWNER_ALLOWLIST_ENV = "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS"
+PILOT_ROLLBACK_ENV = "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED"
 _DEFAULT_SERVICE_RESULT = object()
 
 
@@ -83,6 +84,7 @@ def _install_quota_service(
     *,
     reserve_decision: SimpleNamespace | None = None,
     reserve_exception: Exception | None = None,
+    release_exception: Exception | None = None,
 ) -> dict[str, list]:
     calls: dict[str, list] = {"init": [], "reserve": [], "release": []}
     decision = reserve_decision or SimpleNamespace(
@@ -104,6 +106,8 @@ def _install_quota_service(
 
         def release_reservation(self, **kwargs):
             calls["release"].append(kwargs)
+            if release_exception is not None:
+                raise release_exception
             return SimpleNamespace(allowed=True, status="released", reservation_id=kwargs.get("reservation_id"))
 
     monkeypatch.setattr(analysis, "QuotaPolicyService", FakeQuotaPolicyService, raising=False)
@@ -115,9 +119,12 @@ def _install_sync_dependencies(
     *,
     service_result=_DEFAULT_SERVICE_RESULT,
     service_exception=None,
-) -> None:
+) -> list[dict]:
+    service_calls: list[dict] = []
+
     class FakeAnalysisService:
-        def analyze_stock(self, **_kwargs):
+        def analyze_stock(self, **kwargs):
+            service_calls.append(kwargs)
             if service_exception is not None:
                 raise service_exception
             if service_result is _DEFAULT_SERVICE_RESULT:
@@ -135,6 +142,7 @@ def _install_sync_dependencies(
         "src.services.analysis_service.AnalysisService",
         FakeAnalysisService,
     )
+    return service_calls
 
 
 def _enable_pilot(monkeypatch: pytest.MonkeyPatch, *, owners: str = "pilot-user") -> None:
@@ -230,6 +238,9 @@ def test_reservation_success_releases_on_success(monkeypatch: pytest.MonkeyPatch
             "advisory_mode": True,
             "reserve_attempted": True,
             "reserve_succeeded": True,
+            "release_required": True,
+            "live_enforcement": False,
+            "rollback_enabled": False,
         }
     }
     serialized = json.dumps(metadata, sort_keys=True)
@@ -239,6 +250,22 @@ def test_reservation_success_releases_on_success(monkeypatch: pytest.MonkeyPatch
     assert "pilot-user" not in serialized
     assert "Apple" not in serialized
     assert "original_query" not in serialized
+
+
+def test_reserve_only_default_does_not_thread_reservation_to_cost_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_pilot(monkeypatch)
+    _install_quota_service(monkeypatch)
+    service_calls = _install_sync_dependencies(monkeypatch)
+
+    request = AnalyzeRequest(stock_code="AAPL", async_mode=False)
+    response = analysis._handle_sync_analysis("AAPL", request, _pilot_user())
+
+    assert response.stock_code == "AAPL"
+    assert service_calls
+    reservation_kwarg = "quota_" + "reservation_id"
+    assert reservation_kwarg not in service_calls[0]
 
 
 def test_reservation_metadata_omits_raw_request_and_secret_fields(
@@ -328,7 +355,47 @@ def test_reservation_success_releases_on_generic_exception(monkeypatch: pytest.M
     assert "reservation_id" not in serialized
 
 
-def test_reservation_failure_does_not_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_release_failure_fails_open_and_keeps_success_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_pilot(monkeypatch)
+    calls = _install_quota_service(
+        monkeypatch,
+        release_exception=RuntimeError("token=must-not-leak qres_secret_123"),
+    )
+
+    response = _run_sync(monkeypatch)
+
+    assert response.stock_code == "AAPL"
+    assert calls["reserve"]
+    assert calls["release"] == [{"reservation_id": "qres_success"}]
+
+
+def test_release_failure_fails_open_and_preserves_original_http_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_pilot(monkeypatch)
+    calls = _install_quota_service(
+        monkeypatch,
+        release_exception=RuntimeError("token=must-not-leak qres_secret_123"),
+    )
+    _install_sync_dependencies(
+        monkeypatch,
+        service_exception=HTTPException(
+            status_code=503,
+            detail={"error": "upstream_unavailable"},
+        ),
+    )
+
+    request = AnalyzeRequest(stock_code="AAPL", async_mode=False)
+    with pytest.raises(HTTPException) as exc_info:
+        analysis._handle_sync_analysis("AAPL", request, _pilot_user())
+
+    assert exc_info.value.status_code == 503
+    assert calls["release"] == [{"reservation_id": "qres_success"}]
+
+
+def test_reservation_failure_fails_open(monkeypatch: pytest.MonkeyPatch) -> None:
     _enable_pilot(monkeypatch)
     calls = _install_quota_service(
         monkeypatch,
@@ -347,7 +414,7 @@ def test_reservation_failure_does_not_fail_closed(monkeypatch: pytest.MonkeyPatc
     assert calls["release"] == []
 
 
-def test_reservation_exception_does_not_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_reservation_exception_fails_open(monkeypatch: pytest.MonkeyPatch) -> None:
     _enable_pilot(monkeypatch)
     calls = _install_quota_service(monkeypatch, reserve_exception=RuntimeError("quota down"))
 
@@ -356,6 +423,50 @@ def test_reservation_exception_does_not_fail_closed(monkeypatch: pytest.MonkeyPa
     assert response.stock_code == "AAPL"
     assert calls["reserve"]
     assert calls["release"] == []
+
+
+def test_rollback_flag_disables_route_pilot_even_when_allowlisted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_pilot(monkeypatch)
+    monkeypatch.setenv(PILOT_ROLLBACK_ENV, "true")
+    calls = _install_quota_service(monkeypatch)
+
+    response = _run_sync(monkeypatch)
+
+    assert response.stock_code == "AAPL"
+    assert calls["reserve"] == []
+    assert calls["release"] == []
+
+
+def test_reserve_and_release_warning_logs_are_sanitized(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _enable_pilot(monkeypatch)
+    _install_quota_service(monkeypatch, reserve_exception=RuntimeError("token=must-not-leak qres_secret_123"))
+
+    with caplog.at_level("WARNING", logger=analysis.logger.name):
+        response = _run_sync(monkeypatch)
+
+    assert response.stock_code == "AAPL"
+    first_log = caplog.text
+    assert "must-not-leak" not in first_log
+    assert "qres_secret_123" not in first_log
+    assert "token=***" in first_log
+
+    caplog.clear()
+    _enable_pilot(monkeypatch)
+    _install_quota_service(monkeypatch, release_exception=RuntimeError("token=must-not-leak qres_secret_123"))
+
+    with caplog.at_level("WARNING", logger=analysis.logger.name):
+        response = _run_sync(monkeypatch)
+
+    assert response.stock_code == "AAPL"
+    second_log = caplog.text
+    assert "must-not-leak" not in second_log
+    assert "qres_secret_123" not in second_log
+    assert "token=***" in second_log
 
 
 def test_response_shape_is_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
