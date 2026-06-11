@@ -6,9 +6,57 @@ emitted and consumed across Home/analysis boundaries. They are schema locks, not
 runtime provenance generators.
 """
 
+import re
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter, model_serializer
+from pydantic import BaseModel, ConfigDict, TypeAdapter, model_serializer, model_validator
+
+
+_INTELLIGENCE_PACKET_DROP_KEYS = {
+    "debugref",
+    "debug_ref",
+    "queryid",
+    "query_id",
+    "rawqueryid",
+    "raw_query_id",
+}
+_INTELLIGENCE_PACKET_TEXT_REPLACEMENTS = (
+    (re.compile(r"\bdebug[_\s-]?ref\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "reference label"),
+    (re.compile(r"\braw[_\s-]?prompt\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "input text"),
+    (re.compile(r"\bprompt\s*:\s*[^.;\n]+", re.IGNORECASE), "input text"),
+    (re.compile(r"\bprovider[_\s-]?payload(?:[_\s-]?ref)?\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "internal reference"),
+    (re.compile(r"\bpayload[-_:][A-Za-z0-9_.:-]+", re.IGNORECASE), "internal reference"),
+    (re.compile(r"\btraceback\b(?:\s*\([^)]*\))?", re.IGNORECASE), "diagnostic trace"),
+    (re.compile(r"\bstack\s+trace\b", re.IGNORECASE), "diagnostic trace"),
+    (re.compile(r"\bmost recent call last\b", re.IGNORECASE), "diagnostic trace"),
+    (re.compile(r"\binternal[_\s-]?diagnostic(?:[_\s-]?token)?\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "internal note"),
+    (re.compile(r"\bdiag[-_][A-Za-z0-9_.:-]+", re.IGNORECASE), "internal note"),
+    (re.compile(r"\bquery[-_][A-Za-z0-9_.:-]+", re.IGNORECASE), "request reference"),
+    (re.compile(r"\bsourceid\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "source label"),
+    (re.compile(r"\b[A-Za-z]+-source-\d+[A-Za-z0-9_.:-]*\b", re.IGNORECASE), "source label"),
+    (re.compile(r"\b(?:authorization|bearer)\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "credential marker"),
+    (re.compile(r"\btoken\s*=\s*[\w:./-]+", re.IGNORECASE), "credential marker"),
+    (re.compile(r"\bsecret[-_][A-Za-z0-9_.:-]+\b", re.IGNORECASE), "credential marker"),
+)
+
+
+def _sanitize_intelligence_packet_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        sanitized: Dict[str, Any] = {}
+        for key, item in value.items():
+            normalized_key = re.sub(r"[^a-z0-9_]+", "", str(key).lower())
+            if normalized_key in _INTELLIGENCE_PACKET_DROP_KEYS:
+                continue
+            sanitized[key] = _sanitize_intelligence_packet_value(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_intelligence_packet_value(item) for item in value]
+    if isinstance(value, str):
+        text = value
+        for pattern, replacement in _INTELLIGENCE_PACKET_TEXT_REPLACEMENTS:
+            text = pattern.sub(replacement, text)
+        return text
+    return value
 
 
 class _HomeEvidenceBase(BaseModel):
@@ -116,6 +164,62 @@ class HomeSourceProvenanceEntry(_HomeEvidenceBase):
     debugRef: Optional[str] = None
 
 
+class IntelligenceReportPacketThesis(_HomeEvidenceBase):
+    summary: Optional[str] = None
+    confidenceLabel: Optional[str] = None
+
+
+class IntelligenceReportPacketEvidenceItem(_HomeEvidenceBase):
+    id: Optional[str] = None
+    domain: Optional[str] = None
+    summary: Optional[str] = None
+    sourceId: Optional[str] = None
+    authority: Optional[str] = None
+    freshness: Optional[str] = None
+
+
+class IntelligenceReportPacketConfidence(_HomeEvidenceBase):
+    cap: Optional[float] = None
+    label: Optional[str] = None
+    highConfidenceAllowed: Optional[bool] = None
+    cappedBy: Optional[List[str]] = None
+
+
+class IntelligenceReportPacketSourceAuthority(_HomeEvidenceBase):
+    state: Optional[str] = None
+    scoreGradeCount: Optional[int] = None
+    observationOnlyCount: Optional[int] = None
+    missingCount: Optional[int] = None
+    sourceCount: Optional[int] = None
+
+
+class IntelligenceReportPacketFreshness(_HomeEvidenceBase):
+    floor: Optional[str] = None
+    staleSources: Optional[List[str]] = None
+    fallbackOrProxySources: Optional[List[str]] = None
+
+
+class IntelligenceReportPacketV2(_HomeEvidenceBase):
+    @model_validator(mode="before")
+    @classmethod
+    def _sanitize_legacy_internal_refs(cls, value: Any) -> Any:
+        return _sanitize_intelligence_packet_value(value)
+
+    contractVersion: Optional[str] = None
+    packetState: Optional[str] = None
+    consumerActionBoundary: Optional[str] = None
+    noAdviceBoundary: Optional[bool] = None
+    thesis: Optional[IntelligenceReportPacketThesis] = None
+    evidence: Optional[List[IntelligenceReportPacketEvidenceItem]] = None
+    counterEvidence: Optional[List[IntelligenceReportPacketEvidenceItem]] = None
+    missingData: Optional[List[str]] = None
+    confidence: Optional[IntelligenceReportPacketConfidence] = None
+    sourceAuthority: Optional[IntelligenceReportPacketSourceAuthority] = None
+    freshness: Optional[IntelligenceReportPacketFreshness] = None
+    scenarioRisks: Optional[List[str]] = None
+    nextVerificationSteps: Optional[List[str]] = None
+
+
 HomeEvidenceCoverageFrame = Dict[str, HomeEvidenceCoverageDomain]
 HomeSourceProvenanceFrame = List[HomeSourceProvenanceEntry]
 
@@ -125,6 +229,7 @@ HOME_ANALYSIS_CONSUMED_EVIDENCE_FIELDS = (
     "singleStockEvidencePacket",
     "evidenceCitationFrame",
     "sourceProvenanceFrame",
+    "intelligencePacket",
 )
 
 _FIELD_ADAPTERS = {
@@ -133,6 +238,7 @@ _FIELD_ADAPTERS = {
     "singleStockEvidencePacket": TypeAdapter(HomeSingleStockEvidencePacket),
     "evidenceCitationFrame": TypeAdapter(HomeEvidenceCitationFrame),
     "sourceProvenanceFrame": TypeAdapter(HomeSourceProvenanceFrame),
+    "intelligencePacket": TypeAdapter(IntelligenceReportPacketV2),
 }
 
 
