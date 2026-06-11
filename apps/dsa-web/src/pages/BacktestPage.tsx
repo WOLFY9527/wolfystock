@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, domAnimation, LazyMotion, m } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { backtestApi } from '../api/backtest';
@@ -37,7 +37,12 @@ import {
 } from '../hooks/useSafariInteractionReady';
 import { translate } from '../i18n/core';
 import { ConsumerWorkspacePageShell, ConsumerWorkspaceScope } from '../components/layout/ConsumerWorkspaceShell';
+import ResearchWorkspaceFlowPanel from '../components/research/ResearchWorkspaceFlowPanel';
 import { TerminalPageHeading } from '../components/terminal/TerminalPrimitives';
+import {
+  parseResearchWorkspaceSearch,
+  type ResearchWorkspaceSource,
+} from '../utils/researchWorkspaceRoute';
 
 const HISTORICAL_PAGE_SIZE = 20;
 const HISTORY_PAGE_SIZE = 10;
@@ -63,14 +68,17 @@ type BacktestPageLocationState = {
   prefillName?: string;
 };
 
-type ScannerBacktestHandoff = {
+type BacktestResearchHandoff = {
   symbol: string;
   market: 'CN' | 'US' | 'HK' | null;
+  source: ResearchWorkspaceSource;
+  origin: ResearchWorkspaceSource | null;
   scannerRunId: number | null;
   scannerRank: number | null;
   scannerProfile: string | null;
   themeId: string | null;
   universeType: string | null;
+  watchlistItemId: string | null;
 };
 
 type PerformanceNotice = {
@@ -108,7 +116,7 @@ function normalizeBacktestSymbol(value?: string | null): string | null {
   return normalized || null;
 }
 
-function normalizeBacktestMarket(value?: string | null): ScannerBacktestHandoff['market'] {
+function normalizeBacktestMarket(value?: string | null): BacktestResearchHandoff['market'] {
   const normalized = String(value || '').trim().toUpperCase();
   if (normalized === 'CN' || normalized === 'US' || normalized === 'HK') {
     return normalized;
@@ -125,22 +133,38 @@ function clampInteger(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-function parseScannerBacktestHandoff(search: string): ScannerBacktestHandoff | null {
-  const params = new URLSearchParams(search);
-  if (params.get('source') !== 'scanner') return null;
+function parseBacktestResearchHandoff(search: string): BacktestResearchHandoff | null {
+  const context = parseResearchWorkspaceSearch(search);
+  const source = context.source;
+  if (!source) return null;
 
-  const symbol = normalizeBacktestSymbol(params.get('symbol'));
+  const symbol = normalizeBacktestSymbol(context.symbol);
   if (!symbol) return null;
 
   return {
     symbol,
-    market: normalizeBacktestMarket(params.get('market')),
-    scannerRunId: parsePositiveInteger(params.get('scannerRunId')),
-    scannerRank: parsePositiveInteger(params.get('scannerRank')),
-    scannerProfile: params.get('scannerProfile')?.trim() || null,
-    themeId: params.get('themeId')?.trim() || null,
-    universeType: params.get('universeType')?.trim() || null,
+    market: normalizeBacktestMarket(context.market),
+    source,
+    origin: context.origin || null,
+    scannerRunId: parsePositiveInteger(String(context.scannerRunId || '')),
+    scannerRank: parsePositiveInteger(String(context.scannerRank || '')),
+    scannerProfile: context.scannerProfile?.trim() || null,
+    themeId: context.themeId?.trim() || null,
+    universeType: context.universeType?.trim() || null,
+    watchlistItemId: context.watchlistItemId?.trim() || null,
   };
+}
+
+function researchSourceLabel(source: ResearchWorkspaceSource, language: BacktestLanguage): string {
+  const labels: Record<ResearchWorkspaceSource, { zh: string; en: string }> = {
+    scanner: { zh: '扫描器', en: 'Scanner' },
+    watchlist: { zh: '观察列表', en: 'Watchlist' },
+    portfolio: { zh: '组合', en: 'Portfolio' },
+    backtest: { zh: '回测', en: 'Backtest' },
+    options: { zh: '期权实验室', en: 'Options Lab' },
+    manual: { zh: '手动研究', en: 'Manual research' },
+  };
+  return labels[source]?.[language] || source;
 }
 
 const BacktestPage: React.FC = () => {
@@ -149,7 +173,7 @@ const BacktestPage: React.FC = () => {
   const navigate = useNavigate();
   const { search: routeSearch, state: routeState } = useLocation();
   const { language } = useI18n();
-  const scannerHandoff = parseScannerBacktestHandoff(routeSearch);
+  const researchHandoff = useMemo(() => parseBacktestResearchHandoff(routeSearch), [routeSearch]);
 
   useEffect(() => {
     document.title = bt(language, 'page.documentTitle');
@@ -481,7 +505,7 @@ const BacktestPage: React.FC = () => {
     const state = routeState as BacktestPageLocationState | null;
     const draftRun = state?.draftRun;
     const prefillCode = state?.prefillCode?.trim().toUpperCase();
-    if (!draftRun && !scannerHandoff?.symbol && !prefillCode) return;
+    if (!draftRun && !researchHandoff?.symbol && !prefillCode) return;
 
     let cancelled = false;
     queueMicrotask(() => {
@@ -554,10 +578,10 @@ const BacktestPage: React.FC = () => {
         return;
       }
 
-      if (scannerHandoff?.symbol) {
+      if (researchHandoff?.symbol) {
         setActiveModule('rule');
         setControlPanelMode('normal');
-        setCodeFilter(scannerHandoff.symbol);
+        setCodeFilter(researchHandoff.symbol);
         return;
       }
 
@@ -569,7 +593,7 @@ const BacktestPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [routeState, scannerHandoff]);
+  }, [routeState, researchHandoff]);
 
   const fetchPerformance = async (code?: string, windowBars?: number, options: { showNotice?: boolean } = {}) => {
     const { showNotice = true } = options;
@@ -1426,17 +1450,58 @@ const BacktestPage: React.FC = () => {
             data-testid="backtest-v1-page"
             className="w-full flex-1 min-w-0 flex flex-col gap-6 bg-transparent"
           >
-            {scannerHandoff ? (
-              <section className={`${configPanelRadiusClass} border border-sky-400/15 bg-sky-400/10 px-4 py-3 text-sm text-sky-50`}>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold">{language === 'en' ? 'From scanner' : '来自扫描器'}</span>
-                  <span>{scannerHandoff.symbol}</span>
-                  {scannerHandoff.market ? <span className="text-sky-100/75">· {scannerHandoff.market}</span> : null}
-                  {scannerHandoff.scannerRunId ? <span className="text-sky-100/75">· {bt(language, 'scannerRunMeta', { runId: scannerHandoff.scannerRunId })}</span> : null}
-                  {scannerHandoff.scannerRank ? <span className="text-sky-100/75">· {bt(language, 'scannerRankMeta', { rank: scannerHandoff.scannerRank })}</span> : null}
-                  {scannerHandoff.scannerProfile ? <span className="text-sky-100/75">· {scannerHandoff.scannerProfile}</span> : null}
-                </div>
-              </section>
+            {researchHandoff ? (
+              <ResearchWorkspaceFlowPanel
+                language={language}
+                current="backtest"
+                symbol={researchHandoff.symbol}
+                market={researchHandoff.market}
+                source={researchHandoff.source}
+                origin={researchHandoff.origin}
+                scannerRunId={researchHandoff.scannerRunId}
+                scannerRank={researchHandoff.scannerRank}
+                scannerProfile={researchHandoff.scannerProfile}
+                themeId={researchHandoff.themeId}
+                universeType={researchHandoff.universeType}
+                watchlistItemId={researchHandoff.watchlistItemId}
+                knownEvidence={[
+                  language === 'en'
+                    ? `${researchSourceLabel(researchHandoff.source, language)} handoff received`
+                    : `已接收${researchSourceLabel(researchHandoff.source, language)}上下文`,
+                  researchHandoff.scannerRunId
+                    ? bt(language, 'scannerRunMeta', { runId: researchHandoff.scannerRunId })
+                    : null,
+                  researchHandoff.scannerRank
+                    ? bt(language, 'scannerRankMeta', { rank: researchHandoff.scannerRank })
+                    : null,
+                ]}
+                missingEvidence={[
+                  language === 'en'
+                    ? 'Backtest result has not been produced in this workspace yet'
+                    : '当前工作台尚未生成本次回测结果',
+                  language === 'en'
+                    ? 'Portfolio exposure and options scenario context still need review'
+                    : '组合暴露与期权情景仍需核对',
+                ]}
+                stateNotes={[
+                  language === 'en'
+                    ? 'Prefill uses route context only'
+                    : '仅使用路由上下文预填代码',
+                  language === 'en'
+                    ? 'Backtest assumptions remain controlled by this page'
+                    : '回测假设仍由当前页面控制',
+                ]}
+                nextSteps={[
+                  language === 'en'
+                    ? 'Run or review a backtest, then compare with portfolio and options context'
+                    : '运行或查看回测后，再与组合和期权上下文交叉核对',
+                  language === 'en'
+                    ? 'Use results as research context only'
+                    : '结果仅作为研究上下文使用',
+                ]}
+                className={`${configPanelRadiusClass} border-sky-400/15 bg-sky-400/10 text-sky-50`}
+                testId="backtest-research-workspace-flow"
+              />
             ) : null}
             <LazyMotion features={domAnimation}>
           <AnimatePresence mode="wait" initial={false}>

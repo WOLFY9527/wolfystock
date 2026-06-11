@@ -1,6 +1,5 @@
 import type React from 'react';
 import { BarChart3, BookmarkCheck, BriefcaseBusiness, FlaskConical, Search } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import type { UiLanguage } from '../../i18n/core';
 import { cn } from '../../utils/cn';
 import {
@@ -203,9 +202,9 @@ export default function ResearchWorkspaceFlowPanel({
               const isCurrent = step.key === current;
               const label = language === 'en' ? step.en : step.zh;
               return (
-                <Link
+                <a
                   key={step.key}
-                  to={buildResearchWorkspacePath(step.key, language, routeContext)}
+                  href={buildResearchWorkspacePath(step.key, language, routeContext)}
                   aria-current={isCurrent ? 'page' : undefined}
                   className={cn(
                     'inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors',
@@ -217,7 +216,7 @@ export default function ResearchWorkspaceFlowPanel({
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   <span className="truncate">{isCurrent ? label : `${ui.open} ${label}`}</span>
-                </Link>
+                </a>
               );
             })}
           </nav>

@@ -20,6 +20,7 @@ import {
   type PortfolioScenarioRiskVisiblePosition,
 } from '../components/portfolio/PortfolioScenarioRiskPanel';
 import { PortfolioTrustStrip, type PortfolioTrustChipItem } from '../components/portfolio/PortfolioTrustStrip';
+import ResearchWorkspaceFlowPanel from '../components/research/ResearchWorkspaceFlowPanel';
 import {
   TerminalButton,
   TerminalDenseList,
@@ -41,6 +42,7 @@ import {
 import { translate } from '../i18n/core';
 import { normalizePortfolioRiskEvidence } from '../utils/evidenceDisplay';
 import { toDateInputValue } from '../utils/format';
+import { createPortfolioResearchContextView } from '../utils/portfolioResearchContextView';
 import {
   inferSettlementCurrency,
   LEGACY_PORTFOLIO_DISPLAY_CURRENCY_STORAGE_KEY,
@@ -52,6 +54,7 @@ import {
   savePortfolioDisplayCurrency,
   type PortfolioDisplayCurrency,
 } from '../utils/portfolioPreferences';
+import { parseResearchWorkspaceSearch } from '../utils/researchWorkspaceRoute';
 import type {
   PortfolioAccountItem,
   PortfolioBrokerConnectionItem,
@@ -1362,6 +1365,10 @@ const PortfolioPage: React.FC = () => {
   const { language, t } = useI18n();
   const copy = getPortfolioCopy(t, language);
   const riskFallbackMessage = copy.riskFallback;
+  const routeContext = useMemo(
+    () => parseResearchWorkspaceSearch(typeof window === 'undefined' ? '' : window.location.search),
+    [],
+  );
 
   useEffect(() => {
     document.title = copy.documentTitle;
@@ -2413,6 +2420,67 @@ const PortfolioPage: React.FC = () => {
     return acc;
   }, []);
   const portfolioEvidenceSummary = snapshot ? normalizePortfolioRiskEvidence(snapshot, { maxLimitationLabels: 6 }) : null;
+  const portfolioWorkflowSymbol = routeContext.symbol || String(topPosition?.key || positionRows[0]?.symbol || '').trim().toUpperCase() || null;
+  const portfolioResearchContext = useMemo(
+    () => createPortfolioResearchContextView({
+      snapshot,
+      symbols: portfolioWorkflowSymbol,
+      riskEvidence: portfolioEvidenceSummary,
+    }),
+    [portfolioEvidenceSummary, portfolioWorkflowSymbol, snapshot],
+  );
+  const portfolioWorkflowKnownEvidence = [
+    portfolioWorkflowSymbol
+      ? (language === 'zh' ? `研究代码：${portfolioWorkflowSymbol}` : `Research symbol: ${portfolioWorkflowSymbol}`)
+      : null,
+    portfolioResearchContext.isHeld
+      ? (language === 'zh'
+        ? `当前组合识别到 ${portfolioResearchContext.matchedHoldingsCount} 条持仓`
+        : `${portfolioResearchContext.matchedHoldingsCount} matching holding record(s) found`)
+      : (portfolioWorkflowSymbol
+        ? (language === 'zh' ? '当前组合未识别到该标的持仓' : 'No matching holding is visible in the current portfolio')
+        : null),
+    portfolioResearchContext.accountLabels.length
+      ? (language === 'zh'
+        ? `账户：${portfolioResearchContext.accountLabels.join(' / ')}`
+        : `Account context: ${portfolioResearchContext.accountLabels.join(' / ')}`)
+      : null,
+    portfolioResearchContext.marketLabels.length
+      ? (language === 'zh'
+        ? `市场：${portfolioResearchContext.marketLabels.join(' / ')}`
+        : `Market context: ${portfolioResearchContext.marketLabels.join(' / ')}`)
+      : null,
+  ];
+  const portfolioWorkflowMissingEvidence = [
+    !snapshot ? (language === 'zh' ? '组合快照暂不可用' : 'Portfolio snapshot is not available yet') : null,
+    portfolioResearchContext.dataNotes[0],
+    portfolioWorkflowSymbol ? (language === 'zh' ? '回测验证与期权情景待核对' : 'Backtest validation and options scenario context need review') : null,
+  ];
+  const portfolioWorkflowStateNotes = [
+    portfolioResearchContext.freshnessLabel,
+    portfolioResearchContext.evidencePosture !== 'UNAVAILABLE'
+      ? (language === 'zh'
+        ? `证据状态：${portfolioResearchContext.evidencePosture}`
+        : `Evidence posture: ${portfolioResearchContext.evidencePosture}`)
+      : null,
+    portfolioResearchContext.asOf
+      ? (language === 'zh' ? `快照时间：${portfolioResearchContext.asOf}` : `Snapshot as of ${portfolioResearchContext.asOf}`)
+      : null,
+    portfolioEvidenceSummary?.confidenceCap != null
+      ? (language === 'zh' ? '当前置信度受限，仅供观察' : 'Confidence is capped for observation')
+      : null,
+  ];
+  const portfolioWorkflowNextSteps = [
+    portfolioWorkflowSymbol
+      ? (language === 'zh' ? '打开回测，验证历史规则表现' : 'Open Backtest to validate historical rule behavior')
+      : null,
+    portfolioWorkflowSymbol
+      ? (language === 'zh' ? '打开期权实验室，查看情景准备度' : 'Open Options Lab to review scenario readiness')
+      : null,
+    routeContext.source
+      ? (language === 'zh' ? '回到上游页面复核原始研究上下文' : 'Return upstream to review the originating research context')
+      : null,
+  ];
   const hasPortfolioEvidenceSummary = Boolean(
     portfolioEvidenceSummary
     && (
@@ -3127,6 +3195,30 @@ const PortfolioPage: React.FC = () => {
                 </div>
               </TerminalPanel>
             </div>
+
+            {portfolioWorkflowSymbol ? (
+              <div data-testid="portfolio-row-research-workflow" className="order-2 col-span-12 min-w-0">
+                <ResearchWorkspaceFlowPanel
+                  language={language}
+                  current="portfolio"
+                  symbol={portfolioWorkflowSymbol}
+                  market={routeContext.market}
+                  source={routeContext.source || 'portfolio'}
+                  origin={routeContext.origin}
+                  scannerRunId={routeContext.scannerRunId}
+                  scannerRank={routeContext.scannerRank}
+                  scannerProfile={routeContext.scannerProfile}
+                  themeId={routeContext.themeId}
+                  universeType={routeContext.universeType}
+                  watchlistItemId={routeContext.watchlistItemId}
+                  knownEvidence={portfolioWorkflowKnownEvidence}
+                  missingEvidence={portfolioWorkflowMissingEvidence}
+                  stateNotes={portfolioWorkflowStateNotes}
+                  nextSteps={portfolioWorkflowNextSteps}
+                  testId="portfolio-research-workspace-flow"
+                />
+              </div>
+            ) : null}
 
             <div data-testid="portfolio-row-summary" className="order-2 col-span-12 min-w-0">
               {hasHoldings ? (
