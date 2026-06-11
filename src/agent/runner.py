@@ -476,6 +476,7 @@ def run_agent_loop(
                 tool_calls_log,
                 non_retriable_tool_results,
                 tool_wait_timeout_seconds=effective_tool_timeout,
+                owner_user_id=owner_user_id,
             )
 
             # Append tool results preserving original call order
@@ -558,6 +559,7 @@ def _execute_tools(
     tool_calls_log: List[Dict[str, Any]],
     non_retriable_tool_results: Optional[Dict[str, str]] = None,
     tool_wait_timeout_seconds: Optional[float] = None,
+    owner_user_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Execute one or more tool calls, returning ordered result dicts.
 
@@ -578,7 +580,10 @@ def _execute_tools(
             return tc_item, non_retriable_tool_results[cache_key], False, dur, True
 
         try:
-            res = tool_registry.execute(tc_item.name, **tc_item.arguments)
+            arguments = dict(tc_item.arguments)
+            if tc_item.name == "get_portfolio_snapshot" and owner_user_id:
+                arguments["owner_user_id"] = owner_user_id
+            res = tool_registry.execute(tc_item.name, **arguments)
             res_str = serialize_tool_result(res)
             ok = True
             if cache_key and non_retriable_tool_results is not None and _is_non_retriable_tool_result(res):

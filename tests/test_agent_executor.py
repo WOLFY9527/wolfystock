@@ -419,6 +419,59 @@ class TestAgentExecutor(unittest.TestCase):
         self.assertFalse(result.tool_calls_log[0]["success"])
         self.assertFalse(result.tool_calls_log[0]["cached"])
 
+    def test_runner_injects_owner_context_into_portfolio_tool_without_exposing_argument(self):
+        """Portfolio tools receive hidden owner context without adding it to LLM arguments."""
+        captured_calls = []
+
+        def _portfolio_snapshot(**kwargs):
+            captured_calls.append(dict(kwargs))
+            return {"status": "ok", "owner": kwargs.get("owner_user_id")}
+
+        registry = ToolRegistry()
+        registry.register(
+            ToolDefinition(
+                name="get_portfolio_snapshot",
+                description="Get portfolio snapshot",
+                parameters=[
+                    ToolParameter(name="account_id", type="integer", description="Account id", required=False),
+                ],
+                handler=_portfolio_snapshot,
+            )
+        )
+        adapter = _make_mock_adapter()
+        adapter.call_with_tools.side_effect = [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall(id="p1", name="get_portfolio_snapshot", arguments={"account_id": 7}),
+                ],
+                usage={"total_tokens": 10},
+                provider="openai",
+            ),
+            LLMResponse(
+                content=json.dumps(SAMPLE_DASHBOARD, ensure_ascii=False),
+                tool_calls=[],
+                usage={"total_tokens": 10},
+                provider="openai",
+            ),
+        ]
+
+        result = run_agent_loop(
+            messages=[
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "Analyze"},
+            ],
+            tool_registry=registry,
+            llm_adapter=adapter,
+            max_steps=3,
+            owner_user_id="user-a",
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual(captured_calls, [{"account_id": 7, "owner_user_id": "user-a"}])
+        self.assertEqual(result.tool_calls_log[0]["arguments"], {"account_id": 7})
+        self.assertNotIn("owner_user_id", result.tool_calls_log[0]["arguments"])
+
     def test_non_retriable_tool_failure_is_cached_across_hk_variants(self):
         """Equivalent HK code variants should not re-execute a non-retriable failing tool."""
         calls = []

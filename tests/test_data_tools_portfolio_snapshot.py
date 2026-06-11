@@ -12,6 +12,12 @@ from src.agent.tools.data_tools import _handle_get_portfolio_snapshot
 
 
 class _FakePortfolioService:
+    constructed_owner_ids = []
+
+    def __init__(self, owner_id=None):
+        self.owner_id = owner_id
+        self.constructed_owner_ids.append(owner_id)
+
     def get_portfolio_snapshot(self, **_kwargs):
         return {
             "as_of": "2026-03-15",
@@ -27,7 +33,7 @@ class _FakePortfolioService:
             "accounts": [
                 {
                     "account_id": 1,
-                    "account_name": "Main",
+                    "account_name": "Bootstrap Default" if self.owner_id is None else f"{self.owner_id} Main",
                     "market": "cn",
                     "base_currency": "CNY",
                     "total_equity": 60000.0,
@@ -62,8 +68,10 @@ class _FakePortfolioService:
 
 
 class _FakeRiskService:
-    def __init__(self, **_kwargs):
-        pass
+    constructed_portfolio_owner_ids = []
+
+    def __init__(self, portfolio_service=None, **_kwargs):
+        self.constructed_portfolio_owner_ids.append(getattr(portfolio_service, "owner_id", None))
 
     def get_risk_report(self, **_kwargs):
         return {
@@ -95,14 +103,20 @@ class _FakeRiskService:
 
 
 class TestGetPortfolioSnapshotTool(unittest.TestCase):
+    def setUp(self) -> None:
+        _FakePortfolioService.constructed_owner_ids = []
+        _FakeRiskService.constructed_portfolio_owner_ids = []
+
     @patch("src.services.portfolio_service.PortfolioService", _FakePortfolioService)
     @patch("src.services.portfolio_risk_service.PortfolioRiskService", _FakeRiskService)
     def test_default_returns_compact_snapshot_and_risk(self) -> None:
-        result = _handle_get_portfolio_snapshot(account_id=1)
+        result = _handle_get_portfolio_snapshot(account_id=1, owner_user_id="user-a")
         self.assertEqual(result["status"], "ok")
         self.assertIn("snapshot", result)
         self.assertIn("risk", result)
         self.assertEqual(result["risk"]["status"], "ok")
+        self.assertEqual(_FakePortfolioService.constructed_owner_ids, ["user-a"])
+        self.assertEqual(_FakeRiskService.constructed_portfolio_owner_ids, ["user-a"])
 
         account = result["snapshot"]["accounts"][0]
         self.assertIn("top_positions", account)
@@ -112,9 +126,31 @@ class TestGetPortfolioSnapshotTool(unittest.TestCase):
 
     @patch("src.services.portfolio_service.PortfolioService", _FakePortfolioService)
     @patch("src.services.portfolio_risk_service.PortfolioRiskService", _FakeRiskService)
+    def test_missing_owner_context_fails_closed_without_constructing_service(self) -> None:
+        result = _handle_get_portfolio_snapshot(account_id=1)
+
+        self.assertEqual(result["status"], "failed")
+        self.assertFalse(result["retriable"])
+        self.assertIn("owner context", result["error"])
+        self.assertEqual(_FakePortfolioService.constructed_owner_ids, [])
+
+    @patch("src.services.portfolio_service.PortfolioService", _FakePortfolioService)
+    @patch("src.services.portfolio_risk_service.PortfolioRiskService", _FakeRiskService)
+    def test_authenticated_user_does_not_read_default_owner_snapshot(self) -> None:
+        result = _handle_get_portfolio_snapshot(owner_user_id="authenticated-user")
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(_FakePortfolioService.constructed_owner_ids, ["authenticated-user"])
+        account = result["snapshot"]["accounts"][0]
+        self.assertEqual(account["account_name"], "authenticated-user Main")
+        self.assertNotEqual(account["account_name"], "Bootstrap Default")
+
+    @patch("src.services.portfolio_service.PortfolioService", _FakePortfolioService)
+    @patch("src.services.portfolio_risk_service.PortfolioRiskService", _FakeRiskService)
     def test_include_positions_and_disable_risk(self) -> None:
         result = _handle_get_portfolio_snapshot(
             account_id=1,
+            owner_user_id="user-a",
             include_positions=True,
             include_risk=False,
             as_of="2026-03-15",
@@ -124,7 +160,7 @@ class TestGetPortfolioSnapshotTool(unittest.TestCase):
         self.assertIn("positions", account)
         self.assertNotIn("risk", result)
 
-        invalid = _handle_get_portfolio_snapshot(as_of="2026/03/15")
+        invalid = _handle_get_portfolio_snapshot(as_of="2026/03/15", owner_user_id="user-a")
         self.assertIn("error", invalid)
         self.assertIn("YYYY-MM-DD", invalid["error"])
 
