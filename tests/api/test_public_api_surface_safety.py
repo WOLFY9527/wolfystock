@@ -81,6 +81,11 @@ DIAGNOSTIC_ROUTES_EXCLUDED_FROM_SAFE_BYPASS = {
     ("GET", "/api/v1/agent/models"),
     ("GET", "/api/v1/agent/provider-health"),
 }
+OPTIONS_FIXTURE_PUBLIC_API_SURFACES = {
+    ("GET", "/api/v1/options/underlyings/{symbol}/summary"),
+    ("GET", "/api/v1/options/underlyings/{symbol}/chain"),
+    ("POST", "/api/v1/options/decision/evaluate"),
+}
 
 
 def _json_text(payload: object) -> str:
@@ -1540,6 +1545,15 @@ def test_public_api_abuse_limiter_operator_valid_session_bypass_survives_strict_
 
 
 def test_options_launch_surface_matrix_is_fixture_backed_explicit_and_safe() -> None:
+    route_classifications = _route_surface_classifications()
+    assert {
+        signature: route_classifications[signature]
+        for signature in OPTIONS_FIXTURE_PUBLIC_API_SURFACES
+    } == {
+        signature: "public_fixture_analysis"
+        for signature in OPTIONS_FIXTURE_PUBLIC_API_SURFACES
+    }
+
     client = _options_client()
     try:
         responses = [

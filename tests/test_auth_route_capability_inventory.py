@@ -18,6 +18,7 @@ from api.v1 import api_v1_router
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "auth"
 APP_TSX = REPO_ROOT / "apps" / "dsa-web" / "src" / "App.tsx"
+CONSUMER_APP_NAVIGATION_TS = REPO_ROOT / "apps" / "dsa-web" / "src" / "components" / "layout" / "consumerAppNavigation.ts"
 ADMIN_CAPABILITIES_TS = REPO_ROOT / "apps" / "dsa-web" / "src" / "utils" / "adminCapabilities.ts"
 APP_ROUTES_TEST_TSX = REPO_ROOT / "apps" / "dsa-web" / "src" / "__tests__" / "AppRoutes.test.tsx"
 AUTH_GUARD_TEST_TSX = REPO_ROOT / "apps" / "dsa-web" / "src" / "components" / "auth" / "__tests__" / "AuthGuardOverlay.test.tsx"
@@ -133,6 +134,7 @@ FRONTEND_ADMIN_READ_CAPABILITY_LABELS = {
 }
 SURFACE_CLASSIFICATION_VOCABULARY = {
     "public_static_docs",
+    "public_fixture_analysis",
     "authenticated_member",
     "admin_role_only_legacy",
     "admin_capability_required",
@@ -170,6 +172,13 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/scanner/themes"): "unclassified",
     ("POST", "/api/v1/scanner/themes"): "unclassified",
     ("GET", "/api/v1/usage/summary"): "admin_role_only_legacy",
+    ("GET", "/api/v1/options/underlyings/{symbol}/summary"): "public_fixture_analysis",
+    ("GET", "/api/v1/options/underlyings/{symbol}/expirations"): "public_fixture_analysis",
+    ("GET", "/api/v1/options/underlyings/{symbol}/chain"): "public_fixture_analysis",
+    ("POST", "/api/v1/options/analyze"): "public_fixture_analysis",
+    ("POST", "/api/v1/options/decision/evaluate"): "public_fixture_analysis",
+    ("POST", "/api/v1/options/scenario"): "public_fixture_analysis",
+    ("POST", "/api/v1/options/strategies/compare"): "public_fixture_analysis",
     ("GET", "/api/v1/admin/logs/storage/summary"): "admin_capability_required",
     ("GET", "/api/v1/admin/ops/status"): "admin_capability_required",
     ("GET", "/api/v1/admin/mission-control"): "admin_capability_required",
@@ -197,6 +206,11 @@ EXPECTED_LEGACY_ROUTE_SURFACE_CLASSIFICATIONS = {
     ("GET", "/api/v1/scanner/watchlists/recent"),
     ("GET", "/api/v1/scanner/status"),
     ("GET", "/api/v1/usage/summary"),
+}
+EXPECTED_OPTIONS_FIXTURE_ROUTE_CLASSIFICATIONS = {
+    signature
+    for signature, classification in EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS.items()
+    if signature[1].startswith("/api/v1/options/") and classification == "public_fixture_analysis"
 }
 UNWRAPPED_REGISTERED_ROUTE_EXCEPTIONS = {
     "market_overview": {
@@ -666,9 +680,16 @@ def test_backend_route_surface_classification_vocabulary_and_no_go_markers_are_e
             "no_go_marker",
             "transitional_note",
         }
-        if classification in {"unclassified", "operator_diagnostic", "debug_or_schema_surface"}:
+        if classification in {"unclassified", "operator_diagnostic", "debug_or_schema_surface", "public_fixture_analysis"}:
             marker = entry.get("no_go_marker")
             assert marker and "TODO/NO-GO" in marker, entry["route_id"]
+        if classification == "public_fixture_analysis":
+            marker_text = str(entry.get("no_go_marker") or "").lower()
+            note_text = str(entry.get("transitional_note") or "").lower()
+            assert entry["auth_dependency_label"] == "public", entry["route_id"]
+            assert entry["capability_label"] is None, entry["route_id"]
+            assert "fixture" in marker_text and "production" in marker_text, entry["route_id"]
+            assert "route-local" in note_text and "app-level auth" in note_text, entry["route_id"]
         if classification in {"public_static_docs", "debug_or_schema_surface"}:
             assert not entry["path"].startswith("/api/v1/"), entry["route_id"]
 
@@ -684,6 +705,7 @@ def test_backend_route_surface_classification_covers_target_live_surfaces() -> N
         if signature in EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS
         or signature[1].startswith("/api/v1/agent/")
         or signature[1].startswith("/api/v1/scanner/")
+        or signature[1].startswith("/api/v1/options/")
         or signature[1] == "/api/v1/usage/summary"
         or signature[1] in {
             "/api/v1/market/data-readiness",
@@ -734,6 +756,33 @@ def test_docs_openapi_and_operator_diagnostic_surfaces_are_not_product_routes() 
         and entry["surface_classification"] in {"public_static_docs", "debug_or_schema_surface"}
     ]
     assert api_v1_doc_like_labels == []
+
+
+def test_options_public_api_inventory_matches_fixture_only_frontend_gate_contract() -> None:
+    fixture = _load_json(BACKEND_FIXTURE)
+    classifications = _surface_classification_by_signature(fixture)
+    app_source = APP_TSX.read_text(encoding="utf-8")
+    consumer_nav_source = CONSUMER_APP_NAVIGATION_TS.read_text(encoding="utf-8")
+
+    assert len(EXPECTED_OPTIONS_FIXTURE_ROUTE_CLASSIFICATIONS) == 7
+    for signature in EXPECTED_OPTIONS_FIXTURE_ROUTE_CLASSIFICATIONS:
+        entry = classifications[signature]
+        marker = str(entry["no_go_marker"])
+        note = str(entry["transitional_note"])
+        note_text = note.lower()
+        assert entry["surface_classification"] == "public_fixture_analysis"
+        assert entry["auth_dependency_label"] == "public"
+        assert entry["capability_label"] is None
+        assert "TODO/NO-GO" in marker
+        assert "fixture/demo" in marker
+        assert "production Options decisioning" in marker
+        assert "route-local" in note_text
+        assert "app-level auth" in note_text
+
+    assert '<Route path="/options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />' in app_source
+    assert '<Route path="options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />' in app_source
+    assert "Mirrors Shell nav visibility only. Route-level guest paywalls live in App.tsx." in consumer_nav_source
+    assert "{ key: 'options-lab', labelKey: 'nav.optionsLab', to: '/options-lab', group: 'validate', requiresAuth: false }" in consumer_nav_source
 
 
 def test_backend_write_only_capabilities_do_not_leak_into_frontend_read_route_flags() -> None:

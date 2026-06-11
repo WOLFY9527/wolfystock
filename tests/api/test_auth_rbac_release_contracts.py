@@ -97,6 +97,15 @@ CAPABILITY_GATED_DIAGNOSTIC_SURFACES = (
     ("market_provider_operations", "GET", "/api/v1/admin/market-providers/operations"),
     ("market_provider_fit_advisor", "GET", "/api/v1/market/provider-fit-advisor"),
 )
+OPTIONS_FIXTURE_PUBLIC_API_SURFACES = (
+    ("options_summary", "GET", "/api/v1/options/underlyings/{symbol}/summary"),
+    ("options_expirations", "GET", "/api/v1/options/underlyings/{symbol}/expirations"),
+    ("options_chain", "GET", "/api/v1/options/underlyings/{symbol}/chain"),
+    ("options_analyze", "POST", "/api/v1/options/analyze"),
+    ("options_decision", "POST", "/api/v1/options/decision/evaluate"),
+    ("options_scenario", "POST", "/api/v1/options/scenario"),
+    ("options_strategy_compare", "POST", "/api/v1/options/strategies/compare"),
+)
 QUOTA_DRY_RUN_REQUEST = {
     "ownerUserId": "ordinary-user",
     "routeFamily": "analysis",
@@ -349,6 +358,22 @@ def test_anonymous_denial_matrix_matches_sensitive_route_inventory(auth_release_
     for response in responses.values():
         assert response.json() == {"error": "unauthorized", "message": "Login required"}
         _assert_public_error_safe(response.json(), dict(response.headers))
+
+
+def test_options_public_api_release_contract_is_fixture_only_not_launch_approval() -> None:
+    inventory = _backend_surface_classifications_by_signature()
+
+    for label, method, path in OPTIONS_FIXTURE_PUBLIC_API_SURFACES:
+        entry = inventory[(method, path)]
+        marker = str(entry["no_go_marker"])
+        assert entry["surface_classification"] == "public_fixture_analysis", label
+        assert entry["auth_dependency_label"] == "public", label
+        assert entry["capability_label"] is None, label
+        assert "TODO/NO-GO" in marker, label
+        assert "fixture/demo" in marker, label
+        assert "production Options decisioning" in marker, label
+        assert "provider evidence" in marker, label
+        _assert_public_error_safe(entry)
 
 
 def test_ordinary_users_cannot_access_admin_release_surfaces(auth_release_client) -> None:
