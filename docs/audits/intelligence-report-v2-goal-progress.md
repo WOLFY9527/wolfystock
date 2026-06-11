@@ -89,6 +89,10 @@ Added tests cover:
 - default-off runtime emission from `_build_report_payload` / normal analysis responses
 - explicit opt-in packet emission
 - raw query/source/debug/prompt/provider-payload/stack/internal diagnostic leakage guards
+- composer text sanitizer redacts `source_id` / `sourceId`, `provider_id` / `providerId`,
+  `route_id` / `routeId`, `debug_ref` / `debugRef`, internal source/provider/route/debug
+  identifier wording, and raw `fmp` / `polygon_us_grouped_daily` values from serialized
+  opt-in packets while preserving safe `source-*` labels
 - API history schema hydration from `details.analysis_result`
 - legacy `IntelligenceReportPacketV2` hydration drops or rewrites `sourceId`, `source_id`,
   provider, route, debug, and internal source identifier variants before exposing hydrated
@@ -96,8 +100,8 @@ Added tests cover:
 
 Post-fix local validation on 2026-06-11:
 
-- `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m pytest -p no:cacheprovider tests/test_intelligence_report_packet.py tests/test_analysis_api_contract.py tests/services/test_analysis_research_readiness_projection.py -q` - 67 passed
-- `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m py_compile src/services/intelligence_report_packet.py src/services/analysis_service.py api/v1/schemas/analysis.py api/v1/schemas/history.py api/v1/schemas/home_evidence.py` - passed
+- `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m pytest -p no:cacheprovider tests/test_intelligence_report_packet.py tests/test_analysis_api_contract.py tests/services/test_analysis_research_readiness_projection.py -q` - 68 passed
+- `PYTHONPYCACHEPREFIX=<tmp> /Users/yehengli/daily_stock_analysis/.venv/bin/python -m py_compile api/v1/schemas/analysis.py api/v1/schemas/history.py api/v1/schemas/home_evidence.py src/services/analysis_service.py src/services/intelligence_report_packet.py tests/test_analysis_api_contract.py tests/test_intelligence_report_packet.py` - passed
 
 ## Remaining Quality Gaps
 

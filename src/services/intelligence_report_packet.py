@@ -73,8 +73,44 @@ _INTERNAL_TEXT_REPLACEMENTS = (
     (re.compile(r"\binternal[_\s-]?diagnostic(?:[_\s-]?token)?\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "internal note"),
     (re.compile(r"\bdiag[-_][A-Za-z0-9_.:-]+", re.IGNORECASE), "internal note"),
     (re.compile(r"\bquery[-_][A-Za-z0-9_.:-]+", re.IGNORECASE), "request reference"),
-    (re.compile(r"\bsourceid\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "source label"),
+    (
+        re.compile(
+            r"\b(?:internal\s+)?source[_\s-]?"
+            r"(?:id|ids|ref|refs|key|keys|label|labels|name|names|identifier|identifiers)\b"
+            r"\s*[:=]?\s*[\w:./-]*",
+            re.IGNORECASE,
+        ),
+        "source label",
+    ),
     (re.compile(r"\b[A-Za-z]+-source-\d+[A-Za-z0-9_.:-]*\b", re.IGNORECASE), "source label"),
+    (
+        re.compile(
+            r"\b(?:internal\s+)?provider[_\s-]?"
+            r"(?:id|ids|ref|refs|key|keys|label|labels|name|names|identifier|identifiers)\b"
+            r"\s*[:=]?\s*[\w:./-]*",
+            re.IGNORECASE,
+        ),
+        "source label",
+    ),
+    (
+        re.compile(
+            r"\b(?:internal\s+)?route[_\s-]?"
+            r"(?:id|ids|ref|refs|key|keys|label|labels|name|names|identifier|identifiers)\b"
+            r"\s*[:=]?\s*[\w:./-]*",
+            re.IGNORECASE,
+        ),
+        "source label",
+    ),
+    (
+        re.compile(
+            r"\b(?:internal\s+)?debug[_\s-]?"
+            r"(?:id|ids|ref|refs|key|keys|label|labels|name|names|identifier|identifiers)\b"
+            r"\s*[:=]?\s*[\w:./-]*",
+            re.IGNORECASE,
+        ),
+        "internal note",
+    ),
+    (re.compile(r"\b(?:fmp|polygon_us_grouped_daily)\b", re.IGNORECASE), "source label"),
     (re.compile(r"\b(?:authorization|bearer)\b\s*[:=]?\s*[\w:./-]*", re.IGNORECASE), "credential marker"),
     (re.compile(r"\btoken\s*=\s*[\w:./-]+", re.IGNORECASE), "credential marker"),
     (re.compile(r"\bsecret[-_][A-Za-z0-9_.:-]+\b", re.IGNORECASE), "credential marker"),

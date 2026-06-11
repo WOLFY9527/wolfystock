@@ -360,6 +360,87 @@ def test_packet_does_not_emit_raw_ids_debug_refs_or_internal_diagnostics() -> No
         assert forbidden not in serialized
 
 
+def test_composer_sanitizes_source_provider_identifier_text_across_serialized_packet() -> None:
+    payload = _ready_payload()
+    payload["thesis"] = {
+        "summary": (
+            "source_id=polygon_us_grouped_daily and sourceId=fmp were cited; "
+            "literal fmp should not be consumer-visible."
+        ),
+        "confidenceLabel": "provider_id=fmp routeId=internal-analysis-route debugRef=dbg-123",
+    }
+    payload["standardReport"] = {
+        **payload["standardReport"],
+        "summaryPanel": {
+            **payload["standardReport"]["summaryPanel"],
+            "oneSentence": "providerId=fmp confirms revenue and source-* labels remain safe.",
+        },
+        "reasonLayer": {
+            **payload["standardReport"]["reasonLayer"],
+            "latestKeyUpdate": "internal source identifier polygon_us_grouped_daily was present.",
+            "topRisk": "route_id=internal-analysis-route and debug_ref=dbg-456 appeared in text.",
+        },
+        "highlights": {
+            **payload["standardReport"]["highlights"],
+            "riskAlerts": [
+                "provider identifier fmp and source identifier polygon_us_grouped_daily need redaction.",
+            ],
+        },
+    }
+    payload["researchReadiness"] = {
+        **payload["researchReadiness"],
+        "blockingReasons": ["providerId=fmp", "debugRef=dbg-789"],
+        "nextEvidenceNeeded": [
+            "source_id=polygon_us_grouped_daily",
+            "provider identifier fmp",
+        ],
+    }
+    payload["evidenceCitationFrame"] = {
+        "citedEvidence": [
+            {
+                "id": "provider-text",
+                "domain": "technicals",
+                "summary": (
+                    "source_id=polygon_us_grouped_daily sourceId=fmp "
+                    "provider_id=fmp route_id=internal-analysis-route debug_ref=dbg-999"
+                ),
+            },
+            {
+                "id": "safe-label",
+                "domain": "fundamentals",
+                "summary": "source-* labels remain acceptable in consumer text.",
+            },
+        ],
+        "domainCoverage": [
+            {
+                "domain": "risk",
+                "status": "missing",
+                "summary": "source identifier polygon_us_grouped_daily and provider identifier fmp.",
+            }
+        ],
+    }
+
+    packet = build_intelligence_report_packet_v2(payload)
+    serialized = json.dumps(packet, ensure_ascii=False).lower()
+
+    assert "source-technicals" in serialized
+    assert "source-fundamentals" in serialized
+    assert "source-*" in serialized
+    for forbidden in (
+        "source_id=polygon_us_grouped_daily",
+        "sourceid=fmp",
+        "provider_id=fmp",
+        "providerid=fmp",
+        "route_id=internal-analysis-route",
+        "routeid=internal-analysis-route",
+        "debug_ref=dbg",
+        "debugref=dbg",
+        "polygon_us_grouped_daily",
+        "fmp",
+    ):
+        assert forbidden not in serialized
+
+
 def test_history_report_schema_hydrates_intelligence_packet_from_analysis_result() -> None:
     packet = build_intelligence_report_packet_v2(_ready_payload())
     legacy_packet = {
