@@ -36,6 +36,17 @@ const emptyFlags: AdminCapabilityFlags = {
   canReadSystemConfig: false,
 };
 
+const ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED_VALUES = new Set(['1', 'true', 'yes', 'on', 'enabled']);
+
+export function isAdminMissionControlPrototypeEnabled(): boolean {
+  const rawValue = import.meta.env.VITE_WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED || '';
+  return ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED_VALUES.has(rawValue.trim().toLowerCase());
+}
+
+export function isAdminMissionControlPath(pathname: string): boolean {
+  return pathname === '/admin/mission-control' || pathname.startsWith('/admin/mission-control/');
+}
+
 export function resolveAdminCapabilityFlags(currentUser: CurrentUser | null | undefined): AdminCapabilityFlags {
   if (!currentUser?.isAdmin) {
     return emptyFlags;
@@ -57,6 +68,9 @@ export function canAccessAdminPath(pathname: string, flags: AdminCapabilityFlags
   }
   if (pathname === '/admin/logs' || pathname.startsWith('/admin/logs/')) {
     return capabilityFlags.canReadOpsLogs;
+  }
+  if (isAdminMissionControlPath(pathname)) {
+    return isAdminMissionControlPrototypeEnabled() && capabilityFlags.canReadOpsLogs;
   }
   if (pathname === '/admin/evidence-workflow' || pathname.startsWith('/admin/evidence-workflow/')) {
     return capabilityFlags.canReadOpsLogs;

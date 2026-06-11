@@ -178,6 +178,10 @@ vi.mock('../pages/AdminEvidenceWorkflowPage', () => ({
   default: () => <div>admin-evidence-workflow-page</div>,
 }));
 
+vi.mock('../pages/AdminMissionControlPage', () => ({
+  default: () => <div>admin-mission-control-page</div>,
+}));
+
 vi.mock('../pages/LoginPage', () => ({
   default: () => <div>login-page</div>,
 }));
@@ -258,6 +262,7 @@ function mockAuthBootstrapLoadError(refreshStatus = vi.fn()) {
 describe('AppContent route flows', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('VITE_WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED', '');
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: false,
@@ -699,13 +704,16 @@ describe('AppContent route flows', () => {
     },
   );
 
-  it('redirects locale-prefixed guest settings access to the locale guest page', async () => {
+  it.each(['/en/settings/system', '/en/admin/mission-control'])(
+    'redirects locale-prefixed guest admin access %s to the locale guest page',
+    async (path) => {
     languageState.value = 'en';
-    renderAtWithLocationProbe('/en/settings/system');
+    renderAtWithLocationProbe(path);
 
     expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/en/guest'));
-  });
+    },
+  );
 
   it('keeps locale-prefixed guest portfolio access on the same route and renders the paywall', async () => {
     languageState.value = 'en';
@@ -972,6 +980,25 @@ describe('AppContent route flows', () => {
     expect(screen.queryByText('admin-evidence-workflow-page')).not.toBeInTheDocument();
   });
 
+  it('blocks mission control access when admin ops-log capability is absent', async () => {
+    vi.stubEnv('VITE_WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED', 'true');
+    mockSignedInAdminWithCapabilities(noCapabilities);
+
+    renderAt('/zh/admin/mission-control');
+
+    expect(await screen.findByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeInTheDocument();
+    expect(screen.queryByText('admin-mission-control-page')).not.toBeInTheDocument();
+  });
+
+  it('keeps mission control prototype route disabled by default even for ops-log admins', async () => {
+    mockSignedInAdminWithCapabilities({ ...noCapabilities, canReadOpsLogs: true });
+
+    renderAt('/en/admin/mission-control');
+
+    expect(await screen.findByRole('heading', { name: 'Admin Mission Control prototype is disabled' })).toBeInTheDocument();
+    expect(screen.queryByText('admin-mission-control-page')).not.toBeInTheDocument();
+  });
+
   it.each([
     ['system config', { ...noCapabilities, canReadSystemConfig: true }],
     ['provider operations', { ...noCapabilities, canReadProviders: true }],
@@ -996,6 +1023,16 @@ describe('AppContent route flows', () => {
     renderAt('/zh/admin/evidence-workflow');
 
     await waitFor(() => expect(screen.getByText('admin-evidence-workflow-page')).toBeInTheDocument());
+    expect(screen.queryByRole('heading', { name: '这个管理页面需要对应管理员能力' })).not.toBeInTheDocument();
+  });
+
+  it('renders mission control with ops logs read as the only admin capability', async () => {
+    vi.stubEnv('VITE_WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED', 'true');
+    mockSignedInAdminWithCapabilities({ ...noCapabilities, canReadOpsLogs: true });
+
+    renderAt('/zh/admin/mission-control');
+
+    await waitFor(() => expect(screen.getByText('admin-mission-control-page')).toBeInTheDocument());
     expect(screen.queryByRole('heading', { name: '这个管理页面需要对应管理员能力' })).not.toBeInTheDocument();
   });
 

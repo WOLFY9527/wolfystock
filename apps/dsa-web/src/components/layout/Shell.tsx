@@ -39,6 +39,7 @@ function resolveRailDescription(t: (key: string) => string): string {
 
 function isAdminOpsRoute(pathname: string): boolean {
   return pathname.startsWith('/settings/system')
+    || pathname.startsWith('/admin/mission-control')
     || pathname.startsWith('/admin/logs')
     || pathname.startsWith('/admin/evidence-workflow')
     || pathname.startsWith('/admin/notifications')
@@ -52,6 +53,9 @@ function resolveAdminOpsRouteLabel(pathname: string, language: string): string |
   const isEnglish = language === 'en';
   if (pathname.startsWith('/settings/system')) {
     return isEnglish ? 'Ops Overview / System Settings' : '运维总览/系统设置';
+  }
+  if (pathname.startsWith('/admin/mission-control')) {
+    return 'Mission Control';
   }
   if (pathname.startsWith('/admin/market-providers')) {
     return isEnglish ? 'Data Sources & Readiness' : '数据源与就绪度';

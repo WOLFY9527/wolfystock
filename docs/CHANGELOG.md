@@ -1,3 +1,6 @@
+## 2026-06-11
+- Admin Mission Control is now an explicitly default-off admin prototype: the backend projection is gated by `WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED`, the web route/navigation entry is gated by `VITE_WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED`, and the disabled response does not aggregate provider, quota/cost, storage, task, or admin-log summaries. The enabled path remains admin-only, read-only, advisory, sanitized, and public-launch **NO-GO**; no provider blocking, quota blocking, auth/RBAC/session, DB cleanup/restore/migration, broker/order/trade, notification send, or production-config mutation behavior changed.
+
 ## 2026-06-09
 - Admin SPA deep links now add a server-side defense-in-depth fallback guard: unauthenticated direct browser requests to `/admin...` or supported localized `/zh|en/admin...` shell routes redirect to the matching guest route, while authenticated admin shell access, static assets, product routes, and API auth/RBAC JSON contracts remain unchanged.
 

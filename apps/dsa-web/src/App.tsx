@@ -11,7 +11,7 @@ import { useProductSurface } from './hooks/useProductSurface';
 import type { UiLanguage } from './i18n/core';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from './utils/localeRouting';
 import { isPreviewRoutePath } from './utils/appRouteGuards';
-import { canAccessAdminPath } from './utils/adminCapabilities';
+import { canAccessAdminPath, isAdminMissionControlPath, isAdminMissionControlPrototypeEnabled } from './utils/adminCapabilities';
 
 const APP_BOOT_SPLASH_MIN_MS = 950;
 const APP_BOOT_SPLASH_FADE_MS = 380;
@@ -45,6 +45,7 @@ const AdminProviderCircuitDiagnosticsPage = lazy(() => import('./pages/AdminProv
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'));
 const AdminCostObservabilityPage = lazy(() => import('./pages/AdminCostObservabilityPage'));
 const AdminEvidenceWorkflowPage = lazy(() => import('./pages/AdminEvidenceWorkflowPage'));
+const AdminMissionControlPage = lazy(() => import('./pages/AdminMissionControlPage'));
 
 type GateCopy = {
   eyebrow: string;
@@ -69,9 +70,11 @@ type AuthBootstrapSurfaceCopy = {
 function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: boolean): GateCopy {
   const isEnglish = language === 'en';
 
-  if (pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/evidence-workflow') || pathname.startsWith('/admin/notifications') || pathname.startsWith('/admin/market-providers') || pathname.startsWith('/admin/provider-circuits') || pathname.startsWith('/admin/users') || pathname.startsWith('/admin/cost-observability')) {
+  if (pathname.startsWith('/admin/mission-control') || pathname.startsWith('/admin/logs') || pathname.startsWith('/admin/evidence-workflow') || pathname.startsWith('/admin/notifications') || pathname.startsWith('/admin/market-providers') || pathname.startsWith('/admin/provider-circuits') || pathname.startsWith('/admin/users') || pathname.startsWith('/admin/cost-observability')) {
     const surfaceName = pathname.startsWith('/admin/cost-observability')
       ? (isEnglish ? 'cost observability' : '成本观测')
+      : pathname.startsWith('/admin/mission-control')
+      ? (isEnglish ? 'mission control' : 'Mission Control')
       : pathname.startsWith('/admin/evidence-workflow')
       ? (isEnglish ? 'evidence workflow' : '证据工作流')
       : pathname.startsWith('/admin/provider-circuits')
@@ -185,6 +188,36 @@ function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: bo
         to: '/',
       },
     };
+}
+
+function getMissionControlPrototypeGateCopy(language: UiLanguage): GateCopy {
+  const isEnglish = language === 'en';
+  return {
+    eyebrow: isEnglish ? 'Prototype Gated' : 'Prototype Gate',
+    statusLabel: isEnglish ? 'Prototype Disabled' : 'Prototype 未启用',
+    title: isEnglish ? 'Admin Mission Control prototype is disabled' : 'Admin Mission Control prototype 未启用',
+    description: isEnglish
+      ? 'This cockpit is hidden by default and only opens when the explicit prototype flag is enabled for admin review.'
+      : '这个 cockpit 默认隐藏，只有显式启用 prototype flag 后才会进入管理员复核界面。',
+    bullets: isEnglish
+      ? [
+        'Default navigation does not advertise this cockpit.',
+        'The backend disabled response does not aggregate ops summaries.',
+        'Enabling the prototype still keeps the route admin-only and advisory.',
+      ]
+      : [
+        '默认导航不会展示这个 cockpit。',
+        '后端 disabled 响应不会聚合 ops 摘要。',
+        '显式启用 prototype 后仍然只限管理员、只读且仅供参考。',
+      ],
+    note: isEnglish
+      ? 'Set VITE_WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED=true only for bounded prototype review.'
+      : '仅在有边界的 prototype 复核中设置 VITE_WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED=true。',
+    secondaryAction: {
+      label: isEnglish ? 'Open system settings' : '打开系统设置',
+      to: '/settings/system',
+    },
+  };
 }
 
 function isPathMatch(pathname: string, target: string): boolean {
@@ -353,8 +386,11 @@ const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }
   const { language } = useI18n();
   const { adminCapabilities, isAdminAccount, isGuest } = useProductSurface();
   const routePathname = stripLocalePrefix(location.pathname);
-  const baseGateCopy = getAdminSurfaceCopy(routePathname, language, isGuest);
-  const gateCopy = isAdminAccount
+  const missionControlPrototypeDisabled = isAdminMissionControlPath(routePathname) && !isAdminMissionControlPrototypeEnabled();
+  const baseGateCopy = missionControlPrototypeDisabled
+    ? getMissionControlPrototypeGateCopy(language)
+    : getAdminSurfaceCopy(routePathname, language, isGuest);
+  const gateCopy = isAdminAccount && !missionControlPrototypeDisabled
     ? {
       ...baseGateCopy,
       statusLabel: language === 'en' ? 'Capability Required' : '需要管理员能力',
@@ -416,6 +452,8 @@ export const AppContent: React.FC = () => {
     || routePathname.startsWith('/admin/ai/')
     || routePathname === '/admin/logs'
     || routePathname.startsWith('/admin/logs/')
+    || routePathname === '/admin/mission-control'
+    || routePathname.startsWith('/admin/mission-control/')
     || routePathname === '/admin/evidence-workflow'
     || routePathname.startsWith('/admin/evidence-workflow/')
     || routePathname === '/admin/notifications'
@@ -502,6 +540,7 @@ export const AppContent: React.FC = () => {
           <Route path="/backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
           <Route path="/settings" element={<PersonalSettingsPage />} />
           <Route path="/settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
+          <Route path="/admin/mission-control" element={<AdminSurfaceRoute><AdminMissionControlPage /></AdminSurfaceRoute>} />
           <Route path="/admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
           <Route path="/admin/evidence-workflow" element={<AdminSurfaceRoute><AdminEvidenceWorkflowPage /></AdminSurfaceRoute>} />
           <Route path="/admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />
@@ -539,6 +578,7 @@ export const AppContent: React.FC = () => {
           <Route path="backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
           <Route path="settings" element={<PersonalSettingsPage />} />
           <Route path="settings/system" element={<AdminSurfaceRoute><SystemSettingsPage /></AdminSurfaceRoute>} />
+          <Route path="admin/mission-control" element={<AdminSurfaceRoute><AdminMissionControlPage /></AdminSurfaceRoute>} />
           <Route path="admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
           <Route path="admin/evidence-workflow" element={<AdminSurfaceRoute><AdminEvidenceWorkflowPage /></AdminSurfaceRoute>} />
           <Route path="admin/notifications" element={<AdminSurfaceRoute><AdminNotificationsPage /></AdminSurfaceRoute>} />

@@ -14,6 +14,7 @@ from fastapi import APIRouter
 from api.v1.endpoints import (
     admin_cost,
     admin_logs,
+    admin_mission_control,
     admin_notifications,
     admin_ops_status,
     admin_portfolio,
@@ -98,6 +99,12 @@ router.include_router(
     admin_ops_status.router,
     prefix="/admin",
     tags=["AdminOpsStatus"]
+)
+
+router.include_router(
+    admin_mission_control.router,
+    prefix="/admin",
+    tags=["AdminMissionControl"]
 )
 
 router.include_router(
