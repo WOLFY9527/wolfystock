@@ -3,11 +3,13 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Optional
 
 from sqlalchemy import func, select, text
 
+from src.config import parse_env_bool
 from src.services.admin_logs_service import AdminLogsRetentionService
 from src.services.llm_cost_ledger_service import LlmCostLedgerService
 from src.services.quota_policy_service import QuotaPolicyService
@@ -26,6 +28,21 @@ class AdminOpsStatusService:
     """Aggregate existing admin evidence without changing runtime behavior."""
 
     _HEALTHY_PROVIDER_STATES = frozenset({"closed", "healthy", "ok"})
+    _QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED_ENV = (
+        "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED"
+    )
+    _QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS_ENV = (
+        "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS"
+    )
+    _QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED_ENV = (
+        "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED"
+    )
+    _QUOTA_ANALYSIS_SYNC_RESERVE_FAILURE_POLICY_ENV = (
+        "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_RESERVE_FAILURE_POLICY"
+    )
+    _QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED_ENV = (
+        "WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED"
+    )
 
     def build_status(self, *, app_state: object | None = None) -> Dict[str, Any]:
         generated_at = datetime.now()
@@ -176,6 +193,7 @@ class AdminOpsStatusService:
         )
 
     def _build_quota_cost_advisory_status_summary(self, generated_at: datetime) -> Dict[str, Any]:
+        analysis_sync_pilot_status = self._build_analysis_sync_quota_pilot_status()
         quota_service = QuotaPolicyService(enforcement_enabled=False, global_kill_switch=False)
         shadow = quota_service.classify_shadow_preflight(
             owner_user_id=None,
@@ -225,10 +243,76 @@ class AdminOpsStatusService:
                 "requestBlocked": False,
                 "reservationCreated": False,
                 "reserveConsumeReleaseCalled": False,
+                "analysisSyncRoutePilot": analysis_sync_pilot_status,
                 "ledgerTotal24h": ledger_total,
             },
-            limitations=["not_live_route_boundary_enforcement", "invoice_reconciliation_not_enforcement_input"],
+            limitations=[
+                "not_public_launch_approval",
+                "not_provider_billing_authority",
+                "live_enforcement_disabled_by_default",
+                "invoice_reconciliation_not_enforcement_input",
+            ],
         )
+
+    def _build_analysis_sync_quota_pilot_status(self) -> Dict[str, Any]:
+        pilot_enabled = parse_env_bool(
+            os.getenv(self._QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED_ENV),
+            default=False,
+        )
+        rollback_enabled = parse_env_bool(
+            os.getenv(self._QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED_ENV),
+            default=False,
+        )
+        known_cost_consume_enabled = parse_env_bool(
+            os.getenv(self._QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED_ENV),
+            default=False,
+        )
+        raw_policy = str(os.getenv(self._QUOTA_ANALYSIS_SYNC_RESERVE_FAILURE_POLICY_ENV) or "fail_open").strip().lower()
+        reserve_failure_policy = "fail_closed" if raw_policy == "fail_closed" else "fail_open"
+        owner_allowlist = {
+            token.strip()
+            for token in str(os.getenv(self._QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS_ENV) or "").split(",")
+            if token.strip()
+        }
+        if rollback_enabled:
+            pilot_status = "rollback_disabled"
+        elif not pilot_enabled:
+            pilot_status = "disabled"
+        elif not owner_allowlist:
+            pilot_status = "missing_owner_allowlist"
+        else:
+            pilot_status = "guarded_private_beta_enabled"
+        effective_enabled = pilot_status == "guarded_private_beta_enabled"
+
+        return {
+            "routeBoundary": "api.v1.analysis.analyze.sync_single_stock",
+            "pilotStatus": pilot_status,
+            "enabled": pilot_enabled,
+            "effectiveEnabled": effective_enabled,
+            "rollbackEnabled": rollback_enabled,
+            "ownerAllowlistConfigured": bool(owner_allowlist),
+            "ownerAllowlistCountBucket": self._count_bucket(len(owner_allowlist)),
+            "reserveFailurePolicy": reserve_failure_policy,
+            "knownCostConsumeFlagEnabled": known_cost_consume_enabled,
+            "knownCostConsumePropagationEnabled": effective_enabled and known_cost_consume_enabled,
+            "defaultLiveEnforcement": False,
+            "publicLaunchApproval": False,
+            "providerBillingAuthority": False,
+            "eligibleOnlyWhenAuthEnabled": True,
+            "eligibleOnlyWhenAuthenticated": True,
+            "eligibleOnlyWhenNonTransitional": True,
+            "eligibleOnlyWhenSyncSingleStock": True,
+            "rawReservationIdsExposed": False,
+            "idempotencyMaterialExposed": False,
+            "ownerAllowlistValuesExposed": False,
+            "flagNames": [
+                self._QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_PILOT_ENABLED_ENV,
+                self._QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_ROLLBACK_ENABLED_ENV,
+                self._QUOTA_ANALYSIS_SYNC_RESERVE_RELEASE_OWNER_IDS_ENV,
+                self._QUOTA_ANALYSIS_SYNC_RESERVE_FAILURE_POLICY_ENV,
+                self._QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED_ENV,
+            ],
+        }
 
     def _build_storage_readiness_summary(self) -> Dict[str, Any]:
         db = DatabaseManager.get_instance()

@@ -5,9 +5,9 @@ Scope: internal/private-beta evidence checklist for the default-off quota
 reserve/release advisory pilot on authenticated sync single-stock analysis.
 
 This checklist is for evidence-gathering only. It does not approve public
-launch, does not approve live quota enforcement, and does not approve
-reservation consume wiring. Public launch remains **NO-GO**. Consume and live
-enforcement remain **NO-GO**.
+launch, does not approve live quota enforcement, and does not approve public
+consumer spend-cap claims. Public launch remains **NO-GO**. Broad consume and
+live enforcement remain **NO-GO**.
 
 ## Pilot Boundaries That Must Already Be True
 
@@ -17,8 +17,11 @@ Collect evidence only if all of the following are true:
 - Owner access is controlled by an explicit allowlist.
 - Eligibility is limited to auth-enabled, authenticated, non-transitional,
   sync, single-stock analysis only.
-- The pilot is reserve-only with guaranteed release on every path.
-- Reserve and release remain fail-open advisory semantics.
+- The pilot is reserve/release by default with guaranteed release on every path.
+- Known-cost consume propagation is disabled by default and requires its own
+  explicit guarded flag.
+- Reserve and release remain fail-open advisory semantics unless the private-beta
+  reserve failure policy is explicitly set to `fail_closed` for block testing.
 - API response shape does not change.
 - Execution metadata does not expose raw reservation IDs.
 
@@ -49,8 +52,8 @@ checklist. It must not be pointed at live systems and does not call runtime
 APIs, route handlers, storage, quota services, providers, auth, or live
 credentials. A passing result means the evidence packet is ready for manual
 internal/private-beta review only. It does not approve public launch, live
-quota enforcement, reservation consume wiring, route blocking, or runtime
-behavior changes.
+quota enforcement, broad reservation consume wiring, route blocking, or runtime
+behavior changes outside explicitly guarded private-beta flags.
 
 ## Required Evidence Sections
 
@@ -128,7 +131,8 @@ Provide sanitized before/after proof that:
 Provide sanitized rollback proof by either:
 
 - disabling the pilot flag; or
-- removing the owner from the explicit allowlist.
+- removing the owner from the explicit allowlist; or
+- enabling the rollback flag.
 
 The proof must show the route returns to fully out-of-scope behavior without
 changing API response shape.
@@ -146,12 +150,26 @@ Do not capture or attach any of the following:
 - raw exception text or stack traces
 - credentials or secrets
 
+### 9. Optional Known-Cost Consume Propagation Proof
+
+Only collect this section when
+`WOLFYSTOCK_QUOTA_ANALYSIS_SYNC_KNOWN_COST_CONSUME_ENABLED=true` is explicitly
+approved for the private-beta run. Provide sanitized proof that:
+
+- reservation identity is passed only through the backend persistence seam;
+- known-cost consume is tied to priced LLM usage;
+- route response shape, execution metadata, admin status, and logs do not expose
+  raw reservation IDs;
+- the route `finally` release still runs for failures before known-cost usage is
+  persisted.
+
 ## Stop / Reject Evidence
 
 Stop collection and reject the evidence packet if any of the following occurs:
 
 - reserve or release appears outside sync analysis;
-- any consume or blocking behavior appears;
+- unexpected consume or blocking behavior appears outside the explicit
+  private-beta flags;
 - response shape exposes quota fields;
 - raw identifiers or secrets appear in logs or evidence;
 - auth-disabled, transitional, guest, async, scanner, agent, or options paths
@@ -164,10 +182,9 @@ This checklist does not close live-enforcement readiness. Future live
 enforcement remains blocked until all of the following are accepted:
 
 - stable client retry and request identity;
-- reservation ID propagation into the quota ledger;
-- exact-once consume tied to actual cost result;
+- accepted known-cost consume propagation evidence across staged failures;
 - crash and timeout reconciliation;
-- admin read-only pilot status;
+- admin read-only pilot status in the target environment;
 - rollback and staging evidence;
 - explicit block contract and tests.
 
@@ -184,12 +201,12 @@ Do not use wording that implies:
 
 - public launch approval;
 - live quota enforcement approval;
-- consume approval;
+- broad or standalone consume approval;
 - route-blocking approval.
 
 ## Expected Outcome
 
 If every section above is satisfied with sanitized excerpts only, the result is
 an internal/private-beta evidence packet for manual review. The result is still
-not public launch approval, still not consume approval, and still not live
-quota enforcement approval.
+not public launch approval, still not broad or standalone consume approval, and
+still not live quota enforcement approval.

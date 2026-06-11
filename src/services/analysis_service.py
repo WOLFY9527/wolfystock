@@ -617,6 +617,7 @@ class AnalysisService:
         guest_bucket_hash: Optional[str] = None,
         persist_history: bool = True,
         research_mode: Optional[str] = None,
+        quota_reservation_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         执行股票分析
@@ -671,6 +672,7 @@ class AnalysisService:
                 analysis_query_id=query_id,
                 progress_callback=progress_callback,
                 research_mode=research_mode,
+                quota_reservation_id=quota_reservation_id,
             )
             
             if result is None:

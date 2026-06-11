@@ -69,6 +69,7 @@ Cost, quota, LLM, and observability:
 - `cost-observability-design-index.md`
 - `cost-observability-implementation-roadmap.md`
 - `cost-system-final-qa-matrix.md`
+- `quota-enforcement-goal-progress.md`
 - `duplicate-cost-admin-summary-api-design.md`
 - `duplicate-cost-admin-dashboard-frontend-ux-contract.md`
 - `llm-external-api-cost-audit.md`
