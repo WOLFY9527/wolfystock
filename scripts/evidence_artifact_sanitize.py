@@ -66,9 +66,17 @@ SAFE_STRUCTURAL_KEYS = {
     "secretpresencesummary",
 }
 RAW_KEY_MARKERS = (
+    "broker_order_payload",
+    "brokerorderpayload",
+    "broker_payload",
+    "brokerpayload",
     "debug_payload",
     "debug_trace",
+    "execution_payload",
+    "executionpayload",
     "log_dump",
+    "order_payload",
+    "orderpayload",
     "provider_payload",
     "raw_log",
     "raw_payload",
@@ -81,6 +89,60 @@ RAW_KEY_MARKERS = (
     "stack_trace",
     "stacktrace",
     "traceback",
+)
+BROKER_ORDER_IDENTITY_KEY_MARKERS = (
+    "account_id",
+    "account_ref",
+    "accountid",
+    "accountref",
+    "broker_account_id",
+    "broker_account_ref",
+    "broker_order_id",
+    "broker_position_ref",
+    "brokeraccountid",
+    "brokeraccountref",
+    "brokerorderid",
+    "brokerpositionref",
+    "exec_id",
+    "execid",
+    "execution_id",
+    "executionid",
+    "order_id",
+    "orderid",
+    "request_id",
+    "requestid",
+    "trade_id",
+    "trade_uid",
+    "tradeid",
+    "tradeuid",
+)
+ACCOUNT_METADATA_KEY_MARKERS = (
+    "account_alias",
+    "account_label",
+    "account_metadata",
+    "account_name",
+    "account_profile",
+    "accountalias",
+    "accountlabel",
+    "accountmetadata",
+    "accountname",
+    "accountprofile",
+    "broker_account_metadata",
+    "brokeraccountmetadata",
+)
+ENDPOINT_URL_KEY_MARKERS = (
+    "api_base_url",
+    "apibaseurl",
+    "base_url",
+    "baseurl",
+    "broker_url",
+    "brokerurl",
+    "callback_url",
+    "callbackurl",
+    "endpoint_url",
+    "endpointurl",
+    "request_url",
+    "requesturl",
 )
 APPROVAL_BOOLEAN_KEYS = {
     "approvalboolean",
@@ -125,6 +187,7 @@ CREDENTIAL_URL_PATTERNS = (
     re.compile(r"\bhttps?://[^/\s:@]+:[^@\s]+@[^/\s]+", re.IGNORECASE),
     re.compile(r"\bhttps?://[^\s?#]+[?][^\s]*(?:api[_-]?key|token|secret|password|session|cookie)=", re.IGNORECASE),
 )
+ENDPOINT_URL_PATTERN = re.compile(r"\bhttps?://[^\s]+", re.IGNORECASE)
 PATH_TRAVERSAL_PATTERN = re.compile(r"(?:^|[\\/])\.\.(?:[\\/]|$)|\.\.[\\/]")
 SENSITIVE_ABSOLUTE_PATH_PATTERN = re.compile(r"^/(?:etc|home|private|root|Users|var)/(?:\S+)")
 APPROVAL_WORDING_PATTERN = re.compile(
@@ -133,7 +196,14 @@ APPROVAL_WORDING_PATTERN = re.compile(
     r"release[-_\s]?approved)\b",
     re.IGNORECASE,
 )
-UNSAFE_PATH_MARKERS = tuple(SECRET_KEY_MARKERS) + tuple(RAW_KEY_MARKERS) + ("../", "..\\")
+UNSAFE_PATH_MARKERS = (
+    tuple(SECRET_KEY_MARKERS)
+    + tuple(RAW_KEY_MARKERS)
+    + tuple(BROKER_ORDER_IDENTITY_KEY_MARKERS)
+    + tuple(ACCOUNT_METADATA_KEY_MARKERS)
+    + tuple(ENDPOINT_URL_KEY_MARKERS)
+    + ("../", "..\\")
+)
 
 
 @dataclass(frozen=True)
@@ -153,14 +223,33 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def _matches_marker(key: Any, markers: tuple[str, ...]) -> bool:
+    normalized = normalize_key(key)
+    compacted = compact_key(key)
+    for marker in markers:
+        marker_normalized = normalize_key(marker)
+        marker_compacted = compact_key(marker)
+        if marker_normalized and marker_normalized in normalized:
+            return True
+        if marker_compacted and marker_compacted in compacted:
+            return True
+    return False
+
+
 def _key_matches(key: Any) -> list[UnsafeMatch]:
     normalized = normalize_key(key)
     if normalized in SAFE_STRUCTURAL_KEYS or compact_key(key) in SAFE_STRUCTURAL_KEYS:
         return []
-    if any(marker in normalized for marker in RAW_KEY_MARKERS):
+    if _matches_marker(key, RAW_KEY_MARKERS):
         return [UnsafeMatch("raw_body_or_log", "raw_or_debug_key")]
-    if any(marker in normalized for marker in SECRET_KEY_MARKERS):
+    if _matches_marker(key, SECRET_KEY_MARKERS):
         return [UnsafeMatch("secret_marker", "secret_key_marker")]
+    if _matches_marker(key, BROKER_ORDER_IDENTITY_KEY_MARKERS):
+        return [UnsafeMatch("broker_order_identity", "broker_order_identity_key")]
+    if _matches_marker(key, ACCOUNT_METADATA_KEY_MARKERS):
+        return [UnsafeMatch("account_metadata", "account_metadata_key")]
+    if _matches_marker(key, ENDPOINT_URL_KEY_MARKERS):
+        return [UnsafeMatch("endpoint_url", "endpoint_url_key")]
     return []
 
 
@@ -180,6 +269,8 @@ def _string_matches(value: str) -> list[UnsafeMatch]:
         matches.append(UnsafeMatch("raw_body_or_log", "raw_or_debug_value"))
     if any(pattern.search(value) for pattern in CREDENTIAL_URL_PATTERNS):
         matches.append(UnsafeMatch("credential_url", "credential_url_value"))
+    elif ENDPOINT_URL_PATTERN.search(value):
+        matches.append(UnsafeMatch("endpoint_url", "endpoint_url_value"))
     if PATH_TRAVERSAL_PATTERN.search(value) or SENSITIVE_ABSOLUTE_PATH_PATTERN.search(value):
         matches.append(UnsafeMatch("path_traversal", "unsafe_path_value"))
     if APPROVAL_WORDING_PATTERN.search(value):
