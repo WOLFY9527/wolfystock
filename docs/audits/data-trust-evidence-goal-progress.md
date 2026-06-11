@@ -6,6 +6,12 @@ Date: 2026-06-11
 
 Branch: `codex/goal-data-trust-evidence-os`
 
+Salvage checkpoint: `codex/data-trust-evidence-display-salvage`
+adds only an inert shared display utility/component slice. It is display-only
+prototype plumbing and has no route/page adoption, runtime behavior change, or
+provider/backend integration. Route adoption remains deferred until a separate
+approved task.
+
 ## Goal
 
 Build a private-beta display boundary for evidence, provenance, freshness,
@@ -59,6 +65,13 @@ traces, and unbounded free-form runtime text.
   disclosure buckets.
 - `apps/dsa-web/src/test-utils/consumerRawLeakageGuard.ts` provides reusable
   consumer raw-leak detection for frontend tests.
+- `apps/dsa-web/src/utils/dataTrustEvidenceDisplay.ts` is the v1 inert shared
+  display utility for canonical consumer states, bilingual copy,
+  confidence-cap labels, safe date-shaped `asOf` labels, and safe
+  TrustEvidence/evidenceDisplay bridging.
+- `apps/dsa-web/src/components/evidence/DataTrustEvidenceChips.tsx` renders the
+  shared display model as bounded chips without trusting raw diagnostic labels
+  from callers.
 
 ## Audit 1: Current Display Inconsistencies
 
@@ -101,6 +114,9 @@ The safest v1 path is:
 No backend runtime change is required for this path. If backend work becomes
 necessary, it must be additive/read-only projection or tests only.
 
+The salvage branch only completes step 1 plus a reusable inert chip component.
+Step 2 and all route/page adoption remain pending approval.
+
 ## Surface Review Tracker
 
 | Surface | Current audit status | Initial safe next step |
@@ -136,6 +152,16 @@ npm --prefix apps/dsa-web run typecheck
 npm --prefix apps/dsa-web run build:quiet
 ```
 
+## Salvage Validation Evidence
+
+Recorded on 2026-06-11 for `codex/data-trust-evidence-display-salvage`:
+
+- `npm --prefix apps/dsa-web run test -- src/utils/__tests__/dataTrustEvidenceDisplay.test.ts src/components/evidence/__tests__/DataTrustEvidenceChips.test.tsx src/utils/__tests__/trustEvidenceConsumerMapping.test.ts src/test-utils/__tests__/consumerRawLeakageGuard.test.ts src/utils/__tests__/evidenceDisplay.test.ts`
+  passed: 5 test files, 35 tests.
+- `npm --prefix apps/dsa-web run typecheck` passed.
+- `npm --prefix apps/dsa-web run build:quiet` passed; Vite emitted the existing
+  chunk-size warning only.
+
 Bounded route smoke candidates:
 
 ```bash
@@ -168,7 +194,14 @@ Record and continue with safe display/docs/tests work if any improvement needs:
 - `checkpoint(evidence): audit trust vocabulary`: this document records the
   initial current-state audit, vocabulary, validation plan, and follow-up
   boundaries.
-- `checkpoint(evidence): unify shared display layer`: pending.
+- `fix(evidence): add inert data trust display layer`: adds
+  `dataTrustEvidenceDisplay` plus `DataTrustEvidenceChips` with tests for the
+  ten-state v1 vocabulary, bilingual/product-safe labels,
+  TrustEvidenceSnapshot bridging, existing `NormalizedEvidenceSummary` bridging,
+  confidence-cap labels, safety-label suppression for bounded admin-only use,
+  unsafe `asOf` suppression, caller-provided raw view model suppression, and raw
+  provider/debug/reason leakage suppression. This checkpoint is inert and has no
+  route/page adoption.
 - `checkpoint(evidence): apply consumer evidence states`: pending.
 - `checkpoint(evidence): add leakage and smoke evidence`: pending.
 - `feat(evidence): add data trust evidence os v1`: pending.
