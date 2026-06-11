@@ -807,13 +807,6 @@ function traceAvailabilityLabel(
   return locale === 'zh' ? '未附加步骤级 trace。' : 'No step-level trace was attached to this event.';
 }
 
-function shortIdentifier(value: unknown): string {
-  const raw = String(value ?? '').trim();
-  if (!raw) return '--';
-  if (raw.length <= 14) return raw;
-  return `${raw.slice(0, 7)}...${raw.slice(-5)}`;
-}
-
 function actorBadgeLabel(value: unknown): string {
   const normalized = String(value || 'unknown').trim().toLowerCase();
   if (['admin', 'user', 'guest', 'anonymous', 'system'].includes(normalized)) return normalized;
@@ -1124,6 +1117,130 @@ function operatorDimensionLabel(value: unknown, locale: AdminLogsLanguage): stri
     data_source: { zh: '数据源', en: 'Data source' },
   };
   return labels[normalized]?.[locale] || operatorSafeText(raw, locale, raw.replace(/_/g, ' '));
+}
+
+function normalizeAdminLogsToken(value: string): string {
+  return value
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+}
+
+function looksLikeInternalToken(value: string): boolean {
+  const raw = value.trim();
+  if (!raw) return false;
+  return /^\/|https?:\/\//i.test(raw)
+    || /[a-z][A-Z]/.test(raw)
+    || /[_:]/.test(raw)
+    || /\b(api|backend|debug|diagnostic|payload|prompt|reasoncode|request|route|stack|trace)\b/i.test(raw);
+}
+
+function operatorDefaultTokenLabel(
+  value: unknown,
+  locale: AdminLogsLanguage,
+  fallback: { zh: string; en: string } = { zh: '运维维度待确认', en: 'Operator dimension pending' },
+): string {
+  const raw = safeOperatorText(value, '');
+  if (!raw) return '';
+  const normalized = normalizeAdminLogsToken(raw);
+  const labels: Record<string, { zh: string; en: string }> = {
+    admin: { zh: 'admin', en: 'admin' },
+    ai: { zh: 'AI', en: 'AI' },
+    alpaca: { zh: 'alpaca', en: 'alpaca' },
+    analysis: { zh: '分析', en: 'Analysis' },
+    api: { zh: 'API', en: 'API' },
+    auth: { zh: '认证', en: 'Auth' },
+    backtest: { zh: '回测', en: 'Backtest' },
+    cache: { zh: '本地存储响应', en: 'Cache response' },
+    data_source: { zh: '数据源', en: 'Data source' },
+    external_source_timeout: { zh: '数据源响应超时', en: 'Source timeout' },
+    fmp: { zh: 'fmp', en: 'fmp' },
+    finnhub: { zh: 'finnhub', en: 'finnhub' },
+    local_db: { zh: '本地数据', en: 'Local data' },
+    market: { zh: '市场', en: 'Market' },
+    market_sentiment_card: { zh: '市场情绪模块', en: 'Market sentiment module' },
+    market_overview: { zh: 'Market Overview', en: 'Market Overview' },
+    news: { zh: '新闻', en: 'News' },
+    newsapi: { zh: 'newsapi', en: 'newsapi' },
+    notification: { zh: '通知', en: 'Notification' },
+    portfolio: { zh: '组合', en: 'Portfolio' },
+    provider_fallback_served: { zh: '备用链路激活', en: 'Fallback path active' },
+    scanner: { zh: '扫描器', en: 'Scanner' },
+    security: { zh: '安全', en: 'Security' },
+    system: { zh: '系统', en: 'System' },
+    yahoo: { zh: 'Yahoo', en: 'Yahoo' },
+    yfinance: { zh: 'yfinance', en: 'yfinance' },
+  };
+  if (labels[normalized]) return labels[normalized][locale];
+  const safe = operatorSafeText(raw, locale, '');
+  if (safe && safe !== raw) return safe;
+  return looksLikeInternalToken(raw) ? fallback[locale] : safe;
+}
+
+function operatorEventTypeLabel(value: unknown, locale: AdminLogsLanguage): string {
+  const raw = safeOperatorText(value, '');
+  if (!raw) return locale === 'zh' ? '运维事件' : 'Operator event';
+  const normalized = normalizeAdminLogsToken(raw);
+  const labels: Record<string, { zh: string; en: string }> = {
+    backtest_run: { zh: '回测运行', en: 'Backtest run' },
+    data_source_fallback: { zh: '备用链路激活', en: 'Fallback path active' },
+    external_source_timeout: { zh: '数据源响应超时', en: 'Source timeout' },
+    market_overview_fetch: { zh: 'Market Overview 数据拉取', en: 'Market Overview fetch' },
+    provider_fallback: { zh: '备用链路激活', en: 'Fallback path active' },
+    scan_run: { zh: '扫描器运行', en: 'Scanner run' },
+    scanner_run_completed: { zh: '扫描器完成', en: 'Scanner completed' },
+    scanner_run_started: { zh: '扫描器启动', en: 'Scanner started' },
+    stock_analysis: { zh: '股票分析', en: 'Stock analysis' },
+  };
+  if (labels[normalized]) return labels[normalized][locale];
+  const safe = operatorSafeText(raw, locale, '');
+  if (safe && safe !== raw) return safe;
+  return looksLikeInternalToken(raw) ? (locale === 'zh' ? '运维事件' : 'Operator event') : safe;
+}
+
+function operatorEventNameLabel(value: unknown, locale: AdminLogsLanguage): string {
+  const raw = safeOperatorText(value, '');
+  if (!raw) return locale === 'zh' ? '运维事件' : 'Operator event';
+  const safe = operatorSafeText(raw, locale, '');
+  if (safe && safe !== raw) return safe;
+  const unsafeWords = /\b(api|backend|debug|diagnostic|payload|prompt|reasoncode|request|route|stack|trace)\b/i;
+  if ((/[^\x00-\x7F]/.test(raw) || /\s/.test(raw)) && !unsafeWords.test(raw)) return safe || raw;
+  const label = operatorDefaultTokenLabel(raw, locale, { zh: '运维事件', en: 'Operator event' });
+  return label || (locale === 'zh' ? '运维事件' : 'Operator event');
+}
+
+function linkedRouteLabel(value: unknown, locale: AdminLogsLanguage): string {
+  return value ? (locale === 'zh' ? '已有关联入口' : 'Linked route') : '';
+}
+
+function traceReferenceLabel(value: unknown, locale: AdminLogsLanguage): string {
+  return value ? (locale === 'zh' ? '关联追踪已记录' : 'Trace recorded') : '--';
+}
+
+function actorSecondaryLabel(item: BusinessEvent, locale: AdminLogsLanguage): string {
+  const visibleActor = item.actorLabel || item.userId;
+  if (visibleActor) return operatorSafeText(visibleActor, locale, locale === 'zh' ? '未记录' : 'Not recorded');
+  if (item.requestId) return locale === 'zh' ? '关联请求已记录' : 'Request recorded';
+  return locale === 'zh' ? '未记录' : 'Not recorded';
+}
+
+function businessContextSecondaryLabel(item: BusinessEvent, locale: AdminLogsLanguage): string {
+  return [
+    operatorDefaultTokenLabel(item.market, locale, { zh: '市场待确认', en: 'Market pending' }),
+    linkedRouteLabel(item.route || item.endpoint, locale),
+    operatorDefaultTokenLabel(item.component || item.feature, locale, { zh: '功能模块待确认', en: 'Feature pending' }),
+  ].filter(Boolean).join(' · ');
+}
+
+function businessSourceSecondaryLabel(item: BusinessEvent, locale: AdminLogsLanguage): string {
+  return [
+    item.source && item.source !== item.provider
+      ? operatorDefaultTokenLabel(item.source, locale, { zh: '来源待确认', en: 'Source pending' })
+      : '',
+    operatorDefaultTokenLabel(item.category, locale),
+    operatorEventTypeLabel(item.type, locale),
+  ].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(' · ');
 }
 
 function uniqueOperatorLabels(values: unknown[], locale: AdminLogsLanguage): string[] {
@@ -2248,7 +2365,7 @@ const AdminLogsPage: React.FC = () => {
             />
             <TerminalMetric
               label={locale === 'zh' ? '主要失败功能' : 'Top failing feature'}
-              value={friendlyRawStatusLabel(topCategory?.label || topCategory?.key, locale)}
+              value={operatorDefaultTokenLabel(topCategory?.label || topCategory?.key, locale)}
               subvalue={topCategory ? countLabel(topCategory.count, 'event', 'events', '事件', locale) : '--'}
               valueClassName="truncate text-sm font-semibold tracking-normal"
             />
@@ -2260,7 +2377,7 @@ const AdminLogsPage: React.FC = () => {
             />
             <TerminalMetric
               label={locale === 'zh' ? '最新严重错误' : 'Latest critical error'}
-              value={text(latestCriticalError?.event || latestCriticalError?.category)}
+              value={operatorEventTypeLabel(latestCriticalError?.event || latestCriticalError?.category, locale)}
               subvalue={friendlyRawStatusLabel(latestCriticalError?.errorSummary || latestCriticalError?.reason, locale)}
               valueClassName="truncate text-sm font-semibold tracking-normal"
             />
@@ -2296,25 +2413,22 @@ const AdminLogsPage: React.FC = () => {
                     item.model,
                     item.channel,
                   ].flatMap((value) => {
-                    const label = operatorSafeText(value, locale, '');
+                    const label = operatorDefaultTokenLabel(value, locale, { zh: '来源维度待确认', en: 'Source dimension pending' });
                     return label ? [label] : [];
                   }).join(' · ');
                   const contextLine = [
                     ...(item.affectedSurfaces || []),
                     ...(item.affectedDomains || []),
                   ].flatMap((value) => {
-                    const label = operatorSafeText(value, locale, '');
+                    const label = operatorDefaultTokenLabel(value, locale);
                     return label ? [label] : [];
                   }).join(' · ');
                   const reasonLine = [
-                    item.reasonCode,
-                    item.eventType,
-                    item.freshnessStatus,
-                    item.status,
-                  ].flatMap((value) => {
-                    const label = operatorSafeText(value, locale, '');
-                    return label ? [label] : [];
-                  }).join(' · ');
+                    friendlyRawStatusLabel(item.reasonCode, locale),
+                    item.eventType ? operatorEventTypeLabel(item.eventType, locale) : '',
+                    friendlyRawStatusLabel(item.freshnessStatus, locale),
+                    item.status ? statusLabel(normalizeStatus(item.status), locale) : '',
+                  ].filter((value) => value && value !== '--').filter((value, index, values) => values.indexOf(value) === index).join(' · ');
                   const sampleEventIds = (item.sampleEventIds || []).flatMap((value) => {
                     const label = safeOperatorText(value, '');
                     return label ? [label] : [];
@@ -2396,9 +2510,17 @@ const AdminLogsPage: React.FC = () => {
                         <p className="mt-0.5 truncate text-[11px] text-muted-text" title={text(item.market || item.affectedSurface)}>{text(item.market || item.affectedSurface)}</p>
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate text-xs font-medium text-foreground">{incidentKindLabel('data_quality', locale)} · {text(item.missingDomain)}</p>
-                        <p className="mt-1 truncate text-[11px] text-muted-text" title={operatorSafeText([item.provider, item.source, item.reasonCode].filter(Boolean).join(' · '), locale)}>
-                          {operatorSafeText([item.provider, item.source, item.reasonCode].filter(Boolean).join(' · '), locale, locale === 'zh' ? '未记录' : 'Not recorded')}
+                        <p className="truncate text-xs font-medium text-foreground">{incidentKindLabel('data_quality', locale)} · {operatorDefaultTokenLabel(item.missingDomain, locale)}</p>
+                        <p className="mt-1 truncate text-[11px] text-muted-text" title={[
+                          operatorDefaultTokenLabel(item.provider, locale, { zh: '来源待确认', en: 'Source pending' }),
+                          operatorDefaultTokenLabel(item.source, locale, { zh: '来源待确认', en: 'Source pending' }),
+                          friendlyRawStatusLabel(item.reasonCode, locale),
+                        ].filter((value) => value && value !== '--').join(' · ')}>
+                          {[
+                            operatorDefaultTokenLabel(item.provider, locale, { zh: '来源待确认', en: 'Source pending' }),
+                            operatorDefaultTokenLabel(item.source, locale, { zh: '来源待确认', en: 'Source pending' }),
+                            friendlyRawStatusLabel(item.reasonCode, locale),
+                          ].filter((value) => value && value !== '--').join(' · ') || (locale === 'zh' ? '未记录' : 'Not recorded')}
                         </p>
                       </div>
                       <div className="min-w-0 space-y-1">
@@ -2488,18 +2610,12 @@ const AdminLogsPage: React.FC = () => {
                     const status = normalizeStatus(item.status);
                     const actorRole = actorBadgeLabel(item.actorType);
                     const actorType = actorBadgeDisplay(item.actorType, locale);
-                    const actorSecondary = text(item.actorLabel || item.userId || item.requestId, locale === 'zh' ? '未记录' : 'Not recorded');
-                    const contextPrimary = operatorSafeText(item.contextLabel || item.symbol || item.subject || item.event, locale, locale === 'zh' ? '未记录' : 'Not recorded');
-                    const contextSecondary = [item.market, item.route || item.endpoint, item.component || item.feature]
-                      .map((value) => String(value || '').trim())
-                      .filter(Boolean)
-                      .join(' · ');
-                    const sourcePrimary = operatorSafeText(item.provider || item.source || item.category, locale, locale === 'zh' ? '未记录' : 'Not recorded');
-                    const sourceSecondary = [item.source && item.source !== item.provider ? item.source : null, item.category, item.type]
-                      .map((value) => String(value || '').trim())
-                      .filter(Boolean)
-                      .filter((value, index, values) => values.indexOf(value) === index)
-                      .join(' · ');
+                    const actorSecondary = actorSecondaryLabel(item, locale);
+                    const eventTitle = operatorEventNameLabel(item.event || item.symbol, locale);
+                    const contextPrimary = operatorDefaultTokenLabel(item.contextLabel || item.symbol || item.subject || item.event, locale, { zh: '上下文待确认', en: 'Context pending' }) || (locale === 'zh' ? '未记录' : 'Not recorded');
+                    const contextSecondary = businessContextSecondaryLabel(item, locale);
+                    const sourcePrimary = operatorDefaultTokenLabel(item.provider || item.source || item.category, locale, { zh: '来源待确认', en: 'Source pending' }) || (locale === 'zh' ? '未记录' : 'Not recorded');
+                    const sourceSecondary = businessSourceSecondaryLabel(item, locale);
                     const severity = businessEventSeverity(item);
                     const reason = friendlyRawStatusLabel(item.reason || (isFailedStatus(item.status) ? 'unknown' : '--'), locale);
                     const errorSummary = friendlyRawStatusLabel(item.errorSummary || item.rootCauseSummary, locale);
@@ -2512,8 +2628,8 @@ const AdminLogsPage: React.FC = () => {
                       >
                         <div className="flex min-w-0 items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-foreground" title={operatorSafeText(item.event || item.symbol, locale)}>{operatorSafeText(item.event || item.symbol, locale)}</p>
-                            <p className="mt-1 text-xs leading-5 text-muted-text" title={operatorSafeText(item.type, locale)}>{operatorSafeText(item.eventType || item.type, locale)}</p>
+                            <p className="truncate text-sm font-semibold text-foreground" title={eventTitle}>{eventTitle}</p>
+                            <p className="mt-1 text-xs leading-5 text-muted-text" title={operatorEventTypeLabel(item.eventType || item.type, locale)}>{operatorEventTypeLabel(item.eventType || item.type, locale)}</p>
                           </div>
                           <p className="shrink-0 font-mono text-xs text-secondary-text" title={formatDateTime(item.startedAt, locale)}>{formatDateTime(item.startedAt, locale)}</p>
                         </div>
@@ -2553,18 +2669,12 @@ const AdminLogsPage: React.FC = () => {
                       const status = normalizeStatus(item.status);
                       const actorRole = actorBadgeLabel(item.actorType);
                       const actorType = actorBadgeDisplay(item.actorType, locale);
-                      const actorSecondary = text(item.actorLabel || item.userId || item.requestId, locale === 'zh' ? '未记录' : 'Not recorded');
-                      const contextPrimary = operatorSafeText(item.contextLabel || item.symbol || item.subject || item.event, locale, locale === 'zh' ? '未记录' : 'Not recorded');
-                      const contextSecondary = [item.market, item.route || item.endpoint, item.component || item.feature]
-                        .map((value) => String(value || '').trim())
-                        .filter(Boolean)
-                        .join(' · ');
-                      const sourcePrimary = operatorSafeText(item.provider || item.source || item.category, locale, locale === 'zh' ? '未记录' : 'Not recorded');
-                      const sourceSecondary = [item.source && item.source !== item.provider ? item.source : null, item.category, item.type]
-                        .map((value) => String(value || '').trim())
-                        .filter(Boolean)
-                        .filter((value, index, values) => values.indexOf(value) === index)
-                        .join(' · ');
+                      const actorSecondary = actorSecondaryLabel(item, locale);
+                      const eventTitle = operatorEventNameLabel(item.event || item.symbol, locale);
+                      const contextPrimary = operatorDefaultTokenLabel(item.contextLabel || item.symbol || item.subject || item.event, locale, { zh: '上下文待确认', en: 'Context pending' }) || (locale === 'zh' ? '未记录' : 'Not recorded');
+                      const contextSecondary = businessContextSecondaryLabel(item, locale);
+                      const sourcePrimary = operatorDefaultTokenLabel(item.provider || item.source || item.category, locale, { zh: '来源待确认', en: 'Source pending' }) || (locale === 'zh' ? '未记录' : 'Not recorded');
+                      const sourceSecondary = businessSourceSecondaryLabel(item, locale);
                       const severity = businessEventSeverity(item);
                       const reason = friendlyRawStatusLabel(item.reason || (isFailedStatus(item.status) ? 'unknown' : '--'), locale);
                       const errorSummary = friendlyRawStatusLabel(item.errorSummary || item.rootCauseSummary, locale);
@@ -2574,8 +2684,8 @@ const AdminLogsPage: React.FC = () => {
                         <div key={item.id} data-testid="business-event-row" className="grid grid-cols-[6.25rem_minmax(0,1.15fr)_5.75rem_minmax(0,1fr)_4.5rem] items-center gap-3 px-3 py-2.5 md:grid-cols-[7.25rem_minmax(0,1.1fr)_7.5rem_minmax(0,1.35fr)_6rem] xl:grid-cols-[8.5rem_minmax(9rem,0.9fr)_8.5rem_minmax(13rem,1.25fr)_8rem_minmax(12rem,1.2fr)_minmax(10rem,1fr)_6rem]">
                           <p className="truncate text-xs text-secondary-text" title={formatDateTime(item.startedAt, locale)}>{formatDateTime(item.startedAt, locale)}</p>
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-foreground" title={operatorSafeText(item.event || item.symbol, locale)}>{operatorSafeText(item.event || item.symbol, locale)}</p>
-                            <p className="mt-0.5 truncate text-[11px] text-muted-text" title={operatorSafeText(item.type, locale)}>{operatorSafeText(item.eventType || item.type, locale)}</p>
+                            <p className="truncate text-sm font-semibold text-foreground" title={eventTitle}>{eventTitle}</p>
+                            <p className="mt-0.5 truncate text-[11px] text-muted-text" title={operatorEventTypeLabel(item.eventType || item.type, locale)}>{operatorEventTypeLabel(item.eventType || item.type, locale)}</p>
                           </div>
                           <div className="min-w-0 space-y-1">
                             <StatusChip status={status} locale={locale} className="w-fit" />
@@ -2592,7 +2702,7 @@ const AdminLogsPage: React.FC = () => {
                           <div className="hidden min-w-0 xl:block">
                             <p className="truncate text-xs font-medium text-foreground" title={contextPrimary}>{contextPrimary}</p>
                             <p className="mt-1 truncate text-[11px] text-muted-text" title={operatorSafeText(contextSecondary || item.summary, locale)}>{operatorSafeText(contextSecondary || item.summary, locale)}</p>
-                            <p className="mt-0.5 truncate text-[11px] text-muted-text" title={text(traceValue)}>{traceValue ? `trace ${shortIdentifier(traceValue)}` : '--'}</p>
+                            <p className="mt-0.5 truncate text-[11px] text-muted-text" title={traceReferenceLabel(traceValue, locale)}>{traceReferenceLabel(traceValue, locale)}</p>
                           </div>
                           <div className="hidden min-w-0 xl:block">
                             <p className="truncate text-xs text-secondary-text" title={sourcePrimary}>{sourcePrimary}</p>

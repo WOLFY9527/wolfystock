@@ -227,6 +227,63 @@ function getDiagnosticWindowLabel(language: 'zh' | 'en', foldIndex: number | nul
   return foldIndex != null ? `已存储诊断窗口 ${foldIndex}` : '已存储诊断窗口';
 }
 
+type SafeBooleanFlag = {
+  label: string;
+  value: boolean | null;
+  trueLabel: string;
+  falseLabel: string;
+  keys: string[];
+};
+
+function formatSafeFlagValue(flag: SafeBooleanFlag): string {
+  if (flag.value === true) {
+    return flag.trueLabel;
+  }
+  if (flag.value === false) {
+    return flag.falseLabel;
+  }
+  return '--';
+}
+
+function getAdditionalSafeBooleanFlags(
+  value: unknown,
+  knownKeys: Set<string>,
+): Array<{ key: string; label: string; valueLabel: string }> {
+  if (!isRecord(value)) {
+    return [];
+  }
+  return Object.entries(value)
+    .filter(([key, candidate]) => !knownKeys.has(key) && typeof candidate === 'boolean')
+    .map(([key, candidate], index) => ({
+      key,
+      label: `additional support safeguard ${index + 1}`,
+      valueLabel: candidate ? 'active' : 'inactive',
+    }));
+}
+
+function getSafeAvailabilityReason(reason: string | null | undefined): string {
+  if (!reason) {
+    return '--';
+  }
+  if (reason === 'robustness_analysis_missing') {
+    return 'optimization not executed';
+  }
+  if (reason === 'execution_trace_rows_missing') {
+    return 'execution trace not available';
+  }
+  return 'support evidence not available';
+}
+
+function formatSafeFoldState(state: string | null): string {
+  if (state === 'completed' || state === 'available') {
+    return 'stored';
+  }
+  if (state === 'missing' || state === 'skipped') {
+    return 'not available';
+  }
+  return state ? 'status recorded' : '--';
+}
+
 function renderRobustnessEvidencePreview(
   payload: RuleBacktestRobustnessEvidenceExportResponse,
   language: 'zh' | 'en',
@@ -258,13 +315,60 @@ function renderRobustnessEvidencePreview(
   const configuredTestWindow = getNumber(configuration, ['testWindow', 'test_window']);
   const configuredStep = getNumber(configuration, ['step']);
   const configuredWindowUnit = getString(configuration, ['windowUnit', 'window_unit']);
-  const authorityFlags = [
-    { label: 'provider_calls_executed', value: getBoolean(authority, ['providerCallsExecuted', 'provider_calls_executed']) },
-    { label: 'engine_math_changed', value: getBoolean(authority, ['engineMathChanged', 'engine_math_changed']) },
-    { label: 'optimizer_executed', value: getBoolean(authority, ['optimizerExecuted', 'optimizer_executed']) },
-    { label: 'parameter_sweep_executed', value: getBoolean(authority, ['parameterSweepExecuted', 'parameter_sweep_executed']) },
-    { label: 'strategy_parameters_mutated', value: getBoolean(authority, ['strategyParametersMutated', 'strategy_parameters_mutated']) },
-  ].filter((item) => item.value !== null);
+  const diagnosticOnlyFlag: SafeBooleanFlag = {
+    label: 'Evidence use',
+    value: diagnosticOnly,
+    trueLabel: 'diagnostic only',
+    falseLabel: 'not diagnostic-only',
+    keys: ['diagnosticOnly', 'diagnostic_only'],
+  };
+  const decisionGradeFlag: SafeBooleanFlag = {
+    label: 'Decision status',
+    value: decisionGrade,
+    trueLabel: 'decision-grade',
+    falseLabel: 'not decision-grade',
+    keys: ['decisionGrade', 'decision_grade'],
+  };
+  const authorityFlagDefinitions: SafeBooleanFlag[] = [
+    {
+      label: 'Provider activity',
+      value: getBoolean(authority, ['providerCallsExecuted', 'provider_calls_executed']),
+      trueLabel: 'provider calls recorded',
+      falseLabel: 'no provider calls',
+      keys: ['providerCallsExecuted', 'provider_calls_executed'],
+    },
+    {
+      label: 'Engine calculation',
+      value: getBoolean(authority, ['engineMathChanged', 'engine_math_changed']),
+      trueLabel: 'engine math changed',
+      falseLabel: 'engine math unchanged',
+      keys: ['engineMathChanged', 'engine_math_changed'],
+    },
+    {
+      label: 'Optimization',
+      value: getBoolean(authority, ['optimizerExecuted', 'optimizer_executed']),
+      trueLabel: 'optimization executed',
+      falseLabel: 'optimization not executed',
+      keys: ['optimizerExecuted', 'optimizer_executed'],
+    },
+    {
+      label: 'Parameter sweep',
+      value: getBoolean(authority, ['parameterSweepExecuted', 'parameter_sweep_executed']),
+      trueLabel: 'parameter sweep executed',
+      falseLabel: 'parameter sweep not executed',
+      keys: ['parameterSweepExecuted', 'parameter_sweep_executed'],
+    },
+    {
+      label: 'Strategy parameters',
+      value: getBoolean(authority, ['strategyParametersMutated', 'strategy_parameters_mutated']),
+      trueLabel: 'strategy parameters changed',
+      falseLabel: 'strategy parameters unchanged',
+      keys: ['strategyParametersMutated', 'strategy_parameters_mutated'],
+    },
+  ];
+  const authorityFlags = authorityFlagDefinitions.filter((item) => item.value !== null);
+  const knownAuthorityKeys = new Set(authorityFlagDefinitions.flatMap((flag) => flag.keys));
+  const additionalAuthorityFlags = getAdditionalSafeBooleanFlags(authority, knownAuthorityKeys);
 
   return (
     <div className="flex flex-col gap-3" data-testid="backtest-oos-diagnostic-preview">
@@ -275,12 +379,12 @@ function renderRobustnessEvidencePreview(
       </TerminalNotice>
       <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
         <TerminalNestedBlock>
-          <p className="text-[11px] text-white/35">diagnosticOnly</p>
-          <p className="mt-1 font-mono text-sm text-white/82">{String(diagnosticOnly ?? '--')}</p>
+          <p className="text-[11px] text-white/35">{diagnosticOnlyFlag.label}</p>
+          <p className="mt-1 text-sm text-white/82">{formatSafeFlagValue(diagnosticOnlyFlag)}</p>
         </TerminalNestedBlock>
         <TerminalNestedBlock>
-          <p className="text-[11px] text-white/35">decisionGrade</p>
-          <p className="mt-1 font-mono text-sm text-white/82">{String(decisionGrade ?? '--')}</p>
+          <p className="text-[11px] text-white/35">{decisionGradeFlag.label}</p>
+          <p className="mt-1 text-sm text-white/82">{formatSafeFlagValue(decisionGradeFlag)}</p>
         </TerminalNestedBlock>
         <TerminalNestedBlock>
           <p className="text-[11px] text-white/35">{language === 'en' ? 'Coverage' : '覆盖计数'}</p>
@@ -304,19 +408,24 @@ function renderRobustnessEvidencePreview(
         </TerminalNestedBlock>
       </div>
       <TerminalNestedBlock>
-        <p className="text-[11px] text-white/35">{language === 'en' ? 'Authority no-execution flags' : 'authority 未执行标记'}</p>
+        <p className="text-[11px] text-white/35">{language === 'en' ? 'Execution guardrails' : '执行护栏'}</p>
         <div className="mt-2 flex flex-wrap gap-2">
-          {authorityFlags.length > 0 ? authorityFlags.map((flag) => (
+          {authorityFlags.map((flag) => (
             <TerminalChip
               key={flag.label}
               variant={flag.value === false ? 'info' : 'neutral'}
-              className="font-mono"
             >
-              {flag.label}={String(flag.value)}
+              {formatSafeFlagValue(flag)}
             </TerminalChip>
-          )) : (
+          ))}
+          {additionalAuthorityFlags.length === 0 && authorityFlags.length === 0 ? (
             <span className="font-mono text-xs text-white/55">--</span>
-          )}
+          ) : null}
+          {additionalAuthorityFlags.map((flag) => (
+            <TerminalChip key={flag.key} variant="neutral">
+              {flag.label}: {flag.valueLabel}
+            </TerminalChip>
+          ))}
         </div>
       </TerminalNestedBlock>
       <div className="flex flex-col gap-2">
@@ -328,8 +437,8 @@ function renderRobustnessEvidencePreview(
             <TerminalNestedBlock key={getString(fold, ['foldId', 'fold_id']) || `stored-oos-fold-${index}`}>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-medium text-white/88">{getDiagnosticWindowLabel(language, foldIndex)}</p>
-                <TerminalChip variant="neutral" className="font-mono">
-                  {getString(fold, ['state']) || '--'}
+                <TerminalChip variant="neutral">
+                  {formatSafeFoldState(getString(fold, ['state']))}
                 </TerminalChip>
               </div>
               <div className="mt-2 grid gap-2 md:grid-cols-2">
@@ -469,7 +578,7 @@ const SupportExportsDisclosureBody: React.FC<BacktestSupportExportsDisclosurePro
       return t('backtest.resultPage.supportExports.availability.executionTraceRowsMissing');
     }
     return t('backtest.resultPage.supportExports.availability.fallback', {
-      reason: item.availabilityReason || '--',
+      reason: getSafeAvailabilityReason(item.availabilityReason),
     });
   };
 

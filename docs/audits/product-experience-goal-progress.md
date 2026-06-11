@@ -283,15 +283,21 @@ git diff --check
 
 Follow-up proposals recorded, no protected runtime approval implied:
 
-- Admin Logs default rollups: unknown reason/provider codes can still appear in
-  operator default rows. Likely file:
-  `apps/dsa-web/src/pages/AdminLogsPage.tsx`. Risk: admin-only label mapping;
-  validate with AdminLogs tests and admin ops smoke.
-- Backtest support export disclosure: expanded technical support details still
-  expose backend-style field names. Likely files:
-  `apps/dsa-web/src/components/backtest/BacktestSupportExportsDisclosure.tsx`
-  and its tests. Risk: frontend label projection only; no engine/export
-  contract change.
+- Admin drill-through href sanitization: Market Provider Operations can still
+  carry raw admin-log query parameters inside hrefs. Likely files:
+  `apps/dsa-web/src/pages/MarketProviderOperationsPage.tsx` or shared
+  `AdminDrillThroughStrip` helpers. Risk: link construction only; no admin
+  route, auth, or provider behavior change.
+- Backtest result exports and compare labels: trade CSV rows, assumption lists,
+  warning text, and compare sensitivity labels can still expose unknown
+  backend-style keys when expanded or exported locally. Likely files:
+  `apps/dsa-web/src/components/backtest/BacktestResultReport.tsx`,
+  `apps/dsa-web/src/components/backtest/shared.tsx`, and
+  `apps/dsa-web/src/pages/RuleBacktestComparePage.tsx`. Risk: frontend label
+  projection only; no engine/export contract change.
+- Backtest support export API payload projection: if downloaded JSON/CSV
+  artifacts themselves must be consumer-safe, add a read-only projection helper
+  and tests. Approval needed because that changes the support artifact contract.
 - Consumer raw-leakage smoke coverage: extend
   `consumer-copy-forbidden-vocabulary.smoke.spec.ts` to include Backtest,
   Options, and auth routes with mocked fixtures.
@@ -342,4 +348,74 @@ Boundary confirmation:
 - No auth/session/RBAC runtime changes.
 - No DB migration, cleanup, restore, or PITR execution.
 - No broker/order/trade paths.
+- No external notification sending.
+
+### 2026-06-11 - sanitize Admin Logs default rows
+
+- Added admin-only default label helpers for event names, event types, source
+  dimensions, route references, request references, and trace references.
+- Updated Admin Logs health summary, operator issue rollups, data-missing rows,
+  and default desktop/mobile business queues so raw event/type codes,
+  route/endpoint paths, request IDs, and trace IDs stay out of default visible
+  rows.
+- Kept detail drawers, raw logs, copy affordances, cleanup previews, and API
+  contracts unchanged.
+
+Validation:
+
+```bash
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/AdminLogsPage.test.tsx
+WOLFYSTOCK_ADMIN_OPS_ROUTE_FILTER=logs DSA_WEB_PLAYWRIGHT_PORT=4188 npm --prefix apps/dsa-web run test:e2e -- admin-ops-launch-surfaces.spec.ts --project=chromium --workers=1
+```
+
+Result: all commands completed successfully. The first Playwright retry failed
+at web-server startup because `shortIdentifier` became unused after removing
+default trace IDs; `npm --prefix apps/dsa-web run typecheck` exposed the TS6133
+root cause, and the unused helper was removed before the successful smoke.
+
+Boundary confirmation:
+
+- Frontend display labels and tests only.
+- No public launch approval.
+- No live quota enforcement, reservation consume/blocking, or route blocking.
+- No provider runtime enforcement, provider order/fallback/cache changes, or
+  provider blocking.
+- No auth/session/RBAC runtime changes.
+- No DB migration, cleanup, restore, or PITR execution.
+- No broker/order/trade paths.
+- No external notification sending.
+
+### 2026-06-11 - sanitize Backtest support disclosure labels
+
+- Replaced Backtest support/OOS preview labels for diagnostic-only,
+  decision-grade, provider-call, engine-math, optimizer, parameter-sweep, and
+  strategy-parameter flags with safe support labels instead of backend field
+  names.
+- Added generic labels for unknown boolean support safeguards and unknown
+  availability reasons so `payload`, `diagnosticOnly`, `decisionGrade`,
+  `provider_calls_executed`, `engine_math_changed`, and similar internal keys
+  do not render in the disclosure.
+- Preserved existing support export loading/downloading behavior and did not
+  change backend artifacts or API contracts.
+
+Validation:
+
+```bash
+npm --prefix apps/dsa-web run test -- src/components/backtest/__tests__/BacktestSupportExportsDisclosure.test.tsx
+DSA_WEB_PLAYWRIGHT_PORT=4189 npm --prefix apps/dsa-web run test:e2e -- backtest-visual-result.smoke.spec.ts --project=chromium --workers=1
+```
+
+Result: all commands completed successfully. The Playwright web server still
+reports the pre-existing Vite large chunk warning.
+
+Boundary confirmation:
+
+- Frontend display labels and tests only.
+- No public launch approval.
+- No live quota enforcement, reservation consume/blocking, or route blocking.
+- No provider runtime enforcement, provider order/fallback/cache changes, or
+  provider blocking.
+- No auth/session/RBAC runtime changes.
+- No DB migration, cleanup, restore, or PITR execution.
+- No broker/order/trade paths or order execution behavior.
 - No external notification sending.

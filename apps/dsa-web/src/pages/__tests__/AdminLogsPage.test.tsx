@@ -721,7 +721,7 @@ describe('AdminLogsPage', () => {
     expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill')).toHaveTextContent('降级');
     expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill')).toHaveClass('text-amber-100');
     expect(within(fallbackRow as HTMLElement).getByTestId('event-severity-pill')).not.toHaveClass('text-rose-100');
-    expect(screen.getAllByText('MarketSentimentCard').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('市场情绪模块').length).toBeGreaterThan(0);
     expect(screen.getAllByText('失败 · 无步骤明细').length).toBeGreaterThan(0);
     expect(screen.queryByText('成功 0 · 跳过 0 · 失败 0 · 未确认 0')).not.toBeInTheDocument();
     expect(screen.getAllByText('Scanner: 大盘单机游戏').length).toBeGreaterThan(0);
@@ -737,6 +737,19 @@ describe('AdminLogsPage', () => {
     expect(operatorCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b/i);
     expect(businessCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b/i);
     expect(businessMobileCopy).not.toMatch(/\bprovider\b|\bfallback\b|\bstale\b|\btimeout\b|\bpartial\b|\bcache\b/i);
+    const defaultVisibleAdminCopy = [
+      screen.getByTestId('admin-logs-health-summary').textContent || '',
+      screen.getByTestId('admin-logs-operator-issue-rollup').textContent || '',
+      screen.getByTestId('admin-logs-data-missing-section').textContent || '',
+      screen.getByTestId('business-events-table-shell').textContent || '',
+      screen.getByTestId('business-events-mobile-list').textContent || '',
+    ].join(' ');
+    expect(defaultVisibleAdminCopy).toContain('股票分析');
+    expect(defaultVisibleAdminCopy).toContain('Market Overview 数据拉取');
+    expect(defaultVisibleAdminCopy).toContain('关联追踪已记录');
+    expect(defaultVisibleAdminCopy).not.toMatch(
+      /stock_analysis|market_overview_fetch|ExternalSourceTimeout|ProviderFallbackServed|MarketSentimentCard|data_source|\/api\/v1|trace-[a-z0-9-]+|req-market-card|requestId|traceId|reasonCode/i,
+    );
     await waitFor(() => expect(listBusinessEvents).toHaveBeenLastCalledWith(expect.objectContaining({ since: '24h', limit: 20, offset: 0 })));
     await waitFor(() => expect(listDataMissingDrilldown).toHaveBeenCalledWith({ since: '24h', limit: 4 }));
     await waitFor(() => expect(listOperatorIssueRollup).toHaveBeenCalledWith({ since: '24h', limit: 6 }));
@@ -1231,7 +1244,7 @@ describe('AdminLogsPage', () => {
   it('shows failed no-step events without all-zero step stats and can copy trace id', async () => {
     render(<AdminLogsPage />);
 
-    const rowContainer = await findBusinessEventRowByText('MarketSentimentCard');
+    const rowContainer = await findBusinessEventRowByText('市场情绪模块');
     expect(within(rowContainer).getByText('失败 · 无步骤明细')).toBeInTheDocument();
     expect(within(rowContainer).queryByText('成功 0 · 跳过 0 · 失败 0 · 未确认 0')).not.toBeInTheDocument();
 

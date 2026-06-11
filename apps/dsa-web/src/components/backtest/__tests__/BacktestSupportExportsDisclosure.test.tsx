@@ -241,7 +241,9 @@ describe('BacktestSupportExportsDisclosure', () => {
         },
       ],
     });
-    getRuleBacktestRobustnessEvidenceJson.mockResolvedValue(makeRobustnessEvidencePayload());
+    const robustnessPayload = makeRobustnessEvidencePayload();
+    (robustnessPayload.walkForwardOosEvidence.authority as Record<string, unknown>).payload = true;
+    getRuleBacktestRobustnessEvidenceJson.mockResolvedValue(robustnessPayload);
 
     renderDisclosure();
 
@@ -254,24 +256,69 @@ describe('BacktestSupportExportsDisclosure', () => {
     fireEvent.click(screen.getByRole('button', { name: '展开 OOS diagnostic evidence' }));
 
     const preview = await screen.findByTestId('backtest-oos-diagnostic-preview');
-    expect(preview).toHaveTextContent('diagnosticOnly');
-    expect(preview).toHaveTextContent('true');
-    expect(preview).toHaveTextContent('decisionGrade');
-    expect(preview).toHaveTextContent('false');
+    expect(preview).toHaveTextContent('diagnostic only');
+    expect(preview).toHaveTextContent('not decision-grade');
     expect(preview).toHaveTextContent('可用 1 · 缺失 0 · 跳过 0');
-    expect(preview).toHaveTextContent('provider_calls_executed=false');
-    expect(preview).toHaveTextContent('engine_math_changed=false');
-    expect(preview).toHaveTextContent('optimizer_executed=false');
+    expect(preview).toHaveTextContent('no provider calls');
+    expect(preview).toHaveTextContent('engine math unchanged');
+    expect(preview).toHaveTextContent('optimization not executed');
+    expect(preview).toHaveTextContent('additional support safeguard 1: active');
     expect(preview).toHaveTextContent('已存储诊断窗口 1');
     expect(preview).toHaveTextContent('2024-01-01 -> 2024-02-05');
     expect(preview).toHaveTextContent('2024-02-06 -> 2024-02-23');
 
     const previewText = preview.textContent?.toLowerCase() || '';
+    expect(previewText).not.toContain('diagnosticonly');
+    expect(previewText).not.toContain('decisiongrade');
+    expect(previewText).not.toContain('provider_calls_executed');
+    expect(previewText).not.toContain('engine_math_changed');
+    expect(previewText).not.toContain('optimizer_executed');
+    expect(previewText).not.toContain('payload');
     expect(previewText).not.toContain('winner');
     expect(previewText).not.toContain('best');
     expect(previewText).not.toContain('proof');
     expect(previewText).not.toContain('validated');
     expect(previewText).not.toContain('recommended');
+  });
+
+  it('uses a generic availability label for unknown internal-looking reasons', async () => {
+    getRuleBacktestSupportExportIndex.mockResolvedValue({
+      runId: 99,
+      status: 'completed',
+      exports: [
+        {
+          key: 'support_bundle_manifest_json',
+          available: false,
+          availabilityReason: 'robustness_analysis_missing',
+          format: 'json',
+          mediaType: 'application/json',
+          deliveryMode: 'api',
+          payloadClass: 'RuleBacktestSupportBundleManifestResponse',
+        },
+        {
+          key: 'support_bundle_reproducibility_manifest_json',
+          available: false,
+          availabilityReason: 'payload',
+          format: 'json',
+          mediaType: 'application/json',
+          deliveryMode: 'api',
+          payloadClass: 'RuleBacktestSupportBundleReproducibilityManifestResponse',
+        },
+      ],
+    });
+
+    renderDisclosure();
+
+    fireEvent.click(screen.getByRole('button', { name: '展开 技术支持导出' }));
+
+    await waitFor(() => {
+      expect(getRuleBacktestSupportExportIndex).toHaveBeenCalledWith(99);
+    });
+
+    expect(screen.getByText('当前状态: optimization not executed')).toBeInTheDocument();
+    expect(screen.getByText('当前状态: support evidence not available')).toBeInTheDocument();
+    expect(screen.queryByText('payload')).not.toBeInTheDocument();
+    expect(screen.queryByText('robustness_analysis_missing')).not.toBeInTheDocument();
   });
 
   it('reloads support export state when the run changes', async () => {
