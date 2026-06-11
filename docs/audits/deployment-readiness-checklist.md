@@ -375,7 +375,16 @@ The following must all be true before public multi-user deployment:
 - [x] Production config/secret contract preflight exists through
   `python3 scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>`;
   it consumes only synthetic or operator-sanitized flag names and secret
-  presence states, emits stable JSON, and never prints secret values.
+  presence states, emits stable JSON, and never prints secret values. A passing
+  preflight means only that the sanitized contract is internally complete; it
+  is not public launch approval and does not prove the target environment.
+- [x] Public-deployment env flag semantics are documented for release review:
+  `APP_ENV`, `VITE_API_URL`, `PUBLIC_API_ABUSE_LIMIT_*`,
+  `CRYPTO_REALTIME_ENABLED`, and `SEARXNG_PUBLIC_INSTANCES_ENABLED` have an
+  explicit safe/gated/ambiguous/NO-GO classification below. The matrix is
+  documentation and test coverage only; it does not change runtime defaults,
+  production config values, provider routing, quota enforcement, auth/RBAC
+  behavior, database state, or frontend UI behavior.
 - [ ] Sanitized operator templates have been filled with real
   target-environment operator artifact summaries and validated by their
   matching category validators.
@@ -444,12 +453,42 @@ The following must all be true before public multi-user deployment:
   isolated restore/PITR, HTTPS staging ingress, backup infra, and rollback
   proof are accepted.
 
+## 11. Env flag launch matrix
+
+This matrix classifies public-deployment env flags by current behavior and
+evidence requirements. It is a docs/test readiness aid only: raw `.env` values,
+provider credentials, URLs with embedded credentials, cookies, session ids,
+tokens, database DSNs, webhook URLs, raw provider payloads, and stack traces
+must not be attached to release evidence. Use flag names, presence states,
+bounded labels, and redacted summaries only.
+
+| Flag / feature | Current behavior | Classification | Required target-env evidence before public launch |
+| --- | --- | --- | --- |
+| `APP_ENV` | Enables production-mode security semantics when explicitly set to `production`; missing or non-production values are acceptable for local/dev only. | **GATED** | Sanitized production config contract and config snapshot evidence must show the target environment is explicitly reviewed as production/posture-ready without exposing raw env values. This does not approve auth/RBAC/MFA launch blockers by itself. |
+| `VITE_API_URL` | Frontend uses same-origin API by default; an explicit value only overrides the API base URL for split-domain/static deployments. | **GATED** | Browser/ingress evidence must show the built frontend reaches the intended HTTPS API origin, CORS/CSRF origins match, and backend `:8000` is not directly public. Missing split-domain evidence keeps launch **NO-GO**. |
+| `PUBLIC_API_ABUSE_LIMIT_*` | Process-local abuse burst limiter knobs are clamped and sanitized in diagnostics; they bound malformed public API bursts but are not quota, billing, auth, or distributed rate-limit enforcement. | **SAFE** | Include sanitized limiter configuration/snapshot evidence for the target topology and keep it labeled process-local. Do not present these flags as live quota enforcement or provider abuse protection. |
+| `CRYPTO_REALTIME_ENABLED` | Defaults to realtime crypto SSE background connection unless explicitly disabled; disabling falls back to REST/cache behavior. | **AMBIGUOUS** | Target-env evidence must show whether outbound Binance/WebSocket access is allowed, how failures are degraded, and whether realtime is intentionally disabled. Missing evidence is not a provider-readiness approval. |
+| `SEARXNG_PUBLIC_INSTANCES_ENABLED` | Defaults to discovering public SearXNG instances when no self-hosted `SEARXNG_BASE_URLS` are configured. | **NO-GO** | Public launch must either use vetted self-hosted SearXNG endpoints, explicitly disable public discovery, or attach a separately accepted operator risk decision. Missing evidence keeps search/provider posture blocked. |
+
+Launch classification rule:
+
+- **SAFE** means the current local behavior has bounded diagnostics/tests, but
+  still needs target-environment evidence before public launch.
+- **GATED** means the flag can be safe only when explicitly configured and
+  matched by accepted target-environment evidence.
+- **AMBIGUOUS** means the current default may be acceptable for local/private
+  use but requires an operator decision for public deployment.
+- **NO-GO** applies to launch posture whenever required target-environment
+  evidence is missing, raw secrets would be needed to prove the claim, or a
+  flag is used to imply provider, quota, auth/RBAC, database, broker, or
+  notification live-enforcement approval.
+
 Final launch verdict:
 
 - **NO-GO** until every item in this section is checked or explicitly accepted
   as a documented production exception.
 
-## 11. Validation for this document
+## 12. Validation for this document
 
 Required docs-only validation:
 

@@ -115,7 +115,29 @@ docker-compose -f ./docker/docker-compose.yml exec stock-analyzer python main.py
 
 完整 Nginx HTTPS 模板见 [云服务器 Web 界面访问指南](deploy-webui-cloud.md#可选nginx-反向代理公网推荐)。
 
-### 4.3 启动后检查
+### 4.3 公网环境变量发布矩阵
+
+下表只描述当前发布审查语义，不改变运行时默认值。公网发布仍然是
+**NO-GO**，直到目标环境的 HTTPS ingress、sanitized config snapshot、恢复/PITR、
+WS2/SSE、auth/RBAC/MFA、provider、quota 和最终 release gate 证据被接受。
+
+| 变量 / 功能 | 当前行为 | 分类 | 发布证据要求 |
+| --- | --- | --- | --- |
+| `APP_ENV` | 显式设为 `production` 时启用生产安全语义；本地/dev 可为空或非生产。 | **GATED** | 通过 sanitized 生产配置合同和 config snapshot 证明目标环境已复核，不附 raw `.env` 或 secret values。 |
+| `VITE_API_URL` | 前端默认同源 API；仅在静态站点/API 分域部署时显式覆盖。 | **GATED** | 证明前端构建指向预期 HTTPS API origin，CORS/CSRF origin 匹配，且后端 `:8000` 未直接公网暴露。 |
+| `PUBLIC_API_ABUSE_LIMIT_*` | 进程内 public API 错误突发 limiter，参数有上下界；不是 quota、计费、auth 或分布式限流。 | **SAFE** | 提供 sanitized limiter 配置/快照，并明确 `processLocal`；不得当作 live quota enforcement。 |
+| `CRYPTO_REALTIME_ENABLED` | 默认启用加密货币 SSE 后台实时连接；设为 false 时使用 REST/cache fallback。 | **AMBIGUOUS** | 目标环境需明确是否允许外连 Binance/WebSocket、失败降级方式，或显式禁用实时连接。 |
+| `SEARXNG_PUBLIC_INSTANCES_ENABLED` | `SEARXNG_BASE_URLS` 为空时默认发现公共 SearXNG 实例。 | **NO-GO** | 公网发布必须使用已复核的自建实例、显式禁用公共发现，或附单独接受的运营风险决策。 |
+
+分类含义：
+
+- **SAFE**：当前行为有边界和测试，但仍需要目标环境证据。
+- **GATED**：必须显式配置并与目标环境证据匹配。
+- **AMBIGUOUS**：本地/私有使用可接受，但公网发布前必须有运营决策。
+- **NO-GO**：缺少目标环境证据、需要 raw secret 才能证明、或被用来暗示
+  provider/quota/auth live enforcement approval 时，发布状态保持 **NO-GO**。
+
+### 4.4 启动后检查
 
 ```bash
 # 存活检查：仅确认进程能响应
@@ -125,7 +147,7 @@ curl -fsS http://127.0.0.1:8000/api/health/live
 curl -fsS http://127.0.0.1:8000/api/health/ready
 ```
 
-### 4.4 WS1 基线捕获（部署前）
+### 4.5 WS1 基线捕获（部署前）
 
 > 目标：只做基线采集与验证，不做任何性能优化或架构改造。
 
@@ -147,7 +169,7 @@ python3 scripts/ws1_baseline_capture.py \
 # 3) 基线结果默认输出到 reports/ws1_baseline/baseline_<UTC时间>.json
 ```
 
-### 4.5 Canonical clean-checkout smoke（仅使用仓库已提交脚本）
+### 4.6 Canonical clean-checkout smoke（仅使用仓库已提交脚本）
 
 ```bash
 # 干净 checkout 示例
@@ -161,7 +183,7 @@ python3 scripts/smoke_backtest_standard.py
 python3 scripts/smoke_backtest_rule.py
 ```
 
-### 4.6 目标主机 queue/SSE 单进程验证清单
+### 4.7 目标主机 queue/SSE 单进程验证清单
 
 ```bash
 # 1) 目标主机单进程启动
@@ -194,7 +216,7 @@ curl -N "http://127.0.0.1:8000/api/v1/analysis/tasks/stream?task_id=${TASK_ID}" 
 curl -fsS "http://127.0.0.1:8000/api/v1/analysis/status/${TASK_ID}"
 ```
 
-### 4.7 回滚检查清单（WS1 部署验证专用）
+### 4.8 回滚检查清单（WS1 部署验证专用）
 
 ```bash
 # A. 停止新版本
@@ -344,12 +366,16 @@ journalctl -u stock-analyzer -f
 | `GEMINI_API_KEY` | AI 分析必需 | [Google AI Studio](https://aistudio.google.com/) |
 | `ADMIN_AUTH_ENABLED` | 管理界面认证，生产必须保持 `true` | `.env.example` |
 | `APP_ENV` | 公网或正式演练建议显式设为 `production` | `.env.example` |
+| `VITE_API_URL` | 仅前端/API 分域部署时需要；默认同源 API | 前端构建环境 |
 
 ### 可选配置项
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | `STOCK_LIST` | `600519,300750,002594` | 定时分析 / 观察列表 |
+| `PUBLIC_API_ABUSE_LIMIT_*` | 见 `docs/audits/public-api-abuse-limiter-operator-note.md` | 进程内 public API 错误突发 limiter；不是 quota/live enforcement |
+| `CRYPTO_REALTIME_ENABLED` | `true` | 加密货币 SSE 后台实时连接；公网前需记录外连/禁用决策 |
+| `SEARXNG_PUBLIC_INSTANCES_ENABLED` | `true` | 未配置自建 SearXNG 时发现公共实例；公网前需记录接受或禁用决策 |
 | `SCHEDULE_ENABLED` | `false` | 是否启用定时任务 |
 | `SCHEDULE_TIME` | `18:00` | 每日执行时间 |
 | `MARKET_REVIEW_ENABLED` | `true` | 是否启用大盘复盘 |
