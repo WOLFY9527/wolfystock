@@ -283,11 +283,6 @@ git diff --check
 
 Follow-up proposals recorded, no protected runtime approval implied:
 
-- Liquidity consumer reason fallback: unknown coverage or route rejection codes
-  should render as a generic "key source still needs confirmation" message
-  instead of title-casing raw backend codes. Likely files:
-  `apps/dsa-web/src/pages/LiquidityMonitorPage.tsx` and related smoke tests.
-  Risk: frontend-only copy projection; validate with Liquidity unit/smoke.
 - Admin Logs default rollups: unknown reason/provider codes can still appear in
   operator default rows. Likely file:
   `apps/dsa-web/src/pages/AdminLogsPage.tsx`. Risk: admin-only label mapping;
@@ -312,4 +307,39 @@ Boundary confirmation:
 - No DB migration, cleanup, restore, or PITR execution.
 - No broker/order/trade paths enabled; Backtest copy now avoids default-visible
   broker/order route language.
+- No external notification sending.
+
+### 2026-06-11 - sanitize Liquidity reason fallbacks
+
+- Replaced Liquidity consumer fallback labels for unknown coverage diagnostics,
+  evidence reasons, degradation reasons, pillars, directions, and evidence keys
+  with stable Chinese private-beta copy instead of title-casing backend reason
+  codes.
+- Added a Liquidity page regression test with unmapped backend-style reason
+  values to prove default consumer DOM does not show snake_case codes or their
+  title-cased variants.
+- Re-ran the Liquidity degraded Playwright smoke at desktop and mobile
+  viewports to validate the page still renders the consumer-safe unavailable
+  state.
+
+Validation:
+
+```bash
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/LiquidityMonitorPage.test.tsx
+DSA_WEB_PLAYWRIGHT_PORT=4178 npm --prefix apps/dsa-web run test:e2e -- market-liquidity-monitor-degraded.spec.ts --project=chromium --workers=1
+```
+
+Result: all commands completed successfully. The Playwright web server still
+reports the pre-existing Vite large chunk warning.
+
+Boundary confirmation:
+
+- Frontend display labels and tests only.
+- No public launch approval.
+- No live quota enforcement, reservation consume/blocking, or route blocking.
+- No provider runtime enforcement, provider order/fallback/cache changes, or
+  provider blocking.
+- No auth/session/RBAC runtime changes.
+- No DB migration, cleanup, restore, or PITR execution.
+- No broker/order/trade paths.
 - No external notification sending.

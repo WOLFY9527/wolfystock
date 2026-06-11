@@ -154,7 +154,7 @@ function evidenceProductLabel(item: LiquidityImpulseSynthesisEvidenceItem): stri
     || EVIDENCE_ITEM_LABEL_OVERRIDES[rawLabel]
     || rawLabel
     || pillarLabel(item.pillar)
-    || titleCaseFromSnake(item.key);
+    || '流动性线索待确认';
 }
 
 const IMPULSE_LABELS: Record<string, string> = {
@@ -233,6 +233,8 @@ const LIQUIDITY_BLOCKING_REASON_LABELS: Record<string, string> = {
   unavailable_source: '部分数据暂不可用',
   indicator_unavailable: '指标不可用',
 };
+const LIQUIDITY_UNKNOWN_BLOCKING_REASON_LABEL = '关键来源仍待确认';
+const LIQUIDITY_UNKNOWN_EVIDENCE_REASON_LABEL = '数据边界待确认';
 
 type LiquidityCoverageReadinessSummary = {
   state: 'ready' | 'insufficient' | 'missing';
@@ -404,17 +406,17 @@ function synthesisConfidenceLabel(label?: string | null, confidence?: number | n
 
 function pillarLabel(value?: string | null): string {
   if (!value) return '待确认';
-  return PILLAR_LABELS[value] || titleCaseFromSnake(value);
+  return PILLAR_LABELS[value] || '流动性支柱待确认';
 }
 
 function evidenceDirectionLabel(value?: string | null): string | null {
   if (!value) return null;
-  return EVIDENCE_DIRECTION_LABELS[value] || titleCaseFromSnake(value);
+  return EVIDENCE_DIRECTION_LABELS[value] || '方向待确认';
 }
 
 function evidenceReasonLabel(value?: string | null): string | null {
   if (!value) return null;
-  return EVIDENCE_REASON_LABELS[value] || titleCaseFromSnake(value);
+  return EVIDENCE_REASON_LABELS[value] || LIQUIDITY_UNKNOWN_EVIDENCE_REASON_LABEL;
 }
 
 function evidenceItemDisplayLabel(item: LiquidityImpulseSynthesisEvidenceItem): string {
@@ -440,7 +442,9 @@ function buildEvidenceMeta(
   } else {
     const reason = evidenceReasonLabel(item.reason);
     if (reason) parts.push(reason);
-    if (item.degradationReason) parts.push(titleCaseFromSnake(item.degradationReason));
+    if (item.degradationReason) parts.push(
+      LIQUIDITY_BLOCKING_REASON_LABELS[item.degradationReason] || LIQUIDITY_UNKNOWN_EVIDENCE_REASON_LABEL,
+    );
   }
 
   if (item.source) parts.push(item.source);
@@ -615,7 +619,7 @@ function humanizeBlockingReason(reason: string): string {
   if (reason.startsWith('requires_')) {
     return '所需提供方未配置';
   }
-  return titleCaseFromSnake(reason);
+  return LIQUIDITY_UNKNOWN_BLOCKING_REASON_LABEL;
 }
 
 function indicatorBlockingReasons(indicator: LiquidityMonitorIndicator): string[] {
