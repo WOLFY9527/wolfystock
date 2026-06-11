@@ -182,6 +182,10 @@ vi.mock('../pages/AdminMissionControlPage', () => ({
   default: () => <div>admin-mission-control-page</div>,
 }));
 
+vi.mock('../pages/AdminLaunchCockpitPage', () => ({
+  default: () => <div>admin-launch-cockpit-page</div>,
+}));
+
 vi.mock('../pages/LoginPage', () => ({
   default: () => <div>login-page</div>,
 }));
@@ -944,6 +948,7 @@ describe('AppContent route flows', () => {
   });
 
   it.each([
+    ['/zh/admin/launch-cockpit', { ...noCapabilities, canReadOpsLogs: true }, 'admin-launch-cockpit-page'],
     ['/zh/admin/logs', { ...noCapabilities, canReadOpsLogs: true }, 'admin-logs-page'],
     ['/zh/admin/notifications', { ...noCapabilities, canReadNotifications: true }, 'admin-notifications-page'],
     ['/zh/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
@@ -978,6 +983,15 @@ describe('AppContent route flows', () => {
 
     expect(await screen.findByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeInTheDocument();
     expect(screen.queryByText('admin-evidence-workflow-page')).not.toBeInTheDocument();
+  });
+
+  it('blocks launch cockpit access when admin ops-log capability is absent', async () => {
+    mockSignedInAdminWithCapabilities(noCapabilities);
+
+    renderAt('/zh/admin/launch-cockpit');
+
+    expect(await screen.findByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeInTheDocument();
+    expect(screen.queryByText('admin-launch-cockpit-page')).not.toBeInTheDocument();
   });
 
   it('blocks mission control access when admin ops-log capability is absent', async () => {
@@ -1023,6 +1037,15 @@ describe('AppContent route flows', () => {
     renderAt('/zh/admin/evidence-workflow');
 
     await waitFor(() => expect(screen.getByText('admin-evidence-workflow-page')).toBeInTheDocument());
+    expect(screen.queryByRole('heading', { name: '这个管理页面需要对应管理员能力' })).not.toBeInTheDocument();
+  });
+
+  it('renders launch cockpit with ops logs read as the only admin capability', async () => {
+    mockSignedInAdminWithCapabilities({ ...noCapabilities, canReadOpsLogs: true });
+
+    renderAt('/zh/admin/launch-cockpit');
+
+    await waitFor(() => expect(screen.getByText('admin-launch-cockpit-page')).toBeInTheDocument());
     expect(screen.queryByRole('heading', { name: '这个管理页面需要对应管理员能力' })).not.toBeInTheDocument();
   });
 

@@ -47,6 +47,10 @@ export function isAdminMissionControlPath(pathname: string): boolean {
   return pathname === '/admin/mission-control' || pathname.startsWith('/admin/mission-control/');
 }
 
+export function isAdminLaunchCockpitPath(pathname: string): boolean {
+  return pathname === '/admin/launch-cockpit' || pathname.startsWith('/admin/launch-cockpit/');
+}
+
 export function resolveAdminCapabilityFlags(currentUser: CurrentUser | null | undefined): AdminCapabilityFlags {
   if (!currentUser?.isAdmin) {
     return emptyFlags;
@@ -67,6 +71,9 @@ export function canAccessAdminPath(pathname: string, flags: AdminCapabilityFlags
     return capabilityFlags.canReadSystemConfig;
   }
   if (pathname === '/admin/logs' || pathname.startsWith('/admin/logs/')) {
+    return capabilityFlags.canReadOpsLogs;
+  }
+  if (isAdminLaunchCockpitPath(pathname)) {
     return capabilityFlags.canReadOpsLogs;
   }
   if (isAdminMissionControlPath(pathname)) {
