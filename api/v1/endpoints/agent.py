@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-from api.deps import CurrentUser, get_current_user, require_admin_user
+from api.deps import CurrentUser, get_current_user, require_admin_capability
 from src.config import get_config
 from src.services.agent_model_service import list_agent_model_deployments, list_agent_provider_health
 
@@ -315,7 +315,7 @@ class SendChatRequest(BaseModel):
 @router.post("/chat/send")
 async def send_chat_to_notification(
     request: SendChatRequest,
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("ops:notifications:write")),
 ):
     """
     Send chat session content to configured notification channels.

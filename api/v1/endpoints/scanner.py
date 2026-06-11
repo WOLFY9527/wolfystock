@@ -14,7 +14,7 @@ from api.deps import (
     get_current_user_id,
     get_database_manager,
     is_admin_user,
-    require_admin_user,
+    require_admin_capability,
 )
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.scanner import (
@@ -299,7 +299,7 @@ def get_today_watchlist(
     market: Optional[str] = Query("cn", description="市场过滤"),
     profile: Optional[str] = Query(None, description="扫描配置过滤"),
     db_manager: DatabaseManager = Depends(get_database_manager),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("scanner:admin:read")),
 ) -> ScannerRunDetailResponse:
     def _operation() -> ScannerRunDetailResponse:
         service = _build_scanner_service(db_manager, None)
@@ -328,7 +328,7 @@ def get_recent_watchlists(
     profile: Optional[str] = Query(None, description="扫描配置过滤"),
     limit_days: int = Query(7, ge=1, le=30, description="最近天数"),
     db_manager: DatabaseManager = Depends(get_database_manager),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("scanner:admin:read")),
 ) -> ScannerRunHistoryResponse:
     def _operation() -> ScannerRunHistoryResponse:
         service = _build_scanner_service(db_manager, None)
@@ -355,7 +355,7 @@ def get_scanner_operational_status(
     market: Optional[str] = Query("cn", description="市场过滤"),
     profile: Optional[str] = Query(None, description="扫描配置过滤"),
     db_manager: DatabaseManager = Depends(get_database_manager),
-    _: CurrentUser = Depends(require_admin_user),
+    _: CurrentUser = Depends(require_admin_capability("scanner:admin:read")),
 ) -> ScannerOperationalStatusResponse:
     def _operation() -> ScannerOperationalStatusResponse:
         service = _build_scanner_ops_service(db_manager, None)

@@ -14,9 +14,9 @@
       "path_pattern": "^/api/v1/agent/chat/send$",
       "methods": ["POST"],
       "surface": "agent_admin_send",
-      "auth_dependency_label": "admin_user",
-      "capability_label": null,
-      "transitional_note": "Legacy admin-only route without an explicit capability dependency."
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:notifications:write",
+      "transitional_note": null
     },
     {
       "route_id": "analysis.member_surface",
@@ -59,9 +59,9 @@
       "path_pattern": "^/api/v1/scanner/(?:watchlists/(?:today|recent)|status)$",
       "methods": ["GET"],
       "surface": "scanner_admin",
-      "auth_dependency_label": "admin_user",
-      "capability_label": null,
-      "transitional_note": "Legacy admin scanner endpoints still depend on coarse admin gating."
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "scanner:admin:read",
+      "transitional_note": null
     },
     {
       "route_id": "portfolio.member_surface",
@@ -95,9 +95,9 @@
       "path_pattern": "^/api/v1/usage/summary$",
       "methods": ["GET"],
       "surface": "usage_admin",
-      "auth_dependency_label": "admin_user",
-      "capability_label": null,
-      "transitional_note": "Usage summary is still admin-role gated instead of explicit capability gated."
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "cost:observability:read",
+      "transitional_note": null
     },
     {
       "route_id": "quant.duckdb.read",
@@ -474,11 +474,11 @@
       "route_id": "agent.admin_send",
       "path": "/api/v1/agent/chat/send",
       "method": "POST",
-      "surface_classification": "admin_role_only_legacy",
-      "auth_dependency_label": "admin_user",
-      "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: migrate legacy admin role-only send route to an explicit capability before broad public admin exposure.",
-      "transitional_note": "Legacy admin-only route without an explicit capability dependency."
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "ops:notifications:write",
+      "no_go_marker": null,
+      "transitional_note": "Agent notification dispatch is admin-capability gated and not a public surface."
     },
     {
       "route_id": "user_alerts.rule_dry_run",
@@ -534,31 +534,31 @@
       "route_id": "scanner.watchlists_today",
       "path": "/api/v1/scanner/watchlists/today",
       "method": "GET",
-      "surface_classification": "admin_role_only_legacy",
-      "auth_dependency_label": "admin_user",
-      "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: migrate legacy scanner admin route to an explicit capability before broad public admin exposure.",
-      "transitional_note": "Legacy admin scanner endpoint still depends on coarse admin gating."
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "scanner:admin:read",
+      "no_go_marker": null,
+      "transitional_note": "Scanner operational watchlist read is admin-capability gated and not a public surface."
     },
     {
       "route_id": "scanner.watchlists_recent",
       "path": "/api/v1/scanner/watchlists/recent",
       "method": "GET",
-      "surface_classification": "admin_role_only_legacy",
-      "auth_dependency_label": "admin_user",
-      "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: migrate legacy scanner admin route to an explicit capability before broad public admin exposure.",
-      "transitional_note": "Legacy admin scanner endpoint still depends on coarse admin gating."
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "scanner:admin:read",
+      "no_go_marker": null,
+      "transitional_note": "Scanner operational watchlist read is admin-capability gated and not a public surface."
     },
     {
       "route_id": "scanner.status",
       "path": "/api/v1/scanner/status",
       "method": "GET",
-      "surface_classification": "admin_role_only_legacy",
-      "auth_dependency_label": "admin_user",
-      "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: migrate legacy scanner admin status route to an explicit capability before broad public admin exposure.",
-      "transitional_note": "Legacy admin scanner endpoint still depends on coarse admin gating."
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "scanner:admin:read",
+      "no_go_marker": null,
+      "transitional_note": "Scanner operational status read is admin-capability gated and not a public surface."
     },
     {
       "route_id": "scanner.themes_get",
@@ -584,11 +584,11 @@
       "route_id": "usage.admin_summary",
       "path": "/api/v1/usage/summary",
       "method": "GET",
-      "surface_classification": "admin_role_only_legacy",
-      "auth_dependency_label": "admin_user",
-      "capability_label": null,
-      "no_go_marker": "TODO/NO-GO: migrate usage summary from coarse admin role to an explicit capability before broad public admin exposure.",
-      "transitional_note": "Usage summary is still admin-role gated instead of explicit capability gated."
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "cost:observability:read",
+      "no_go_marker": null,
+      "transitional_note": "LLM usage summary is admin-capability gated and not a public surface."
     },
     {
       "route_id": "options.underlying_summary",
