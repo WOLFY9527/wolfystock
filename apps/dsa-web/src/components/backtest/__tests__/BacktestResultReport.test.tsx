@@ -656,6 +656,16 @@ describe('BacktestResultReport', () => {
       ],
     })} mode="simple" />);
 
+    const report = screen.getByTestId('backtest-result-report');
+    const timeline = screen.getByTestId('backtest-report-event-timeline');
+    const exitAttribution = screen.getByTestId('backtest-attribution-exit-reason');
+    const tradeTable = screen.getByTestId('backtest-report-trade-table');
+    expect(report).toHaveTextContent('回测原因已脱敏');
+    expect(timeline).not.toHaveTextContent(/authorityScope|provider_calls_executed|provider calls executed/i);
+    expect(exitAttribution).not.toHaveTextContent(/authorityScope|provider_calls_executed|provider calls executed/i);
+    expect(tradeTable).not.toHaveTextContent(/authorityScope|provider_calls_executed|provider calls executed/i);
+    expect(report).not.toHaveTextContent(/authorityScope|provider_calls_executed|provider calls executed/i);
+
     fireEvent.click(screen.getByRole('button', { name: '导出交易CSV' }));
     const blob = createObjectUrlMock.mock.calls[0]?.[0];
     expect(blob).toBeInstanceOf(Blob);

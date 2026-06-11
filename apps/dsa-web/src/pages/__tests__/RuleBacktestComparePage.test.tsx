@@ -484,6 +484,7 @@ describe('RuleBacktestComparePage', () => {
     expect(screen.queryByText('未触发数据调用')).not.toBeInTheDocument();
     expect(screen.getAllByText('比较字段需复核').length).toBeGreaterThanOrEqual(2);
     expect(pageShell).not.toHaveTextContent(/stored_rule_backtest_runs|stored_projection_only|providerCallsExecuted|provider calls executed|executionCount|authorityScope|authority Scope|sourceState|trace JSON|helper metadata|后端判定|字段分组|AI \//i);
+    expect(pageShell).not.toHaveTextContent(/stored_compare_derived_heatmap_only|stored compare derived heatmap only|provider_runtime_scope|provider runtime scope/i);
     expect(screen.getByTestId('compare-heatmap-cell-0-0')).toHaveAttribute('data-state', 'available');
     expect(screen.getByTestId('compare-heatmap-cell-0-1')).toHaveAttribute('data-state', 'missing');
     expect(screen.getByTestId('compare-heatmap-cell-1-0')).toHaveAttribute('data-state', 'ambiguous');

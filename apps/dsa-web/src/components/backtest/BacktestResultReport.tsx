@@ -940,7 +940,7 @@ function buildEvents(trades: RuleBacktestTradeItem[]): EventRow[] {
       events.push({
         date: trade.entryDate,
         type: 'ENTRY',
-        label: humanToken(trade.entryReason || trade.entrySignal || trade.entryTrigger),
+        label: safeTradeReasonToken(trade.entryReason || trade.entrySignal || trade.entryTrigger),
         tone: 'neutral',
       });
     }
@@ -948,7 +948,7 @@ function buildEvents(trades: RuleBacktestTradeItem[]): EventRow[] {
       events.push({
         date: trade.exitDate,
         type: 'EXIT',
-        label: humanToken(trade.exitReason || trade.exitSignal || trade.exitTrigger),
+        label: safeTradeReasonToken(trade.exitReason || trade.exitSignal || trade.exitTrigger),
         tone: toneFor(getTradeReturn(trade)),
       });
     }
@@ -1571,7 +1571,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             </div>
             <div>
               <p className={`${LABEL_CLASS} mb-2`}>按退出原因</p>
-              <AttributionList rows={attributionByExitReason} testId="backtest-attribution-exit-reason" formatKey={humanToken} />
+              <AttributionList rows={attributionByExitReason} testId="backtest-attribution-exit-reason" formatKey={safeTradeReasonToken} />
             </div>
             <div>
               <p className={`${LABEL_CLASS} mb-2`}>按持有周期</p>
@@ -1671,8 +1671,8 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                     <td className="px-3 py-2 font-mono">{formatNumber(tradeFees(trade), 2)}</td>
                     <td className="px-3 py-2 font-mono">{formatNumber(tradeSlippage(trade), 2)}</td>
                     <td className="px-3 py-2 font-mono">{formatNumber(trade.holdingDays ?? trade.holdingCalendarDays ?? trade.holdingBars, 0)}</td>
-                    <td className="max-w-[180px] truncate px-3 py-2">{humanToken(trade.exitReason || trade.exitTrigger || trade.exitSignal)}</td>
-                    <td className="max-w-[220px] truncate px-3 py-2">{humanToken(trade.signalReason || trade.entrySignal || trade.entryTrigger)}</td>
+                    <td className="max-w-[180px] truncate px-3 py-2">{safeTradeReasonToken(trade.exitReason || trade.exitTrigger || trade.exitSignal)}</td>
+                    <td className="max-w-[220px] truncate px-3 py-2">{safeTradeReasonToken(trade.signalReason || trade.entrySignal || trade.entryTrigger)}</td>
                   </tr>
                 )) : (
                   <tr><td colSpan={14} className="px-3 py-6 text-center text-white/42">暂无交易记录</td></tr>

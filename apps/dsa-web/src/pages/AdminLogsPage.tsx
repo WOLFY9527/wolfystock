@@ -1969,9 +1969,7 @@ const AdminLogsPage: React.FC = () => {
       ...(primaryOperatorIssue.affectedDomains || []),
     ], locale)
     : [];
-  const primaryOperatorSamples = primaryOperatorIssue
-    ? (primaryOperatorIssue.sampleEventIds || []).map((value) => safeOperatorText(value, '')).filter(Boolean).slice(0, 2)
-    : [];
+  const primaryOperatorSampleCount = primaryOperatorIssue?.sampleEventIds?.length || 0;
   const operatorCurrentState = primaryOperatorIssue
     ? (locale === 'zh'
       ? `${healthSummary.failedEvents} 个失败 / ${visibleRecordCount} 条记录 · 首要问题：${primaryOperatorIssueTitle} · 影响 ${primaryOperatorAffected.join(' / ') || '待汇总'}`
@@ -1986,8 +1984,8 @@ const AdminLogsPage: React.FC = () => {
       : (locale === 'zh' ? '保持业务事件监控' : 'Keep monitoring business events');
   const operatorEvidenceRef = primaryOperatorIssue
     ? (locale === 'zh'
-      ? `运维问题 · ${countLabel(primaryOperatorIssue.count, 'event', 'events', '条事件', locale)}${primaryOperatorSamples.length ? ` · 样例 ${primaryOperatorSamples.join(' / ')}` : ''}`
-      : `Operator issue · ${countLabel(primaryOperatorIssue.count, 'event', 'events', '条事件', locale)}${primaryOperatorSamples.length ? ` · samples ${primaryOperatorSamples.join(' / ')}` : ''}`)
+      ? `运维问题 · ${countLabel(primaryOperatorIssue.count, 'event', 'events', '条事件', locale)}${primaryOperatorSampleCount ? ' · 关联事件已记录' : ''}`
+      : `Operator issue · ${countLabel(primaryOperatorIssue.count, 'event', 'events', '条事件', locale)}${primaryOperatorSampleCount ? ' · related events recorded' : ''}`)
     : (locale === 'zh' ? '当前页 / 业务事件 / 运维问题 / 数据缺口' : 'Current page / business events / operator issues / data gaps');
   const l0TrustState: AdminOpsTrustState = healthSummary.failedEvents > 0
     ? 'degraded'
@@ -2429,10 +2427,7 @@ const AdminLogsPage: React.FC = () => {
                     friendlyRawStatusLabel(item.freshnessStatus, locale),
                     item.status ? statusLabel(normalizeStatus(item.status), locale) : '',
                   ].filter((value) => value && value !== '--').filter((value, index, values) => values.indexOf(value) === index).join(' · ');
-                  const sampleEventIds = (item.sampleEventIds || []).flatMap((value) => {
-                    const label = safeOperatorText(value, '');
-                    return label ? [label] : [];
-                  }).slice(0, 3);
+                  const relatedEventCount = item.sampleEventIds?.length || 0;
                   return (
                     <div
                       key={item.issueId}
@@ -2454,10 +2449,10 @@ const AdminLogsPage: React.FC = () => {
                       </div>
                       <div className="min-w-0">
                         <p className="truncate text-xs text-secondary-text">{countLabel(item.count, 'event', 'events', '条事件', locale)} · {formatDateTime(item.latestTimestamp, locale)}</p>
-                        <p className="mt-1 truncate text-[11px] text-muted-text" title={sampleEventIds.join(' · ')}>
-                          {sampleEventIds.length
-                            ? `${locale === 'zh' ? '样例事件' : 'Sample events'}: ${sampleEventIds.join(' · ')}`
-                            : (locale === 'zh' ? '无样例事件 ID' : 'No sample event IDs')}
+                        <p className="mt-1 truncate text-[11px] text-muted-text">
+                          {relatedEventCount
+                            ? (locale === 'zh' ? '关联事件已记录' : 'Related events recorded')
+                            : (locale === 'zh' ? '暂无关联事件记录' : 'No related events recorded')}
                         </p>
                         <p className="mt-1 truncate text-[11px] text-muted-text" title={contextLine}>{contextLine || '--'}</p>
                       </div>

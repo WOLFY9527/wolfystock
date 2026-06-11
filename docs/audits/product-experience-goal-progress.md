@@ -3,6 +3,7 @@
 Date: 2026-06-11
 Branch: `codex/goal-product-experience-unification`
 Mode: route-by-route private-beta product coherence work.
+Status: fix applied after read-only review.
 
 ## Goal
 
@@ -120,7 +121,7 @@ Always run:
 
 ```bash
 git diff --check
-./scripts/release_secret_scan.sh --local-only
+./scripts/release_secret_scan.sh
 ```
 
 When frontend is touched:
@@ -463,12 +464,16 @@ WOLFYSTOCK_ADMIN_OPS_ROUTE_FILTER=market-providers DSA_WEB_PLAYWRIGHT_PORT=4190 
 DSA_WEB_PLAYWRIGHT_PORT=4191 npm --prefix apps/dsa-web run test:e2e -- backtest-visual-result.smoke.spec.ts --project=chromium --workers=1
 DSA_WEB_PLAYWRIGHT_PORT=4192 npm --prefix apps/dsa-web run test:e2e -- backtest-visual-result.smoke.spec.ts --project=chromium --workers=1
 git diff --check
-./scripts/release_secret_scan.sh --local-only
+./scripts/release_secret_scan.sh
 ```
 
 Known validation notes:
 
 - Vite build consistently reports the pre-existing large chunk warning.
+- Earlier `--local-only` secret scans covered staged, unstaged, and untracked
+  files only; they did not scan committed `origin/main..HEAD` changes. The full
+  branch scan was rerun with `./scripts/release_secret_scan.sh` for all 27
+  changed files and passed.
 - Earlier red retries were resolved before commit: one Backtest page broad
   test exposed unrelated existing result-heading expectations, one Playwright
   retry exposed an unused `shortIdentifier`, and one Market Provider test
