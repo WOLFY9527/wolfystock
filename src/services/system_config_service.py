@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 from datetime import datetime, timezone
@@ -38,6 +39,7 @@ from src.core.config_registry import (
 )
 from src.providers.validation import normalize_provider_name, validate_provider_connection
 from src.services.execution_log_service import ExecutionLogService
+from src.services.provider_circuit_observer import ProviderCircuitObserver
 from src.services.system_config_provider_projection import (
     mask_provider_secret,
     project_provider_result_checks,
@@ -55,6 +57,10 @@ FACTORY_RESET_CONFIRMATION_PHRASE = "FACTORY RESET"
 _TEXT_CONTENT_BLOCK_TYPES = {"text", "output_text", "input_text"}
 _REMOTE_VALIDATION_TIMEOUT_SECONDS = 5.0
 _REMOTE_VALIDATION_USER_AGENT = "WolfyStock-Provider-Validation/1.0"
+_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED_ENV = "WOLFYSTOCK_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED"
+_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENV = "WOLFYSTOCK_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENABLED"
+_PROVIDER_CIRCUIT_ADMIN_PROBE_CATEGORY = "data_source_validation"
+_PROVIDER_CIRCUIT_ADMIN_PROBE_ROUTE_FAMILY = "admin_provider_probe"
 
 
 class ConfigValidationError(Exception):
@@ -729,6 +735,12 @@ class SystemConfigService:
         resolved_credential = ""
         if normalized_provider in {"fmp", "finnhub", "alpha_vantage", "twelve_data", "tushare"}:
             resolved_credential = self._resolve_provider_key(normalized_provider, credential)
+        circuit_decision = self._provider_circuit_admin_probe_pilot_decision(normalized_provider)
+        if circuit_decision and circuit_decision["would_block_call"]:
+            return self._provider_circuit_blocked_builtin_response(
+                provider=normalized_provider,
+                decision=circuit_decision,
+            )
         if normalized_provider == "twelve_data":
             return self._test_twelve_data_hk_data_source(
                 symbol=normalized_symbol,
@@ -759,6 +771,66 @@ class SystemConfigService:
             "checks": checks,
             "summary": provider_validation_summary(normalized_provider, status, checks),
             "suggestion": provider_validation_suggestion(normalized_provider, status),
+        }
+
+    @staticmethod
+    def _provider_circuit_admin_probe_pilot_enabled() -> bool:
+        return parse_env_bool(os.getenv(_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED_ENV), default=False)
+
+    @staticmethod
+    def _provider_circuit_admin_probe_pilot_rollback_enabled() -> bool:
+        return parse_env_bool(os.getenv(_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENV), default=False)
+
+    def _provider_circuit_admin_probe_pilot_decision(self, provider: str) -> Optional[Dict[str, Any]]:
+        pilot_enabled = self._provider_circuit_admin_probe_pilot_enabled()
+        rollback_enabled = self._provider_circuit_admin_probe_pilot_rollback_enabled()
+        if not pilot_enabled or rollback_enabled:
+            return None
+        return ProviderCircuitObserver().build_low_risk_enforcement_pilot_decision(
+            provider=provider,
+            provider_category=_PROVIDER_CIRCUIT_ADMIN_PROBE_CATEGORY,
+            route_family=_PROVIDER_CIRCUIT_ADMIN_PROBE_ROUTE_FAMILY,
+            pilot_enabled=pilot_enabled,
+            rollback_enabled=rollback_enabled,
+            controlled_provider_categories=(_PROVIDER_CIRCUIT_ADMIN_PROBE_CATEGORY,),
+            controlled_route_families=(_PROVIDER_CIRCUIT_ADMIN_PROBE_ROUTE_FAMILY,),
+        )
+
+    @staticmethod
+    def _provider_circuit_blocked_builtin_response(
+        *,
+        provider: str,
+        decision: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        reason_code = str(decision.get("enforcement_block_reason_code") or "provider_circuit_blocked")
+        message = (
+            "Provider circuit admin probe pilot blocked this provider validation "
+            f"before outbound work: {reason_code}."
+        )
+        return {
+            "provider": provider,
+            "ok": False,
+            "status": "failed",
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "duration_ms": 0,
+            "key_masked": None,
+            "checks": [
+                {
+                    "name": "provider_circuit",
+                    "endpoint": _PROVIDER_CIRCUIT_ADMIN_PROBE_ROUTE_FAMILY,
+                    "ok": False,
+                    "http_status": None,
+                    "duration_ms": 0,
+                    "error_type": "provider_circuit_blocked",
+                    "message": message,
+                }
+            ],
+            "summary": "Provider circuit admin probe pilot blocked this provider validation.",
+            "suggestion": (
+                "Review admin provider circuit diagnostics or disable "
+                f"{_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED_ENV}; rollback is "
+                f"{_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENV}=true."
+            ),
         }
 
     @staticmethod

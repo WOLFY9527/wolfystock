@@ -19,6 +19,9 @@ from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.storage import AnalysisHistory, AppUserSession, ConversationSessionRecord, DatabaseManager, UserPreference
 from src.services.system_config_service import ConfigConflictError, SystemConfigService
 
+PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED_ENV = "WOLFYSTOCK_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED"
+PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENV = "WOLFYSTOCK_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENABLED"
+
 
 class SystemConfigServiceTestCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -48,6 +51,8 @@ class SystemConfigServiceTestCase(unittest.TestCase):
             "SCHEDULE_ENABLED",
             "MAX_WORKERS",
             "ANALYSIS_DELAY",
+            PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED_ENV,
+            PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENV,
         ]
         self._previous_env = {key: os.environ.get(key) for key in self._managed_env_keys}
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -92,6 +97,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
 
     def tearDown(self) -> None:
         Config.reset_instance()
+        DatabaseManager.reset_instance()
         for key, value in self._previous_env.items():
             if value is None:
                 os.environ.pop(key, None)
@@ -116,6 +122,11 @@ class SystemConfigServiceTestCase(unittest.TestCase):
     @staticmethod
     def _hk_state_check(payload: dict) -> dict:
         return next(check for check in payload["checks"] if check["name"] == "hk_quote_history")
+
+    @staticmethod
+    def _fresh_provider_circuit_db() -> DatabaseManager:
+        DatabaseManager.reset_instance()
+        return DatabaseManager(db_url="sqlite:///:memory:")
 
     def test_get_config_masks_sensitive_values(self) -> None:
         payload = self.service.get_config(include_schema=True)
@@ -1028,6 +1039,148 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         mock_reload.assert_not_called()
         mock_setup.assert_not_called()
         mock_factory_reset.assert_not_called()
+
+    def test_builtin_data_source_provider_circuit_pilot_is_default_off_and_skips_circuit_lookup(self) -> None:
+        os.environ.pop(PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED_ENV, None)
+        os.environ.pop(PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENV, None)
+        provider_result = SimpleNamespace(
+            status=SimpleNamespace(value="success"),
+            reason=None,
+            metadata={
+                "status": "success",
+                "checks": [
+                    {
+                        "name": "quote",
+                        "endpoint": "/api/v3/quote/MSFT",
+                        "ok": True,
+                        "http_status": 200,
+                        "duration_ms": 12,
+                        "error_type": None,
+                        "message": "quote endpoint returned 200.",
+                    }
+                ],
+            },
+            finishedAt=datetime(2026, 5, 14, 0, 0, tzinfo=timezone.utc),
+            durationMs=12,
+        )
+
+        with patch("src.services.system_config_service.ProviderCircuitObserver", side_effect=AssertionError("circuit lookup must stay default-off")) as mock_observer, \
+                patch("src.services.system_config_service.validate_provider_connection", return_value=provider_result) as mock_validate:
+            payload = self.service.test_builtin_data_source(
+                provider="fmp",
+                symbol="MSFT",
+                credential="full-secret-fmp-key",
+            )
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["status"], "success")
+        mock_validate.assert_called_once_with(
+            "fmp",
+            "MSFT",
+            credential="full-secret-fmp-key",
+            timeout_seconds=5.0,
+        )
+        mock_observer.assert_not_called()
+
+    def test_builtin_data_source_provider_circuit_pilot_blocks_admin_probe_without_provider_call(self) -> None:
+        os.environ[PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED_ENV] = "true"
+        os.environ.pop(PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENV, None)
+        db = self._fresh_provider_circuit_db()
+        db.transition_provider_circuit_state(
+            provider="fmp",
+            provider_category="data_source_validation",
+            route_family="admin_provider_probe",
+            to_state="provider_quota_depleted",
+            reason_bucket="provider_429",
+            metadata={
+                "url": "https://provider.example.test/raw?api_key=must-not-leak",
+                "raw_payload": "must-not-leak",
+            },
+            now=datetime(2026, 5, 14, 0, 0),
+        )
+
+        with patch(
+            "src.services.system_config_service.validate_provider_connection",
+            side_effect=AssertionError("provider validation must not run when circuit blocks the pilot"),
+        ) as mock_validate:
+            payload = self.service.test_builtin_data_source(
+                provider="fmp",
+                symbol="MSFT",
+                credential="full-secret-fmp-key",
+            )
+
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["provider"], "fmp")
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["duration_ms"], 0)
+        self.assertIsNone(payload["key_masked"])
+        self.assertEqual(len(payload["checks"]), 1)
+        self.assertEqual(payload["checks"][0]["name"], "provider_circuit")
+        self.assertEqual(payload["checks"][0]["endpoint"], "admin_provider_probe")
+        self.assertFalse(payload["checks"][0]["ok"])
+        self.assertEqual(payload["checks"][0]["error_type"], "provider_circuit_blocked")
+        self.assertIn("provider_429", payload["checks"][0]["message"])
+        mock_validate.assert_not_called()
+
+        serialized = str(payload).lower()
+        for blocked in (
+            "full-secret-fmp-key",
+            "must-not-leak",
+            "https://provider.example",
+            "api_key",
+            "raw_payload",
+        ):
+            self.assertNotIn(blocked, serialized)
+
+    def test_builtin_data_source_provider_circuit_pilot_rollback_restores_provider_probe(self) -> None:
+        os.environ[PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED_ENV] = "true"
+        os.environ[PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENV] = "true"
+        db = self._fresh_provider_circuit_db()
+        db.transition_provider_circuit_state(
+            provider="fmp",
+            provider_category="data_source_validation",
+            route_family="admin_provider_probe",
+            to_state="open",
+            reason_bucket="timeout",
+            cooldown_until=datetime(2026, 5, 14, 0, 30),
+            now=datetime(2026, 5, 14, 0, 0),
+        )
+        provider_result = SimpleNamespace(
+            status=SimpleNamespace(value="success"),
+            reason=None,
+            metadata={
+                "status": "success",
+                "checks": [
+                    {
+                        "name": "quote",
+                        "endpoint": "/api/v3/quote/MSFT",
+                        "ok": True,
+                        "http_status": 200,
+                        "duration_ms": 12,
+                        "error_type": None,
+                        "message": "quote endpoint returned 200.",
+                    }
+                ],
+            },
+            finishedAt=datetime(2026, 5, 14, 0, 0, tzinfo=timezone.utc),
+            durationMs=12,
+        )
+
+        with patch("src.services.system_config_service.validate_provider_connection", return_value=provider_result) as mock_validate:
+            payload = self.service.test_builtin_data_source(
+                provider="fmp",
+                symbol="MSFT",
+                credential="full-secret-fmp-key",
+            )
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["status"], "success")
+        mock_validate.assert_called_once_with(
+            "fmp",
+            "MSFT",
+            credential="full-secret-fmp-key",
+            timeout_seconds=5.0,
+        )
 
     @patch("src.services.system_config_service.requests.request")
     def test_twelve_data_hk_diagnostic_distinguishes_all_bounded_states(self, mock_request) -> None:
