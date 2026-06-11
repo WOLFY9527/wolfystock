@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 
 from data_provider.base import DataFetchError, DataFetcherManager, build_provider_route_evidence_contract
+from data_provider.provider_credentials import ProviderCredentialBundle
 from data_provider.realtime_types import RealtimeSource, UnifiedRealtimeQuote
 from src.repositories.stock_repo import StockRepository
 from src.services.agent_stock_evidence_service import StockEvidenceService
@@ -62,6 +63,35 @@ class _RealtimeFetcher:
         if self.quotes_by_source:
             return self.quotes_by_source.get(source)
         return self.quote
+
+
+class _DailyHistoryFetcher:
+    def __init__(
+        self,
+        *,
+        name: str,
+        priority: int,
+        result=None,
+        error: Exception | None = None,
+    ) -> None:
+        self.name = name
+        self.priority = priority
+        self.result = result
+        self.error = error
+        self.calls: list[dict[str, object]] = []
+
+    def get_daily_data(self, stock_code: str, start_date=None, end_date=None, days: int = 30):
+        self.calls.append(
+            {
+                "stock_code": stock_code,
+                "start_date": start_date,
+                "end_date": end_date,
+                "days": days,
+            }
+        )
+        if self.error is not None:
+            raise self.error
+        return self.result
 
 
 class _RemoteNameFetcher:
@@ -460,6 +490,246 @@ def test_cn_quote_keeps_first_success_and_only_merges_missing_supplementary_fiel
     }
 
 
+def test_us_realtime_trace_records_alpaca_fallback_to_yfinance_without_cn_or_hk_calls() -> None:
+    yfinance = _RealtimeFetcher(
+        name="YfinanceFetcher",
+        priority=4,
+        quote=UnifiedRealtimeQuote(
+            code="AAPL",
+            name="Apple",
+            source=RealtimeSource.YFINANCE,
+            price=210.5,
+        ),
+    )
+    efinance = _RealtimeFetcher(
+        name="EfinanceFetcher",
+        priority=1,
+        quote=UnifiedRealtimeQuote(code="AAPL", source=RealtimeSource.EFINANCE, price=1.0),
+    )
+    akshare = _RealtimeFetcher(
+        name="AkshareFetcher",
+        priority=2,
+        quote=UnifiedRealtimeQuote(code="AAPL", source=RealtimeSource.AKSHARE_EM, price=1.0),
+    )
+    tushare = _RealtimeFetcher(
+        name="TushareFetcher",
+        priority=3,
+        quote=UnifiedRealtimeQuote(code="AAPL", source=RealtimeSource.TUSHARE, price=1.0),
+    )
+    alpaca = _RealtimeFetcher(name="AlpacaFetcher", priority=0, quote=None)
+    manager = DataFetcherManager(fetchers=[efinance, akshare, tushare, yfinance])
+
+    with (
+        patch("src.config.get_config", return_value=_realtime_config(enabled=True)),
+        patch(
+            "data_provider.base.get_provider_credentials",
+            return_value=ProviderCredentialBundle(
+                provider="alpaca",
+                auth_mode="key_secret",
+                key_id="configured_id",
+                secret_key="configured_pair",
+                extras={"data_feed": "iex"},
+            ),
+        ),
+        patch.object(manager, "_get_alpaca_fetcher", return_value=alpaca),
+        patch.object(
+            manager,
+            "_get_twelve_data_fetcher",
+            side_effect=AssertionError("US realtime must not construct HK Twelve Data fetcher"),
+        ),
+    ):
+        quote = manager.get_realtime_quote("AAPL")
+
+    assert quote is not None
+    assert quote.source == RealtimeSource.YFINANCE
+    assert alpaca.calls == [("AAPL", None)]
+    assert yfinance.calls == [("AAPL", None)]
+    assert efinance.calls == []
+    assert akshare.calls == []
+    assert tushare.calls == []
+
+    trace = manager.get_last_realtime_quote_trace()
+    assert trace == [
+        {
+            "sequence": 1,
+            "provider": "market_route",
+            "action": "selected",
+            "outcome": "ok",
+            "status": "ok",
+            "reason": None,
+            "message": "US stock route selected: alpaca -> yfinance.",
+        },
+        {
+            "sequence": 2,
+            "provider": "alpaca",
+            "action": "attempting",
+            "outcome": "unknown",
+            "status": "unknown",
+            "reason": None,
+            "message": "Attempting realtime quote from alpaca for AAPL.",
+        },
+        {
+            "sequence": 3,
+            "provider": "alpaca",
+            "action": "failed",
+            "outcome": "empty_result",
+            "status": "empty_result",
+            "reason": "provider_returned_none",
+            "message": "Provider returned no realtime quote.",
+        },
+        {
+            "sequence": 4,
+            "provider": "yfinance",
+            "action": "attempting",
+            "outcome": "unknown",
+            "status": "unknown",
+            "reason": None,
+            "message": "Attempting realtime quote from yfinance for AAPL.",
+        },
+        {
+            "sequence": 5,
+            "provider": "yfinance",
+            "action": "succeeded",
+            "outcome": "ok",
+            "status": "ok",
+            "reason": None,
+            "message": "Realtime quote accepted from yfinance.",
+        },
+    ]
+
+    contract = build_provider_route_evidence_contract(
+        provider_family="market_realtime",
+        route_family="us_realtime_quote",
+        trace_entries=trace,
+    )
+    assert contract["advisoryOnly"] is True
+    assert contract["liveEnforcement"] is False
+    assert contract["noExternalCalls"] is True
+    assert contract["externalProviderCalls"] is False
+    assert contract["providerRuntimeChanged"] is False
+    assert contract["marketCacheMutation"] is False
+    assert contract["routeTrace"][0]["providerFamily"] == "market_route"
+    assert [item["providerFamily"] for item in contract["routeTrace"][1:]] == [
+        "alpaca",
+        "alpaca",
+        "yfinance",
+        "yfinance",
+    ]
+
+
+def test_hk_realtime_trace_records_twelve_data_fallback_to_akshare_hk_without_cn_or_us_calls() -> None:
+    twelve_data = _RealtimeFetcher(name="TwelveDataFetcher", priority=0, quote=None)
+    akshare = _RealtimeFetcher(
+        name="AkshareFetcher",
+        priority=2,
+        quote=UnifiedRealtimeQuote(
+            code="HK01810",
+            name="Xiaomi",
+            source=RealtimeSource.TWELVE_DATA,
+            price=44.2,
+        ),
+    )
+    efinance = _RealtimeFetcher(
+        name="EfinanceFetcher",
+        priority=1,
+        quote=UnifiedRealtimeQuote(code="HK01810", source=RealtimeSource.EFINANCE, price=1.0),
+    )
+    tushare = _RealtimeFetcher(
+        name="TushareFetcher",
+        priority=3,
+        quote=UnifiedRealtimeQuote(code="HK01810", source=RealtimeSource.TUSHARE, price=1.0),
+    )
+    manager = DataFetcherManager(fetchers=[efinance, akshare, tushare])
+
+    with (
+        patch("src.config.get_config", return_value=_realtime_config(enabled=True)),
+        patch(
+            "data_provider.base.get_provider_credentials",
+            side_effect=AssertionError("HK realtime must not inspect US Alpaca credentials"),
+        ),
+        patch.object(manager, "_get_twelve_data_fetcher", return_value=twelve_data),
+        patch.object(
+            manager,
+            "_get_alpaca_fetcher",
+            side_effect=AssertionError("HK realtime must not construct US Alpaca fetcher"),
+        ),
+    ):
+        quote = manager.get_realtime_quote("1810.HK")
+
+    assert quote is not None
+    assert quote.price == 44.2
+    assert twelve_data.calls == [("HK01810", None)]
+    assert akshare.calls == [("HK01810", "hk")]
+    assert efinance.calls == []
+    assert tushare.calls == []
+
+    trace = manager.get_last_realtime_quote_trace()
+    assert trace == [
+        {
+            "sequence": 1,
+            "provider": "market_route",
+            "action": "selected",
+            "outcome": "ok",
+            "status": "ok",
+            "reason": None,
+            "message": "HK route selected: twelve_data -> akshare_hk.",
+        },
+        {
+            "sequence": 2,
+            "provider": "twelve_data",
+            "action": "attempting",
+            "outcome": "unknown",
+            "status": "unknown",
+            "reason": None,
+            "message": "Attempting realtime quote from twelve_data for HK01810.",
+        },
+        {
+            "sequence": 3,
+            "provider": "twelve_data",
+            "action": "failed",
+            "outcome": "empty_result",
+            "status": "empty_result",
+            "reason": "provider_returned_none",
+            "message": "Provider returned no realtime quote.",
+        },
+        {
+            "sequence": 4,
+            "provider": "akshare_hk",
+            "action": "attempting",
+            "outcome": "unknown",
+            "status": "unknown",
+            "reason": None,
+            "message": "Attempting realtime quote from akshare_hk for HK01810.",
+        },
+        {
+            "sequence": 5,
+            "provider": "akshare_hk",
+            "action": "succeeded",
+            "outcome": "ok",
+            "status": "ok",
+            "reason": None,
+            "message": "Realtime quote accepted from akshare_hk.",
+        },
+    ]
+
+    contract = build_provider_route_evidence_contract(
+        provider_family="market_realtime",
+        route_family="hk_realtime_quote",
+        trace_entries=trace,
+        source_confidence={"freshness": "fallback", "isFallback": True},
+    )
+    assert contract["advisoryOnly"] is True
+    assert contract["liveEnforcement"] is False
+    assert contract["noExternalCalls"] is True
+    assert contract["externalProviderCalls"] is False
+    assert contract["providerRuntimeChanged"] is False
+    assert contract["marketCacheMutation"] is False
+    assert contract["fallback"]["state"] == "fallback"
+    assert contract["routeTrace"][2]["providerFamily"] == "twelve_data"
+    assert contract["routeTrace"][2]["outcome"] == "empty_result"
+    assert contract["routeTrace"][-1]["providerFamily"] == "akshare_hk"
+
+
 def test_unified_realtime_quote_shape_filters_none_and_requires_positive_price() -> None:
     quote = UnifiedRealtimeQuote(
         code="AAPL",
@@ -539,6 +809,132 @@ def test_us_history_remote_fallback_preserves_normalized_symbol_dates_and_source
         end_date="2024-01-31",
         days=20,
     )
+
+
+def test_us_daily_history_trace_records_alpaca_failure_then_yfinance_fallback_without_hk_or_cn_calls() -> None:
+    daily_frame = pd.DataFrame(
+        [
+            {"date": "2026-05-01", "open": 100.0, "high": 102.0, "low": 99.0, "close": 101.5},
+        ]
+    )
+    yfinance = _DailyHistoryFetcher(
+        name="YfinanceFetcher",
+        priority=4,
+        result=(daily_frame, "YfinanceFetcher"),
+    )
+    efinance = _DailyHistoryFetcher(
+        name="EfinanceFetcher",
+        priority=1,
+        result=(daily_frame, "EfinanceFetcher"),
+    )
+    akshare = _DailyHistoryFetcher(
+        name="AkshareFetcher",
+        priority=2,
+        result=(daily_frame, "AkshareFetcher"),
+    )
+    alpaca = _DailyHistoryFetcher(
+        name="AlpacaFetcher",
+        priority=0,
+        error=TimeoutError("alpaca timeout"),
+    )
+    manager = DataFetcherManager(fetchers=[efinance, akshare, yfinance])
+
+    with (
+        patch(
+            "data_provider.base.get_provider_credentials",
+            return_value=ProviderCredentialBundle(
+                provider="alpaca",
+                auth_mode="key_secret",
+                key_id="configured_id",
+                secret_key="configured_pair",
+                extras={"data_feed": "iex"},
+            ),
+        ),
+        patch.object(manager, "_get_alpaca_fetcher", return_value=alpaca),
+        patch.object(
+            manager,
+            "_get_twelve_data_fetcher",
+            side_effect=AssertionError("US daily history must not construct HK Twelve Data fetcher"),
+        ),
+    ):
+        frame, source = manager.get_daily_data("AAPL", days=20)
+
+    assert frame is daily_frame
+    assert source == "YfinanceFetcher"
+    assert alpaca.calls == [
+        {"stock_code": "AAPL", "start_date": None, "end_date": None, "days": 20},
+    ]
+    assert yfinance.calls == [
+        {"stock_code": "AAPL", "start_date": None, "end_date": None, "days": 20},
+    ]
+    assert efinance.calls == []
+    assert akshare.calls == []
+
+    trace = manager.get_last_daily_history_trace()
+    assert trace == [
+        {
+            "sequence": 1,
+            "provider": "market_route",
+            "action": "selected",
+            "outcome": "ok",
+            "status": "ok",
+            "reason": None,
+            "message": "US daily history route selected: AlpacaFetcher -> YfinanceFetcher.",
+        },
+        {
+            "sequence": 2,
+            "provider": "AlpacaFetcher",
+            "action": "attempting",
+            "outcome": "unknown",
+            "status": "unknown",
+            "reason": None,
+            "message": "Attempting daily history from AlpacaFetcher for AAPL.",
+        },
+        {
+            "sequence": 3,
+            "provider": "AlpacaFetcher",
+            "action": "failed",
+            "outcome": "timeout",
+            "status": "timeout",
+            "reason": "alpaca timeout",
+            "message": "Daily history failed on AlpacaFetcher: alpaca timeout",
+        },
+        {
+            "sequence": 4,
+            "provider": "YfinanceFetcher",
+            "action": "attempting",
+            "outcome": "unknown",
+            "status": "unknown",
+            "reason": None,
+            "message": "Attempting daily history from YfinanceFetcher for AAPL.",
+        },
+        {
+            "sequence": 5,
+            "provider": "YfinanceFetcher",
+            "action": "succeeded",
+            "outcome": "ok",
+            "status": "ok",
+            "reason": None,
+            "message": "Daily history accepted from YfinanceFetcher: rows=1.",
+        },
+    ]
+
+    contract = build_provider_route_evidence_contract(
+        provider_family="market_history",
+        route_family="us_daily_history",
+        trace_entries=trace,
+        source_confidence={"freshness": "fallback", "isFallback": True},
+    )
+    assert contract["advisoryOnly"] is True
+    assert contract["liveEnforcement"] is False
+    assert contract["noExternalCalls"] is True
+    assert contract["externalProviderCalls"] is False
+    assert contract["providerRuntimeChanged"] is False
+    assert contract["marketCacheMutation"] is False
+    assert contract["fallback"]["state"] == "fallback"
+    assert contract["routeTrace"][2]["providerFamily"] == "alpacafetcher"
+    assert contract["routeTrace"][2]["outcome"] == "timeout"
+    assert contract["routeTrace"][-1]["providerFamily"] == "yfinancefetcher"
 
 
 def test_stock_service_history_payload_preserves_aggregation_shape() -> None:
