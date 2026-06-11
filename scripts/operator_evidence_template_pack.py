@@ -119,7 +119,18 @@ def _security_template() -> dict[str, Any]:
         },
         "rbacFallbackDisable": {
             **_security_section(),
+            "disableSwitchExplicit": False,
             "fallbackDisabled": False,
+            "routeInventoryComplete": False,
+            "coarseFallbackDisabledOrExceptionAccepted": False,
+            "backendAdminRoutesExplicitCapabilities": False,
+            "frontendAdminGatesCapabilityBased": False,
+            "frontendAdminMissingCapabilitiesFailClosed": False,
+            "explicitCapabilityPayloadsPassWithoutFallback": False,
+            "legacyMissingCapabilityUsersFailClosed": False,
+            "rollbackPlanRecorded": False,
+            "auditEvidenceSanitized": False,
+            "runtimeDefaultUnchanged": False,
         },
         "breakGlassRecovery": _security_section(),
         "adminRouteSampling": {

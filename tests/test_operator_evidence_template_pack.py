@@ -29,6 +29,20 @@ PLACEHOLDERS = {
     "<release-candidate-sha>",
 }
 
+RBAC_FALLBACK_OFF_OPERATOR_PILOT_FIELDS = {
+    "disableSwitchExplicit",
+    "routeInventoryComplete",
+    "coarseFallbackDisabledOrExceptionAccepted",
+    "backendAdminRoutesExplicitCapabilities",
+    "frontendAdminGatesCapabilityBased",
+    "frontendAdminMissingCapabilitiesFailClosed",
+    "explicitCapabilityPayloadsPassWithoutFallback",
+    "legacyMissingCapabilityUsersFailClosed",
+    "rollbackPlanRecorded",
+    "auditEvidenceSanitized",
+    "runtimeDefaultUnchanged",
+}
+
 UNSAFE_MARKERS = (
     "api_key",
     "apikey",
@@ -97,6 +111,10 @@ def test_all_templates_generated(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert {path.name for path in tmp_path.glob("*.json")} == EXPECTED_FILES
+    security_template = _load(tmp_path / "security_operator_acceptance.json")
+    assert RBAC_FALLBACK_OFF_OPERATOR_PILOT_FIELDS.issubset(
+        security_template["rbacFallbackDisable"]
+    )
 
     combined = "\n".join(path.read_text(encoding="utf-8") for path in tmp_path.glob("*.json"))
     for placeholder in PLACEHOLDERS:

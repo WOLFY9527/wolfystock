@@ -99,11 +99,19 @@ Status:
 - [x] Frontend admin gates fail closed when capability fields are missing.
 - [x] Auth payloads expose bounded capability summaries and convenience flags,
   not password/session/role internals.
+- [x] Fallback-off operator pilot evidence can be validated offline through
+  `scripts/security_operator_acceptance_check.py --artifact <sanitized-security-operator-artifact.json>`;
+  the artifact must include complete route inventory, explicit backend
+  capability classification, frontend fail-closed gate proof, explicit allow,
+  legacy/missing fail-closed denial, rollback, sanitized audit evidence, and
+  `runtimeDefaultUnchanged=true`.
 
 Remaining gaps:
 
 - [ ] Coarse admin compatibility fallback remains for existing/legacy admin
   users.
+- [ ] A real target-environment fallback-off operator pilot artifact has not
+  been accepted by reviewers.
 - [ ] Adjacent non-migrated admin surfaces still use coarse `require_admin_user`
   style gates.
 - [ ] Role management UI and capability mutation governance are absent.
@@ -114,7 +122,9 @@ Remaining gaps:
 Go/no-go:
 
 - **NO-GO** for broad public admin exposure until coarse fallback removal or a
-  written production exception is approved with compensating controls.
+  written production exception is approved with compensating controls. Offline
+  fallback-off evidence readiness does not flip the default and does not approve
+  public launch.
 
 ## 4. WS2 / task runtime gates
 

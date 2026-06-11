@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+import json
 from pathlib import Path
 import re
 from unittest.mock import patch
@@ -36,6 +37,12 @@ PUBLIC_LAUNCH_ADMIN_RBAC_ENDPOINT_FILES = (
     "scanner.py",
     "system_config.py",
     "usage.py",
+)
+FRONTEND_ROUTE_CAPABILITY_FIXTURE = (
+    Path(__file__).resolve().parent / "fixtures" / "auth" / "frontend_route_capability_inventory.json"
+)
+FRONTEND_ADMIN_CAPABILITIES_SOURCE = (
+    Path(__file__).resolve().parents[1] / "apps" / "dsa-web" / "src" / "utils" / "adminCapabilities.ts"
 )
 
 EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS: dict[str, dict[str, int]] = {
@@ -222,6 +229,38 @@ def inventory_public_launch_admin_route_capabilities() -> AdminRouteCapabilityIn
     )
 
 
+def _frontend_admin_capability_gate_evidence() -> dict[str, bool]:
+    fixture = json.loads(FRONTEND_ROUTE_CAPABILITY_FIXTURE.read_text(encoding="utf-8"))
+    capability_source = FRONTEND_ADMIN_CAPABILITIES_SOURCE.read_text(encoding="utf-8")
+    admin_routes = fixture.get("admin_surface_routes", [])
+    capability_flags = {
+        str(entry.get("capability_flag"))
+        for entry in admin_routes
+        if str(entry.get("capability_flag") or "").strip()
+    }
+    capability_labels = {
+        str(entry.get("capability_label"))
+        for entry in admin_routes
+        if str(entry.get("capability_label") or "").strip()
+    }
+    route_prefixes = {
+        str(entry.get("path") or "").split("/:")[0]
+        for entry in admin_routes
+    }
+
+    return {
+        "admin_gates_capability_based": bool(admin_routes)
+        and all(flag in capability_source for flag in capability_flags)
+        and all(label in capability_source for label in capability_labels)
+        and all(prefix in capability_source for prefix in route_prefixes if prefix),
+        "missing_capabilities_fail_closed": bool(capability_flags)
+        and all(f"{flag}: false" in capability_source for flag in capability_flags)
+        and "if (!currentUser?.isAdmin)" in capability_source
+        and "return emptyFlags" in capability_source
+        and "return false;" in capability_source,
+    }
+
+
 def _role_management_runtime_api_present() -> bool:
     endpoint_dir = Path(__file__).resolve().parents[1] / "api" / "v1" / "endpoints"
     route_text = "\n".join(path.read_text(encoding="utf-8") for path in endpoint_dir.glob("admin*.py"))
@@ -263,6 +302,7 @@ def _operator_evidence_is_sanitized(value: object) -> bool:
 
 def build_coarse_admin_fallback_disable_rehearsal_evidence() -> dict[str, object]:
     inventory = inventory_public_launch_admin_route_capabilities()
+    frontend_gate_evidence = _frontend_admin_capability_gate_evidence()
     inventoried_capabilities = tuple(
         sorted({capability for counts in inventory.capability_counts.values() for capability in counts})
     )
@@ -329,6 +369,13 @@ def build_coarse_admin_fallback_disable_rehearsal_evidence() -> dict[str, object
         "public_launch_inventory_complete": inventory.capability_counts
         == EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS,
         "public_launch_routes_without_legacy_admin_dependencies": not inventory.legacy_admin_dependencies,
+        "backend_admin_routes_explicit_capability_classified": inventory.capability_counts
+        == EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS
+        and not inventory.legacy_admin_dependencies,
+        "frontend_admin_gates_capability_based": frontend_gate_evidence["admin_gates_capability_based"],
+        "frontend_admin_missing_capabilities_fail_closed": frontend_gate_evidence["missing_capabilities_fail_closed"],
+        "operator_pilot_evidence_path": "security_operator_acceptance",
+        "public_launch_approved": False,
         "default_enabled_without_explicit_config": default_enabled_without_explicit_config,
         "runtime_default_changed": False,
     }
@@ -471,6 +518,10 @@ def build_security_launch_preflight() -> SecurityLaunchPreflight:
         and staging_rehearsal_evidence["audit_payload_sanitized"]
         and staging_rehearsal_evidence["public_launch_inventory_complete"]
         and staging_rehearsal_evidence["public_launch_routes_without_legacy_admin_dependencies"]
+        and staging_rehearsal_evidence["backend_admin_routes_explicit_capability_classified"]
+        and staging_rehearsal_evidence["frontend_admin_gates_capability_based"]
+        and staging_rehearsal_evidence["frontend_admin_missing_capabilities_fail_closed"]
+        and not staging_rehearsal_evidence["public_launch_approved"]
         and staging_rehearsal_evidence["default_enabled_without_explicit_config"]
         and not staging_rehearsal_evidence["runtime_default_changed"]
     )

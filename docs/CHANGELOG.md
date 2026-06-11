@@ -1,4 +1,5 @@
 ## 2026-06-12
+- Security operator acceptance evidence now requires explicit fallback-off RBAC pilot proof: complete route inventory, backend explicit-capability classification, frontend fail-closed capability gates, explicit capability allow, legacy/missing fail-closed denial, rollback, sanitized audit evidence, and unchanged runtime defaults. This strengthens offline operator evidence validation only; it does not flip `WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED`, approve public launch, change auth/session/RBAC runtime behavior, add role-management UI/API, or alter frontend UI.
 - Quota low-risk enforcement pilot is now available only behind explicit opt-in flags for authenticated sync single-stock analysis: the existing owner-allowlisted reserve/release pilot remains default-off, the new enforcement flag can block only this route on quota rejection, success consumes estimated route units, and analysis failure releases the reservation. This does not enable global quota enforcement, provider quota buckets, public-launch approval, frontend behavior, auth/RBAC behavior, DB schema changes, notification sends, or broker/order/trade paths.
 
 ## 2026-06-11
