@@ -1,9 +1,13 @@
 # Admin/Ops Launch Cockpit Goal Progress
 
-Status: in progress
-Branch: `codex/goal-admin-ops-launch-cockpit`
+Status: salvage validated for post-fix read-only review
+Branch: `codex/admin-ops-launch-cockpit-salvage`
 Mode: private-beta admin/operator cockpit. This work is read-only/advisory and
 does not approve public launch.
+
+Salvage source: current `origin/main` plus cherry-picked cockpit checkpoints
+from the old goal branch. The old `codex/goal-admin-ops-launch-cockpit` branch
+is not a merge endpoint for this work.
 
 ## Goal Boundary
 
@@ -102,15 +106,52 @@ inventing missing task labels.
 5. Add frontend tests and, if practical, a bounded admin Playwright smoke using
    mocked/safe data.
 
-## Checkpoint Log
+## Salvage Checkpoint Log
 
-| Checkpoint | Commit | Status | Notes |
+| Source checkpoint | Salvage commit | Status | Notes |
 | --- | --- | --- | --- |
-| `checkpoint(admin-ops): map readiness cockpit` | `cece18b1` | Complete | Initial audit map and implementation plan. Validation: `git diff --check`; `./scripts/release_secret_scan.sh --local-only`. |
-| `checkpoint(admin-ops): add sanitized status surfaces` | `8380bd1d` | Complete | Backend `launchCockpit` projection/schema/tests. Focused validation: `pytest -p no:cacheprovider tests/api/test_admin_ops_status.py`; `python -m py_compile api/v1/endpoints/admin_ops_status.py api/v1/schemas/admin_ops_status.py src/services/admin_ops_status_service.py`. |
-| `checkpoint(admin-ops): add evidence and blocker view` | pending | In progress | Frontend `/admin/launch-cockpit` route/page/navigation and API client. Focused validation: `npm --prefix apps/dsa-web run test -- src/api/__tests__/adminOpsStatus.test.ts --reporter=dot`; `npm --prefix apps/dsa-web run test -- src/pages/__tests__/AdminLaunchCockpitPage.test.tsx --reporter=dot`; `npm --prefix apps/dsa-web run test -- src/__tests__/AppRoutes.test.tsx --reporter=dot`; `npm --prefix apps/dsa-web run test -- src/components/layout/__tests__/Shell.test.tsx --reporter=dot`; `npm --prefix apps/dsa-web run typecheck`. |
-| `checkpoint(admin-ops): add cockpit validation` | pending | Pending | Focused validation and smoke evidence. |
-| `feat(admin-ops): add private beta launch cockpit` | pending | Pending | Final squash/checkpoint closeout commit. |
+| `cece18b1 checkpoint(admin-ops): map readiness cockpit` | `d763654f` | Carried into salvage | Initial audit map and implementation plan are preserved, but old-branch validation is not treated as current validation. Current validation is listed below. |
+| `8380bd1d checkpoint(admin-ops): add sanitized status surfaces` | `e3430b7c` | Carried into salvage | Backend additive `launchCockpit` projection/schema/tests are preserved on current main. Current validation is listed below. |
+| `31c4b7cb checkpoint(admin-ops): add evidence and blocker view` | `05d2123d` | Carried into salvage with post-fix route guard | Frontend `/admin/launch-cockpit` page/API/nav are preserved. Salvage adds guest redirect coverage for `/admin/ops` and `/admin/launch-cockpit` so the default-on admin route remains admin-only under existing `ops:logs:read`. |
+
+No unresolved future checkpoint is marked complete in this salvage document.
+The earlier `checkpoint(admin-ops): add cockpit validation` and
+`feat(admin-ops): add private beta launch cockpit` rows from the old goal
+branch are intentionally not carried forward as completed work.
+
+## 2026-06-11 Salvage Validation Evidence
+
+| Command | Result |
+| --- | --- |
+| `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m pytest -p no:cacheprovider tests/api/test_admin_ops_status.py -q` | PASS: 5 passed. |
+| `PYTHONDONTWRITEBYTECODE=1 /Users/yehengli/daily_stock_analysis/.venv/bin/python -m py_compile api/v1/endpoints/admin_ops_status.py api/v1/schemas/admin_ops_status.py src/services/admin_ops_status_service.py` | PASS: exit 0. |
+| `npm --prefix apps/dsa-web run test -- src/api/__tests__/adminOpsStatus.test.ts --reporter=dot` | PASS: 1 test passed. |
+| `npm --prefix apps/dsa-web run test -- src/pages/__tests__/AdminLaunchCockpitPage.test.tsx --reporter=dot` | PASS: 2 tests passed. |
+| `npm --prefix apps/dsa-web run test -- src/__tests__/AppRoutes.test.tsx --reporter=dot` | PASS: 126 tests passed, including guest redirect coverage for `/admin/ops` and `/admin/launch-cockpit`. |
+| `npm --prefix apps/dsa-web run test -- src/components/layout/__tests__/Shell.test.tsx --reporter=dot` | PASS: 35 tests passed. Existing React `act(...)` warnings were printed by this target. |
+| `npm --prefix apps/dsa-web run typecheck` | PASS: `tsc -b --pretty false` exit 0. |
+| `npm --prefix apps/dsa-web run build` | PASS: `tsc -b && vite build` exit 0. Vite printed existing large chunk warnings. |
+| `git diff --check origin/main..HEAD` | PASS: exit 0. |
+| `./scripts/release_secret_scan.sh` | PASS: no high-confidence secret patterns found in changed text files. |
+
+Validation environment note: `apps/dsa-web/node_modules` was absent in this
+salvage worktree, so `npm --prefix apps/dsa-web ci` was run before Vitest,
+typecheck, and build. It installed dependencies from the existing lockfile and
+reported the existing npm audit summary; no dependency files were changed.
+
+## Salvage Preservation Notes
+
+- Product Experience and Research workflow progress documents were not changed.
+- `apps/dsa-web/src/utils/trustDisclosure.ts` and
+  `apps/dsa-web/src/utils/evidenceDisplay.ts` were not changed.
+- Backtest safety/report/support disclosure files, admin logs, notifications,
+  liquidity, private beta readiness, and consumer safety files unrelated to
+  this cockpit were not changed.
+- The cockpit remains admin-only under existing `ops:logs:read`, read-only,
+  advisory, sanitized, and additive on the admin ops status response.
+- The cockpit does not change provider order/fallback/cache behavior, quota
+  enforcement, auth/RBAC/session behavior, DB restore/cleanup/PITR, broker/order
+  behavior, notification sending, production config, or consumer routes.
 
 ## Explicit Non-Approvals
 

@@ -548,11 +548,15 @@ describe('AppContent route flows', () => {
 
   it.each([
     ['/zh/admin/system', '/zh/guest', '游客预览模式'],
+    ['/zh/admin/ops', '/zh/guest', '游客预览模式'],
+    ['/zh/admin/launch-cockpit', '/zh/guest', '游客预览模式'],
     ['/zh/admin/providers', '/zh/guest', '游客预览模式'],
     ['/zh/admin/evidence', '/zh/guest', '游客预览模式'],
     ['/zh/admin/costs', '/zh/guest', '游客预览模式'],
     ['/zh/admin/ai', '/zh/guest', '游客预览模式'],
     ['/en/admin/system', '/en/guest', 'Guest Preview Mode'],
+    ['/en/admin/ops', '/en/guest', 'Guest Preview Mode'],
+    ['/en/admin/launch-cockpit', '/en/guest', 'Guest Preview Mode'],
     ['/en/admin/providers', '/en/guest', 'Guest Preview Mode'],
     ['/en/admin/evidence', '/en/guest', 'Guest Preview Mode'],
     ['/en/admin/costs', '/en/guest', 'Guest Preview Mode'],

@@ -417,6 +417,10 @@ export const AppContent: React.FC = () => {
     || routePathname.startsWith('/admin/costs/')
     || routePathname === '/admin/ai'
     || routePathname.startsWith('/admin/ai/')
+    || routePathname === '/admin/ops'
+    || routePathname.startsWith('/admin/ops/')
+    || routePathname === '/admin/launch-cockpit'
+    || routePathname.startsWith('/admin/launch-cockpit/')
     || routePathname === '/admin/logs'
     || routePathname.startsWith('/admin/logs/')
     || routePathname === '/admin/evidence-workflow'
