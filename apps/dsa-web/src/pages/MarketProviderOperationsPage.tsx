@@ -1548,13 +1548,6 @@ const ProviderSetupChecklistPanel: React.FC<{
     ), 'ok');
     groups.push({ surface, items, severity });
   }
-  const defaultOpenSurface = surfaceFocus && groups.some((group) => group.surface === surfaceFocus.label)
-    ? surfaceFocus.label
-    : groups.slice().sort((left, right) => (
-      severityWeight(left.severity) - severityWeight(right.severity)
-      || CHECKLIST_SURFACE_ORDER.indexOf(left.surface as (typeof CHECKLIST_SURFACE_ORDER)[number]) - CHECKLIST_SURFACE_ORDER.indexOf(right.surface as (typeof CHECKLIST_SURFACE_ORDER)[number])
-    ))[0]?.surface;
-
   return (
     <TerminalNestedBlock data-testid="market-provider-setup-checklist" className="mt-4 bg-black/10 px-3 py-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1602,7 +1595,7 @@ const ProviderSetupChecklistPanel: React.FC<{
         >
           <span className="font-semibold text-cyan-100/82">已按 {surfaceFocus.label} 聚焦：</span>
           {' '}
-          默认只展开该产品面；其他产品面保留紧凑标题、数量和状态，避免首屏变成完整清单墙。以下清单来自现有 productAffectedSurfaces，用于确认覆盖缺口；仅改善数据覆盖披露，不会改变评分规则。
+          默认只标记该产品面，细节仍需按需展开，避免首屏变成完整清单墙。以下清单来自现有 productAffectedSurfaces，用于确认覆盖缺口；仅改善数据覆盖披露，不会改变评分规则。
         </div>
       ) : null}
 
@@ -1621,8 +1614,7 @@ const ProviderSetupChecklistPanel: React.FC<{
               key={group.surface}
               data-testid={`market-provider-setup-surface-${group.surface.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
               title={group.surface}
-              summary={`${formatNumber(group.items.length, 0)} 项 · ${disclosureSeverityLabel(group.severity)} · ${group.surface === defaultOpenSurface ? '默认展开' : '默认折叠'}`}
-              defaultOpen={group.surface === defaultOpenSurface}
+              summary={`${formatNumber(group.items.length, 0)} 项 · ${disclosureSeverityLabel(group.severity)} · 默认折叠`}
               className={cn(
                 'bg-white/[0.025]',
                 surfaceFocus?.label === group.surface ? 'border-cyan-200/20 bg-cyan-300/[0.035]' : '',

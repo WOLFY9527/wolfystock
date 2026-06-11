@@ -1349,8 +1349,8 @@ const BacktestPage: React.FC = () => {
         '过往表现不代表未来收益',
       ];
   const researchBoundaryEventNote = language === 'en'
-    ? 'Signal, fill, and execution labels on this page describe historical rule events only. They do not place orders, connect to a broker, or change portfolio holdings.'
-    : '页面中的信号、成交与执行标签仅表示历史规则事件，不会提交订单、不会连接券商或改动组合持仓。';
+    ? 'Signal, fill, and execution labels on this page describe historical rule events only. They do not trigger external execution or change portfolio holdings.'
+    : '页面中的信号、成交与执行标签仅表示历史规则事件，不会触发外部执行，也不会改动组合持仓。';
   const configPanelRadiusClass = 'rounded-[14px]';
   const configInsetRadiusClass = 'rounded-xl';
   const normalModeRadiusTaxonomyClass = [

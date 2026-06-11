@@ -242,3 +242,74 @@ Boundary confirmation:
 - No DB migration, cleanup, restore, or PITR execution.
 - No broker/order/trade paths.
 - No external notification sending.
+
+### 2026-06-11 - add route smoke evidence
+
+- Removed default-visible Backtest copy that named broker/order paths. The
+  research boundary now says historical rule labels do not trigger external
+  execution or mutate portfolio holdings.
+- Kept Market Provider Operations product-surface setup gaps highlighted but
+  collapsed by default, so admin first screens stay summary-first and full
+  diagnostics remain operator-initiated.
+- Updated bounded Playwright route smoke expectations to the current safer
+  product IA: Market Overview accepts the shared no-trade/no-order boundary,
+  Portfolio and Watchlist empty states use private-beta research-first wording,
+  Settings uses the consumer-facing `账户中心` h1, and admin ops tests assert the
+  current Chinese operator labels.
+
+Route smoke evidence:
+
+```bash
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/BacktestPage.test.tsx -t "defaults to the point-and-shoot normal workspace"
+npm --prefix apps/dsa-web run test -- src/pages/__tests__/MarketProviderOperationsPage.test.tsx
+DSA_WEB_PLAYWRIGHT_PORT=4174 npm --prefix apps/dsa-web run test:e2e -- consumer-copy-regression.smoke.spec.ts secondary-consumer-copy.smoke.spec.ts
+WOLFYSTOCK_ADMIN_OPS_ROUTE_FILTER=logs,cost,evidence,market-providers,provider-circuits DSA_WEB_PLAYWRIGHT_PORT=4175 npm --prefix apps/dsa-web run test:e2e -- admin-ops-launch-surfaces.spec.ts
+CI=1 DSA_WEB_PLAYWRIGHT_PORT=4187 npm --prefix apps/dsa-web run test:e2e -- semantic-route-headings.spec.ts --project=chromium --reporter=list
+```
+
+Result: all route smoke commands completed successfully after the bounded
+copy/IA fixes above. Playwright generated failure screenshots/videos/traces
+during earlier red runs; they remain local test artifacts and are not part of
+the branch diff.
+
+Additional validation for this checkpoint:
+
+```bash
+npm --prefix apps/dsa-web run typecheck
+npm --prefix apps/dsa-web run build
+git diff --check
+./scripts/release_secret_scan.sh --local-only
+```
+
+Follow-up proposals recorded, no protected runtime approval implied:
+
+- Liquidity consumer reason fallback: unknown coverage or route rejection codes
+  should render as a generic "key source still needs confirmation" message
+  instead of title-casing raw backend codes. Likely files:
+  `apps/dsa-web/src/pages/LiquidityMonitorPage.tsx` and related smoke tests.
+  Risk: frontend-only copy projection; validate with Liquidity unit/smoke.
+- Admin Logs default rollups: unknown reason/provider codes can still appear in
+  operator default rows. Likely file:
+  `apps/dsa-web/src/pages/AdminLogsPage.tsx`. Risk: admin-only label mapping;
+  validate with AdminLogs tests and admin ops smoke.
+- Backtest support export disclosure: expanded technical support details still
+  expose backend-style field names. Likely files:
+  `apps/dsa-web/src/components/backtest/BacktestSupportExportsDisclosure.tsx`
+  and its tests. Risk: frontend label projection only; no engine/export
+  contract change.
+- Consumer raw-leakage smoke coverage: extend
+  `consumer-copy-forbidden-vocabulary.smoke.spec.ts` to include Backtest,
+  Options, and auth routes with mocked fixtures.
+
+Boundary confirmation:
+
+- Frontend copy, tests, and smoke expectations only.
+- No public launch approval.
+- No live quota enforcement, reservation consume/blocking, or route blocking.
+- No provider runtime enforcement, provider order/fallback/cache changes, or
+  provider blocking.
+- No auth/session/RBAC runtime changes.
+- No DB migration, cleanup, restore, or PITR execution.
+- No broker/order/trade paths enabled; Backtest copy now avoids default-visible
+  broker/order route language.
+- No external notification sending.

@@ -8,7 +8,7 @@ const ROUTES = [
   { path: '/zh/market-overview', heading: '市场总览' },
   { path: '/zh/backtest', heading: '回测' },
   { path: '/zh/options-lab', heading: '期权实验室' },
-  { path: '/zh/settings', heading: '设置' },
+  { path: '/zh/settings', heading: '账户中心' },
 ] as const;
 
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
