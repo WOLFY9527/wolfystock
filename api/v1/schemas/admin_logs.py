@@ -118,7 +118,7 @@ class ExecutionStepModel(BaseModel):
 
 
 class BusinessEventModel(BaseModel):
-    id: str
+    id: str = Field(description="Bounded admin diagnostic event handle.")
     event: str
     category: str
     type: Optional[str] = None
@@ -139,7 +139,10 @@ class BusinessEventModel(BaseModel):
     feature: Optional[str] = None
     reason: Optional[str] = None
     errorSummary: Optional[str] = None
-    traceId: Optional[str] = None
+    traceId: Optional[str] = Field(
+        default=None,
+        description="Bounded admin diagnostic trace handle; unsafe raw trace values are hashed or omitted.",
+    )
     rootCauseSummary: Optional[str] = None
     stepTraceAvailable: Optional[bool] = None
     analysisType: Optional[str] = None
@@ -147,7 +150,10 @@ class BusinessEventModel(BaseModel):
     scannerId: Optional[str] = None
     backtestId: Optional[str] = None
     userId: Optional[str] = None
-    requestId: Optional[str] = None
+    requestId: Optional[str] = Field(
+        default=None,
+        description="Bounded admin diagnostic request handle; unsafe raw request values are hashed or omitted.",
+    )
     recordId: Optional[str] = None
     startedAt: Optional[str] = None
     finishedAt: Optional[str] = None

@@ -5,6 +5,7 @@ Execution log service for admin observability (D2).
 
 from __future__ import annotations
 
+import hashlib
 import re
 import uuid
 from datetime import datetime, timedelta
@@ -294,6 +295,47 @@ def _compact_identifier(value: Any) -> Optional[str]:
     if not text:
         return None
     return text if len(text) <= 80 else f"{text[:36]}...{text[-16:]}"
+
+
+_BOUNDED_DIAGNOSTIC_HANDLE_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
+_DROP_DIAGNOSTIC_HANDLE_RE = re.compile(
+    r"(api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?(?:token|cookie)|"
+    r"cookie|token|authorization|bearer|credential|private[-_]?key|secret|password|dsn|"
+    r"database[-_]?url|connection[-_]?string|reservation|idempotenc|reserve)",
+    re.IGNORECASE,
+)
+_HASH_DIAGNOSTIC_HANDLE_RE = re.compile(r"(^|[-_.:])(guest|session|user|owner)([-_.:]|$)", re.IGNORECASE)
+_HASHED_DIAGNOSTIC_HANDLE_SOURCES = {"provider_payload", "raw_payload", "event_detail"}
+
+
+def _hashed_diagnostic_handle(value: str, kind: str) -> str:
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+    return f"{kind}:sha256:{digest}"
+
+
+def _project_diagnostic_handle(value: Any, *, kind: str, source: str) -> Optional[str]:
+    text = _as_str(value)
+    if not text:
+        return None
+    if _masked_message(text) != text:
+        return None
+    if _DROP_DIAGNOSTIC_HANDLE_RE.search(text):
+        return None
+    if source in _HASHED_DIAGNOSTIC_HANDLE_SOURCES:
+        return _hashed_diagnostic_handle(text, kind)
+    if _HASH_DIAGNOSTIC_HANDLE_RE.search(text):
+        return _hashed_diagnostic_handle(text, kind)
+    if not _BOUNDED_DIAGNOSTIC_HANDLE_RE.fullmatch(text):
+        return _hashed_diagnostic_handle(text, kind)
+    return text
+
+
+def _first_diagnostic_handle(kind: str, *candidates: Tuple[Any, str]) -> Optional[str]:
+    for value, source in candidates:
+        handle = _project_diagnostic_handle(value, kind=kind, source=source)
+        if handle:
+            return handle
+    return None
 
 
 def _reason_from_failure_text(*values: Any, failed: bool = False) -> Optional[str]:
@@ -3146,23 +3188,25 @@ class ExecutionLogService:
             top_event.get("event_name"),
         )
         first_failed_step = next((step for step in steps if step.get("status") == "failed"), {})
-        request_id = _compact_identifier(_first_text(
-            business.get("requestId"),
-            top_detail.get("request_id"),
-            top_detail.get("requestId"),
-            raw_response.get("request_id"),
-            raw_response.get("requestId"),
-            meta.get("actor_request_id"),
-            row.get("query_id"),
-        ))
-        trace_id = _compact_identifier(_first_text(
-            business.get("traceId"),
-            top_detail.get("trace_id"),
-            top_detail.get("traceId"),
-            raw_response.get("trace_id"),
-            raw_response.get("traceId"),
-            raw_response.get("x_trace_id"),
-        ))
+        request_id = _first_diagnostic_handle(
+            "request",
+            (business.get("requestId"), "business_event"),
+            (top_detail.get("request_id"), "event_detail"),
+            (top_detail.get("requestId"), "event_detail"),
+            (raw_response.get("request_id"), "provider_payload"),
+            (raw_response.get("requestId"), "provider_payload"),
+            (meta.get("actor_request_id"), "actor_context"),
+            (row.get("query_id"), "session_row"),
+        )
+        trace_id = _first_diagnostic_handle(
+            "trace",
+            (business.get("traceId"), "business_event"),
+            (top_detail.get("trace_id"), "event_detail"),
+            (top_detail.get("traceId"), "event_detail"),
+            (raw_response.get("trace_id"), "provider_payload"),
+            (raw_response.get("traceId"), "provider_payload"),
+            (raw_response.get("x_trace_id"), "provider_payload"),
+        )
         explicit_reason = _first_text(
             business.get("reason"),
             business_metadata.get("reason"),
@@ -3327,7 +3371,7 @@ class ExecutionLogService:
             "scannerId": business.get("scannerId"),
             "backtestId": business.get("backtestId"),
             "userId": business.get("userId") or meta.get("actor_user_id"),
-            "requestId": triage.get("requestId") or business.get("requestId") or row.get("query_id"),
+            "requestId": triage.get("requestId"),
             "recordId": record_id,
             "startedAt": started_at,
             "finishedAt": finished_at,

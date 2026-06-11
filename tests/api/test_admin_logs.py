@@ -43,6 +43,11 @@ def _storage_measurement(size: int):
     }
 
 
+def _assert_hashed_diagnostic_handle(testcase: unittest.TestCase, value: str | None, kind: str) -> None:
+    testcase.assertIsNotNone(value)
+    testcase.assertRegex(str(value), rf"^{kind}:sha256:[0-9a-f]{{16}}$")
+
+
 def _admin_user() -> CurrentUser:
     return CurrentUser(
         user_id="bootstrap-admin",
@@ -366,11 +371,11 @@ class AdminLogsApiTestCase(unittest.TestCase):
                 raw_response={
                     "provider": "finnhub",
                     "source": "market_overview",
-                    "request_id": "req-sentiment",
-                    "trace_id": "trace-sentiment",
+                    "request_id": "provider-payload-request-ref",
+                    "trace_id": "provider-payload-trace-ref",
                     "error": "upstream provider timeout token=SECRET",
                 },
-                actor={"actor_type": "anonymous", "request_id": "req-sentiment"},
+                actor={"actor_type": "anonymous"},
             )
 
             payload = admin_logs.list_execution_logs_root(
@@ -390,14 +395,16 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(item.provider, "finnhub")
         self.assertEqual(item.source, "market_overview")
         self.assertEqual(item.reason, "timeout")
-        self.assertEqual(item.requestId, "req-sentiment")
-        self.assertEqual(item.traceId, "trace-sentiment")
+        _assert_hashed_diagnostic_handle(self, item.requestId, "request")
+        _assert_hashed_diagnostic_handle(self, item.traceId, "trace")
         self.assertFalse(item.stepTraceAvailable)
         self.assertEqual(item.failedStepCount, 0)
         self.assertEqual(item.status, "failed")
         self.assertIn("provider timeout", item.errorSummary or "")
         dumped = str(item.model_dump()).lower()
         self.assertNotIn("SECRET", str(item.model_dump()))
+        self.assertNotIn("provider-payload-request-ref", str(item.model_dump()))
+        self.assertNotIn("provider-payload-trace-ref", str(item.model_dump()))
         for forbidden in ("raw_response", "request_body", "response_body", "traceback", "provider_payload"):
             self.assertNotIn(forbidden, dumped)
         self.assertEqual(detail.contextLabel, "MarketSentimentCard")
@@ -420,7 +427,8 @@ class AdminLogsApiTestCase(unittest.TestCase):
 
         self.assertEqual(payload.total, 1)
         self.assertEqual(payload.items[0].symbol, "ORCL")
-        self.assertEqual(payload.items[0].requestId, "guest:session-1:req-1")
+        _assert_hashed_diagnostic_handle(self, payload.items[0].requestId, "request")
+        self.assertNotIn("guest:session-1:req-1", str(payload.model_dump()))
 
     def test_root_detail_returns_split_step_counts_and_skipped_reasons(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
@@ -920,23 +928,99 @@ class AdminLogsApiTestCase(unittest.TestCase):
         item = payload.items[0]
         self.assertEqual(item.id, execution_id)
         self.assertEqual(item.actorType, "guest")
-        self.assertEqual(item.requestId, "guest:session-9:req-1")
+        _assert_hashed_diagnostic_handle(self, item.requestId, "request")
         self.assertTrue(item.stepTraceAvailable)
         self.assertEqual(item.provider, "fmp")
         self.assertEqual(item.reason, "timeout")
         self.assertEqual(item.metadata["databaseDsn"], "***")
         self.assertEqual(item.metadata["safeLabel"], "ok")
+        self.assertNotIn("guest:session-9:req-1", str(item.model_dump()))
         self.assertNotIn("SECRET", str(item.model_dump()))
 
         failed_step = next(step for step in detail.steps if step.name == "fetch_quote")
         self.assertEqual(detail.actorType, "guest")
-        self.assertEqual(detail.requestId, "guest:session-9:req-1")
+        _assert_hashed_diagnostic_handle(self, detail.requestId, "request")
         self.assertEqual(detail.endpoint, "/api/v1/market/quote?api_key=***")
         self.assertEqual(detail.metadata["databaseDsn"], "***")
         self.assertEqual(detail.metadata["safeLabel"], "ok")
         self.assertEqual(failed_step.metadata["sessionToken"], "***")
         self.assertEqual(failed_step.metadata["safeDetail"], "visible")
+        self.assertNotIn("guest:session-9:req-1", str(detail.model_dump()))
         self.assertNotIn("SECRET", str(detail.model_dump()))
+
+    def test_business_event_projection_enforces_bounded_handle_policy(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            secret_like = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="SecretHandle",
+                summary="secret-like handle",
+                subject="SecretHandle",
+                request_id="token=DO_NOT_EXPOSE_HANDLE",
+            )
+            service.finish_execution(secret_like, status="failed")
+
+            reservation = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="ReservationHandle",
+                summary="reservation handle",
+                subject="ReservationHandle",
+                request_id="reservation:reserve-unit-raw-123",
+            )
+            service.finish_execution(reservation, status="failed")
+
+            idempotency = service.start_execution(
+                category="analysis",
+                type="stock_analysis",
+                event="IdempotencyHandle",
+                summary="idempotency handle",
+                subject="IdempotencyHandle",
+                request_id="idempotency-key:raw-456",
+            )
+            service.finish_execution(idempotency, status="failed")
+
+            provider_payload = service.record_market_overview_fetch(
+                panel_name="ProviderPayloadHandle",
+                endpoint_url="/api/v1/market-overview/provider-payload",
+                status="failure",
+                fetch_timestamp="2026-04-30T10:00:00",
+                error_message="provider payload failed",
+                raw_response={
+                    "provider": "finnhub",
+                    "source": "market_overview",
+                    "request_id": "raw-provider-request-ref-123",
+                    "trace_id": "raw-provider-trace-ref-456",
+                    "provider_payload": "raw-provider-payload-container-value",
+                    "error": "provider payload error",
+                },
+                actor={"actor_type": "system"},
+            )
+
+            payload = admin_logs.list_execution_logs_root(since="", limit=20, _=_admin_user())
+            provider_detail = admin_logs.get_business_event_detail(provider_payload, _=_admin_user())
+
+        items = {item.event: item for item in payload.items}
+
+        self.assertIsNone(items["SecretHandle"].requestId)
+        self.assertIsNone(items["ReservationHandle"].requestId)
+        self.assertIsNone(items["IdempotencyHandle"].requestId)
+        _assert_hashed_diagnostic_handle(self, items["ProviderPayloadHandle"].requestId, "request")
+        _assert_hashed_diagnostic_handle(self, items["ProviderPayloadHandle"].traceId, "trace")
+
+        dumped = str(payload.model_dump())
+        detail_dumped = str(provider_detail.model_dump())
+        for forbidden in (
+            "token=DO_NOT_EXPOSE_HANDLE",
+            "reservation:reserve-unit-raw-123",
+            "idempotency-key:raw-456",
+            "raw-provider-request-ref-123",
+            "raw-provider-trace-ref-456",
+            "raw-provider-payload-container-value",
+        ):
+            self.assertNotIn(forbidden, dumped)
+            self.assertNotIn(forbidden, detail_dumped)
 
     def test_root_filters_generic_business_execution_fields(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
@@ -969,6 +1053,7 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(payload.total, 1)
         self.assertEqual(payload.items[0].id, execution_id)
         self.assertEqual(payload.items[0].type, "scan_run")
+        self.assertEqual(payload.items[0].requestId, "req-scan")
         self.assertEqual(payload.items[0].scannerId, "scanner-mainland")
         self.assertEqual(payload.items[0].skippedStepCount, 0)
 
