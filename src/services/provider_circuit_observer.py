@@ -21,6 +21,8 @@ class ProviderCircuitObserver:
 
     DEFAULT_OFF_LABEL = "provider_circuit_live_enforcement_default_off"
     ROLLBACK_LABEL = "no_runtime_change_to_rollback"
+    LOW_RISK_ADMIN_PROBE_DEFAULT_OFF_LABEL = "provider_circuit_admin_probe_pilot_default_off"
+    LOW_RISK_ADMIN_PROBE_ROLLBACK_LABEL = "WOLFYSTOCK_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENABLED"
     RESULT_BUCKETS = {
         "success",
         "timeout",
@@ -329,6 +331,66 @@ class ProviderCircuitObserver:
             "would_change_fallback_behavior": False,
             "no_external_calls": True,
             "provider_behavior_changed": False,
+            "market_cache_behavior_changed": False,
+        }
+
+    def build_low_risk_enforcement_pilot_decision(
+        self,
+        *,
+        provider: str,
+        provider_category: Optional[str] = None,
+        route_family: Optional[str] = None,
+        pilot_enabled: bool = False,
+        rollback_enabled: bool = False,
+        controlled_provider_categories: Optional[set[str] | tuple[str, ...] | list[str]] = None,
+        controlled_route_families: Optional[set[str] | tuple[str, ...] | list[str]] = None,
+        now: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        """Build the only live-blocking pilot decision for a named low-risk boundary.
+
+        This helper is intentionally narrower than the advisory projections above:
+        callers must pass an explicit pilot flag, rollback flag, and controlled
+        scope. It never changes provider order, fallback, or MarketCache behavior.
+        """
+        projection = self.build_admin_enforcement_projection(
+            provider=provider,
+            provider_category=provider_category,
+            route_family=route_family,
+            controlled_provider_categories=controlled_provider_categories,
+            controlled_route_families=controlled_route_families,
+            now=now,
+        )
+        scope_matched = bool(projection["scope_matched"])
+        would_block_if_enforced = bool(projection["would_block_if_enforced"])
+        if rollback_enabled:
+            pilot_status = "disabled_by_rollback"
+        elif not pilot_enabled:
+            pilot_status = "disabled_by_default"
+        elif not scope_matched:
+            pilot_status = "scope_not_enabled"
+        elif would_block_if_enforced:
+            pilot_status = "blocked"
+        else:
+            pilot_status = "allowed"
+
+        would_block_call = bool(pilot_status == "blocked")
+        return {
+            **projection,
+            "boundary": "admin_provider_probe",
+            "pilot_enabled": bool(pilot_enabled),
+            "rollback_enabled": bool(rollback_enabled),
+            "pilot_status": pilot_status,
+            "scope_matched": scope_matched,
+            "default_off_label": self.LOW_RISK_ADMIN_PROBE_DEFAULT_OFF_LABEL,
+            "rollback_label": self.LOW_RISK_ADMIN_PROBE_ROLLBACK_LABEL,
+            "advisory_only": not would_block_call,
+            "live_enforcement": would_block_call,
+            "would_block_call": would_block_call,
+            "would_block_if_enforced": would_block_if_enforced,
+            "provider_behavior_changed": would_block_call,
+            "would_change_provider_order": False,
+            "would_change_fallback_behavior": False,
+            "no_external_calls": True,
             "market_cache_behavior_changed": False,
         }
 

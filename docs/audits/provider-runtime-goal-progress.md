@@ -1,4 +1,29 @@
 
+## 2026-06-12 Provider Circuit Admin Probe Pilot
+
+Implemented a default-off, explicit opt-in provider circuit enforcement pilot
+for the admin built-in provider validation probe only:
+
+- boundary: `/config/data-source/test-builtin`, provider category
+  `data_source_validation`, route family `admin_provider_probe`;
+- enable switch:
+  `WOLFYSTOCK_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ENABLED=true`;
+- rollback switch:
+  `WOLFYSTOCK_PROVIDER_CIRCUIT_ADMIN_PROBE_PILOT_ROLLBACK_ENABLED=true`;
+- when enabled and stored circuit state for the selected provider/boundary
+  would block, the admin probe returns a sanitized blocked diagnostic before
+  outbound provider validation;
+- default-off and rollback paths do not read circuit state or change the
+  provider validation call path.
+
+This is not public-launch approval. It does not change global provider order,
+fallback, retry, timeout, in-flight, sufficiency, MarketCache TTL/SWR/cold-start
+behavior, quota enforcement, auth/RBAC/session behavior, DB schema, frontend
+behavior, broker/order/trade paths, or notification sending. Public launch
+provider reliability remains **NO-GO** until target-environment provider
+entitlement, degraded behavior, broader circuit policy, and operator evidence
+are accepted.
+
 ## 2026-06-11 Salvage Rebase And Baseline Gate Evidence
 
 The clean salvage branch was synced to current `origin/main` before commit.

@@ -208,19 +208,23 @@ Status:
   buckets.
 - [x] Provider SLA/readiness diagnostics and Launch Cockpit/admin provider
   surfaces are present as bounded advisory operator visibility.
+- [x] A default-off admin built-in provider validation probe pilot can block
+  only the `data_source_validation/admin_provider_probe` boundary when
+  explicitly enabled; rollback is a separate explicit flag.
 - [x] Diagnostics responses omit raw provider payloads, URLs/query strings,
   credentials, cookies, raw session ids, exception text, stack traces, and
   internal storage details.
 
 Remaining blockers:
 
-- [ ] No runtime provider call site is integrated for enforcement.
+- [ ] No public/user provider runtime call site is approved for enforcement.
 - [ ] No provider ordering, fallback, retry, timeout, in-flight, sufficiency, or
-  MarketCache behavior change has landed.
+  MarketCache behavior change has landed outside the narrow admin probe pilot.
 - [ ] Existing Launch Cockpit/admin provider surfaces do not prove provider
   entitlement, staging degraded behavior, live circuit enforcement, provider
   order/fallback/cache behavior, or public launch readiness.
-- [ ] Provider circuit enforcement pilot remains separately required.
+- [ ] Accepted operator/staging evidence and any broader provider circuit
+  enforcement policy remain separately required.
 - [ ] Provider SLA/degraded target-environment evidence and live-credential
   redaction proof remain missing before launch.
 
