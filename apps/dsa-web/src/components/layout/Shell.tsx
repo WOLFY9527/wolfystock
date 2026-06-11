@@ -79,7 +79,7 @@ function resolveAdminOpsRouteLabel(pathname: string, language: string): string |
 }
 
 function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, language: string): string {
-  if (pathname === '/' || pathname === '') {
+  if (pathname === '/' || pathname === '' || pathname === '/guest') {
     return t('nav.home');
   }
   const adminRouteLabel = resolveAdminOpsRouteLabel(pathname, language);
@@ -327,7 +327,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const { pathname } = useLocation();
   const routeLocale = parseLocaleFromPathname(pathname);
   const surfacePathname = stripLocalePrefix(pathname);
-  const isHomeRoute = surfacePathname === '/' || surfacePathname === '';
+  const isHomeRoute = surfacePathname === '/' || surfacePathname === '' || surfacePathname === '/guest';
   const isBacktestRoute = surfacePathname.startsWith('/backtest');
   const isMarketOverviewRoute = surfacePathname.startsWith('/market-overview');
   const isLiquidityMonitorRoute = surfacePathname.startsWith('/market/liquidity-monitor');

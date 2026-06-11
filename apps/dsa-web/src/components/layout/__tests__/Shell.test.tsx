@@ -295,8 +295,8 @@ describe('Shell', () => {
     expect(story).toHaveTextContent('市场');
     expect(story).toHaveTextContent('从主题扩散和退潮中找到下一批研究对象');
     expect(story).toHaveTextContent('证据边界');
-    expect(story).toHaveTextContent('不形成交易建议');
-    expect(within(story).getByRole('link', { name: /运行扫描器/ })).toHaveAttribute('href', '/zh/scanner');
+    expect(story).toHaveTextContent('不产生外部动作');
+    expect(within(story).getByRole('link', { name: /查看扫描器/ })).toHaveAttribute('href', '/zh/scanner');
     expect(within(story).getByRole('link', { name: '返回市场总览' })).toHaveAttribute('href', '/zh/market-overview');
   });
 
@@ -698,6 +698,36 @@ describe('Shell', () => {
     expect(document.querySelector('.shell-main-column--consumer')).not.toBeNull();
     expect(document.querySelector('.shell-main-column--home')).not.toBeNull();
     expect(document.querySelector('.shell-content-frame--backtest')).toBeNull();
+  });
+
+  it.each([
+    { path: '/guest', language: 'zh' as const, title: '先确认市场背景', primaryHref: '/market-overview', secondaryHref: '/scanner' },
+    { path: '/zh/guest', language: 'zh' as const, title: '先确认市场背景', primaryHref: '/zh/market-overview', secondaryHref: '/zh/scanner' },
+    { path: '/en/guest', language: 'en' as const, title: 'Confirm market context', primaryHref: '/en/market-overview', secondaryHref: '/en/scanner' },
+  ])('uses the Home shell and story treatment for %s', ({ path, language, title, primaryHref, secondaryHref }) => {
+    languageState.value = language;
+
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const story = screen.getByTestId('consumer-route-story');
+    expect(story).toHaveTextContent(title);
+    expect(story).toHaveTextContent(language === 'en' ? 'research observation' : '研究观察');
+    expect(story.querySelectorAll('a')[0]).toHaveAttribute('href', primaryHref);
+    expect(story.querySelectorAll('a')[1]).toHaveAttribute('href', secondaryHref);
+    expect(document.querySelector('.theme-shell')).toHaveClass('theme-shell--wide', 'theme-shell--consumer', 'theme-shell--home', 'theme-shell--page-scroll', 'min-h-screen');
+    expect(document.querySelector('.shell-content-frame')).toHaveClass('shell-content-frame--wide', 'shell-content-frame--consumer', 'shell-content-frame--home', 'shell-content-frame--page-scroll');
+    expect(document.querySelector('.shell-main-column')).toHaveClass('shell-main-column--consumer', 'shell-main-column--home', 'shell-main-column--page-scroll', 'p-0');
+    expect(document.querySelector('.theme-page-transition')).toHaveClass('theme-page-transition--page-scroll');
+    expect(document.documentElement).toHaveAttribute('data-page-scroll-shell', 'true');
+    expect(document.body).toHaveAttribute('data-page-scroll-shell', 'true');
   });
 
   it('uses the full-width workspace lane for the market overview route', () => {

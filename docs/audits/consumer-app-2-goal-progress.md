@@ -71,6 +71,33 @@ Next verification before the first checkpoint:
 - Commit `checkpoint(consumer): map app ia gaps`.
 - Run full `./scripts/release_secret_scan.sh` after the checkpoint commit and before push.
 
+### read-only review blockers fixed
+
+Status: implemented as a bounded checkpoint fix. This does not complete the full Consumer App 2 rebuild.
+
+Fixed:
+
+- `/guest`, `/zh/guest`, and `/en/guest` now receive the same Home/Start consumer shell classification, story band, wide shell, home modifiers, and page-scroll treatment as `/`.
+- Consumer route story copy was reworded away from rendered action/advice vocabulary in route purpose, next-step, evidence boundary, boundary, and link labels. Replacement language uses research observation, scenario review, manual records, no external action, no holding changes, and read-only validation.
+- `Shell.test.tsx` now covers dedicated guest routes for the Home shell/story behavior while preserving existing Product Experience shell classes and grouped navigation coverage.
+
+Deferred / unchanged:
+
+- No auth routing, route guards, backend, API, provider/cache/fallback, DB, quota, broker/order/trade, notifications, or page-level product logic changes.
+- `AppRoutes.test.tsx` was not changed because existing coverage already proves `/guest`, `/zh/guest`, and `/en/guest` route behavior remains guest-safe.
+- The broader Consumer App 2 route-by-route rebuild remains active and incomplete.
+
+Validation evidence:
+
+- Red test before implementation: `npm --prefix apps/dsa-web run test -- src/components/layout/__tests__/Shell.test.tsx` failed on the three new dedicated guest shell/story cases because `consumer-route-story` was absent.
+- Green test after implementation: `npm --prefix apps/dsa-web run test -- src/components/layout/__tests__/Shell.test.tsx` passed with 42 tests.
+- Focused route/shell regression: `npm --prefix apps/dsa-web run test -- src/components/layout/__tests__/Shell.test.tsx src/__tests__/AppRoutes.test.tsx` passed with 159 tests.
+- TypeScript/build gates: `npm --prefix apps/dsa-web run typecheck` passed; `npm --prefix apps/dsa-web run build:quiet` passed with the existing Vite chunk-size warning.
+- Changed-file quality gates: `npm --prefix apps/dsa-web run lint:changed` passed; `npm --prefix apps/dsa-web run check:design:changed` passed with 2 files scanned and no blocking violations or warnings.
+- Bounded browser smoke: `DSA_WEB_PLAYWRIGHT_PORT=4231 npm --prefix apps/dsa-web run test:e2e -- guest-entry-branding.smoke.spec.ts consumer-copy-forbidden-vocabulary.smoke.spec.ts --project=chromium --workers=1` passed with 4 tests.
+- Source copy scan: `rg -n "\b(buy|sell|broker|orders?|trading|execution|advice|guidance)\b|买入|卖出|交易|执行|券商|订单|委托|建议" apps/dsa-web/src/components/layout/consumerAppNavigation.ts` returned no matches.
+- Git whitespace, secret scan, final status, commit, and push evidence are reported in the task closeout.
+
 ## Validation Asset Audit
 
 Recommended bounded validation set for this goal:
