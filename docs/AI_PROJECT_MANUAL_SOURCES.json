@@ -1,0 +1,853 @@
+{
+  "discovery": {
+    "candidateMarkdownAfterPolicy": 213,
+    "excludedByReason": {
+      "ai_governance_mirror": 5,
+      "archive_provenance": 55,
+      "codex_point_in_time_audit": 54,
+      "fixture_local_doc": 3,
+      "language_or_broad_duplicate": 13,
+      "legacy_or_external_product_doc": 3,
+      "task_progress_log": 10
+    },
+    "includedSourceCount": 53,
+    "markdownDiscovered": 356,
+    "prunedDirectories": [
+      "scripts/__pycache__"
+    ]
+  },
+  "exclusionPolicy": [
+    ".git/**",
+    "node_modules/**",
+    "dist/**",
+    "static/**",
+    "coverage/**",
+    "reports/** unless explicitly high-value",
+    "worktree_archives/**",
+    "archive folders unless explicitly allowlisted",
+    "docs/codex/audits/** task reports unless explicitly promoted by a current source",
+    "local/generated evidence such as .codex/**, .claude/reviews/**, artifacts/**, screenshots/**, and test-results/**",
+    "AI-governance mirrors such as CLAUDE.md and .github/copilot-instructions.md when AGENTS.md is available",
+    "language duplicates and broad translated guides unless generating a language-specific manual"
+  ],
+  "generator": {
+    "callsExternalServices": false,
+    "deterministic": true,
+    "path": "scripts/build_ai_project_manual.py",
+    "readsProductionDataPaths": false,
+    "requiresApiKeys": false,
+    "version": 1
+  },
+  "includedSources": [
+    {
+      "bytes": 15127,
+      "categories": [
+        "governance",
+        "workflow"
+      ],
+      "lineCount": 281,
+      "path": "AGENTS.md",
+      "purpose": "canonical repository AI-agent rules",
+      "sha256": "220b11384db42340fce1977eeaf6fcbe084530bdb6e85afd16a2b58b29a470f7",
+      "title": "AGENTS.md"
+    },
+    {
+      "bytes": 9923,
+      "categories": [
+        "architecture",
+        "product"
+      ],
+      "lineCount": 253,
+      "path": "README.md",
+      "purpose": "product purpose, feature set, stack, entry points",
+      "sha256": "571a95356850104aaf6e4e31f6e585c0bbcd544bd69e99f971c9859e2a8c1490",
+      "title": "WolfyStock"
+    },
+    {
+      "bytes": 7717,
+      "categories": [
+        "governance",
+        "sources"
+      ],
+      "lineCount": 148,
+      "path": "docs/ARCHIVE_INDEX.md",
+      "purpose": "archive lanes and safe-use rules",
+      "sha256": "b8844ab4321266a3d994c228fb340f6d95cd0d7fc0db8d8482fa119028807aae",
+      "title": "WolfyStock Archive And Historical Evidence Index"
+    },
+    {
+      "bytes": 20936,
+      "categories": [
+        "deployment",
+        "launch"
+      ],
+      "lineCount": 636,
+      "path": "docs/DEPLOY.md",
+      "purpose": "deployment modes and boundary notes",
+      "sha256": "66ea0cbbd2e48ae51908e37abb669a83106e45895ddba8c6af89f3d2c7e94f41",
+      "title": "🚀 部署指南"
+    },
+    {
+      "bytes": 12663,
+      "categories": [
+        "governance",
+        "sources"
+      ],
+      "lineCount": 169,
+      "path": "docs/DOCS_INDEX.md",
+      "purpose": "current documentation navigation and authority map",
+      "sha256": "f105b713a9da47efb87ba96b05ff45e170f80e5db6e82ad05659a11f3089bdfe",
+      "title": "WolfyStock Documentation Index"
+    },
+    {
+      "bytes": 10997,
+      "categories": [
+        "governance",
+        "workflow"
+      ],
+      "lineCount": 279,
+      "path": "docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md",
+      "purpose": "AI worker modes, stale-doc traps, validation expectations",
+      "sha256": "d452aab150f575c406231310c37228515b0490d0fef7069a865d31fa0da26cf5",
+      "title": "WolfyStock AI Maintenance Manual"
+    },
+    {
+      "bytes": 22811,
+      "categories": [
+        "architecture",
+        "product"
+      ],
+      "lineCount": 510,
+      "path": "docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md",
+      "purpose": "system overview, routes, API groups, domain guide",
+      "sha256": "a9a4add659239aff3d69c4193735900cdfc2a2064d3db009714909b2a926b083",
+      "title": "WolfyStock System Handbook"
+    },
+    {
+      "bytes": 1798,
+      "categories": [
+        "experimental",
+        "notifications"
+      ],
+      "lineCount": 38,
+      "path": "docs/alerts/README.md",
+      "purpose": "alerts domain entry point and safety posture",
+      "sha256": "d10210a66ad9dc3742654abf6d3d90f36048933588d552c8695ac62b625c9819",
+      "title": "WolfyStock Alerts Docs"
+    },
+    {
+      "bytes": 28118,
+      "categories": [
+        "architecture",
+        "protected-domains"
+      ],
+      "lineCount": 373,
+      "path": "docs/architecture/WOLFYSTOCK_MODULE_ARCHITECTURE.md",
+      "purpose": "bounded-context architecture and dependency rules",
+      "sha256": "ecce47ff03dd9cabf86743226db46e5237fbf763ba5b4654592bc2d3483bbfc5",
+      "title": "WolfyStock Modular Architecture Manual"
+    },
+    {
+      "bytes": 12741,
+      "categories": [
+        "architecture",
+        "workflow"
+      ],
+      "lineCount": 383,
+      "path": "docs/architecture/backend-frontend-modular-maintenance-handbook.md",
+      "purpose": "module owners, first files, invariants, debug flow",
+      "sha256": "2fe81d4aabc75a3f42a18b102413f576f3ec32b4b67ccfe45e1b59484a7c1a78",
+      "title": "Backend / Frontend Modular Maintenance Handbook"
+    },
+    {
+      "bytes": 9169,
+      "categories": [
+        "governance",
+        "sources"
+      ],
+      "lineCount": 167,
+      "path": "docs/architecture/file-governance-taxonomy.md",
+      "purpose": "active-vs-archive and generated artifact policy",
+      "sha256": "0749aa456f9b75d969d50c231095d8db49a5cc6314da258f5e0439fb5dc46cfa",
+      "title": "WolfyStock File Governance Taxonomy"
+    },
+    {
+      "bytes": 5252,
+      "categories": [
+        "launch",
+        "sources"
+      ],
+      "lineCount": 130,
+      "path": "docs/audits/README.md",
+      "purpose": "active audit and launch authority index",
+      "sha256": "3780e9f6da4c18d5af01e8c061f93d0dc211ebd660d201243b42ab9b7c4efdd5",
+      "title": "Audit Index"
+    },
+    {
+      "bytes": 15441,
+      "categories": [
+        "auth",
+        "rbac"
+      ],
+      "lineCount": 303,
+      "path": "docs/audits/admin-rbac-r5-coarse-fallback-removal-plan.md",
+      "purpose": "future coarse fallback removal plan",
+      "sha256": "974fd1a431bc005f000128434742cded46d3050d3f945886ff004acba388fa11",
+      "title": "Admin RBAC R5 Coarse Fallback Removal Plan"
+    },
+    {
+      "bytes": 2321,
+      "categories": [
+        "auth",
+        "security"
+      ],
+      "lineCount": 55,
+      "path": "docs/audits/auth-rbac-release-security-guide.md",
+      "purpose": "Auth/RBAC release review scope",
+      "sha256": "f1267e9aa74f467eaab72ef12834753448b0fecdd60de4e0e1d7a5a8b6d1cf09",
+      "title": "Auth/RBAC Release Security Guide"
+    },
+    {
+      "bytes": 15411,
+      "categories": [
+        "backtest",
+        "launch",
+        "portfolio"
+      ],
+      "lineCount": 205,
+      "path": "docs/audits/backtest-portfolio-public-safety-audit.md",
+      "purpose": "portfolio/backtest public safety evidence",
+      "sha256": "5a7a3197c5c469c1738e1f6c56a67df1f898141654150ad614970ad052bd6a83",
+      "title": "Backtest and Portfolio Public Safety Audit"
+    },
+    {
+      "bytes": 2272,
+      "categories": [
+        "data-pipeline",
+        "provider"
+      ],
+      "lineCount": 33,
+      "path": "docs/audits/data-pipeline-r2-progressive-enrichment.md",
+      "purpose": "progressive enrichment contract and future async merge",
+      "sha256": "cd2e6d545d6c2e2eeecd6e49137560b5a90e9ce3e73b079681b403f7f909d179",
+      "title": "Data Pipeline R2 Progressive Enrichment"
+    },
+    {
+      "bytes": 9109,
+      "categories": [
+        "data",
+        "frontend"
+      ],
+      "lineCount": 207,
+      "path": "docs/audits/data-quality-user-disclosure-policy.md",
+      "purpose": "user-facing source, freshness, and data-quality disclosure",
+      "sha256": "ac3d58c97a823b607ff6bc0533b89a8cf825fb7e1309ea0f0e7a9765ae9da698",
+      "title": "Data Quality User Disclosure Policy"
+    },
+    {
+      "bytes": 27331,
+      "categories": [
+        "launch",
+        "validation"
+      ],
+      "lineCount": 507,
+      "path": "docs/audits/deployment-readiness-checklist.md",
+      "purpose": "release-candidate checklist and final gates",
+      "sha256": "25af91c1f9dc33434a41d538e4cda859d8ef74516f34f216d9c81c721a6125bc",
+      "title": "Public Multi-user Deployment Readiness Checklist"
+    },
+    {
+      "bytes": 4020,
+      "categories": [
+        "cost",
+        "quota"
+      ],
+      "lineCount": 90,
+      "path": "docs/audits/index-cost-quota-observability.md",
+      "purpose": "cost, quota, provider budget, observability index",
+      "sha256": "5b846d0883a4e0a34f0d1d7b617cda27867ba659e0b34921648a6b031bfb73ee",
+      "title": "Cost / Quota / Observability Audit Index"
+    },
+    {
+      "bytes": 4033,
+      "categories": [
+        "data",
+        "options",
+        "provider"
+      ],
+      "lineCount": 87,
+      "path": "docs/audits/index-provider-data-options.md",
+      "purpose": "provider/data/options readiness index",
+      "sha256": "4d788f6faecf75d5c9c9512789825ba7c6f08da697e641bd1f505a7216402cb2",
+      "title": "Provider / Data / Options Audit Index"
+    },
+    {
+      "bytes": 4169,
+      "categories": [
+        "auth",
+        "security"
+      ],
+      "lineCount": 88,
+      "path": "docs/audits/index-security-rbac-mfa.md",
+      "purpose": "security, RBAC, role-governance, MFA doc index",
+      "sha256": "1e736c9c0b71d222479c140eb5241baa14c7e7105781ce20d126873abfd65ea7",
+      "title": "Security / RBAC / MFA Audit Index"
+    },
+    {
+      "bytes": 17738,
+      "categories": [
+        "launch",
+        "validation"
+      ],
+      "lineCount": 255,
+      "path": "docs/audits/launch-acceptance-evidence-pack.md",
+      "purpose": "sanitized launch evidence contract",
+      "sha256": "630ca7193ad3baf1c525064615d1eb0ff0605d3888abeb29fde139c74dbf56f0",
+      "title": "Launch Acceptance Evidence Pack"
+    },
+    {
+      "bytes": 5774,
+      "categories": [
+        "options",
+        "provider"
+      ],
+      "lineCount": 83,
+      "path": "docs/audits/options-provider-adapter-contract.md",
+      "purpose": "Options provider adapter and fixture/live boundary",
+      "sha256": "2b2d5fd1a5ceb0c9996e04819afd17fa0fba0ed959c682cecffc7d46e77b1327",
+      "title": "Options Provider Adapter Contract"
+    },
+    {
+      "bytes": 11681,
+      "categories": [
+        "deployment",
+        "launch"
+      ],
+      "lineCount": 157,
+      "path": "docs/audits/private-beta-readiness.md",
+      "purpose": "private beta boundary and non-approved areas",
+      "sha256": "670f07a022db9a1403e469d2a1ce5161afc6d724edd9631b3febd4a40c407b4c",
+      "title": "Private Beta Readiness Report"
+    },
+    {
+      "bytes": 27856,
+      "categories": [
+        "launch"
+      ],
+      "lineCount": 200,
+      "path": "docs/audits/public-launch-gap-register.md",
+      "purpose": "detailed launch blocker register",
+      "sha256": "307817a7b95a49bf24482b3314f77d5d88f84015480533f68346b19928e6a8f2",
+      "title": "Public Launch Gap Register"
+    },
+    {
+      "bytes": 13746,
+      "categories": [
+        "launch"
+      ],
+      "lineCount": 195,
+      "path": "docs/audits/public-launch-readiness-master.md",
+      "purpose": "executive public launch NO-GO verdict",
+      "sha256": "77e339c0fbf06610407189f2517421873e95e847b9f97c40a4122783fe2c79a3",
+      "title": "Public Launch Readiness Master"
+    },
+    {
+      "bytes": 6530,
+      "categories": [
+        "cost",
+        "quota"
+      ],
+      "lineCount": 195,
+      "path": "docs/audits/quota-reserve-release-operator-evidence-checklist.md",
+      "purpose": "quota reserve/release operator evidence",
+      "sha256": "ac0e1f91da3a0d57c1bda8c9cce3997ac759f92bca8b83a2dcc31b88b720ae1f",
+      "title": "Quota Reserve/Release Operator Evidence Checklist"
+    },
+    {
+      "bytes": 20581,
+      "categories": [
+        "auth",
+        "mfa"
+      ],
+      "lineCount": 495,
+      "path": "docs/audits/security-mfa-secret-storage-hardening-plan.md",
+      "purpose": "deferred MFA secret and recovery hardening plan",
+      "sha256": "7e4175b5169594fca5fdb93df95a2711cbfb2e11e9fcd807ec51ce50e75e3389",
+      "title": "Security MFA Secret Storage Hardening Plan"
+    },
+    {
+      "bytes": 8243,
+      "categories": [
+        "product",
+        "safety"
+      ],
+      "lineCount": 209,
+      "path": "docs/audits/trading-no-advice-product-policy.md",
+      "purpose": "no-advice and no-order product safety policy",
+      "sha256": "a288b09e8b2d4929d3f9cf4c19e27052a9d7a783fb98cd583d314bedfbec3f9a",
+      "title": "Trading No-Advice Product Policy"
+    },
+    {
+      "bytes": 19397,
+      "categories": [
+        "launch",
+        "runtime",
+        "ws2"
+      ],
+      "lineCount": 264,
+      "path": "docs/audits/ws2-multi-instance-smoke-test-design.md",
+      "purpose": "multi-instance smoke design and acceptance criteria",
+      "sha256": "6d5361f9e2ced0378a692a06fd734dc499632348fd80365f0b574d761eaed506",
+      "title": "WS2 Multi-instance Smoke Test Design"
+    },
+    {
+      "bytes": 41475,
+      "categories": [
+        "cost",
+        "quota",
+        "ws2"
+      ],
+      "lineCount": 513,
+      "path": "docs/audits/ws2-multi-user-runtime-cost-control-design.md",
+      "purpose": "multi-user runtime, quota, cost, circuit baseline",
+      "sha256": "47327e135ce839af7dead6c51eb5d461512170202bb79c660ed0a10c21c82d6d",
+      "title": "WS2 Multi-user Runtime + LLM/API Cost Control Design"
+    },
+    {
+      "bytes": 27040,
+      "categories": [
+        "backtest"
+      ],
+      "lineCount": 187,
+      "path": "docs/backtest-system.md",
+      "purpose": "backtest APIs, async behavior, stored-first exports",
+      "sha256": "8bff1fd08c5c5d14417e18e1415bed99e53df0c0f36e55391a7ab44e575f5c00",
+      "title": "Backtest System"
+    },
+    {
+      "bytes": 10675,
+      "categories": [
+        "backtest"
+      ],
+      "lineCount": 156,
+      "path": "docs/backtest/README.md",
+      "purpose": "backtest domain entry point and v1 semantics freeze",
+      "sha256": "ff4ac95618699c58e2a2a9da8418b8b613b13959eca2b6658fbb742adaf7e7c0",
+      "title": "WolfyStock Backtest Docs"
+    },
+    {
+      "bytes": 6037,
+      "categories": [
+        "protected-domains"
+      ],
+      "lineCount": 230,
+      "path": "docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md",
+      "purpose": "backend protected semantic boundaries",
+      "sha256": "e13714d234a36a32d244b69c9e7a929ac09264d5a04f00581c67915d62cb77fe",
+      "title": "WolfyStock Backend Protected Domains"
+    },
+    {
+      "bytes": 4377,
+      "categories": [
+        "backtest",
+        "protected-domains"
+      ],
+      "lineCount": 179,
+      "path": "docs/codex/WOLFYSTOCK_BACKTEST_UNIVERSE_RULES.md",
+      "purpose": "backtest universe local-only guardrails",
+      "sha256": "58091bbbbba4970211793748da877e47c2201880f3fa4f66b07423ca51b4af32",
+      "title": "WolfyStock Backtest Universe Rules"
+    },
+    {
+      "bytes": 5611,
+      "categories": [
+        "validation",
+        "workflow"
+      ],
+      "lineCount": 286,
+      "path": "docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md",
+      "purpose": "final report evidence contract",
+      "sha256": "de2b4302c8965b94a44c0dd8852233ff656f50ca4caa6d1b39e53f1ecf4c3dff",
+      "title": "WolfyStock Codex Final Report Template"
+    },
+    {
+      "bytes": 8952,
+      "categories": [
+        "protected-domains",
+        "workflow"
+      ],
+      "lineCount": 255,
+      "path": "docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md",
+      "purpose": "Codex operating guard, protected domains, validation policy",
+      "sha256": "0ba3837ff4085fd0cfda600b0b829cf87395fefa7effed7143c92a782c6ce30b",
+      "title": "WolfyStock Codex Standard Guard"
+    },
+    {
+      "bytes": 10962,
+      "categories": [
+        "validation",
+        "workflow"
+      ],
+      "lineCount": 315,
+      "path": "docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md",
+      "purpose": "execution modes, prompt fields, commit/push rules",
+      "sha256": "f8b7c955411c633968f0d7a82cc0769c03bdda3f9a30ab28858cce6b8a855848",
+      "title": "WolfyStock Codex Task Runtime Rules"
+    },
+    {
+      "bytes": 12225,
+      "categories": [
+        "validation"
+      ],
+      "lineCount": 207,
+      "path": "docs/codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md",
+      "purpose": "smallest-safe validation tiers and path routing",
+      "sha256": "c4b0a4a01e49a7db04ad80b053f4f71c06bad564584f887024bbb6700cf1b249",
+      "title": "WolfyStock Codex Validation Matrix"
+    },
+    {
+      "bytes": 5045,
+      "categories": [
+        "cost",
+        "provider",
+        "quota"
+      ],
+      "lineCount": 203,
+      "path": "docs/codex/WOLFYSTOCK_PROVIDER_BUDGET_AND_ROUTING_RULES.md",
+      "purpose": "provider budget, quota, and routing rules",
+      "sha256": "c773bfab91b57b2611c86bf39e24fa2c83aa2ebd04c3c70529aaa45cfba291c7",
+      "title": "WolfyStock Provider Budget and Routing Rules"
+    },
+    {
+      "bytes": 14993,
+      "categories": [
+        "data",
+        "experimental"
+      ],
+      "lineCount": 383,
+      "path": "docs/data-reliability/provider-source-confidence-contract.md",
+      "purpose": "provider source confidence and fail-closed boundary",
+      "sha256": "6394aadf6566d1237cc68288a27c52d8301166e12b2d386d56948b90582fd395",
+      "title": "Provider Source-Confidence Contract"
+    },
+    {
+      "bytes": 5014,
+      "categories": [
+        "frontend"
+      ],
+      "lineCount": 101,
+      "path": "docs/frontend/README.md",
+      "purpose": "current frontend route-family and visual authority entry point",
+      "sha256": "fe05230128ccf4f601282c54735f403d0aa00292ce2df6fd8a96ec22f4833ed2",
+      "title": "WolfyStock Frontend Docs"
+    },
+    {
+      "bytes": 9253,
+      "categories": [
+        "admin",
+        "frontend"
+      ],
+      "lineCount": 248,
+      "path": "docs/frontend/WOLFYSTOCK_ADMIN_MAINTENANCE_OS.md",
+      "purpose": "admin maintenance OS IA and operator UX rules",
+      "sha256": "38d143b7ac7c44605a484ee27cd2b50e73dfdf0cf661857da27c0c2df7dcb76a",
+      "title": "WolfyStock Admin Maintenance OS"
+    },
+    {
+      "bytes": 10349,
+      "categories": [
+        "data",
+        "frontend"
+      ],
+      "lineCount": 280,
+      "path": "docs/frontend/WOLFYSTOCK_CONSUMER_DATA_QUALITY_UX.md",
+      "purpose": "consumer data-quality UX wording and disclosure rules",
+      "sha256": "adbf64f69eb83f599f0c60649b4c98ddf5775bb938e3c54d459b5c3c2e1dfee4",
+      "title": "WolfyStock Consumer Data Quality UX"
+    },
+    {
+      "bytes": 9786,
+      "categories": [
+        "frontend",
+        "ui"
+      ],
+      "lineCount": 306,
+      "path": "docs/frontend/WOLFYSTOCK_FRONTEND_NOISE_BUDGET.md",
+      "purpose": "frontend noise, density, and disclosure budget",
+      "sha256": "3078c63cecdb6a593f544bb3db1fa86a7817e61d83f477a57abb5fc55e8916b5",
+      "title": "WolfyStock Frontend Noise Budget"
+    },
+    {
+      "bytes": 12454,
+      "categories": [
+        "frontend",
+        "validation"
+      ],
+      "lineCount": 370,
+      "path": "docs/frontend/validation-playbook.md",
+      "purpose": "frontend/browser evidence and visual validation expectations",
+      "sha256": "cb6656fba6f69165a7ca641a961bff8549ec63f78525185929a3ce65ff6c0953",
+      "title": "WolfyStock Frontend Validation Playbook"
+    },
+    {
+      "bytes": 9285,
+      "categories": [
+        "frontend",
+        "ui"
+      ],
+      "lineCount": 250,
+      "path": "docs/frontend/visual-system.md",
+      "purpose": "Linear OS route taxonomy, layout, primitives, IA",
+      "sha256": "4a4886433d8f25eec29e296c64fcb2c51f0f6f3dcd4dea2f539bd851664c11d5",
+      "title": "WolfyStock Frontend Visual System"
+    },
+    {
+      "bytes": 4008,
+      "categories": [
+        "runtime",
+        "ws2"
+      ],
+      "lineCount": 55,
+      "path": "docs/operations/background-job-queue-boundary.md",
+      "purpose": "process-local async and first queue boundary",
+      "sha256": "083a2097aa874395d1043980ce564cec3b2bfa4edd4fb67a63c30c9113f43a8d",
+      "title": "Background Job Queue Boundary"
+    },
+    {
+      "bytes": 4252,
+      "categories": [
+        "runtime",
+        "ws2"
+      ],
+      "lineCount": 77,
+      "path": "docs/operations/queue-ws2-metrics-production-readiness.md",
+      "purpose": "queue/WS2 metrics production-readiness notes",
+      "sha256": "d7c7c68c613c4b764e372f8db6d0073c91f302788d8dfee3d47326ff39acdf1d",
+      "title": "Queue / WS2 / Metrics Production Readiness"
+    },
+    {
+      "bytes": 1094,
+      "categories": [
+        "options"
+      ],
+      "lineCount": 26,
+      "path": "docs/options/README.md",
+      "purpose": "Options Lab domain entry point",
+      "sha256": "e2e110593e1899042fdc37584fb2ede1ee277ff3b663a5550a7e06f4f7a19cba",
+      "title": "WolfyStock Options Docs"
+    },
+    {
+      "bytes": 1420,
+      "categories": [
+        "portfolio"
+      ],
+      "lineCount": 30,
+      "path": "docs/portfolio/README.md",
+      "purpose": "portfolio domain entry point and safety rules",
+      "sha256": "6fba4169d63e32ce113bf263bd595711ee8f7997be559db10482f5954638f893",
+      "title": "WolfyStock Portfolio Docs"
+    },
+    {
+      "bytes": 4009,
+      "categories": [
+        "data",
+        "provider"
+      ],
+      "lineCount": 74,
+      "path": "docs/provider-data/README.md",
+      "purpose": "provider, data, freshness, cache, disclosure rules",
+      "sha256": "005f9424188e6079519325bc5bf5ca2e6733e22d6eaace79cfe632dee813b4ae",
+      "title": "WolfyStock Provider And Data Docs"
+    },
+    {
+      "bytes": 8306,
+      "categories": [
+        "data",
+        "experimental"
+      ],
+      "lineCount": 257,
+      "path": "docs/quant-duckdb-engine.md",
+      "purpose": "DuckDB diagnostic-only engine posture",
+      "sha256": "f40a2121dd27c900e14f96734518dbf1a5b99392381f28ff6bc1a4d010e9b244",
+      "title": "DuckDB Quant Engine"
+    }
+  ],
+  "outputs": {
+    "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
+    "manual": "docs/AI_PROJECT_MANUAL.md",
+    "manualSha256": "33b8bb99329af54c31afaa66c34e0011b6080af255fe5886cf3ea043c1470bee"
+  },
+  "schemaVersion": 1,
+  "sections": [
+    {
+      "key": "start-here",
+      "sources": [
+        "AGENTS.md",
+        "docs/DOCS_INDEX.md",
+        "docs/WOLFYSTOCK_AI_MAINTENANCE_MANUAL.md",
+        "docs/architecture/file-governance-taxonomy.md"
+      ],
+      "title": "Start Here: Authority And Operating Posture",
+      "updateTrigger": "AI governance, source authority, archive policy, or generated-artifact policy changes.",
+      "validation": "Docs/generator validation plus `python scripts/check_ai_assets.py` when AI governance assets change."
+    },
+    {
+      "key": "product-boundary",
+      "sources": [
+        "README.md",
+        "docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md",
+        "docs/DEPLOY.md",
+        "docs/audits/private-beta-readiness.md",
+        "docs/audits/public-launch-readiness-master.md",
+        "docs/audits/trading-no-advice-product-policy.md"
+      ],
+      "title": "Product Purpose And Current Deployment Boundary",
+      "updateTrigger": "Product positioning, deployment mode, private beta, no-advice, or launch verdict changes.",
+      "validation": "Docs-only validation for docs changes; release/UAT evidence for deployment posture changes."
+    },
+    {
+      "key": "architecture-surfaces",
+      "sources": [
+        "docs/WOLFYSTOCK_SYSTEM_HANDBOOK.md",
+        "docs/architecture/WOLFYSTOCK_MODULE_ARCHITECTURE.md",
+        "docs/architecture/backend-frontend-modular-maintenance-handbook.md",
+        "README.md"
+      ],
+      "title": "Architecture And Major Surfaces",
+      "updateTrigger": "Route map, API group, module ownership, dependency direction, or first-files debug flow changes.",
+      "validation": "Focused validation for touched surface; architecture docs-only validation for handbook-only changes."
+    },
+    {
+      "key": "auth-rbac-mfa",
+      "sources": [
+        "docs/audits/index-security-rbac-mfa.md",
+        "docs/audits/auth-rbac-release-security-guide.md",
+        "docs/audits/admin-rbac-r5-coarse-fallback-removal-plan.md",
+        "docs/audits/security-mfa-secret-storage-hardening-plan.md",
+        "docs/codex/WOLFYSTOCK_BACKEND_PROTECTED_DOMAINS.md"
+      ],
+      "title": "Auth, RBAC, And MFA",
+      "updateTrigger": "Any auth, session, capability, MFA, security evidence, admin route, or role-governance change.",
+      "validation": "Focused auth/RBAC tests, route-capability inventory, redaction checks, and wider gates when enforcement changes."
+    },
+    {
+      "key": "portfolio-backtest",
+      "sources": [
+        "docs/portfolio/README.md",
+        "docs/backtest/README.md",
+        "docs/backtest-system.md",
+        "docs/audits/backtest-portfolio-public-safety-audit.md",
+        "docs/codex/WOLFYSTOCK_BACKTEST_UNIVERSE_RULES.md"
+      ],
+      "title": "Portfolio And Backtest",
+      "updateTrigger": "Portfolio accounting/read models, backtest execution/readback/export, public-safety, or owner-isolation changes.",
+      "validation": "Portfolio/backtest focused tests, golden fixtures, mutation guards, no-advice checks, and owner-isolation evidence when applicable."
+    },
+    {
+      "key": "provider-quota-cost",
+      "sources": [
+        "docs/provider-data/README.md",
+        "docs/codex/WOLFYSTOCK_PROVIDER_BUDGET_AND_ROUTING_RULES.md",
+        "docs/audits/index-provider-data-options.md",
+        "docs/audits/index-cost-quota-observability.md",
+        "docs/audits/quota-reserve-release-operator-evidence-checklist.md"
+      ],
+      "title": "Provider, Quota, And Cost",
+      "updateTrigger": "Provider routing/fallback/freshness/cache, quota, circuit, budget, cost, or provider diagnostics changes.",
+      "validation": "Provider/cache/freshness tests, quota lifecycle tests, no-live-call proof when scoped, and redaction checks."
+    },
+    {
+      "key": "ws2-durable-runtime",
+      "sources": [
+        "docs/operations/background-job-queue-boundary.md",
+        "docs/operations/queue-ws2-metrics-production-readiness.md",
+        "docs/audits/ws2-multi-instance-smoke-test-design.md",
+        "docs/audits/ws2-multi-user-runtime-cost-control-design.md"
+      ],
+      "title": "WS2 And Durable Runtime",
+      "updateTrigger": "Analysis task queue, SSE, durable polling, worker, broker, multi-instance, or WS2 readiness changes.",
+      "validation": "Synthetic/local smoke first; staging/API A-B evidence and operator artifacts only when deployment posture changes."
+    },
+    {
+      "key": "options-data-pipeline",
+      "sources": [
+        "docs/options/README.md",
+        "docs/audits/options-provider-adapter-contract.md",
+        "docs/audits/data-pipeline-r2-progressive-enrichment.md",
+        "docs/audits/data-quality-user-disclosure-policy.md",
+        "docs/audits/trading-no-advice-product-policy.md"
+      ],
+      "title": "Options And Data Pipeline",
+      "updateTrigger": "Options providers, chain/Greeks, scenario copy, optional enrichment, data-quality, or no-advice changes.",
+      "validation": "Options/data-quality focused tests, fixture/mocked-provider tests, no-order scans, and redaction checks."
+    },
+    {
+      "key": "frontend-ia-ui",
+      "sources": [
+        "docs/frontend/README.md",
+        "docs/frontend/visual-system.md",
+        "docs/frontend/validation-playbook.md",
+        "docs/frontend/WOLFYSTOCK_FRONTEND_NOISE_BUDGET.md",
+        "docs/frontend/WOLFYSTOCK_CONSUMER_DATA_QUALITY_UX.md",
+        "docs/frontend/WOLFYSTOCK_ADMIN_MAINTENANCE_OS.md"
+      ],
+      "title": "Frontend IA And UI Conventions",
+      "updateTrigger": "Frontend route taxonomy, primitives, route IA, visual system, consumer/admin disclosure, or browser-evidence rules change.",
+      "validation": "Frontend focused tests plus lint/build/browser evidence when UI source or visual behavior changes."
+    },
+    {
+      "key": "validation-workflow",
+      "sources": [
+        "AGENTS.md",
+        "docs/codex/WOLFYSTOCK_CODEX_STANDARD_GUARD.md",
+        "docs/codex/WOLFYSTOCK_CODEX_TASK_RUNTIME_RULES.md",
+        "docs/codex/WOLFYSTOCK_CODEX_VALIDATION_MATRIX.md",
+        "docs/codex/WOLFYSTOCK_CODEX_FINAL_REPORT_TEMPLATE.md",
+        "docs/frontend/validation-playbook.md"
+      ],
+      "title": "Validation Profiles And Task Workflow",
+      "updateTrigger": "Task modes, prompt fields, validation matrix, final report format, or frontend evidence rules change.",
+      "validation": "Run the task-required commands; docs-only changes use diff-check/status/secret scan unless task says otherwise."
+    },
+    {
+      "key": "launch-no-go",
+      "sources": [
+        "docs/audits/README.md",
+        "docs/audits/public-launch-readiness-master.md",
+        "docs/audits/public-launch-gap-register.md",
+        "docs/audits/deployment-readiness-checklist.md",
+        "docs/audits/launch-acceptance-evidence-pack.md"
+      ],
+      "title": "Public Launch NO-GO Blockers",
+      "updateTrigger": "Launch verdict, blocker register, release checklist, operator evidence contract, or launch acceptance process changes.",
+      "validation": "Docs-only validation for launch docs; release-grade gates and sanitized operator evidence for actual launch posture changes."
+    },
+    {
+      "key": "experimental-demo-only",
+      "sources": [
+        "docs/audits/options-provider-adapter-contract.md",
+        "docs/quant-duckdb-engine.md",
+        "docs/alerts/README.md",
+        "docs/operations/background-job-queue-boundary.md",
+        "docs/operations/queue-ws2-metrics-production-readiness.md",
+        "docs/data-reliability/provider-source-confidence-contract.md",
+        "docs/audits/data-pipeline-r2-progressive-enrichment.md"
+      ],
+      "title": "Known Experimental And Demo-Only Surfaces",
+      "updateTrigger": "Any diagnostic/demo/fixture/dry-run surface becomes runtime, production, or user-visible decision authority.",
+      "validation": "Fail-closed tests, no-live-call proof, redaction checks, docs wording review, and task-specific runtime evidence."
+    },
+    {
+      "key": "source-policy",
+      "sources": [
+        "docs/DOCS_INDEX.md",
+        "docs/architecture/file-governance-taxonomy.md",
+        "docs/ARCHIVE_INDEX.md",
+        "docs/audits/README.md"
+      ],
+      "title": "Source Inclusion And Exclusion Policy",
+      "updateTrigger": "Docs taxonomy, archive policy, generated artifact policy, or manual source curation changes.",
+      "validation": "Run this generator twice and prove deterministic output; run docs diff-check and secret scan."
+    }
+  ]
+}
