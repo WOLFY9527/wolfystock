@@ -430,8 +430,17 @@ def _handle_get_portfolio_snapshot(
     include_positions: bool = False,
     include_risk: bool = True,
     as_of: Optional[str] = None,
+    owner_user_id: Optional[str] = None,
 ) -> dict:
     """Get compact portfolio snapshot for account-aware suggestions."""
+    owner_id = str(owner_user_id or "").strip()
+    if not owner_id:
+        return {
+            "status": "failed",
+            "error": "owner context required for portfolio snapshot",
+            "retriable": False,
+        }
+
     method = (cost_method or "fifo").strip().lower()
     if method not in {"fifo", "avg"}:
         return {"error": "cost_method must be fifo or avg"}
@@ -451,7 +460,7 @@ def _handle_get_portfolio_snapshot(
         return {"status": "not_supported", "error": f"portfolio module unavailable: {exc}"}
 
     try:
-        portfolio_service = PortfolioService()
+        portfolio_service = PortfolioService(owner_id=owner_id)
         snapshot = portfolio_service.get_portfolio_snapshot(
             account_id=account_id,
             as_of=as_of_date,
