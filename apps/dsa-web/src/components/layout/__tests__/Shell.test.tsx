@@ -7,6 +7,13 @@ import { ThemeProvider } from '../../theme/ThemeProvider';
 import { expectNoRawI18nKeys } from '../../../test-utils/i18nRawKeySentinel';
 import { Shell } from '../Shell';
 import { ShellRailContext } from '../ShellRailContext';
+import {
+  CONSUMER_NAV_GROUPS,
+  CONSUMER_NAV_ITEMS,
+  ROUTE_STORIES,
+  resolveConsumerNavItem,
+  resolveConsumerRouteStory,
+} from '../consumerAppNavigation';
 import { setAdminSurfaceMode } from '../../../hooks/useProductSurface';
 import { useStockPoolStore } from '../../../stores/stockPoolStore';
 
@@ -160,6 +167,127 @@ describe('Shell', () => {
     expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.backtest') })).toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: '决策台' })).not.toBeInTheDocument();
     expect(within(primaryNav).queryByRole('link', { name: 'Decision Desk' })).not.toBeInTheDocument();
+  });
+
+  it('keeps consumer IA metadata aligned with the live anonymous Shell navigation', () => {
+    expect(CONSUMER_NAV_GROUPS.map((group) => group.key)).toEqual([
+      'start',
+      'research',
+      'account',
+      'markets',
+      'validate',
+    ]);
+    expect(CONSUMER_NAV_ITEMS.map((item) => [item.key, item.group, item.to, item.requiresAuth === true])).toEqual([
+      ['home', 'start', '/', false],
+      ['scanner', 'research', '/scanner', false],
+      ['portfolio', 'account', '/portfolio', false],
+      ['market-overview', 'markets', '/market-overview', false],
+      ['liquidity-monitor', 'markets', '/market/liquidity-monitor', false],
+      ['rotation-radar', 'markets', '/market/rotation-radar', false],
+      ['watchlist', 'research', '/watchlist', false],
+      ['backtest', 'validate', '/backtest', false],
+      ['options-lab', 'validate', '/options-lab', false],
+    ]);
+
+    for (const key of ['scanner', 'portfolio', 'backtest'] as const) {
+      expect(CONSUMER_NAV_ITEMS.find((item) => item.key === key)?.requiresAuth).not.toBe(true);
+    }
+  });
+
+  it('keeps dedicated guest route metadata separate from Home for base and localized paths', () => {
+    expect(resolveConsumerNavItem('/guest')).toBeNull();
+    expect(resolveConsumerNavItem('/en/guest')).toBeNull();
+    expect(resolveConsumerRouteStory('/guest')?.routeKey).toBe('guest');
+    expect(resolveConsumerRouteStory('/en/guest')?.routeKey).toBe('guest');
+    expect(resolveConsumerRouteStory('/guest')?.routeKey).not.toBe('home');
+    expect(resolveConsumerRouteStory('/en/guest')?.copy.en.eyebrow).toBe('Guest / Public Preview');
+
+    expect(resolveConsumerNavItem('/')?.key).toBe('home');
+    expect(resolveConsumerNavItem('/en')?.key).toBe('home');
+    expect(resolveConsumerNavItem('/en/scanner')?.key).toBe('scanner');
+    expect(resolveConsumerNavItem('/zh/backtest')?.key).toBe('backtest');
+    expect(resolveConsumerNavItem('/unknown')).toBeNull();
+  });
+
+  it('keeps route stories aligned with the current consumer route inventory and no-advice boundaries', () => {
+    expect(ROUTE_STORIES.map((story) => story.routeKey)).toEqual([
+      'home',
+      'guest',
+      'scanner',
+      'portfolio',
+      'market-overview',
+      'liquidity-monitor',
+      'rotation-radar',
+      'watchlist',
+      'backtest',
+      'options-lab',
+    ]);
+
+    for (const story of ROUTE_STORIES) {
+      expect(story.copy.zh.evidence).toContain('证据边界');
+      expect(story.copy.en.evidence).toContain('Evidence boundary');
+      expect(story.copy.zh.boundary).not.toMatch(/买入|下单|必买|稳赚|保证收益/);
+      expect(story.copy.en.boundary).not.toMatch(/guaranteed|best contract|AI recommends you buy/i);
+    }
+  });
+
+  it('renders the dedicated guest route with the same anonymous primary navigation exposed by live Shell', () => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: false,
+      currentUser: null,
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/guest']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const primaryNav = screen.getByRole('navigation', { name: translate('zh', 'shell.drawerTitle') });
+    const homeLink = within(primaryNav).getByRole('link', { name: translate('zh', 'nav.home') });
+    expect(homeLink).toHaveAttribute('href', '/');
+    expect(homeLink).not.toHaveClass('is-active');
+    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.scanner') })).toHaveAttribute('href', '/scanner');
+    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.portfolio') })).toHaveAttribute('href', '/portfolio');
+    expect(within(primaryNav).getByRole('link', { name: translate('zh', 'nav.backtest') })).toHaveAttribute('href', '/backtest');
+    expect(screen.getByRole('link', { name: translate('zh', 'nav.signIn') })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '账户中心' })).not.toBeInTheDocument();
+  });
+
+  it('renders the localized dedicated guest route without collapsing nav links to unlocalized Home', () => {
+    languageState.value = 'en';
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: false,
+      currentUser: null,
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/en/guest']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const primaryNav = screen.getByRole('navigation', { name: translate('en', 'shell.drawerTitle') });
+    const homeLink = within(primaryNav).getByRole('link', { name: translate('en', 'nav.home') });
+    expect(homeLink).toHaveAttribute('href', '/en');
+    expect(homeLink).not.toHaveClass('is-active');
+    expect(within(primaryNav).getByRole('link', { name: translate('en', 'nav.scanner') })).toHaveAttribute('href', '/en/scanner');
+    expect(within(primaryNav).getByRole('link', { name: translate('en', 'nav.portfolio') })).toHaveAttribute('href', '/en/portfolio');
+    expect(within(primaryNav).getByRole('link', { name: translate('en', 'nav.backtest') })).toHaveAttribute('href', '/en/backtest');
+    expect(screen.getByRole('link', { name: translate('en', 'nav.signIn') })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Account Center' })).not.toBeInTheDocument();
   });
 
   it('highlights the localized liquidity monitor nav item independently from market overview', async () => {
