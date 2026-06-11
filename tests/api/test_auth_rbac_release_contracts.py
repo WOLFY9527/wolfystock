@@ -86,6 +86,11 @@ ORDINARY_USER_FORBIDDEN_SURFACES = (
     ("market_provider_operations", "GET", "/api/v1/admin/market-providers/operations"),
 )
 CAPABILITY_GATED_DIAGNOSTIC_SURFACES = (
+    ("agent_chat_send", "POST", "/api/v1/agent/chat/send"),
+    ("scanner_watchlist_today", "GET", "/api/v1/scanner/watchlists/today"),
+    ("scanner_watchlist_recent", "GET", "/api/v1/scanner/watchlists/recent"),
+    ("scanner_status", "GET", "/api/v1/scanner/status"),
+    ("usage_summary", "GET", "/api/v1/usage/summary"),
     ("storage_summary", "GET", "/api/v1/admin/logs/storage/summary"),
     ("cost_ledger", "GET", "/api/v1/admin/cost/llm-ledger-summary"),
     ("mission_control", "GET", "/api/v1/admin/mission-control"),
@@ -117,11 +122,11 @@ QUOTA_DRY_RUN_REQUEST = {
     "operation": "estimate",
     "pricingStatus": "ok",
 }
-LEGACY_ROLE_ONLY_ADMIN_ROUTE_COUNTS = {
-    "agent.py": 1,
-    "scanner.py": 3,
-    "usage.py": 1,
+AGENT_SEND_REQUEST = {
+    "content": "T-1463 capability-gated notification dispatch check",
+    "title": "T-1463",
 }
+LEGACY_ROLE_ONLY_ADMIN_ROUTE_COUNTS: dict[str, int] = {}
 ANONYMOUS_DENIAL_MATRIX_SURFACES = (
     (
         "agent_chat_sessions_member",
@@ -131,6 +136,17 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "authenticated_member",
         "authenticated_user",
         None,
+        None,
+    ),
+    (
+        "agent_chat_send_capability_admin",
+        "POST",
+        "/api/v1/agent/chat/send",
+        "/api/v1/agent/chat/send",
+        "admin_capability_required",
+        "admin_capability",
+        "ops:notifications:write",
+        AGENT_SEND_REQUEST,
     ),
     (
         "scanner_runs_member",
@@ -139,6 +155,7 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "/api/v1/scanner/runs",
         "authenticated_member",
         "authenticated_user",
+        None,
         None,
     ),
     (
@@ -149,32 +166,46 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "authenticated_member",
         "authenticated_user",
         None,
-    ),
-    (
-        "scanner_status_legacy_admin",
-        "GET",
-        "/api/v1/scanner/status",
-        "/api/v1/scanner/status",
-        "admin_role_only_legacy",
-        "admin_user",
         None,
     ),
     (
-        "scanner_watchlist_today_legacy_admin",
+        "scanner_status_capability_admin",
         "GET",
-        "/api/v1/scanner/watchlists/today",
-        "/api/v1/scanner/watchlists/today",
-        "admin_role_only_legacy",
-        "admin_user",
+        "/api/v1/scanner/status",
+        "/api/v1/scanner/status",
+        "admin_capability_required",
+        "admin_capability",
+        "scanner:admin:read",
         None,
     ),
     (
-        "usage_summary_legacy_admin",
+        "scanner_watchlist_today_capability_admin",
+        "GET",
+        "/api/v1/scanner/watchlists/today",
+        "/api/v1/scanner/watchlists/today",
+        "admin_capability_required",
+        "admin_capability",
+        "scanner:admin:read",
+        None,
+    ),
+    (
+        "scanner_watchlist_recent_capability_admin",
+        "GET",
+        "/api/v1/scanner/watchlists/recent",
+        "/api/v1/scanner/watchlists/recent",
+        "admin_capability_required",
+        "admin_capability",
+        "scanner:admin:read",
+        None,
+    ),
+    (
+        "usage_summary_capability_admin",
         "GET",
         "/api/v1/usage/summary",
         "/api/v1/usage/summary",
-        "admin_role_only_legacy",
-        "admin_user",
+        "admin_capability_required",
+        "admin_capability",
+        "cost:observability:read",
         None,
     ),
     (
@@ -184,6 +215,7 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "/api/v1/system/config",
         "admin_capability_required",
         "admin_capability",
+        "ops:system_config:read",
         None,
     ),
     (
@@ -193,6 +225,7 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "/api/v1/admin/ops/status",
         "admin_capability_required",
         "admin_capability",
+        "ops:logs:read",
         None,
     ),
     (
@@ -202,6 +235,7 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "/api/v1/admin/providers/quota-windows",
         "admin_capability_required",
         "admin_capability",
+        "ops:providers:read",
         None,
     ),
     (
@@ -211,6 +245,7 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "/api/v1/market/provider-fit-advisor",
         "admin_capability_required",
         "admin_capability",
+        "ops:providers:read",
         None,
     ),
     (
@@ -220,6 +255,7 @@ ANONYMOUS_DENIAL_MATRIX_SURFACES = (
         "/api/v1/admin/cost/quota-dry-run",
         "admin_capability_required",
         "admin_capability",
+        "cost:observability:read",
         QUOTA_DRY_RUN_REQUEST,
     ),
 )
@@ -307,6 +343,8 @@ def _request_capability_diagnostic_surface(client: TestClient, method: str, path
     kwargs = {}
     if path == "/api/v1/admin/cost/quota-dry-run":
         kwargs["json"] = QUOTA_DRY_RUN_REQUEST
+    if path == "/api/v1/agent/chat/send":
+        kwargs["json"] = AGENT_SEND_REQUEST
     return client.request(method, path, **kwargs)
 
 
@@ -336,16 +374,15 @@ def test_anonymous_denial_matrix_matches_sensitive_route_inventory(auth_release_
         request_path,
         expected_classification,
         expected_auth_dependency,
+        expected_capability,
         request_json,
     ) in enumerate(ANONYMOUS_DENIAL_MATRIX_SURFACES, start=10):
         entry = inventory[(method, inventory_path)]
         assert entry["surface_classification"] == expected_classification, label
         assert entry["auth_dependency_label"] == expected_auth_dependency, label
+        assert entry["capability_label"] == expected_capability, label
         if expected_auth_dependency == "admin_capability":
-            assert entry["capability_label"], label
-        if expected_classification == "admin_role_only_legacy":
-            assert entry["capability_label"] is None, label
-            assert "TODO/NO-GO" in str(entry["no_go_marker"]), label
+            assert entry["no_go_marker"] is None, label
 
         kwargs = {"headers": {"X-Forwarded-For": f"203.0.113.{index}"}}
         if request_json is not None:
@@ -506,7 +543,7 @@ def test_adjacent_admin_capabilities_do_not_unlock_cost_or_provider_routes(
     )
 
 
-def test_role_only_legacy_admin_routes_are_launch_blockers() -> None:
+def test_role_only_legacy_admin_route_dependencies_are_cleared() -> None:
     endpoint_dir = REPO_ROOT / "api" / "v1" / "endpoints"
     actual_counts = {
         path.name: count

@@ -281,6 +281,11 @@ def test_docs_openapi_and_backend_diagnostics_have_explicit_surface_classificati
         assert classifications[signature] == expected
 
     assert classifications[("POST", "/api/v1/agent/chat")] == "authenticated_member"
+    assert classifications[("POST", "/api/v1/agent/chat/send")] == "admin_capability_required"
+    assert classifications[("GET", "/api/v1/scanner/watchlists/today")] == "admin_capability_required"
+    assert classifications[("GET", "/api/v1/scanner/watchlists/recent")] == "admin_capability_required"
+    assert classifications[("GET", "/api/v1/scanner/status")] == "admin_capability_required"
+    assert classifications[("GET", "/api/v1/usage/summary")] == "admin_capability_required"
     assert classifications[("GET", "/api/v1/admin/logs/storage/summary")] == "admin_capability_required"
     assert classifications[("GET", "/api/v1/admin/mission-control")] == "admin_capability_required"
     assert classifications[("POST", "/api/v1/admin/cost/quota-dry-run")] == "admin_capability_required"

@@ -26,27 +26,33 @@ from src.admin_rbac import (
 from src.multi_user import ROLE_ADMIN
 
 PUBLIC_LAUNCH_ADMIN_RBAC_ENDPOINT_FILES = (
+    "agent.py",
     "admin_cost.py",
     "admin_logs.py",
     "admin_notifications.py",
     "admin_portfolio.py",
     "admin_provider_circuits.py",
     "admin_security.py",
+    "scanner.py",
     "system_config.py",
+    "usage.py",
 )
 
 EXPECTED_PUBLIC_LAUNCH_ADMIN_ROUTE_CAPABILITY_COUNTS: dict[str, dict[str, int]] = {
+    "agent.py": {"ops:notifications:write": 1},
     "admin_cost.py": {"cost:observability:read": 4},
-    "admin_logs.py": {"ops:logs:read": 5, "ops:logs:write": 1},
+    "admin_logs.py": {"ops:logs:read": 8, "ops:logs:write": 1},
     "admin_notifications.py": {"ops:notifications:read": 2, "ops:notifications:write": 5},
     "admin_portfolio.py": {"users:portfolio:read": 4},
     "admin_provider_circuits.py": {"ops:providers:read": 5},
     "admin_security.py": {"users:security:write": 1},
+    "scanner.py": {"scanner:admin:read": 3},
     "system_config.py": {
         "ops:system_config:read": 3,
         "ops:system_config:write": 3,
         "ops:providers:write": 3,
     },
+    "usage.py": {"cost:observability:read": 1},
 }
 
 _CAPABILITY_DEPENDENCY_PATTERN = re.compile(r"require_admin_capability\(\s*[\"']([^\"']+)[\"']\s*\)")

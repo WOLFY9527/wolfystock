@@ -333,6 +333,7 @@ class SecurityLaunchPreflightTestCase(unittest.TestCase):
                 "ops:providers:write",
                 "ops:system_config:read",
                 "ops:system_config:write",
+                "scanner:admin:read",
                 "users:portfolio:read",
                 "users:security:write",
             ),

@@ -26,6 +26,9 @@ AUTH_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "auth.py"
 ADMIN_LOGS_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "admin_logs.py"
 ADMIN_USERS_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "admin_users.py"
 MARKET_PROVIDER_OPERATIONS_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "market_provider_operations.py"
+AGENT_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "agent.py"
+SCANNER_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "scanner.py"
+USAGE_ENDPOINT_TS = REPO_ROOT / "api" / "v1" / "endpoints" / "usage.py"
 
 BACKEND_FIXTURE = FIXTURE_DIR / "backend_route_capability_inventory.json"
 FRONTEND_FIXTURE = FIXTURE_DIR / "frontend_route_capability_inventory.json"
@@ -77,26 +80,13 @@ EXPLICIT_AUTHENTICATED_ROUTE_EXCEPTIONS = {
         "note": "Backtest OOS parameter readiness export is authenticated-user scoped outside the admin control-plane inventory.",
     },
 }
-EXPECTED_TRANSITIONAL_ADMIN_USER_ALLOWLIST = {
-    "agent.admin_send": {
-        "surface": "agent_admin_send",
-        "note_fragment": "legacy admin-only route",
-        "routes": [("POST", "/api/v1/agent/chat/send")],
-    },
-    "scanner.admin_watchlists_and_status": {
-        "surface": "scanner_admin",
-        "note_fragment": "legacy admin scanner endpoints",
-        "routes": [
-            ("GET", "/api/v1/scanner/status"),
-            ("GET", "/api/v1/scanner/watchlists/recent"),
-            ("GET", "/api/v1/scanner/watchlists/today"),
-        ],
-    },
-    "usage.admin_summary": {
-        "surface": "usage_admin",
-        "note_fragment": "usage summary",
-        "routes": [("GET", "/api/v1/usage/summary")],
-    },
+EXPECTED_TRANSITIONAL_ADMIN_USER_ALLOWLIST = {}
+EXPECTED_T1463_MIGRATED_ROUTE_CAPABILITIES = {
+    ("POST", "/api/v1/agent/chat/send"): "ops:notifications:write",
+    ("GET", "/api/v1/scanner/watchlists/today"): "scanner:admin:read",
+    ("GET", "/api/v1/scanner/watchlists/recent"): "scanner:admin:read",
+    ("GET", "/api/v1/scanner/status"): "scanner:admin:read",
+    ("GET", "/api/v1/usage/summary"): "cost:observability:read",
 }
 EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS = {
     "agent.admin_send": 1,
@@ -160,18 +150,18 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/agent/chat/sessions/{session_id}"): "authenticated_member",
     ("DELETE", "/api/v1/agent/chat/sessions/{session_id}"): "authenticated_member",
     ("POST", "/api/v1/agent/chat/stream"): "authenticated_member",
-    ("POST", "/api/v1/agent/chat/send"): "admin_role_only_legacy",
+    ("POST", "/api/v1/agent/chat/send"): "admin_capability_required",
     ("POST", "/api/v1/user-alerts/rules/{rule_id}/dry-run"): "authenticated_member",
     ("POST", "/api/v1/scanner/run"): "authenticated_member",
     ("GET", "/api/v1/scanner/runs"): "authenticated_member",
     ("GET", "/api/v1/scanner/strategy-simulation"): "authenticated_member",
     ("GET", "/api/v1/scanner/runs/{run_id}"): "authenticated_member",
-    ("GET", "/api/v1/scanner/watchlists/today"): "admin_role_only_legacy",
-    ("GET", "/api/v1/scanner/watchlists/recent"): "admin_role_only_legacy",
-    ("GET", "/api/v1/scanner/status"): "admin_role_only_legacy",
+    ("GET", "/api/v1/scanner/watchlists/today"): "admin_capability_required",
+    ("GET", "/api/v1/scanner/watchlists/recent"): "admin_capability_required",
+    ("GET", "/api/v1/scanner/status"): "admin_capability_required",
     ("GET", "/api/v1/scanner/themes"): "unclassified",
     ("POST", "/api/v1/scanner/themes"): "unclassified",
-    ("GET", "/api/v1/usage/summary"): "admin_role_only_legacy",
+    ("GET", "/api/v1/usage/summary"): "admin_capability_required",
     ("GET", "/api/v1/options/underlyings/{symbol}/summary"): "public_fixture_analysis",
     ("GET", "/api/v1/options/underlyings/{symbol}/expirations"): "public_fixture_analysis",
     ("GET", "/api/v1/options/underlyings/{symbol}/chain"): "public_fixture_analysis",
@@ -200,13 +190,7 @@ EXPECTED_OPERATOR_DIAGNOSTIC_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/agent/models"),
     ("GET", "/api/v1/agent/provider-health"),
 }
-EXPECTED_LEGACY_ROUTE_SURFACE_CLASSIFICATIONS = {
-    ("POST", "/api/v1/agent/chat/send"),
-    ("GET", "/api/v1/scanner/watchlists/today"),
-    ("GET", "/api/v1/scanner/watchlists/recent"),
-    ("GET", "/api/v1/scanner/status"),
-    ("GET", "/api/v1/usage/summary"),
-}
+EXPECTED_LEGACY_ROUTE_SURFACE_CLASSIFICATIONS: set[tuple[str, str]] = set()
 EXPECTED_OPTIONS_FIXTURE_ROUTE_CLASSIFICATIONS = {
     signature
     for signature, classification in EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS.items()
@@ -577,7 +561,19 @@ def test_admin_observability_route_inventory_keeps_capabilities_and_transitional
     admin_users_activity_read = groups["admin.users.activity_read"]
     admin_activity_read = groups["admin.activity.read"]
     provider_observability = groups["admin.providers.read"]
+    agent_admin_send = groups["agent.admin_send"]
+    scanner_admin = groups["scanner.admin_watchlists_and_status"]
+    usage_admin = groups["usage.admin_summary"]
 
+    assert agent_admin_send["auth_dependency_label"] == "admin_capability"
+    assert agent_admin_send["capability_label"] == "ops:notifications:write"
+    assert agent_admin_send["transitional_note"] is None
+    assert scanner_admin["auth_dependency_label"] == "admin_capability"
+    assert scanner_admin["capability_label"] == "scanner:admin:read"
+    assert scanner_admin["transitional_note"] is None
+    assert usage_admin["auth_dependency_label"] == "admin_capability"
+    assert usage_admin["capability_label"] == "cost:observability:read"
+    assert usage_admin["transitional_note"] is None
     assert admin_users_read["auth_dependency_label"] == "admin_capability"
     assert admin_users_read["capability_label"] == "users:read"
     assert admin_users_read["transitional_note"] is None
@@ -608,7 +604,13 @@ def test_admin_observability_route_inventory_keeps_capabilities_and_transitional
     admin_logs_source = ADMIN_LOGS_ENDPOINT_TS.read_text(encoding="utf-8")
     market_provider_source = MARKET_PROVIDER_OPERATIONS_ENDPOINT_TS.read_text(encoding="utf-8")
     quant_source = (REPO_ROOT / "api" / "v1" / "endpoints" / "quant.py").read_text(encoding="utf-8")
+    agent_source = AGENT_ENDPOINT_TS.read_text(encoding="utf-8")
+    scanner_source = SCANNER_ENDPOINT_TS.read_text(encoding="utf-8")
+    usage_source = USAGE_ENDPOINT_TS.read_text(encoding="utf-8")
 
+    assert 'require_admin_capability("ops:notifications:write")' in agent_source
+    assert 'require_admin_capability("scanner:admin:read")' in scanner_source
+    assert 'require_admin_capability("cost:observability:read")' in usage_source
     assert 'require_admin_capability("users:read")' in admin_users_source
     assert 'require_admin_capability("users:activity:read")' in admin_users_source
     assert 'require_admin_capability("quant:admin:read")' in quant_source
@@ -618,24 +620,15 @@ def test_admin_observability_route_inventory_keeps_capabilities_and_transitional
     assert 'require_admin_capability("ops:providers:read")' in market_provider_source
 
 
-def test_remaining_require_admin_user_route_groups_are_explicitly_allowlisted() -> None:
+def test_no_remaining_require_admin_user_route_groups_in_control_plane_inventory() -> None:
     fixture = _load_json(BACKEND_FIXTURE)
-    live_routes = _collect_live_routes()
     coarse_admin_groups = {
         group["route_id"]: group
         for group in fixture["protected_groups"]
         if group["auth_dependency_label"] == "admin_user"
     }
 
-    assert set(coarse_admin_groups) == set(EXPECTED_TRANSITIONAL_ADMIN_USER_ALLOWLIST)
-
-    for route_id, expected in EXPECTED_TRANSITIONAL_ADMIN_USER_ALLOWLIST.items():
-        group = coarse_admin_groups[route_id]
-        assert group["surface"] == expected["surface"]
-        assert group["capability_label"] is None
-        assert group["transitional_note"]
-        assert expected["note_fragment"] in group["transitional_note"].lower()
-        assert _matched_route_signatures(live_routes, group) == expected["routes"]
+    assert coarse_admin_groups == EXPECTED_TRANSITIONAL_ADMIN_USER_ALLOWLIST
 
 
 def test_control_plane_route_inventory_fails_closed_without_explicit_classification() -> None:
@@ -742,6 +735,14 @@ def test_docs_openapi_and_operator_diagnostic_surfaces_are_not_product_routes() 
         assert entry["surface_classification"] == "operator_diagnostic"
         assert entry["auth_dependency_label"] == "public"
         assert "NO-GO" in entry["no_go_marker"]
+
+    for signature, expected_capability in EXPECTED_T1463_MIGRATED_ROUTE_CAPABILITIES.items():
+        entry = classifications[signature]
+        assert entry["surface_classification"] == "admin_capability_required"
+        assert entry["auth_dependency_label"] == "admin_capability"
+        assert entry["capability_label"] == expected_capability
+        assert entry["no_go_marker"] is None
+        assert entry["transitional_note"]
 
     for signature in EXPECTED_LEGACY_ROUTE_SURFACE_CLASSIFICATIONS:
         entry = classifications[signature]
