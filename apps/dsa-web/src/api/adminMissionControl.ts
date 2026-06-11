@@ -50,6 +50,17 @@ export interface MissionControlSummary {
   publicLaunchNoGoCount: number;
 }
 
+export interface MissionControlPrototypeGate {
+  enabled: boolean;
+  status: 'disabled' | 'enabled' | string;
+  reasonCode?: string | null;
+  featureFlag: string;
+  readOnly: boolean;
+  advisoryOnly: boolean;
+  noExternalCalls: boolean;
+  liveEnforcement: boolean;
+}
+
 export interface MissionControlResponse {
   generatedAt: string;
   readOnly: boolean;
@@ -59,6 +70,7 @@ export interface MissionControlResponse {
   publicLaunchApproved: boolean;
   releaseApproved: boolean;
   launchVerdict: 'NO_GO' | string;
+  prototypeGate: MissionControlPrototypeGate;
   opsSnapshotAvailable: boolean;
   summary: MissionControlSummary;
   domains: MissionControlDomainSlice[];
@@ -87,6 +99,22 @@ function normalizeDomain(value: Record<string, unknown>): MissionControlDomainSl
   };
 }
 
+function normalizePrototypeGate(value: unknown): MissionControlPrototypeGate {
+  const normalized = toCamelCase<MissionControlPrototypeGate>(
+    value && typeof value === 'object' ? value as Record<string, unknown> : {},
+  );
+  return {
+    ...normalized,
+    enabled: normalized.enabled === true,
+    status: normalized.status || 'disabled',
+    featureFlag: normalized.featureFlag || 'WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED',
+    readOnly: normalized.readOnly !== false,
+    advisoryOnly: normalized.advisoryOnly !== false,
+    noExternalCalls: normalized.noExternalCalls !== false,
+    liveEnforcement: normalized.liveEnforcement === true,
+  };
+}
+
 export const adminMissionControlApi = {
   async getSnapshot(): Promise<MissionControlResponse> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/admin/mission-control');
@@ -99,6 +127,7 @@ export const adminMissionControlApi = {
       runtimeBehaviorChanged: normalized.runtimeBehaviorChanged === true,
       publicLaunchApproved: normalized.publicLaunchApproved === true,
       releaseApproved: normalized.releaseApproved === true,
+      prototypeGate: normalizePrototypeGate(normalized.prototypeGate),
       opsSnapshotAvailable: normalized.opsSnapshotAvailable === true,
       domains: safeArray<Record<string, unknown>>(normalized.domains).map(normalizeDomain),
       postureLegend: normalized.postureLegend || {},

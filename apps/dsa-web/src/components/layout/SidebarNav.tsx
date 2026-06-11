@@ -33,6 +33,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { buildLoginPath, useProductSurface } from '../../hooks/useProductSurface';
 import { cn } from '../../utils/cn';
+import { isAdminMissionControlPrototypeEnabled } from '../../utils/adminCapabilities';
 import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../../utils/localeRouting';
 import { BrandLogo, BRAND_WORDMARK_CLASSNAME } from '../common/BrandLogo';
 import { ConfirmDialog } from '../common/ConfirmDialog';
@@ -238,12 +239,15 @@ function useSidebarNavView({
   const providerCircuitsPath = routeLocale ? buildLocalizedPath('/admin/provider-circuits', routeLocale) : '/admin/provider-circuits';
   const userGovernancePath = routeLocale ? buildLocalizedPath('/admin/users', routeLocale) : '/admin/users';
   const costObservabilityPath = routeLocale ? buildLocalizedPath('/admin/cost-observability', routeLocale) : '/admin/cost-observability';
+  const missionControlPrototypeEnabled = isAdminMissionControlPrototypeEnabled();
   const adminNavItems: AdminNavItem[] = [];
   if (canReadSystemConfig) {
     adminNavItems.push({ key: 'system', label: adminNavCopy.system, to: consolePath, icon: ShieldCheck, group: 'trust' });
   }
   if (canReadOpsLogs) {
-    adminNavItems.push({ key: 'mission-control', label: adminNavCopy.missionControl, to: missionControlPath, icon: Gauge, group: 'trust' });
+    if (missionControlPrototypeEnabled) {
+      adminNavItems.push({ key: 'mission-control', label: adminNavCopy.missionControl, to: missionControlPath, icon: Gauge, group: 'trust' });
+    }
     adminNavItems.push({ key: 'logs', label: adminNavCopy.logs, to: adminLogsPath, icon: Activity, group: 'evidence' });
     adminNavItems.push({ key: 'evidence', label: adminNavCopy.evidence, to: evidenceWorkflowPath, icon: FileCheck2, group: 'evidence' });
   }

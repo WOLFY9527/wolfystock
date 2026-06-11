@@ -20,6 +20,8 @@ FORBIDDEN_RESPONSE_MARKERS = (
     "owner_user_id",
     "raw-session-id",
     "session_id",
+    "reservation_id",
+    "raw-reservation-id",
     "provider-payload-secret",
     "provider_payload",
     "raw_payload",
@@ -35,6 +37,9 @@ FORBIDDEN_RESPONSE_MARKERS = (
     "secret",
     "traceback",
     "stack_trace",
+    "stack trace",
+    "diagnostic_ref",
+    "raw_diagnostics",
     "raw exception",
     "provider.example",
     "https://",
@@ -126,6 +131,45 @@ def _assert_no_sensitive_markers(payload: object) -> None:
         assert marker.lower() not in text
 
 
+def test_admin_mission_control_default_disabled_does_not_aggregate_ops_status(
+    app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED", raising=False)
+    monkeypatch.setattr(
+        "src.services.admin_ops_status_service.AdminOpsStatusService.build_status",
+        lambda *_, **__: pytest.fail("disabled mission control must not aggregate ops status"),
+    )
+
+    with _client(app, _ops_admin) as client:
+        response = client.get("/api/v1/admin/mission-control")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["prototypeGate"] == {
+        "enabled": False,
+        "status": "disabled",
+        "reasonCode": "prototype_gate_disabled_by_default",
+        "featureFlag": "WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED",
+        "readOnly": True,
+        "advisoryOnly": True,
+        "noExternalCalls": True,
+        "liveEnforcement": False,
+    }
+    assert payload["opsSnapshotAvailable"] is False
+    assert payload["summary"]["domainCount"] == 0
+    assert payload["domains"] == []
+    assert payload["metadata"]["opsAggregationAttempted"] is False
+    assert payload["metadata"]["highRiskSummariesAggregated"] is False
+    assert payload["metadata"]["externalCallsMade"] is False
+    assert payload["metadata"]["providerCallsAttempted"] is False
+    assert payload["metadata"]["notificationSendAttempted"] is False
+    assert payload["metadata"]["cleanupCalled"] is False
+    assert payload["metadata"]["restoreCalled"] is False
+    assert payload["metadata"]["authBehaviorChanged"] is False
+    _assert_no_sensitive_markers(payload)
+
+
 def test_admin_mission_control_requires_admin_with_ops_logs_read(app: FastAPI) -> None:
     with _client(app, _regular_user) as client:
         regular = client.get("/api/v1/admin/mission-control")
@@ -146,7 +190,11 @@ def test_admin_mission_control_requires_admin_with_ops_logs_read(app: FastAPI) -
     assert allowed.status_code == 200
 
 
-def test_admin_mission_control_returns_all_readiness_domains(app: FastAPI) -> None:
+def test_admin_mission_control_enabled_returns_all_readiness_domains(
+    app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED", "true")
     app.state.task_queue = _TaskQueueFixture()
 
     with _client(app, _ops_admin) as client:
@@ -161,8 +209,14 @@ def test_admin_mission_control_returns_all_readiness_domains(app: FastAPI) -> No
     assert payload["publicLaunchApproved"] is False
     assert payload["releaseApproved"] is False
     assert payload["launchVerdict"] == "NO_GO"
+    assert payload["prototypeGate"]["enabled"] is True
+    assert payload["prototypeGate"]["status"] == "enabled"
+    assert payload["prototypeGate"]["readOnly"] is True
+    assert payload["prototypeGate"]["advisoryOnly"] is True
     assert payload["metadata"]["mutationPaths"] == []
     assert payload["metadata"]["externalCallsMade"] is False
+    assert payload["metadata"]["opsAggregationAttempted"] is True
+    assert payload["metadata"]["highRiskSummariesAggregated"] is True
     assert payload["summary"]["domainCount"] == 9
     assert payload["summary"]["publicLaunchNoGoCount"] >= 1
     assert payload["summary"]["approvalRequiredCount"] >= 1
@@ -201,6 +255,7 @@ def test_admin_mission_control_does_not_execute_live_or_mutating_paths(
     app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED", "true")
     app.state.task_queue = _TaskQueueFixture()
     monkeypatch.setattr(
         "requests.sessions.Session.request",
@@ -247,6 +302,8 @@ def test_admin_mission_control_degrades_ops_snapshot_without_raw_exception(
     app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED", "true")
+
     def _raise_raw_failure(self, *, app_state=None):
         raise RuntimeError("raw exception raw-owner-user-id raw-session-id access-token traceback provider-payload-secret")
 

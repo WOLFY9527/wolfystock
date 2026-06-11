@@ -242,7 +242,7 @@ function dimensionText(providerCategory?: string | null, routeFamily?: string | 
 function readinessNotice(item: ProviderSlaReadinessItem): string {
   if (item.liveHttpCallsEnabled === false) return '当前只读观测外部调用门禁，不会触发 provider 实际请求。';
   if (item.credentialsPresent === false) return '凭证未就绪，先核对凭证配置与开关。';
-  if (item.wouldBlockCall) return '当前门禁判断会阻断调用，需先查看熔断与最近错误。';
+  if (item.wouldBlockCall) return '若未来启用门禁会阻断调用；当前仅 advisory-only 展示，不执行 provider blocking。';
   return '当前仅展示就绪信号与趋势，不改变排序、fallback 或配额语义。';
 }
 
@@ -348,7 +348,7 @@ function buildOperationalVerdict(
       level: 'LOADING',
       title: '正在读取数据源熔断快照',
       description: '只读取现有诊断 API，不触发外部数据调用。',
-      impact: '等待快照后判断生产调用',
+      impact: '等待快照后判断只读门禁信号',
       nextAction: '读取完成后查看动作列表',
       tone: 'info',
     };
@@ -356,10 +356,10 @@ function buildOperationalVerdict(
   if (summary.open > 0 || summary.slaBlocked > 0 || summary.slaCredentialGaps > 0) {
     return {
       level: 'BLOCKED',
-      title: '数据源熔断需要管理员处理',
-      description: `${summary.open} 个熔断打开，${summary.slaBlocked + summary.slaCredentialGaps} 个 SLA / 凭证阻断信号。`,
-      impact: '相关数据源生产调用应暂缓',
-      nextAction: '按下方动作列表先处理阻断项',
+      title: '数据源熔断需要管理员复核',
+      description: `${summary.open} 个熔断打开，${summary.slaBlocked + summary.slaCredentialGaps} 个 SLA / 凭证门禁信号；当前仅 advisory-only 展示。`,
+      impact: '不执行 provider blocking；若未来启用门禁，相关调用应暂缓。',
+      nextAction: '按下方动作列表先复核门禁信号',
       tone: 'danger',
     };
   }
@@ -377,7 +377,7 @@ function buildOperationalVerdict(
     level: 'LIVE',
     title: '数据源熔断当前可运营',
     description: `${summary.states} 个状态快照未显示阻断，事件和诊断细节默认后置。`,
-    impact: '生产调用可继续按既有门禁观察',
+    impact: '当前仅按既有只读诊断观察',
     nextAction: '保持监控，必要时展开 L3 诊断',
     tone: 'good',
   };
@@ -392,8 +392,8 @@ function buildSummaryMetrics(summary: OperationalSummary): SummaryMetric[] {
       tone: summary.open ? 'danger' : summary.warn ? 'warn' : 'good',
     },
     {
-      label: 'SLA 阻断',
-      value: summary.slaBlocked || summary.slaCredentialGaps ? `${summary.slaBlocked + summary.slaCredentialGaps} 阻断` : summary.slaWatch ? `${summary.slaWatch} 观察` : '未阻断',
+      label: 'SLA 门禁信号',
+      value: summary.slaBlocked || summary.slaCredentialGaps ? `${summary.slaBlocked + summary.slaCredentialGaps} 待复核` : summary.slaWatch ? `${summary.slaWatch} 观察` : '未见信号',
       subvalue: `${summary.slaReadiness} 个就绪信号`,
       tone: summary.slaBlocked || summary.slaCredentialGaps ? 'danger' : summary.slaWatch ? 'warn' : 'good',
     },
@@ -423,7 +423,9 @@ function buildOperatorActions(data: ProviderCircuitDiagnosticsBundle | null): Op
     actions.push({
       id: `state-${item.provider}-${index}`,
       issue: `${safeText(item.provider)} 熔断${tone === 'danger' ? '打开' : '降级观察'}`,
-      impact: tone === 'danger' ? '相关生产调用应暂缓，避免继续命中失败路径。' : '仍可观察，但当前数据源处于降级或缓存路径。',
+      impact: tone === 'danger'
+        ? '当前页面不执行 provider blocking；若未来启用门禁，相关调用应暂缓。'
+        : '仍可观察，但当前数据源处于降级或缓存路径。',
       nextAction: `核对 ${actionReasonLabel(item.reasonBucket)} 与冷却时间 ${safeDate(item.cooldownUntil)}。`,
       tone,
       priority: tone === 'danger' ? 10 : 30,
@@ -436,7 +438,7 @@ function buildOperatorActions(data: ProviderCircuitDiagnosticsBundle | null): Op
     actions.push({
       id: `sla-${item.provider}-${index}`,
       issue: `${safeText(item.provider)} SLA / 凭证需核对`,
-      impact: blocked ? '门禁判断可能阻断数据源调用。' : '延迟、错误或熔断建议显示该数据源需要观察。',
+      impact: blocked ? '若未来启用门禁可能阻断调用；当前仅 advisory-only 展示。' : '延迟、错误或熔断建议显示该数据源需要观察。',
       nextAction: item.credentialsPresent === false
         ? '先核对凭证配置与数据源开关。'
         : '展开 L3 诊断查看最近错误 bucket 与趋势窗口。',
@@ -737,7 +739,7 @@ const SlaReadinessPanel: React.FC<{ items: ProviderSlaReadinessItem[] }> = ({ it
                     </span>
                   </p>
                   <p>
-                    阻断判断
+                    若启用门禁会阻断
                     <span className="block truncate font-mono text-white/68">{boolLabel(item.wouldBlockCall)}</span>
                   </p>
                 </div>
@@ -818,7 +820,7 @@ const BoundaryPanel: React.FC<{ data?: ProviderCircuitDiagnosticsBundle | null }
     <TerminalPanel as="aside" dense className="h-full">
       <TerminalSectionHeader eyebrow="边界" title="诊断观测" />
       <TerminalNotice variant="info" className="mt-4">
-        当前为诊断观测，不会改变数据源 fallback 或 MarketCache 行为。
+        当前为诊断观测，不会执行 provider blocking，也不会改变数据源 fallback 或 MarketCache 行为。
       </TerminalNotice>
       <DiagnosticsDisclosure title="L3 页面边界与脱敏姿态" summary="读取、外呼、门禁与脱敏信息默认收起" className="mt-3">
         <div className="grid grid-cols-1 gap-2 text-[11px] text-white/50">
@@ -997,11 +999,11 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/50 to-transparent" />
           <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0 flex-1">
-              <TerminalPageHeading eyebrow="生产调用门禁" title="数据源熔断诊断" />
+              <TerminalPageHeading eyebrow="只读门禁诊断" title="数据源熔断诊断" />
               <p className="mt-3 max-w-4xl text-sm leading-6 text-white/54">
                 {isLoading
                   ? '正在读取只读诊断快照'
-                  : '先判断数据源调用是否可继续、哪里被阻断、需要管理员处理什么；事件、配额、探测与 bucket 细节默认折叠。'}
+                  : '先判断哪些数据源信号需要复核；事件、配额、探测与 bucket 细节默认折叠，当前不执行 provider blocking。'}
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <TerminalChip variant="info">只读诊断</TerminalChip>
@@ -1009,7 +1011,7 @@ const AdminProviderCircuitDiagnosticsPage: React.FC = () => {
                   {data?.states.metadata?.noExternalCalls === true ? '不触发外部调用' : '外部调用状态待确认'}
                 </TerminalChip>
                 <TerminalChip variant={data?.states.metadata?.liveEnforcement === false ? 'success' : 'caution'}>
-                  {data?.states.metadata?.liveEnforcement === false ? '不执行熔断门禁' : '熔断门禁状态待确认'}
+                  {data?.states.metadata?.liveEnforcement === false ? '不执行 provider blocking' : '熔断门禁状态待确认'}
                 </TerminalChip>
               </div>
             </div>

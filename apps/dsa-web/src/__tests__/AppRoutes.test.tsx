@@ -262,6 +262,7 @@ function mockAuthBootstrapLoadError(refreshStatus = vi.fn()) {
 describe('AppContent route flows', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('VITE_WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED', '');
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: false,
@@ -949,7 +950,6 @@ describe('AppContent route flows', () => {
     ['/zh/admin/provider-circuits', { ...noCapabilities, canReadProviders: true }, 'admin-provider-circuit-diagnostics-page'],
     ['/zh/admin/cost-observability', { ...noCapabilities, canReadCostObservability: true }, 'admin-cost-observability-page'],
     ['/zh/admin/evidence-workflow', { ...noCapabilities, canReadOpsLogs: true }, 'admin-evidence-workflow-page'],
-    ['/zh/admin/mission-control', { ...noCapabilities, canReadOpsLogs: true }, 'admin-mission-control-page'],
     ['/zh/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
   ])('renders %s only with its matching capability', async (path, adminCapabilities, pageText) => {
     useAuthMock.mockReturnValue({
@@ -981,11 +981,21 @@ describe('AppContent route flows', () => {
   });
 
   it('blocks mission control access when admin ops-log capability is absent', async () => {
+    vi.stubEnv('VITE_WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED', 'true');
     mockSignedInAdminWithCapabilities(noCapabilities);
 
     renderAt('/zh/admin/mission-control');
 
     expect(await screen.findByRole('heading', { name: '这个管理页面需要对应管理员能力' })).toBeInTheDocument();
+    expect(screen.queryByText('admin-mission-control-page')).not.toBeInTheDocument();
+  });
+
+  it('keeps mission control prototype route disabled by default even for ops-log admins', async () => {
+    mockSignedInAdminWithCapabilities({ ...noCapabilities, canReadOpsLogs: true });
+
+    renderAt('/en/admin/mission-control');
+
+    expect(await screen.findByRole('heading', { name: 'Admin Mission Control prototype is disabled' })).toBeInTheDocument();
     expect(screen.queryByText('admin-mission-control-page')).not.toBeInTheDocument();
   });
 
@@ -1017,6 +1027,7 @@ describe('AppContent route flows', () => {
   });
 
   it('renders mission control with ops logs read as the only admin capability', async () => {
+    vi.stubEnv('VITE_WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED', 'true');
     mockSignedInAdminWithCapabilities({ ...noCapabilities, canReadOpsLogs: true });
 
     renderAt('/zh/admin/mission-control');

@@ -57,6 +57,16 @@ const payload = {
   publicLaunchApproved: false,
   releaseApproved: false,
   launchVerdict: 'NO_GO',
+  prototypeGate: {
+    enabled: true,
+    status: 'enabled',
+    reasonCode: null,
+    featureFlag: 'WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED',
+    readOnly: true,
+    advisoryOnly: true,
+    noExternalCalls: true,
+    liveEnforcement: false,
+  },
   opsSnapshotAvailable: true,
   summary: {
     domainCount: 9,
@@ -121,6 +131,44 @@ describe('AdminMissionControlPage', () => {
     expect(document.querySelector('form')).not.toBeInTheDocument();
     expect(document.querySelector('input, textarea, select, [contenteditable="true"]')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /approve|批准|提交|保存|send|发送|cleanup|restore|migration/i })).not.toBeInTheDocument();
+  });
+
+  it('shows a bounded disabled prototype state without readiness domains', async () => {
+    getSnapshot.mockResolvedValueOnce({
+      ...payload,
+      prototypeGate: {
+        enabled: false,
+        status: 'disabled',
+        reasonCode: 'prototype_gate_disabled_by_default',
+        featureFlag: 'WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED',
+        readOnly: true,
+        advisoryOnly: true,
+        noExternalCalls: true,
+        liveEnforcement: false,
+      },
+      opsSnapshotAvailable: false,
+      summary: {
+        domainCount: 0,
+        landedFoundationCount: 0,
+        evidenceToolingCount: 0,
+        realOperatorEvidenceMissingCount: 0,
+        approvalRequiredCount: 0,
+        publicLaunchNoGoCount: 0,
+      },
+      domains: [],
+      metadata: {
+        ...payload.metadata,
+        opsAggregationAttempted: false,
+        highRiskSummariesAggregated: false,
+      },
+    });
+
+    render(<AdminMissionControlPage />);
+
+    expect(await screen.findByText('Mission Control prototype 未启用')).toBeInTheDocument();
+    expect(screen.getAllByText(/默认关闭/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByTestId('admin-mission-domain-grid')).not.toBeInTheDocument();
+    expect(screen.queryAllByTestId('admin-mission-domain-card')).toHaveLength(0);
   });
 
   it('renders sanitized drill-through links only to existing admin read surfaces', async () => {

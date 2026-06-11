@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from copy import deepcopy
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Mapping, Optional
@@ -29,6 +30,15 @@ def _posture(
         "approvalRequired": approval_required,
         "publicLaunchNoGo": public_launch_no_go,
     }
+
+
+_PROTOTYPE_FEATURE_FLAG = "WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED"
+_TRUE_VALUES = {"1", "true", "yes", "on", "enabled"}
+
+
+def is_admin_mission_control_prototype_enabled() -> bool:
+    raw_value = os.getenv(_PROTOTYPE_FEATURE_FLAG, "")
+    return raw_value.strip().lower() in _TRUE_VALUES
 
 
 class AdminMissionControlService:
@@ -318,6 +328,9 @@ class AdminMissionControlService:
 
     def build_snapshot(self, *, app_state: object | None = None) -> Dict[str, Any]:
         generated_at = datetime.now().isoformat()
+        if not is_admin_mission_control_prototype_enabled():
+            return self._build_disabled_snapshot(generated_at=generated_at)
+
         ops_status, ops_available, ops_reason = self._safe_ops_status(app_state=app_state)
         domains = [self._build_domain(domain, ops_status) for domain in self._DOMAINS]
         summary = self._build_summary(domains)
@@ -330,6 +343,7 @@ class AdminMissionControlService:
             "publicLaunchApproved": False,
             "releaseApproved": False,
             "launchVerdict": "NO_GO",
+            "prototypeGate": self._prototype_gate(enabled=True),
             "opsSnapshotAvailable": ops_available,
             "summary": summary,
             "domains": domains,
@@ -337,6 +351,10 @@ class AdminMissionControlService:
             "metadata": {
                 "contract": "admin_mission_control_v1",
                 "gatingCapability": "ops:logs:read",
+                "prototypeFeatureFlag": _PROTOTYPE_FEATURE_FLAG,
+                "prototypeEnabled": True,
+                "opsAggregationAttempted": True,
+                "highRiskSummariesAggregated": True,
                 "opsSnapshotReasonCode": ops_reason,
                 "mutationPaths": [],
                 "externalCallsMade": False,
@@ -357,6 +375,63 @@ class AdminMissionControlService:
                     "target_user_portfolio_details_not_read",
                 ],
             },
+        }
+
+    def _build_disabled_snapshot(self, *, generated_at: str) -> Dict[str, Any]:
+        return {
+            "generatedAt": generated_at,
+            "readOnly": True,
+            "noExternalCalls": True,
+            "liveEnforcement": False,
+            "runtimeBehaviorChanged": False,
+            "publicLaunchApproved": False,
+            "releaseApproved": False,
+            "launchVerdict": "NO_GO",
+            "prototypeGate": self._prototype_gate(enabled=False),
+            "opsSnapshotAvailable": False,
+            "summary": self._build_summary([]),
+            "domains": [],
+            "postureLegend": self._POSTURE_LEGEND,
+            "metadata": {
+                "contract": "admin_mission_control_prototype_disabled",
+                "gatingCapability": "ops:logs:read",
+                "prototypeFeatureFlag": _PROTOTYPE_FEATURE_FLAG,
+                "prototypeEnabled": False,
+                "disabledReasonCode": "prototype_gate_disabled_by_default",
+                "opsAggregationAttempted": False,
+                "highRiskSummariesAggregated": False,
+                "mutationPaths": [],
+                "externalCallsMade": False,
+                "providerCallsAttempted": False,
+                "notificationSendAttempted": False,
+                "portfolioTargetReadsAttempted": False,
+                "cleanupCalled": False,
+                "restoreCalled": False,
+                "migrationRun": False,
+                "authBehaviorChanged": False,
+                "productionConfigMutation": False,
+                "publicLaunchApprovalAdded": False,
+                "redaction": [
+                    "prototype_disabled_no_runtime_summaries",
+                    "raw_identifiers_omitted",
+                    "auth_material_omitted",
+                    "external_payloads_omitted",
+                    "trace_details_omitted",
+                ],
+            },
+        }
+
+    @staticmethod
+    def _prototype_gate(*, enabled: bool) -> Dict[str, Any]:
+        return {
+            "enabled": enabled,
+            "status": "enabled" if enabled else "disabled",
+            "reasonCode": None if enabled else "prototype_gate_disabled_by_default",
+            "featureFlag": _PROTOTYPE_FEATURE_FLAG,
+            "readOnly": True,
+            "advisoryOnly": True,
+            "noExternalCalls": True,
+            "liveEnforcement": False,
         }
 
     def _safe_ops_status(self, *, app_state: object | None) -> tuple[Dict[str, Any], bool, Optional[str]]:

@@ -55,6 +55,17 @@ class AdminMissionControlSummary(_AdminMissionControlModel):
     public_launch_no_go_count: int = Field(alias="publicLaunchNoGoCount")
 
 
+class AdminMissionControlPrototypeGate(_AdminMissionControlModel):
+    enabled: bool
+    status: Literal["disabled", "enabled"]
+    reason_code: Optional[str] = Field(default=None, alias="reasonCode")
+    feature_flag: str = Field(alias="featureFlag")
+    read_only: bool = Field(default=True, alias="readOnly")
+    advisory_only: bool = Field(default=True, alias="advisoryOnly")
+    no_external_calls: bool = Field(default=True, alias="noExternalCalls")
+    live_enforcement: bool = Field(default=False, alias="liveEnforcement")
+
+
 class AdminMissionControlResponse(_AdminMissionControlModel):
     generated_at: str = Field(alias="generatedAt")
     read_only: bool = Field(default=True, alias="readOnly")
@@ -64,6 +75,7 @@ class AdminMissionControlResponse(_AdminMissionControlModel):
     public_launch_approved: bool = Field(default=False, alias="publicLaunchApproved")
     release_approved: bool = Field(default=False, alias="releaseApproved")
     launch_verdict: Literal["NO_GO"] = Field(default="NO_GO", alias="launchVerdict")
+    prototype_gate: AdminMissionControlPrototypeGate = Field(alias="prototypeGate")
     ops_snapshot_available: bool = Field(alias="opsSnapshotAvailable")
     summary: AdminMissionControlSummary
     domains: List[AdminMissionControlDomainSlice]

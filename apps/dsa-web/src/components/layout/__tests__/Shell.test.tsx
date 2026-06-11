@@ -86,6 +86,7 @@ const fullCapabilityAdminUser = {
 describe('Shell', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('VITE_WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED', '');
     languageState.value = 'zh';
     setAdminSurfaceMode('user');
     window.sessionStorage.clear();
@@ -722,7 +723,7 @@ describe('Shell', () => {
 
     const adminNav = await screen.findByTestId('shell-admin-primary-nav');
     expect(within(adminNav).getByRole('link', { name: '运维总览/系统设置' })).toBeInTheDocument();
-    expect(within(adminNav).getByRole('link', { name: 'Mission Control' })).toBeInTheDocument();
+    expect(within(adminNav).queryByRole('link', { name: 'Mission Control' })).not.toBeInTheDocument();
     expect(within(adminNav).getByRole('link', { name: '数据源与就绪度' })).toHaveClass('is-active');
     expect(within(adminNav).getByRole('link', { name: '熔断诊断' })).toBeInTheDocument();
     expect(within(adminNav).getByRole('link', { name: '系统日志' })).toBeInTheDocument();
@@ -734,6 +735,35 @@ describe('Shell', () => {
     expect(within(adminNav).queryByRole('link', { name: translate('zh', 'nav.scanner') })).not.toBeInTheDocument();
     expect(screen.queryByTestId('shell-consumer-primary-nav')).not.toBeInTheDocument();
     expect(screen.queryByTestId('shell-admin-utility-menu')).not.toBeInTheDocument();
+  });
+
+  it('shows Mission Control in admin nav only when the prototype gate is enabled', async () => {
+    vi.stubEnv('VITE_WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED', 'true');
+    window.innerWidth = 390;
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      currentUser: fullCapabilityAdminUser,
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/zh/admin/market-providers']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '打开导航菜单' }));
+      await settleDrawerMotion();
+    });
+
+    const adminNav = await screen.findByTestId('shell-admin-primary-nav');
+    expect(within(adminNav).getByRole('link', { name: 'Mission Control' })).toHaveAttribute('href', '/zh/admin/mission-control');
   });
 
   it('uses the wide workspace lane for the backtest route', () => {
@@ -912,11 +942,36 @@ describe('Shell', () => {
     expect(within(adminMenu).getByTestId('shell-admin-utility-group-evidence')).toHaveTextContent('事件 / Evidence');
     expect(within(adminMenu).getByTestId('shell-admin-utility-group-dataOps')).toHaveTextContent('数据运行 / Data Ops');
     expect(within(adminMenu).getByTestId('shell-admin-utility-group-support')).toHaveTextContent('用户支持 / Support');
-    expect(screen.getByRole('link', { name: 'Mission Control' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Mission Control' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: '数据源与就绪度' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '系统日志' })).toBeInTheDocument();
     expect(within(actionIsland).getByRole('button', { name: translate('zh', 'nav.logout') })).toBeInTheDocument();
     expect(actionIsland.querySelectorAll('[data-testid="shell-header-utility-divider"]')).toHaveLength(2);
+  });
+
+  it('shows Mission Control in the compact admin menu only when explicitly enabled', async () => {
+    vi.stubEnv('VITE_WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED', 'true');
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      currentUser: fullCapabilityAdminUser,
+      logout: mockLogout,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    const actionIsland = await screen.findByTestId('shell-header-utility-island');
+    fireEvent.click(within(actionIsland).getByRole('button', { name: '系统' }));
+    const adminMenu = await screen.findByTestId('shell-admin-utility-menu');
+    expect(within(adminMenu).getByRole('link', { name: 'Mission Control' })).toHaveAttribute('href', '/admin/mission-control');
   });
 
   it('shows only capability-authorized admin entries inside the compact control menu', async () => {
@@ -990,7 +1045,7 @@ describe('Shell', () => {
     const actionIsland = await screen.findByTestId('shell-header-utility-island');
     expect(within(actionIsland).queryByRole('button', { name: translate('zh', 'nav.independentConsole') })).not.toBeInTheDocument();
     const adminNav = await screen.findByTestId('shell-admin-primary-nav');
-    expect(within(adminNav).getByRole('link', { name: 'Mission Control' })).toBeInTheDocument();
+    expect(within(adminNav).queryByRole('link', { name: 'Mission Control' })).not.toBeInTheDocument();
     expect(within(adminNav).getByRole('link', { name: '证据复核' })).toBeInTheDocument();
     expect(within(adminNav).getByRole('link', { name: '系统日志' })).toHaveClass('is-active');
     expect(within(adminNav).queryByRole('link', { name: 'Evidence Review' })).not.toBeInTheDocument();

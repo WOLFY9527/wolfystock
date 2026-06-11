@@ -129,9 +129,10 @@ const AdminMissionControlPage: React.FC = () => {
   }, []);
 
   const data = state.data;
+  const prototypeDisabled = data?.prototypeGate?.enabled === false;
   const noGoDomains = useMemo(
-    () => data?.domains.filter((domain) => domain.posture.publicLaunchNoGo) || [],
-    [data],
+    () => (prototypeDisabled ? [] : data?.domains.filter((domain) => domain.posture.publicLaunchNoGo) || []),
+    [data, prototypeDisabled],
   );
 
   return (
@@ -147,6 +148,7 @@ const AdminMissionControlPage: React.FC = () => {
             action={(
               <div className="flex flex-wrap gap-2">
                 <TerminalChip variant="info">只读</TerminalChip>
+                {prototypeDisabled ? <TerminalChip variant="caution">Prototype gate disabled</TerminalChip> : null}
                 <TerminalChip variant="danger">Public launch NO-GO</TerminalChip>
               </div>
             )}
@@ -155,44 +157,50 @@ const AdminMissionControlPage: React.FC = () => {
             dataTestId="admin-mission-l0-overview-strip"
             className="mt-4"
             systemTrustState="blocked"
-            impact="覆盖安全、成本、数据源、存储、WS2、通知、组合/回测、路由和 private-beta posture。"
-            recommendedAction="补齐真实操作员证据与人工审批；不要从本页执行运行时控制。"
+            impact={prototypeDisabled
+              ? 'Prototype 默认关闭；未聚合 provider、quota、storage、task 或 admin-log 摘要。'
+              : '覆盖安全、成本、数据源、存储、WS2、通知、组合/回测、路由和 private-beta posture。'}
+            recommendedAction={prototypeDisabled
+              ? '仅在有边界的管理员 prototype 复核中显式启用；默认路径保持隐藏。'
+              : '补齐真实操作员证据与人工审批；不要从本页执行运行时控制。'}
             evidenceRef="admin_mission_control_v1"
             lastUpdated={data ? formatDateTime(data.generatedAt) : state.loading ? '读取中' : '不可用'}
           />
-          <AdminDrillThroughStrip
-            className="mt-4"
-            items={[
-              {
-                label: '查看证据工作流',
-                target: 'evidence',
-                evidenceType: 'operator evidence',
-                reason: '从总控进入脱敏证据、模板和人工复核路径。',
-                params: { ref: 'mission_control' },
-              },
-              {
-                label: '查看系统日志',
-                target: 'logs',
-                evidenceType: 'ops status',
-                reason: '回看 mission-control 相关的只读运行证据。',
-                params: { tab: 'business', query: 'mission control', since: '24h' },
-              },
-              {
-                label: '查看数据源运维',
-                target: 'marketProviders',
-                evidenceType: 'provider readiness',
-                reason: '继续检查数据源覆盖、fallback 和 readiness 缺口。',
-                params: { surface: 'market_overview' },
-              },
-              {
-                label: '查看成本观测',
-                target: 'cost',
-                evidenceType: 'quota cost',
-                reason: '确认成本与配额仍是观测态而非 live enforcement。',
-                params: { window: '24h', area: 'all' },
-              },
-            ]}
-          />
+          {!prototypeDisabled ? (
+            <AdminDrillThroughStrip
+              className="mt-4"
+              items={[
+                {
+                  label: '查看证据工作流',
+                  target: 'evidence',
+                  evidenceType: 'operator evidence',
+                  reason: '从总控进入脱敏证据、模板和人工复核路径。',
+                  params: { ref: 'mission_control' },
+                },
+                {
+                  label: '查看系统日志',
+                  target: 'logs',
+                  evidenceType: 'ops status',
+                  reason: '回看 mission-control 相关的只读运行证据。',
+                  params: { tab: 'business', query: 'mission control', since: '24h' },
+                },
+                {
+                  label: '查看数据源运维',
+                  target: 'marketProviders',
+                  evidenceType: 'provider readiness',
+                  reason: '继续检查数据源覆盖、fallback 和 readiness 缺口。',
+                  params: { surface: 'market_overview' },
+                },
+                {
+                  label: '查看成本观测',
+                  target: 'cost',
+                  evidenceType: 'quota cost',
+                  reason: '确认成本与配额仍是观测态而非 live enforcement。',
+                  params: { window: '24h', area: 'all' },
+                },
+              ]}
+            />
+          ) : null}
         </TerminalPanel>
 
         {state.error ? <ApiErrorAlert error={state.error} /> : null}
@@ -207,6 +215,10 @@ const AdminMissionControlPage: React.FC = () => {
             {state.loading ? (
               <TerminalEmptyState title="正在读取 Mission Control">
                 正在读取只读 posture projection。
+              </TerminalEmptyState>
+            ) : prototypeDisabled ? (
+              <TerminalEmptyState title="Mission Control prototype 未启用">
+                默认关闭；未聚合 provider、quota、storage、task 或 admin-log 摘要。
               </TerminalEmptyState>
             ) : data ? (
               <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2" data-testid="admin-mission-domain-grid">
