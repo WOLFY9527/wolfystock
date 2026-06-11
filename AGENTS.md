@@ -40,6 +40,7 @@
 - 仓库协作 skill 存放在 `.claude/skills/`，分析产物存放在 `.claude/reviews/`；前者可以入库，后者默认视为本地产物。
 - 根目录 `SKILL.md` 与 `docs/openclaw-skill-integration.md` 属于产品或外部集成说明，不是仓库协作规则真源。
 - `docs/codex/WOLFYSTOCK_CODEX_EXECUTION_POLICY.md` 是 Codex 任务提示的压缩执行策略，不是新的规则真源；若与本文件冲突，以 `AGENTS.md` 为准。
+- `docs/AI_PROJECT_MANUAL.md` 是由 `scripts/build_ai_project_manual.py` 生成的 AI worker onboarding / navigation 手册，用于快速定位当前任务模式、source map、验证与 stale-doc traps；它不是新的规则真源。需要更新时改源文档或生成器后重新生成，不要手改生成文件。
 - 若未来新增 `.agents/skills/` 或其他 agent 专用目录，必须先明确单一真源，再通过脚本或镜像同步；禁止手工长期维护多份同义内容。
 - 文件与文档归档、删除、AI 资产镜像边界参考 `docs/architecture/file-governance-taxonomy.md`。
 - 修改 AI 协作治理资产时，执行：
