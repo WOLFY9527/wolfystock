@@ -779,7 +779,8 @@ describe('MarketProviderOperationsPage', () => {
     expect(checklist).toHaveTextContent('数据源运维 / 系统诊断');
     const marketOverviewGroup = screen.getByTestId('market-provider-setup-surface-market-overview');
     const rotationGroup = screen.getByTestId('market-provider-setup-surface-rotation-radar');
-    expect(marketOverviewGroup).toHaveAttribute('open');
+    expect(marketOverviewGroup).not.toHaveAttribute('open');
+    expect(marketOverviewGroup).toHaveTextContent('默认折叠');
     expect(rotationGroup).not.toHaveAttribute('open');
     expect(rotationGroup).toHaveTextContent('默认折叠');
     expect(rotationGroup).not.toHaveTextContent('刷新 CN/HK connect 缓存快照');
@@ -953,18 +954,24 @@ describe('MarketProviderOperationsPage', () => {
       expect(await screen.findByText('数据源配置清单')).toBeInTheDocument();
       const focus = screen.getByTestId('market-provider-setup-surface-focus');
       expect(focus).toHaveTextContent('已按 Market Overview 聚焦');
+      expect(focus).toHaveTextContent('默认只标记该产品面');
       expect(focus).toHaveTextContent('确认覆盖缺口');
       const checklist = screen.getByTestId('market-provider-setup-checklist');
       expect(checklist).toHaveTextContent('Market Overview');
-      expect(checklist).toHaveTextContent('Fed Liquidity');
-      expect(checklist).toHaveTextContent('Polygon grouped daily US equities');
       expect(checklist).toHaveTextContent('Rotation Radar');
       expect(checklist).toHaveTextContent('Portfolio');
-      expect(screen.getByTestId('market-provider-setup-surface-market-overview')).toHaveAttribute('open');
+      const marketOverviewGroup = screen.getByTestId('market-provider-setup-surface-market-overview');
+      expect(marketOverviewGroup).not.toHaveAttribute('open');
+      expect(marketOverviewGroup).toHaveTextContent('默认折叠');
       expect(screen.getByTestId('market-provider-setup-surface-rotation-radar')).not.toHaveAttribute('open');
       expect(screen.getByTestId('market-provider-setup-surface-portfolio')).not.toHaveAttribute('open');
+      expect(marketOverviewGroup).not.toHaveTextContent('Fed Liquidity');
+      expect(marketOverviewGroup).not.toHaveTextContent('Polygon grouped daily US equities');
       expect(screen.getByTestId('market-provider-setup-surface-rotation-radar')).not.toHaveTextContent('CN/HK connect');
       expect(screen.getByTestId('market-provider-setup-surface-portfolio')).not.toHaveTextContent('Portfolio 手动');
+      fireEvent.click(within(marketOverviewGroup).getByRole('button', { name: '展开 Market Overview' }));
+      expect(marketOverviewGroup).toHaveTextContent('Fed Liquidity');
+      expect(marketOverviewGroup).toHaveTextContent('Polygon grouped daily US equities');
 
       const matrixDisclosure = screen.getByTestId('market-provider-matrix-disclosure');
       fireEvent.click(within(matrixDisclosure).getByRole('button', { name: '展开 L4 完整数据源矩阵：来源 / 就绪 / 门槛 / 原因代码（已脱敏）' }));
@@ -1107,12 +1114,31 @@ describe('MarketProviderOperationsPage', () => {
   });
 
   it('renders unified drill-through controls to logs, circuits, cost, and evidence surfaces', async () => {
-    getOperations.mockResolvedValue(populatedPayload);
+    getOperations.mockResolvedValue({
+      ...populatedPayload,
+      adminLogDrillThrough: {
+        ...populatedPayload.adminLogDrillThrough,
+        query: {
+          tab: 'business',
+          query: 'market provider',
+          since: '24h',
+          provider: 'fallback token=SECRET',
+          source: 'quote',
+          trace: 'trace-should-not-render',
+        },
+        eventId: 'evt-1 token=SECRET',
+      },
+    });
 
     render(<MarketProviderOperationsPage />);
 
     await screen.findByTestId('market-provider-l0-overview-strip');
-    expect(screen.getByRole('link', { name: /查看相关日志/i })).toHaveAttribute('href', '/zh/admin/logs?query=market%20provider&since=24h');
+    const adminLogHrefs = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href^="/zh/admin/logs"]'))
+      .map((link) => link.getAttribute('href') || '');
+    expect(adminLogHrefs).toContain('/zh/admin/logs?tab=business&query=market%20provider%20fallback%20quote&since=24h&eventId=evt-1');
+    for (const href of adminLogHrefs) {
+      expect(href).not.toMatch(/provider=|source=|trace|token|SECRET/i);
+    }
     expect(screen.getByRole('link', { name: /查看熔断与配额/i })).toHaveAttribute('href', '/zh/admin/provider-circuits?provider=fallback&since=24h');
     expect(screen.getByRole('link', { name: /查看成本观测/i })).toHaveAttribute('href', '/zh/admin/cost-observability?window=24h&area=provider');
     expect(screen.getByRole('link', { name: /查看证据工作流/i })).toHaveAttribute('href', '/zh/admin/evidence-workflow?ref=provider_bundle#schema-ref');

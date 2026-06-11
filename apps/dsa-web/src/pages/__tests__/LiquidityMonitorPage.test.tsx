@@ -821,6 +821,89 @@ describe('LiquidityMonitorPage', () => {
     );
   });
 
+  it('keeps unknown liquidity diagnostic reasons generic in consumer copy', async () => {
+    const [firstIndicator] = payload.indicators;
+    getLiquidityMonitor.mockResolvedValueOnce({
+      ...payload,
+      score: {
+        ...payload.score,
+        regime: 'unavailable',
+        confidence: 0.18,
+        includedIndicatorCount: 0,
+        includedIndicatorWeight: 0,
+      },
+      indicators: [
+        {
+          ...firstIndicator,
+          status: 'unavailable',
+          freshness: 'unavailable',
+          includedInScore: false,
+          scoreContribution: 0,
+          coverageDiagnostics: {
+            ...(firstIndicator.coverageDiagnostics || {
+              indicatorId: firstIndicator.key,
+              indicatorName: firstIndicator.label,
+              requiredInputs: [],
+              fulfilledInputs: [],
+              missingInputs: [],
+            }),
+            scoreContributionAllowed: false,
+            scoreExclusionReason: 'new_backend_reason_code',
+            capReason: 'another_backend_gate',
+            sourceAuthorityReason: 'unexpected_source_authority',
+            routeRejectedReasonCodes: ['new_backend_reason_code', 'another_backend_gate'],
+            configuredProviderAvailable: false,
+            realSourceAvailable: false,
+            missingInputs: ['unknown_source'],
+          },
+        },
+      ],
+      liquidityImpulseSynthesis: {
+        ...payload.liquidityImpulseSynthesis,
+        liquidityImpulse: 'data_insufficient',
+        confidence: 0,
+        confidenceLabel: 'insufficient',
+        dominantDrivers: [{
+          key: 'liquidity_monitor:unknown_backend_driver',
+          pillar: 'unknown_backend_pillar',
+          direction: 'unknown_backend_direction',
+          scoreContributionAllowed: false,
+        }],
+        counterEvidence: [{
+          key: 'liquidity_monitor:unknown_backend_counter',
+          pillar: 'unknown_counter_pillar',
+          reason: 'unknown_counter_reason_code',
+          scoreContributionAllowed: false,
+        }],
+        dataGaps: [{
+          key: 'liquidity_monitor:unknown_backend_gap',
+          pillar: 'unknown_gap_pillar',
+          reason: 'missing_scoring_evidence_v2',
+          degradationReason: 'raw_degradation_code',
+          scoreContributionAllowed: false,
+        }],
+        evidenceQuality: {
+          scoringEvidenceCount: 0,
+          scoringPillarCount: 0,
+          discountedEvidenceCount: 0,
+          dataGapCount: 1,
+          realScoringEvidenceCount: 0,
+        },
+      },
+    });
+
+    render(<LiquidityMonitorPage />);
+
+    await waitFor(() => expect(screen.getByTestId('liquidity-decision-readiness')).toHaveTextContent('流动性支柱待确认'));
+    const readiness = screen.getByTestId('liquidity-decision-readiness');
+    expect(readiness).toHaveTextContent('流动性支柱待确认');
+    expect(readiness).toHaveTextContent('方向待确认');
+    const bodyText = document.body.textContent || '';
+    expect(bodyText).not.toMatch(
+      /new_backend_reason_code|New Backend Reason Code|another_backend_gate|Another Backend Gate|unexpected_source_authority|Unexpected Source Authority|unknown_source|Unknown Source|unknown_backend_driver|Unknown Backend Driver|unknown_backend_pillar|Unknown Backend Pillar|unknown_backend_direction|Unknown Backend Direction|unknown_counter_reason_code|Unknown Counter Reason Code|missing_scoring_evidence_v2|Missing Scoring Evidence V2|raw_degradation_code|Raw Degradation Code/i,
+    );
+  });
+
   it('keeps consumer default copy safe when fallback, stale, synthetic, and unavailable metadata are present', async () => {
     getLiquidityMonitor.mockResolvedValueOnce({
       ...payload,

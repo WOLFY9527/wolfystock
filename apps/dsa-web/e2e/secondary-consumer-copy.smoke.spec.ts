@@ -346,7 +346,7 @@ test.describe('secondary consumer copy smoke', () => {
     await page.waitForLoadState('domcontentloaded');
 
     await expect(page.getByTestId('portfolio-bento-page')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('portfolio-start-card')).toContainText('暂无持仓');
+    await expect(page.getByTestId('portfolio-start-card')).toContainText('创建或导入首个组合');
     await expect(page.getByTestId('portfolio-start-card')).toContainText(/先创建或选择账户|导入历史记录/);
     await expectNoForbiddenTerms(page, forbiddenInternalPattern);
     await expectNoForbiddenTerms(page, forbiddenTradingPattern, allowedBoundaryTerms);
@@ -363,8 +363,8 @@ test.describe('secondary consumer copy smoke', () => {
     try {
       await expect(page.getByTestId('watchlist-page')).toBeVisible({ timeout: 15_000 });
       await expect(page.locator('body')).toContainText(/观察列表|watchlist/i);
-      await expect(page.getByTestId('watchlist-compact-empty-state')).toContainText('先从扫描器加入候选，也可以在扫描器手动补充代码。');
-      await expect(page.getByTestId('watchlist-compact-empty-state')).toContainText('打开扫描器');
+      await expect(page.getByTestId('watchlist-compact-empty-state')).toContainText('先研究单个代码');
+      await expect(page.getByTestId('watchlist-compact-empty-state')).toContainText('手动研究代码');
       await expectNoForbiddenTerms(page, forbiddenInternalPattern);
       await expectNoForbiddenTerms(page, forbiddenExecutionPattern, allowedBoundaryTerms);
       await expectNoHorizontalOverflow(page);

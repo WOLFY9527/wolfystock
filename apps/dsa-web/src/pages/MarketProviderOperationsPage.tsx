@@ -443,14 +443,60 @@ function limitationLabel(value: string): string {
   return value.replace(/_/g, ' ');
 }
 
+const ADMIN_LOG_ROUTES = new Set(['/zh/admin/logs', '/en/admin/logs']);
+const ADMIN_LOG_TABS = new Set(['business', 'analysis', 'scanner', 'backtest', 'data_source', 'security', 'raw']);
+const ADMIN_LOG_WINDOWS = new Set(['15m', '1h', '24h', '7d']);
+
+function sanitizeAdminLogSearchText(value: unknown, maxLength = 80): string | null {
+  const cleaned = String(value || '')
+    .replace(/https?:\/\/\S+|www\.\S+/gi, ' ')
+    .replace(SENSITIVE_FRAGMENT_PATTERN, '$1 ')
+    .replace(/\b(token|secret|cookie|session|password|bearer|api[_-]?key|stack|trace|payload|prompt|credential)\b[:=]?\S*/gi, ' ')
+    .replace(/[^a-zA-Z0-9 _:-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+  return cleaned || null;
+}
+
+function sanitizeAdminLogCode(value: unknown, maxLength = 80): string | null {
+  const cleaned = String(value || '')
+    .replace(/https?:\/\/\S+|www\.\S+/gi, '')
+    .replace(SENSITIVE_FRAGMENT_PATTERN, '$1')
+    .replace(/\b(token|secret|cookie|session|password|bearer|api[_-]?key|stack|trace|payload|prompt|credential)\b[:=]?\S*/gi, '')
+    .replace(/[^a-zA-Z0-9:_-]/g, '')
+    .trim()
+    .slice(0, maxLength);
+  return cleaned || null;
+}
+
 function buildAdminLogHref(drill?: AdminLogDrillThrough): string | null {
-  if (!drill?.route) return null;
+  if (!drill?.route || !ADMIN_LOG_ROUTES.has(drill.route)) return null;
   const query = new URLSearchParams();
-  Object.entries(drill.query || {}).forEach(([key, value]) => {
-    if (value) query.set(key, value);
-  });
-  if (drill.eventId) query.set('eventId', drill.eventId);
-  const queryText = query.toString();
+  const params = drill.query || {};
+  const tab = sanitizeAdminLogCode(params.tab, 24);
+  if (tab && ADMIN_LOG_TABS.has(tab)) query.set('tab', tab);
+  const queryTextValue = [
+    params.query,
+    params.provider,
+    params.source,
+    params.surface,
+    params.domain,
+  ].flatMap((value) => {
+    const safe = sanitizeAdminLogSearchText(value);
+    return safe ? [safe] : [];
+  }).filter((value, index, values) => values.indexOf(value) === index).join(' ');
+  const safeQueryText = sanitizeAdminLogSearchText(queryTextValue);
+  if (safeQueryText) query.set('query', safeQueryText);
+  const since = String(params.since || '');
+  if (ADMIN_LOG_WINDOWS.has(since)) query.set('since', since);
+  const eventId = sanitizeAdminLogCode(drill.eventId || params.eventId);
+  if (eventId) query.set('eventId', eventId);
+  const requestId = sanitizeAdminLogCode(params.requestId);
+  if (requestId) query.set('requestId', requestId);
+  const userId = sanitizeAdminLogCode(params.userId);
+  if (userId) query.set('userId', userId);
+  const queryText = query.toString().replace(/\+/g, '%20');
   return queryText ? `${drill.route}?${queryText}` : drill.route;
 }
 
@@ -1548,13 +1594,6 @@ const ProviderSetupChecklistPanel: React.FC<{
     ), 'ok');
     groups.push({ surface, items, severity });
   }
-  const defaultOpenSurface = surfaceFocus && groups.some((group) => group.surface === surfaceFocus.label)
-    ? surfaceFocus.label
-    : groups.slice().sort((left, right) => (
-      severityWeight(left.severity) - severityWeight(right.severity)
-      || CHECKLIST_SURFACE_ORDER.indexOf(left.surface as (typeof CHECKLIST_SURFACE_ORDER)[number]) - CHECKLIST_SURFACE_ORDER.indexOf(right.surface as (typeof CHECKLIST_SURFACE_ORDER)[number])
-    ))[0]?.surface;
-
   return (
     <TerminalNestedBlock data-testid="market-provider-setup-checklist" className="mt-4 bg-black/10 px-3 py-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1602,7 +1641,7 @@ const ProviderSetupChecklistPanel: React.FC<{
         >
           <span className="font-semibold text-cyan-100/82">已按 {surfaceFocus.label} 聚焦：</span>
           {' '}
-          默认只展开该产品面；其他产品面保留紧凑标题、数量和状态，避免首屏变成完整清单墙。以下清单来自现有 productAffectedSurfaces，用于确认覆盖缺口；仅改善数据覆盖披露，不会改变评分规则。
+          默认只标记该产品面，细节仍需按需展开，避免首屏变成完整清单墙。以下清单来自现有 productAffectedSurfaces，用于确认覆盖缺口；仅改善数据覆盖披露，不会改变评分规则。
         </div>
       ) : null}
 
@@ -1621,8 +1660,7 @@ const ProviderSetupChecklistPanel: React.FC<{
               key={group.surface}
               data-testid={`market-provider-setup-surface-${group.surface.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
               title={group.surface}
-              summary={`${formatNumber(group.items.length, 0)} 项 · ${disclosureSeverityLabel(group.severity)} · ${group.surface === defaultOpenSurface ? '默认展开' : '默认折叠'}`}
-              defaultOpen={group.surface === defaultOpenSurface}
+              summary={`${formatNumber(group.items.length, 0)} 项 · ${disclosureSeverityLabel(group.severity)} · 默认折叠`}
               className={cn(
                 'bg-white/[0.025]',
                 surfaceFocus?.label === group.surface ? 'border-cyan-200/20 bg-cyan-300/[0.035]' : '',

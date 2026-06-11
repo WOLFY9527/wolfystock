@@ -227,35 +227,67 @@ function compactToken(value: unknown): string {
   return text === 'unknown' ? '--' : text;
 }
 
+const HUMAN_TOKEN_LABELS: Record<string, string> = {
+  adjustment_status_unknown: '复权状态未知',
+  market_rules_not_modeled: '涨跌停/停牌未建模',
+  signal_entry: '信号入场',
+  signal_exit: '信号离场',
+  stop_loss: '风险退出参考触发',
+  take_profit: '上方退出参考触发',
+  forced_close: '期末平仓',
+  moving_average_crossover: '均线交叉',
+  bar_close: '收盘信号',
+  next_bar_open: '次日开盘',
+  open: '开盘价',
+  close: '收盘价',
+  deterministic: '确定性引擎',
+  fractional: '允许碎股',
+  whole_shares: '整股',
+  not_modeled: '未建模',
+  disabled: '禁用',
+  unknown: '未提供',
+  local_us_parquet: '本地美股 Parquet',
+  benchmark_security: '基准证券',
+  daily: '日线',
+  '1d': '日线',
+};
+
+const INTERNAL_SUPPORT_SAFE_WARNING = '诊断提示已记录，详情需结合复查材料确认。';
+const INTERNAL_SUPPORT_SAFE_REASON = '回测原因已脱敏';
+const INTERNAL_TEXT_PATTERN = /\b(provider|authority|scope|trace|payload|runtime|cache|fallback|order|broker|database|db|quota|request|response|raw|schema|helper|metadata|debug|stack|exception|token|marketcache|sourceauthority)\b/i;
+
+function normalizedHumanTokenKey(value: unknown): string {
+  const raw = safeText(typeof value === 'string' ? value : value == null ? null : String(value));
+  return raw ? raw.toLowerCase().replaceAll('-', '_').replace(/\s+/g, '_') : '';
+}
+
+function isKnownHumanToken(value: unknown): boolean {
+  const normalized = normalizedHumanTokenKey(value);
+  return Boolean(normalized && HUMAN_TOKEN_LABELS[normalized]);
+}
+
+function isInternalLookingText(value: unknown): boolean {
+  const raw = safeText(typeof value === 'string' ? value : value == null ? null : String(value));
+  if (!raw) return false;
+  const normalized = normalizedHumanTokenKey(raw);
+  return INTERNAL_TEXT_PATTERN.test(raw)
+    || /[a-z][A-Z]/.test(raw)
+    || /[a-z0-9]+_[a-z0-9_]+/.test(normalized)
+    || /^[{[]/.test(raw);
+}
+
 function humanToken(value: unknown): string {
   const raw = safeText(typeof value === 'string' ? value : value == null ? null : String(value));
   if (!raw) return '未提供';
-  const normalized = raw.toLowerCase().replaceAll('-', '_').replace(/\s+/g, '_');
-  const labels: Record<string, string> = {
-    adjustment_status_unknown: '复权状态未知',
-    market_rules_not_modeled: '涨跌停/停牌未建模',
-    signal_entry: '信号入场',
-    signal_exit: '信号离场',
-    stop_loss: '风险退出参考触发',
-    take_profit: '上方退出参考触发',
-    forced_close: '期末平仓',
-    moving_average_crossover: '均线交叉',
-    bar_close: '收盘信号',
-    next_bar_open: '次日开盘',
-    open: '开盘价',
-    close: '收盘价',
-    deterministic: '确定性引擎',
-    fractional: '允许碎股',
-    whole_shares: '整股',
-    not_modeled: '未建模',
-    disabled: '禁用',
-    unknown: '未提供',
-    local_us_parquet: '本地美股 Parquet',
-    benchmark_security: '基准证券',
-    daily: '日线',
-    '1d': '日线',
-  };
-  return labels[normalized] || raw.replaceAll('_', ' ');
+  const normalized = normalizedHumanTokenKey(raw);
+  return HUMAN_TOKEN_LABELS[normalized] || raw.replaceAll('_', ' ');
+}
+
+function safeTradeReasonToken(value: unknown): string {
+  const raw = safeText(typeof value === 'string' ? value : value == null ? null : String(value));
+  if (!raw) return humanToken(value);
+  if (isKnownHumanToken(raw)) return humanToken(raw);
+  return isInternalLookingText(raw) ? INTERNAL_SUPPORT_SAFE_REASON : humanToken(raw);
 }
 
 function holdingBucketLabel(bucket: string): string {
@@ -273,7 +305,14 @@ function formatBps(value: unknown): string {
 }
 
 function warningText(warning: BacktestDiagnosticWarning | Record<string, unknown>): string {
-  return safeText(warning.code) ? humanToken(warning.code) : safeText(warning.message) || '元数据提示';
+  const code = safeText(warning.code);
+  if (code) {
+    if (isKnownHumanToken(code)) return humanToken(code);
+    return isInternalLookingText(code) ? INTERNAL_SUPPORT_SAFE_WARNING : humanToken(code);
+  }
+  const message = safeText(warning.message);
+  if (!message) return '元数据提示';
+  return isInternalLookingText(message) ? INTERNAL_SUPPORT_SAFE_WARNING : message;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -901,7 +940,7 @@ function buildEvents(trades: RuleBacktestTradeItem[]): EventRow[] {
       events.push({
         date: trade.entryDate,
         type: 'ENTRY',
-        label: humanToken(trade.entryReason || trade.entrySignal || trade.entryTrigger),
+        label: safeTradeReasonToken(trade.entryReason || trade.entrySignal || trade.entryTrigger),
         tone: 'neutral',
       });
     }
@@ -909,7 +948,7 @@ function buildEvents(trades: RuleBacktestTradeItem[]): EventRow[] {
       events.push({
         date: trade.exitDate,
         type: 'EXIT',
-        label: humanToken(trade.exitReason || trade.exitSignal || trade.exitTrigger),
+        label: safeTradeReasonToken(trade.exitReason || trade.exitSignal || trade.exitTrigger),
         tone: toneFor(getTradeReturn(trade)),
       });
     }
@@ -1288,8 +1327,8 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
         tradeFees(trade),
         tradeSlippage(trade),
         trade.holdingDays ?? trade.holdingCalendarDays ?? trade.holdingBars,
-        trade.exitReason ?? trade.exitTrigger ?? trade.exitSignal,
-        trade.signalReason ?? trade.entrySignal ?? trade.entryTrigger,
+        safeTradeReasonToken(trade.exitReason ?? trade.exitTrigger ?? trade.exitSignal),
+        safeTradeReasonToken(trade.signalReason ?? trade.entrySignal ?? trade.entryTrigger),
       ]),
     );
   };
@@ -1532,7 +1571,7 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
             </div>
             <div>
               <p className={`${LABEL_CLASS} mb-2`}>按退出原因</p>
-              <AttributionList rows={attributionByExitReason} testId="backtest-attribution-exit-reason" formatKey={humanToken} />
+              <AttributionList rows={attributionByExitReason} testId="backtest-attribution-exit-reason" formatKey={safeTradeReasonToken} />
             </div>
             <div>
               <p className={`${LABEL_CLASS} mb-2`}>按持有周期</p>
@@ -1632,8 +1671,8 @@ const BacktestResultReport: React.FC<BacktestResultReportProps> = ({
                     <td className="px-3 py-2 font-mono">{formatNumber(tradeFees(trade), 2)}</td>
                     <td className="px-3 py-2 font-mono">{formatNumber(tradeSlippage(trade), 2)}</td>
                     <td className="px-3 py-2 font-mono">{formatNumber(trade.holdingDays ?? trade.holdingCalendarDays ?? trade.holdingBars, 0)}</td>
-                    <td className="max-w-[180px] truncate px-3 py-2">{humanToken(trade.exitReason || trade.exitTrigger || trade.exitSignal)}</td>
-                    <td className="max-w-[220px] truncate px-3 py-2">{humanToken(trade.signalReason || trade.entrySignal || trade.entryTrigger)}</td>
+                    <td className="max-w-[180px] truncate px-3 py-2">{safeTradeReasonToken(trade.exitReason || trade.exitTrigger || trade.exitSignal)}</td>
+                    <td className="max-w-[220px] truncate px-3 py-2">{safeTradeReasonToken(trade.signalReason || trade.entrySignal || trade.entryTrigger)}</td>
                   </tr>
                 )) : (
                   <tr><td colSpan={14} className="px-3 py-6 text-center text-white/42">暂无交易记录</td></tr>

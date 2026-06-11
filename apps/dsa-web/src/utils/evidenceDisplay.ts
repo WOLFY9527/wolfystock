@@ -76,6 +76,23 @@ const DIRECT_LABEL_MAP: Record<string, string | null> = {
   '部分外部数据暂不可用': '部分外部数据暂不可用',
   '历史数据不足': '历史数据不足',
   '真实资金流暂缺': '真实资金流暂缺',
+  read_only: '只读',
+  readonly: '只读',
+  'read-only': '只读',
+  advisory_only: '仅提示',
+  'advisory-only': '仅提示',
+  dry_run: '试运行',
+  'dry-run': '试运行',
+  'dry run': '试运行',
+  no_send: '不发送',
+  'no-send': '不发送',
+  no_live_quota: '保持观察边界',
+  'no-live-quota': '保持观察边界',
+  quota_dry_run: '保持观察边界',
+  no_provider_blocking: '不改变数据通路',
+  'no-provider-blocking': '不改变数据通路',
+  no_external_calls: '不触发外部动作',
+  'no-external-calls': '不触发外部动作',
   'FX 汇率已过期': 'FX 汇率已过期',
   'fx 汇率已过期': 'FX 汇率已过期',
   'FX 汇率缺失': 'FX 汇率缺失',
@@ -85,10 +102,8 @@ const DIRECT_LABEL_MAP: Record<string, string | null> = {
   fallback: '备用数据',
   'fallback 数据': '备用数据',
   fallback_data: '备用数据',
-  'dry-run': '演示数据',
-  dry_run: '演示数据',
-  'dry run': '演示数据',
   fixture: '演示数据',
+  demo: '演示数据',
   mock: '演示数据',
   synthetic: '演示数据',
   stale: '数据已过期',
@@ -188,6 +203,50 @@ function shouldHideFromUser(normalized: string): boolean {
   return HIDDEN_USER_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
+const PRIVATE_BETA_LABEL_MAP: Record<string, string> = {
+  read_only: '只读',
+  read_only_projection: '只读',
+  readonly: '只读',
+  advisory_only: '仅提示',
+  advisory_only_contract: '仅提示',
+  suggestion_only: '仅提示',
+  dry_run: '试运行',
+  dry_run_preview: '试运行',
+  dryrun: '试运行',
+  no_send: '不发送',
+  nosend: '不发送',
+  no_notification: '不发送',
+  notification_disabled: '不发送',
+  delivery_disabled: '不发送',
+  no_live_quota: '保持观察边界',
+  nolivequota: '保持观察边界',
+  quota_dry_run: '保持观察边界',
+  live_enforcement_false: '保持观察边界',
+  'liveenforcement=false': '保持观察边界',
+  no_provider_blocking: '不改变数据通路',
+  noproviderblocking: '不改变数据通路',
+  no_provider_enforcement: '不改变数据通路',
+  provider_blocking_false: '不改变数据通路',
+  'providerblocking=false': '不改变数据通路',
+  would_block_call_false: '不改变数据通路',
+  'wouldblockcall=false': '不改变数据通路',
+  no_external_calls: '不触发外部动作',
+  'noexternalcalls=true': '不触发外部动作',
+  demo_only: '演示数据',
+  provider_fixture_not_decision_grade: '演示数据',
+  synthetic_or_fixture_data_not_decision_grade: '演示数据',
+};
+
+function mapPrivateBetaBoundaryLabel(normalized: string): string | null {
+  if (PRIVATE_BETA_LABEL_MAP[normalized]) {
+    return PRIVATE_BETA_LABEL_MAP[normalized];
+  }
+  if (normalized.includes('演示数据')) {
+    return '演示数据';
+  }
+  return null;
+}
+
 function mapKnownLabel(value?: string | null): string | null {
   const raw = asString(value);
   if (!raw) return null;
@@ -202,6 +261,10 @@ function mapKnownLabel(value?: string | null): string | null {
   }
   if (shouldHideFromUser(normalized)) {
     return null;
+  }
+  const privateBetaBoundaryLabel = mapPrivateBetaBoundaryLabel(normalized);
+  if (privateBetaBoundaryLabel) {
+    return privateBetaBoundaryLabel;
   }
   if (normalized.includes('provider_timeout') || normalized.includes('provider') || normalized.includes('timeout')) {
     return '部分外部数据暂不可用';

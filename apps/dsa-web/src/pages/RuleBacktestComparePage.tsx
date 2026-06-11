@@ -66,6 +66,20 @@ const COMPARE_CHART_STRIP_KEYS = [
   'excessReturnVsBenchmarkPct',
 ] as const;
 
+const SAFE_UNKNOWN_COMPARE_FIELD_LABEL = '比较字段需复核';
+const SAFE_UNKNOWN_COMPARE_VALUE_LABEL = '比较值需复核';
+
+const COMPARE_SENSITIVITY_VALUE_LABELS: Record<string, string> = {
+  auto: '自动',
+  bar_close: '收盘后判定',
+  close: '收盘价',
+  daily: '日线',
+  ema: '指数移动平均',
+  next_bar_open: '下一时段开盘',
+  open: '开盘价',
+  sma: '简单移动平均',
+};
+
 function parseRunIdsParam(value: string | null): number[] {
   if (!value) return [];
   const orderedIds: number[] = [];
@@ -201,6 +215,30 @@ function normalizeCompareKey(value: string): string {
     .replace(/[^a-z0-9]+/g, '');
 }
 
+function tokenizeCompareKey(value?: string | null): string[] {
+  return String(value || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[^A-Za-z0-9]+/)
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isInternalLookingCompareKey(...values: Array<string | null | undefined>): boolean {
+  const internalTokens = new Set([
+    'authority',
+    'contract',
+    'diagnostic',
+    'diagnostics',
+    'executed',
+    'payload',
+    'provider',
+    'stack',
+    'trace',
+  ]);
+
+  return values.some((value) => tokenizeCompareKey(value).some((token) => internalTokens.has(token)));
+}
+
 function formatSensitivityLabel(key: string): string {
   const labels: Record<string, string> = {
     'strategy_spec.signal.fast_period': '快线周期',
@@ -224,6 +262,7 @@ function formatSensitivityLabel(key: string): string {
     period_window: '回测区间',
   };
   if (labels[key]) return labels[key];
+  if (isInternalLookingCompareKey(key)) return SAFE_UNKNOWN_COMPARE_FIELD_LABEL;
 
   const fallback = key.split('.').at(-1) || key;
   return fallback.replaceAll('_', ' ').replaceAll(/([a-z0-9])([A-Z])/g, '$1 $2');
@@ -238,7 +277,17 @@ function formatSensitivityValue(value: unknown): string {
   }
   if (typeof value === 'string') {
     const trimmed = value.trim();
-    return trimmed || '--';
+    if (!trimmed) return '--';
+    const normalized = trimmed.toLowerCase();
+    if (COMPARE_SENSITIVITY_VALUE_LABELS[normalized]) return COMPARE_SENSITIVITY_VALUE_LABELS[normalized];
+    const stateLabel = formatCompareStateLabel(trimmed);
+    if (stateLabel !== trimmed.replaceAll('_', ' ')) {
+      return stateLabel === '比较边界需复核' ? SAFE_UNKNOWN_COMPARE_VALUE_LABEL : stateLabel;
+    }
+    if (isInternalLookingCompareKey(trimmed) || /[a-z0-9]+_[a-z0-9_]+/i.test(trimmed) || /^[{[]/.test(trimmed)) {
+      return SAFE_UNKNOWN_COMPARE_VALUE_LABEL;
+    }
+    return trimmed;
   }
   if (Array.isArray(value)) {
     const parts = value.flatMap((entry) => { const v = formatSensitivityValue(entry); return v ? [v] : []; });
@@ -359,13 +408,17 @@ function buildSensitivityRowsFromDetail({
     const detail = details[key];
     if (!detail?.values?.length) return rows;
 
+    const rawValuesByRun = new Map(detail.values.map((entry) => [entry.runId, entry.value]));
     const valuesByRun = new Map(detail.values.map((entry) => [entry.runId, formatSensitivityValue(entry.value)]));
     const values = items.map((item) => ({
       runId: item.metadata.id,
       label: valuesByRun.get(item.metadata.id) || '缺失',
       isBaseline: item.metadata.id === baselineRunId,
     }));
-    const distinctValues = new Set(values.map((entry) => entry.label));
+    const distinctValues = new Set(items.map((item) => {
+      const rawValue = rawValuesByRun.get(item.metadata.id);
+      return rawValue === undefined ? '__missing__' : JSON.stringify(rawValue);
+    }));
     if (distinctValues.size <= 1) return rows;
 
     rows.push({
@@ -670,6 +723,7 @@ function MetricDeltaTable({ metricDeltas }: { metricDeltas: Record<string, RuleB
 
 function formatMetricLabel(metricKey: string, fallback?: string): string {
   return COMPARE_METRIC_LABELS[metricKey]
+    || (isInternalLookingCompareKey(metricKey, fallback) ? SAFE_UNKNOWN_COMPARE_FIELD_LABEL : null)
     || (fallback || metricKey)
       .replaceAll('_', ' ')
       .replaceAll(/([a-z0-9])([A-Z])/g, '$1 $2');

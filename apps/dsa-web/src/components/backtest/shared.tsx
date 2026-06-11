@@ -425,22 +425,66 @@ export const Banner: React.FC<{
   </div>
 );
 
+const INTERNAL_ASSUMPTION_TEXT_PATTERN = /\b(provider|authority|contract|diagnostic|decision|payload|trace|stack|engine|optimizer|storage|identity|request|cache|fallback|mutation|sweep|external|runtime)\b|providercallsexecuted|authorityscope|contractkind|diagnosticonly|decisiongrade/i;
+
+function normalizeAssumptionText(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_\-./:]+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function isInternalLookingAssumptionText(value: string): boolean {
+  const normalized = normalizeAssumptionText(value);
+  const compact = normalized.replace(/\s+/g, '');
+  return INTERNAL_ASSUMPTION_TEXT_PATTERN.test(normalized) || INTERNAL_ASSUMPTION_TEXT_PATTERN.test(compact);
+}
+
+function getGenericAssumptionLabel(language: BacktestLanguage): string {
+  return language === 'en' ? 'Execution assumption' : '执行假设';
+}
+
+function getRecordedAssumptionValue(language: BacktestLanguage): string {
+  return language === 'en' ? 'Recorded for review' : '已记录，需结合复查材料确认';
+}
+
+function getTranslatedAssumptionLabel(key: string, language: BacktestLanguage): string | null {
+  const label = bt(language, `assumptionLabels.${key}`);
+  return label === `backtest.assumptionLabels.${key}` ? null : label;
+}
+
+function formatAssumptionValue(value: unknown, language: BacktestLanguage): string | null {
+  if (value == null || value === '') return null;
+  if (typeof value === 'boolean') return value ? bt(language, 'common.yes') : bt(language, 'common.no');
+  if (Array.isArray(value)) {
+    const items = value
+      .map((item) => formatAssumptionValue(item, language))
+      .filter((item): item is string => Boolean(item && !isInternalLookingAssumptionText(item)));
+    return items.length > 0 ? items.join(', ') : getRecordedAssumptionValue(language);
+  }
+  if (typeof value === 'object') return getRecordedAssumptionValue(language);
+  const text = String(value).trim();
+  if (!text) return null;
+  return isInternalLookingAssumptionText(text) ? getRecordedAssumptionValue(language) : text;
+}
+
 export const AssumptionList: React.FC<{
   assumptions?: AssumptionMap;
   emptyText: string;
 }> = ({ assumptions, emptyText }) => {
   const { language } = useI18n();
   const entries = Object.entries(assumptions || {}).reduce<Array<{ key: string; label: string; value: string }>>((acc, [key, value]) => {
-    if (value != null && value !== '') {
+    const label = getTranslatedAssumptionLabel(key, language);
+    if (!label && isInternalLookingAssumptionText(key)) {
+      return acc;
+    }
+    const formattedValue = formatAssumptionValue(value, language);
+    if (formattedValue) {
       acc.push({
         key,
-        label: (() => {
-          const label = bt(language, `assumptionLabels.${key}`);
-          return label === `backtest.assumptionLabels.${key}` ? key.replace(/_/g, ' ') : label;
-        })(),
-        value: typeof value === 'boolean'
-          ? (value ? bt(language, 'common.yes') : bt(language, 'common.no'))
-          : Array.isArray(value) ? value.join(', ') : String(value),
+        label: label || getGenericAssumptionLabel(language),
+        value: formattedValue,
       });
     }
     return acc;

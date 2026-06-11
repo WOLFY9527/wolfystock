@@ -6,6 +6,7 @@ import { translate } from '../../../i18n/core';
 import type { RuleBacktestRunResponse } from '../../../types/backtest';
 import { DeterministicAuditTable, DeterministicBacktestResultView } from '../DeterministicBacktestResultView';
 import { normalizeDeterministicBacktestResult } from '../normalizeDeterministicBacktestResult';
+import { AssumptionList } from '../shared';
 
 const CHART_IMPORT_TIMEOUT = 5000;
 
@@ -115,6 +116,43 @@ function makeViewerRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBa
 }
 
 describe('DeterministicBacktestResultView', () => {
+  it('keeps shared assumption labels useful without exposing unknown internal fields', () => {
+    const { container } = render(
+      <UiLanguageProvider>
+        <AssumptionList
+          emptyText="暂无执行假设。"
+          assumptions={{
+            entry_fill_timing: 'next bar open',
+            provider_calls_executed: false,
+            authorityScope: 'service-only',
+            contractKind: 'backtest_parameter_grid_descriptor_request_bundle',
+            diagnosticOnly: true,
+            decisionGrade: false,
+            payload: { trace: 'provider_calls_executed=false' },
+            trace: ['provider_calls_executed=false'],
+            stack: 'Traceback: provider_calls_executed',
+            review_note: 'provider_calls_executed=false',
+            friendly_note: 'manual review retained',
+          }}
+        />
+      </UiLanguageProvider>,
+    );
+
+    const list = container.querySelector('.audit-grid');
+    expect(list).toBeInTheDocument();
+    expect(list).toHaveTextContent('入场成交时点');
+    expect(list).toHaveTextContent('next bar open');
+    expect(list).toHaveTextContent('执行假设');
+    expect(list).toHaveTextContent('已记录，需结合复查材料确认');
+    expect(list).toHaveTextContent('manual review retained');
+    expect(list).not.toHaveTextContent(
+      /provider_calls_executed|provider calls executed|authorityScope|authority scope|contractKind|contract kind/i,
+    );
+    expect(list).not.toHaveTextContent(
+      /diagnosticOnly|diagnostic only|decisionGrade|decision grade|payload|trace|stack|Traceback|backtest_parameter_grid_descriptor_request_bundle/i,
+    );
+  });
+
   it('renders a non-empty KPI and chart-centered overview from normalized data', async () => {
     render(<DeterministicBacktestResultView run={makeViewerRun()} />);
 

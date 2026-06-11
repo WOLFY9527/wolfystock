@@ -849,7 +849,7 @@ appTest.describe('consumer copy regression smoke', () => {
       const visualStrip = page.getByTestId('market-overview-visual-evidence-strip');
       await appExpect(visualStrip).toBeVisible();
       await appExpect(visualStrip).toContainText('核心图表证据');
-      await appExpect(page.getByTestId('market-decision-semantics-strip')).toContainText('不构成交易指令');
+      await appExpect(page.getByTestId('market-decision-semantics-strip')).toContainText(/不构成交易(?:或下单)?指令/);
       await appExpect(shell).toContainText(/已使用最近一次可用数据|最近一次可用数据|更新中/);
       await expectConsumerSafeSurface(visualStrip);
       await expectConsumerSafeSurface(shell);
