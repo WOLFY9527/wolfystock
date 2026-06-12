@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, desc, select
 
+from src.repositories.scanner_repo import ScannerRepository
 from src.services.catalyst_event_exposure import build_catalyst_event_exposures
 from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
 from src.services.reason_code_vocabulary import classify_reason_code
@@ -45,6 +46,7 @@ class WatchlistService:
 
     def __init__(self, db_manager: Optional[DatabaseManager] = None) -> None:
         self.db = db_manager or DatabaseManager.get_instance()
+        self.scanner_repo = ScannerRepository(self.db)
 
     @staticmethod
     def _normalize_market(market: str) -> str:
@@ -986,22 +988,13 @@ class WatchlistService:
                     .where(and_(*conditions))
                     .order_by(UserWatchlistItem.market.asc(), UserWatchlistItem.symbol.asc())
                 ).scalars().all()
+                latest_by_pair = self.scanner_repo.get_latest_completed_candidates_by_market_symbol(
+                    [(str(row.market), str(row.symbol)) for row in rows]
+                )
 
                 for row in rows:
                     markets.add(str(row.market))
-                    latest = session.execute(
-                        select(MarketScannerCandidate, MarketScannerRun)
-                        .join(MarketScannerRun, MarketScannerRun.id == MarketScannerCandidate.run_id)
-                        .where(
-                            and_(
-                                MarketScannerCandidate.symbol == row.symbol,
-                                MarketScannerRun.market == row.market,
-                                MarketScannerRun.status == "completed",
-                            )
-                        )
-                        .order_by(desc(MarketScannerRun.completed_at), desc(MarketScannerRun.run_at), desc(MarketScannerRun.id))
-                        .limit(1)
-                    ).first()
+                    latest = latest_by_pair.get((str(row.market), str(row.symbol)))
 
                     if latest is None:
                         row.score_status = "stale"

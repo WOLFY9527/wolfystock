@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import and_, desc, func, or_, select
 
@@ -196,6 +196,51 @@ class ScannerRepository:
                 .order_by(MarketScannerCandidate.rank.asc(), MarketScannerCandidate.id.asc())
             ).scalars().all()
             return list(rows)
+
+    def get_latest_completed_candidates_by_market_symbol(
+        self,
+        pairs: List[Tuple[str, str]],
+    ) -> Dict[Tuple[str, str], Tuple[MarketScannerCandidate, MarketScannerRun]]:
+        """Return the latest completed scanner candidate for exact market/symbol pairs."""
+        requested_pairs = {
+            (str(market), str(symbol))
+            for market, symbol in pairs
+            if str(market) and str(symbol)
+        }
+        if not requested_pairs:
+            return {}
+
+        symbols_by_market: Dict[str, List[str]] = {}
+        for market, symbol in sorted(requested_pairs):
+            symbols_by_market.setdefault(market, []).append(symbol)
+
+        market_symbol_clauses = [
+            and_(
+                MarketScannerRun.market == market,
+                MarketScannerCandidate.symbol.in_(symbols),
+            )
+            for market, symbols in symbols_by_market.items()
+        ]
+
+        with self.db.get_session() as session:
+            rows = session.execute(
+                select(MarketScannerCandidate, MarketScannerRun)
+                .join(MarketScannerRun, MarketScannerRun.id == MarketScannerCandidate.run_id)
+                .where(
+                    and_(
+                        MarketScannerRun.status == "completed",
+                        or_(*market_symbol_clauses),
+                    )
+                )
+                .order_by(desc(MarketScannerRun.completed_at), desc(MarketScannerRun.run_at), desc(MarketScannerRun.id))
+            ).all()
+
+        latest_by_pair: Dict[Tuple[str, str], Tuple[MarketScannerCandidate, MarketScannerRun]] = {}
+        for candidate, run in rows:
+            key = (str(run.market), str(candidate.symbol))
+            if key in requested_pairs and key not in latest_by_pair:
+                latest_by_pair[key] = (candidate, run)
+        return latest_by_pair
 
     def list_recent_analysis_symbols(
         self,
