@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+from sqlalchemy import event
+
 from src.config import Config
 from src.storage import DatabaseManager, MarketScannerCandidate, MarketScannerRun, UserWatchlistItem
 from src.services.watchlist_service import WatchlistService
@@ -48,15 +50,19 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
         rank: int,
         diagnostics_source: str | None = None,
         diagnostics_payload: dict | None = None,
+        run_at: datetime | None = None,
+        completed_at: datetime | None = None,
+        status: str = "completed",
+        reason_summary: str = "Latest scanner score.",
     ) -> None:
         now = datetime.now()
         run = MarketScannerRun(
             market=market,
             profile=f"{market}_preopen_v1",
             universe_name=f"{market}_watchlist",
-            status="completed",
-            run_at=now - timedelta(minutes=5),
-            completed_at=now - timedelta(minutes=4),
+            status=status,
+            run_at=run_at or now - timedelta(minutes=5),
+            completed_at=completed_at or now - timedelta(minutes=4),
             shortlist_size=1,
             universe_size=1,
             preselected_size=1,
@@ -67,7 +73,7 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
             name=symbol,
             rank=rank,
             score=score,
-            reason_summary="Latest scanner score.",
+            reason_summary=reason_summary,
             diagnostics_json=(
                 json.dumps(diagnostics_payload, ensure_ascii=False)
                 if diagnostics_payload is not None
@@ -569,6 +575,116 @@ class WatchlistScoreRefreshTestCase(unittest.TestCase):
 
         self.assertEqual(result["updated_count"], 2)
         self.assertEqual(sorted(result["markets"]), ["hk", "us"])
+
+    def test_refresh_uses_bounded_bulk_lookup_for_large_watchlist(self) -> None:
+        self.db.create_or_update_app_user(
+            user_id="user-2",
+            username="bob",
+            role="user",
+            display_name="Bob",
+        )
+        expected_scores: dict[tuple[str, str], float] = {}
+        stale_keys: set[tuple[str, str]] = set()
+
+        for index in range(24):
+            market = "us" if index % 2 == 0 else "hk"
+            symbol = f"B{index:04d}"
+            self.service.add_item(
+                owner_id="user-1",
+                symbol=symbol,
+                market=market,
+                scanner_score=10 + index,
+                scanner_rank=90 + index,
+            )
+            key = (market, symbol)
+            if index < 18:
+                score = 70.0 + index
+                expected_scores[key] = score
+                self._save_scanner_candidate(symbol=symbol, market=market, score=score, rank=index + 1)
+            else:
+                stale_keys.add(key)
+
+        self.service.add_item(owner_id="user-1", symbol="DUAL", market="us", scanner_score=10, scanner_rank=90)
+        self.service.add_item(owner_id="user-1", symbol="DUAL", market="hk", scanner_score=20, scanner_rank=91)
+        self.service.add_item(owner_id="user-2", symbol="B0000", market="us", scanner_score=5, scanner_rank=88)
+
+        baseline_time = datetime(2026, 5, 12, 9, 0, 0)
+        self._save_scanner_candidate(
+            symbol="DUAL",
+            market="us",
+            score=55.0,
+            rank=8,
+            run_at=baseline_time,
+            completed_at=baseline_time,
+            reason_summary="Older US scanner score.",
+        )
+        self._save_scanner_candidate(
+            symbol="DUAL",
+            market="us",
+            score=91.0,
+            rank=1,
+            run_at=baseline_time + timedelta(minutes=10),
+            completed_at=baseline_time + timedelta(minutes=10),
+            reason_summary="Latest US scanner score.",
+        )
+        self._save_scanner_candidate(
+            symbol="DUAL",
+            market="us",
+            score=99.0,
+            rank=1,
+            run_at=baseline_time + timedelta(minutes=20),
+            completed_at=baseline_time + timedelta(minutes=20),
+            status="running",
+            reason_summary="Running scanner score should be ignored.",
+        )
+        self._save_scanner_candidate(
+            symbol="DUAL",
+            market="hk",
+            score=82.0,
+            rank=2,
+            run_at=baseline_time + timedelta(minutes=5),
+            completed_at=baseline_time + timedelta(minutes=5),
+            reason_summary="Latest HK scanner score.",
+        )
+        expected_scores[("us", "DUAL")] = 91.0
+        expected_scores[("hk", "DUAL")] = 82.0
+
+        scanner_join_queries: list[str] = []
+
+        def count_scanner_join(_conn, _cursor, statement, _parameters, _context, _executemany) -> None:
+            normalized = " ".join(str(statement).lower().split())
+            if "from market_scanner_candidates" in normalized and "join market_scanner_runs" in normalized:
+                scanner_join_queries.append(str(statement))
+
+        event.listen(self.db._engine, "before_cursor_execute", count_scanner_join)
+        try:
+            result = self.service.refresh_scores(owner_id="user-1")
+        finally:
+            event.remove(self.db._engine, "before_cursor_execute", count_scanner_join)
+
+        self.assertEqual(result["updated_count"], len(expected_scores))
+        self.assertEqual(result["skipped_count"], len(stale_keys))
+        self.assertEqual(result["failed_count"], 0)
+        self.assertEqual(len(scanner_join_queries), 1)
+
+        user_one_items = {
+            (item["market"], item["symbol"]): item
+            for item in self.service.list_items(owner_id="user-1")
+        }
+        for key, expected_score in expected_scores.items():
+            self.assertEqual(user_one_items[key]["score_status"], "fresh")
+            self.assertEqual(user_one_items[key]["scanner_score"], expected_score)
+        for key in stale_keys:
+            self.assertEqual(user_one_items[key]["score_status"], "stale")
+            self.assertIn("No scanner candidate", user_one_items[key]["score_error"])
+
+        self.assertEqual(user_one_items[("us", "DUAL")]["score_reason"], "Latest US scanner score.")
+        self.assertEqual(user_one_items[("hk", "DUAL")]["score_reason"], "Latest HK scanner score.")
+        user_two_item = self.service.list_items(owner_id="user-2")[0]
+        self.assertEqual(user_two_item["scanner_score"], 5.0)
+        self.assertEqual(user_two_item["scanner_rank"], 88)
+        self.assertIsNone(user_two_item["score_source"])
+        self.assertIsNone(user_two_item["last_scored_at"])
 
     def test_refresh_is_owner_scoped_when_other_users_hold_same_symbol(self) -> None:
         self.db.create_or_update_app_user(
