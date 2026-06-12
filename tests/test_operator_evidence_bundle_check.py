@@ -37,6 +37,54 @@ def _provider_artifact(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def _provider_sla_artifact(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "artifactVersion": "wolfystock_provider_sla_licensing_evidence_v1",
+        "environment": "staging",
+        "operator": "provider-ops",
+        "observedAt": "2026-05-08T10:30:00Z",
+        "providerFamily": "data-source-validation",
+        "entitlementLicensingStatus": "needs-review",
+        "credentialPresence": "redacted",
+        "allowedUsageScope": "admin-probe-review",
+        "stagingProbeResult": "not-run",
+        "degradedFallbackPolicy": "unchanged",
+        "runtimeEnforcement": {
+            "claim": "not-claimed",
+            "liveEnforcement": False,
+            "wouldBlockCall": False,
+        },
+        "publicReadinessClaim": "not-claimed",
+        "adminProbePilotEvidence": {
+            "contractVersion": "provider_admin_probe_pilot_evidence_v1",
+            "adminProbeOnly": True,
+            "defaultOffPosture": True,
+            "rollbackAvailable": True,
+            "selectedBoundary": "admin-provider-probe",
+            "apiRoute": "/api/admin/provider-circuits/diagnostics",
+            "providerCategory": "data_source_validation",
+            "routeFamily": "admin_provider_probe",
+            "publicRuntimeProviderBlocking": False,
+            "memberRuntimeProviderBlocking": False,
+            "providerRuntimeEnforcement": False,
+            "providerOrderFallbackCacheBehaviorChanged": False,
+            "sanitizedFieldsOnly": True,
+            "acceptedOperatorEvidencePresent": False,
+            "publicLaunchReady": False,
+            "remainingPublicLaunchNoGoItems": [
+                "public_provider_circuit_enforcement_not_accepted",
+                "target_environment_provider_sla_evidence_missing",
+                "provider_entitlement_licensing_not_accepted",
+            ],
+        },
+        "outcome": "accepted",
+        "evidenceRedactionVersion": "provider-sla-licensing-redaction-v1",
+        "notes": "Sanitized provider admin probe evidence for later review.",
+    }
+    payload.update(overrides)
+    return payload
+
+
 def _restore_artifact(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "schemaVersion": "wolfystock_restore_pitr_operator_evidence_input_v1",
@@ -275,6 +323,7 @@ def _write_bundle(tmp_path: Path, artifacts: dict[str, object]) -> Path:
 def _accepted_artifacts() -> dict[str, object]:
     return {
         "provider_operator_evidence.json": _provider_artifact(),
+        "provider_sla_licensing_evidence.json": _provider_sla_artifact(),
         "restore_pitr_operator_evidence.json": _restore_artifact(),
         "security_operator_acceptance.json": _security_artifact(),
         "quota_budget_operator_evidence.json": _quota_artifact(),

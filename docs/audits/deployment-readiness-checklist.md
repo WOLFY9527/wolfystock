@@ -427,8 +427,9 @@ The following must all be true before public multi-user deployment:
   it aggregates already-sanitized validator statuses only and does not replace
   any required operator artifact.
 - [x] Domain-local offline validators/templates exist for provider operator
-  evidence, real restore/PITR operator evidence, security MFA/RBAC operator
-  acceptance, quota/budget operator evidence, and staging ingress operator
+  evidence, provider SLA/licensing and admin-probe pilot evidence, real
+  restore/PITR operator evidence, security MFA/RBAC operator acceptance,
+  quota/budget operator evidence, and staging ingress operator
   evidence. These validators are rehearsal/evidence plumbing only; they do not
   perform runtime calls or approve launch.
 - [x] Offline validators/templates exist for WS2/SSE operator decisions,

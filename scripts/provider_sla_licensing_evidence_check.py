@@ -51,7 +51,7 @@ ALLOWED_STAGING_PROBE_RESULT = {"accepted", "needs-review", "rejected", "not-run
 ALLOWED_PUBLIC_READINESS_CLAIM = {"not-claimed", "evidence-ready-for-review", "public-ready"}
 ALLOWED_RUNTIME_ENFORCEMENT_CLAIM = {"not-claimed", "accepted-artifact"}
 SAFE_LABEL_RE = re.compile(r"^[a-z][a-z0-9_.-]{0,79}$")
-SAFE_ROUTE_LABEL_RE = re.compile(r"^[a-z0-9][a-z0-9_/.-]{0,119}$")
+SAFE_ROUTE_LABEL_RE = re.compile(r"^/?[a-z0-9][a-z0-9_/.-]{0,119}$")
 
 SAFE_KEY_COMPACTS = {
     _compact_key(key)
@@ -74,7 +74,51 @@ SAFE_KEY_COMPACTS = {
         "dryRunOnly",
         "advisoryBlockCandidate",
         "notes",
+        "adminProbePilotEvidence",
+        "adminProbeOnly",
+        "defaultOffPosture",
+        "rollbackAvailable",
+        "selectedBoundary",
+        "selectedBoundaryOnly",
+        "apiRoute",
+        "providerCategory",
+        "routeFamily",
+        "lastDecisionCategory",
+        "scopeMatched",
+        "publicRuntimeProviderBlocking",
+        "memberRuntimeProviderBlocking",
+        "providerRuntimeEnforcement",
+        "providerOrderFallbackCacheBehaviorChanged",
+        "sanitizedFieldsOnly",
+        "acceptedOperatorEvidencePresent",
+        "publicLaunchReady",
+        "remainingPublicLaunchNoGoItems",
     )
+}
+ADMIN_PROBE_EVIDENCE_FIELD = "adminProbePilotEvidence"
+ADMIN_PROBE_CONTRACT_VERSION = "provider_admin_probe_pilot_evidence_v1"
+ADMIN_PROBE_PROVIDER_CATEGORY = "data_source_validation"
+ADMIN_PROBE_ROUTE_FAMILY = "admin_provider_probe"
+ADMIN_PROBE_REQUIRED_FIELDS = (
+    "contractVersion",
+    "adminProbeOnly",
+    "defaultOffPosture",
+    "rollbackAvailable",
+    "selectedBoundary",
+    "apiRoute",
+    "providerCategory",
+    "routeFamily",
+    "publicRuntimeProviderBlocking",
+    "memberRuntimeProviderBlocking",
+    "providerRuntimeEnforcement",
+    "providerOrderFallbackCacheBehaviorChanged",
+    "sanitizedFieldsOnly",
+    "acceptedOperatorEvidencePresent",
+    "publicLaunchReady",
+    "remainingPublicLaunchNoGoItems",
+)
+ADMIN_PROBE_REQUIRED_NO_GO_ITEMS = {
+    "public_provider_circuit_enforcement_not_accepted",
 }
 CREDENTIAL_KEY_MARKERS = (
     "apikey",
@@ -110,6 +154,8 @@ RAW_PAYLOAD_KEY_MARKERS = (
     "responsebody",
 )
 EXCEPTION_KEY_MARKERS = (
+    "trace",
+    "traceid",
     "exception",
     "exceptiontext",
     "rawlog",
@@ -126,6 +172,15 @@ IDENTIFIER_KEY_MARKERS = (
     "phonenumber",
     "tenantid",
     "userid",
+)
+REQUEST_ID_KEY_MARKERS = (
+    "correlationid",
+    "requestid",
+    "xrequestid",
+)
+CACHE_KEY_MARKERS = (
+    "cachekey",
+    "rawcachekey",
 )
 
 SECRET_VALUE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -203,8 +258,12 @@ def _safe_field(field: str) -> str:
         *EXCEPTION_KEY_MARKERS,
         *IDENTIFIER_KEY_MARKERS,
         "rawurl",
+        *REQUEST_ID_KEY_MARKERS,
+        *CACHE_KEY_MARKERS,
     )
     if any(marker in compact for marker in unsafe_markers):
+        return "[redacted]"
+    if compact.endswith("url"):
         return "[redacted]"
     return field
 
@@ -243,6 +302,10 @@ def _scan_key(field: str, key: Any) -> list[dict[str, str]]:
         return [_safe_finding(field, "payload_content_forbidden")]
     if any(marker in compact for marker in EXCEPTION_KEY_MARKERS):
         return [_safe_finding(field, "exception_or_stack_trace_forbidden")]
+    if any(marker in compact for marker in REQUEST_ID_KEY_MARKERS):
+        return [_safe_finding(field, "request_id_forbidden")]
+    if any(marker in compact for marker in CACHE_KEY_MARKERS):
+        return [_safe_finding(field, "cache_key_forbidden")]
     if any(marker in compact for marker in IDENTIFIER_KEY_MARKERS):
         return [_safe_finding(field, "account_or_user_identifier_forbidden")]
     if any(marker in compact for marker in CREDENTIAL_KEY_MARKERS):
@@ -252,6 +315,115 @@ def _scan_key(field: str, key: Any) -> list[dict[str, str]]:
     if compact == "rawurl" or compact.endswith("url"):
         return [_safe_finding(field, "url_query_string_forbidden")]
     return []
+
+
+def _validate_bool_field(
+    findings: list[dict[str, str]],
+    evidence: dict[str, Any],
+    field: str,
+) -> bool | None:
+    value = evidence.get(field)
+    if not isinstance(value, bool):
+        findings.append(_finding(f"{ADMIN_PROBE_EVIDENCE_FIELD}.{field}", "invalid_boolean_field"))
+        return None
+    return value
+
+
+def _validate_admin_probe_no_go_items(
+    findings: list[dict[str, str]],
+    evidence: dict[str, Any],
+) -> None:
+    field = f"{ADMIN_PROBE_EVIDENCE_FIELD}.remainingPublicLaunchNoGoItems"
+    value = evidence.get("remainingPublicLaunchNoGoItems")
+    if not isinstance(value, list) or not value:
+        findings.append(_finding(field, "admin_probe_evidence_must_list_remaining_no_go_items"))
+        return
+    safe_items = {str(item) for item in value if _safe_label(item)}
+    if len(safe_items) != len(value):
+        findings.append(_finding(field, "invalid_sanitized_label"))
+    if not ADMIN_PROBE_REQUIRED_NO_GO_ITEMS.issubset(safe_items):
+        findings.append(_finding(field, "admin_probe_evidence_must_list_remaining_no_go_items"))
+
+
+def _validate_admin_probe_pilot_evidence(artifact: dict[str, Any]) -> list[dict[str, str]]:
+    findings: list[dict[str, str]] = []
+    if ADMIN_PROBE_EVIDENCE_FIELD not in artifact:
+        return findings
+    evidence = artifact.get(ADMIN_PROBE_EVIDENCE_FIELD)
+    if not isinstance(evidence, dict):
+        return [_finding(ADMIN_PROBE_EVIDENCE_FIELD, "invalid_admin_probe_pilot_evidence")]
+
+    for field in ADMIN_PROBE_REQUIRED_FIELDS:
+        if field not in evidence:
+            findings.append(_finding(f"{ADMIN_PROBE_EVIDENCE_FIELD}.{field}", "missing_required_field"))
+
+    if evidence.get("contractVersion") != ADMIN_PROBE_CONTRACT_VERSION:
+        findings.append(_finding(f"{ADMIN_PROBE_EVIDENCE_FIELD}.contractVersion", "invalid_sanitized_label"))
+    if not _safe_label(evidence.get("selectedBoundary"), route=True):
+        findings.append(_finding(f"{ADMIN_PROBE_EVIDENCE_FIELD}.selectedBoundary", "invalid_sanitized_label"))
+    if not _safe_label(evidence.get("apiRoute"), route=True):
+        findings.append(_finding(f"{ADMIN_PROBE_EVIDENCE_FIELD}.apiRoute", "invalid_sanitized_label"))
+    if evidence.get("providerCategory") != ADMIN_PROBE_PROVIDER_CATEGORY:
+        findings.append(_finding(f"{ADMIN_PROBE_EVIDENCE_FIELD}.providerCategory", "admin_probe_evidence_scope_must_match_admin_probe"))
+    if evidence.get("routeFamily") != ADMIN_PROBE_ROUTE_FAMILY:
+        findings.append(_finding(f"{ADMIN_PROBE_EVIDENCE_FIELD}.routeFamily", "admin_probe_evidence_scope_must_match_admin_probe"))
+
+    admin_probe_only = _validate_bool_field(findings, evidence, "adminProbeOnly")
+    default_off_posture = _validate_bool_field(findings, evidence, "defaultOffPosture")
+    rollback_available = _validate_bool_field(findings, evidence, "rollbackAvailable")
+    public_runtime_blocking = _validate_bool_field(findings, evidence, "publicRuntimeProviderBlocking")
+    member_runtime_blocking = _validate_bool_field(findings, evidence, "memberRuntimeProviderBlocking")
+    provider_runtime_enforcement = _validate_bool_field(findings, evidence, "providerRuntimeEnforcement")
+    order_fallback_cache_changed = _validate_bool_field(
+        findings,
+        evidence,
+        "providerOrderFallbackCacheBehaviorChanged",
+    )
+    sanitized_fields_only = _validate_bool_field(findings, evidence, "sanitizedFieldsOnly")
+    accepted_operator_evidence = _validate_bool_field(findings, evidence, "acceptedOperatorEvidencePresent")
+    public_launch_ready = _validate_bool_field(findings, evidence, "publicLaunchReady")
+
+    if admin_probe_only is not True:
+        findings.append(_finding(f"{ADMIN_PROBE_EVIDENCE_FIELD}.adminProbeOnly", "admin_probe_evidence_must_be_admin_probe_only"))
+    if default_off_posture is not True:
+        findings.append(_finding(f"{ADMIN_PROBE_EVIDENCE_FIELD}.defaultOffPosture", "admin_probe_evidence_must_show_default_off_posture"))
+    if rollback_available is not True:
+        findings.append(_finding(f"{ADMIN_PROBE_EVIDENCE_FIELD}.rollbackAvailable", "admin_probe_evidence_must_show_rollback_available"))
+    if public_runtime_blocking is True:
+        findings.append(_finding(
+            f"{ADMIN_PROBE_EVIDENCE_FIELD}.publicRuntimeProviderBlocking",
+            "admin_probe_evidence_must_not_claim_public_runtime_blocking",
+        ))
+    if member_runtime_blocking is True:
+        findings.append(_finding(
+            f"{ADMIN_PROBE_EVIDENCE_FIELD}.memberRuntimeProviderBlocking",
+            "admin_probe_evidence_must_not_claim_member_runtime_blocking",
+        ))
+    if provider_runtime_enforcement is True:
+        findings.append(_finding(
+            f"{ADMIN_PROBE_EVIDENCE_FIELD}.providerRuntimeEnforcement",
+            "admin_probe_evidence_must_not_claim_provider_runtime_enforcement",
+        ))
+    if order_fallback_cache_changed is True:
+        findings.append(_finding(
+            f"{ADMIN_PROBE_EVIDENCE_FIELD}.providerOrderFallbackCacheBehaviorChanged",
+            "admin_probe_evidence_must_not_change_provider_order_fallback_or_cache",
+        ))
+    if sanitized_fields_only is not True:
+        findings.append(_finding(f"{ADMIN_PROBE_EVIDENCE_FIELD}.sanitizedFieldsOnly", "admin_probe_evidence_must_be_sanitized_only"))
+    if accepted_operator_evidence is True:
+        findings.append(_finding(
+            f"{ADMIN_PROBE_EVIDENCE_FIELD}.acceptedOperatorEvidencePresent",
+            "admin_probe_operator_evidence_not_accepted_by_validator",
+        ))
+    if public_launch_ready is True:
+        findings.append(_finding(
+            f"{ADMIN_PROBE_EVIDENCE_FIELD}.publicLaunchReady",
+            "public_ready_claim_requires_accepted_staging_evidence",
+        ))
+
+    _validate_admin_probe_no_go_items(findings, evidence)
+    return findings
 
 
 def _scan_string(field: str, value: str) -> list[dict[str, str]]:
@@ -423,6 +595,7 @@ def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, b
     runtime_findings, runtime_summary = _validate_runtime_enforcement(artifact)
     findings.extend(runtime_findings)
     findings.extend(_validate_public_readiness(artifact))
+    findings.extend(_validate_admin_probe_pilot_evidence(artifact))
     findings.extend(_scan_unsafe_content(artifact))
 
     checks["requiredFieldsPresent"] = not any(
@@ -455,6 +628,8 @@ def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, b
         "exception_or_stack_trace_forbidden",
         "launch_approval_claim_forbidden",
         "payload_content_forbidden",
+        "request_id_forbidden",
+        "cache_key_forbidden",
         "url_query_string_forbidden",
     }
     checks["unsafeContentAbsent"] = not any(

@@ -57,6 +57,53 @@ def _provider_template() -> dict[str, Any]:
     }
 
 
+def _provider_sla_licensing_template() -> dict[str, Any]:
+    return {
+        "artifactVersion": "wolfystock_provider_sla_licensing_evidence_v1",
+        "environment": "staging",
+        "operator": "sanitized-operator-label",
+        "observedAt": TEMPLATE_TIMESTAMP,
+        "providerFamily": "data-source-validation",
+        "entitlementLicensingStatus": "needs-review",
+        "credentialPresence": "redacted",
+        "allowedUsageScope": "admin-probe-review",
+        "stagingProbeResult": "not-run",
+        "degradedFallbackPolicy": "unchanged",
+        "runtimeEnforcement": {
+            "claim": "not-claimed",
+            "liveEnforcement": False,
+            "wouldBlockCall": False,
+        },
+        "publicReadinessClaim": "not-claimed",
+        "adminProbePilotEvidence": {
+            "contractVersion": "provider_admin_probe_pilot_evidence_v1",
+            "adminProbeOnly": True,
+            "defaultOffPosture": True,
+            "rollbackAvailable": True,
+            "selectedBoundary": "admin-provider-probe",
+            "apiRoute": "/api/admin/provider-circuits/diagnostics",
+            "providerCategory": "data_source_validation",
+            "routeFamily": "admin_provider_probe",
+            "publicRuntimeProviderBlocking": False,
+            "memberRuntimeProviderBlocking": False,
+            "providerRuntimeEnforcement": False,
+            "providerOrderFallbackCacheBehaviorChanged": False,
+            "sanitizedFieldsOnly": True,
+            "acceptedOperatorEvidencePresent": False,
+            "publicLaunchReady": False,
+            "remainingPublicLaunchNoGoItems": [
+                "public_provider_circuit_enforcement_not_accepted",
+                "target_environment_provider_sla_evidence_missing",
+                "provider_entitlement_licensing_not_accepted",
+            ],
+        },
+        "outcome": "needs-review",
+        "evidenceRedactionVersion": "provider-sla-licensing-redaction-v1",
+        "notes": "<review-ticket-label>",
+        "templatePlaceholders": _template_placeholders(),
+    }
+
+
 def _restore_pitr_template() -> dict[str, Any]:
     return {
         "schemaVersion": "wolfystock_restore_pitr_operator_evidence_input_v1",
@@ -266,6 +313,11 @@ class TemplateSpec:
 
 TEMPLATE_SPECS: tuple[TemplateSpec, ...] = (
     TemplateSpec("provider", "provider_operator_evidence.json", _provider_template),
+    TemplateSpec(
+        "provider-sla-licensing",
+        "provider_sla_licensing_evidence.json",
+        _provider_sla_licensing_template,
+    ),
     TemplateSpec("restore-pitr", "restore_pitr_operator_evidence.json", _restore_pitr_template),
     TemplateSpec("security", "security_operator_acceptance.json", _security_template),
     TemplateSpec("quota-budget", "quota_budget_operator_evidence.json", _quota_budget_template),

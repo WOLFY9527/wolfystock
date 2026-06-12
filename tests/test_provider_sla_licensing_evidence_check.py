@@ -195,6 +195,162 @@ def test_dry_run_advisory_artifact_does_not_imply_enforcement(tmp_path: Path) ->
     assert payload["runtimeBehaviorChanged"] is False
 
 
+def test_admin_probe_pilot_evidence_rejects_public_runtime_or_launch_claims(tmp_path: Path) -> None:
+    path = _write_json(
+        tmp_path,
+        _artifact(
+            adminProbePilotEvidence={
+                "contractVersion": "provider_admin_probe_pilot_evidence_v1",
+                "adminProbeOnly": True,
+                "defaultOffPosture": True,
+                "rollbackAvailable": True,
+                "selectedBoundary": "/api/v1/system/config/data-source/test-builtin",
+                "providerCategory": "data_source_validation",
+                "routeFamily": "admin_provider_probe",
+                "publicRuntimeProviderBlocking": True,
+                "memberRuntimeProviderBlocking": True,
+                "providerRuntimeEnforcement": True,
+                "providerOrderFallbackCacheBehaviorChanged": True,
+                "sanitizedFieldsOnly": True,
+                "acceptedOperatorEvidencePresent": False,
+                "publicLaunchReady": True,
+                "remainingPublicLaunchNoGoItems": ["public_provider_circuit_enforcement_not_accepted"],
+            },
+        ),
+    )
+
+    result = _run_validator(path)
+
+    assert result.returncode == 1
+    payload = _stdout_json(result)
+    findings = {(finding["field"], finding["reasonCode"]) for finding in payload["findings"]}
+    assert (
+        "adminProbePilotEvidence.publicRuntimeProviderBlocking",
+        "admin_probe_evidence_must_not_claim_public_runtime_blocking",
+    ) in findings
+    assert (
+        "adminProbePilotEvidence.memberRuntimeProviderBlocking",
+        "admin_probe_evidence_must_not_claim_member_runtime_blocking",
+    ) in findings
+    assert (
+        "adminProbePilotEvidence.providerRuntimeEnforcement",
+        "admin_probe_evidence_must_not_claim_provider_runtime_enforcement",
+    ) in findings
+    assert (
+        "adminProbePilotEvidence.providerOrderFallbackCacheBehaviorChanged",
+        "admin_probe_evidence_must_not_change_provider_order_fallback_or_cache",
+    ) in findings
+    assert (
+        "adminProbePilotEvidence.publicLaunchReady",
+        "public_ready_claim_requires_accepted_staging_evidence",
+    ) in findings
+    assert payload["launchApproved"] is False
+    assert payload["releaseApproved"] is False
+
+
+def test_admin_probe_pilot_evidence_accepts_safe_default_off_review_contract(tmp_path: Path) -> None:
+    path = _write_json(
+        tmp_path,
+        _artifact(
+            adminProbePilotEvidence={
+                "contractVersion": "provider_admin_probe_pilot_evidence_v1",
+                "adminProbeOnly": True,
+                "defaultOffPosture": True,
+                "rollbackAvailable": True,
+                "selectedBoundary": "/api/v1/system/config/data-source/test-builtin",
+                "apiRoute": "/api/v1/system/config/data-source/test-builtin",
+                "providerCategory": "data_source_validation",
+                "routeFamily": "admin_provider_probe",
+                "publicRuntimeProviderBlocking": False,
+                "memberRuntimeProviderBlocking": False,
+                "providerRuntimeEnforcement": False,
+                "providerOrderFallbackCacheBehaviorChanged": False,
+                "sanitizedFieldsOnly": True,
+                "acceptedOperatorEvidencePresent": False,
+                "publicLaunchReady": False,
+                "remainingPublicLaunchNoGoItems": [
+                    "public_provider_circuit_enforcement_not_accepted",
+                    "target_environment_provider_sla_evidence_missing",
+                ],
+            },
+        ),
+    )
+
+    result = _run_validator(path)
+
+    assert result.returncode == 0
+    payload = _stdout_json(result)
+    assert payload["status"] == "pass"
+    assert payload["launchApproved"] is False
+    assert payload["releaseApproved"] is False
+    assert payload["providerRuntimeBehaviorChanged"] is False
+    assert payload["providerOrderChanged"] is False
+    assert payload["providerFallbackBehaviorChanged"] is False
+    assert payload["marketCacheBehaviorChanged"] is False
+
+
+def test_admin_probe_pilot_evidence_rejects_unsafe_artifact_fields_without_echoing_values(tmp_path: Path) -> None:
+    unsafe_values = {
+        "providerUrl": "https://provider.example.invalid/probe?token=url-token-should-not-print",
+        "requestId": "req-secret-should-not-print",
+        "request_id": "req-snake-secret-should-not-print",
+        "token": "token=provider-token-should-not-print",
+        "rawPayload": {"body": "raw-payload-should-not-print"},
+        "trace": "Traceback trace-value-should-not-print",
+        "traceId": "trace-id-should-not-print",
+        "credential": "credential=provider-credential-should-not-print",
+        "cacheKey": "market:fmp:AAPL:cache-key-should-not-print",
+        "cache_key": "market:fmp:AAPL:cache-key-snake-should-not-print",
+    }
+    path = _write_json(
+        tmp_path,
+        _artifact(
+            adminProbePilotEvidence={
+                "contractVersion": "provider_admin_probe_pilot_evidence_v1",
+                "adminProbeOnly": True,
+                "defaultOffPosture": True,
+                "rollbackAvailable": True,
+                "selectedBoundary": "/api/v1/system/config/data-source/test-builtin",
+                "providerCategory": "data_source_validation",
+                "routeFamily": "admin_provider_probe",
+                "publicRuntimeProviderBlocking": False,
+                "memberRuntimeProviderBlocking": False,
+                "providerRuntimeEnforcement": False,
+                "providerOrderFallbackCacheBehaviorChanged": False,
+                "sanitizedFieldsOnly": True,
+                "acceptedOperatorEvidencePresent": False,
+                "publicLaunchReady": False,
+                "remainingPublicLaunchNoGoItems": ["public_provider_circuit_enforcement_not_accepted"],
+                **unsafe_values,
+            },
+        ),
+    )
+
+    result = _run_validator(path)
+
+    combined_output = result.stdout + result.stderr
+    assert result.returncode == 1
+    for unsafe_text in unsafe_values.values():
+        if isinstance(unsafe_text, str):
+            assert unsafe_text not in combined_output
+    assert "raw-payload-should-not-print" not in combined_output
+    assert "providerUrl" not in combined_output
+    assert "requestId" not in combined_output
+    assert "adminProbePilotEvidence.request_id" not in combined_output
+    assert "rawPayload" not in combined_output
+    assert "traceId" not in combined_output
+    assert "cacheKey" not in combined_output
+    assert "adminProbePilotEvidence.cache_key" not in combined_output
+    payload = _stdout_json(result)
+    reason_codes = {finding["reasonCode"] for finding in payload["findings"]}
+    assert "url_query_string_forbidden" in reason_codes
+    assert "request_id_forbidden" in reason_codes
+    assert "credential_leakage_forbidden" in reason_codes
+    assert "payload_content_forbidden" in reason_codes
+    assert "exception_or_stack_trace_forbidden" in reason_codes
+    assert "cache_key_forbidden" in reason_codes
+
+
 def test_output_is_sanitized_for_failure_paths(tmp_path: Path) -> None:
     raw_url = "https://provider.example.invalid/query?token=url-token-should-not-print"
     raw_user = "user@example.invalid"

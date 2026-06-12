@@ -29,6 +29,38 @@ reliability remains **NO-GO** until accepted target-environment provider
 entitlement, degraded behavior, broader circuit policy, and operator/staging
 evidence exist.
 
+## 2026-06-12 Provider Admin Probe Evidence Acceptance Hardening
+
+Tightened the admin probe pilot evidence acceptance layer without changing
+provider runtime behavior:
+
+- `adminProbePilotEvidence` now explicitly marks the evidence as admin-probe
+  only, default-off, rollback-available, sanitized-only, not accepted operator
+  evidence, not public-launch-ready, and still blocked by remaining public
+  provider-circuit **NO-GO** items;
+- the evidence separately records that public/member provider runtime blocking,
+  provider runtime enforcement, provider order/fallback/cache changes,
+  MarketCache changes, quota enforcement changes, auth/RBAC/session changes,
+  and notification sends are not part of this surface;
+- `scripts/provider_sla_licensing_evidence_check.py` now rejects sanitized
+  provider SLA/licensing artifacts that try to promote admin-probe evidence into
+  public/member runtime blocking, provider runtime enforcement, provider
+  order/fallback/cache changes, accepted operator evidence, or public readiness;
+- the checker also treats synthetic provider URLs, request ids, tokens, raw
+  payloads, trace markers, credentials, and cache keys as unsafe evidence fields
+  and keeps failing output bounded/redacted.
+- `scripts/operator_evidence_template_pack.py` now emits
+  `provider_sla_licensing_evidence.json`, and
+  `scripts/operator_evidence_bundle_check.py` validates it through
+  `scripts/provider_sla_licensing_evidence_check.py` so reviewer evidence packs
+  expose the same admin-probe-only/default-off/no-enforcement posture.
+
+This hardening is reviewer evidence only. It does not change the existing admin
+probe pilot runtime path, public/user provider routes, provider ordering,
+fallback, retry, timeout, in-flight behavior, MarketCache TTL/SWR/cold-start
+behavior, quota/cost enforcement, auth/RBAC/session behavior, DB schema,
+frontend source, broker/order/trade paths, or notification sending.
+
 ## 2026-06-12 Provider Circuit Admin Probe Pilot
 
 Implemented a default-off, explicit opt-in provider circuit enforcement pilot

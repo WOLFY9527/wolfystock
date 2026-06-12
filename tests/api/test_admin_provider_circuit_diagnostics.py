@@ -1031,8 +1031,16 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
             metadata={
                 "safe_label": "admin_probe_pilot",
                 "url": "https://provider.example.test/raw?api_key=must-not-leak",
+                "request_id": "request-id-must-not-leak",
+                "requestId": "request-id-camel-must-not-leak",
                 "headers": {"Authorization": "Bearer must-not-leak"},
+                "token": "token-must-not-leak",
                 "raw_payload": "must-not-leak",
+                "trace": "Traceback trace-must-not-leak",
+                "traceId": "trace-id-must-not-leak",
+                "credential": "credential-must-not-leak",
+                "cache_key": "cache-key-must-not-leak",
+                "cacheKey": "cache-key-camel-must-not-leak",
                 "stack_trace": "Traceback must-not-leak",
             },
             now=datetime(2026, 5, 6, 10, 30, 0),
@@ -1094,6 +1102,19 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
         self.assertTrue(evidence["liveEnforcement"])
         self.assertTrue(evidence["wouldBlockCall"])
         self.assertTrue(evidence["wouldBlockIfEnforced"])
+        self.assertTrue(evidence["adminProbeOnly"])
+        self.assertTrue(evidence["defaultOffPosture"])
+        self.assertTrue(evidence["rollbackAvailable"])
+        self.assertFalse(evidence["publicRuntimeProviderBlocking"])
+        self.assertFalse(evidence["memberRuntimeProviderBlocking"])
+        self.assertFalse(evidence["providerRuntimeEnforcement"])
+        self.assertFalse(evidence["providerOrderFallbackCacheBehaviorChanged"])
+        self.assertTrue(evidence["sanitizedFieldsOnly"])
+        self.assertFalse(evidence["acceptedOperatorEvidencePresent"])
+        self.assertIn(
+            "public_provider_circuit_enforcement_not_accepted",
+            evidence["remainingPublicLaunchNoGoItems"],
+        )
         self.assertEqual(evidence["enforcementBlockReasonCode"], "provider_429")
         self.assertFalse(evidence["wouldChangeProviderOrder"])
         self.assertFalse(evidence["wouldChangeFallbackBehavior"])
@@ -1117,7 +1138,15 @@ class AdminProviderCircuitDiagnosticsApiTestCase(unittest.TestCase):
             "https://provider.example",
             "api_key",
             "authorization",
+            "request-id-must-not-leak",
+            "request-id-camel-must-not-leak",
+            "token-must-not-leak",
             "raw_payload",
+            "trace-must-not-leak",
+            "trace-id-must-not-leak",
+            "credential-must-not-leak",
+            "cache-key-must-not-leak",
+            "cache-key-camel-must-not-leak",
             "traceback",
         ):
             self.assertNotIn(blocked, text)

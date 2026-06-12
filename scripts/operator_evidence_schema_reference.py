@@ -20,6 +20,7 @@ try:
     from config_snapshot_evidence_check import REQUIRED_FIELDS as CONFIG_SNAPSHOT_REQUIRED_FIELDS
     from manual_release_approval_evidence_check import REQUIRED_FIELDS as MANUAL_RELEASE_REQUIRED_FIELDS
     from provider_operator_evidence_check import REQUIRED_FIELDS as PROVIDER_REQUIRED_FIELDS
+    from provider_sla_licensing_evidence_check import REQUIRED_FIELDS as PROVIDER_SLA_REQUIRED_FIELDS
     from quota_operator_evidence_check import REQUIRED_SECTIONS as QUOTA_REQUIRED_SECTIONS
     from restore_pitr_operator_evidence_check import REQUIRED_FIELDS as RESTORE_PITR_REQUIRED_FIELDS
     from security_operator_acceptance_check import REQUIRED_SECTIONS as SECURITY_REQUIRED_SECTIONS
@@ -31,6 +32,7 @@ except ModuleNotFoundError:  # pragma: no cover - package import fallback
     from scripts.config_snapshot_evidence_check import REQUIRED_FIELDS as CONFIG_SNAPSHOT_REQUIRED_FIELDS
     from scripts.manual_release_approval_evidence_check import REQUIRED_FIELDS as MANUAL_RELEASE_REQUIRED_FIELDS
     from scripts.provider_operator_evidence_check import REQUIRED_FIELDS as PROVIDER_REQUIRED_FIELDS
+    from scripts.provider_sla_licensing_evidence_check import REQUIRED_FIELDS as PROVIDER_SLA_REQUIRED_FIELDS
     from scripts.quota_operator_evidence_check import REQUIRED_SECTIONS as QUOTA_REQUIRED_SECTIONS
     from scripts.restore_pitr_operator_evidence_check import REQUIRED_FIELDS as RESTORE_PITR_REQUIRED_FIELDS
     from scripts.security_operator_acceptance_check import REQUIRED_SECTIONS as SECURITY_REQUIRED_SECTIONS
@@ -57,6 +59,7 @@ REVIEW_POSTURE = {
 }
 REQUIRED_FIELDS_BY_CATEGORY = {
     "provider": PROVIDER_REQUIRED_FIELDS,
+    "provider-sla-licensing": PROVIDER_SLA_REQUIRED_FIELDS,
     "restore-pitr": RESTORE_PITR_REQUIRED_FIELDS,
     "security": ("schemaVersion", *SECURITY_REQUIRED_SECTIONS),
     "quota-budget": ("schemaVersion", *QUOTA_REQUIRED_SECTIONS),
