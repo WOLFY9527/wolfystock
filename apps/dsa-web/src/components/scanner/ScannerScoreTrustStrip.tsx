@@ -2,8 +2,8 @@ import type {
   ScannerCandidate,
   ScannerCandidateDiagnostic,
 } from '../../types/scanner';
-import type { TrustDisclosureBucket } from '../../utils/trustDisclosure';
-import { TrustDisclosureChips } from '../evidence/TrustDisclosureChips';
+import type { DataTrustEvidenceState } from '../../utils/dataTrustEvidenceDisplay';
+import { DataTrustEvidenceChips } from '../evidence/DataTrustEvidenceChips';
 import { TerminalChip } from '../terminal/TerminalPrimitives';
 
 type TrustSource = ScannerCandidate | ScannerCandidateDiagnostic | null | undefined;
@@ -42,19 +42,6 @@ function getBoolean(parent: Record<string, unknown> | null, ...keys: string[]) {
     if (typeof value === 'boolean') return value;
   }
   return null;
-}
-
-function getStringArray(parent: Record<string, unknown> | null, ...keys: string[]) {
-  for (const key of keys) {
-    const value = parent?.[key];
-    if (Array.isArray(value)) {
-      return value.reduce<string[]>((acc, item) => {
-        if (typeof item === 'string' && item.trim()) acc.push(item.trim());
-        return acc;
-      }, []);
-    }
-  }
-  return [];
 }
 
 function unique<T>(items: T[]): T[] {
@@ -204,7 +191,9 @@ export function ScannerScoreTrustStrip({
     ?? getBoolean(providerObservation, 'observationOnly', 'observation_only')
     ?? inferredObservationOnly;
   const inferredFallbackFlag = normalizeKey(getString(sourceConfidence, 'freshness')) === 'fallback'
-    || normalizeKey(getString(evidencePacket, 'freshnessState', 'freshness_state')) === 'fallback';
+    || normalizeKey(getString(evidencePacket, 'freshnessState', 'freshness_state')) === 'fallback'
+    || /fallback/.test(normalizeKey(capReason))
+    || /fallback/.test(normalizeKey(degradationReason));
   const fallbackFlag = getBoolean(sourceConfidence, 'isFallback', 'is_fallback')
     ?? inferredFallbackFlag;
   const staleFlag = getBoolean(sourceConfidence, 'isStale', 'is_stale')
@@ -232,23 +221,12 @@ export function ScannerScoreTrustStrip({
   const confidenceBadge = confidenceChip(confidenceTierValue, language);
   const confidenceLimited = ['capped', 'low', 'unknown'].includes(confidenceTierValue);
   const cautionReason = localizeReason(capReason, language) || localizeReason(degradationReason, language);
-  const trustBuckets: Array<TrustDisclosureBucket | null> = [
-    confidenceLimited ? 'confidence' : null,
-    observationOnly ? 'observe-only' : null,
-    fallbackFlag ? 'fallback' : null,
-    proxyFlag ? 'proxy' : null,
-    staleFlag ? 'stale' : null,
+  const dataTrustStates: DataTrustEvidenceState[] = unique([
     partialFlag ? 'partial' : null,
-  ];
-  const trustTerms = [
-    capReason,
-    degradationReason,
-    sourceLabel,
-    quoteFreshnessRaw,
-    historyFreshnessRaw,
-    ...getStringArray(evidencePacket, 'userFacingLabels', 'warningFlags')
-      .filter((label) => ['fallback', 'proxy', 'stale', 'partial'].includes(normalizeKey(label))),
-  ];
+    staleFlag ? 'stale' : null,
+    fallbackFlag || proxyFlag ? 'fallback' : null,
+    observationOnly ? 'observation-only' : null,
+  ].filter((state): state is DataTrustEvidenceState => Boolean(state)));
   const displaySource = displaySourceLabel(sourceLabel, language);
   const summaryParts = unique([
     cautionReason,
@@ -267,10 +245,13 @@ export function ScannerScoreTrustStrip({
             {confidenceBadge.label}
           </TerminalChip>
         ) : null}
-        <TrustDisclosureChips
-          buckets={trustBuckets}
-          terms={trustTerms}
-          chipClassName="px-1.5 py-0.5 text-[10px] font-semibold"
+        <DataTrustEvidenceChips
+          input={{
+            locale: language,
+            states: dataTrustStates,
+          }}
+          maxStates={5}
+          className="gap-1"
         />
       </div>
       {summaryParts.length ? (
