@@ -1,0 +1,106 @@
+{
+  "evidenceScope": "synthetic",
+  "schemaVersion": "wolfystock_quota_reserve_release_operator_evidence_v1",
+  "sections": {
+    "acceptedEvidencePacket": {
+      "adminVisibilityLabel": "quota pilot evidence review-only",
+      "defaultOffPosture": true,
+      "disabledModeVerified": true,
+      "guestPublicQuotaMutation": true,
+      "invoiceExportReconciliationStatus": "accepted",
+      "liveEnforcement": false,
+      "operatorVisibilityLabel": "operator evidence manual review required",
+      "ownerAllowlistBoundary": "explicit_owner_allowlist",
+      "providerInvoiceExportRef": "inv-real-provider-001",
+      "publicLaunchReady": true,
+      "realProviderInvoiceExportAttached": true,
+      "releaseApproved": true,
+      "rollbackSwitchLabel": "pilot_flag_or_owner_allowlist_removal",
+      "routeLabel": "sync_single_stock_only",
+      "sourceScope": "synthetic"
+    },
+    "analysisFailureFinallyRelease": {
+      "analysisSucceeded": false,
+      "releaseAttempted": true,
+      "releaseFromFinally": true,
+      "releaseSucceeded": true,
+      "reserveSucceeded": true,
+      "responseShapeChanged": false,
+      "routeLabel": "sync_single_stock_only"
+    },
+    "configSnapshot": {
+      "advisoryMode": true,
+      "enabledByDefault": false,
+      "ownerAllowlistConfigured": true,
+      "publicGlobalEnablement": false,
+      "routeLabel": "sync_single_stock_only"
+    },
+    "costLedgerReservationEvidence": {
+      "billingAuthoritativeActualProviderCost": false,
+      "exactOnceActualCostConsumeAccepted": false,
+      "ledgerFieldAvailable": true,
+      "publicLaunchApproval": false,
+      "rawReservationIdAbsent": true,
+      "routeEstimatedUnitsOnly": true,
+      "routeLabel": "sync_single_stock_only",
+      "routeReservationIdPropagated": false,
+      "runtimeBehaviorChanged": false,
+      "terminalTransitionOwner": "route_pilot_estimated_units"
+    },
+    "executionLogMetadataSafety": {
+      "boundedMetadataOnly": true,
+      "idempotencyMaterialAbsent": true,
+      "rawOwnerOrRequestAbsent": true,
+      "rawProviderOrExceptionAbsent": true,
+      "rawReservationIdAbsent": true
+    },
+    "quotaWindowBeforeAfter": {
+      "after": {
+        "consumed_units": 12,
+        "request_count": 8,
+        "reserved_units": 4
+      },
+      "aggregateOnly": true,
+      "before": {
+        "consumed_units": 12,
+        "request_count": 7,
+        "reserved_units": 4
+      },
+      "reservedUnitsLeaked": false
+    },
+    "releaseFailureFailOpen": {
+      "consumeAttempted": false,
+      "failOpen": true,
+      "releaseAttempted": true,
+      "releaseSucceeded": false,
+      "requestBlocked": false,
+      "routeLabel": "sync_single_stock_only",
+      "warningRecorded": true
+    },
+    "reserveFailureFailOpen": {
+      "analysisProceeded": true,
+      "consumeAttempted": false,
+      "failOpen": true,
+      "requestBlocked": false,
+      "reserveAttempted": true,
+      "reserveSucceeded": false,
+      "routeLabel": "sync_single_stock_only"
+    },
+    "rollbackProof": {
+      "ownerRemovedFromAllowlist": false,
+      "pilotDisabled": true,
+      "responseShapeChanged": false,
+      "routeOutOfScope": true
+    },
+    "successReserveRelease": {
+      "analysisCompleted": true,
+      "releaseAttempted": true,
+      "releaseSucceeded": true,
+      "reserveAttempted": true,
+      "reserveSucceeded": true,
+      "responseShapeChanged": false,
+      "routeLabel": "sync_single_stock_only",
+      "sourceScope": "synthetic"
+    }
+  }
+}

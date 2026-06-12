@@ -12,6 +12,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "quota_reserve_release_operator_evidence_check.py"
+FIXTURE_ROOT = REPO_ROOT / "tests" / "fixtures" / "quota_reserve_release_operator_evidence"
+VALID_FIXTURE = FIXTURE_ROOT / "accepted_packet.synthetic.valid.json"
+INVALID_FIXTURE = FIXTURE_ROOT / "accepted_packet.synthetic.invalid.json"
 
 
 SECTION_IDS = (
@@ -24,6 +27,7 @@ SECTION_IDS = (
     "quotaWindowBeforeAfter",
     "costLedgerReservationEvidence",
     "rollbackProof",
+    "acceptedEvidencePacket",
 )
 
 
@@ -116,6 +120,22 @@ def _valid_artifact() -> dict[str, object]:
                 "routeOutOfScope": True,
                 "responseShapeChanged": False,
             },
+            "acceptedEvidencePacket": {
+                "sourceScope": "synthetic",
+                "defaultOffPosture": True,
+                "liveEnforcement": False,
+                "ownerAllowlistBoundary": "explicit_owner_allowlist",
+                "routeLabel": "sync_single_stock_only",
+                "guestPublicQuotaMutation": False,
+                "disabledModeVerified": True,
+                "rollbackSwitchLabel": "pilot_flag_or_owner_allowlist_removal",
+                "adminVisibilityLabel": "quota pilot evidence review-only",
+                "operatorVisibilityLabel": "operator evidence manual review required",
+                "invoiceExportReconciliationStatus": "advisory_only",
+                "realProviderInvoiceExportAttached": False,
+                "publicLaunchReady": False,
+                "releaseApproved": False,
+            },
         },
     }
 
@@ -153,14 +173,22 @@ def test_valid_sanitized_artifact_passes(tmp_path: Path) -> None:
     payload = _stdout_json(result)
     assert payload["status"] == "pass"
     assert payload["finalStatus"] == "EVIDENCE-READY"
+    assert payload["reviewablePacketStatus"] == "quota-pilot-evidence-reviewable"
     assert payload["advisoryOnly"] is True
+    assert payload["publicLaunchReady"] is False
+    assert payload["releaseApproved"] is False
     assert payload["launchApproved"] is False
     assert payload["liveQuotaEnforcementApproved"] is False
     assert payload["consumeWiringApproved"] is False
+    assert payload["guestPublicQuotaMutationApproved"] is False
+    assert payload["invoiceExportReconciliationAccepted"] is False
     assert payload["runtimeBehaviorChanged"] is False
     assert payload["networkCallsExecutedByValidator"] is False
     assert payload["runtimeApisCalledByValidator"] is False
     assert payload["storageAccessedByValidator"] is False
+    assert payload["checks"]["guestPublicQuotaMutationAbsent"] is True  # type: ignore[index]
+    assert payload["checks"]["operatorVisibilityLabelsRecorded"] is True  # type: ignore[index]
+    assert payload["checks"]["invoiceExportReconciliationNotAccepted"] is True  # type: ignore[index]
     assert {category["id"] for category in payload["categories"]} == set(SECTION_IDS)  # type: ignore[index]
 
 
@@ -387,6 +415,56 @@ def test_cost_ledger_reservation_evidence_requires_no_billing_authority_claim(tm
     reason_codes = _reason_codes(_stdout_json(result))
     assert "billing_authority_claim_forbidden" in reason_codes
     assert "public_launch_approval_forbidden" in reason_codes
+
+
+def test_accepted_packet_posture_rejects_public_guest_invoice_or_release_claims(tmp_path: Path) -> None:
+    artifact = _valid_artifact()
+    sections = artifact["sections"]
+    assert isinstance(sections, dict)
+    packet = sections["acceptedEvidencePacket"]
+    assert isinstance(packet, dict)
+    packet["guestPublicQuotaMutation"] = True
+    packet["invoiceExportReconciliationStatus"] = "accepted"
+    packet["realProviderInvoiceExportAttached"] = True
+    packet["publicLaunchReady"] = True
+    packet["releaseApproved"] = True
+    path = _write_json(tmp_path, artifact)
+
+    result = _run_validator(path)
+
+    assert result.returncode == 1
+    payload = _stdout_json(result)
+    assert payload["publicLaunchReady"] is False
+    assert payload["releaseApproved"] is False
+    assert payload["invoiceExportReconciliationAccepted"] is False
+    reason_codes = _reason_codes(payload)
+    assert "guest_public_quota_mutation_forbidden" in reason_codes
+    assert "invoice_export_reconciliation_not_accepted" in reason_codes
+    assert "provider_invoice_export_evidence_forbidden" in reason_codes
+    assert "public_launch_ready_forbidden" in reason_codes
+    assert "release_approval_forbidden" in reason_codes
+
+
+def test_committed_synthetic_valid_and_invalid_artifacts_validate_expected_packet_path() -> None:
+    valid_result = _run_validator(VALID_FIXTURE)
+    invalid_result = _run_validator(INVALID_FIXTURE)
+
+    assert valid_result.returncode == 0
+    valid_payload = _stdout_json(valid_result)
+    assert valid_payload["reviewablePacketStatus"] == "quota-pilot-evidence-reviewable"
+    assert valid_payload["publicLaunchReady"] is False
+    assert valid_payload["releaseApproved"] is False
+    assert valid_payload["invoiceExportReconciliationAccepted"] is False
+
+    assert invalid_result.returncode == 1
+    combined_invalid_output = invalid_result.stdout + invalid_result.stderr
+    assert "inv-real-provider-001" not in combined_invalid_output
+    invalid_payload = _stdout_json(invalid_result)
+    assert invalid_payload["finalStatus"] == "NO-GO"
+    assert invalid_payload["publicLaunchReady"] is False
+    reason_codes = _reason_codes(invalid_payload)
+    assert "provider_invoice_export_data_forbidden" in reason_codes
+    assert "guest_public_quota_mutation_forbidden" in reason_codes
 
 
 def test_script_does_not_import_or_call_runtime_quota_storage_route_modules() -> None:

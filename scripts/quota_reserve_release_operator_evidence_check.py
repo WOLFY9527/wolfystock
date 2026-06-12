@@ -44,10 +44,23 @@ REQUIRED_CATEGORIES = (
     "quotaWindowBeforeAfter",
     "costLedgerReservationEvidence",
     "rollbackProof",
+    "acceptedEvidencePacket",
 )
 
 ALLOWED_ROUTE_LABELS = {"sync_single_stock_only"}
 ALLOWED_EVIDENCE_SCOPES = {"synthetic", "private_beta", "internal_private_beta"}
+ALLOWED_OWNER_BOUNDARY_LABELS = {"explicit_owner_allowlist"}
+ALLOWED_ROLLBACK_SWITCH_LABELS = {
+    "pilot_disabled",
+    "owner_allowlist_removal",
+    "pilot_flag_or_owner_allowlist_removal",
+}
+ALLOWED_INVOICE_EXPORT_RECONCILIATION_STATUSES = {
+    "missing",
+    "not_implemented",
+    "not_accepted",
+    "advisory_only",
+}
 AGGREGATE_QUOTA_FIELDS = {"reserved_units", "consumed_units", "request_count"}
 ALLOWED_TERMINAL_TRANSITION_OWNERS = {
     "not_wired",
@@ -145,6 +158,23 @@ ROW_LEVEL_RESERVATION_KEYS = {
     "reservationrows",
     "reservations",
 }
+PROVIDER_INVOICE_EXPORT_KEYS = {
+    "billingexport",
+    "billingexportfile",
+    "invoiceexportfile",
+    "invoiceexportid",
+    "invoiceexportref",
+    "invoiceexportrows",
+    "invoiceid",
+    "providerbillingexport",
+    "providerinvoiceexport",
+    "providerinvoiceexportid",
+    "providerinvoiceexportref",
+    "providerinvoiceid",
+    "rawbillingexport",
+    "rawinvoiceexport",
+    "rawproviderinvoiceexport",
+}
 
 SECRET_VALUE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("raw_reservation_identifier_forbidden", re.compile(r"\bqres_[A-Za-z0-9._:-]{4,}\b", re.IGNORECASE)),
@@ -171,6 +201,10 @@ SECRET_VALUE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("launch_approval_claim_forbidden", re.compile(r"\bGO\b|launch[-_\s]?approved|public launch approved", re.IGNORECASE)),
     ("live_enforcement_claim_forbidden", re.compile(r"\blive[-_\s]?enforcement[-_\s]?(?:enabled|approved)\b", re.IGNORECASE)),
     ("consume_wiring_claim_forbidden", re.compile(r"\bconsume[-_\s]?wiring[-_\s]?(?:enabled|approved)\b", re.IGNORECASE)),
+    (
+        "provider_invoice_export_data_forbidden",
+        re.compile(r"\binv[-_](?:real[-_])?provider[-_][A-Za-z0-9._:-]{3,}\b", re.IGNORECASE),
+    ),
 )
 
 
@@ -210,6 +244,8 @@ def _scan_key(field: str, key: Any) -> list[dict[str, str]]:
         return [_finding(field, "window_identity_key_forbidden")]
     if compact in ROW_LEVEL_RESERVATION_KEYS:
         return [_finding(field, "row_level_reservation_data_forbidden")]
+    if compact in PROVIDER_INVOICE_EXPORT_KEYS:
+        return [_finding(field, "provider_invoice_export_data_forbidden")]
     return []
 
 
@@ -528,6 +564,87 @@ def _validate_rollback(category_id: str, category: dict[str, Any]) -> list[dict[
     return findings
 
 
+def _is_non_empty_text(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _validate_accepted_evidence_packet(category_id: str, category: dict[str, Any]) -> list[dict[str, str]]:
+    findings: list[dict[str, str]] = []
+    required = (
+        "sourceScope",
+        "defaultOffPosture",
+        "liveEnforcement",
+        "ownerAllowlistBoundary",
+        "routeLabel",
+        "guestPublicQuotaMutation",
+        "disabledModeVerified",
+        "rollbackSwitchLabel",
+        "adminVisibilityLabel",
+        "operatorVisibilityLabel",
+        "invoiceExportReconciliationStatus",
+        "realProviderInvoiceExportAttached",
+        "publicLaunchReady",
+        "releaseApproved",
+    )
+    for field in _missing_fields(category, required):
+        findings.append(_finding(_path_for_category(category_id, field), "missing_required_field"))
+    if "sourceScope" in category and category.get("sourceScope") not in ALLOWED_EVIDENCE_SCOPES:
+        findings.append(_finding(_path_for_category(category_id, "sourceScope"), "invalid_evidence_scope"))
+    if "defaultOffPosture" in category and not _bool_is(category.get("defaultOffPosture"), True):
+        findings.append(_finding(_path_for_category(category_id, "defaultOffPosture"), "default_off_required"))
+    if "liveEnforcement" in category and not _bool_is(category.get("liveEnforcement"), False):
+        findings.append(_finding(_path_for_category(category_id, "liveEnforcement"), "live_enforcement_forbidden"))
+    if (
+        "ownerAllowlistBoundary" in category
+        and category.get("ownerAllowlistBoundary") not in ALLOWED_OWNER_BOUNDARY_LABELS
+    ):
+        findings.append(_finding(_path_for_category(category_id, "ownerAllowlistBoundary"), "invalid_owner_allowlist_boundary"))
+    if "routeLabel" in category and category.get("routeLabel") not in ALLOWED_ROUTE_LABELS:
+        findings.append(_finding(_path_for_category(category_id, "routeLabel"), "invalid_route_label"))
+    if "guestPublicQuotaMutation" in category and not _bool_is(category.get("guestPublicQuotaMutation"), False):
+        findings.append(
+            _finding(_path_for_category(category_id, "guestPublicQuotaMutation"), "guest_public_quota_mutation_forbidden")
+        )
+    if "disabledModeVerified" in category and not _bool_is(category.get("disabledModeVerified"), True):
+        findings.append(_finding(_path_for_category(category_id, "disabledModeVerified"), "disabled_mode_evidence_required"))
+    if "rollbackSwitchLabel" in category and category.get("rollbackSwitchLabel") not in ALLOWED_ROLLBACK_SWITCH_LABELS:
+        findings.append(_finding(_path_for_category(category_id, "rollbackSwitchLabel"), "invalid_rollback_switch_label"))
+    for field in ("adminVisibilityLabel", "operatorVisibilityLabel"):
+        if field in category and not _is_non_empty_text(category.get(field)):
+            findings.append(_finding(_path_for_category(category_id, field), "visibility_label_required"))
+    if "invoiceExportReconciliationStatus" in category:
+        status = category.get("invoiceExportReconciliationStatus")
+        if status == "accepted":
+            findings.append(
+                _finding(
+                    _path_for_category(category_id, "invoiceExportReconciliationStatus"),
+                    "invoice_export_reconciliation_not_accepted",
+                )
+            )
+        elif status not in ALLOWED_INVOICE_EXPORT_RECONCILIATION_STATUSES:
+            findings.append(
+                _finding(
+                    _path_for_category(category_id, "invoiceExportReconciliationStatus"),
+                    "invalid_invoice_export_reconciliation_status",
+                )
+            )
+    if "realProviderInvoiceExportAttached" in category and not _bool_is(
+        category.get("realProviderInvoiceExportAttached"),
+        False,
+    ):
+        findings.append(
+            _finding(
+                _path_for_category(category_id, "realProviderInvoiceExportAttached"),
+                "provider_invoice_export_evidence_forbidden",
+            )
+        )
+    if "publicLaunchReady" in category and not _bool_is(category.get("publicLaunchReady"), False):
+        findings.append(_finding(_path_for_category(category_id, "publicLaunchReady"), "public_launch_ready_forbidden"))
+    if "releaseApproved" in category and not _bool_is(category.get("releaseApproved"), False):
+        findings.append(_finding(_path_for_category(category_id, "releaseApproved"), "release_approval_forbidden"))
+    return findings
+
+
 CATEGORY_VALIDATORS = {
     "configSnapshot": _validate_config_snapshot,
     "successReserveRelease": _validate_success_case,
@@ -538,6 +655,7 @@ CATEGORY_VALIDATORS = {
     "quotaWindowBeforeAfter": _validate_quota_window,
     "costLedgerReservationEvidence": _validate_cost_ledger_reservation_evidence,
     "rollbackProof": _validate_rollback,
+    "acceptedEvidencePacket": _validate_accepted_evidence_packet,
 }
 
 
@@ -591,16 +709,22 @@ def validate_artifacts(artifacts: list[Any], *, artifact_count: int, load_findin
     findings = _dedupe_findings(load_findings + category_extraction_findings + category_findings + forbidden_findings)
     aggregate_findings = _aggregate_findings(findings)
     passed = not findings
+    reason_codes = {finding["reasonCode"] for finding in findings}
     return {
         "schemaVersion": SUMMARY_SCHEMA_VERSION,
         "tool": "scripts/quota_reserve_release_operator_evidence_check.py",
         "inputSchemaVersion": INPUT_SCHEMA_VERSION,
         "status": "pass" if passed else "fail",
         "finalStatus": "EVIDENCE-READY" if passed else "NO-GO",
+        "reviewablePacketStatus": "quota-pilot-evidence-reviewable" if passed else "quota-pilot-evidence-no-go",
         "advisoryOnly": True,
+        "publicLaunchReady": False,
+        "releaseApproved": False,
         "launchApproved": False,
         "liveQuotaEnforcementApproved": False,
         "consumeWiringApproved": False,
+        "guestPublicQuotaMutationApproved": False,
+        "invoiceExportReconciliationAccepted": False,
         "runtimeBehaviorChanged": False,
         "networkCallsExecutedByValidator": False,
         "runtimeApisCalledByValidator": False,
@@ -614,6 +738,12 @@ def validate_artifacts(artifacts: list[Any], *, artifact_count: int, load_findin
                 for finding in findings
             ),
             "routeScopeAccepted": not any(finding["reasonCode"] == "invalid_route_label" for finding in findings),
+            "guestPublicQuotaMutationAbsent": "guest_public_quota_mutation_forbidden" not in reason_codes,
+            "operatorVisibilityLabelsRecorded": "visibility_label_required" not in reason_codes
+            and "acceptedEvidencePacket" in categories,
+            "invoiceExportReconciliationNotAccepted": "invoice_export_reconciliation_not_accepted" not in reason_codes
+            and "provider_invoice_export_evidence_forbidden" not in reason_codes
+            and "provider_invoice_export_data_forbidden" not in reason_codes,
             "advisoryModeOnly": not any(
                 finding["reasonCode"]
                 in {"live_enforcement_claim_forbidden", "consume_wiring_claim_forbidden", "launch_approval_claim_forbidden"}

@@ -132,7 +132,10 @@ Current hard blockers include:
 
 - no accepted global MFA enforcement and recovery/key operations;
 - RBAC coarse compatibility fallback remains;
-- no approved live quota enforcement pilot;
+- no approved live quota enforcement pilot; accepted narrow operator/staging
+  evidence, invoice/export reconciliation, a single terminal transition owner,
+  and exact-once actual-cost consume remain unaccepted, so public launch stays
+  **NO-GO** even if a quota packet becomes reviewable;
 - no approved provider runtime enforcement pilot;
 - process-local SSE and missing accepted WS2 multi-instance staging evidence;
 - no accepted real isolated PostgreSQL restore/PITR drill;
