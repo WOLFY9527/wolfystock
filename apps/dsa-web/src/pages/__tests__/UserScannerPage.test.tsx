@@ -13,6 +13,7 @@ import type {
 } from '../../types/scanner';
 import type { WatchlistItem } from '../../types/watchlist';
 import type { RuleBacktestRunResponse } from '../../types/backtest';
+import { findConsumerRawLeakage } from '../../test-utils/consumerRawLeakageGuard';
 
 const {
   getRuns,
@@ -2223,6 +2224,71 @@ describe('UserScannerPage', () => {
     const summary = await screen.findByTestId('scanner-diagnostics-summary');
     fireEvent.click(within(summary).getByRole('button', { name: /淘汰分布|Rejection mix/i }));
     expect(await screen.findByTestId('scanner-rejection-aggregate')).toBeInTheDocument();
+  });
+
+  it('keeps synthetic scanner diagnostics collapsed and sanitized for member view', async () => {
+    getRun.mockResolvedValue(makeCryptoDiagnosticsRun({
+      diagnostics: {
+        coverageSummary: {
+          inputUniverseSize: 300,
+          eligibleAfterUniverseFetch: 280,
+          eligibleAfterLiquidityFilter: 240,
+          eligibleAfterDataAvailabilityFilter: 210,
+          rankedCandidateCount: 40,
+          shortlistedCount: 3,
+          excludedTotal: 90,
+          excludedByReason: [],
+          likelyBottleneck: 'data_availability',
+          likelyBottleneckLabel: 'Data availability',
+        },
+        providerDiagnostics: {
+          configuredPrimaryProvider: 'synthetic_provider_url=https://provider.example.invalid/options?token=secret',
+          quoteSourceUsed: 'synthetic_cache_key=scanner:cn:2026-06-12',
+          snapshotSourceUsed: 'synthetic_request_id=req-scanner-raw-123',
+          historySourceUsed: 'synthetic_provider_payload_label=raw_payload',
+          providersUsed: ['synthetic_provider_url'],
+          fallbackOccurred: true,
+          fallbackCount: 1,
+          providerFailureCount: 1,
+          missingDataSymbolCount: 1,
+          providerWarnings: [
+            'synthetic_debug_reason=Traceback stack trace',
+            'synthetic_score_trace=score_debug_vector',
+            'synthetic_diagnostic_window=operator-window',
+          ],
+        },
+        aiInterpretation: {
+          synthetic_provider_url: 'https://provider.example.invalid/raw?token=secret',
+          synthetic_cache_key: 'scanner:cn:cache-key',
+          synthetic_request_id: 'req-scanner-raw-123',
+          synthetic_debug_reason: 'Traceback synthetic stack',
+          synthetic_score_trace: 'score_debug_vector',
+          synthetic_diagnostic_window: 'operator-window',
+          synthetic_provider_payload_label: 'raw_provider_payload',
+        },
+      },
+    }));
+
+    renderUserScannerPage();
+
+    const forbiddenSyntheticMarkers = /synthetic_provider_url|synthetic_cache_key|synthetic_request_id|synthetic_debug_reason|synthetic_score_trace|synthetic_diagnostic_window|synthetic_provider_payload_label|provider\.example|req-scanner-raw-123|raw_provider_payload|Traceback|score_debug_vector|operator-window/i;
+    expect(await screen.findByTestId('scanner-diagnostics-disclosure')).toBeInTheDocument();
+    expect(screen.queryByTestId('scanner-diagnostics-panel')).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(forbiddenSyntheticMarkers);
+
+    const diagnostics = screen.getByTestId('scanner-diagnostics-disclosure');
+    fireEvent.click(within(diagnostics).getByRole('button', { name: /展开.*(?:数据说明|Data notes)|Expand.*(?:数据说明|Data notes)/i }));
+    const panel = await screen.findByTestId('scanner-diagnostics-panel');
+    const panelText = panel.textContent || '';
+
+    expect(panel).toHaveTextContent(/诊断详情已保留|Diagnostic details retained/);
+    expect(panel).not.toHaveTextContent(forbiddenSyntheticMarkers);
+    expect(findConsumerRawLeakage(panelText, {
+      extraForbiddenPatterns: [
+        /synthetic_(?:provider_url|cache_key|request_id|debug_reason|score_trace|diagnostic_window|provider_payload_label)/i,
+        /provider\.example|req-scanner-raw-123|Traceback|score_debug_vector|operator-window/i,
+      ],
+    })).toEqual([]);
   });
 
   it('keeps expanded scanner diagnostics free of raw provider and internal keys', async () => {

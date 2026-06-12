@@ -12,6 +12,16 @@ describe('consumer raw leakage guard', () => {
       'fallback_used',
       'reason_codes',
       '/api/v1/market/rotation-radar',
+      'synthetic_provider_url',
+      'synthetic_cache_key',
+      'synthetic_request_id',
+      'synthetic_debug_reason',
+      'synthetic_score_trace',
+      'synthetic_diagnostic_window',
+      'synthetic_provider_payload_label',
+      'https://provider.example.invalid/options?token=secret',
+      'req-synth-123',
+      'Traceback stack trace',
     ] as const;
 
     for (const example of examples) {

@@ -32,6 +32,50 @@ function toDisplayText(value: unknown): string | null {
   return null;
 }
 
+const restrictedDiagnosticTextPattern = /(?:synthetic_(?:provider_url|cache_key|request_id|debug_reason|score_trace|diagnostic_window|provider_payload_label)|\b(?:provider_url|cache_key|request_id|debug_reason|score_trace|diagnostic_window|provider_payload|raw_payload|raw_provider_payload)\b|https?:\/\/|\?token=|\b(?:traceback|stack trace|authorization|bearer|cookie|api[_-]?key|secret|credential|sourceAuthorityAllowed|scoreContributionAllowed)\b)/i;
+
+type AiDiagnosticDisplayEntry = {
+  key: string;
+  label: string;
+  value: string;
+};
+
+function isRestrictedDiagnosticEntry(key: string, value: string | null): boolean {
+  const normalizedKey = key.trim();
+  const text = `${normalizedKey} ${value || ''}`;
+  return normalizedKey.includes('_') || restrictedDiagnosticTextPattern.test(text);
+}
+
+function restrictedDiagnosticLabel(language: 'zh' | 'en'): AiDiagnosticDisplayEntry {
+  return {
+    key: 'restricted-diagnostics',
+    label: language === 'en' ? 'Diagnostic details retained' : '诊断详情已保留',
+    value: language === 'en' ? 'Operator review only' : '仅限运维核查',
+  };
+}
+
+function getAiDiagnosticDisplayEntries(
+  aiDiagnostics: Record<string, unknown> | null,
+  language: 'zh' | 'en',
+): AiDiagnosticDisplayEntry[] {
+  if (!aiDiagnostics) return [];
+  let hasRestrictedDiagnostic = false;
+  const entries = Object.entries(aiDiagnostics)
+    .reduce<AiDiagnosticDisplayEntry[]>((items, [key, rawValue]) => {
+      const value = toDisplayText(rawValue);
+      if (isRestrictedDiagnosticEntry(key, value)) {
+        hasRestrictedDiagnostic = true;
+        return items;
+      }
+      if (!value) return items;
+      items.push({ key, label: key, value });
+      return items;
+    }, [])
+    .slice(0, 5);
+
+  return hasRestrictedDiagnostic ? [restrictedDiagnosticLabel(language), ...entries].slice(0, 6) : entries;
+}
+
 function getRunCoverageSummary(runDetail: ScannerRunDetail): ScannerCoverageSummary | null {
   const diagnostics = runDetail.diagnostics || {};
   return isRecord(diagnostics.coverageSummary) ? diagnostics.coverageSummary as unknown as ScannerCoverageSummary : null;
@@ -105,6 +149,7 @@ export const ScannerDiagnosticsPanel = Object.assign(function ScannerDiagnostics
   const coverage = getRunCoverageSummary(runDetail);
   const provider = getRunProviderDiagnostics(runDetail);
   const aiDiagnostics = getAiDiagnostics(runDetail);
+  const aiDiagnosticDisplayEntries = getAiDiagnosticDisplayEntries(aiDiagnostics, language);
   const hasAnyDiagnostics = hasRunDiagnosticsContent(runDetail);
 
   if (!hasAnyDiagnostics) return null;
@@ -244,13 +289,10 @@ export const ScannerDiagnosticsPanel = Object.assign(function ScannerDiagnostics
               {language === 'en' ? 'AI' : 'AI'}
             </h5>
             <div className="flex flex-wrap gap-2">
-              {Object.entries(aiDiagnostics)
-                .map(([key, value]) => [key, toDisplayText(value)] as const)
-                .filter((entry): entry is readonly [string, string] => Boolean(entry[1]))
-                .slice(0, 6)
-                .map(([key, value]) => (
+              {aiDiagnosticDisplayEntries
+                .map(({ key, label, value }) => (
                   <TerminalChip key={key} variant="neutral" className="px-1.5 py-0.5 text-[10px] font-sans text-white/72">
-                    <span className="shrink-0 text-white/36">{key}</span>
+                    <span className="shrink-0 text-white/36">{label}</span>
                     <span className="min-w-0 truncate">{value}</span>
                   </TerminalChip>
                 ))}

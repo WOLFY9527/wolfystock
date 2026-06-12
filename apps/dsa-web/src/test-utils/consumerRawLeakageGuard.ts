@@ -29,6 +29,10 @@ const defaultForbiddenPatterns = [
   /\/api\/v\d+\/[^\s<>"']+/i,
   /\bsource-provenance:[^\s<]+/i,
   /\bmarket:(?:liquidity|marketregime|rotation|scanner|overview|temperature)[^\s<]*/i,
+  /\bsynthetic_(?:provider_url|cache_key|request_id|debug_reason|score_trace|diagnostic_window|provider_payload_label)\b/i,
+  /\bprovider\.example\b/i,
+  /\breq-(?:scanner-raw|synth)-[a-z0-9-]+\b/i,
+  /\b(?:traceback|stack trace)\b/i,
   /\braw\s+(?:payload|response|json|provider\s+payload)\b/i,
   /\bprovider\s+(?:runtime|trace|payload|debug|route)\b/i,
 ] as const;
