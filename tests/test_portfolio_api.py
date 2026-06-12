@@ -26,7 +26,7 @@ from api.app import create_app
 from src.config import Config
 from src.services.portfolio_ibkr_sync_service import PortfolioIbkrSyncError
 from src.services.portfolio_service import PortfolioService
-from src.services.portfolio_service import PortfolioBusyError
+from src.services.portfolio_service import PortfolioBusyError, PortfolioConflictError
 from src.storage import DatabaseManager
 
 
@@ -36,6 +36,33 @@ def _reset_auth_globals() -> None:
     auth._password_hash_salt = None
     auth._password_hash_stored = None
     auth._rate_limit = {}
+
+
+SAFE_IMPORT_VALIDATION_MESSAGE = "Portfolio import request could not be processed."
+SAFE_IMPORT_CONFLICT_MESSAGE = "Portfolio import conflicts with existing records."
+SAFE_IMPORT_INTERNAL_MESSAGE = "Portfolio import is temporarily unavailable. Please retry later."
+RAW_IMPORT_ERROR_MARKERS = (
+    "raw-exception-text-must-not-leak",
+    "Traceback (most recent call last)",
+    "provider.example.invalid",
+    "request_id=req-raw-must-not-leak",
+    "account_label=vip-account-label-must-not-leak",
+    "broker_ref=broker-ref-must-not-leak",
+    "import_fingerprint=fp-raw-must-not-leak",
+    "raw_provider_payload_marker",
+)
+
+
+def _raw_import_exception_text() -> str:
+    return (
+        "raw-exception-text-must-not-leak "
+        "Traceback (most recent call last): provider stack "
+        "https://provider.example.invalid/import?request_id=req-raw-must-not-leak "
+        "account_label=vip-account-label-must-not-leak "
+        "broker_ref=broker-ref-must-not-leak "
+        "import_fingerprint=fp-raw-must-not-leak "
+        "raw_provider_payload_marker"
+    )
 
 
 class PortfolioApiTestCase(unittest.TestCase):
@@ -101,6 +128,21 @@ class PortfolioApiTestCase(unittest.TestCase):
     @staticmethod
     def _json_text(response) -> str:
         return json.dumps(response.json(), ensure_ascii=False, sort_keys=True)
+
+    def _assert_safe_import_error(
+        self,
+        response,
+        *,
+        status_code: int,
+        error_code: str,
+        message: str,
+    ) -> None:
+        self.assertEqual(response.status_code, status_code)
+        payload = response.json()
+        self.assertEqual(payload, {"error": error_code, "message": message})
+        response_text = self._json_text(response)
+        for marker in RAW_IMPORT_ERROR_MARKERS:
+            self.assertNotIn(marker, response_text)
 
     @staticmethod
     def _ibkr_flex_xml_bytes() -> bytes:
@@ -743,6 +785,107 @@ class PortfolioApiTestCase(unittest.TestCase):
         )
         for marker in raw_markers:
             self.assertNotIn(marker, combined_text)
+
+    def test_import_parse_errors_use_safe_envelopes_without_raw_exception_text(self) -> None:
+        cases = (
+            (
+                "/api/v1/portfolio/imports/parse",
+                "parse_import_file",
+                "ibkr",
+                "ibkr-flex.xml",
+                "application/xml",
+            ),
+            (
+                "/api/v1/portfolio/imports/csv/parse",
+                "parse_trade_csv",
+                "huatai",
+                "huatai.csv",
+                "text/csv",
+            ),
+        )
+
+        for endpoint, method_name, broker, filename, content_type in cases:
+            with self.subTest(endpoint=endpoint):
+                with patch(
+                    f"api.v1.endpoints.portfolio.PortfolioImportService.{method_name}",
+                    side_effect=ValueError(_raw_import_exception_text()),
+                ):
+                    response = self.client.post(
+                        endpoint,
+                        data={"broker": broker},
+                        files={"file": (filename, b"synthetic", content_type)},
+                    )
+
+                self._assert_safe_import_error(
+                    response,
+                    status_code=400,
+                    error_code="validation_error",
+                    message=SAFE_IMPORT_VALIDATION_MESSAGE,
+                )
+
+    def test_import_commit_conflicts_use_safe_envelopes_without_raw_broker_markers(self) -> None:
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Conflict Import", "broker": "IBKR", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        account_id = account_resp.json()["id"]
+        cases = (
+            (
+                "/api/v1/portfolio/imports/commit",
+                "parse_import_file",
+                "ibkr",
+                "ibkr-flex.xml",
+                "application/xml",
+            ),
+            (
+                "/api/v1/portfolio/imports/csv/commit",
+                "parse_trade_csv",
+                "huatai",
+                "huatai.csv",
+                "text/csv",
+            ),
+        )
+
+        for endpoint, parse_method_name, broker, filename, content_type in cases:
+            with self.subTest(endpoint=endpoint):
+                with patch(
+                    f"api.v1.endpoints.portfolio.PortfolioImportService.{parse_method_name}",
+                    return_value={"broker": broker},
+                ), patch(
+                    "api.v1.endpoints.portfolio.PortfolioImportService.commit_import_records",
+                    side_effect=PortfolioConflictError(_raw_import_exception_text()),
+                ):
+                    response = self.client.post(
+                        endpoint,
+                        data={"account_id": str(account_id), "broker": broker, "dry_run": "false"},
+                        files={"file": (filename, b"synthetic", content_type)},
+                    )
+
+                self._assert_safe_import_error(
+                    response,
+                    status_code=409,
+                    error_code="conflict",
+                    message=SAFE_IMPORT_CONFLICT_MESSAGE,
+                )
+
+    def test_import_internal_errors_use_safe_envelope_without_traceback_or_provider_url(self) -> None:
+        with patch(
+            "api.v1.endpoints.portfolio.PortfolioImportService.parse_import_file",
+            side_effect=RuntimeError(_raw_import_exception_text()),
+        ):
+            response = self.client.post(
+                "/api/v1/portfolio/imports/parse",
+                data={"broker": "ibkr"},
+                files={"file": ("ibkr-flex.xml", b"synthetic", "application/xml")},
+            )
+
+        self._assert_safe_import_error(
+            response,
+            status_code=500,
+            error_code="internal_error",
+            message=SAFE_IMPORT_INTERNAL_MESSAGE,
+        )
 
     def test_csv_import_preview_and_commit_redact_trade_ids_and_fingerprints(self) -> None:
         account_resp = self.client.post(

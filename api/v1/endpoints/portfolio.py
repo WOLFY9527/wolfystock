@@ -12,6 +12,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 
 from api.deps import CurrentUser, get_current_user
+from api.v1.errors import safe_api_error
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.portfolio import (
     PortfolioAccountCreateRequest,
@@ -68,6 +69,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+IMPORT_VALIDATION_ERROR_MESSAGE = "Portfolio import request could not be processed."
+IMPORT_CONFLICT_ERROR_MESSAGE = "Portfolio import conflicts with existing records."
+IMPORT_INTERNAL_ERROR_MESSAGE = "Portfolio import is temporarily unavailable. Please retry later."
 IMPORT_ARTIFACT_REDACTED = "<redacted>"
 _IMPORT_ARTIFACT_URL_RE = re.compile(r"\bhttps?://[^\s\"'<>]+", re.IGNORECASE)
 _IMPORT_ARTIFACT_SENSITIVE_TEXT_RE = re.compile(
@@ -319,6 +323,31 @@ def _raw_sync_request_value(value: Optional[str], *, handle_prefix: str) -> Opti
     if re.fullmatch(rf"{re.escape(handle_prefix)}_[a-f0-9]{{12}}", text):
         return None
     return text
+
+
+def _import_bad_request() -> HTTPException:
+    return safe_api_error(
+        status_code=400,
+        error="validation_error",
+        message=IMPORT_VALIDATION_ERROR_MESSAGE,
+    )
+
+
+def _import_conflict_error() -> HTTPException:
+    return safe_api_error(
+        status_code=409,
+        error="conflict",
+        message=IMPORT_CONFLICT_ERROR_MESSAGE,
+    )
+
+
+def _import_internal_error(message: str, exc: Exception) -> HTTPException:
+    logger.error("%s: %s", message, exc, exc_info=True)
+    return safe_api_error(
+        status_code=500,
+        error="internal_error",
+        message=IMPORT_INTERNAL_ERROR_MESSAGE,
+    )
 
 
 def _serialize_import_record(item: dict) -> PortfolioImportTradeItem:
@@ -1205,9 +1234,9 @@ def parse_broker_import(
         parsed = importer.parse_import_file(broker=broker, content=content)
         return _build_import_parse_response(parsed)
     except ValueError as exc:
-        raise _bad_request(exc)
+        raise _import_bad_request() from exc
     except Exception as exc:
-        raise _internal_error("Parse broker import failed", exc)
+        raise _import_internal_error("Parse broker import failed", exc) from exc
 
 
 @router.get(
@@ -1223,7 +1252,7 @@ def list_import_brokers(
     try:
         return PortfolioImportBrokerListResponse(brokers=importer.list_supported_brokers())
     except Exception as exc:
-        raise _internal_error("List broker imports failed", exc)
+        raise _import_internal_error("List broker imports failed", exc) from exc
 
 
 @router.post(
@@ -1253,11 +1282,11 @@ def commit_broker_import(
         )
         return _build_import_commit_response(result)
     except PortfolioConflictError as exc:
-        raise _conflict_error(error="conflict", message=str(exc))
+        raise _import_conflict_error() from exc
     except ValueError as exc:
-        raise _bad_request(exc)
+        raise _import_bad_request() from exc
     except Exception as exc:
-        raise _internal_error("Commit broker import failed", exc)
+        raise _import_internal_error("Commit broker import failed", exc) from exc
 
 
 @router.post(
@@ -1277,9 +1306,9 @@ def parse_csv_import(
         parsed = importer.parse_trade_csv(broker=broker, content=content)
         return _build_import_parse_response(parsed)
     except ValueError as exc:
-        raise _bad_request(exc)
+        raise _import_bad_request() from exc
     except Exception as exc:
-        raise _internal_error("Parse CSV import failed", exc)
+        raise _import_internal_error("Parse CSV import failed", exc) from exc
 
 
 @router.get(
@@ -1295,7 +1324,7 @@ def list_csv_brokers(
     try:
         return PortfolioImportBrokerListResponse(brokers=importer.list_supported_csv_brokers())
     except Exception as exc:
-        raise _internal_error("List CSV brokers failed", exc)
+        raise _import_internal_error("List CSV brokers failed", exc) from exc
 
 
 @router.post(
@@ -1323,11 +1352,11 @@ def commit_csv_import(
         )
         return _build_import_commit_response(result)
     except PortfolioConflictError as exc:
-        raise _conflict_error(error="conflict", message=str(exc))
+        raise _import_conflict_error() from exc
     except ValueError as exc:
-        raise _bad_request(exc)
+        raise _import_bad_request() from exc
     except Exception as exc:
-        raise _internal_error("Commit CSV import failed", exc)
+        raise _import_internal_error("Commit CSV import failed", exc) from exc
 
 
 @router.post(
