@@ -210,5 +210,12 @@ Record and continue with safe display/docs/tests work if any improvement needs:
   provider/debug/reason leakage suppression. This checkpoint is inert and has no
   route/page adoption.
 - `checkpoint(evidence): apply consumer evidence states`: pending.
+- `feat(evidence): adopt scanner data trust chips`: applies the shared
+  `DataTrustEvidenceChips` display model to the Scanner score trust strip using
+  existing bounded candidate diagnostics/metadata only. The checkpoint maps
+  partial, stale, fallback, synthetic/proxy, and observation-only display states
+  into canonical consumer chips, preserves the default no-advice chip, and adds
+  a focused raw-marker guard test. It does not change scanner scoring, ranking,
+  selection, provider runtime, API/schema payloads, or launch posture.
 - `checkpoint(evidence): add leakage and smoke evidence`: pending.
 - `feat(evidence): add data trust evidence os v1`: pending.
