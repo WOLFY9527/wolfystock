@@ -76,6 +76,7 @@ def test_dry_run_outputs_planned_offline_multi_instance_checks() -> None:
     payload = _stdout_json(result)
     assert payload["schemaVersion"] == "wolfystock_ws2_multi_instance_smoke_preflight_v1"
     assert payload["validationProfile"] == "PROFILE_DURABLE_PROTECTED"
+    assert payload["acceptanceEvidenceProfile"] == "PROFILE_WS2_ACCEPTANCE_EVIDENCE_SCOPED"
     assert payload["preflightStatus"] == "dry-run-review-required"
     assert payload["mode"] == "dry-run"
     assert payload["manualReviewRequired"] is True
@@ -85,10 +86,12 @@ def test_dry_run_outputs_planned_offline_multi_instance_checks() -> None:
     assert payload["storageMode"] == "disposable-sqlite"
     assert payload["evidenceBoundary"] == {
         "acceptedStagingEvidence": False,
+        "ciSyntheticEvidence": False,
         "durablePollingBaseline": True,
         "liveStagingCallsImplemented": False,
         "publicLaunchReady": False,
         "sseCrossInstanceReliable": False,
+        "syntheticLocalDryRunEvidence": False,
         "targetEnvironmentEvidence": False,
     }
     assert payload["sseLimitation"] == {
@@ -117,6 +120,7 @@ def test_synthetic_preflight_runs_disposable_smoke_and_sanitized_evidence() -> N
     assert payload["preflightStatus"] == "preflight-pass-review-required"
     assert payload["mode"] == "synthetic"
     assert payload["validationProfile"] == "PROFILE_DURABLE_PROTECTED"
+    assert payload["acceptanceEvidenceProfile"] == "PROFILE_WS2_ACCEPTANCE_EVIDENCE_SCOPED"
     assert payload["manualReviewRequired"] is True
     assert payload["runtimeBehaviorChanged"] is False
     assert payload["networkCallsExecuted"] is False
@@ -139,17 +143,29 @@ def test_synthetic_preflight_runs_disposable_smoke_and_sanitized_evidence() -> N
     assert evidence_by_id["api_b_durable_read"]["processMemoryShared"] is False
     assert evidence_by_id["api_b_durable_read"]["pollingFallbackUsed"] is True
     assert evidence_by_id["api_b_durable_read"]["visibleStatus"] == "completed"
+    assert evidence_by_id["api_b_durable_read"]["latestSequence"] == 4
     assert evidence_by_id["polling_replay"]["durablePollingBaseline"] is True
     assert evidence_by_id["polling_replay"]["replaySequences"] == [2, 3]
+    assert evidence_by_id["polling_replay"]["latestSequence"] == 4
+    assert evidence_by_id["polling_replay"]["boundedByLimit"] is True
     assert evidence_by_id["owner_isolation"]["ownerValueIncluded"] is False
     assert evidence_by_id["owner_isolation"]["syntheticOwnerIsolationRepresented"] is True
     assert evidence_by_id["owner_isolation"]["crossOwnerStatusCode"] == 404
+    assert evidence_by_id["owner_isolation"]["crossOwnerPollStatusCode"] == 404
     assert evidence_by_id["lease_expiry_retry"]["leaseExpirySimulated"] is True
     assert evidence_by_id["lease_expiry_retry"]["reclaimedAttemptCount"] == 2
+    assert evidence_by_id["lease_expiry_retry"]["staleWorkerWriteRejected"] is True
+    assert evidence_by_id["lease_expiry_retry"]["terminalWriteAccepted"] is True
     assert evidence_by_id["failure_safety"]["retryCapEnforced"] is True
     assert evidence_by_id["failure_safety"]["retryStatuses"] == ["retry_queued", "failed"]
     assert evidence_by_id["failure_safety"]["failedTaskPollable"] is True
+    assert evidence_by_id["failure_safety"]["failureEventRecorded"] is True
+    assert evidence_by_id["failure_safety"]["credentialValueIncluded"] is False
     assert evidence_by_id["failure_safety"]["safeFailureCode"] == "non_retryable_synthetic_error"
+    assert payload["evidenceBoundary"]["syntheticLocalDryRunEvidence"] is True
+    assert payload["evidenceBoundary"]["acceptedStagingEvidence"] is False
+    assert payload["evidenceBoundary"]["targetEnvironmentEvidence"] is False
+    assert payload["evidenceBoundary"]["publicLaunchReady"] is False
     _assert_bounded_sanitized_output(result)
 
 
