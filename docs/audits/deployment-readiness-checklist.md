@@ -140,6 +140,12 @@ Status:
   `python3 scripts/ws2_multi_instance_smoke.py --synthetic`; it uses disposable
   SQLite and synthetic durable task helpers only, does not call staging, and
   does not change API/SSE/worker semantics.
+- [x] Target-environment WS2 evidence can be checked offline through
+  `python3 scripts/ws2_target_environment_evidence_check.py <sanitized-ws2-target-environment-evidence.json>`;
+  the template lives at
+  `docs/audits/ws2-target-environment-evidence-template.json`. This checker
+  validates only operator-supplied sanitized API A/B evidence and does not run
+  staging calls, create evidence, change runtime behavior, or approve launch.
 - [x] Current process-local `AnalysisTaskQueue` and SSE remain the default.
 
 Remaining blockers:
@@ -153,6 +159,9 @@ Remaining blockers:
 - [ ] Accepted smoke must prove API A submit, worker lease, API B durable read,
   polling replay, owner isolation, lease expiry recovery, retry/failure safety,
   and sanitized degraded readiness.
+- [ ] A real sanitized WS2 target-environment artifact must be filled from the
+  staging/API A+B run and accepted by reviewers; placeholder, fixture-only,
+  local, or CI synthetic evidence does not close this gate.
 - [ ] External SSE replay/cutover remains future work.
 - [ ] No production queue/broker cutover has been approved.
 
@@ -418,6 +427,10 @@ The following must all be true before public multi-user deployment:
   config snapshot evidence, and manual release review records. These are
   review plumbing only: real operator artifacts are still required, and release
   approval remains external/manual.
+- [x] Offline checker/template exists for WS2 target-environment evidence:
+  `scripts/ws2_target_environment_evidence_check.py` and
+  `docs/audits/ws2-target-environment-evidence-template.json`. Passing the
+  checker is review plumbing only and keeps `publicLaunchReady=false`.
 - [x] Offline operator evidence workflow tooling exists for sanitized template
   generation, per-category validation, checksum manifest creation/verification,
   bundle aggregation, and Markdown review-report rendering. The tooling is
@@ -451,6 +464,11 @@ The following must all be true before public multi-user deployment:
   accepted through
   `python3 scripts/ws2_sse_operator_decision_check.py <sanitized-ws2-sse-operator-decision.json>`
   without cross-instance SSE claims or runtime cutover.
+- [ ] Sanitized WS2 target-environment API A/B evidence is attached and
+  accepted through
+  `python3 scripts/ws2_target_environment_evidence_check.py <sanitized-ws2-target-environment-evidence.json>`
+  without raw user identifiers, URLs, credentials, payloads, stack traces,
+  cross-instance SSE claims, queue/broker cutover, or public launch approval.
 - [x] Incident-response audit evidence pack exists through
   `python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>`;
   it validates sanitized admin-critical action evidence, preview-first cleanup,
