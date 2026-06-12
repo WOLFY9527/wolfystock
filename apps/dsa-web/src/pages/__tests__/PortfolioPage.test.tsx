@@ -11,6 +11,21 @@ import {
 import PortfolioPage from '../PortfolioPage';
 
 const p = (key: string) => translate('zh', `portfolio.${key}`);
+const SAFE_IBKR_CONNECTION_HANDLE = 'conn_111111111111';
+const SAFE_IBKR_ACCOUNT_HANDLE = 'acct_222222222222';
+const SAFE_IBKR_URL_HANDLE = 'url_333333333333';
+const SAFE_IBKR_SECONDARY_CONNECTION_HANDLE = 'conn_444444444444';
+const SAFE_IBKR_SECONDARY_ACCOUNT_HANDLE = 'acct_555555555555';
+const SAFE_IBKR_SECONDARY_URL_HANDLE = 'url_666666666666';
+const SYNTHETIC_BROKER_IMPORT_RAW_MARKERS = [
+  'synthetic_account_label_must_not_leak',
+  'synthetic_provider_url_must_not_leak',
+  'synthetic_import_fingerprint_must_not_leak',
+  'synthetic_broker_connection_name_must_not_leak',
+  'synthetic_raw_payload_label_must_not_leak',
+  'synthetic_import_file_label_must_not_leak',
+  'synthetic_request_id_must_not_leak',
+];
 
 const {
   getAccounts,
@@ -465,8 +480,8 @@ describe('PortfolioPage FX refresh', () => {
     syncIbkrReadOnly.mockResolvedValue({
       accountId: 1,
       brokerConnectionId: 9,
-      brokerAccountRef: 'U1234567',
-      connectionName: 'Primary IBKR',
+      brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
+      connectionName: SAFE_IBKR_CONNECTION_HANDLE,
       snapshotDate: '2026-03-19',
       syncedAt: '2026-03-19T10:00:00',
       baseCurrency: 'USD',
@@ -480,7 +495,7 @@ describe('PortfolioPage FX refresh', () => {
       fxStale: false,
       snapshotOverlayActive: true,
       usedExistingConnection: true,
-      apiBaseUrl: 'https://localhost:5000/v1/api',
+      apiBaseUrl: SAFE_IBKR_URL_HANDLE,
       verifySsl: false,
       warnings: [],
     });
@@ -1966,12 +1981,15 @@ describe('PortfolioPage FX refresh', () => {
         {
           id: 9,
           portfolioAccountId: 1,
-          connectionName: 'Primary IBKR',
+          connectionName: SAFE_IBKR_CONNECTION_HANDLE,
           brokerType: 'ibkr',
-          brokerAccountRef: 'U1234567',
+          brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
           importMode: 'file',
           status: 'active',
-          syncMetadata: {},
+          syncMetadata: {
+            rawPayloadLabel: 'synthetic_raw_payload_label_must_not_leak',
+            importFileLabel: 'synthetic_import_file_label_must_not_leak',
+          },
         },
       ],
     });
@@ -1989,9 +2007,13 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.change(brokerSelect, { target: { value: 'ibkr' } });
 
     expect(screen.getByText(translate('zh', 'portfolio.ibkrImportHint'))).toBeInTheDocument();
-    expect(screen.getByText('Primary IBKR')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('U1234567')).toBeInTheDocument();
+    expect(screen.getByText(SAFE_IBKR_CONNECTION_HANDLE)).toBeInTheDocument();
+    expect(screen.getByDisplayValue(SAFE_IBKR_ACCOUNT_HANDLE)).toBeInTheDocument();
     expect(screen.getByText(translate('zh', 'portfolio.currentImportAccount'))).toBeInTheDocument();
+    const portfolioDom = screen.getByTestId('portfolio-bento-page').textContent || '';
+    for (const marker of SYNTHETIC_BROKER_IMPORT_RAW_MARKERS) {
+      expect(portfolioDom).not.toContain(marker);
+    }
   });
 
   it('triggers read-only IBKR sync from the existing data sync surface', async () => {
@@ -2006,16 +2028,16 @@ describe('PortfolioPage FX refresh', () => {
         {
           id: 9,
           portfolioAccountId: 1,
-          connectionName: 'Primary IBKR',
+          connectionName: SAFE_IBKR_CONNECTION_HANDLE,
           brokerType: 'ibkr',
-          brokerAccountRef: 'U1234567',
+          brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
           importMode: 'file',
           status: 'active',
           syncMetadata: {
             ibkrApi: {
-              apiBaseUrl: 'https://localhost:5000/v1/api',
+              apiBaseUrl: SAFE_IBKR_URL_HANDLE,
               verifySsl: false,
-              brokerAccountRef: 'U1234567',
+              brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
             },
           },
         },
@@ -2043,9 +2065,9 @@ describe('PortfolioPage FX refresh', () => {
     await waitFor(() => expect(syncIbkrReadOnly).toHaveBeenCalledWith({
       accountId: 1,
       brokerConnectionId: 9,
-      brokerAccountRef: 'U1234567',
+      brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
       sessionToken: 'unit-test-not-a-real-session',
-      apiBaseUrl: 'https://localhost:5000/v1/api',
+      apiBaseUrl: SAFE_IBKR_URL_HANDLE,
       verifySsl: false,
     }));
     expect(await screen.findByText(translate('zh', 'portfolio.syncResult'))).toBeInTheDocument();
@@ -2114,16 +2136,16 @@ describe('PortfolioPage FX refresh', () => {
           {
             id: 9,
             portfolioAccountId: 1,
-            connectionName: 'Primary IBKR',
+            connectionName: SAFE_IBKR_CONNECTION_HANDLE,
             brokerType: 'ibkr',
-            brokerAccountRef: 'U1234567',
+            brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
             importMode: 'file',
             status: 'active',
             syncMetadata: {
               ibkrApi: {
-                apiBaseUrl: 'https://localhost:5000/v1/api',
+                apiBaseUrl: SAFE_IBKR_URL_HANDLE,
                 verifySsl: false,
-                brokerAccountRef: 'U1234567',
+                brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
               },
             },
           },
@@ -2134,16 +2156,16 @@ describe('PortfolioPage FX refresh', () => {
           {
             id: 9,
             portfolioAccountId: 1,
-            connectionName: 'Primary IBKR',
+            connectionName: SAFE_IBKR_CONNECTION_HANDLE,
             brokerType: 'ibkr',
-            brokerAccountRef: 'U1234567',
+            brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
             importMode: 'api',
             status: 'active',
             syncMetadata: {
               ibkrApi: {
-                apiBaseUrl: 'https://localhost:5000/v1/api',
+                apiBaseUrl: SAFE_IBKR_URL_HANDLE,
                 verifySsl: false,
-                brokerAccountRef: 'U1234567',
+                brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
               },
               lastSyncAt: '2026-03-19T10:00:00',
             },
@@ -2377,16 +2399,16 @@ describe('PortfolioPage FX refresh', () => {
         {
           id: 9,
           portfolioAccountId: 1,
-          connectionName: 'Primary IBKR',
+          connectionName: SAFE_IBKR_CONNECTION_HANDLE,
           brokerType: 'ibkr',
-          brokerAccountRef: 'U1234567',
+          brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
           importMode: 'api',
           status: 'active',
           syncMetadata: {
             ibkrApi: {
-              apiBaseUrl: 'https://localhost:5000/v1/api',
+              apiBaseUrl: SAFE_IBKR_URL_HANDLE,
               verifySsl: false,
-              brokerAccountRef: 'U1234567',
+              brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
             },
           },
         },
@@ -2432,16 +2454,16 @@ describe('PortfolioPage FX refresh', () => {
         {
           id: 9,
           portfolioAccountId: 1,
-          connectionName: 'Primary IBKR',
+          connectionName: SAFE_IBKR_CONNECTION_HANDLE,
           brokerType: 'ibkr',
-          brokerAccountRef: 'U1234567',
+          brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
           importMode: 'api',
           status: 'active',
           syncMetadata: {
             ibkrApi: {
-              apiBaseUrl: 'https://localhost:5000/v1/api',
+              apiBaseUrl: SAFE_IBKR_URL_HANDLE,
               verifySsl: false,
-              brokerAccountRef: 'U1234567',
+              brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
             },
           },
         },
@@ -3113,16 +3135,16 @@ describe('PortfolioPage FX refresh', () => {
             {
               id: 12,
               portfolioAccountId: 2,
-              connectionName: 'Secondary IBKR',
+              connectionName: SAFE_IBKR_SECONDARY_CONNECTION_HANDLE,
               brokerType: 'ibkr',
-              brokerAccountRef: 'U7654321',
+              brokerAccountRef: SAFE_IBKR_SECONDARY_ACCOUNT_HANDLE,
               importMode: 'api',
               status: 'active',
               syncMetadata: {
                 ibkrApi: {
-                  apiBaseUrl: 'https://localhost:6000/v1/api',
+                  apiBaseUrl: SAFE_IBKR_SECONDARY_URL_HANDLE,
                   verifySsl: true,
-                  brokerAccountRef: 'U7654321',
+                  brokerAccountRef: SAFE_IBKR_SECONDARY_ACCOUNT_HANDLE,
                 },
               },
             },
@@ -3134,16 +3156,16 @@ describe('PortfolioPage FX refresh', () => {
           {
             id: 9,
             portfolioAccountId: 1,
-            connectionName: 'Primary IBKR',
+            connectionName: SAFE_IBKR_CONNECTION_HANDLE,
             brokerType: 'ibkr',
-            brokerAccountRef: 'U1234567',
+            brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
             importMode: 'api',
             status: 'active',
             syncMetadata: {
               ibkrApi: {
-                apiBaseUrl: 'https://localhost:5000/v1/api',
+                apiBaseUrl: SAFE_IBKR_URL_HANDLE,
                 verifySsl: false,
-                brokerAccountRef: 'U1234567',
+                brokerAccountRef: SAFE_IBKR_ACCOUNT_HANDLE,
               },
             },
           },
@@ -3161,7 +3183,7 @@ describe('PortfolioPage FX refresh', () => {
     ) as HTMLSelectElement;
     fireEvent.change(brokerSelect, { target: { value: 'ibkr' } });
 
-    expect(await screen.findByText('Primary IBKR')).toBeInTheDocument();
+    expect(await screen.findByText(SAFE_IBKR_CONNECTION_HANDLE)).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText(translate('zh', 'portfolio.ibkrSessionTokenPlaceholder')), {
       target: { value: 'session-token-123' },
     });
@@ -3183,10 +3205,10 @@ describe('PortfolioPage FX refresh', () => {
     fireEvent.change(tradeAccountSelect, { target: { value: '2' } });
 
     await waitFor(() => expect(listBrokerConnections).toHaveBeenCalledWith(2));
-    await waitFor(() => expect(screen.getByText('Secondary IBKR')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(SAFE_IBKR_SECONDARY_CONNECTION_HANDLE)).toBeInTheDocument());
     await waitFor(() => expect(screen.queryByText(translate('zh', 'portfolio.syncResult'))).not.toBeInTheDocument());
-    expect(screen.getByLabelText('IBKR API 地址')).toHaveValue('https://localhost:6000/v1/api');
-    expect(screen.getByLabelText('IBKR 账户引用')).toHaveValue('U7654321');
+    expect(screen.getByLabelText('IBKR API 地址')).toHaveValue(SAFE_IBKR_SECONDARY_URL_HANDLE);
+    expect(screen.getByLabelText('IBKR 账户引用')).toHaveValue(SAFE_IBKR_SECONDARY_ACCOUNT_HANDLE);
     expect(screen.getByLabelText('IBKR 会话令牌')).toHaveValue('session-token-123');
     expect(screen.getByLabelText(translate('zh', 'portfolio.verifyIbkrSsl'))).toBeChecked();
   });

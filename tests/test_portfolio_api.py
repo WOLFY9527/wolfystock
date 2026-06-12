@@ -124,7 +124,7 @@ class PortfolioApiTestCase(unittest.TestCase):
 <FlexStatements>
   <FlexStatement accountId="fixture-broker-account-ref-must-not-leak" fromDate="2026-01-01" toDate="2026-01-31" currency="USD">
     <Trades>
-      <Trade assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" tradeDate="2026-01-03" buySell="BUY" quantity="10" tradePrice="150" ibCommission="1.25" taxes="0" ibExecID="fixture-execution-id-must-not-leak" orderID="fixture-order-id-must-not-leak" description="account_label=fixture-account-label-must-not-leak request_id=fixture-request-id-must-not-leak token=fixture-token-must-not-leak https://broker.example.invalid/path?token=fixture-url-token-must-not-leak"/>
+      <Trade assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" tradeDate="2026-01-03" buySell="BUY" quantity="10" tradePrice="150" ibCommission="1.25" taxes="0" ibExecID="fixture-execution-id-must-not-leak" orderID="fixture-order-id-must-not-leak" description="account_label=fixture-account-label-must-not-leak provider_url=synthetic_provider_url_must_not_leak import_fingerprint=synthetic_import_fingerprint_must_not_leak connection_name=synthetic_broker_connection_name_must_not_leak raw_payload_label=synthetic_raw_payload_label_must_not_leak import_file_label=synthetic_import_file_label_must_not_leak request_id=fixture-request-id-must-not-leak token=fixture-token-must-not-leak https://broker.example.invalid/path?token=fixture-url-token-must-not-leak"/>
     </Trades>
   </FlexStatement>
 </FlexStatements>
@@ -568,11 +568,14 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(created["portfolio_account_id"], account_id)
         self.assertEqual(created["broker_type"], "ibkr")
         self.assertEqual(created["sync_metadata"], {"source": "flex"})
+        self.assertRegex(created["portfolio_account_name"], r"^acct_[a-f0-9]{12}$")
+        self.assertRegex(created["broker_account_ref"], r"^acct_[a-f0-9]{12}$")
+        self.assertRegex(created["connection_name"], r"^conn_[a-f0-9]{12}$")
 
         list_resp = self.client.get("/api/v1/portfolio/broker-connections")
         self.assertEqual(list_resp.status_code, 200)
         self.assertEqual(len(list_resp.json()["connections"]), 1)
-        self.assertEqual(list_resp.json()["connections"][0]["portfolio_account_name"], "Global")
+        self.assertRegex(list_resp.json()["connections"][0]["portfolio_account_name"], r"^acct_[a-f0-9]{12}$")
 
         update_resp = self.client.put(
             f"/api/v1/portfolio/broker-connections/{created['id']}",
@@ -584,7 +587,7 @@ class PortfolioApiTestCase(unittest.TestCase):
         )
         self.assertEqual(update_resp.status_code, 200)
         updated = update_resp.json()
-        self.assertEqual(updated["connection_name"], "IBKR Flex")
+        self.assertRegex(updated["connection_name"], r"^conn_[a-f0-9]{12}$")
         self.assertEqual(updated["status"], "disabled")
         self.assertEqual(updated["sync_metadata"]["scope"], "global")
 
@@ -605,23 +608,45 @@ class PortfolioApiTestCase(unittest.TestCase):
     def test_broker_connection_read_payload_redacts_sensitive_metadata(self) -> None:
         account_resp = self.client.post(
             "/api/v1/portfolio/accounts",
-            json={"name": "Sensitive", "broker": "IBKR", "market": "us", "base_currency": "USD"},
+            json={
+                "name": "synthetic_account_label_must_not_leak",
+                "broker": "IBKR",
+                "market": "us",
+                "base_currency": "USD",
+            },
         )
         self.assertEqual(account_resp.status_code, 200)
         account_id = account_resp.json()["id"]
+        raw_markers = (
+            "synthetic_account_label_must_not_leak",
+            "synthetic_provider_url_must_not_leak",
+            "synthetic_import_fingerprint_must_not_leak",
+            "synthetic_broker_connection_name_must_not_leak",
+            "synthetic_raw_payload_label_must_not_leak",
+            "synthetic_import_file_label_must_not_leak",
+            "synthetic_request_id_must_not_leak",
+            "SECRET_API_KEY",
+            "SECRET_TOKEN",
+            "bearer abc.def.ghi",
+        )
 
         create_resp = self.client.post(
             "/api/v1/portfolio/broker-connections",
             json={
                 "portfolio_account_id": account_id,
                 "broker_type": "ibkr",
-                "broker_name": "Interactive Brokers",
-                "connection_name": "Primary IBKR",
-                "broker_account_ref": "U1234567",
+                "broker_name": "synthetic_broker_connection_name_must_not_leak",
+                "connection_name": "synthetic_broker_connection_name_must_not_leak",
+                "broker_account_ref": "synthetic_account_label_must_not_leak",
                 "import_mode": "api",
                 "status": "active",
                 "sync_metadata": {
                     "source": "flex",
+                    "provider_url": "https://broker.example.invalid/synthetic_provider_url_must_not_leak",
+                    "import_fingerprint": "synthetic_import_fingerprint_must_not_leak",
+                    "raw_payload_label": "synthetic_raw_payload_label_must_not_leak",
+                    "import_file_label": "synthetic_import_file_label_must_not_leak",
+                    "request_id": "synthetic_request_id_must_not_leak",
                     "api_key": "SECRET_API_KEY",
                     "nested": {"token": "SECRET_TOKEN", "ok": True},
                     "note": "bearer abc.def.ghi",
@@ -630,18 +655,25 @@ class PortfolioApiTestCase(unittest.TestCase):
         )
         self.assertEqual(create_resp.status_code, 200)
         created = create_resp.json()
+        self.assertRegex(created["portfolio_account_name"], r"^acct_[a-f0-9]{12}$")
+        self.assertRegex(created["broker_name"], r"^broker_[a-f0-9]{12}$")
+        self.assertRegex(created["connection_name"], r"^conn_[a-f0-9]{12}$")
+        self.assertRegex(created["broker_account_ref"], r"^acct_[a-f0-9]{12}$")
         self.assertEqual(created["sync_metadata"]["source"], "flex")
+        self.assertRegex(created["sync_metadata"]["provider_url"], r"^url_[a-f0-9]{12}$")
+        self.assertRegex(created["sync_metadata"]["import_fingerprint"], r"^import_[a-f0-9]{12}$")
+        self.assertRegex(created["sync_metadata"]["raw_payload_label"], r"^payload_[a-f0-9]{12}$")
+        self.assertRegex(created["sync_metadata"]["import_file_label"], r"^file_[a-f0-9]{12}$")
+        self.assertRegex(created["sync_metadata"]["request_id"], r"^req_[a-f0-9]{12}$")
         self.assertEqual(created["sync_metadata"]["api_key"], "***")
         self.assertEqual(created["sync_metadata"]["nested"]["token"], "***")
-        self.assertNotIn("SECRET_API_KEY", self._json_text(create_resp))
-        self.assertNotIn("SECRET_TOKEN", self._json_text(create_resp))
-        self.assertNotIn("bearer abc.def.ghi", self._json_text(create_resp))
+        for marker in raw_markers:
+            self.assertNotIn(marker, self._json_text(create_resp))
 
         list_resp = self.client.get("/api/v1/portfolio/broker-connections")
         self.assertEqual(list_resp.status_code, 200)
-        self.assertNotIn("SECRET_API_KEY", self._json_text(list_resp))
-        self.assertNotIn("SECRET_TOKEN", self._json_text(list_resp))
-        self.assertNotIn("bearer abc.def.ghi", self._json_text(list_resp))
+        for marker in raw_markers:
+            self.assertNotIn(marker, self._json_text(list_resp))
 
     def test_broker_import_preview_and_commit_redact_browser_artifact_identifiers(self) -> None:
         account_resp = self.client.post(
@@ -657,6 +689,11 @@ class PortfolioApiTestCase(unittest.TestCase):
             "fixture-order-id-must-not-leak",
             "fixture-request-id-must-not-leak",
             "fixture-account-label-must-not-leak",
+            "synthetic_provider_url_must_not_leak",
+            "synthetic_import_fingerprint_must_not_leak",
+            "synthetic_broker_connection_name_must_not_leak",
+            "synthetic_raw_payload_label_must_not_leak",
+            "synthetic_import_file_label_must_not_leak",
             "fixture-token-must-not-leak",
             "fixture-url-token-must-not-leak",
             "broker.example.invalid",
@@ -669,12 +706,12 @@ class PortfolioApiTestCase(unittest.TestCase):
         )
         self.assertEqual(parse_resp.status_code, 200)
         parsed = parse_resp.json()
-        self.assertEqual(parsed["metadata"]["broker_account_ref"], "<redacted>")
-        self.assertEqual(parsed["metadata"]["file_fingerprint"], "<redacted>")
-        self.assertEqual(parsed["metadata"]["suggested_connection_name"], "<redacted>")
-        self.assertEqual(parsed["records"][0]["trade_uid"], "<redacted>")
-        self.assertEqual(parsed["records"][0]["dedup_hash"], "<redacted>")
-        self.assertEqual(parsed["records"][0]["note"], "<redacted>")
+        self.assertRegex(parsed["metadata"]["broker_account_ref"], r"^acct_[a-f0-9]{12}$")
+        self.assertRegex(parsed["metadata"]["file_fingerprint"], r"^file_[a-f0-9]{12}$")
+        self.assertRegex(parsed["metadata"]["suggested_connection_name"], r"^conn_[a-f0-9]{12}$")
+        self.assertRegex(parsed["records"][0]["trade_uid"], r"^trade_[a-f0-9]{12}$")
+        self.assertRegex(parsed["records"][0]["dedup_hash"], r"^import_[a-f0-9]{12}$")
+        self.assertRegex(parsed["records"][0]["note"], r"^(payload|url)_[a-f0-9]{12}$")
 
         commit_resp = self.client.post(
             "/api/v1/portfolio/imports/commit",
@@ -683,9 +720,9 @@ class PortfolioApiTestCase(unittest.TestCase):
         )
         self.assertEqual(commit_resp.status_code, 200)
         committed = commit_resp.json()
-        self.assertEqual(committed["metadata"]["broker_account_ref"], "<redacted>")
-        self.assertEqual(committed["metadata"]["file_fingerprint"], "<redacted>")
-        self.assertEqual(committed["metadata"]["suggested_connection_name"], "<redacted>")
+        self.assertRegex(committed["metadata"]["broker_account_ref"], r"^acct_[a-f0-9]{12}$")
+        self.assertRegex(committed["metadata"]["file_fingerprint"], r"^file_[a-f0-9]{12}$")
+        self.assertRegex(committed["metadata"]["suggested_connection_name"], r"^conn_[a-f0-9]{12}$")
 
         duplicate_resp = self.client.post(
             "/api/v1/portfolio/imports/commit",
@@ -695,8 +732,9 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(duplicate_resp.status_code, 200)
         duplicate = duplicate_resp.json()
         self.assertTrue(duplicate["duplicate_import"])
-        self.assertEqual(duplicate["metadata"]["broker_account_ref"], "<redacted>")
-        self.assertEqual(duplicate["metadata"]["file_fingerprint"], "<redacted>")
+        self.assertRegex(duplicate["metadata"]["broker_account_ref"], r"^acct_[a-f0-9]{12}$")
+        self.assertRegex(duplicate["metadata"]["file_fingerprint"], r"^file_[a-f0-9]{12}$")
+        self.assertRegex(duplicate["metadata"]["suggested_connection_name"], r"^conn_[a-f0-9]{12}$")
 
         combined_text = (
             f"{self._json_text(parse_resp)}\n"
@@ -727,9 +765,9 @@ class PortfolioApiTestCase(unittest.TestCase):
         )
         self.assertEqual(parse_resp.status_code, 200)
         parsed = parse_resp.json()
-        self.assertEqual(parsed["records"][0]["trade_uid"], "<redacted>")
-        self.assertEqual(parsed["records"][0]["dedup_hash"], "<redacted>")
-        self.assertEqual(parsed["metadata"]["file_fingerprint"], "<redacted>")
+        self.assertRegex(parsed["records"][0]["trade_uid"], r"^trade_[a-f0-9]{12}$")
+        self.assertRegex(parsed["records"][0]["dedup_hash"], r"^import_[a-f0-9]{12}$")
+        self.assertRegex(parsed["metadata"]["file_fingerprint"], r"^file_[a-f0-9]{12}$")
 
         commit_resp = self.client.post(
             "/api/v1/portfolio/imports/csv/commit",
@@ -739,7 +777,7 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(commit_resp.status_code, 200)
         committed = commit_resp.json()
         self.assertTrue(committed["dry_run"])
-        self.assertEqual(committed["metadata"]["file_fingerprint"], "<redacted>")
+        self.assertRegex(committed["metadata"]["file_fingerprint"], r"^file_[a-f0-9]{12}$")
 
         combined_text = f"{self._json_text(parse_resp)}\n{self._json_text(commit_resp)}"
         self.assertNotIn(trade_uid, combined_text)
@@ -767,7 +805,7 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(parsed["broker"], "ibkr")
         self.assertEqual(parsed["record_count"], 1)
         self.assertEqual(parsed["cash_record_count"], 1)
-        self.assertEqual(parsed["metadata"]["broker_account_ref"], "<redacted>")
+        self.assertRegex(parsed["metadata"]["broker_account_ref"], r"^acct_[a-f0-9]{12}$")
         self.assertNotIn("U1234567", self._json_text(parse_resp))
 
         commit_resp = self.client.post(
@@ -824,9 +862,77 @@ class PortfolioApiTestCase(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
-        self.assertEqual(payload["broker_account_ref"], "U1234567")
+        self.assertRegex(payload["broker_account_ref"], r"^acct_[a-f0-9]{12}$")
+        self.assertRegex(payload["connection_name"], r"^conn_[a-f0-9]{12}$")
+        self.assertRegex(payload["api_base_url"], r"^url_[a-f0-9]{12}$")
+        self.assertNotIn("U1234567", self._json_text(resp))
+        self.assertNotIn("https://localhost:5000", self._json_text(resp))
         self.assertTrue(payload["snapshot_overlay_active"])
-        sync_mock.assert_called_once()
+        sync_mock.assert_called_once_with(
+            account_id=account_id,
+            broker_connection_id=None,
+            broker_account_ref=None,
+            session_token="unit-test-session",
+            api_base_url="https://localhost:5000",
+            verify_ssl=False,
+        )
+
+    @patch("api.v1.endpoints.portfolio.PortfolioIbkrSyncService.sync_read_only_account_state")
+    def test_ibkr_sync_endpoint_ignores_display_handles_for_raw_matching(self, sync_mock: MagicMock) -> None:
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Global", "broker": "IBKR", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        account_id = account_resp.json()["id"]
+
+        sync_mock.return_value = {
+            "account_id": account_id,
+            "broker_connection_id": 9,
+            "broker_account_ref": "synthetic_account_label_must_not_leak",
+            "connection_name": "synthetic_broker_connection_name_must_not_leak",
+            "snapshot_date": "2026-04-15",
+            "synced_at": "2026-04-15T09:00:00",
+            "base_currency": "USD",
+            "total_cash": 5000.0,
+            "total_market_value": 1600.0,
+            "total_equity": 6600.0,
+            "realized_pnl": 0.0,
+            "unrealized_pnl": 100.0,
+            "position_count": 1,
+            "cash_balance_count": 1,
+            "fx_stale": False,
+            "snapshot_overlay_active": True,
+            "used_existing_connection": True,
+            "api_base_url": "https://broker.example.invalid/synthetic_provider_url_must_not_leak",
+            "verify_ssl": False,
+            "warnings": ["request_id=synthetic_request_id_must_not_leak"],
+        }
+
+        resp = self.client.post(
+            "/api/v1/portfolio/sync/ibkr",
+            json={
+                "account_id": account_id,
+                "broker_connection_id": 9,
+                "broker_account_ref": "acct_123456789abc",
+                "session_token": "unit-test-session",
+                "api_base_url": "url_123456789abc",
+                "verify_ssl": False,
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn("synthetic_account_label_must_not_leak", self._json_text(resp))
+        self.assertNotIn("synthetic_broker_connection_name_must_not_leak", self._json_text(resp))
+        self.assertNotIn("synthetic_provider_url_must_not_leak", self._json_text(resp))
+        self.assertNotIn("synthetic_request_id_must_not_leak", self._json_text(resp))
+        sync_mock.assert_called_once_with(
+            account_id=account_id,
+            broker_connection_id=9,
+            broker_account_ref=None,
+            session_token="unit-test-session",
+            api_base_url=None,
+            verify_ssl=False,
+        )
 
     @patch("api.v1.endpoints.portfolio.PortfolioIbkrSyncService.sync_read_only_account_state")
     def test_ibkr_sync_endpoint_surfaces_structured_session_error(self, sync_mock: MagicMock) -> None:
