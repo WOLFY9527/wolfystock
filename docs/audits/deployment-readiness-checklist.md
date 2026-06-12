@@ -179,11 +179,18 @@ Status:
 - [x] A default-off, owner-allowlisted sync single-stock analysis route pilot
   can block only that route on quota rejection, consume estimated route units
   after success, and release on analysis failure when explicitly enabled.
+- [x] Cost-ledger reservation evidence now distinguishes the existing
+  `quota_reservation_id` ledger seam from the route pilot's estimated-unit
+  consume/release behavior; the current route pilot does not make actual
+  provider-cost accounting billing-authoritative.
 
 Remaining blockers:
 
 - [ ] Accepted staging/operator evidence for the default-off route pilot is not
   complete, and broad/global quota enforcement remains disabled.
+- [ ] A single terminal transition owner for route-pilot reservations and
+  cost-ledger reconciliation has not been accepted; exact-once actual-cost
+  consume remains **NO-GO**.
 - [ ] Ledger writes remain observational and best-effort; failures must not
   change user-visible LLM behavior.
 - [ ] Some legacy/system usage can still write null-owner rows for backward
@@ -195,7 +202,9 @@ Remaining blockers:
 Go/no-go:
 
 - **NO-GO** for unrestricted public usage until quotas have a staged enforcement
-  pilot, admin visibility, rollback plan, and owner/guest accounting acceptance.
+  pilot, admin visibility, rollback plan, owner/guest accounting acceptance,
+  billing-authoritative reconciliation, and an accepted exact-once consume
+  boundary.
 
 ## 6. Provider reliability gates
 

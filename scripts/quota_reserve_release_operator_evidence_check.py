@@ -27,12 +27,18 @@ REQUIRED_CATEGORIES = (
     "releaseFailureFailOpen",
     "executionLogMetadataSafety",
     "quotaWindowBeforeAfter",
+    "costLedgerReservationEvidence",
     "rollbackProof",
 )
 
 ALLOWED_ROUTE_LABELS = {"sync_single_stock_only"}
 ALLOWED_EVIDENCE_SCOPES = {"synthetic", "private_beta", "internal_private_beta"}
 AGGREGATE_QUOTA_FIELDS = {"reserved_units", "consumed_units", "request_count"}
+ALLOWED_TERMINAL_TRANSITION_OWNERS = {
+    "not_wired",
+    "route_pilot_estimated_units",
+    "cost_ledger_reconciliation",
+}
 
 RESERVATION_ID_KEYS = {"reservationid", "quotareservationid", "rawreservationid"}
 IDEMPOTENCY_KEYS = {"idempotencykey", "idempotencyhash", "idempotencymaterial"}
@@ -519,6 +525,54 @@ def _validate_quota_window(category_id: str, category: dict[str, Any]) -> list[d
     return findings
 
 
+def _validate_cost_ledger_reservation_evidence(category_id: str, category: dict[str, Any]) -> list[dict[str, str]]:
+    findings: list[dict[str, str]] = []
+    required = (
+        "routeLabel",
+        "ledgerFieldAvailable",
+        "routeReservationIdPropagated",
+        "routeEstimatedUnitsOnly",
+        "billingAuthoritativeActualProviderCost",
+        "terminalTransitionOwner",
+        "exactOnceActualCostConsumeAccepted",
+        "rawReservationIdAbsent",
+        "runtimeBehaviorChanged",
+        "publicLaunchApproval",
+    )
+    for field in _missing_fields(category, required):
+        findings.append(_finding(_path_for_category(category_id, field), "missing_required_field"))
+    if "routeLabel" in category and category.get("routeLabel") not in ALLOWED_ROUTE_LABELS:
+        findings.append(_finding(_path_for_category(category_id, "routeLabel"), "invalid_route_label"))
+    if "ledgerFieldAvailable" in category and not _bool_is(category.get("ledgerFieldAvailable"), True):
+        findings.append(_finding(_path_for_category(category_id, "ledgerFieldAvailable"), "expected_true"))
+    if "routeReservationIdPropagated" in category and not isinstance(category.get("routeReservationIdPropagated"), bool):
+        findings.append(_finding(_path_for_category(category_id, "routeReservationIdPropagated"), "invalid_boolean"))
+    for field in ("routeEstimatedUnitsOnly", "rawReservationIdAbsent"):
+        if field in category and not _bool_is(category.get(field), True):
+            findings.append(_finding(_path_for_category(category_id, field), "expected_true"))
+    if (
+        "billingAuthoritativeActualProviderCost" in category
+        and not _bool_is(category.get("billingAuthoritativeActualProviderCost"), False)
+    ):
+        findings.append(
+            _finding(_path_for_category(category_id, "billingAuthoritativeActualProviderCost"), "billing_authority_claim_forbidden")
+        )
+    if "exactOnceActualCostConsumeAccepted" in category and not _bool_is(category.get("exactOnceActualCostConsumeAccepted"), False):
+        findings.append(
+            _finding(_path_for_category(category_id, "exactOnceActualCostConsumeAccepted"), "exact_once_actual_cost_consume_not_accepted")
+        )
+    if "runtimeBehaviorChanged" in category and not _bool_is(category.get("runtimeBehaviorChanged"), False):
+        findings.append(_finding(_path_for_category(category_id, "runtimeBehaviorChanged"), "runtime_behavior_change_forbidden"))
+    if "publicLaunchApproval" in category and not _bool_is(category.get("publicLaunchApproval"), False):
+        findings.append(_finding(_path_for_category(category_id, "publicLaunchApproval"), "public_launch_approval_forbidden"))
+    if (
+        "terminalTransitionOwner" in category
+        and category.get("terminalTransitionOwner") not in ALLOWED_TERMINAL_TRANSITION_OWNERS
+    ):
+        findings.append(_finding(_path_for_category(category_id, "terminalTransitionOwner"), "invalid_terminal_transition_owner"))
+    return findings
+
+
 def _validate_rollback(category_id: str, category: dict[str, Any]) -> list[dict[str, str]]:
     findings: list[dict[str, str]] = []
     for field in _missing_fields(category, ("routeOutOfScope", "responseShapeChanged")):
@@ -542,6 +596,7 @@ CATEGORY_VALIDATORS = {
     "releaseFailureFailOpen": _validate_release_failure,
     "executionLogMetadataSafety": _validate_metadata_safety,
     "quotaWindowBeforeAfter": _validate_quota_window,
+    "costLedgerReservationEvidence": _validate_cost_ledger_reservation_evidence,
     "rollbackProof": _validate_rollback,
 }
 
