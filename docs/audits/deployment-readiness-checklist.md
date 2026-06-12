@@ -220,6 +220,9 @@ Status:
 - [x] A default-off admin built-in provider validation probe pilot can block
   only the `data_source_validation/admin_provider_probe` boundary when
   explicitly enabled; rollback is a separate explicit flag.
+- [x] Admin SLA readiness can expose opt-in `adminProbePilotEvidence` for the
+  admin probe pilot, including default-off, rollback, selected boundary, last
+  decision category, would-block/block state, and sanitized no-change markers.
 - [x] Diagnostics responses omit raw provider payloads, URLs/query strings,
   credentials, cookies, raw session ids, exception text, stack traces, and
   internal storage details.
@@ -234,6 +237,9 @@ Remaining blockers:
   order/fallback/cache behavior, or public launch readiness.
 - [ ] Accepted operator/staging evidence and any broader provider circuit
   enforcement policy remain separately required.
+- [ ] The opt-in admin probe evidence surface is operator visibility only; it
+  does not accept target-environment evidence, approve public launch, or approve
+  public/user provider runtime enforcement by itself.
 - [ ] Provider SLA/degraded target-environment evidence and live-credential
   redaction proof remain missing before launch.
 

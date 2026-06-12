@@ -1,4 +1,34 @@
 
+## 2026-06-12 Provider Circuit Admin Probe Evidence Surface
+
+Extended the existing admin provider SLA readiness surface with an opt-in,
+operator-readable pilot evidence projection:
+
+- surface:
+  `/api/v1/admin/providers/sla-readiness?adminProbePilotEvidence=true`;
+- evidence contract: `provider_admin_probe_pilot_evidence_v1`;
+- evidence shows pilot enabled/disabled, rollback enabled/disabled, selected
+  boundary, API route, last decision category, would-block/block state, and
+  sanitized no-change markers;
+- default SLA readiness responses still omit the evidence field unless the
+  operator explicitly requests it;
+- evidence appears only for `data_source_validation/admin_provider_probe`.
+
+The evidence is generated from stored circuit state and existing pilot flags. It
+does not call providers, store raw payloads, expose provider URLs/query strings,
+credentials, cookies, raw session ids, exception text, or stack traces, and does
+not change global provider order, fallback, retry, timeout, in-flight,
+sufficiency, MarketCache TTL/SWR/cold-start behavior, quota enforcement,
+auth/RBAC/session behavior, frontend behavior, broker/order/trade paths, or
+notification sending.
+
+This is operator visibility and review plumbing only. It is not public-launch
+approval, does not accept target-environment evidence by itself, and does not
+approve public/user provider runtime enforcement. Public launch provider
+reliability remains **NO-GO** until accepted target-environment provider
+entitlement, degraded behavior, broader circuit policy, and operator/staging
+evidence exist.
+
 ## 2026-06-12 Provider Circuit Admin Probe Pilot
 
 Implemented a default-off, explicit opt-in provider circuit enforcement pilot
