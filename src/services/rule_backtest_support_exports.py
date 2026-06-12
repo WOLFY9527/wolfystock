@@ -36,12 +36,321 @@ _RULE_BACKTEST_OOS_PARAMETER_READINESS_GUARDRAILS = {
     "winner_promotion": False,
     "engine_math_changed": False,
 }
+_SUPPORT_EXPORT_RAW_MARKERS = (
+    "synthetic_cache_key",
+    "synthetic_provider_url",
+    "synthetic_request_id",
+    "synthetic_stack_trace",
+    "synthetic_debug_reason",
+    "synthetic_execution_trace_detail",
+)
+_SUPPORT_EXPORT_FORBIDDEN_TEXT_MARKERS = _SUPPORT_EXPORT_RAW_MARKERS + (
+    "authorization",
+    "bearer ",
+    "cookie",
+    "set-cookie",
+    "session_id",
+    "api_key",
+    "access_token",
+    "refresh_token",
+    "password",
+    "credential",
+    "raw_provider_payload",
+    "raw_payload",
+    "provider_payload",
+    "request_body",
+    "response_body",
+    "stack_trace",
+    "traceback",
+    "http://",
+    "https://",
+)
+_SUPPORT_RUN_TIMING_KEYS = {
+    "cancelled_at",
+    "created_at",
+    "failed_at",
+    "started_at",
+    "finished_at",
+    "last_updated_at",
+    "queue_duration_seconds",
+    "run_duration_seconds",
+}
+_SUPPORT_RUN_DIAGNOSTICS_KEYS = {
+    "current_status",
+    "terminal_status",
+    "reason_code",
+    "message",
+    "last_transition_at",
+    "last_transition_message",
+    "last_non_terminal_status",
+}
+_SUPPORT_ARTIFACT_AVAILABILITY_KEYS = {
+    "version",
+    "source",
+    "completeness",
+    "has_summary",
+    "has_parsed_strategy",
+    "has_metrics",
+    "has_execution_model",
+    "has_comparison",
+    "has_trade_rows",
+    "has_equity_curve",
+    "has_execution_trace",
+    "has_run_diagnostics",
+    "has_run_timing",
+}
+_SUPPORT_READBACK_INTEGRITY_KEYS = {
+    "version",
+    "source",
+    "completeness",
+    "used_legacy_fallback",
+    "used_live_storage_repair",
+    "has_summary_storage_drift",
+    "drift_domains",
+    "missing_summary_fields",
+    "integrity_level",
+}
+_SUPPORT_RESULT_AUTHORITY_DOMAIN_NAMES = {
+    "summary",
+    "parsed_strategy",
+    "metrics",
+    "execution_model",
+    "execution_assumptions_snapshot",
+    "comparison",
+    "replay_payload",
+    "audit_rows",
+    "daily_return_series",
+    "exposure_curve",
+    "trade_rows",
+    "equity_curve",
+    "execution_trace",
+}
+_SUPPORT_RESULT_AUTHORITY_DOMAIN_KEYS = {"source", "completeness", "state", "missing", "missing_kind"}
+_TRACE_EXECUTION_MODEL_KEYS = {
+    "version",
+    "timeframe",
+    "signal_evaluation_timing",
+    "entry_timing",
+    "exit_timing",
+    "entry_fill_price_basis",
+    "exit_fill_price_basis",
+    "position_sizing",
+    "fee_model",
+    "fee_bps_per_side",
+    "slippage_model",
+    "slippage_bps_per_side",
+    "market_rules",
+}
+_TRACE_MARKET_RULE_KEYS = {
+    "trading_day_execution",
+    "terminal_bar_fill_fallback",
+    "window_end_position_handling",
+}
+_TRACE_EXECUTION_ASSUMPTION_KEYS = {
+    "summary_text",
+    "timeframe",
+    "indicator_price_basis",
+    "signal_evaluation_timing",
+    "entry_fill_timing",
+    "exit_fill_timing",
+    "default_fill_price_basis",
+    "position_sizing",
+    "fee_model",
+    "fee_bps_per_side",
+    "slippage_model",
+    "slippage_bps_per_side",
+    "benchmark_method",
+    "benchmark_price_basis",
+    "engine",
+    "signal_timing",
+    "fill_timing",
+    "fill_price",
+    "allow_same_day_exit",
+    "allow_fractional_shares",
+    "lot_size",
+    "volume_participation_limit",
+    "limit_up_down_handling",
+    "halt_handling",
+    "short_selling",
+    "market_rules",
+    "warnings",
+    "fill_model",
+}
+_TRACE_FEE_MODEL_KEYS = {"type", "commission_bps", "min_commission", "tax_bps", "sec_fee"}
+_TRACE_SLIPPAGE_MODEL_KEYS = {"type", "slippage_bps"}
+_TRACE_WARNING_KEYS = {"code", "severity", "message"}
+_TRACE_BENCHMARK_SUMMARY_KEYS = {
+    "label",
+    "code",
+    "method",
+    "requested_mode",
+    "resolved_mode",
+    "normalized_base",
+    "price_basis",
+    "start_date",
+    "end_date",
+    "start_price",
+    "end_price",
+    "return_pct",
+    "auto_resolved",
+    "fallback_used",
+    "unavailable_reason",
+}
+_TRACE_FALLBACK_KEYS = {"run_fallback", "trace_rebuilt", "provider_authority", "note"}
+_TRACE_ROW_NESTED_KEYS = {
+    "code",
+    "applied",
+    "authority",
+    "note",
+    "state",
+    "severity",
+    "message",
+    "summary_text",
+}
 
 
 def stringify_execution_trace_value(value: Any) -> str:
     if value is None:
         return ""
     return str(value)
+
+
+def _support_export_text_is_unsafe(value: Any) -> bool:
+    text = str(value or "").lower()
+    return any(marker in text for marker in _SUPPORT_EXPORT_FORBIDDEN_TEXT_MARKERS)
+
+
+def _safe_export_scalar(value: Any) -> Any:
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text or _support_export_text_is_unsafe(text):
+            return None
+        return text
+    return None
+
+
+def _safe_export_string_list(value: Any) -> list[str]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return []
+    result: list[str] = []
+    for item in value:
+        safe_item = _safe_export_scalar(item)
+        if isinstance(safe_item, str) and safe_item:
+            result.append(safe_item)
+    return result
+
+
+def _safe_export_mapping(
+    value: Any,
+    allowed_keys: set[str],
+    *,
+    list_keys: set[str] | None = None,
+) -> dict[str, Any]:
+    payload = _mapping_payload(value)
+    list_keys = list_keys or set()
+    result: dict[str, Any] = {}
+    for key in allowed_keys:
+        if key not in payload:
+            continue
+        if key in list_keys:
+            result[key] = _safe_export_string_list(payload.get(key))
+            continue
+        result[key] = _safe_export_scalar(payload.get(key))
+    return result
+
+
+def _safe_export_nested_mapping(value: Any, allowed_keys: set[str]) -> dict[str, Any]:
+    payload = _mapping_payload(value)
+    result: dict[str, Any] = {}
+    for key in allowed_keys:
+        if key not in payload:
+            continue
+        safe_value = _safe_export_scalar(payload.get(key))
+        if safe_value is not None:
+            result[key] = safe_value
+    return result
+
+
+def _safe_trace_row_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return _safe_export_nested_mapping(value, _TRACE_ROW_NESTED_KEYS)
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        safe_items = [_safe_trace_row_value(item) for item in value]
+        return [item for item in safe_items if item not in ({}, None, "")]
+    return _safe_export_scalar(value)
+
+
+def _safe_trace_export_section(value: Any, allowed_keys: set[str]) -> dict[str, Any]:
+    payload = _mapping_payload(value)
+    result: dict[str, Any] = {}
+    for key in allowed_keys:
+        if key not in payload:
+            continue
+        if key == "market_rules":
+            result[key] = _safe_export_mapping(payload.get(key), _TRACE_MARKET_RULE_KEYS)
+        elif key == "fee_model":
+            result[key] = _safe_export_mapping(payload.get(key), _TRACE_FEE_MODEL_KEYS)
+        elif key == "slippage_model":
+            result[key] = _safe_export_mapping(payload.get(key), _TRACE_SLIPPAGE_MODEL_KEYS)
+        elif key == "warnings":
+            result[key] = [
+                _safe_export_mapping(item, _TRACE_WARNING_KEYS)
+                for item in _list_payload(payload.get(key))
+                if isinstance(item, Mapping)
+            ]
+        else:
+            result[key] = _safe_export_scalar(payload.get(key))
+    return result
+
+
+def _safe_result_authority_domain(
+    value: Any,
+    *,
+    include_missing: bool,
+) -> dict[str, Any]:
+    payload = _mapping_payload(value)
+    allowed_keys = (
+        _SUPPORT_RESULT_AUTHORITY_DOMAIN_KEYS
+        if include_missing
+        else {"source", "completeness", "state"}
+    )
+    result = _safe_export_mapping(
+        payload,
+        allowed_keys,
+        list_keys={"missing"},
+    )
+    for key in ("source", "completeness", "state"):
+        if key in allowed_keys and key not in result:
+            result[key] = "unknown"
+    if include_missing:
+        result.setdefault("missing", [])
+        result.setdefault("missing_kind", "fields")
+    return result
+
+
+def _safe_result_authority_payload(
+    result_authority: Mapping[str, Any],
+    *,
+    include_missing: bool,
+) -> dict[str, Any]:
+    domains = _mapping_payload(result_authority.get("domains"))
+    safe_domains: dict[str, Any] = {}
+    for domain_name in _SUPPORT_RESULT_AUTHORITY_DOMAIN_NAMES:
+        if domain_name not in domains:
+            continue
+        safe_domains[domain_name] = _safe_result_authority_domain(
+            domains.get(domain_name),
+            include_missing=include_missing,
+        )
+    return {
+        "contract_version": _safe_export_scalar(result_authority.get("contract_version")),
+        "read_mode": _safe_export_scalar(result_authority.get("read_mode")),
+        "domains": safe_domains,
+    }
 
 
 def build_execution_trace_export_rows(
@@ -58,38 +367,28 @@ def build_execution_trace_export_rows(
             value = row.get(key)
             if key == "action_display":
                 value = value or action_formatter(str(row.get("event_type") or row.get("action") or "hold"))
-            export_row[label] = stringify_execution_trace_value(value)
+            export_row[label] = stringify_execution_trace_value(_safe_trace_row_value(value))
         export_rows.append(export_row)
     return export_rows
 
 
 def build_reproducibility_authority_summary(result_authority: Mapping[str, Any]) -> dict[str, Any]:
-    domains = dict(result_authority.get("domains") or {})
-    summarized_domains: dict[str, Any] = {}
-    for domain_name, domain_payload in domains.items():
-        domain = dict(domain_payload or {})
-        summarized_domains[str(domain_name)] = {
-            "source": domain.get("source"),
-            "completeness": domain.get("completeness"),
-            "state": domain.get("state"),
-        }
-    return {
-        "contract_version": result_authority.get("contract_version"),
-        "read_mode": result_authority.get("read_mode"),
-        "domains": summarized_domains,
-    }
+    return _safe_result_authority_payload(result_authority, include_missing=False)
 
 
 def build_execution_assumptions_fingerprint(
     execution_assumptions_snapshot: Mapping[str, Any],
     execution_assumptions: Mapping[str, Any],
 ) -> dict[str, Any]:
-    payload = dict(execution_assumptions_snapshot.get("payload") or execution_assumptions or {})
+    payload = _safe_trace_export_section(
+        execution_assumptions_snapshot.get("payload") or execution_assumptions or {},
+        _TRACE_EXECUTION_ASSUMPTION_KEYS,
+    )
     serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return {
-        "source": execution_assumptions_snapshot.get("source"),
-        "completeness": execution_assumptions_snapshot.get("completeness"),
-        "summary_text": payload.get("summary_text"),
+        "source": _safe_export_scalar(execution_assumptions_snapshot.get("source")),
+        "completeness": _safe_export_scalar(execution_assumptions_snapshot.get("completeness")),
+        "summary_text": _safe_export_scalar(payload.get("summary_text")),
         "hash_sha256": hashlib.sha256(serialized.encode("utf-8")).hexdigest() if payload else None,
     }
 
@@ -100,13 +399,19 @@ def _mapping_payload(value: Any) -> dict[str, Any]:
 
 def _text_or_unknown(value: Any) -> str:
     text = str(value or "").strip()
-    return text or "unknown"
+    if not text or _support_export_text_is_unsafe(text):
+        return "unknown"
+    return text
 
 
 def _string_list(value: Any) -> list[str]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
         return []
-    return [str(item).strip() for item in value if str(item or "").strip()]
+    return [
+        text
+        for item in value
+        if (text := str(item or "").strip()) and not _support_export_text_is_unsafe(text)
+    ]
 
 
 def _authority_allowed_value(data_quality: Mapping[str, Any]) -> bool | None:
@@ -213,15 +518,21 @@ def build_support_bundle_manifest(run: Mapping[str, Any]) -> dict[str, Any]:
             "no_result_reason": run.get("no_result_reason"),
             "no_result_message": run.get("no_result_message"),
         },
-        "run_timing": dict(run.get("run_timing") or {}),
-        "run_diagnostics": dict(run.get("run_diagnostics") or {}),
-        "artifact_availability": dict(run.get("artifact_availability") or {}),
-        "readback_integrity": dict(run.get("readback_integrity") or {}),
-        "result_authority": {
-            "contract_version": result_authority.get("contract_version"),
-            "read_mode": result_authority.get("read_mode"),
-            "domains": dict(result_authority.get("domains") or {}),
-        },
+        "run_timing": _safe_export_mapping(run.get("run_timing"), _SUPPORT_RUN_TIMING_KEYS),
+        "run_diagnostics": _safe_export_mapping(
+            run.get("run_diagnostics"),
+            _SUPPORT_RUN_DIAGNOSTICS_KEYS,
+        ),
+        "artifact_availability": _safe_export_mapping(
+            run.get("artifact_availability"),
+            _SUPPORT_ARTIFACT_AVAILABILITY_KEYS,
+        ),
+        "readback_integrity": _safe_export_mapping(
+            run.get("readback_integrity"),
+            _SUPPORT_READBACK_INTEGRITY_KEYS,
+            list_keys={"drift_domains", "missing_summary_fields"},
+        ),
+        "result_authority": _safe_result_authority_payload(result_authority, include_missing=True),
         "artifact_counts": {
             "status_history_count": len(list(run.get("status_history") or [])),
             "warning_count": len(list(run.get("warnings") or [])),
@@ -260,10 +571,20 @@ def build_support_bundle_reproducibility_manifest(run: Mapping[str, Any]) -> dic
             "benchmark_mode": run.get("benchmark_mode"),
             "benchmark_code": run.get("benchmark_code"),
         },
-        "run_diagnostics": dict(run.get("run_diagnostics") or {}),
-        "run_timing": dict(run.get("run_timing") or {}),
-        "artifact_availability": dict(run.get("artifact_availability") or {}),
-        "readback_integrity": dict(run.get("readback_integrity") or {}),
+        "run_diagnostics": _safe_export_mapping(
+            run.get("run_diagnostics"),
+            _SUPPORT_RUN_DIAGNOSTICS_KEYS,
+        ),
+        "run_timing": _safe_export_mapping(run.get("run_timing"), _SUPPORT_RUN_TIMING_KEYS),
+        "artifact_availability": _safe_export_mapping(
+            run.get("artifact_availability"),
+            _SUPPORT_ARTIFACT_AVAILABILITY_KEYS,
+        ),
+        "readback_integrity": _safe_export_mapping(
+            run.get("readback_integrity"),
+            _SUPPORT_READBACK_INTEGRITY_KEYS,
+            list_keys={"drift_domains", "missing_summary_fields"},
+        ),
         "execution_assumptions_fingerprint": build_execution_assumptions_fingerprint(
             execution_assumptions_snapshot=execution_assumptions_snapshot,
             execution_assumptions=execution_assumptions,
@@ -864,16 +1185,28 @@ def build_execution_trace_export_json_payload(
         raise ValueError(f"Run {run.get('id')} has no audit rows to export.")
 
     return {
-        "version": execution_trace.get("version"),
-        "source": execution_trace.get("source"),
-        "completeness": execution_trace.get("completeness"),
-        "missing_fields": list(execution_trace.get("missing_fields") or []),
+        "version": _safe_export_scalar(execution_trace.get("version")),
+        "source": _safe_export_scalar(execution_trace.get("source")),
+        "completeness": _safe_export_scalar(execution_trace.get("completeness")),
+        "missing_fields": _safe_export_string_list(execution_trace.get("missing_fields")),
         "trace_rows": export_rows,
-        "assumptions": dict(execution_trace.get("assumptions_defaults") or {}),
-        "execution_model": dict(execution_trace.get("execution_model") or {}),
-        "execution_assumptions": dict(execution_trace.get("execution_assumptions") or {}),
-        "benchmark_summary": dict(run.get("benchmark_summary") or {}),
-        "fallback": dict(execution_trace.get("fallback") or {}),
+        "assumptions": _safe_trace_export_section(
+            execution_trace.get("assumptions_defaults"),
+            _TRACE_EXECUTION_ASSUMPTION_KEYS,
+        ),
+        "execution_model": _safe_trace_export_section(
+            execution_trace.get("execution_model"),
+            _TRACE_EXECUTION_MODEL_KEYS,
+        ),
+        "execution_assumptions": _safe_trace_export_section(
+            execution_trace.get("execution_assumptions"),
+            _TRACE_EXECUTION_ASSUMPTION_KEYS,
+        ),
+        "benchmark_summary": _safe_trace_export_section(
+            run.get("benchmark_summary"),
+            _TRACE_BENCHMARK_SUMMARY_KEYS,
+        ),
+        "fallback": _safe_trace_export_section(execution_trace.get("fallback"), _TRACE_FALLBACK_KEYS),
     }
 
 

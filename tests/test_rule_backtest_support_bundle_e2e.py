@@ -92,6 +92,15 @@ RAW_PROVIDER_SENTINELS = (
     "PASSWORD_VALUE_SHOULD_NOT_LEAK",
 )
 
+SYNTHETIC_SUPPORT_EXPORT_RAW_MARKERS = (
+    "synthetic_cache_key",
+    "synthetic_provider_url",
+    "synthetic_request_id",
+    "synthetic_stack_trace",
+    "synthetic_debug_reason",
+    "synthetic_execution_trace_detail",
+)
+
 FORBIDDEN_EXPORT_TEXT_MARKERS = (
     "broker_credentials",
     "brokerorderpayload",
@@ -153,6 +162,8 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         return None
 
     def setUp(self) -> None:
+        self._old_admin_auth_enabled = os.environ.get("ADMIN_AUTH_ENABLED")
+        os.environ["ADMIN_AUTH_ENABLED"] = "false"
         _reset_auth_globals()
         self.temp_dir = tempfile.TemporaryDirectory()
         self.data_dir = Path(self.temp_dir.name)
@@ -231,6 +242,11 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         self.client.close()
         DatabaseManager.reset_instance()
         Config.reset_instance()
+        if self._old_admin_auth_enabled is None:
+            os.environ.pop("ADMIN_AUTH_ENABLED", None)
+        else:
+            os.environ["ADMIN_AUTH_ENABLED"] = self._old_admin_auth_enabled
+        _reset_auth_globals()
         os.environ.pop("ENV_FILE", None)
         os.environ.pop("DATABASE_PATH", None)
         self.temp_dir.cleanup()
@@ -279,6 +295,8 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
         for sentinel in RAW_PROVIDER_SENTINELS:
             self.assertNotIn(sentinel, serialized)
+        for marker in SYNTHETIC_SUPPORT_EXPORT_RAW_MARKERS:
+            self.assertNotIn(marker, serialized)
         normalized = serialized.lower()
         for marker in FORBIDDEN_EXPORT_TEXT_MARKERS:
             self.assertNotIn(marker.lower(), normalized)
@@ -1083,6 +1101,85 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         assert run_row is not None
 
         summary = json.loads(run_row.summary_json)
+        execution_trace = dict(summary.get("execution_trace") or {})
+        trace_rows = list(execution_trace.get("rows") or [])
+        if trace_rows:
+            first_row = dict(trace_rows[0] or {})
+            first_row.update(
+                {
+                    "synthetic_execution_trace_detail": "synthetic_execution_trace_detail",
+                    "notes": "synthetic_debug_reason",
+                    "fallback": {
+                        "code": "open_missing_close_fallback",
+                        "applied": True,
+                        "authority": "stored_trace_row",
+                        "synthetic_provider_url": "synthetic_provider_url",
+                    },
+                    "assumptions_defaults": {
+                        "summary_text": "row assumptions",
+                        "synthetic_cache_key": "synthetic_cache_key",
+                    },
+                }
+            )
+            trace_rows[0] = first_row
+            execution_trace["rows"] = trace_rows
+        execution_trace["missing_fields"] = ["synthetic_debug_reason"]
+        execution_trace["assumptions_defaults"] = {
+            **dict(execution_trace.get("assumptions_defaults") or {}),
+            "synthetic_cache_key": "synthetic_cache_key",
+        }
+        execution_trace["execution_model"] = {
+            **dict(execution_trace.get("execution_model") or {}),
+            "synthetic_provider_url": "synthetic_provider_url",
+        }
+        execution_trace["execution_assumptions"] = {
+            **dict(execution_trace.get("execution_assumptions") or {}),
+            "synthetic_request_id": "synthetic_request_id",
+        }
+        execution_trace["fallback"] = {
+            **dict(execution_trace.get("fallback") or {}),
+            "synthetic_execution_trace_detail": "synthetic_execution_trace_detail",
+        }
+        summary["execution_trace"] = execution_trace
+
+        run_timing = dict(summary.get("run_timing") or {})
+        run_timing["synthetic_request_id"] = "synthetic_request_id"
+        summary["run_timing"] = run_timing
+
+        run_diagnostics = dict(summary.get("run_diagnostics") or {})
+        run_diagnostics["synthetic_debug_reason"] = "synthetic_debug_reason"
+        summary["run_diagnostics"] = run_diagnostics
+
+        artifact_availability = dict(summary.get("artifact_availability") or {})
+        artifact_availability["synthetic_cache_key"] = "synthetic_cache_key"
+        summary["artifact_availability"] = artifact_availability
+
+        readback_integrity = dict(summary.get("readback_integrity") or {})
+        readback_integrity["synthetic_stack_trace"] = "synthetic_stack_trace"
+        summary["readback_integrity"] = readback_integrity
+
+        result_authority = dict(summary.get("result_authority") or {})
+        domains = dict(result_authority.get("domains") or {})
+        execution_trace_authority = dict(domains.get("execution_trace") or {})
+        execution_trace_authority["synthetic_provider_url"] = "synthetic_provider_url"
+        execution_trace_authority[
+            "synthetic_execution_trace_detail"
+        ] = "synthetic_execution_trace_detail"
+        domains["execution_trace"] = execution_trace_authority
+        result_authority["domains"] = domains
+        summary["result_authority"] = result_authority
+
+        benchmark_summary = dict(summary.get("benchmark_summary") or {})
+        benchmark_summary["synthetic_stack_trace"] = "synthetic_stack_trace"
+        summary["benchmark_summary"] = benchmark_summary
+
+        data_quality = dict(summary.get("data_quality") or {})
+        data_quality["synthetic_cache_key"] = "synthetic_cache_key"
+        data_quality["authority_reason_codes"] = list(data_quality.get("authority_reason_codes") or []) + [
+            "synthetic_debug_reason"
+        ]
+        summary["data_quality"] = data_quality
+
         summary.update(
             {
                 "raw_provider_payload": "RAW_PROVIDER_PAYLOAD_SHOULD_NOT_LEAK",
@@ -1124,6 +1221,20 @@ class RuleBacktestSupportBundleE2ETestCase(unittest.TestCase):
         self.assertEqual(trace_assumptions["entry_fill_timing"], "next_bar_open")
         self.assertEqual(trace_assumptions["fee_model"]["commission_bps"], 1.5)
         self.assertEqual(trace_assumptions["slippage_model"]["slippage_bps"], 2.5)
+        self.assertIn("run_fallback", payloads["trace_json"]["fallback"])
+        self.assertIn("trace_rebuilt", payloads["trace_json"]["fallback"])
+        self.assertEqual(
+            payloads["manifest"]["result_authority"]["domains"]["execution_trace"]["source"],
+            "summary.execution_trace",
+        )
+        self.assertEqual(
+            payloads["reproducibility"]["result_authority"]["domains"]["execution_trace"],
+            {
+                "source": "summary.execution_trace",
+                "completeness": "complete",
+                "state": "available",
+            },
+        )
 
     def test_support_bundle_e2e_insufficient_history_export_surface_is_sanitized(self) -> None:
         _, response = self._run_insufficient_history_backtest()
