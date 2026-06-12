@@ -31,6 +31,7 @@ except ModuleNotFoundError:  # pragma: no cover - package import fallback
 SCHEMA_VERSION = "wolfystock_ws2_target_environment_evidence_validation_v1"
 ARTIFACT_VERSION = "wolfystock_ws2_target_environment_evidence_v1"
 VALIDATION_PROFILE = "PROFILE_DURABLE_PROTECTED"
+ACCEPTANCE_EVIDENCE_PROFILE = "PROFILE_WS2_ACCEPTANCE_EVIDENCE_SCOPED"
 REDACTION_VERSION = "ws2_target_environment_evidence_redaction_v1"
 
 ALLOWED_EVIDENCE_CLASSES = {
@@ -87,25 +88,85 @@ TOPOLOGY_FIELDS = (
 )
 REQUIRED_CHECK_FIELDS = (
     "apiASubmitTransportExercised",
+    "syntheticWorkerLeaseFlowVerified",
     "workerLeaseAcquired",
     "progressPersisted",
+    "apiBDurableStatusReadback",
+    "apiBPollingReplayVerified",
     "apiBDurablePollingReadback",
+    "ownerHiddenStatusVerified",
+    "ownerHiddenPollingVerified",
     "retryFailureSafetyVerified",
+    "leaseExpiryRecoveryVerified",
+    "staleWorkerWriteRejected",
+    "retryCapVerified",
+    "terminalFailurePollable",
     "ownerIsolationVerified",
     "sanitizedFailureOutputVerified",
     "sseLimitationRecorded",
+    "crossInstanceSseNotClaimed",
     "durablePollingBaselineRecorded",
 )
 SUMMARY_FIELDS = (
     "apiASubmitTransport",
     "workerLease",
     "progressPersistence",
+    "apiBDurableStatusReadback",
+    "apiBPollingReplay",
     "apiBDurablePolling",
+    "ownerHiddenStatus",
+    "ownerHiddenPolling",
     "retryFailureSafety",
+    "leaseExpiryRecovery",
+    "staleWorkerWriteRejection",
     "ownerIsolation",
     "sanitizedFailureOutput",
     "sseLimitation",
     "reviewNotes",
+)
+ACCEPTANCE_DIMENSIONS = (
+    (
+        "api_a_submit",
+        "API A submit",
+        ("apiASubmitTransportExercised",),
+    ),
+    (
+        "worker_lease_synthetic_worker",
+        "Worker lease or synthetic worker behavior",
+        ("syntheticWorkerLeaseFlowVerified", "workerLeaseAcquired", "progressPersisted"),
+    ),
+    (
+        "api_b_durable_read",
+        "API B durable read",
+        ("apiBDurableStatusReadback",),
+    ),
+    (
+        "polling_replay",
+        "Polling replay",
+        ("apiBPollingReplayVerified", "apiBDurablePollingReadback", "durablePollingBaselineRecorded"),
+    ),
+    (
+        "owner_isolation",
+        "Owner isolation",
+        ("ownerHiddenStatusVerified", "ownerHiddenPollingVerified", "ownerIsolationVerified"),
+    ),
+    (
+        "retry_failure_safety",
+        "Retry and failure safety",
+        (
+            "retryFailureSafetyVerified",
+            "leaseExpiryRecoveryVerified",
+            "staleWorkerWriteRejected",
+            "retryCapVerified",
+            "terminalFailurePollable",
+            "sanitizedFailureOutputVerified",
+        ),
+    ),
+    (
+        "sse_limitation_handling",
+        "Explicit SSE limitation handling",
+        ("sseLimitationRecorded", "crossInstanceSseNotClaimed", "durablePollingBaselineRecorded"),
+    ),
 )
 
 SAFE_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,159}$")
@@ -309,10 +370,47 @@ def _artifact_status(review_status: str, accepted_complete: bool) -> str:
     return "needs-review"
 
 
-def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, Any], dict[str, bool], str]:
+def _acceptance_dimension_matrix(
+    *,
+    checks: dict[str, Any],
+    boundary: dict[str, Any],
+    topology: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    synthetic_evidence = (
+        boundary.get("syntheticLocalDryRunEvidence") is True
+        or boundary.get("ciSyntheticEvidence") is True
+    )
+    matrix: dict[str, dict[str, Any]] = {}
+    for dimension_id, label, required_checks in ACCEPTANCE_DIMENSIONS:
+        passed = all(checks.get(field) is True for field in required_checks)
+        entry: dict[str, Any] = {
+            "label": label,
+            "requiredChecks": list(required_checks),
+            "passed": passed,
+            "targetEnvironmentEvidence": boundary.get("targetEnvironmentEvidence") is True,
+            "acceptedStagingEvidence": boundary.get("acceptedStagingEvidence") is True,
+            "syntheticEvidence": synthetic_evidence,
+            "publicLaunchReady": False,
+        }
+        if dimension_id == "sse_limitation_handling":
+            entry.update(
+                {
+                    "sseBroadcastScope": str(topology.get("sseBroadcastScope") or "<missing>"),
+                    "durablePollingBaseline": topology.get("durablePollingBaseline") is True,
+                    "externalSseReplayImplemented": topology.get("externalSseReplayImplemented") is True,
+                    "productionQueueBrokerCutover": topology.get("productionQueueBrokerCutover") is True,
+                }
+            )
+        matrix[dimension_id] = entry
+    return matrix
+
+
+def _validate_artifact(
+    artifact: Any,
+) -> tuple[list[dict[str, str]], dict[str, Any], dict[str, bool], dict[str, dict[str, Any]], str]:
     findings: list[dict[str, str]] = []
     if not isinstance(artifact, dict):
-        return [_finding("$", "artifact_must_be_json_object")], {}, {}, "invalid"
+        return [_finding("$", "artifact_must_be_json_object")], {}, {}, {}, "invalid"
 
     for field in REQUIRED_FIELDS:
         if field not in artifact:
@@ -467,6 +565,11 @@ def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, A
             for item in deduped_findings
         ),
     }
+    acceptance_matrix = _acceptance_dimension_matrix(
+        checks=checks,
+        boundary=boundary,
+        topology=topology,
+    )
 
     sanitized_artifact = {
         "artifactVersion": str(artifact_version or "<missing>"),
@@ -508,17 +611,18 @@ def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, A
         "evidenceRedactionVersion": str(redaction_version or "<missing>"),
     }
     artifact_status = _artifact_status(review_status, accepted_complete)
-    return deduped_findings, sanitized_artifact, checks_summary, artifact_status
+    return deduped_findings, sanitized_artifact, checks_summary, acceptance_matrix, artifact_status
 
 
 def validate_ws2_target_environment_evidence(artifact: Any) -> dict[str, Any]:
-    findings, artifact_summary, checks_summary, artifact_status = _validate_artifact(artifact)
+    findings, artifact_summary, checks_summary, acceptance_matrix, artifact_status = _validate_artifact(artifact)
     passed = not findings
     return {
         "schemaVersion": SCHEMA_VERSION,
         "status": "pass" if passed else "fail",
         "artifactStatus": artifact_status,
         "validationProfile": VALIDATION_PROFILE,
+        "acceptanceEvidenceProfile": ACCEPTANCE_EVIDENCE_PROFILE,
         "advisoryOnly": True,
         "manualReviewRequired": True,
         "launchAcceptanceIntegrated": False,
@@ -526,6 +630,7 @@ def validate_ws2_target_environment_evidence(artifact: Any) -> dict[str, Any]:
         "networkCallsExecutedByValidator": False,
         "publicLaunchReady": False,
         "checks": checks_summary,
+        "acceptanceDimensions": acceptance_matrix,
         "artifact": artifact_summary,
         "findings": findings,
     }

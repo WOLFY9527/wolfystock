@@ -144,8 +144,12 @@ Status:
   `python3 scripts/ws2_target_environment_evidence_check.py <sanitized-ws2-target-environment-evidence.json>`;
   the template lives at
   `docs/audits/ws2-target-environment-evidence-template.json`. This checker
-  validates only operator-supplied sanitized API A/B evidence and does not run
-  staging calls, create evidence, change runtime behavior, or approve launch.
+  validates only operator-supplied sanitized API A/B evidence and now emits a
+  scoped acceptance-dimension matrix for API A submit, synthetic worker/lease
+  flow, API B durable status readback, polling replay, owner-hidden
+  status/polling, retry/failure safety, and explicit process-local SSE
+  limitation handling. It does not run staging calls, create evidence, change
+  runtime behavior, or approve launch.
 - [x] Current process-local `AnalysisTaskQueue` and SSE remain the default.
 
 Remaining blockers:
@@ -162,6 +166,10 @@ Remaining blockers:
 - [ ] A real sanitized WS2 target-environment artifact must be filled from the
   staging/API A+B run and accepted by reviewers; placeholder, fixture-only,
   local, or CI synthetic evidence does not close this gate.
+- [ ] Each `PROFILE_WS2_ACCEPTANCE_EVIDENCE_SCOPED` acceptance dimension must
+  be backed by operator-filled target-environment summaries; passing local
+  synthetic evidence or the offline checker alone is not accepted staging
+  readiness.
 - [ ] External SSE replay/cutover remains future work.
 - [ ] No production queue/broker cutover has been approved.
 

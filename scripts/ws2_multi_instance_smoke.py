@@ -36,6 +36,7 @@ from src.storage import DatabaseManager  # noqa: E402
 
 SCHEMA_VERSION = "wolfystock_ws2_multi_instance_smoke_preflight_v1"
 VALIDATION_PROFILE = "PROFILE_DURABLE_PROTECTED"
+ACCEPTANCE_EVIDENCE_PROFILE = "PROFILE_WS2_ACCEPTANCE_EVIDENCE_SCOPED"
 PASS_STATUS = "preflight-pass-review-required"
 FAIL_STATUS = "preflight-fail-review-required"
 DRY_RUN_STATUS = "dry-run-review-required"
@@ -151,6 +152,7 @@ def _base_summary(
     return {
         "schemaVersion": SCHEMA_VERSION,
         "validationProfile": VALIDATION_PROFILE,
+        "acceptanceEvidenceProfile": ACCEPTANCE_EVIDENCE_PROFILE,
         "generatedAt": _now_iso(),
         "preflightStatus": status,
         "mode": mode,
@@ -169,10 +171,12 @@ def _base_summary(
         "multiInstanceRiskAccepted": False,
         "evidenceBoundary": {
             "acceptedStagingEvidence": False,
+            "ciSyntheticEvidence": False,
             "durablePollingBaseline": True,
             "liveStagingCallsImplemented": False,
             "publicLaunchReady": False,
             "sseCrossInstanceReliable": False,
+            "syntheticLocalDryRunEvidence": mode == "synthetic",
             "targetEnvironmentEvidence": False,
         },
         "sseLimitation": {

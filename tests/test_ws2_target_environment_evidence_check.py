@@ -19,13 +19,23 @@ TEMPLATE = (
 
 REQUIRED_CHECK_KEYS = {
     "apiASubmitTransportExercised",
+    "syntheticWorkerLeaseFlowVerified",
     "workerLeaseAcquired",
     "progressPersisted",
+    "apiBDurableStatusReadback",
+    "apiBPollingReplayVerified",
     "apiBDurablePollingReadback",
+    "ownerHiddenStatusVerified",
+    "ownerHiddenPollingVerified",
     "retryFailureSafetyVerified",
+    "leaseExpiryRecoveryVerified",
+    "staleWorkerWriteRejected",
+    "retryCapVerified",
+    "terminalFailurePollable",
     "ownerIsolationVerified",
     "sanitizedFailureOutputVerified",
     "sseLimitationRecorded",
+    "crossInstanceSseNotClaimed",
     "durablePollingBaselineRecorded",
 }
 
@@ -78,21 +88,37 @@ def _artifact(**overrides: object) -> dict[str, Any]:
         },
         "checks": {
             "apiASubmitTransportExercised": True,
+            "syntheticWorkerLeaseFlowVerified": True,
             "workerLeaseAcquired": True,
             "progressPersisted": True,
+            "apiBDurableStatusReadback": True,
+            "apiBPollingReplayVerified": True,
             "apiBDurablePollingReadback": True,
+            "ownerHiddenStatusVerified": True,
+            "ownerHiddenPollingVerified": True,
             "retryFailureSafetyVerified": True,
+            "leaseExpiryRecoveryVerified": True,
+            "staleWorkerWriteRejected": True,
+            "retryCapVerified": True,
+            "terminalFailurePollable": True,
             "ownerIsolationVerified": True,
             "sanitizedFailureOutputVerified": True,
             "sseLimitationRecorded": True,
+            "crossInstanceSseNotClaimed": True,
             "durablePollingBaselineRecorded": True,
         },
         "summaries": {
             "apiASubmitTransport": "API A accepted a synthetic analysis submit over the staging HTTPS API.",
             "workerLease": "One worker acquired a bounded lease and duplicate active lease was blocked.",
             "progressPersistence": "Durable progress rows were observed with bounded sequence metadata.",
+            "apiBDurableStatusReadback": "API B read the durable task status without API A process memory.",
+            "apiBPollingReplay": "API B replayed durable progress events after a sequence cursor.",
             "apiBDurablePolling": "API B read durable status and replayed progress after a cursor.",
+            "ownerHiddenStatus": "Cross-owner status read returned hidden not-found.",
+            "ownerHiddenPolling": "Cross-owner polling read returned hidden not-found.",
             "retryFailureSafety": "Retry cap and terminal failure behavior were summarized with safe reason codes.",
+            "leaseExpiryRecovery": "A second worker reclaimed the task after lease expiry.",
+            "staleWorkerWriteRejection": "The stale worker could not write terminal state after reclaim.",
             "ownerIsolation": "Cross-owner status and polling reads returned hidden not-found responses.",
             "sanitizedFailureOutput": "Failure output contained only safe reason codes and no traceback text.",
             "sseLimitation": "Process-local SSE limitation remained recorded; durable polling was the baseline.",
@@ -138,6 +164,7 @@ def test_accepts_sanitized_accepted_staging_api_ab_evidence(tmp_path: Path) -> N
     assert payload["status"] == "pass"
     assert payload["artifactStatus"] == "accepted-staging-review-required"
     assert payload["validationProfile"] == "PROFILE_DURABLE_PROTECTED"
+    assert payload["acceptanceEvidenceProfile"] == "PROFILE_WS2_ACCEPTANCE_EVIDENCE_SCOPED"
     assert payload["advisoryOnly"] is True
     assert payload["manualReviewRequired"] is True
     assert payload["launchAcceptanceIntegrated"] is False
@@ -148,6 +175,30 @@ def test_accepts_sanitized_accepted_staging_api_ab_evidence(tmp_path: Path) -> N
     assert payload["checks"]["acceptedStagingEvidenceComplete"] is True
     assert payload["checks"]["sseLimitationAndPollingBaselineRecorded"] is True
     assert payload["checks"]["noLaunchApprovalClaim"] is True
+    assert set(payload["acceptanceDimensions"]) == {
+        "api_a_submit",
+        "worker_lease_synthetic_worker",
+        "api_b_durable_read",
+        "polling_replay",
+        "owner_isolation",
+        "retry_failure_safety",
+        "sse_limitation_handling",
+    }
+    assert all(dimension["passed"] is True for dimension in payload["acceptanceDimensions"].values())
+    assert all(
+        dimension["publicLaunchReady"] is False
+        for dimension in payload["acceptanceDimensions"].values()
+    )
+    assert payload["acceptanceDimensions"]["api_b_durable_read"]["requiredChecks"] == [
+        "apiBDurableStatusReadback"
+    ]
+    assert payload["acceptanceDimensions"]["polling_replay"]["requiredChecks"] == [
+        "apiBPollingReplayVerified",
+        "apiBDurablePollingReadback",
+        "durablePollingBaselineRecorded",
+    ]
+    assert payload["acceptanceDimensions"]["sse_limitation_handling"]["sseBroadcastScope"] == "process-local"
+    assert payload["acceptanceDimensions"]["sse_limitation_handling"]["externalSseReplayImplemented"] is False
     assert payload["artifact"]["targetEnvironmentLabel"] == "staging-api-ab-primary"
     assert payload["artifact"]["runId"] == "ws2-ab-run-20260612-001"
     assert payload["artifact"]["reviewerAcceptanceStatus"] == "accepted-staging"
@@ -175,11 +226,13 @@ def test_sanitized_template_validates_as_needs_review_without_acceptance() -> No
     assert payload["artifact"]["evidenceBoundary"]["acceptedStagingEvidence"] is False
     assert payload["artifact"]["evidenceBoundary"]["publicLaunchApproval"] is False
     assert payload["checks"]["acceptedStagingEvidenceComplete"] is False
+    assert payload["acceptanceDimensions"]["api_a_submit"]["passed"] is False
+    assert payload["acceptanceDimensions"]["sse_limitation_handling"]["passed"] is True
 
 
 def test_accepted_staging_requires_all_target_evidence_fields_true(tmp_path: Path) -> None:
     artifact = _artifact()
-    artifact["checks"]["workerLeaseAcquired"] = False
+    artifact["checks"]["apiBPollingReplayVerified"] = False
     path = _write_json(tmp_path, artifact)
 
     result = _run_validator(path)
@@ -190,6 +243,7 @@ def test_accepted_staging_requires_all_target_evidence_fields_true(tmp_path: Pat
     assert {
         finding["reasonCode"] for finding in payload["findings"]
     } >= {"accepted_staging_requires_required_checks_true"}
+    assert payload["acceptanceDimensions"]["polling_replay"]["passed"] is False
 
 
 def test_secret_raw_debug_and_launch_claims_are_rejected_without_echoing_values(tmp_path: Path) -> None:
