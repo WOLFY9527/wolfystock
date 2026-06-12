@@ -115,6 +115,12 @@ relevant runbook context:
 - `release_gate_summary.sh`: informational release summary and optional
   sanitized GO/NO-GO JSON. Safe usage: summarize evidence posture; it does not
   approve a release and does not run the full backend gate by default.
+- `private_beta_uat_evidence_check.py`: offline validation for one
+  operator-filled, sanitized small private-beta UAT evidence JSON record. Safe
+  usage: validate candidate commit/clean-tree, runtime owner, route boundary,
+  raw/advice leakage, console/network/overflow, branch-aware secret scan, and
+  rollback fields. It does not run browser UAT, call networks, read
+  credentials, mutate runtime state, or approve public launch.
 - `production_config_readiness.py`, `launch_acceptance_evidence.py`,
   `incident_response_evidence.py`, and the `*_operator_*` / `*_evidence_*`
   validators: offline validation of sanitized release/operator artifacts. Safe
