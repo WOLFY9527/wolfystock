@@ -111,6 +111,9 @@ _OPERATOR_ISSUE_GUIDANCE = {
     ),
 }
 _OPERATOR_SEVERITY_ORDER = {"critical": 0, "error": 1, "warning": 2, "info": 3}
+_OPERATOR_SUMMARY_DISPLAY_POLICY = "safe_summary_only"
+_OPERATOR_DETAIL_EXPORT_POLICY = "operator_explicit_action"
+_OPERATOR_SAFE_HANDLE_POLICY = "summary_omits_raw_handles"
 
 
 class AdminOperatorIssueRollupService:
@@ -462,6 +465,7 @@ class AdminOperatorIssueRollupService:
                 event_id
                 for _, event_id in sorted(bucket["sample_events"], key=lambda entry: (entry[0], entry[1]), reverse=True)[:5]
             ]
+            related_event_summary = "related_events_recorded" if sample_event_ids else "no_related_events_recorded"
             items.append(
                 {
                     "issue_id": bucket["issue_id"],
@@ -483,6 +487,11 @@ class AdminOperatorIssueRollupService:
                     "freshness_status": bucket["freshness_status"],
                     "status": bucket["status"],
                     "operator_guidance": bucket["operator_guidance"],
+                    "summary_display_policy": _OPERATOR_SUMMARY_DISPLAY_POLICY,
+                    "detail_export_policy": _OPERATOR_DETAIL_EXPORT_POLICY,
+                    "safe_handle_policy": _OPERATOR_SAFE_HANDLE_POLICY,
+                    "related_event_summary": related_event_summary,
+                    "operator_detail_available": bool(sample_event_ids),
                 }
             )
         items.sort(

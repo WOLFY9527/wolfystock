@@ -344,6 +344,44 @@ const rawSessions = [
   },
 ];
 
+const rawSessionDetail = {
+  ...rawSessions[0],
+  queryId: 'query-operator-detail',
+  readableSummary: {
+    ...rawSessions[0].readableSummary,
+    actorDisplay: 'admin',
+    actorRole: 'admin',
+    requestId: 'request:sha256:abcdef1234567890',
+    traceId: 'trace:sha256:1234567890abcdef',
+    summaryParagraph: 'Operator detail available after explicit action',
+  },
+  events: [
+    {
+      id: 42,
+      phase: 'data_source',
+      status: 'failed',
+      truthLevel: 'actual',
+      message: 'operator detail marker SYNTHETIC_ADMIN_DETAIL_MARKER token=FRONTENDTOKEN',
+      detail: {
+        safeOperatorDetail: 'operator detail marker SYNTHETIC_ADMIN_DETAIL_MARKER',
+        rawPayload: 'RAW_PAYLOAD_MARKER',
+        traceback: 'TRACEBACK_MARKER',
+        databaseDsn: 'postgresql://reader:FRONTENDSECRET@db.example/logs',
+        apiKey: 'FRONTENDSECRET',
+      },
+    },
+  ],
+  operationDetail: {
+    operationType: 'Operator detail export',
+    target: 'raw-timeout',
+    status: 'failed',
+    keyMetric: 'operator detail marker SYNTHETIC_ADMIN_DETAIL_MARKER',
+    diagnostics: [
+      { message: 'operator detail marker SYNTHETIC_ADMIN_DETAIL_MARKER', rawResponse: 'RAW_RESPONSE_MARKER' },
+    ],
+  },
+};
+
 const dataMissingDrilldown = [
   {
     affectedSurface: 'Home quote panel',
@@ -577,7 +615,7 @@ describe('AdminLogsPage', () => {
         latestCriticalAt: null,
       },
     });
-    getSessionDetail.mockResolvedValue({ ...rawSessions[0], events: [], operationDetail: {} });
+    getSessionDetail.mockResolvedValue(rawSessionDetail);
     getStorageSummary.mockResolvedValue({
       totalLogCount: 120000,
       totalEventCount: 180000,
@@ -899,6 +937,37 @@ describe('AdminLogsPage', () => {
       category: 'data_source',
       query: expect.stringContaining('finnhub'),
     })));
+  });
+
+  it('keeps synthetic operator markers out of default admin summaries while preserving explicit actions', async () => {
+    listOperatorIssueRollup.mockResolvedValueOnce({
+      total: 1,
+      items: [
+        {
+          ...operatorIssueRollup[0],
+          issueTitle: 'Provider timeout · SYNTHETIC_ADMIN_DETAIL_MARKER',
+          operatorGuidance: 'Open sample_event_ids evt-sensitive-123 only from explicit operator detail export.',
+          sampleEventIds: ['evt-sensitive-123'],
+          reasonCode: 'provider_timeout',
+          eventType: 'DataSourceFallbackServed',
+          freshnessStatus: 'synthetic',
+        },
+      ],
+    });
+
+    render(<AdminLogsPage />);
+
+    const summaryCopy = [
+      (await screen.findByTestId('admin-logs-l0-overview-strip')).textContent || '',
+      screen.getByTestId('admin-logs-operator-issue-rollup').textContent || '',
+      screen.getByTestId('admin-logs-health-summary').textContent || '',
+      screen.getByTestId('business-events-table-shell').textContent || '',
+      screen.getByTestId('business-events-mobile-list').textContent || '',
+    ].join(' ');
+    expect(summaryCopy).toContain('关联事件已记录');
+    expect(summaryCopy).toContain('筛选日志');
+    expect(screen.getByRole('tab', { name: '原始日志' })).toBeInTheDocument();
+    expect(summaryCopy).not.toMatch(/SYNTHETIC_ADMIN_DETAIL_MARKER|sample_event_ids|evt-sensitive-123|DataSourceFallbackServed|reasonCode|synthetic/i);
   });
 
   it('opens the incident timeline drawer from data-missing drilldown samples', async () => {
@@ -1487,6 +1556,48 @@ describe('AdminLogsPage', () => {
     expect(screen.getByTestId('raw-logs-table-inner')).toHaveClass('min-w-[880px]');
     expect(rawShell.querySelector('span[aria-hidden="true"]')).toHaveClass('bg-gradient-to-l');
     await waitFor(() => expect(listSessions).toHaveBeenCalledWith(expect.objectContaining({ minLevel: 'WARNING' })));
+  });
+
+  it('keeps operator detail copy and export behind explicit raw-session actions', async () => {
+    let exportedBlob: Blob | undefined;
+    const createObjectUrlMock = vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      exportedBlob = blob as Blob;
+      return 'blob:admin-operator-detail';
+    });
+    const revokeObjectUrlMock = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const clickMock = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    render(<AdminLogsPage />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: '原始日志' }));
+    const rawRow = (await screen.findByText('数据源响应超时')).closest('[data-testid="admin-log-row"]');
+    expect(rawRow).not.toBeNull();
+    fireEvent.click(within(rawRow as HTMLElement).getByRole('button', { name: translate('zh', 'adminLogs.viewDetails') }));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('admin-logs-copy-operator-detail')).toBeInTheDocument();
+    expect(screen.getByTestId('admin-logs-export-operator-detail')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('admin-logs-copy-operator-detail'));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('"detailExportPolicy": "operator_explicit_action"')));
+    const copied = String((navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] || '');
+    expect(copied).toContain('SYNTHETIC_ADMIN_DETAIL_MARKER');
+    expect(copied).toContain('"safeHandlePolicy": "explicit_operator_detail_export"');
+    expect(copied).not.toContain('RAW_PAYLOAD_MARKER');
+    expect(copied).not.toContain('RAW_RESPONSE_MARKER');
+    expect(copied).not.toContain('TRACEBACK_MARKER');
+    expect(copied).not.toContain('FRONTENDSECRET');
+    expect(copied).not.toContain('FRONTENDTOKEN');
+
+    fireEvent.click(screen.getByTestId('admin-logs-export-operator-detail'));
+    expect(createObjectUrlMock).toHaveBeenCalledTimes(1);
+    expect(clickMock).toHaveBeenCalledTimes(1);
+    expect(revokeObjectUrlMock).toHaveBeenCalledWith('blob:admin-operator-detail');
+    const exportedText = await exportedBlob?.text();
+    expect(exportedText).toContain('"detailExportPolicy": "operator_explicit_action"');
+    expect(exportedText).toContain('SYNTHETIC_ADMIN_DETAIL_MARKER');
+    expect(exportedText).not.toContain('RAW_PAYLOAD_MARKER');
+    expect(exportedText).not.toContain('FRONTENDSECRET');
   });
 
   it('uses mobile business event cards while keeping the desktop event rail from md up', async () => {

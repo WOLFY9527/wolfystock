@@ -570,6 +570,16 @@ function operatorSafeText(value: unknown, locale: AdminLogsLanguage, fallback = 
   return fallback;
 }
 
+const ADMIN_SUMMARY_UNSAFE_MARKER_RE = /\b(?:sample_?event_?ids?|sampleEventIds|reasonCode|requestId|traceId|raw_?payload|raw_?response|provider_payload|traceback|synthetic[_\s-]?[a-z0-9_-]*|evt-[a-z0-9_-]+|DataSourceFallbackServed)\b/i;
+
+function operatorSummarySafeText(value: unknown, locale: AdminLogsLanguage, fallback: string): string {
+  const safe = operatorSafeText(value, locale, fallback);
+  if (!safe || ADMIN_SUMMARY_UNSAFE_MARKER_RE.test(safe)) {
+    return fallback;
+  }
+  return safe;
+}
+
 function formatStorageBytes(value: unknown): string {
   const bytes = Number(value);
   if (!Number.isFinite(bytes) || bytes <= 0) return '--';
@@ -1045,7 +1055,7 @@ function sanitizeDisplayValue(value: unknown): unknown {
   if (value && typeof value === 'object') {
     return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => {
       const normalized = key.toLowerCase().replace(/[-\s]/g, '_');
-      if (/api_?key|token|authorization|secret|password/.test(normalized)) return [key, '***'];
+      if (/api_?key|token|authorization|secret|password|cookie|credential|private_?key|privatekey|dsn|database_?url|databaseurl|database_?dsn|databasedsn|connection_?string|connectionstring|raw_?payload|rawpayload|raw_?response|rawresponse|traceback/.test(normalized)) return [key, '***'];
       return [key, sanitizeDisplayValue(item)];
     }));
   }
@@ -1057,6 +1067,15 @@ function sanitizeDisplayValue(value: unknown): unknown {
       .replace(LOCAL_PATH_DISPLAY_RE, '[redacted_path]');
   }
   return value;
+}
+
+function buildOperatorDetailPayload(detail: ExecutionLogSessionDetail): Record<string, unknown> {
+  return {
+    summaryDisplayPolicy: 'safe_summary_only',
+    detailExportPolicy: 'operator_explicit_action',
+    safeHandlePolicy: 'explicit_operator_detail_export',
+    detail: sanitizeDisplayValue(detail),
+  };
 }
 
 function safeOperatorText(value: unknown, fallback = '--'): string {
@@ -1376,7 +1395,7 @@ function buildStableListKeys<T>(
 }
 
 function downloadLogJson(detail: ExecutionLogSessionDetail): void {
-  const blob = new Blob([JSON.stringify(sanitizeDisplayValue(detail), null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify(buildOperatorDetailPayload(detail), null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -1387,7 +1406,7 @@ function downloadLogJson(detail: ExecutionLogSessionDetail): void {
 
 async function copyLogJson(detail: ExecutionLogSessionDetail): Promise<void> {
   if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(JSON.stringify(sanitizeDisplayValue(detail), null, 2));
+    await navigator.clipboard.writeText(JSON.stringify(buildOperatorDetailPayload(detail), null, 2));
   }
 }
 
@@ -1968,7 +1987,7 @@ const AdminLogsPage: React.FC = () => {
   const visibleRecordCount = activeTab === 'raw' ? filteredSessions.length : businessTotal;
   const primaryOperatorIssue = operatorIssueItems[0] || null;
   const primaryOperatorIssueTitle = primaryOperatorIssue
-    ? operatorSafeText(primaryOperatorIssue.issueTitle, locale, locale === 'zh' ? '未命名问题' : 'Untitled issue')
+    ? operatorSummarySafeText(primaryOperatorIssue.issueTitle, locale, locale === 'zh' ? '运维问题' : 'Operator issue')
     : '';
   const primaryOperatorAffected = primaryOperatorIssue
     ? uniqueOperatorLabels([
@@ -1985,7 +2004,7 @@ const AdminLogsPage: React.FC = () => {
       ? `${healthSummary.failedEvents} 个失败 / ${visibleRecordCount} 条记录`
       : `${healthSummary.failedEvents} failed / ${visibleRecordCount} records`);
   const operatorNextAction = primaryOperatorIssue
-    ? operatorSafeText(primaryOperatorIssue.operatorGuidance, locale, locale === 'zh' ? '先处理首要运维问题，再回看相关事件。' : 'Review the top operator issue, then inspect related events.')
+    ? operatorSummarySafeText(primaryOperatorIssue.operatorGuidance, locale, locale === 'zh' ? '先处理首要运维问题，再回看相关事件。' : 'Review the top operator issue, then inspect related events.')
     : healthSummary.failedEvents > 0
       ? (locale === 'zh' ? '先处理失败和数据源降级' : 'Review failures and data-source degradations first')
       : (locale === 'zh' ? '保持业务事件监控' : 'Keep monitoring business events');
@@ -2410,8 +2429,8 @@ const AdminLogsPage: React.FC = () => {
             ) : (
               <TerminalDenseList className="mt-3 gap-0 overflow-hidden rounded-xl border border-white/6 bg-black/15">
                 {operatorIssueItems.map((item) => {
-                  const title = operatorSafeText(item.issueTitle, locale);
-                  const guidance = operatorSafeText(item.operatorGuidance, locale, locale === 'zh' ? '检查相关配置与最近失败原因。' : 'Check related configuration and recent failure reasons.');
+                  const title = operatorSummarySafeText(item.issueTitle, locale, locale === 'zh' ? '运维问题' : 'Operator issue');
+                  const guidance = operatorSummarySafeText(item.operatorGuidance, locale, locale === 'zh' ? '检查相关配置与最近失败原因。' : 'Check related configuration and recent failure reasons.');
                   const providerLine = [
                     item.provider,
                     item.source,
@@ -2428,12 +2447,13 @@ const AdminLogsPage: React.FC = () => {
                     const label = operatorDefaultTokenLabel(value, locale);
                     return label ? [label] : [];
                   }).join(' · ');
-                  const reasonLine = [
+                  const reasonLineRaw = [
                     friendlyRawStatusLabel(item.reasonCode, locale),
                     item.eventType ? operatorEventTypeLabel(item.eventType, locale) : '',
                     friendlyRawStatusLabel(item.freshnessStatus, locale),
                     item.status ? statusLabel(normalizeStatus(item.status), locale) : '',
                   ].filter((value) => value && value !== '--').filter((value, index, values) => values.indexOf(value) === index).join(' · ');
+                  const reasonLine = operatorSummarySafeText(reasonLineRaw, locale, '--');
                   const relatedEventCount = item.sampleEventIds?.length || 0;
                   return (
                     <div
@@ -2932,10 +2952,24 @@ const AdminLogsPage: React.FC = () => {
                   <TerminalButton type="button" variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => void copyTextValue(buildRawDebugSummary(drawerDetail))}>
                     {locale === 'zh' ? '复制执行摘要' : 'Copy execution summary'}
                   </TerminalButton>
-                  <TerminalButton type="button" variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => void copyLogJson(drawerDetail)}>
+                  <TerminalButton
+                    type="button"
+                    variant="secondary"
+                    data-testid="admin-logs-copy-operator-detail"
+                    title={locale === 'zh' ? '仅限明确操作后的运维详情复制' : 'Operator detail copy after explicit action'}
+                    className="px-3 py-1.5 text-xs"
+                    onClick={() => void copyLogJson(drawerDetail)}
+                  >
                     {t('adminLogs.copyDetails')}
                   </TerminalButton>
-                  <TerminalButton type="button" variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => downloadLogJson(drawerDetail)}>
+                  <TerminalButton
+                    type="button"
+                    variant="secondary"
+                    data-testid="admin-logs-export-operator-detail"
+                    title={locale === 'zh' ? '仅限明确操作后的运维详情导出' : 'Operator detail export after explicit action'}
+                    className="px-3 py-1.5 text-xs"
+                    onClick={() => downloadLogJson(drawerDetail)}
+                  >
                     {t('adminLogs.exportDetails')}
                   </TerminalButton>
                 </div>
