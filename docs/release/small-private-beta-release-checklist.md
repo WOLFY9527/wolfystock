@@ -8,6 +8,50 @@ is already selected and the operator can verify the active process, route
 identity, guest/auth behavior, consumer safety copy, admin boundary, and
 rollback path.
 
+Public launch remains **NO-GO**. Private-beta evidence is bounded,
+authenticated, observation-first review evidence only. It must not be used as
+approval for public launch, live quota/provider enforcement, global MFA/RBAC
+runtime changes, production DB operations, broker/order/trade paths, external
+notification sending, or auth/session/provider/quota runtime behavior changes.
+
+## Evidence Pack Files
+
+Use the JSON template and offline checker when the operator wants a
+machine-checkable private-beta UAT record:
+
+```bash
+cp docs/release/private-beta-uat-evidence-template.json /tmp/private-beta-uat-evidence.json
+# Fill /tmp/private-beta-uat-evidence.json with sanitized operator evidence.
+python3 scripts/private_beta_uat_evidence_check.py --evidence /tmp/private-beta-uat-evidence.json
+```
+
+The checker validates structure, required fail-closed booleans, branch-aware
+secret-scan evidence, rollback record, and public-launch NO-GO boundaries. It
+does not open a browser, run Playwright, read credentials, call networks, query
+runtime services, send notifications, mutate databases, or approve launch.
+
+Template placeholders are intentionally not accepted as completed evidence. A
+filled evidence record must use sanitized labels and evidence references only:
+no real user, session, account, broker, provider, request, order, execution,
+cookie, token, URL, stack trace, raw DOM dump, raw console dump, raw provider
+payload, or private machine path.
+
+## Candidate Scope
+
+The private beta may review only bounded, authenticated, observation-first
+surfaces that already expose sanitized, read-only, dry-run, or advisory
+evidence. The operator record should identify which of these surface families
+were sampled:
+
+| Surface family | Private-beta use | Still not approved |
+| --- | --- | --- |
+| Guest/public preview | Confirm route identity and safe public copy. | No private product data exposure and no public launch approval. |
+| Authenticated product routes | Confirm beta user route identity and observation-first product flows. | No broker/order/trade path, no personalized advice, no execution-ready claim. |
+| Admin/operator routes | Confirm guest/non-admin denial and admin capability boundary. | Hidden navigation is not authorization; no auth/RBAC runtime change. |
+| Provider/quota/admin diagnostics | Review sanitized advisory status and labels. | No provider runtime enforcement, no provider blocking, no live quota/global spend enforcement. |
+| Storage/restore/rollback records | Record rollback target and operator runbook readiness. | No production DB migration, cleanup, restore, PITR, or retention execution. |
+| Notification/cost evidence | Confirm dry-run/no-send wording where sampled. | No external notification sending from this evidence pack. |
+
 ## 1. Preflight
 
 Record these values before UAT starts:
@@ -26,6 +70,9 @@ git log --oneline --decorate origin/main..HEAD
   operator who started it.
 - [ ] The port owner matches the intended beta runtime; do not reuse an unknown
   shared server as release evidence.
+- [ ] Runtime topology is recorded as private-beta/single-runtime evidence when
+  applicable; do not infer public ingress, multi-instance, or cross-instance
+  SSE readiness from this record.
 - [ ] Unauthenticated `GET /api/v1/market/market-briefing` returns 200 and any
   degraded response stays insufficient-data / observation-only.
 - [ ] After login, `GET /api/v1/auth/me` returns 200 for the expected beta test
@@ -43,14 +90,60 @@ fixes it or records an explicit manual exception.
 | Guest/public | Guest can use only public/preview surfaces; protected product routes show the intended guest overlay or redirect and do not mount private product data. | Guest route matrix and request paths. |
 | Authenticated product pages | Logged-in beta user can reach the intended product pages without losing route identity. No broker/order path is exposed. | Auth route matrix after `/api/v1/auth/me` 200. |
 | Admin route boundary | Guest redirects away from admin routes; logged-in non-admin sees an admin/capability gate; only admin/capability accounts see operator surfaces. Hidden navigation is not authorization. | Guest, non-admin, and admin/capability checks. |
-| Raw leakage | Default-visible UI and accessibility text contain no raw JSON, provider payloads, diagnostics, debug/trace/schema details, `MarketCache`, or backend snake_case terms. | DOM/accessibility scan and manual spot check. |
-| Advice leakage | No buy/sell/order CTA, target price, guaranteed return, personalized trading advice, or execution-ready language appears. Fallback/stale/demo data never carries high-confidence trading posture. | DOM/accessibility scan and CTA inventory. |
+| Raw leakage | Default-visible UI, accessibility text, and sampled exports/readback contain no raw JSON, provider payloads, prompts/responses, diagnostics, debug/trace/schema details, `MarketCache`, `/api/v1` internals, source refs, IDs, or backend snake_case terms. | DOM/accessibility scan, export/readback spot check, and manual spot check. |
+| Advice leakage | No buy/sell/order CTA, target price, guaranteed return, personalized trading advice, position sizing, ideal entry, broker-ready, or execution-ready language appears. Fallback/stale/demo data never carries high-confidence trading posture. | DOM/accessibility scan and CTA inventory. |
 | Console/network/overflow | Desktop and mobile UAT have no page console errors, no unexpected failed network calls, and no horizontal overflow. | Fresh browser evidence at release/UAT viewports. |
 
-Do not use Playwright for T-1355 validation; this section describes the beta
-operator gate that must be collected by the release/UAT owner.
+For route evidence, follow `docs/frontend/validation-playbook.md` and prefer
+app-local Playwright commands with a task-owned port when the operator chooses
+to run browser automation. Useful route-family harnesses include:
 
-## 3. Validation Tiers
+```bash
+DSA_WEB_PLAYWRIGHT_PORT=4181 npm --prefix apps/dsa-web run test:e2e -- e2e/uat-route-identity-auth-session.spec.ts --project=chromium
+DSA_WEB_PLAYWRIGHT_PORT=4181 npm --prefix apps/dsa-web run test:e2e -- e2e/guest-entry-branding.smoke.spec.ts --project=chromium
+DSA_WEB_PLAYWRIGHT_PORT=4181 npm --prefix apps/dsa-web run test:e2e -- e2e/route-truth-smoke-guard.spec.ts --project=chromium
+DSA_WEB_PLAYWRIGHT_PORT=4181 npm --prefix apps/dsa-web run test:e2e -- e2e/shell-route-admin-affordance.smoke.spec.ts --project=chromium
+DSA_WEB_PLAYWRIGHT_PORT=4181 npm --prefix apps/dsa-web run test:e2e -- e2e/admin-auth-harness.spec.ts --project=chromium
+```
+
+Playwright/live UAT is operator-run release evidence. Docs/checker maintenance
+tasks do not run real UAT unless the operator explicitly requests it.
+
+## 3. Disabled / Not-Approved Snapshot
+
+Record these as explicit `false` / `NO-GO` fields in the evidence record:
+
+- [ ] Public launch approved: no; public launch ready: no; public launch
+  verdict: **NO-GO**.
+- [ ] Live quota/global spend enforcement enabled by this pack: no.
+- [ ] Provider runtime enforcement/provider blocking/provider order or fallback
+  change enabled by this pack: no.
+- [ ] Global MFA/RBAC/auth-session runtime behavior changed by this pack: no.
+- [ ] Production DB migration, cleanup, retention, restore, or PITR executed by
+  this pack: no.
+- [ ] Broker/order/trade path exposed or validated by this pack: no.
+- [ ] External notifications sent by this pack: no.
+- [ ] Real credentials, users, sessions, accounts, broker/provider IDs, request
+  IDs, URLs, stack traces, raw logs, or raw payloads included: no.
+
+## 4. Manual Exceptions
+
+All gates are fail-closed. If the operator records an exception, it must stay
+bounded and must not override the forbidden domains above.
+
+Minimum exception record:
+
+```text
+Gate:
+Observed failure:
+Why beta can proceed or why beta stays paused:
+Approver role label:
+Expiry / revisit condition:
+Rollback trigger:
+Forbidden-domain impact confirmed absent: yes/no
+```
+
+## 5. Validation Tiers
 
 Use the smallest tier that matches the change and the beta decision.
 
@@ -88,9 +181,11 @@ Use for the private beta candidate itself.
 - Run `./scripts/release_secret_scan.sh --base-ref origin/main` and any
   release-owned auth/RBAC, market-briefing, and rollback evidence checks
   required by the operator.
+- Validate the filled sanitized JSON record when used:
+  `python3 scripts/private_beta_uat_evidence_check.py --evidence <sanitized-private-beta-uat-evidence.json>`.
 - Keep public launch approval separate; private beta evidence is not public GO.
 
-## 4. Rollback Runbook
+## 6. Rollback Runbook
 
 Rollback scope stays as narrow as the incident allows. Prefer `git revert`; do
 not rewrite shared history.
@@ -132,11 +227,14 @@ git revert <oldest_beta_commit_sha>^..<newest_beta_commit_sha>
 6. Record rollback commit, push status, remaining risk, and whether beta remains
    paused or can resume.
 
-## 5. Minimum Evidence Record
+## 7. Minimum Evidence Record
 
 ```text
 Beta candidate HEAD:
+Branch:
+Clean tree / staged files absent:
 Runtime PID/cwd/port owner:
+Runtime topology / shared-server reuse:
 Preflight status:
 Unauth market-briefing 200:
 Auth/me 200 after login:
@@ -147,9 +245,20 @@ Admin boundary:
 Raw leakage:
 Advice leakage:
 Console/network/horizontal overflow:
-Validation tier:
+Release secret scan command and result:
+Validation tier / checker result:
 Rollback target:
 Rollback method:
+Manual exceptions / waivers:
+Disabled/not-approved snapshot:
+  public launch approved: no
+  public launch ready: no
+  live quota enforcement enabled: no
+  provider runtime enforcement enabled: no
+  broker/order/trade path enabled: no
+  external notifications sent: no
+  production DB operations executed: no
 Secrets printed in evidence: no
+Raw IDs/payloads/logs/URLs/stack traces in evidence: no
 Manual release/public launch approval claimed: no
 ```

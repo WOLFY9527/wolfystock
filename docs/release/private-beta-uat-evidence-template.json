@@ -1,0 +1,134 @@
+{
+  "schemaVersion": "wolfystock_private_beta_uat_evidence_v1",
+  "mode": "operator_sanitized_template",
+  "candidate": {
+    "commitSha": "<release-candidate-sha>",
+    "branchName": "codex/<private-beta-candidate-branch>",
+    "recordedAt": "1970-01-01T00:00:00Z",
+    "operatorLabel": "<sanitized-operator-label>",
+    "gitStatusSummary": "<redacted-or-configured-clean-tree-summary>",
+    "cleanTreeRecorded": false,
+    "stagedFilesAbsent": false,
+    "unexpectedDirtyFilesAbsent": false
+  },
+  "runtime": {
+    "runtimePidLabel": "<sanitized-pid-label>",
+    "runtimeCwdLabel": "<repo-relative-or-sanitized-cwd-label>",
+    "runtimePort": 4179,
+    "runtimeOwnerLabel": "<sanitized-operator-label>",
+    "recordedAt": "1970-01-01T00:00:00Z",
+    "portOwnerMatchesIntendedBetaRuntime": false,
+    "unknownSharedServerReusedAsEvidence": true
+  },
+  "guestPublicRouteChecks": [
+    {
+      "routeLabel": "guest-home",
+      "pathPattern": "/guest",
+      "finalPathLabel": "/guest",
+      "expectedBoundary": "public-preview-or-guest-overlay",
+      "routeIdentityPreserved": false,
+      "privateDataMounted": true,
+      "evidenceRef": "<review-ticket-label>",
+      "outcome": "needs-review"
+    }
+  ],
+  "authenticatedUserRouteChecks": [
+    {
+      "routeLabel": "authenticated-home",
+      "pathPattern": "/",
+      "finalPathLabel": "/",
+      "authMeStatusClass": "2xx",
+      "routeIdentityPreserved": false,
+      "brokerOrderTradePathExposed": true,
+      "evidenceRef": "<review-ticket-label>",
+      "outcome": "needs-review"
+    }
+  ],
+  "adminRouteBoundaryChecks": [
+    {
+      "routeLabel": "admin-ops-status",
+      "pathPattern": "/admin/ops-status",
+      "finalPathLabel": "/admin/ops-status",
+      "guestDenied": false,
+      "nonAdminDenied": false,
+      "adminCapabilityAccepted": false,
+      "hiddenNavigationTreatedAsAuthorization": true,
+      "evidenceRef": "<review-ticket-label>",
+      "outcome": "needs-review"
+    }
+  ],
+  "rawLeakageChecks": {
+    "defaultVisibleDomChecked": false,
+    "accessibilityTextChecked": false,
+    "forbiddenRawTermsAbsent": false,
+    "rawProviderPayloadsAbsent": false,
+    "debugDetailsCollapsed": false,
+    "evidenceRef": "<review-ticket-label>",
+    "outcome": "needs-review"
+  },
+  "adviceOrderExecutionLeakageChecks": {
+    "defaultVisibleDomChecked": false,
+    "forbiddenAdviceTermsAbsent": false,
+    "noBrokerOrderTradeCta": false,
+    "noPersonalizedFinancialAdvice": false,
+    "evidenceRef": "<review-ticket-label>",
+    "outcome": "needs-review"
+  },
+  "consoleNetworkOverflowChecks": {
+    "desktopViewportChecked": false,
+    "mobileViewportChecked": false,
+    "consoleErrorsAbsent": false,
+    "unexpectedNetworkFailuresAbsent": false,
+    "horizontalOverflowAbsent": false,
+    "evidenceRef": "<review-ticket-label>",
+    "outcome": "needs-review"
+  },
+  "releaseSecretScan": {
+    "command": "./scripts/release_secret_scan.sh --base-ref origin/main",
+    "baseRef": "origin/main",
+    "passed": false,
+    "localOnlyUsedAsReleaseEvidence": true,
+    "evidenceRef": "<review-ticket-label>"
+  },
+  "rollback": {
+    "rollbackTargetCommitSha": "<last-known-good-commit-sha>",
+    "rollbackTargetRecorded": false,
+    "rollbackMethod": "git revert <beta_commit_sha>",
+    "rollbackOwnerLabel": "<sanitized-operator-label>",
+    "rollbackEvidenceRef": "<review-ticket-label>",
+    "productionDbRollbackRequired": true,
+    "postRollbackGuestAuthAdminChecksPlanned": false
+  },
+  "publicLaunchBoundary": {
+    "privateBetaBoundedAuthenticatedObservationFirst": true,
+    "publicLaunchVerdict": "NO-GO",
+    "publicLaunchApproved": false,
+    "publicLaunchReady": false,
+    "liveQuotaEnforcementEnabled": false,
+    "providerRuntimeEnforcementEnabled": false,
+    "brokerOrderTradePathEnabled": false,
+    "externalNotificationsSent": false,
+    "productionDbOperationsExecuted": false,
+    "authSessionRuntimeChangedForEvidence": false,
+    "globalMfaRbacRuntimeChanged": false
+  },
+  "localGeneration": {
+    "checkerOpenedBrowser": false,
+    "checkerNetworkCallsEnabled": false,
+    "checkerReadCredentials": false,
+    "checkerChangedRuntimeBehavior": false,
+    "realIdentifiersIncluded": false,
+    "rawLogsOrPayloadsIncluded": false,
+    "evidenceRedactionVersion": "private_beta_uat_redaction_v1"
+  },
+  "templatePlaceholders": {
+    "replaceBeforeReview": [
+      "<release-candidate-sha>",
+      "<private-beta-candidate-branch>",
+      "<sanitized-operator-label>",
+      "<review-ticket-label>",
+      "<redacted-or-configured>",
+      "<repo-relative-or-sanitized-cwd-label>"
+    ]
+  }
+}
