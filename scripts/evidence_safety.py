@@ -23,16 +23,29 @@ UNSAFE_LABEL_MARKERS = (
     "apikey",
     "authorization",
     "bearer",
+    "account_label",
+    "account_name",
+    "account_ref",
+    "broker_account",
+    "broker_url",
     "cookie",
     "credential",
     "database_url",
     "db_url",
+    "dedup_hash",
     "debug_payload",
+    "exec_id",
+    "execution_id",
+    "fingerprint",
+    "import_fingerprint",
+    "order_id",
+    "order_ref",
     "password",
     "payload",
     "private_key",
     "raw",
     "request",
+    "request_id",
     "response",
     "secret",
     "session",
@@ -77,7 +90,12 @@ def join_path(parent: str, key: str) -> str:
 def path_label(path: Path) -> str:
     label = path.name
     lowered = label.lower()
-    if any(marker in lowered for marker in UNSAFE_LABEL_MARKERS + FORBIDDEN_APPROVAL_LABEL_PHRASES):
+    normalized = normalize_key(label)
+    compacted = compact_key(label)
+    if any(
+        marker in lowered or marker in normalized or marker.replace("_", "") in compacted
+        for marker in UNSAFE_LABEL_MARKERS + FORBIDDEN_APPROVAL_LABEL_PHRASES
+    ):
         return "[redacted]"
     return label
 

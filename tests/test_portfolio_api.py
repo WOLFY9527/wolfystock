@@ -47,6 +47,7 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.data_dir = Path(self.temp_dir.name)
         self.env_path = self.data_dir / ".env"
         self.db_path = self.data_dir / "portfolio_api_test.db"
+        self._previous_admin_auth_enabled = os.environ.get("ADMIN_AUTH_ENABLED")
         self.env_path.write_text(
             "\n".join(
                 [
@@ -62,6 +63,7 @@ class PortfolioApiTestCase(unittest.TestCase):
 
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.db_path)
+        os.environ["ADMIN_AUTH_ENABLED"] = "false"
         Config.reset_instance()
         DatabaseManager.reset_instance()
         app = create_app(static_dir=self.data_dir / "empty-static")
@@ -73,6 +75,10 @@ class PortfolioApiTestCase(unittest.TestCase):
         Config.reset_instance()
         os.environ.pop("ENV_FILE", None)
         os.environ.pop("DATABASE_PATH", None)
+        if self._previous_admin_auth_enabled is None:
+            os.environ.pop("ADMIN_AUTH_ENABLED", None)
+        else:
+            os.environ["ADMIN_AUTH_ENABLED"] = self._previous_admin_auth_enabled
         self.temp_dir.cleanup()
 
     def _save_close(self, symbol: str, on_date: date, close: float) -> None:
@@ -107,6 +113,19 @@ class PortfolioApiTestCase(unittest.TestCase):
     <CashTransactions>
       <CashTransaction reportDate="2026-01-02" currency="USD" amount="5000" description="Deposit"/>
     </CashTransactions>
+  </FlexStatement>
+</FlexStatements>
+"""
+        return xml_text.encode("utf-8")
+
+    @staticmethod
+    def _ibkr_sensitive_flex_xml_bytes() -> bytes:
+        xml_text = """<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements>
+  <FlexStatement accountId="fixture-broker-account-ref-must-not-leak" fromDate="2026-01-01" toDate="2026-01-31" currency="USD">
+    <Trades>
+      <Trade assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" tradeDate="2026-01-03" buySell="BUY" quantity="10" tradePrice="150" ibCommission="1.25" taxes="0" ibExecID="fixture-execution-id-must-not-leak" orderID="fixture-order-id-must-not-leak" description="account_label=fixture-account-label-must-not-leak request_id=fixture-request-id-must-not-leak token=fixture-token-must-not-leak https://broker.example.invalid/path?token=fixture-url-token-must-not-leak"/>
+    </Trades>
   </FlexStatement>
 </FlexStatements>
 """
@@ -624,6 +643,107 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertNotIn("SECRET_TOKEN", self._json_text(list_resp))
         self.assertNotIn("bearer abc.def.ghi", self._json_text(list_resp))
 
+    def test_broker_import_preview_and_commit_redact_browser_artifact_identifiers(self) -> None:
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Import Redaction", "broker": "IBKR", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        account_id = account_resp.json()["id"]
+        fixture = self._ibkr_sensitive_flex_xml_bytes()
+        raw_markers = (
+            "fixture-broker-account-ref-must-not-leak",
+            "fixture-execution-id-must-not-leak",
+            "fixture-order-id-must-not-leak",
+            "fixture-request-id-must-not-leak",
+            "fixture-account-label-must-not-leak",
+            "fixture-token-must-not-leak",
+            "fixture-url-token-must-not-leak",
+            "broker.example.invalid",
+        )
+
+        parse_resp = self.client.post(
+            "/api/v1/portfolio/imports/parse",
+            data={"broker": "ibkr"},
+            files={"file": ("ibkr-sensitive-flex.xml", fixture, "application/xml")},
+        )
+        self.assertEqual(parse_resp.status_code, 200)
+        parsed = parse_resp.json()
+        self.assertEqual(parsed["metadata"]["broker_account_ref"], "<redacted>")
+        self.assertEqual(parsed["metadata"]["file_fingerprint"], "<redacted>")
+        self.assertEqual(parsed["metadata"]["suggested_connection_name"], "<redacted>")
+        self.assertEqual(parsed["records"][0]["trade_uid"], "<redacted>")
+        self.assertEqual(parsed["records"][0]["dedup_hash"], "<redacted>")
+        self.assertEqual(parsed["records"][0]["note"], "<redacted>")
+
+        commit_resp = self.client.post(
+            "/api/v1/portfolio/imports/commit",
+            data={"account_id": str(account_id), "broker": "ibkr", "dry_run": "false"},
+            files={"file": ("ibkr-sensitive-flex.xml", fixture, "application/xml")},
+        )
+        self.assertEqual(commit_resp.status_code, 200)
+        committed = commit_resp.json()
+        self.assertEqual(committed["metadata"]["broker_account_ref"], "<redacted>")
+        self.assertEqual(committed["metadata"]["file_fingerprint"], "<redacted>")
+        self.assertEqual(committed["metadata"]["suggested_connection_name"], "<redacted>")
+
+        duplicate_resp = self.client.post(
+            "/api/v1/portfolio/imports/commit",
+            data={"account_id": str(account_id), "broker": "ibkr", "dry_run": "false"},
+            files={"file": ("ibkr-sensitive-flex.xml", fixture, "application/xml")},
+        )
+        self.assertEqual(duplicate_resp.status_code, 200)
+        duplicate = duplicate_resp.json()
+        self.assertTrue(duplicate["duplicate_import"])
+        self.assertEqual(duplicate["metadata"]["broker_account_ref"], "<redacted>")
+        self.assertEqual(duplicate["metadata"]["file_fingerprint"], "<redacted>")
+
+        combined_text = (
+            f"{self._json_text(parse_resp)}\n"
+            f"{self._json_text(commit_resp)}\n"
+            f"{self._json_text(duplicate_resp)}"
+        )
+        for marker in raw_markers:
+            self.assertNotIn(marker, combined_text)
+
+    def test_csv_import_preview_and_commit_redact_trade_ids_and_fingerprints(self) -> None:
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "CSV Import Redaction", "broker": "Huatai", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        account_id = account_resp.json()["id"]
+        trade_uid = "fixture-order-id-must-not-leak"
+        csv_text = (
+            "成交日期,证券代码,买卖标志,成交数量,成交均价,手续费,印花税,币种,成交编号\n"
+            f"2026-01-03,AAPL,买入,10,150,1.25,0,USD,{trade_uid}\n"
+        )
+        fixture = csv_text.encode("utf-8")
+
+        parse_resp = self.client.post(
+            "/api/v1/portfolio/imports/csv/parse",
+            data={"broker": "huatai"},
+            files={"file": ("huatai-sensitive.csv", fixture, "text/csv")},
+        )
+        self.assertEqual(parse_resp.status_code, 200)
+        parsed = parse_resp.json()
+        self.assertEqual(parsed["records"][0]["trade_uid"], "<redacted>")
+        self.assertEqual(parsed["records"][0]["dedup_hash"], "<redacted>")
+        self.assertEqual(parsed["metadata"]["file_fingerprint"], "<redacted>")
+
+        commit_resp = self.client.post(
+            "/api/v1/portfolio/imports/csv/commit",
+            data={"account_id": str(account_id), "broker": "huatai", "dry_run": "true"},
+            files={"file": ("huatai-sensitive.csv", fixture, "text/csv")},
+        )
+        self.assertEqual(commit_resp.status_code, 200)
+        committed = commit_resp.json()
+        self.assertTrue(committed["dry_run"])
+        self.assertEqual(committed["metadata"]["file_fingerprint"], "<redacted>")
+
+        combined_text = f"{self._json_text(parse_resp)}\n{self._json_text(commit_resp)}"
+        self.assertNotIn(trade_uid, combined_text)
+
     def test_generic_broker_import_endpoints_support_ibkr(self) -> None:
         account_resp = self.client.post(
             "/api/v1/portfolio/accounts",
@@ -647,7 +767,8 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(parsed["broker"], "ibkr")
         self.assertEqual(parsed["record_count"], 1)
         self.assertEqual(parsed["cash_record_count"], 1)
-        self.assertEqual(parsed["metadata"]["broker_account_ref"], "U1234567")
+        self.assertEqual(parsed["metadata"]["broker_account_ref"], "<redacted>")
+        self.assertNotIn("U1234567", self._json_text(parse_resp))
 
         commit_resp = self.client.post(
             "/api/v1/portfolio/imports/commit",

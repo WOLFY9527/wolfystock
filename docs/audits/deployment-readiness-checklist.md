@@ -506,10 +506,12 @@ The following must all be true before public multi-user deployment:
   readiness output, browser DOM, or docs.
 - [ ] Broker/order/trade redaction evidence confirms no raw broker account IDs,
   order IDs, request IDs, endpoint URLs, account metadata, tokens, raw broker
-  payloads, or execution payloads appear in public/member/admin-safe outputs,
-  logs, reports, operator evidence, browser DOM, or release-candidate exports;
-  use `docs/audits/broker-order-trade-redaction-release-evidence-checklist.md`
-  as the review checklist and keep missing accepted evidence as **NO-GO**.
+  payloads, execution payloads, import fingerprints, or account labels appear
+  in public/member/admin-safe outputs, portfolio import preview/commit response
+  artifacts, logs, reports, operator evidence, browser DOM, or
+  release-candidate exports; use
+  `docs/audits/broker-order-trade-redaction-release-evidence-checklist.md` as
+  the review checklist and keep missing accepted evidence as **NO-GO**.
 - [ ] `./scripts/release_secret_scan.sh` is clean on the release candidate.
 - [ ] Admin harness/browser smoke evidence is current, with mocked harness
   coverage clearly separated from real auth/session staging proof.
