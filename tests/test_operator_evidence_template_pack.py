@@ -44,6 +44,22 @@ RBAC_FALLBACK_OFF_OPERATOR_PILOT_FIELDS = {
     "runtimeDefaultUnchanged",
 }
 
+RBAC_FALLBACK_OBSERVE_FIELDS = {
+    "coarseAdminCompatibilityFallbackPresent",
+    "fallbackObserveModeEnabled",
+    "fallbackOffAccepted",
+    "fallbackRemoved",
+    "productionLeastPrivilegeAccepted",
+    "publicLaunchApproved",
+    "failClosedProductionEnforcementEnabled",
+    "routeInventory",
+    "explicitCapabilityPayloadProof",
+    "legacyMissingPayloadFailClosedObserveEvidence",
+    "rollbackPosture",
+    "sanitizedAuditExcerpts",
+    "runtimeBehaviorChanged",
+}
+
 UNSAFE_MARKERS = (
     "api_key",
     "apikey",
@@ -116,6 +132,14 @@ def test_all_templates_generated(tmp_path: Path) -> None:
     assert RBAC_FALLBACK_OFF_OPERATOR_PILOT_FIELDS.issubset(
         security_template["rbacFallbackDisable"]
     )
+    observe_template = security_template["rbacFallbackObserve"]
+    assert RBAC_FALLBACK_OBSERVE_FIELDS.issubset(observe_template)
+    assert observe_template["coarseAdminCompatibilityFallbackPresent"] is True
+    assert observe_template["fallbackOffAccepted"] is False
+    assert observe_template["fallbackRemoved"] is False
+    assert observe_template["productionLeastPrivilegeAccepted"] is False
+    assert observe_template["publicLaunchApproved"] is False
+    assert observe_template["failClosedProductionEnforcementEnabled"] is False
 
     combined = "\n".join(path.read_text(encoding="utf-8") for path in tmp_path.glob("*.json"))
     for placeholder in PLACEHOLDERS:
