@@ -34,7 +34,9 @@ The output is stable JSON with
 `releaseApproved` is always `false`. The checker emits `finalStatus=NO-GO`
 until every hard blocker has accepted sanitized evidence. When every category is
 accepted, it emits `finalStatus=GO-REVIEW-REQUIRED`, which still requires a
-human release approval.
+human release approval. Accepted sanitized evidence also must not set
+`publicLaunchReady=true`; before external/manual release review,
+`publicLaunchReady`, `releaseApproved`, and `launchApproved` remain false.
 
 The matrix also includes domain-local operator validator categories for
 provider operations, real restore/PITR, security MFA/RBAC acceptance,
@@ -82,7 +84,7 @@ incomplete evidence keeps the summary at **NO-GO**.
 | `provider_staging_probe_artifact` | Sanitized provider staging probe artifact with credential redaction, entitlement/freshness labels, operator capture metadata, and no checker live calls. |
 | `provider_live_probe_opt_in_timeout` | Explicit provider live-probe opt-in for a named staging provider, bounded timeout, sanitized result evidence, and proof this checker made no live calls. |
 | `provider_circuit_controlled_enforcement` | Controlled provider-circuit enforcement pilot, bounded route, rollback switch, and sanitized degraded-state evidence. This remains required even when current runtime support is not available. |
-| `quota_pilot_acceptance` | Controlled quota pilot with explicit owner allowlist, out-of-scope advisory behavior, advisory-only invoice reconciliation, global enforcement disabled by default, rollback switch, and user/admin status-label evidence. |
+| `quota_pilot_acceptance` | Controlled quota pilot with explicit owner allowlist, out-of-scope advisory behavior, advisory-only invoice reconciliation, global enforcement disabled by default, rollback switch, and user/admin status-label evidence. Attach the sanitized reserve/release packet validated by `scripts/quota_reserve_release_operator_evidence_check.py`; a reviewable packet still keeps `publicLaunchReady=false` and `releaseApproved=false`. |
 | `budget_alert_dry_run_acceptance` | Sanitized dry-run budget alert intent, outbound delivery disabled by default, no live LLM/provider/invoice calls, and user/admin alert-label evidence. |
 | `real_isolated_postgresql_restore_pitr` | Real isolated PostgreSQL restore, PITR execution, isolated target, and post-restore smoke evidence. |
 | `staging_ingress_smoke` | HTTPS staging ingress smoke, backend port exposure proof, synthetic users/data, and live opt-in evidence. |

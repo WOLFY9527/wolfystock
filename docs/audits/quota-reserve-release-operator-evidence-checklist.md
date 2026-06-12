@@ -56,6 +56,8 @@ APIs, route handlers, storage, quota services, providers, auth, or live
 credentials. A passing result means the evidence packet is ready for manual
 internal/private-beta review only. It does not approve public launch, quota
 enforcement expansion, provider quota enforcement, or broad spend-cap readiness.
+The checker output must keep `publicLaunchReady=false`, `releaseApproved=false`,
+`launchApproved=false`, and `invoiceExportReconciliationAccepted=false`.
 
 ## Required Evidence Sections
 
@@ -177,6 +179,29 @@ Provide sanitized rollback proof by either:
 The proof must show the route returns to fully out-of-scope behavior without
 changing API response shape.
 
+### 10. Accepted Evidence Packet Posture
+
+Provide a final sanitized packet posture section proving reviewers can see the
+boundary in one place:
+
+- `defaultOffPosture=true`;
+- `liveEnforcement=false`;
+- `ownerAllowlistBoundary=explicit_owner_allowlist`;
+- `routeLabel=sync_single_stock_only`;
+- `guestPublicQuotaMutation=false`;
+- `disabledModeVerified=true`;
+- `rollbackSwitchLabel=pilot_flag_or_owner_allowlist_removal`;
+- admin and operator visibility labels state review-only/manual-review status;
+- `invoiceExportReconciliationStatus=missing|not_implemented|not_accepted|advisory_only`;
+- `realProviderInvoiceExportAttached=false`;
+- `publicLaunchReady=false`;
+- `releaseApproved=false`.
+
+This section is the quota-domain attachment for
+`launch-acceptance-evidence-pack.md` category `quota_pilot_acceptance`. It can
+make the quota packet reviewable, but it cannot move public launch out of
+**NO-GO** or make invoice/export reconciliation accepted.
+
 ## Do Not Capture
 
 Do not capture or attach any of the following:
@@ -190,6 +215,8 @@ Do not capture or attach any of the following:
 - provider or model payloads
 - raw exception text or stack traces
 - credentials or secrets
+- real provider invoice/export files, invoice IDs, account IDs, provider account
+  labels, billing exports, or reconciliation rows
 
 ## Stop / Reject Evidence
 
@@ -205,6 +232,8 @@ Stop collection and reject the evidence packet if any of the following occurs:
 - the route and cost ledger both attempt to own terminal consume/release for
   the same reservation id;
 - LLM-attempt success is treated as billing-authoritative final request success;
+- the packet claims `publicLaunchReady=true`, `releaseApproved=true`, accepted
+  invoice/export reconciliation, or any guest/public quota mutation;
 - protected code, config, or deployment changes are required.
 
 ## Future Broad-Enforcement Blockers
@@ -245,4 +274,10 @@ Do not use wording that implies:
 If every section above is satisfied with sanitized excerpts only, the result is
 an internal/private-beta evidence packet for manual review. The result is still
 not public launch approval, not provider quota enforcement approval, and not
-broad live quota enforcement approval.
+broad live quota enforcement approval. Synthetic examples for local validation
+live in
+`tests/fixtures/quota_reserve_release_operator_evidence/accepted_packet.synthetic.valid.json`
+and
+`tests/fixtures/quota_reserve_release_operator_evidence/accepted_packet.synthetic.invalid.json`;
+they are test fixtures only and must not be replaced with real user, owner,
+account, provider, invoice, token, or credential data.
