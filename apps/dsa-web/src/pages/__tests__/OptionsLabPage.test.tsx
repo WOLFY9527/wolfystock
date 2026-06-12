@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OptionsLabPage, { OptionsLabErrorBoundary } from '../OptionsLabPage';
 import { optionsLabApi } from '../../api/optionsLab';
 import type { OptionsResearchReadiness } from '../../types/researchReadiness';
+import { findConsumerRawLeakage } from '../../test-utils/consumerRawLeakageGuard';
 
 const optionsLabPageSource = readFileSync(resolve(process.cwd(), 'src/pages/OptionsLabPage.tsx'), 'utf8');
 
@@ -25,6 +26,11 @@ const SAFE_INSTRUCTION_BOUNDARY = '不构成执行指令';
 const OBSERVE_ONLY_EVIDENCE_COPY = '仅供观察，不作为结论依据';
 const DEMO_EVIDENCE_COPY = '演示数据：当前数据延迟，仅用于界面与情景验证，不作为结论依据。';
 const NON_DECISION_BOUNDARY_COPY = '未达到可判断等级，仅供情景观察，暂不形成结论。';
+const SYNTHETIC_DIAGNOSTIC_MARKERS = /synthetic_provider_url|synthetic_cache_key|synthetic_request_id|synthetic_debug_reason|synthetic_score_trace|synthetic_diagnostic_window|synthetic_provider_payload_label|provider\.example|cache:synth:TEM|req-synth-123|Traceback|scoreContributionAllowed|raw_provider_payload/i;
+const SYNTHETIC_DIAGNOSTIC_GUARD_PATTERNS = [
+  /synthetic_(?:provider_url|cache_key|request_id|debug_reason|score_trace|diagnostic_window|provider_payload_label)/i,
+  /provider\.example|cache:synth:TEM|req-synth-123|Traceback|scoreContributionAllowed|raw_provider_payload/i,
+];
 
 function buildOptionsResearchReadiness(
   overrides: Partial<OptionsResearchReadiness> = {},
@@ -134,6 +140,71 @@ function buildScenarioEvidenceFrame(overrides: Record<string, unknown> = {}) {
     },
     ...overrides,
   };
+}
+
+function buildSyntheticDiagnosticsScenarioFrame() {
+  return buildScenarioEvidenceFrame({
+    synthetic_provider_url: 'https://provider.example.invalid/options?token=secret',
+    synthetic_cache_key: 'cache:synth:TEM',
+    synthetic_request_id: 'req-synth-123',
+    synthetic_debug_reason: 'Traceback synthetic stack trace',
+    synthetic_score_trace: 'scoreContributionAllowed=false score_debug_vector',
+    synthetic_diagnostic_window: 'operator-window',
+    synthetic_provider_payload_label: 'raw_provider_payload',
+    chainQuality: {
+      hasChain: true,
+      contractCount: 2,
+      callCount: 1,
+      putCount: 1,
+      freshness: 'synthetic_delayed',
+      sourceType: 'synthetic_fixture',
+      coverageState: 'strategy_compare_ready',
+      synthetic_provider_url: 'https://provider.example.invalid/chain',
+      synthetic_cache_key: 'cache:synth:TEM',
+      synthetic_request_id: 'req-synth-123',
+      synthetic_provider_payload_label: 'raw_provider_payload',
+    },
+    payoffEvidence: {
+      targetPrice: 65,
+      payoffAtTarget: 270,
+      expectedMoveAbs: 7.5,
+      expectedMovePct: 14.31,
+      expectedMoveSource: 'straddle_mid',
+      candidateCount: 4,
+      comparisonState: 'strategy_compare_ready',
+      synthetic_score_trace: 'scoreContributionAllowed=false score_debug_vector',
+    },
+    riskEvidence: {
+      premiumAtRisk: 230,
+      maxLoss: 230,
+      maxGain: 270,
+      breakeven: 52.3,
+      requiredMovePct: -0.19,
+      synthetic_diagnostic_window: 'operator-window',
+    },
+    assumptions: {
+      inputMode: 'decision',
+      direction: 'bullish',
+      targetPrice: 65,
+      targetDate: '2026-08-21',
+      riskProfile: 'balanced',
+      targetPriceStatus: 'target_above_breakeven',
+      synthetic_debug_reason: 'Traceback synthetic stack trace',
+    },
+    missingEvidence: [
+      'provider authority',
+      'live chain',
+      'synthetic_provider_url',
+      'synthetic_cache_key',
+      'synthetic_request_id',
+    ],
+    blockingReasons: ['synthetic_debug_reason', 'synthetic_score_trace'],
+    nextEvidenceNeeded: [
+      '补充 provider authority 与 live chain 证据',
+      'synthetic_diagnostic_window',
+      'synthetic_provider_payload_label',
+    ],
+  });
 }
 
 function mockHappyPath(readiness?: OptionsResearchReadiness | null) {
@@ -689,6 +760,117 @@ describe('OptionsLabPage', () => {
     expect(within(decisionSection).getAllByText('$7.50').length).toBeGreaterThan(0);
     expect(within(decisionSection).getAllByText('$230.00').length).toBeGreaterThan(0);
     expect(within(decisionSection).getAllByText(/专业结构：牛市看涨价差/).length).toBeGreaterThan(0);
+  });
+
+  it('keeps synthetic options diagnostics out of member scenario evidence and collapsed details', async () => {
+    vi.mocked(optionsLabApi.evaluateDecision).mockResolvedValueOnce(withOptionsReadiness({
+      symbol: 'TEM',
+      strategy: 'bull_call_spread',
+      dataQuality: {
+        dataQualityScore: 25,
+        dataQualityTier: 'synthetic_demo_only',
+        blockingReasons: ['synthetic_or_fixture_data_not_decision_grade'],
+        sourceType: 'synthetic',
+        asOfAgeMinutes: 0,
+      },
+      liquidity: {
+        liquidityScore: 76,
+        spreadPct: 10,
+        liquidityWarnings: [],
+      },
+      ivGreeks: {
+        ivReadiness: 82,
+        ivRankStatus: 'unavailable',
+        ivRank: null,
+        ivPercentile: null,
+        warnings: ['iv_rank_unavailable'],
+      },
+      ivRank: null,
+      ivPercentile: null,
+      ivRankStatus: 'unavailable',
+      decisionGrade: false,
+      gateDecision: 'blocked',
+      failClosedReasonCodes: ['synthetic_or_fixture_data_not_decision_grade'],
+      dataQualityGates: {
+        decisionGrade: false,
+        tier: 'synthetic_demo_only',
+      },
+      liquidityGates: {
+        passed: true,
+        liquidityScore: 76,
+      },
+      expectedMove: {
+        expectedMoveAbs: 7.5,
+        expectedMovePct: 14.31,
+        expectedMoveSource: 'straddle_mid',
+        expectedMoveWarnings: ['expected_move_uses_fixture_mid_prices'],
+      },
+      optimizer: {
+        preferredStrategyKey: null,
+        optimizerLabel: '数据不足，禁止判断',
+        noTradeReason: 'data_quality_not_decision_grade',
+        alternatives: [],
+      },
+      rankedAlternatives: [],
+      breakeven: {
+        breakeven: 52.3,
+        requiredMovePct: -0.19,
+        targetPriceStatus: 'target_above_breakeven',
+        score: 86,
+      },
+      riskReward: {
+        maxLoss: 230,
+        maxGain: 270,
+        riskRewardRatio: 1.17,
+        score: 72,
+      },
+      tradeQualityScore: 35,
+      decisionLabel: '数据不足，禁止判断',
+      primaryReasons: ['当前为 synthetic delayed / 演示数据'],
+      riskWarnings: ['不可用于真实交易判断'],
+      betterAlternative: null,
+      noAdviceDisclosure: 'Analytical output only; not personalized financial advice.',
+      optionsConsumerScenarioFrame: buildSyntheticDiagnosticsScenarioFrame(),
+      freshness: {
+        source: 'synthetic_options_lab_fixture',
+        freshness: 'synthetic_delayed',
+        asOf: '2026-05-06T09:45:00Z',
+      },
+      metadata: {
+        readOnly: true,
+        fixtureBacked: true,
+        syntheticData: true,
+        noExternalCalls: true,
+        noOrderPlacement: true,
+        noBrokerConnection: true,
+        noPortfolioMutation: true,
+        noTradingRecommendation: true,
+        strategyEngine: 'options_decision_engine_r1',
+      },
+    }));
+
+    renderPage();
+
+    const section = await screen.findByTestId('options-lab-scenario-evidence');
+    expect(section).toHaveTextContent('情景证据');
+    expect(section).toHaveTextContent('授权链路待补证');
+    expect(section).toHaveTextContent('补齐授权链路与实时链路证据');
+    expect(section).not.toHaveTextContent(SYNTHETIC_DIAGNOSTIC_MARKERS);
+    expect(findConsumerRawLeakage(section.textContent || '', {
+      extraForbiddenPatterns: SYNTHETIC_DIAGNOSTIC_GUARD_PATTERNS,
+    })).toEqual([]);
+
+    const details = screen.getByTestId('options-lab-analysis-details');
+    const toggle = within(details).getByRole('button', { name: /展开 数据注记/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(document.body).not.toHaveTextContent(SYNTHETIC_DIAGNOSTIC_MARKERS);
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(details).not.toHaveTextContent(SYNTHETIC_DIAGNOSTIC_MARKERS);
+    expect(findConsumerRawLeakage(details.textContent || '', {
+      extraForbiddenPatterns: SYNTHETIC_DIAGNOSTIC_GUARD_PATTERNS,
+    })).toEqual([]);
   });
 
   it('renders payoff and IV visuals from existing strategy and chain data without changing read-only framing', async () => {
