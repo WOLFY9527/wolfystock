@@ -7,7 +7,8 @@ import ast
 import json
 from pathlib import Path
 
-from src.services.source_provenance_contract import SOURCE_PROVENANCE_CONTRACT_VERSION
+import src.services.liquidity_source_provenance_sidecar as liquidity_helper
+from src.services.source_provenance_contract import SOURCE_PROVENANCE_CONTRACT_VERSION, summarize_source_provenance
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -161,6 +162,38 @@ def _readyish_payload() -> dict[str, object]:
     }
 
 
+def _legacy_sidecar_payload(contract_version: str, entries: list[dict[str, object]]) -> dict[str, object]:
+    summary = summarize_source_provenance(entries)
+    return {
+        "contractVersion": contract_version,
+        "sourceProvenanceContractVersion": SOURCE_PROVENANCE_CONTRACT_VERSION,
+        "entryCount": summary["entryCount"],
+        "authorityTierCounts": summary["authorityTierCounts"],
+        "freshnessStateCounts": summary["freshnessStateCounts"],
+        "evidenceDomainCounts": summary["evidenceDomainCounts"],
+        "fallbackOrProxyCount": summary["fallbackOrProxyCount"],
+        "observationOnlyCount": summary["observationOnlyCount"],
+        "scoreContributionAllowedCount": summary["scoreContributionAllowedCount"],
+        "entries": entries,
+    }
+
+
+def _legacy_liquidity_entries(payload: dict[str, object]) -> list[dict[str, object]]:
+    mapped = liquidity_helper._mapping(payload)
+    return sorted(
+        [
+            liquidity_helper._build_domain_entry(
+                domain_key=domain_key,
+                evidence_domain=evidence_domain,
+                fallback_label=fallback_label,
+                payload=mapped,
+            )
+            for domain_key, evidence_domain, fallback_label in liquidity_helper._DOMAIN_SPECS
+        ],
+        key=lambda item: (item["sourceId"], item["debugRef"], item["evidenceDomain"]),
+    )
+
+
 def test_helper_is_pure_and_json_stable() -> None:
     from src.services.liquidity_source_provenance_sidecar import (
         LIQUIDITY_SOURCE_PROVENANCE_VERSION,
@@ -175,6 +208,24 @@ def test_helper_is_pure_and_json_stable() -> None:
     assert sidecar["contractVersion"] == LIQUIDITY_SOURCE_PROVENANCE_VERSION
     assert sidecar["sourceProvenanceContractVersion"] == SOURCE_PROVENANCE_CONTRACT_VERSION
     assert json.loads(json.dumps(sidecar, ensure_ascii=False, sort_keys=True)) == sidecar
+
+
+def test_readyish_liquidity_payload_matches_legacy_inline_sidecar_wrapper() -> None:
+    payload = _readyish_payload()
+    from src.services.liquidity_source_provenance_sidecar import (
+        LIQUIDITY_SOURCE_PROVENANCE_VERSION,
+        build_liquidity_source_provenance_sidecar,
+    )
+
+    sidecar = build_liquidity_source_provenance_sidecar(payload)
+    expected = _legacy_sidecar_payload(
+        LIQUIDITY_SOURCE_PROVENANCE_VERSION,
+        _legacy_liquidity_entries(payload),
+    )
+
+    assert json.loads(json.dumps(sidecar, ensure_ascii=False, sort_keys=True)) == json.loads(
+        json.dumps(expected, ensure_ascii=False, sort_keys=True)
+    )
 
 
 def test_readyish_payload_builds_expected_domain_entries() -> None:

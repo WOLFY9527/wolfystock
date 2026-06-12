@@ -7,11 +7,12 @@ import ast
 import json
 from pathlib import Path
 
+import src.services.market_intelligence_source_provenance_sidecar as market_helper
 from src.services.market_intelligence_source_provenance_sidecar import (
     MARKET_INTELLIGENCE_SOURCE_PROVENANCE_VERSION,
     build_market_intelligence_source_provenance_sidecar,
 )
-from src.services.source_provenance_contract import SOURCE_PROVENANCE_CONTRACT_VERSION
+from src.services.source_provenance_contract import SOURCE_PROVENANCE_CONTRACT_VERSION, summarize_source_provenance
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -136,6 +137,34 @@ def _readyish_inputs() -> dict[str, object]:
     }
 
 
+def _legacy_sidecar_payload(contract_version: str, entries: list[dict[str, object]]) -> dict[str, object]:
+    summary = summarize_source_provenance(entries)
+    return {
+        "contractVersion": contract_version,
+        "sourceProvenanceContractVersion": SOURCE_PROVENANCE_CONTRACT_VERSION,
+        "entryCount": summary["entryCount"],
+        "authorityTierCounts": summary["authorityTierCounts"],
+        "freshnessStateCounts": summary["freshnessStateCounts"],
+        "evidenceDomainCounts": summary["evidenceDomainCounts"],
+        "fallbackOrProxyCount": summary["fallbackOrProxyCount"],
+        "observationOnlyCount": summary["observationOnlyCount"],
+        "scoreContributionAllowedCount": summary["scoreContributionAllowedCount"],
+        "entries": entries,
+    }
+
+
+def _legacy_market_entries(payload: dict[str, object]) -> list[dict[str, object]]:
+    mapped = market_helper._mapping(payload)
+    return sorted(
+        [
+            market_helper._build_domain_entry(domain_key, evidence_domain, fallback_label, mapped[domain_key])
+            for domain_key, evidence_domain, fallback_label in market_helper._DOMAIN_SPECS
+            if domain_key in mapped
+        ],
+        key=lambda item: (item["sourceId"], item["debugRef"], item["evidenceDomain"]),
+    )
+
+
 def test_helper_is_pure_and_json_stable() -> None:
     imports = _helper_imports()
     assert all(not module.startswith(FORBIDDEN_IMPORT_PREFIXES) for module in imports)
@@ -143,6 +172,19 @@ def test_helper_is_pure_and_json_stable() -> None:
     sidecar = build_market_intelligence_source_provenance_sidecar(_readyish_inputs())
 
     assert json.loads(json.dumps(sidecar, ensure_ascii=False, sort_keys=True)) == sidecar
+
+
+def test_readyish_market_payload_matches_legacy_inline_sidecar_wrapper() -> None:
+    payload = _readyish_inputs()
+    sidecar = build_market_intelligence_source_provenance_sidecar(payload)
+    expected = _legacy_sidecar_payload(
+        MARKET_INTELLIGENCE_SOURCE_PROVENANCE_VERSION,
+        _legacy_market_entries(payload),
+    )
+
+    assert json.loads(json.dumps(sidecar, ensure_ascii=False, sort_keys=True)) == json.loads(
+        json.dumps(expected, ensure_ascii=False, sort_keys=True)
+    )
 
 
 def test_readyish_market_payload_builds_all_expected_entries() -> None:

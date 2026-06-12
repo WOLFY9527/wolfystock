@@ -6,9 +6,8 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from src.services.source_provenance_contract import (
-    SOURCE_PROVENANCE_CONTRACT_VERSION,
     build_source_provenance,
-    summarize_source_provenance,
+    build_source_provenance_sidecar,
 )
 
 
@@ -41,19 +40,10 @@ def build_market_intelligence_source_provenance_sidecar(
         ],
         key=lambda item: (item["sourceId"], item["debugRef"], item["evidenceDomain"]),
     )
-    summary = summarize_source_provenance(entries)
-    return {
-        "contractVersion": MARKET_INTELLIGENCE_SOURCE_PROVENANCE_VERSION,
-        "sourceProvenanceContractVersion": SOURCE_PROVENANCE_CONTRACT_VERSION,
-        "entryCount": summary["entryCount"],
-        "authorityTierCounts": summary["authorityTierCounts"],
-        "freshnessStateCounts": summary["freshnessStateCounts"],
-        "evidenceDomainCounts": summary["evidenceDomainCounts"],
-        "fallbackOrProxyCount": summary["fallbackOrProxyCount"],
-        "observationOnlyCount": summary["observationOnlyCount"],
-        "scoreContributionAllowedCount": summary["scoreContributionAllowedCount"],
-        "entries": entries,
-    }
+    return build_source_provenance_sidecar(
+        contract_version=MARKET_INTELLIGENCE_SOURCE_PROVENANCE_VERSION,
+        entries=entries,
+    )
 
 
 def _build_domain_entry(

@@ -489,6 +489,27 @@ def summarize_source_provenance(entries: Iterable[Mapping[str, Any]]) -> dict[st
     }
 
 
+def build_source_provenance_sidecar(
+    *,
+    contract_version: str,
+    entries: Iterable[Mapping[str, Any]],
+) -> dict[str, Any]:
+    sidecar_entries = list(entries)
+    summary = summarize_source_provenance(sidecar_entries)
+    return {
+        "contractVersion": contract_version,
+        "sourceProvenanceContractVersion": SOURCE_PROVENANCE_CONTRACT_VERSION,
+        "entryCount": summary["entryCount"],
+        "authorityTierCounts": summary["authorityTierCounts"],
+        "freshnessStateCounts": summary["freshnessStateCounts"],
+        "evidenceDomainCounts": summary["evidenceDomainCounts"],
+        "fallbackOrProxyCount": summary["fallbackOrProxyCount"],
+        "observationOnlyCount": summary["observationOnlyCount"],
+        "scoreContributionAllowedCount": summary["scoreContributionAllowedCount"],
+        "entries": sidecar_entries,
+    }
+
+
 __all__ = [
     "SOURCE_PROVENANCE_CONTRACT_VERSION",
     "build_fixture_demo_source_provenance",
@@ -496,6 +517,7 @@ __all__ = [
     "build_observation_only_source_provenance",
     "build_score_grade_source_provenance",
     "build_source_provenance",
+    "build_source_provenance_sidecar",
     "build_stale_source_provenance",
     "build_unknown_source_provenance",
     "summarize_source_provenance",
