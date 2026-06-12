@@ -13,6 +13,7 @@ from src.services.source_provenance_contract import (
     build_fixture_demo_source_provenance,
     build_observation_only_source_provenance,
     build_score_grade_source_provenance,
+    build_source_provenance_sidecar,
     build_source_provenance,
     build_stale_source_provenance,
     build_unknown_source_provenance,
@@ -209,6 +210,43 @@ def test_summary_aggregates_by_authority_freshness_and_domain_with_stable_entry_
         "source-provenance:unknown",
         "source-provenance:z",
     ]
+
+
+def test_sidecar_builder_wraps_summary_without_changing_payload_shape() -> None:
+    entries = [
+        build_fallback_proxy_source_provenance(
+            source_id="yfinance_proxy",
+            source_label="Yahoo Finance",
+            evidence_domain="macro",
+            debug_ref="z-debug",
+        ),
+        build_score_grade_source_provenance(
+            source_id="polygon_us_grouped_daily",
+            source_label="Polygon grouped daily US equities",
+            evidence_domain="quote",
+            debug_ref="a-debug",
+        ),
+    ]
+    summary = summarize_source_provenance(entries)
+
+    sidecar = build_source_provenance_sidecar(
+        contract_version="sample_source_provenance_sidecar_v1",
+        entries=entries,
+    )
+
+    assert sidecar == {
+        "contractVersion": "sample_source_provenance_sidecar_v1",
+        "sourceProvenanceContractVersion": SOURCE_PROVENANCE_CONTRACT_VERSION,
+        "entryCount": summary["entryCount"],
+        "authorityTierCounts": summary["authorityTierCounts"],
+        "freshnessStateCounts": summary["freshnessStateCounts"],
+        "evidenceDomainCounts": summary["evidenceDomainCounts"],
+        "fallbackOrProxyCount": summary["fallbackOrProxyCount"],
+        "observationOnlyCount": summary["observationOnlyCount"],
+        "scoreContributionAllowedCount": summary["scoreContributionAllowedCount"],
+        "entries": entries,
+    }
+    assert json.loads(json.dumps(sidecar, ensure_ascii=False, sort_keys=True)) == sidecar
 
 
 def test_leakage_guardrails_sanitize_sensitive_strings_from_consumer_fields() -> None:
