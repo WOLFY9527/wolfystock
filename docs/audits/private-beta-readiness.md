@@ -151,7 +151,9 @@ Before calling a build a private-beta candidate, reviewers should confirm:
 - [ ] Focused backend tests for touched backend files pass.
 - [ ] If frontend is touched, typecheck/build and bounded route smoke pass.
 - [ ] `git diff --check` passes.
-- [ ] `./scripts/release_secret_scan.sh --local-only` passes.
+- [ ] `./scripts/release_secret_scan.sh --base-ref origin/main` passes; do
+  not use `--local-only` as private-beta candidate evidence because it skips
+  committed branch changes.
 - [ ] Public launch, live quota enforcement, provider runtime enforcement,
   global MFA enforcement, DB migration/cleanup/restore, broker/order paths, and
   external notification sending remain disabled/not approved.

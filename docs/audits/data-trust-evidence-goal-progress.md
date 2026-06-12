@@ -134,11 +134,18 @@ Step 2 and all route/page adoption remain pending approval.
 
 ## Validation Plan
 
-Always run for each checkpoint:
+Run for local inner-loop checkpoints before commit:
 
 ```bash
 git diff --check
 ./scripts/release_secret_scan.sh --local-only
+```
+
+Before branch review, commit/push evidence, or landing, rerun the branch-aware
+release scan:
+
+```bash
+./scripts/release_secret_scan.sh --base-ref origin/main
 ```
 
 When frontend code changes:

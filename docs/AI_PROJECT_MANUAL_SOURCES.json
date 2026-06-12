@@ -1,6 +1,6 @@
 {
   "discovery": {
-    "candidateMarkdownAfterPolicy": 285,
+    "candidateMarkdownAfterPolicy": 216,
     "excludedByReason": {
       "ai_governance_mirror": 5,
       "archive_provenance": 55,
@@ -11,7 +11,7 @@
       "task_progress_log": 10
     },
     "includedSourceCount": 53,
-    "markdownDiscovered": 428,
+    "markdownDiscovered": 359,
     "prunedDirectoryNames": [
       ".cache",
       ".codex",
@@ -341,15 +341,15 @@
       "title": "Options Provider Adapter Contract"
     },
     {
-      "bytes": 11681,
+      "bytes": 11799,
       "categories": [
         "deployment",
         "launch"
       ],
-      "lineCount": 157,
+      "lineCount": 159,
       "path": "docs/audits/private-beta-readiness.md",
       "purpose": "private beta boundary and non-approved areas",
-      "sha256": "670f07a022db9a1403e469d2a1ce5161afc6d724edd9631b3febd4a40c407b4c",
+      "sha256": "24088c87b76772a0619d0f00cb190e716d6770d983afffd0dacbd7b47ae439a1",
       "title": "Private Beta Readiness Report"
     },
     {
@@ -364,14 +364,14 @@
       "title": "Public Launch Gap Register"
     },
     {
-      "bytes": 13993,
+      "bytes": 14059,
       "categories": [
         "launch"
       ],
-      "lineCount": 195,
+      "lineCount": 196,
       "path": "docs/audits/public-launch-readiness-master.md",
       "purpose": "executive public launch NO-GO verdict",
-      "sha256": "4a1b57d1b94f23daa792f80efd11103a450b1b875b8fda486084ed64e74c37e6",
+      "sha256": "48c127aa56c736968a4605125daec8dbb0f486048e8ab9e4fc0b3e85e5f35d95",
       "title": "Public Launch Readiness Master"
     },
     {
@@ -601,15 +601,15 @@
       "title": "WolfyStock Frontend Noise Budget"
     },
     {
-      "bytes": 12454,
+      "bytes": 12631,
       "categories": [
         "frontend",
         "validation"
       ],
-      "lineCount": 370,
+      "lineCount": 373,
       "path": "docs/frontend/validation-playbook.md",
       "purpose": "frontend/browser evidence and visual validation expectations",
-      "sha256": "cb6656fba6f69165a7ca641a961bff8549ec63f78525185929a3ce65ff6c0953",
+      "sha256": "cda4fff48cd8dcfb6321560bef6d373d6a8f233420d0030d85b0d30ffddf3fdc",
       "title": "WolfyStock Frontend Validation Playbook"
     },
     {
@@ -698,7 +698,7 @@
   "outputs": {
     "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
     "manual": "docs/AI_PROJECT_MANUAL.md",
-    "manualSha256": "7aaea435af540b343e5a1f25123d1c8406a1625d376e7c576ea1444c84348d09"
+    "manualSha256": "630bc788c744beb3e7d9a2238773acd772abdd38cd8d98186dbbb982de3d8d20"
   },
   "schemaVersion": 1,
   "sections": [

@@ -47,6 +47,10 @@ Validation:
   high-confidence secret patterns;
 - backend/frontend tests not required for docs-only slice.
 
+Note: the local-only scan above covered staged, unstaged, and untracked files
+only. Before using this record as branch or candidate evidence, rerun
+`./scripts/release_secret_scan.sh --base-ref origin/main`.
+
 Decision:
 
 - Private-beta candidate review may use this report as an evidence index.

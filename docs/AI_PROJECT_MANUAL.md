@@ -186,8 +186,8 @@ The machine-readable manifest is generated at `docs/AI_PROJECT_MANUAL_SOURCES.js
 
 Current discovery summary:
 
-- Markdown discovered after pruned directory rules: 428
-- Candidate Markdown after exclusion policy: 285
+- Markdown discovered after pruned directory rules: 359
+- Candidate Markdown after exclusion policy: 216
 - Curated sources included in this manual: 53
 
 Exclusion policy:

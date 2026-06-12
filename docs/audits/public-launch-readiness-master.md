@@ -88,9 +88,10 @@ Public launch may leave **NO-GO** only through an external/manual release
 decision after all of the following are true:
 
 - `./scripts/ci_gate.sh` is clean on the release candidate.
-- `scripts/release_secret_scan.sh` is clean on the release candidate. This is a
-  lightweight changed-file smoke check for obvious secrets, not a replacement
-  for a full enterprise DLP or historical secret-audit program.
+- `scripts/release_secret_scan.sh` is clean on the release candidate. By
+  default it scans committed branch changes from the release base ref plus
+  staged, unstaged, and untracked text files; it is still not a replacement for
+  a full enterprise DLP or historical secret-audit program.
 - `git status --short` is clean before tagging or deploying.
 - Staging smoke passes through HTTPS reverse proxy with synthetic users and
   data. The available helper is
