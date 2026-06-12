@@ -88,8 +88,11 @@ npm --prefix apps/dsa-web run check:design
 `build:quiet` still fails on TypeScript or Vite errors; it only reduces noisy
 successful Vite output. `release_secret_scan.sh` defaults to the release-safe
 branch + staged + working tree + untracked scan. Use `--local-only` only for
-inner-loop validation, and `--files-from <path>` only when a caller already has
-a reviewed changed-file list.
+inner-loop validation; branch review, private-beta candidate, batch landing,
+and release evidence must use the default full scan or
+`./scripts/release_secret_scan.sh --base-ref origin/main`. Use the
+`--files-from <path>` mode only when a caller already has a reviewed
+changed-file list.
 
 ## Standard Playwright Invocation
 

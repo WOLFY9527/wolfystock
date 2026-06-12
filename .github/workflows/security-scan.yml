@@ -9,7 +9,10 @@ on:
       - 'bot/**'
       - 'data_provider/**'
       - 'docker/**'
+      - '*.py'
+      - 'patch/**'
       - 'src/**'
+      - 'strategies/**'
       - 'scripts/security_scan.sh'
       - 'requirements*.txt'
       - 'pyproject.toml'
@@ -23,7 +26,10 @@ on:
       - 'bot/**'
       - 'data_provider/**'
       - 'docker/**'
+      - '*.py'
+      - 'patch/**'
       - 'src/**'
+      - 'strategies/**'
       - 'scripts/security_scan.sh'
       - 'requirements*.txt'
       - 'pyproject.toml'
@@ -51,7 +57,8 @@ jobs:
       - name: Gitleaks scan with redacted output
         uses: gitleaks/gitleaks-action@v2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: >-
+            ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_COMMENTS: 'false'
         with:
           args: detect --source . --redact --no-banner --exit-code 1

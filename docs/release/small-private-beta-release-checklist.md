@@ -60,7 +60,10 @@ Use during a bounded task before commit.
 
 - Run focused tests for the changed route/module.
 - Run changed-file lint/typecheck/build only when frontend source changed.
-- For docs-only work, use `git diff --check` plus local secret scan.
+- For docs-only inner-loop work before commit, use `git diff --check` plus
+  `./scripts/release_secret_scan.sh --local-only`; for branch review, batch
+  landing, or release evidence, use
+  `./scripts/release_secret_scan.sh --base-ref origin/main`.
 
 ### Batch Fast Gate
 
@@ -82,8 +85,9 @@ Use for the private beta candidate itself.
   boundary.
 - Verify no raw leakage, no advice leakage, no console errors, no unexpected
   network failures, and no horizontal overflow.
-- Run release secret scan and any release-owned auth/RBAC, market-briefing, and
-  rollback evidence checks required by the operator.
+- Run `./scripts/release_secret_scan.sh --base-ref origin/main` and any
+  release-owned auth/RBAC, market-briefing, and rollback evidence checks
+  required by the operator.
 - Keep public launch approval separate; private beta evidence is not public GO.
 
 ## 4. Rollback Runbook
