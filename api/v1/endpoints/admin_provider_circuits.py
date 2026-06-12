@@ -67,6 +67,11 @@ _ADMIN_PROBE_PROVIDER_CATEGORY = "data_source_validation"
 _ADMIN_PROBE_ROUTE_FAMILY = "admin_provider_probe"
 _ADMIN_PROBE_SELECTED_BOUNDARY = "/config/data-source/test-builtin"
 _ADMIN_PROBE_API_ROUTE = "/api/v1/system/config/data-source/test-builtin"
+_ADMIN_PROBE_REMAINING_PUBLIC_LAUNCH_NO_GO_ITEMS = [
+    "public_provider_circuit_enforcement_not_accepted",
+    "target_environment_provider_sla_evidence_missing",
+    "provider_entitlement_licensing_not_accepted",
+]
 _SAFE_DIAGNOSTIC_REF_RE = re.compile(r"[^A-Za-z0-9_.:-]+")
 _UNSAFE_DIAGNOSTIC_TEXT_RE = re.compile(
     r"(https?://|[?&][a-z0-9_.:-]+=|"
@@ -359,6 +364,9 @@ def _admin_probe_pilot_evidence_projection(
         "selectedBoundary": _ADMIN_PROBE_SELECTED_BOUNDARY,
         "apiRoute": _ADMIN_PROBE_API_ROUTE,
         "selectedBoundaryOnly": True,
+        "adminProbeOnly": True,
+        "defaultOffPosture": True,
+        "rollbackAvailable": True,
         "providerCategory": _ADMIN_PROBE_PROVIDER_CATEGORY,
         "routeFamily": _ADMIN_PROBE_ROUTE_FAMILY,
         "lastDecisionCategory": str(decision.get("pilot_status") or "unknown"),
@@ -367,8 +375,12 @@ def _admin_probe_pilot_evidence_projection(
         "wouldBlockCall": bool(decision.get("would_block_call") is True),
         "wouldBlockIfEnforced": bool(decision.get("would_block_if_enforced") is True),
         "enforcementBlockReasonCode": reason_code,
+        "publicRuntimeProviderBlocking": False,
+        "memberRuntimeProviderBlocking": False,
+        "providerRuntimeEnforcement": False,
         "wouldChangeProviderOrder": False,
         "wouldChangeFallbackBehavior": False,
+        "providerOrderFallbackCacheBehaviorChanged": False,
         "noExternalCalls": True,
         "adminProbeBehaviorChanged": bool(decision.get("provider_behavior_changed") is True),
         "globalProviderBehaviorChanged": False,
@@ -376,7 +388,10 @@ def _admin_probe_pilot_evidence_projection(
         "quotaEnforcementChanged": False,
         "authRbacSessionChanged": False,
         "notificationSendEnabled": False,
+        "sanitizedFieldsOnly": True,
+        "acceptedOperatorEvidencePresent": False,
         "publicLaunchReady": False,
+        "remainingPublicLaunchNoGoItems": list(_ADMIN_PROBE_REMAINING_PUBLIC_LAUNCH_NO_GO_ITEMS),
         "defaultOffLabel": str(
             decision.get("default_off_label") or ProviderCircuitObserver.LOW_RISK_ADMIN_PROBE_DEFAULT_OFF_LABEL
         ),

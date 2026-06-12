@@ -108,6 +108,7 @@ def test_render_output_mentions_required_fields_and_validator_names(tmp_path: Pa
         assert spec.filename in markdown
     for validator_name in {
         "provider_operator_evidence_check.py",
+        "provider_sla_licensing_evidence_check.py",
         "restore_pitr_operator_evidence_check.py",
         "security_operator_acceptance_check.py",
         "quota_operator_evidence_check.py",

@@ -182,10 +182,16 @@ Release review should attach:
 - `scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>` output for every final matrix category, including the domain-local rehearsal tracks now split into explicit blockers.
 - Domain-local validator outputs for accepted operator artifacts:
   `scripts/provider_operator_evidence_check.py`,
+  `scripts/provider_sla_licensing_evidence_check.py`,
   `scripts/restore_pitr_operator_evidence_check.py`,
   `scripts/security_operator_acceptance_check.py`,
   `scripts/quota_operator_evidence_check.py`, and
   `scripts/staging_ingress_operator_evidence_check.py`.
+  The provider SLA/licensing artifact may include admin-probe pilot evidence
+  only when it remains admin-probe-only, default-off, rollback-available,
+  sanitized-only, and explicit that public/member provider runtime blocking,
+  provider runtime enforcement, provider order/fallback/cache changes,
+  accepted operator evidence, and public launch readiness are not proven.
 - Optional sanitized template pack from
   `scripts/operator_evidence_template_pack.py <template-dir>`. Reviewers must
   treat these as blank templates until operators fill them with sanitized

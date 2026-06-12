@@ -127,6 +127,9 @@ class ProviderAdminProbePilotEvidenceItem(_AdminProviderCircuitModel):
     selected_boundary: str = Field(alias="selectedBoundary")
     api_route: str = Field(alias="apiRoute")
     selected_boundary_only: bool = Field(default=True, alias="selectedBoundaryOnly")
+    admin_probe_only: bool = Field(default=True, alias="adminProbeOnly")
+    default_off_posture: bool = Field(default=True, alias="defaultOffPosture")
+    rollback_available: bool = Field(default=True, alias="rollbackAvailable")
     provider_category: str = Field(alias="providerCategory")
     route_family: str = Field(alias="routeFamily")
     last_decision_category: str = Field(alias="lastDecisionCategory")
@@ -135,8 +138,15 @@ class ProviderAdminProbePilotEvidenceItem(_AdminProviderCircuitModel):
     would_block_call: bool = Field(default=False, alias="wouldBlockCall")
     would_block_if_enforced: bool = Field(default=False, alias="wouldBlockIfEnforced")
     enforcement_block_reason_code: Optional[str] = Field(default=None, alias="enforcementBlockReasonCode")
+    public_runtime_provider_blocking: bool = Field(default=False, alias="publicRuntimeProviderBlocking")
+    member_runtime_provider_blocking: bool = Field(default=False, alias="memberRuntimeProviderBlocking")
+    provider_runtime_enforcement: bool = Field(default=False, alias="providerRuntimeEnforcement")
     would_change_provider_order: bool = Field(default=False, alias="wouldChangeProviderOrder")
     would_change_fallback_behavior: bool = Field(default=False, alias="wouldChangeFallbackBehavior")
+    provider_order_fallback_cache_behavior_changed: bool = Field(
+        default=False,
+        alias="providerOrderFallbackCacheBehaviorChanged",
+    )
     no_external_calls: bool = Field(default=True, alias="noExternalCalls")
     admin_probe_behavior_changed: bool = Field(default=False, alias="adminProbeBehaviorChanged")
     global_provider_behavior_changed: bool = Field(default=False, alias="globalProviderBehaviorChanged")
@@ -144,7 +154,13 @@ class ProviderAdminProbePilotEvidenceItem(_AdminProviderCircuitModel):
     quota_enforcement_changed: bool = Field(default=False, alias="quotaEnforcementChanged")
     auth_rbac_session_changed: bool = Field(default=False, alias="authRbacSessionChanged")
     notification_send_enabled: bool = Field(default=False, alias="notificationSendEnabled")
+    sanitized_fields_only: bool = Field(default=True, alias="sanitizedFieldsOnly")
+    accepted_operator_evidence_present: bool = Field(default=False, alias="acceptedOperatorEvidencePresent")
     public_launch_ready: bool = Field(default=False, alias="publicLaunchReady")
+    remaining_public_launch_no_go_items: List[str] = Field(
+        default_factory=list,
+        alias="remainingPublicLaunchNoGoItems",
+    )
     default_off_label: str = Field(alias="defaultOffLabel")
     rollback_label: str = Field(alias="rollbackLabel")
 

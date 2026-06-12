@@ -27,6 +27,7 @@ except ModuleNotFoundError:  # pragma: no cover - package import fallback
     from scripts.evidence_safety import path_label as _path_label
 
 from provider_operator_evidence_check import validate_provider_operator_evidence
+from provider_sla_licensing_evidence_check import validate_provider_sla_licensing_evidence
 from config_snapshot_evidence_check import validate_config_snapshot_evidence
 from manual_release_approval_evidence_check import validate_manual_release_approval_evidence
 from quota_operator_evidence_check import validate_artifact as validate_quota_operator_evidence
@@ -66,6 +67,12 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         filename="provider_operator_evidence.json",
         validator_name="provider_operator_evidence_check.py",
         validate=validate_provider_operator_evidence,
+    ),
+    ArtifactSpec(
+        category="provider-sla-licensing",
+        filename="provider_sla_licensing_evidence.json",
+        validator_name="provider_sla_licensing_evidence_check.py",
+        validate=validate_provider_sla_licensing_evidence,
     ),
     ArtifactSpec(
         category="restore-pitr",

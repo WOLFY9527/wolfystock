@@ -12,6 +12,7 @@ SCRIPT = REPO_ROOT / "scripts" / "operator_evidence_template_pack.py"
 
 EXPECTED_FILES = {
     "provider_operator_evidence.json",
+    "provider_sla_licensing_evidence.json",
     "restore_pitr_operator_evidence.json",
     "security_operator_acceptance.json",
     "quota_budget_operator_evidence.json",
@@ -202,6 +203,14 @@ def test_generated_templates_are_validator_safe_or_review_only(tmp_path: Path) -
     direct_checks: list[tuple[list[str], str, str]] = [
         (
             ["scripts/provider_operator_evidence_check.py", str(tmp_path / "provider_operator_evidence.json")],
+            "status",
+            "pass",
+        ),
+        (
+            [
+                "scripts/provider_sla_licensing_evidence_check.py",
+                str(tmp_path / "provider_sla_licensing_evidence.json"),
+            ],
             "status",
             "pass",
         ),

@@ -102,14 +102,21 @@ and does not close the `real_isolated_postgresql_restore_pitr` gate by itself.
 The bundle checker currently treats these files as required:
 
 - `provider_operator_evidence.json`
+- `provider_sla_licensing_evidence.json`
 - `restore_pitr_operator_evidence.json`
 - `security_operator_acceptance.json`
 - `quota_budget_operator_evidence.json`
 - `staging_ingress_operator_evidence.json`
+- `ws2_sse_operator_decision_evidence.json`
+- `config_snapshot_evidence.json`
+- `manual_release_approval_review_record.json`
 
-Other generated artifacts, such as config snapshot, WS2/SSE, and manual review
-record files, remain useful review attachments but may be reported as advisory
-by the bundle checker.
+`provider_sla_licensing_evidence.json` is the review artifact for provider
+SLA/licensing and admin-probe pilot evidence. Its admin-probe evidence must
+remain admin-probe-only, default-off, rollback-available, sanitized-only, and
+must not claim public/member runtime provider blocking, provider runtime
+enforcement, provider order/fallback/cache changes, accepted operator evidence,
+or public launch readiness.
 
 The WS2 target-environment template is maintained as a standalone review
 template at `docs/audits/ws2-target-environment-evidence-template.json`.
@@ -122,6 +129,7 @@ Run the domain validators for every artifact collected:
 
 ```bash
 python3 scripts/provider_operator_evidence_check.py "$EVIDENCE_DIR/provider_operator_evidence.json"
+python3 scripts/provider_sla_licensing_evidence_check.py "$EVIDENCE_DIR/provider_sla_licensing_evidence.json"
 python3 scripts/restore_pitr_operator_evidence_check.py \
   --artifact "$EVIDENCE_DIR/restore_pitr_operator_evidence.json"
 python3 scripts/security_operator_acceptance_check.py "$EVIDENCE_DIR/security_operator_acceptance.json"
@@ -129,6 +137,10 @@ python3 scripts/restore_pitr_operator_evidence_check.py "$EVIDENCE_DIR/restore_p
 python3 scripts/security_operator_acceptance_check.py --artifact "$EVIDENCE_DIR/security_operator_acceptance.json"
 python3 scripts/quota_operator_evidence_check.py "$EVIDENCE_DIR/quota_budget_operator_evidence.json"
 python3 scripts/staging_ingress_operator_evidence_check.py "$EVIDENCE_DIR/staging_ingress_operator_evidence.json"
+python3 scripts/ws2_sse_operator_decision_check.py "$EVIDENCE_DIR/ws2_sse_operator_decision_evidence.json"
+python3 scripts/config_snapshot_evidence_check.py "$EVIDENCE_DIR/config_snapshot_evidence.json"
+python3 scripts/manual_release_approval_evidence_check.py \
+  --artifact "$EVIDENCE_DIR/manual_release_approval_review_record.json"
 ```
 
 For the security artifact, `rbacFallbackDisable` must be accepted only when the
@@ -139,14 +151,10 @@ sanitized audit evidence, and unchanged runtime defaults. This is pilot
 evidence; it does not change the production/default fallback value or approve
 public launch.
 
-If present, also validate advisory artifacts:
+If present, also validate standalone advisory artifacts:
 
 ```bash
-python3 scripts/ws2_sse_operator_decision_check.py "$EVIDENCE_DIR/ws2_sse_operator_decision_evidence.json"
 python3 scripts/ws2_target_environment_evidence_check.py "$EVIDENCE_DIR/ws2_target_environment_evidence.json"
-python3 scripts/config_snapshot_evidence_check.py "$EVIDENCE_DIR/config_snapshot_evidence.json"
-python3 scripts/manual_release_approval_evidence_check.py \
-  --artifact "$EVIDENCE_DIR/manual_release_approval_review_record.json"
 ```
 
 Fix only the sanitized artifact content when a validator rejects an artifact.
