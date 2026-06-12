@@ -234,7 +234,21 @@ def _security_template() -> dict[str, Any]:
                 }
             ],
         },
-        "breakGlassRecovery": _security_section(),
+        "breakGlassRecovery": {
+            **_security_section(),
+            "generationVerified": False,
+            "displayOnceVerified": False,
+            "plaintextStoredAfterDisplay": False,
+            "hashStorageVerified": False,
+            "singleUseConsumeVerified": False,
+            "replayDeniedVerified": False,
+            "rotationRevocationVerified": False,
+            "breakGlassDefaultOff": False,
+            "recoveryFallbackSampled": False,
+            "rollbackPlanRecorded": False,
+            "auditEvidenceSanitized": False,
+            "runtimeDefaultUnchanged": False,
+        },
         "adminRouteSampling": {
             **_security_section(),
             "sampledRoutes": ["/redacted-or-configured"],

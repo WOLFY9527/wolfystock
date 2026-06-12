@@ -33,10 +33,9 @@ def _write_artifact_dir(tmp_path: Path, *, unsafe_value: str = "raw-body-value-n
             "notes": unsafe_value,
         },
         "provider_sla_licensing_evidence.json": {
-            "schemaVersion": "wolfystock_provider_sla_licensing_evidence_v1",
-            "providerName": "tradier",
+            "artifactVersion": "wolfystock_provider_sla_licensing_evidence_v1",
             "outcome": "accepted",
-            "evidenceRedactionVersion": "provider_sla_licensing_redaction_v1",
+            "evidenceRedactionVersion": "provider-sla-licensing-redaction-v1",
         },
         "restore_pitr_operator_evidence.json": {
             "schemaVersion": "wolfystock_restore_pitr_operator_evidence_input_v1",

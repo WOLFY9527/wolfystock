@@ -79,6 +79,22 @@ RBAC_R5_FORBIDDEN_TRUE_KEYS = {
     "rbacfallbackoffaccepted",
     "rbacfallbackremoved",
 }
+MFA_RECOVERY_CODE_ACCEPTANCE_TRUE_FIELDS = (
+    "generationVerified",
+    "displayOnceVerified",
+    "hashStorageVerified",
+    "singleUseConsumeVerified",
+    "replayDeniedVerified",
+    "rotationRevocationVerified",
+    "breakGlassDefaultOff",
+    "recoveryFallbackSampled",
+    "rollbackPlanRecorded",
+    "auditEvidenceSanitized",
+    "runtimeDefaultUnchanged",
+)
+MFA_RECOVERY_CODE_ACCEPTANCE_FALSE_FIELDS = (
+    "plaintextStoredAfterDisplay",
+)
 SAFE_PLACEHOLDERS = {
     "",
     "***",
@@ -99,6 +115,7 @@ SENSITIVE_KEY_MARKERS = (
     "bearer",
     "cookie",
     "credential",
+    "email",
     "mfa_secret",
     "otp_seed",
     "otpseed",
@@ -109,6 +126,9 @@ SENSITIVE_KEY_MARKERS = (
     "session",
     "totp_secret",
     "token",
+    "user_id",
+    "userid",
+    "username",
 )
 RAW_PAYLOAD_KEY_MARKERS = (
     "debug_payload",
@@ -141,15 +161,33 @@ SENSITIVE_VALUE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         ),
     ),
     ("bearer_token", re.compile(r"\bBearer\s+(?!\*{3}|redacted\b)[A-Za-z0-9._~+/=-]{12,}", re.IGNORECASE)),
+    ("cookie_header", re.compile(r"\bSet-Cookie\s*:\s*[^;\s]+", re.IGNORECASE)),
     ("credential_bearing_url", re.compile(r"(?i)\bhttps?://[^\s?#]+[?][^\s]+")),
+    ("private_url", re.compile(r"(?i)\bhttps?://[^\s]+")),
+    ("totp_uri", re.compile(r"(?i)\botpauth://")),
+    ("raw_recovery_code", re.compile(r"\b[A-Z0-9]{4,8}(?:-[A-Z0-9]{4,8}){2,}\b")),
     ("private_key", re.compile(r"-----BEGIN (?:RSA |DSA |EC |OPENSSH |PGP )?PRIVATE KEY-----")),
     ("provider_token", re.compile(r"\b(?:sk-[A-Za-z0-9_-]{24,}|gh[pousr]_[A-Za-z0-9_]{24,}|xox[baprs]-[A-Za-z0-9-]{20,})\b")),
+    (
+        "production_credential_assignment",
+        re.compile(
+            r"\b[A-Z][A-Z0-9_]*(?:SECRET|KEY|TOKEN|PASSWORD|COOKIE|SESSION)[A-Z0-9_]*\s*=\s*"
+            r"(?!\*{3}|redacted\b|masked\b|missing\b|none\b)[^\s,;&]+"
+        ),
+    ),
     ("stack_trace", re.compile(r"(?i)\b(?:traceback \(most recent call last\)|stack trace|stacktrace)\b")),
     ("debug_payload", re.compile(r"(?i)\b(?:raw|debug|provider)[_\s-]+(?:payload|request|response|body)\b")),
 )
 LAUNCH_APPROVAL_PATTERN = re.compile(
     r"\b(?:launch[-_\s]?approved|production[-_\s]?ready|automatic[-_\s]?go|"
-    r"release[-_\s]?approved)\b",
+    r"public[-_\s]?launch[-_\s]?(?:approved|ready)|release[-_\s]?approved)\b",
+    re.IGNORECASE,
+)
+GLOBAL_MFA_ENFORCEMENT_PATTERN = re.compile(
+    r"\b(?:global|all[-_\s]?users?|production|public)\b.{0,60}\bMFA\b.{0,60}"
+    r"\b(?:approved|required|enabled|enforced|ready|go)\b|"
+    r"\bMFA\b.{0,60}\b(?:approved|required|enabled|enforced|ready|go)\b.{0,60}"
+    r"\b(?:global|all[-_\s]?users?|production|public)\b",
     re.IGNORECASE,
 )
 RBAC_R5_UNSAFE_ACCEPTANCE_PATTERN = re.compile(
@@ -229,8 +267,23 @@ def _find_unsafe_values(value: Any, *, path: str = "") -> list[dict[str, str]]:
 def _find_launch_approval_claims(value: Any, *, path: str = "") -> list[dict[str, str]]:
     def _scan_entry(field: str, key: Any, nested: Any) -> list[dict[str, str]]:
         compact_key = _compact_key(key)
-        if compact_key in {"launchapproved", "releaseapproved", "approvedforlaunch"} and nested is True:
+        if compact_key in {
+            "launchapproved",
+            "releaseapproved",
+            "approvedforlaunch",
+            "publiclaunchapproval",
+            "publiclaunchapproved",
+            "publiclaunchready",
+        } and nested is True:
             return [_finding(field, "approval_boolean_not_allowed", field_key="path")]
+        if compact_key in {
+            "globalmfaenabled",
+            "globalmfaenforced",
+            "globalmfarequired",
+            "mfaenforcementenabled",
+            "publicmfarequired",
+        } and nested is True:
+            return [_finding(field, "global_mfa_enforcement_claim_not_allowed", field_key="path")]
         if compact_key in {"launchdecision", "launchstatus", "finalstatus", "releasedecision"}:
             text = str(nested).strip().lower()
             if text in {"go", "launch-approved", "launch_approved", "approved"} or LAUNCH_APPROVAL_PATTERN.search(text):
@@ -238,8 +291,11 @@ def _find_launch_approval_claims(value: Any, *, path: str = "") -> list[dict[str
         return []
 
     def _scan_string(field: str, text: Any) -> list[dict[str, str]]:
-        if LAUNCH_APPROVAL_PATTERN.search(str(text).strip()):
+        value = str(text).strip()
+        if LAUNCH_APPROVAL_PATTERN.search(value):
             return [_finding(field, "launch_approved_text_not_allowed", field_key="path")]
+        if GLOBAL_MFA_ENFORCEMENT_PATTERN.search(value):
+            return [_finding(field, "global_mfa_enforcement_claim_not_allowed", field_key="path")]
         return []
 
     return scan_json_tree(
@@ -470,6 +526,20 @@ def _rbac_r5_observe_audit_excerpt_issues(section: dict[str, Any]) -> list[str]:
     return issues
 
 
+def _mfa_recovery_code_acceptance_missing_fields(section: dict[str, Any]) -> list[str]:
+    missing = [
+        field
+        for field in MFA_RECOVERY_CODE_ACCEPTANCE_TRUE_FIELDS
+        if section.get(field) is not True
+    ]
+    missing.extend(
+        field
+        for field in MFA_RECOVERY_CODE_ACCEPTANCE_FALSE_FIELDS
+        if section.get(field) is not False
+    )
+    return missing
+
+
 def _build_summary(artifact: dict[str, Any]) -> dict[str, Any]:
     section_issues = _section_completion_issues(artifact)
     unsafe_findings = _find_unsafe_values(artifact)
@@ -478,8 +548,10 @@ def _build_summary(artifact: dict[str, Any]) -> dict[str, Any]:
     mfa_role_issues = _mfa_role_label_issues(artifact)
     rbac_section = artifact.get("rbacFallbackDisable") if isinstance(artifact.get("rbacFallbackDisable"), dict) else {}
     mfa_section = artifact.get("mfaAdminPilot") if isinstance(artifact.get("mfaAdminPilot"), dict) else {}
+    recovery_section = artifact.get("breakGlassRecovery") if isinstance(artifact.get("breakGlassRecovery"), dict) else {}
     fallback_disabled = rbac_section.get("fallbackDisabled")
     rbac_pilot_missing_fields = _rbac_fallback_off_operator_pilot_missing_fields(rbac_section)
+    recovery_missing_fields = _mfa_recovery_code_acceptance_missing_fields(recovery_section)
 
     checks = [
         {
@@ -506,6 +578,21 @@ def _build_summary(artifact: dict[str, Any]) -> dict[str, Any]:
             "evidence": {
                 "roleLabelCount": len(_string_list(mfa_section.get("testAccountRoleLabels"))),
                 "issues": mfa_role_issues[:20],
+            },
+        },
+        {
+            "id": "mfa_recovery_code_acceptance_evidence",
+            "status": _status(not recovery_missing_fields),
+            "evidence": {
+                "missingFields": recovery_missing_fields,
+                **{
+                    field: recovery_section.get(field) is True
+                    for field in MFA_RECOVERY_CODE_ACCEPTANCE_TRUE_FIELDS
+                },
+                **{
+                    field: recovery_section.get(field) is False
+                    for field in MFA_RECOVERY_CODE_ACCEPTANCE_FALSE_FIELDS
+                },
             },
         },
         {

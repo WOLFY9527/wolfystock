@@ -60,6 +60,21 @@ RBAC_FALLBACK_OBSERVE_FIELDS = {
     "runtimeBehaviorChanged",
 }
 
+MFA_RECOVERY_CODE_ACCEPTANCE_FIELDS = {
+    "generationVerified",
+    "displayOnceVerified",
+    "plaintextStoredAfterDisplay",
+    "hashStorageVerified",
+    "singleUseConsumeVerified",
+    "replayDeniedVerified",
+    "rotationRevocationVerified",
+    "breakGlassDefaultOff",
+    "recoveryFallbackSampled",
+    "rollbackPlanRecorded",
+    "auditEvidenceSanitized",
+    "runtimeDefaultUnchanged",
+}
+
 UNSAFE_MARKERS = (
     "api_key",
     "apikey",
@@ -140,6 +155,9 @@ def test_all_templates_generated(tmp_path: Path) -> None:
     assert observe_template["productionLeastPrivilegeAccepted"] is False
     assert observe_template["publicLaunchApproved"] is False
     assert observe_template["failClosedProductionEnforcementEnabled"] is False
+    assert MFA_RECOVERY_CODE_ACCEPTANCE_FIELDS.issubset(
+        security_template["breakGlassRecovery"]
+    )
 
     combined = "\n".join(path.read_text(encoding="utf-8") for path in tmp_path.glob("*.json"))
     for placeholder in PLACEHOLDERS:
