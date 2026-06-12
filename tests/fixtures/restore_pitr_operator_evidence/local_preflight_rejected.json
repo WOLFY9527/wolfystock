@@ -1,0 +1,113 @@
+{
+  "backupArtifactRef": "review-ticket-label",
+  "backupArtifactSummary": {
+    "artifactKind": "encrypted-base-backup",
+    "artifactRef": "review-ticket-label",
+    "rawPathIncluded": false,
+    "sourceEnvironmentLabel": "redacted-or-configured",
+    "walArchiveSummaryRef": "review-ticket-label"
+  },
+  "completedAt": "1970-01-01T00:00:00Z",
+  "destructiveProductionCommandExecuted": false,
+  "drillId": "review-ticket-label",
+  "environment": "isolated-restore",
+  "evidenceMode": "local-synthetic-preflight",
+  "evidenceRedactionVersion": "restore-pitr-redaction-v1",
+  "isolatedTarget": {
+    "environment": "isolated-restore",
+    "isolationBoundaryRef": "review-ticket-label",
+    "productionStorageTouched": false,
+    "targetLabel": "staging-environment-label"
+  },
+  "localGeneration": {
+    "checkerRanRestoreCommands": false,
+    "networkCallsEnabled": false,
+    "productionSecretsRead": false,
+    "productionStorageTouched": false,
+    "rawLogsIncluded": false,
+    "runtimeBehaviorChanged": false
+  },
+  "operator": "sanitized-operator-label",
+  "operatorApprovals": [
+    {
+      "approvalRef": "review-ticket-label",
+      "approved": false,
+      "approvedAt": "1970-01-01T00:00:00Z",
+      "role": "restore-operator"
+    },
+    {
+      "approvalRef": "review-ticket-label",
+      "approved": false,
+      "approvedAt": "1970-01-01T00:00:00Z",
+      "role": "release-reviewer"
+    }
+  ],
+  "outcome": "needs-review",
+  "ownerIsolationSmoke": {
+    "crossOwnerAccessBlocked": false,
+    "ownerScopeChecked": false,
+    "sampledOwnerLabelRefs": [
+      "redacted-or-configured"
+    ]
+  },
+  "pitrTarget": {
+    "targetRef": "review-ticket-label",
+    "targetTimestamp": "1970-01-01T00:00:00Z",
+    "walReplaySummaryRef": "review-ticket-label"
+  },
+  "pitrTargetTimestamp": "1970-01-01T00:00:00Z",
+  "postRestoreSmoke": {
+    "appBootReadiness": "needs-review",
+    "sampledQuerySummaries": [
+      "redacted-or-configured"
+    ],
+    "schemaCompatibility": "needs-review"
+  },
+  "launchApproved": false,
+  "publicLaunchReady": false,
+  "restoreCommandExecuted": false,
+  "restoreExecutionSummary": {
+    "commandSummaryRef": "review-ticket-label",
+    "destructiveProductionCommandExecuted": false,
+    "executedOutsideValidator": false,
+    "localOnlyDryRun": true,
+    "productionDbMutation": false,
+    "restoreCommandExecuted": false
+  },
+  "restoreTarget": "staging-environment-label",
+  "reviewOnly": true,
+  "rollbackDecisionPoint": {
+    "decidedAt": "1970-01-01T00:00:00Z",
+    "decision": "manual-review-required",
+    "decisionRef": "review-ticket-label"
+  },
+  "rpoObservedSeconds": 0,
+  "rtoObservedSeconds": 0,
+  "sanitizedArtifactReferences": [
+    {
+      "kind": "validator-output",
+      "label": "restore-pitr-validator-output",
+      "ref": "review-ticket-label"
+    }
+  ],
+  "schemaVersion": "wolfystock_restore_pitr_operator_evidence_input_v1",
+  "startedAt": "1970-01-01T00:00:00Z",
+  "templatePlaceholders": {
+    "replaceBeforeReview": [
+      "<sanitized-operator-label>",
+      "<staging-environment-label>",
+      "<redacted-or-configured>",
+      "<review-ticket-label>",
+      "<release-candidate-sha>"
+    ]
+  },
+  "verificationQueries": [
+    {
+      "checksum": "redacted-or-configured",
+      "expectedCount": 0,
+      "label": "redacted-or-configured",
+      "observedCount": 0,
+      "resultKind": "count"
+    }
+  ]
+}

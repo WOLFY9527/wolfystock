@@ -146,11 +146,14 @@ def test_restore_pitr_template_is_review_only_and_not_launch_ready(tmp_path: Pat
 
     assert result.returncode == 0, result.stderr
     payload = _stdout_json(result)["restore_pitr_operator_evidence.json"]
+    assert payload["evidenceMode"] == "local-synthetic-preflight"
     assert payload["outcome"] == "needs-review"
     assert payload["restoreCommandExecuted"] is False
     assert payload["reviewOnly"] is True
     assert payload["publicLaunchReady"] is False
     assert payload["launchApproved"] is False
+    assert payload["restoreExecutionSummary"]["localOnlyDryRun"] is True
+    assert payload["sanitizedArtifactReferences"][0]["kind"] == "validator-output"
     assert payload["localGeneration"]["checkerRanRestoreCommands"] is False
     assert payload["localGeneration"]["productionSecretsRead"] is False
 

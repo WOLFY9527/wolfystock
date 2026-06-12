@@ -107,6 +107,7 @@ def _provider_sla_licensing_template() -> dict[str, Any]:
 def _restore_pitr_template() -> dict[str, Any]:
     return {
         "schemaVersion": "wolfystock_restore_pitr_operator_evidence_input_v1",
+        "evidenceMode": "local-synthetic-preflight",
         "drillId": "review-ticket-label",
         "environment": "isolated-restore",
         "operator": "sanitized-operator-label",
@@ -133,6 +134,68 @@ def _restore_pitr_template() -> dict[str, Any]:
         "publicLaunchReady": False,
         "launchApproved": False,
         "evidenceRedactionVersion": "restore-pitr-redaction-v1",
+        "isolatedTarget": {
+            "targetLabel": "staging-environment-label",
+            "environment": "isolated-restore",
+            "isolationBoundaryRef": "review-ticket-label",
+            "productionStorageTouched": False,
+        },
+        "backupArtifactSummary": {
+            "artifactRef": "review-ticket-label",
+            "artifactKind": "encrypted-base-backup",
+            "walArchiveSummaryRef": "review-ticket-label",
+            "sourceEnvironmentLabel": "redacted-or-configured",
+            "rawPathIncluded": False,
+        },
+        "pitrTarget": {
+            "targetTimestamp": TEMPLATE_TIMESTAMP,
+            "targetRef": "review-ticket-label",
+            "walReplaySummaryRef": "review-ticket-label",
+        },
+        "restoreExecutionSummary": {
+            "restoreCommandExecuted": False,
+            "executedOutsideValidator": False,
+            "localOnlyDryRun": True,
+            "productionDbMutation": False,
+            "destructiveProductionCommandExecuted": False,
+            "commandSummaryRef": "review-ticket-label",
+        },
+        "postRestoreSmoke": {
+            "appBootReadiness": "needs-review",
+            "schemaCompatibility": "needs-review",
+            "sampledQuerySummaries": ["redacted-or-configured"],
+        },
+        "ownerIsolationSmoke": {
+            "ownerScopeChecked": False,
+            "crossOwnerAccessBlocked": False,
+            "sampledOwnerLabelRefs": ["redacted-or-configured"],
+        },
+        "rollbackDecisionPoint": {
+            "decision": "manual-review-required",
+            "decidedAt": TEMPLATE_TIMESTAMP,
+            "decisionRef": "review-ticket-label",
+        },
+        "operatorApprovals": [
+            {
+                "role": "restore-operator",
+                "approved": False,
+                "approvedAt": TEMPLATE_TIMESTAMP,
+                "approvalRef": "review-ticket-label",
+            },
+            {
+                "role": "release-reviewer",
+                "approved": False,
+                "approvedAt": TEMPLATE_TIMESTAMP,
+                "approvalRef": "review-ticket-label",
+            },
+        ],
+        "sanitizedArtifactReferences": [
+            {
+                "kind": "validator-output",
+                "label": "restore-pitr-validator-output",
+                "ref": "review-ticket-label",
+            }
+        ],
         "localGeneration": {
             "checkerRanRestoreCommands": False,
             "networkCallsEnabled": False,

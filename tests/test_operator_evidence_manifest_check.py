@@ -10,6 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "operator_evidence_manifest_check.py"
 EXPECTED_MANIFEST_CATEGORIES = {
     "provider",
+    "provider-sla-licensing",
     "restore-pitr",
     "security",
     "quota-budget",
@@ -30,6 +31,13 @@ def _write_artifact_dir(tmp_path: Path, *, unsafe_value: str = "raw-body-value-n
             "outcome": "accepted",
             "evidenceRedactionVersion": "provider_operator_redaction_v1",
             "notes": unsafe_value,
+        },
+        "provider_sla_licensing_evidence.json": {
+            "artifactVersion": "wolfystock_provider_sla_licensing_evidence_v1",
+            "environment": "staging",
+            "operator": "provider-ops",
+            "outcome": "accepted",
+            "evidenceRedactionVersion": "provider-sla-licensing-redaction-v1",
         },
         "restore_pitr_operator_evidence.json": {
             "schemaVersion": "wolfystock_restore_pitr_operator_evidence_input_v1",
@@ -108,7 +116,7 @@ def test_create_manifest_for_sanitized_fixture_directory(tmp_path: Path) -> None
     payload = _read_manifest(manifest)
     entries = payload["entries"]
     assert isinstance(entries, list)
-    assert len(entries) == 8
+    assert len(entries) == 9
     assert {entry["category"] for entry in entries} == EXPECTED_MANIFEST_CATEGORIES
     assert all(Path(entry["fileLabel"]).name == entry["fileLabel"] for entry in entries)
     assert all(set(entry) <= {"category", "fileLabel", "sha256", "byteSize", "generatedAt", "validatorName", "redactionVersion"} for entry in entries)

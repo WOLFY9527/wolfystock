@@ -88,6 +88,7 @@ def _provider_sla_artifact(**overrides: object) -> dict[str, object]:
 def _restore_artifact(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "schemaVersion": "wolfystock_restore_pitr_operator_evidence_input_v1",
+        "evidenceMode": "real-isolated-drill",
         "drillId": "restore-pitr-2026-05-08-001",
         "environment": "isolated-restore",
         "operator": "ops-oncall-sanitized",
@@ -111,6 +112,68 @@ def _restore_artifact(**overrides: object) -> dict[str, object]:
         "rtoObservedSeconds": 2220,
         "outcome": "accepted",
         "evidenceRedactionVersion": "restore-pitr-redaction-v1",
+        "isolatedTarget": {
+            "targetLabel": "restore-target:sandbox-pg-20260508",
+            "environment": "isolated-restore",
+            "isolationBoundaryRef": "isolation-boundary:ticket-001",
+            "productionStorageTouched": False,
+        },
+        "backupArtifactSummary": {
+            "artifactRef": "backup-ref:sha256-0123456789abcdef",
+            "artifactKind": "encrypted-base-backup",
+            "walArchiveSummaryRef": "wal-range:sha256-abcdef0123456789",
+            "sourceEnvironmentLabel": "source-backup-label",
+            "rawPathIncluded": False,
+        },
+        "pitrTarget": {
+            "targetTimestamp": "2026-05-08T08:45:00Z",
+            "targetRef": "pitr-target:pre-drill-checkpoint",
+            "walReplaySummaryRef": "wal-replay:bounded-summary",
+        },
+        "restoreExecutionSummary": {
+            "restoreCommandExecuted": True,
+            "executedOutsideValidator": True,
+            "localOnlyDryRun": False,
+            "productionDbMutation": False,
+            "destructiveProductionCommandExecuted": False,
+            "commandSummaryRef": "restore-command-summary:ticket-001",
+        },
+        "postRestoreSmoke": {
+            "appBootReadiness": "pass",
+            "schemaCompatibility": "pass",
+            "sampledQuerySummaries": ["query-summary:auth-count"],
+        },
+        "ownerIsolationSmoke": {
+            "ownerScopeChecked": True,
+            "crossOwnerAccessBlocked": True,
+            "sampledOwnerLabelRefs": ["owner-sample:alpha", "owner-sample:beta"],
+        },
+        "rollbackDecisionPoint": {
+            "decision": "rollback-not-required",
+            "decidedAt": "2026-05-08T09:38:00Z",
+            "decisionRef": "rollback-review:ticket-001",
+        },
+        "operatorApprovals": [
+            {
+                "role": "restore-operator",
+                "approved": True,
+                "approvedAt": "2026-05-08T09:39:00Z",
+                "approvalRef": "approval:restore-operator",
+            },
+            {
+                "role": "release-reviewer",
+                "approved": True,
+                "approvedAt": "2026-05-08T09:40:00Z",
+                "approvalRef": "approval:release-reviewer",
+            },
+        ],
+        "sanitizedArtifactReferences": [
+            {
+                "kind": "validator-output",
+                "label": "restore-pitr-validator-output",
+                "ref": "artifact-ref:restore-pitr-validator-output",
+            }
+        ],
         "localGeneration": {
             "checkerRanRestoreCommands": False,
             "networkCallsEnabled": False,
