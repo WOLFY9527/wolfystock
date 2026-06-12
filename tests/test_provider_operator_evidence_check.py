@@ -3,14 +3,18 @@
 
 from __future__ import annotations
 
-import json
-import subprocess
-import sys
 from pathlib import Path
+
+from tests.helpers.cli_validator import make_cli_validator, stdout_json as _stdout_json
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "provider_operator_evidence_check.py"
+_write_json, _run_validator = make_cli_validator(
+    SCRIPT,
+    cwd=REPO_ROOT,
+    artifact_name="provider-evidence.json",
+)
 
 
 def _artifact(**overrides: object) -> dict[str, object]:
@@ -30,26 +34,6 @@ def _artifact(**overrides: object) -> dict[str, object]:
     }
     payload.update(overrides)
     return payload
-
-
-def _write_json(tmp_path: Path, payload: object) -> Path:
-    path = tmp_path / "provider-evidence.json"
-    path.write_text(json.dumps(payload), encoding="utf-8")
-    return path
-
-
-def _run_validator(path: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, str(SCRIPT), str(path)],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-
-def _stdout_json(result: subprocess.CompletedProcess[str]) -> dict[str, object]:
-    return json.loads(result.stdout)
 
 
 def test_accepts_sanitized_operator_artifact(tmp_path: Path) -> None:
