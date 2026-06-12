@@ -223,6 +223,20 @@ class AdminOperatorIssueRollupItemModel(BaseModel):
     freshness_status: Optional[str] = None
     status: Optional[str] = None
     operator_guidance: str
+    summary_display_policy: str = Field(
+        default="safe_summary_only",
+        description="Default admin summaries must omit raw event handles and operator-only details.",
+    )
+    detail_export_policy: str = Field(
+        default="operator_explicit_action",
+        description="Operator detail handles may appear only after an explicit detail/copy/export action.",
+    )
+    safe_handle_policy: str = Field(
+        default="summary_omits_raw_handles",
+        description="Default copy uses counts and safe labels instead of raw sample event IDs.",
+    )
+    related_event_summary: str = "no_related_events_recorded"
+    operator_detail_available: bool = False
 
 
 class AdminOperatorIssueRollupResponse(BaseModel):

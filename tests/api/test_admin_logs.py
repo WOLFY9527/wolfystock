@@ -729,6 +729,43 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertNotIn("/Users/alice", dumped)
         self.assertNotIn("raw_response", dumped.lower())
 
+    def test_operator_issue_rollup_declares_summary_detail_policy_while_preserving_detail_handles(self) -> None:
+        now = datetime.now()
+        self._record_event(
+            session_id="provider-timeout-policy",
+            event_name="ExternalSourceTimeout",
+            level="WARNING",
+            category="data_source",
+            message="provider timeout operator marker SYNTHETIC_ADMIN_DETAIL_MARKER",
+            status="timed_out",
+            target="finnhub",
+            detail={
+                "surface": "market_overview",
+                "domain": "quote",
+                "provider": "finnhub",
+                "source": "market_overview",
+                "reason_code": "provider_timeout",
+                "freshness_status": "missing",
+                "metadata": {"operatorMarker": "SYNTHETIC_ADMIN_DETAIL_MARKER"},
+            },
+            event_at=now,
+        )
+
+        with patch("src.services.admin_logs_service.get_db", return_value=self.db):
+            payload = admin_logs.list_operator_issue_rollup(since="", limit=10, _=_admin_user())
+
+        self.assertEqual(payload.total, 1)
+        item = payload.items[0]
+        self.assertEqual(item.summary_display_policy, "safe_summary_only")
+        self.assertEqual(item.detail_export_policy, "operator_explicit_action")
+        self.assertEqual(item.safe_handle_policy, "summary_omits_raw_handles")
+        self.assertEqual(item.related_event_summary, "related_events_recorded")
+        self.assertTrue(item.operator_detail_available)
+        self.assertGreater(len(item.sample_event_ids), 0)
+        dumped = str(item.model_dump())
+        self.assertIn("sample_event_ids", dumped)
+        self.assertNotIn("SYNTHETIC_ADMIN_DETAIL_MARKER", dumped)
+
     def test_operator_issue_rollup_redacts_path_like_dimensions_and_metadata_tokens(self) -> None:
         now = datetime.now()
         self._record_event(
