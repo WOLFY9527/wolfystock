@@ -76,6 +76,12 @@ public-safety wording.
   partial/unavailable. Neither export implies market impact, spread simulation,
   partial fills, PIT universe guarantees, or decision-grade institutional
   execution realism.
+- Support exports use field-level positive allowlists per export type. Unknown
+  diagnostic/cache/provider/request/stack/debug fields are dropped or reduced to
+  bounded scalar summaries; unsafe raw markers fail closed instead of entering
+  manifests, execution-trace JSON, or execution-trace CSV. Export sanitization
+  must not change backtest math, stored results, provider/cache behavior, or
+  readback authority.
 - Backtest pages lead with result, risk metrics, assumptions, and evidence
   quality before export, rerun, trace, ledger, or raw controls.
 - Execution assumptions and data quality can be professional evidence when

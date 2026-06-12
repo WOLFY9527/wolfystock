@@ -21,7 +21,10 @@ from api.v1.schemas.backtest import (
     RuleBacktestUniverseResultsResponse,
 )
 from src.services.rule_backtest_support_exports import (
+    build_execution_trace_export_csv_text,
+    build_execution_trace_export_json_payload,
     build_oos_parameter_readiness_export,
+    build_support_bundle_manifest,
     build_support_bundle_reproducibility_manifest,
 )
 
@@ -45,6 +48,14 @@ FORBIDDEN_PUBLIC_TERMS = (
     "response_body",
     "stack_trace",
     "traceback",
+)
+SYNTHETIC_SUPPORT_EXPORT_RAW_MARKERS = (
+    "synthetic_cache_key",
+    "synthetic_provider_url",
+    "synthetic_request_id",
+    "synthetic_stack_trace",
+    "synthetic_debug_reason",
+    "synthetic_execution_trace_detail",
 )
 RESULT_REQUIRED_KEYS = {
     "id",
@@ -74,6 +85,171 @@ EXPORT_KEYS = [
     "execution_model_metadata_json",
     "oos_parameter_readiness_json",
 ]
+SUPPORT_MANIFEST_TOP_LEVEL_KEYS = {
+    "manifest_version",
+    "manifest_kind",
+    "run",
+    "run_timing",
+    "run_diagnostics",
+    "artifact_availability",
+    "readback_integrity",
+    "result_authority",
+    "artifact_counts",
+    "dataset_lineage",
+}
+SUPPORT_MANIFEST_RUN_KEYS = {
+    "id",
+    "code",
+    "status",
+    "status_message",
+    "run_at",
+    "completed_at",
+    "strategy_hash",
+    "timeframe",
+    "lookback_bars",
+    "period_start",
+    "period_end",
+    "benchmark_mode",
+    "benchmark_code",
+    "trade_count",
+    "total_return_pct",
+    "sharpe_ratio",
+    "max_drawdown_pct",
+    "final_equity",
+    "no_result_reason",
+    "no_result_message",
+}
+SUPPORT_REPRODUCIBILITY_TOP_LEVEL_KEYS = {
+    "manifest_version",
+    "manifest_kind",
+    "run",
+    "run_diagnostics",
+    "run_timing",
+    "artifact_availability",
+    "readback_integrity",
+    "execution_assumptions_fingerprint",
+    "result_authority",
+    "dataset_lineage",
+}
+SUPPORT_REPRODUCIBILITY_RUN_KEYS = {
+    "id",
+    "code",
+    "status",
+    "run_at",
+    "completed_at",
+    "strategy_hash",
+    "timeframe",
+    "lookback_bars",
+    "period_start",
+    "period_end",
+    "benchmark_mode",
+    "benchmark_code",
+}
+SUPPORT_RUN_TIMING_KEYS = {
+    "cancelled_at",
+    "created_at",
+    "failed_at",
+    "started_at",
+    "finished_at",
+    "last_updated_at",
+    "queue_duration_seconds",
+    "run_duration_seconds",
+}
+SUPPORT_RUN_DIAGNOSTICS_KEYS = {
+    "current_status",
+    "terminal_status",
+    "reason_code",
+    "message",
+    "last_transition_at",
+    "last_transition_message",
+    "last_non_terminal_status",
+}
+SUPPORT_ARTIFACT_AVAILABILITY_KEYS = {
+    "version",
+    "source",
+    "completeness",
+    "has_summary",
+    "has_parsed_strategy",
+    "has_metrics",
+    "has_execution_model",
+    "has_comparison",
+    "has_trade_rows",
+    "has_equity_curve",
+    "has_execution_trace",
+    "has_run_diagnostics",
+    "has_run_timing",
+}
+SUPPORT_READBACK_INTEGRITY_KEYS = {
+    "version",
+    "source",
+    "completeness",
+    "used_legacy_fallback",
+    "used_live_storage_repair",
+    "has_summary_storage_drift",
+    "drift_domains",
+    "missing_summary_fields",
+    "integrity_level",
+}
+SUPPORT_RESULT_AUTHORITY_TOP_LEVEL_KEYS = {"contract_version", "read_mode", "domains"}
+SUPPORT_RESULT_AUTHORITY_DOMAIN_KEYS = {"source", "completeness", "state", "missing", "missing_kind"}
+SUPPORT_REPRODUCIBILITY_RESULT_AUTHORITY_DOMAIN_KEYS = {"source", "completeness", "state"}
+SUPPORT_ARTIFACT_COUNTS_KEYS = {
+    "status_history_count",
+    "warning_count",
+    "trade_rows_count",
+    "equity_curve_points",
+    "audit_rows_count",
+    "daily_return_series_count",
+    "exposure_curve_count",
+    "execution_trace_rows_count",
+}
+SUPPORT_DATASET_LINEAGE_KEYS = {
+    "source",
+    "provider",
+    "authority_status",
+    "authority_source_type",
+    "authority_reason_codes",
+    "authority_reason_families",
+    "authority_allowed",
+    "degraded_fill_only",
+    "requested_range",
+    "actual_range",
+    "bar_count",
+    "dataset_version",
+}
+TRACE_EXPORT_TOP_LEVEL_KEYS = {
+    "version",
+    "source",
+    "completeness",
+    "missing_fields",
+    "trace_rows",
+    "assumptions",
+    "execution_model",
+    "execution_assumptions",
+    "benchmark_summary",
+    "fallback",
+}
+TRACE_EXPORT_ROW_ALLOWED_KEYS = {
+    "date",
+    "event_type",
+    "action",
+    "signal_summary",
+    "position",
+    "shares",
+    "cash",
+    "holdings_value",
+    "total_portfolio_value",
+    "daily_pnl",
+    "daily_return",
+    "cumulative_return",
+    "benchmark_cumulative_return",
+    "buy_hold_cumulative_return",
+    "fees",
+    "slippage",
+    "notes",
+    "fallback",
+    "anomaly",
+}
 FORBIDDEN_ROBUSTNESS_OPTIMIZER_TERMS = (
     "optimizer",
     "optimization",
@@ -167,6 +343,12 @@ def _assert_no_sensitive_public_payload(value: Any) -> None:
     public_text = "\n".join(_iter_strings(value)).lower()
     for term in FORBIDDEN_PUBLIC_TERMS:
         assert term not in public_text
+
+
+def _assert_no_synthetic_support_export_raw_markers(value: Any) -> None:
+    public_text = "\n".join(_iter_strings(value)).lower()
+    for marker in SYNTHETIC_SUPPORT_EXPORT_RAW_MARKERS:
+        assert marker not in public_text
 
 
 def _assert_no_live_provider_authority(value: Any) -> None:
@@ -924,12 +1106,14 @@ def test_execution_trace_export_fixture_freezes_compact_public_trace_shape() -> 
 
     trace = RuleBacktestExecutionTraceExportResponse(**payload).model_dump()
 
+    assert set(payload) == TRACE_EXPORT_TOP_LEVEL_KEYS
     assert trace["version"] == "v1"
     assert trace["source"] == "summary.execution_trace"
     assert trace["completeness"] == "complete"
     assert trace["missing_fields"] == []
     assert len(trace["trace_rows"]) == 3
     for row in trace["trace_rows"]:
+        assert set(row) <= TRACE_EXPORT_ROW_ALLOWED_KEYS
         assert {"date", "event_type", "action", "signal_summary", "position", "total_portfolio_value"} <= set(row)
         assert "provider_response" not in row
         assert "request_headers" not in row
@@ -943,7 +1127,60 @@ def test_execution_trace_export_fixture_freezes_compact_public_trace_shape() -> 
     assert trace["fallback"]["provider_authority"] == "none"
 
     _assert_no_sensitive_public_payload(trace)
+    _assert_no_synthetic_support_export_raw_markers(trace)
     _assert_no_live_provider_authority(trace)
+
+
+def test_execution_trace_export_builders_drop_synthetic_raw_marker_fields() -> None:
+    run = _load_fixture("rule_backtest_result_summary_dto.json")
+    execution_trace = run["execution_trace"]
+    execution_trace["missing_fields"] = ["synthetic_debug_reason"]
+    execution_trace["assumptions_defaults"]["synthetic_cache_key"] = "synthetic_cache_key"
+    execution_trace["execution_model"]["synthetic_provider_url"] = "synthetic_provider_url"
+    execution_trace["execution_assumptions"]["synthetic_request_id"] = "synthetic_request_id"
+    execution_trace["fallback"]["synthetic_execution_trace_detail"] = "synthetic_execution_trace_detail"
+    run["benchmark_summary"]["synthetic_stack_trace"] = "synthetic_stack_trace"
+    execution_trace["rows"][0].update(
+        {
+            "notes": "synthetic_debug_reason",
+            "fallback": {
+                "code": "open_missing_close_fallback",
+                "applied": True,
+                "authority": "stored_trace_row",
+                "synthetic_provider_url": "synthetic_provider_url",
+            },
+            "assumptions_defaults": {
+                "summary_text": "row assumptions",
+                "synthetic_cache_key": "synthetic_cache_key",
+            },
+        }
+    )
+    trace_columns = [
+        ("date", "date"),
+        ("action_display", "action"),
+        ("notes", "notes"),
+        ("assumptions_defaults", "assumptions"),
+        ("fallback", "fallback"),
+    ]
+
+    trace_json = build_execution_trace_export_json_payload(
+        run,
+        trace_columns,
+        action_formatter=lambda action: action,
+    )
+    trace_csv = build_execution_trace_export_csv_text(
+        run,
+        trace_columns,
+        action_formatter=lambda action: action,
+    )
+
+    _assert_no_synthetic_support_export_raw_markers(trace_json)
+    _assert_no_synthetic_support_export_raw_markers(trace_csv)
+    assert trace_json["source"] == "summary.execution_trace"
+    assert trace_json["execution_model"]["entry_timing"] == "next_bar_open"
+    assert trace_json["execution_assumptions"]["indicator_price_basis"] == "close"
+    assert trace_json["fallback"]["provider_authority"] == "none"
+    assert "open_missing_close_fallback" in trace_json["trace_rows"][0]["fallback"]
 
 
 def test_robustness_evidence_export_fixture_freezes_stored_payload_shape() -> None:
@@ -1068,14 +1305,16 @@ def test_oos_parameter_readiness_export_fixture_freezes_stored_first_diagnostic_
 
 
 def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_boundary() -> None:
+    raw_manifest = _load_fixture("rule_backtest_support_bundle_manifest_dto.json")
+    raw_reproducibility = _load_fixture("rule_backtest_support_bundle_reproducibility_manifest_dto.json")
     export_index = RuleBacktestSupportExportIndexResponse(
         **_load_fixture("rule_backtest_export_index_dto.json")
     ).model_dump()
     manifest = RuleBacktestSupportBundleManifestResponse(
-        **_load_fixture("rule_backtest_support_bundle_manifest_dto.json")
+        **raw_manifest
     ).model_dump()
     reproducibility = RuleBacktestSupportBundleReproducibilityManifestResponse(
-        **_load_fixture("rule_backtest_support_bundle_reproducibility_manifest_dto.json")
+        **raw_reproducibility
     ).model_dump()
     projected_reproducibility = RuleBacktestSupportBundleReproducibilityManifestResponse(
         **build_support_bundle_reproducibility_manifest(
@@ -1090,6 +1329,30 @@ def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_bou
         }
         for domain_name, domain_payload in manifest["result_authority"]["domains"].items()
     }
+
+    assert set(raw_manifest) <= SUPPORT_MANIFEST_TOP_LEVEL_KEYS
+    assert set(raw_manifest) == SUPPORT_MANIFEST_TOP_LEVEL_KEYS - {"dataset_lineage"}
+    assert set(raw_manifest["run"]) <= SUPPORT_MANIFEST_RUN_KEYS
+    assert set(raw_manifest["run"]) == SUPPORT_MANIFEST_RUN_KEYS - {"sharpe_ratio"}
+    assert set(raw_manifest["run_timing"]) <= SUPPORT_RUN_TIMING_KEYS
+    assert set(raw_manifest["run_diagnostics"]) <= SUPPORT_RUN_DIAGNOSTICS_KEYS
+    assert set(raw_manifest["artifact_availability"]) == SUPPORT_ARTIFACT_AVAILABILITY_KEYS
+    assert set(raw_manifest["readback_integrity"]) == SUPPORT_READBACK_INTEGRITY_KEYS
+    assert set(raw_manifest["result_authority"]) == SUPPORT_RESULT_AUTHORITY_TOP_LEVEL_KEYS
+    for domain_payload in raw_manifest["result_authority"]["domains"].values():
+        assert set(domain_payload) <= SUPPORT_RESULT_AUTHORITY_DOMAIN_KEYS
+    assert set(raw_manifest["artifact_counts"]) == SUPPORT_ARTIFACT_COUNTS_KEYS
+
+    assert set(raw_reproducibility) == SUPPORT_REPRODUCIBILITY_TOP_LEVEL_KEYS
+    assert set(raw_reproducibility["run"]) == SUPPORT_REPRODUCIBILITY_RUN_KEYS
+    assert set(raw_reproducibility["run_timing"]) <= SUPPORT_RUN_TIMING_KEYS
+    assert set(raw_reproducibility["run_diagnostics"]) <= SUPPORT_RUN_DIAGNOSTICS_KEYS
+    assert set(raw_reproducibility["artifact_availability"]) == SUPPORT_ARTIFACT_AVAILABILITY_KEYS
+    assert set(raw_reproducibility["readback_integrity"]) == SUPPORT_READBACK_INTEGRITY_KEYS
+    assert set(raw_reproducibility["result_authority"]) == SUPPORT_RESULT_AUTHORITY_TOP_LEVEL_KEYS
+    for domain_payload in raw_reproducibility["result_authority"]["domains"].values():
+        assert set(domain_payload) <= SUPPORT_REPRODUCIBILITY_RESULT_AUTHORITY_DOMAIN_KEYS
+    assert set(raw_reproducibility["dataset_lineage"]) == SUPPORT_DATASET_LINEAGE_KEYS
 
     assert export_index["run_id"] == 7001
     assert export_index["status"] == "completed"
@@ -1188,9 +1451,54 @@ def test_export_index_and_support_bundle_fixtures_freeze_stored_first_export_bou
     _assert_no_sensitive_public_payload(export_index)
     _assert_no_sensitive_public_payload(manifest)
     _assert_no_sensitive_public_payload(reproducibility)
+    _assert_no_synthetic_support_export_raw_markers(export_index)
+    _assert_no_synthetic_support_export_raw_markers(manifest)
+    _assert_no_synthetic_support_export_raw_markers(reproducibility)
     _assert_no_live_provider_authority(export_index)
     _assert_no_live_provider_authority(manifest)
     _assert_no_live_provider_authority(reproducibility)
+
+
+def test_support_bundle_manifest_builders_drop_synthetic_raw_marker_fields() -> None:
+    run = _load_fixture("rule_backtest_result_summary_dto.json")
+    run["run_timing"]["synthetic_request_id"] = "synthetic_request_id"
+    run["run_diagnostics"]["synthetic_debug_reason"] = "synthetic_debug_reason"
+    run["artifact_availability"]["synthetic_cache_key"] = "synthetic_cache_key"
+    run["readback_integrity"]["synthetic_stack_trace"] = "synthetic_stack_trace"
+    run["result_authority"]["domains"]["execution_trace"][
+        "synthetic_provider_url"
+    ] = "synthetic_provider_url"
+    run["result_authority"]["domains"]["execution_trace"][
+        "synthetic_execution_trace_detail"
+    ] = "synthetic_execution_trace_detail"
+    run["data_quality"] = {
+        "source": "fixture_local_history",
+        "provider": "Local Fixture",
+        "authority_reason_codes": ["proxy_source_not_reproducible", "synthetic_debug_reason"],
+        "synthetic_cache_key": "synthetic_cache_key",
+    }
+
+    manifest = build_support_bundle_manifest(run)
+    reproducibility = build_support_bundle_reproducibility_manifest(run)
+
+    _assert_no_synthetic_support_export_raw_markers(manifest)
+    _assert_no_synthetic_support_export_raw_markers(reproducibility)
+    assert manifest["run_diagnostics"]["current_status"] == "completed"
+    assert manifest["artifact_availability"]["has_execution_trace"] is True
+    assert manifest["readback_integrity"]["integrity_level"] == "stored_complete"
+    assert manifest["result_authority"]["domains"]["execution_trace"] == {
+        "source": "summary.execution_trace",
+        "completeness": "complete",
+        "state": "available",
+        "missing": [],
+        "missing_kind": "fields",
+    }
+    assert manifest["dataset_lineage"]["authority_reason_codes"] == ["proxy_source_not_reproducible"]
+    assert reproducibility["result_authority"]["domains"]["execution_trace"] == {
+        "source": "summary.execution_trace",
+        "completeness": "complete",
+        "state": "available",
+    }
 
 
 def test_factor_lab_readiness_packet_stays_observe_only_and_outside_support_export_boundary() -> None:
@@ -1467,4 +1775,5 @@ def test_all_backtest_golden_fixtures_are_sanitized_and_explicitly_enumerated() 
     for path in fixture_paths:
         payload = json.loads(path.read_text(encoding="utf-8"))
         _assert_no_sensitive_public_payload(payload)
+        _assert_no_synthetic_support_export_raw_markers(payload)
         _assert_no_live_provider_authority(payload)
