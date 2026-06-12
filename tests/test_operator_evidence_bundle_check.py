@@ -160,8 +160,18 @@ def _security_artifact() -> dict[str, object]:
         },
         "breakGlassRecovery": {
             **base_section,
+            "generationVerified": True,
+            "displayOnceVerified": True,
+            "plaintextStoredAfterDisplay": False,
+            "hashStorageVerified": True,
+            "singleUseConsumeVerified": True,
+            "replayDeniedVerified": True,
+            "rotationRevocationVerified": True,
             "breakGlassDefaultOff": True,
             "recoveryFallbackSampled": True,
+            "rollbackPlanRecorded": True,
+            "auditEvidenceSanitized": True,
+            "runtimeDefaultUnchanged": True,
             "runtimeBehaviorChanged": False,
         },
         "adminRouteSampling": {

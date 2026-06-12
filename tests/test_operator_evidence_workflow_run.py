@@ -11,6 +11,7 @@ SCRIPT = REPO_ROOT / "scripts" / "operator_evidence_workflow_run.py"
 
 EXPECTED_TEMPLATE_FILES = {
     "provider_operator_evidence.json",
+    "provider_sla_licensing_evidence.json",
     "restore_pitr_operator_evidence.json",
     "security_operator_acceptance.json",
     "quota_budget_operator_evidence.json",

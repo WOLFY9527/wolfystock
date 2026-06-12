@@ -60,8 +60,18 @@ def _accepted_artifact() -> dict:
         },
         "breakGlassRecovery": {
             **base_section,
+            "generationVerified": True,
+            "displayOnceVerified": True,
+            "plaintextStoredAfterDisplay": False,
+            "hashStorageVerified": True,
+            "singleUseConsumeVerified": True,
+            "replayDeniedVerified": True,
+            "rotationRevocationVerified": True,
             "breakGlassDefaultOff": True,
             "recoveryFallbackSampled": True,
+            "rollbackPlanRecorded": True,
+            "auditEvidenceSanitized": True,
+            "runtimeDefaultUnchanged": True,
             "runtimeBehaviorChanged": False,
         },
         "adminRouteSampling": {
@@ -105,6 +115,22 @@ def test_security_operator_acceptance_accepts_sanitized_artifact(tmp_path: Path)
         "auditEvidenceSanitized": True,
         "runtimeDefaultUnchanged": True,
     }
+    assert checks["mfa_recovery_code_acceptance_evidence"]["status"] == "pass"
+    assert checks["mfa_recovery_code_acceptance_evidence"]["evidence"] == {
+        "missingFields": [],
+        "generationVerified": True,
+        "displayOnceVerified": True,
+        "plaintextStoredAfterDisplay": True,
+        "hashStorageVerified": True,
+        "singleUseConsumeVerified": True,
+        "replayDeniedVerified": True,
+        "rotationRevocationVerified": True,
+        "breakGlassDefaultOff": True,
+        "recoveryFallbackSampled": True,
+        "rollbackPlanRecorded": True,
+        "auditEvidenceSanitized": True,
+        "runtimeDefaultUnchanged": True,
+    }
     assert checks["launch_approval_claims_absent"]["status"] == "pass"
 
 
@@ -130,6 +156,7 @@ def test_security_operator_acceptance_rejects_raw_payloads_debug_and_go_claims(t
         ("raw-request", ("adminRouteSampling", "rawRequestBody", "{\"cookie\":\"redacted\"}"), "artifact_contains_no_sensitive_or_raw_payload_values"),
         ("stack-trace", ("breakGlassRecovery", "stackTrace", "Traceback (most recent call last)"), "artifact_contains_no_sensitive_or_raw_payload_values"),
         ("launch-go", ("mfaAdminPilot", "launchDecision", "GO"), "launch_approval_claims_absent"),
+        ("global-mfa", ("mfaAdminPilot", "notes", "global MFA approved for all production users"), "launch_approval_claims_absent"),
     ]
     for name, (section, key, value), failed_check in unsafe_cases:
         payload = _accepted_artifact()
@@ -142,6 +169,80 @@ def test_security_operator_acceptance_rejects_raw_payloads_debug_and_go_claims(t
         assert result.returncode == 1, name
         checks = {check["id"]: check for check in _json(result)["checks"]}
         assert checks[failed_check]["status"] == "fail"
+
+
+def test_security_operator_acceptance_requires_complete_recovery_code_evidence(tmp_path: Path) -> None:
+    required_true_fields = (
+        "generationVerified",
+        "displayOnceVerified",
+        "hashStorageVerified",
+        "singleUseConsumeVerified",
+        "replayDeniedVerified",
+        "rotationRevocationVerified",
+        "breakGlassDefaultOff",
+        "recoveryFallbackSampled",
+        "rollbackPlanRecorded",
+        "auditEvidenceSanitized",
+        "runtimeDefaultUnchanged",
+    )
+
+    for field in required_true_fields:
+        payload = _accepted_artifact()
+        payload["breakGlassRecovery"][field] = False
+        artifact_path = tmp_path / f"recovery-code-missing-{field}.json"
+        artifact_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        result = _run_helper(artifact_path)
+
+        assert result.returncode == 1, field
+        checks = {check["id"]: check for check in _json(result)["checks"]}
+        check = checks["mfa_recovery_code_acceptance_evidence"]
+        assert check["status"] == "fail"
+        assert field in check["evidence"]["missingFields"]
+
+
+def test_security_operator_acceptance_requires_no_recovery_plaintext_storage(tmp_path: Path) -> None:
+    payload = _accepted_artifact()
+    payload["breakGlassRecovery"]["plaintextStoredAfterDisplay"] = True
+    artifact_path = tmp_path / "recovery-code-plaintext-storage.json"
+    artifact_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_helper(artifact_path)
+
+    assert result.returncode == 1
+    checks = {check["id"]: check for check in _json(result)["checks"]}
+    check = checks["mfa_recovery_code_acceptance_evidence"]
+    assert check["status"] == "fail"
+    assert "plaintextStoredAfterDisplay" in check["evidence"]["missingFields"]
+
+
+def test_security_operator_acceptance_rejects_raw_recovery_codes_without_echoing(tmp_path: Path) -> None:
+    raw_code = "ABCD-EFGH-IJKL"
+    payload = _accepted_artifact()
+    payload["breakGlassRecovery"]["recoveryCodes"] = [raw_code]
+    artifact_path = tmp_path / "raw-recovery-code.json"
+    artifact_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_helper(artifact_path)
+
+    assert result.returncode == 1
+    assert raw_code not in result.stdout
+    assert raw_code not in result.stderr
+    checks = {check["id"]: check for check in _json(result)["checks"]}
+    assert checks["artifact_contains_no_sensitive_or_raw_payload_values"]["status"] == "fail"
+
+
+def test_security_operator_acceptance_rejects_runtime_behavior_change_flags(tmp_path: Path) -> None:
+    payload = _accepted_artifact()
+    payload["breakGlassRecovery"]["authRuntimeChanged"] = True
+    artifact_path = tmp_path / "runtime-changed.json"
+    artifact_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_helper(artifact_path)
+
+    assert result.returncode == 1
+    checks = {check["id"]: check for check in _json(result)["checks"]}
+    assert checks["runtime_behavior_unchanged"]["status"] == "fail"
 
 
 def test_security_operator_acceptance_requires_rbac_fallback_disabled_true(tmp_path: Path) -> None:

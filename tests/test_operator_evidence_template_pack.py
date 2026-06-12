@@ -44,6 +44,21 @@ RBAC_FALLBACK_OFF_OPERATOR_PILOT_FIELDS = {
     "runtimeDefaultUnchanged",
 }
 
+MFA_RECOVERY_CODE_ACCEPTANCE_FIELDS = {
+    "generationVerified",
+    "displayOnceVerified",
+    "plaintextStoredAfterDisplay",
+    "hashStorageVerified",
+    "singleUseConsumeVerified",
+    "replayDeniedVerified",
+    "rotationRevocationVerified",
+    "breakGlassDefaultOff",
+    "recoveryFallbackSampled",
+    "rollbackPlanRecorded",
+    "auditEvidenceSanitized",
+    "runtimeDefaultUnchanged",
+}
+
 UNSAFE_MARKERS = (
     "api_key",
     "apikey",
@@ -115,6 +130,9 @@ def test_all_templates_generated(tmp_path: Path) -> None:
     security_template = _load(tmp_path / "security_operator_acceptance.json")
     assert RBAC_FALLBACK_OFF_OPERATOR_PILOT_FIELDS.issubset(
         security_template["rbacFallbackDisable"]
+    )
+    assert MFA_RECOVERY_CODE_ACCEPTANCE_FIELDS.issubset(
+        security_template["breakGlassRecovery"]
     )
 
     combined = "\n".join(path.read_text(encoding="utf-8") for path in tmp_path.glob("*.json"))
