@@ -3,6 +3,7 @@
 > GENERATED FILE. DO NOT EDIT DIRECTLY.
 >
 > Edit source docs or `scripts/build_ai_project_manual.py`, then run `python scripts/build_ai_project_manual.py`.
+> Check freshness with `python scripts/build_ai_project_manual.py --check`.
 
 Status: generated AI maintenance onboarding manual.
 Audience: Codex workers, review agents, integrators, and humans assigning AI work.
@@ -185,8 +186,8 @@ The machine-readable manifest is generated at `docs/AI_PROJECT_MANUAL_SOURCES.js
 
 Current discovery summary:
 
-- Markdown discovered after pruned directory rules: 427
-- Candidate Markdown after exclusion policy: 284
+- Markdown discovered after pruned directory rules: 428
+- Candidate Markdown after exclusion policy: 285
 - Curated sources included in this manual: 53
 
 Exclusion policy:

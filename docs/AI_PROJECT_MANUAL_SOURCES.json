@@ -1,6 +1,6 @@
 {
   "discovery": {
-    "candidateMarkdownAfterPolicy": 284,
+    "candidateMarkdownAfterPolicy": 285,
     "excludedByReason": {
       "ai_governance_mirror": 5,
       "archive_provenance": 55,
@@ -11,52 +11,31 @@
       "task_progress_log": 10
     },
     "includedSourceCount": 53,
-    "markdownDiscovered": 427,
-    "prunedDirectories": [
+    "markdownDiscovered": 428,
+    "prunedDirectoryNames": [
+      ".cache",
       ".codex",
+      ".codex-artifacts",
       ".git",
+      ".mypy_cache",
       ".pytest_cache",
       ".venv",
       "__pycache__",
-      "api/__pycache__",
-      "api/middlewares/__pycache__",
-      "api/v1/__pycache__",
-      "api/v1/endpoints/__pycache__",
-      "api/v1/schemas/__pycache__",
-      "apps/dsa-web/node_modules",
-      "apps/dsa-web/test-results",
       "artifacts",
-      "bot/__pycache__",
-      "bot/commands/__pycache__",
-      "bot/platforms/__pycache__",
-      "data_provider/__pycache__",
+      "backtest_outputs",
+      "blob-report",
+      "build",
+      "coverage",
+      "dist",
+      "htmlcov",
       "node_modules",
-      "patch/__pycache__",
-      "scripts/__pycache__",
-      "src/__pycache__",
-      "src/agent/__pycache__",
-      "src/agent/agents/__pycache__",
-      "src/agent/skills/__pycache__",
-      "src/agent/strategies/__pycache__",
-      "src/agent/tools/__pycache__",
-      "src/contracts/__pycache__",
-      "src/contracts/data_quality/__pycache__",
-      "src/contracts/evidence/__pycache__",
-      "src/core/__pycache__",
-      "src/data/__pycache__",
-      "src/notification_sender/__pycache__",
-      "src/providers/__pycache__",
-      "src/repositories/__pycache__",
-      "src/schemas/__pycache__",
-      "src/services/__pycache__",
-      "src/services/quant_analytics/__pycache__",
-      "src/utils/__pycache__",
+      "playwright-report",
+      "reports",
+      "screenshots",
       "static",
       "test-results",
-      "tests/__pycache__",
-      "tests/api/__pycache__",
-      "tests/scripts/__pycache__",
-      "tests/services/__pycache__"
+      "venv",
+      "worktree_archives"
     ]
   },
   "exclusionPolicy": [
@@ -79,7 +58,8 @@
     "path": "scripts/build_ai_project_manual.py",
     "readsProductionDataPaths": false,
     "requiresApiKeys": false,
-    "version": 1
+    "sha256": "53b8154cfa7eceb72a1307c1805e077580d04bb31a51c27e28576943c75e95fe",
+    "version": 2
   },
   "includedSources": [
     {
@@ -288,15 +268,15 @@
       "title": "Data Quality User Disclosure Policy"
     },
     {
-      "bytes": 30188,
+      "bytes": 32542,
       "categories": [
         "launch",
         "validation"
       ],
-      "lineCount": 547,
+      "lineCount": 582,
       "path": "docs/audits/deployment-readiness-checklist.md",
       "purpose": "release-candidate checklist and final gates",
-      "sha256": "8c8bd60c2f804092d14301cea8b99276a4034d8ce6264b5bc41a98fc9f8b7d9f",
+      "sha256": "31c773c6bd568195141c7f858604f3d917b1c1ee331a89a6029831b3bddd1d0b",
       "title": "Public Multi-user Deployment Readiness Checklist"
     },
     {
@@ -373,14 +353,14 @@
       "title": "Private Beta Readiness Report"
     },
     {
-      "bytes": 30921,
+      "bytes": 32153,
       "categories": [
         "launch"
       ],
       "lineCount": 202,
       "path": "docs/audits/public-launch-gap-register.md",
       "purpose": "detailed launch blocker register",
-      "sha256": "634df1c3e760535ad66b1532e10937bff2166be4248a0481ced60c8d5763d05b",
+      "sha256": "4cbab05c40daa707320ba60071ca891b1b5f394d093b5be2679cf3c0f1b33d1f",
       "title": "Public Launch Gap Register"
     },
     {
@@ -395,15 +375,15 @@
       "title": "Public Launch Readiness Master"
     },
     {
-      "bytes": 7171,
+      "bytes": 9345,
       "categories": [
         "cost",
         "quota"
       ],
-      "lineCount": 204,
+      "lineCount": 248,
       "path": "docs/audits/quota-reserve-release-operator-evidence-checklist.md",
       "purpose": "quota reserve/release operator evidence",
-      "sha256": "1c29c40371dd063d7e942d397b9223ea03f86420eacdbfecfdc591fa5ad5ea62",
+      "sha256": "9bf9b074e400e980fdcfe5a44a778df14f19a44819891dd6dcbb199253d2bbf0",
       "title": "Quota Reserve/Release Operator Evidence Checklist"
     },
     {
@@ -718,7 +698,7 @@
   "outputs": {
     "manifest": "docs/AI_PROJECT_MANUAL_SOURCES.json",
     "manual": "docs/AI_PROJECT_MANUAL.md",
-    "manualSha256": "6c2d596908f613637452d6adfa5ee8e9c2ec311c121c13275fe15830cfdb1774"
+    "manualSha256": "7aaea435af540b343e5a1f25123d1c8406a1625d376e7c576ea1444c84348d09"
   },
   "schemaVersion": 1,
   "sections": [

@@ -8,6 +8,11 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import scripts.build_ai_project_manual as manual_generator
+
 AGENTS = ROOT / "AGENTS.md"
 CLAUDE = ROOT / "CLAUDE.md"
 COPILOT = ROOT / ".github" / "copilot-instructions.md"
@@ -113,6 +118,12 @@ def ensure_no_tracked_claude_artifacts() -> None:
         fail(f"tracked .claude artifact outside skills/: {path}")
 
 
+def ensure_ai_project_manual_fresh() -> None:
+    result = manual_generator.main(["--check"])
+    if result != 0:
+        fail(f"generated AI project manual is stale; run python {manual_generator.GENERATOR_PATH}")
+
+
 def main() -> None:
     ensure_symlink()
     ensure_copilot_entry()
@@ -120,6 +131,7 @@ def main() -> None:
     ensure_skill_files()
     ensure_gitignore_rules()
     ensure_no_tracked_claude_artifacts()
+    ensure_ai_project_manual_fresh()
     print("[ai-assets] OK")
 
 
