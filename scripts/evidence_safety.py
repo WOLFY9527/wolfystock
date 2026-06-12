@@ -7,9 +7,11 @@ validator keeps its own marker vocabulary, reason codes, and schema rules.
 
 from __future__ import annotations
 
+import json
 import re
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping, Sequence
 
 
 Finding = dict[str, str]
@@ -81,6 +83,19 @@ def compact_key(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
 
 
+def matches_marker(value: Any, markers: Sequence[str]) -> bool:
+    normalized = normalize_key(value)
+    compacted = compact_key(value)
+    for marker in markers:
+        marker_normalized = normalize_key(marker)
+        marker_compacted = compact_key(marker)
+        if marker_normalized and marker_normalized in normalized:
+            return True
+        if marker_compacted and marker_compacted in compacted:
+            return True
+    return False
+
+
 def join_path(parent: str, key: str) -> str:
     if parent in {"", "$"}:
         return key
@@ -98,6 +113,47 @@ def path_label(path: Path) -> str:
     ):
         return "[redacted]"
     return label
+
+
+def read_json_document(
+    path: Path,
+    *,
+    failure_reason_code: str,
+    field: str = "$",
+    field_key: str = "field",
+) -> tuple[Any | None, list[Finding]]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8")), []
+    except (OSError, json.JSONDecodeError):
+        return None, [finding(field, failure_reason_code, field_key=field_key)]
+
+
+def is_iso_timestamp(value: Any) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+    try:
+        datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
+
+
+def missing_fields(mapping: Mapping[str, Any], required_fields: Sequence[str]) -> list[str]:
+    return [field for field in required_fields if field not in mapping]
+
+
+def required_field_findings(
+    mapping: Mapping[str, Any],
+    required_fields: Sequence[str],
+    *,
+    parent: str = "",
+    reason_code: str = "missing_required_field",
+    field_key: str = "field",
+) -> list[Finding]:
+    return [
+        finding(join_path(parent, field), reason_code, field_key=field_key)
+        for field in missing_fields(mapping, required_fields)
+    ]
 
 
 def scan_json_tree(

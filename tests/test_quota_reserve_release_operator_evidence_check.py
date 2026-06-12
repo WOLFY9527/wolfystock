@@ -395,7 +395,6 @@ def test_script_does_not_import_or_call_runtime_quota_storage_route_modules() ->
         "api.",
         "api.v1.",
         "aiohttp",
-        "evidence_safety",
         "httpx",
         "requests",
         "scripts.",
@@ -413,12 +412,15 @@ def test_script_does_not_import_or_call_runtime_quota_storage_route_modules() ->
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported_modules.append(node.module)
 
-    assert not [
+    allowed_helper_modules = {"evidence_safety", "scripts.evidence_safety"}
+    forbidden_exact_modules = {prefix.rstrip(".") for prefix in forbidden_import_prefixes}
+    forbidden_modules = [
         module
         for module in imported_modules
-        if module in {prefix.rstrip(".") for prefix in forbidden_import_prefixes}
-        or any(module.startswith(prefix) for prefix in forbidden_import_prefixes)
+        if module not in allowed_helper_modules
+        if module in forbidden_exact_modules or any(module.startswith(prefix) for prefix in forbidden_import_prefixes)
     ]
+    assert not forbidden_modules
 
     forbidden_call_names = {
         "reserve_quota",
@@ -435,3 +437,17 @@ def test_script_does_not_import_or_call_runtime_quota_storage_route_modules() ->
                 called_names.add(node.func.attr)
 
     assert called_names.isdisjoint(forbidden_call_names)
+
+
+def test_script_reuses_shared_evidence_safety_helpers() -> None:
+    source = SCRIPT.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    imported_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in {"evidence_safety", "scripts.evidence_safety"}:
+            imported_names.update(alias.name for alias in node.names)
+
+    assert {"compact_key", "finding", "read_json_document", "scan_json_tree"}.issubset(imported_names)
+    assert "def _scan_json_tree(" not in source
+    assert "def _join_path(" not in source
+    assert "def _compact_key(" not in source
