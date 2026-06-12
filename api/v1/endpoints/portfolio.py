@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 from datetime import date
@@ -76,48 +77,19 @@ _IMPORT_ARTIFACT_SENSITIVE_TEXT_RE = re.compile(
     r"\s*[:=]?",
     re.IGNORECASE,
 )
-_IMPORT_ARTIFACT_SENSITIVE_KEY_MARKERS = (
-    "account_label",
-    "account_name",
-    "account_ref",
-    "accountlabel",
-    "accountname",
-    "accountref",
-    "broker_account",
-    "brokeraccount",
-    "connection_name",
-    "dedup_hash",
-    "deduphash",
-    "execution_id",
-    "executionid",
-    "exec_id",
-    "execid",
-    "file_fingerprint",
-    "filefingerprint",
-    "fingerprint",
-    "import_fingerprint",
-    "importfingerprint",
-    "order_id",
-    "order_ref",
-    "orderid",
-    "orderref",
-    "broker_payload",
-    "brokerpayload",
-    "execution_payload",
-    "executionpayload",
-    "raw_",
-    "raw_payload",
-    "rawpayload",
-    "request_payload",
-    "requestpayload",
-    "response_payload",
-    "responsepayload",
-    "request_id",
-    "requestid",
+_IMPORT_ARTIFACT_SECRET_KEY_MARKERS = (
+    "api_key",
+    "apikey",
+    "authorization",
+    "bearer",
+    "cookie",
+    "credential",
+    "password",
+    "private_key",
+    "secret",
+    "session_token",
+    "sessiontoken",
     "token",
-    "trade_uid",
-    "tradeuid",
-    "url",
 )
 
 
@@ -197,6 +169,158 @@ def _ibkr_sync_error(exc: PortfolioIbkrSyncError) -> HTTPException:
     )
 
 
+def _portfolio_display_handle(value: Any, *, prefix: str, namespace: Optional[str] = None) -> Optional[str]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    seed = f"{namespace or prefix}:{text}"
+    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+    return f"{prefix}_{digest[:12]}"
+
+
+def _normalized_import_artifact_key(key: Any) -> tuple[str, str]:
+    normalized = str(key or "").strip().lower().replace("-", "_").replace(" ", "_")
+    compact = normalized.replace("_", "")
+    return normalized, compact
+
+
+def _import_artifact_secret_key(key: Any) -> bool:
+    normalized, compact = _normalized_import_artifact_key(key)
+    return any(marker in normalized or marker in compact for marker in _IMPORT_ARTIFACT_SECRET_KEY_MARKERS)
+
+
+def _import_artifact_handle_prefix_for_key(key: Any) -> Optional[str]:
+    normalized, compact = _normalized_import_artifact_key(key)
+    if any(marker in normalized or marker in compact for marker in ("provider_url", "api_base_url", "url")):
+        return "url"
+    if any(marker in normalized or marker in compact for marker in ("request_id", "requestid")):
+        return "req"
+    if any(marker in normalized or marker in compact for marker in ("raw_payload", "raw_payload_label", "payload")):
+        return "payload"
+    if any(marker in normalized or marker in compact for marker in ("import_file_label", "import_file_name", "file_label", "file_name")):
+        return "file"
+    if any(marker in normalized or marker in compact for marker in ("file_fingerprint", "filefingerprint")):
+        return "file"
+    if any(marker in normalized or marker in compact for marker in ("import_fingerprint", "fingerprint", "dedup_hash", "deduphash")):
+        return "import"
+    if any(marker in normalized or marker in compact for marker in ("trade_uid", "tradeuid")):
+        return "trade"
+    if any(marker in normalized or marker in compact for marker in ("execution_id", "executionid", "exec_id", "execid")):
+        return "exec"
+    if any(marker in normalized or marker in compact for marker in ("order_id", "order_ref", "orderid", "orderref")):
+        return "order"
+    if any(marker in normalized or marker in compact for marker in ("connection_name", "connectionname")):
+        return "conn"
+    if any(marker in normalized or marker in compact for marker in ("broker_name", "brokername")):
+        return "broker"
+    if any(
+        marker in normalized or marker in compact
+        for marker in (
+            "account_label",
+            "account_name",
+            "account_ref",
+            "accountlabel",
+            "accountname",
+            "accountref",
+            "broker_account",
+            "brokeraccount",
+        )
+    ):
+        return "acct"
+    return None
+
+
+def _import_artifact_handle_prefix_for_text(value: str) -> Optional[str]:
+    text = str(value or "")
+    if _IMPORT_ARTIFACT_URL_RE.search(text):
+        return "url"
+    if _IMPORT_ARTIFACT_SENSITIVE_TEXT_RE.search(text):
+        return "payload"
+    return None
+
+
+def _sanitize_import_artifact_text(value: str) -> str:
+    text = sanitize_message(str(value or ""))
+    handle_prefix = _import_artifact_handle_prefix_for_text(text)
+    if handle_prefix:
+        return _portfolio_display_handle(text, prefix=handle_prefix) or IMPORT_ARTIFACT_REDACTED
+    return text
+
+
+def _sanitize_import_artifact_value(
+    value: Any,
+    *,
+    handle_prefix: Optional[str] = None,
+    force_redact: bool = False,
+) -> Any:
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, child in value.items():
+            key_text = str(key)
+            child_prefix = _import_artifact_handle_prefix_for_key(key_text)
+            sanitized[key_text] = _sanitize_import_artifact_value(
+                child,
+                handle_prefix=handle_prefix or child_prefix,
+                force_redact=force_redact or _import_artifact_secret_key(key_text),
+            )
+        return sanitized
+    if isinstance(value, list):
+        return [
+            _sanitize_import_artifact_value(item, handle_prefix=handle_prefix, force_redact=force_redact)
+            for item in value
+        ]
+    if isinstance(value, tuple):
+        return tuple(
+            _sanitize_import_artifact_value(item, handle_prefix=handle_prefix, force_redact=force_redact)
+            for item in value
+        )
+    if force_redact:
+        return "***"
+    if handle_prefix:
+        handle = _portfolio_display_handle(value, prefix=handle_prefix)
+        return handle if handle is not None else value
+    if isinstance(value, str):
+        return _sanitize_import_artifact_text(value)
+    return value
+
+
+def _build_broker_connection_item(row: dict) -> PortfolioBrokerConnectionItem:
+    payload = dict(row)
+    display_fields = {
+        "portfolio_account_name": "acct",
+        "broker_name": "broker",
+        "connection_name": "conn",
+        "broker_account_ref": "acct",
+        "last_import_fingerprint": "import",
+    }
+    for field, prefix in display_fields.items():
+        if payload.get(field):
+            payload[field] = _portfolio_display_handle(payload[field], prefix=prefix)
+    payload["sync_metadata"] = _sanitize_import_artifact_value(dict(payload.get("sync_metadata") or {}))
+    return PortfolioBrokerConnectionItem(**payload)
+
+
+def _build_ibkr_sync_response(data: dict) -> PortfolioIbkrSyncResponse:
+    payload = dict(data)
+    if payload.get("broker_account_ref"):
+        payload["broker_account_ref"] = _portfolio_display_handle(payload["broker_account_ref"], prefix="acct")
+    if payload.get("connection_name"):
+        payload["connection_name"] = _portfolio_display_handle(payload["connection_name"], prefix="conn")
+    if payload.get("api_base_url"):
+        payload["api_base_url"] = _portfolio_display_handle(payload["api_base_url"], prefix="url")
+    payload["warnings"] = _sanitize_import_artifact_value(list(payload.get("warnings", [])))
+    return PortfolioIbkrSyncResponse(**payload)
+
+
+def _raw_sync_request_value(value: Optional[str], *, handle_prefix: str) -> Optional[str]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if re.fullmatch(rf"{re.escape(handle_prefix)}_[a-f0-9]{{12}}", text):
+        return None
+    return text
+
+
 def _serialize_import_record(item: dict) -> PortfolioImportTradeItem:
     payload = dict(item)
     trade_date = payload.get("trade_date")
@@ -226,40 +350,6 @@ def _serialize_import_corporate_action(item: dict) -> dict:
     else:
         payload["effective_date"] = str(effective_date)
     return _sanitize_import_artifact_value(payload)
-
-
-def _is_import_artifact_sensitive_key(key: Any) -> bool:
-    normalized = str(key or "").strip().lower().replace("-", "_").replace(" ", "_")
-    compact = normalized.replace("_", "")
-    return any(marker in normalized or marker in compact for marker in _IMPORT_ARTIFACT_SENSITIVE_KEY_MARKERS)
-
-
-def _sanitize_import_artifact_text(value: str) -> str:
-    text = sanitize_message(str(value or ""))
-    if _IMPORT_ARTIFACT_URL_RE.search(text) or _IMPORT_ARTIFACT_SENSITIVE_TEXT_RE.search(text):
-        return IMPORT_ARTIFACT_REDACTED
-    return text
-
-
-def _sanitize_import_artifact_value(value: Any, *, force_redact: bool = False) -> Any:
-    if isinstance(value, dict):
-        sanitized: dict[str, Any] = {}
-        for key, child in value.items():
-            key_text = str(key)
-            sanitized[key_text] = _sanitize_import_artifact_value(
-                child,
-                force_redact=force_redact or _is_import_artifact_sensitive_key(key_text),
-            )
-        return sanitized
-    if isinstance(value, list):
-        return [_sanitize_import_artifact_value(item, force_redact=force_redact) for item in value]
-    if isinstance(value, tuple):
-        return tuple(_sanitize_import_artifact_value(item, force_redact=force_redact) for item in value)
-    if force_redact:
-        return IMPORT_ARTIFACT_REDACTED
-    if isinstance(value, str):
-        return _sanitize_import_artifact_text(value)
-    return value
 
 
 def _build_import_parse_response(parsed: dict) -> PortfolioImportParseResponse:
@@ -532,7 +622,7 @@ def create_broker_connection(
             sync_metadata=request.sync_metadata,
             owner_id=current_user.user_id,
         )
-        return PortfolioBrokerConnectionItem(**row)
+        return _build_broker_connection_item(row)
     except PortfolioConflictError as exc:
         raise _conflict_error(error="conflict", message=str(exc))
     except ValueError as exc:
@@ -561,7 +651,7 @@ def list_broker_connections(
             status=status,
         )
         return PortfolioBrokerConnectionListResponse(
-            connections=[PortfolioBrokerConnectionItem(**item) for item in rows]
+            connections=[_build_broker_connection_item(item) for item in rows]
         )
     except ValueError as exc:
         raise _bad_request(exc)
@@ -597,7 +687,7 @@ def update_broker_connection(
                 status_code=404,
                 detail={"error": "not_found", "message": f"Broker connection not found: {connection_id}"},
             )
-        return PortfolioBrokerConnectionItem(**updated)
+        return _build_broker_connection_item(updated)
     except HTTPException:
         raise
     except PortfolioConflictError as exc:
@@ -623,12 +713,12 @@ def sync_ibkr_account_state(
         data = sync_service.sync_read_only_account_state(
             account_id=request.account_id,
             broker_connection_id=request.broker_connection_id,
-            broker_account_ref=request.broker_account_ref,
+            broker_account_ref=_raw_sync_request_value(request.broker_account_ref, handle_prefix="acct"),
             session_token=request.session_token,
-            api_base_url=request.api_base_url,
+            api_base_url=_raw_sync_request_value(request.api_base_url, handle_prefix="url"),
             verify_ssl=request.verify_ssl,
         )
-        return PortfolioIbkrSyncResponse(**data)
+        return _build_ibkr_sync_response(data)
     except PortfolioIbkrSyncError as exc:
         raise _ibkr_sync_error(exc)
     except PortfolioConflictError as exc:
