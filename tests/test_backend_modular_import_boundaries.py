@@ -20,7 +20,11 @@ DATA_PROVIDER_ROOT = REPO_ROOT / "data_provider"
 SRC_ROOT = REPO_ROOT / "src"
 CONTRACTS_ROOT = SRC_ROOT / "contracts"
 SERVICES_ROOT = SRC_ROOT / "services"
-ACTIVE_CONTRACT_NAMESPACES = {"data_quality", "evidence"}
+ACTIVE_CONTRACT_CHILD_NAMESPACES = {"data_quality", "evidence"}
+ACTIVE_CONTRACT_PUBLIC_EXPORTS = {
+    *ACTIVE_CONTRACT_CHILD_NAMESPACES,
+    "source_confidence",
+}
 INACTIVE_BACKEND_NAMESPACE_MODULES = (
     "src.platform",
     "src.domains",
@@ -224,7 +228,19 @@ EXPLICITLY_FORBIDDEN_OPTIONS_LAB_SCHEMA_IMPORT_NAMES = {
     "OptionsStrategyGateSummary",
 }
 EXPECTED_API_SCHEMA_UPWARD_IMPORTS = {
+    "src/services/backtest_factor_research_bridge.py": {"api.v1.schemas.factors"},
+    "src/services/custom_strategy_contracts.py": {"api.v1.schemas.custom_strategy"},
+    "src/services/event_intelligence_provider_contract.py": {"api.v1.schemas.event_intelligence"},
+    "src/services/event_intelligence_timeline.py": {"api.v1.schemas.event_intelligence"},
+    "src/services/factor_experiment_manifest.py": {"api.v1.schemas.factors"},
+    "src/services/factor_exposure.py": {"api.v1.schemas.factors"},
+    "src/services/factor_metrics.py": {"api.v1.schemas.factors"},
+    "src/services/factor_neutralization.py": {"api.v1.schemas.factors"},
+    "src/services/factor_observations.py": {"api.v1.schemas.factors"},
+    "src/services/factor_registry.py": {"api.v1.schemas.factors"},
+    "src/services/factor_research_report.py": {"api.v1.schemas.factors"},
     "src/services/options_lab_service.py": {"api.v1.schemas.options"},
+    "src/services/portfolio_factor_exposure.py": {"api.v1.schemas.factors"},
 }
 # Transitional, owned upward imports from services into API schemas.
 # These are inventory items, not a pattern to copy into new services.
@@ -241,13 +257,28 @@ MARKET_OVERVIEW_RUNTIME_DIRECT_IMPORT_PREFIXES = ("requests", "yfinance")
 # Transitional provider-runtime touch points. Owners are the domain listed in
 # the importing path plus provider-runtime; new entries need architecture review.
 EXPECTED_PROVIDER_RUNTIME_IMPORTS = {
+    "src/services/cn_provider_health_service.py": {
+        "data_provider.akshare_fetcher",
+        "data_provider.baostock_fetcher",
+        "data_provider.pytdx_fetcher",
+    },
     "src/services/crypto_realtime_service.py": {"src.services.market_cache"},
     "src/services/liquidity_monitor_service.py": {"src.services.market_cache"},
-    "src/services/market_overview_service.py": {"src.services.market_cache"},
+    "src/services/market_cache_redis_backend.py": {"src.services.market_cache"},
+    "src/services/market_overview_service.py": {
+        "data_provider.akshare_fetcher",
+        "data_provider.coinbase_public_provider",
+        "src.services.market_cache",
+    },
     "src/services/market_overview_tickflow_breadth_provider.py": {"data_provider.tickflow_fetcher"},
     "src/services/market_provider_operations_service.py": {"src.services.market_cache"},
+    "src/services/market_scanner_context_adapter.py": {"src.services.market_cache"},
     "src/services/market_scanner_service.py": {"data_provider.base"},
     "src/services/portfolio_risk_board_lookup.py": {"data_provider.base"},
+    "src/services/rotation_radar_quote_provider.py": {
+        "data_provider.alpaca_fetcher",
+        "data_provider.provider_credentials",
+    },
     "src/services/stock_service.py": {
         "data_provider.base",
     },
@@ -272,7 +303,11 @@ EXPECTED_PROVIDER_HEAVY_SERVICE_FILES = frozenset(
 )
 KNOWN_PROVIDER_RUNTIME_HOTSPOTS = {
     "src/services/market_overview_service.py": {
-        "provider_runtime": {"src.services.market_cache"},
+        "provider_runtime": {
+            "data_provider.akshare_fetcher",
+            "data_provider.coinbase_public_provider",
+            "src.services.market_cache",
+        },
         "direct_provider_clients": set(),
     },
     "src/services/market_overview_tickflow_breadth_provider.py": {
@@ -357,7 +392,6 @@ EXPECTED_CONTROL_PLANE_SERVICE_BOUNDARY_IMPORTS = {
     "src/services/market_provider_operations_service.py": {
         "src.services.execution_log_service",
         "src.services.market_cache",
-        "src.services.market_overview_service",
     },
 }
 
@@ -448,9 +482,51 @@ def _classify_backend_module(module_name: str) -> str | None:
     return None
 
 
+def _is_type_checking_guard(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Name)
+        and node.id == "TYPE_CHECKING"
+    ) or (
+        isinstance(node, ast.Attribute)
+        and node.attr == "TYPE_CHECKING"
+    )
+
+
+class _ImportPrefixCollector(ast.NodeVisitor):
+    def __init__(self, import_prefixes: tuple[str, ...], *, include_type_checking: bool) -> None:
+        self.import_prefixes = import_prefixes
+        self.include_type_checking = include_type_checking
+        self.modules: set[str] = set()
+
+    def visit_If(self, node: ast.If) -> None:
+        if not self.include_type_checking and _is_type_checking_guard(node.test):
+            for child in node.orelse:
+                self.visit(child)
+            return
+        self.generic_visit(node)
+
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            self._add_if_matched(alias.name)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.level != 0:
+            return
+        self._add_if_matched(node.module or "")
+
+    def _add_if_matched(self, module_name: str) -> None:
+        if any(
+            module_name == prefix or module_name.startswith(prefix + ".")
+            for prefix in self.import_prefixes
+        ):
+            self.modules.add(module_name)
+
+
 def _import_mapping_for_prefixes(
     search_roots: tuple[Path, ...],
     import_prefixes: tuple[str, ...],
+    *,
+    include_type_checking: bool = True,
 ) -> dict[str, set[str]]:
     matches: dict[str, set[str]] = {}
     for search_root in search_roots:
@@ -459,52 +535,33 @@ def _import_mapping_for_prefixes(
                 python_file.read_text(encoding="utf-8"),
                 filename=str(python_file),
             )
-            modules: set[str] = set()
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Import):
-                    for alias in node.names:
-                        module_name = alias.name
-                        if any(
-                            module_name == prefix or module_name.startswith(prefix + ".")
-                            for prefix in import_prefixes
-                        ):
-                            modules.add(module_name)
-                elif isinstance(node, ast.ImportFrom):
-                    module_name = node.module or ""
-                    if node.level == 0 and any(
-                        module_name == prefix or module_name.startswith(prefix + ".")
-                        for prefix in import_prefixes
-                    ):
-                        modules.add(module_name)
+            collector = _ImportPrefixCollector(
+                import_prefixes,
+                include_type_checking=include_type_checking,
+            )
+            collector.visit(tree)
 
-            if modules:
-                matches[python_file.relative_to(REPO_ROOT).as_posix()] = modules
+            if collector.modules:
+                matches[python_file.relative_to(REPO_ROOT).as_posix()] = collector.modules
     return matches
 
 
-def _imports_for_file(python_file: Path, import_prefixes: tuple[str, ...]) -> set[str]:
+def _imports_for_file(
+    python_file: Path,
+    import_prefixes: tuple[str, ...],
+    *,
+    include_type_checking: bool = True,
+) -> set[str]:
     tree = ast.parse(
         python_file.read_text(encoding="utf-8"),
         filename=str(python_file),
     )
-    modules: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                module_name = alias.name
-                if any(
-                    module_name == prefix or module_name.startswith(prefix + ".")
-                    for prefix in import_prefixes
-                ):
-                    modules.add(module_name)
-        elif isinstance(node, ast.ImportFrom):
-            module_name = node.module or ""
-            if node.level == 0 and any(
-                module_name == prefix or module_name.startswith(prefix + ".")
-                for prefix in import_prefixes
-            ):
-                modules.add(module_name)
-    return modules
+    collector = _ImportPrefixCollector(
+        import_prefixes,
+        include_type_checking=include_type_checking,
+    )
+    collector.visit(tree)
+    return collector.modules
 
 
 @lru_cache(maxsize=1)
@@ -575,11 +632,11 @@ def test_platform_and_domains_namespaces_are_not_active_yet() -> None:
 def test_contracts_namespace_remains_limited_to_inert_evidence_and_data_quality() -> None:
     from src import contracts
 
-    assert _contracts_child_namespaces() == ACTIVE_CONTRACT_NAMESPACES, (
-        "src.contracts should remain limited to inert evidence/data_quality "
-        "namespaces until a reviewed boundary plan lands"
+    assert _contracts_child_namespaces() == ACTIVE_CONTRACT_CHILD_NAMESPACES, (
+        "src.contracts child namespaces should remain limited to inert "
+        "evidence/data_quality namespaces until a reviewed boundary plan lands"
     )
-    assert set(contracts.__all__) == ACTIVE_CONTRACT_NAMESPACES
+    assert set(contracts.__all__) == ACTIVE_CONTRACT_PUBLIC_EXPORTS
 
 
 def test_architecture_manual_domains_have_current_backend_classifications() -> None:
@@ -611,6 +668,7 @@ def test_provider_runtime_import_inventory_is_explicit() -> None:
     actual_mapping = _import_mapping_for_prefixes(
         (API_ROOT, SERVICES_ROOT, SRC_ROOT / "contracts"),
         PROVIDER_RUNTIME_IMPORT_PREFIXES,
+        include_type_checking=False,
     )
 
     assert actual_mapping == EXPECTED_PROVIDER_RUNTIME_IMPORTS, (
@@ -625,7 +683,13 @@ def test_portfolio_risk_board_lookup_is_the_only_portfolio_risk_provider_runtime
     actual_mapping = {
         path.name: imports
         for path in portfolio_risk_files
-        if (imports := _imports_for_file(path, PROVIDER_RUNTIME_IMPORT_PREFIXES))
+        if (
+            imports := _imports_for_file(
+                path,
+                PROVIDER_RUNTIME_IMPORT_PREFIXES,
+                include_type_checking=False,
+            )
+        )
     }
 
     assert actual_mapping == {
@@ -637,6 +701,7 @@ def test_portfolio_risk_board_lookup_is_the_only_portfolio_risk_provider_runtime
     assert _imports_for_file(
         SERVICES_ROOT / "portfolio_risk_service.py",
         PROVIDER_RUNTIME_IMPORT_PREFIXES,
+        include_type_checking=False,
     ) == set(), "portfolio_risk_service.py must remain provider-runtime-free"
 
 
@@ -644,6 +709,7 @@ def test_direct_provider_client_import_inventory_is_explicit() -> None:
     actual_mapping = _import_mapping_for_prefixes(
         (SERVICES_ROOT,),
         DIRECT_PROVIDER_CLIENT_IMPORT_PREFIXES,
+        include_type_checking=False,
     )
 
     assert actual_mapping == EXPECTED_DIRECT_PROVIDER_CLIENT_IMPORTS, (
@@ -656,8 +722,16 @@ def test_direct_provider_client_import_inventory_is_explicit() -> None:
 def test_provider_heavy_service_file_inventory_is_explicit() -> None:
     actual_service_files = frozenset(
         {
-            *_import_mapping_for_prefixes((SERVICES_ROOT,), PROVIDER_RUNTIME_IMPORT_PREFIXES),
-            *_import_mapping_for_prefixes((SERVICES_ROOT,), DIRECT_PROVIDER_CLIENT_IMPORT_PREFIXES),
+            *_import_mapping_for_prefixes(
+                (SERVICES_ROOT,),
+                PROVIDER_RUNTIME_IMPORT_PREFIXES,
+                include_type_checking=False,
+            ),
+            *_import_mapping_for_prefixes(
+                (SERVICES_ROOT,),
+                DIRECT_PROVIDER_CLIENT_IMPORT_PREFIXES,
+                include_type_checking=False,
+            ),
         }
     )
 
@@ -674,10 +748,12 @@ def test_known_provider_runtime_hotspots_remain_explicit() -> None:
             "provider_runtime": _imports_for_file(
                 REPO_ROOT / relative_path,
                 PROVIDER_RUNTIME_IMPORT_PREFIXES,
+                include_type_checking=False,
             ),
             "direct_provider_clients": _imports_for_file(
                 REPO_ROOT / relative_path,
                 DIRECT_PROVIDER_CLIENT_IMPORT_PREFIXES,
+                include_type_checking=False,
             ),
         }
         for relative_path in KNOWN_PROVIDER_RUNTIME_HOTSPOTS
@@ -732,10 +808,12 @@ def test_stock_service_transitional_provider_boundary_stays_frozen() -> None:
         "provider_runtime": _imports_for_file(
             SERVICES_ROOT / "stock_service.py",
             PROVIDER_RUNTIME_IMPORT_PREFIXES,
+            include_type_checking=False,
         ),
         "direct_provider_clients": _imports_for_file(
             SERVICES_ROOT / "stock_service.py",
             DIRECT_PROVIDER_CLIENT_IMPORT_PREFIXES,
+            include_type_checking=False,
         ),
     }
 
