@@ -60,6 +60,7 @@ Current template and bundle categories relevant to recent launch evidence:
 | RBAC R5 fallback observe and MFA recovery-code acceptance evidence | `security` | `security_operator_acceptance.json` | `scripts/security_operator_acceptance_check.py` |
 | Quota/budget operator evidence | `quota-budget` | `quota_budget_operator_evidence.json` | `scripts/quota_operator_evidence_check.py` |
 | Staging ingress operator evidence | `staging-ingress` | `staging_ingress_operator_evidence.json` | `scripts/staging_ingress_operator_evidence_check.py` |
+| WS2 target-environment API A/B evidence | `ws2-target-environment` | `ws2_target_environment_evidence.json` | `scripts/ws2_target_environment_evidence_check.py` |
 | WS2/SSE operator decision evidence | `ws2-sse` | `ws2_sse_operator_decision_evidence.json` | `scripts/ws2_sse_operator_decision_check.py` |
 | Config snapshot evidence | `config-snapshot` | `config_snapshot_evidence.json` | `scripts/config_snapshot_evidence_check.py` |
 | Manual release review record | `manual-release-approval` | `manual_release_approval_review_record.json` | `scripts/manual_release_approval_evidence_check.py` |
@@ -163,6 +164,7 @@ The bundle checker currently treats these files as required:
 - `security_operator_acceptance.json`
 - `quota_budget_operator_evidence.json`
 - `staging_ingress_operator_evidence.json`
+- `ws2_target_environment_evidence.json`
 - `ws2_sse_operator_decision_evidence.json`
 - `config_snapshot_evidence.json`
 - `manual_release_approval_review_record.json`
@@ -190,10 +192,14 @@ Their validators check sanitized request-safety and notification rehearsal
 summaries only; they must not run live network calls, send notifications, change
 API middleware, or change runtime defaults.
 
-The WS2 target-environment template is maintained as a standalone review
-template at `docs/audits/ws2-target-environment-evidence-template.json`.
-Operators should copy it into the evidence directory, replace placeholders with
-sanitized API A/B run summaries, and leave `publicLaunchApproval=false`.
+The WS2 target-environment template is maintained at
+`docs/audits/ws2-target-environment-evidence-template.json` and in the operator
+template pack as `ws2_target_environment_evidence.json`. Operators should
+replace placeholders with sanitized API A/B run summaries, keep process-local
+SSE limitation explicit, include deployment topology, manual review,
+rollback/degraded, and single-instance exception posture fields, and leave
+`publicLaunchApproval=false`, `releaseApproved=false`, and
+`publicLaunchReady=false`.
 
 ## Run Validators
 

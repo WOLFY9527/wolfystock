@@ -36,6 +36,7 @@ from quota_operator_evidence_check import validate_artifact as validate_quota_op
 from restore_pitr_operator_evidence_check import _build_report as validate_restore_pitr_operator_evidence
 from security_operator_acceptance_check import _build_summary as validate_security_operator_acceptance
 from staging_ingress_operator_evidence_check import validate_staging_ingress_operator_evidence
+from ws2_target_environment_evidence_check import validate_ws2_target_environment_evidence
 from ws2_sse_operator_decision_check import validate_ws2_sse_operator_decision
 
 
@@ -111,6 +112,12 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         filename="staging_ingress_operator_evidence.json",
         validator_name="staging_ingress_operator_evidence_check.py",
         validate=validate_staging_ingress_operator_evidence,
+    ),
+    ArtifactSpec(
+        category="ws2-target-environment",
+        filename="ws2_target_environment_evidence.json",
+        validator_name="ws2_target_environment_evidence_check.py",
+        validate=validate_ws2_target_environment_evidence,
     ),
     ArtifactSpec(
         category="ws2-sse",
@@ -217,6 +224,14 @@ def _artifact_status(*, payload: Any, validator_summary: dict[str, Any]) -> str:
         ):
             return "needs-review"
         return "rejected"
+
+    validator_artifact_status = str(validator_summary.get("artifactStatus") or "").strip()
+    if validator_artifact_status == "needs-review":
+        return "needs-review"
+    if validator_artifact_status in {"rejected-no-go", "invalid"}:
+        return "rejected"
+    if validator_artifact_status == "accepted-staging-review-required":
+        return "accepted"
 
     outcomes = _collect_outcomes(payload)
     passed = _validator_passed(validator_summary)

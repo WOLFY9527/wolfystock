@@ -19,6 +19,7 @@ EXPECTED_FILES = {
     "security_operator_acceptance.json",
     "quota_budget_operator_evidence.json",
     "staging_ingress_operator_evidence.json",
+    "ws2_target_environment_evidence.json",
     "ws2_sse_operator_decision_evidence.json",
     "config_snapshot_evidence.json",
     "manual_release_approval_review_record.json",
@@ -75,6 +76,13 @@ MFA_RECOVERY_CODE_ACCEPTANCE_FIELDS = {
     "rollbackPlanRecorded",
     "auditEvidenceSanitized",
     "runtimeDefaultUnchanged",
+}
+
+WS2_TARGET_ENV_MANUAL_REVIEW_FIELDS = {
+    "manualReviewRequired",
+    "manualReviewStatus",
+    "singleInstanceExceptionPosture",
+    "rollbackOrDegradedNote",
 }
 
 UNSAFE_MARKERS = (
@@ -167,11 +175,11 @@ def test_all_templates_generated(tmp_path: Path) -> None:
 
 
 def test_single_category_generation_writes_only_that_template(tmp_path: Path) -> None:
-    result = _run("--category", "ws2-sse", str(tmp_path))
+    result = _run("--category", "ws2-target-environment", str(tmp_path))
 
     assert result.returncode == 0, result.stderr
     assert {path.name for path in tmp_path.glob("*.json")} == {
-        "ws2_sse_operator_decision_evidence.json"
+        "ws2_target_environment_evidence.json"
     }
 
 
@@ -209,6 +217,28 @@ def test_api_abuse_request_safety_template_is_review_only_and_not_launch_ready(t
         "rawRequestDataIncluded": False,
         "runtimeBehaviorChanged": False,
     }
+
+
+def test_ws2_target_environment_template_is_review_only_and_not_launch_ready(tmp_path: Path) -> None:
+    result = _run("--stdout", "--category", "ws2-target-environment", str(tmp_path))
+
+    assert result.returncode == 0, result.stderr
+    payload = _stdout_json(result)["ws2_target_environment_evidence.json"]
+    assert payload["artifactVersion"] == "wolfystock_ws2_target_environment_evidence_v1"
+    assert payload["validationProfile"] == "PROFILE_DURABLE_PROTECTED"
+    assert payload["evidenceClass"] == "target-environment"
+    assert payload["reviewerAcceptanceStatus"] == "needs-review"
+    assert payload["releaseApproved"] is False
+    assert payload["publicLaunchReady"] is False
+    assert payload["topology"]["sseBroadcastScope"] == "process-local"
+    assert payload["topology"]["externalSseReplayImplemented"] is False
+    assert payload["topology"]["productionQueueBrokerCutover"] is False
+    assert payload["checks"]["sseLimitationRecorded"] is True
+    assert payload["checks"]["crossInstanceSseNotClaimed"] is True
+    assert payload["checks"]["durablePollingBaselineRecorded"] is True
+    assert WS2_TARGET_ENV_MANUAL_REVIEW_FIELDS.issubset(payload["manualReview"])
+    assert payload["manualReview"]["manualReviewRequired"] is True
+    assert payload["manualReview"]["manualReviewStatus"] == "needs-review"
 
 
 def test_restore_pitr_template_is_review_only_and_not_launch_ready(tmp_path: Path) -> None:
@@ -338,6 +368,14 @@ def test_generated_templates_are_validator_safe_or_review_only(tmp_path: Path) -
             [
                 "scripts/ws2_sse_operator_decision_check.py",
                 str(tmp_path / "ws2_sse_operator_decision_evidence.json"),
+            ],
+            "status",
+            "pass",
+        ),
+        (
+            [
+                "scripts/ws2_target_environment_evidence_check.py",
+                str(tmp_path / "ws2_target_environment_evidence.json"),
             ],
             "status",
             "pass",

@@ -129,6 +129,7 @@ def test_render_output_mentions_required_fields_and_validator_names(tmp_path: Pa
         "security_operator_acceptance_check.py",
         "quota_operator_evidence_check.py",
         "staging_ingress_operator_evidence_check.py",
+        "ws2_target_environment_evidence_check.py",
         "ws2_sse_operator_decision_check.py",
         "config_snapshot_evidence_check.py",
         "manual_release_approval_evidence_check.py",
