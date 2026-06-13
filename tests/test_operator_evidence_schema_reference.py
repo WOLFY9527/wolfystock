@@ -56,7 +56,17 @@ def test_render_creates_markdown_and_json_outputs(tmp_path: Path) -> None:
 
     payload = _load_json(json_path)
     assert payload["schemaVersion"] == "wolfystock_operator_evidence_schema_reference_v1"
-    assert payload["reviewPosture"] == {"manualReviewRequired": True, "releaseApproved": False}
+    assert payload["reviewPosture"] == {
+        "manualReviewRequired": True,
+        "releaseApproved": False,
+        "publicLaunchReady": False,
+    }
+    assert payload["reviewBoundaries"] == {
+        "targetEnvironmentObservationsRequired": True,
+        "templatesAndSyntheticFixturesAcceptedProductionEvidence": False,
+        "validatorsExecuteLiveActions": False,
+        "acceptedReviewEvidenceApprovesPublicLaunch": False,
+    }
 
     categories = payload["categories"]
     assert isinstance(categories, list)
@@ -68,6 +78,10 @@ def test_render_creates_markdown_and_json_outputs(tmp_path: Path) -> None:
 
     markdown = md_path.read_text(encoding="utf-8")
     assert "releaseApproved=false" in markdown
+    assert "publicLaunchReady=false" in markdown
+    assert "real target-environment observations" in markdown
+    assert "not accepted production evidence" in markdown
+    assert "does not approve public launch" in markdown
     assert len(markdown.splitlines()) <= 245
 
 
@@ -108,6 +122,7 @@ def test_render_output_mentions_required_fields_and_validator_names(tmp_path: Pa
         assert spec.filename in markdown
     for validator_name in {
         "api_abuse_request_safety_evidence_check.py",
+        "notification_delivery_rehearsal_evidence_check.py",
         "provider_operator_evidence_check.py",
         "provider_sla_licensing_evidence_check.py",
         "restore_pitr_operator_evidence_check.py",

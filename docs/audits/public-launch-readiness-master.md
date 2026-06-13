@@ -49,9 +49,10 @@ portfolio/backtest browser and export proof, notification delivery, user data
 privacy/export/deletion, market freshness/fallback, AI guest-preview safety,
 Options derivatives safety, and API abuse/request-safety evidence.
 
-Offline validator/template coverage for provider, restore/PITR, security
-MFA/RBAC, quota/budget, staging ingress, WS2/SSE, config snapshot, and manual
-release review-record evidence is now consolidated into
+Offline validator/template coverage for API abuse/request-safety, provider,
+provider SLA/licensing, notification delivery rehearsal, restore/PITR,
+security MFA/RBAC, quota/budget, staging ingress, WS2/SSE, config snapshot, and
+manual release review-record evidence is now consolidated into
 `docs/audits/operator-evidence-real-runbook.md`. That coverage only proves the
 local validators and sanitized templates exist. Real operator-produced
 artifacts are still required for launch review, and final approval remains
@@ -118,14 +119,16 @@ decision after all of the following are true:
   rehearsal, user data privacy/export/deletion rehearsal, market data
   freshness/fallback evidence, AI report/guest-preview safety, Options
   derivatives safety, API abuse/request-safety evidence, final clean full
-  `ci_gate`, and the five domain-local operator validator categories for
-  provider, restore/PITR, security MFA/RBAC, quota/budget, and staging ingress
-  evidence, plus WS2/SSE operator decision evidence, config snapshot evidence,
-  and manual release review-record evidence.
+  `ci_gate`, and the domain-local operator validator categories for API
+  abuse/request-safety, provider, provider SLA/licensing, notification delivery
+  rehearsal, restore/PITR, security MFA/RBAC, quota/budget, staging ingress,
+  WS2/SSE operator decision, config snapshot, and manual release review-record
+  evidence.
 - Sanitized evidence templates may be generated through
   `python3 scripts/operator_evidence_template_pack.py <template-dir>`, then
   manually filled by operators with sanitized target-environment artifact
-  summaries. Blank or placeholder templates are not evidence.
+  summaries. Blank or placeholder templates, synthetic fixtures, local dry-run
+  output, and checker success are not accepted production evidence.
 - Sanitized file-integrity metadata may be created and verified through
   `python3 scripts/operator_evidence_manifest_check.py create --artifact-dir <sanitized-operator-evidence-dir> --output <manifest.json>`
   and

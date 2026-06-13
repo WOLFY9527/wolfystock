@@ -122,10 +122,27 @@ relevant runbook context:
   rollback fields. It does not run browser UAT, call networks, read
   credentials, mutate runtime state, or approve public launch.
 - `production_config_readiness.py`, `launch_acceptance_evidence.py`,
-  `incident_response_evidence.py`, and the `*_operator_*` / `*_evidence_*`
-  validators: offline validation of sanitized release/operator artifacts. Safe
-  usage: validate externally prepared sanitized evidence only; they are not
-  substitutes for human release approval.
+  `incident_response_evidence.py`, `operator_evidence_template_pack.py`,
+  `operator_evidence_schema_reference.py`, `operator_evidence_manifest_check.py`,
+  `operator_evidence_bundle_check.py`, `operator_evidence_gap_analyzer.py`,
+  `operator_evidence_bundle_diff.py`, `release_review_report_render.py`, and
+  the `*_operator_*` / `*_evidence_*` validators: offline generation or
+  validation of sanitized release/operator artifacts. Safe usage: generate
+  blank templates, render schema/reference guidance, validate externally
+  prepared sanitized evidence, create/verify checksum metadata, aggregate
+  validator summaries, and render bounded review reports. They are review
+  plumbing only and are not substitutes for real target-environment operator
+  observations or human release approval.
+- `api_abuse_request_safety_evidence_check.py`,
+  `provider_sla_licensing_evidence_check.py`,
+  `notification_delivery_rehearsal_evidence_check.py`,
+  `restore_pitr_operator_evidence_check.py`, and
+  `security_operator_acceptance_check.py`: focused offline validators for the
+  recent API abuse/request-safety, provider SLA/licensing, notification
+  rehearsal, restore/PITR, RBAC R5 fallback observe, and MFA recovery-code
+  acceptance evidence surfaces. These validators must consume sanitized
+  artifacts only; they do not execute live provider, network, DB,
+  notification, auth/RBAC, or runtime actions.
 - `staging_ingress_smoke.py`: safe-by-default staging ingress preflight with
   live HTTP checks only when explicitly enabled.
 - `backup_restore_drill_check.sh` and `release_restore_rollback_drill.py`:
@@ -271,6 +288,18 @@ helper" is to check who calls it:
 - `production_config_readiness.py`
 - `launch_acceptance_evidence.py`
 - `incident_response_evidence.py`
+- `operator_evidence_template_pack.py`
+- `operator_evidence_schema_reference.py`
+- `operator_evidence_manifest_check.py`
+- `operator_evidence_bundle_check.py`
+- `operator_evidence_gap_analyzer.py`
+- `operator_evidence_bundle_diff.py`
+- `release_review_report_render.py`
+- `api_abuse_request_safety_evidence_check.py`
+- `provider_sla_licensing_evidence_check.py`
+- `notification_delivery_rehearsal_evidence_check.py`
+- `restore_pitr_operator_evidence_check.py`
+- `security_operator_acceptance_check.py`
 
 ### Desktop packaging
 

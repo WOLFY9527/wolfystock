@@ -126,7 +126,17 @@ def test_archive_packager_and_schema_reference_cover_offline_workflow(tmp_path: 
     schema_payload = _read_json(schema_json)
     schema_markdown = schema_md.read_text(encoding="utf-8")
     assert schema_payload["schemaVersion"] == SCHEMA_VERSION
-    assert schema_payload["reviewPosture"] == {"manualReviewRequired": True, "releaseApproved": False}
+    assert schema_payload["reviewPosture"] == {
+        "manualReviewRequired": True,
+        "releaseApproved": False,
+        "publicLaunchReady": False,
+    }
+    assert schema_payload["reviewBoundaries"] == {
+        "targetEnvironmentObservationsRequired": True,
+        "templatesAndSyntheticFixturesAcceptedProductionEvidence": False,
+        "validatorsExecuteLiveActions": False,
+        "acceptedReviewEvidenceApprovesPublicLaunch": False,
+    }
     assert schema_payload["runtimeBehaviorChanged"] is False
     assert schema_payload["networkCallsExecuted"] is False
     assert schema_payload["rawArtifactBodiesIncluded"] is False

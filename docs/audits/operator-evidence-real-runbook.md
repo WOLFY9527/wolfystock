@@ -45,6 +45,24 @@ python3 scripts/operator_evidence_template_pack.py \
 
 The generator creates placeholders only. The generated files are not real
 evidence until an operator replaces placeholders with sanitized summaries.
+Generated templates, local synthetic fixtures, dry-run/preflight outputs, and
+successful validator statuses are review plumbing only. They must not be used
+as accepted production evidence, and they do not approve public launch.
+
+Current template and bundle categories relevant to recent launch evidence:
+
+| Evidence area | Template category | Artifact filename | Validator |
+| --- | --- | --- | --- |
+| API abuse/request-safety evidence | `api-abuse-request-safety` | `api_abuse_safety_evidence.json` | `scripts/api_abuse_request_safety_evidence_check.py` |
+| Provider SLA/licensing and admin-probe pilot evidence | `provider-sla-licensing` | `provider_sla_licensing_evidence.json` | `scripts/provider_sla_licensing_evidence_check.py` |
+| Notification delivery rehearsal evidence | `notification-delivery-rehearsal` | `notification_delivery_rehearsal_evidence.json` | `scripts/notification_delivery_rehearsal_evidence_check.py` |
+| Restore/PITR real isolated drill operator evidence | `restore-pitr` | `restore_pitr_operator_evidence.json` | `scripts/restore_pitr_operator_evidence_check.py` |
+| RBAC R5 fallback observe and MFA recovery-code acceptance evidence | `security` | `security_operator_acceptance.json` | `scripts/security_operator_acceptance_check.py` |
+| Quota/budget operator evidence | `quota-budget` | `quota_budget_operator_evidence.json` | `scripts/quota_operator_evidence_check.py` |
+| Staging ingress operator evidence | `staging-ingress` | `staging_ingress_operator_evidence.json` | `scripts/staging_ingress_operator_evidence_check.py` |
+| WS2/SSE operator decision evidence | `ws2-sse` | `ws2_sse_operator_decision_evidence.json` | `scripts/ws2_sse_operator_decision_check.py` |
+| Config snapshot evidence | `config-snapshot` | `config_snapshot_evidence.json` | `scripts/config_snapshot_evidence_check.py` |
+| Manual release review record | `manual-release-approval` | `manual_release_approval_review_record.json` | `scripts/manual_release_approval_evidence_check.py` |
 
 ## Fill Sanitized Artifacts
 
@@ -110,8 +128,10 @@ and does not close the `real_isolated_postgresql_restore_pitr` gate by itself.
 
 The bundle checker currently treats these files as required:
 
+- `api_abuse_safety_evidence.json`
 - `provider_operator_evidence.json`
 - `provider_sla_licensing_evidence.json`
+- `notification_delivery_rehearsal_evidence.json`
 - `restore_pitr_operator_evidence.json`
 - `security_operator_acceptance.json`
 - `quota_budget_operator_evidence.json`
@@ -127,6 +147,22 @@ must not claim public/member runtime provider blocking, provider runtime
 enforcement, provider order/fallback/cache changes, accepted operator evidence,
 or public launch readiness.
 
+`security_operator_acceptance.json` carries both the RBAC R5 fallback observe
+evidence and MFA recovery-code acceptance evidence. The `rbacFallbackObserve`
+section records that the coarse compatibility fallback is still present unless
+operators separately accept a guarded fallback-off path; observe-mode evidence
+does not remove fallback behavior, enable production least privilege, or approve
+public launch. The `breakGlassRecovery` section records recovery-code
+generation, display-once handling, hash storage, single-use consume, replay
+denial, rotation/revocation, default-off break-glass posture, rollback,
+sanitized audit evidence, and `runtimeDefaultUnchanged=true` for manual review.
+
+`api_abuse_safety_evidence.json` and
+`notification_delivery_rehearsal_evidence.json` are offline review artifacts.
+Their validators check sanitized request-safety and notification rehearsal
+summaries only; they must not run live network calls, send notifications, change
+API middleware, or change runtime defaults.
+
 The WS2 target-environment template is maintained as a standalone review
 template at `docs/audits/ws2-target-environment-evidence-template.json`.
 Operators should copy it into the evidence directory, replace placeholders with
@@ -137,8 +173,11 @@ sanitized API A/B run summaries, and leave `publicLaunchApproval=false`.
 Run the domain validators for every artifact collected:
 
 ```bash
+python3 scripts/api_abuse_request_safety_evidence_check.py "$EVIDENCE_DIR/api_abuse_safety_evidence.json"
 python3 scripts/provider_operator_evidence_check.py "$EVIDENCE_DIR/provider_operator_evidence.json"
 python3 scripts/provider_sla_licensing_evidence_check.py "$EVIDENCE_DIR/provider_sla_licensing_evidence.json"
+python3 scripts/notification_delivery_rehearsal_evidence_check.py \
+  "$EVIDENCE_DIR/notification_delivery_rehearsal_evidence.json"
 python3 scripts/restore_pitr_operator_evidence_check.py \
   --artifact "$EVIDENCE_DIR/restore_pitr_operator_evidence.json"
 python3 scripts/security_operator_acceptance_check.py "$EVIDENCE_DIR/security_operator_acceptance.json"
@@ -158,6 +197,12 @@ capability gates, explicit allow, legacy/missing fail-closed denial, rollback,
 sanitized audit evidence, and unchanged runtime defaults. This is pilot
 evidence; it does not change the production/default fallback value or approve
 public launch.
+
+For RBAC R5 fallback observe evidence, use `rbacFallbackObserve` to document
+the current fallback posture, explicit capability payload proof,
+legacy/missing-payload fail-closed observations, rollback posture, sanitized
+audit excerpts, and `runtimeBehaviorChanged=false`. It is observe evidence, not
+fallback removal.
 
 If present, also validate standalone advisory artifacts:
 

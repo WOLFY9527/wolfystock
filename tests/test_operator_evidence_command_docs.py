@@ -85,8 +85,11 @@ def _fenced_blocks(path: Path) -> list[tuple[int, str, str]]:
 def _referenced_script_paths(path: Path) -> set[str]:
     scripts: set[str] = set()
     for match in SCRIPT_REF_PATTERN.finditer(_read(path)):
-        script = match.group(0)
-        if script.startswith("tests/"):
+        script = match.group(0).removeprefix("./")
+        if script.startswith(("tests/", "apps/")):
+            scripts.add(script)
+            continue
+        if (REPO_ROOT / script).exists():
             scripts.add(script)
             continue
         if not script.startswith("scripts/"):
