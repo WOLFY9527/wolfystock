@@ -71,6 +71,24 @@ launch semantics:
    checksum manifests, bundle summaries, and rendered reports are review
    support only.
 
+Recent evidence packs are reconciled into the launch matrix as follows:
+
+| Evidence surface | Launch category or local bundle category | Artifact filename | Review meaning |
+| --- | --- | --- | --- |
+| RBAC R5 fallback observe evidence | `security_operator_acceptance` / `security` | `security_operator_acceptance.json` | Observe-only evidence for `rbacFallbackObserve`; it does not remove fallback behavior or approve public launch. |
+| MFA recovery-code acceptance evidence | `security_operator_acceptance` / `security` | `security_operator_acceptance.json` | Manual-review evidence for `breakGlassRecovery`; `releaseApproved=false` and runtime defaults remain unchanged. |
+| Restore/PITR real isolated drill operator evidence | `restore_pitr_operator_evidence` / `restore-pitr` | `restore_pitr_operator_evidence.json` | Sanitized operator artifact from a real isolated drill; the validator does not run DB commands and does not close launch approval by itself. |
+| High-growth retention dry-run evidence | `admin_log_retention_capacity_rehearsal` | `<sanitized-retention-dry-run-evidence-ref>` | Dry-run/report evidence only; policy-only tiers and synthetic fixtures are not accepted production retention evidence. |
+| API abuse/request-safety evidence | `api_abuse_request_safety` / `api-abuse-request-safety` | `api_abuse_safety_evidence.json` | Offline request-safety review evidence; no API middleware/runtime defaults are changed. |
+| Notification delivery rehearsal evidence | `notifications_delivery_rehearsal` / `notification-delivery-rehearsal` | `notification_delivery_rehearsal_evidence.json` | Dry-run or synthetic no-send rehearsal evidence; no outbound notification is sent by the checker. |
+
+Sanitized operator artifacts must be filled from real target-environment
+observations and manually reviewed. Validators do not execute live provider,
+network, DB, notification, or runtime actions unless a separate opt-in smoke is
+explicitly documented. Templates and synthetic fixtures are not accepted
+production evidence, and accepted review evidence still does not equal public
+launch approval without manual release review.
+
 ## 2. Required Evidence Categories
 
 All categories are hard blockers. Missing, pending, rejected, unsafe, or
@@ -78,8 +96,8 @@ incomplete evidence keeps the summary at **NO-GO**.
 
 | Category id | Required operator evidence |
 | --- | --- |
-| `mfa_pilot_acceptance` | Accepted admin-only MFA pilot, recovery-path, rollback, unsupported/global rollout NO-GO, break-glass default-off, and sanitized audit evidence. |
-| `rbac_fallback_disable_switch` | RBAC fallback disable switch or accepted production exception, complete route inventory, explicit-payload pass proof, legacy/missing-payload fail-closed proof, rollback, and sanitized audit evidence. |
+| `mfa_pilot_acceptance` | Accepted admin-only MFA pilot, recovery-path and recovery-code acceptance, rollback, unsupported/global rollout NO-GO, break-glass default-off, and sanitized audit evidence. |
+| `rbac_fallback_disable_switch` | RBAC fallback disable switch or accepted production exception, complete route inventory, explicit-payload pass proof, legacy/missing-payload fail-closed proof, rollback, sanitized audit evidence, and separate R5 fallback observe evidence when fallback remains present. |
 | `provider_credential_staging_dry_run` | Provider credential staging dry-run, credential presence-only contract, entitlement matrix, and no checker live calls. |
 | `provider_staging_probe_artifact` | Sanitized provider staging probe artifact with credential redaction, entitlement/freshness labels, operator capture metadata, and no checker live calls. |
 | `provider_live_probe_opt_in_timeout` | Explicit provider live-probe opt-in for a named staging provider, bounded timeout, sanitized result evidence, and proof this checker made no live calls. |
@@ -92,7 +110,7 @@ incomplete evidence keeps the summary at **NO-GO**.
 | `supply_chain_dependency_build_artifact_safety` | Sanitized dependency-manifest inspection, build/test artifact scan, visible frontend build warnings, no dependency or lockfile changes, and NO-GO behavior for missing required evidence. |
 | `incident_response_audit_evidence` | Sanitized incident-response evidence for admin-critical actions, preview-first cleanup, provider/notification/release failure paths, local no-network generation, and audit redaction. |
 | `ws2_sse_topology_polling_fallback` | WS2 topology evidence proving process-local SSE limitation, durable polling fallback, API A/B visibility, owner isolation, and no runtime cutover. |
-| `admin_log_retention_capacity_rehearsal` | Admin log retention/capacity rehearsal proving preview-first cleanup, minimum-retention guard, storage-pressure handling, sanitized audit event, and unchanged cleanup defaults. |
+| `admin_log_retention_capacity_rehearsal` | Admin log retention/capacity rehearsal and high-growth retention dry-run evidence proving preview-first cleanup/reporting, minimum-retention guard, storage-pressure handling, sanitized audit event, and unchanged cleanup defaults. |
 | `portfolio_backtest_export_browser_proof` | Portfolio/backtest export and browser proof covering no-advice wording, export/readback integrity, owner isolation, broker redaction, and no runtime mutation. |
 | `notifications_delivery_rehearsal` | Notification delivery rehearsal with dry-run or synthetic delivery evidence, route/channel mapping, failure-path audit, secret redaction, and real outbound disabled unless explicitly accepted. |
 | `user_data_privacy_export_deletion_rehearsal` | User data privacy rehearsal covering sanitized export projection, deletion preview, owner isolation, audit evidence, and no raw user/session/provider data exposure. |
@@ -103,7 +121,7 @@ incomplete evidence keeps the summary at **NO-GO**.
 | `final_clean_full_ci_gate` | Clean worktree, full `ci_gate`, release secret scan, and final diff check evidence. |
 | `provider_operator_evidence` | Accepted sanitized provider operator evidence from `scripts/provider_operator_evidence_check.py` as collected through `docs/audits/operator-evidence-real-runbook.md`; advisory/review-gated, no validator provider calls, no raw provider payloads or credentials, and runtime behavior unchanged. |
 | `restore_pitr_operator_evidence` | Accepted sanitized real restore/PITR operator evidence from `scripts/restore_pitr_operator_evidence_check.py` as collected through `docs/audits/operator-evidence-real-runbook.md`; real restore artifact summary sanitized, no DB commands by the validator, production storage untouched, and manual review required. |
-| `security_operator_acceptance` | Accepted sanitized MFA/RBAC operator acceptance from `scripts/security_operator_acceptance_check.py` as collected through `docs/audits/operator-evidence-real-runbook.md`; MFA/RBAC sections accepted, fallback-off pilot evidence includes route inventory, backend explicit capability classification, frontend fail-closed gate proof, rollback, sanitized audit evidence, and `runtimeDefaultUnchanged=true`; `releaseApproved=false`, no auth/RBAC runtime mutation, and manual review required. |
+| `security_operator_acceptance` | Accepted sanitized MFA/RBAC operator acceptance from `scripts/security_operator_acceptance_check.py` as collected through `docs/audits/operator-evidence-real-runbook.md`; MFA/RBAC sections accepted, `rbacFallbackObserve` evidence records fallback observe posture without removal, fallback-off pilot evidence includes route inventory, backend explicit capability classification, frontend fail-closed gate proof, rollback, sanitized audit evidence, and `runtimeDefaultUnchanged=true`; `breakGlassRecovery` records MFA recovery-code lifecycle acceptance; `releaseApproved=false`, no auth/RBAC runtime mutation, and manual review required. |
 | `quota_budget_operator_evidence` | Accepted sanitized quota/budget operator evidence from `scripts/quota_operator_evidence_check.py` as collected through `docs/audits/operator-evidence-real-runbook.md`; quota/budget sections accepted, no outbound notifications by the validator, no quota runtime mutation, and advisory review required. |
 | `staging_ingress_operator_evidence` | Accepted sanitized staging ingress operator evidence from `scripts/staging_ingress_operator_evidence_check.py` as collected through `docs/audits/operator-evidence-real-runbook.md`; artifact summary sanitized, no network calls by the validator, no ingress runtime mutation, and manual review required. |
 | `ws2_sse_operator_decision_evidence` | Accepted sanitized WS2/SSE topology operator decision evidence from `scripts/ws2_sse_operator_decision_check.py` as collected through `docs/audits/operator-evidence-real-runbook.md`; process-local SSE limitation preserved, polling fallback or single-instance limitation recorded, no validator network calls, no runtime mutation, and manual review required. |
@@ -183,8 +201,10 @@ Release review should attach:
 - `scripts/production_config_readiness.py --contract <sanitized-production-config-contract.json>` output.
 - `scripts/launch_acceptance_evidence.py --evidence <sanitized-launch-acceptance-evidence.json>` output for every final matrix category, including the domain-local rehearsal tracks now split into explicit blockers.
 - Domain-local validator outputs for accepted operator artifacts:
+  `scripts/api_abuse_request_safety_evidence_check.py`,
   `scripts/provider_operator_evidence_check.py`,
   `scripts/provider_sla_licensing_evidence_check.py`,
+  `scripts/notification_delivery_rehearsal_evidence_check.py`,
   `scripts/restore_pitr_operator_evidence_check.py`,
   `scripts/security_operator_acceptance_check.py`,
   `scripts/quota_operator_evidence_check.py`, and

@@ -60,6 +60,13 @@ REDACTION_NOTES = (
 REVIEW_POSTURE = {
     "manualReviewRequired": True,
     "releaseApproved": False,
+    "publicLaunchReady": False,
+}
+REFERENCE_BOUNDARIES = {
+    "targetEnvironmentObservationsRequired": True,
+    "templatesAndSyntheticFixturesAcceptedProductionEvidence": False,
+    "validatorsExecuteLiveActions": False,
+    "acceptedReviewEvidenceApprovesPublicLaunch": False,
 }
 REQUIRED_FIELDS_BY_CATEGORY = {
     "provider": PROVIDER_REQUIRED_FIELDS,
@@ -134,6 +141,7 @@ def build_reference() -> dict[str, Any]:
         "networkCallsExecuted": False,
         "rawArtifactBodiesIncluded": False,
         "reviewPosture": dict(REVIEW_POSTURE),
+        "reviewBoundaries": dict(REFERENCE_BOUNDARIES),
         "categories": categories,
     }
 
@@ -167,6 +175,11 @@ def render_markdown(reference: dict[str, Any]) -> str:
         "- Raw artifact bodies included: false",
         "- Manual review required: true",
         "- releaseApproved=false",
+        "- publicLaunchReady=false",
+        "- Sanitized operator artifacts must be filled from real target-environment observations.",
+        "- Templates, synthetic fixtures, and local dry-run or preflight output are not accepted production evidence.",
+        "- Validators do not execute live provider, network, DB, notification, or runtime actions.",
+        "- Accepted review evidence still does not approve public launch without manual release review.",
         "",
         "## Categories",
         "",

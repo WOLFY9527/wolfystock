@@ -18,7 +18,8 @@ and not a substitute for the real operator runbook or manual review.
   acceptance fixtures, launch acceptance scripts, runtime code, or shared
   release-gate plumbing.
 - Treat all successful statuses as review support only. `releaseApproved`
-  remains `false`.
+  remains `false`, `publicLaunchReady` remains `false`, and synthetic fixtures
+  are not accepted production evidence.
 
 ## Placeholder Inputs
 
@@ -51,6 +52,7 @@ Expected safe posture:
 - sanitized fixture status: `complete-review-required`
 - unsafe fixture status: `rejected-no-go`
 - `releaseApproved=false`
+- `publicLaunchReady=false`
 
 ### 2. Schema Reference Render
 
@@ -129,6 +131,7 @@ Expected safe posture:
 - missing required synthetic artifact: `incomplete-no-go`
 - validator rejection: `rejected-no-go`
 - `releaseApproved=false`
+- `publicLaunchReady=false`
 
 If a summary already exists and only the report needs to be re-rendered:
 

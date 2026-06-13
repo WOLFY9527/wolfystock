@@ -58,8 +58,11 @@ operator/admin evidence support only:
 | Provider readiness and licensing | `01d21fe1 feat(provider): add SLA licensing evidence validator`; `8e869811 fix(provider): keep circuit projection advisory-only`. | Review sanitized entitlement/SLA/advisory posture before exposing provider-dependent surfaces. | No provider runtime enforcement, provider blocking, provider order/fallback/cache/runtime change, or live entitlement claim. |
 | Quota reserve/release | `650cca57 feat(quota): add offline reserve release evidence validator`; `docs/audits/quota-reserve-release-operator-evidence-checklist.md`. | Prepare internal/private-beta evidence for default-off reserve/release review. | No live quota enforcement, reservation consume, route blocking, or public-launch evidence. |
 | Async durability | `2097e637 test(async): freeze async durability no-go contracts`; WS2 docs. | Make process-local/SSE limitations explicit for private-beta deployment review. | No durable outbox/retry/exactly-once claim; no multi-instance public deployment approval. |
-| MFA/RBAC review | `25d2ca77 feat(security): add MFA operator evidence validator`; `e559d08a feat(security): add admin RBAC route inventory`. | Review admin security and route inventory evidence. | No global MFA enforcement, no RBAC fallback removal, no public admin approval. |
+| MFA/RBAC review | `25d2ca77 feat(security): add MFA operator evidence validator`; `e559d08a feat(security): add admin RBAC route inventory`; `security_operator_acceptance.json` sections `rbacFallbackObserve` and `breakGlassRecovery`. | Review RBAC R5 fallback observe posture and MFA recovery-code lifecycle acceptance evidence with sanitized operator artifacts. | No global MFA enforcement, no RBAC fallback removal, no auth/session/RBAC runtime change, no public admin approval. |
 | Storage/restore/migration | `a45c5cdd feat: add isolated pg restore smoke wrapper`; `7d766ce0 feat(storage): add migration readiness report helper`; `scripts/restore_pitr_operator_evidence_check.py`. | Validate sanitized, isolated, offline evidence and readiness summaries. | No production migration, cleanup, retention, restore, or PITR execution. |
+| High-growth retention dry-run | `docs/audits/high-growth-retention-tier-policy.md`; `admin_log_retention_capacity_rehearsal` launch category. | Review policy-only retention tiers and sanitized dry-run report references for operator planning. | No cleanup execution, no DB mutation, no retention approval without accepted dry-run reports. |
+| API abuse/request safety | `scripts/api_abuse_request_safety_evidence_check.py`; `api_abuse_safety_evidence.json`. | Review offline request-safety summaries for rate-limit, invalid request, oversized payload, denial sanitization, and unchanged runtime defaults. | No API middleware change, no auth/session runtime change, no public launch approval. |
+| Notification rehearsal | `scripts/notification_delivery_rehearsal_evidence_check.py`; `notification_delivery_rehearsal_evidence.json`. | Review dry-run/no-send delivery rehearsal evidence, route/channel mapping, failure-path audit, and secret redaction. | No external notification sending, no notification routing change, no real delivery approval. |
 | Backtest reproducibility | `6d87a3f3 test(backtest): add reproducibility manifest fixture` and existing backtest safety docs/tests. | Support reproducible observation/testing claims. | No trading signal routing, broker/order path, or public quant capability claim. |
 
 ## Admin And Operator Surface Review
@@ -139,7 +142,7 @@ Current hard blockers include:
 - no approved provider runtime enforcement pilot;
 - process-local SSE and missing accepted WS2 multi-instance staging evidence;
 - no accepted real isolated PostgreSQL restore/PITR drill;
-- missing retention tiers/dry-run reports for multiple high-growth domains;
+- missing accepted dry-run reports for multiple high-growth domains;
 - no public release-candidate secret/no-advice/no-diagnostic evidence pack;
 - no approved broker/order/trade path, and no external notification sending
   approval.

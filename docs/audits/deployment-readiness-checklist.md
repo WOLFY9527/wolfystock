@@ -426,15 +426,18 @@ The following must all be true before public multi-user deployment:
   `python3 scripts/operator_evidence_bundle_check.py <sanitized-operator-evidence-dir>`;
   it aggregates already-sanitized validator statuses only and does not replace
   any required operator artifact.
-- [x] Domain-local offline validators/templates exist for provider operator
-  evidence, provider SLA/licensing and admin-probe pilot evidence, real
-  restore/PITR operator evidence, security MFA/RBAC operator acceptance,
-  quota/budget operator evidence, and staging ingress operator
-  evidence. These validators are rehearsal/evidence plumbing only; they do not
-  perform runtime calls or approve launch.
+- [x] Domain-local offline validators/templates exist for API
+  abuse/request-safety evidence, provider operator evidence, provider
+  SLA/licensing and admin-probe pilot evidence, notification delivery
+  rehearsal evidence, real restore/PITR operator evidence, security MFA/RBAC
+  operator acceptance, quota/budget operator evidence, and staging ingress
+  operator evidence. These validators are rehearsal/evidence plumbing only;
+  they do not perform live provider/network/DB/notification/runtime actions or
+  approve launch.
 - [x] Offline validators/templates exist for WS2/SSE operator decisions,
   config snapshot evidence, and manual release review records. These are
-  review plumbing only: real operator artifacts are still required, and release
+  review plumbing only: real operator artifacts are still required, templates
+  and synthetic fixtures are not accepted production evidence, and release
   approval remains external/manual.
 - [x] Offline checker/template exists for WS2 target-environment evidence:
   `scripts/ws2_target_environment_evidence_check.py` and
@@ -491,7 +494,9 @@ The following must all be true before public multi-user deployment:
   `python3 scripts/manual_release_approval_evidence_check.py --artifact <sanitized-manual-release-review-record.json>`;
   this validator must still emit `releaseApproved=false`.
 - [ ] Real operator-produced artifacts for the domain-local validator
-  categories are attached and accepted by reviewers for the target environment.
+  categories are attached and accepted by reviewers for the target environment;
+  accepted review evidence still does not approve public launch without manual
+  release review.
 - [ ] Staging smoke passes through HTTPS reverse proxy on synthetic users/data.
 - [ ] Accepted WS2 staging multi-instance smoke passes or deployment is
   explicitly constrained to single API process with documented SSE/task
