@@ -1,6 +1,6 @@
 import type React from 'react';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { BrandedLoadingScreen } from './components/common/BrandedLoadingScreen';
 import { ConsumerProtectedFrame } from './components/layout/ConsumerWorkspaceShell';
 import { Shell } from './components/layout/Shell';
@@ -389,8 +389,13 @@ const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }
   const { language } = useI18n();
   const { adminCapabilities, isAdminAccount, isGuest } = useProductSurface();
   const routePathname = stripLocalePrefix(location.pathname);
+  const routeLocale = parseLocaleFromPathname(location.pathname);
+  const currentRoute = `${location.pathname}${location.search}${location.hash}`;
+  const loginPath = routeLocale
+    ? buildLocalizedPath(`/login?redirect=${encodeURIComponent(currentRoute)}`, routeLocale)
+    : `/login?redirect=${encodeURIComponent(currentRoute)}`;
   const missionControlPrototypeDisabled = isAdminMissionControlPath(routePathname) && !isAdminMissionControlPrototypeEnabled();
-  const baseGateCopy = missionControlPrototypeDisabled
+  const baseGateCopy = isAdminAccount && missionControlPrototypeDisabled
     ? getMissionControlPrototypeGateCopy(language)
     : getAdminSurfaceCopy(routePathname, language, isGuest);
   const gateCopy = isAdminAccount && !missionControlPrototypeDisabled
@@ -418,7 +423,7 @@ const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ children }
       note={gateCopy.note}
       primaryAction={{
         label: isGuest ? (language === 'en' ? 'Sign in' : '登录') : (language === 'en' ? 'Open personal settings' : '打开个人设置'),
-        to: isGuest ? '/login' : '/settings',
+        to: isGuest ? loginPath : '/settings',
       }}
       secondaryAction={gateCopy.secondaryAction}
     />
@@ -442,35 +447,6 @@ export const AppContent: React.FC = () => {
   const guestHomeElement = loggedIn ? <Navigate to={localizedHomePath} replace /> : <GuestHomePage />;
   const isGuestRestrictedPath = (
     routePathname === '/settings'
-    || routePathname.startsWith('/settings/')
-    || routePathname === '/admin/system'
-    || routePathname.startsWith('/admin/system/')
-    || routePathname === '/admin/providers'
-    || routePathname.startsWith('/admin/providers/')
-    || routePathname === '/admin/evidence'
-    || routePathname.startsWith('/admin/evidence/')
-    || routePathname === '/admin/costs'
-    || routePathname.startsWith('/admin/costs/')
-    || routePathname === '/admin/ai'
-    || routePathname.startsWith('/admin/ai/')
-    || routePathname === '/admin/logs'
-    || routePathname.startsWith('/admin/logs/')
-    || routePathname === '/admin/launch-cockpit'
-    || routePathname.startsWith('/admin/launch-cockpit/')
-    || routePathname === '/admin/mission-control'
-    || routePathname.startsWith('/admin/mission-control/')
-    || routePathname === '/admin/evidence-workflow'
-    || routePathname.startsWith('/admin/evidence-workflow/')
-    || routePathname === '/admin/notifications'
-    || routePathname.startsWith('/admin/notifications/')
-    || routePathname === '/admin/market-providers'
-    || routePathname.startsWith('/admin/market-providers/')
-    || routePathname === '/admin/provider-circuits'
-    || routePathname.startsWith('/admin/provider-circuits/')
-    || routePathname === '/admin/users'
-    || routePathname.startsWith('/admin/users/')
-    || routePathname === '/admin/cost-observability'
-    || routePathname.startsWith('/admin/cost-observability/')
   );
 
   useEffect(() => {
@@ -523,6 +499,7 @@ export const AppContent: React.FC = () => {
           <Route path="/market" element={<Navigate to="/market-overview" replace />} />
           <Route path="/admin" element={<Navigate to="/settings/system" replace />} />
           <Route path="/admin/system" element={<Navigate to="/settings/system" replace />} />
+          <Route path="/admin/provider" element={<Navigate to="/admin/market-providers" replace />} />
           <Route path="/admin/providers" element={<Navigate to="/admin/market-providers" replace />} />
           <Route path="/admin/evidence" element={<Navigate to="/admin/evidence-workflow" replace />} />
           <Route path="/admin/costs" element={<Navigate to="/admin/cost-observability" replace />} />
@@ -558,10 +535,11 @@ export const AppContent: React.FC = () => {
           <Route path="/admin/cost-observability" element={<AdminSurfaceRoute><AdminCostObservabilityPage /></AdminSurfaceRoute>} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
-        <Route path="/:locale" element={<Shell />}>
+        <Route path="/:locale" element={<LocalizedShellRoute />}>
           <Route path="market" element={<Navigate to="../market-overview" replace />} />
           <Route path="admin" element={<Navigate to="../settings/system" replace />} />
           <Route path="admin/system" element={<Navigate to="../settings/system" replace />} />
+          <Route path="admin/provider" element={<Navigate to="../admin/market-providers" replace />} />
           <Route path="admin/providers" element={<Navigate to="../admin/market-providers" replace />} />
           <Route path="admin/evidence" element={<Navigate to="../admin/evidence-workflow" replace />} />
           <Route path="admin/costs" element={<Navigate to="../admin/cost-observability" replace />} />
@@ -702,6 +680,17 @@ const PreviewRoutes: React.FC = () => {
       </Suspense>
     </PreviewShell>
   );
+};
+
+const LocalizedShellRoute: React.FC = () => {
+  const location = useLocation();
+  const routeLocale = parseLocaleFromPathname(location.pathname);
+
+  if (!routeLocale) {
+    return <NotFoundPage />;
+  }
+
+  return <Shell><Outlet /></Shell>;
 };
 
 const AppBody: React.FC = () => {
