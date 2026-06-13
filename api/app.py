@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Optional, Any, Dict, Tuple
 
 from fastapi import FastAPI, Request
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html, get_swagger_ui_oauth2_redirect_html
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
@@ -44,6 +45,10 @@ from src.services.task_queue import get_task_queue
 logger = logging.getLogger(__name__)
 
 _SUPPORTED_ADMIN_SPA_LOCALES = frozenset({"zh", "en"})
+_ROOT_OPENAPI_PATH = "/openapi.json"
+_ROOT_SWAGGER_PATH = "/docs"
+_ROOT_SWAGGER_OAUTH2_REDIRECT_PATH = "/docs/oauth2-redirect"
+_ROOT_REDOC_PATH = "/redoc"
 
 
 def _iso_now() -> str:
@@ -67,6 +72,38 @@ def _add_security_headers(app: FastAPI) -> None:
     async def security_headers_middleware(request: Request, call_next):
         response = await call_next(request)
         return apply_security_headers(response, request)
+
+
+def _docs_auth_error_response(request: Request, *, status_code: int, error: str, message: str) -> JSONResponse:
+    return apply_security_headers(
+        JSONResponse(
+            status_code=status_code,
+            content={"error": error, "message": message},
+        ),
+        request,
+    )
+
+
+def _require_docs_admin_user(request: Request):
+    if not is_auth_enabled():
+        return None
+
+    current_user = resolve_current_user(request)
+    if current_user is None:
+        return _docs_auth_error_response(
+            request,
+            status_code=401,
+            error="unauthorized",
+            message="Login required",
+        )
+    if not current_user.is_admin:
+        return _docs_auth_error_response(
+            request,
+            status_code=403,
+            error="admin_required",
+            message="Admin access required",
+        )
+    return None
 
 
 def _build_health_payload(
@@ -205,6 +242,9 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
         ),
         version="1.0.0",
         lifespan=app_lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
     
     # ============================================================
@@ -251,6 +291,41 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     
     app.include_router(api_v1_router)
     add_error_handlers(app)
+
+    @app.get(_ROOT_OPENAPI_PATH, include_in_schema=False)
+    async def openapi_schema(request: Request):
+        auth_error = _require_docs_admin_user(request)
+        if auth_error is not None:
+            return auth_error
+        return JSONResponse(app.openapi())
+
+    @app.get(_ROOT_SWAGGER_PATH, include_in_schema=False)
+    async def swagger_ui(request: Request):
+        auth_error = _require_docs_admin_user(request)
+        if auth_error is not None:
+            return auth_error
+        return get_swagger_ui_html(
+            openapi_url=_ROOT_OPENAPI_PATH,
+            title=f"{app.title} - Swagger UI",
+            oauth2_redirect_url=_ROOT_SWAGGER_OAUTH2_REDIRECT_PATH,
+        )
+
+    @app.get(_ROOT_SWAGGER_OAUTH2_REDIRECT_PATH, include_in_schema=False)
+    async def swagger_ui_oauth2_redirect(request: Request):
+        auth_error = _require_docs_admin_user(request)
+        if auth_error is not None:
+            return auth_error
+        return get_swagger_ui_oauth2_redirect_html()
+
+    @app.get(_ROOT_REDOC_PATH, include_in_schema=False)
+    async def redoc_html(request: Request):
+        auth_error = _require_docs_admin_user(request)
+        if auth_error is not None:
+            return auth_error
+        return get_redoc_html(
+            openapi_url=_ROOT_OPENAPI_PATH,
+            title=f"{app.title} - ReDoc",
+        )
     
     # ============================================================
     # 根路由和健康检查
@@ -287,7 +362,7 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
 <p><code>cd apps/dsa-web &amp;&amp; npm install &amp;&amp; npm run build</code></p>
 <p>Or start with auto-build:</p>
 <p><code>python main.py --serve-only</code></p>
-<div class="hint"><p>If you only need the API, visit <a href="/docs">/docs</a> for the interactive API documentation.</p></div>
+<div class="hint"><p>Interactive API docs are available at <a href="/docs">/docs</a> and follow the current admin auth setting.</p></div>
 <p class="status">API Version 1.0.0 &bull; <a href="/api/health">/api/health</a></p>
 </div></body></html>"""
 
