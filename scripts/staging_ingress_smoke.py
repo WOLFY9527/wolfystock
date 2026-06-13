@@ -28,7 +28,27 @@ TIMEOUT_ENV = "WOLFYSTOCK_STAGING_INGRESS_TIMEOUT_SECONDS"
 DEFAULT_TIMEOUT_SECONDS = 5.0
 MAX_BODY_BYTES = 64_000
 OPERATOR_EVIDENCE_SCHEMA_VERSION = "wolfystock_staging_ingress_operator_evidence_v1"
+TARGET_ENV_EVIDENCE_MODE = "target-environment-https-ingress"
 SAFE_PLACEHOLDERS = {"", "[redacted]", "redacted", "<redacted>", "***", "sanitized", "none"}
+SAFE_FALSE_MARKER_KEYS = {
+    "rawResponseBodiesIncluded",
+    "tokensIncluded",
+    "cookiesIncluded",
+    "secretsIncluded",
+    "dsnsIncluded",
+    "apiKeysIncluded",
+    "providerPayloadsIncluded",
+    "debugTracesIncluded",
+    "credentialBearingUrlsIncluded",
+    "backendPort8000Public",
+    "customerDataUsed",
+    "releaseApproved",
+    "publicLaunchReady",
+}
+PRIVATE_HOST_OR_IP_PATTERN = re.compile(
+    r"\b(?:localhost|(?:\d{1,3}\.){3}\d{1,3}|[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.(?:local|internal|lan|private))\b",
+    re.IGNORECASE,
+)
 
 SENSITIVE_BODY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("api_key", re.compile(r"(?i)[\"']?\bapi[_\s-]?key\b[\"']?\s*[:=]")),
@@ -141,6 +161,22 @@ def _safe_reason_code(value: Any) -> bool:
     return bool(re.fullmatch(r"[a-z0-9_.:-]+", str(value or "")))
 
 
+def _public_ports_are_80_443(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    ports = value.get("publicPorts")
+    return isinstance(ports, list) and set(ports) == {80, 443} and value.get("onlyPublicPorts80And443") is True
+
+
+def _manual_review_ready(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    return value.get("reviewRequired") is True and str(value.get("state") or "").strip() in {
+        "ready-for-manual-review",
+        "accepted-for-manual-review",
+    }
+
+
 def _find_sensitive_value(value: Any, *, path: str = "") -> list[dict[str, str]]:
     findings: list[dict[str, str]] = []
     if isinstance(value, dict):
@@ -148,6 +184,8 @@ def _find_sensitive_value(value: Any, *, path: str = "") -> list[dict[str, str]]
             key_text = str(key)
             nested_path = f"{path}.{key_text}" if path else key_text
             normalized_key = key_text.lower().replace("-", "_")
+            if key_text in SAFE_FALSE_MARKER_KEYS and nested is False:
+                continue
             if isinstance(nested, str) and any(marker in normalized_key for marker in ("token", "secret", "password", "cookie", "session", "dsn", "private_key", "response_body", "provider_payload", "raw_payload", "debug_trace", "stack_trace")):
                 if not _safe_placeholder(nested):
                     findings.append({"path": nested_path, "reasonCode": "sensitive_key_contains_value"})
@@ -161,8 +199,14 @@ def _find_sensitive_value(value: Any, *, path: str = "") -> list[dict[str, str]]
     if isinstance(value, str):
         if _safe_placeholder(value):
             return findings
+        if PRIVATE_HOST_OR_IP_PATTERN.search(value):
+            findings.append({"path": path or "$", "reasonCode": "private_host_or_ip"})
+            return findings
         if re.search(r"(?i)\bhttps?://[^\s?#]+[?][^\s]+", value):
             findings.append({"path": path or "$", "reasonCode": "credential_bearing_url"})
+            return findings
+        if re.search(r"(?i)\bhttps?://[^\s\"']+", value):
+            findings.append({"path": path or "$", "reasonCode": "raw_url"})
             return findings
         for reason_code, pattern in SENSITIVE_BODY_PATTERNS:
             if pattern.search(value):
@@ -193,6 +237,11 @@ def _operator_evidence_checks(payload: dict[str, Any]) -> tuple[list[dict[str, A
     timestamp = payload.get("timestamp") or payload.get("generatedAt")
     reason_codes = payload.get("reasonCodes") if isinstance(payload.get("reasonCodes"), list) else []
     sanitization = payload.get("sanitization") if isinstance(payload.get("sanitization"), dict) else {}
+    https_ingress = payload.get("httpsIngress") if isinstance(payload.get("httpsIngress"), dict) else {}
+    synthetic_posture = (
+        payload.get("syntheticDataPosture") if isinstance(payload.get("syntheticDataPosture"), dict) else {}
+    )
+    manual_review = payload.get("manualReview") if isinstance(payload.get("manualReview"), dict) else {}
 
     ready = _operator_result_from_summary(payload, "health_ready")
     alias = _operator_result_from_summary(payload, "health_alias")
@@ -308,11 +357,45 @@ def _operator_evidence_checks(payload: dict[str, Any]) -> tuple[list[dict[str, A
                 },
             },
         },
+        {
+            "id": "operator_evidence_records_target_https_ingress",
+            "status": "pass"
+            if payload.get("evidenceMode") == TARGET_ENV_EVIDENCE_MODE
+            and https_ingress.get("reverseProxyTlsObserved") is True
+            and _public_ports_are_80_443(https_ingress)
+            and https_ingress.get("backendPort8000Public") is False
+            and https_ingress.get("httpRedirectsToHttps") is True
+            and synthetic_posture.get("syntheticUsersOnly") is True
+            and synthetic_posture.get("customerDataUsed") is False
+            and _manual_review_ready(manual_review)
+            else "fail",
+            "evidence": {
+                "evidenceMode": str(payload.get("evidenceMode") or "<missing>"),
+                "reverseProxyTlsObserved": https_ingress.get("reverseProxyTlsObserved") is True,
+                "onlyPublicPorts80And443": _public_ports_are_80_443(https_ingress),
+                "backendPort8000Public": https_ingress.get("backendPort8000Public") is True,
+                "httpRedirectsToHttps": https_ingress.get("httpRedirectsToHttps") is True,
+                "syntheticUsersOnly": synthetic_posture.get("syntheticUsersOnly") is True,
+                "customerDataUsed": synthetic_posture.get("customerDataUsed") is True,
+                "manualReviewReady": _manual_review_ready(manual_review),
+            },
+        },
+        {
+            "id": "operator_evidence_preserves_launch_no_go",
+            "status": "pass"
+            if payload.get("releaseApproved") is False and payload.get("publicLaunchReady") is False
+            else "fail",
+            "evidence": {
+                "releaseApproved": payload.get("releaseApproved") is True,
+                "publicLaunchReady": payload.get("publicLaunchReady") is True,
+            },
+        },
     ]
 
     normalized = {
         "schemaVersion": str(payload.get("schemaVersion") or OPERATOR_EVIDENCE_SCHEMA_VERSION),
         "mode": str(payload.get("mode") or "operator_sanitized"),
+        "evidenceMode": str(payload.get("evidenceMode") or "<missing>"),
         "baseUrlHostLabel": host_label if _safe_host_label(host_label) else "<invalid>",
         "networkCallsEnabled": payload.get("networkCallsEnabled") is True,
         "liveOptInRecorded": payload.get("liveOptInRecorded") is True,
@@ -339,6 +422,19 @@ def _operator_evidence_checks(payload: dict[str, Any]) -> tuple[list[dict[str, A
             "health_live": live,
             "admin_fail_closed": admin,
         },
+        "httpsIngress": {
+            "reverseProxyTlsObserved": https_ingress.get("reverseProxyTlsObserved") is True,
+            "onlyPublicPorts80And443": _public_ports_are_80_443(https_ingress),
+            "backendPort8000Public": https_ingress.get("backendPort8000Public") is True,
+            "httpRedirectsToHttps": https_ingress.get("httpRedirectsToHttps") is True,
+        },
+        "syntheticDataPosture": {
+            "syntheticUsersOnly": synthetic_posture.get("syntheticUsersOnly") is True,
+            "customerDataUsed": synthetic_posture.get("customerDataUsed") is True,
+        },
+        "manualReviewReady": _manual_review_ready(manual_review),
+        "releaseApproved": payload.get("releaseApproved") is True,
+        "publicLaunchReady": payload.get("publicLaunchReady") is True,
     }
     return checks, normalized
 

@@ -424,6 +424,7 @@ def _staging_ingress_template() -> dict[str, Any]:
         "environment": "staging",
         "operator": "<sanitized-operator-label>",
         "observedAt": TEMPLATE_TIMESTAMP,
+        "evidenceMode": "local-dry-run-preflight",
         "baseUrlLabel": "staging-environment-label",
         "networkCallsEnabled": False,
         "checkedRoutes": [
@@ -435,6 +436,53 @@ def _staging_ingress_template() -> dict[str, Any]:
                 "summary": "<redacted-or-configured>",
             }
         ],
+        "reverseProxyTlsSummary": {
+            "summary": "<redacted-or-configured>",
+            "httpsObserved": False,
+        },
+        "publicPortExposureSummary": {
+            "summary": "<redacted-or-configured>",
+            "publicPorts": [],
+            "onlyPublicPorts80And443": False,
+        },
+        "backendExposureSummary": {
+            "summary": "<redacted-or-configured>",
+            "backendPort8000Public": False,
+        },
+        "httpToHttpsRedirectSummary": {
+            "summary": "<redacted-or-configured>",
+            "redirectsToHttps": False,
+        },
+        "healthEndpointSummary": {"summary": "<redacted-or-configured>"},
+        "readinessEndpointSummary": {"summary": "<redacted-or-configured>"},
+        "liveEndpointSummary": {"summary": "<redacted-or-configured>"},
+        "adminFailClosedSummary": {
+            "summary": "<redacted-or-configured>",
+            "unauthenticatedStatusClass": "401-or-403",
+        },
+        "sensitivePayloadRedaction": {
+            "summary": "<redacted-or-configured>",
+            "rawBodiesIncluded": False,
+            "debugPayloadsIncluded": False,
+            "credentialsIncluded": False,
+        },
+        "syntheticDataPosture": {
+            "summary": "<redacted-or-configured>",
+            "syntheticUsersOnly": False,
+            "customerDataUsed": False,
+        },
+        "ownerIsolationSummary": {
+            "summary": "<redacted-or-configured>",
+            "notApplicable": True,
+        },
+        "rollbackNote": {"summary": "<review-ticket-label>"},
+        "manualReview": {
+            "state": "draft-needs-target-evidence",
+            "reviewRequired": True,
+            "reviewTicketRef": "<review-ticket-label>",
+        },
+        "releaseApproved": False,
+        "publicLaunchReady": False,
         "authBoundaryResult": {"summary": "<redacted-or-configured>"},
         "securityHeaderSummary": {"summary": "<redacted-or-configured>"},
         "csrfOrStateMutationSummary": {"summary": "<redacted-or-configured>"},

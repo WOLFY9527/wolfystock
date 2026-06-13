@@ -32,6 +32,12 @@ ARTIFACT_VERSION = "wolfystock_staging_ingress_operator_evidence_v1"
 REDACTION_VERSION = "staging_ingress_operator_redaction_v1"
 ALLOWED_ENVIRONMENTS = {"staging", "production-like-staging", "sandbox"}
 ALLOWED_OUTCOMES = {"accepted", "rejected", "needs-review"}
+TARGET_ENV_EVIDENCE_MODE = "target-environment-https-ingress"
+ALLOWED_EVIDENCE_MODES = {
+    TARGET_ENV_EVIDENCE_MODE,
+    "local-dry-run-preflight",
+    "operator-template-draft",
+}
 SAFE_PLACEHOLDERS = {"", "<redacted>", "[redacted]", "redacted", "sanitized", "none"}
 SUMMARY_FIELDS = (
     "authBoundaryResult",
@@ -39,15 +45,43 @@ SUMMARY_FIELDS = (
     "csrfOrStateMutationSummary",
     "publicSurfaceSummary",
     "rateLimitOrAbuseSummary",
+    "reverseProxyTlsSummary",
+    "publicPortExposureSummary",
+    "backendExposureSummary",
+    "httpToHttpsRedirectSummary",
+    "healthEndpointSummary",
+    "readinessEndpointSummary",
+    "liveEndpointSummary",
+    "adminFailClosedSummary",
+    "sensitivePayloadRedaction",
+    "syntheticDataPosture",
+    "ownerIsolationSummary",
+    "rollbackNote",
 )
 REQUIRED_FIELDS = (
     "artifactVersion",
     "environment",
     "operator",
     "observedAt",
+    "evidenceMode",
     "baseUrlLabel",
     "networkCallsEnabled",
     "checkedRoutes",
+    "reverseProxyTlsSummary",
+    "publicPortExposureSummary",
+    "backendExposureSummary",
+    "httpToHttpsRedirectSummary",
+    "healthEndpointSummary",
+    "readinessEndpointSummary",
+    "liveEndpointSummary",
+    "adminFailClosedSummary",
+    "sensitivePayloadRedaction",
+    "syntheticDataPosture",
+    "ownerIsolationSummary",
+    "rollbackNote",
+    "manualReview",
+    "releaseApproved",
+    "publicLaunchReady",
     "authBoundaryResult",
     "securityHeaderSummary",
     "csrfOrStateMutationSummary",
@@ -60,6 +94,10 @@ REQUIRED_FIELDS = (
 
 URL_WITH_CREDENTIALS_PATTERN = re.compile(r"https?://[^/\s:@]+:[^@\s]+@[^/\s]+", re.IGNORECASE)
 URL_PATTERN = re.compile(r"https?://[^\s\"']+", re.IGNORECASE)
+IP_OR_PRIVATE_HOST_PATTERN = re.compile(
+    r"\b(?:localhost|(?:\d{1,3}\.){3}\d{1,3}|[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.(?:local|internal|lan|private))\b",
+    re.IGNORECASE,
+)
 GO_CLAIM_PATTERN = re.compile(
     r"\bgo\b|launch[-_\s]?approved|production[-_\s]?ready|automatic[-_\s]?go|release[-_\s]?approved",
     re.IGNORECASE,
@@ -123,6 +161,21 @@ RAW_KEY_MARKERS = (
     "stacktrace",
     "traceback",
 )
+SAFE_FALSE_MARKER_KEYS = {
+    "rawBodiesIncluded",
+    "rawResponseBodiesIncluded",
+    "rawRequestBodiesIncluded",
+    "debugPayloadsIncluded",
+    "debugTracesIncluded",
+    "credentialsIncluded",
+    "tokensIncluded",
+    "cookiesIncluded",
+    "secretsIncluded",
+    "backendPort8000Public",
+    "customerDataUsed",
+    "releaseApproved",
+    "publicLaunchReady",
+}
 
 
 def _is_non_empty_text(value: Any) -> bool:
@@ -181,6 +234,8 @@ def _summary_is_safe(value: Any) -> bool:
         for key, nested in value.items():
             key_text = str(key)
             normalized = _normalize_key(key_text)
+            if key_text in SAFE_FALSE_MARKER_KEYS and nested is False:
+                continue
             if any(marker in normalized for marker in RAW_KEY_MARKERS + SENSITIVE_KEY_MARKERS):
                 return False
             if not _summary_is_safe(nested):
@@ -195,6 +250,7 @@ def _summary_is_safe(value: Any) -> bool:
         return not (
             URL_WITH_CREDENTIALS_PATTERN.search(text)
             or URL_PATTERN.search(text)
+            or IP_OR_PRIVATE_HOST_PATTERN.search(text)
             or RAW_PAYLOAD_PATTERN.search(text)
             or SECRET_MARKER_PATTERN.search(text)
             or GO_CLAIM_PATTERN.search(text)
@@ -224,6 +280,13 @@ def _scan_value_key(field: str, key: Any) -> list[dict[str, str]]:
     return []
 
 
+def _scan_value_entry(field: str, key: Any, value: Any) -> list[dict[str, str]]:
+    key_text = str(key)
+    if key_text in SAFE_FALSE_MARKER_KEYS and value is False:
+        return []
+    return _scan_value_key(field, key)
+
+
 def _scan_value_string(field: str, value: Any) -> list[dict[str, str]]:
     findings: list[dict[str, str]] = []
     text = value.strip()
@@ -231,6 +294,10 @@ def _scan_value_string(field: str, value: Any) -> list[dict[str, str]]:
         return findings
     if URL_WITH_CREDENTIALS_PATTERN.search(text):
         findings.append(_finding(field, "credential_url_forbidden"))
+    if URL_PATTERN.search(text):
+        findings.append(_finding(field, "raw_url_forbidden"))
+    if IP_OR_PRIVATE_HOST_PATTERN.search(text):
+        findings.append(_finding(field, "private_host_or_ip_forbidden"))
     if RAW_PAYLOAD_PATTERN.search(text):
         reason = "debug_trace_forbidden" if re.search(
             r"(?i)\b(?:debug[_\s-]?payload|debug[_\s-]?trace|stack trace|traceback)\b",
@@ -250,10 +317,40 @@ def _scan_value(value: Any, *, field: str = "$") -> list[dict[str, str]]:
     return scan_json_tree(
         value,
         field=field,
-        scan_key=_scan_value_key,
+        scan_entry=_scan_value_entry,
         scan_string=_scan_value_string,
         recurse_on_key_findings=False,
     )
+
+
+def _dict_bool(value: Any, key: str, expected: bool) -> bool:
+    return isinstance(value, dict) and value.get(key) is expected
+
+
+def _public_ports_are_80_443(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    ports = value.get("publicPorts")
+    if not isinstance(ports, list):
+        return False
+    return set(ports) == {80, 443} and value.get("onlyPublicPorts80And443") is True
+
+
+def _manual_review_ready(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    return value.get("reviewRequired") is True and str(value.get("state") or "").strip() in {
+        "ready-for-manual-review",
+        "accepted-for-manual-review",
+    }
+
+
+def _owner_isolation_summarized(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    if value.get("notApplicable") is True:
+        return True
+    return value.get("ownerIsolationChecked") is True and value.get("crossOwnerAccessBlocked") is True
 
 
 def _validate_route(route: Any, index: int) -> list[dict[str, str]]:
@@ -315,6 +412,7 @@ def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, A
     environment = artifact.get("environment")
     operator = artifact.get("operator")
     observed_at = artifact.get("observedAt")
+    evidence_mode = artifact.get("evidenceMode")
     base_url_label = artifact.get("baseUrlLabel")
     network_calls_enabled = artifact.get("networkCallsEnabled")
     checked_routes = artifact.get("checkedRoutes")
@@ -330,6 +428,8 @@ def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, A
         findings.append(_finding("operator", "invalid_operator"))
     if not _is_iso_timestamp(observed_at):
         findings.append(_finding("observedAt", "invalid_observed_at"))
+    if evidence_mode not in ALLOWED_EVIDENCE_MODES:
+        findings.append(_finding("evidenceMode", "invalid_evidence_mode"))
     if not _is_safe_base_label(base_url_label):
         findings.append(_finding("baseUrlLabel", "invalid_base_url_label"))
     if not isinstance(network_calls_enabled, bool):
@@ -342,6 +442,10 @@ def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, A
         findings.append(_finding("evidenceRedactionVersion", "invalid_redaction_version"))
     if not _is_non_empty_text(notes):
         findings.append(_finding("notes", "invalid_notes"))
+    if artifact.get("releaseApproved") is not False:
+        findings.append(_finding("releaseApproved", "release_approved_flag_forbidden"))
+    if artifact.get("publicLaunchReady") is not False:
+        findings.append(_finding("publicLaunchReady", "public_launch_ready_flag_forbidden"))
 
     for name in SUMMARY_FIELDS:
         if name not in artifact:
@@ -357,10 +461,44 @@ def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, A
     if outcome == "accepted":
         if environment not in {"staging", "production-like-staging", "sandbox"}:
             findings.append(_finding("environment", "accepted_outcome_requires_staging_or_sandbox_environment"))
+        if evidence_mode != TARGET_ENV_EVIDENCE_MODE:
+            findings.append(_finding("evidenceMode", "accepted_outcome_requires_target_environment_https_ingress"))
+        if network_calls_enabled is not True:
+            findings.append(_finding("networkCallsEnabled", "accepted_outcome_requires_network_calls_enabled"))
         for field in ("authBoundaryResult", "securityHeaderSummary", "csrfOrStateMutationSummary", "publicSurfaceSummary", "rateLimitOrAbuseSummary"):
             text = _summary_text(artifact.get(field))
             if not text:
                 findings.append(_finding(field, SUMMARY_REASON_MAP[field]))
+        if not _dict_bool(artifact.get("reverseProxyTlsSummary"), "httpsObserved", True):
+            findings.append(_finding("reverseProxyTlsSummary", "accepted_outcome_requires_https_reverse_proxy"))
+        if not _public_ports_are_80_443(artifact.get("publicPortExposureSummary")):
+            findings.append(_finding("publicPortExposureSummary", "accepted_outcome_requires_public_ports_80_443_only"))
+        if not _dict_bool(artifact.get("backendExposureSummary"), "backendPort8000Public", False):
+            findings.append(_finding("backendExposureSummary", "accepted_outcome_requires_backend_8000_not_public"))
+        if not _dict_bool(artifact.get("httpToHttpsRedirectSummary"), "redirectsToHttps", True):
+            findings.append(_finding("httpToHttpsRedirectSummary", "accepted_outcome_requires_http_to_https_redirect"))
+        if not _summary_text(artifact.get("healthEndpointSummary")):
+            findings.append(_finding("healthEndpointSummary", "accepted_outcome_requires_health_endpoint_summary"))
+        if not _summary_text(artifact.get("readinessEndpointSummary")):
+            findings.append(_finding("readinessEndpointSummary", "accepted_outcome_requires_readiness_endpoint_summary"))
+        if not _summary_text(artifact.get("liveEndpointSummary")):
+            findings.append(_finding("liveEndpointSummary", "accepted_outcome_requires_live_endpoint_summary"))
+        if not _dict_bool(artifact.get("sensitivePayloadRedaction"), "rawBodiesIncluded", False):
+            findings.append(_finding("sensitivePayloadRedaction", "accepted_outcome_requires_raw_payloads_redacted"))
+        if not _dict_bool(artifact.get("sensitivePayloadRedaction"), "debugPayloadsIncluded", False):
+            findings.append(_finding("sensitivePayloadRedaction", "accepted_outcome_requires_debug_payloads_redacted"))
+        if not _dict_bool(artifact.get("sensitivePayloadRedaction"), "credentialsIncluded", False):
+            findings.append(_finding("sensitivePayloadRedaction", "accepted_outcome_requires_credentials_redacted"))
+        if not _dict_bool(artifact.get("syntheticDataPosture"), "syntheticUsersOnly", True) or not _dict_bool(
+            artifact.get("syntheticDataPosture"), "customerDataUsed", False
+        ):
+            findings.append(_finding("syntheticDataPosture", "accepted_outcome_requires_synthetic_user_data_posture"))
+        if not _owner_isolation_summarized(artifact.get("ownerIsolationSummary")):
+            findings.append(_finding("ownerIsolationSummary", "accepted_outcome_requires_owner_isolation_summary"))
+        if not _summary_text(artifact.get("rollbackNote")):
+            findings.append(_finding("rollbackNote", "accepted_outcome_requires_rollback_note"))
+        if not _manual_review_ready(artifact.get("manualReview")):
+            findings.append(_finding("manualReview", "accepted_outcome_requires_manual_review_ready"))
 
     sanitized_routes = []
     if isinstance(checked_routes, list):
@@ -380,6 +518,7 @@ def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, A
         "environment": str(environment or "<missing>"),
         "operator": str(operator or "<missing>"),
         "observedAt": str(observed_at or "<missing>"),
+        "evidenceMode": str(evidence_mode or "<missing>"),
         "baseUrlLabel": str(base_url_label) if _is_safe_base_label(base_url_label) else "<invalid>",
         "networkCallsEnabled": isinstance(network_calls_enabled, bool) and network_calls_enabled,
         "checkedRouteCount": len(checked_routes) if isinstance(checked_routes, list) else 0,
@@ -387,6 +526,8 @@ def _validate_artifact(artifact: Any) -> tuple[list[dict[str, str]], dict[str, A
         "outcome": str(outcome or "<missing>"),
         "evidenceRedactionVersion": str(evidence_redaction_version or "<missing>"),
         "notes": str(notes) if _is_non_empty_text(notes) and _summary_is_safe(notes) else "<redacted>",
+        "releaseApproved": artifact.get("releaseApproved") is True,
+        "publicLaunchReady": artifact.get("publicLaunchReady") is True,
     }
 
     deduped_findings = sorted({json.dumps(item, sort_keys=True): item for item in findings}.values(), key=lambda item: (item["field"], item["reasonCode"]))
@@ -411,8 +552,10 @@ def validate_staging_ingress_operator_evidence(artifact: Any) -> dict[str, Any]:
                     "credential_url_forbidden",
                     "debug_trace_forbidden",
                     "launch_approval_claim_forbidden",
+                    "private_host_or_ip_forbidden",
                     "production_mutation_or_destructive_command_forbidden",
                     "raw_payload_forbidden",
+                    "raw_url_forbidden",
                     "secret_or_header_marker_forbidden",
                 }
                 for finding in findings
@@ -421,6 +564,10 @@ def validate_staging_ingress_operator_evidence(artifact: Any) -> dict[str, Any]:
                 finding["reasonCode"].startswith("accepted_outcome_requires_") for finding in findings
             ),
             "environmentAllowed": not any(finding["reasonCode"] == "invalid_environment" for finding in findings),
+            "releaseApprovalPreservedFalse": not any(
+                finding["reasonCode"] in {"release_approved_flag_forbidden", "public_launch_ready_flag_forbidden"}
+                for finding in findings
+            ),
         },
         "artifact": summary,
         "findings": findings,

@@ -356,6 +356,7 @@ def _ingress_artifact(**overrides: object) -> dict[str, object]:
         "environment": "staging",
         "operator": "staging-ingress-ops",
         "observedAt": "2026-05-08T10:30:00Z",
+        "evidenceMode": "target-environment-https-ingress",
         "baseUrlLabel": "staging-ingress-primary",
         "networkCallsEnabled": True,
         "checkedRoutes": [
@@ -367,6 +368,74 @@ def _ingress_artifact(**overrides: object) -> dict[str, object]:
                 "summary": "Public readiness route returned bounded health metadata.",
             }
         ],
+        "reverseProxyTlsSummary": {
+            "status": "accepted",
+            "summary": "HTTPS reverse proxy terminated TLS for the public ingress using sanitized target-environment evidence.",
+            "httpsObserved": True,
+        },
+        "publicPortExposureSummary": {
+            "status": "accepted",
+            "summary": "Public ingress exposed only ports 80 and 443.",
+            "publicPorts": [80, 443],
+            "onlyPublicPorts80And443": True,
+        },
+        "backendExposureSummary": {
+            "status": "accepted",
+            "summary": "Backend API port 8000 was reachable only through the private reverse-proxy path.",
+            "backendPort8000Public": False,
+        },
+        "httpToHttpsRedirectSummary": {
+            "status": "accepted",
+            "summary": "HTTP public ingress redirected to HTTPS without exposing backend internals.",
+            "redirectsToHttps": True,
+        },
+        "healthEndpointSummary": {
+            "status": "accepted",
+            "summary": "The /api/health endpoint returned bounded health metadata through HTTPS ingress.",
+        },
+        "readinessEndpointSummary": {
+            "status": "accepted",
+            "summary": "The /api/health/ready endpoint returned bounded readiness metadata through HTTPS ingress.",
+        },
+        "liveEndpointSummary": {
+            "status": "accepted",
+            "summary": "The /api/health/live endpoint returned bounded liveness metadata through HTTPS ingress.",
+        },
+        "adminFailClosedSummary": {
+            "status": "accepted",
+            "summary": "Protected admin sample returned 401 or 403 for unauthenticated access.",
+            "unauthenticatedStatusClass": "401-or-403",
+        },
+        "sensitivePayloadRedaction": {
+            "status": "accepted",
+            "summary": "Operator artifact contains only bounded reason-code summaries and sanitized labels.",
+            "rawBodiesIncluded": False,
+            "debugPayloadsIncluded": False,
+            "credentialsIncluded": False,
+        },
+        "syntheticDataPosture": {
+            "status": "accepted",
+            "summary": "Ingress smoke used synthetic users and sanitized data labels only.",
+            "syntheticUsersOnly": True,
+            "customerDataUsed": False,
+        },
+        "ownerIsolationSummary": {
+            "status": "accepted",
+            "summary": "Owner isolation posture was summarized with labels only.",
+            "ownerIsolationChecked": True,
+            "crossOwnerAccessBlocked": True,
+        },
+        "rollbackNote": {
+            "status": "accepted",
+            "summary": "Rollback owner and ingress rollback reference were recorded with sanitized labels.",
+        },
+        "manualReview": {
+            "state": "ready-for-manual-review",
+            "reviewRequired": True,
+            "reviewTicketRef": "staging-ingress-review-ticket",
+        },
+        "releaseApproved": False,
+        "publicLaunchReady": False,
         "authBoundaryResult": {
             "status": "accepted",
             "summary": "Protected routes failed closed for unauthenticated access.",
