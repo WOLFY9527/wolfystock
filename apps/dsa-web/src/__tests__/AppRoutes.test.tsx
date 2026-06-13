@@ -448,21 +448,27 @@ describe('AppContent route flows', () => {
     expect(previewReportPanelImportSpy).not.toHaveBeenCalled();
   });
 
-  it.each(['/settings', '/settings/system'])(
-    'redirects guest access from %s to the dedicated guest page',
-    async (path) => {
-      renderAtWithLocationProbe(path);
+  it('redirects guest access from /settings to the dedicated guest page', async () => {
+    renderAtWithLocationProbe('/settings');
 
-      expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
-      await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/guest'));
-      expect(screen.queryByText('chat-page')).not.toBeInTheDocument();
-      expect(screen.queryByText('portfolio-page')).not.toBeInTheDocument();
-      expect(screen.queryByText('backtest-page')).not.toBeInTheDocument();
-      expect(screen.queryByText('scanner-surface-page')).not.toBeInTheDocument();
-      expect(screen.queryByText('personal-settings-page')).not.toBeInTheDocument();
-      expect(screen.queryByText('system-settings-page')).not.toBeInTheDocument();
-    },
-  );
+    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/guest'));
+    expect(screen.queryByText('chat-page')).not.toBeInTheDocument();
+    expect(screen.queryByText('portfolio-page')).not.toBeInTheDocument();
+    expect(screen.queryByText('backtest-page')).not.toBeInTheDocument();
+    expect(screen.queryByText('scanner-surface-page')).not.toBeInTheDocument();
+    expect(screen.queryByText('personal-settings-page')).not.toBeInTheDocument();
+    expect(screen.queryByText('system-settings-page')).not.toBeInTheDocument();
+  });
+
+  it('keeps guest access on /settings/system fail-closed with an admin sign-in requirement', async () => {
+    renderAtWithLocationProbe('/settings/system');
+
+    expect(await screen.findByText('Admin Sign-in Required')).toBeInTheDocument();
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/settings/system');
+    expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
+    expect(screen.queryByText('system-settings-page')).not.toBeInTheDocument();
+  });
 
   it.each([
     ['/portfolio', 'auth-guard:Portfolio'],
@@ -522,16 +528,19 @@ describe('AppContent route flows', () => {
   it.each([
     ['/admin/system', '/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
     ['/admin/providers', '/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
+    ['/admin/provider', '/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
     ['/admin/evidence', '/admin/evidence-workflow', { ...noCapabilities, canReadOpsLogs: true }, 'admin-evidence-workflow-page'],
     ['/admin/costs', '/admin/cost-observability', { ...noCapabilities, canReadCostObservability: true }, 'admin-cost-observability-page'],
     ['/admin/ai', '/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
     ['/zh/admin/system', '/zh/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
     ['/zh/admin/providers', '/zh/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
+    ['/zh/admin/provider', '/zh/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
     ['/zh/admin/evidence', '/zh/admin/evidence-workflow', { ...noCapabilities, canReadOpsLogs: true }, 'admin-evidence-workflow-page'],
     ['/zh/admin/costs', '/zh/admin/cost-observability', { ...noCapabilities, canReadCostObservability: true }, 'admin-cost-observability-page'],
     ['/zh/admin/ai', '/zh/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
     ['/en/admin/system', '/en/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
     ['/en/admin/providers', '/en/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
+    ['/en/admin/provider', '/en/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
     ['/en/admin/evidence', '/en/admin/evidence-workflow', { ...noCapabilities, canReadOpsLogs: true }, 'admin-evidence-workflow-page'],
     ['/en/admin/costs', '/en/admin/cost-observability', { ...noCapabilities, canReadCostObservability: true }, 'admin-cost-observability-page'],
     ['/en/admin/ai', '/en/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
@@ -549,26 +558,32 @@ describe('AppContent route flows', () => {
   );
 
   it.each([
-    ['/zh/admin/system', '/zh/guest', '游客预览模式'],
-    ['/zh/admin/providers', '/zh/guest', '游客预览模式'],
-    ['/zh/admin/evidence', '/zh/guest', '游客预览模式'],
-    ['/zh/admin/costs', '/zh/guest', '游客预览模式'],
-    ['/zh/admin/ai', '/zh/guest', '游客预览模式'],
-    ['/en/admin/system', '/en/guest', 'Guest Preview Mode'],
-    ['/en/admin/providers', '/en/guest', 'Guest Preview Mode'],
-    ['/en/admin/evidence', '/en/guest', 'Guest Preview Mode'],
-    ['/en/admin/costs', '/en/guest', 'Guest Preview Mode'],
-    ['/en/admin/ai', '/en/guest', 'Guest Preview Mode'],
-  ])('keeps guest handling unchanged for admin alias %s', async (path, expectedPath, guestText) => {
+    ['/zh/admin/system', '/zh/settings/system', '需要管理员登录', '/zh/login?redirect=%2Fzh%2Fsettings%2Fsystem'],
+    ['/zh/admin/providers', '/zh/admin/market-providers', '需要管理员登录', '/zh/login?redirect=%2Fzh%2Fadmin%2Fmarket-providers'],
+    ['/zh/admin/provider', '/zh/admin/market-providers', '需要管理员登录', '/zh/login?redirect=%2Fzh%2Fadmin%2Fmarket-providers'],
+    ['/zh/admin/evidence', '/zh/admin/evidence-workflow', '需要管理员登录', '/zh/login?redirect=%2Fzh%2Fadmin%2Fevidence-workflow'],
+    ['/zh/admin/costs', '/zh/admin/cost-observability', '需要管理员登录', '/zh/login?redirect=%2Fzh%2Fadmin%2Fcost-observability'],
+    ['/zh/admin/ai', '/zh/settings/system', '需要管理员登录', '/zh/login?redirect=%2Fzh%2Fsettings%2Fsystem'],
+    ['/en/admin/system', '/en/settings/system', 'Admin Sign-in Required', '/en/login?redirect=%2Fen%2Fsettings%2Fsystem'],
+    ['/en/admin/providers', '/en/admin/market-providers', 'Admin Sign-in Required', '/en/login?redirect=%2Fen%2Fadmin%2Fmarket-providers'],
+    ['/en/admin/provider', '/en/admin/market-providers', 'Admin Sign-in Required', '/en/login?redirect=%2Fen%2Fadmin%2Fmarket-providers'],
+    ['/en/admin/evidence', '/en/admin/evidence-workflow', 'Admin Sign-in Required', '/en/login?redirect=%2Fen%2Fadmin%2Fevidence-workflow'],
+    ['/en/admin/costs', '/en/admin/cost-observability', 'Admin Sign-in Required', '/en/login?redirect=%2Fen%2Fadmin%2Fcost-observability'],
+    ['/en/admin/ai', '/en/settings/system', 'Admin Sign-in Required', '/en/login?redirect=%2Fen%2Fsettings%2Fsystem'],
+  ])('keeps anonymous admin alias %s fail-closed with a sign-in path', async (path, expectedPath, statusLabel, loginHref) => {
     renderAtWithLocationProbe(path);
 
-    expect(await screen.findByText(guestText)).toBeInTheDocument();
+    expect(await screen.findByText(statusLabel)).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+    expect(screen.getAllByRole('link', { name: /Sign in|登录/ }).some((link) => link.getAttribute('href') === loginHref)).toBe(true);
+    expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
+    expect(screen.queryByText('游客预览模式')).not.toBeInTheDocument();
   });
 
   it.each([
     ['/zh/admin/system', '/zh/settings/system'],
     ['/zh/admin/providers', '/zh/admin/market-providers'],
+    ['/zh/admin/provider', '/zh/admin/market-providers'],
     ['/zh/admin/evidence', '/zh/admin/evidence-workflow'],
     ['/zh/admin/costs', '/zh/admin/cost-observability'],
     ['/zh/admin/ai', '/zh/settings/system'],
@@ -697,6 +712,19 @@ describe('AppContent route flows', () => {
     },
   );
 
+  it.each(['/logs', '/users', '/system', '/provider'])(
+    'renders NotFound for naked unknown route %s instead of silently falling back to Home',
+    async (path) => {
+      renderAtWithLocationProbe(path);
+
+      expect(await screen.findByText('not-found-page')).toBeInTheDocument();
+      expect(screen.getByTestId('location-path')).toHaveTextContent(path);
+      expect(screen.queryByText('Home Workspace')).not.toBeInTheDocument();
+      expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
+      expect(screen.queryByText('游客预览模式')).not.toBeInTheDocument();
+    },
+  );
+
   it.each(['/prototype/scanner-board', '/zh/prototype/scanner-board'])(
     'falls through to NotFound for the removed scanner board prototype route at %s',
     async (path) => {
@@ -708,14 +736,19 @@ describe('AppContent route flows', () => {
     },
   );
 
-  it.each(['/en/settings/system', '/en/admin/mission-control'])(
-    'redirects locale-prefixed guest admin access %s to the locale guest page',
-    async (path) => {
-    languageState.value = 'en';
-    renderAtWithLocationProbe(path);
+  it.each([
+    ['/en/settings/system', 'Admin Sign-in Required', '/en/login?redirect=%2Fen%2Fsettings%2Fsystem'],
+    ['/en/admin/mission-control', 'Admin Sign-in Required', '/en/login?redirect=%2Fen%2Fadmin%2Fmission-control'],
+  ])(
+    'keeps locale-prefixed guest admin access %s fail-closed without redirecting to guest',
+    async (path, statusLabel, loginHref) => {
+      languageState.value = 'en';
+      renderAtWithLocationProbe(path);
 
-    expect(await screen.findByText('Guest Preview Mode')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/en/guest'));
+      expect(await screen.findByText(statusLabel)).toBeInTheDocument();
+      expect(screen.getAllByRole('link', { name: 'Sign in' }).some((link) => link.getAttribute('href') === loginHref)).toBe(true);
+      expect(screen.getByTestId('location-path')).toHaveTextContent(path);
+      expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
     },
   );
 
