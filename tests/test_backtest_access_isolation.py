@@ -660,6 +660,37 @@ class BacktestAccessIsolationTestCase(unittest.TestCase):
             200,
         )
 
+        run_list = self.user_client.get("/api/v1/backtest/rule/runs", params={"limit": 100})
+        self.assertEqual(run_list.status_code, 200, run_list.text)
+        run_list_payload = run_list.json()
+        self.assertEqual(run_list_payload["total"], 1)
+        self.assertEqual([item["id"] for item in run_list_payload["items"]], [own_run_id])
+        self.assertEqual([item["code"] for item in run_list_payload["items"]], ["AAPL"])
+        self.assertNotIn("MSFT", run_list.text)
+
+        hidden_code_list = self.user_client.get("/api/v1/backtest/rule/runs", params={"code": "MSFT"})
+        self.assertEqual(hidden_code_list.status_code, 200, hidden_code_list.text)
+        self.assertEqual(hidden_code_list.json()["total"], 0)
+        self.assertEqual(hidden_code_list.json()["items"], [])
+        self.assertNotIn("MSFT", hidden_code_list.text)
+
+        own_export_index = self.user_client.get(f"/api/v1/backtest/rule/runs/{own_run_id}/export-index")
+        self.assertEqual(own_export_index.status_code, 200, own_export_index.text)
+        own_export_index_payload = own_export_index.json()
+        self.assertEqual(own_export_index_payload["run_id"], own_run_id)
+        self.assertTrue(own_export_index_payload["exports"])
+        self.assertTrue(
+            all(f"/rule/runs/{own_run_id}/" in item["endpoint_path"] for item in own_export_index_payload["exports"])
+        )
+        self.assertNotIn("MSFT", own_export_index.text)
+
+        for export in own_export_index_payload["exports"]:
+            with self.subTest(own_export=export["key"]):
+                export_response = self.user_client.get(export["endpoint_path"])
+                self.assertIn(export_response.status_code, {200, 409})
+                self.assertNotEqual(export_response.status_code, 404)
+                self.assertNotIn("MSFT", export_response.text)
+
         denied_paths = [
             f"/api/v1/backtest/rule/runs/{other_run_id}",
             f"/api/v1/backtest/rule/runs/{other_run_id}/status",

@@ -385,6 +385,10 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
                 self.alice_client.get("/api/v1/portfolio/snapshot", params={"as_of": "2026-01-03"}),
                 self.alice_client.get("/api/v1/portfolio/risk", params={"as_of": "2026-01-03"}),
                 self.alice_client.get("/api/v1/portfolio/broker-connections"),
+                self.alice_client.get(
+                    "/api/v1/portfolio/broker-connections",
+                    params={"portfolio_account_id": alice_account},
+                ),
             ]
 
         for response in export_reads:
@@ -407,6 +411,14 @@ class PortfolioOwnerIsolationApiTestCase(unittest.TestCase):
             self.alice_client.get("/api/v1/portfolio/corporate-actions", params={"account_id": bob_account, "page_size": 100}),
             self.alice_client.get("/api/v1/portfolio/snapshot", params={"account_id": bob_account, "as_of": "2026-01-03"}),
             self.alice_client.get("/api/v1/portfolio/risk", params={"account_id": bob_account, "as_of": "2026-01-03"}),
+            self.alice_client.get(
+                "/api/v1/portfolio/broker-connections",
+                params={"portfolio_account_id": bob_account},
+            ),
+            self.alice_client.put(
+                f"/api/v1/portfolio/accounts/{bob_account}",
+                json={"name": "stolen owner", "owner_id": self.bob_id},
+            ),
             self.alice_client.put(
                 f"/api/v1/portfolio/broker-connections/{bob_connection.json()['id']}",
                 json={"connection_name": "stolen export"},
