@@ -603,6 +603,66 @@ class AuthMfaFoundationTestCase(unittest.TestCase):
         self.assertNotIn(recovery_code, audit_text)
         self.assertNotIn(TEST_MFA_SECRET, audit_text)
 
+    def test_mfa_recovery_code_login_session_contract_has_no_method_state(self) -> None:
+        recovery_code = self._enable_admin_mfa_and_recovery_codes()[0]
+
+        with patch.dict(os.environ, {"WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true"}, clear=False):
+            response = self.client.post(
+                "/api/v1/auth/login",
+                json={
+                    "username": "admin",
+                    "password": "adminpass123",
+                    "mfaRecoveryCode": recovery_code,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+        self.assertIn("set-cookie", {key.lower(): value for key, value in response.headers.items()})
+        payload = response.json()
+        current_user = payload["currentUser"]
+        for forbidden_key in (
+            "mfaRequired",
+            "mfaRequiredForLogin",
+            "mfaMethod",
+            "mfaVerifiedAt",
+            "mfaRecoveryCode",
+            "recoveryCodes",
+            "sessionId",
+        ):
+            self.assertNotIn(forbidden_key, payload)
+            self.assertNotIn(forbidden_key, current_user)
+        self.assertNotIn(recovery_code, response.text)
+        self.assertNotIn(TEST_MFA_SECRET, response.text)
+
+    def test_mfa_recovery_code_login_session_rejects_after_row_revoked(self) -> None:
+        recovery_code = self._enable_admin_mfa_and_recovery_codes()[0]
+
+        with patch.dict(os.environ, {"WOLFYSTOCK_MFA_LOGIN_ENFORCEMENT_ENABLED": "true"}, clear=False):
+            response = self.client.post(
+                "/api/v1/auth/login",
+                json={
+                    "username": "admin",
+                    "password": "adminpass123",
+                    "mfaRecoveryCode": recovery_code,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        cookie_header = response.headers["set-cookie"]
+        session_cookie = cookie_header.split(f"{auth.COOKIE_NAME}=", 1)[1].split(";", 1)[0]
+        identity = auth.get_session_identity(session_cookie)
+        self.assertIsNotNone(identity)
+        self.assertIsNotNone(identity.session_id)
+
+        self.assertTrue(self.db.revoke_app_user_session(identity.session_id))
+        self.client.cookies.set(auth.COOKIE_NAME, session_cookie)
+        rejected = self.client.get("/api/v1/auth/me")
+
+        self.assertEqual(rejected.status_code, 401)
+        self.assertEqual(rejected.json()["error"], "unauthorized")
+        self.assertFalse(auth.verify_session(session_cookie))
+
     def test_mfa_login_enforcement_invalid_recovery_code_fails_closed_and_is_sanitized(self) -> None:
         self._enable_admin_mfa_and_recovery_codes()
 
