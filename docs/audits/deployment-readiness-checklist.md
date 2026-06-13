@@ -308,13 +308,22 @@ Remaining blockers:
   `/api/health/live`, unauthenticated `/api/v1/admin/users` fail-closed
   behavior, sensitive/debug payload patterns, sanitized timeout/action output,
   and attachable JSON evidence.
+- [x] Staging ingress operator evidence now distinguishes local dry-run output
+  from real sanitized target-environment HTTPS ingress evidence. Accepted
+  artifacts must prove HTTPS reverse proxy, public 80/443 only, backend `:8000`
+  not directly public, HTTP-to-HTTPS redirect, health/readiness/live summaries,
+  protected admin 401/403 fail-closed, redacted evidence posture, synthetic
+  user/data posture, owner isolation or not-applicable posture, rollback note,
+  and manual review state while preserving `releaseApproved=false` and
+  `publicLaunchReady=false`.
 - [ ] Isolated PostgreSQL backup/restore execution is still missing.
 - [ ] Real isolated PostgreSQL restore/PITR evidence is still pending until an
   accepted sanitized artifact from a real isolated drill is supplied; generated
   templates, dry-run preflight output, and validator success alone do not close
   this blocker.
 - [ ] Real HTTPS staging ingress smoke evidence is still missing; the new
-  preflight must be run against a synthetic staging URL with explicit opt-in.
+  preflight must be run against a synthetic staging URL with explicit opt-in,
+  then converted into the sanitized target-environment operator artifact.
 - [ ] Encrypted backup infrastructure, PITR execution, restore smoke, and
   rollback runbook must be documented and exercised before public onboarding.
 - [x] Policy-only high-growth retention tiers now exist in

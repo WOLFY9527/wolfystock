@@ -86,11 +86,29 @@ def _operator_evidence_payload() -> dict:
     return {
         "schemaVersion": "wolfystock_staging_ingress_operator_evidence_v1",
         "mode": "operator_sanitized",
+        "evidenceMode": "target-environment-https-ingress",
         "timestamp": "2026-05-08T03:04:05+00:00",
         "baseUrlHostLabel": "staging-ingress.example.com",
         "networkCallsEnabled": True,
         "liveOptInRecorded": True,
         "timeoutSeconds": 5,
+        "httpsIngress": {
+            "reverseProxyTlsObserved": True,
+            "publicPorts": [80, 443],
+            "onlyPublicPorts80And443": True,
+            "backendPort8000Public": False,
+            "httpRedirectsToHttps": True,
+        },
+        "syntheticDataPosture": {
+            "syntheticUsersOnly": True,
+            "customerDataUsed": False,
+        },
+        "manualReview": {
+            "state": "ready-for-manual-review",
+            "reviewRequired": True,
+        },
+        "releaseApproved": False,
+        "publicLaunchReady": False,
         "resultSummary": {
             "health_ready": {"status": "pass", "statusCode": 200, "reasonCode": "ok"},
             "health_alias": {"status": "pass", "statusCode": 200, "reasonCode": "ok"},
@@ -239,6 +257,8 @@ def test_staging_ingress_operator_evidence_accepts_sanitized_artifact(tmp_path: 
         "operator_evidence_records_admin_fail_closed": "pass",
         "operator_evidence_has_sanitized_reason_codes": "pass",
         "operator_evidence_declares_required_sanitization": "pass",
+        "operator_evidence_records_target_https_ingress": "pass",
+        "operator_evidence_preserves_launch_no_go": "pass",
     }
 
 
@@ -311,3 +331,31 @@ def test_staging_ingress_operator_evidence_requires_admin_fail_closed(tmp_path: 
     evidence = _parse_evidence(result.stdout)
     checks = {check["id"]: check for check in evidence["checks"]}
     assert checks["operator_evidence_records_admin_fail_closed"]["status"] == "fail"
+
+
+def test_staging_ingress_operator_evidence_rejects_local_dry_run_and_launch_flags(tmp_path: Path) -> None:
+    payload = _operator_evidence_payload()
+    payload["evidenceMode"] = "local-dry-run-preflight"
+    payload["networkCallsEnabled"] = False
+    payload["liveOptInRecorded"] = False
+    payload["releaseApproved"] = True
+    payload["publicLaunchReady"] = True
+    payload["httpsIngress"]["reverseProxyTlsObserved"] = False
+    payload["httpsIngress"]["publicPorts"] = [8000]
+    payload["httpsIngress"]["onlyPublicPorts80And443"] = False
+    payload["httpsIngress"]["backendPort8000Public"] = True
+    payload["httpsIngress"]["httpRedirectsToHttps"] = False
+    payload["syntheticDataPosture"]["syntheticUsersOnly"] = False
+    payload["manualReview"]["state"] = "draft"
+    payload["manualReview"]["reviewRequired"] = False
+    evidence_path = tmp_path / "local-dry-run-staging-ingress-evidence.json"
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_smoke("--operator-evidence", str(evidence_path))
+
+    assert result.returncode == 1
+    evidence = _parse_evidence(result.stdout)
+    checks = {check["id"]: check for check in evidence["checks"]}
+    assert checks["operator_evidence_records_real_smoke_opt_in"]["status"] == "fail"
+    assert checks["operator_evidence_records_target_https_ingress"]["status"] == "fail"
+    assert checks["operator_evidence_preserves_launch_no_go"]["status"] == "fail"

@@ -64,6 +64,33 @@ Current template and bundle categories relevant to recent launch evidence:
 | Config snapshot evidence | `config-snapshot` | `config_snapshot_evidence.json` | `scripts/config_snapshot_evidence_check.py` |
 | Manual release review record | `manual-release-approval` | `manual_release_approval_review_record.json` | `scripts/manual_release_approval_evidence_check.py` |
 
+## Staging Ingress Evidence Path
+
+Keep the two staging ingress contracts separate:
+
+- `scripts/staging_ingress_smoke.py --base-url <label>` is safe by default and
+  emits local dry-run/preflight evidence unless
+  `WOLFYSTOCK_STAGING_INGRESS_SMOKE=1` is explicitly set. Dry-run output is not
+  accepted target-environment evidence.
+- `scripts/staging_ingress_operator_evidence_check.py` validates the sanitized
+  operator artifact that reviewers can inspect offline. Accepted artifacts must
+  use `evidenceMode=target-environment-https-ingress`, set
+  `networkCallsEnabled=true` for the operator-run smoke, and still keep
+  `releaseApproved=false` and `publicLaunchReady=false`.
+
+Accepted staging ingress artifacts must summarize HTTPS reverse proxy posture,
+public 80/443-only exposure, backend `:8000` not directly public,
+HTTP-to-HTTPS redirect posture, health/readiness/live endpoint results,
+protected admin 401/403 fail-closed posture, redacted evidence posture,
+synthetic user/data posture, owner-isolation or not-applicable posture,
+rollback note, and manual review state. Use sanitized labels, reason codes,
+counts, booleans, and review-ticket references only.
+
+Reject local-only dry-run/preflight claims, raw URLs, credential-bearing URLs,
+IP addresses, private hostnames, raw request/response material, stack traces,
+cookies, session identifiers, credentials, backend exposure approval claims, and
+public-launch approval wording.
+
 ## Fill Sanitized Artifacts
 
 Fill each template from the operator's real records using only:
