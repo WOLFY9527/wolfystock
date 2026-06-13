@@ -351,13 +351,19 @@
       "status": "accepted",
       "acceptedBy": "release-operator",
       "capturedAt": "2026-05-07T00:00:00Z",
-      "evidenceRef": "notifications-delivery-rehearsal-synthetic-json",
+      "evidenceRef": "notification-delivery-rehearsal-evidence-synthetic-json",
       "checks": {
-        "deliveryRehearsalPassed": true,
-        "routeChannelMappingRecorded": true,
-        "failurePathAudited": true,
-        "notificationSecretsRedacted": true,
-        "realOutboundDisabledOrAccepted": true
+        "notificationDeliveryRehearsalValidatorPassed": true,
+        "dryRunNoSendProofRecorded": true,
+        "channelMappingRecorded": true,
+        "recipientChannelOwnershipLabelsRecorded": true,
+        "failurePathAuditSanitized": true,
+        "outboundDisabledByDefault": true,
+        "noProviderNetworkCallsByChecker": true,
+        "manualApprovalRequiredForRealDelivery": true,
+        "releaseApprovedFalse": true,
+        "publicLaunchReadyFalse": true,
+        "runtimeBehaviorUnchanged": true
       },
       "sanitization": {
         "externalServicesCalledByChecker": false,

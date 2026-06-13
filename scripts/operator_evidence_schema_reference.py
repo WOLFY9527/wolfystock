@@ -19,6 +19,7 @@ try:
     from operator_evidence_template_pack import TEMPLATE_SPECS, PLACEHOLDER_VALUES
     from config_snapshot_evidence_check import REQUIRED_FIELDS as CONFIG_SNAPSHOT_REQUIRED_FIELDS
     from manual_release_approval_evidence_check import REQUIRED_FIELDS as MANUAL_RELEASE_REQUIRED_FIELDS
+    from notification_delivery_rehearsal_evidence_check import REQUIRED_TOP_LEVEL_FIELDS as NOTIFICATION_REHEARSAL_REQUIRED_FIELDS
     from provider_operator_evidence_check import REQUIRED_FIELDS as PROVIDER_REQUIRED_FIELDS
     from provider_sla_licensing_evidence_check import REQUIRED_FIELDS as PROVIDER_SLA_REQUIRED_FIELDS
     from quota_operator_evidence_check import REQUIRED_SECTIONS as QUOTA_REQUIRED_SECTIONS
@@ -31,6 +32,9 @@ except ModuleNotFoundError:  # pragma: no cover - package import fallback
     from scripts.operator_evidence_template_pack import TEMPLATE_SPECS, PLACEHOLDER_VALUES
     from scripts.config_snapshot_evidence_check import REQUIRED_FIELDS as CONFIG_SNAPSHOT_REQUIRED_FIELDS
     from scripts.manual_release_approval_evidence_check import REQUIRED_FIELDS as MANUAL_RELEASE_REQUIRED_FIELDS
+    from scripts.notification_delivery_rehearsal_evidence_check import (
+        REQUIRED_TOP_LEVEL_FIELDS as NOTIFICATION_REHEARSAL_REQUIRED_FIELDS,
+    )
     from scripts.provider_operator_evidence_check import REQUIRED_FIELDS as PROVIDER_REQUIRED_FIELDS
     from scripts.provider_sla_licensing_evidence_check import REQUIRED_FIELDS as PROVIDER_SLA_REQUIRED_FIELDS
     from scripts.quota_operator_evidence_check import REQUIRED_SECTIONS as QUOTA_REQUIRED_SECTIONS
@@ -60,6 +64,7 @@ REVIEW_POSTURE = {
 REQUIRED_FIELDS_BY_CATEGORY = {
     "provider": PROVIDER_REQUIRED_FIELDS,
     "provider-sla-licensing": PROVIDER_SLA_REQUIRED_FIELDS,
+    "notification-delivery-rehearsal": NOTIFICATION_REHEARSAL_REQUIRED_FIELDS,
     "restore-pitr": RESTORE_PITR_REQUIRED_FIELDS,
     "security": ("schemaVersion", *SECURITY_REQUIRED_SECTIONS),
     "quota-budget": ("schemaVersion", *QUOTA_REQUIRED_SECTIONS),
@@ -139,10 +144,13 @@ def _markdown_list(values: list[str]) -> str:
     return ", ".join(f"`{value}`" for value in values)
 
 
-def _markdown_bullets(values: list[str]) -> list[str]:
+def _markdown_field_chunks(values: list[str], *, chunk_size: int = 6) -> list[str]:
     if not values:
         return ["  - `<none>`"]
-    return [f"  - `{value}`" for value in values]
+    return [
+        "  - " + _markdown_list(values[index : index + chunk_size])
+        for index in range(0, len(values), chunk_size)
+    ]
 
 
 def render_markdown(reference: dict[str, Any]) -> str:
@@ -173,7 +181,7 @@ def render_markdown(reference: dict[str, Any]) -> str:
                 f"- Validator script: `{entry['validatorScript']}`",
                 "- Review posture: manual review required, releaseApproved=false",
                 "- Required top-level fields:",
-                *_markdown_bullets(entry["requiredTopLevelFields"]),
+                *_markdown_field_chunks(entry["requiredTopLevelFields"]),
                 f"- Safe placeholder examples: {_markdown_list(entry['safePlaceholderExamples'])}",
                 f"- Redaction notes: {' '.join(entry['redactionNotes'])}",
                 "",

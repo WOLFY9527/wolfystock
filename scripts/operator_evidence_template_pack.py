@@ -104,6 +104,76 @@ def _provider_sla_licensing_template() -> dict[str, Any]:
     }
 
 
+def _notification_delivery_rehearsal_template() -> dict[str, Any]:
+    return {
+        "schemaVersion": "wolfystock_notification_delivery_rehearsal_evidence_v1",
+        "mode": "offline-sanitized-rehearsal",
+        "environment": "staging",
+        "operator": "<sanitized-operator-label>",
+        "observedAt": TEMPLATE_TIMESTAMP,
+        "dryRunNoSendProof": {
+            "dryRunOnly": True,
+            "noOutboundSent": True,
+            "deliveryClientPatchedOrDisabled": True,
+            "providerCallsExecuted": False,
+            "checkerNetworkCallsEnabled": False,
+            "outcome": "needs-review",
+        },
+        "channelMappingSummary": {
+            "mappingComplete": False,
+            "routes": [
+                {
+                    "routeLabel": "review-ticket-label",
+                    "channelLabel": "redacted-or-configured",
+                    "ownerLabel": "redacted-or-configured",
+                    "channelType": "email",
+                    "mappingSourceLabel": "review-ticket-label",
+                }
+            ],
+        },
+        "recipientChannelOwnershipEvidence": {
+            "sanitizedLabelsOnly": True,
+            "owners": [
+                {
+                    "ownerLabel": "redacted-or-configured",
+                    "channelLabel": "redacted-or-configured",
+                    "ownershipEvidenceLabel": "review-ticket-label",
+                    "recipientLabel": "redacted-or-configured",
+                    "manualApprovalRequired": True,
+                    "rawRecipientIdIncluded": False,
+                }
+            ],
+        },
+        "failurePathAuditSummary": {
+            "failurePathsAudited": False,
+            "cases": [
+                {
+                    "caseLabel": "review-ticket-label",
+                    "routeLabel": "review-ticket-label",
+                    "sanitizedReasonCode": "redacted-or-configured",
+                    "coreFlowContinues": False,
+                    "rawNotificationBodyIncluded": False,
+                    "providerPayloadIncluded": False,
+                    "stackTraceIncluded": False,
+                }
+            ],
+        },
+        "outboundSafety": {
+            "outboundDisabledByDefault": True,
+            "externalProviderCallsByChecker": False,
+            "manualApprovalRequiredForRealDelivery": True,
+            "realDeliveryRehearsalApproved": False,
+            "runtimeNotificationBehaviorChanged": False,
+            "releaseApproved": False,
+            "publicLaunchReady": False,
+        },
+        "outcome": "needs-review",
+        "evidenceRedactionVersion": "notification_delivery_rehearsal_redaction_v1",
+        "notes": "<review-ticket-label>",
+        "templatePlaceholders": _template_placeholders(),
+    }
+
+
 def _restore_pitr_template() -> dict[str, Any]:
     return {
         "schemaVersion": "wolfystock_restore_pitr_operator_evidence_input_v1",
@@ -449,6 +519,11 @@ TEMPLATE_SPECS: tuple[TemplateSpec, ...] = (
         "provider-sla-licensing",
         "provider_sla_licensing_evidence.json",
         _provider_sla_licensing_template,
+    ),
+    TemplateSpec(
+        "notification-delivery-rehearsal",
+        "notification_delivery_rehearsal_evidence.json",
+        _notification_delivery_rehearsal_template,
     ),
     TemplateSpec("restore-pitr", "restore_pitr_operator_evidence.json", _restore_pitr_template),
     TemplateSpec("security", "security_operator_acceptance.json", _security_template),

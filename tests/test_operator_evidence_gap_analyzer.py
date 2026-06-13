@@ -15,6 +15,7 @@ UNSAFE_REJECTED = FIXTURE_ROOT / "unsafe_rejected"
 EXPECTED_CATEGORIES = {
     "provider",
     "provider-sla-licensing",
+    "notification-delivery-rehearsal",
     "restore-pitr",
     "security",
     "quota-budget",

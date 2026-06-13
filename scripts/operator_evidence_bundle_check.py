@@ -30,6 +30,7 @@ from provider_operator_evidence_check import validate_provider_operator_evidence
 from provider_sla_licensing_evidence_check import validate_provider_sla_licensing_evidence
 from config_snapshot_evidence_check import validate_config_snapshot_evidence
 from manual_release_approval_evidence_check import validate_manual_release_approval_evidence
+from notification_delivery_rehearsal_evidence_check import validate_artifact as validate_notification_delivery_rehearsal_evidence
 from quota_operator_evidence_check import validate_artifact as validate_quota_operator_evidence
 from restore_pitr_operator_evidence_check import _build_report as validate_restore_pitr_operator_evidence
 from security_operator_acceptance_check import _build_summary as validate_security_operator_acceptance
@@ -73,6 +74,12 @@ ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
         filename="provider_sla_licensing_evidence.json",
         validator_name="provider_sla_licensing_evidence_check.py",
         validate=validate_provider_sla_licensing_evidence,
+    ),
+    ArtifactSpec(
+        category="notification-delivery-rehearsal",
+        filename="notification_delivery_rehearsal_evidence.json",
+        validator_name="notification_delivery_rehearsal_evidence_check.py",
+        validate=validate_notification_delivery_rehearsal_evidence,
     ),
     ArtifactSpec(
         category="restore-pitr",

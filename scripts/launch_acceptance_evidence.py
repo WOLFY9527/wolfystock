@@ -397,11 +397,17 @@ CATEGORY_SPECS: tuple[CategorySpec, ...] = (
             "failure-path audit, secret redaction, and real outbound disabled unless explicitly accepted"
         ),
         required_checks=(
-            "deliveryRehearsalPassed",
-            "routeChannelMappingRecorded",
-            "failurePathAudited",
-            "notificationSecretsRedacted",
-            "realOutboundDisabledOrAccepted",
+            "notificationDeliveryRehearsalValidatorPassed",
+            "dryRunNoSendProofRecorded",
+            "channelMappingRecorded",
+            "recipientChannelOwnershipLabelsRecorded",
+            "failurePathAuditSanitized",
+            "outboundDisabledByDefault",
+            "noProviderNetworkCallsByChecker",
+            "manualApprovalRequiredForRealDelivery",
+            "releaseApprovedFalse",
+            "publicLaunchReadyFalse",
+            "runtimeBehaviorUnchanged",
         ),
     ),
     CategorySpec(
