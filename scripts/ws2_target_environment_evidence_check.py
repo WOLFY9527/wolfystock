@@ -51,11 +51,23 @@ ALLOWED_SSE_BROADCAST_SCOPES = {
     "external-broadcast-required",
     "needs-review",
 }
+ALLOWED_SINGLE_INSTANCE_EXCEPTION_POSTURES = {
+    "not-used",
+    "needs-review",
+    "accepted-single-instance-exception",
+    "rejected",
+}
+ALLOWED_MANUAL_REVIEW_STATUSES = {
+    "needs-review",
+    "accepted-staging",
+    "rejected",
+}
 REQUIRED_FIELDS = (
     "artifactVersion",
     "validationProfile",
     "evidenceClass",
     "targetEnvironmentLabel",
+    "deploymentTopologyLabel",
     "runId",
     "operator",
     "capturedAt",
@@ -63,11 +75,14 @@ REQUIRED_FIELDS = (
     "completedAt",
     "reviewerAcceptanceStatus",
     "reviewerLabel",
+    "releaseApproved",
+    "publicLaunchReady",
     "evidenceRedactionVersion",
     "evidenceBoundary",
     "topology",
     "checks",
     "summaries",
+    "manualReview",
 )
 BOUNDARY_FIELDS = (
     "syntheticLocalDryRunEvidence",
@@ -124,6 +139,12 @@ SUMMARY_FIELDS = (
     "sseLimitation",
     "reviewNotes",
 )
+MANUAL_REVIEW_FIELDS = (
+    "manualReviewRequired",
+    "manualReviewStatus",
+    "singleInstanceExceptionPosture",
+    "rollbackOrDegradedNote",
+)
 ACCEPTANCE_DIMENSIONS = (
     (
         "api_a_submit",
@@ -172,12 +193,19 @@ ACCEPTANCE_DIMENSIONS = (
 SAFE_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,159}$")
 URL_WITH_CREDENTIALS_PATTERN = re.compile(r"https?://[^/\s:@]+:[^@\s]+@[^/\s]+", re.IGNORECASE)
 URL_PATTERN = re.compile(r"https?://[^\s\"']+", re.IGNORECASE)
+PRIVATE_HOSTNAME_PATTERN = re.compile(
+    r"\b(?:localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+    r"172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|"
+    r"192\.168\.\d{1,3}\.\d{1,3}|[A-Za-z0-9.-]*(?:\.internal|\.local|\.lan|\.corp|\.private))\b",
+    re.IGNORECASE,
+)
 RAW_DEBUG_OR_BODY_PATTERN = re.compile(
     r"\b(?:raw[_\s-]?(?:request|response|payload|body|log|logs)|request[_\s-]?body|"
-    r"response[_\s-]?body|debug[_\s-]?(?:payload|trace)|stack trace|stacktrace|"
+    r"response[_\s-]?body|task[_\s-]?payload|debug[_\s-]?(?:payload|trace)|stack trace|stacktrace|"
     r"Traceback \(most recent call last\):)\b",
     re.IGNORECASE,
 )
+PROVIDER_PAYLOAD_PATTERN = re.compile(r"\bprovider[_\s-]?payload\b", re.IGNORECASE)
 SECRET_OR_COOKIE_PATTERN = re.compile(
     r"\b(?:api[_\s-]?key|apikey|authorization|bearer|cookie|credential|password|passwd|"
     r"private key|secret|session|set-cookie|token|totp|webhook)\b",
@@ -214,6 +242,15 @@ SENSITIVE_KEY_MARKERS = (
     "setcookie",
     "token",
 )
+RAW_IDENTITY_KEY_MARKERS = (
+    "actor_id",
+    "client_id",
+    "principal_id",
+    "session_id",
+    "task_id",
+    "user_id",
+    "userid",
+)
 RAW_DEBUG_KEY_MARKERS = (
     "debug_payload",
     "debugpayload",
@@ -231,7 +268,25 @@ RAW_DEBUG_KEY_MARKERS = (
     "responsebody",
     "stack_trace",
     "stacktrace",
+    "task_payload",
+    "taskpayload",
     "traceback",
+)
+PROVIDER_PAYLOAD_KEY_MARKERS = (
+    "provider_payload",
+    "providerpayload",
+)
+QUEUE_BROKER_KEY_MARKERS = (
+    "broker_credential",
+    "broker_password",
+    "broker_secret",
+    "broker_url",
+    "brokerurl",
+    "queue_credential",
+    "queue_password",
+    "queue_secret",
+    "queue_url",
+    "queueurl",
 )
 LAUNCH_APPROVAL_KEYS = {
     "go",
@@ -243,6 +298,12 @@ LAUNCH_APPROVAL_KEYS = {
     "publiclaunchapproval",
     "publiclaunchapproved",
     "releaseapproved",
+    "publiclaunchready",
+}
+RUNTIME_CHANGE_KEYS = {
+    "runtimebehaviorchanged",
+    "runtimecutover",
+    "runtimecutoverapproved",
 }
 
 
@@ -271,16 +332,26 @@ def _is_iso_timestamp(value: Any) -> bool:
 
 def _scan_value_key(field: str, key: Any) -> list[dict[str, str]]:
     normalized_key = _normalize_key(key)
+    compacted_key = compact_key(key)
+    findings: list[dict[str, str]] = []
     if any(marker in normalized_key for marker in RAW_DEBUG_KEY_MARKERS):
-        return [_finding(field, "raw_debug_or_body_marker_forbidden")]
+        findings.append(_finding(field, "raw_debug_or_body_marker_forbidden"))
+    if any(marker in compacted_key or marker in normalized_key for marker in RAW_IDENTITY_KEY_MARKERS):
+        findings.append(_finding(field, "raw_identity_marker_forbidden"))
+    if any(marker in compacted_key or marker in normalized_key for marker in PROVIDER_PAYLOAD_KEY_MARKERS):
+        findings.append(_finding(field, "provider_payload_marker_forbidden"))
+    if any(marker in compacted_key or marker in normalized_key for marker in QUEUE_BROKER_KEY_MARKERS):
+        findings.append(_finding(field, "queue_broker_credential_marker_forbidden"))
     if any(marker in normalized_key for marker in SENSITIVE_KEY_MARKERS):
-        return [_finding(field, "secret_or_cookie_marker_forbidden")]
-    return []
+        findings.append(_finding(field, "secret_or_cookie_marker_forbidden"))
+    return findings
 
 
 def _scan_value_entry(field: str, key: Any, value: Any) -> list[dict[str, str]]:
     if compact_key(key) in LAUNCH_APPROVAL_KEYS and value is True:
         return [_finding(field, "launch_approval_claim_forbidden")]
+    if compact_key(key) in RUNTIME_CHANGE_KEYS and value is True:
+        return [_finding(field, "runtime_behavior_change_claim_forbidden")]
     return []
 
 
@@ -293,8 +364,12 @@ def _scan_value_string(field: str, value: Any) -> list[dict[str, str]]:
         findings.append(_finding(field, "credential_url_forbidden"))
     if URL_PATTERN.search(text):
         findings.append(_finding(field, "raw_url_forbidden"))
+    if PRIVATE_HOSTNAME_PATTERN.search(text):
+        findings.append(_finding(field, "private_hostname_forbidden"))
     if RAW_DEBUG_OR_BODY_PATTERN.search(text):
         findings.append(_finding(field, "raw_debug_or_body_marker_forbidden"))
+    if PROVIDER_PAYLOAD_PATTERN.search(text):
+        findings.append(_finding(field, "provider_payload_marker_forbidden"))
     if SECRET_OR_COOKIE_PATTERN.search(text):
         findings.append(_finding(field, "secret_or_cookie_marker_forbidden"))
     if any(pattern.search(text) for pattern in LAUNCH_APPROVAL_TEXT_PATTERNS):
@@ -334,6 +409,16 @@ def _summaries_have_required_text(summaries: dict[str, Any]) -> bool:
     return all(_is_non_empty_text(summaries.get(field)) for field in SUMMARY_FIELDS)
 
 
+def _manual_review_complete(manual_review: dict[str, Any]) -> bool:
+    return (
+        manual_review.get("manualReviewRequired") is True
+        and manual_review.get("manualReviewStatus") == "accepted-staging"
+        and manual_review.get("singleInstanceExceptionPosture")
+        in {"not-used", "accepted-single-instance-exception"}
+        and _is_non_empty_text(manual_review.get("rollbackOrDegradedNote"))
+    )
+
+
 def _required_check_values_true(checks: dict[str, Any]) -> bool:
     return all(checks.get(field) is True for field in REQUIRED_CHECK_FIELDS)
 
@@ -346,6 +431,7 @@ def _accepted_staging_evidence_complete(
     checks: dict[str, Any],
     topology: dict[str, Any],
     summaries: dict[str, Any],
+    manual_review: dict[str, Any],
 ) -> bool:
     return (
         evidence_class == "accepted-staging"
@@ -359,6 +445,7 @@ def _accepted_staging_evidence_complete(
         and topology.get("externalSseReplayImplemented") is False
         and topology.get("productionQueueBrokerCutover") is False
         and _summaries_have_required_text(summaries)
+        and _manual_review_complete(manual_review)
     )
 
 
@@ -420,6 +507,7 @@ def _validate_artifact(
     validation_profile = artifact.get("validationProfile")
     evidence_class = str(artifact.get("evidenceClass") or "").strip()
     target_environment_label = artifact.get("targetEnvironmentLabel")
+    deployment_topology_label = artifact.get("deploymentTopologyLabel")
     run_id = artifact.get("runId")
     operator = artifact.get("operator")
     captured_at = artifact.get("capturedAt")
@@ -427,6 +515,8 @@ def _validate_artifact(
     completed_at = artifact.get("completedAt")
     review_status = str(artifact.get("reviewerAcceptanceStatus") or "").strip()
     reviewer_label = artifact.get("reviewerLabel")
+    release_approved = artifact.get("releaseApproved")
+    public_launch_ready = artifact.get("publicLaunchReady")
     redaction_version = artifact.get("evidenceRedactionVersion")
 
     if artifact_version != ARTIFACT_VERSION:
@@ -437,6 +527,8 @@ def _validate_artifact(
         findings.append(_finding("evidenceClass", "invalid_evidence_class"))
     if not _is_safe_label(target_environment_label):
         findings.append(_finding("targetEnvironmentLabel", "invalid_target_environment_label"))
+    if not _is_safe_label(deployment_topology_label):
+        findings.append(_finding("deploymentTopologyLabel", "invalid_deployment_topology_label"))
     if not _is_safe_label(run_id):
         findings.append(_finding("runId", "invalid_run_id"))
     if not _is_safe_label(operator):
@@ -452,6 +544,10 @@ def _validate_artifact(
         findings.append(_finding("reviewerAcceptanceStatus", "invalid_reviewer_acceptance_status"))
     if not _is_safe_label(reviewer_label):
         findings.append(_finding("reviewerLabel", "invalid_reviewer_label"))
+    if release_approved is not False:
+        findings.append(_finding("releaseApproved", "launch_approval_claim_forbidden"))
+    if public_launch_ready is not False:
+        findings.append(_finding("publicLaunchReady", "launch_approval_claim_forbidden"))
     if redaction_version != REDACTION_VERSION:
         findings.append(_finding("evidenceRedactionVersion", "invalid_redaction_version"))
 
@@ -459,10 +555,14 @@ def _validate_artifact(
     topology_findings, topology = _validate_required_object(artifact, "topology", TOPOLOGY_FIELDS)
     check_findings, checks = _validate_required_object(artifact, "checks", REQUIRED_CHECK_FIELDS)
     summary_findings, summaries = _validate_required_object(artifact, "summaries", SUMMARY_FIELDS)
+    manual_review_findings, manual_review = _validate_required_object(
+        artifact, "manualReview", MANUAL_REVIEW_FIELDS
+    )
     findings.extend(boundary_findings)
     findings.extend(topology_findings)
     findings.extend(check_findings)
     findings.extend(summary_findings)
+    findings.extend(manual_review_findings)
 
     for field in BOUNDARY_FIELDS:
         if field in boundary and not isinstance(boundary.get(field), bool):
@@ -470,6 +570,30 @@ def _validate_artifact(
     for field in REQUIRED_CHECK_FIELDS:
         if field in checks and not isinstance(checks.get(field), bool):
             findings.append(_finding(f"checks.{field}", "invalid_boolean"))
+    if "manualReviewRequired" in manual_review and not isinstance(
+        manual_review.get("manualReviewRequired"), bool
+    ):
+        findings.append(_finding("manualReview.manualReviewRequired", "invalid_boolean"))
+    if (
+        "manualReviewStatus" in manual_review
+        and manual_review.get("manualReviewStatus") not in ALLOWED_MANUAL_REVIEW_STATUSES
+    ):
+        findings.append(_finding("manualReview.manualReviewStatus", "invalid_manual_review_status"))
+    if (
+        "singleInstanceExceptionPosture" in manual_review
+        and manual_review.get("singleInstanceExceptionPosture")
+        not in ALLOWED_SINGLE_INSTANCE_EXCEPTION_POSTURES
+    ):
+        findings.append(
+            _finding(
+                "manualReview.singleInstanceExceptionPosture",
+                "invalid_single_instance_exception_posture",
+            )
+        )
+    if "rollbackOrDegradedNote" in manual_review and not _is_non_empty_text(
+        manual_review.get("rollbackOrDegradedNote")
+    ):
+        findings.append(_finding("manualReview.rollbackOrDegradedNote", "missing_rollback_or_degraded_note"))
 
     for field in ("apiAInstanceLabel", "apiBInstanceLabel", "workerLabel", "storageLabel"):
         if field in topology and not _is_safe_label(topology.get(field)):
@@ -519,6 +643,10 @@ def _validate_artifact(
             )
         if not _summaries_have_required_text(summaries):
             findings.append(_finding("summaries", "accepted_staging_requires_required_summaries"))
+        if not _manual_review_complete(manual_review):
+            findings.append(
+                _finding("manualReview", "accepted_staging_requires_manual_review_and_rollback")
+            )
 
     if checks.get("sseLimitationRecorded") is not True or checks.get("durablePollingBaselineRecorded") is not True:
         findings.append(_finding("checks", "sse_limitation_and_polling_baseline_required"))
@@ -537,6 +665,7 @@ def _validate_artifact(
         checks=checks,
         topology=topology,
         summaries=summaries,
+        manual_review=manual_review,
     )
     checks_summary = {
         "requiredEvidenceFieldsPresent": not any(
@@ -548,7 +677,9 @@ def _validate_artifact(
             and checks.get("durablePollingBaselineRecorded") is True
             and topology.get("durablePollingBaseline") is True
         ),
+        "manualReviewAndRollbackRecorded": _manual_review_complete(manual_review),
         "targetEnvironmentIdentifierSanitized": _is_safe_label(target_environment_label),
+        "deploymentTopologyLabelSanitized": _is_safe_label(deployment_topology_label),
         "timestampsAndRunIdBounded": _is_safe_label(run_id)
         and _is_iso_timestamp(captured_at)
         and _is_iso_timestamp(submitted_at)
@@ -561,6 +692,7 @@ def _validate_artifact(
             in {
                 "external_sse_replay_cutover_forbidden",
                 "queue_broker_cutover_forbidden",
+                "runtime_behavior_change_claim_forbidden",
             }
             for item in deduped_findings
         ),
@@ -578,6 +710,9 @@ def _validate_artifact(
         "targetEnvironmentLabel": (
             str(target_environment_label) if _is_safe_label(target_environment_label) else "<invalid>"
         ),
+        "deploymentTopologyLabel": (
+            str(deployment_topology_label) if _is_safe_label(deployment_topology_label) else "<invalid>"
+        ),
         "runId": str(run_id) if _is_safe_label(run_id) else "<invalid>",
         "operator": str(operator) if _is_safe_label(operator) else "<invalid>",
         "capturedAt": str(captured_at) if _is_iso_timestamp(captured_at) else "<invalid>",
@@ -585,6 +720,8 @@ def _validate_artifact(
         "completedAt": str(completed_at) if _is_iso_timestamp(completed_at) else "<invalid>",
         "reviewerAcceptanceStatus": str(review_status or "<missing>"),
         "reviewerLabel": str(reviewer_label) if _is_safe_label(reviewer_label) else "<invalid>",
+        "releaseApproved": release_approved is True,
+        "publicLaunchReady": public_launch_ready is True,
         "evidenceBoundary": {field: boundary.get(field) is True for field in BOUNDARY_FIELDS},
         "topology": {
             "apiAInstanceLabel": topology.get("apiAInstanceLabel")
@@ -608,6 +745,16 @@ def _validate_artifact(
         "summaryFieldsPresent": {
             field: _is_non_empty_text(summaries.get(field)) for field in SUMMARY_FIELDS
         },
+        "manualReview": {
+            "manualReviewRequired": manual_review.get("manualReviewRequired") is True,
+            "manualReviewStatus": str(manual_review.get("manualReviewStatus") or "<missing>"),
+            "singleInstanceExceptionPosture": str(
+                manual_review.get("singleInstanceExceptionPosture") or "<missing>"
+            ),
+            "rollbackOrDegradedNotePresent": _is_non_empty_text(
+                manual_review.get("rollbackOrDegradedNote")
+            ),
+        },
         "evidenceRedactionVersion": str(redaction_version or "<missing>"),
     }
     artifact_status = _artifact_status(review_status, accepted_complete)
@@ -625,6 +772,7 @@ def validate_ws2_target_environment_evidence(artifact: Any) -> dict[str, Any]:
         "acceptanceEvidenceProfile": ACCEPTANCE_EVIDENCE_PROFILE,
         "advisoryOnly": True,
         "manualReviewRequired": True,
+        "releaseApproved": False,
         "launchAcceptanceIntegrated": False,
         "runtimeBehaviorChanged": False,
         "networkCallsExecutedByValidator": False,

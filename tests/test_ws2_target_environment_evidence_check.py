@@ -39,6 +39,13 @@ REQUIRED_CHECK_KEYS = {
     "durablePollingBaselineRecorded",
 }
 
+REQUIRED_MANUAL_REVIEW_KEYS = {
+    "manualReviewRequired",
+    "manualReviewStatus",
+    "singleInstanceExceptionPosture",
+    "rollbackOrDegradedNotePresent",
+}
+
 FORBIDDEN_OUTPUT_MARKERS = (
     "authorization",
     "bearer",
@@ -61,6 +68,7 @@ def _artifact(**overrides: object) -> dict[str, Any]:
         "validationProfile": "PROFILE_DURABLE_PROTECTED",
         "evidenceClass": "accepted-staging",
         "targetEnvironmentLabel": "staging-api-ab-primary",
+        "deploymentTopologyLabel": "api-a-api-b-worker-durable-polling",
         "runId": "ws2-ab-run-20260612-001",
         "operator": "ws2-platform-ops",
         "capturedAt": "2026-06-12T10:30:00Z",
@@ -68,6 +76,8 @@ def _artifact(**overrides: object) -> dict[str, Any]:
         "completedAt": "2026-06-12T10:28:00Z",
         "reviewerAcceptanceStatus": "accepted-staging",
         "reviewerLabel": "release-reviewer",
+        "releaseApproved": False,
+        "publicLaunchReady": False,
         "evidenceRedactionVersion": "ws2_target_environment_evidence_redaction_v1",
         "evidenceBoundary": {
             "syntheticLocalDryRunEvidence": False,
@@ -124,6 +134,12 @@ def _artifact(**overrides: object) -> dict[str, Any]:
             "sseLimitation": "Process-local SSE limitation remained recorded; durable polling was the baseline.",
             "reviewNotes": "Sanitized staging/API A-B evidence accepted for manual review only.",
         },
+        "manualReview": {
+            "manualReviewRequired": True,
+            "manualReviewStatus": "accepted-staging",
+            "singleInstanceExceptionPosture": "not-used",
+            "rollbackOrDegradedNote": "Rollback to single API process remains documented if target topology degrades.",
+        },
     }
     payload.update(overrides)
     return payload
@@ -167,6 +183,7 @@ def test_accepts_sanitized_accepted_staging_api_ab_evidence(tmp_path: Path) -> N
     assert payload["acceptanceEvidenceProfile"] == "PROFILE_WS2_ACCEPTANCE_EVIDENCE_SCOPED"
     assert payload["advisoryOnly"] is True
     assert payload["manualReviewRequired"] is True
+    assert payload["releaseApproved"] is False
     assert payload["launchAcceptanceIntegrated"] is False
     assert payload["runtimeBehaviorChanged"] is False
     assert payload["networkCallsExecutedByValidator"] is False
@@ -174,6 +191,7 @@ def test_accepts_sanitized_accepted_staging_api_ab_evidence(tmp_path: Path) -> N
     assert payload["checks"]["requiredEvidenceFieldsPresent"] is True
     assert payload["checks"]["acceptedStagingEvidenceComplete"] is True
     assert payload["checks"]["sseLimitationAndPollingBaselineRecorded"] is True
+    assert payload["checks"]["manualReviewAndRollbackRecorded"] is True
     assert payload["checks"]["noLaunchApprovalClaim"] is True
     assert set(payload["acceptanceDimensions"]) == {
         "api_a_submit",
@@ -200,8 +218,16 @@ def test_accepts_sanitized_accepted_staging_api_ab_evidence(tmp_path: Path) -> N
     assert payload["acceptanceDimensions"]["sse_limitation_handling"]["sseBroadcastScope"] == "process-local"
     assert payload["acceptanceDimensions"]["sse_limitation_handling"]["externalSseReplayImplemented"] is False
     assert payload["artifact"]["targetEnvironmentLabel"] == "staging-api-ab-primary"
+    assert payload["artifact"]["deploymentTopologyLabel"] == "api-a-api-b-worker-durable-polling"
     assert payload["artifact"]["runId"] == "ws2-ab-run-20260612-001"
     assert payload["artifact"]["reviewerAcceptanceStatus"] == "accepted-staging"
+    assert payload["artifact"]["manualReview"] == {
+        "manualReviewRequired": True,
+        "manualReviewStatus": "accepted-staging",
+        "singleInstanceExceptionPosture": "not-used",
+        "rollbackOrDegradedNotePresent": True,
+    }
+    assert set(payload["artifact"]["manualReview"]) == REQUIRED_MANUAL_REVIEW_KEYS
     assert payload["artifact"]["evidenceBoundary"] == {
         "syntheticLocalDryRunEvidence": False,
         "ciSyntheticEvidence": False,
@@ -222,12 +248,57 @@ def test_sanitized_template_validates_as_needs_review_without_acceptance() -> No
     assert payload["artifactStatus"] == "needs-review"
     assert payload["publicLaunchReady"] is False
     assert payload["artifact"]["reviewerAcceptanceStatus"] == "needs-review"
+    assert payload["artifact"]["releaseApproved"] is False
+    assert payload["artifact"]["publicLaunchReady"] is False
+    assert payload["artifact"]["manualReview"]["manualReviewStatus"] == "needs-review"
+    assert payload["artifact"]["manualReview"]["rollbackOrDegradedNotePresent"] is True
     assert payload["artifact"]["evidenceBoundary"]["targetEnvironmentEvidence"] is False
     assert payload["artifact"]["evidenceBoundary"]["acceptedStagingEvidence"] is False
     assert payload["artifact"]["evidenceBoundary"]["publicLaunchApproval"] is False
     assert payload["checks"]["acceptedStagingEvidenceComplete"] is False
     assert payload["acceptanceDimensions"]["api_a_submit"]["passed"] is False
     assert payload["acceptanceDimensions"]["sse_limitation_handling"]["passed"] is True
+
+
+def test_accepted_staging_requires_manual_review_and_rollback_posture(tmp_path: Path) -> None:
+    artifact = _artifact(
+        manualReview={
+            "manualReviewRequired": True,
+            "manualReviewStatus": "accepted-staging",
+            "singleInstanceExceptionPosture": "not-used",
+            "rollbackOrDegradedNote": "",
+        }
+    )
+    path = _write_json(tmp_path, artifact)
+
+    result = _run_validator(path)
+
+    assert result.returncode == 1
+    payload = _stdout_json(result)
+    assert {
+        finding["reasonCode"] for finding in payload["findings"]
+    } >= {"accepted_staging_requires_manual_review_and_rollback"}
+    assert payload["checks"]["manualReviewAndRollbackRecorded"] is False
+
+
+def test_rejects_release_public_launch_and_runtime_cutover_flags(tmp_path: Path) -> None:
+    artifact = _artifact(
+        releaseApproved=True,
+        publicLaunchReady=True,
+        runtimeBehaviorChanged=True,
+    )
+    path = _write_json(tmp_path, artifact)
+
+    result = _run_validator(path)
+
+    assert result.returncode == 1
+    payload = _stdout_json(result)
+    assert {
+        finding["reasonCode"] for finding in payload["findings"]
+    } >= {
+        "launch_approval_claim_forbidden",
+        "runtime_behavior_change_claim_forbidden",
+    }
 
 
 def test_accepted_staging_requires_all_target_evidence_fields_true(tmp_path: Path) -> None:
@@ -274,6 +345,33 @@ def test_secret_raw_debug_and_launch_claims_are_rejected_without_echoing_values(
         "launch_approval_claim_forbidden",
         "raw_debug_or_body_marker_forbidden",
         "secret_or_cookie_marker_forbidden",
+    }
+
+
+def test_rejects_raw_identity_payload_provider_and_private_hostname_markers(tmp_path: Path) -> None:
+    artifact = _artifact(
+        operatorEvidence={
+            "userId": "user-123",
+            "taskPayloadBody": "redacted body should not be attached",
+            "providerPayload": "provider response body was copied",
+            "brokerUrl": "amqp://queue.internal.example",
+            "privateHost": "api.internal.example.local",
+        }
+    )
+    path = _write_json(tmp_path, artifact)
+
+    result = _run_validator(path)
+
+    assert result.returncode == 1
+    payload = _stdout_json(result)
+    assert {
+        finding["reasonCode"] for finding in payload["findings"]
+    } >= {
+        "raw_identity_marker_forbidden",
+        "raw_debug_or_body_marker_forbidden",
+        "provider_payload_marker_forbidden",
+        "queue_broker_credential_marker_forbidden",
+        "private_hostname_forbidden",
     }
 
 

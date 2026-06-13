@@ -26,6 +26,7 @@ try:
     from restore_pitr_operator_evidence_check import REQUIRED_FIELDS as RESTORE_PITR_REQUIRED_FIELDS
     from security_operator_acceptance_check import REQUIRED_SECTIONS as SECURITY_REQUIRED_SECTIONS
     from staging_ingress_operator_evidence_check import REQUIRED_FIELDS as STAGING_INGRESS_REQUIRED_FIELDS
+    from ws2_target_environment_evidence_check import REQUIRED_FIELDS as WS2_TARGET_ENV_REQUIRED_FIELDS
     from ws2_sse_operator_decision_check import REQUIRED_FIELDS as WS2_SSE_REQUIRED_FIELDS
 except ModuleNotFoundError:  # pragma: no cover - package import fallback
     from scripts.operator_evidence_bundle_check import ARTIFACT_SPECS
@@ -41,12 +42,14 @@ except ModuleNotFoundError:  # pragma: no cover - package import fallback
     from scripts.restore_pitr_operator_evidence_check import REQUIRED_FIELDS as RESTORE_PITR_REQUIRED_FIELDS
     from scripts.security_operator_acceptance_check import REQUIRED_SECTIONS as SECURITY_REQUIRED_SECTIONS
     from scripts.staging_ingress_operator_evidence_check import REQUIRED_FIELDS as STAGING_INGRESS_REQUIRED_FIELDS
+    from scripts.ws2_target_environment_evidence_check import REQUIRED_FIELDS as WS2_TARGET_ENV_REQUIRED_FIELDS
     from scripts.ws2_sse_operator_decision_check import REQUIRED_FIELDS as WS2_SSE_REQUIRED_FIELDS
 
 
 SCHEMA_VERSION = "wolfystock_operator_evidence_schema_reference_v1"
 REFERENCE_TITLE = "Operator Evidence Schema Reference"
 ADVISORY_VALIDATORS = {
+    "ws2-target-environment": "ws2_target_environment_evidence_check.py",
     "ws2-sse": "ws2_sse_operator_decision_check.py",
     "config-snapshot": "config_snapshot_evidence_check.py",
     "manual-release-approval": "manual_release_approval_evidence_check.py",
@@ -76,6 +79,7 @@ REQUIRED_FIELDS_BY_CATEGORY = {
     "security": ("schemaVersion", *SECURITY_REQUIRED_SECTIONS),
     "quota-budget": ("schemaVersion", *QUOTA_REQUIRED_SECTIONS),
     "staging-ingress": STAGING_INGRESS_REQUIRED_FIELDS,
+    "ws2-target-environment": WS2_TARGET_ENV_REQUIRED_FIELDS,
     "ws2-sse": WS2_SSE_REQUIRED_FIELDS,
     "config-snapshot": CONFIG_SNAPSHOT_REQUIRED_FIELDS,
     "manual-release-approval": MANUAL_RELEASE_REQUIRED_FIELDS,

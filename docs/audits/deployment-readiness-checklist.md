@@ -148,8 +148,11 @@ Status:
   scoped acceptance-dimension matrix for API A submit, synthetic worker/lease
   flow, API B durable status readback, polling replay, owner-hidden
   status/polling, retry/failure safety, and explicit process-local SSE
-  limitation handling. It does not run staging calls, create evidence, change
-  runtime behavior, or approve launch.
+  limitation handling. It also requires an explicit deployment topology label,
+  manual review status, rollback/degraded note, single-instance exception
+  posture when used, `releaseApproved=false`, and `publicLaunchReady=false`.
+  It does not run staging calls, create evidence, change runtime behavior, or
+  approve launch.
 - [x] Current process-local `AnalysisTaskQueue` and SSE remain the default.
 
 Remaining blockers:
@@ -442,7 +445,10 @@ The following must all be true before public multi-user deployment:
 - [x] Offline checker/template exists for WS2 target-environment evidence:
   `scripts/ws2_target_environment_evidence_check.py` and
   `docs/audits/ws2-target-environment-evidence-template.json`. Passing the
-  checker is review plumbing only and keeps `publicLaunchReady=false`.
+  checker is review plumbing only and keeps `releaseApproved=false` and
+  `publicLaunchReady=false`. The same artifact is included in the offline
+  operator evidence template pack, bundle checker, and schema reference as
+  `ws2_target_environment_evidence.json`.
 - [x] Offline operator evidence workflow tooling exists for sanitized template
   generation, per-category validation, checksum manifest creation/verification,
   bundle aggregation, and Markdown review-report rendering. The tooling is
@@ -480,7 +486,10 @@ The following must all be true before public multi-user deployment:
   accepted through
   `python3 scripts/ws2_target_environment_evidence_check.py <sanitized-ws2-target-environment-evidence.json>`
   without raw user identifiers, URLs, credentials, payloads, stack traces,
-  cross-instance SSE claims, queue/broker cutover, or public launch approval.
+  provider payloads, private hostnames, cross-instance SSE claims,
+  queue/broker cutover, or public launch approval. The artifact must include
+  deployment topology, manual review, rollback/degraded, and single-instance
+  exception posture fields while preserving process-local SSE limitation.
 - [x] Incident-response audit evidence pack exists through
   `python3 scripts/incident_response_evidence.py --evidence <sanitized-incident-response-evidence.json>`;
   it validates sanitized admin-critical action evidence, preview-first cleanup,

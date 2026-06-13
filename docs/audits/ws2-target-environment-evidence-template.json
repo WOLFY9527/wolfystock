@@ -3,6 +3,7 @@
   "validationProfile": "PROFILE_DURABLE_PROTECTED",
   "evidenceClass": "target-environment",
   "targetEnvironmentLabel": "staging-environment-label",
+  "deploymentTopologyLabel": "api-a-api-b-worker-durable-polling",
   "runId": "ws2-target-evidence-run-0001",
   "operator": "sanitized-operator-label",
   "capturedAt": "1970-01-01T00:00:00Z",
@@ -10,6 +11,8 @@
   "completedAt": "1970-01-01T00:00:00Z",
   "reviewerAcceptanceStatus": "needs-review",
   "reviewerLabel": "review-ticket-label",
+  "releaseApproved": false,
+  "publicLaunchReady": false,
   "evidenceRedactionVersion": "ws2_target_environment_evidence_redaction_v1",
   "evidenceBoundary": {
     "syntheticLocalDryRunEvidence": false,
@@ -65,6 +68,12 @@
     "sanitizedFailureOutput": "Awaiting operator-filled sanitized failure evidence.",
     "sseLimitation": "Process-local SSE limitation remains recorded; durable polling is the baseline.",
     "reviewNotes": "Template only; replace placeholders with sanitized target-run summaries before review."
+  },
+  "manualReview": {
+    "manualReviewRequired": true,
+    "manualReviewStatus": "needs-review",
+    "singleInstanceExceptionPosture": "needs-review",
+    "rollbackOrDegradedNote": "Awaiting operator-filled rollback or degraded-topology note."
   },
   "templatePlaceholders": {
     "replaceBeforeReview": [

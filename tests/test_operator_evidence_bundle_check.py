@@ -414,6 +414,89 @@ def _ws2_sse_artifact(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def _ws2_target_environment_artifact(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "artifactVersion": "wolfystock_ws2_target_environment_evidence_v1",
+        "validationProfile": "PROFILE_DURABLE_PROTECTED",
+        "evidenceClass": "accepted-staging",
+        "targetEnvironmentLabel": "staging-api-ab-primary",
+        "deploymentTopologyLabel": "api-a-api-b-worker-durable-polling",
+        "runId": "ws2-ab-run-20260508-001",
+        "operator": "ws2-platform-ops",
+        "capturedAt": "2026-05-08T10:30:00Z",
+        "submittedAt": "2026-05-08T10:20:00Z",
+        "completedAt": "2026-05-08T10:28:00Z",
+        "reviewerAcceptanceStatus": "accepted-staging",
+        "reviewerLabel": "release-reviewer",
+        "releaseApproved": False,
+        "publicLaunchReady": False,
+        "evidenceRedactionVersion": "ws2_target_environment_evidence_redaction_v1",
+        "evidenceBoundary": {
+            "syntheticLocalDryRunEvidence": False,
+            "ciSyntheticEvidence": False,
+            "targetEnvironmentEvidence": True,
+            "acceptedStagingEvidence": True,
+            "publicLaunchApproval": False,
+        },
+        "topology": {
+            "apiAInstanceLabel": "api-a",
+            "apiBInstanceLabel": "api-b",
+            "workerLabel": "worker-a",
+            "storageLabel": "staging-postgresql",
+            "sseBroadcastScope": "process-local",
+            "durablePollingBaseline": True,
+            "externalSseReplayImplemented": False,
+            "productionQueueBrokerCutover": False,
+        },
+        "checks": {
+            "apiASubmitTransportExercised": True,
+            "syntheticWorkerLeaseFlowVerified": True,
+            "workerLeaseAcquired": True,
+            "progressPersisted": True,
+            "apiBDurableStatusReadback": True,
+            "apiBPollingReplayVerified": True,
+            "apiBDurablePollingReadback": True,
+            "ownerHiddenStatusVerified": True,
+            "ownerHiddenPollingVerified": True,
+            "retryFailureSafetyVerified": True,
+            "leaseExpiryRecoveryVerified": True,
+            "staleWorkerWriteRejected": True,
+            "retryCapVerified": True,
+            "terminalFailurePollable": True,
+            "ownerIsolationVerified": True,
+            "sanitizedFailureOutputVerified": True,
+            "sseLimitationRecorded": True,
+            "crossInstanceSseNotClaimed": True,
+            "durablePollingBaselineRecorded": True,
+        },
+        "summaries": {
+            "apiASubmitTransport": "API A accepted a synthetic analysis submit over the staging HTTPS API.",
+            "workerLease": "One worker acquired a bounded lease and duplicate active lease was blocked.",
+            "progressPersistence": "Durable progress rows were observed with bounded sequence metadata.",
+            "apiBDurableStatusReadback": "API B read durable task status without API A process memory.",
+            "apiBPollingReplay": "API B replayed durable progress events after a sequence cursor.",
+            "apiBDurablePolling": "API B read durable status and replayed progress after a cursor.",
+            "ownerHiddenStatus": "Cross-owner status read returned hidden not-found.",
+            "ownerHiddenPolling": "Cross-owner polling read returned hidden not-found.",
+            "retryFailureSafety": "Retry cap and terminal failure behavior used safe reason codes.",
+            "leaseExpiryRecovery": "A second worker reclaimed the task after lease expiry.",
+            "staleWorkerWriteRejection": "The stale worker could not write terminal state after reclaim.",
+            "ownerIsolation": "Cross-owner status and polling reads returned hidden not-found responses.",
+            "sanitizedFailureOutput": "Failure output contained only safe reason codes.",
+            "sseLimitation": "Process-local SSE limitation remained recorded; durable polling was the baseline.",
+            "reviewNotes": "Sanitized staging/API A-B evidence accepted for manual review only.",
+        },
+        "manualReview": {
+            "manualReviewRequired": True,
+            "manualReviewStatus": "accepted-staging",
+            "singleInstanceExceptionPosture": "not-used",
+            "rollbackOrDegradedNote": "Rollback to single API process remains documented if target topology degrades.",
+        },
+    }
+    payload.update(overrides)
+    return payload
+
+
 def _config_snapshot_artifact(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "artifactVersion": "config-snapshot-evidence-v1",
@@ -536,6 +619,7 @@ def _accepted_artifacts() -> dict[str, object]:
         "security_operator_acceptance.json": _security_artifact(),
         "quota_budget_operator_evidence.json": _quota_artifact(),
         "staging_ingress_operator_evidence.json": _ingress_artifact(),
+        "ws2_target_environment_evidence.json": _ws2_target_environment_artifact(),
         "ws2_sse_operator_decision_evidence.json": _ws2_sse_artifact(),
         "config_snapshot_evidence.json": _config_snapshot_artifact(),
         "manual_release_approval_review_record.json": _manual_release_review_artifact(),
