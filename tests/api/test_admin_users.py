@@ -369,7 +369,10 @@ class AdminUsersApiTestCase(unittest.TestCase):
         ]
         self.assertGreaterEqual(len(user_routes), 3)
         for route in user_routes:
-            self.assertTrue(set(getattr(route, "methods", set())) <= {"GET"})
+            if getattr(route, "path", "") == "/api/v1/admin/users/onboard":
+                self.assertTrue(set(getattr(route, "methods", set())) <= {"POST"})
+            else:
+                self.assertTrue(set(getattr(route, "methods", set())) <= {"GET"})
 
     def test_cross_user_admin_detail_attempt_is_denied_with_sanitized_error(self) -> None:
         self._as_user()
@@ -411,6 +414,28 @@ class AdminUsersApiTestCase(unittest.TestCase):
         self.assertEqual([item["username"] for item in response.json()["items"]], ["admin", "alice", "bob"])
         self.assertEqual(self._count(AppUser), before_users)
         self.assertEqual(self._count(AppUserSession), before_sessions)
+
+    def test_user_directory_does_not_expose_onboarding_secret_in_safe_projections(self) -> None:
+        self.db.create_or_update_app_user(
+            user_id="user-3",
+            username="beta-user",
+            display_name="Beta User",
+            role="user",
+            password_hash="pbkdf2:beta-secret-hash",
+            is_active=True,
+        )
+        self._as_admin()
+
+        list_response = self.client.get("/api/v1/admin/users", params={"q": "beta-user"})
+        detail_response = self.client.get("/api/v1/admin/users/user-3")
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(detail_response.status_code, 200)
+        for response in (list_response, detail_response):
+            self._assert_no_privacy_export_leaks(response)
+            text = self._json_text(response)
+            self.assertNotIn("initialPassword", text)
+            self.assertNotIn("beta-secret-hash", text)
 
 
 if __name__ == "__main__":

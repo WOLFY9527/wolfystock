@@ -97,7 +97,7 @@ EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS = {
     "admin.users.read": 2,
     "admin.users.activity_read": 1,
     "admin.users.portfolio_read": 4,
-    "admin.users.security_write": 3,
+    "admin.users.security_write": 4,
     "admin.activity.read": 1,
     "admin.logs.read": 8,
     "admin.logs.write": 1,
@@ -170,6 +170,7 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("POST", "/api/v1/options/scenario"): "public_fixture_analysis",
     ("POST", "/api/v1/options/strategies/compare"): "public_fixture_analysis",
     ("GET", "/api/v1/admin/logs/storage/summary"): "admin_capability_required",
+    ("POST", "/api/v1/admin/users/onboard"): "admin_capability_required",
     ("GET", "/api/v1/admin/ops/status"): "admin_capability_required",
     ("GET", "/api/v1/admin/mission-control"): "admin_capability_required",
     ("GET", "/api/v1/admin/cost/duplicate-summary"): "admin_capability_required",
@@ -613,6 +614,7 @@ def test_admin_observability_route_inventory_keeps_capabilities_and_transitional
     assert 'require_admin_capability("cost:observability:read")' in usage_source
     assert 'require_admin_capability("users:read")' in admin_users_source
     assert 'require_admin_capability("users:activity:read")' in admin_users_source
+    assert "/users/onboard" in admin_users_source
     assert 'require_admin_capability("quant:admin:read")' in quant_source
     assert 'require_admin_capability("quant:admin:write")' in quant_source
     assert 'require_admin_capability("ops:logs:read")' in admin_logs_source
@@ -856,6 +858,11 @@ def test_frontend_route_inventory_matches_admin_capability_map_and_wrapper_bound
     app_source = APP_TSX.read_text(encoding="utf-8")
     capability_source = ADMIN_CAPABILITIES_TS.read_text(encoding="utf-8")
     restricted_block = _extract_route_block(app_source, "const isGuestRestrictedPath = (", ");")
+    fail_closed_admin_surface_paths = {
+        entry["path"]
+        for entry in fixture["admin_surface_routes"]
+        if entry["route_id"] != "settings.system"
+    }
 
     admin_wrapped_paths = _collect_wrapped_route_paths(app_source, "AdminSurfaceRoute")
     registered_wrapped_paths = _collect_wrapped_route_paths(app_source, "RegisteredSurfaceRoute")
@@ -863,7 +870,13 @@ def test_frontend_route_inventory_matches_admin_capability_map_and_wrapper_bound
     for entry in fixture["admin_surface_routes"]:
         assert entry["path"] in admin_wrapped_paths
         assert entry["localized_path"] in admin_wrapped_paths
-        assert any(marker in restricted_block for marker in _guest_restriction_markers(entry["path"]))
+        has_guest_restriction_marker = any(
+            marker in restricted_block for marker in _guest_restriction_markers(entry["path"])
+        )
+        if entry["path"] in fail_closed_admin_surface_paths:
+            assert not has_guest_restriction_marker
+        else:
+            assert has_guest_restriction_marker
         expected_flag = entry["capability_flag"]
         route_prefix = entry["path"].replace("/:userId", "").replace("/:runId", "")
         if entry["route_id"] == "admin.user_activity":
@@ -887,7 +900,13 @@ def test_frontend_route_inventory_matches_admin_capability_map_and_wrapper_bound
         assert entry["localized_path"] in registered_wrapped_paths
 
     for prefix in fixture["guest_redirect_prefixes"]:
-        assert any(marker in restricted_block for marker in _guest_restriction_markers(prefix))
+        has_guest_restriction_marker = any(
+            marker in restricted_block for marker in _guest_restriction_markers(prefix)
+        )
+        if prefix in fail_closed_admin_surface_paths:
+            assert not has_guest_restriction_marker
+        else:
+            assert has_guest_restriction_marker
 
     for entry in fixture["public_routes"]:
         assert f'path="{entry["path"]}"' in app_source
@@ -910,7 +929,12 @@ def test_frontend_guest_paywall_and_admin_gate_boundaries_are_represented_in_exi
         assert entry["test_probe"] in app_routes_test_source or entry["test_probe"] in auth_guard_test_source
 
     assert "/settings/system" in app_routes_test_source
+    assert "keeps anonymous admin alias %s fail-closed with a sign-in path" in app_routes_test_source
+    assert "keeps locale-prefixed guest admin access %s fail-closed without redirecting to guest" in app_routes_test_source
+    assert "renders NotFound for naked unknown route %s instead of silently falling back to Home" in app_routes_test_source
+    assert "/admin/provider" in app_routes_test_source
     assert "/zh/admin/evidence-workflow" in app_routes_test_source
     assert "/zh/admin/cost-observability" in app_routes_test_source
+    assert "/zh/admin/users" in app_routes_test_source
     assert "Sign in to continue to Portfolio" in auth_guard_test_source
     assert "登录后即可进入 市场总览" in auth_guard_test_source

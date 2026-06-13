@@ -39,6 +39,7 @@ SURFACES: tuple[SurfaceSpec, ...] = (
         markers=(
             'require_admin_capability("users:read")',
             'require_admin_capability("users:activity:read")',
+            "/users/onboard",
             "/users",
         ),
         review_note="admin user directory and activity routes remain capability-gated",

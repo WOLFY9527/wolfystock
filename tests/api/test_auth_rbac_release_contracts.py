@@ -35,6 +35,7 @@ AUDIT_EXPECTED_CAPABILITY_MARKERS = {
     "admin_users": (
         'require_admin_capability("users:read")',
         'require_admin_capability("users:activity:read")',
+        "/users/onboard",
     ),
     "market_provider_operations": (
         'require_admin_capability("ops:providers:read")',

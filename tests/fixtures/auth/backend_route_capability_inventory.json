@@ -146,7 +146,7 @@
     },
     {
       "route_id": "admin.users.security_write",
-      "path_pattern": "^/api/v1/admin/users/\\{user_id\\}/(?:disable|enable|revoke-sessions)$",
+      "path_pattern": "^/api/v1/admin/users(?:/onboard|/\\{user_id\\}/(?:disable|enable|revoke-sessions))$",
       "methods": ["POST"],
       "surface": "admin_user_security",
       "auth_dependency_label": "admin_capability",
@@ -669,6 +669,16 @@
       "capability_label": "ops:logs:read",
       "no_go_marker": null,
       "transitional_note": "Storage diagnostics are admin-capability gated and not a public surface."
+    },
+    {
+      "route_id": "admin.users.onboard",
+      "path": "/api/v1/admin/users/onboard",
+      "method": "POST",
+      "surface_classification": "admin_capability_required",
+      "auth_dependency_label": "admin_capability",
+      "capability_label": "users:security:write",
+      "no_go_marker": null,
+      "transitional_note": "Private-beta onboarding stays admin-capability gated behind recent admin reauthentication."
     },
     {
       "route_id": "admin.ops.status",

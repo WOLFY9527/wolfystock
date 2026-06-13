@@ -9,7 +9,9 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.deps import CurrentUser, require_admin_capability
+from api.v1.endpoints.admin_security import _require_admin_security_write
 from api.v1.schemas.admin_activity import AdminActivityEvent, AdminActivityResponse, AdminActivityWindow
+from api.v1.schemas.admin_security import AdminUserOnboardRequest, AdminUserOnboardResponse
 from api.v1.schemas.admin_users import (
     AdminDataLinks,
     AdminSessionSummary,
@@ -19,7 +21,9 @@ from api.v1.schemas.admin_users import (
     AdminUserListResponse,
     AdminUserRiskBadge,
 )
+from src.auth_context import AdminActorContext
 from src.services.admin_activity_service import AdminActivityService
+from src.services.admin_user_onboarding_service import AdminUserOnboardingError, AdminUserOnboardingService
 from src.services.admin_user_service import AdminUserService
 
 router = APIRouter()
@@ -132,6 +136,16 @@ def _build_session_summary(item: dict[str, Any]) -> AdminSessionSummary:
     return AdminSessionSummary.model_validate(item)
 
 
+def _to_admin_actor(current_user: CurrentUser) -> AdminActorContext:
+    return AdminActorContext(
+        user_id=current_user.user_id,
+        username=current_user.username,
+        display_name=current_user.display_name,
+        role=current_user.role,
+        is_admin=current_user.is_admin,
+    )
+
+
 @router.get(
     "/users",
     response_model=AdminUserListResponse,
@@ -228,6 +242,43 @@ def get_admin_user_detail(
             "client_device_metadata_unavailable",
         ],
     )
+
+
+@router.post(
+    "/users/onboard",
+    response_model=AdminUserOnboardResponse,
+    summary="Create a normal active user for private-beta onboarding",
+)
+def onboard_admin_user(
+    body: AdminUserOnboardRequest,
+    current_user: CurrentUser = Depends(_require_admin_security_write),
+) -> AdminUserOnboardResponse:
+    try:
+        result = AdminUserOnboardingService().create_user(
+            actor=_to_admin_actor(current_user),
+            username=body.username,
+            display_name=body.display_name,
+            email=body.email,
+            password=body.password,
+            reason=body.reason,
+        )
+    except AdminUserOnboardingError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"error": exc.error, "message": exc.message},
+        ) from None
+
+    payload = {
+        "targetUserId": result.target_user_id,
+        "username": result.username,
+        "role": "user",
+        "created": result.created,
+        "passwordDelivery": "returned_once",
+        "initialPassword": result.initial_password,
+        "auditEventId": result.audit_event_id,
+        "message": result.message,
+    }
+    return AdminUserOnboardResponse.model_validate(payload)
 
 
 @router.get(

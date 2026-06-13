@@ -24,6 +24,7 @@ class AdminGovernanceAuditService:
         "admin_security.account_disabled",
         "admin_security.account_enabled",
         "admin_security.sessions_revoked",
+        "admin_user_onboarding.user_created",
     }
 
     def __init__(self, execution_logs: ExecutionLogService | None = None):
