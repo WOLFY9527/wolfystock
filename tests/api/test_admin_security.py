@@ -78,7 +78,7 @@ class AdminSecurityApiTestCase(unittest.TestCase):
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.db = DatabaseManager(db_url=f"sqlite:///{self.db_path}")
 
-        from api.v1.endpoints import admin_security, auth as auth_endpoint
+        from api.v1.endpoints import admin_security, admin_users, auth as auth_endpoint
 
         self.env_patch = patch.dict(
             os.environ,
@@ -98,6 +98,7 @@ class AdminSecurityApiTestCase(unittest.TestCase):
 
         self.app = FastAPI()
         self.app.include_router(admin_security.router, prefix="/api/v1/admin")
+        self.app.include_router(admin_users.router, prefix="/api/v1/admin")
         self.app.include_router(auth_endpoint.router, prefix="/api/v1/auth")
         self.client = TestClient(self.app)
         self.now = datetime.now()
@@ -246,6 +247,22 @@ class AdminSecurityApiTestCase(unittest.TestCase):
         for needle in forbidden:
             self.assertNotIn(str(needle), text)
 
+    def _assert_safe_onboarding_audit(self, *, expected_status: str) -> None:
+        rows = self._audit_rows("admin_user_onboarding.user_created")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].overall_status, expected_status)
+        text = json.dumps(rows[0].summary_json, ensure_ascii=False)
+        text += json.dumps(self.db.get_execution_log_session_detail(rows[0].session_id), ensure_ascii=False)
+        self.assertIn("acct:", text)
+        self.assertNotIn("beta-user", text)
+        self.assertNotIn("beta@example.com", text)
+        self.assertNotIn("initialPassword", text)
+        self.assertNotIn("password_hash", text)
+        self.assertNotIn("pbkdf2", text)
+        self.assertNotIn("token", text.lower())
+        self.assertNotIn("secret", text.lower())
+        self.assertNotIn("cookie", text.lower())
+
     def _assert_safe_audit(self, action: str, *, expected_status: str) -> None:
         rows = self._audit_rows(action)
         self.assertEqual(len(rows), 1)
@@ -272,12 +289,25 @@ class AdminSecurityApiTestCase(unittest.TestCase):
         )
         self.assertEqual(unauthenticated.status_code, 401)
 
+        onboard_unauthenticated = self.client.post(
+            "/api/v1/admin/users/onboard",
+            json={"username": "beta-user", "displayName": "Beta User", "reason": "private beta onboarding"},
+        )
+        self.assertEqual(onboard_unauthenticated.status_code, 401)
+
         self._as_user()
         forbidden = self.client.post(
             "/api/v1/admin/users/user-1/disable",
             json={"reason": "support request", "confirm": "DISABLE"},
         )
         self.assertEqual(forbidden.status_code, 403)
+
+        self._as_user()
+        onboard_forbidden = self.client.post(
+            "/api/v1/admin/users/onboard",
+            json={"username": "beta-user", "displayName": "Beta User", "reason": "private beta onboarding"},
+        )
+        self.assertEqual(onboard_forbidden.status_code, 403)
 
     def test_admin_without_security_write_capability_is_denied_safely(self) -> None:
         self._as_admin("support-admin-1")
@@ -320,6 +350,119 @@ class AdminSecurityApiTestCase(unittest.TestCase):
         self.assertEqual(response.json()["sessionsRevoked"], 2)
         self.assertFalse(self._user_is_active("user-1"))
         self._assert_safe_payload(response)
+
+    def test_authenticated_admin_can_onboard_normal_user_with_one_time_password_and_safe_audit(self) -> None:
+        self._login_admin_session()
+        self._reauth_admin_session()
+
+        response = self.client.post(
+            "/api/v1/admin/users/onboard",
+            json={
+                "username": "beta-user",
+                "displayName": "Beta User",
+                "email": "beta@example.com",
+                "reason": "private beta onboarding",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["username"], "beta-user")
+        self.assertEqual(payload["role"], "user")
+        self.assertTrue(payload["created"])
+        self.assertEqual(payload["passwordDelivery"], "returned_once")
+        self.assertTrue(isinstance(payload["initialPassword"], str) and len(payload["initialPassword"]) >= 10)
+        self.assertNotIn("password_hash", self._json_text(response))
+        self.assertNotIn("secret", self._json_text(response).lower())
+
+        created = self.db.get_app_user_by_username("beta-user")
+        self.assertIsNotNone(created)
+        self.assertEqual(getattr(created, "role", None), "user")
+        self.assertTrue(getattr(created, "is_active", False))
+        self.assertNotEqual(getattr(created, "password_hash", None), payload["initialPassword"])
+
+        preferences = self.db.get_user_notification_preferences(getattr(created, "id"))
+        self.assertEqual(preferences["email"], "beta@example.com")
+        self.assertFalse(preferences["enabled"])
+
+        list_response = self.client.get("/api/v1/admin/users", params={"q": "beta-user"})
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(list_response.json()["items"][0]["username"], "beta-user")
+        self.assertNotIn(payload["initialPassword"], self._json_text(list_response))
+
+        self._assert_safe_onboarding_audit(expected_status="completed")
+
+    def test_authenticated_admin_onboarding_requires_recent_reauth(self) -> None:
+        self._login_admin_session()
+
+        response = self.client.post(
+            "/api/v1/admin/users/onboard",
+            json={"username": "beta-user", "displayName": "Beta User", "reason": "private beta onboarding"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"]["error"], "admin_reauth_required")
+
+    def test_admin_onboarding_rejects_duplicate_username_and_duplicate_email_safely(self) -> None:
+        self._login_admin_session()
+        self._reauth_admin_session()
+
+        self.db.upsert_user_notification_preferences(
+            "user-1",
+            email="alice@example.com",
+            enabled=False,
+            channel="email",
+            discord_webhook=None,
+            discord_enabled=False,
+        )
+
+        duplicate_username = self.client.post(
+            "/api/v1/admin/users/onboard",
+            json={"username": "alice", "displayName": "Alice Copy", "reason": "private beta onboarding"},
+        )
+        self.assertEqual(duplicate_username.status_code, 409)
+        self.assertEqual(duplicate_username.json()["detail"]["error"], "duplicate_username")
+        self._assert_safe_payload(duplicate_username)
+
+        duplicate_email = self.client.post(
+            "/api/v1/admin/users/onboard",
+            json={
+                "username": "beta-user-2",
+                "displayName": "Beta User 2",
+                "email": "alice@example.com",
+                "reason": "private beta onboarding",
+            },
+        )
+        self.assertEqual(duplicate_email.status_code, 409)
+        self.assertEqual(duplicate_email.json()["detail"]["error"], "duplicate_email")
+        self._assert_safe_payload(duplicate_email)
+
+    def test_admin_onboarding_rejects_invalid_payload_and_admin_username(self) -> None:
+        self._login_admin_session()
+        self._reauth_admin_session()
+
+        invalid_email = self.client.post(
+            "/api/v1/admin/users/onboard",
+            json={
+                "username": "beta-user",
+                "displayName": "Beta User",
+                "email": "not-an-email",
+                "reason": "private beta onboarding",
+            },
+        )
+        self.assertEqual(invalid_email.status_code, 400)
+        self.assertEqual(invalid_email.json()["detail"]["error"], "validation_error")
+
+        forbidden_admin = self.client.post(
+            "/api/v1/admin/users/onboard",
+            json={
+                "username": "admin",
+                "displayName": "Not Allowed",
+                "reason": "private beta onboarding",
+            },
+        )
+        self.assertEqual(forbidden_admin.status_code, 400)
+        self.assertEqual(forbidden_admin.json()["detail"]["error"], "role_not_allowed")
 
     def test_authenticated_admin_security_write_rejects_expired_reauth(self) -> None:
         _, identity = self._login_admin_session()

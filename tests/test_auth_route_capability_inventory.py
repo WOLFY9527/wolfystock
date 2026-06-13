@@ -97,7 +97,7 @@ EXPECTED_CONTROL_PLANE_GROUP_ROUTE_COUNTS = {
     "admin.users.read": 2,
     "admin.users.activity_read": 1,
     "admin.users.portfolio_read": 4,
-    "admin.users.security_write": 3,
+    "admin.users.security_write": 4,
     "admin.activity.read": 1,
     "admin.logs.read": 8,
     "admin.logs.write": 1,
@@ -170,6 +170,7 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("POST", "/api/v1/options/scenario"): "public_fixture_analysis",
     ("POST", "/api/v1/options/strategies/compare"): "public_fixture_analysis",
     ("GET", "/api/v1/admin/logs/storage/summary"): "admin_capability_required",
+    ("POST", "/api/v1/admin/users/onboard"): "admin_capability_required",
     ("GET", "/api/v1/admin/ops/status"): "admin_capability_required",
     ("GET", "/api/v1/admin/mission-control"): "admin_capability_required",
     ("GET", "/api/v1/admin/cost/duplicate-summary"): "admin_capability_required",
@@ -613,6 +614,7 @@ def test_admin_observability_route_inventory_keeps_capabilities_and_transitional
     assert 'require_admin_capability("cost:observability:read")' in usage_source
     assert 'require_admin_capability("users:read")' in admin_users_source
     assert 'require_admin_capability("users:activity:read")' in admin_users_source
+    assert "/users/onboard" in admin_users_source
     assert 'require_admin_capability("quant:admin:read")' in quant_source
     assert 'require_admin_capability("quant:admin:write")' in quant_source
     assert 'require_admin_capability("ops:logs:read")' in admin_logs_source
