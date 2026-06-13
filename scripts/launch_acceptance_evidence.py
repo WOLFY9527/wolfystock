@@ -619,17 +619,23 @@ CATEGORY_SPECS: tuple[CategorySpec, ...] = (
             "accepted sanitized configuration snapshot evidence validated by "
             "scripts/config_snapshot_evidence_check.py, with the config snapshot guide referenced, "
             "auth/provider/quota/database summaries recorded, secret posture represented only as presence or redacted labels, "
-            "raw config and env values excluded, no external services by the validator, unchanged runtime behavior, "
-            "and manual review gate"
+            "production/auth/CORS/CSRF/proxy/MFA/RBAC/quota/provider/backup/ingress/public-instance/crypto posture "
+            "recorded as sanitized labels and presence states, raw config and env values excluded, no external services by "
+            "the validator, unchanged runtime behavior, releaseApproved=false, publicLaunchReady=false, and manual review gate"
         ),
         required_checks=(
             "configSnapshotValidatorPassed",
             "configSnapshotGuideReferenced",
             "authProviderQuotaDatabaseSummariesRecorded",
+            "postureEvidenceComplete",
+            "providerCredentialPresenceStatesRecorded",
+            "publicInstanceAndCryptoPostureRecorded",
             "secretPresenceOnlyOrRedacted",
             "rawConfigAndEnvValuesExcluded",
             "externalServicesCalledByValidatorFalse",
             "runtimeBehaviorUnchanged",
+            "releaseApprovedFalse",
+            "publicLaunchReadyFalse",
             "manualReviewGateRecorded",
         ),
     ),

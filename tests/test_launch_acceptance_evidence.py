@@ -341,10 +341,15 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
         "configSnapshotValidatorPassed",
         "configSnapshotGuideReferenced",
         "authProviderQuotaDatabaseSummariesRecorded",
+        "postureEvidenceComplete",
+        "providerCredentialPresenceStatesRecorded",
+        "publicInstanceAndCryptoPostureRecorded",
         "secretPresenceOnlyOrRedacted",
         "rawConfigAndEnvValuesExcluded",
         "externalServicesCalledByValidatorFalse",
         "runtimeBehaviorUnchanged",
+        "releaseApprovedFalse",
+        "publicLaunchReadyFalse",
         "manualReviewGateRecorded",
     ]
     assert categories["manual_release_approval_review_record"]["requiredChecks"] == [

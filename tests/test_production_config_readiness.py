@@ -53,6 +53,7 @@ def test_production_config_readiness_accepts_sanitized_contract() -> None:
     }
     checks = {check["id"]: check for check in evidence["checks"]}
     assert checks["required_launch_config_names"]["status"] == "pass"
+    assert checks["production_mode_explicit"]["evidence"]["state"] == "production"
     assert checks["admin_auth_enabled_for_public_deploy"]["status"] == "pass"
     assert checks["admin_auth_enabled_for_public_deploy"]["evidence"] == {
         "flagName": "ADMIN_AUTH_ENABLED",
@@ -61,11 +62,21 @@ def test_production_config_readiness_accepts_sanitized_contract() -> None:
         "runtimeDefaultChanged": False,
         "valuesIncluded": False,
     }
+    assert checks["cors_csrf_origin_posture"]["evidence"] == {
+        "corsAllowAllState": "disabled",
+        "corsOriginsState": "configured",
+        "csrfTrustedOriginsState": "configured",
+        "rawOriginValuesIncluded": False,
+        "valuesIncluded": False,
+    }
+    assert checks["trusted_proxy_posture_explicit"]["evidence"]["state"] == "disabled"
     assert checks["mfa_rollout_mode_explicit"]["evidence"]["mode"] == "disabled"
     assert checks["rbac_coarse_fallback_disable_flag"]["evidence"]["state"] == "disabled"
     assert checks["quota_enforcement_mode_explicit"]["evidence"]["mode"] == "pilot"
     assert checks["backup_pitr_execution_opt_in_disabled_by_default"]["evidence"]["state"] == "disabled"
     assert checks["staging_ingress_live_opt_in_disabled_by_default"]["evidence"]["networkCallsEnabled"] is False
+    assert checks["public_searxng_instance_posture"]["evidence"]["state"] == "disabled"
+    assert checks["crypto_realtime_decision_posture"]["evidence"]["state"] == "disabled"
 
 
 def test_production_config_readiness_missing_required_config_is_no_go() -> None:
@@ -79,6 +90,8 @@ def test_production_config_readiness_missing_required_config_is_no_go() -> None:
     assert "APP_ENV" in checks["required_launch_config_names"]["evidence"]["missingNames"]
     assert checks["provider_live_credential_contract"]["status"] == "fail"
     assert checks["quota_enforcement_mode_explicit"]["evidence"]["mode"] == "missing"
+    assert "CRYPTO_REALTIME_ENABLED" in checks["required_launch_config_names"]["evidence"]["missingNames"]
+    assert "SEARXNG_PUBLIC_INSTANCES_ENABLED" in checks["required_launch_config_names"]["evidence"]["missingNames"]
 
 
 def test_production_config_readiness_auth_disabled_is_public_no_go(tmp_path: Path) -> None:
@@ -109,6 +122,38 @@ def test_production_config_readiness_missing_admin_auth_is_public_no_go() -> Non
     checks = {check["id"]: check for check in _output(result)["checks"]}
     assert checks["admin_auth_enabled_for_public_deploy"]["status"] == "fail"
     assert checks["admin_auth_enabled_for_public_deploy"]["evidence"]["state"] == "missing_or_invalid"
+
+
+def test_production_config_readiness_cors_raw_url_is_rejected_without_echo(tmp_path: Path) -> None:
+    raw_origin = "https://admin:secret-value@example.invalid"
+    contract = json.loads(READY_FIXTURE.read_text(encoding="utf-8"))
+    contract["flags"]["CORS_ORIGINS"] = raw_origin
+    contract_path = tmp_path / "raw-cors-contract.json"
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+
+    result = _run_preflight("--contract", str(contract_path))
+
+    assert result.returncode == 1
+    assert raw_origin not in result.stdout
+    assert raw_origin not in result.stderr
+    checks = {check["id"]: check for check in _output(result)["checks"]}
+    assert checks["cors_csrf_origin_posture"]["status"] == "fail"
+    assert checks["cors_csrf_origin_posture"]["evidence"]["corsOriginsState"] == "invalid_raw_value"
+    assert checks["cors_csrf_origin_posture"]["evidence"]["rawOriginValuesIncluded"] is False
+
+
+def test_production_config_readiness_public_searxng_enabled_is_no_go(tmp_path: Path) -> None:
+    contract = json.loads(READY_FIXTURE.read_text(encoding="utf-8"))
+    contract["flags"]["SEARXNG_PUBLIC_INSTANCES_ENABLED"] = "true"
+    contract_path = tmp_path / "public-searxng-contract.json"
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+
+    result = _run_preflight("--contract", str(contract_path))
+
+    assert result.returncode == 1
+    checks = {check["id"]: check for check in _output(result)["checks"]}
+    assert checks["public_searxng_instance_posture"]["status"] == "fail"
+    assert checks["public_searxng_instance_posture"]["evidence"]["state"] == "enabled_public_instance_no_go"
 
 
 def test_production_config_readiness_reports_global_mfa_scope_as_fail_closed(tmp_path: Path) -> None:

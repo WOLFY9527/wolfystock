@@ -32,6 +32,33 @@ def _artifact(**overrides: object) -> dict[str, object]:
         "rollbackConfigSummary": "Rollback switches and restore expectations documented without command output.",
         "secretPresenceSummary": "redacted only",
         "unsafeDefaultsSummary": "Operator reviewed unsafe defaults; no raw config values included.",
+        "postureEvidence": {
+            "targetEnvironmentLabel": "production-review-label",
+            "productionMode": "production",
+            "authEnabled": "enabled",
+            "corsPosture": "restricted-origins",
+            "csrfPosture": "trusted-origins-configured",
+            "trustedProxyPosture": "explicit",
+            "mfaEnforcementScope": "admin-only",
+            "rbacFallbackPosture": "disabled",
+            "quotaMode": "pilot",
+            "backupPitrOptIn": "disabled",
+            "stagingIngressOptIn": "disabled",
+            "publicSearxngInstancePosture": "disabled",
+            "cryptoRealtimeDecisionPosture": "disabled",
+            "providerCredentialPresenceStates": {
+                "llmProvider": "configured",
+                "marketDataProvider": "configured",
+                "optionsLiveProvider": "missing",
+            },
+        },
+        "manualReview": {
+            "status": "accepted",
+            "reviewTicketRef": "review-ticket-label",
+            "targetEnvironmentEvidenceRequired": True,
+        },
+        "releaseApproved": False,
+        "publicLaunchReady": False,
         "outcome": "accepted",
         "evidenceRedactionVersion": "config_snapshot_redaction_v1",
     }
@@ -50,10 +77,15 @@ def test_accepts_sanitized_config_snapshot(tmp_path: Path) -> None:
     assert payload["advisoryOnly"] is True
     assert payload["runtimeBehaviorChanged"] is False
     assert payload["launchAcceptanceIntegrated"] is False
+    assert payload["releaseApproved"] is False
+    assert payload["publicLaunchReady"] is False
     assert payload["networkCallsExecutedByValidator"] is False
     assert payload["realEnvReadByValidator"] is False
+    assert payload["checks"]["postureEvidenceComplete"] is True
+    assert payload["checks"]["acceptedOutcomeHasResolvedPostureEvidence"] is True
     assert payload["artifact"]["environment"] == "production-like-staging"
     assert payload["artifact"]["outcome"] == "accepted"
+    assert payload["artifact"]["manualReviewStatus"] == "accepted"
 
 
 def test_actual_secret_markers_are_rejected_without_echoing_values(tmp_path: Path) -> None:
@@ -93,6 +125,76 @@ def test_raw_env_or_config_dump_is_rejected(tmp_path: Path) -> None:
     payload = _stdout_json(result)
     reason_codes = {finding["reasonCode"] for finding in payload["findings"]}
     assert "raw_config_dump_forbidden" in reason_codes
+
+
+def test_missing_required_posture_evidence_field_is_rejected(tmp_path: Path) -> None:
+    posture = dict(_artifact()["postureEvidence"])  # type: ignore[arg-type]
+    posture.pop("corsPosture")
+    path = _write_json(tmp_path, _artifact(postureEvidence=posture))
+
+    result = _run_validator(path)
+
+    assert result.returncode == 1
+    payload = _stdout_json(result)
+    findings = {(finding["field"], finding["reasonCode"]) for finding in payload["findings"]}
+    assert ("postureEvidence.corsPosture", "missing_required_field") in findings
+    assert ("outcome", "accepted_missing_posture_evidence") in findings
+
+
+def test_accepted_outcome_with_unresolved_posture_is_rejected(tmp_path: Path) -> None:
+    posture = dict(_artifact()["postureEvidence"])  # type: ignore[arg-type]
+    posture["mfaEnforcementScope"] = "needs-review"
+    path = _write_json(tmp_path, _artifact(postureEvidence=posture))
+
+    result = _run_validator(path)
+
+    assert result.returncode == 1
+    payload = _stdout_json(result)
+    findings = {(finding["field"], finding["reasonCode"]) for finding in payload["findings"]}
+    assert ("outcome", "accepted_missing_posture_evidence") in findings
+
+
+def test_private_hosts_and_raw_urls_are_rejected_without_echoing_values(tmp_path: Path) -> None:
+    private_host = "primary-db.internal"
+    raw_url = "https://ops:secret-value@example.invalid/admin"
+    posture = dict(_artifact()["postureEvidence"])  # type: ignore[arg-type]
+    posture["targetEnvironmentLabel"] = private_host
+    path = _write_json(
+        tmp_path,
+        _artifact(
+            postureEvidence=posture,
+            rollbackConfigSummary=f"Rollback proof stored at {raw_url}",
+        ),
+    )
+
+    result = _run_validator(path)
+
+    combined_output = result.stdout + result.stderr
+    assert result.returncode == 1
+    assert private_host not in combined_output
+    assert raw_url not in combined_output
+    payload = _stdout_json(result)
+    reason_codes = {finding["reasonCode"] for finding in payload["findings"]}
+    assert "private_hostname_forbidden" in reason_codes
+    assert "raw_url_forbidden" in reason_codes
+
+
+def test_release_approval_or_public_launch_ready_flags_are_rejected(tmp_path: Path) -> None:
+    path = _write_json(
+        tmp_path,
+        _artifact(
+            releaseApproved=True,
+            publicLaunchReady=True,
+        ),
+    )
+
+    result = _run_validator(path)
+
+    assert result.returncode == 1
+    payload = _stdout_json(result)
+    findings = {(finding["field"], finding["reasonCode"]) for finding in payload["findings"]}
+    assert ("releaseApproved", "release_approval_forbidden") in findings
+    assert ("publicLaunchReady", "public_launch_ready_forbidden") in findings
 
 
 def test_accepted_outcome_missing_critical_summary_is_rejected(tmp_path: Path) -> None:
