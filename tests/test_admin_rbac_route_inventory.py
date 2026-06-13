@@ -177,3 +177,73 @@ def test_build_inventory_does_not_import_runtime_app_db_or_provider_modules(tmp_
         builtins.__import__ = original_import
 
     assert inventory["summary"]["routeCount"] == 5
+
+
+def test_current_inventory_reports_frontend_admin_fail_closed_dimensions():
+    module = _load_script()
+
+    inventory = module.build_inventory(repo_root=REPO_ROOT)
+    frontend_routes = {route["path"]: route for route in inventory["frontendAdminRoutes"]}
+
+    assert inventory["schemaVersion"] == 2
+    assert inventory["inspectionMethod"] == "python_ast_and_frontend_source_scan"
+    assert inventory["summary"]["frontendAdminRouteCount"] == 12
+    assert inventory["summary"]["frontendFailClosedRouteCount"] == 12
+    assert inventory["summary"]["frontendUnknownGateCount"] == 0
+    assert inventory["frontendUnknowns"] == []
+    assert set(frontend_routes) == {
+        "/settings/system",
+        "/admin/launch-cockpit",
+        "/admin/mission-control",
+        "/admin/logs",
+        "/admin/evidence-workflow",
+        "/admin/notifications",
+        "/admin/market-providers",
+        "/admin/provider-circuits",
+        "/admin/users",
+        "/admin/users/:userId",
+        "/admin/users/:userId/activity",
+        "/admin/cost-observability",
+    }
+
+    for route in frontend_routes.values():
+        assert route["classification"] == "frontend_admin_capability_gate"
+        assert route["fallbackDependence"] == "frontend_requires_current_user_isAdmin_and_capability_payload"
+        assert route["missingPayloadBehavior"] == "fail_closed_when_capability_payload_missing"
+        assert route["capabilityFlag"]
+        assert route["capabilityLabel"]
+        assert route["unknownReasons"] == []
+
+    assert frontend_routes["/admin/mission-control"]["gateStyle"] == "admin_surface_capability_with_feature_flag"
+    assert (
+        frontend_routes["/admin/mission-control"]["featureFlagDependency"]
+        == "VITE_WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED"
+    )
+    assert frontend_routes["/admin/users/:userId/activity"]["capabilityLabel"] == "users:activity:read"
+    assert frontend_routes["/admin/users/:userId"]["capabilityLabel"] == "users:read"
+
+
+def test_current_inventory_reports_backend_and_frontend_fallback_surfaces():
+    module = _load_script()
+
+    inventory = module.build_inventory(repo_root=REPO_ROOT)
+    surfaces = {surface["surface"]: surface for surface in inventory["fallbackSurfaces"]}
+
+    assert set(surfaces) == {
+        "backend_capability_route_expansion",
+        "backend_direct_coarse_admin_routes",
+        "backend_manual_admin_request_guards",
+        "frontend_admin_surface_routes",
+    }
+    assert surfaces["backend_capability_route_expansion"]["classification"] == "coarse_fallback_remaining"
+    assert (
+        surfaces["backend_capability_route_expansion"]["fallbackDependencyLabel"]
+        == "capability_expansion_uses_coarse_fallback_when_enabled"
+    )
+    assert surfaces["backend_capability_route_expansion"]["routeCount"] == inventory["summary"]["capabilityRouteCount"]
+    assert "WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED" in surfaces["backend_capability_route_expansion"]["sourceLabels"]
+    assert surfaces["backend_direct_coarse_admin_routes"]["routeCount"] == inventory["summary"]["coarseAdminRouteCount"]
+    assert surfaces["backend_direct_coarse_admin_routes"]["routeCount"] == 0
+    assert surfaces["backend_manual_admin_request_guards"]["routeCount"] == inventory["summary"]["manualAdminRouteCount"]
+    assert surfaces["frontend_admin_surface_routes"]["classification"] == "fail_closed_frontend_gate"
+    assert surfaces["frontend_admin_surface_routes"]["routeCount"] == inventory["summary"]["frontendFailClosedRouteCount"]
