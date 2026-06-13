@@ -32,6 +32,8 @@ REQUIRED_FLAG_NAMES = (
     "WOLFYSTOCK_QUOTA_ENFORCEMENT_MODE",
     "WOLFYSTOCK_BACKUP_PITR_EXECUTION_ENABLED",
     "WOLFYSTOCK_STAGING_INGRESS_SMOKE",
+    "SEARXNG_PUBLIC_INSTANCES_ENABLED",
+    "CRYPTO_REALTIME_ENABLED",
 )
 
 SECRET_GROUPS: dict[str, tuple[str, ...]] = {
@@ -68,6 +70,7 @@ SECRET_STATE_VALUES = {"missing", "present", "sanitized"}
 TRUE_VALUES = {"1", "true", "yes", "on", "enabled"}
 FALSE_VALUES = {"0", "false", "no", "off", "disabled"}
 QUOTA_MODES = {"disabled", "advisory", "pilot", "enforced"}
+SANITIZED_PRESENCE_LABELS = {"configured", "redacted", "redacted only"}
 
 
 def _empty_contract() -> dict[str, Any]:
@@ -112,6 +115,15 @@ def _flag_bool(flags: dict[str, Any], name: str) -> bool | None:
     return None
 
 
+def _presence_label(flags: dict[str, Any], name: str) -> str:
+    if not _flag_present(flags, name):
+        return "missing"
+    value = _norm(flags.get(name)).replace("_", " ")
+    if value in SANITIZED_PRESENCE_LABELS:
+        return "configured"
+    return "invalid_raw_value"
+
+
 def _secret_state(raw: Any) -> tuple[str, str | None]:
     if isinstance(raw, bool):
         return ("present" if raw else "missing"), None
@@ -152,6 +164,60 @@ def _admin_auth_enabled_check(flags: dict[str, Any]) -> dict[str, Any]:
             "flagName": "ADMIN_AUTH_ENABLED",
             "state": state,
             "authDisabledPublicIngressSafe": False,
+            "runtimeDefaultChanged": False,
+            "valuesIncluded": False,
+        },
+    }
+
+
+def _production_mode_check(flags: dict[str, Any]) -> dict[str, Any]:
+    mode = _norm(flags.get("APP_ENV"))
+    state = "production" if mode == "production" else "missing_or_non_production"
+    return {
+        "id": "production_mode_explicit",
+        "status": _status(mode == "production"),
+        "evidence": {
+            "flagName": "APP_ENV",
+            "state": state,
+            "runtimeDefaultChanged": False,
+            "valuesIncluded": False,
+        },
+    }
+
+
+def _cors_csrf_posture_check(flags: dict[str, Any]) -> dict[str, Any]:
+    cors_allow_all = _flag_bool(flags, "CORS_ALLOW_ALL")
+    cors_state = "disabled" if cors_allow_all is False else "enabled_or_missing"
+    origins_state = _presence_label(flags, "CORS_ORIGINS")
+    csrf_state = _presence_label(flags, "CSRF_TRUSTED_ORIGINS")
+    ok = cors_allow_all is False and origins_state == "configured" and csrf_state == "configured"
+    return {
+        "id": "cors_csrf_origin_posture",
+        "status": _status(ok),
+        "evidence": {
+            "corsAllowAllState": cors_state,
+            "corsOriginsState": origins_state,
+            "csrfTrustedOriginsState": csrf_state,
+            "rawOriginValuesIncluded": False,
+            "valuesIncluded": False,
+        },
+    }
+
+
+def _trusted_proxy_posture_check(flags: dict[str, Any]) -> dict[str, Any]:
+    trust_proxy = _flag_bool(flags, "TRUST_X_FORWARDED_FOR")
+    state = "missing_or_invalid"
+    if trust_proxy is True:
+        state = "enabled_trusted_proxy_required"
+    elif trust_proxy is False:
+        state = "disabled"
+    return {
+        "id": "trusted_proxy_posture_explicit",
+        "status": _status(trust_proxy is not None),
+        "evidence": {
+            "flagName": "TRUST_X_FORWARDED_FOR",
+            "state": state,
+            "rawProxyHostIncluded": False,
             "runtimeDefaultChanged": False,
             "valuesIncluded": False,
         },
@@ -282,16 +348,60 @@ def _deployment_opt_in_checks(flags: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def _public_instance_posture_checks(flags: dict[str, Any]) -> list[dict[str, Any]]:
+    public_searxng = _flag_bool(flags, "SEARXNG_PUBLIC_INSTANCES_ENABLED")
+    crypto_realtime = _flag_bool(flags, "CRYPTO_REALTIME_ENABLED")
+
+    searxng_state = "missing_or_invalid"
+    if public_searxng is True:
+        searxng_state = "enabled_public_instance_no_go"
+    elif public_searxng is False:
+        searxng_state = "disabled"
+
+    crypto_state = "missing_or_invalid"
+    if crypto_realtime is True:
+        crypto_state = "enabled_review_required"
+    elif crypto_realtime is False:
+        crypto_state = "disabled"
+
+    return [
+        {
+            "id": "public_searxng_instance_posture",
+            "status": _status(public_searxng is False),
+            "evidence": {
+                "flagName": "SEARXNG_PUBLIC_INSTANCES_ENABLED",
+                "state": searxng_state,
+                "publicInstanceLaunchApproved": False,
+                "valuesIncluded": False,
+            },
+        },
+        {
+            "id": "crypto_realtime_decision_posture",
+            "status": _status(crypto_realtime is not None),
+            "evidence": {
+                "flagName": "CRYPTO_REALTIME_ENABLED",
+                "state": crypto_state,
+                "externalProviderCallsByChecker": False,
+                "valuesIncluded": False,
+            },
+        },
+    ]
+
+
 def build_readiness(contract: dict[str, Any]) -> dict[str, Any]:
     flags = contract.get("flags") if isinstance(contract.get("flags"), dict) else {}
     secret_presence = contract.get("secretPresence") if isinstance(contract.get("secretPresence"), dict) else {}
     checks = [
         _required_flags_check(flags),
+        _production_mode_check(flags),
         _admin_auth_enabled_check(flags),
+        _cors_csrf_posture_check(flags),
+        _trusted_proxy_posture_check(flags),
         *_security_posture_checks(flags),
         _provider_credential_check(secret_presence),
         _quota_check(flags),
         *_deployment_opt_in_checks(flags),
+        *_public_instance_posture_checks(flags),
     ]
     failed = [check["id"] for check in checks if check["status"] != "pass"]
     return {

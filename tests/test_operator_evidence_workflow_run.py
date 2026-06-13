@@ -10,8 +10,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "operator_evidence_workflow_run.py"
 
 EXPECTED_TEMPLATE_FILES = {
+    "api_abuse_safety_evidence.json",
     "provider_operator_evidence.json",
     "provider_sla_licensing_evidence.json",
+    "notification_delivery_rehearsal_evidence.json",
     "restore_pitr_operator_evidence.json",
     "security_operator_acceptance.json",
     "quota_budget_operator_evidence.json",

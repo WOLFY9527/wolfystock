@@ -204,6 +204,15 @@ legacy/missing-payload fail-closed observations, rollback posture, sanitized
 audit excerpts, and `runtimeBehaviorChanged=false`. It is observe evidence, not
 fallback removal.
 
+For config snapshot evidence, fill `postureEvidence` and `manualReview` with
+sanitized labels and presence states only. Required posture covers production
+mode, auth enabled, CORS/CSRF, trusted proxy, MFA scope, RBAC fallback, quota,
+provider credential presence groups, backup/PITR opt-in, staging ingress
+opt-in, public SearXNG/public instance posture, and crypto realtime decision
+posture. Keep `releaseApproved=false` and `publicLaunchReady=false`; do not
+include raw `.env` values, private hostnames, raw URLs, stack traces, provider
+keys, DSNs, cookies, tokens, webhook URLs, or public launch approval claims.
+
 If present, also validate standalone advisory artifacts:
 
 ```bash

@@ -471,7 +471,14 @@ The following must all be true before public multi-user deployment:
   `python3 scripts/release_review_report_render.py` and reviewed manually.
 - [ ] Sanitized config snapshot evidence is attached and accepted through
   `python3 scripts/config_snapshot_evidence_check.py <sanitized-config-snapshot-evidence.json>`
-  without raw `.env` values, deployment state reads, or secret-bearing values.
+  with production mode, auth enabled, CORS/CSRF, trusted proxy, MFA scope,
+  RBAC fallback, quota mode, provider credential presence, backup/PITR,
+  staging ingress, public SearXNG/public instance, crypto realtime decision,
+  and manual review posture represented only as sanitized labels or presence
+  states. The artifact must keep `releaseApproved=false` and
+  `publicLaunchReady=false`, and must not include raw `.env` values,
+  deployment state reads, private hostnames, raw URLs, stack traces, or
+  secret-bearing values.
 - [ ] Sanitized WS2/SSE topology operator decision evidence is attached and
   accepted through
   `python3 scripts/ws2_sse_operator_decision_check.py <sanitized-ws2-sse-operator-decision.json>`

@@ -659,10 +659,15 @@
         "configSnapshotValidatorPassed": true,
         "configSnapshotGuideReferenced": true,
         "authProviderQuotaDatabaseSummariesRecorded": true,
+        "postureEvidenceComplete": true,
+        "providerCredentialPresenceStatesRecorded": true,
+        "publicInstanceAndCryptoPostureRecorded": true,
         "secretPresenceOnlyOrRedacted": true,
         "rawConfigAndEnvValuesExcluded": true,
         "externalServicesCalledByValidatorFalse": true,
         "runtimeBehaviorUnchanged": true,
+        "releaseApprovedFalse": true,
+        "publicLaunchReadyFalse": true,
         "manualReviewGateRecorded": true
       },
       "sanitization": {

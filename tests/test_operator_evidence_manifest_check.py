@@ -9,8 +9,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "operator_evidence_manifest_check.py"
 EXPECTED_MANIFEST_CATEGORIES = {
+    "api-abuse-request-safety",
     "provider",
     "provider-sla-licensing",
+    "notification-delivery-rehearsal",
     "restore-pitr",
     "security",
     "quota-budget",
@@ -25,6 +27,11 @@ def _write_artifact_dir(tmp_path: Path, *, unsafe_value: str = "raw-body-value-n
     artifact_dir = tmp_path / "sanitized-bundle"
     artifact_dir.mkdir()
     artifacts = {
+        "api_abuse_safety_evidence.json": {
+            "artifactVersion": "wolfystock_api_abuse_request_safety_evidence_v1",
+            "outcome": "accepted",
+            "evidenceRedactionVersion": "api-abuse-request-safety-redaction-v1",
+        },
         "provider_operator_evidence.json": {
             "providerName": "tradier",
             "operator": "provider-ops",
@@ -38,6 +45,11 @@ def _write_artifact_dir(tmp_path: Path, *, unsafe_value: str = "raw-body-value-n
             "operator": "provider-ops",
             "outcome": "accepted",
             "evidenceRedactionVersion": "provider-sla-licensing-redaction-v1",
+        },
+        "notification_delivery_rehearsal_evidence.json": {
+            "schemaVersion": "wolfystock_notification_delivery_rehearsal_evidence_v1",
+            "outcome": "accepted",
+            "evidenceRedactionVersion": "notification_delivery_rehearsal_redaction_v1",
         },
         "restore_pitr_operator_evidence.json": {
             "schemaVersion": "wolfystock_restore_pitr_operator_evidence_input_v1",
@@ -70,6 +82,45 @@ def _write_artifact_dir(tmp_path: Path, *, unsafe_value: str = "raw-body-value-n
         },
         "config_snapshot_evidence.json": {
             "artifactVersion": "wolfystock_config_snapshot_evidence_v1",
+            "environment": "production-like-staging",
+            "operator": "release-ops",
+            "observedAt": "2026-05-08T10:30:00Z",
+            "authConfigSummary": "Admin auth enabled; MFA rollout mode reviewed; RBAC posture documented.",
+            "providerConfigSummary": "Provider presence documented with redacted-only credential posture.",
+            "quotaConfigSummary": "Quota mode documented without owner identifiers.",
+            "notificationConfigSummary": "Notification routing posture documented without webhook URLs or tokens.",
+            "databaseConfigSummary": "Database storage and backup posture documented without DSNs.",
+            "loggingRetentionSummary": "Retention window documented without raw logs.",
+            "rollbackConfigSummary": "Rollback switches documented without command output.",
+            "secretPresenceSummary": "redacted only",
+            "unsafeDefaultsSummary": "Unsafe defaults reviewed without raw config values.",
+            "postureEvidence": {
+                "targetEnvironmentLabel": "production-review-label",
+                "productionMode": "production",
+                "authEnabled": "enabled",
+                "corsPosture": "restricted-origins",
+                "csrfPosture": "trusted-origins-configured",
+                "trustedProxyPosture": "explicit",
+                "mfaEnforcementScope": "admin-only",
+                "rbacFallbackPosture": "disabled",
+                "quotaMode": "pilot",
+                "backupPitrOptIn": "disabled",
+                "stagingIngressOptIn": "disabled",
+                "publicSearxngInstancePosture": "disabled",
+                "cryptoRealtimeDecisionPosture": "disabled",
+                "providerCredentialPresenceStates": {
+                    "llmProvider": "configured",
+                    "marketDataProvider": "configured",
+                    "optionsLiveProvider": "missing",
+                },
+            },
+            "manualReview": {
+                "status": "accepted",
+                "reviewTicketRef": "review-ticket-label",
+                "targetEnvironmentEvidenceRequired": True,
+            },
+            "releaseApproved": False,
+            "publicLaunchReady": False,
             "outcome": "accepted",
             "evidenceRedactionVersion": "config_snapshot_redaction_v1",
         },
@@ -116,7 +167,7 @@ def test_create_manifest_for_sanitized_fixture_directory(tmp_path: Path) -> None
     payload = _read_manifest(manifest)
     entries = payload["entries"]
     assert isinstance(entries, list)
-    assert len(entries) == 9
+    assert len(entries) == 11
     assert {entry["category"] for entry in entries} == EXPECTED_MANIFEST_CATEGORIES
     assert all(Path(entry["fileLabel"]).name == entry["fileLabel"] for entry in entries)
     assert all(set(entry) <= {"category", "fileLabel", "sha256", "byteSize", "generatedAt", "validatorName", "redactionVersion"} for entry in entries)
