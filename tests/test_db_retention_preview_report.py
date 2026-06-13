@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from scripts.db_retention_preview_report import POLICY_VERSION, build_report
+from scripts.db_retention_preview_report import POLICY_VERSION, build_report, check_evidence
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -213,6 +213,16 @@ def _domain(report: dict[str, object], name: str) -> dict[str, object]:
     raise AssertionError(f"domain not found: {name}")
 
 
+def _check_artifact(path: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), "--check-artifact", str(path)],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
 def test_default_report_is_policy_only_and_destructive_actions_are_disabled() -> None:
     report = build_report()
 
@@ -234,8 +244,100 @@ def test_default_report_is_policy_only_and_destructive_actions_are_disabled() ->
         "scanner_watchlist_backtest_artifacts",
         "guest_cache_metadata",
         "future_options_cache",
+        "portfolio_import_previews",
         "portfolio_source_of_truth_protected",
+        "research_report_packets",
     }
+    assert report["runtimeBehaviorChanged"] is False
+    assert report["productionDataTouched"] is False
+    assert report["networkCallsExecuted"] is False
+    assert report["publicLaunchApproved"] is False
+
+
+def test_non_admin_domains_emit_required_dry_run_evidence_posture() -> None:
+    report = build_report()
+    non_admin_domains = [
+        domain
+        for domain in report["domains"]
+        if domain["domain"] != "admin_log_existing_retention_domain"
+    ]
+
+    assert non_admin_domains
+    for domain in non_admin_domains:
+        assert domain["domainLabel"]
+        assert domain["dryRunCandidateCount"] == domain["matchedRowCount"]
+        assert set(domain["candidateWindow"]) == {"oldest", "newest", "source"}
+        assert domain["ownerScopePosture"]["ownerScope"] == domain["ownerScope"]
+        assert domain["ownerScopePosture"]["cleanupRequiresOwnerScopeProof"] is True
+        assert domain["minimumRetentionGuard"]["deleteBeforeApprovedMinimum"] is False
+        assert domain["minimumRetentionGuard"]["minimumRetentionDaysApproved"] is False
+        assert domain["storagePressurePosture"]["automaticCleanupEnabled"] is False
+        assert domain["storagePressurePosture"]["deleteAllowedUnderPressure"] is False
+        assert domain["sanitizedAuditSummary"]["rawIdentifiersIncluded"] is False
+        assert domain["sanitizedAuditSummary"]["rawPayloadIncluded"] is False
+        assert domain["rollbackRestoreNote"]["restoreOrPitrEvidenceRequiredBeforeCleanup"] is True
+        assert domain["publicLaunchApproved"] is False
+
+
+def test_generated_report_is_accepted_as_evidence_ready(tmp_path: Path) -> None:
+    artifact = tmp_path / "retention-evidence.json"
+    artifact.write_text(json.dumps(build_report()), encoding="utf-8")
+
+    findings = check_evidence(json.loads(artifact.read_text(encoding="utf-8")))
+    result = _check_artifact(artifact)
+
+    assert findings == []
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["finalStatus"] == "EVIDENCE-READY"
+    assert payload["publicLaunchApproved"] is False
+    assert "launch-approved" not in result.stdout.lower()
+    assert "production-ready" not in result.stdout.lower()
+
+
+def test_checker_rejects_missing_required_posture_without_echoing_values(tmp_path: Path) -> None:
+    report = build_report()
+    durable = _domain(report, "durable_task_state_progress")
+    durable.pop("minimumRetentionGuard")
+    durable["rawOwnerId"] = "owner-secret-123"
+
+    artifact = tmp_path / "unsafe-retention-evidence.json"
+    artifact.write_text(json.dumps(report), encoding="utf-8")
+
+    result = _check_artifact(artifact)
+
+    assert result.returncode == 1
+    combined = result.stdout + result.stderr
+    assert "owner-secret-123" not in combined
+    payload = json.loads(result.stdout)
+    assert payload["finalStatus"] == "REJECTED"
+    assert "domains[durable_task_state_progress].minimumRetentionGuard:missing" in payload["findings"]
+    assert "domains[durable_task_state_progress].rawOwnerId:unsafe_raw_identifier_key" in payload["findings"]
+
+
+def test_checker_rejects_destructive_or_launch_approval_claims(tmp_path: Path) -> None:
+    report = build_report()
+    provider = _domain(report, "provider_quota_circuit_probe_events")
+    provider["deleteAllowed"] = True
+    provider["cleanupExecuted"] = True
+    provider["rawSqlDump"] = "DELETE FROM provider_probe_events; raw secret dump"
+    report["publicLaunchApproved"] = True
+
+    artifact = tmp_path / "destructive-retention-evidence.json"
+    artifact.write_text(json.dumps(report), encoding="utf-8")
+
+    result = _check_artifact(artifact)
+
+    assert result.returncode == 1
+    combined = result.stdout + result.stderr
+    assert "DELETE FROM" not in combined
+    assert "raw secret dump" not in combined
+    payload = json.loads(result.stdout)
+    assert payload["finalStatus"] == "REJECTED"
+    assert "publicLaunchApproved:must_be_false" in payload["findings"]
+    assert "domains[provider_quota_circuit_probe_events].deleteAllowed:must_be_false" in payload["findings"]
+    assert "domains[provider_quota_circuit_probe_events].cleanupExecuted:unsafe_runtime_cleanup_key" in payload["findings"]
+    assert "domains[provider_quota_circuit_probe_events].rawSqlDump:unsafe_sql_or_dump_key" in payload["findings"]
 
 
 def test_sqlite_preview_counts_only_aggregates_and_does_not_mutate_rows(tmp_path: Path) -> None:

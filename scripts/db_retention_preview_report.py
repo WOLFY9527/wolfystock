@@ -28,6 +28,71 @@ DESTRUCTIVE_SQL_RE = re.compile(
     re.IGNORECASE,
 )
 
+REQUIRED_NON_ADMIN_DOMAINS = {
+    "durable_task_state_progress",
+    "llm_usage_cost_ledger",
+    "provider_quota_circuit_probe_events",
+    "scanner_watchlist_backtest_artifacts",
+    "guest_cache_metadata",
+    "future_options_cache",
+    "portfolio_import_previews",
+    "portfolio_source_of_truth_protected",
+    "research_report_packets",
+}
+
+DOMAIN_LABELS = {
+    "admin_log_existing_retention_domain": "Existing admin log retention/capacity evidence",
+    "durable_task_state_progress": "Task progress and terminal task state",
+    "llm_usage_cost_ledger": "LLM usage and cost ledger summaries",
+    "provider_quota_circuit_probe_events": "Provider counters and probe events",
+    "scanner_watchlist_backtest_artifacts": "Scanner, watchlist, and backtest artifacts",
+    "guest_cache_metadata": "Guest and cache metadata",
+    "future_options_cache": "Future Options cache rows",
+    "portfolio_import_previews": "Portfolio import previews",
+    "portfolio_source_of_truth_protected": "Portfolio source-of-truth records",
+    "research_report_packets": "Research and report packets",
+}
+
+UNSAFE_RAW_IDENTIFIER_KEYS = {
+    "ownerid",
+    "owneruserid",
+    "rawownerid",
+    "rawuserid",
+    "requestid",
+    "sessionid",
+    "userid",
+}
+UNSAFE_RUNTIME_CLEANUP_KEYS = {
+    "cleanupexecuted",
+    "deleteexecuted",
+    "productioncleanupexecuted",
+    "retentionjobenabled",
+    "runtimecleanupenabled",
+    "runtimecleanupexecuted",
+}
+UNSAFE_SQL_OR_DUMP_KEYS = {
+    "rawsql",
+    "rawsqldump",
+    "sqldump",
+}
+UNSAFE_RAW_PAYLOAD_KEYS = {
+    "privateDbPath",
+    "productionDbPath",
+    "rawProviderPayload",
+    "rawRequestBody",
+    "rawResponseBody",
+    "stackTrace",
+}
+UNSAFE_APPROVAL_KEYS = {
+    "launchApproved",
+    "publicLaunchReady",
+    "releaseApproved",
+}
+UNSAFE_VALUE_RE = re.compile(
+    r"(delete\s+from|drop\s+table|traceback|stack trace|raw secret dump)",
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True)
 class TablePolicy:
@@ -226,6 +291,20 @@ DOMAIN_POLICIES: tuple[DomainPolicy, ...] = (
         ),
     ),
     DomainPolicy(
+        domain="portfolio_import_previews",
+        owner_scope="owner_scoped_import_preview",
+        protected_reasons=(
+            "portfolio_import_previews_are_not_accounting_source_of_truth",
+            "committed_portfolio_rows_preserved_by_default",
+        ),
+        tables=(
+            TablePolicy("portfolio_import_previews", ("created_at", "updated_at")),
+            TablePolicy("portfolio_import_parse_results", ("created_at", "updated_at")),
+            TablePolicy("portfolio_import_files", ("created_at", "updated_at")),
+            TablePolicy("portfolio_import_audit_summaries", ("created_at", "updated_at")),
+        ),
+    ),
+    DomainPolicy(
         domain="portfolio_source_of_truth_protected",
         owner_scope="owner_scoped_source_of_truth",
         protected_reasons=(
@@ -261,6 +340,27 @@ DOMAIN_POLICIES: tuple[DomainPolicy, ...] = (
             ),
             TablePolicy("portfolio_daily_snapshots", ("created_at", "updated_at", "snapshot_date")),
             TablePolicy("portfolio_fx_rates", ("updated_at", "rate_date")),
+        ),
+    ),
+    DomainPolicy(
+        domain="research_report_packets",
+        owner_scope="owner_or_guest_report_scope",
+        protected_reasons=(
+            "raw_prompt_and_provider_context_excluded",
+            "report_summary_preview_only",
+            "ai_prompt_model_routing_behavior_protected",
+        ),
+        tables=(
+            TablePolicy("analysis_history", ("created_at", "updated_at")),
+            TablePolicy("analysis_sessions", ("created_at", "updated_at")),
+            TablePolicy(
+                "analysis_records",
+                ("created_at", "updated_at"),
+                requires_parent_join=True,
+                parent_table="analysis_sessions",
+            ),
+            TablePolicy("report_export_packets", ("created_at", "updated_at")),
+            TablePolicy("report_evidence_exports", ("created_at", "updated_at")),
         ),
     ),
 )
@@ -387,14 +487,53 @@ def _preview_domain(conn: sqlite3.Connection | None, domain_policy: DomainPolicy
     return {
         "policyVersion": POLICY_VERSION,
         "domain": domain_policy.domain,
+        "domainLabel": DOMAIN_LABELS.get(domain_policy.domain, domain_policy.domain.replace("_", " ")),
         "ownerScope": domain_policy.owner_scope,
+        "dryRunCandidateCount": matched_row_count,
         "matchedRowCount": matched_row_count,
         "oldestCreatedAt": bounds[0],
         "newestCreatedAt": bounds[1],
+        "candidateWindow": {
+            "oldest": bounds[0],
+            "newest": bounds[1],
+            "source": "aggregate_timestamp_bounds_only",
+        },
         "protectedRowReasons": sorted(protected_reasons),
         "estimatedBytes": _estimate_bytes(conn, inspected_tables) if conn is not None else None,
         "deleteAllowed": False,
         "directCleanupAllowed": False,
+        "minimumRetentionGuard": {
+            "minimumRetentionDaysApproved": False,
+            "deleteBeforeApprovedMinimum": False,
+            "posture": "operator_policy_required_before_cleanup",
+        },
+        "storagePressurePosture": {
+            "estimatedBytesOnly": True,
+            "automaticCleanupEnabled": False,
+            "deleteAllowedUnderPressure": False,
+            "pressureResponse": "operator_review_only",
+        },
+        "ownerScopePosture": {
+            "ownerScope": domain_policy.owner_scope,
+            "cleanupRequiresOwnerScopeProof": True,
+            "rawOwnerIdentifiersIncluded": False,
+        },
+        "sanitizedAuditSummary": {
+            "included": True,
+            "rawIdentifiersIncluded": False,
+            "rawPayloadIncluded": False,
+            "privatePathIncluded": False,
+            "stackTraceIncluded": False,
+        },
+        "rollbackRestoreNote": {
+            "restoreOrPitrEvidenceRequiredBeforeCleanup": True,
+            "rollbackSummaryRequiredBeforeCleanup": True,
+            "cleanupExecutedByThisReport": False,
+        },
+        "runtimeBehaviorChanged": False,
+        "productionDataTouched": False,
+        "networkCallsExecuted": False,
+        "publicLaunchApproved": False,
         "leafTablesRequireParentJoin": bool(leaf_table_names),
         "ownerJoinStrategy": (
             "domain_parent_join_required_for_leaf_tables"
@@ -423,6 +562,10 @@ def build_report(sqlite_db: Path | None = None) -> dict[str, Any]:
         "mode": REPORT_MODE,
         "dryRun": True,
         "deleteAllowed": False,
+        "runtimeBehaviorChanged": False,
+        "productionDataTouched": False,
+        "networkCallsExecuted": False,
+        "publicLaunchApproved": False,
         "generatedAt": _utc_now_iso(),
         "databaseInspected": sqlite_db is not None,
         "databaseSource": "operator_supplied_sqlite_path" if sqlite_db is not None else "not_supplied",
@@ -441,6 +584,142 @@ def build_report(sqlite_db: Path | None = None) -> dict[str, Any]:
             "restoreOrPitrExecutionAdded": False,
         },
     }
+
+
+def check_evidence(report: dict[str, Any]) -> list[str]:
+    findings: list[str] = []
+    _require_false(report, "deleteAllowed", findings, "deleteAllowed")
+    _require_true(report, "dryRun", findings, "dryRun")
+    for key in ("runtimeBehaviorChanged", "productionDataTouched", "networkCallsExecuted", "publicLaunchApproved"):
+        _require_false(report, key, findings, key)
+
+    domains = report.get("domains")
+    if not isinstance(domains, list):
+        findings.append("domains:missing_or_invalid")
+        domains = []
+
+    by_domain: dict[str, dict[str, Any]] = {}
+    for index, item in enumerate(domains):
+        if not isinstance(item, dict):
+            findings.append(f"domains[{index}]:not_object")
+            continue
+        domain_name = item.get("domain")
+        if not isinstance(domain_name, str) or not domain_name:
+            findings.append(f"domains[{index}].domain:missing")
+            continue
+        by_domain[domain_name] = item
+        _check_domain_evidence(item, findings)
+
+    for domain_name in sorted(REQUIRED_NON_ADMIN_DOMAINS - set(by_domain)):
+        findings.append(f"domains[{domain_name}]:missing_required_non_admin_domain")
+
+    _scan_unsafe(report, findings)
+    return sorted(dict.fromkeys(findings))
+
+
+def _check_domain_evidence(domain: dict[str, Any], findings: list[str]) -> None:
+    domain_name = str(domain.get("domain", "unknown"))
+    prefix = f"domains[{domain_name}]"
+    for key in ("domainLabel", "ownerScope"):
+        if not isinstance(domain.get(key), str) or not str(domain.get(key)).strip():
+            findings.append(f"{prefix}.{key}:missing")
+    _require_false(domain, "deleteAllowed", findings, f"{prefix}.deleteAllowed")
+    _require_false(domain, "directCleanupAllowed", findings, f"{prefix}.directCleanupAllowed")
+    for key in ("runtimeBehaviorChanged", "productionDataTouched", "networkCallsExecuted", "publicLaunchApproved"):
+        _require_false(domain, key, findings, f"{prefix}.{key}")
+
+    if domain.get("dryRunCandidateCount") != domain.get("matchedRowCount"):
+        findings.append(f"{prefix}.dryRunCandidateCount:must_equal_matchedRowCount")
+
+    candidate_window = domain.get("candidateWindow")
+    if not isinstance(candidate_window, dict) or set(candidate_window) != {"oldest", "newest", "source"}:
+        findings.append(f"{prefix}.candidateWindow:missing")
+
+    owner_scope = domain.get("ownerScopePosture")
+    if not isinstance(owner_scope, dict):
+        findings.append(f"{prefix}.ownerScopePosture:missing")
+    else:
+        if owner_scope.get("ownerScope") != domain.get("ownerScope"):
+            findings.append(f"{prefix}.ownerScopePosture.ownerScope:mismatch")
+        _require_true(owner_scope, "cleanupRequiresOwnerScopeProof", findings, f"{prefix}.ownerScopePosture.cleanupRequiresOwnerScopeProof")
+        _require_false(owner_scope, "rawOwnerIdentifiersIncluded", findings, f"{prefix}.ownerScopePosture.rawOwnerIdentifiersIncluded")
+
+    minimum_guard = domain.get("minimumRetentionGuard")
+    if not isinstance(minimum_guard, dict):
+        findings.append(f"{prefix}.minimumRetentionGuard:missing")
+    else:
+        _require_false(minimum_guard, "minimumRetentionDaysApproved", findings, f"{prefix}.minimumRetentionGuard.minimumRetentionDaysApproved")
+        _require_false(minimum_guard, "deleteBeforeApprovedMinimum", findings, f"{prefix}.minimumRetentionGuard.deleteBeforeApprovedMinimum")
+
+    storage_pressure = domain.get("storagePressurePosture")
+    if not isinstance(storage_pressure, dict):
+        findings.append(f"{prefix}.storagePressurePosture:missing")
+    else:
+        _require_false(storage_pressure, "automaticCleanupEnabled", findings, f"{prefix}.storagePressurePosture.automaticCleanupEnabled")
+        _require_false(storage_pressure, "deleteAllowedUnderPressure", findings, f"{prefix}.storagePressurePosture.deleteAllowedUnderPressure")
+
+    audit_summary = domain.get("sanitizedAuditSummary")
+    if not isinstance(audit_summary, dict):
+        findings.append(f"{prefix}.sanitizedAuditSummary:missing")
+    else:
+        _require_false(audit_summary, "rawIdentifiersIncluded", findings, f"{prefix}.sanitizedAuditSummary.rawIdentifiersIncluded")
+        _require_false(audit_summary, "rawPayloadIncluded", findings, f"{prefix}.sanitizedAuditSummary.rawPayloadIncluded")
+        _require_false(audit_summary, "privatePathIncluded", findings, f"{prefix}.sanitizedAuditSummary.privatePathIncluded")
+        _require_false(audit_summary, "stackTraceIncluded", findings, f"{prefix}.sanitizedAuditSummary.stackTraceIncluded")
+
+    rollback_note = domain.get("rollbackRestoreNote")
+    if not isinstance(rollback_note, dict):
+        findings.append(f"{prefix}.rollbackRestoreNote:missing")
+    else:
+        _require_true(rollback_note, "restoreOrPitrEvidenceRequiredBeforeCleanup", findings, f"{prefix}.rollbackRestoreNote.restoreOrPitrEvidenceRequiredBeforeCleanup")
+        _require_false(rollback_note, "cleanupExecutedByThisReport", findings, f"{prefix}.rollbackRestoreNote.cleanupExecutedByThisReport")
+
+
+def _require_true(payload: dict[str, Any], key: str, findings: list[str], path: str) -> None:
+    if payload.get(key) is not True:
+        findings.append(f"{path}:must_be_true")
+
+
+def _require_false(payload: dict[str, Any], key: str, findings: list[str], path: str) -> None:
+    if payload.get(key) is not False:
+        findings.append(f"{path}:must_be_false")
+
+
+def _scan_unsafe(value: Any, findings: list[str], path: str = "") -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}" if path else str(key)
+            normalized = re.sub(r"[^a-z0-9]", "", str(key).lower())
+            if normalized in UNSAFE_RAW_IDENTIFIER_KEYS:
+                findings.append(f"{child_path}:unsafe_raw_identifier_key")
+            if normalized in UNSAFE_RUNTIME_CLEANUP_KEYS:
+                findings.append(f"{child_path}:unsafe_runtime_cleanup_key")
+            if normalized in UNSAFE_SQL_OR_DUMP_KEYS:
+                findings.append(f"{child_path}:unsafe_sql_or_dump_key")
+            if str(key) in UNSAFE_RAW_PAYLOAD_KEYS:
+                findings.append(f"{child_path}:unsafe_raw_payload_key")
+            if str(key) in UNSAFE_APPROVAL_KEYS and child is True:
+                findings.append(f"{child_path}:unsafe_launch_approval_claim")
+            _scan_unsafe(child, findings, child_path)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            if path == "domains" and isinstance(child, dict) and isinstance(child.get("domain"), str):
+                child_path = f"domains[{child['domain']}]"
+            else:
+                child_path = f"{path}[{index}]"
+            _scan_unsafe(child, findings, child_path)
+    elif isinstance(value, str) and UNSAFE_VALUE_RE.search(value):
+        findings.append(f"{path}:unsafe_value")
+
+
+def _load_json_artifact(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(json.dumps({"finalStatus": "REJECTED", "findings": [type(exc).__name__]}))
+    if not isinstance(payload, dict):
+        raise SystemExit(json.dumps({"finalStatus": "REJECTED", "findings": ["artifact:not_object"]}))
+    return payload
 
 
 def _open_sqlite_readonly(path: Path) -> sqlite3.Connection:
@@ -476,12 +755,35 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         type=Path,
         help="Optional SQLite database file to inspect using a read-only connection. The path is never emitted.",
     )
+    parser.add_argument(
+        "--check-artifact",
+        type=Path,
+        help="Validate an existing sanitized retention preview evidence JSON artifact.",
+    )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(list(argv or sys.argv[1:]))
+    if args.check_artifact is not None:
+        payload = _load_json_artifact(args.check_artifact)
+        findings = check_evidence(payload)
+        result = {
+            "policyVersion": payload.get("policyVersion", POLICY_VERSION),
+            "finalStatus": "REJECTED" if findings else "EVIDENCE-READY",
+            "publicLaunchApproved": False,
+            "domainsCovered": sorted(
+                item.get("domain")
+                for item in payload.get("domains", [])
+                if isinstance(item, dict) and isinstance(item.get("domain"), str)
+            ),
+            "findings": findings,
+        }
+        json.dump(result, sys.stdout, ensure_ascii=False, indent=2 if args.pretty else None, sort_keys=True)
+        sys.stdout.write("\n")
+        return 1 if findings else 0
+
     report = build_report(sqlite_db=args.sqlite_db)
     json.dump(report, sys.stdout, ensure_ascii=False, indent=2 if args.pretty else None, sort_keys=True)
     sys.stdout.write("\n")
