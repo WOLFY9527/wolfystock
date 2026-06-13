@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -20,6 +21,8 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ROUTER_PATH = Path("api/v1/router.py")
 ENDPOINTS_DIR = Path("api/v1/endpoints")
+FRONTEND_APP_PATH = Path("apps/dsa-web/src/App.tsx")
+FRONTEND_ADMIN_CAPABILITIES_PATH = Path("apps/dsa-web/src/utils/adminCapabilities.ts")
 ROUTE_DECORATOR_METHODS = {
     "get": ("GET",),
     "post": ("POST",),
@@ -566,6 +569,212 @@ def _summary(routes: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _read_optional_source(path: Path) -> str:
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+def _frontend_route_id(path: str) -> str:
+    normalized = path.strip("/").replace("/", ".").replace(":", "")
+    return normalized.replace("-", "_") or "root"
+
+
+def _collect_admin_surface_paths(app_source: str) -> list[str]:
+    paths = {
+        match.group(1)
+        for match in re.finditer(r'<Route\s+path="([^"]+)"\s+element=\{<AdminSurfaceRoute>', app_source)
+    }
+    return sorted(path for path in paths if path.startswith("/"))
+
+
+def _collect_flag_capability_map(capability_source: str) -> dict[str, str]:
+    map_match = re.search(
+        r"const\s+capabilityByFlag:[^{]+=\s*\{(?P<body>.*?)\};",
+        capability_source,
+        flags=re.DOTALL,
+    )
+    if not map_match:
+        return {}
+    return {
+        match.group("flag"): match.group("capability")
+        for match in re.finditer(
+            r"(?P<flag>can[A-Za-z0-9_]+):\s*'(?P<capability>[^']+)'",
+            map_match.group("body"),
+        )
+    }
+
+
+def _collect_frontend_gate_rules(capability_source: str) -> tuple[dict[str, dict[str, Any]], set[str]]:
+    rules: dict[str, dict[str, Any]] = {}
+    feature_flagged_paths: set[str] = set()
+
+    for match in re.finditer(
+        r"if\s*\(\s*pathname\s*===\s*'(?P<path>[^']+)'\s*\|\|\s*pathname\.startsWith\('(?P=path)/'\)\s*\)"
+        r"\s*\{\s*return\s+capabilityFlags\.(?P<flag>can[A-Za-z0-9_]+);",
+        capability_source,
+        flags=re.DOTALL,
+    ):
+        rules[match.group("path")] = {
+            "capabilityFlag": match.group("flag"),
+            "gateSource": "canAccessAdminPath",
+            "featureFlagDependency": None,
+        }
+
+    for function_name, feature_dependency in (
+        ("isAdminLaunchCockpitPath", None),
+        ("isAdminMissionControlPath", "VITE_WOLFYSTOCK_ADMIN_MISSION_CONTROL_PROTOTYPE_ENABLED"),
+    ):
+        path_match = re.search(
+            rf"function\s+{function_name}\([^)]*\):\s*boolean\s*\{{\s*return\s+pathname\s*===\s*'(?P<path>[^']+)'",
+            capability_source,
+            flags=re.DOTALL,
+        )
+        gate_match = re.search(
+            rf"if\s*\(\s*{function_name}\(pathname\)\s*\)\s*\{{\s*return\s+(?:isAdminMissionControlPrototypeEnabled\(\)\s*&&\s*)?capabilityFlags\.(?P<flag>can[A-Za-z0-9_]+);",
+            capability_source,
+            flags=re.DOTALL,
+        )
+        if path_match and gate_match:
+            path = path_match.group("path")
+            rules[path] = {
+                "capabilityFlag": gate_match.group("flag"),
+                "gateSource": f"canAccessAdminPath:{function_name}",
+                "featureFlagDependency": feature_dependency,
+            }
+            if feature_dependency:
+                feature_flagged_paths.add(path)
+
+    if "pathname === '/admin/users'" in capability_source and "pathname.endsWith('/activity')" in capability_source:
+        rules["/admin/users"] = {
+            "capabilityFlag": "canReadUsers",
+            "gateSource": "canAccessAdminPath:user_routes",
+            "featureFlagDependency": None,
+        }
+        rules["/admin/users/:userId"] = {
+            "capabilityFlag": "canReadUsers",
+            "gateSource": "canAccessAdminPath:user_routes",
+            "featureFlagDependency": None,
+        }
+        rules["/admin/users/:userId/activity"] = {
+            "capabilityFlag": "canReadUserActivity",
+            "gateSource": "canAccessAdminPath:user_routes",
+            "featureFlagDependency": None,
+        }
+
+    return rules, feature_flagged_paths
+
+
+def _collect_frontend_admin_routes(repo_root: Path) -> list[dict[str, Any]]:
+    app_source = _read_optional_source(repo_root / FRONTEND_APP_PATH)
+    capability_source = _read_optional_source(repo_root / FRONTEND_ADMIN_CAPABILITIES_PATH)
+    if not app_source or not capability_source:
+        return []
+
+    flag_capabilities = _collect_flag_capability_map(capability_source)
+    gate_rules, feature_flagged_paths = _collect_frontend_gate_rules(capability_source)
+    routes: list[dict[str, Any]] = []
+
+    for path in _collect_admin_surface_paths(app_source):
+        rule = gate_rules.get(path)
+        capability_flag = str(rule.get("capabilityFlag")) if rule else None
+        capability_label = flag_capabilities.get(capability_flag or "")
+        feature_flag_dependency = rule.get("featureFlagDependency") if rule else None
+        classification = "frontend_admin_capability_gate" if capability_flag and capability_label else "frontend_unknown_admin_gate"
+        gate_style = "admin_surface_capability"
+        if path in feature_flagged_paths:
+            gate_style = "admin_surface_capability_with_feature_flag"
+        elif classification == "frontend_unknown_admin_gate":
+            gate_style = "unknown"
+
+        routes.append(
+            {
+                "file": FRONTEND_APP_PATH.as_posix(),
+                "helperFile": FRONTEND_ADMIN_CAPABILITIES_PATH.as_posix(),
+                "routeId": _frontend_route_id(path),
+                "path": path,
+                "localizedPath": path.lstrip("/"),
+                "gateStyle": gate_style,
+                "classification": classification,
+                "capabilityFlag": capability_flag,
+                "capabilityLabel": capability_label,
+                "fallbackDependence": "frontend_requires_current_user_isAdmin_and_capability_payload"
+                if capability_flag
+                else "unknown",
+                "missingPayloadBehavior": "fail_closed_when_capability_payload_missing"
+                if capability_flag
+                else "unknown",
+                "gateSource": rule.get("gateSource") if rule else None,
+                "featureFlagDependency": feature_flag_dependency,
+                "unknownReasons": [] if classification != "frontend_unknown_admin_gate" else ["admin_route_without_known_capability_gate"],
+            }
+        )
+
+    routes.sort(key=lambda item: item["path"])
+    return routes
+
+
+def _frontend_summary(frontend_routes: list[dict[str, Any]]) -> dict[str, Any]:
+    by_classification = Counter(route["classification"] for route in frontend_routes)
+    by_capability = Counter(route["capabilityLabel"] or "unknown" for route in frontend_routes)
+    return {
+        "frontendAdminRouteCount": len(frontend_routes),
+        "frontendFailClosedRouteCount": sum(
+            1
+            for route in frontend_routes
+            if route["missingPayloadBehavior"] == "fail_closed_when_capability_payload_missing"
+        ),
+        "frontendUnknownGateCount": by_classification.get("frontend_unknown_admin_gate", 0),
+        "byFrontendClassification": dict(sorted(by_classification.items())),
+        "byFrontendCapability": dict(sorted(by_capability.items())),
+    }
+
+
+def _fallback_surfaces(routes: list[dict[str, Any]], frontend_routes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    backend_by_fallback = Counter(route["fallbackDependence"] for route in routes)
+    surfaces = [
+        {
+            "surface": "backend_capability_route_expansion",
+            "classification": "coarse_fallback_remaining",
+            "fallbackDependencyLabel": "capability_expansion_uses_coarse_fallback_when_enabled",
+            "routeCount": backend_by_fallback.get("capability_expansion_uses_coarse_fallback_when_enabled", 0),
+            "sourceLabels": [
+                "api.deps.require_admin_capability",
+                "src.admin_rbac.expand_admin_capabilities",
+                "WOLFYSTOCK_ADMIN_RBAC_COARSE_FALLBACK_ENABLED",
+            ],
+        },
+        {
+            "surface": "backend_direct_coarse_admin_routes",
+            "classification": "direct_coarse_admin_guard",
+            "fallbackDependencyLabel": "direct_coarse_admin_guard",
+            "routeCount": backend_by_fallback.get("direct_coarse_admin_guard", 0),
+            "sourceLabels": ["api.deps.require_admin_user"],
+        },
+        {
+            "surface": "backend_manual_admin_request_guards",
+            "classification": "manual_admin_guard",
+            "fallbackDependencyLabel": "manual_admin_current_user_guard",
+            "routeCount": backend_by_fallback.get("manual_admin_current_user_guard", 0),
+            "sourceLabels": ["api.v1.endpoints.auth._require_admin_current_user"],
+        },
+        {
+            "surface": "frontend_admin_surface_routes",
+            "classification": "fail_closed_frontend_gate",
+            "fallbackDependencyLabel": "frontend_requires_current_user_isAdmin_and_capability_payload",
+            "routeCount": sum(
+                1
+                for route in frontend_routes
+                if route["fallbackDependence"] == "frontend_requires_current_user_isAdmin_and_capability_payload"
+            ),
+            "sourceLabels": [
+                "apps/dsa-web/src/App.tsx.AdminSurfaceRoute",
+                "apps/dsa-web/src/utils/adminCapabilities.resolveAdminCapabilityFlags",
+                "apps/dsa-web/src/utils/adminCapabilities.canAccessAdminPath",
+            ],
+        },
+    ]
+    return sorted(surfaces, key=lambda item: item["surface"])
+
+
 def build_inventory(repo_root: Path | str = REPO_ROOT) -> dict[str, Any]:
     """Build a sanitized static inventory from source files only."""
     root = Path(repo_root)
@@ -591,21 +800,30 @@ def build_inventory(repo_root: Path | str = REPO_ROOT) -> dict[str, Any]:
                 routes.append(entry)
 
     routes.sort(key=lambda item: (item["file"], item["line"], item["path"], tuple(item["methods"])))
+    frontend_routes = _collect_frontend_admin_routes(root)
+    summary = _summary(routes)
+    summary.update(_frontend_summary(frontend_routes))
     return {
         "tool": "admin_rbac_route_inventory",
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "readOnly": True,
         "runtimeBehaviorChanged": False,
         "authBehaviorChanged": False,
         "runtimeImportsRequired": False,
-        "inspectionMethod": "python_ast_source_scan",
-        "summary": _summary(routes),
+        "inspectionMethod": "python_ast_and_frontend_source_scan",
+        "summary": summary,
         "routes": routes,
+        "frontendAdminRoutes": frontend_routes,
+        "fallbackSurfaces": _fallback_surfaces(routes, frontend_routes),
         "unknowns": [route for route in routes if route["classification"] == "unclassified"],
+        "frontendUnknowns": [
+            route for route in frontend_routes if route["classification"] == "frontend_unknown_admin_gate"
+        ],
         "limitations": [
             "Static source inspection only; dynamic runtime router mutation is not evaluated.",
             "Local dependency wrappers are resolved only when their source is in the inspected endpoint file.",
             "Capability fallback dependence is reported from known helper semantics; this helper does not evaluate configuration values.",
+            "Frontend admin gate inventory is a bounded source scan of App.tsx and adminCapabilities.ts; it does not execute React routing.",
         ],
     }
 
