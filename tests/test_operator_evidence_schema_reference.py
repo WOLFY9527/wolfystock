@@ -68,7 +68,7 @@ def test_render_creates_markdown_and_json_outputs(tmp_path: Path) -> None:
 
     markdown = md_path.read_text(encoding="utf-8")
     assert "releaseApproved=false" in markdown
-    assert len(markdown.splitlines()) <= 220
+    assert len(markdown.splitlines()) <= 245
 
 
 def test_render_is_deterministic_and_sanitized(tmp_path: Path) -> None:
@@ -107,6 +107,7 @@ def test_render_output_mentions_required_fields_and_validator_names(tmp_path: Pa
         assert spec.category in markdown
         assert spec.filename in markdown
     for validator_name in {
+        "api_abuse_request_safety_evidence_check.py",
         "provider_operator_evidence_check.py",
         "provider_sla_licensing_evidence_check.py",
         "restore_pitr_operator_evidence_check.py",

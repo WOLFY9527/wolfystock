@@ -1,0 +1,57 @@
+{
+  "artifactVersion": "wolfystock_api_abuse_request_safety_evidence_v1",
+  "environment": "staging",
+  "operator": "sanitized-operator-label",
+  "observedAt": "2026-06-13T00:00:00Z",
+  "evidenceMode": "offline-synthetic-review",
+  "rateLimitInvalidRequestSummary": {
+    "rateLimitProbe": "sanitized-status-only",
+    "invalidRequestHandling": "sanitized-reason-codes-only",
+    "clientIdentifierMaterialIncluded": false,
+    "sensitiveRouteMaterialIncluded": false
+  },
+  "oversizedPayloadSafety": {
+    "payloadBodyStoredOrPrinted": false,
+    "resultSummary": "sanitized-rejection-summary",
+    "maxBodyLabel": "configured-limit-label"
+  },
+  "malformedInputRejectionSummary": {
+    "malformedJsonRejected": true,
+    "malformedFormRejected": true,
+    "bodyEchoed": false
+  },
+  "denialSanitization": {
+    "authDenialSanitized": true,
+    "adminDenialSanitized": true,
+    "browserStateMaterialIncluded": false,
+    "authHeaderMaterialIncluded": false,
+    "principalIdentifierMaterialIncluded": false
+  },
+  "auditLogRedactionProof": {
+    "auditEventsUseReasonCodes": true,
+    "bodyMaterialLogged": false,
+    "networkAddressLogged": false,
+    "principalIdentifierLogged": false
+  },
+  "leakageReview": {
+    "errorDetailsIncluded": false,
+    "diagnosticPayloadIncluded": false,
+    "sensitiveQueryStringsIncluded": false,
+    "privateUrlsIncluded": false
+  },
+  "runtimeDefaults": {
+    "apiMiddlewareChanged": false,
+    "rateLimitImplementationChanged": false,
+    "identityAccessRuntimeChanged": false,
+    "publicApiDefaultsChanged": false,
+    "runtimeDefaultUnchanged": true
+  },
+  "manualReview": {
+    "manualReviewRequired": true,
+    "reviewTicketRef": "review-ticket-label"
+  },
+  "releaseApproved": false,
+  "publicLaunchReady": false,
+  "outcome": "accepted",
+  "evidenceRedactionVersion": "api-abuse-request-safety-redaction-v1"
+}

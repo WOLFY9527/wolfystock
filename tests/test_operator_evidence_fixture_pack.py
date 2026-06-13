@@ -14,6 +14,7 @@ UNSAFE_REJECTED = FIXTURE_ROOT / "unsafe_rejected"
 WORKFLOW_SCRIPT = REPO_ROOT / "scripts" / "operator_evidence_workflow_run.py"
 
 EXPECTED_FILES = {
+    "api_abuse_safety_evidence.json",
     "provider_operator_evidence.json",
     "provider_sla_licensing_evidence.json",
     "restore_pitr_operator_evidence.json",

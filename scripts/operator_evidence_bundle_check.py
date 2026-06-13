@@ -28,6 +28,7 @@ except ModuleNotFoundError:  # pragma: no cover - package import fallback
 
 from provider_operator_evidence_check import validate_provider_operator_evidence
 from provider_sla_licensing_evidence_check import validate_provider_sla_licensing_evidence
+from api_abuse_request_safety_evidence_check import validate_api_abuse_request_safety_evidence
 from config_snapshot_evidence_check import validate_config_snapshot_evidence
 from manual_release_approval_evidence_check import validate_manual_release_approval_evidence
 from quota_operator_evidence_check import validate_artifact as validate_quota_operator_evidence
@@ -62,6 +63,12 @@ class ArtifactSpec:
 
 
 ARTIFACT_SPECS: tuple[ArtifactSpec, ...] = (
+    ArtifactSpec(
+        category="api-abuse-request-safety",
+        filename="api_abuse_safety_evidence.json",
+        validator_name="api_abuse_request_safety_evidence_check.py",
+        validate=validate_api_abuse_request_safety_evidence,
+    ),
     ArtifactSpec(
         category="provider",
         filename="provider_operator_evidence.json",

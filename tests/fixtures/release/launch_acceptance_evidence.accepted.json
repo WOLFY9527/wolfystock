@@ -463,7 +463,10 @@
         "oversizedPayloadSafetyVerified": true,
         "denialAuditEvidenceSanitized": true,
         "debugTracebackAndRequestBodiesRedacted": true,
-        "runtimeDefaultUnchanged": true
+        "runtimeDefaultUnchanged": true,
+        "manualReviewRequired": true,
+        "releaseApprovedFalse": true,
+        "publicLaunchReadyFalse": true
       },
       "sanitization": {
         "externalServicesCalledByChecker": false,

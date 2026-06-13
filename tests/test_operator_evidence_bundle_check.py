@@ -385,6 +385,68 @@ def _manual_release_review_artifact(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def _api_abuse_request_safety_artifact(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "artifactVersion": "wolfystock_api_abuse_request_safety_evidence_v1",
+        "environment": "staging",
+        "operator": "sanitized-operator-label",
+        "observedAt": "2026-05-08T10:30:00Z",
+        "evidenceMode": "operator-sanitized-review",
+        "rateLimitInvalidRequestSummary": {
+            "rateLimitProbe": "sanitized-status-only",
+            "invalidRequestHandling": "sanitized-reason-codes-only",
+            "clientIdentifierMaterialIncluded": False,
+            "sensitiveRouteMaterialIncluded": False,
+        },
+        "oversizedPayloadSafety": {
+            "payloadBodyStoredOrPrinted": False,
+            "resultSummary": "sanitized-rejection-summary",
+            "maxBodyLabel": "configured-limit-label",
+        },
+        "malformedInputRejectionSummary": {
+            "malformedJsonRejected": True,
+            "malformedFormRejected": True,
+            "bodyEchoed": False,
+        },
+        "denialSanitization": {
+            "authDenialSanitized": True,
+            "adminDenialSanitized": True,
+            "browserStateMaterialIncluded": False,
+            "authHeaderMaterialIncluded": False,
+            "principalIdentifierMaterialIncluded": False,
+        },
+        "auditLogRedactionProof": {
+            "auditEventsUseReasonCodes": True,
+            "bodyMaterialLogged": False,
+            "networkAddressLogged": False,
+            "principalIdentifierLogged": False,
+        },
+        "leakageReview": {
+            "errorDetailsIncluded": False,
+            "diagnosticPayloadIncluded": False,
+            "sensitiveQueryStringsIncluded": False,
+            "privateUrlsIncluded": False,
+        },
+        "runtimeDefaults": {
+            "apiMiddlewareChanged": False,
+            "rateLimitImplementationChanged": False,
+            "identityAccessRuntimeChanged": False,
+            "publicApiDefaultsChanged": False,
+            "runtimeDefaultUnchanged": True,
+        },
+        "manualReview": {
+            "manualReviewRequired": True,
+            "reviewTicketRef": "review-ticket-label",
+        },
+        "releaseApproved": False,
+        "publicLaunchReady": False,
+        "outcome": "accepted",
+        "evidenceRedactionVersion": "api-abuse-request-safety-redaction-v1",
+    }
+    payload.update(overrides)
+    return payload
+
+
 def _write_bundle(tmp_path: Path, artifacts: dict[str, object]) -> Path:
     bundle = tmp_path / "bundle"
     bundle.mkdir()
@@ -395,6 +457,7 @@ def _write_bundle(tmp_path: Path, artifacts: dict[str, object]) -> Path:
 
 def _accepted_artifacts() -> dict[str, object]:
     return {
+        "api_abuse_safety_evidence.json": _api_abuse_request_safety_artifact(),
         "provider_operator_evidence.json": _provider_artifact(),
         "provider_sla_licensing_evidence.json": _provider_sla_artifact(),
         "restore_pitr_operator_evidence.json": _restore_artifact(),

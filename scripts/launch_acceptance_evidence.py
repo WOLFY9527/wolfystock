@@ -478,6 +478,9 @@ CATEGORY_SPECS: tuple[CategorySpec, ...] = (
             "denialAuditEvidenceSanitized",
             "debugTracebackAndRequestBodiesRedacted",
             "runtimeDefaultUnchanged",
+            "manualReviewRequired",
+            "releaseApprovedFalse",
+            "publicLaunchReadyFalse",
         ),
     ),
     CategorySpec(
