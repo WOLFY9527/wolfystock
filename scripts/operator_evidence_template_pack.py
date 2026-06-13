@@ -433,6 +433,73 @@ def _manual_release_template() -> dict[str, Any]:
     }
 
 
+def _api_abuse_request_safety_template() -> dict[str, Any]:
+    return {
+        "artifactVersion": "wolfystock_api_abuse_request_safety_evidence_v1",
+        "environment": "staging",
+        "operator": "sanitized-operator-label",
+        "observedAt": TEMPLATE_TIMESTAMP,
+        "evidenceMode": "offline-synthetic-review",
+        "rateLimitInvalidRequestSummary": {
+            "rateLimitProbe": "redacted-or-configured",
+            "invalidRequestHandling": "redacted-or-configured",
+            "clientIdentifierMaterialIncluded": False,
+            "sensitiveRouteMaterialIncluded": False,
+        },
+        "oversizedPayloadSafety": {
+            "payloadBodyStoredOrPrinted": False,
+            "resultSummary": "redacted-or-configured",
+            "maxBodyLabel": "redacted-or-configured",
+        },
+        "malformedInputRejectionSummary": {
+            "malformedJsonRejected": False,
+            "malformedFormRejected": False,
+            "bodyEchoed": False,
+        },
+        "denialSanitization": {
+            "authDenialSanitized": False,
+            "adminDenialSanitized": False,
+            "browserStateMaterialIncluded": False,
+            "authHeaderMaterialIncluded": False,
+            "principalIdentifierMaterialIncluded": False,
+        },
+        "auditLogRedactionProof": {
+            "auditEventsUseReasonCodes": False,
+            "bodyMaterialLogged": False,
+            "networkAddressLogged": False,
+            "principalIdentifierLogged": False,
+        },
+        "leakageReview": {
+            "errorDetailsIncluded": False,
+            "diagnosticPayloadIncluded": False,
+            "sensitiveQueryStringsIncluded": False,
+            "privateUrlsIncluded": False,
+        },
+        "runtimeDefaults": {
+            "apiMiddlewareChanged": False,
+            "rateLimitImplementationChanged": False,
+            "identityAccessRuntimeChanged": False,
+            "publicApiDefaultsChanged": False,
+            "runtimeDefaultUnchanged": True,
+        },
+        "manualReview": {
+            "manualReviewRequired": True,
+            "reviewTicketRef": "review-ticket-label",
+        },
+        "releaseApproved": False,
+        "publicLaunchReady": False,
+        "outcome": "needs-review",
+        "evidenceRedactionVersion": "api-abuse-request-safety-redaction-v1",
+        "localGeneration": {
+            "checkerReadsRuntimeConfig": False,
+            "networkCallsEnabled": False,
+            "rawRequestDataIncluded": False,
+            "runtimeBehaviorChanged": False,
+        },
+        "templatePlaceholders": _template_placeholders(),
+    }
+
+
 TemplateFactory = Callable[[], dict[str, Any]]
 
 
@@ -444,6 +511,11 @@ class TemplateSpec:
 
 
 TEMPLATE_SPECS: tuple[TemplateSpec, ...] = (
+    TemplateSpec(
+        "api-abuse-request-safety",
+        "api_abuse_safety_evidence.json",
+        _api_abuse_request_safety_template,
+    ),
     TemplateSpec("provider", "provider_operator_evidence.json", _provider_template),
     TemplateSpec(
         "provider-sla-licensing",

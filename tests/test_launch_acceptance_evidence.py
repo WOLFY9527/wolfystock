@@ -277,6 +277,9 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
         "denialAuditEvidenceSanitized",
         "debugTracebackAndRequestBodiesRedacted",
         "runtimeDefaultUnchanged",
+        "manualReviewRequired",
+        "releaseApprovedFalse",
+        "publicLaunchReadyFalse",
     ]
     assert categories["provider_operator_evidence"]["requiredChecks"] == [
         "providerOperatorValidatorPassed",
@@ -575,6 +578,9 @@ def test_launch_acceptance_evidence_api_abuse_request_safety_is_backed_by_repo_l
         "denialAuditEvidenceSanitized",
         "debugTracebackAndRequestBodiesRedacted",
         "runtimeDefaultUnchanged",
+        "manualReviewRequired",
+        "releaseApprovedFalse",
+        "publicLaunchReadyFalse",
     ]
 
     public_api_safety_source = (

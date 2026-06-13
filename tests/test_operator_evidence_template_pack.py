@@ -11,6 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "operator_evidence_template_pack.py"
 
 EXPECTED_FILES = {
+    "api_abuse_safety_evidence.json",
     "provider_operator_evidence.json",
     "provider_sla_licensing_evidence.json",
     "restore_pitr_operator_evidence.json",
@@ -183,6 +184,32 @@ def test_stdout_mode_prints_sanitized_templates_without_writing(tmp_path: Path) 
     assert payload["config_snapshot_evidence.json"]["outcome"] == "needs-review"
 
 
+def test_api_abuse_request_safety_template_is_review_only_and_not_launch_ready(tmp_path: Path) -> None:
+    result = _run("--stdout", "--category", "api-abuse-request-safety", str(tmp_path))
+
+    assert result.returncode == 0, result.stderr
+    payload = _stdout_json(result)["api_abuse_safety_evidence.json"]
+    assert payload["artifactVersion"] == "wolfystock_api_abuse_request_safety_evidence_v1"
+    assert payload["evidenceMode"] == "offline-synthetic-review"
+    assert payload["outcome"] == "needs-review"
+    assert payload["manualReview"]["manualReviewRequired"] is True
+    assert payload["releaseApproved"] is False
+    assert payload["publicLaunchReady"] is False
+    assert payload["runtimeDefaults"] == {
+        "apiMiddlewareChanged": False,
+        "rateLimitImplementationChanged": False,
+        "identityAccessRuntimeChanged": False,
+        "publicApiDefaultsChanged": False,
+        "runtimeDefaultUnchanged": True,
+    }
+    assert payload["localGeneration"] == {
+        "checkerReadsRuntimeConfig": False,
+        "networkCallsEnabled": False,
+        "rawRequestDataIncluded": False,
+        "runtimeBehaviorChanged": False,
+    }
+
+
 def test_restore_pitr_template_is_review_only_and_not_launch_ready(tmp_path: Path) -> None:
     result = _run("--stdout", "--category", "restore-pitr", str(tmp_path))
 
@@ -246,6 +273,14 @@ def test_generated_templates_are_validator_safe_or_review_only(tmp_path: Path) -
     assert {artifact["status"] for artifact in bundle["artifacts"]} == {"needs-review"}
 
     direct_checks: list[tuple[list[str], str, str]] = [
+        (
+            [
+                "scripts/api_abuse_request_safety_evidence_check.py",
+                str(tmp_path / "api_abuse_safety_evidence.json"),
+            ],
+            "status",
+            "pass",
+        ),
         (
             ["scripts/provider_operator_evidence_check.py", str(tmp_path / "provider_operator_evidence.json")],
             "status",

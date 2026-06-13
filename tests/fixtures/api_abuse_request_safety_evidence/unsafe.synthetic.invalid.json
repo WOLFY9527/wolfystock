@@ -1,0 +1,38 @@
+{
+  "artifactVersion": "wolfystock_api_abuse_request_safety_evidence_v1",
+  "environment": "staging",
+  "operator": "sanitized-operator-label",
+  "observedAt": "2026-06-13T00:00:00Z",
+  "evidenceMode": "offline-synthetic-review",
+  "rateLimitInvalidRequestSummary": {
+    "requestBody": "password=should-not-print",
+    "clientIp": "192.0.2.55"
+  },
+  "oversizedPayloadSafety": {
+    "payloadBodyStoredOrPrinted": true
+  },
+  "malformedInputRejectionSummary": {
+    "rawRequestPath": "/api/v1/admin/users?token=should-not-print"
+  },
+  "denialSanitization": {
+    "authorizationHeader": "Bearer should-not-print",
+    "cookie": "dsa_session=should-not-print"
+  },
+  "auditLogRedactionProof": {
+    "rawUserId": "user-real-account-123"
+  },
+  "leakageReview": {
+    "traceback": "Traceback (most recent call last):"
+  },
+  "runtimeDefaults": {
+    "runtimeDefaultUnchanged": false
+  },
+  "manualReview": {
+    "manualReviewRequired": false,
+    "reviewTicketRef": "review-ticket-label"
+  },
+  "releaseApproved": true,
+  "publicLaunchReady": true,
+  "outcome": "accepted",
+  "evidenceRedactionVersion": "api-abuse-request-safety-redaction-v1"
+}
