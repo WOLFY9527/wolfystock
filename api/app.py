@@ -27,7 +27,7 @@ from fastapi import FastAPI, Request
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html, get_swagger_ui_oauth2_redirect_html
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from sqlalchemy import text
 
 from api.deps import resolve_current_user
@@ -44,7 +44,6 @@ from src.services.task_queue import get_task_queue
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_ADMIN_SPA_LOCALES = frozenset({"zh", "en"})
 _ROOT_OPENAPI_PATH = "/openapi.json"
 _ROOT_SWAGGER_PATH = "/docs"
 _ROOT_SWAGGER_OAUTH2_REDIRECT_PATH = "/docs/oauth2-redirect"
@@ -53,18 +52,6 @@ _ROOT_REDOC_PATH = "/redoc"
 
 def _iso_now() -> str:
     return datetime.now().isoformat()
-
-
-def _admin_spa_guest_redirect_path(full_path: str) -> Optional[str]:
-    normalized_path = f"/{str(full_path or '').lstrip('/')}".rstrip("/") or "/"
-    if normalized_path == "/admin" or normalized_path.startswith("/admin/"):
-        return "/guest"
-
-    parts = normalized_path.split("/")
-    if len(parts) >= 3 and parts[1] in _SUPPORTED_ADMIN_SPA_LOCALES and parts[2] == "admin":
-        return f"/{parts[1]}/guest"
-
-    return None
 
 
 def _add_security_headers(app: FastAPI) -> None:
@@ -437,10 +424,6 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
                 content_type, _ = mimetypes.guess_type(str(file_path))
                 return FileResponse(file_path, media_type=content_type)
 
-            admin_guest_path = _admin_spa_guest_redirect_path(full_path)
-            if admin_guest_path and is_auth_enabled() and resolve_current_user(request) is None:
-                return RedirectResponse(admin_guest_path, status_code=302)
-            
             return FileResponse(static_dir / "index.html")
     
     return app
