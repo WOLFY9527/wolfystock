@@ -236,11 +236,17 @@ def test_launch_acceptance_evidence_all_accepted_is_go_review_required_not_appro
         "runtimeMutationNotPerformed",
     ]
     assert categories["notifications_delivery_rehearsal"]["requiredChecks"] == [
-        "deliveryRehearsalPassed",
-        "routeChannelMappingRecorded",
-        "failurePathAudited",
-        "notificationSecretsRedacted",
-        "realOutboundDisabledOrAccepted",
+        "notificationDeliveryRehearsalValidatorPassed",
+        "dryRunNoSendProofRecorded",
+        "channelMappingRecorded",
+        "recipientChannelOwnershipLabelsRecorded",
+        "failurePathAuditSanitized",
+        "outboundDisabledByDefault",
+        "noProviderNetworkCallsByChecker",
+        "manualApprovalRequiredForRealDelivery",
+        "releaseApprovedFalse",
+        "publicLaunchReadyFalse",
+        "runtimeBehaviorUnchanged",
     ]
     assert categories["user_data_privacy_export_deletion_rehearsal"]["requiredChecks"] == [
         "privacyExportProjectionSanitized",
@@ -617,6 +623,54 @@ def test_launch_acceptance_evidence_api_abuse_request_safety_is_backed_by_repo_l
         assert check_name in category["requiredChecks"]
         for anchor_test in anchor_tests:
             assert anchor_test in public_api_safety_source
+
+
+def test_launch_acceptance_evidence_notification_rehearsal_is_backed_by_offline_checker() -> None:
+    result = _run_checker("--evidence", str(ACCEPTED_FIXTURE))
+
+    assert result.returncode == 0
+    evidence = _json(result)
+    category = next(item for item in evidence["categories"] if item["id"] == "notifications_delivery_rehearsal")
+    assert category["status"] == "accepted"
+    assert category["requiredChecks"] == [
+        "notificationDeliveryRehearsalValidatorPassed",
+        "dryRunNoSendProofRecorded",
+        "channelMappingRecorded",
+        "recipientChannelOwnershipLabelsRecorded",
+        "failurePathAuditSanitized",
+        "outboundDisabledByDefault",
+        "noProviderNetworkCallsByChecker",
+        "manualApprovalRequiredForRealDelivery",
+        "releaseApprovedFalse",
+        "publicLaunchReadyFalse",
+        "runtimeBehaviorUnchanged",
+    ]
+
+    accepted_payload = json.loads(ACCEPTED_FIXTURE.read_text(encoding="utf-8"))
+    fixture_category = accepted_payload["categories"]["notifications_delivery_rehearsal"]
+    assert fixture_category["evidenceRef"] == "notification-delivery-rehearsal-evidence-synthetic-json"
+    assert fixture_category["checks"]["releaseApprovedFalse"] is True
+    assert fixture_category["checks"]["publicLaunchReadyFalse"] is True
+    assert fixture_category["sanitization"] == {
+        "externalServicesCalledByChecker": False,
+        "realSecretsIncluded": False,
+        "rawCredentialValuesIncluded": False,
+        "rawProviderPayloadsIncluded": False,
+        "responseBodiesIncluded": False,
+        "productionDataPathsIncluded": False,
+    }
+
+    checker_source = (REPO_ROOT / "scripts" / "notification_delivery_rehearsal_evidence_check.py").read_text(
+        encoding="utf-8"
+    )
+    checker_tests = (
+        REPO_ROOT / "tests" / "test_notification_delivery_rehearsal_evidence_check.py"
+    ).read_text(encoding="utf-8")
+    assert "networkCallsExecutedByValidator" in checker_source
+    assert "outboundNotificationsSentByValidator" in checker_source
+    assert "runtimeNotificationBehaviorChanged" in checker_source
+    assert "test_accepts_sanitized_offline_notification_delivery_rehearsal" in checker_tests
+    assert "test_rejects_raw_recipients_urls_tokens_payloads_and_traces_without_leaking" in checker_tests
 
 
 def test_launch_acceptance_evidence_user_data_privacy_rehearsal_is_backed_by_repo_local_offline_anchors() -> None:

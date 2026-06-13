@@ -14,6 +14,7 @@ EXPECTED_FILES = {
     "api_abuse_safety_evidence.json",
     "provider_operator_evidence.json",
     "provider_sla_licensing_evidence.json",
+    "notification_delivery_rehearsal_evidence.json",
     "restore_pitr_operator_evidence.json",
     "security_operator_acceptance.json",
     "quota_budget_operator_evidence.json",
@@ -293,6 +294,14 @@ def test_generated_templates_are_validator_safe_or_review_only(tmp_path: Path) -
             ],
             "status",
             "pass",
+        ),
+        (
+            [
+                "scripts/notification_delivery_rehearsal_evidence_check.py",
+                str(tmp_path / "notification_delivery_rehearsal_evidence.json"),
+            ],
+            "finalStatus",
+            "REJECTED",
         ),
         (
             [

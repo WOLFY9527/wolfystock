@@ -85,6 +85,77 @@ def _provider_sla_artifact(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def _notification_rehearsal_artifact(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "schemaVersion": "wolfystock_notification_delivery_rehearsal_evidence_v1",
+        "mode": "offline-sanitized-rehearsal",
+        "environment": "staging",
+        "operator": "notification-ops",
+        "observedAt": "2026-05-08T10:30:00Z",
+        "dryRunNoSendProof": {
+            "dryRunOnly": True,
+            "noOutboundSent": True,
+            "deliveryClientPatchedOrDisabled": True,
+            "providerCallsExecuted": False,
+            "checkerNetworkCallsEnabled": False,
+            "outcome": "accepted",
+        },
+        "channelMappingSummary": {
+            "mappingComplete": True,
+            "routes": [
+                {
+                    "routeLabel": "admin-notification-rehearsal",
+                    "channelLabel": "ops-channel-alpha",
+                    "ownerLabel": "owner-label-alpha",
+                    "channelType": "email",
+                    "mappingSourceLabel": "mapping-ref-alpha",
+                }
+            ],
+        },
+        "recipientChannelOwnershipEvidence": {
+            "sanitizedLabelsOnly": True,
+            "owners": [
+                {
+                    "ownerLabel": "owner-label-alpha",
+                    "channelLabel": "ops-channel-alpha",
+                    "ownershipEvidenceLabel": "ownership-proof-alpha",
+                    "recipientLabel": "recipient-label-alpha",
+                    "manualApprovalRequired": True,
+                    "rawRecipientIdIncluded": False,
+                }
+            ],
+        },
+        "failurePathAuditSummary": {
+            "failurePathsAudited": True,
+            "cases": [
+                {
+                    "caseLabel": "delivery-timeout-synthetic",
+                    "routeLabel": "admin-notification-rehearsal",
+                    "sanitizedReasonCode": "synthetic_delivery_timeout",
+                    "coreFlowContinues": True,
+                    "rawNotificationBodyIncluded": False,
+                    "providerPayloadIncluded": False,
+                    "stackTraceIncluded": False,
+                }
+            ],
+        },
+        "outboundSafety": {
+            "outboundDisabledByDefault": True,
+            "externalProviderCallsByChecker": False,
+            "manualApprovalRequiredForRealDelivery": True,
+            "realDeliveryRehearsalApproved": False,
+            "runtimeNotificationBehaviorChanged": False,
+            "releaseApproved": False,
+            "publicLaunchReady": False,
+        },
+        "outcome": "accepted",
+        "evidenceRedactionVersion": "notification_delivery_rehearsal_redaction_v1",
+        "notes": "Sanitized no-send notification rehearsal evidence.",
+    }
+    payload.update(overrides)
+    return payload
+
+
 def _restore_artifact(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "schemaVersion": "wolfystock_restore_pitr_operator_evidence_input_v1",
@@ -460,6 +531,7 @@ def _accepted_artifacts() -> dict[str, object]:
         "api_abuse_safety_evidence.json": _api_abuse_request_safety_artifact(),
         "provider_operator_evidence.json": _provider_artifact(),
         "provider_sla_licensing_evidence.json": _provider_sla_artifact(),
+        "notification_delivery_rehearsal_evidence.json": _notification_rehearsal_artifact(),
         "restore_pitr_operator_evidence.json": _restore_artifact(),
         "security_operator_acceptance.json": _security_artifact(),
         "quota_budget_operator_evidence.json": _quota_artifact(),

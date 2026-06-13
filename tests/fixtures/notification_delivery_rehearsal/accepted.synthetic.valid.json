@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "wolfystock_notification_delivery_rehearsal_evidence_v1",
+  "mode": "offline-sanitized-rehearsal",
+  "environment": "staging",
+  "operator": "notification-ops-operator",
+  "observedAt": "2026-05-08T10:30:00Z",
+  "dryRunNoSendProof": {
+    "dryRunOnly": true,
+    "noOutboundSent": true,
+    "deliveryClientPatchedOrDisabled": true,
+    "providerCallsExecuted": false,
+    "checkerNetworkCallsEnabled": false,
+    "outcome": "accepted"
+  },
+  "channelMappingSummary": {
+    "mappingComplete": true,
+    "routes": [
+      {
+        "routeLabel": "admin-notification-rehearsal",
+        "channelLabel": "ops-channel-alpha",
+        "ownerLabel": "owner-label-alpha",
+        "channelType": "email",
+        "mappingSourceLabel": "review-ticket-label"
+      }
+    ]
+  },
+  "recipientChannelOwnershipEvidence": {
+    "sanitizedLabelsOnly": true,
+    "owners": [
+      {
+        "ownerLabel": "owner-label-alpha",
+        "channelLabel": "ops-channel-alpha",
+        "ownershipEvidenceLabel": "review-ticket-label",
+        "recipientLabel": "recipient-label-alpha",
+        "manualApprovalRequired": true,
+        "rawRecipientIdIncluded": false
+      }
+    ]
+  },
+  "failurePathAuditSummary": {
+    "failurePathsAudited": true,
+    "cases": [
+      {
+        "caseLabel": "delivery-timeout-synthetic",
+        "routeLabel": "admin-notification-rehearsal",
+        "sanitizedReasonCode": "synthetic_delivery_timeout",
+        "coreFlowContinues": true,
+        "rawNotificationBodyIncluded": false,
+        "providerPayloadIncluded": false,
+        "stackTraceIncluded": false
+      }
+    ]
+  },
+  "outboundSafety": {
+    "outboundDisabledByDefault": true,
+    "externalProviderCallsByChecker": false,
+    "manualApprovalRequiredForRealDelivery": true,
+    "realDeliveryRehearsalApproved": false,
+    "runtimeNotificationBehaviorChanged": false,
+    "releaseApproved": false,
+    "publicLaunchReady": false
+  },
+  "outcome": "accepted",
+  "evidenceRedactionVersion": "notification_delivery_rehearsal_redaction_v1",
+  "notes": "Sanitized dry-run evidence for manual review."
+}

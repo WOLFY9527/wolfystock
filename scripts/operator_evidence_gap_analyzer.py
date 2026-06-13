@@ -39,10 +39,6 @@ PLACEHOLDER_STRINGS = {
     *PLACEHOLDER_VALUES,
     TEMPLATE_TIMESTAMP,
     "0000000",
-    "redacted-or-configured",
-    "review-ticket-label",
-    "sanitized-operator-label",
-    "staging-environment-label",
 }
 UNSAFE_REASON_FRAGMENTS = (
     "approval",

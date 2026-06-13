@@ -13,8 +13,10 @@ SANITIZED_COMPLETE = FIXTURE_ROOT / "sanitized_complete"
 UNSAFE_REJECTED = FIXTURE_ROOT / "unsafe_rejected"
 
 EXPECTED_CATEGORIES = {
+    "api-abuse-request-safety",
     "provider",
     "provider-sla-licensing",
+    "notification-delivery-rehearsal",
     "restore-pitr",
     "security",
     "quota-budget",
