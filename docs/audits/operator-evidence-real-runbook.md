@@ -70,7 +70,11 @@ For PostgreSQL restore/PITR, keep three contracts separate:
   externally executed isolated restore/PITR drill.
 - `scripts/restore_pitr_operator_evidence_check.py --artifact` validates the
   camelCase `wolfystock_restore_pitr_operator_evidence_input_v1` operator
-  review artifact in the evidence bundle.
+  review artifact in the evidence bundle. Accepted operator evidence must
+  explicitly mark `evidenceMode=real-isolated-drill` and include sanitized
+  sections for isolated target, backup artifact summary, PITR target, restore
+  execution summary, post-restore smoke, owner-isolation smoke, rollback
+  decision point, operator approvals, and sanitized artifact references.
 - `scripts/isolated_pg_restore_smoke.py --artifact` validates the separate
   isolated restore smoke wrapper contract and always keeps
   `publicLaunchReady=false`.
@@ -87,13 +91,18 @@ Recommended sequence:
    review.
 
 Generated restore/PITR templates are review placeholders only. They intentionally
-start with `outcome=needs-review`, `restoreCommandExecuted=false`,
-`publicLaunchReady=false`, and `launchApproved=false`; they should validate as
-`NO-GO` until an operator fills them from a real isolated drill.
+start with `evidenceMode=local-synthetic-preflight`, `outcome=needs-review`,
+`restoreCommandExecuted=false`, `publicLaunchReady=false`, and
+`launchApproved=false`; they should validate as `NO-GO` until an operator fills
+them from a real isolated drill.
 
 Do not capture raw DSNs, env values, backup paths, database dumps, raw SQL,
 hostnames, user rows, stack traces, or command output. Use bounded labels,
 counts, checksums, timestamps, and sanitized ticket references instead.
+Operator artifacts with placeholder blocks, local-only dry-run claims,
+production DB mutation markers, raw connection strings, private hostnames,
+usernames/passwords, sensitive user-data paths, stack traces, or launch approval
+claims must remain rejected.
 
 Validator success only means the sanitized artifact is ready for manual review.
 It is not public launch approval, does not prove this tool executed a restore,
@@ -133,7 +142,6 @@ python3 scripts/provider_sla_licensing_evidence_check.py "$EVIDENCE_DIR/provider
 python3 scripts/restore_pitr_operator_evidence_check.py \
   --artifact "$EVIDENCE_DIR/restore_pitr_operator_evidence.json"
 python3 scripts/security_operator_acceptance_check.py "$EVIDENCE_DIR/security_operator_acceptance.json"
-python3 scripts/restore_pitr_operator_evidence_check.py "$EVIDENCE_DIR/restore_pitr_operator_evidence.json"
 python3 scripts/security_operator_acceptance_check.py --artifact "$EVIDENCE_DIR/security_operator_acceptance.json"
 python3 scripts/quota_operator_evidence_check.py "$EVIDENCE_DIR/quota_budget_operator_evidence.json"
 python3 scripts/staging_ingress_operator_evidence_check.py "$EVIDENCE_DIR/staging_ingress_operator_evidence.json"

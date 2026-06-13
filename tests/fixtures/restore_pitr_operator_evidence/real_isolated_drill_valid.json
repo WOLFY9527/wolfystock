@@ -1,0 +1,113 @@
+{
+  "backupArtifactRef": "backup-ref:sha256-0123456789abcdef",
+  "backupArtifactSummary": {
+    "artifactKind": "encrypted-base-backup",
+    "artifactRef": "backup-ref:sha256-0123456789abcdef",
+    "rawPathIncluded": false,
+    "sourceEnvironmentLabel": "source-backup-label",
+    "walArchiveSummaryRef": "wal-range:sha256-abcdef0123456789"
+  },
+  "completedAt": "2026-05-08T09:37:00Z",
+  "destructiveProductionCommandExecuted": false,
+  "drillId": "restore-pitr-2026-05-08-001",
+  "environment": "isolated-restore",
+  "evidenceMode": "real-isolated-drill",
+  "evidenceRedactionVersion": "restore-pitr-redaction-v1",
+  "isolatedTarget": {
+    "environment": "isolated-restore",
+    "isolationBoundaryRef": "isolation-boundary:ticket-001",
+    "productionStorageTouched": false,
+    "targetLabel": "restore-target:sandbox-pg-20260508"
+  },
+  "localGeneration": {
+    "checkerRanRestoreCommands": false,
+    "networkCallsEnabled": false,
+    "productionSecretsRead": false,
+    "productionStorageTouched": false,
+    "rawLogsIncluded": false,
+    "runtimeBehaviorChanged": false
+  },
+  "operator": "ops-oncall-sanitized",
+  "operatorApprovals": [
+    {
+      "approvalRef": "approval:restore-operator",
+      "approved": true,
+      "approvedAt": "2026-05-08T09:39:00Z",
+      "role": "restore-operator"
+    },
+    {
+      "approvalRef": "approval:release-reviewer",
+      "approved": true,
+      "approvedAt": "2026-05-08T09:40:00Z",
+      "role": "release-reviewer"
+    }
+  ],
+  "outcome": "accepted",
+  "ownerIsolationSmoke": {
+    "crossOwnerAccessBlocked": true,
+    "ownerScopeChecked": true,
+    "sampledOwnerLabelRefs": [
+      "owner-sample:alpha",
+      "owner-sample:beta"
+    ]
+  },
+  "pitrTarget": {
+    "targetRef": "pitr-target:pre-drill-checkpoint",
+    "targetTimestamp": "2026-05-08T08:45:00Z",
+    "walReplaySummaryRef": "wal-replay:bounded-summary"
+  },
+  "pitrTargetTimestamp": "2026-05-08T08:45:00Z",
+  "postRestoreSmoke": {
+    "appBootReadiness": "pass",
+    "sampledQuerySummaries": [
+      "query-summary:auth-count",
+      "query-summary:portfolio-checksum"
+    ],
+    "schemaCompatibility": "pass"
+  },
+  "restoreCommandExecuted": true,
+  "restoreExecutionSummary": {
+    "commandSummaryRef": "restore-command-summary:ticket-001",
+    "destructiveProductionCommandExecuted": false,
+    "executedOutsideValidator": true,
+    "localOnlyDryRun": false,
+    "productionDbMutation": false,
+    "restoreCommandExecuted": true
+  },
+  "restoreTarget": "restore-target:sandbox-pg-20260508",
+  "rollbackDecisionPoint": {
+    "decidedAt": "2026-05-08T09:38:00Z",
+    "decision": "rollback-not-required",
+    "decisionRef": "rollback-review:ticket-001"
+  },
+  "rpoObservedSeconds": 420,
+  "rtoObservedSeconds": 2220,
+  "sanitizedArtifactReferences": [
+    {
+      "kind": "validator-output",
+      "label": "restore-pitr-validator-output",
+      "ref": "artifact-ref:restore-pitr-validator-output"
+    },
+    {
+      "kind": "review-ticket",
+      "label": "manual-review-ticket",
+      "ref": "review-ticket:restore-pitr-001"
+    }
+  ],
+  "schemaVersion": "wolfystock_restore_pitr_operator_evidence_input_v1",
+  "startedAt": "2026-05-08T09:00:00Z",
+  "verificationQueries": [
+    {
+      "checksum": "sha256:auth-count-fixture",
+      "expectedCount": 12,
+      "label": "auth-row-count",
+      "observedCount": 12,
+      "resultKind": "count"
+    },
+    {
+      "checksum": "sha256:portfolio-fixture",
+      "label": "portfolio-checksum",
+      "resultKind": "checksum"
+    }
+  ]
+}

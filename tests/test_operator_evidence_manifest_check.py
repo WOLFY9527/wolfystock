@@ -34,6 +34,8 @@ def _write_artifact_dir(tmp_path: Path, *, unsafe_value: str = "raw-body-value-n
         },
         "provider_sla_licensing_evidence.json": {
             "artifactVersion": "wolfystock_provider_sla_licensing_evidence_v1",
+            "environment": "staging",
+            "operator": "provider-ops",
             "outcome": "accepted",
             "evidenceRedactionVersion": "provider-sla-licensing-redaction-v1",
         },

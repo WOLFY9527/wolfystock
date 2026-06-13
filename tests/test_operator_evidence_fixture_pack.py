@@ -35,6 +35,8 @@ FORBIDDEN_OUTPUT_PHRASES = (
 UNSAFE_FIXTURE_VALUES = (
     "fixture-unsafe-api-key-value-should-not-leak",
     "fixture-unsafe-raw-response-value-should-not-leak",
+    "fixture-restore-raw-log-value-should-not-leak",
+    "fixture-restore-username-should-not-leak",
 )
 SANITIZED_FORBIDDEN_MARKERS = (
     "://",
@@ -132,3 +134,14 @@ def test_unsafe_marker_values_are_confined_to_unsafe_rejected_fixture_pack() -> 
     for unsafe_value in UNSAFE_FIXTURE_VALUES:
         assert unsafe_value not in safe_text
         assert unsafe_value in unsafe_text
+
+
+def test_restore_pitr_unsafe_fixture_differs_from_review_template() -> None:
+    safe_payload = _read_json(SANITIZED_COMPLETE / "restore_pitr_operator_evidence.json")
+    unsafe_payload = _read_json(UNSAFE_REJECTED / "restore_pitr_operator_evidence.json")
+
+    assert safe_payload["evidenceMode"] == "local-synthetic-preflight"
+    assert safe_payload["outcome"] == "needs-review"
+    assert unsafe_payload["evidenceMode"] == "real-isolated-drill"
+    assert unsafe_payload["outcome"] == "accepted"
+    assert unsafe_payload["restoreExecutionSummary"]["username"] == "fixture-restore-username-should-not-leak"

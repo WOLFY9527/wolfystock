@@ -532,7 +532,11 @@ The following must all be true before public multi-user deployment:
   environment, with accepted restore/PITR operator evidence from the real drill.
 - [ ] Restore/PITR evidence attachments include only sanitized validator output,
   manifests, and review references; raw command output, DSNs, env values, backup
-  paths, SQL, row data, dumps, and tracebacks are not attached.
+  paths, SQL, row data, dumps, tracebacks, private hostnames, usernames/passwords,
+  sensitive user-data paths, and launch approval claims are not attached. Accepted
+  operator artifacts include isolated target, backup artifact summary, PITR target,
+  restore execution summary, post-restore smoke, owner-isolation smoke, rollback
+  decision point, operator approvals, and sanitized artifact references.
 - [ ] Rollback plan is written, including last-good commit/image, DB restore
   decision point, health checks, and owner-isolation smoke.
 - [ ] Retention dry-run reports exist for high-growth domains; the policy-only
