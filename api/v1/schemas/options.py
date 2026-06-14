@@ -27,7 +27,16 @@ class OptionChainLimitations(_OptionsModel):
     no_broker_execution: bool = Field(default=True, alias="noBrokerExecution")
 
 
+OptionsLabMode = Literal["sandbox", "educational"]
+OptionsLabDataStatus = Literal["example_data", "sandbox_data", "unavailable", "ready"]
+
+
 class OptionsMetadata(_OptionsModel):
+    mode: OptionsLabMode = "sandbox"
+    data_status: OptionsLabDataStatus = Field(default="example_data", alias="dataStatus")
+    label: str = "教学沙盒 · 示例数据"
+    no_advice: bool = Field(default=True, alias="noAdvice")
+    execution_supported: bool = Field(default=False, alias="executionSupported")
     read_only: bool = Field(default=True, alias="readOnly")
     fixture_backed: bool = Field(default=True, alias="fixtureBacked")
     synthetic_data: bool = Field(default=True, alias="syntheticData")
