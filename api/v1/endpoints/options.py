@@ -113,6 +113,11 @@ def _map_options_metadata(metadata: OptionsLabMetadataModel | None) -> OptionsMe
     if metadata is None:
         return OptionsMetadata()
     return OptionsMetadata(
+        mode=metadata.mode,
+        dataStatus=metadata.data_status,
+        label=metadata.label,
+        noAdvice=metadata.no_advice,
+        executionSupported=metadata.execution_supported,
         read_only=metadata.read_only,
         fixture_backed=metadata.fixture_backed,
         synthetic_data=metadata.synthetic_data,

@@ -106,6 +106,41 @@ def _assert_no_safety_leaks(payload) -> None:
         assert value not in text
 
 
+def _assert_consumer_safe_sandbox_metadata(payload: dict) -> None:
+    metadata = payload["metadata"]
+    assert metadata["mode"] in {"sandbox", "educational"}
+    assert metadata["dataStatus"] in {"example_data", "sandbox_data", "unavailable", "ready"}
+    assert metadata["label"] in {"教学沙盒", "示例数据", "教学沙盒 · 示例数据"}
+    assert metadata["noAdvice"] is True
+    assert metadata["executionSupported"] is False
+    assert metadata["noOrderPlacement"] is True
+    assert metadata["noBrokerConnection"] is True
+    assert metadata["noTradingRecommendation"] is True
+    if metadata["fixtureBacked"] or metadata["syntheticData"]:
+        assert metadata["dataStatus"] == "example_data"
+        assert metadata["label"] == "教学沙盒 · 示例数据"
+
+
+def _assert_no_execution_implication_fields(payload: dict) -> None:
+    forbidden_truthy_keys = {
+        "brokerExecutionSupported",
+        "orderPlacementSupported",
+        "personalizedRecommendation",
+        "guaranteedPricing",
+        "targetProfit",
+        "targetLoss",
+    }
+    stack = [payload]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            for key, value in item.items():
+                assert not (key in forbidden_truthy_keys and value)
+                stack.append(value)
+        elif isinstance(item, list):
+            stack.extend(item)
+
+
 def _assert_consumer_scenario_frame_contract(frame: dict) -> None:
     assert set(frame.keys()) == {
         "contractVersion",
@@ -673,6 +708,66 @@ def test_endpoint_response_excludes_raw_provider_and_recommendation_language() -
         text = "\n".join(_json_text(response.json()) for response in responses).lower()
         for value in SAFETY_BLOCKED_MARKERS:
             assert value not in text
+    finally:
+        client.close()
+
+
+def test_options_lab_success_responses_expose_consumer_safe_sandbox_metadata() -> None:
+    client = _client()
+    try:
+        responses = [
+            client.get("/api/v1/options/underlyings/TEM/summary"),
+            client.get("/api/v1/options/underlyings/TEM/expirations"),
+            client.get("/api/v1/options/underlyings/TEM/chain"),
+            client.post(
+                "/api/v1/options/analyze",
+                json={
+                    "symbol": "TEM",
+                    "direction": "bullish",
+                    "targetPrice": 65,
+                    "targetDate": "2026-08-21",
+                    "maxPremium": 600,
+                    "riskProfile": "balanced",
+                    "strategies": ["long_call"],
+                },
+            ),
+            client.post(
+                "/api/v1/options/scenario",
+                json={
+                    "symbol": "TEM",
+                    "strategy": "long_call",
+                    "contractSymbol": "TEM260619C00055000",
+                    "targetPrice": 65,
+                },
+            ),
+            client.post(
+                "/api/v1/options/strategies/compare",
+                json={
+                    "symbol": "TEM",
+                    "direction": "bullish",
+                    "targetPrice": 65,
+                    "targetDate": "2026-06-19",
+                    "riskProfile": "balanced",
+                    "strategies": ["long_call", "bull_call_spread"],
+                },
+            ),
+            client.post(
+                "/api/v1/options/decision/evaluate",
+                json={
+                    "symbol": "TEM",
+                    "strategy": "bull_call_spread",
+                    "expiration": "2026-06-19",
+                    "targetPrice": 65,
+                    "targetDate": "2026-06-19",
+                    "riskBudget": 600,
+                },
+            ),
+        ]
+        assert all(response.status_code == 200 for response in responses)
+        for response in responses:
+            payload = response.json()
+            _assert_consumer_safe_sandbox_metadata(payload)
+            _assert_no_execution_implication_fields(payload)
     finally:
         client.close()
 
@@ -1441,6 +1536,11 @@ def test_decision_endpoint_returns_safe_demo_only_contract_quality() -> None:
         assert "补充 provider authority 与 live chain 证据" in readiness["nextEvidenceNeeded"]
         assert payload["metadata"]["noExternalCalls"] is True
         assert payload["metadata"]["readOnly"] is True
+        assert payload["metadata"]["mode"] == "sandbox"
+        assert payload["metadata"]["dataStatus"] == "example_data"
+        assert payload["metadata"]["label"] == "教学沙盒 · 示例数据"
+        assert payload["metadata"]["noAdvice"] is True
+        assert payload["metadata"]["executionSupported"] is False
         assert payload["metadata"]["noOrderPlacement"] is True
         assert payload["metadata"]["noBrokerConnection"] is True
         assert payload["metadata"]["noPortfolioMutation"] is True
@@ -1583,6 +1683,11 @@ def test_decision_endpoint_tradier_live_provider_opt_in_uses_mocked_http_and_fai
         assert "provider_adapter_contract_not_decision_grade" in readiness["blockingReasons"]
         assert "补充 provider authority 与 live chain 证据" in readiness["nextEvidenceNeeded"]
         assert payload["metadata"]["readOnly"] is True
+        assert payload["metadata"]["mode"] == "educational"
+        assert payload["metadata"]["dataStatus"] == "unavailable"
+        assert payload["metadata"]["label"] == "教学沙盒"
+        assert payload["metadata"]["noAdvice"] is True
+        assert payload["metadata"]["executionSupported"] is False
         assert payload["metadata"]["noOrderPlacement"] is True
         assert payload["metadata"]["noBrokerConnection"] is True
         assert payload["metadata"]["noPortfolioMutation"] is True
@@ -2318,6 +2423,18 @@ def test_decision_endpoint_options_readiness_distinguishes_delayed_and_live_usab
     live_payload = options._map_decision_response(live_result).model_dump(by_alias=True)
     delayed_readiness = delayed_payload["optionsReadiness"]
     live_readiness = live_payload["optionsReadiness"]
+
+    assert delayed_payload["metadata"]["mode"] == "educational"
+    assert delayed_payload["metadata"]["dataStatus"] == "ready"
+    assert delayed_payload["metadata"]["label"] == "教学沙盒"
+    assert delayed_payload["metadata"]["noAdvice"] is True
+    assert delayed_payload["metadata"]["executionSupported"] is False
+
+    assert live_payload["metadata"]["mode"] == "educational"
+    assert live_payload["metadata"]["dataStatus"] == "ready"
+    assert live_payload["metadata"]["label"] == "教学沙盒"
+    assert live_payload["metadata"]["noAdvice"] is True
+    assert live_payload["metadata"]["executionSupported"] is False
 
     assert delayed_readiness["optionsResearchReady"] is True
     assert delayed_readiness["readinessState"] == "delayed_usable"

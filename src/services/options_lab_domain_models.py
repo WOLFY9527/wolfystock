@@ -50,6 +50,11 @@ class OptionContractSnapshot:
 
 @dataclass
 class OptionsLabMetadataModel:
+    mode: str = "sandbox"
+    data_status: str = "example_data"
+    label: str = "教学沙盒 · 示例数据"
+    no_advice: bool = True
+    execution_supported: bool = False
     read_only: bool = True
     fixture_backed: bool = True
     synthetic_data: bool = True
@@ -65,6 +70,21 @@ class OptionsLabMetadataModel:
     provider_name: str = "synthetic_fixture"
     provider_capabilities: dict[str, Any] = field(default_factory=dict)
     live_provider_enabled: bool = False
+
+    def __post_init__(self) -> None:
+        tradeable_data = self.provider_capabilities.get("tradeableData")
+        authority_tier = str(self.provider_capabilities.get("authorityTier") or "").strip().lower()
+        if self.live_provider_enabled and not (self.fixture_backed or self.synthetic_data):
+            self.data_status = (
+                "ready" if tradeable_data is True and authority_tier == "decision_grade" else "unavailable"
+            )
+        elif not (self.fixture_backed or self.synthetic_data):
+            self.data_status = "sandbox_data"
+        if self.data_status != "example_data" and self.label == "教学沙盒 · 示例数据":
+            self.label = "教学沙盒"
+        self.mode = "sandbox" if self.data_status in {"example_data", "sandbox_data"} else "educational"
+        self.no_advice = True
+        self.execution_supported = False
 
 
 @dataclass
