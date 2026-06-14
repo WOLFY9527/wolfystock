@@ -19,9 +19,13 @@ from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.storage import AppUser, AppUserSession, DatabaseManager
 
 FORBIDDEN_PRIVACY_EXPORT_MARKERS = (
+    "password",
+    "passwordHash",
     "password_hash",
     "initialPassword",
     "passwordDelivery",
+    "sessionToken",
+    "session_token",
     "pbkdf2:admin-secret-hash",
     "pbkdf2:user-secret-hash",
     "raw-active-session-token",
@@ -34,6 +38,14 @@ FORBIDDEN_PRIVACY_EXPORT_MARKERS = (
     "apikey",
     "api-key",
     "totp-secret-ref",
+    "mfaSecret",
+    "mfa_secret",
+    "rawMfaSecret",
+    "raw_mfa_secret",
+    "recoverySecret",
+    "recovery_secret",
+    "rawRecoverySecret",
+    "raw_recovery_secret",
     "recovery-code-hash",
     "provider credential",
     "provider_credential",
@@ -42,6 +54,22 @@ FORBIDDEN_PRIVACY_EXPORT_MARKERS = (
     "traceback",
     "stack trace",
 )
+
+FORBIDDEN_RESPONSE_KEYS = {
+    "password",
+    "passwordHash",
+    "password_hash",
+    "initialPassword",
+    "sessionToken",
+    "session_token",
+    "cookie",
+    "rawRecoverySecret",
+    "raw_recovery_secret",
+    "rawMfaSecret",
+    "raw_mfa_secret",
+    "mfaSecret",
+    "mfa_secret",
+}
 
 
 def _admin_user(*, admin_capabilities: tuple[str, ...] = ("users:read",)) -> CurrentUser:
@@ -170,9 +198,21 @@ class AdminUsersApiTestCase(unittest.TestCase):
         return json.dumps(response.json(), ensure_ascii=False)
 
     def _assert_no_privacy_export_leaks(self, response) -> None:
+        self._assert_no_forbidden_response_keys(response.json())
         text = self._json_text(response).lower()
         for marker in FORBIDDEN_PRIVACY_EXPORT_MARKERS:
+            if marker == "password":
+                continue
             self.assertNotIn(marker.lower(), text)
+
+    def _assert_no_forbidden_response_keys(self, value) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                self.assertNotIn(key, FORBIDDEN_RESPONSE_KEYS)
+                self._assert_no_forbidden_response_keys(child)
+        elif isinstance(value, list):
+            for child in value:
+                self._assert_no_forbidden_response_keys(child)
 
     def _count(self, model) -> int:
         from sqlalchemy import func, select
@@ -235,6 +275,37 @@ class AdminUsersApiTestCase(unittest.TestCase):
         self.assertNotIn("api_key", text.lower())
         self.assertNotIn("secret", text.lower())
 
+    def test_admin_user_lifecycle_fields_are_explicit_and_redacted(self) -> None:
+        self._as_admin()
+
+        list_response = self.client.get("/api/v1/admin/users", params={"sort": "username_asc"})
+        detail_response = self.client.get("/api/v1/admin/users/user-1")
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(detail_response.status_code, 200)
+
+        items = {item["id"]: item for item in list_response.json()["items"]}
+        active_user = items["user-1"]
+        inactive_user = items["user-2"]
+        for item in (active_user, inactive_user, detail_response.json()["user"]):
+            self.assertIn("status", item)
+            self.assertIn("role", item)
+            self.assertIn("createdAt", item)
+            self.assertIn("updatedAt", item)
+            self.assertIn("lastSeenAt", item)
+            self.assertIn("lifecycleState", item)
+            self.assertNotIn("lastLoginAt", item)
+
+        self.assertEqual(active_user["status"], "active")
+        self.assertEqual(active_user["lifecycleState"], "active")
+        self.assertEqual(inactive_user["status"], "inactive")
+        self.assertEqual(inactive_user["lifecycleState"], "inactive")
+        self.assertEqual(detail_response.json()["user"]["status"], "active")
+        self.assertEqual(detail_response.json()["user"]["lifecycleState"], "active")
+
+        self._assert_no_privacy_export_leaks(list_response)
+        self._assert_no_privacy_export_leaks(detail_response)
+
     def test_endpoint_validates_neutral_service_dicts_into_existing_public_schema(self) -> None:
         self._as_admin()
 
@@ -296,6 +367,8 @@ class AdminUsersApiTestCase(unittest.TestCase):
 
         list_item = list_response.json()["items"][0]
         self.assertEqual(list_item["displayName"], "Alice Analyst")
+        self.assertEqual(list_item["status"], "active")
+        self.assertEqual(list_item["lifecycleState"], "active")
         self.assertEqual(list_item["isActive"], True)
         self.assertEqual(list_item["passwordState"], "set")
         self.assertEqual(list_item["sessionSummary"]["activeCount"], 1)
@@ -306,6 +379,8 @@ class AdminUsersApiTestCase(unittest.TestCase):
 
         detail_payload = detail_response.json()
         self.assertEqual(detail_payload["user"]["displayName"], "Alice Analyst")
+        self.assertEqual(detail_payload["user"]["status"], "active")
+        self.assertEqual(detail_payload["user"]["lifecycleState"], "active")
         self.assertEqual(detail_payload["sessions"][0]["sessionHandle"], "sess_123456789abc")
         self.assertEqual(detail_payload["sessions"][0]["status"], "active")
         self.assertEqual(detail_payload["dataLinks"]["activity"], "/api/v1/admin/users/user-1/activity")

@@ -22,6 +22,22 @@ from src.admin_rbac import SUPPORT_ADMIN_ROLE
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.storage import AdminUserRole, AppUserSession, DatabaseManager, ExecutionLogSession
 
+FORBIDDEN_RESPONSE_KEYS = {
+    "password",
+    "passwordHash",
+    "password_hash",
+    "initialPassword",
+    "sessionToken",
+    "session_token",
+    "cookie",
+    "rawRecoverySecret",
+    "raw_recovery_secret",
+    "rawMfaSecret",
+    "raw_mfa_secret",
+    "mfaSecret",
+    "mfa_secret",
+}
+
 
 def _reset_auth_globals() -> None:
     auth._auth_enabled = None
@@ -227,6 +243,7 @@ class AdminSecurityApiTestCase(unittest.TestCase):
             )
 
     def _assert_safe_payload(self, response) -> None:
+        self._assert_no_forbidden_response_keys(response.json())
         text = self._json_text(response)
         forbidden = [
             "password_hash",
@@ -247,6 +264,15 @@ class AdminSecurityApiTestCase(unittest.TestCase):
         ]
         for needle in forbidden:
             self.assertNotIn(str(needle), text)
+
+    def _assert_no_forbidden_response_keys(self, value) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                self.assertNotIn(key, FORBIDDEN_RESPONSE_KEYS)
+                self._assert_no_forbidden_response_keys(child)
+        elif isinstance(value, list):
+            for child in value:
+                self._assert_no_forbidden_response_keys(child)
 
     def _onboarding_audit_text(self, row: ExecutionLogSession) -> str:
         text = json.dumps(row.summary_json, ensure_ascii=False)
@@ -307,12 +333,15 @@ class AdminSecurityApiTestCase(unittest.TestCase):
                 _=_admin_user(),
             )
 
-    def _assert_safe_audit(self, action: str, *, expected_status: str) -> None:
+    def _assert_safe_audit(self, action: str, *, expected_status: str, expected_outcome: str = "success") -> None:
         rows = self._audit_rows(action)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].overall_status, expected_status)
         text = json.dumps(rows[0].summary_json, ensure_ascii=False)
         text += json.dumps(self.db.get_execution_log_session_detail(rows[0].session_id), ensure_ascii=False)
+        self.assertIn(action, text)
+        self.assertIn(f'"event": "{action}"', text)
+        self.assertIn(f'"outcome": "{expected_outcome}"', text)
         self.assertIn("user-1", text)
         self.assertIn("admin", text)
         self.assertNotIn("raw-active-session-token", text)
@@ -345,6 +374,20 @@ class AdminSecurityApiTestCase(unittest.TestCase):
             json={"reason": "support request", "confirm": "DISABLE"},
         )
         self.assertEqual(forbidden.status_code, 403)
+
+        enable_forbidden = self.client.post(
+            "/api/v1/admin/users/user-1/enable",
+            json={"reason": "support request", "confirm": "ENABLE"},
+        )
+        revoke_forbidden = self.client.post(
+            "/api/v1/admin/users/user-1/revoke-sessions",
+            json={"reason": "support request", "confirm": "REVOKE_SESSIONS", "scope": "all"},
+        )
+        self.assertEqual(enable_forbidden.status_code, 403)
+        self.assertEqual(revoke_forbidden.status_code, 403)
+        self._assert_safe_payload(forbidden)
+        self._assert_safe_payload(enable_forbidden)
+        self._assert_safe_payload(revoke_forbidden)
 
         self._as_user()
         onboard_forbidden = self.client.post(
@@ -655,6 +698,7 @@ class AdminSecurityApiTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "completed")
         self.assertTrue(payload["changed"])
         self.assertEqual(payload["sessionsRevoked"], 2)
+        self.assertTrue(payload["auditEventId"])
         self.assertFalse(self._user_is_active("user-1"))
         self.assertEqual(self._active_session_count("user-1"), 0)
         self._assert_safe_payload(response)
@@ -677,9 +721,13 @@ class AdminSecurityApiTestCase(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["changed"])
+        payload = response.json()
+        self.assertEqual(payload["action"], "enable")
+        self.assertEqual(payload["status"], "completed")
+        self.assertTrue(payload["changed"])
+        self.assertTrue(payload["auditEventId"])
         self.assertTrue(self._user_is_active("user-1"))
-        self.assertEqual(response.json()["sessionsRevoked"], 0)
+        self.assertEqual(payload["sessionsRevoked"], 0)
         self._assert_safe_payload(response)
         self._assert_safe_audit("admin_security.account_enabled", expected_status="completed")
 
@@ -691,7 +739,11 @@ class AdminSecurityApiTestCase(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["sessionsRevoked"], 2)
+        payload = response.json()
+        self.assertEqual(payload["action"], "revoke_sessions")
+        self.assertEqual(payload["status"], "completed")
+        self.assertTrue(payload["auditEventId"])
+        self.assertEqual(payload["sessionsRevoked"], 2)
         self.assertEqual(self._active_session_count("user-1"), 0)
         self._assert_safe_payload(response)
         self._assert_safe_audit("admin_security.sessions_revoked", expected_status="completed")

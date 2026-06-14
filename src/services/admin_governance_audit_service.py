@@ -91,6 +91,7 @@ class AdminGovernanceAuditService:
             {
                 "target_user_id": str(target_user_id or "").strip(),
                 "reason": str(reason or "").strip()[:500],
+                "event": action,
                 **(metadata or {}),
             }
         )
