@@ -16,7 +16,9 @@ from fastapi.testclient import TestClient
 try:
     import litellm  # noqa: F401
 except ModuleNotFoundError:
-    sys.modules["litellm"] = MagicMock()
+    litellm_mock = MagicMock()
+    litellm_mock.Router = MagicMock()
+    sys.modules["litellm"] = litellm_mock
 
 import src.auth as auth
 from api.app import create_app
@@ -47,6 +49,10 @@ FORBIDDEN_LEAK_MARKERS = (
     "sk-secret",
     "SECRET",
     "detail",
+    "loc",
+    "input",
+    "ctx",
+    "type",
 )
 
 
@@ -99,13 +105,23 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
         os.environ.pop(key, None)
 
 
-def _assert_safe_error_payload(response, *, status_code: int, error: str, message: str) -> None:
+def _assert_safe_error_payload(
+    response,
+    *,
+    status_code: int,
+    error: str,
+    message: str,
+    retryable: bool | None = None,
+) -> None:
     assert response.status_code == status_code
     payload = response.json()
     assert payload["error"] == error
-    assert payload["message"] == message
     assert payload["code"] == error
+    assert payload["message"] == message
     assert payload["status"] == status_code
+    if retryable is not None:
+        assert payload["retryable"] is retryable
+    assert "detail" not in payload
     serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
     for marker in FORBIDDEN_LEAK_MARKERS:
         assert marker not in serialized
@@ -180,3 +196,18 @@ def test_agent_chat_internal_error_response_is_consumer_safe(client: TestClient,
         error="internal_error",
         message="AI research is temporarily unavailable. Please retry later.",
     )
+
+
+def test_validation_error_response_is_consumer_safe_for_body_query_and_path(client: TestClient) -> None:
+    body_response = client.post("/api/v1/agent/chat", json={})
+    query_response = client.get("/api/v1/history", params={"page": 0})
+    path_response = client.delete("/api/v1/portfolio/accounts/not-a-number")
+
+    for response in (body_response, query_response, path_response):
+        _assert_safe_error_payload(
+            response,
+            status_code=422,
+            error="validation_error",
+            message="请求参数验证失败",
+            retryable=False,
+        )
