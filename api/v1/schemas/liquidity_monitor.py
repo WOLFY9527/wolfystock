@@ -5,9 +5,10 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from src.contracts.source_confidence import MarketIntelligenceSourceTier
+from src.services.market_data_quality import build_consumer_data_quality_state
 
 
 FreshnessLabel = Literal["live", "cached", "delayed", "stale", "fallback", "mock", "error", "unavailable"]
@@ -22,6 +23,13 @@ ThemeFlowStateLabel = Literal["leading", "broadening", "rotating", "crowded", "f
 ConfidenceLabel = Literal["high", "medium", "low", "blocked"]
 CapitalFlowDestinationLabel = Literal["growth_ai_software_semis", "oil", "gold", "btc", "defensives", "no_clear_edge"]
 CapitalFlowPressureLabel = Literal["absorbing", "lagging", "easing", "tightening", "benign", "stress", "balanced"]
+DataQualityState = Literal["ready", "delayed", "cached", "partial", "no_evidence", "unavailable"]
+
+
+class ConsumerDataQuality(BaseModel):
+    state: DataQualityState
+    label: str
+    available: bool = False
 
 
 class CapitalFlowSourceAssetPressure(BaseModel):
@@ -196,8 +204,29 @@ class LiquidityMonitorResponse(BaseModel):
     generatedAt: str
     score: LiquidityMonitorScore
     freshness: LiquidityMonitorFreshnessSummary
+    dataQuality: ConsumerDataQuality
     indicators: list[LiquidityMonitorIndicator] = Field(default_factory=list)
     capitalFlowSignal: LiquidityMonitorCapitalFlowSignal | None = None
     liquidityImpulseSynthesis: LiquidityImpulseSynthesisPayload
     advisoryDisclosure: str
     sourceMetadata: LiquidityMonitorSourceMetadata
+
+    @model_validator(mode="before")
+    @classmethod
+    def _populate_data_quality(cls, value: Any) -> Any:
+        if not isinstance(value, dict) or "dataQuality" in value:
+            return value
+        payload = dict(value)
+        freshness = payload.get("freshness") if isinstance(payload.get("freshness"), dict) else {}
+        score = payload.get("score") if isinstance(payload.get("score"), dict) else {}
+        payload["dataQuality"] = build_consumer_data_quality_state(
+            {
+                "freshness": freshness.get("status"),
+                "isUnavailable": score.get("regime") == "unavailable" and not payload.get("indicators"),
+                "isPartial": any(
+                    isinstance(item, dict) and item.get("status") == "partial"
+                    for item in payload.get("indicators") or []
+                ),
+            }
+        )
+        return payload

@@ -24,6 +24,7 @@ from src.services.investor_signal_model import (
 )
 from src.services.provider_evidence_snapshot import build_provider_evidence_snapshot
 from src.services.liquidity_impulse_synthesis_adapter import build_liquidity_impulse_synthesis_payload
+from src.services.market_data_quality import build_consumer_data_quality_state
 from src.services.cn_money_market_rates_contracts import (
     OFFICIAL_CN_MONEY_MARKET_RATES_CONTEXT_METRICS,
     OFFICIAL_CN_MONEY_MARKET_RATES_PROVIDER_ID,
@@ -356,6 +357,12 @@ class LiquidityMonitorService:
         available_freshness = [str(item["freshness"]) for item in indicators if item["status"] != "unavailable"]
         available_as_of = [str(item["updatedAt"] or "") for item in indicators if item["status"] != "unavailable" and item.get("updatedAt")]
 
+        freshness_summary = {
+            "status": self._weakest_freshness(available_freshness) if available_freshness else "unavailable",
+            "weakestIndicatorFreshness": self._weakest_freshness(available_freshness) if available_freshness else "unavailable",
+            "latestAsOf": max(available_as_of) if available_as_of else None,
+        }
+
         return {
             "endpoint": "/api/v1/market/liquidity-monitor",
             "generatedAt": self._now().isoformat(timespec="seconds"),
@@ -367,11 +374,14 @@ class LiquidityMonitorService:
                 "possibleIndicatorWeight": POSSIBLE_WEIGHT,
                 "includedIndicatorWeight": included_weight,
             },
-            "freshness": {
-                "status": self._weakest_freshness(available_freshness) if available_freshness else "unavailable",
-                "weakestIndicatorFreshness": self._weakest_freshness(available_freshness) if available_freshness else "unavailable",
-                "latestAsOf": max(available_as_of) if available_as_of else None,
-            },
+            "freshness": freshness_summary,
+            "dataQuality": build_consumer_data_quality_state(
+                {
+                    "freshness": freshness_summary["status"],
+                    "isUnavailable": regime == "unavailable" and not available_freshness,
+                    "isPartial": any(item["status"] == "partial" for item in indicators),
+                }
+            ),
             "indicators": indicators,
             "observationEvidenceSnapshot": self._build_observation_evidence_snapshot(indicators),
             "capitalFlowSignal": self._build_capital_flow_signal(indicators, panels),

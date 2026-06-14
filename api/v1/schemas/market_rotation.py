@@ -39,6 +39,19 @@ RotationRiskLabel = Literal[
     "single_name_driven",
     "stale_or_incomplete_windows",
 ]
+DataQualityState = Literal["ready", "delayed", "cached", "partial", "no_evidence", "unavailable"]
+
+
+class ConsumerDataQualityModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    state: DataQualityState
+    label: str
+    available: bool = False
+
+
+def _default_unavailable_data_quality() -> ConsumerDataQualityModel:
+    return ConsumerDataQualityModel(state="unavailable", label="暂不可用", available=False)
 
 
 class RotationRadarTimeWindowModel(BaseModel):
@@ -254,6 +267,7 @@ class RotationRadarConsumerProviderStateModel(BaseModel):
     sourceTier: str = "unknown"
     providerTier: str = "unknown"
     freshness: str = "fallback"
+    dataQuality: ConsumerDataQualityModel = Field(default_factory=_default_unavailable_data_quality)
     asOf: Optional[str] = None
     coverage: Dict[str, Any] = Field(default_factory=dict)
     sourceAuthorityAllowed: bool = False
@@ -292,6 +306,7 @@ class RotationRadarConsumerThemeQualityModel(BaseModel):
     isFallback: bool = False
     isStale: bool = False
     isPartial: bool = False
+    dataQuality: ConsumerDataQualityModel = Field(default_factory=_default_unavailable_data_quality)
     evidenceQuality: str = "insufficient"
     dataGaps: List[str] = Field(default_factory=list)
     breadthEvidence: Optional["RotationRadarConsumerThemeBreadthEvidenceModel"] = None
@@ -321,6 +336,7 @@ class RotationRadarConsumerEvidenceSnapshotModel(BaseModel):
     isFallback: bool = False
     isStale: bool = False
     isPartial: bool = False
+    dataQuality: ConsumerDataQualityModel = Field(default_factory=_default_unavailable_data_quality)
     headlineEligibleThemeCount: int = 0
     observationThemeCount: int = 0
     taxonomyThemeCount: int = 0

@@ -310,6 +310,7 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
         assert consumer_snapshot["isFallback"] is True
         assert consumer_snapshot["isStale"] is False
         assert consumer_snapshot["isPartial"] is False
+        assert consumer_snapshot["dataQuality"] == {"state": "cached", "label": "使用缓存数据", "available": False}
         assert consumer_snapshot["headlineEligibleThemeCount"] == 0
         assert consumer_snapshot["observationThemeCount"] == len(payload["themes"])
         assert consumer_snapshot["taxonomyThemeCount"] == 0
@@ -318,6 +319,11 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
         assert consumer_snapshot["providerState"]["present"] is False
         assert consumer_snapshot["providerState"]["status"] == "absent"
         assert consumer_snapshot["providerState"]["sourceType"] == "fallback_static"
+        assert consumer_snapshot["providerState"]["dataQuality"] == {
+            "state": "cached",
+            "label": "使用缓存数据",
+            "available": False,
+        }
         assert consumer_snapshot["providerState"]["sourceAuthorityAllowed"] is False
         assert consumer_snapshot["providerState"]["scoreContributionAllowed"] is False
         assert consumer_snapshot["providerState"]["noExternalCalls"] is True
@@ -335,9 +341,15 @@ def test_market_rotation_radar_response_is_safe_and_read_only(monkeypatch: pytes
             "isFallback",
             "isStale",
             "isPartial",
+            "dataQuality",
             "evidenceQuality",
             "dataGaps",
             "breadthEvidence",
+        }
+        assert consumer_snapshot["themes"][0]["dataQuality"] == {
+            "state": "cached",
+            "label": "使用缓存数据",
+            "available": False,
         }
         assert set(consumer_snapshot["themes"][0]["breadthEvidence"]) == {
             "source",
@@ -1334,8 +1346,18 @@ def test_market_rotation_radar_partial_quote_failures_are_sanitized_in_api_paylo
         consumer_snapshot = payload["consumerEvidenceSnapshot"]
         assert consumer_snapshot["isPartial"] is True
         assert consumer_snapshot["freshness"] == "partial"
+        assert consumer_snapshot["dataQuality"] == {
+            "state": "partial",
+            "label": "部分数据缺失",
+            "available": False,
+        }
         assert consumer_snapshot["providerState"]["status"] == "partial"
         assert consumer_snapshot["providerState"]["sourceType"] in {"synthetic_fixture", "unofficial_proxy"}
+        assert consumer_snapshot["providerState"]["dataQuality"] == {
+            "state": "partial",
+            "label": "部分数据缺失",
+            "available": False,
+        }
         assert consumer_snapshot["providerState"]["coverage"]["usableSymbolCount"] > 0
         assert consumer_snapshot["scoreContributionAllowed"] is False
         assert "partial_coverage" in consumer_snapshot["reasonCodes"]
@@ -1347,6 +1369,14 @@ def test_market_rotation_radar_partial_quote_failures_are_sanitized_in_api_paylo
         assert ai_consumer_theme["breadthEvidence"]["observationOnly"] is True
         assert ai_consumer_theme["breadthEvidence"]["authorityGrant"] is False
         assert ai_consumer_theme["breadthEvidence"]["scoreContributionAllowed"] is False
+        assert ai_consumer_theme["dataQuality"] == {
+            "state": "partial",
+            "label": "部分数据缺失",
+            "available": False,
+        }
+        dumped_quality = json.dumps(ai_consumer_theme["dataQuality"], ensure_ascii=False)
+        for field in ("sourceType", "trustLevel", "reasonCode", "confidence", "isPartial"):
+            assert field not in dumped_quality
         _assert_consumer_snapshot_excludes_admin_fields(consumer_snapshot)
         ai_apps = next(theme for theme in payload["themes"] if theme["id"] == "ai_applications")
         assert ai_apps["rotationStateEvidence"]["evidenceSnapshot"]["sourceConfidence"]["freshness"] == "partial"

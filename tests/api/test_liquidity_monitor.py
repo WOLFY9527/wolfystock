@@ -206,9 +206,11 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
         "advisoryDisclosure",
         "sourceMetadata",
         "capitalFlowSignal",
+        "dataQuality",
     }
     assert body["endpoint"] == "/api/v1/market/liquidity-monitor"
     assert body["score"]["regime"] == "supportive"
+    assert body["dataQuality"] == {"state": "delayed", "label": "数据延迟", "available": False}
     assert set(body["sourceMetadata"]) == {"externalProviderCalls", "providerRuntimeChanged", "marketCacheMutation"}
     assert body["sourceMetadata"]["externalProviderCalls"] is False
     assert body["sourceMetadata"]["providerRuntimeChanged"] is False
@@ -234,6 +236,66 @@ def test_liquidity_monitor_route_returns_schema_compatible_payload() -> None:
     assert diagnostics["requiredProviderClass"] == "official_public.vix_or_volatility"
     assert diagnostics["realSourceAvailable"] is True
     assert diagnostics["scoreContributionAllowed"] is True
+
+
+def test_liquidity_monitor_route_exposes_safe_data_quality_for_unavailable_score() -> None:
+    app = FastAPI()
+    app.include_router(liquidity_monitor.router, prefix="/api/v1/market")
+
+    payload = {
+        "endpoint": "/api/v1/market/liquidity-monitor",
+        "generatedAt": "2026-05-07T10:00:00+08:00",
+        "score": {
+            "value": 50,
+            "regime": "unavailable",
+            "confidence": 0.12,
+            "includedIndicatorCount": 0,
+            "possibleIndicatorWeight": 43,
+            "includedIndicatorWeight": 0,
+        },
+        "freshness": {
+            "status": "unavailable",
+            "weakestIndicatorFreshness": "unavailable",
+            "latestAsOf": None,
+        },
+        "indicators": [],
+        "liquidityImpulseSynthesis": {
+            "liquidityImpulse": "data_insufficient",
+            "impulseLabel": "Data insufficient for a reliable liquidity call",
+            "subtype": "data_insufficient",
+            "confidence": 0.12,
+            "confidenceLabel": "insufficient",
+            "pillarScores": {},
+            "directionScore": 0.0,
+            "dominantDrivers": [],
+            "counterEvidence": [],
+            "dataGaps": [],
+            "narrativeBullets": [],
+            "evidenceQuality": {},
+            "notInvestmentAdvice": True,
+        },
+        "advisoryDisclosure": "Advisory-only liquidity monitor output.",
+        "sourceMetadata": {
+            "externalProviderCalls": False,
+            "providerRuntimeChanged": False,
+            "marketCacheMutation": False,
+        },
+    }
+
+    with patch("api.v1.endpoints.liquidity_monitor.LiquidityMonitorService") as mock_service:
+        mock_service.return_value.get_liquidity_monitor.return_value = payload
+        response = TestClient(app).get("/api/v1/market/liquidity-monitor")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["dataQuality"] == {
+        "state": "unavailable",
+        "label": "暂不可用",
+        "available": False,
+    }
+    dumped_quality = json.dumps(body["dataQuality"], ensure_ascii=False)
+    for field in ("trustLevel", "reasonCode", "isFallback", "sourceType", "confidence"):
+        assert field not in dumped_quality
 
 
 def test_liquidity_monitor_route_preserves_evidence_input_authority_metadata() -> None:

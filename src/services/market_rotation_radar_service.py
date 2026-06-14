@@ -25,6 +25,7 @@ from src.services.market_data_source_registry import (
 from src.services.data_source_router import DataSourceRouteRequest
 from src.services.data_source_router_diagnostics import build_data_source_route_diagnostic_snapshot
 from src.services.investor_signal_model import build_consumer_safe_investor_signal
+from src.services.market_data_quality import build_consumer_data_quality_state
 from src.services.market_intelligence_trust_gate import (
     evaluate_market_intelligence_trust,
     evaluate_market_intelligence_trust_from_sources,
@@ -1609,6 +1610,14 @@ class MarketRotationRadarService:
             "isFallback": bool(payload.get("isFallback")),
             "isStale": bool(payload.get("isStale")),
             "isPartial": is_partial,
+            "dataQuality": build_consumer_data_quality_state(
+                {
+                    "freshness": freshness,
+                    "isFallback": bool(payload.get("isFallback")),
+                    "isStale": bool(payload.get("isStale")),
+                    "isPartial": is_partial,
+                }
+            ),
             "headlineEligibleThemeCount": self._safe_int(summary.get("headlineEligibleThemeCount")),
             "observationThemeCount": self._safe_int(
                 summary.get("observationThemeCount"),
@@ -1664,6 +1673,14 @@ class MarketRotationRadarService:
             "sourceTier": source_tier,
             "providerTier": provider_tier,
             "freshness": freshness,
+            "dataQuality": build_consumer_data_quality_state(
+                {
+                    "freshness": freshness,
+                    "isFallback": provider_tier == "fallback" or source_tier == "static_fallback",
+                    "isStale": freshness == "stale",
+                    "isPartial": str(source_meta.get("status") or "") == "partial",
+                }
+            ),
             "asOf": source_meta.get("asOf"),
             "coverage": {
                 "requestedSymbolCount": self._safe_int(
@@ -1769,6 +1786,14 @@ class MarketRotationRadarService:
             "isFallback": bool(theme.get("isFallback")),
             "isStale": bool(theme.get("isStale")),
             "isPartial": bool(theme.get("isPartial")),
+            "dataQuality": build_consumer_data_quality_state(
+                {
+                    "freshness": theme.get("freshness"),
+                    "isFallback": bool(theme.get("isFallback")),
+                    "isStale": bool(theme.get("isStale")),
+                    "isPartial": bool(theme.get("isPartial")),
+                }
+            ),
             "evidenceQuality": str(theme.get("evidenceQuality") or "insufficient"),
             "dataGaps": [str(item) for item in (theme.get("dataGaps") or []) if str(item or "").strip()],
         }
