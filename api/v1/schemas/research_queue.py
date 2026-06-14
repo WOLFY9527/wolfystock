@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -50,6 +50,10 @@ class ResearchQueueBuildInputs(_ResearchQueueModel):
     portfolio: list[ResearchQueueSeedItem] = Field(default_factory=list)
     research: list[ResearchQueueSeedItem] = Field(default_factory=list)
     dataQuality: list[ResearchQueueSeedItem] = Field(default_factory=list)
+    moneyFlowSummary: Any | None = None
+    eventRadarSummary: Any | None = None
+    personalSummary: Any | None = None
+    dataQualitySummary: Any | None = None
 
 
 class ResearchQueueItem(_ResearchQueueModel):
