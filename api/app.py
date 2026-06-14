@@ -48,6 +48,7 @@ _ROOT_OPENAPI_PATH = "/openapi.json"
 _ROOT_SWAGGER_PATH = "/docs"
 _ROOT_SWAGGER_OAUTH2_REDIRECT_PATH = "/docs/oauth2-redirect"
 _ROOT_REDOC_PATH = "/redoc"
+_SAFE_PUBLIC_READINESS_STATES = {"ready", "degraded", "unavailable", "maintenance", "unknown"}
 
 
 def _iso_now() -> str:
@@ -111,6 +112,60 @@ def _build_health_payload(
     }
 
 
+def _build_public_health_payload(*, mode: str, status: str, ready: bool) -> Dict[str, Any]:
+    return {
+        "status": status,
+        "timestamp": _iso_now(),
+        "service": "daily-stock-analysis-api",
+        "mode": mode,
+        "ready": ready,
+    }
+
+
+def _project_public_readiness_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    checks = payload.get("checks")
+    if not isinstance(checks, dict):
+        checks = {}
+
+    check_statuses = {
+        name: check.get("status")
+        for name, check in checks.items()
+        if isinstance(check, dict)
+    }
+    unknown_status = any(
+        status not in {"ok", "not_ready", "maintenance"}
+        for status in check_statuses.values()
+    )
+    ready = bool(payload.get("ready")) and not unknown_status
+
+    if unknown_status:
+        public_state = "unknown"
+    elif any(status == "maintenance" for status in check_statuses.values()):
+        public_state = "maintenance"
+    elif ready and payload.get("warnings"):
+        public_state = "degraded"
+    elif ready:
+        public_state = "ready"
+    elif any(
+        check_statuses.get(name) == "not_ready"
+        for name in ("system_config", "storage")
+    ):
+        public_state = "unavailable"
+    elif any(status == "not_ready" for status in check_statuses.values()):
+        public_state = "degraded"
+    else:
+        public_state = "unknown"
+
+    if public_state not in _SAFE_PUBLIC_READINESS_STATES:
+        public_state = "unknown"
+
+    return _build_public_health_payload(
+        mode="ready",
+        status=public_state,
+        ready=public_state == "ready",
+    )
+
+
 def _storage_readiness_check() -> Tuple[bool, Dict[str, Any]]:
     try:
         db = get_db()
@@ -120,16 +175,16 @@ def _storage_readiness_check() -> Tuple[bool, Dict[str, Any]]:
         finally:
             session.close()
         return True, {"status": "ok", "detail": "storage session responded to SELECT 1"}
-    except Exception as exc:
-        return False, {"status": "not_ready", "detail": f"storage check failed: {exc}"}
+    except Exception:
+        return False, {"status": "not_ready", "detail": "storage check failed"}
 
 
 def _task_queue_readiness_check(app: FastAPI) -> Tuple[bool, Dict[str, Any], list[str]]:
     try:
         queue = getattr(app.state, "task_queue", None) or get_task_queue()
         runtime = queue.get_runtime_status()
-    except Exception as exc:
-        return False, {"status": "not_ready", "detail": f"task queue check failed: {exc}"}, []
+    except Exception:
+        return False, {"status": "not_ready", "detail": "task queue check failed"}, []
 
     ready = bool(runtime.get("topology_ok", True)) and not bool(runtime.get("shutdown"))
     detail = "task queue ready"
@@ -137,14 +192,18 @@ def _task_queue_readiness_check(app: FastAPI) -> Tuple[bool, Dict[str, Any], lis
     warnings = [warning] if warning else []
     if bool(runtime.get("shutdown")):
         detail = "task queue is shutting down"
+        status = "maintenance"
     elif not bool(runtime.get("topology_ok", True)):
         detail = (
             "process-local task queue requires single-process API deployment "
             f"(configured_worker_count={runtime.get('configured_worker_count')})"
         )
+        status = "not_ready"
+    else:
+        status = "ok"
 
     return ready, {
-        "status": "ok" if ready else "not_ready",
+        "status": status,
         "detail": detail,
         "mode": runtime.get("mode"),
         "single_process_required": runtime.get("single_process_required"),
@@ -361,21 +420,19 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     @app.get(
         "/api/health/live",
         response_model=HealthResponse,
+        response_model_exclude_none=True,
         tags=["Health"],
         summary="存活检查",
         description="用于判断 API 进程是否存活"
     )
     async def live_health_check() -> HealthResponse:
         """Liveness endpoint: cheap and process-local."""
-        return HealthResponse(**_build_health_payload(
-            mode="live",
-            ready=True,
-            checks={"process": {"status": "ok", "detail": "process is serving requests"}},
-        ))
+        return HealthResponse(**_build_public_health_payload(mode="live", status="ok", ready=True))
 
     @app.get(
         "/api/health/ready",
         response_model=HealthResponse,
+        response_model_exclude_none=True,
         tags=["Health"],
         summary="就绪检查",
         description="用于判断 API 是否已准备好承接流量"
@@ -383,11 +440,12 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     async def ready_health_check():
         """Readiness endpoint: validates core runtime dependencies."""
         status_code, payload = _readiness_payload(app)
-        return JSONResponse(status_code=status_code, content=payload)
+        return JSONResponse(status_code=status_code, content=_project_public_readiness_payload(payload))
 
     @app.get(
         "/api/health",
         response_model=HealthResponse,
+        response_model_exclude_none=True,
         tags=["Health"],
         summary="健康检查",
         description="默认健康检查，返回就绪状态"
@@ -395,7 +453,7 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     async def health_check():
         """Compatibility alias for readiness checks."""
         status_code, payload = _readiness_payload(app)
-        return JSONResponse(status_code=status_code, content=payload)
+        return JSONResponse(status_code=status_code, content=_project_public_readiness_payload(payload))
     
     # ============================================================
     # 静态文件托管（前端 SPA）
