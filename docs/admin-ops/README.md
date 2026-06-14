@@ -30,3 +30,8 @@ operations dashboards, or admin frontend UX contracts.
 - Security, RBAC, MFA, and admin mutations require current audit/runbook review
   and narrow validation.
 - Operator evidence must be sanitized before handoff.
+- Private-beta onboarding responses may contain `initialPassword` exactly once
+  with `passwordDelivery=returned_once`. Treat it as one-time secret material:
+  do not log response bodies, do not store it in browser history, screenshots,
+  proxy logs, CDN logs, analytics, or audit metadata, copy and hand it off only
+  through the approved operator process, and discard it after use.

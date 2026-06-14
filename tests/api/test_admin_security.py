@@ -267,7 +267,13 @@ class AdminSecurityApiTestCase(unittest.TestCase):
         for needle in extra_forbidden or []:
             self.assertNotIn(needle, text)
 
-    def _assert_safe_onboarding_audit(self, *, expected_status: str, expected_reason_code: str | None = None) -> None:
+    def _assert_safe_onboarding_audit(
+        self,
+        *,
+        expected_status: str,
+        expected_reason_code: str | None = None,
+        extra_forbidden: list[str] | None = None,
+    ) -> None:
         rows = self._audit_rows("admin_user_onboarding.user_created")
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].overall_status, expected_status)
@@ -275,7 +281,7 @@ class AdminSecurityApiTestCase(unittest.TestCase):
         self.assertIn("acct:", text)
         if expected_reason_code is not None:
             self.assertIn(f'"reason_code": "{expected_reason_code}"', text)
-        self._assert_onboarding_audit_redacted(text)
+        self._assert_onboarding_audit_redacted(text, extra_forbidden=extra_forbidden)
 
     def _assert_onboarding_failure_reason_codes(
         self,
@@ -415,9 +421,43 @@ class AdminSecurityApiTestCase(unittest.TestCase):
         list_response = self.client.get("/api/v1/admin/users", params={"q": "beta-user"})
         self.assertEqual(list_response.status_code, 200)
         self.assertEqual(list_response.json()["items"][0]["username"], "beta-user")
+        self.assertNotIn("initialPassword", self._json_text(list_response))
         self.assertNotIn(payload["initialPassword"], self._json_text(list_response))
 
-        self._assert_safe_onboarding_audit(expected_status="completed")
+        detail_response = self.client.get(f"/api/v1/admin/users/{payload['targetUserId']}")
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_response.json()["user"]["username"], "beta-user")
+        self.assertNotIn("initialPassword", self._json_text(detail_response))
+        self.assertNotIn(payload["initialPassword"], self._json_text(detail_response))
+
+        self._assert_safe_onboarding_audit(
+            expected_status="completed",
+            extra_forbidden=[payload["initialPassword"]],
+        )
+
+    def test_onboarding_openapi_documents_one_time_secret_handling_contract(self) -> None:
+        schema = self.app.openapi()
+        response_schema = schema["components"]["schemas"]["AdminUserOnboardResponse"]
+        properties = response_schema["properties"]
+        password_delivery_description = properties["passwordDelivery"]["description"]
+        initial_password_description = properties["initialPassword"]["description"]
+        route_description = schema["paths"]["/api/v1/admin/users/onboard"]["post"]["description"]
+
+        self.assertIn("One-time delivery contract", password_delivery_description)
+        self.assertIn("only in the successful onboarding response", password_delivery_description)
+        self.assertIn("audit, list, and detail projections", password_delivery_description)
+        self.assertIn("One-time secret material", initial_password_description)
+        self.assertIn("must not log response bodies", initial_password_description)
+        self.assertIn("browser history", initial_password_description)
+        self.assertIn("screenshots", initial_password_description)
+        self.assertIn("proxy logs", initial_password_description)
+        self.assertIn("CDN logs", initial_password_description)
+        self.assertIn("analytics", initial_password_description)
+        self.assertIn("audit metadata", initial_password_description)
+        self.assertIn("approved operator handoff process", initial_password_description)
+        self.assertIn("discard it after use", initial_password_description)
+        self.assertIn("passwordDelivery=returned_once", route_description)
+        self.assertIn("must not log or persist the response body", route_description)
 
     def test_authenticated_admin_onboarding_requires_recent_reauth(self) -> None:
         self._login_admin_session()
