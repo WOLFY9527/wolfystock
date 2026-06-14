@@ -23,6 +23,7 @@ FORBIDDEN_CONSUMER_RESPONSE_FIELDS = (
     "fallback",
     "trustLevel",
     "reasonCode",
+    "sourceType",
     "launchVerdict",
     "consumerVisible",
     "advisoryOnly",
@@ -30,7 +31,6 @@ FORBIDDEN_CONSUMER_RESPONSE_FIELDS = (
     "isFallback",
     "isStale",
     "isPartial",
-    "sourceType",
     "source_type",
     "scoreContributionAllowed",
     "score_contribution_allowed",
@@ -44,6 +44,8 @@ FORBIDDEN_CONSUMER_RESPONSE_FIELDS = (
     "cookie",
     "session_id",
     "token",
+    "target price",
+    "predicted return",
 )
 
 
@@ -53,6 +55,33 @@ def _assert_no_forbidden_consumer_response_fields(payload: dict) -> None:
     for forbidden in FORBIDDEN_CONSUMER_RESPONSE_FIELDS:
         assert forbidden not in serialized
         assert forbidden.lower() not in normalized
+
+
+def _assert_safe_watchlist_research_context(item: dict) -> None:
+    research_fields = {
+        "symbol_status": item.get("symbol_status"),
+        "research_status": item.get("research_status"),
+        "data_quality": item.get("data_quality"),
+        "last_reviewed_at": item.get("last_reviewed_at"),
+        "evidence_status": item.get("evidence_status"),
+        "notes_available": item.get("notes_available"),
+        "user_note_present": item.get("user_note_present"),
+        "no_advice_disclosure": item.get("no_advice_disclosure"),
+    }
+    self_contained = {key: value for key, value in research_fields.items() if value is not None}
+    serialized = json.dumps(self_contained, ensure_ascii=False)
+    normalized = serialized.lower()
+    for forbidden in FORBIDDEN_CONSUMER_RESPONSE_FIELDS:
+        assert forbidden not in serialized
+        assert forbidden.lower() not in normalized
+    assert "buy" not in normalized
+    assert "sell" not in normalized
+    assert "add position" not in normalized
+    assert "reduce" not in normalized
+    assert "买入" not in serialized
+    assert "卖出" not in serialized
+    assert "加仓" not in serialized
+    assert "减仓" not in serialized
 
 
 def _reset_auth_globals() -> None:
@@ -180,6 +209,14 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(payload["scanner_score"], 94.0)
         self.assertEqual(payload["theme_id"], "crypto_miners")
         self.assertEqual(payload["universe_type"], "default")
+        self.assertEqual(payload["symbol_status"], "ready")
+        self.assertEqual(payload["research_status"], "ready")
+        self.assertEqual(payload["data_quality"], "ready")
+        self.assertEqual(payload["evidence_status"], "ready")
+        self.assertTrue(payload["notes_available"])
+        self.assertTrue(payload["user_note_present"])
+        self.assertIn("research", payload["no_advice_disclosure"].lower())
+        _assert_safe_watchlist_research_context(payload)
 
         list_resp = self.client.get("/api/v1/watchlist/items")
         self.assertEqual(list_resp.status_code, 200)
@@ -391,6 +428,13 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(provenance["data_quality"], "cached")
         self.assertEqual(provenance["label"], "最近可用")
         self.assertEqual(scanner["data_quality"], "cached")
+        item = payload["items"][0]
+        self.assertEqual(item["symbol_status"], "ready")
+        self.assertEqual(item["research_status"], "stale_or_cached")
+        self.assertEqual(item["data_quality"], "stale_or_cached")
+        self.assertEqual(item["evidence_status"], "stale_or_cached")
+        self.assertTrue(item["last_reviewed_at"])
+        _assert_safe_watchlist_research_context(item)
         _assert_no_forbidden_consumer_response_fields(payload)
 
     def test_watchlist_items_project_scanner_confidence_disclosure_metadata(self) -> None:
@@ -983,3 +1027,69 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(intelligence["scanner"]["status"], "unknown")
         self.assertEqual(intelligence["strategy_simulation"]["status"], "unknown")
         self.assertIsNone(intelligence["backtest"]["last_result_id"])
+        item = list_resp.json()["items"][0]
+        self.assertEqual(item["symbol_status"], "symbol_unknown")
+        self.assertEqual(item["research_status"], "symbol_unknown")
+        self.assertEqual(item["data_quality"], "no_evidence")
+        self.assertEqual(item["evidence_status"], "no_evidence")
+        self.assertFalse(item["notes_available"])
+        self.assertFalse(item["user_note_present"])
+        _assert_safe_watchlist_research_context(item)
+
+    def test_watchlist_research_context_reports_unsupported_market_without_rejecting_legacy_rows(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        with self.db.get_session() as session:
+            session.add(
+                UserWatchlistItem(
+                    owner_id="user-1",
+                    symbol="AAPL",
+                    market="cn",
+                    source="scanner",
+                    notes="kept as user note",
+                )
+            )
+            session.commit()
+
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        item = list_resp.json()["items"][0]
+        self.assertEqual(item["symbol_status"], "unsupported_market")
+        self.assertEqual(item["research_status"], "unsupported_market")
+        self.assertEqual(item["data_quality"], "no_evidence")
+        self.assertEqual(item["evidence_status"], "no_evidence")
+        self.assertTrue(item["notes_available"])
+        self.assertTrue(item["user_note_present"])
+        _assert_safe_watchlist_research_context(item)
+
+    def test_watchlist_research_context_sanitizes_raw_failure_details(self) -> None:
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+
+        with self.db.get_session() as session:
+            session.add(
+                UserWatchlistItem(
+                    owner_id="user-1",
+                    symbol="NVDA",
+                    market="us",
+                    source="scanner",
+                    score_status="data_failed",
+                    score_error=(
+                        "Traceback from https://provider.example/query?token=secret "
+                        "sourceType=provider_runtime trustLevel=internal reasonCode=raw_provider_error "
+                        "target price and predicted return unavailable"
+                    ),
+                )
+            )
+            session.commit()
+
+        list_resp = self.client.get("/api/v1/watchlist/items")
+        self.assertEqual(list_resp.status_code, 200)
+        payload = list_resp.json()
+        item = payload["items"][0]
+        self.assertEqual(item["symbol_status"], "symbol_unknown")
+        self.assertEqual(item["research_status"], "unavailable")
+        self.assertEqual(item["data_quality"], "unavailable")
+        self.assertEqual(item["evidence_status"], "unavailable")
+        self.assertEqual(item["score_error"], "Watchlist research context is temporarily unavailable.")
+        _assert_safe_watchlist_research_context(item)
+        _assert_no_forbidden_consumer_response_fields(payload)

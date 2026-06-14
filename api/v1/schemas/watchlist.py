@@ -9,6 +9,15 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 from src.utils.symbol_normalization import canonical_stock_code
 
+WatchlistResearchState = Literal[
+    "ready",
+    "no_evidence",
+    "unavailable",
+    "symbol_unknown",
+    "unsupported_market",
+    "stale_or_cached",
+]
+
 
 class WatchlistScoreStatusContextResponse(BaseModel):
     scope: str
@@ -72,6 +81,14 @@ class WatchlistItemResponse(BaseModel):
     score_status: Optional[str] = None
     score_status_context: Optional[WatchlistScoreStatusContextResponse] = None
     score_error: Optional[str] = None
+    symbol_status: Optional[WatchlistResearchState] = None
+    research_status: Optional[WatchlistResearchState] = None
+    data_quality: Optional[WatchlistResearchState] = None
+    last_reviewed_at: Optional[str] = None
+    evidence_status: Optional[WatchlistResearchState] = None
+    notes_available: bool = False
+    user_note_present: bool = False
+    no_advice_disclosure: Optional[str] = None
     theme_id: Optional[str] = None
     universe_type: Optional[str] = None
     notes: Optional[str] = None
