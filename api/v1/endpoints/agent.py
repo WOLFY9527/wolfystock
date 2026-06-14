@@ -9,14 +9,16 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from api.deps import CurrentUser, get_current_user, require_admin_capability
+from api.v1.schemas.research_stock import AIStockResearchResponse
 from src.config import get_config
 from src.services.agent_model_service import list_agent_model_deployments, list_agent_provider_health
 from src.services.execution_log_service import ExecutionLogService
+from src.services.research_stock_service import AIStockResearchService
 
 # Tool name -> Chinese display name mapping
 TOOL_DISPLAY_NAMES: Dict[str, str] = {
@@ -184,6 +186,21 @@ async def get_agent_models():
 async def get_agent_provider_health():
     """Get safe Agent provider readiness without exposing credentials."""
     return AgentProviderHealthResponse(**list_agent_provider_health(get_config()))
+
+
+@router.get("/stock-research", response_model=AIStockResearchResponse)
+async def get_stock_research(
+    ticker: str = Query(..., min_length=1, max_length=32),
+    market: str = Query(default="UNKNOWN", min_length=1, max_length=16),
+    research_window: str = Query(default="latest_available", min_length=1, max_length=64),
+    _: CurrentUser = Depends(get_current_user),
+):
+    """Return structured AI Stock Research evidence without live execution."""
+    return AIStockResearchService().build_unavailable_response(
+        ticker=ticker,
+        market=market,
+        research_window=research_window,
+    )
 
 def _build_skills_response(config) -> SkillsResponse:
     from src.agent.factory import get_skill_manager

@@ -2,7 +2,7 @@
   "protected_groups": [
     {
       "route_id": "agent.member_surface",
-      "path_pattern": "^/api/v1/agent/(?:chat|chat/sessions(?:/\\{session_id\\})?|chat/stream)$",
+      "path_pattern": "^/api/v1/agent/(?:stock-research|chat|chat/sessions(?:/\\{session_id\\})?|chat/stream)$",
       "methods": ["GET", "POST", "DELETE"],
       "surface": "agent",
       "auth_dependency_label": "authenticated_user",
@@ -429,6 +429,16 @@
       "capability_label": null,
       "no_go_marker": null,
       "transitional_note": null
+    },
+    {
+      "route_id": "agent.stock_research",
+      "path": "/api/v1/agent/stock-research",
+      "method": "GET",
+      "surface_classification": "authenticated_member",
+      "auth_dependency_label": "authenticated_user",
+      "capability_label": null,
+      "no_go_marker": null,
+      "transitional_note": "Structured research scaffold is member-gated and returns unavailable evidence without live execution."
     },
     {
       "route_id": "agent.chat_sessions",

@@ -145,6 +145,7 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("GET", "/api/v1/agent/models"): "operator_diagnostic",
     ("GET", "/api/v1/agent/provider-health"): "operator_diagnostic",
     ("GET", "/api/v1/agent/skills"): "unclassified",
+    ("GET", "/api/v1/agent/stock-research"): "authenticated_member",
     ("POST", "/api/v1/agent/chat"): "authenticated_member",
     ("GET", "/api/v1/agent/chat/sessions"): "authenticated_member",
     ("GET", "/api/v1/agent/chat/sessions/{session_id}"): "authenticated_member",
