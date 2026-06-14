@@ -74,6 +74,7 @@ DOCS_AND_SCHEMA_CLASSIFICATIONS = {
     ("GET", "/redoc"): "public_static_docs",
     ("GET", "/openapi.json"): "debug_or_schema_surface",
 }
+LEGACY_UNSUPPORTED_OPENAPI_PATH = "/api/v1/openapi.json"
 DIAGNOSTIC_ROUTES_EXCLUDED_FROM_SAFE_BYPASS = {
     ("GET", "/api/v1/market/data-readiness"),
     ("GET", "/api/v1/market/cn-provider-health"),
@@ -300,6 +301,38 @@ def test_docs_openapi_and_backend_diagnostics_have_explicit_surface_classificati
         and classification in {"public_static_docs", "debug_or_schema_surface"}
     ]
     assert api_routes_with_doc_labels == []
+
+
+def test_legacy_api_v1_openapi_path_is_unsupported_not_a_docs_surface() -> None:
+    app = FastAPI()
+    app.include_router(api_v1_router)
+    route_signatures = {
+        (method, route.path)
+        for route in app.routes
+        if isinstance(route, APIRoute)
+        for method in (route.methods or set())
+        if method not in {"HEAD", "OPTIONS"}
+    }
+    classifications = _route_surface_classifications()
+
+    assert ("GET", LEGACY_UNSUPPORTED_OPENAPI_PATH) not in route_signatures
+    assert ("GET", LEGACY_UNSUPPORTED_OPENAPI_PATH) not in classifications
+
+    client = _auth_guarded_client()
+    try:
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
+            fail_closed_response = client.get(LEGACY_UNSUPPORTED_OPENAPI_PATH)
+        _reset_auth_globals()
+        with patch.object(auth, "_is_auth_enabled_from_env", return_value=False):
+            unsupported_response = client.get(LEGACY_UNSUPPORTED_OPENAPI_PATH)
+
+        assert fail_closed_response.status_code == 401
+        assert fail_closed_response.json() == {"error": "unauthorized", "message": "Login required"}
+        _assert_public_surface_safe(fail_closed_response.json())
+        assert unsupported_response.status_code == 404
+    finally:
+        client.close()
+        _reset_auth_globals()
 
 
 def test_unauthenticated_admin_routes_fail_closed_with_sanitized_errors() -> None:
