@@ -7,6 +7,18 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
+from src.services.backtest_response_contract import BACKTEST_NO_ADVICE_DISCLOSURE
+
+
+class BacktestResponseContractFields(BaseModel):
+    data_status: str = "ready"
+    calculation_status: str = "ready"
+    sample_status: str = "ready"
+    source_window: Dict[str, Any] = Field(default_factory=dict)
+    as_of: Optional[str] = None
+    limitations: List[str] = Field(default_factory=list)
+    no_advice_disclosure: str = BACKTEST_NO_ADVICE_DISCLOSURE
+
 
 class BacktestRunRequest(BaseModel):
     code: Optional[str] = Field(None, description="仅回测指定股票")
@@ -16,7 +28,7 @@ class BacktestRunRequest(BaseModel):
     limit: int = Field(200, ge=1, le=2000, description="最多处理的分析记录数")
 
 
-class BacktestRunResponse(BaseModel):
+class BacktestRunResponse(BacktestResponseContractFields):
     run_id: Optional[int] = Field(None, description="回测运行记录ID")
     run_at: Optional[str] = Field(None, description="回测运行时间")
     processed: int = Field(..., description="候选记录数")
@@ -81,7 +93,7 @@ class BacktestCodeRequest(BaseModel):
     code: str = Field(..., description="股票代码")
 
 
-class BacktestRunHistoryItem(BaseModel):
+class BacktestRunHistoryItem(BacktestResponseContractFields):
     id: int
     code: Optional[str] = None
     eval_window_days: int
@@ -1050,7 +1062,7 @@ class RuleBacktestCompareResponse(BaseModel):
     items: List[RuleBacktestCompareRunItem] = Field(default_factory=list)
 
 
-class RuleBacktestHistoryItem(BaseModel):
+class RuleBacktestHistoryItem(BacktestResponseContractFields):
     model_config = ConfigDict(populate_by_name=True)
 
     id: int
@@ -1132,7 +1144,7 @@ class RuleBacktestHistoryResponse(BaseModel):
     items: List[RuleBacktestHistoryItem] = Field(default_factory=list)
 
 
-class RuleBacktestRunResponse(BaseModel):
+class RuleBacktestRunResponse(BacktestResponseContractFields):
     model_config = ConfigDict(populate_by_name=True)
 
     id: int
@@ -1215,7 +1227,7 @@ class RuleBacktestDetailResponse(RuleBacktestRunResponse):
     pass
 
 
-class RuleBacktestStatusResponse(BaseModel):
+class RuleBacktestStatusResponse(BacktestResponseContractFields):
     id: int
     code: str
     status: str
@@ -1397,7 +1409,7 @@ class RuleBacktestSupportExportIndexResponse(BaseModel):
     exports: List[RuleBacktestSupportExportIndexItem] = Field(default_factory=list)
 
 
-class BacktestResultItem(BaseModel):
+class BacktestResultItem(BacktestResponseContractFields):
     analysis_history_id: int
     code: str
     analysis_date: Optional[str] = None
@@ -1439,7 +1451,7 @@ class BacktestResultsResponse(BaseModel):
     items: List[BacktestResultItem] = Field(default_factory=list)
 
 
-class PerformanceMetrics(BaseModel):
+class PerformanceMetrics(BacktestResponseContractFields):
     scope: str
     code: Optional[str] = None
     eval_window_days: int

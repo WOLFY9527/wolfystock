@@ -1451,9 +1451,17 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("data_quality", response["summary"])
         self.assertEqual(response["summary"]["data_quality"]["bar_count"], 0)
         self.assertIsNotNone(response["no_result_message"])
+        self.assertEqual(response["data_status"], "data_unavailable")
+        self.assertEqual(response["calculation_status"], "insufficient_sample")
+        self.assertEqual(response["sample_status"], "insufficient_sample")
+        self.assertEqual(response["source_window"]["requested_start"], "2024-01-01")
+        self.assertEqual(response["source_window"]["requested_end"], "2024-01-31")
+        self.assertTrue(response["limitations"])
+        self.assertIn("Research diagnostic only", response["no_advice_disclosure"])
         serialized = json.dumps(response, ensure_ascii=False, sort_keys=True)
         for forbidden in ("SECRET", "TOKEN", "api_key", "payload_json", "raw_provider_payload"):
             self.assertNotIn(forbidden, serialized)
+        self.assertNotIn("place order", serialized.lower())
         self._assert_public_backtest_text_is_analytical(serialized)
 
     def test_service_normalizes_timezone_datetime_boundaries_to_dates(self) -> None:
@@ -1588,6 +1596,34 @@ class RuleBacktestTestCase(unittest.TestCase):
             "proxy_source_not_reproducible",
             response["professionalReadiness"]["categories"]["reproducibility"]["blockers"],
         )
+
+    def test_rule_backtest_contract_marks_fixture_or_example_data_source(self) -> None:
+        service = RuleBacktestService(self.db)
+        with self.db.get_session() as session:
+            rows = session.query(StockDaily).filter(StockDaily.code == "600519").all()
+            for row in rows:
+                row.data_source = "synthetic_fixture"
+            session.commit()
+
+        with patch.object(service, "_ensure_market_history", return_value=0), patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.run_backtest(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                start_date="2024-01-05",
+                end_date="2024-01-20",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        self.assertEqual(response["status"], "completed")
+        self.assertEqual(response["data_status"], "fixture_or_example_data")
+        self.assertEqual(response["calculation_status"], "ready")
+        self.assertEqual(response["sample_status"], "ready")
+        self.assertTrue(
+            any("fixture" in limitation.lower() for limitation in response["limitations"]),
+            response["limitations"],
+        )
+        self.assertIn("Research diagnostic only", response["no_advice_disclosure"])
 
     def test_rule_backtest_data_quality_marks_unknown_history_source_as_degraded_fill_only(self) -> None:
         service = RuleBacktestService(self.db)

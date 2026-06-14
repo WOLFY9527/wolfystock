@@ -1804,6 +1804,12 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.code, "AAPL")
         self.assertEqual(response.requested_mode, "local_first")
         self.assertEqual(response.resolved_source, "LocalParquet")
+        self.assertEqual(response.data_status, "ready")
+        self.assertEqual(response.calculation_status, "ready")
+        self.assertEqual(response.sample_status, "ready")
+        self.assertEqual(response.source_window["eval_window_days"], 10)
+        self.assertEqual(response.as_of, "2026-04-27T09:00:00Z")
+        self.assertIn("Research diagnostic only", response.no_advice_disclosure)
         service.get_stock_summary.assert_called_once_with("AAPL", eval_window_days=5)
 
     def test_get_backtest_performance_falls_back_to_rule_run_aggregate_when_standard_summary_missing(self) -> None:
@@ -1847,6 +1853,11 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.avg_simulated_return_pct, 4.5)
         self.assertEqual(response.resolved_source, "stored_rule_backtest_runs")
         self.assertEqual(response.evaluation_mode, "rule_deterministic_fallback")
+        self.assertEqual(response.data_status, "ready")
+        self.assertEqual(response.calculation_status, "ready")
+        self.assertEqual(response.sample_status, "ready")
+        self.assertEqual(response.source_window["completed_run_count"], 2)
+        self.assertIn("Research diagnostic only", response.no_advice_disclosure)
 
     def test_get_backtest_performance_returns_zero_state_payload_when_no_summary_exists(self) -> None:
         service = MagicMock()
@@ -1868,6 +1879,34 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.completed_count, 0)
         self.assertEqual(response.resolved_source, "no_backtest_data")
         self.assertEqual(response.evaluation_mode, "empty_state")
+        self.assertEqual(response.data_status, "data_unavailable")
+        self.assertEqual(response.calculation_status, "calculation_unavailable")
+        self.assertEqual(response.sample_status, "data_unavailable")
+        self.assertIsNone(response.win_rate_pct)
+        self.assertTrue(response.limitations)
+        self.assertIn("Research diagnostic only", response.no_advice_disclosure)
+
+    def test_rule_backtest_run_response_gates_metrics_until_calculation_ready(self) -> None:
+        service = MagicMock()
+        service.submit_backtest.return_value = self._rule_run_payload(status="queued")
+        request = RuleBacktestRunRequest(
+            code="600519",
+            strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            wait_for_completion=False,
+        )
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = run_rule_backtest(request, BackgroundTasks(), db_manager=MagicMock())
+
+        self.assertEqual(response.status, "queued")
+        self.assertEqual(response.calculation_status, "calculation_unavailable")
+        self.assertEqual(response.sample_status, "calculation_unavailable")
+        self.assertEqual(response.source_window["requested_start"], "2025-01-01")
+        self.assertEqual(response.source_window["requested_end"], "2025-12-31")
+        self.assertIn("status queued", response.limitations)
+        self.assertIn("Research diagnostic only", response.no_advice_disclosure)
+        serialized = json.dumps(response.model_dump(mode="json"), ensure_ascii=False, sort_keys=True)
+        self.assertNotIn("place order", serialized.lower())
 
     def test_get_rule_backtest_run_serializes_canonical_audit_rows_field(self) -> None:
         service = MagicMock()
