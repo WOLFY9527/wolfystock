@@ -15,6 +15,10 @@ class _AdminOpsStatusModel(BaseModel):
 class AdminOpsStatusSection(_AdminOpsStatusModel):
     available: bool = False
     status: str = "unavailable"
+    service: str = ""
+    configured: bool = False
+    last_checked_at: Optional[str] = Field(default=None, alias="lastCheckedAt")
+    message: str = ""
     label: str = "advisory"
     reason_code: Optional[str] = Field(default=None, alias="reasonCode")
     read_only: bool = Field(default=True, alias="readOnly")
@@ -93,6 +97,9 @@ class AdminOpsCockpitBlocker(_AdminOpsStatusModel):
 
 class AdminOpsLaunchCockpit(_AdminOpsStatusModel):
     contract: str = "admin_ops_launch_cockpit_v1"
+    status: str = "unavailable"
+    last_checked_at: Optional[str] = Field(default=None, alias="lastCheckedAt")
+    message: str = ""
     read_only: bool = Field(default=True, alias="readOnly")
     advisory_only: bool = Field(default=True, alias="advisoryOnly")
     no_external_calls: bool = Field(default=True, alias="noExternalCalls")

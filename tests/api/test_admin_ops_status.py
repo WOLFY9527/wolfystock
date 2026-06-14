@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import src.auth as auth
 from pathlib import Path
 
 import pytest
@@ -40,6 +41,20 @@ FORBIDDEN_RESPONSE_MARKERS = (
     "provider.example",
     "https://",
     "?token=",
+    "postgres://",
+    "db.example.test",
+    "/users/example/",
+    "runtimeerror",
+    "operationalerror",
+    "providercircuitstate",
+    "providerprobecount",
+    "configuredworkercount",
+    "scripts/",
+    "docs/",
+    "tests/",
+    "api/v1/endpoints/",
+    ".py",
+    ".md",
 )
 
 
@@ -127,7 +142,28 @@ def _assert_no_sensitive_markers(payload: object) -> None:
         assert marker.lower() not in text
 
 
-def test_admin_ops_status_requires_admin_with_ops_logs_read(app: FastAPI) -> None:
+def _assert_bounded_section(payload: dict, key: str, *, expected_service: str) -> None:
+    section = payload[key]
+    assert section["service"] == expected_service
+    assert isinstance(section["configured"], bool)
+    assert isinstance(section["message"], str)
+    assert section["summary"] == {}
+    assert section["dataSources"] == []
+
+
+def test_admin_ops_status_requires_admin_with_ops_logs_read(
+    app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ADMIN_AUTH_ENABLED", "true")
+    auth._auth_enabled = None
+    with TestClient(app) as client:
+        anonymous = client.get("/api/v1/admin/ops/status")
+    assert anonymous.status_code == 401
+    assert anonymous.json()["detail"]["error"] == "unauthorized"
+    _assert_no_sensitive_markers(anonymous.json())
+    auth._auth_enabled = None
+
     with _client(app, _regular_user) as client:
         regular = client.get("/api/v1/admin/ops/status")
     assert regular.status_code == 403
@@ -184,9 +220,34 @@ def test_admin_ops_status_returns_read_only_advisory_markers(app: FastAPI, monke
     assert payload["storageReadinessSummary"]["readOnly"] is True
     assert payload["taskQueueStatusSummary"]["noExternalCalls"] is True
     assert payload["adminLogEvidenceSummary"]["deleteAllowed"] is False
-    assert "dataSources" in payload["metadata"]
-    assert "redaction" in payload["metadata"]
-    assert payload["metadata"]["mutationPaths"] == []
+    assert payload["metadata"]["contract"] == "admin_ops_status_snapshot_v2"
+    assert payload["metadata"]["projection"] == "bounded_admin_diagnostics"
+    assert payload["metadata"]["publicLaunchNoGo"] is True
+    _assert_no_sensitive_markers(payload)
+
+
+def test_admin_ops_status_projects_bounded_admin_diagnostics(app: FastAPI) -> None:
+    app.state.task_queue = _TaskQueueFixture()
+
+    with _client(app, _ops_admin) as client:
+        response = client.get("/api/v1/admin/ops/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    _assert_bounded_section(payload, "providerStatusSummary", expected_service="provider_reliability")
+    _assert_bounded_section(payload, "quotaCostAdvisoryStatusSummary", expected_service="quota_cost")
+    _assert_bounded_section(payload, "storageReadinessSummary", expected_service="storage")
+    _assert_bounded_section(payload, "taskQueueStatusSummary", expected_service="task_queue")
+    _assert_bounded_section(payload, "adminLogEvidenceSummary", expected_service="admin_logs")
+
+    cockpit = payload["launchCockpit"]
+    assert cockpit["domains"]
+    assert cockpit["blockers"]
+    assert all(not item for item in (domain["evidenceRefs"] for domain in cockpit["domains"]))
+    assert all(not item for item in (domain["blockerRefs"] for domain in cockpit["domains"]))
+    assert all(not item for item in (domain["followUpProposals"] for domain in cockpit["domains"]))
+    assert all(not item for item in (blocker["evidenceRefs"] for blocker in cockpit["blockers"]))
     _assert_no_sensitive_markers(payload)
 
 
@@ -246,14 +307,14 @@ def test_admin_ops_status_includes_private_beta_launch_cockpit_no_go_view(app: F
     assert security["publicLaunchNoGo"] is True
     assert security["readOnly"] is True
     assert security["liveEnforcement"] is False
-    assert "scripts/security_mfa_operator_evidence_check.py" in security["evidenceRefs"]
+    assert security["evidenceRefs"] == []
+    assert security["blockerRefs"] == []
     assert security["detailRoute"] == "/admin/users"
 
     quota = by_domain["quota_cost"]
     assert quota["safeNextActions"]
     assert quota["detailRoute"] == "/admin/cost-observability"
-    assert quota["followUpProposals"][0]["approvalNeeded"] is True
-    assert "api/v1/endpoints/analysis.py" in quota["followUpProposals"][0]["likelyFiles"]
+    assert quota["followUpProposals"] == []
 
     provider = by_domain["provider_reliability"]
     assert provider["providerRuntimeChanged"] is False
@@ -262,12 +323,13 @@ def test_admin_ops_status_includes_private_beta_launch_cockpit_no_go_view(app: F
 
     route = by_domain["route_classification"]
     assert route["realOperatorEvidenceMissing"] is False
-    assert route["blockerRefs"]
-    assert "tests/fixtures/auth/backend_route_capability_inventory.json" in route["evidenceRefs"]
+    assert route["blockerRefs"] == []
+    assert route["evidenceRefs"] == []
 
     blockers = cockpit["blockers"]
     assert any(blocker["blockerKey"] == "public_launch_no_go" for blocker in blockers)
     assert all(blocker["publicLaunchNoGo"] is True for blocker in blockers)
+    assert all(blocker["evidenceRefs"] == [] for blocker in blockers)
     _assert_no_sensitive_markers(payload)
 
 
@@ -312,4 +374,29 @@ def test_admin_ops_status_unavailable_source_degrades_without_raw_exception(app:
     assert payload["providerStatusSummary"]["reasonCode"] == "source_unavailable"
     assert payload["taskQueueStatusSummary"]["available"] is False
     assert payload["taskQueueStatusSummary"]["status"] == "unavailable"
+    _assert_no_sensitive_markers(payload)
+
+
+def test_admin_ops_status_launch_cockpit_failure_degrades_without_raw_exception(
+    app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _raise_launch_cockpit_failure(self):
+        raise RuntimeError(
+            "RuntimeError postgres://raw-user:raw-password@db.example.test/wolfystock "
+            "/Users/example/app.py raw-secret-token traceback"
+        )
+
+    monkeypatch.setattr(
+        "src.services.admin_ops_status_service.AdminOpsStatusService._build_launch_cockpit",
+        _raise_launch_cockpit_failure,
+    )
+
+    with _client(app, _ops_admin) as client:
+        response = client.get("/api/v1/admin/ops/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["launchCockpit"]["status"] == "unavailable"
+    assert payload["launchCockpit"]["message"] == "Admin launch readiness snapshot unavailable."
     _assert_no_sensitive_markers(payload)
