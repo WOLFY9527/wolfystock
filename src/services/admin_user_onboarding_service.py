@@ -54,10 +54,23 @@ class AdminUserOnboardingService:
         password: str | None,
         reason: str,
     ) -> AdminUserOnboardingResult:
-        normalized_username = _normalize_username(username)
-        normalized_display_name = _normalize_display_name(display_name, fallback=normalized_username)
-        normalized_email = _normalize_email(email)
-        normalized_reason = _normalize_reason(reason)
+        normalized_username = str(username or "").strip()
+        normalized_email = str(email or "").strip().lower() or None
+        normalized_reason = str(reason or "").strip()
+        try:
+            normalized_username = _normalize_username(username)
+            normalized_display_name = _normalize_display_name(display_name, fallback=normalized_username)
+            normalized_email = _normalize_email(email)
+            normalized_reason = _normalize_reason(reason)
+        except AdminUserOnboardingError as exc:
+            self.record_failure_audit(
+                actor=actor,
+                reason_code=_audit_failure_reason_code(exc.error),
+                username=normalized_username,
+                email=normalized_email,
+                reason=normalized_reason,
+            )
+            raise
 
         existing_user = self.repo.get_app_user_by_username(normalized_username)
         if existing_user is not None:
@@ -69,7 +82,7 @@ class AdminUserOnboardingService:
                 reason=normalized_reason,
                 overall_status="failed",
                 outcome="duplicate_username",
-                metadata={"created": False},
+                metadata={"created": False, "reason_code": "duplicate_username"},
             )
             raise AdminUserOnboardingError(
                 status_code=409,
@@ -88,7 +101,7 @@ class AdminUserOnboardingService:
                     reason=normalized_reason,
                     overall_status="failed",
                     outcome="duplicate_email",
-                    metadata={"created": False},
+                    metadata={"created": False, "reason_code": "duplicate_email"},
                 )
                 raise AdminUserOnboardingError(
                     status_code=409,
@@ -100,6 +113,13 @@ class AdminUserOnboardingService:
         try:
             password_hash = hash_password_for_storage(initial_password)
         except ValueError as exc:
+            self.record_failure_audit(
+                actor=actor,
+                reason_code="validation_error",
+                username=normalized_username,
+                email=normalized_email,
+                reason=normalized_reason,
+            )
             raise AdminUserOnboardingError(
                 status_code=400,
                 error="invalid_password",
@@ -149,6 +169,31 @@ class AdminUserOnboardingService:
             initial_password=initial_password,
             audit_event_id=audit_event_id,
             message="User created",
+        )
+
+    def record_failure_audit(
+        self,
+        *,
+        actor: AdminActorContext,
+        reason_code: str,
+        username: str | None = None,
+        email: str | None = None,
+        reason: str | None = None,
+        target_user_id: str = "pending",
+    ) -> str | None:
+        normalized_reason_code = _audit_failure_reason_code(reason_code)
+        return self._record_audit(
+            actor=actor,
+            target_user_id=target_user_id,
+            username=str(username or "").strip(),
+            email=str(email or "").strip().lower() or None,
+            reason=str(reason or "").strip(),
+            overall_status="failed",
+            outcome=normalized_reason_code,
+            metadata={
+                "created": False,
+                "reason_code": normalized_reason_code,
+            },
         )
 
     def _find_user_id_by_email(self, email: str) -> str | None:
@@ -231,6 +276,21 @@ def _normalize_reason(value: str) -> str:
     if len(normalized) > 500:
         raise AdminUserOnboardingError(status_code=400, error="validation_error", message="reason is too long")
     return normalized
+
+
+def _audit_failure_reason_code(error: str) -> str:
+    normalized = str(error or "").strip()
+    if normalized in {
+        "admin_reauth_required",
+        "duplicate_username",
+        "duplicate_email",
+        "role_not_allowed",
+        "reserved_username",
+        "permission_denied",
+        "admin_required",
+    }:
+        return normalized
+    return "validation_error"
 
 
 def _generate_initial_password() -> str:

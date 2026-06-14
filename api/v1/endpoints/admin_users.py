@@ -8,8 +8,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.deps import CurrentUser, require_admin_capability
-from api.v1.endpoints.admin_security import _require_admin_security_write
+from api.deps import CurrentUser, require_admin_capability, require_recent_admin_reauth
 from api.v1.schemas.admin_activity import AdminActivityEvent, AdminActivityResponse, AdminActivityWindow
 from api.v1.schemas.admin_security import AdminUserOnboardRequest, AdminUserOnboardResponse
 from api.v1.schemas.admin_users import (
@@ -21,6 +20,7 @@ from api.v1.schemas.admin_users import (
     AdminUserListResponse,
     AdminUserRiskBadge,
 )
+from src.auth import get_admin_reauth_max_age_seconds
 from src.auth_context import AdminActorContext
 from src.services.admin_activity_service import AdminActivityService
 from src.services.admin_user_onboarding_service import AdminUserOnboardingError, AdminUserOnboardingService
@@ -146,6 +146,24 @@ def _to_admin_actor(current_user: CurrentUser) -> AdminActorContext:
     )
 
 
+def _require_onboarding_security_write(
+    current_user: CurrentUser = Depends(require_admin_capability("users:security:write")),
+) -> CurrentUser:
+    if current_user.transitional and not current_user.auth_enabled and not current_user.is_authenticated:
+        return current_user
+    max_age_minutes = max(1, get_admin_reauth_max_age_seconds() // 60)
+    try:
+        return require_recent_admin_reauth(current_user, max_age_minutes=max_age_minutes)
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        if detail.get("error") == "admin_reauth_required":
+            AdminUserOnboardingService().record_failure_audit(
+                actor=_to_admin_actor(current_user),
+                reason_code="admin_reauth_required",
+            )
+        raise
+
+
 @router.get(
     "/users",
     response_model=AdminUserListResponse,
@@ -251,7 +269,7 @@ def get_admin_user_detail(
 )
 def onboard_admin_user(
     body: AdminUserOnboardRequest,
-    current_user: CurrentUser = Depends(_require_admin_security_write),
+    current_user: CurrentUser = Depends(_require_onboarding_security_write),
 ) -> AdminUserOnboardResponse:
     try:
         result = AdminUserOnboardingService().create_user(
