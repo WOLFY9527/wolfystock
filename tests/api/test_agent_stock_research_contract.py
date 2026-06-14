@@ -37,6 +37,24 @@ FORBIDDEN_RESPONSE_TERMS = (
     "智能选股",
 )
 
+FORBIDDEN_INTERNAL_FIELD_TERMS = (
+    "provider_url",
+    "providerurl",
+    "raw_provider_error",
+    "rawprovidererror",
+    "traceback",
+    "filesystem",
+    "reasoncode",
+    "trustlevel",
+    "fallback",
+    "sourcetype",
+    "api_key",
+    "apikey",
+    "token",
+    "cookie",
+    "/users/",
+)
+
 
 def _user() -> CurrentUser:
     return CurrentUser(
@@ -85,11 +103,36 @@ def test_stock_research_endpoint_returns_structured_unavailable_contract() -> No
     assert payload["neutral_or_uncertain_factors"]
     assert payload["technical_state"] is None
     assert payload["portfolio_watchlist_relevance"] is None
-    assert payload["sources"] == []
+    assert payload["sources"] == [
+        {
+            "name": "No approved evidence input",
+            "category": "research_evidence",
+            "status": "no_evidence",
+            "as_of": None,
+        }
+    ]
     assert payload["freshness"]["status"] == "unavailable"
+    assert payload["freshness"]["as_of"] is None
+    assert payload["freshness"]["source_count"] == 0
     assert payload["risk_disclosure"]
     assert payload["no_advice_disclosure"]
     assert payload["unavailable"]["reason"] == "evidence_missing"
+
+
+def test_stock_research_sources_expose_only_safe_evidence_metadata() -> None:
+    response = _client().get(
+        "/api/v1/agent/stock-research",
+        params={"ticker": "NVDA", "market": "US"},
+    )
+
+    assert response.status_code == 200
+    source = response.json()["sources"][0]
+
+    assert set(source) == {"name", "category", "status", "as_of"}
+    assert source["name"]
+    assert source["category"] == "research_evidence"
+    assert source["status"] == "no_evidence"
+    assert source["as_of"] is None
 
 
 def test_stock_research_serialized_response_excludes_trading_advice_terms() -> None:
@@ -101,4 +144,16 @@ def test_stock_research_serialized_response_excludes_trading_advice_terms() -> N
     assert response.status_code == 200
     serialized = _json_text(response.json())
     leaked = [term for term in FORBIDDEN_RESPONSE_TERMS if term.lower() in serialized]
+    assert leaked == []
+
+
+def test_stock_research_serialized_response_excludes_internal_evidence_leaks() -> None:
+    response = _client().get(
+        "/api/v1/agent/stock-research",
+        params={"ticker": "TSLA", "market": "US"},
+    )
+
+    assert response.status_code == 200
+    serialized = _json_text(response.json())
+    leaked = [term for term in FORBIDDEN_INTERNAL_FIELD_TERMS if term.lower() in serialized]
     assert leaked == []
