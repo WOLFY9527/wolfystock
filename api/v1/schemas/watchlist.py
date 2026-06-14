@@ -81,9 +81,8 @@ class WatchlistItemResponse(BaseModel):
 
 
 class WatchlistOhlcvProvenanceResponse(BaseModel):
-    source: str
-    source_type: str
-    source_label: str
+    data_quality: Literal["ready", "delayed", "cached", "partial", "no_evidence", "unavailable"]
+    label: str
 
 
 class WatchlistReasonFamilyResponse(BaseModel):
@@ -119,11 +118,9 @@ class WatchlistScannerLineageV1Response(BaseModel):
     universe_type: Optional[str] = None
     research_reason: str
     research_next_step: str
-    data_state: Literal["available", "limited", "observation_only", "insufficient", "updating", "unavailable"]
+    data_state: Literal["ready", "delayed", "cached", "partial", "no_evidence", "unavailable"]
     freshness_label: str
     no_advice_boundary: bool = True
-    observation_only: bool = True
-    score_grade_allowed: bool = False
 
 
 class WatchlistScannerIntelligenceResponse(BaseModel):
@@ -136,12 +133,8 @@ class WatchlistScannerIntelligenceResponse(BaseModel):
     reason: Optional[str] = None
     last_scanned_at: Optional[str] = None
     ohlcv_provenance: Optional[WatchlistOhlcvProvenanceResponse] = None
+    data_quality: Optional[Literal["ready", "delayed", "cached", "partial", "no_evidence", "unavailable"]] = None
     score_confidence: Optional[float] = None
-    score_grade_allowed: Optional[bool] = None
-    cap_reason: Optional[str] = None
-    degradation_reason: Optional[str] = None
-    source_confidence: Optional["WatchlistScannerSourceConfidenceResponse"] = None
-    reason_families: Optional["WatchlistScannerReasonFamiliesResponse"] = None
     investor_signal: Optional[Dict[str, Any]] = None
     scanner_lineage_v1: Optional[WatchlistScannerLineageV1Response] = None
 

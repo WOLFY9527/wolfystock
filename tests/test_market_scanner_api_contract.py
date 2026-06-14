@@ -26,6 +26,39 @@ from src.services.market_scanner_service import MarketScannerService
 from src.services.scanner_evidence_packet import build_scanner_evidence_packet
 
 
+FORBIDDEN_CONSUMER_RESPONSE_FIELDS = (
+    "fallback",
+    "trustLevel",
+    "reasonCode",
+    "launchVerdict",
+    "consumerVisible",
+    "advisoryOnly",
+    "liveEnforcement",
+    "isFallback",
+    "isStale",
+    "isPartial",
+    "sourceType",
+    "scoreContributionAllowed",
+    "observationOnly",
+    "raw provider error",
+    "Traceback",
+    "https://",
+    "api_key",
+    "secret",
+    "cookie",
+    "session_id",
+    "token",
+)
+
+
+def _assert_no_forbidden_consumer_response_fields(payload: dict) -> None:
+    serialized = json.dumps(payload, ensure_ascii=False)
+    normalized = serialized.lower()
+    for forbidden in FORBIDDEN_CONSUMER_RESPONSE_FIELDS:
+        assert forbidden not in serialized
+        assert forbidden.lower() not in normalized
+
+
 def _make_candidate(symbol: str, rank: int, *, benchmark_code: str = "000300") -> dict:
     return {
         "symbol": symbol,
@@ -452,14 +485,12 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             [item["symbol"] for item in serialized["shortlist"]],
             [item["symbol"] for item in payload["shortlist"]],
         )
-        self.assertEqual(
-            serialized["shortlist"][0]["candidateSourceProvenanceFrame"]["scoreContributionAllowedCount"],
-            0,
-        )
+        self.assertEqual(serialized["shortlist"][0]["candidateSourceProvenanceFrame"], {})
         self.assertEqual(
             serialized["selected"][0]["candidateSourceProvenanceFrame"],
             serialized["shortlist"][0]["candidateSourceProvenanceFrame"],
         )
+        _assert_no_forbidden_consumer_response_fields(serialized)
 
     def test_run_market_scan_preserves_additive_scanner_context_frame(self) -> None:
         service = MagicMock()
@@ -559,7 +590,7 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
         self.assertEqual(serialized["scannerContextFrame"]["assetClassBias"]["state"], "supportive")
         self.assertEqual(serialized["scannerContextFrame"]["universePolicy"]["type"], "default")
 
-    def test_run_market_scan_preserves_provider_observation_metadata_in_response_model(self) -> None:
+    def test_run_market_scan_sanitizes_consumer_provider_diagnostics_in_response_model(self) -> None:
         service = MagicMock()
         payload = _make_run_payload()
         provider_observation = {
@@ -577,6 +608,7 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
                     "observationOnly": True,
                     "scoreContributionAllowed": False,
                     "degradationReason": "fallback_source",
+                    "rawProviderError": "Traceback (most recent call last): https://provider.example.test?token=secret",
                     "asOf": "2026-05-19T08:40:00+08:00",
                     "updatedAt": "2026-05-19T08:40:00+08:00",
                 }
@@ -645,60 +677,48 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             response = run_market_scan(request, db_manager=MagicMock())
 
         serialized = response.model_dump()
-        self.assertTrue(response.shortlist[0].diagnostics["cn_provider_observation"]["observationOnly"])
-        self.assertFalse(response.shortlist[0].diagnostics["score_explainability"]["source_confidence"]["sourceAuthorityAllowed"])
-        self.assertFalse(response.shortlist[0].diagnostics["score_explainability"]["source_confidence"]["scoreContributionAllowed"])
-        self.assertTrue(response.shortlist[0].diagnostics["score_explainability"]["source_confidence"]["observationOnly"])
-        self.assertEqual(response.shortlist[0].diagnostics["score_explainability"]["cap_reason"], "fallback_source")
+        self.assertEqual(serialized["shortlist"][0]["diagnostics"], {})
+        self.assertEqual(serialized["shortlist"][0]["candidateSourceProvenanceFrame"], {})
+        self.assertEqual(serialized["candidates"][0]["cn_provider_observation"], {})
+        consumer_projection = serialized["shortlist"][0]["consumerDiagnostics"]
+        self.assertEqual(consumer_projection["dataQualityState"], "partial")
+        self.assertIn(consumer_projection["dataQualityState"], {"ready", "delayed", "cached", "partial", "no_evidence", "unavailable"})
+        _assert_no_forbidden_consumer_response_fields(serialized)
+
+    def test_admin_gated_scanner_watchlist_keeps_diagnostics_for_admin_surface(self) -> None:
+        service = MagicMock()
+        payload = _make_run_payload()
+        payload["shortlist"][0]["diagnostics"]["score_explainability"]["source_confidence"] = {
+            "sourceType": "fallback_static",
+            "isFallback": True,
+            "scoreContributionAllowed": False,
+            "observationOnly": True,
+        }
+        payload["shortlist"][0]["diagnostics"]["evidence_packet"] = {
+            "providerObservation": {
+                "entries": [
+                    {
+                        "providerName": "akshare",
+                        "sourceType": "public_proxy",
+                        "scoreContributionAllowed": False,
+                    }
+                ]
+            }
+        }
+        service.get_today_watchlist.return_value = payload
+
+        with patch("api.v1.endpoints.scanner.MarketScannerService", return_value=service):
+            response = get_today_watchlist(market="cn", profile="cn_preopen_v1", db_manager=MagicMock(), _=MagicMock())
+
+        serialized = response.model_dump()
         self.assertEqual(
-            response.shortlist[0].diagnostics["evidence_packet"]["providerObservation"]["entries"][0]["providerName"],
-            "akshare",
-        )
-        self.assertEqual(
-            response.shortlist[0].diagnostics["evidence_packet"]["providerObservation"]["entries"][0]["sourceType"],
-            "public_proxy",
-        )
-        self.assertEqual(response.shortlist[0].diagnostics["evidence_packet"]["capReason"], "fallback_source")
-        self.assertEqual(response.shortlist[0].consumerDiagnostics["status"], "limited")
-        self.assertFalse(response.shortlist[0].consumerDiagnostics["scoreGradeAllowed"])
-        self.assertEqual(response.shortlist[0].consumerDiagnostics["capReason"], "fallback_source")
-        self.assertEqual(response.shortlist[0].consumerDiagnostics["sourceClass"], "fallback")
-        self.assertEqual(response.candidates[0].cn_provider_observation["entries"][0]["providerName"], "akshare")
-        self.assertTrue(serialized["shortlist"][0]["diagnostics"]["cn_provider_observation"]["observationOnly"])
-        self.assertFalse(
-            serialized["shortlist"][0]["diagnostics"]["score_explainability"]["source_confidence"]["sourceAuthorityAllowed"]
-        )
-        self.assertFalse(
-            serialized["shortlist"][0]["diagnostics"]["score_explainability"]["source_confidence"]["scoreContributionAllowed"]
+            serialized["shortlist"][0]["diagnostics"]["score_explainability"]["source_confidence"]["sourceType"],
+            "fallback_static",
         )
         self.assertEqual(
             serialized["shortlist"][0]["diagnostics"]["evidence_packet"]["providerObservation"]["entries"][0]["providerName"],
             "akshare",
         )
-        self.assertEqual(
-            serialized["shortlist"][0]["diagnostics"]["evidence_packet"]["providerObservation"]["entries"][0]["sourceType"],
-            "public_proxy",
-        )
-        self.assertEqual(
-            serialized["candidates"][0]["cn_provider_observation"]["entries"][0]["providerName"],
-            "akshare",
-        )
-        consumer_projection = serialized["shortlist"][0]["consumerDiagnostics"]
-        self.assertEqual(consumer_projection["status"], "limited")
-        self.assertFalse(consumer_projection["scoreGradeAllowed"])
-        projection_json = json.dumps(consumer_projection, ensure_ascii=False)
-        for forbidden in [
-            "providerObservation",
-            "cn_provider_observation",
-            "providerName",
-            "akshare",
-            "public_proxy",
-            "source_confidence",
-            "sourceAuthorityAllowed",
-            "scoreContributionAllowed",
-            "adminReasonCodes",
-        ]:
-            self.assertNotIn(forbidden, projection_json)
 
     def test_run_market_scan_preserves_additive_candidate_evidence_and_readiness_fields(self) -> None:
         service = MagicMock()
@@ -828,11 +848,7 @@ class MarketScannerApiContractTestCase(unittest.TestCase):
             serialized["shortlist"][0]["candidateResearchSummaryFrame"]["nextResearchStep"],
             "补充基本面证据",
         )
-        self.assertEqual(
-            serialized["shortlist"][0]["candidateSourceProvenanceFrame"]["contractVersion"],
-            "source_provenance_v1",
-        )
-        self.assertEqual(serialized["shortlist"][0]["candidateSourceProvenanceFrame"]["scoreContributionAllowedCount"], 0)
+        self.assertEqual(serialized["shortlist"][0]["candidateSourceProvenanceFrame"], {})
         self.assertEqual([item["symbol"] for item in serialized["shortlist"]], ["NVDA", "AAPL"])
         provenance_json = json.dumps(serialized["shortlist"][0]["candidateSourceProvenanceFrame"], ensure_ascii=False).lower()
         for forbidden in ("token", "cookie", "session", "payload", "stack", "trace", "internal", "raw"):
