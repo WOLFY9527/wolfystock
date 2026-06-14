@@ -26,6 +26,7 @@ from api.v1.schemas.scanner import (
     ScannerThemeGenerateRequest,
     ScannerThemeGenerationResponse,
     ScannerThemesResponse,
+    sanitize_scanner_consumer_payload,
 )
 from src.core.scanner_theme_registry import create_ai_scanner_theme, list_scanner_themes
 from src.services.market_scanner_ops_service import MarketScannerOperationsService
@@ -161,7 +162,7 @@ def run_market_scan(
             request_source="api",
             notify=False,
         )
-        return ScannerRunDetailResponse(**payload)
+        return ScannerRunDetailResponse(**sanitize_scanner_consumer_payload(payload))
 
     return _run_endpoint("运行市场扫描失败", _operation)
 
@@ -392,6 +393,8 @@ def get_market_scan_run(
         )
         if payload is None:
             raise _not_found_error(f"未找到扫描记录 {run_id}")
+        if not is_admin_user(current_user):
+            payload = sanitize_scanner_consumer_payload(payload)
         return ScannerRunDetailResponse(**payload)
 
     return _run_endpoint("查询扫描详情失败", _operation)

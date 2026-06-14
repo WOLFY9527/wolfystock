@@ -13,7 +13,6 @@ from sqlalchemy import and_, desc, select
 
 from src.repositories.scanner_repo import ScannerRepository
 from src.services.catalyst_event_exposure import build_catalyst_event_exposures
-from src.services.market_data_source_registry import resolve_source_label, resolve_source_type
 from src.services.reason_code_vocabulary import classify_reason_code
 from src.services.scanner_evidence_packet import build_scanner_investor_signal
 from src.storage import AppUser, DatabaseManager, MarketScannerCandidate, MarketScannerRun, RuleBacktestRun, UserWatchlistItem
@@ -35,8 +34,6 @@ _LINEAGE_FORBIDDEN_TEXT_RE = re.compile(
     r"买入|卖出|加仓|减仓|下单|交易|止损|止盈|目标价|仓位|必买|稳赚|保证收益",
     re.IGNORECASE,
 )
-
-
 class WatchlistService:
     """Business logic for user-owned candidate tracking."""
 
@@ -152,12 +149,55 @@ class WatchlistService:
         ).strip().lower()
         if source not in _LOCAL_OHLCV_HISTORY_SOURCES:
             return None
-        source_type = resolve_source_type(source)
         return {
-            "source": source,
-            "source_type": source_type,
-            "source_label": resolve_source_label(source, source_type=source_type),
+            "data_quality": "cached",
+            "label": "最近可用",
         }
+
+    @staticmethod
+    def _consumer_data_quality_label(*values: Any) -> str:
+        tokens: List[str] = []
+        for value in values:
+            if isinstance(value, dict):
+                tokens.extend(str(key) for key, flag in value.items() if flag is True)
+                tokens.extend(str(item) for item in value.values() if isinstance(item, str))
+            elif isinstance(value, (list, tuple, set)):
+                tokens.extend(str(item) for item in value)
+            elif value is not None:
+                tokens.append(str(value))
+        normalized = " ".join(tokens).strip().lower()
+        if not normalized:
+            return "no_evidence"
+        if any(marker in normalized for marker in ("unavailable", "provider_down", "provider_error", "data_failed", "failed", "error")):
+            return "unavailable"
+        if any(marker in normalized for marker in ("missing", "insufficient", "no_data", "no evidence", "no_evidence", "updating")):
+            return "no_evidence"
+        if any(marker in normalized for marker in ("cached", "cache_snapshot", "local")):
+            return "cached"
+        if any(marker in normalized for marker in ("stale", "delayed")):
+            return "delayed"
+        if any(marker in normalized for marker in ("fallback", "partial", "synthetic", "proxy", "limited", "observation")):
+            return "partial"
+        if any(marker in normalized for marker in ("ready", "available", "complete", "fresh", "live", "selected", "score_grade")):
+            return "ready"
+        return "no_evidence"
+
+    @staticmethod
+    def _sanitize_investor_signal(payload: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if not isinstance(payload, dict):
+            return None
+        allowed = {
+            "contractVersion",
+            "freshness",
+            "confidenceLabel",
+            "warningLabels",
+            "dataQuality",
+            "noAdviceBoundary",
+        }
+        projected = {key: value for key, value in payload.items() if key in allowed and value is not None}
+        if "dataQuality" not in projected:
+            projected["dataQuality"] = WatchlistService._consumer_data_quality_label(payload.get("freshness"))
+        return projected or None
 
     @staticmethod
     def _optional_bool(value: Any) -> Optional[bool]:
@@ -410,7 +450,7 @@ class WatchlistService:
         return projected if any(value is not None for value in projected.values()) else None
 
     @classmethod
-    def _project_scanner_score_disclosure(cls, diagnostics: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _project_scanner_score_disclosure_internal(cls, diagnostics: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         explainability = diagnostics.get("score_explainability")
         if not isinstance(explainability, dict):
             return None
@@ -424,6 +464,23 @@ class WatchlistService:
             "source_confidence": cls._project_source_confidence(explainability.get("source_confidence")),
         }
         projected["reason_families"] = cls._project_scanner_reason_families(projected)
+        return projected if any(value is not None for value in projected.values()) else None
+
+    @classmethod
+    def _project_scanner_score_disclosure(cls, disclosure: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if not isinstance(disclosure, dict):
+            return None
+        source_confidence = disclosure.get("source_confidence") if isinstance(disclosure.get("source_confidence"), dict) else {}
+        projected = {
+            "score_confidence": cls._safe_float(disclosure.get("score_confidence")),
+            "data_quality": cls._consumer_data_quality_label(
+                source_confidence,
+                source_confidence.get("freshness"),
+                disclosure.get("score_grade_allowed"),
+                disclosure.get("cap_reason"),
+                disclosure.get("degradation_reason"),
+            ),
+        }
         return projected if any(value is not None for value in projected.values()) else None
 
     @classmethod
@@ -465,25 +522,29 @@ class WatchlistService:
         if isinstance(source_confidence, dict) and source_confidence.get("is_unavailable") is True:
             return "unavailable"
         if status in {"insufficient", "insufficient_history", "no_data", "missing_data"}:
-            return "insufficient"
+            return "no_evidence"
         if status in {"", "unknown"} and item.get("scanner_score") is None:
-            return "updating"
+            return "no_evidence"
         if score_grade_allowed:
-            return "available"
+            return "ready"
         if disclosure is None:
-            return "limited"
-        return "observation_only"
+            return "no_evidence"
+        return cls._consumer_data_quality_label(source_confidence, disclosure.get("cap_reason"), disclosure.get("degradation_reason"))
 
     @staticmethod
     def _lineage_freshness_label(data_state: str, disclosure: Optional[Dict[str, Any]]) -> str:
-        if data_state == "available":
+        if data_state == "ready":
             return "已更新"
-        if data_state == "updating":
-            return "数据更新中"
         if data_state == "unavailable":
             return "暂不可用"
-        if data_state == "insufficient":
+        if data_state == "no_evidence":
             return "数据不足"
+        if data_state == "partial":
+            return "部分可用"
+        if data_state == "delayed":
+            return "延迟可用"
+        if data_state == "cached":
+            return "最近可用"
         source_confidence = disclosure.get("source_confidence") if isinstance(disclosure, dict) else None
         freshness = str(source_confidence.get("freshness") or "").strip().lower() if isinstance(source_confidence, dict) else ""
         if freshness in {"live", "fresh"}:
@@ -588,7 +649,6 @@ class WatchlistService:
             or cls._isoformat_datetime(getattr(run, "run_at", None))
             or cls._isoformat_datetime(getattr(candidate, "created_at", None))
         )
-        observation_only = not score_grade_allowed or data_state != "available"
         return {
             "contract_version": _LINEAGE_CONTRACT_VERSION,
             "source": "scanner",
@@ -608,8 +668,6 @@ class WatchlistService:
             "data_state": data_state,
             "freshness_label": cls._lineage_freshness_label(data_state, disclosure),
             "no_advice_boundary": True,
-            "observation_only": observation_only,
-            "score_grade_allowed": score_grade_allowed,
         }
 
     def _scanner_intelligence_context_by_item(self, items: List[Dict[str, Any]]) -> Dict[tuple[int, str], Dict[str, Any]]:
@@ -644,14 +702,15 @@ class WatchlistService:
             item = item_by_key.get(key, {})
             context: Dict[str, Any] = {}
             provenance = self._project_local_ohlcv_provenance(diagnostics)
-            disclosure = self._project_scanner_score_disclosure(diagnostics)
+            internal_disclosure = self._project_scanner_score_disclosure_internal(diagnostics)
+            disclosure = self._project_scanner_score_disclosure(internal_disclosure)
             investor_signal = build_scanner_investor_signal(diagnostics)
             lineage = self._project_scanner_lineage_v1(
                 item=item,
                 candidate=candidate,
                 run=run,
                 diagnostics=diagnostics,
-                disclosure=disclosure,
+                disclosure=internal_disclosure,
             )
             catalyst_exposures = self._project_catalyst_exposures(item, diagnostics)
             if provenance is not None:
@@ -659,7 +718,7 @@ class WatchlistService:
             if disclosure is not None:
                 context["score_disclosure"] = disclosure
             if investor_signal is not None:
-                context["investor_signal"] = investor_signal
+                context["investor_signal"] = self._sanitize_investor_signal(investor_signal)
             context["scanner_lineage_v1"] = lineage
             if catalyst_exposures is not None:
                 context["catalyst_exposures"] = catalyst_exposures
@@ -736,6 +795,7 @@ class WatchlistService:
         }
         if scanner_ohlcv_provenance is not None:
             scanner_payload["ohlcv_provenance"] = scanner_ohlcv_provenance
+            scanner_payload["data_quality"] = scanner_ohlcv_provenance.get("data_quality")
         if scanner_score_disclosure is not None:
             scanner_payload.update(scanner_score_disclosure)
         if scanner_investor_signal is not None:

@@ -3,9 +3,186 @@
 
 from __future__ import annotations
 
+import copy
+import re
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+SCANNER_CONSUMER_DATA_QUALITY_LABELS = {"ready", "delayed", "cached", "partial", "no_evidence", "unavailable"}
+_SCANNER_FORBIDDEN_CONSUMER_KEYS = {
+    "fallback",
+    "trustlevel",
+    "reasoncode",
+    "reasoncodes",
+    "launchverdict",
+    "consumervisible",
+    "advisoryonly",
+    "liveenforcement",
+    "isfallback",
+    "isstale",
+    "ispartial",
+    "sourcetype",
+    "scorecontributionallowed",
+    "observationonly",
+    "observeonly",
+    "sourceauthorityallowed",
+    "providerobservation",
+    "cnproviderobservation",
+    "providername",
+    "providerid",
+    "rawprovidererror",
+}
+_SCANNER_FORBIDDEN_CONSUMER_TEXT_RE = re.compile(
+    r"fallback|trustlevel|reasoncode|launchverdict|consumervisible|advisoryonly|"
+    r"liveenforcement|isfallback|isstale|ispartial|sourcetype|"
+    r"scorecontributionallowed|observationonly|raw provider error|traceback|"
+    r"https?://|api[_-]?key|secret|cookie|session_id|token",
+    re.IGNORECASE,
+)
+
+
+def _scanner_normalize_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(value or "").lower())
+
+
+def _scanner_consumer_data_quality_label(*values: Any) -> str:
+    tokens: List[str] = []
+    for value in values:
+        if isinstance(value, dict):
+            tokens.extend(str(key) for key, flag in value.items() if flag is True)
+            tokens.extend(str(item) for item in value.values() if isinstance(item, str))
+        elif isinstance(value, (list, tuple, set)):
+            tokens.extend(str(item) for item in value)
+        elif value is not None:
+            tokens.append(str(value))
+    normalized = " ".join(tokens).strip().lower()
+    if not normalized:
+        return "no_evidence"
+    if any(marker in normalized for marker in ("unavailable", "provider_down", "provider_error", "data_failed", "failed", "error")):
+        return "unavailable"
+    if any(marker in normalized for marker in ("missing", "insufficient", "no_data", "no evidence", "no_evidence")):
+        return "no_evidence"
+    if any(marker in normalized for marker in ("fallback", "partial", "synthetic", "proxy", "limited", "observation")):
+        return "partial"
+    if any(marker in normalized for marker in ("stale", "delayed")):
+        return "delayed"
+    if any(marker in normalized for marker in ("cached", "cache_snapshot", "local")):
+        return "cached"
+    if any(marker in normalized for marker in ("ready", "available", "complete", "fresh", "live", "selected", "score_grade")):
+        return "ready"
+    return "no_evidence"
+
+
+def _scanner_sanitize_consumer_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        sanitized: Dict[str, Any] = {}
+        for key, item in value.items():
+            normalized_key = _scanner_normalize_key(str(key))
+            if any(marker in normalized_key for marker in _SCANNER_FORBIDDEN_CONSUMER_KEYS):
+                continue
+            clean = _scanner_sanitize_consumer_value(item)
+            if clean is not None:
+                sanitized[str(key)] = clean
+        return sanitized
+    if isinstance(value, list):
+        return [item for item in (_scanner_sanitize_consumer_value(item) for item in value) if item is not None]
+    if isinstance(value, str):
+        if _SCANNER_FORBIDDEN_CONSUMER_TEXT_RE.search(value):
+            return None
+        return value
+    return value
+
+
+def _scanner_consumer_diagnostics_payload(value: Any) -> Dict[str, Any]:
+    payload = value if isinstance(value, dict) else {}
+    quality = _scanner_consumer_data_quality_label(
+        payload.get("dataQualityState"),
+        payload.get("freshnessState"),
+        payload.get("freshnessCategory"),
+        payload.get("sourceClass"),
+        payload.get("status"),
+        payload.get("sourceConfidenceBucket"),
+    )
+    allowed = {
+        "status",
+        "reasonBucket",
+        "reasonLabel",
+        "nextEvidence",
+        "sourceConfidenceBucket",
+        "confidenceCategory",
+        "freshnessCategory",
+        "scoreConfidence",
+        "missingEvidence",
+        "userFacingLabels",
+        "warningFlags",
+        "investorSignal",
+    }
+    sanitized = {
+        key: _scanner_sanitize_consumer_value(payload.get(key))
+        for key in allowed
+        if key in payload
+    }
+    sanitized = {key: item for key, item in sanitized.items() if item is not None}
+    sanitized["dataQualityState"] = quality
+    return sanitized
+
+
+def sanitize_scanner_consumer_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Project scanner run payloads into the normal-user API contract."""
+    result = copy.deepcopy(payload or {})
+    if isinstance(result.get("diagnostics"), dict):
+        result["diagnostics"] = _scanner_sanitize_consumer_value(result["diagnostics"])
+    for frame_key in ("scannerContextFrame",):
+        if isinstance(result.get(frame_key), dict):
+            result[frame_key] = _scanner_sanitize_consumer_value(result[frame_key])
+    for collection_key in ("shortlist", "selected"):
+        items = result.get(collection_key)
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            diagnostics = item.get("diagnostics") if isinstance(item.get("diagnostics"), dict) else {}
+            consumer_diagnostics = item.get("consumerDiagnostics") if isinstance(item.get("consumerDiagnostics"), dict) else {}
+            source_confidence = {}
+            score_explainability = diagnostics.get("score_explainability") if isinstance(diagnostics, dict) else {}
+            if isinstance(score_explainability, dict) and isinstance(score_explainability.get("source_confidence"), dict):
+                source_confidence = score_explainability["source_confidence"]
+            item["consumerDiagnostics"] = _scanner_consumer_diagnostics_payload(
+                {
+                    **consumer_diagnostics,
+                    "dataQualityState": consumer_diagnostics.get("dataQualityState")
+                    or diagnostics.get("dataQualityState")
+                    or source_confidence.get("freshness"),
+                    "freshnessState": consumer_diagnostics.get("freshnessState") or source_confidence.get("freshness"),
+                    "sourceClass": consumer_diagnostics.get("sourceClass") or source_confidence.get("sourceType"),
+                    "status": consumer_diagnostics.get("status"),
+                }
+            )
+            item["diagnostics"] = {}
+            item["candidateSourceProvenanceFrame"] = {}
+            for frame_key in (
+                "candidateEvidenceFrame",
+                "candidateResearchReadiness",
+                "candidateResearchSummaryFrame",
+            ):
+                if isinstance(item.get(frame_key), dict):
+                    item[frame_key] = _scanner_sanitize_consumer_value(item[frame_key])
+    candidates = result.get("candidates")
+    if isinstance(candidates, list):
+        for item in candidates:
+            if not isinstance(item, dict):
+                continue
+            item.pop("provider", None)
+            item.pop("reason", None)
+            item["failed_rules"] = []
+            item["missing_fields"] = []
+            item["metrics"] = {}
+            item["cn_provider_observation"] = {}
+            item["consumerDiagnostics"] = _scanner_consumer_diagnostics_payload(item.get("consumerDiagnostics"))
+    return result
 
 
 class ScannerRunRequest(BaseModel):

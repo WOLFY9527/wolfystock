@@ -19,6 +19,42 @@ from src.config import Config
 from src.storage import DatabaseManager, MarketScannerCandidate, MarketScannerRun, RuleBacktestRun, UserWatchlistItem
 
 
+FORBIDDEN_CONSUMER_RESPONSE_FIELDS = (
+    "fallback",
+    "trustLevel",
+    "reasonCode",
+    "launchVerdict",
+    "consumerVisible",
+    "advisoryOnly",
+    "liveEnforcement",
+    "isFallback",
+    "isStale",
+    "isPartial",
+    "sourceType",
+    "source_type",
+    "scoreContributionAllowed",
+    "score_contribution_allowed",
+    "observationOnly",
+    "observation_only",
+    "raw provider error",
+    "Traceback",
+    "https://",
+    "api_key",
+    "secret",
+    "cookie",
+    "session_id",
+    "token",
+)
+
+
+def _assert_no_forbidden_consumer_response_fields(payload: dict) -> None:
+    serialized = json.dumps(payload, ensure_ascii=False)
+    normalized = serialized.lower()
+    for forbidden in FORBIDDEN_CONSUMER_RESPONSE_FIELDS:
+        assert forbidden not in serialized
+        assert forbidden.lower() not in normalized
+
+
 def _reset_auth_globals() -> None:
     auth._auth_enabled = None
     auth._session_secret = None
@@ -46,6 +82,7 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.data_dir = Path(self.temp_dir.name)
         self.env_path = self.data_dir / ".env"
         self.db_path = self.data_dir / "watchlist_api_test.db"
+        self.previous_admin_auth_enabled = os.environ.get("ADMIN_AUTH_ENABLED")
         self.env_path.write_text(
             "\n".join(
                 [
@@ -61,6 +98,7 @@ class WatchlistApiTestCase(unittest.TestCase):
 
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.db_path)
+        os.environ["ADMIN_AUTH_ENABLED"] = "false"
         Config.reset_instance()
         _reset_auth_globals()
         DatabaseManager.reset_instance()
@@ -88,6 +126,10 @@ class WatchlistApiTestCase(unittest.TestCase):
         _reset_auth_globals()
         os.environ.pop("ENV_FILE", None)
         os.environ.pop("DATABASE_PATH", None)
+        if self.previous_admin_auth_enabled is None:
+            os.environ.pop("ADMIN_AUTH_ENABLED", None)
+        else:
+            os.environ["ADMIN_AUTH_ENABLED"] = self.previous_admin_auth_enabled
         self.temp_dir.cleanup()
 
     def _make_auth_enabled_client(self) -> TestClient:
@@ -105,6 +147,7 @@ class WatchlistApiTestCase(unittest.TestCase):
         )
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.db_path)
+        os.environ["ADMIN_AUTH_ENABLED"] = "true"
         Config.reset_instance()
         _reset_auth_globals()
         app = create_app(static_dir=self.data_dir / "empty-static")
@@ -289,7 +332,7 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(item["universe_type"], "theme")
         self.assertTrue(item["last_scored_at"])
 
-    def test_watchlist_items_project_local_ohlcv_provenance_from_scanner_candidate_diagnostics(self) -> None:
+    def test_watchlist_items_project_safe_local_ohlcv_quality_from_scanner_candidate_diagnostics(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
 
         now = datetime.now()
@@ -342,10 +385,13 @@ class WatchlistApiTestCase(unittest.TestCase):
 
         list_resp = self.client.get("/api/v1/watchlist/items")
         self.assertEqual(list_resp.status_code, 200)
-        provenance = list_resp.json()["items"][0]["intelligence"]["scanner"]["ohlcv_provenance"]
-        self.assertEqual(provenance["source"], "local_us_parquet")
-        self.assertEqual(provenance["source_type"], "cache_snapshot")
-        self.assertEqual(provenance["source_label"], "本地 Parquet 历史")
+        payload = list_resp.json()
+        scanner = payload["items"][0]["intelligence"]["scanner"]
+        provenance = scanner["ohlcv_provenance"]
+        self.assertEqual(provenance["data_quality"], "cached")
+        self.assertEqual(provenance["label"], "最近可用")
+        self.assertEqual(scanner["data_quality"], "cached")
+        _assert_no_forbidden_consumer_response_fields(payload)
 
     def test_watchlist_items_project_scanner_confidence_disclosure_metadata(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
@@ -426,53 +472,19 @@ class WatchlistApiTestCase(unittest.TestCase):
         self.assertEqual(list_resp.status_code, 200)
         scanner = list_resp.json()["items"][0]["intelligence"]["scanner"]
         self.assertEqual(scanner["score_confidence"], 0.35)
-        self.assertEqual(scanner["cap_reason"], "configured_cache_only_diagnostic")
-        self.assertEqual(scanner["degradation_reason"], "configured_cache_only_diagnostic")
-        self.assertFalse(scanner["score_grade_allowed"])
-        self.assertEqual(
-            scanner["reason_families"]["cap_reason"],
-            {
-                "raw_code": "configured_cache_only_diagnostic",
-                "family": "unclassified",
-                "scope": None,
-            },
-        )
-        self.assertEqual(
-            scanner["reason_families"]["degradation_reason"],
-            {
-                "raw_code": "configured_cache_only_diagnostic",
-                "family": "unclassified",
-                "scope": None,
-            },
-        )
-        self.assertEqual(
-            scanner["reason_families"]["source_confidence"]["cap_reason"],
-            {
-                "raw_code": "configured_cache_only_diagnostic",
-                "family": "unclassified",
-                "scope": None,
-            },
-        )
-        self.assertEqual(
-            scanner["reason_families"]["source_confidence"]["degradation_reason"],
-            {
-                "raw_code": "configured_cache_only_diagnostic",
-                "family": "unclassified",
-                "scope": None,
-            },
-        )
-        self.assertEqual(scanner["source_confidence"]["source"], "local_us_parquet_dir")
-        self.assertEqual(scanner["source_confidence"]["source_type"], "cache_snapshot")
-        self.assertFalse(scanner["source_confidence"]["score_contribution_allowed"])
-        self.assertFalse(scanner["source_confidence"]["source_authority_allowed"])
-        self.assertTrue(scanner["source_confidence"]["observation_only"])
+        self.assertEqual(scanner["data_quality"], "cached")
+        self.assertNotIn("cap_reason", scanner)
+        self.assertNotIn("degradation_reason", scanner)
+        self.assertNotIn("score_grade_allowed", scanner)
+        self.assertNotIn("reason_families", scanner)
+        self.assertNotIn("source_confidence", scanner)
         investor_signal = scanner["investor_signal"]
         self.assertEqual(investor_signal["contractVersion"], "investor_signal_contract_v1")
-        self.assertFalse(investor_signal["sourceAuthorityAllowed"])
         self.assertEqual(investor_signal["freshness"], "cached")
         self.assertEqual(investor_signal["confidenceLabel"], "blocked")
-        self.assertIn("source_authority_missing", investor_signal["reasonCodes"])
-        self.assertIn("score_rights_missing", investor_signal["reasonCodes"])
+        self.assertNotIn("sourceAuthorityAllowed", investor_signal)
+        self.assertNotIn("reasonCodes", investor_signal)
+        _assert_no_forbidden_consumer_response_fields(list_resp.json())
 
     def test_watchlist_items_project_scanner_lineage_v1_without_raw_diagnostics(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
@@ -580,22 +592,23 @@ class WatchlistApiTestCase(unittest.TestCase):
                 "universe_type": "theme",
                 "research_reason": "动量延续，等待补充证据。",
                 "research_next_step": "补充证据后继续观察。",
-                "data_state": "observation_only",
+                "data_state": "cached",
                 "freshness_label": "最近可用",
                 "no_advice_boundary": True,
-                "observation_only": True,
-                "score_grade_allowed": False,
             },
         )
 
         serialized_lineage = json.dumps(lineage, ensure_ascii=False)
         self.assertNotIn("source_confidence", lineage)
+        self.assertNotIn("observation_only", lineage)
+        self.assertNotIn("score_grade_allowed", lineage)
         self.assertNotIn("providerObservation", serialized_lineage)
         self.assertNotIn("rawDiagnostics", serialized_lineage)
         self.assertNotIn("reasonCodes", serialized_lineage)
         self.assertNotIn("sourceAuthorityAllowed", serialized_lineage)
         self.assertNotIn("scoreContributionAllowed", serialized_lineage)
         self.assertNotIn("internal-provider", serialized_lineage)
+        _assert_no_forbidden_consumer_response_fields(list_resp.json())
 
     def test_watchlist_items_attach_catalyst_exposures_from_explicit_saved_evidence(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
