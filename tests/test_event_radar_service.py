@@ -1,0 +1,212 @@
+# -*- coding: utf-8 -*-
+"""Focused tests for the market-moving event radar contract scaffold."""
+
+from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+
+import pytest
+from pydantic import ValidationError
+
+from api.v1.schemas.event_radar import (
+    EventRadarCategory,
+    EventRadarImpactStatus,
+    EventRadarItem,
+    EventRadarSnapshot,
+    EventRadarSourceStatus,
+)
+from src.services.event_radar_service import (
+    EVENT_RADAR_NO_ADVICE_DISCLOSURE,
+    EventRadarService,
+    build_event_radar_snapshot,
+    build_no_evidence_event_radar_snapshot,
+)
+
+
+AS_OF = datetime(2026, 6, 14, 9, 30, tzinfo=timezone.utc)
+
+FORBIDDEN_RUNTIME_TERMS = (
+    "buy",
+    "sell",
+    "add position",
+    "reduce position",
+    "stop-loss",
+    "take-profit",
+    "target price",
+    "predicted return",
+    "ai recommends",
+    "place order",
+    "submit order",
+)
+
+FORBIDDEN_LEAK_MARKERS = (
+    "traceback",
+    "exception",
+    "rawpayload",
+    "providerpayload",
+    "/users/",
+    "api_key",
+    "sessionid",
+    "session_id",
+    "bearer ",
+    "sk-",
+)
+
+FORBIDDEN_FEED_KEYS = (
+    "headline",
+    "url",
+    "sourceUrl",
+    "rawPayload",
+    "providerPayload",
+    "page",
+    "limit",
+    "offset",
+    "nextCursor",
+    "hasMore",
+)
+
+
+def _event_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "id": "evt-radar-macro-001",
+        "title": "US CPI surprise raises valuation review pressure across rate-sensitive groups",
+        "category": EventRadarCategory.MACRO,
+        "impactStatus": EventRadarImpactStatus.HIGH_ATTENTION,
+        "affectedSectors": ["software", "semiconductors"],
+        "affectedThemes": ["rate_sensitivity", "duration_risk"],
+        "relatedSymbols": ["QQQ", "SMH", "AAPL"],
+        "relatedMarketSignals": ["usd_strength", "front_end_yields_up"],
+        "reviewModules": ["macro_context", "home_overview", "watchlist_context"],
+        "sourceStatus": EventRadarSourceStatus.READY,
+        "freshness": "delayed",
+        "summary": (
+            "Macro release pressure may affect discount-rate assumptions and sector leadership, "
+            "so impacted holdings and watchlist names should be reviewed."
+        ),
+        "noAdviceDisclosure": EVENT_RADAR_NO_ADVICE_DISCLOSURE,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _assert_no_forbidden_terms(payload: object) -> None:
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+    for term in FORBIDDEN_RUNTIME_TERMS:
+        assert term not in serialized
+
+
+def _assert_no_leak_markers(payload: object) -> None:
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+    for marker in FORBIDDEN_LEAK_MARKERS:
+        assert marker not in serialized
+
+
+def test_event_radar_snapshot_serializes_contract_shape() -> None:
+    snapshot = build_event_radar_snapshot(
+        items=[_event_payload()],
+        as_of=AS_OF,
+        source_status=EventRadarSourceStatus.READY,
+    )
+
+    dumped = snapshot.model_dump(mode="json")
+
+    assert dumped["schemaVersion"] == "event_radar_snapshot_v1"
+    assert dumped["sourceStatus"] == "ready"
+    assert dumped["itemCount"] == 1
+    assert dumped["items"][0]["category"] == "macro"
+    assert dumped["items"][0]["impactStatus"] == "high_attention"
+    assert dumped["items"][0]["affectedSectors"] == ["software", "semiconductors"]
+    assert dumped["items"][0]["relatedMarketSignals"] == ["usd_strength", "front_end_yields_up"]
+    assert dumped["items"][0]["reviewModules"] == ["macro_context", "home_overview", "watchlist_context"]
+
+
+def test_no_evidence_default_snapshot_is_valid_and_safe() -> None:
+    snapshot = build_no_evidence_event_radar_snapshot(as_of=AS_OF)
+
+    assert isinstance(snapshot, EventRadarSnapshot)
+    assert snapshot.sourceStatus is EventRadarSourceStatus.NO_EVIDENCE
+    assert snapshot.freshness == "unavailable"
+    assert snapshot.itemCount == 0
+    assert snapshot.items == []
+    assert "no verified event source" in snapshot.summary.lower()
+    assert snapshot.noAdviceDisclosure == EVENT_RADAR_NO_ADVICE_DISCLOSURE
+
+    dumped = snapshot.model_dump(mode="json")
+    _assert_no_forbidden_terms(dumped)
+    _assert_no_leak_markers(dumped)
+
+
+def test_example_items_are_impact_oriented_and_not_headline_feed_entries() -> None:
+    snapshot = build_event_radar_snapshot(
+        items=[
+            _event_payload(),
+            _event_payload(
+                id="evt-radar-portfolio-001",
+                title="Portfolio earnings cluster creates concentrated review workload this week",
+                category=EventRadarCategory.PORTFOLIO,
+                impactStatus=EventRadarImpactStatus.REVIEW,
+                affectedSectors=["internet"],
+                affectedThemes=["earnings_cluster", "position_overlap"],
+                relatedSymbols=["AMZN", "GOOGL"],
+                relatedMarketSignals=["earnings_density", "correlation_risk"],
+                reviewModules=["portfolio_context", "earnings_calendar", "risk_review"],
+                summary=(
+                    "Several held or closely tracked names report in the same window, which can "
+                    "change portfolio review priority and scenario preparation."
+                ),
+            ),
+        ],
+        as_of=AS_OF,
+        source_status=EventRadarSourceStatus.READY,
+    )
+
+    assert all(item.affectedSectors for item in snapshot.items)
+    assert all(item.affectedThemes for item in snapshot.items)
+    assert all(item.relatedMarketSignals for item in snapshot.items)
+    assert all(item.reviewModules for item in snapshot.items)
+    assert "headline" not in snapshot.model_dump_json()
+
+
+def test_contract_rejects_forbidden_trading_advice_language() -> None:
+    with pytest.raises(ValidationError):
+        EventRadarItem.model_validate(
+            _event_payload(
+                title="Buy semiconductors now",
+                summary="Immediate buy signal after the CPI release.",
+            )
+        )
+
+
+def test_contract_rejects_internal_diagnostics_and_secret_like_markers() -> None:
+    with pytest.raises(ValidationError):
+        EventRadarItem.model_validate(
+            _event_payload(
+                summary="Traceback: provider failed at /Users/test with api_key=sk-secret",
+            )
+        )
+
+
+def test_snapshot_payload_does_not_introduce_generic_news_feed_shape() -> None:
+    snapshot = build_event_radar_snapshot(
+        items=[_event_payload()],
+        as_of=AS_OF,
+        source_status=EventRadarSourceStatus.READY,
+    )
+
+    dumped = snapshot.model_dump(mode="json")
+    serialized = json.dumps(dumped, ensure_ascii=False)
+    for key in FORBIDDEN_FEED_KEYS:
+        assert f'"{key}"' not in serialized
+
+
+def test_service_returns_same_safe_no_evidence_snapshot_without_wired_sources() -> None:
+    service = EventRadarService()
+
+    snapshot = service.build_snapshot(as_of=AS_OF)
+
+    assert snapshot.sourceStatus is EventRadarSourceStatus.NO_EVIDENCE
+    assert snapshot.items == []
+    assert snapshot.itemCount == 0
+    _assert_no_forbidden_terms(snapshot.model_dump(mode="json"))
+    _assert_no_leak_markers(snapshot.model_dump(mode="json"))
