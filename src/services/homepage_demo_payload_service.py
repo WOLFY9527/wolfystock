@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Deterministic homepage demo payload builder for UI/UAT fixtures only."""
+"""Deterministic homepage demo payload builder for UI fixtures only."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ HAPPY_PATH = "happy_path"
 DEGRADED_EXAMPLE = "degraded_example"
 FIXED_AS_OF = "2026-06-14T09:30:00Z"
 _FIXED_AS_OF_DT = datetime(2026, 6, 14, 9, 30, tzinfo=timezone.utc)
-DEMO_DISCLOSURE = "首页演示样例，仅用于界面联调与 UAT，不代表真实数据。"
+DEMO_DISCLOSURE = "首页演示样例，仅用于公开界面联调，不代表真实数据。"
 _DEMO_FLAGS = {"sampleData": True, "demoPayload": True}
 _DATA_QUALITY_LABELS = {
     "ready": "正常",
@@ -73,8 +73,8 @@ class HomepageDemoPayloadService:
             "asOf": FIXED_AS_OF,
             "sampleData": True,
             "demoPayload": True,
-            "headline": "首页 happy-path 演示样例",
-            "summary": "固定 happy-path 样例，展示正常联调路径。",
+            "headline": "首页正常态演示样例",
+            "summary": "固定正常态样例，展示公开界面联调路径。",
             "marketPulse": market_pulse,
             "moneyFlow": money_flow,
             "eventRadar": event_radar,
@@ -82,7 +82,7 @@ class HomepageDemoPayloadService:
             "researchQueue": research_queue,
             "dataQuality": self._build_overall_data_quality(
                 status="ready",
-                summary="固定 happy-path 样例，字段稳定，适合界面联调。",
+                summary="固定正常态样例，字段稳定，适合公开界面联调。",
                 sections=section_states,
             ),
             "demoDisclosure": DEMO_DISCLOSURE,
@@ -108,7 +108,7 @@ class HomepageDemoPayloadService:
             "sampleData": True,
             "demoPayload": True,
             "headline": "首页异常态演示样例",
-            "summary": "固定异常样例，刻意保留延迟与缺失状态，供 UAT 展示。",
+            "summary": "固定异常样例，刻意保留延迟与缺失状态，适合公开界面联调。",
             "marketPulse": market_pulse,
             "moneyFlow": money_flow,
             "eventRadar": event_radar,
@@ -206,7 +206,7 @@ class HomepageDemoPayloadService:
         )
         payload["sourceStatus"] = {
             "status": "ready",
-            "summary": "固定 happy-path 演示样例，字段仅用于界面联调。",
+            "summary": "固定正常态演示样例，字段仅用于公开界面联调。",
         }
         payload["noAdviceDisclosure"] = DEMO_DISCLOSURE
         self._mark_money_flow_payload(payload)

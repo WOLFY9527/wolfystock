@@ -37,7 +37,7 @@ _RESEARCH_ACTION_BY_STATUS = {
 
 
 class DashboardOverviewService:
-    """Build the overview contract from inert standalone scaffold services."""
+    """Build the overview contract from inert standalone services."""
 
     def get_market_intelligence_overview(self) -> dict[str, object]:
         as_of = _now_iso()
@@ -85,16 +85,16 @@ def _project_market_pulse(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     sp500 = _metric(indices[0] if len(indices) > 0 else None, fallback_label="S&P 500")
     nasdaq = _metric(indices[1] if len(indices) > 1 else None, fallback_label="Nasdaq")
     russell = _metric(indices[2] if len(indices) > 2 else None, fallback_label="Russell 2000")
-    breadth = _metric(snapshot.get("breadth"), fallback_label="Market breadth")
-    liquidity = _metric(snapshot.get("liquidity"), fallback_label="Liquidity state")
+    breadth = _metric(snapshot.get("breadth"), fallback_label="市场广度")
+    liquidity = _metric(snapshot.get("liquidity"), fallback_label="流动性状态")
 
     return {
         "sp500": sp500,
         "nasdaq": nasdaq,
         "russell2000": russell,
         "vix": _metric(snapshot.get("volatility"), fallback_label="VIX"),
-        "tenYearYield": _metric(snapshot.get("rates"), fallback_label="10Y Yield"),
-        "dollarIndex": _metric(snapshot.get("dollar"), fallback_label="Dollar Index"),
+        "tenYearYield": _metric(snapshot.get("rates"), fallback_label="10年期美债收益率"),
+        "dollarIndex": _metric(snapshot.get("dollar"), fallback_label="美元指数"),
         "marketBreadth": {
             "summary": _summary_from_metric(breadth, prefix="市场广度"),
             "status": breadth["status"],
@@ -114,8 +114,8 @@ def _project_money_flow(proxy: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "topInflows": [item for item in top_inflows if item],
         "topOutflows": [item for item in top_outflows if item],
-        "styleBias": _text(style_bias.get("bias")) or "unknown",
-        "offensiveDefensiveBias": _text(offensive_defensive.get("bias")) or "unknown",
+        "styleBias": _public_bias_text(style_bias.get("bias")),
+        "offensiveDefensiveBias": _public_bias_text(offensive_defensive.get("bias")),
         "sourceStatus": _dashboard_state(data_quality.get("state") or status),
         "status": status,
     }
@@ -176,10 +176,10 @@ def _market_brief() -> dict[str, Any]:
 
 def _liquidity_risk(market_pulse: Mapping[str, Any]) -> dict[str, Any]:
     volatility = _metric(market_pulse.get("volatility"), fallback_label="VIX")
-    rates = _metric(market_pulse.get("rates"), fallback_label="10Y Yield")
-    dollar = _metric(market_pulse.get("dollar"), fallback_label="Dollar Index")
+    rates = _metric(market_pulse.get("rates"), fallback_label="10年期美债收益率")
+    dollar = _metric(market_pulse.get("dollar"), fallback_label="美元指数")
     return {
-        "summary": "流动性与风险偏好以市场脉冲 scaffold 为观察依据，证据不足时保持收敛表述。",
+        "summary": "流动性与风险偏好以市场脉冲观察项为依据，证据不足时保持收敛表述。",
         "volatilityTone": _metric_tone(volatility, fallback="暂无证据"),
         "fundingStress": _metric_tone(rates, fallback="暂无证据"),
         "dollarRatePressure": _metric_tone(dollar, fallback="暂无证据"),
@@ -190,11 +190,29 @@ def _liquidity_risk(market_pulse: Mapping[str, Any]) -> dict[str, Any]:
 def _metric(value: Any, *, fallback_label: str) -> dict[str, str]:
     item = _as_dict(value)
     return {
-        "label": _text(item.get("label")) or fallback_label,
+        "label": _public_metric_label(_text(item.get("label")) or fallback_label),
         "value": _metric_value(item),
         "change": _metric_change(item.get("change")),
         "status": _metric_status(item),
     }
+
+
+def _public_metric_label(label: str) -> str:
+    return {
+        "10Y Yield": "10年期美债收益率",
+        "10Y Treasury yield": "10年期美债收益率",
+        "Dollar Index": "美元指数",
+        "Dollar index": "美元指数",
+        "Market breadth": "市场广度",
+        "Liquidity state": "流动性状态",
+    }.get(label, label)
+
+
+def _public_bias_text(value: Any) -> str:
+    text = _text(value)
+    if not text or text.lower() == "unknown":
+        return "暂无证据"
+    return text
 
 
 def _metric_value(item: Mapping[str, Any]) -> str:

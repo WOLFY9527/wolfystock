@@ -58,6 +58,13 @@ FORBIDDEN_MARKERS = (
     "交易建议",
     "投资建议",
 )
+FORBIDDEN_PUBLIC_COPY = (
+    "Market Pulse",
+    "Money Flow Proxy",
+    "stable",
+    "Static metadata only",
+    "not personalized financial advice",
+)
 
 
 def _build_payload() -> dict[str, object]:
@@ -102,6 +109,13 @@ def test_homepage_capabilities_response_has_no_internal_diagnostics_or_secrets()
 def test_homepage_capabilities_response_has_no_trading_advice_language() -> None:
     serialized = json.dumps(_build_payload(), ensure_ascii=False).lower()
 
-    assert "not personalized financial advice" in serialized
+    assert "不构成个性化建议或交易指令" in serialized
     for marker in ("buy", "sell", "place order", "trade execution", "买入", "卖出", "加仓", "减仓"):
+        assert marker not in serialized
+
+
+def test_homepage_capabilities_response_uses_bounded_public_chinese_copy() -> None:
+    serialized = json.dumps(_build_payload(), ensure_ascii=False)
+
+    for marker in FORBIDDEN_PUBLIC_COPY:
         assert marker not in serialized

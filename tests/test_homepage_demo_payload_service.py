@@ -75,6 +75,10 @@ FORBIDDEN_INTERNAL_MARKERS = (
     "schemaversion",
     "proxymode",
 )
+FORBIDDEN_PUBLIC_COPY = (
+    "happy-path",
+    "UAT",
+)
 
 
 def _serialized(payload: object) -> str:
@@ -98,7 +102,7 @@ def _assert_sample_marked(payload: dict[str, object], *, scenario: str, expected
     assert payload["sampleData"] is True
     assert payload["demoPayload"] is True
     assert payload["asOf"] == "2026-06-14T09:30:00Z"
-    assert payload["demoDisclosure"] == "首页演示样例，仅用于界面联调与 UAT，不代表真实数据。"
+    assert payload["demoDisclosure"] == "首页演示样例，仅用于公开界面联调，不代表真实数据。"
 
 
 def _assert_demo_flags(payload: dict[str, object]) -> None:
@@ -110,8 +114,10 @@ def _assert_no_forbidden_terms(payload: dict[str, object]) -> None:
     serialized = _serialized(payload)
     advice_hits = [term for term in FORBIDDEN_TRADING_TERMS if term in serialized]
     leak_hits = [term for term in FORBIDDEN_INTERNAL_MARKERS if term in serialized]
+    public_copy_hits = [term.lower() for term in FORBIDDEN_PUBLIC_COPY if term.lower() in serialized]
     assert advice_hits == []
     assert leak_hits == []
+    assert public_copy_hits == []
 
 
 def test_happy_path_payload_is_stable_and_sample_marked() -> None:
