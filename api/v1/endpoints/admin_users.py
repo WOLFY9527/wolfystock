@@ -266,6 +266,11 @@ def get_admin_user_detail(
     "/users/onboard",
     response_model=AdminUserOnboardResponse,
     summary="Create a normal active user for private-beta onboarding",
+    description=(
+        "Creates a normal active private-beta user. The response returns initialPassword "
+        "exactly once with passwordDelivery=returned_once; clients and operators must treat "
+        "it as one-time secret material and must not log or persist the response body."
+    ),
 )
 def onboard_admin_user(
     body: AdminUserOnboardRequest,

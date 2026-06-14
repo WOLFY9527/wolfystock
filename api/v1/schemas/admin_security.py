@@ -42,7 +42,22 @@ class AdminUserOnboardResponse(_AdminSecurityModel):
     username: str
     role: Literal["user"]
     created: bool
-    password_delivery: Literal["returned_once"] = Field(alias="passwordDelivery")
-    initial_password: str = Field(alias="initialPassword")
+    password_delivery: Literal["returned_once"] = Field(
+        alias="passwordDelivery",
+        description=(
+            "One-time delivery contract. returned_once means initialPassword is present "
+            "only in the successful onboarding response and is excluded from audit, "
+            "list, and detail projections."
+        ),
+    )
+    initial_password: str = Field(
+        alias="initialPassword",
+        description=(
+            "One-time secret material returned only in the successful onboarding response. "
+            "Operators and API clients must not log response bodies or store this value in "
+            "browser history, screenshots, proxy logs, CDN logs, analytics, or audit metadata; "
+            "copy it only through the approved operator handoff process and discard it after use."
+        ),
+    )
     audit_event_id: str | None = Field(default=None, alias="auditEventId")
     message: str

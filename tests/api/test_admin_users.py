@@ -20,6 +20,8 @@ from src.storage import AppUser, AppUserSession, DatabaseManager
 
 FORBIDDEN_PRIVACY_EXPORT_MARKERS = (
     "password_hash",
+    "initialPassword",
+    "passwordDelivery",
     "pbkdf2:admin-secret-hash",
     "pbkdf2:user-secret-hash",
     "raw-active-session-token",
@@ -434,7 +436,6 @@ class AdminUsersApiTestCase(unittest.TestCase):
         for response in (list_response, detail_response):
             self._assert_no_privacy_export_leaks(response)
             text = self._json_text(response)
-            self.assertNotIn("initialPassword", text)
             self.assertNotIn("beta-secret-hash", text)
 
 
