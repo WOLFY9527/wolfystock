@@ -137,7 +137,7 @@ def list_notification_channels(
 ):
     service = NotificationService()
     return NotificationChannelListResponse(
-        items=service.list_channels(),
+        items=[NotificationChannelModel.from_service_payload(item) for item in service.list_channels()],
         available_system_channels=service.list_system_channels(),
     )
 
@@ -152,7 +152,7 @@ def create_notification_channel(
     _: CurrentUser = Depends(require_admin_capability("ops:notifications:write")),
 ):
     try:
-        return NotificationChannelModel(**NotificationService().create_channel(**request.model_dump()))
+        return NotificationChannelModel.from_service_payload(NotificationService().create_channel(**request.model_dump()))
     except Exception as exc:
         raise _service_error(exc) from exc
 
@@ -168,8 +168,8 @@ def update_notification_channel(
     _: CurrentUser = Depends(require_admin_capability("ops:notifications:write")),
 ):
     try:
-        return NotificationChannelModel(
-            **NotificationService().update_channel(
+        return NotificationChannelModel.from_service_payload(
+            NotificationService().update_channel(
                 channel_id,
                 **request.model_dump(exclude_unset=True),
             )
@@ -220,7 +220,7 @@ def test_notification_channel(
             )
             result["error"] = localized_error
             result["diagnostics"] = localized_diagnostics
-        return NotificationChannelTestResponse(**result)
+        return NotificationChannelTestResponse.from_service_payload(result)
     except Exception as exc:
         raise _service_error(exc) from exc
 

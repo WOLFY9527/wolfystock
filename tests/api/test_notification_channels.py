@@ -132,9 +132,116 @@ class NotificationChannelsTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["name"], "Ops inbox")
-        self.assertEqual(payload["type"], "in_app")
+        self.assertEqual(payload["channel_type"], "in_app")
         self.assertEqual(len(fake_service.create_calls), 1)
         self.assertEqual(fake_service.create_calls[0]["name"], "Ops inbox")
+
+    def test_channel_api_projects_safe_operator_status_from_leaky_service_payload(self) -> None:
+        client = self._app()
+
+        class LeakyNotificationService:
+            def list_system_channels(self):
+                return ["email"]
+
+            def list_channels(self):
+                return [
+                    {
+                        "id": 7,
+                        "name": "Ops webhook",
+                        "type": "webhook",
+                        "enabled": True,
+                        "severity_min": "warning",
+                        "event_types": ["admin_logs.storage"],
+                        "config": {
+                            "webhook_url": "https://user:pass@hooks.example.test/services/raw/path",
+                            "token": "route-token",
+                            "email_destination": "alice@example.com",
+                            "provider_credentials": {"password": "provider-password"},
+                        },
+                        "target_summary": "webhook:https://hooks.example.test/services/raw/path",
+                        "last_tested_at": "2026-06-14T01:02:03",
+                        "last_status": "failed",
+                        "last_error": "Traceback token=raw-token /tmp/provider.py",
+                        "last_error_diagnostics": {
+                            "provider_error": "raw provider response token=raw-token",
+                            "filesystem_path": "/tmp/provider.py",
+                        },
+                    },
+                    {
+                        "id": 8,
+                        "name": "Disabled webhook",
+                        "type": "webhook",
+                        "enabled": False,
+                        "config": {"webhook_url": "https://hooks.example.test/disabled"},
+                        "target_summary": "webhook:configured",
+                        "last_status": "disabled",
+                    },
+                    {
+                        "id": 9,
+                        "name": "Unconfigured webhook",
+                        "type": "webhook",
+                        "enabled": True,
+                        "config": {},
+                        "target_summary": "webhook:unconfigured",
+                        "last_status": "unknown",
+                    },
+                ]
+
+            def test_channel(self, channel_id: int, *, dry_run: bool = False):
+                return {
+                    "success": False,
+                    "dry_run": bool(dry_run),
+                    "target_summary": "webhook:https://hooks.example.test/services/raw/path",
+                    "error": "Traceback token=raw-token /tmp/provider.py",
+                    "error_code": "webhook_delivery_failed",
+                    "diagnostics": {
+                        "provider_error": "raw provider response token=raw-token",
+                        "filesystem_path": "/tmp/provider.py",
+                    },
+                    "channel": self.list_channels()[0],
+                }
+
+        with patch("api.v1.endpoints.admin_notifications.NotificationService", return_value=LeakyNotificationService()):
+            list_response = client.get("/api/v1/admin/notification-channels")
+            test_response = client.post("/api/v1/admin/notification-channels/7/test?dry_run=true")
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(test_response.status_code, 200)
+        combined = f"{list_response.json()} {test_response.json()}"
+        for leaked in (
+            "user:pass",
+            "/services/raw/path",
+            "route-token",
+            "alice@example.com",
+            "provider-password",
+            "raw-token",
+            "raw provider response",
+            "/tmp/provider.py",
+            "Traceback",
+            "diagnostics",
+            "target_summary",
+            "last_error",
+        ):
+            self.assertNotIn(leaked, combined)
+        self.assertNotIn("'config':", combined)
+        item = list_response.json()["items"][0]
+        self.assertEqual(item["channel_type"], "webhook")
+        self.assertTrue(item["configured"])
+        self.assertEqual(item["delivery_mode"], "webhook")
+        self.assertEqual(item["status"], "failed")
+        self.assertEqual(item["last_checked_at"], "2026-06-14T01:02:03")
+        disabled = list_response.json()["items"][1]
+        self.assertTrue(disabled["configured"])
+        self.assertEqual(disabled["delivery_mode"], "no_send")
+        self.assertEqual(disabled["status"], "disabled")
+        unconfigured = list_response.json()["items"][2]
+        self.assertFalse(unconfigured["configured"])
+        self.assertEqual(unconfigured["delivery_mode"], "no_send")
+        self.assertEqual(unconfigured["status"], "unavailable")
+        test_payload = test_response.json()
+        self.assertEqual(test_payload["status"], "failed")
+        self.assertEqual(test_payload["error_code"], "webhook_delivery_failed")
+        self.assertEqual(test_payload["channel"]["status"], "failed")
 
     def test_webhook_url_validation_rejects_non_http_targets(self) -> None:
         with self.assertRaises(ValueError):
@@ -869,8 +976,10 @@ class NotificationChannelsTestCase(unittest.TestCase):
             self.assertEqual(en_payload["error_code"], "ssl_certificate_verify_failed")
             self.assertIn("证书", zh_payload["error"])
             self.assertIn("certificate", en_payload["error"].lower())
-            self.assertIn("troubleshooting", zh_payload["diagnostics"])
-            self.assertIn("troubleshooting", en_payload["diagnostics"])
+            self.assertNotIn("diagnostics", zh_payload)
+            self.assertNotIn("diagnostics", en_payload)
+            self.assertEqual(zh_payload["status"], "failed")
+            self.assertEqual(en_payload["status"], "failed")
 
             channels = failing.list_channels()
             self.assertEqual(channels[0]["last_error_code"], "ssl_certificate_verify_failed")
