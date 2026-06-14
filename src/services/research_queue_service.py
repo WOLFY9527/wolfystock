@@ -63,6 +63,18 @@ DEFAULT_REVIEW_MODULES: dict[ResearchQueueCategory, str] = {
     "research": "research_review",
     "data_quality": "data_quality_review",
 }
+ADAPTER_DEFAULT_TITLES = {
+    "money_flow": "资金流延续性观察",
+    "event_radar": "关键事件复核",
+    "personal_summary": "组合/关注列表复核",
+    "data_quality": "数据质量复核",
+}
+ADAPTER_DEFAULT_REASONS = {
+    "money_flow": "资金流线索需要延续性复核，仅保留研究观察。",
+    "event_radar": "关键事件线索需要复核，当前仅保留研究观察。",
+    "personal_summary": "组合与关注列表线索需要复核，当前仅保留研究观察。",
+    "data_quality": "公开资料质量需要复核，先补齐证据再继续研究。",
+}
 STATUS_RANK = {
     "high_attention": 0,
     "review": 1,
@@ -85,6 +97,54 @@ FORBIDDEN_TEXT_RE = re.compile(
 )
 SAFE_SYMBOL_RE = re.compile(r"^[A-Za-z0-9._-]{1,24}$")
 SAFE_MODULE_RE = re.compile(r"^[a-z_]{3,40}$")
+DOMAIN_EVIDENCE_STATUS = {
+    "ready": "available",
+    "available": "available",
+    "complete": "available",
+    "completed": "available",
+    "fresh": "available",
+    "live": "available",
+    "updated": "available",
+    "partial": "partial",
+    "degraded": "partial",
+    "limited": "partial",
+    "cached": "partial",
+    "cache_snapshot": "partial",
+    "fallback": "partial",
+    "local": "partial",
+    "local_historical": "partial",
+    "delayed": "partial",
+    "stale": "partial",
+    "no_data": "no_evidence",
+    "missing": "no_evidence",
+    "no_evidence": "no_evidence",
+    "unknown": "no_evidence",
+    "error": "unavailable",
+    "failed": "unavailable",
+    "mock": "unavailable",
+    "provider_down": "unavailable",
+    "provider_error": "unavailable",
+    "synthetic": "unavailable",
+    "unavailable": "unavailable",
+}
+GENERIC_STATUS_TO_QUEUE_STATUS = {
+    "high_attention": "high_attention",
+    "review": "review",
+    "observe": "observe",
+    "ready": "review",
+    "partial": "observe",
+    "delayed": "review",
+    "cached": "review",
+    "stale": "review",
+    "stronger": "review",
+    "weaker": "review",
+    "volume_expanded": "review",
+    "normal": "observe",
+    "range_bound": "observe",
+    "sample_data": "observe",
+    "no_evidence": "no_evidence",
+    "unavailable": "unavailable",
+}
 
 
 @dataclass(frozen=True)
@@ -151,7 +211,204 @@ class ResearchQueueService:
             for seed_item in seed_items:
                 sequence += 1
                 prepared.append(self._prepare_item(seed_item, category, sequence))
+        for seed_item, category in self._adapt_summary_inputs(build_inputs):
+            sequence += 1
+            prepared.append(self._prepare_item(seed_item, category, sequence))
         return prepared
+
+    def _adapt_summary_inputs(
+        self,
+        build_inputs: ResearchQueueBuildInputs,
+    ) -> list[tuple[ResearchQueueSeedItem, ResearchQueueCategory]]:
+        adapted: list[tuple[ResearchQueueSeedItem, ResearchQueueCategory]] = []
+        for candidate in (
+            self._adapt_money_flow_summary(build_inputs.moneyFlowSummary),
+            self._adapt_event_radar_summary(build_inputs.eventRadarSummary),
+            self._adapt_personal_summary(build_inputs.personalSummary),
+            self._adapt_data_quality_summary(build_inputs.dataQualitySummary),
+        ):
+            if candidate is not None:
+                adapted.append(candidate)
+        return adapted
+
+    def _adapt_money_flow_summary(
+        self,
+        value: Any,
+    ) -> tuple[ResearchQueueSeedItem, ResearchQueueCategory] | None:
+        payload = self._coerce_summary_mapping(value)
+        if payload is None:
+            return None
+        status_token = self._status_token(payload.get("status"))
+        evidence_status = self._resolve_evidence_status(
+            self._status_token(
+                self._nested_value(payload.get("dataQuality"), "state"),
+                payload.get("status"),
+            )
+        )
+        names = self._collect_field_values(payload.get("topInflows"), "name")
+        names.extend(self._collect_field_values(payload.get("topOutflows"), "name"))
+        if not names and evidence_status in {"no_evidence", "unavailable"}:
+            return None
+        return (
+            ResearchQueueSeedItem(
+                title=ADAPTER_DEFAULT_TITLES["money_flow"],
+                reason=self._first_safe_text(
+                    payload.get("interpretation"),
+                    self._first_sequence_text(payload.get("topInflows"), "interpretation"),
+                    self._first_sequence_text(payload.get("topOutflows"), "interpretation"),
+                    default=ADAPTER_DEFAULT_REASONS["money_flow"],
+                ),
+                reviewModule=DEFAULT_REVIEW_MODULES["money_flow"],
+                status=self._resolve_queue_status(status_token, fallback="review"),
+                relatedThemes=names,
+                evidenceStatus=evidence_status,
+            ),
+            "money_flow",
+        )
+
+    def _adapt_event_radar_summary(
+        self,
+        value: Any,
+    ) -> tuple[ResearchQueueSeedItem, ResearchQueueCategory] | None:
+        payload = self._coerce_summary_mapping(value)
+        if payload is None:
+            return None
+        raw_items = self._coerce_sequence(payload.get("items"))
+        event_items = [self._coerce_summary_mapping(item) for item in raw_items]
+        event_items = [item for item in event_items if item is not None]
+        if not event_items:
+            return None
+        source_status = self._status_token(payload.get("sourceStatus"), payload.get("status"))
+        if source_status in {"no_evidence", "unavailable"}:
+            return None
+        queue_status = self._strongest_queue_status(
+            self._status_token(item.get("impactStatus")) for item in event_items
+        )
+        review_modules = self._collect_field_values(event_items, "reviewModules", nested=True)
+        related_symbols = self._collect_field_values(event_items, "relatedSymbols", nested=True)
+        related_themes = self._collect_field_values(event_items, "affectedThemes", nested=True)
+        related_themes.extend(self._collect_field_values(event_items, "affectedSectors", nested=True))
+        return (
+            ResearchQueueSeedItem(
+                title=ADAPTER_DEFAULT_TITLES["event_radar"],
+                reason=self._first_safe_text(
+                    payload.get("summary"),
+                    self._first_sequence_text(event_items, "summary"),
+                    default=ADAPTER_DEFAULT_REASONS["event_radar"],
+                ),
+                reviewModule=(review_modules[0] if review_modules else DEFAULT_REVIEW_MODULES["event"]),
+                status=queue_status,
+                relatedSymbols=related_symbols,
+                relatedThemes=related_themes,
+                evidenceStatus=self._resolve_evidence_status(source_status),
+            ),
+            "event",
+        )
+
+    def _adapt_personal_summary(
+        self,
+        value: Any,
+    ) -> tuple[ResearchQueueSeedItem, ResearchQueueCategory] | None:
+        payload = self._coerce_summary_mapping(value)
+        if payload is None:
+            return None
+        review_queue = self._nested_mapping(payload, "reviewQueue")
+        review_items = self._coerce_sequence((review_queue or {}).get("items"))
+        review_item_mappings = [self._coerce_summary_mapping(item) for item in review_items]
+        review_item_mappings = [item for item in review_item_mappings if item is not None]
+
+        watchlist_exceptions = self._nested_mapping(payload, "watchlistExceptions")
+        exception_items = self._coerce_sequence((watchlist_exceptions or {}).get("items"))
+        exception_mappings = [self._coerce_summary_mapping(item) for item in exception_items]
+        exception_mappings = [item for item in exception_mappings if item is not None]
+
+        research_coverage = self._nested_mapping(payload, "researchCoverage")
+        portfolio_snapshot = self._nested_mapping(payload, "portfolioSnapshot")
+        data_quality = self._nested_mapping(payload, "dataQuality")
+
+        if not any((review_item_mappings, exception_mappings, research_coverage, portfolio_snapshot)):
+            return None
+
+        category: ResearchQueueCategory = "watchlist" if any(
+            (
+                review_item_mappings,
+                exception_mappings,
+                self._coerce_sequence((research_coverage or {}).get("missingSymbols")),
+                self._coerce_sequence((research_coverage or {}).get("staleSymbols")),
+            )
+        ) else "portfolio"
+        priority_tokens = [
+            self._status_token(item.get("priorityStatus")) for item in review_item_mappings
+        ]
+        secondary_tokens = [
+            self._status_token(item.get("researchStatus")) for item in review_item_mappings
+        ]
+        secondary_tokens.extend(self._status_token(item.get("researchStatus")) for item in exception_mappings)
+        secondary_tokens.extend(
+            [
+                self._status_token((portfolio_snapshot or {}).get("riskStatus")),
+                self._status_token((portfolio_snapshot or {}).get("concentrationStatus")),
+                self._status_token(payload.get("status")),
+            ]
+        )
+        queue_status = self._strongest_queue_status(priority_tokens) if any(priority_tokens) else self._strongest_queue_status(secondary_tokens)
+        related_symbols = self._collect_field_values(review_item_mappings, "symbol")
+        related_symbols.extend(self._collect_field_values(exception_mappings, "symbol"))
+        related_symbols.extend(self._coerce_text_sequence((research_coverage or {}).get("missingSymbols")))
+        related_symbols.extend(self._coerce_text_sequence((research_coverage or {}).get("staleSymbols")))
+        evidence_status = self._resolve_evidence_status(
+            self._status_token(
+                (data_quality or {}).get("status"),
+                (watchlist_exceptions or {}).get("status"),
+                (research_coverage or {}).get("status"),
+                payload.get("status"),
+            )
+        )
+        if not related_symbols and evidence_status in {"no_evidence", "unavailable"}:
+            return None
+        return (
+            ResearchQueueSeedItem(
+                title=ADAPTER_DEFAULT_TITLES["personal_summary"],
+                reason=self._first_safe_text(
+                    self._first_sequence_text(review_item_mappings, "reviewReason"),
+                    self._first_sequence_text(exception_mappings, "reviewReason"),
+                    default=ADAPTER_DEFAULT_REASONS["personal_summary"],
+                ),
+                reviewModule=DEFAULT_REVIEW_MODULES[category],
+                status=queue_status,
+                relatedSymbols=related_symbols,
+                relatedThemes=["关注列表"] if category == "watchlist" else ["组合"],
+                evidenceStatus=evidence_status,
+            ),
+            category,
+        )
+
+    def _adapt_data_quality_summary(
+        self,
+        value: Any,
+    ) -> tuple[ResearchQueueSeedItem, ResearchQueueCategory] | None:
+        payload = self._coerce_summary_mapping(value)
+        if payload is None:
+            return None
+        status_token = self._status_token(payload.get("status"))
+        if not status_token:
+            return None
+        if status_token == "ready" and not self._module_names(payload):
+            return None
+        return (
+            ResearchQueueSeedItem(
+                title=ADAPTER_DEFAULT_TITLES["data_quality"],
+                reason=self._first_safe_text(
+                    payload.get("message"),
+                    default=ADAPTER_DEFAULT_REASONS["data_quality"],
+                ),
+                reviewModule=DEFAULT_REVIEW_MODULES["data_quality"],
+                status=self._resolve_data_quality_queue_status(status_token),
+                relatedThemes=self._module_names(payload),
+                evidenceStatus=self._resolve_evidence_status(status_token),
+            ),
+            "data_quality",
+        )
 
     def _prepare_item(
         self,
@@ -247,6 +504,113 @@ class ResearchQueueService:
         if text:
             return text
         return DEFAULT_AS_OF
+
+    def _coerce_summary_mapping(self, value: Any) -> Mapping[str, Any] | None:
+        if isinstance(value, Mapping):
+            return value
+        model_dump = getattr(value, "model_dump", None)
+        if callable(model_dump):
+            dumped = model_dump(mode="python", by_alias=True)
+            if isinstance(dumped, Mapping):
+                return dumped
+        return None
+
+    def _coerce_sequence(self, value: Any) -> list[Any]:
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            return list(value)
+        return []
+
+    def _coerce_text_sequence(self, value: Any) -> list[str]:
+        return [str(item or "") for item in self._coerce_sequence(value)]
+
+    def _nested_mapping(self, payload: Mapping[str, Any], key: str) -> Mapping[str, Any] | None:
+        return self._coerce_summary_mapping(payload.get(key))
+
+    def _nested_value(self, value: Any, key: str) -> Any:
+        mapping = self._coerce_summary_mapping(value)
+        if mapping is None:
+            return None
+        return mapping.get(key)
+
+    def _collect_field_values(
+        self,
+        values: Any,
+        field_name: str,
+        *,
+        nested: bool = False,
+    ) -> list[str]:
+        collected: list[str] = []
+        for value in self._coerce_sequence(values):
+            if nested:
+                collected.extend(self._coerce_text_sequence((self._coerce_summary_mapping(value) or {}).get(field_name)))
+                continue
+            mapping = self._coerce_summary_mapping(value)
+            if mapping is None:
+                continue
+            text = mapping.get(field_name)
+            if text is not None:
+                collected.append(str(text))
+        return collected
+
+    def _first_sequence_text(self, values: Any, field_name: str) -> str | None:
+        for value in self._coerce_sequence(values):
+            mapping = self._coerce_summary_mapping(value)
+            if mapping is None:
+                continue
+            text = self._safe_text(mapping.get(field_name))
+            if text:
+                return text
+        return None
+
+    def _first_safe_text(self, *candidates: Any, default: str) -> str:
+        for candidate in candidates:
+            text = self._safe_text(candidate)
+            if text:
+                return text
+        return default
+
+    def _status_token(self, *values: Any) -> str:
+        for value in values:
+            if value is None:
+                continue
+            if isinstance(value, Mapping):
+                continue
+            text = str(value or "").strip().lower()
+            if text:
+                return text
+        return ""
+
+    def _resolve_evidence_status(self, token: str) -> ResearchQueueEvidenceStatus:
+        return DOMAIN_EVIDENCE_STATUS.get(token, "no_evidence")
+
+    def _resolve_queue_status(
+        self,
+        token: str,
+        *,
+        fallback: str = "observe",
+    ) -> str:
+        return GENERIC_STATUS_TO_QUEUE_STATUS.get(token, fallback)
+
+    def _strongest_queue_status(self, tokens: Sequence[str] | Any) -> str:
+        strongest = "observe"
+        strongest_rank = STATUS_RANK.get(strongest, 99)
+        for token in tokens:
+            normalized = self._resolve_queue_status(self._status_token(token))
+            rank = STATUS_RANK.get(normalized, 99)
+            if rank < strongest_rank:
+                strongest = normalized
+                strongest_rank = rank
+        return strongest
+
+    def _resolve_data_quality_queue_status(self, token: str) -> str:
+        if token in {"partial", "delayed", "cached"}:
+            return "review"
+        return self._resolve_queue_status(token)
+
+    def _module_names(self, payload: Mapping[str, Any]) -> list[str]:
+        modules = self._coerce_text_sequence(payload.get("affectedModules"))
+        modules.extend(self._coerce_text_sequence(payload.get("updatedModules")))
+        return modules
 
     def _safe_text(self, value: str | None) -> str | None:
         text = str(value or "").strip()
