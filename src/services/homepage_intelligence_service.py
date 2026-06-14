@@ -65,19 +65,20 @@ class HomepageIntelligenceService:
         self._demo_payload_service = HomepageDemoPayloadService()
 
     def build_bundle(self) -> dict[str, Any]:
-        capabilities = self._capabilities_service.build_snapshot()
-        module_manifest = self._module_manifest_service.build_manifest(
-            as_of=HOMEPAGE_INTELLIGENCE_DEFAULT_AS_OF
+        capabilities = self._project_capabilities(self._capabilities_service.build_snapshot())
+        module_manifest = self._project_module_manifest(
+            self._module_manifest_service.build_manifest(as_of=HOMEPAGE_INTELLIGENCE_DEFAULT_AS_OF)
         )
-        module_manifest["noAdviceDisclosure"] = "仅供模块可用性与接入准备度观察，不构成投资建议。"
         session_status = self._market_session_status_service.build_status(
             {
                 "market": "US",
                 "sessionState": "unknown",
                 "asOf": HOMEPAGE_INTELLIGENCE_DEFAULT_AS_OF,
             }
+        ).model_dump(mode="json")
+        source_freshness = build_source_freshness_summary(_SOURCE_FRESHNESS_SAMPLE).model_dump(
+            mode="json", by_alias=True
         )
-        source_freshness = build_source_freshness_summary(_SOURCE_FRESHNESS_SAMPLE)
         demo_payloads = self._demo_payload_service.build_payloads()
 
         response = HomepageIntelligenceResponse(
@@ -99,3 +100,140 @@ class HomepageIntelligenceService:
             noAdviceDisclosure=HOMEPAGE_INTELLIGENCE_NO_ADVICE_DISCLOSURE,
         )
         return response.model_dump(mode="json")
+
+    def _project_capabilities(self, snapshot: Any) -> dict[str, Any]:
+        payload = snapshot.model_dump(mode="json") if hasattr(snapshot, "model_dump") else dict(snapshot)
+        return {
+            "schemaVersion": payload.get("schemaVersion", "homepage_capabilities_v1"),
+            "status": payload.get("status", "ready"),
+            "sections": [
+                {
+                    "key": str(section.get("key", ""))[:40],
+                    "label": str(section.get("label", ""))[:80],
+                    "supported": bool(section.get("supported", False)),
+                    "status": section.get("status", "no_evidence"),
+                    "description": self._metadata_text(
+                        section.get("description"),
+                        fallback="提供首页能力状态观察。",
+                        max_length=120,
+                    ),
+                }
+                for section in payload.get("sections", [])
+                if isinstance(section, dict)
+            ],
+            "capabilities": {
+                key: bool(value)
+                for key, value in dict(payload.get("capabilities", {})).items()
+                if key
+                in {
+                    "marketPulse",
+                    "moneyFlowProxy",
+                    "eventRadar",
+                    "personalSummary",
+                    "researchQueue",
+                    "publicDataQuality",
+                    "sessionStatus",
+                    "eventWindows",
+                    "noAdviceBoundary",
+                }
+            },
+            "dataQuality": {
+                "status": dict(payload.get("dataQuality", {})).get("status", "ready"),
+                "label": dict(payload.get("dataQuality", {})).get("label", "正常"),
+                "available": bool(dict(payload.get("dataQuality", {})).get("available", True)),
+                "description": self._metadata_text(
+                    dict(payload.get("dataQuality", {})).get("description"),
+                    fallback="首页能力状态已整理为公开元数据。",
+                    max_length=120,
+                ),
+            },
+            "noAdviceDisclosure": "仅供首页能力状态观察，不构成个性化建议。",
+        }
+
+    def _project_module_manifest(self, payload: dict[str, Any]) -> dict[str, Any]:
+        modules: list[dict[str, Any]] = []
+        for module in payload.get("modules", []):
+            if not isinstance(module, dict):
+                continue
+            modules.append(
+                {
+                    "key": str(module.get("key", ""))[:48],
+                    "label": str(module.get("label", ""))[:80],
+                    "category": module.get("category", "overview"),
+                    "availability": self._bounded_availability(module.get("availability")),
+                    "integrationStatus": self._bounded_integration(module.get("integrationStatus")),
+                    "publicStatus": module.get("publicStatus", "public"),
+                    "reviewPoint": self._metadata_text(
+                        module.get("reviewPoint"),
+                        fallback="复核该模块的公开展示边界。",
+                        max_length=120,
+                    ),
+                    "dataQuality": self._project_quality(module.get("dataQuality")),
+                }
+            )
+
+        return {
+            "status": self._bounded_status(payload.get("status")),
+            "asOf": HOMEPAGE_INTELLIGENCE_DEFAULT_AS_OF,
+            "modules": modules,
+            "dataQuality": self._project_quality(payload.get("dataQuality")),
+            "noAdviceDisclosure": "仅供模块可用性与接入准备度观察，不构成个性化建议。",
+        }
+
+    def _project_quality(self, value: Any) -> dict[str, str]:
+        payload = value if isinstance(value, dict) else {}
+        return {
+            "state": self._bounded_status(payload.get("state") or payload.get("status")),
+            "label": str(payload.get("label") or "正常")[:40],
+            "summary": self._metadata_text(
+                payload.get("summary") or payload.get("description"),
+                fallback="公开状态字段已整理为安全元数据。",
+                max_length=120,
+            ),
+        }
+
+    def _bounded_status(self, value: Any) -> str:
+        text = str(value or "ready")
+        return text if text in {"ready", "partial", "no_evidence", "unavailable"} else "partial"
+
+    def _bounded_availability(self, value: Any) -> str:
+        text = str(value or "ready")
+        return text if text in {"ready", "partial", "no_evidence", "unavailable"} else "partial"
+
+    def _bounded_integration(self, value: Any) -> str:
+        text = str(value or "standalone")
+        return text if text in {"standalone", "wired", "pending", "unavailable"} else "pending"
+
+    def _metadata_text(self, value: Any, *, fallback: str, max_length: int) -> str:
+        text = str(value or "").strip()
+        compact = text.lower().replace("_", "").replace(" ", "").replace("-", "")
+        if not text or any(
+            marker in compact
+            for marker in (
+                "交易指令",
+                "交易信号",
+                "买入",
+                "卖出",
+                "下单",
+                "targetprice",
+                "placorder",
+                "placeorder",
+                "buynow",
+                "sellnow",
+                "livedata",
+                "realtime",
+                "real-time",
+                "http://",
+                "https://",
+                "provider",
+                "raw",
+                "traceback",
+                "reasoncode",
+                "trustlevel",
+                "sourcetype",
+                "fallback",
+                "scaffold",
+            )
+        ):
+            return fallback
+        return text[:max_length]
