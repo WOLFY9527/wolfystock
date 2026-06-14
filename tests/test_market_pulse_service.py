@@ -87,6 +87,20 @@ def _complete_payload() -> dict:
     }
 
 
+def _safe_metric_payload() -> dict:
+    return {
+        "asOf": "2026-06-14T09:30:00Z",
+        "sp500": {"value": 5300.25, "change": 0.8},
+        "nasdaq": {"value": 18880.4, "change": 1.1, "state": "走强"},
+        "russell2000": {"value": 2110.2, "change": -0.2, "state": "中性"},
+        "vix": {"value": 13.4, "change": -0.7, "state": "ready"},
+        "tenYearYield": {"value": 4.31, "change": 0.03, "dataQuality": "ready"},
+        "dollarIndex": {"value": 104.2, "change": -0.1},
+        "marketBreadth": {"value": 56.0, "change": 2.5},
+        "liquidityState": {"state": "ready", "interpretation": "适合研究观察"},
+    }
+
+
 def test_market_pulse_default_snapshot_has_stable_top_level_shape() -> None:
     snapshot = MarketPulseService().build_snapshot().model_dump(mode="json")
 
@@ -154,6 +168,33 @@ def test_market_pulse_contract_bounds_data_quality_states() -> None:
     assert metric_states <= MARKET_PULSE_ALLOWED_DATA_QUALITY_STATES
 
 
+def test_market_pulse_safe_metric_payload_maps_to_homepage_ready_shape() -> None:
+    snapshot = MarketPulseService().build_snapshot(_safe_metric_payload()).model_dump(mode="json")
+
+    assert snapshot["status"] == "ready"
+    assert snapshot["asOf"] == "2026-06-14T09:30:00Z"
+    assert snapshot["dataQuality"] == {
+        "state": "正常",
+        "label": "正常",
+        "available": True,
+    }
+    assert [item["label"] for item in snapshot["indices"]] == ["S&P 500", "Nasdaq", "Russell 2000"]
+    assert snapshot["indices"][0]["state"] == "正常"
+    assert snapshot["indices"][0]["interpretation"] == "适合研究观察"
+    assert snapshot["indices"][1]["state"] == "走强"
+    assert snapshot["indices"][2]["state"] == "中性"
+    assert snapshot["volatility"]["label"] == "VIX"
+    assert snapshot["volatility"]["state"] == "正常"
+    assert snapshot["rates"]["label"] == "10Y Treasury yield"
+    assert snapshot["rates"]["dataQuality"]["state"] == "正常"
+    assert snapshot["dollar"]["label"] == "Dollar index"
+    assert snapshot["dollar"]["state"] == "正常"
+    assert snapshot["breadth"]["label"] == "Market breadth"
+    assert snapshot["breadth"]["state"] == "正常"
+    assert snapshot["liquidity"]["label"] == "Liquidity state"
+    assert snapshot["liquidity"]["state"] == "正常"
+
+
 def test_market_pulse_snapshot_strips_advice_terms_and_internal_markers() -> None:
     payload = _complete_payload()
     payload["indices"][0].update(
@@ -181,16 +222,69 @@ def test_market_pulse_snapshot_strips_advice_terms_and_internal_markers() -> Non
     serialized = json.dumps(snapshot, ensure_ascii=False)
     serialized_lower = serialized.lower()
 
-    assert snapshot["indices"][0]["state"] == "观察"
-    assert snapshot["indices"][0]["interpretation"] == "观察"
-    assert snapshot["indices"][0]["dataQuality"]["state"] == "观察"
-    assert snapshot["volatility"]["state"] == "观察"
-    assert snapshot["volatility"]["interpretation"] == "观察"
-    assert snapshot["volatility"]["dataQuality"]["state"] == "观察"
+    assert snapshot["indices"][0]["state"] == "正常"
+    assert snapshot["indices"][0]["interpretation"] == "适合研究观察"
+    assert snapshot["indices"][0]["dataQuality"]["state"] == "正常"
+    assert snapshot["volatility"]["state"] == "正常"
+    assert snapshot["volatility"]["interpretation"] == "适合研究观察"
+    assert snapshot["volatility"]["dataQuality"]["state"] == "正常"
 
     for term in FORBIDDEN_TERMS:
         assert term not in serialized_lower
     assert "https://private-provider.example/api" not in serialized
+
+
+def test_market_pulse_alias_metric_inputs_drop_debug_and_provider_fields() -> None:
+    payload = _safe_metric_payload()
+    payload["sp500"].update(
+        {
+            "label": "Injected label",
+            "unit": "ticks",
+            "state": "provider_down",
+            "interpretation": "buy now",
+            "dataQuality": "sourceType",
+            "providerUrl": "https://private-provider.example/api",
+            "sourceType": "official_public",
+            "trustLevel": "high",
+            "reasonCode": "provider_timeout",
+            "debug": {"token": "secret-token"},
+            "rawPayload": {"sessionId": "abc123"},
+        }
+    )
+    payload["liquidityState"].update(
+        {
+            "provider": "hidden",
+            "traceback": "Traceback: RuntimeError",
+            "apiKey": "secret-key",
+        }
+    )
+
+    snapshot = MarketPulseService().build_snapshot(payload).model_dump(mode="json")
+    dumped = json.dumps(snapshot, ensure_ascii=False)
+    dumped_lower = dumped.lower()
+
+    assert snapshot["indices"][0]["label"] == "S&P 500"
+    assert snapshot["indices"][0]["unit"] == "pt"
+    assert snapshot["indices"][0]["state"] == "正常"
+    assert snapshot["indices"][0]["interpretation"] == "适合研究观察"
+    assert snapshot["indices"][0]["dataQuality"]["state"] == "正常"
+    assert snapshot["liquidity"]["state"] == "正常"
+
+    for forbidden in (
+        "Injected label",
+        "ticks",
+        "private-provider.example",
+        "sourceType",
+        "trustLevel",
+        "reasonCode",
+        "secret-token",
+        "abc123",
+        "secret-key",
+        "Traceback",
+        "hidden",
+        "buy now",
+    ):
+        assert forbidden.lower() not in dumped_lower
 
 
 def test_market_pulse_service_is_inert_and_does_not_import_runtime_providers() -> None:
