@@ -101,6 +101,11 @@ def _assert_sample_marked(payload: dict[str, object], *, scenario: str, expected
     assert payload["demoDisclosure"] == "首页演示样例，仅用于界面联调与 UAT，不代表真实数据。"
 
 
+def _assert_demo_flags(payload: dict[str, object]) -> None:
+    assert payload["sampleData"] is True
+    assert payload["demoPayload"] is True
+
+
 def _assert_no_forbidden_terms(payload: dict[str, object]) -> None:
     serialized = _serialized(payload)
     advice_hits = [term for term in FORBIDDEN_TRADING_TERMS if term in serialized]
@@ -143,6 +148,15 @@ def test_happy_path_payload_is_stable_and_sample_marked() -> None:
     assert first["researchQueue"]["dataQuality"]["status"] == "ready"
     assert first["marketPulse"]["noAdviceDisclosure"] == first["demoDisclosure"]
     assert first["moneyFlow"]["noAdviceDisclosure"] == first["demoDisclosure"]
+    for section in (
+        first["marketPulse"],
+        first["moneyFlow"],
+        first["eventRadar"],
+        first["personalSummary"],
+        first["researchQueue"],
+        first["dataQuality"],
+    ):
+        _assert_demo_flags(section)
 
 
 def test_degraded_example_payload_is_stable_and_sample_marked() -> None:
@@ -167,6 +181,15 @@ def test_degraded_example_payload_is_stable_and_sample_marked() -> None:
     assert first["personalSummary"]["status"] == "partial"
     assert first["personalSummary"]["watchlistExceptions"]["items"]
     assert first["researchQueue"]["dataQuality"]["status"] == "partial"
+    for section in (
+        first["marketPulse"],
+        first["moneyFlow"],
+        first["eventRadar"],
+        first["personalSummary"],
+        first["researchQueue"],
+        first["dataQuality"],
+    ):
+        _assert_demo_flags(section)
 
 
 def test_build_payloads_returns_both_scenarios_with_expected_defaults() -> None:
@@ -177,6 +200,66 @@ def test_build_payloads_returns_both_scenarios_with_expected_defaults() -> None:
     assert payloads[DEGRADED_EXAMPLE]["dataQuality"]["status"] != "ready"
     assert set(payloads[HAPPY_PATH]["dataQuality"]["sections"].values()) == {"ready"}
     assert "ready" not in set(payloads[DEGRADED_EXAMPLE]["dataQuality"]["sections"].values())
+    assert payloads[HAPPY_PATH]["moneyFlow"]["sourceStatus"]["status"] == "ready"
+    assert payloads[DEGRADED_EXAMPLE]["moneyFlow"]["sourceStatus"]["status"] == "partial"
+
+
+def test_happy_path_avoids_abnormal_default_states() -> None:
+    payload = HomepageDemoPayloadService().build_payload(HAPPY_PATH)
+    serialized = _serialized(payload)
+
+    for forbidden_default in ("cached", "unavailable", "degraded", "sample_degraded"):
+        assert forbidden_default not in serialized
+    assert '"partial"' not in serialized
+    assert '"no_evidence"' not in serialized
+
+
+def test_nested_demo_contracts_are_consistently_demo_marked() -> None:
+    service = HomepageDemoPayloadService()
+
+    for scenario in (HAPPY_PATH, DEGRADED_EXAMPLE):
+        payload = service.build_payload(scenario)
+        for item in payload["eventRadar"]["items"]:
+            _assert_demo_flags(item)
+        for item in payload["researchQueue"]["items"]:
+            _assert_demo_flags(item)
+
+        personal_summary = payload["personalSummary"]
+        _assert_demo_flags(personal_summary["portfolioSnapshot"])
+        _assert_demo_flags(personal_summary["watchlistExceptions"])
+        _assert_demo_flags(personal_summary["researchCoverage"])
+        _assert_demo_flags(personal_summary["reviewQueue"])
+        _assert_demo_flags(personal_summary["dataQuality"])
+        for item in personal_summary["watchlistExceptions"]["items"]:
+            _assert_demo_flags(item)
+        for item in personal_summary["reviewQueue"]["items"]:
+            _assert_demo_flags(item)
+
+        money_flow = payload["moneyFlow"]
+        _assert_demo_flags(money_flow["sourceStatus"])
+        _assert_demo_flags(money_flow["dataQuality"])
+        _assert_demo_flags(money_flow["styleBias"])
+        _assert_demo_flags(money_flow["styleBias"]["dataQuality"])
+        _assert_demo_flags(money_flow["offensiveDefensiveBias"])
+        _assert_demo_flags(money_flow["offensiveDefensiveBias"]["dataQuality"])
+        for item in money_flow["topInflows"]:
+            _assert_demo_flags(item)
+        for item in money_flow["topOutflows"]:
+            _assert_demo_flags(item)
+
+
+def test_money_flow_source_status_stays_public_and_demo_only() -> None:
+    payloads = HomepageDemoPayloadService().build_payloads()
+
+    happy_source_status = payloads[HAPPY_PATH]["moneyFlow"]["sourceStatus"]
+    degraded_source_status = payloads[DEGRADED_EXAMPLE]["moneyFlow"]["sourceStatus"]
+
+    assert set(happy_source_status) == {"status", "summary", "sampleData", "demoPayload"}
+    assert set(degraded_source_status) == {"status", "summary", "sampleData", "demoPayload"}
+    assert happy_source_status["status"] == "ready"
+    assert degraded_source_status["status"] == "partial"
+    assert "sample_ready" not in _serialized(payloads)
+    assert "sample_degraded" not in _serialized(payloads)
 
 
 def test_payloads_avoid_forbidden_trading_language_and_internal_markers() -> None:
