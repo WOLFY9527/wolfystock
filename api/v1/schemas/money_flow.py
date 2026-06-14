@@ -16,7 +16,10 @@ MoneyFlowDirection = Literal["inflow", "outflow", "neutral"]
 MoneyFlowStrength = Literal["strong", "moderate", "weak", "mixed", "unknown"]
 MoneyFlowBreadth = Literal["broadening", "converging", "mixed", "unknown"]
 MoneyFlowRelativeMove = Literal["strengthening", "weakening", "flat", "unknown"]
+MoneyFlowStyleBias = Literal["growth", "value", "balanced", "mixed", "unknown"]
+MoneyFlowOffensiveDefensiveBias = Literal["offensive", "defensive", "balanced", "mixed", "unknown"]
 DataQualityState = Literal["ready", "delayed", "cached", "partial", "no_evidence", "unavailable"]
+MAX_TOP_MONEY_FLOW_ITEMS = 5
 
 
 class ConsumerDataQualityModel(BaseModel):
@@ -40,10 +43,18 @@ class MoneyFlowItemModel(BaseModel):
     dataQuality: DataQualityState = "no_evidence"
 
 
-class MoneyFlowBiasModel(BaseModel):
+class MoneyFlowStyleBiasModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    bias: str
+    bias: MoneyFlowStyleBias
+    interpretation: str
+    dataQuality: ConsumerDataQualityModel
+
+
+class MoneyFlowOffensiveDefensiveBiasModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bias: MoneyFlowOffensiveDefensiveBias
     interpretation: str
     dataQuality: ConsumerDataQualityModel
 
@@ -62,10 +73,10 @@ class HomeMoneyFlowProxyResponse(BaseModel):
 
     status: MoneyFlowProxyStatus
     asOf: str | None = None
-    topInflows: list[MoneyFlowItemModel] = Field(default_factory=list)
-    topOutflows: list[MoneyFlowItemModel] = Field(default_factory=list)
-    styleBias: MoneyFlowBiasModel
-    offensiveDefensiveBias: MoneyFlowBiasModel
+    topInflows: list[MoneyFlowItemModel] = Field(default_factory=list, max_length=MAX_TOP_MONEY_FLOW_ITEMS)
+    topOutflows: list[MoneyFlowItemModel] = Field(default_factory=list, max_length=MAX_TOP_MONEY_FLOW_ITEMS)
+    styleBias: MoneyFlowStyleBiasModel
+    offensiveDefensiveBias: MoneyFlowOffensiveDefensiveBiasModel
     interpretation: str
     sourceStatus: MoneyFlowSourceStatusModel
     dataQuality: ConsumerDataQualityModel
