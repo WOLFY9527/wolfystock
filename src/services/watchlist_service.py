@@ -17,6 +17,7 @@ from src.services.reason_code_vocabulary import classify_reason_code
 from src.services.scanner_evidence_packet import build_scanner_investor_signal
 from src.storage import AppUser, DatabaseManager, MarketScannerCandidate, MarketScannerRun, RuleBacktestRun, UserWatchlistItem
 from src.utils.symbol_normalization import canonical_stock_code
+from src.utils.symbol_validation import validate_consumer_symbol_precheck
 
 
 _LOCAL_OHLCV_HISTORY_SOURCES = {"local_us_parquet", "local_us_parquet_dir"}
@@ -26,6 +27,35 @@ _SCORE_STATUS_CONTEXT = {
     "source_freshness_implied": False,
     "source_authority_implied": False,
 }
+_WATCHLIST_NO_ADVICE_DISCLOSURE = (
+    "This watchlist item provides bounded research context only and does not provide "
+    "personalized trading guidance."
+)
+_RESEARCH_UNAVAILABLE_STATUSES = {
+    "data_failed",
+    "provider_down",
+    "provider_error",
+    "failed",
+    "error",
+    "critical",
+    "unavailable",
+}
+_RESEARCH_NO_EVIDENCE_STATUSES = {
+    "insufficient",
+    "insufficient_history",
+    "missing",
+    "missing_data",
+    "no_data",
+    "no_evidence",
+}
+_RESEARCH_STALE_STATUSES = {"cached", "cache_snapshot", "delayed", "expired", "partial", "stale"}
+_RESEARCH_READY_STATUSES = {"available", "complete", "completed", "fresh", "live", "ready", "selected"}
+_SCORE_ERROR_FORBIDDEN_TEXT_RE = re.compile(
+    r"traceback|https?://|api[_-]?key|secret|cookie|session|token|"
+    r"sourcetype|trustlevel|reasoncode|provider|target price|predicted return|"
+    r"买入|卖出|加仓|减仓|目标价|预测收益",
+    re.IGNORECASE,
+)
 _LINEAGE_CONTRACT_VERSION = "scanner_watchlist_lineage_v1"
 _LINEAGE_FORBIDDEN_TEXT_RE = re.compile(
     r"sourceauthorityallowed|scorecontributionallowed|reasonfamilies|reasoncode|"
@@ -85,7 +115,7 @@ class WatchlistService:
             "score_reason": str(row.score_reason) if row.score_reason else None,
             "score_status": str(row.score_status) if row.score_status else None,
             "score_status_context": dict(_SCORE_STATUS_CONTEXT),
-            "score_error": str(row.score_error) if row.score_error else None,
+            "score_error": WatchlistService._sanitize_score_error(row.score_error),
             "theme_id": str(row.theme_id) if row.theme_id else None,
             "universe_type": str(row.universe_type) if row.universe_type else None,
             "notes": str(row.notes) if row.notes else None,
@@ -93,7 +123,17 @@ class WatchlistService:
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
         payload["intelligence"] = WatchlistService._build_intelligence_payload(payload)
+        payload.update(WatchlistService._build_research_context_payload(payload))
         return payload
+
+    @classmethod
+    def _sanitize_score_error(cls, value: Any) -> Optional[str]:
+        normalized = cls._optional_str(value)
+        if normalized is None:
+            return None
+        if _SCORE_ERROR_FORBIDDEN_TEXT_RE.search(normalized):
+            return "Watchlist research context is temporarily unavailable."
+        return normalized
 
     @staticmethod
     def _load_json_object(raw: Optional[str]) -> Dict[str, Any]:
@@ -181,6 +221,153 @@ class WatchlistService:
         if any(marker in normalized for marker in ("ready", "available", "complete", "fresh", "live", "selected", "score_grade")):
             return "ready"
         return "no_evidence"
+
+    @staticmethod
+    def _research_state_from_quality(value: Any) -> Optional[str]:
+        normalized = str(value or "").strip().lower()
+        if not normalized:
+            return None
+        if normalized in _RESEARCH_UNAVAILABLE_STATUSES:
+            return "unavailable"
+        if normalized in _RESEARCH_NO_EVIDENCE_STATUSES:
+            return "no_evidence"
+        if normalized in _RESEARCH_STALE_STATUSES:
+            return "stale_or_cached"
+        if normalized in _RESEARCH_READY_STATUSES:
+            return "ready"
+        return None
+
+    @classmethod
+    def _nested_dict(cls, payload: Any, *keys: str) -> Dict[str, Any]:
+        current = payload
+        for key in keys:
+            if not isinstance(current, dict):
+                return {}
+            current = current.get(key)
+        return current if isinstance(current, dict) else {}
+
+    @classmethod
+    def _has_research_evidence(cls, item: Dict[str, Any]) -> bool:
+        if item.get("scanner_score") is not None or item.get("scanner_run_id") is not None:
+            return True
+        if cls._optional_str(item.get("score_reason")) or cls._optional_str(item.get("last_scored_at")):
+            return True
+        intelligence = item.get("intelligence") if isinstance(item.get("intelligence"), dict) else {}
+        scanner = cls._nested_dict(intelligence, "scanner")
+        backtest = cls._nested_dict(intelligence, "backtest")
+        if backtest.get("last_result_id") is not None:
+            return True
+        if intelligence.get("catalyst_exposures"):
+            return True
+        if scanner.get("scanner_lineage_v1") or scanner.get("ohlcv_provenance") or scanner.get("investor_signal"):
+            return True
+        if scanner.get("score_confidence") is not None:
+            return True
+        return False
+
+    @classmethod
+    def _symbol_research_status(cls, item: Dict[str, Any]) -> str:
+        precheck = validate_consumer_symbol_precheck(
+            cls._optional_str(item.get("symbol")),
+            market=cls._optional_str(item.get("market")),
+        )
+        if precheck.status == "unsupported_market":
+            return "unsupported_market"
+        if precheck.status == "unavailable":
+            return "unavailable"
+        if precheck.status in {"ambiguous", "invalid_format", "not_found"}:
+            return "symbol_unknown"
+        return "ready" if cls._has_research_evidence(item) else "symbol_unknown"
+
+    @classmethod
+    def _research_data_quality(cls, item: Dict[str, Any]) -> str:
+        score_status = str(item.get("score_status") or "").strip().lower()
+        score_status_state = cls._research_state_from_quality(score_status)
+        if score_status_state == "unavailable":
+            return "unavailable"
+        if score_status_state == "stale_or_cached" and not (
+            cls._optional_str(item.get("last_scored_at")) or cls._optional_str(item.get("score_error"))
+        ):
+            score_status_state = None
+
+        intelligence = item.get("intelligence") if isinstance(item.get("intelligence"), dict) else {}
+        scanner = cls._nested_dict(intelligence, "scanner")
+        lineage = cls._nested_dict(scanner, "scanner_lineage_v1")
+        provenance = cls._nested_dict(scanner, "ohlcv_provenance")
+        investor_signal = cls._nested_dict(scanner, "investor_signal")
+        backtest = cls._nested_dict(intelligence, "backtest")
+
+        states = [
+            cls._research_state_from_quality(scanner.get("data_quality")),
+            cls._research_state_from_quality(provenance.get("data_quality")),
+            cls._research_state_from_quality(lineage.get("data_state")),
+            cls._research_state_from_quality(investor_signal.get("dataQuality")),
+            score_status_state,
+        ]
+        if backtest.get("last_result_id") is not None:
+            states.append("ready")
+        if intelligence.get("catalyst_exposures"):
+            states.append("stale_or_cached")
+        if item.get("scanner_score") is not None or item.get("scanner_run_id") is not None:
+            states.append("ready")
+
+        if "unavailable" in states:
+            return "unavailable"
+        if "stale_or_cached" in states:
+            return "stale_or_cached"
+        if "ready" in states:
+            return "ready"
+        return "no_evidence"
+
+    @classmethod
+    def _last_reviewed_at(cls, item: Dict[str, Any]) -> Optional[str]:
+        intelligence = item.get("intelligence") if isinstance(item.get("intelligence"), dict) else {}
+        scanner = cls._nested_dict(intelligence, "scanner")
+        lineage = cls._nested_dict(scanner, "scanner_lineage_v1")
+        backtest = cls._nested_dict(intelligence, "backtest")
+        candidates = [
+            item.get("last_scored_at"),
+            scanner.get("last_scanned_at"),
+            lineage.get("run_completed_at"),
+            backtest.get("tested_at"),
+        ]
+        parsed: List[tuple[datetime, str]] = []
+        fallback: Optional[str] = None
+        for value in candidates:
+            normalized = cls._optional_str(value)
+            if normalized is None:
+                continue
+            fallback = fallback or normalized
+            parsed_value = cls._parse_iso_datetime(normalized)
+            if parsed_value is not None:
+                if parsed_value.tzinfo is not None:
+                    parsed_value = parsed_value.replace(tzinfo=None)
+                parsed.append((parsed_value, normalized))
+        if parsed:
+            return max(parsed, key=lambda item: item[0])[1]
+        return fallback
+
+    @classmethod
+    def _build_research_context_payload(cls, item: Dict[str, Any]) -> Dict[str, Any]:
+        symbol_status = cls._symbol_research_status(item)
+        data_quality = cls._research_data_quality(item)
+        if symbol_status in {"unsupported_market", "unavailable"}:
+            research_status = symbol_status
+        elif symbol_status == "symbol_unknown" and data_quality == "no_evidence":
+            research_status = "symbol_unknown"
+        else:
+            research_status = data_quality
+
+        return {
+            "symbol_status": symbol_status,
+            "research_status": research_status,
+            "data_quality": data_quality,
+            "last_reviewed_at": cls._last_reviewed_at(item),
+            "evidence_status": data_quality,
+            "notes_available": cls._optional_str(item.get("notes")) is not None,
+            "user_note_present": cls._optional_str(item.get("notes")) is not None,
+            "no_advice_disclosure": _WATCHLIST_NO_ADVICE_DISCLOSURE,
+        }
 
     @staticmethod
     def _sanitize_investor_signal(payload: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -868,6 +1055,7 @@ class WatchlistService:
                 scanner_lineage_v1=intelligence_context.get("scanner_lineage_v1"),
                 catalyst_exposures=intelligence_context.get("catalyst_exposures"),
             )
+            item.update(self._build_research_context_payload(item))
         return items
 
     def list_items(self, owner_id: str) -> List[Dict[str, Any]]:
