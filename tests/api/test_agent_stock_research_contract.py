@@ -12,6 +12,8 @@ from api.deps import CurrentUser, get_current_user
 from api.v1.endpoints import agent as agent_endpoint
 
 
+RESEARCH_CONSUMER_ACTION_BOUNDARY = "no_advice"
+
 FORBIDDEN_RESPONSE_TERMS = (
     "buy",
     "sell",
@@ -117,6 +119,24 @@ def test_stock_research_endpoint_returns_structured_unavailable_contract() -> No
     assert payload["risk_disclosure"]
     assert payload["no_advice_disclosure"]
     assert payload["unavailable"]["reason"] == "evidence_missing"
+
+
+def test_stock_research_serialized_response_exposes_no_advice_boundary_without_recommendation_language() -> None:
+    response = _client().get(
+        "/api/v1/agent/stock-research",
+        params={"ticker": "META", "market": "US"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    serialized = _json_text(payload)
+
+    assert payload["consumer_action_boundary"] == RESEARCH_CONSUMER_ACTION_BOUNDARY
+    assert "no advice" in payload["no_advice_disclosure"].lower()
+    assert "no_evidence" in serialized
+    assert "unavailable" in serialized
+    assert "recommendation" not in serialized
+    assert "推荐" not in serialized
 
 
 def test_stock_research_sources_expose_only_safe_evidence_metadata() -> None:
