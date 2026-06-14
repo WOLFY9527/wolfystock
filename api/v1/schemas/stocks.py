@@ -9,7 +9,7 @@
 2. 定义历史 K 线数据模型
 """
 
-from typing import Annotated, Any, Dict, Optional, List
+from typing import Annotated, Any, Dict, Optional, List, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema
 
@@ -214,8 +214,24 @@ class StockValidationResponse(BaseModel):
     """股票代码真实性校验响应"""
 
     stock_code: str = Field(..., description="股票代码")
+    normalized_symbol: Optional[str] = Field(None, description="归一化后的股票代码")
+    market: Optional[str] = Field(None, description="归属市场：cn/hk/us，无法判断时为空")
+    status: Literal[
+        "valid",
+        "invalid_format",
+        "unsupported_market",
+        "ambiguous",
+        "not_found",
+        "unavailable",
+        "unknown",
+    ] = Field("unknown", description="消费端安全的符号校验状态")
+    valid: bool = Field(False, description="是否已确认可安全用于下游研究")
     exists: bool = Field(..., description="股票代码是否存在")
     stock_name: Optional[str] = Field(None, description="解析出的股票名称")
+    message: str = Field(
+        "Symbol format is supported, but verification is not confirmed yet.",
+        description="消费端安全提示文案",
+    )
 
 
 class StockEvidenceFundamentalsSummary(BaseModel):

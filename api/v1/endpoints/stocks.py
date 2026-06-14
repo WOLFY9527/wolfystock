@@ -40,6 +40,10 @@ from src.services.import_parser import (
 )
 from src.services.agent_stock_evidence_service import StockEvidenceService
 from src.services.stock_service import StockService
+from src.utils.symbol_validation import (
+    ConsumerSymbolPrecheck,
+    validate_consumer_symbol_precheck,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +51,9 @@ router = APIRouter()
 
 # 须在 /{stock_code} 路由之前定义
 ALLOWED_MIME_STR = ", ".join(ALLOWED_MIME)
+_VALIDATION_UNAVAILABLE_MESSAGE = "Symbol validation is temporarily unavailable. Try again later."
+_VALIDATION_VERIFIED_MESSAGE = "Symbol verified."
+_VALIDATION_UNKNOWN_MESSAGE = "Symbol format is supported, but verification is not confirmed yet."
 
 
 class _ReadOnlyEvidenceFetcherManager:
@@ -54,6 +61,56 @@ class _ReadOnlyEvidenceFetcherManager:
 
     def get_realtime_quote(self, symbol: str):
         return None
+
+
+def _stock_validation_response(
+    precheck: ConsumerSymbolPrecheck,
+    *,
+    status: str | None = None,
+    valid: bool = False,
+    exists: bool = False,
+    stock_name: Optional[str] = None,
+    message: str | None = None,
+) -> StockValidationResponse:
+    normalized_symbol = precheck.normalized_symbol or precheck.raw_symbol
+    return StockValidationResponse(
+        stock_code=normalized_symbol,
+        normalized_symbol=normalized_symbol,
+        market=precheck.market,
+        status=status or precheck.status,
+        valid=valid,
+        exists=exists,
+        stock_name=_consumer_safe_stock_name(stock_name, normalized_symbol),
+        message=message or precheck.message,
+    )
+
+
+def _consumer_safe_stock_name(value: object, symbol: str) -> Optional[str]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text.upper() == str(symbol or "").strip().upper():
+        return None
+    if any(
+        marker in text.lower()
+        for marker in (
+            "traceback",
+            "http://",
+            "https://",
+            "api_key",
+            "apikey",
+            "secret",
+            "cookie",
+            "session",
+            "token",
+            "trustlevel",
+            "reasoncode",
+            "sourcetype",
+            "fallback",
+        )
+    ):
+        return None
+    return text
 
 
 @router.post(
@@ -261,24 +318,53 @@ async def parse_import(request: Request) -> ExtractFromImageResponse:
     summary="校验股票代码是否存在",
     description="在触发分析前校验股票代码是否能解析为真实标的",
 )
-def validate_stock_ticker(stock_code: str) -> StockValidationResponse:
+def validate_stock_ticker(
+    stock_code: str,
+    market: Optional[str] = Query(None, description="可选市场约束：cn / hk / us"),
+) -> StockValidationResponse:
+    return _validate_stock_ticker(stock_code, market=market)
+
+
+def _validate_stock_ticker(
+    stock_code: str,
+    market: Optional[str] = None,
+) -> StockValidationResponse:
+    precheck = validate_consumer_symbol_precheck(stock_code, market=market)
+    if not precheck.can_lookup:
+        return _stock_validation_response(precheck)
+
     try:
         service = StockService()
-        result = service.validate_ticker_exists(stock_code)
-        return StockValidationResponse(
-            stock_code=result.get("stock_code", stock_code),
-            exists=bool(result.get("exists")),
+        result = service.validate_ticker_exists(precheck.normalized_symbol)
+    except Exception:
+        logger.warning("Stock symbol validation lookup unavailable for %s", precheck.normalized_symbol)
+        return _stock_validation_response(
+            precheck,
+            status="unavailable",
+            valid=False,
+            exists=False,
+            stock_name=None,
+            message=_VALIDATION_UNAVAILABLE_MESSAGE,
+        )
+
+    if bool(result.get("exists")):
+        return _stock_validation_response(
+            precheck,
+            status="valid",
+            valid=True,
+            exists=True,
             stock_name=result.get("stock_name"),
+            message=_VALIDATION_VERIFIED_MESSAGE,
         )
-    except Exception as e:
-        logger.error(f"校验股票代码失败: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "internal_error",
-                "message": f"校验股票代码失败: {str(e)}"
-            }
-        )
+
+    return _stock_validation_response(
+        precheck,
+        status="unknown",
+        valid=False,
+        exists=False,
+        stock_name=None,
+        message=_VALIDATION_UNKNOWN_MESSAGE,
+    )
 
 
 @router.get(
