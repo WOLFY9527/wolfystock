@@ -1,0 +1,139 @@
+# -*- coding: utf-8 -*-
+"""Bounded homepage intelligence metadata contract for UI discovery and UAT."""
+
+from __future__ import annotations
+
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from api.v1.schemas.homepage_capabilities import HomepageCapabilitiesSnapshot
+from api.v1.schemas.homepage_module_manifest import HomepageModuleManifestResponse
+from api.v1.schemas.market_session_status import MarketSessionStatusContract
+from api.v1.schemas.source_freshness_summary import SourceFreshnessSummary
+
+
+HomepageIntelligenceStatus = Literal["ready", "partial", "no_evidence", "unavailable"]
+HomepageIntelligenceScope = Literal["homepage_ui_uat_metadata"]
+
+HOMEPAGE_INTELLIGENCE_SCHEMA_VERSION = "homepage_intelligence_v1"
+HOMEPAGE_INTELLIGENCE_DEFAULT_AS_OF = "2026-06-14T09:30:00Z"
+HOMEPAGE_INTELLIGENCE_NO_ADVICE_DISCLOSURE = (
+    "仅供首页元数据与固定样例联调，不构成投资建议。"
+)
+HOMEPAGE_INTELLIGENCE_DEFAULT_SCENARIO = "happy_path"
+HOMEPAGE_INTELLIGENCE_ALLOWED_SCENARIOS = frozenset({"happy_path", "degraded_example"})
+
+_FORBIDDEN_TEXT_MARKERS = (
+    "买入",
+    "卖出",
+    "下单",
+    "立即交易",
+    "交易信号",
+    "交易指令",
+    "目标价",
+    "止损",
+    "止盈",
+    "recommendation",
+    "buynow",
+    "sellnow",
+    "placeorder",
+    "targetprice",
+    "traceback",
+    "provider",
+    "reasoncode",
+    "trustlevel",
+    "sourcetype",
+    "rawpayload",
+    "token",
+    "secret",
+    "cookie",
+    "sessionid",
+    "apikey",
+    "http://",
+    "https://",
+    "livedata",
+    "实时数据",
+    "realtime",
+    "real-time",
+)
+
+
+def _assert_safe_text(value: Any, *, field_name: str) -> None:
+    if isinstance(value, str):
+        compact = value.lower().replace("_", "").replace(" ", "").replace("-", "")
+        for marker in _FORBIDDEN_TEXT_MARKERS:
+            if marker in compact:
+                raise ValueError(f"{field_name} contains forbidden text marker: {marker}")
+        return
+    if isinstance(value, BaseModel):
+        _assert_safe_text(value.model_dump(mode="json"), field_name=field_name)
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _assert_safe_text(item, field_name=f"{field_name}.{key}")
+        return
+    if isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            _assert_safe_text(item, field_name=f"{field_name}[{index}]")
+
+
+class HomepageIntelligenceDemoBundle(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    defaultScenario: Literal["happy_path"]
+    scenarios: dict[str, dict[str, Any]]
+
+    @model_validator(mode="after")
+    def _validate_demo_bundle(self) -> "HomepageIntelligenceDemoBundle":
+        if set(self.scenarios) != set(HOMEPAGE_INTELLIGENCE_ALLOWED_SCENARIOS):
+            raise ValueError("demo scenarios mismatch")
+        for scenario_name, payload in self.scenarios.items():
+            if payload.get("scenario") != scenario_name:
+                raise ValueError(f"demo scenario payload mismatch: {scenario_name}")
+            if payload.get("asOf") != HOMEPAGE_INTELLIGENCE_DEFAULT_AS_OF:
+                raise ValueError(f"demo scenario asOf mismatch: {scenario_name}")
+            if payload.get("sampleData") is not True or payload.get("demoPayload") is not True:
+                raise ValueError(f"demo scenario must remain sample-only: {scenario_name}")
+        _assert_safe_text(self.model_dump(mode="json"), field_name=self.__class__.__name__)
+        return self
+
+
+class HomepageIntelligenceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: str = Field(default=HOMEPAGE_INTELLIGENCE_SCHEMA_VERSION)
+    status: HomepageIntelligenceStatus
+    scope: HomepageIntelligenceScope
+    asOf: str = Field(..., min_length=1, max_length=40)
+    sampleOnly: bool
+    capabilities: HomepageCapabilitiesSnapshot
+    moduleManifest: HomepageModuleManifestResponse
+    sessionStatus: MarketSessionStatusContract
+    sourceFreshness: SourceFreshnessSummary
+    demo: HomepageIntelligenceDemoBundle
+    noAdviceDisclosure: str = Field(..., min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def _validate_contract(self) -> "HomepageIntelligenceResponse":
+        if self.schemaVersion != HOMEPAGE_INTELLIGENCE_SCHEMA_VERSION:
+            raise ValueError("schemaVersion mismatch")
+        if self.asOf != HOMEPAGE_INTELLIGENCE_DEFAULT_AS_OF:
+            raise ValueError("asOf must remain deterministic for metadata/UAT payloads")
+        if self.sampleOnly is not True:
+            raise ValueError("sampleOnly must remain true")
+        _assert_safe_text(self.model_dump(mode="json"), field_name=self.__class__.__name__)
+        return self
+
+
+__all__ = [
+    "HOMEPAGE_INTELLIGENCE_ALLOWED_SCENARIOS",
+    "HOMEPAGE_INTELLIGENCE_DEFAULT_AS_OF",
+    "HOMEPAGE_INTELLIGENCE_DEFAULT_SCENARIO",
+    "HOMEPAGE_INTELLIGENCE_NO_ADVICE_DISCLOSURE",
+    "HOMEPAGE_INTELLIGENCE_SCHEMA_VERSION",
+    "HomepageIntelligenceDemoBundle",
+    "HomepageIntelligenceResponse",
+    "HomepageIntelligenceScope",
+    "HomepageIntelligenceStatus",
+]

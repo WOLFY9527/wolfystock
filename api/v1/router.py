@@ -28,6 +28,7 @@ from api.v1.endpoints import (
     backtest,
     dashboard_overview,
     history,
+    homepage_intelligence,
     leveraged_etf_mapper,
     market,
     market_overview,
@@ -214,6 +215,12 @@ router.include_router(
     dashboard_overview.router,
     prefix="/dashboard",
     tags=["Dashboard"]
+)
+
+router.include_router(
+    homepage_intelligence.router,
+    prefix="/homepage",
+    tags=["Homepage"]
 )
 
 router.include_router(
