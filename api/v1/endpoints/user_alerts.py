@@ -55,11 +55,18 @@ def _not_found(rule_id: int) -> HTTPException:
 
 
 def _internal_error(message: str, exc: Exception) -> HTTPException:
-    logger.error("%s: %s", message, exc, exc_info=True)
+    logger.error("%s: %s", message, exc.__class__.__name__)
     return HTTPException(
         status_code=500,
-        detail={"error": "internal_error", "message": f"{message}: {str(exc)}"},
+        detail={"error": "internal_error", "message": message},
     )
+
+
+def _dry_run_data_status(freshness_status: str) -> str:
+    normalized = str(freshness_status or "").strip().lower()
+    if normalized in {"fresh", "live", "cached", "delayed"}:
+        return "caller_supplied"
+    return "unavailable"
 
 
 def _actor(current_user: CurrentUser) -> dict:
@@ -262,18 +269,20 @@ def dry_run_alert_rule(
         rule = service.get_rule(owner_id=owner_id, rule_id=rule_id)
         if rule is None:
             raise _not_found(rule_id)
+        result = build_user_alert_dry_run_pipeline_result(
+            rule=rule,
+            observed_price=request.observed_price,
+            observed_at=request.observed_at,
+            freshness=request.freshness.model_dump(by_alias=True, exclude_none=True),
+            suppression=(
+                request.suppression.model_dump(by_alias=True, exclude_none=True)
+                if request.suppression is not None
+                else None
+            ),
+        )
         return UserAlertDryRunResponse(
-            **build_user_alert_dry_run_pipeline_result(
-                rule=rule,
-                observed_price=request.observed_price,
-                observed_at=request.observed_at,
-                freshness=request.freshness.model_dump(by_alias=True, exclude_none=True),
-                suppression=(
-                    request.suppression.model_dump(by_alias=True, exclude_none=True)
-                    if request.suppression is not None
-                    else None
-                ),
-            )
+            data_status=_dry_run_data_status(request.freshness.status),
+            **result,
         )
     except HTTPException:
         raise
