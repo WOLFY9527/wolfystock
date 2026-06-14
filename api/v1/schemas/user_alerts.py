@@ -15,6 +15,11 @@ from src.utils.symbol_normalization import canonical_stock_code
 
 UserAlertRuleType = Literal["watchlist_price_threshold"]
 UserAlertDirection = Literal["above", "below"]
+UserAlertDeliveryMode = Literal["in_app"]
+UserAlertRuleEvaluationMode = Literal["saved_rule_only"]
+UserAlertDryRunEvaluationMode = Literal["dry_run"]
+UserAlertRuleDataStatus = Literal["not_evaluated"]
+UserAlertDryRunDataStatus = Literal["caller_supplied", "unavailable"]
 UserAlertDryRunFreshnessStatus = Literal[
     "fresh",
     "live",
@@ -96,18 +101,28 @@ class UserAlertRuleModel(_UserAlertSchema):
     threshold_price: float = Field(..., alias="thresholdPrice")
     enabled: bool
     note: Optional[str] = None
-    delivery_mode: Literal["in_app"] = Field("in_app", alias="deliveryMode")
+    delivery_mode: UserAlertDeliveryMode = Field("in_app", alias="deliveryMode")
     in_app_only: bool = Field(True, alias="inAppOnly")
     owner_scoped: bool = Field(True, alias="ownerScoped")
+    delivery_supported: Literal[False] = Field(False, alias="deliverySupported")
+    send_enabled: Literal[False] = Field(False, alias="sendEnabled")
+    no_send: Literal[True] = Field(True, alias="noSend")
+    evaluation_mode: UserAlertRuleEvaluationMode = Field("saved_rule_only", alias="evaluationMode")
+    data_status: UserAlertRuleDataStatus = Field("not_evaluated", alias="dataStatus")
     created_at: Optional[str] = Field(None, alias="createdAt")
     updated_at: Optional[str] = Field(None, alias="updatedAt")
 
 
 class UserAlertRuleListResponse(_UserAlertSchema):
     contract_version: str = Field("user_alert_contract_v1", alias="contractVersion")
-    delivery_mode: Literal["in_app"] = Field("in_app", alias="deliveryMode")
+    delivery_mode: UserAlertDeliveryMode = Field("in_app", alias="deliveryMode")
     in_app_only: bool = Field(True, alias="inAppOnly")
     owner_scoped: bool = Field(True, alias="ownerScoped")
+    delivery_supported: Literal[False] = Field(False, alias="deliverySupported")
+    send_enabled: Literal[False] = Field(False, alias="sendEnabled")
+    no_send: Literal[True] = Field(True, alias="noSend")
+    evaluation_mode: UserAlertRuleEvaluationMode = Field("saved_rule_only", alias="evaluationMode")
+    data_status: UserAlertRuleDataStatus = Field("not_evaluated", alias="dataStatus")
     items: List[UserAlertRuleModel] = Field(default_factory=list)
 
 
@@ -186,7 +201,12 @@ class UserAlertDryRunRequest(_UserAlertSchema):
 
 class UserAlertDryRunResponse(_UserAlertSchema):
     dry_run: Literal[True] = Field(True, alias="dryRun")
+    delivery_supported: Literal[False] = Field(False, alias="deliverySupported")
+    delivery_mode: UserAlertDeliveryMode = Field("in_app", alias="deliveryMode")
+    send_enabled: Literal[False] = Field(False, alias="sendEnabled")
     no_send: Literal[True] = Field(True, alias="noSend")
+    evaluation_mode: UserAlertDryRunEvaluationMode = Field("dry_run", alias="evaluationMode")
+    data_status: UserAlertDryRunDataStatus = Field("caller_supplied", alias="dataStatus")
     outbound_attempted: Literal[False] = Field(False, alias="outboundAttempted")
     live_outbound: Literal[False] = Field(False, alias="liveOutbound")
     local_only: Literal[True] = Field(True, alias="localOnly")

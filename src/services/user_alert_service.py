@@ -17,6 +17,11 @@ from src.utils.symbol_normalization import canonical_stock_code
 CONTRACT_VERSION = "user_alert_contract_v1"
 RULE_TYPE_WATCHLIST_PRICE_THRESHOLD = "watchlist_price_threshold"
 DELIVERY_MODE_IN_APP = "in_app"
+DELIVERY_SUPPORTED = False
+SEND_ENABLED = False
+NO_SEND = True
+EVALUATION_MODE_SAVED_RULE_ONLY = "saved_rule_only"
+DATA_STATUS_NOT_EVALUATED = "not_evaluated"
 _UNSET = object()
 
 
@@ -90,6 +95,11 @@ class UserAlertService:
             "delivery_mode": DELIVERY_MODE_IN_APP,
             "in_app_only": True,
             "owner_scoped": True,
+            "delivery_supported": DELIVERY_SUPPORTED,
+            "send_enabled": SEND_ENABLED,
+            "no_send": NO_SEND,
+            "evaluation_mode": EVALUATION_MODE_SAVED_RULE_ONLY,
+            "data_status": DATA_STATUS_NOT_EVALUATED,
             "created_at": cls._isoformat(row.created_at),
             "updated_at": cls._isoformat(row.updated_at),
         }

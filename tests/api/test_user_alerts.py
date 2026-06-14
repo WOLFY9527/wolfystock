@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 import os
 import tempfile
 import unittest
@@ -44,8 +45,6 @@ _API_DRY_RUN_FIELDS = {
     "market_cache_mutation",
     "networkCallsEnabled",
     "network_calls_enabled",
-    "noSend",
-    "no_send",
     "observedAsOf",
     "observed_as_of",
     "observedAt",
@@ -65,6 +64,13 @@ _API_DRY_RUN_FIELDS = {
     "suppressedLocalRecord",
     "suppressed_local_record",
 }
+_NOTIFICATION_SAFETY_KEYS = {
+    "deliverySupported",
+    "sendEnabled",
+    "noSend",
+    "evaluationMode",
+    "dataStatus",
+}
 _RULE_RESPONSE_KEYS = {
     "id",
     "contractVersion",
@@ -77,6 +83,7 @@ _RULE_RESPONSE_KEYS = {
     "deliveryMode",
     "inAppOnly",
     "ownerScoped",
+    *_NOTIFICATION_SAFETY_KEYS,
     "createdAt",
     "updatedAt",
 }
@@ -85,6 +92,7 @@ _RULE_LIST_RESPONSE_KEYS = {
     "deliveryMode",
     "inAppOnly",
     "ownerScoped",
+    *_NOTIFICATION_SAFETY_KEYS,
     "items",
 }
 _EVENT_RESPONSE_KEYS = {
@@ -115,7 +123,12 @@ _EVENT_LIST_RESPONSE_KEYS = {
 }
 _DRY_RUN_RESPONSE_KEYS = {
     "dryRun",
+    "deliverySupported",
+    "deliveryMode",
+    "sendEnabled",
     "noSend",
+    "evaluationMode",
+    "dataStatus",
     "outboundAttempted",
     "liveOutbound",
     "localOnly",
@@ -170,6 +183,38 @@ def _assert_response_keys(
     expected_keys: set[str],
 ) -> None:
     test_case.assertEqual(set(payload), expected_keys)
+
+
+def _assert_rule_notification_safety_contract(
+    test_case: unittest.TestCase,
+    payload: dict[str, object],
+) -> None:
+    test_case.assertFalse(payload["deliverySupported"])
+    test_case.assertEqual(payload["deliveryMode"], "in_app")
+    test_case.assertFalse(payload["sendEnabled"])
+    test_case.assertTrue(payload["noSend"])
+    test_case.assertEqual(payload["evaluationMode"], "saved_rule_only")
+    test_case.assertEqual(payload["dataStatus"], "not_evaluated")
+
+
+def _assert_no_unsafe_notification_leakage(test_case: unittest.TestCase, payload: object) -> None:
+    text = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    forbidden_markers = (
+        "provider outage raw stack",
+        "https://hooks.example.invalid/raw-webhook",
+        "alice@example.com",
+        "RAW_TOKEN",
+        "api_key",
+        "secret",
+        "cookie",
+        "Traceback",
+        "reasonCode",
+        "trustLevel",
+        "fallback",
+        "sourceType",
+    )
+    for marker in forbidden_markers:
+        test_case.assertNotIn(marker, text)
 
 
 class UserAlertsApiTestCase(unittest.TestCase):
@@ -263,6 +308,7 @@ class UserAlertsApiTestCase(unittest.TestCase):
         self.assertTrue(created["inAppOnly"])
         self.assertEqual(created["deliveryMode"], "in_app")
         self.assertTrue(created["ownerScoped"])
+        _assert_rule_notification_safety_contract(self, created)
         self.assertNotIn("buy", str(created).lower())
         self.assertNotIn("order", str(created).lower())
 
@@ -272,7 +318,9 @@ class UserAlertsApiTestCase(unittest.TestCase):
         _assert_response_keys(self, listed, _RULE_LIST_RESPONSE_KEYS)
         _assert_no_api_dry_run_fields(self, listed)
         self.assertEqual(listed["items"][0]["id"], created["id"])
+        _assert_rule_notification_safety_contract(self, listed)
         _assert_response_keys(self, listed["items"][0], _RULE_RESPONSE_KEYS)
+        _assert_rule_notification_safety_contract(self, listed["items"][0])
 
         update_resp = self.client.patch(
             f"/api/v1/user-alerts/rules/{created['id']}",
@@ -291,6 +339,7 @@ class UserAlertsApiTestCase(unittest.TestCase):
         self.assertEqual(updated["thresholdPrice"], 118.25)
         self.assertFalse(updated["enabled"])
         self.assertIsNone(updated["note"])
+        _assert_rule_notification_safety_contract(self, updated)
 
         delete_resp = self.client.delete(f"/api/v1/user-alerts/rules/{created['id']}")
         self.assertEqual(delete_resp.status_code, 200)
@@ -299,6 +348,71 @@ class UserAlertsApiTestCase(unittest.TestCase):
         _assert_response_keys(self, after_delete, _RULE_LIST_RESPONSE_KEYS)
         _assert_no_api_dry_run_fields(self, after_delete)
         self.assertEqual(after_delete["items"], [])
+
+    def test_rule_list_filters_unsafe_notification_provider_fields_from_service_payload(self) -> None:
+        class UnsafeService:
+            def list_rules(self, *, owner_id: str):
+                return [
+                    {
+                        "id": 10,
+                        "contract_version": "user_alert_contract_v1",
+                        "rule_type": "watchlist_price_threshold",
+                        "symbol": "NVDA",
+                        "direction": "above",
+                        "threshold_price": 125.5,
+                        "enabled": True,
+                        "note": "Safe note.",
+                        "delivery_mode": "in_app",
+                        "in_app_only": True,
+                        "owner_scoped": True,
+                        "created_at": None,
+                        "updated_at": None,
+                        "provider_error": "provider outage raw stack",
+                        "webhook_url": "https://hooks.example.invalid/raw-webhook",
+                        "email_destination": "alice@example.com",
+                        "token": "RAW_TOKEN",
+                        "api_key": "RAW_TOKEN",
+                        "secret": "RAW_TOKEN",
+                        "cookie": "RAW_TOKEN",
+                        "traceback": "Traceback (most recent call last)",
+                        "reasonCode": "internal_reason_code",
+                        "trustLevel": "internal_trust_level",
+                        "fallback": "internal_fallback_label",
+                        "sourceType": "internal_source_type",
+                    }
+                ]
+
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+        with patch("api.v1.endpoints.user_alerts._get_user_alert_service", return_value=UnsafeService()):
+            response = self.client.get("/api/v1/user-alerts/rules")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        _assert_response_keys(self, payload, _RULE_LIST_RESPONSE_KEYS)
+        self.assertEqual(len(payload["items"]), 1)
+        _assert_response_keys(self, payload["items"][0], _RULE_RESPONSE_KEYS)
+        _assert_rule_notification_safety_contract(self, payload)
+        _assert_rule_notification_safety_contract(self, payload["items"][0])
+        _assert_no_unsafe_notification_leakage(self, payload)
+
+    def test_internal_alert_error_response_does_not_expose_unsafe_notification_details(self) -> None:
+        class FailingService:
+            def list_rules(self, *, owner_id: str):
+                raise RuntimeError(
+                    "provider outage raw stack "
+                    "https://hooks.example.invalid/raw-webhook "
+                    "alice@example.com RAW_TOKEN Traceback reasonCode trustLevel fallback sourceType"
+                )
+
+        self.app.dependency_overrides[get_current_user] = lambda: _make_user("user-1", "alice")
+        with patch("api.v1.endpoints.user_alerts._get_user_alert_service", return_value=FailingService()):
+            response = self.client.get("/api/v1/user-alerts/rules")
+
+        self.assertEqual(response.status_code, 500)
+        payload = response.json()
+        self.assertEqual(payload["error"], "internal_error")
+        self.assertEqual(payload["message"], "List user alert rules failed")
+        _assert_no_unsafe_notification_leakage(self, payload)
 
     def test_guest_or_unauthorized_access_is_rejected(self) -> None:
         client = self._make_auth_enabled_client()
@@ -498,7 +612,12 @@ class UserAlertsApiTestCase(unittest.TestCase):
         payload = response.json()
         _assert_response_keys(self, payload, _DRY_RUN_RESPONSE_KEYS)
         self.assertTrue(payload["dryRun"])
+        self.assertFalse(payload["deliverySupported"])
+        self.assertEqual(payload["deliveryMode"], "in_app")
+        self.assertFalse(payload["sendEnabled"])
         self.assertTrue(payload["noSend"])
+        self.assertEqual(payload["evaluationMode"], "dry_run")
+        self.assertEqual(payload["dataStatus"], "caller_supplied")
         self.assertFalse(payload["outboundAttempted"])
         self.assertFalse(payload["liveOutbound"])
         self.assertTrue(payload["localOnly"])
@@ -601,7 +720,12 @@ class UserAlertsApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertTrue(payload["dryRun"])
+        self.assertFalse(payload["deliverySupported"])
+        self.assertEqual(payload["deliveryMode"], "in_app")
+        self.assertFalse(payload["sendEnabled"])
         self.assertTrue(payload["noSend"])
+        self.assertEqual(payload["evaluationMode"], "dry_run")
+        self.assertEqual(payload["dataStatus"], "unavailable")
         self.assertFalse(payload["outboundAttempted"])
         self.assertFalse(payload["liveOutbound"])
         self.assertTrue(payload["localOnly"])
