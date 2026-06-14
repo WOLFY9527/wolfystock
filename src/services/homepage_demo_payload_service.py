@@ -21,6 +21,7 @@ DEGRADED_EXAMPLE = "degraded_example"
 FIXED_AS_OF = "2026-06-14T09:30:00Z"
 _FIXED_AS_OF_DT = datetime(2026, 6, 14, 9, 30, tzinfo=timezone.utc)
 DEMO_DISCLOSURE = "首页演示样例，仅用于界面联调与 UAT，不代表真实数据。"
+_DEMO_FLAGS = {"sampleData": True, "demoPayload": True}
 _DATA_QUALITY_LABELS = {
     "ready": "正常",
     "partial": "部分缺失",
@@ -136,6 +137,7 @@ class HomepageDemoPayloadService:
             }
         ).model_dump(mode="json")
         payload["noAdviceDisclosure"] = DEMO_DISCLOSURE
+        self._mark_market_pulse_payload(payload)
         return payload
 
     def _build_market_pulse_degraded(self) -> dict[str, Any]:
@@ -153,6 +155,7 @@ class HomepageDemoPayloadService:
             }
         ).model_dump(mode="json")
         payload["noAdviceDisclosure"] = DEMO_DISCLOSURE
+        self._mark_market_pulse_payload(payload)
         return payload
 
     def _build_money_flow_happy(self) -> dict[str, Any]:
@@ -202,10 +205,11 @@ class HomepageDemoPayloadService:
             interpretation="资金流样例线索已整理为固定联调载荷。",
         )
         payload["sourceStatus"] = {
-            "status": "sample_ready",
-            "summary": "固定观察型示例，字段仅用于联调展示。",
+            "status": "ready",
+            "summary": "固定 happy-path 演示样例，字段仅用于界面联调。",
         }
         payload["noAdviceDisclosure"] = DEMO_DISCLOSURE
+        self._mark_money_flow_payload(payload)
         return payload
 
     def _build_money_flow_degraded(self) -> dict[str, Any]:
@@ -232,10 +236,11 @@ class HomepageDemoPayloadService:
             interpretation="固定异常样例仅展示部分缺失的资金流代理状态。",
         )
         payload["sourceStatus"] = {
-            "status": "sample_degraded",
-            "summary": "固定异常示例，刻意保留部分缺失字段。",
+            "status": "partial",
+            "summary": "固定 demo 异常样例，刻意展示部分缺失状态。",
         }
         payload["noAdviceDisclosure"] = DEMO_DISCLOSURE
+        self._mark_money_flow_payload(payload)
         return payload
 
     def _build_event_radar_happy(self) -> dict[str, Any]:
@@ -283,6 +288,7 @@ class HomepageDemoPayloadService:
         payload["noAdviceDisclosure"] = DEMO_DISCLOSURE
         for item in payload["items"]:
             item["noAdviceDisclosure"] = DEMO_DISCLOSURE
+        self._mark_event_radar_payload(payload)
         return payload
 
     def _build_event_radar_degraded(self) -> dict[str, Any]:
@@ -315,6 +321,7 @@ class HomepageDemoPayloadService:
         payload["noAdviceDisclosure"] = DEMO_DISCLOSURE
         for item in payload["items"]:
             item["noAdviceDisclosure"] = DEMO_DISCLOSURE
+        self._mark_event_radar_payload(payload)
         return payload
 
     def _build_personal_summary_happy(self) -> dict[str, Any]:
@@ -365,6 +372,7 @@ class HomepageDemoPayloadService:
         }
         payload["reviewQueue"] = {"status": "ready", "items": []}
         payload["noAdviceDisclosure"] = DEMO_DISCLOSURE
+        self._mark_personal_summary_payload(payload)
         return payload
 
     def _build_personal_summary_degraded(self) -> dict[str, Any]:
@@ -410,6 +418,7 @@ class HomepageDemoPayloadService:
             watchlist_status="partial",
         ).model_dump(mode="json")
         payload["noAdviceDisclosure"] = DEMO_DISCLOSURE
+        self._mark_personal_summary_payload(payload)
         return payload
 
     def _build_research_queue_happy(self) -> dict[str, Any]:
@@ -452,6 +461,7 @@ class HomepageDemoPayloadService:
         payload["dataQuality"]["summary"] = "研究队列样例已生成，字段固定且稳定。"
         for item in payload["items"]:
             item["noAdviceDisclosure"] = DEMO_DISCLOSURE
+        self._mark_research_queue_payload(payload)
         return payload
 
     def _build_research_queue_degraded(self) -> dict[str, Any]:
@@ -483,6 +493,7 @@ class HomepageDemoPayloadService:
         payload["dataQuality"]["summary"] = "研究队列异常样例已生成，刻意保留部分缺失状态。"
         for item in payload["items"]:
             item["noAdviceDisclosure"] = DEMO_DISCLOSURE
+        self._mark_research_queue_payload(payload)
         return payload
 
     def _build_overall_data_quality(
@@ -498,4 +509,67 @@ class HomepageDemoPayloadService:
             "summary": summary,
             "sections": dict(sections),
             "sampleData": True,
+            "demoPayload": True,
         }
+
+    def _mark_demo_mapping(self, payload: dict[str, Any]) -> None:
+        payload.update(_DEMO_FLAGS)
+
+    def _mark_demo_sequence(self, items: list[Any]) -> None:
+        for item in items:
+            if isinstance(item, dict):
+                self._mark_demo_mapping(item)
+
+    def _mark_market_pulse_payload(self, payload: dict[str, Any]) -> None:
+        self._mark_demo_mapping(payload)
+        self._mark_demo_sequence(payload.get("indices", []))
+        for item in payload.get("indices", []):
+            if isinstance(item, dict) and isinstance(item.get("dataQuality"), dict):
+                self._mark_demo_mapping(item["dataQuality"])
+        for key in ("volatility", "rates", "dollar", "breadth", "liquidity", "dataQuality"):
+            value = payload.get(key)
+            if isinstance(value, dict):
+                self._mark_demo_mapping(value)
+                if isinstance(value.get("dataQuality"), dict):
+                    self._mark_demo_mapping(value["dataQuality"])
+
+    def _mark_money_flow_payload(self, payload: dict[str, Any]) -> None:
+        self._mark_demo_mapping(payload)
+        self._mark_demo_sequence(payload.get("topInflows", []))
+        self._mark_demo_sequence(payload.get("topOutflows", []))
+        for key in ("styleBias", "offensiveDefensiveBias", "sourceStatus", "dataQuality"):
+            value = payload.get(key)
+            if isinstance(value, dict):
+                self._mark_demo_mapping(value)
+                if isinstance(value.get("dataQuality"), dict):
+                    self._mark_demo_mapping(value["dataQuality"])
+
+    def _mark_event_radar_payload(self, payload: dict[str, Any]) -> None:
+        self._mark_demo_mapping(payload)
+        self._mark_demo_sequence(payload.get("items", []))
+
+    def _mark_personal_summary_payload(self, payload: dict[str, Any]) -> None:
+        self._mark_demo_mapping(payload)
+        for key in (
+            "portfolioSnapshot",
+            "watchlistExceptions",
+            "researchCoverage",
+            "reviewQueue",
+            "dataQuality",
+        ):
+            value = payload.get(key)
+            if isinstance(value, dict):
+                self._mark_demo_mapping(value)
+        watchlist_exceptions = payload.get("watchlistExceptions")
+        if isinstance(watchlist_exceptions, dict):
+            self._mark_demo_sequence(watchlist_exceptions.get("items", []))
+        review_queue = payload.get("reviewQueue")
+        if isinstance(review_queue, dict):
+            self._mark_demo_sequence(review_queue.get("items", []))
+
+    def _mark_research_queue_payload(self, payload: dict[str, Any]) -> None:
+        self._mark_demo_mapping(payload)
+        self._mark_demo_sequence(payload.get("items", []))
+        data_quality = payload.get("dataQuality")
+        if isinstance(data_quality, dict):
+            self._mark_demo_mapping(data_quality)
