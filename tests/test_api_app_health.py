@@ -35,6 +35,14 @@ class _DatabaseStub:
         return self.session
 
 
+class _BrokenDatabaseStub:
+    def get_session(self):
+        raise RuntimeError(
+            "OperationalError postgres://raw-user:raw-password@db.example.test/wolfystock "
+            "/Users/example/app.py raw-secret-token"
+        )
+
+
 class _QueueStub:
     def __init__(self, runtime_status: dict | None = None) -> None:
         self.runtime_status = runtime_status or {
@@ -117,6 +125,28 @@ def _forbid_market_overview_startup_calls(monkeypatch) -> None:
     )
 
 
+def _assert_public_health_payload_is_safe(payload: dict) -> None:
+    text = str(payload).lower()
+    forbidden_markers = (
+        "checks",
+        "warnings",
+        "detail",
+        "worker_hints",
+        "configured_worker_count",
+        "single_process_required",
+        "launchverdict",
+        "postgres://",
+        "raw-password",
+        "raw-secret-token",
+        "/users/",
+        "runtimeerror",
+        "operationalerror",
+        "traceback",
+    )
+    for marker in forbidden_markers:
+        assert marker not in text
+
+
 class ApiAppHealthTestCase(unittest.TestCase):
     def _make_app(self, *, queue_stub: _QueueStub | None = None, db_stub: _DatabaseStub | None = None):
         temp_dir = tempfile.TemporaryDirectory()
@@ -147,6 +177,8 @@ class ApiAppHealthTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["mode"], "live")
         self.assertIs(payload["ready"], True)
+        self.assertNotIn("checks", payload)
+        self.assertNotIn("warnings", payload)
 
     def test_ready_health_endpoint_checks_storage_and_queue_topology(self) -> None:
         app, _, db = self._make_app()
@@ -156,11 +188,10 @@ class ApiAppHealthTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["status"], "ready")
         self.assertEqual(payload["mode"], "ready")
         self.assertIs(payload["ready"], True)
-        self.assertEqual(payload["checks"]["storage"]["status"], "ok")
-        self.assertEqual(payload["checks"]["task_queue"]["status"], "ok")
+        _assert_public_health_payload_is_safe(payload)
         self.assertTrue(db.session.executed)
 
     def test_default_health_alias_uses_readiness_contract(self) -> None:
@@ -172,7 +203,9 @@ class ApiAppHealthTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["mode"], "ready")
+        self.assertEqual(payload["status"], "ready")
         self.assertIs(payload["ready"], True)
+        _assert_public_health_payload_is_safe(payload)
 
     def test_ready_health_returns_503_when_task_queue_topology_is_unsafe(self) -> None:
         queue = _QueueStub(
@@ -193,9 +226,58 @@ class ApiAppHealthTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 503)
         payload = response.json()
-        self.assertEqual(payload["status"], "not_ready")
+        self.assertEqual(payload["status"], "degraded")
         self.assertIs(payload["ready"], False)
-        self.assertEqual(payload["checks"]["task_queue"]["status"], "not_ready")
+        _assert_public_health_payload_is_safe(payload)
+
+    def test_ready_health_returns_unavailable_without_leaking_storage_exception(self) -> None:
+        app, _, _ = self._make_app(db_stub=_BrokenDatabaseStub())
+
+        with TestClient(app) as client:
+            response = client.get("/api/health/ready")
+
+        self.assertEqual(response.status_code, 503)
+        payload = response.json()
+        self.assertEqual(payload["status"], "unavailable")
+        self.assertEqual(payload["mode"], "ready")
+        self.assertIs(payload["ready"], False)
+        _assert_public_health_payload_is_safe(payload)
+
+    def test_ready_health_reports_maintenance_without_queue_diagnostics(self) -> None:
+        queue = _QueueStub(
+            runtime_status={
+                "mode": "process_local",
+                "single_process_required": True,
+                "configured_worker_count": 1,
+                "topology_ok": True,
+                "shutdown": True,
+                "accepting_new_tasks": False,
+                "worker_hints": {"WEB_CONCURRENCY": 1},
+            }
+        )
+        app, _, _ = self._make_app(queue_stub=queue)
+
+        with TestClient(app) as client:
+            response = client.get("/api/health/ready")
+
+        self.assertEqual(response.status_code, 503)
+        payload = response.json()
+        self.assertEqual(payload["status"], "maintenance")
+        self.assertIs(payload["ready"], False)
+        _assert_public_health_payload_is_safe(payload)
+
+    def test_ready_health_reports_unknown_without_raw_internal_details(self) -> None:
+        app, _, _ = self._make_app()
+
+        with patch("api.app._storage_readiness_check", return_value=(False, {"status": "mystery"})):
+            with TestClient(app) as client:
+                response = client.get("/api/health/ready")
+
+        self.assertEqual(response.status_code, 503)
+        payload = response.json()
+        self.assertEqual(payload["status"], "unknown")
+        self.assertIs(payload["ready"], False)
+        _assert_public_health_payload_is_safe(payload)
 
     def test_app_lifespan_shuts_down_task_queue_explicitly(self) -> None:
         queue = _QueueStub()
