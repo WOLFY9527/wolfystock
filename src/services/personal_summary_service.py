@@ -64,11 +64,13 @@ _OBSERVE_VALUES = {"observe", "observation", "watch"}
 _NORMAL_VALUES = {"available", "complete", "completed", "fresh", "live", "normal", "ready"}
 _SAMPLE_VALUES = {"example_data", "fixture", "sample", "sample_data"}
 _MOVEMENT_VALUES = {"stronger", "weaker", "volume_expanded", "range_bound"}
+_MAX_WATCHLIST_EXCEPTION_ITEMS = 5
+_MAX_REVIEW_QUEUE_ITEMS = 5
 _PRIORITY_ORDER = {
-    "review": 0,
+    "unavailable": 0,
     "no_evidence": 1,
-    "unavailable": 2,
-    "stale": 3,
+    "stale": 2,
+    "review": 3,
     "observe": 4,
     "weaker": 5,
     "stronger": 6,
@@ -93,6 +95,7 @@ class PersonalSummaryService:
         watchlist_status: Optional[str] = None,
     ) -> PersonalSummaryResponse:
         raw_watchlist = [item for item in (watchlist_items or []) if isinstance(item, Mapping)]
+        ranked_watchlist_exceptions = self._collect_watchlist_exceptions(raw_watchlist)
         portfolio_component_status = self._portfolio_component_status(
             portfolio_snapshot=portfolio_snapshot,
             portfolio_connected=portfolio_connected,
@@ -104,9 +107,16 @@ class PersonalSummaryService:
             portfolio_connected=portfolio_connected,
             sample_data=sample_data,
         )
-        watchlist_model = self._build_watchlist_exceptions(raw_watchlist, watchlist_status=watchlist_status)
+        watchlist_model = self._build_watchlist_exceptions(
+            ranked_watchlist_exceptions,
+            items_present=bool(raw_watchlist),
+            watchlist_status=watchlist_status,
+        )
         research_model = self._build_research_coverage(raw_watchlist)
-        review_queue = self._build_review_queue(watchlist_model.items, watchlist_status=watchlist_model.status)
+        review_queue = self._build_review_queue(
+            ranked_watchlist_exceptions,
+            watchlist_status=watchlist_model.status,
+        )
         data_quality = self._build_data_quality(
             portfolio_status=portfolio_component_status,
             watchlist_status=watchlist_model.status,
@@ -127,6 +137,21 @@ class PersonalSummaryService:
             dataQuality=data_quality,
             noAdviceDisclosure=PERSONAL_SUMMARY_NO_ADVICE_DISCLOSURE,
         )
+
+    def _collect_watchlist_exceptions(
+        self,
+        items: Sequence[Mapping[str, Any]],
+    ) -> list[PersonalSummaryWatchlistException]:
+        deduped: dict[str, list[PersonalSummaryWatchlistException]] = {}
+        for item in items:
+            projected_item = self._project_watchlist_exception(item)
+            if projected_item is None:
+                continue
+            deduped.setdefault(projected_item.symbol, []).append(projected_item)
+
+        ranked_items = [self._merge_watchlist_exception_group(group) for group in deduped.values()]
+        ranked_items.sort(key=self._exception_sort_key)
+        return ranked_items
 
     def _build_portfolio_snapshot(
         self,
@@ -163,43 +188,39 @@ class PersonalSummaryService:
 
     def _build_watchlist_exceptions(
         self,
-        items: Sequence[Mapping[str, Any]],
+        items: Sequence[PersonalSummaryWatchlistException],
         *,
+        items_present: bool,
         watchlist_status: Optional[str],
     ) -> PersonalSummaryWatchlistExceptions:
-        projected: list[PersonalSummaryWatchlistException] = []
         stale_count = 0
         no_evidence_count = 0
         for item in items:
-            projected_item = self._project_watchlist_exception(item)
-            if projected_item is None:
-                continue
-            projected.append(projected_item)
             if "stale" in {
-                projected_item.symbolStatus,
-                projected_item.evidenceStatus,
-                projected_item.researchStatus,
+                item.symbolStatus,
+                item.evidenceStatus,
+                item.researchStatus,
             }:
                 stale_count += 1
             if "no_evidence" in {
-                projected_item.symbolStatus,
-                projected_item.evidenceStatus,
-                projected_item.researchStatus,
+                item.symbolStatus,
+                item.evidenceStatus,
+                item.researchStatus,
             }:
                 no_evidence_count += 1
 
         if watchlist_status:
             status = self._normalize_component_status(watchlist_status, default="no_evidence")
-        elif projected:
-            status = self._watchlist_items_status(projected)
         elif items:
+            status = self._watchlist_items_status(items)
+        elif items_present:
             status = "ready"
         else:
             status = "no_evidence"
 
         return PersonalSummaryWatchlistExceptions(
             status=status,
-            items=projected,
+            items=list(items[:_MAX_WATCHLIST_EXCEPTION_ITEMS]),
             staleCount=stale_count,
             noEvidenceCount=no_evidence_count,
         )
@@ -218,23 +239,23 @@ class PersonalSummaryService:
         )
         movement_status = self._normalize_signal_status(
             self._lookup(item, "movementStatus", "movement_status"),
-            default="no_evidence",
+            default="normal",
         )
         relative_strength_status = self._normalize_signal_status(
             self._lookup(item, "relativeStrengthStatus", "relative_strength_status"),
-            default="no_evidence",
+            default="normal",
         )
         volume_status = self._normalize_signal_status(
             self._lookup(item, "volumeStatus", "volume_status"),
-            default="no_evidence",
+            default="normal",
         )
         evidence_status = self._normalize_signal_status(
             self._lookup(item, "evidenceStatus", "evidence_status", "data_quality", "dataQuality"),
-            default="no_evidence",
+            default="normal",
         )
         research_status = self._normalize_signal_status(
             self._lookup(item, "researchStatus", "research_status"),
-            default="no_evidence",
+            default="normal",
         )
         review_reason = self._sanitize_reason(
             self._lookup(item, "reviewReason", "review_reason", "score_reason"),
@@ -256,7 +277,7 @@ class PersonalSummaryService:
             volumeStatus=volume_status,
             evidenceStatus=evidence_status,
             researchStatus=research_status,
-            lastReviewedAt=self._safe_text(self._lookup(item, "lastReviewedAt", "last_reviewed_at")),
+            lastReviewedAt=self._sanitize_metadata_text(self._lookup(item, "lastReviewedAt", "last_reviewed_at")),
             reviewReason=review_reason,
         )
         return projected if self._is_exception(projected) else None
@@ -322,6 +343,7 @@ class PersonalSummaryService:
             for item in items
         ]
         queue_items.sort(key=lambda item: (_PRIORITY_ORDER.get(item.priorityStatus, 99), item.symbol))
+        queue_items = queue_items[:_MAX_REVIEW_QUEUE_ITEMS]
         if queue_items:
             status: PersonalSummaryStatus = "partial"
         elif watchlist_status == "ready":
@@ -535,6 +557,20 @@ class PersonalSummaryService:
         ]
         return min(statuses, key=lambda status: _PRIORITY_ORDER.get(status, 99))
 
+    @classmethod
+    def _exception_sort_key(cls, item: PersonalSummaryWatchlistException) -> tuple[Any, ...]:
+        return (
+            _PRIORITY_ORDER.get(cls._priority_status(item), 99),
+            _PRIORITY_ORDER.get(item.symbolStatus, 99),
+            _PRIORITY_ORDER.get(item.evidenceStatus, 99),
+            _PRIORITY_ORDER.get(item.researchStatus, 99),
+            _PRIORITY_ORDER.get(item.movementStatus, 99),
+            _PRIORITY_ORDER.get(item.relativeStrengthStatus, 99),
+            _PRIORITY_ORDER.get(item.volumeStatus, 99),
+            item.symbol,
+            item.reviewReason or "",
+        )
+
     @staticmethod
     def _is_exception(item: PersonalSummaryWatchlistException) -> bool:
         return any(
@@ -548,6 +584,47 @@ class PersonalSummaryService:
                 item.researchStatus,
             )
         ) or bool(item.reviewReason)
+
+    @classmethod
+    def _merge_watchlist_exception_group(
+        cls,
+        items: Sequence[PersonalSummaryWatchlistException],
+    ) -> PersonalSummaryWatchlistException:
+        ordered_items = sorted(items, key=cls._exception_sort_key)
+        primary_item = ordered_items[0]
+        symbol_status = cls._worst_status(item.symbolStatus for item in items)
+        movement_status = cls._worst_status(item.movementStatus for item in items)
+        relative_strength_status = cls._worst_status(item.relativeStrengthStatus for item in items)
+        volume_status = cls._worst_status(item.volumeStatus for item in items)
+        evidence_status = cls._worst_status(item.evidenceStatus for item in items)
+        research_status = cls._worst_status(item.researchStatus for item in items)
+        default_reason = cls._default_review_reason(
+            symbol_status=symbol_status,
+            movement_status=movement_status,
+            relative_strength_status=relative_strength_status,
+            volume_status=volume_status,
+            evidence_status=evidence_status,
+            research_status=research_status,
+        )
+        return PersonalSummaryWatchlistException(
+            symbol=primary_item.symbol,
+            displayName=cls._preferred_display_name(ordered_items),
+            symbolStatus=symbol_status,
+            movementStatus=movement_status,
+            relativeStrengthStatus=relative_strength_status,
+            volumeStatus=volume_status,
+            evidenceStatus=evidence_status,
+            researchStatus=research_status,
+            lastReviewedAt=cls._preferred_last_reviewed_at(ordered_items),
+            reviewReason=cls._merge_review_reasons(ordered_items, default=default_reason),
+        )
+
+    @classmethod
+    def _worst_status(
+        cls,
+        statuses: Sequence[PersonalSummarySignalStatus] | Any,
+    ) -> PersonalSummarySignalStatus:
+        return min(statuses, key=lambda status: _PRIORITY_ORDER.get(status, 99))
 
     @staticmethod
     def _default_review_reason(
@@ -567,19 +644,59 @@ class PersonalSummaryService:
             evidence_status,
             research_status,
         }
-        if "review" in statuses:
-            return "Review evidence changed."
+        if "unavailable" in statuses:
+            return "Research context unavailable."
         if "no_evidence" in statuses:
             return "Research evidence missing."
         if "stale" in statuses:
             return "Research evidence is stale."
-        if "unavailable" in statuses:
-            return "Research context unavailable."
+        if "review" in statuses:
+            return "Review evidence changed."
         if statuses & {"observe", "stronger", "weaker", "volume_expanded", "range_bound"}:
             return "Watchlist item needs observation."
         if "sample_data" in statuses:
             return "Sample data only."
         return None
+
+    @classmethod
+    def _preferred_display_name(
+        cls,
+        items: Sequence[PersonalSummaryWatchlistException],
+    ) -> Optional[str]:
+        for item in items:
+            if item.displayName and item.displayName != item.symbol:
+                return item.displayName
+        return items[0].displayName if items else None
+
+    @classmethod
+    def _preferred_last_reviewed_at(
+        cls,
+        items: Sequence[PersonalSummaryWatchlistException],
+    ) -> Optional[str]:
+        values = [item.lastReviewedAt for item in items if item.lastReviewedAt]
+        return max(values) if values else None
+
+    @classmethod
+    def _merge_review_reasons(
+        cls,
+        items: Sequence[PersonalSummaryWatchlistException],
+        *,
+        default: Optional[str],
+    ) -> Optional[str]:
+        deduped_reasons: list[str] = []
+        seen: set[str] = set()
+        for item in items:
+            reason = cls._sanitize_reason(item.reviewReason, default=None)
+            if reason is None:
+                continue
+            reason_key = reason.casefold()
+            if reason_key in seen:
+                continue
+            deduped_reasons.append(reason)
+            seen.add(reason_key)
+        if deduped_reasons:
+            return "; ".join(deduped_reasons[:2])
+        return default
 
     @classmethod
     def _sanitize_symbol(cls, value: Any) -> Optional[str]:
@@ -615,6 +732,15 @@ class PersonalSummaryService:
     def _safe_text(value: Any) -> Optional[str]:
         text = str(value or "").strip()
         return text or None
+
+    @classmethod
+    def _sanitize_metadata_text(cls, value: Any) -> Optional[str]:
+        text = cls._safe_text(value)
+        if text is None:
+            return None
+        if _FORBIDDEN_TEXT_RE.search(text):
+            return None
+        return text
 
     @staticmethod
     def _float_value(value: Any) -> Optional[float]:
