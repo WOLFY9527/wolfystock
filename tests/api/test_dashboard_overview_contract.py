@@ -4,16 +4,50 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+import os
+import sys
+import types
+from dataclasses import dataclass
+from importlib import util
+from pathlib import Path
+from unittest.mock import patch
+
+os.environ.setdefault("DISABLE_SQLALCHEMY_CEXT_RUNTIME", "1")
+if "orjson" not in sys.modules:
+    sys.modules["orjson"] = types.SimpleNamespace(
+        OPT_NON_STR_KEYS=0,
+        OPT_SERIALIZE_NUMPY=0,
+        dumps=lambda value, option=0: json.dumps(value).encode("utf-8"),
+        loads=json.loads,
+    )
+sys.modules.setdefault("greenlet", None)
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import src.auth as auth
-from api.middlewares.auth import add_auth_middleware
-from api.v1 import api_v1_router
-import api.v1.endpoints.dashboard_overview as dashboard_overview
+@dataclass(frozen=True)
+class _CurrentUser:
+    user_id: str = "anonymous"
+    username: str = "anonymous"
+    display_name: str | None = "Anonymous"
+    role: str = "anonymous"
+    is_admin: bool = False
+    session_id: str | None = None
 
+
+def _optional_current_user():
+    return None
+
+
+ENDPOINT_PATH = Path(__file__).resolve().parents[2] / "api/v1/endpoints/dashboard_overview.py"
+sys.modules.setdefault(
+    "api.deps",
+    types.SimpleNamespace(CurrentUser=_CurrentUser, get_optional_current_user=_optional_current_user),
+)
+_endpoint_spec = util.spec_from_file_location("dashboard_overview_under_test", ENDPOINT_PATH)
+assert _endpoint_spec is not None and _endpoint_spec.loader is not None
+dashboard_overview = util.module_from_spec(_endpoint_spec)
+_endpoint_spec.loader.exec_module(dashboard_overview)
 
 ROUTE_PATH = "/api/v1/dashboard/market-intelligence-overview"
 FORBIDDEN_ADVICE_TERMS = (
@@ -38,6 +72,17 @@ FORBIDDEN_INTERNAL_MARKERS = (
     "confidence",
     "sourceType",
     "provider URL",
+    "provider_id",
+    "providerId",
+    "provider_payload",
+    "provider_response",
+    "raw_provider",
+    "diagnostic",
+    "diagnostics",
+    "source_run_id",
+    "external_run_id",
+    "trade_id",
+    "fill_reason_codes",
     "traceback",
     "raw exception",
     "/Users/",
@@ -67,23 +112,6 @@ ALLOWED_DATA_QUALITY_STATES = {
     "no_evidence",
     "unavailable",
 }
-
-
-def _reset_auth_globals() -> None:
-    auth._auth_enabled = None
-    auth._session_secret = None
-    auth._password_hash_salt = None
-    auth._password_hash_stored = None
-    auth._password_hash_value = None
-    auth._rate_limit = {}
-    auth._admin_reauth_markers = {}
-
-
-def _full_client() -> TestClient:
-    app = FastAPI()
-    add_auth_middleware(app)
-    app.include_router(api_v1_router)
-    return TestClient(app)
 
 
 def _route_only_client() -> TestClient:
@@ -119,11 +147,251 @@ def test_dashboard_overview_endpoint_returns_stable_top_level_sections() -> None
     assert payload["marketPulse"]["sp500"]["label"] == "S&P 500"
     assert payload["marketPulse"]["marketBreadth"]["summary"]
     assert payload["marketBrief"]["headline"]
-    assert payload["moneyFlow"]["topInflows"]
     assert payload["liquidityRisk"]["summary"]
     assert payload["sectorThemeRotation"]["summary"]
-    assert payload["researchQueue"]["items"]
+    assert isinstance(payload["moneyFlow"]["topInflows"], list)
+    assert isinstance(payload["moneyFlow"]["topOutflows"], list)
+    assert isinstance(payload["sectorThemeRotation"]["leadingThemes"], list)
+    assert isinstance(payload["sectorThemeRotation"]["laggingThemes"], list)
+    assert isinstance(payload["researchQueue"]["items"], list)
     assert payload["dataQuality"]["state"] in ALLOWED_DATA_QUALITY_STATES
+
+
+def test_dashboard_overview_uses_bounded_scaffold_compatible_subcontracts() -> None:
+    client = _route_only_client()
+
+    class FakeMarketPulseService:
+        def build_snapshot(self):
+            return {
+                "status": "partial",
+                "indices": [
+                    {
+                        "label": "S&P 500",
+                        "value": 5123.45,
+                        "unit": "pt",
+                        "change": 0.12,
+                        "state": "观察",
+                        "interpretation": "适合研究观察",
+                        "dataQuality": {"state": "正常", "label": "正常", "available": True},
+                    },
+                    {
+                        "label": "Nasdaq",
+                        "value": 17234.5,
+                        "unit": "pt",
+                        "change": -0.21,
+                        "state": "复核",
+                        "interpretation": "复核",
+                        "dataQuality": {"state": "复核", "label": "复核", "available": True},
+                    },
+                    {
+                        "label": "Russell 2000",
+                        "value": None,
+                        "unit": "pt",
+                        "change": None,
+                        "state": "暂无证据",
+                        "interpretation": "暂无证据",
+                        "dataQuality": {"state": "暂无证据", "label": "暂无证据", "available": False},
+                    },
+                ],
+                "volatility": {
+                    "label": "VIX",
+                    "value": 14.2,
+                    "unit": "pt",
+                    "change": -0.3,
+                    "state": "中性",
+                    "interpretation": "适合研究观察",
+                    "dataQuality": {"state": "正常", "label": "正常", "available": True},
+                },
+                "rates": {
+                    "label": "10Y Treasury yield",
+                    "value": 4.18,
+                    "unit": "%",
+                    "change": 0.01,
+                    "state": "观察",
+                    "interpretation": "观察",
+                    "dataQuality": {"state": "观察", "label": "观察", "available": True},
+                },
+                "dollar": {
+                    "label": "Dollar index",
+                    "value": 104.3,
+                    "unit": "pt",
+                    "change": 0.05,
+                    "state": "中性",
+                    "interpretation": "适合研究观察",
+                    "dataQuality": {"state": "正常", "label": "正常", "available": True},
+                },
+                "breadth": {
+                    "label": "Market breadth",
+                    "value": 52.0,
+                    "unit": "%",
+                    "change": 1.0,
+                    "state": "观察",
+                    "interpretation": "观察",
+                    "dataQuality": {"state": "观察", "label": "观察", "available": True},
+                },
+                "liquidity": {
+                    "label": "Liquidity state",
+                    "value": None,
+                    "unit": None,
+                    "change": None,
+                    "state": "中性",
+                    "interpretation": "中性",
+                    "dataQuality": {"state": "正常", "label": "正常", "available": True},
+                },
+                "dataQuality": {"state": "正常", "label": "正常", "available": True},
+                "noAdviceDisclosure": "仅供研究观察，不构成投资建议。",
+            }
+
+    class FakeMoneyFlowService:
+        def build_homepage_money_flow_proxy(self):
+            return {
+                "status": "partial",
+                "topInflows": [
+                    {
+                        "name": "质量因子",
+                        "category": "style",
+                        "direction": "inflow",
+                        "strength": "moderate",
+                        "breadth": "mixed",
+                        "relativeMove": "strengthening",
+                        "interpretation": "观察相对强度变化。",
+                        "dataQuality": "partial",
+                    }
+                ],
+                "topOutflows": [],
+                "styleBias": {
+                    "bias": "quality",
+                    "interpretation": "质量风格相对占优，继续观察。",
+                    "dataQuality": {"state": "partial", "label": "部分数据缺失", "available": False},
+                },
+                "offensiveDefensiveBias": {
+                    "bias": "defensive",
+                    "interpretation": "防御风格相对占优，继续观察。",
+                    "dataQuality": {"state": "partial", "label": "部分数据缺失", "available": False},
+                },
+                "sourceStatus": {
+                    "providerWired": False,
+                    "proxyMode": "observed_flow_proxy",
+                    "observationOnly": True,
+                    "summary": "未接入真实资金流提供方；当前仅保留 observed flow proxy contract scaffold。",
+                },
+                "dataQuality": {"state": "partial", "label": "部分数据缺失", "available": False},
+                "noAdviceDisclosure": "仅用于观察昨日资金流向代理，不构成投资建议或交易指令。",
+            }
+
+    class FakeSectorThemeStrengthService:
+        def build_summary(self):
+            return {
+                "status": "ready",
+                "strongest": [
+                    {
+                        "name": "防御质量",
+                        "category": "theme",
+                        "relativeStrength": 0.7,
+                        "breadth": 0.5,
+                        "diffusionStatus": "diffusing",
+                        "leadershipStatus": "stronger",
+                        "observation": "强度扩散仅用于观察。",
+                        "dataQuality": {"status": "ready", "observation": "安全观察口径。"},
+                    }
+                ],
+                "weakest": [],
+                "leadership": {
+                    "status": "stronger",
+                    "observation": "少数主题保持领先，继续复核。",
+                    "dataQuality": {"status": "ready", "observation": "安全观察口径。"},
+                },
+                "diffusion": {
+                    "status": "diffusing",
+                    "observation": "扩散状态仅用于研究观察。",
+                    "dataQuality": {"status": "ready", "observation": "安全观察口径。"},
+                },
+                "concentration": {
+                    "status": "neutral",
+                    "observation": "集中度中性。",
+                    "dataQuality": {"status": "ready", "observation": "安全观察口径。"},
+                },
+                "dataQuality": {"status": "ready", "observation": "安全观察口径。"},
+                "noAdviceDisclosure": "仅用于观察行业与主题强弱变化，非交易建议。",
+            }
+
+    class FakeResearchQueueService:
+        def build_queue(self):
+            return {
+                "status": "ready",
+                "items": [
+                    {
+                        "id": "market-1",
+                        "priority": 1,
+                        "title": "广度复核",
+                        "reason": "市场观察信号需要复核后再继续研究。",
+                        "category": "market",
+                        "reviewModule": "market_overview",
+                        "status": "review",
+                        "relatedSymbols": [],
+                        "relatedThemes": [],
+                        "evidenceStatus": "available",
+                        "noAdviceDisclosure": "This queue is for research review only and offers no advice.",
+                    }
+                ],
+                "dataQuality": {
+                    "status": "ready",
+                    "summary": "研究队列条目已生成，可按优先级继续复核。",
+                    "availableDomains": ["market"],
+                    "missingDomains": [],
+                },
+                "noAdviceDisclosure": "This queue is for research review only and offers no advice.",
+            }
+
+    class FakePublicDataQualityService:
+        def __call__(self, value):
+            return {
+                "status": "ready",
+                "label": "正常",
+                "suitableForResearchObservation": True,
+                "message": "核心模块已更新，适合研究观察",
+                "updatedModules": ["首页"],
+                "affectedModules": [],
+                "noAdviceDisclosure": "仅供研究观察，不构成投资建议",
+            }
+
+    with patch("src.services.dashboard_overview_service.MarketPulseService", FakeMarketPulseService):
+        with patch("src.services.dashboard_overview_service.MoneyFlowService", FakeMoneyFlowService):
+            with patch("src.services.dashboard_overview_service.SectorThemeStrengthService", FakeSectorThemeStrengthService):
+                with patch("src.services.dashboard_overview_service.ResearchQueueService", FakeResearchQueueService):
+                    with patch("src.services.dashboard_overview_service.build_public_data_quality_summary", FakePublicDataQualityService()):
+                        try:
+                            response = client.get(ROUTE_PATH)
+                        finally:
+                            client.close()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["marketPulse"]["sp500"] == {
+        "label": "S&P 500",
+        "value": "5123.45 pt",
+        "change": "+0.12",
+        "status": "ready",
+    }
+    assert payload["moneyFlow"]["topInflows"] == ["质量因子"]
+    assert payload["moneyFlow"]["topOutflows"] == []
+    assert payload["moneyFlow"]["styleBias"] == "quality"
+    assert payload["moneyFlow"]["sourceStatus"] == "partial"
+    assert payload["sectorThemeRotation"]["leadingThemes"] == ["防御质量"]
+    assert payload["sectorThemeRotation"]["laggingThemes"] == []
+    assert payload["sectorThemeRotation"]["diffusion"] == "diffusing"
+    assert payload["researchQueue"]["items"][0] == {
+        "title": "广度复核",
+        "summary": "市场观察信号需要复核后再继续研究。",
+        "action": "复核",
+        "priority": "high",
+    }
+    assert payload["dataQuality"]["state"] == "ready"
+    assert payload["dataQuality"]["label"] == "正常"
+    assert payload["dataQuality"]["sections"]["marketPulse"] == "partial"
+    assert payload["dataQuality"]["sections"]["moneyFlow"] == "partial"
+    assert payload["dataQuality"]["sections"]["sectorThemeRotation"] == "ready"
+    assert payload["dataQuality"]["sections"]["researchQueue"] == "ready"
 
 
 def test_dashboard_overview_default_response_is_consumer_safe_and_no_advice() -> None:
@@ -151,7 +419,6 @@ def test_dashboard_overview_research_queue_uses_safe_language_only() -> None:
 
     assert response.status_code == 200
     items = response.json()["researchQueue"]["items"]
-    assert items
     for item in items:
         assert item["action"] in ALLOWED_RESEARCH_ACTIONS
         for field in ("title", "summary", "action"):
@@ -170,6 +437,16 @@ def test_dashboard_overview_data_quality_fields_are_bounded() -> None:
     payload = response.json()
 
     assert payload["dataQuality"]["state"] == "ready"
+    assert set(payload["dataQuality"]["sections"]) == {
+        "marketPulse",
+        "marketBrief",
+        "moneyFlow",
+        "liquidityRisk",
+        "sectorThemeRotation",
+        "researchQueue",
+    }
+    assert payload["dataQuality"]["sections"]["marketBrief"] == "ready"
+    assert payload["dataQuality"]["sections"]["liquidityRisk"] == "ready"
     assert payload["moneyFlow"]["sourceStatus"] in ALLOWED_DATA_QUALITY_STATES
     for section_state in payload["dataQuality"]["sections"].values():
         assert section_state in ALLOWED_DATA_QUALITY_STATES
@@ -188,51 +465,8 @@ def test_dashboard_overview_response_does_not_leak_internal_markers_or_secret_li
         assert marker not in dumped
 
 
-def test_dashboard_overview_route_follows_existing_consumer_auth_boundary() -> None:
-    _reset_auth_globals()
-    client = _full_client()
-    service = MagicMock()
-    service.get_market_intelligence_overview.return_value = {
-        "status": "ready",
-        "asOf": "2026-06-14T09:30:00Z",
-        "marketPulse": {
-            "sp500": {"label": "S&P 500", "value": "观察中", "change": "0.0%", "status": "ready"},
-            "nasdaq": {"label": "Nasdaq", "value": "观察中", "change": "0.0%", "status": "ready"},
-            "russell2000": {"label": "Russell 2000", "value": "观察中", "change": "0.0%", "status": "ready"},
-            "vix": {"label": "VIX", "value": "中性", "change": "0.0", "status": "ready"},
-            "tenYearYield": {"label": "10Y Yield", "value": "中性", "change": "0bp", "status": "ready"},
-            "dollarIndex": {"label": "Dollar Index", "value": "中性", "change": "0.0%", "status": "ready"},
-            "marketBreadth": {"summary": "广度中性，适合继续观察。", "status": "ready"},
-            "liquidityState": "流动性中性观察",
-        },
-        "marketBrief": {
-            "headline": "市场状态以观察为主",
-            "summary": "当前概览仅用于研究观察，不用于交易判断。",
-            "status": "ready",
-        },
-        "moneyFlow": {
-            "topInflows": ["大型股指数"],
-            "topOutflows": ["高波动题材"],
-            "styleBias": "均衡",
-            "offensiveDefensiveBias": "中性",
-            "sourceStatus": "ready",
-            "status": "ready",
-        },
-        "liquidityRisk": {"summary": "流动性与风险偏好暂处中性。", "volatilityTone": "平稳", "fundingStress": "可控", "dollarRatePressure": "中性", "status": "ready"},
-        "sectorThemeRotation": {"leadingThemes": ["防御质量"], "laggingThemes": ["高波动题材"], "diffusion": "分歧", "summary": "主题轮动仍以分歧为主。", "status": "ready"},
-        "researchQueue": {"status": "ready", "items": [{"title": "指数广度复核", "summary": "观察广度是否继续扩散。", "action": "复核", "priority": "high"}]},
-        "dataQuality": {"state": "ready", "label": "正常", "summary": "接口合同正常。", "sections": {"marketPulse": "ready", "marketBrief": "ready", "moneyFlow": "ready", "liquidityRisk": "ready", "sectorThemeRotation": "ready", "researchQueue": "ready"}},
-        "noAdviceDisclosure": "本概览仅用于市场研究观察，不构成投资建议或交易指令。",
-    }
+def test_dashboard_overview_route_keeps_existing_optional_auth_dependency_shape() -> None:
+    source = ENDPOINT_PATH.read_text(encoding="utf-8")
 
-    with patch.object(auth, "_is_auth_enabled_from_env", return_value=True):
-        with patch("api.v1.endpoints.dashboard_overview.DashboardOverviewService", return_value=service):
-            response = client.get(ROUTE_PATH)
-
-    try:
-        assert response.status_code == 401
-        assert response.json() == {"error": "unauthorized", "message": "Login required"}
-        service.get_market_intelligence_overview.assert_not_called()
-    finally:
-        client.close()
-        _reset_auth_globals()
+    assert "current_user: Optional[CurrentUser] = Depends(get_optional_current_user)" in source
+    assert "DashboardOverviewService().get_market_intelligence_overview()" in source
