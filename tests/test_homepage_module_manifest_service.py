@@ -41,7 +41,7 @@ def test_default_manifest_serializes_all_expected_modules() -> None:
 
     assert payload["status"] == "ready"
     assert payload["asOf"] == "2026-06-14T09:30:00Z"
-    assert payload["noAdviceDisclosure"] == "仅供模块可用性与接入准备度观察，不构成投资建议或交易指令。"
+    assert payload["noAdviceDisclosure"] == "仅供模块可用性与接入准备度观察，不构成个性化投资建议。"
 
     modules = payload["modules"]
     assert isinstance(modules, list)
@@ -62,7 +62,7 @@ def test_default_manifest_serializes_all_expected_modules() -> None:
     assert data_quality == {
         "state": "ready",
         "label": "正常",
-        "summary": "当前模块 manifest 仅描述公开状态、接入状态与复核点，不包含交易建议或内部诊断。",
+        "summary": "当前模块 manifest 仅描述公开状态、接入状态与复核点，不包含操作性结论。",
     }
 
 
@@ -83,14 +83,24 @@ def test_manifest_statuses_are_bounded() -> None:
     [
         "买入",
         "卖出",
+        "加仓",
+        "减仓",
+        "清仓",
         "下单",
         "交易信号",
+        "交易指令",
+        "交易执行",
+        "交易建议",
         "trading signal",
         "buy now",
         "sell now",
         "target price",
         "止损",
         "止盈",
+        "目标价",
+        "收益预测",
+        "AI推荐",
+        "智能选股",
     ],
 )
 def test_manifest_is_not_presented_as_trading_signal(forbidden: str) -> None:

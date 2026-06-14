@@ -24,6 +24,8 @@ sys.modules.setdefault("greenlet", None)
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from src.services.homepage_intelligence_service import HomepageIntelligenceService
+
 
 @dataclass(frozen=True)
 class _CurrentUser:
@@ -56,13 +58,20 @@ _endpoint_spec.loader.exec_module(homepage_intelligence)
 FORBIDDEN_ADVICE_TERMS = (
     "买入",
     "卖出",
+    "加仓",
+    "减仓",
+    "清仓",
     "下单",
     "立即交易",
     "交易信号",
     "交易指令",
+    "交易执行",
     "目标价",
     "止损",
     "止盈",
+    "收益预测",
+    "AI推荐",
+    "智能选股",
     "recommendation",
     "buy now",
     "sell now",
@@ -148,6 +157,16 @@ def test_homepage_intelligence_endpoint_is_anonymous_safe_and_optional_auth() ->
     endpoint_source = ENDPOINT_PATH.read_text(encoding="utf-8")
     assert "get_optional_current_user" in endpoint_source
     assert "Depends(get_optional_current_user)" in endpoint_source
+
+
+def test_homepage_intelligence_service_build_bundle_validates_and_serializes() -> None:
+    payload = HomepageIntelligenceService().build_bundle()
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+
+    assert payload["schemaVersion"] == "homepage_intelligence_v1"
+    assert payload["capabilities"]["schemaVersion"] == "homepage_capabilities_v1"
+    for marker in FORBIDDEN_ADVICE_TERMS:
+        assert marker.lower() not in serialized
 
 
 def test_homepage_intelligence_route_is_registered_in_v1_router() -> None:

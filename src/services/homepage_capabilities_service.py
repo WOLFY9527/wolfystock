@@ -12,7 +12,7 @@ from api.v1.schemas.homepage_capabilities import (
 )
 
 
-HOMEPAGE_CAPABILITIES_NO_ADVICE_DISCLOSURE = "首页能力信息仅供研究观察，不构成个性化建议或交易指令。"
+HOMEPAGE_CAPABILITIES_NO_ADVICE_DISCLOSURE = "首页能力信息仅供研究观察，不构成个性化建议。"
 _DEFAULT_SECTIONS = (
     HomepageCapabilitySection(
         key="marketPulse",
@@ -47,7 +47,7 @@ _DEFAULT_SECTIONS = (
         label="研究队列",
         supported=True,
         status="ready",
-        description="提供后续研究排队入口，不包含交易指令。",
+        description="提供后续研究排队入口，仅用于观察与复核。",
     ),
 )
 _DEFAULT_CAPABILITIES = HomepageCapabilityFlags()

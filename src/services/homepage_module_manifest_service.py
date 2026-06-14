@@ -18,8 +18,8 @@ from api.v1.schemas.homepage_module_manifest import (
 )
 
 
-NO_ADVICE_DISCLOSURE = "仅供模块可用性与接入准备度观察，不构成投资建议或交易指令。"
-TOP_LEVEL_DATA_QUALITY_SUMMARY = "当前模块 manifest 仅描述公开状态、接入状态与复核点，不包含交易建议或内部诊断。"
+NO_ADVICE_DISCLOSURE = "仅供模块可用性与接入准备度观察，不构成个性化投资建议。"
+TOP_LEVEL_DATA_QUALITY_SUMMARY = "当前模块 manifest 仅描述公开状态、接入状态与复核点，不包含操作性结论。"
 _DATA_QUALITY_LABELS = {
     "ready": "正常",
     "partial": "部分缺失",
