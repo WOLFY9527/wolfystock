@@ -16,6 +16,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from api.deps import CurrentUser, get_current_user, require_admin_capability
 from src.config import get_config
 from src.services.agent_model_service import list_agent_model_deployments, list_agent_provider_health
+from src.services.execution_log_service import ExecutionLogService
 
 # Tool name -> Chinese display name mapping
 TOOL_DISPLAY_NAMES: Dict[str, str] = {
@@ -40,6 +41,40 @@ TOOL_DISPLAY_NAMES: Dict[str, str] = {
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+def _actor(current_user: CurrentUser) -> dict:
+    return {
+        "user_id": current_user.user_id,
+        "username": current_user.username,
+        "display_name": current_user.display_name,
+        "role": "admin" if current_user.is_admin else "user",
+        "actor_type": "admin" if current_user.is_admin else "user",
+        "session_id": current_user.session_id,
+    }
+
+
+def _record_agent_audit(
+    *,
+    event_type: str,
+    message: str,
+    current_user: CurrentUser,
+    session_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    try:
+        ExecutionLogService().record_user_write_action(
+            event_type=event_type,
+            message=message,
+            actor=_actor(current_user),
+            domain="agent",
+            target_type="agent_session",
+            target_id=session_id,
+            status="completed",
+            metadata={"route_family": "agent", **(metadata or {})},
+        )
+    except Exception as exc:
+        logger.warning("Record agent user action audit failed: %s", exc)
+
 
 def _conversation_access_http_error(exc: ValueError) -> HTTPException:
     """Normalize conversation ownership errors into stable HTTP responses."""
@@ -199,6 +234,7 @@ async def agent_chat(
         raise HTTPException(status_code=400, detail="Agent mode is not enabled")
         
     session_id = request.session_id or str(uuid.uuid4())
+    is_new_session = request.session_id is None
     
     try:
         skills = request.effective_skills
@@ -218,6 +254,17 @@ async def agent_chat(
             None,
             lambda: executor.chat(message=request.message, session_id=session_id,
                                   context=ctx, owner_id=current_user.user_id),
+        )
+        _record_agent_audit(
+            event_type="agent.request_created" if is_new_session else "agent.request_updated",
+            message="Agent chat request persisted",
+            current_user=current_user,
+            session_id=session_id,
+            metadata={
+                "new_session": is_new_session,
+                "skill_count": len(skills or []),
+                "has_context": bool(request.context),
+            },
         )
 
         return ChatResponse(
@@ -302,6 +349,13 @@ async def delete_chat_session(
         count = get_db().delete_conversation_session(session_id, owner_id=current_user.user_id)
     except ValueError as exc:
         raise _conversation_access_http_error(exc) from exc
+    if count:
+        _record_agent_audit(
+            event_type="agent.request_deleted",
+            message="Agent chat session deleted",
+            current_user=current_user,
+            session_id=session_id,
+        )
     return {"deleted": count}
 
 

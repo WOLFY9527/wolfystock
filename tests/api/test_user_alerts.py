@@ -132,6 +132,11 @@ def _reset_auth_globals() -> None:
     auth._password_hash_salt = None
     auth._password_hash_stored = None
     auth._rate_limit = {}
+    try:
+        from api.middlewares.public_abuse_limiter import reset_public_api_abuse_limiter_state
+    except ModuleNotFoundError:
+        return
+    reset_public_api_abuse_limiter_state()
 
 
 def _make_user(user_id: str, username: str) -> CurrentUser:
@@ -169,6 +174,7 @@ def _assert_response_keys(
 
 class UserAlertsApiTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        self.previous_admin_auth_enabled = os.environ.get("ADMIN_AUTH_ENABLED")
         self.temp_dir = tempfile.TemporaryDirectory()
         self.data_dir = Path(self.temp_dir.name)
         self.env_path = self.data_dir / ".env"
@@ -187,6 +193,7 @@ class UserAlertsApiTestCase(unittest.TestCase):
         )
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.db_path)
+        os.environ["ADMIN_AUTH_ENABLED"] = "false"
         Config.reset_instance()
         _reset_auth_globals()
         DatabaseManager.reset_instance()
@@ -211,6 +218,7 @@ class UserAlertsApiTestCase(unittest.TestCase):
         )
         os.environ["ENV_FILE"] = str(self.env_path)
         os.environ["DATABASE_PATH"] = str(self.db_path)
+        os.environ["ADMIN_AUTH_ENABLED"] = "true"
         Config.reset_instance()
         _reset_auth_globals()
         app = create_app(static_dir=self.data_dir / "empty-static")
@@ -224,6 +232,10 @@ class UserAlertsApiTestCase(unittest.TestCase):
         _reset_auth_globals()
         os.environ.pop("ENV_FILE", None)
         os.environ.pop("DATABASE_PATH", None)
+        if self.previous_admin_auth_enabled is None:
+            os.environ.pop("ADMIN_AUTH_ENABLED", None)
+        else:
+            os.environ["ADMIN_AUTH_ENABLED"] = self.previous_admin_auth_enabled
         self.temp_dir.cleanup()
 
     def test_owner_can_create_list_update_and_delete_own_alert_rules(self) -> None:

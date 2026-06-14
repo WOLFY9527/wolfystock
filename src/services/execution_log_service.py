@@ -39,6 +39,7 @@ _DEFAULT_LOG_CATEGORIES = {
     "api",
     "frontend",
     "security",
+    "user_action",
 }
 _NOISY_MARKET_EVENTS = {
     "MarketCacheHit",
@@ -1693,6 +1694,126 @@ class ExecutionLogService:
             truth_level="actual",
             message=_masked_message(message) or business_event["summary"],
             detail=safe_detail,
+            event_at=started_at,
+        )
+        self.db.finalize_execution_log_session(
+            session_id=session_id,
+            overall_status=normalized_status,
+            truth_level="actual",
+            summary=summary,
+            ended_at=started_at,
+        )
+        return session_id
+
+    def record_user_write_action(
+        self,
+        *,
+        event_type: str,
+        message: str,
+        actor: Optional[Dict[str, Any]] = None,
+        domain: str = "user",
+        target_type: Optional[str] = None,
+        target_id: Optional[Any] = None,
+        status: str = "completed",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        session_id = uuid.uuid4().hex
+        started_at = datetime.now()
+        normalized_status = _normalize_business_status(status)
+        event_name = _as_str(event_type) or "user.write_action"
+        domain_name = _as_str(domain).lower() or "user"
+        safe_target_id = _project_diagnostic_handle(target_id, kind="target", source="event_detail")
+        safe_metadata = _sanitize_metadata(
+            {
+                **(metadata or {}),
+                "category": "user_action",
+                "eventType": event_name,
+                "event_type": event_name,
+                "domain": domain_name,
+                "target_type": _as_str(target_type) or None,
+                "target_id": safe_target_id,
+                "status": normalized_status,
+                "outcome": _outcome_from_status(normalized_status),
+            }
+        )
+        actor_payload = self._resolve_actor(None, actor)
+        actor_payload["session_id"] = None
+        business_event = {
+            "id": session_id,
+            "event": event_name,
+            "category": "user_action",
+            "type": event_name,
+            "eventType": event_name,
+            "status": normalized_status,
+            "summary": _as_str(message) or f"User action: {event_name}",
+            "subject": _as_str(target_type) or domain_name,
+            "symbol": _as_str(safe_metadata.get("symbol")).upper() or None if isinstance(safe_metadata, dict) else None,
+            "market": _as_str(safe_metadata.get("market")).upper() or None if isinstance(safe_metadata, dict) else None,
+            "route": safe_metadata.get("route") if isinstance(safe_metadata, dict) else None,
+            "endpoint": safe_metadata.get("endpoint") if isinstance(safe_metadata, dict) else None,
+            "component": domain_name,
+            "feature": domain_name,
+            "recordId": safe_target_id,
+            "requestId": None,
+            "userId": actor_payload.get("user_id"),
+            "startedAt": started_at.isoformat(),
+            "finishedAt": started_at.isoformat(),
+            "durationMs": 0,
+            "stepCount": 1,
+            "successStepCount": 1 if normalized_status in {"success", "completed"} else 0,
+            "failedStepCount": 1 if normalized_status == "failed" else 0,
+            "skippedStepCount": 0,
+            "unknownStepCount": 0,
+            "metadata": safe_metadata,
+        }
+        summary = self._merge_summary(
+            {
+                "business_event": business_event,
+                "user_action": safe_metadata,
+                "log": {"level": "INFO", "category": "user_action", "event_name": event_name},
+            },
+            {
+                "meta": {
+                    "owner_user_id": actor_payload.get("user_id"),
+                    "actor_user_id": actor_payload.get("user_id"),
+                    "actor_username": None,
+                    "actor_display": None,
+                    "actor_role": actor_payload.get("role"),
+                    "actor_type": actor_payload.get("actor_type"),
+                    "actor_session_id": None,
+                    "actor_request_id": None,
+                    "session_kind": "user_activity",
+                    "subsystem": "user_action",
+                    "action_name": event_name,
+                    "destructive": event_name.endswith("_deleted") or event_name.endswith(".deleted"),
+                }
+            },
+        )
+        self.db.create_execution_log_session(
+            session_id=session_id,
+            task_id=event_name,
+            code=None,
+            name=event_name,
+            overall_status=normalized_status,
+            truth_level="actual",
+            summary=summary,
+            started_at=started_at,
+        )
+        self.db.append_execution_log_event(
+            session_id=session_id,
+            phase="user_action",
+            step=event_name,
+            target=_as_str(target_type) or domain_name,
+            status=normalized_status,
+            truth_level="actual",
+            message=_masked_message(message) or business_event["summary"],
+            detail={
+                "level": "INFO",
+                "category": "user_action",
+                "event_name": event_name,
+                "action": event_name,
+                **safe_metadata,
+            },
             event_at=started_at,
         )
         self.db.finalize_execution_log_session(

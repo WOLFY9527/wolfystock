@@ -138,6 +138,30 @@ def _record_portfolio_audit(
         logger.warning("Record portfolio audit log failed: %s", exc)
 
 
+def _record_user_write_audit(
+    *,
+    event_type: str,
+    message: str,
+    current_user: CurrentUser,
+    target_type: str,
+    target_id: Optional[object] = None,
+    metadata: Optional[dict] = None,
+) -> None:
+    try:
+        ExecutionLogService().record_user_write_action(
+            event_type=event_type,
+            message=message,
+            actor=_actor(current_user),
+            domain="portfolio",
+            target_type=target_type,
+            target_id=target_id,
+            status="completed",
+            metadata={"route_family": "portfolio", **(metadata or {})},
+        )
+    except Exception as exc:
+        logger.warning("Record portfolio user action audit failed: %s", exc)
+
+
 def _assert_owned_request(owner_id: Optional[str], current_user: CurrentUser) -> None:
     normalized_owner_id = str(owner_id or "").strip()
     if normalized_owner_id and normalized_owner_id != current_user.user_id:
@@ -497,6 +521,17 @@ def create_account(
             base_currency=request.base_currency,
             owner_id=current_user.user_id,
         )
+        _record_user_write_audit(
+            event_type="portfolio.account_created",
+            message="Portfolio account created",
+            current_user=current_user,
+            target_type="portfolio_account",
+            target_id=row.get("id"),
+            metadata={
+                "market": str(row.get("market") or "").upper() or None,
+                "base_currency": str(row.get("base_currency") or "").upper() or None,
+            },
+        )
         return PortfolioAccountItem(**row)
     except ValueError as exc:
         raise _bad_request(exc)
@@ -550,6 +585,18 @@ def update_account(
                 status_code=404,
                 detail={"error": "not_found", "message": f"Account not found: {account_id}"},
             )
+        _record_user_write_audit(
+            event_type="portfolio.account_updated",
+            message="Portfolio account updated",
+            current_user=current_user,
+            target_type="portfolio_account",
+            target_id=account_id,
+            metadata={
+                "market": str(updated.get("market") or "").upper() or None,
+                "base_currency": str(updated.get("base_currency") or "").upper() or None,
+                "is_active": bool(updated.get("is_active")),
+            },
+        )
         return PortfolioAccountItem(**updated)
     except HTTPException:
         raise
@@ -580,6 +627,14 @@ def delete_account(account_id: int, current_user: CurrentUser = Depends(get_curr
             current_user=current_user,
             account_id=account_id,
             detail={"delete_mode": data["delete_mode"], "next_account_id": data["next_account_id"]},
+        )
+        _record_user_write_audit(
+            event_type="portfolio.account_deleted",
+            message="Portfolio account archived",
+            current_user=current_user,
+            target_type="portfolio_account",
+            target_id=account_id,
+            metadata={"delete_mode": data["delete_mode"]},
         )
         return PortfolioAccountDeleteResponse(**data)
     except HTTPException:
