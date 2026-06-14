@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import Field
 
 from api.deps import CurrentUser, require_admin_capability, require_recent_admin_reauth
 from api.v1.schemas.admin_activity import AdminActivityEvent, AdminActivityResponse, AdminActivityWindow
@@ -41,6 +42,19 @@ USER_STATUS_VALUES = {"all", "active", "inactive", "needs_password", "sessionles
 SESSION_STATUS_VALUES = {"all", "active", "expired", "revoked"}
 ROLE_VALUES = {"admin", "user"}
 ACTOR_TYPE_VALUES = {"admin", "user", "guest", "anonymous", "system"}
+
+
+class AdminLifecycleUserListItem(AdminUserListItem):
+    status: Literal["active", "inactive"]
+    lifecycle_state: Literal["active", "inactive", "needs_password"] = Field(alias="lifecycleState")
+
+
+class AdminLifecycleUserListResponse(AdminUserListResponse):
+    items: list[AdminLifecycleUserListItem] = Field(default_factory=list)
+
+
+class AdminLifecycleUserDetailResponse(AdminUserDetailResponse):
+    user: AdminLifecycleUserListItem
 
 
 def _parse_optional_datetime(value: Optional[str], *, name: str) -> Optional[datetime]:
@@ -115,21 +129,32 @@ def _build_activity_response(
     )
 
 
-def _build_user_list_item(item: dict[str, Any]) -> AdminUserListItem:
+def _lifecycle_fields(item: dict[str, Any]) -> dict[str, str]:
+    status = "active" if bool(item.get("is_active")) else "inactive"
+    if status == "inactive":
+        lifecycle_state = "inactive"
+    elif item.get("password_state") == "unset":
+        lifecycle_state = "needs_password"
+    else:
+        lifecycle_state = "active"
+    return {"status": status, "lifecycle_state": lifecycle_state}
+
+
+def _build_user_list_item(item: dict[str, Any]) -> AdminLifecycleUserListItem:
     session_summary = AdminSessionSummaryCounts.model_validate(item.get("session_summary") or {})
     risk_badges = [
         AdminUserRiskBadge.model_validate(badge)
         for badge in item.get("risk_badges") or []
     ]
     links = AdminDataLinks.model_validate(item.get("links") or {})
-    return AdminUserListItem.model_validate(
-        {
-            **item,
-            "session_summary": session_summary,
-            "risk_badges": risk_badges,
-            "links": links,
-        }
-    )
+    payload = {
+        **item,
+        "session_summary": session_summary,
+        "risk_badges": risk_badges,
+        "links": links,
+    }
+    payload.update(_lifecycle_fields(payload))
+    return AdminLifecycleUserListItem.model_validate(payload)
 
 
 def _build_session_summary(item: dict[str, Any]) -> AdminSessionSummary:
@@ -166,7 +191,7 @@ def _require_onboarding_security_write(
 
 @router.get(
     "/users",
-    response_model=AdminUserListResponse,
+    response_model=AdminLifecycleUserListResponse,
     summary="List safe admin user directory entries",
 )
 def list_admin_users(
@@ -182,7 +207,7 @@ def list_admin_users(
     offset: int = Query(default=0, ge=0, le=10000),
     sort: str = Query(default="created_at_desc"),
     _: CurrentUser = Depends(require_admin_capability("users:read")),
-) -> AdminUserListResponse:
+) -> AdminLifecycleUserListResponse:
     role = _validate_value(role, ROLE_VALUES, name="role")
     status = _validate_value(status, USER_STATUS_VALUES, name="status") or "all"
     sort = _validate_value(sort, USER_SORT_VALUES, name="sort") or "created_at_desc"
@@ -206,7 +231,7 @@ def list_admin_users(
         offset=offset,
     )
     validated_items = [_build_user_list_item(item) for item in items]
-    return AdminUserListResponse(
+    return AdminLifecycleUserListResponse(
         items=validated_items,
         total=total,
         limit=limit,
@@ -217,7 +242,7 @@ def list_admin_users(
 
 @router.get(
     "/users/{user_id}",
-    response_model=AdminUserDetailResponse,
+    response_model=AdminLifecycleUserDetailResponse,
     summary="Read one safe admin user detail projection",
 )
 def get_admin_user_detail(
@@ -226,7 +251,7 @@ def get_admin_user_detail(
     session_limit: int = Query(default=20, ge=1, le=50),
     session_status: str = Query(default="all"),
     _: CurrentUser = Depends(require_admin_capability("users:read")),
-) -> AdminUserDetailResponse:
+) -> AdminLifecycleUserDetailResponse:
     normalized_user_id = str(user_id or "").strip()
     if not normalized_user_id or len(normalized_user_id) > 64:
         raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "Invalid user_id"})
@@ -243,7 +268,7 @@ def get_admin_user_detail(
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "User not found"})
     validated_user = _build_user_list_item(user)
     validated_sessions = [_build_session_summary(session) for session in sessions]
-    return AdminUserDetailResponse(
+    return AdminLifecycleUserDetailResponse(
         user=validated_user,
         sessions=validated_sessions,
         dataLinks=AdminDataLinks(
