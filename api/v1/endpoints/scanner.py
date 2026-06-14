@@ -16,6 +16,7 @@ from api.deps import (
     is_admin_user,
     require_admin_capability,
 )
+from api.v1.errors import safe_api_error
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.scanner import (
     ScannerOperationalStatusResponse,
@@ -37,6 +38,9 @@ from src.storage import DatabaseManager
 logger = logging.getLogger(__name__)
 router = APIRouter()
 ResponseT = TypeVar("ResponseT")
+
+SCANNER_VALIDATION_ERROR_MESSAGE = "Scanner request could not be processed."
+SCANNER_INTERNAL_ERROR_MESSAGE = "Scanner data is temporarily unavailable. Please retry later."
 
 
 def _public_theme_payload(theme: object) -> dict[str, Any]:
@@ -86,24 +90,29 @@ def _actor(current_user: CurrentUser | object | None) -> dict | None:
 
 
 def _validation_error(exc: ValueError) -> HTTPException:
-    return HTTPException(
+    return safe_api_error(
         status_code=400,
-        detail={"error": "validation_error", "message": str(exc)},
+        error="validation_error",
+        message=str(exc) or SCANNER_VALIDATION_ERROR_MESSAGE,
+        fallback_message=SCANNER_VALIDATION_ERROR_MESSAGE,
     )
 
 
 def _not_found_error(message: str) -> HTTPException:
-    return HTTPException(
+    return safe_api_error(
         status_code=404,
-        detail={"error": "not_found", "message": message},
+        error="not_found",
+        message=message,
     )
 
 
 def _internal_error(action_label: str, exc: Exception) -> HTTPException:
     logger.error("%s: %s", action_label, exc, exc_info=True)
-    return HTTPException(
+    return safe_api_error(
         status_code=500,
-        detail={"error": "internal_error", "message": f"{action_label}: {str(exc)}"},
+        error="internal_error",
+        message=SCANNER_INTERNAL_ERROR_MESSAGE,
+        retryable=True,
     )
 
 

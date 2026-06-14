@@ -8,6 +8,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.deps import CurrentUser, get_current_user
+from api.v1.errors import safe_api_error
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.watchlist import (
     WatchlistDeleteResponse,
@@ -24,6 +25,9 @@ from src.services.watchlist_service import WatchlistService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+WATCHLIST_VALIDATION_ERROR_MESSAGE = "Watchlist request could not be processed."
+WATCHLIST_INTERNAL_ERROR_MESSAGE = "Watchlist data is temporarily unavailable. Please retry later."
 
 
 def _get_watchlist_service() -> WatchlistService:
@@ -77,24 +81,29 @@ def _record_audit(
 
 
 def _bad_request(exc: Exception) -> HTTPException:
-    return HTTPException(
+    return safe_api_error(
         status_code=400,
-        detail={"error": "validation_error", "message": str(exc)},
+        error="validation_error",
+        message=str(exc) or WATCHLIST_VALIDATION_ERROR_MESSAGE,
+        fallback_message=WATCHLIST_VALIDATION_ERROR_MESSAGE,
     )
 
 
 def _not_found(message: str) -> HTTPException:
-    return HTTPException(
+    return safe_api_error(
         status_code=404,
-        detail={"error": "not_found", "message": message},
+        error="not_found",
+        message=message,
     )
 
 
 def _internal_error(message: str, exc: Exception) -> HTTPException:
     logger.error("%s: %s", message, exc, exc_info=True)
-    return HTTPException(
+    return safe_api_error(
         status_code=500,
-        detail={"error": "internal_error", "message": f"{message}: {str(exc)}"},
+        error="internal_error",
+        message=WATCHLIST_INTERNAL_ERROR_MESSAGE,
+        retryable=True,
     )
 
 

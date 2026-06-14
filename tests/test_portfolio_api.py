@@ -139,7 +139,11 @@ class PortfolioApiTestCase(unittest.TestCase):
     ) -> None:
         self.assertEqual(response.status_code, status_code)
         payload = response.json()
-        self.assertEqual(payload, {"error": error_code, "message": message})
+        self.assertEqual(payload.get("error"), error_code)
+        self.assertEqual(payload.get("code"), error_code)
+        self.assertEqual(payload.get("message"), message)
+        self.assertEqual(payload.get("status"), status_code)
+        self.assertNotIn("detail", payload)
         response_text = self._json_text(response)
         for marker in RAW_IMPORT_ERROR_MARKERS:
             self.assertNotIn(marker, response_text)
@@ -1201,13 +1205,11 @@ class PortfolioApiTestCase(unittest.TestCase):
             },
         )
         self.assertEqual(resp.status_code, 400)
-        self.assertEqual(
-            resp.json(),
-            {
-                "error": "ibkr_session_expired",
-                "message": "当前 IBKR session 已失效、未授权或未连上可访问账户。",
-            },
-        )
+        payload = resp.json()
+        self.assertEqual(payload.get("error"), "ibkr_session_expired")
+        self.assertEqual(payload.get("code"), "ibkr_session_expired")
+        self.assertEqual(payload.get("message"), "当前 IBKR session 已失效、未授权或未连上可访问账户。")
+        self.assertEqual(payload.get("status"), 400)
 
     @patch("api.v1.endpoints.portfolio.PortfolioIbkrSyncService.sync_read_only_account_state")
     def test_ibkr_sync_endpoint_sanitizes_secret_like_error_text(self, sync_mock: MagicMock) -> None:
@@ -1234,7 +1236,8 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(resp.status_code, 400)
         text = self._json_text(resp)
         self.assertNotIn("SECRET_SESSION_TOKEN", text)
-        self.assertIn("***", text)
+        self.assertNotIn("session_token", text)
+        self.assertIn("Portfolio broker sync could not be processed.", text)
 
     @patch("api.v1.endpoints.portfolio.PortfolioIbkrSyncService.sync_read_only_account_state")
     def test_ibkr_sync_endpoint_surfaces_mapping_conflict(self, sync_mock: MagicMock) -> None:
