@@ -51,10 +51,19 @@ FORBIDDEN_MARKERS = (
     "sell",
     "place order",
     "trade execution",
+    "交易指令",
+    "交易执行",
     "买入",
     "卖出",
     "加仓",
     "减仓",
+    "清仓",
+    "止损",
+    "止盈",
+    "目标价",
+    "收益预测",
+    "AI推荐",
+    "智能选股",
     "交易建议",
     "投资建议",
 )
@@ -109,9 +118,10 @@ def test_homepage_capabilities_response_has_no_internal_diagnostics_or_secrets()
 def test_homepage_capabilities_response_has_no_trading_advice_language() -> None:
     serialized = json.dumps(_build_payload(), ensure_ascii=False).lower()
 
-    assert "不构成个性化建议或交易指令" in serialized
-    for marker in ("buy", "sell", "place order", "trade execution", "买入", "卖出", "加仓", "减仓"):
-        assert marker not in serialized
+    assert "仅供研究观察" in serialized
+    assert "不构成个性化建议" in serialized
+    for marker in FORBIDDEN_MARKERS:
+        assert marker.lower() not in serialized
 
 
 def test_homepage_capabilities_response_uses_bounded_public_chinese_copy() -> None:
