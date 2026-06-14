@@ -73,29 +73,41 @@ def _set_admin_cookie(client: TestClient, db: DatabaseManager) -> None:
 
 
 @pytest.mark.parametrize(
-    ("path", "expected_location"),
+    "path",
     [
-        ("/admin", "/guest"),
-        ("/admin/market-providers", "/guest"),
-        ("/admin/provider-circuits", "/guest"),
-        ("/zh/admin", "/zh/guest"),
-        ("/zh/admin/market-providers", "/zh/guest"),
-        ("/en/admin", "/en/guest"),
-        ("/en/admin/provider-circuits", "/en/guest"),
+        "/admin",
+        "/admin/users",
+        "/admin/logs",
+        "/admin/system",
+        "/admin/provider",
+        "/admin/market-providers",
+        "/admin/provider-circuits",
+        "/zh/admin",
+        "/zh/admin/users",
+        "/zh/admin/logs",
+        "/zh/admin/system",
+        "/zh/admin/provider",
+        "/zh/admin/market-providers",
+        "/en/admin",
+        "/en/admin/users",
+        "/en/admin/logs",
+        "/en/admin/system",
+        "/en/admin/provider",
+        "/en/admin/market-providers",
+        "/en/admin/provider-circuits",
     ],
 )
-def test_unauthenticated_direct_admin_spa_routes_redirect_to_guest(
+def test_unauthenticated_direct_admin_spa_routes_serve_shell_for_fail_closed_hydration(
     auth_enabled_spa_client,
     path: str,
-    expected_location: str,
 ) -> None:
     client, _ = auth_enabled_spa_client
 
     response = client.get(path, follow_redirects=False)
 
-    assert response.status_code == 302
-    assert response.headers["location"] == expected_location
-    assert "admin-spa-shell" not in response.text
+    assert response.status_code == 200
+    assert "location" not in response.headers
+    assert response.text == "<html>admin-spa-shell</html>"
 
 
 def test_authenticated_admin_keeps_direct_admin_spa_shell_access(auth_enabled_spa_client) -> None:

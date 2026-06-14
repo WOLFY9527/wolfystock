@@ -558,6 +558,24 @@ describe('AppContent route flows', () => {
   );
 
   it.each([
+    ['/admin', '/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
+    ['/admin/users', '/admin/users', { ...noCapabilities, canReadUsers: true }, 'admin-users-page'],
+    ['/admin/logs', '/admin/logs', { ...noCapabilities, canReadOpsLogs: true }, 'admin-logs-page'],
+    ['/admin/system', '/settings/system', { ...noCapabilities, canReadSystemConfig: true }, 'system-settings-page'],
+    ['/admin/provider', '/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
+    ['/admin/market-providers', '/admin/market-providers', { ...noCapabilities, canReadProviders: true }, 'market-provider-operations-page'],
+  ])('renders admin route %s for admins without exposing the guest preview', async (path, expectedPath, adminCapabilities, pageText) => {
+    mockSignedInAdminWithCapabilities(adminCapabilities);
+
+    renderAtWithLocationProbe(path);
+
+    expect(await screen.findByText(pageText)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+    expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
+    expect(screen.queryByText('游客预览模式')).not.toBeInTheDocument();
+  });
+
+  it.each([
     ['/zh/admin/system', '/zh/settings/system', '需要管理员登录', '/zh/login?redirect=%2Fzh%2Fsettings%2Fsystem'],
     ['/zh/admin/providers', '/zh/admin/market-providers', '需要管理员登录', '/zh/login?redirect=%2Fzh%2Fadmin%2Fmarket-providers'],
     ['/zh/admin/provider', '/zh/admin/market-providers', '需要管理员登录', '/zh/login?redirect=%2Fzh%2Fadmin%2Fmarket-providers'],
@@ -578,6 +596,28 @@ describe('AppContent route flows', () => {
     expect(screen.getAllByRole('link', { name: /Sign in|登录/ }).some((link) => link.getAttribute('href') === loginHref)).toBe(true);
     expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
     expect(screen.queryByText('游客预览模式')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['/admin', '/settings/system', 'Admin Sign-in Required', '/login?redirect=%2Fsettings%2Fsystem'],
+    ['/admin/users', '/admin/users', 'Admin Sign-in Required', '/login?redirect=%2Fadmin%2Fusers'],
+    ['/admin/logs', '/admin/logs', 'Admin Sign-in Required', '/login?redirect=%2Fadmin%2Flogs'],
+    ['/admin/system', '/settings/system', 'Admin Sign-in Required', '/login?redirect=%2Fsettings%2Fsystem'],
+    ['/admin/provider', '/admin/market-providers', 'Admin Sign-in Required', '/login?redirect=%2Fadmin%2Fmarket-providers'],
+    ['/admin/market-providers', '/admin/market-providers', 'Admin Sign-in Required', '/login?redirect=%2Fadmin%2Fmarket-providers'],
+  ])('keeps anonymous admin route %s fail-closed without rendering guest', async (path, expectedPath, statusLabel, loginHref) => {
+    languageState.value = 'en';
+    renderAtWithLocationProbe(path);
+
+    expect(await screen.findByText(statusLabel)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+    expect(screen.getAllByRole('link', { name: 'Sign in' }).some((link) => link.getAttribute('href') === loginHref)).toBe(true);
+    expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
+    expect(screen.queryByText('游客预览模式')).not.toBeInTheDocument();
+    expect(screen.queryByText('admin-users-page')).not.toBeInTheDocument();
+    expect(screen.queryByText('admin-logs-page')).not.toBeInTheDocument();
+    expect(screen.queryByText('system-settings-page')).not.toBeInTheDocument();
+    expect(screen.queryByText('market-provider-operations-page')).not.toBeInTheDocument();
   });
 
   it.each([
@@ -606,6 +646,35 @@ describe('AppContent route flows', () => {
 
     expect(await screen.findByRole('heading', { name: '这个页面需要管理员账户' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+  });
+
+  it.each([
+    ['/admin', '/settings/system'],
+    ['/admin/users', '/admin/users'],
+    ['/admin/logs', '/admin/logs'],
+    ['/admin/system', '/settings/system'],
+    ['/admin/provider', '/admin/market-providers'],
+    ['/admin/market-providers', '/admin/market-providers'],
+  ])('keeps non-admin account gating unchanged for admin route %s', async (path, expectedPath) => {
+    useAuthMock.mockReturnValue({
+      authEnabled: true,
+      loggedIn: true,
+      isLoading: false,
+      loadError: null,
+      refreshStatus: vi.fn(),
+    });
+    useProductSurfaceMock.mockReturnValue({
+      isGuest: false,
+      isAdmin: false,
+      isAdminMode: false,
+      adminCapabilities: noCapabilities,
+    });
+
+    renderAtWithLocationProbe(path);
+
+    expect(await screen.findByRole('heading', { name: /requires an admin account/ })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(expectedPath));
+    expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
   });
 
   it('redirects legacy /chat guest access to the market overview surface', async () => {
