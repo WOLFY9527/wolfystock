@@ -26,11 +26,39 @@ class AdminOpsStatusService:
     """Aggregate existing admin evidence without changing runtime behavior."""
 
     _HEALTHY_PROVIDER_STATES = frozenset({"closed", "healthy", "ok"})
+    _SENSITIVE_TEXT_MARKERS = (
+        "traceback",
+        "exception",
+        "postgres://",
+        "sqlite://",
+        "api_key",
+        "apikey",
+        "secret",
+        "token",
+        "cookie",
+        "bearer",
+        "authorization",
+        "password",
+        "scripts/",
+        "docs/",
+        "tests/",
+        "api/v1/endpoints/",
+        "/users/",
+        ".py",
+        ".md",
+        "://",
+    )
 
     def build_status(self, *, app_state: object | None = None) -> Dict[str, Any]:
         generated_at = datetime.now()
+        generated_at_iso = generated_at.isoformat()
+        provider_status = self._safe_source(self._build_provider_status_summary)
+        quota_status = self._safe_source(lambda: self._build_quota_cost_advisory_status_summary(generated_at))
+        storage_status = self._safe_source(self._build_storage_readiness_summary)
+        task_queue_status = self._safe_source(lambda: self._build_task_queue_status_summary(app_state))
+        admin_log_status = self._safe_source(self._build_admin_log_evidence_summary)
         return {
-            "generatedAt": generated_at.isoformat(),
+            "generatedAt": generated_at_iso,
             "readOnly": True,
             "noExternalCalls": True,
             "liveEnforcement": False,
@@ -46,43 +74,270 @@ class AdminOpsStatusService:
                 "runtimeBehaviorChanged": False,
                 "consumerVisible": False,
             },
-            "providerStatusSummary": self._safe_source(self._build_provider_status_summary),
-            "quotaCostAdvisoryStatusSummary": self._safe_source(
-                lambda: self._build_quota_cost_advisory_status_summary(generated_at)
+            "providerStatusSummary": self._project_section(
+                service="provider_reliability",
+                snapshot=provider_status,
+                configured=bool(provider_status.get("available")),
+                last_checked_at=generated_at_iso if provider_status.get("available") else None,
+                message=self._provider_status_message(provider_status),
             ),
-            "storageReadinessSummary": self._safe_source(self._build_storage_readiness_summary),
-            "taskQueueStatusSummary": self._safe_source(lambda: self._build_task_queue_status_summary(app_state)),
-            "adminLogEvidenceSummary": self._safe_source(self._build_admin_log_evidence_summary),
-            "launchCockpit": self._build_launch_cockpit(),
+            "quotaCostAdvisoryStatusSummary": self._project_section(
+                service="quota_cost",
+                snapshot=quota_status,
+                configured=bool(quota_status.get("available")),
+                last_checked_at=generated_at_iso if quota_status.get("available") else None,
+                message=self._quota_status_message(quota_status),
+            ),
+            "storageReadinessSummary": self._project_section(
+                service="storage",
+                snapshot=storage_status,
+                configured=bool(storage_status.get("available")),
+                last_checked_at=generated_at_iso if storage_status.get("available") else None,
+                message=self._storage_status_message(storage_status),
+            ),
+            "taskQueueStatusSummary": self._project_section(
+                service="task_queue",
+                snapshot=task_queue_status,
+                configured=getattr(app_state, "task_queue", None) is not None,
+                last_checked_at=generated_at_iso if task_queue_status.get("available") else None,
+                message=self._task_queue_status_message(task_queue_status),
+            ),
+            "adminLogEvidenceSummary": self._project_section(
+                service="admin_logs",
+                snapshot=admin_log_status,
+                configured=bool(admin_log_status.get("available")),
+                last_checked_at=generated_at_iso if admin_log_status.get("available") else None,
+                message=self._admin_log_status_message(admin_log_status),
+            ),
+            "launchCockpit": self._safe_launch_cockpit(generated_at_iso),
             "metadata": {
-                "contract": "admin_ops_status_snapshot_v1",
-                "gatingCapability": "ops:logs:read",
-                "redaction": [
-                    "actor_identifiers_bucketed",
-                    "login_context_identifiers_omitted",
-                    "external_source_bodies_omitted",
-                    "request_content_omitted",
-                    "auth_material_and_credential_values_omitted",
-                    "diagnostic_trace_details_omitted",
-                    "raw_exception_text_omitted",
-                ],
-                "mutationPaths": [],
-                "dataSources": [
-                    "provider_circuit_states",
-                    "provider_circuit_events",
-                    "provider_quota_windows",
-                    "provider_probe_events",
-                    "quota_policy_readiness_helpers",
-                    "llm_cost_ledger_summary",
-                    "database_session_check",
-                    "task_queue_runtime_status",
-                    "execution_log_sessions",
-                    "execution_log_events",
-                    "admin_log_retention_policy",
-                    "admin_ops_launch_cockpit_projection",
+                "contract": "admin_ops_status_snapshot_v2",
+                "projection": "bounded_admin_diagnostics",
+                "publicLaunchNoGo": True,
+                "categories": [
+                    "provider_reliability",
+                    "quota_cost",
+                    "storage",
+                    "task_queue",
+                    "admin_logs",
+                    "launch_readiness",
                 ],
             },
         }
+
+    @classmethod
+    def _project_section(
+        cls,
+        *,
+        service: str,
+        snapshot: Dict[str, Any],
+        configured: bool,
+        last_checked_at: str | None,
+        message: str,
+    ) -> Dict[str, Any]:
+        section = cls._section(
+            available=bool(snapshot.get("available", False)),
+            status=str(snapshot.get("status") or "unavailable"),
+            service=service,
+            configured=bool(configured),
+            lastCheckedAt=last_checked_at,
+            message=message,
+            label="bounded_admin_diagnostic",
+            reasonCode=snapshot.get("reasonCode"),
+            dataSources=[],
+            summary={},
+            limitations=[],
+        )
+        return section
+
+    @staticmethod
+    def _provider_status_message(snapshot: Dict[str, Any]) -> str:
+        status = str(snapshot.get("status") or "unavailable")
+        if status == "degraded_observed":
+            return "Stored provider reliability snapshot shows degraded observations; provider names, URLs, and payloads are omitted."
+        if status == "observed":
+            return "Stored provider reliability snapshot available; provider names, URLs, and payloads are omitted."
+        if status == "no_evidence":
+            return "No stored provider reliability evidence observed yet."
+        return "Provider reliability snapshot unavailable."
+
+    @staticmethod
+    def _quota_status_message(snapshot: Dict[str, Any]) -> str:
+        if snapshot.get("available"):
+            return "Quota and cost advisory snapshot available; live enforcement remains disabled."
+        return "Quota and cost advisory snapshot unavailable."
+
+    @staticmethod
+    def _storage_status_message(snapshot: Dict[str, Any]) -> str:
+        if snapshot.get("available"):
+            return "Storage readiness session check available; connection details are omitted."
+        return "Storage readiness snapshot unavailable."
+
+    @staticmethod
+    def _task_queue_status_message(snapshot: Dict[str, Any]) -> str:
+        if snapshot.get("available"):
+            return "Task queue runtime snapshot available; worker details and warnings are bounded."
+        return "Task queue runtime snapshot unavailable."
+
+    @staticmethod
+    def _admin_log_status_message(snapshot: Dict[str, Any]) -> str:
+        if snapshot.get("available"):
+            return "Admin log evidence snapshot available; raw identifiers and file paths are omitted."
+        return "Admin log evidence snapshot unavailable."
+
+    def _safe_launch_cockpit(self, generated_at: str) -> Dict[str, Any]:
+        try:
+            raw = self._build_launch_cockpit()
+        except Exception:
+            return self._fallback_launch_cockpit()
+        return self._project_launch_cockpit(raw, generated_at=generated_at)
+
+    def _project_launch_cockpit(self, snapshot: Dict[str, Any], *, generated_at: str) -> Dict[str, Any]:
+        return {
+            "contract": str(snapshot.get("contract") or "admin_ops_launch_cockpit_v1"),
+            "status": "no_go" if bool(snapshot.get("publicLaunchNoGo", True)) else "advisory",
+            "lastCheckedAt": generated_at,
+            "message": "Private beta launch readiness snapshot is advisory only; detailed evidence references are omitted.",
+            "readOnly": True,
+            "advisoryOnly": True,
+            "noExternalCalls": True,
+            "publicLaunchApproved": bool(snapshot.get("publicLaunchApproved", False)),
+            "publicLaunchNoGo": bool(snapshot.get("publicLaunchNoGo", True)),
+            "liveEnforcement": False,
+            "runtimeBehaviorChanged": False,
+            "approvalRequired": bool(snapshot.get("approvalRequired", True)),
+            "summaryCounts": dict(snapshot.get("summaryCounts") or {}),
+            "unsafeActionStates": {
+                str(key): bool(value)
+                for key, value in dict(snapshot.get("unsafeActionStates") or {}).items()
+            },
+            "domains": [
+                self._project_launch_cockpit_domain(item)
+                for item in list(snapshot.get("domains") or [])
+                if isinstance(item, dict)
+            ],
+            "blockers": [
+                self._project_launch_cockpit_blocker(item)
+                for item in list(snapshot.get("blockers") or [])
+                if isinstance(item, dict)
+            ],
+            "safeNextActions": self._sanitize_messages(
+                snapshot.get("safeNextActions"),
+                fallback=["Review bounded admin evidence and keep public launch blocked."],
+            ),
+            "limitations": ["bounded_admin_projection", "no_raw_internal_references"],
+        }
+
+    def _fallback_launch_cockpit(self) -> Dict[str, Any]:
+        return {
+            "contract": "admin_ops_launch_cockpit_v1",
+            "status": "unavailable",
+            "lastCheckedAt": None,
+            "message": "Admin launch readiness snapshot unavailable.",
+            "readOnly": True,
+            "advisoryOnly": True,
+            "noExternalCalls": True,
+            "publicLaunchApproved": False,
+            "publicLaunchNoGo": True,
+            "liveEnforcement": False,
+            "runtimeBehaviorChanged": False,
+            "approvalRequired": True,
+            "summaryCounts": {},
+            "unsafeActionStates": {},
+            "domains": [],
+            "blockers": [
+                {
+                    "blockerKey": "public_launch_no_go",
+                    "title": "Public launch remains NO-GO",
+                    "severity": "critical",
+                    "publicLaunchNoGo": True,
+                    "approvalRequired": True,
+                    "affectedDomains": [],
+                    "evidenceRefs": [],
+                    "nextAction": "Use existing admin evidence surfaces until the bounded snapshot is available.",
+                }
+            ],
+            "safeNextActions": ["Use existing admin evidence surfaces until the bounded snapshot is available."],
+            "limitations": ["bounded_snapshot_unavailable"],
+        }
+
+    def _project_launch_cockpit_domain(self, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "domainKey": str(snapshot.get("domainKey") or ""),
+            "label": str(snapshot.get("label") or ""),
+            "status": str(snapshot.get("status") or "unknown"),
+            "statusLabel": self._safe_message(
+                snapshot.get("statusLabel"),
+                fallback="Read-only bounded admin diagnostic.",
+            ),
+            "detailRoute": self._safe_internal_route(snapshot.get("detailRoute")),
+            "foundationLanded": bool(snapshot.get("foundationLanded")),
+            "evidenceToolingPresent": bool(snapshot.get("evidenceToolingPresent")),
+            "realOperatorEvidenceMissing": bool(snapshot.get("realOperatorEvidenceMissing", True)),
+            "approvalRequired": bool(snapshot.get("approvalRequired", True)),
+            "publicLaunchNoGo": bool(snapshot.get("publicLaunchNoGo", True)),
+            "readOnly": True,
+            "advisoryOnly": True,
+            "noExternalCalls": True,
+            "liveEnforcement": False,
+            "runtimeBehaviorChanged": False,
+            "providerRuntimeChanged": bool(snapshot.get("providerRuntimeChanged", False)),
+            "externalActionsEnabled": False,
+            "evidenceRefs": [],
+            "blockerRefs": [],
+            "safeNextActions": self._sanitize_messages(snapshot.get("safeNextActions")),
+            "limitations": [],
+            "followUpProposals": [],
+        }
+
+    def _project_launch_cockpit_blocker(self, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        affected_domains = snapshot.get("affectedDomains")
+        return {
+            "blockerKey": str(snapshot.get("blockerKey") or ""),
+            "title": self._safe_message(snapshot.get("title"), fallback="Admin launch blocker"),
+            "severity": str(snapshot.get("severity") or "high"),
+            "publicLaunchNoGo": bool(snapshot.get("publicLaunchNoGo", True)),
+            "approvalRequired": bool(snapshot.get("approvalRequired", True)),
+            "affectedDomains": [
+                str(item)
+                for item in list(affected_domains or [])
+                if str(item).strip()
+            ],
+            "evidenceRefs": [],
+            "nextAction": self._safe_message(
+                snapshot.get("nextAction"),
+                fallback="Review bounded admin evidence before changing launch posture.",
+            ),
+        }
+
+    def _sanitize_messages(self, values: Any, *, fallback: list[str] | None = None) -> list[str]:
+        items: list[str] = []
+        for value in list(values or []):
+            safe_value = self._safe_message(value, fallback="")
+            if safe_value and safe_value not in items:
+                items.append(safe_value)
+        if items:
+            return items
+        return list(fallback or [])
+
+    def _safe_message(self, value: Any, *, fallback: str) -> str:
+        text = str(value or "").strip()
+        if not text or self._looks_sensitive_text(text):
+            return fallback
+        return text
+
+    def _looks_sensitive_text(self, value: str) -> bool:
+        text = str(value or "").strip().lower()
+        if not text:
+            return False
+        return any(marker in text for marker in self._SENSITIVE_TEXT_MARKERS)
+
+    @staticmethod
+    def _safe_internal_route(value: Any) -> str:
+        route = str(value or "").strip()
+        if route.startswith("/admin/"):
+            return route
+        return "/admin"
 
     def _safe_source(self, builder: Callable[[], Dict[str, Any]]) -> Dict[str, Any]:
         try:
@@ -100,6 +355,10 @@ class AdminOpsStatusService:
         section = {
             "available": False,
             "status": "unavailable",
+            "service": "",
+            "configured": False,
+            "lastCheckedAt": None,
+            "message": "",
             "label": "advisory",
             "reasonCode": None,
             "readOnly": True,
