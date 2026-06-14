@@ -8,6 +8,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
+RESEARCH_CONSUMER_ACTION_BOUNDARY = "no_advice"
+RESEARCH_NO_ADVICE_DISCLOSURE = (
+    "No advice: structured research context only; not a directive or instruction "
+    "for any market action."
+)
+
+
 class ResearchSummary(BaseModel):
     status: Literal["available", "degraded", "unavailable"]
     text: str
@@ -65,4 +72,5 @@ class AIStockResearchResponse(BaseModel):
     freshness: ResearchFreshness
     risk_disclosure: str
     no_advice_disclosure: str
+    consumer_action_boundary: Literal["no_advice"] = RESEARCH_CONSUMER_ACTION_BOUNDARY
     unavailable: ResearchUnavailableState | None = None

@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 from api.v1.schemas.research_stock import (
     AIStockResearchResponse,
+    RESEARCH_NO_ADVICE_DISCLOSURE,
     ResearchDataQuality,
     ResearchFactor,
     ResearchFreshness,
@@ -93,10 +94,7 @@ class AIStockResearchService:
                 "Evidence may be incomplete, delayed, or missing; use this response only as "
                 "bounded research context."
             ),
-            no_advice_disclosure=(
-                "This endpoint provides structured research evidence only and does not provide "
-                "personalized trading guidance."
-            ),
+            no_advice_disclosure=RESEARCH_NO_ADVICE_DISCLOSURE,
             unavailable=ResearchUnavailableState(
                 state="unavailable",
                 reason="evidence_missing",
