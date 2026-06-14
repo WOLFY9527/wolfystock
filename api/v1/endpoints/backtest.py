@@ -47,6 +47,7 @@ from api.v1.schemas.backtest import (
 )
 from api.v1.schemas.common import ErrorResponse
 from src.services.backtest_service import BacktestService
+from src.services.backtest_response_contract import build_performance_contract, build_rule_run_contract
 from src.services.rule_backtest_execution_model_registry import (
     RuleBacktestExecutionModelUnsupportedError,
     resolve_rule_backtest_execution_model_request,
@@ -75,6 +76,14 @@ def _build_rule_backtest_service(
 
 
 def _build_model(model_cls: Type[ResponseT], data: dict) -> ResponseT:
+    if model_cls in {
+        RuleBacktestRunResponse,
+        RuleBacktestDetailResponse,
+        RuleBacktestHistoryItem,
+        RuleBacktestStatusResponse,
+    }:
+        data = dict(data)
+        data.update(build_rule_run_contract(data))
     return model_cls(**data)
 
 
@@ -167,7 +176,7 @@ def _build_rule_run_performance_fallback(
         default=None,
     )
 
-    return {
+    payload = {
         "scope": scope,
         "code": code,
         "eval_window_days": int(eval_window_days or 10),
@@ -211,6 +220,8 @@ def _build_rule_run_performance_fallback(
             "mode": "stored_result_aggregate",
         },
     }
+    payload.update(build_performance_contract(payload))
+    return payload
 
 
 def _build_empty_performance_payload(
@@ -220,7 +231,7 @@ def _build_empty_performance_payload(
     eval_window_days: Optional[int],
 ) -> dict:
     resolved_window = int(eval_window_days or 10)
-    return {
+    payload = {
         "scope": scope,
         "code": code,
         "eval_window_days": resolved_window,
@@ -255,6 +266,8 @@ def _build_empty_performance_payload(
         "fallback_used": False,
         "execution_assumptions": {},
     }
+    payload.update(build_performance_contract(payload))
+    return payload
 
 
 # ------------------ 普通回测接口，使用 BacktestService ------------------
@@ -425,6 +438,7 @@ def get_backtest_performance(
                 code=None,
                 eval_window_days=eval_window_days,
             )
+        data.update(build_performance_contract(data))
         return PerformanceMetrics(**data)
     return _run_endpoint("查询总体回测表现失败", _operation)
 
@@ -462,6 +476,7 @@ def get_backtest_stock_performance(
                 code=code,
                 eval_window_days=eval_window_days,
             )
+        data.update(build_performance_contract(data))
         return PerformanceMetrics(**data)
     return _run_endpoint("查询个股回测表现失败", _operation)
 

@@ -532,11 +532,28 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(stats["completed"], 0)
         self.assertEqual(stats["insufficient"], 1)
         self.assertFalse(stats["fallback_used"])
+        self.assertEqual(stats["data_status"], "data_unavailable")
+        self.assertEqual(stats["calculation_status"], "insufficient_sample")
+        self.assertEqual(stats["sample_status"], "insufficient_sample")
+        self.assertTrue(stats["limitations"])
+        self.assertIn("Research diagnostic only", stats["no_advice_disclosure"])
 
         with self.db.get_session() as session:
             daily_rows = session.query(StockDaily).filter(StockDaily.code == "AAPL").all()
+            result = session.query(BacktestResult).filter(BacktestResult.code == "AAPL").one()
 
         self.assertEqual(daily_rows, [])
+        self.assertEqual(result.stock_return_pct, None)
+
+        recent = service.get_recent_evaluations(code="AAPL", eval_window_days=3, limit=10, page=1)
+        item = recent["items"][0]
+        self.assertEqual(item["eval_status"], "insufficient_data")
+        self.assertEqual(item["data_status"], "data_unavailable")
+        self.assertEqual(item["calculation_status"], "insufficient_sample")
+        self.assertEqual(item["sample_status"], "insufficient_sample")
+        self.assertIsNone(item["stock_return_pct"])
+        self.assertIsNone(item["simulated_return_pct"])
+        self.assertIn("Research diagnostic only", item["no_advice_disclosure"])
 
     def test_sample_status_reports_maturity_window_exclusion_for_recent_samples(self) -> None:
         recent_created_at = datetime.now() - timedelta(days=2)

@@ -15,6 +15,11 @@ from src.config import get_config
 from src.core.backtest_engine import OVERALL_SENTINEL_CODE, BacktestEngine, EvaluationConfig
 from src.repositories.backtest_repo import BacktestRepository
 from src.repositories.stock_repo import StockRepository
+from src.services.backtest_response_contract import (
+    build_performance_contract,
+    build_standard_result_contract,
+    build_standard_run_contract,
+)
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
 from src.storage import AnalysisHistory, BacktestResult, BacktestRun, BacktestSummary, DatabaseManager, StockDaily
@@ -354,7 +359,7 @@ class BacktestService:
             fallback_used=run_fallback_used,
         )
 
-        return {
+        payload = {
             "run_id": run_record.id,
             "run_at": run_record.run_at.isoformat() if run_record.run_at else None,
             "processed": processed,
@@ -379,6 +384,8 @@ class BacktestService:
             "pricing_fallback_used": run_source_metadata.fallback_used,
             "execution_assumptions": self._signal_evaluation_assumptions(),
         }
+        payload.update(build_standard_run_contract(payload))
+        return payload
 
     def list_backtest_runs(self, *, code: Optional[str] = None, page: int = 1, limit: int = 20) -> Dict[str, Any]:
         offset = max(page - 1, 0) * limit
@@ -1300,7 +1307,7 @@ class BacktestService:
             analysis_date=row.analysis_date,
             eval_window_days=row.eval_window_days,
         )
-        return {
+        payload = {
             "analysis_history_id": row.analysis_history_id,
             "code": row.code,
             "analysis_date": row.analysis_date.isoformat() if row.analysis_date else None,
@@ -1339,6 +1346,8 @@ class BacktestService:
             ),
             "execution_assumptions": assumptions,
         }
+        payload.update(build_standard_result_contract(payload))
+        return payload
 
     def _run_to_dict(self, row: BacktestRun) -> Dict[str, Any]:
         summary = {}
@@ -1347,7 +1356,7 @@ class BacktestService:
                 summary = json.loads(row.summary_json)
             except Exception:
                 summary = {}
-        return {
+        payload = {
             "id": row.id,
             "code": row.code,
             "eval_window_days": row.eval_window_days,
@@ -1386,10 +1395,12 @@ class BacktestService:
             "fallback_used": summary.get("fallback_used"),
             "execution_assumptions": self._signal_evaluation_assumptions(),
         }
+        payload.update(build_standard_run_contract(payload))
+        return payload
 
     def _summary_to_dict(self, row: BacktestSummary) -> Dict[str, Any]:
         diagnostics = json.loads(row.diagnostics_json) if row.diagnostics_json else {}
-        return {
+        payload = {
             "scope": row.scope,
             "code": None if row.code == OVERALL_SENTINEL_CODE else row.code,
             "eval_window_days": row.eval_window_days,
@@ -1421,6 +1432,8 @@ class BacktestService:
             "fallback_used": diagnostics.get("fallback_used"),
             "execution_assumptions": self._signal_evaluation_assumptions(),
         }
+        payload.update(build_performance_contract(payload))
+        return payload
 
     @staticmethod
     def _requested_mode_for_code(code: Optional[str]) -> str:

@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from src.core.rule_backtest_engine import ExecutionModelConfig, ParsedStrategy, RuleBacktestEngine, RuleBacktestParser, _safe_float
 from src.repositories.rule_backtest_repo import RuleBacktestRepository
+from src.services.backtest_response_contract import build_rule_run_contract
 from src.services.backtest_data_source_guard import assess_backtest_data_source_eligibility
 from src.services.backtest_bounded_grid_runner import run_bounded_parameter_grid_diagnostic
 from src.services.backtest_parameter_stability import build_parameter_stability_evidence_from_compare_summary
@@ -5314,7 +5315,7 @@ class RuleBacktestService:
         readback_integrity: Dict[str, Any],
         readiness_payload: Dict[str, Any],
     ) -> Dict[str, Any]:
-        return {
+        payload = {
             "id": int(row.id),
             "code": str(row.code),
             "status": str(row.status),
@@ -5333,6 +5334,8 @@ class RuleBacktestService:
             "artifact_availability": dict(artifact_availability or {}),
             "readback_integrity": dict(readback_integrity or {}),
         }
+        payload.update(build_rule_run_contract(payload))
+        return payload
 
     @staticmethod
     def _load_summary_payload(summary_json: Optional[str]) -> Dict[str, Any]:
@@ -10415,7 +10418,7 @@ class RuleBacktestService:
             execution_model=execution_model,
             result_authority=result_authority,
         )
-        return {
+        payload = {
             "id": row.id,
             "code": row.code,
             "strategy_text": row.strategy_text,
@@ -10483,6 +10486,8 @@ class RuleBacktestService:
             "execution_trace": execution_trace,
             "result_authority": result_authority,
         }
+        payload.update(build_rule_run_contract(payload))
+        return payload
 
     def _trade_row_to_dict(self, trade: RuleBacktestTrade) -> Dict[str, Any]:
         trade_row, _ = self._trade_row_to_dict_with_diagnostics(trade)
