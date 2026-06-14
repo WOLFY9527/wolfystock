@@ -15,6 +15,7 @@ from api.v1.schemas.research_stock import (
     ResearchDataQuality,
     ResearchFactor,
     ResearchFreshness,
+    ResearchSource,
     ResearchSummary,
     ResearchUnavailableState,
 )
@@ -75,10 +76,17 @@ class AIStockResearchService:
             ],
             technical_state=None,
             portfolio_watchlist_relevance=None,
-            sources=[],
+            sources=[
+                ResearchSource(
+                    name="No approved evidence input",
+                    category="research_evidence",
+                    status="no_evidence",
+                    as_of=None,
+                )
+            ],
             freshness=ResearchFreshness(
                 status="unavailable",
-                as_of=generated_at,
+                as_of=None,
                 source_count=0,
             ),
             risk_disclosure=(

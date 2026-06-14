@@ -34,6 +34,13 @@ class ResearchFreshness(BaseModel):
     source_count: int = 0
 
 
+class ResearchSource(BaseModel):
+    name: str
+    category: str
+    status: Literal["ready", "delayed", "cached", "partial", "unavailable", "no_evidence"]
+    as_of: str | None = None
+
+
 class ResearchUnavailableState(BaseModel):
     state: Literal["unavailable", "degraded"]
     reason: str
@@ -54,7 +61,7 @@ class AIStockResearchResponse(BaseModel):
     neutral_or_uncertain_factors: list[ResearchFactor] = Field(default_factory=list)
     technical_state: dict[str, Any] | None = None
     portfolio_watchlist_relevance: dict[str, Any] | None = None
-    sources: list[dict[str, Any]] = Field(default_factory=list)
+    sources: list[ResearchSource] = Field(default_factory=list)
     freshness: ResearchFreshness
     risk_disclosure: str
     no_advice_disclosure: str
