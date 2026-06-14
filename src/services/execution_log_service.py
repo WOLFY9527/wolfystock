@@ -339,6 +339,157 @@ def _first_diagnostic_handle(kind: str, *candidates: Tuple[Any, str]) -> Optiona
     return None
 
 
+_SAFE_AUDIT_CODE_RE = re.compile(r"^[A-Za-z0-9_.:-]{2,80}$")
+_SAFE_AUDIT_METADATA_KEYS = {
+    "category",
+    "eventtype",
+    "event_type",
+    "domain",
+    "routefamily",
+    "route_family",
+    "targettype",
+    "target_type",
+    "status",
+    "outcome",
+    "market",
+    "symbol",
+    "skillcount",
+    "skill_count",
+    "newsession",
+    "new_session",
+    "safelabel",
+    "safe_label",
+    "saferesult",
+    "safe_result",
+    "safedetail",
+    "safe_detail",
+}
+_UNSAFE_AUDIT_METADATA_KEYS = {
+    "accountname",
+    "account_name",
+    "actordisplay",
+    "actor_display",
+    "actorrequestid",
+    "actor_request_id",
+    "actorsessionid",
+    "actor_session_id",
+    "actoruserid",
+    "actor_user_id",
+    "actorusername",
+    "actor_username",
+    "context",
+    "displayname",
+    "display_name",
+    "email",
+    "initialpassword",
+    "initial_password",
+    "message",
+    "rawagentcontext",
+    "raw_agent_context",
+    "rawagentmessage",
+    "raw_agent_message",
+    "rawrequestbody",
+    "raw_request_body",
+    "rawresponse",
+    "raw_response",
+    "reason",
+    "requestbody",
+    "request_body",
+    "sessionid",
+    "session_id",
+    "targetid",
+    "target_id",
+    "targetuserid",
+    "target_user_id",
+    "traceback",
+    "userid",
+    "user_id",
+    "username",
+}
+
+
+def _metadata_key_token(key: Any) -> str:
+    return re.sub(r"[^a-z0-9_]", "", str(key or "").strip().lower())
+
+
+def _safe_audit_code(value: Any) -> Optional[str]:
+    text = _as_str(value)
+    if not text or not _SAFE_AUDIT_CODE_RE.fullmatch(text):
+        return None
+    if _masked_message(text) != text or _DROP_DIAGNOSTIC_HANDLE_RE.search(text):
+        return None
+    return text
+
+
+def _first_safe_audit_code(*values: Any) -> Optional[str]:
+    for value in values:
+        code = _safe_audit_code(value)
+        if code:
+            return code
+    return None
+
+
+def _audit_hash(value: Any, kind: str) -> Optional[str]:
+    text = _as_str(value)
+    if not text or _masked_message(text) != text:
+        return None
+    return _hashed_diagnostic_handle(text, kind)
+
+
+def _first_audit_hash(kind: str, *values: Any) -> Optional[str]:
+    for value in values:
+        handle = _audit_hash(value, kind)
+        if handle:
+            return handle
+    return None
+
+
+def _unsafe_audit_metadata_key(key: Any, value: Any) -> bool:
+    token = _metadata_key_token(key)
+    if token in _SAFE_AUDIT_METADATA_KEYS:
+        return False
+    if token in _UNSAFE_AUDIT_METADATA_KEYS or token.startswith("raw"):
+        return True
+    if "traceback" in token:
+        return True
+    if token.endswith("url") or token in {"url", "providerurl", "provider_url"}:
+        return _as_str(value).lower().startswith(("http://", "https://"))
+    return False
+
+
+def _safe_audit_metadata_projection(value: Any) -> Any:
+    sanitized = _sanitize_metadata(value)
+    if isinstance(sanitized, dict):
+        projected: Dict[str, Any] = {}
+        for key, item in sanitized.items():
+            if _unsafe_audit_metadata_key(key, item):
+                continue
+            projected[str(key)] = _safe_audit_metadata_projection(item)
+        return projected
+    if isinstance(sanitized, list):
+        return [_safe_audit_metadata_projection(item) for item in sanitized]
+    if isinstance(sanitized, tuple):
+        return tuple(_safe_audit_metadata_projection(item) for item in sanitized)
+    return sanitized
+
+
+def _safe_actor_label(value: Any, actor_type: Any) -> Optional[str]:
+    label = _as_str(value)
+    normalized_type = _as_str(actor_type).lower()
+    if label.lower() in {"anonymous", "system"} and label.lower() == normalized_type:
+        return label.lower()
+    return None
+
+
+def _severity_from_level_or_status(level: Any, status: Any) -> str:
+    normalized = _normalize_log_level(level, "")
+    if normalized in {"ERROR", "CRITICAL"}:
+        return "error"
+    if normalized in {"NOTICE", "WARNING"}:
+        return "warning"
+    return _severity_from_status(status)
+
+
 def _reason_from_failure_text(*values: Any, failed: bool = False) -> Optional[str]:
     text = " ".join(_as_str(value) for value in values if _as_str(value)).lower()
     if not text:
@@ -3308,6 +3459,62 @@ class ExecutionLogService:
             top_detail.get("event_name"),
             top_event.get("event_name"),
         )
+        action = _first_text(
+            business.get("action"),
+            business_metadata.get("action"),
+            top_detail.get("action"),
+            event_type,
+            top_event.get("event_name"),
+        )
+        level = _event_level(top_event) if top_event else _level_from_status(status)
+        outcome = _first_safe_audit_code(
+            _outcome_from_status(status),
+            business.get("outcome"),
+            business_metadata.get("outcome"),
+            top_detail.get("outcome"),
+        )
+        reason_code = _first_safe_audit_code(
+            business.get("reason_code"),
+            business.get("reasonCode"),
+            business_metadata.get("reason_code"),
+            business_metadata.get("reasonCode"),
+            top_detail.get("reason_code"),
+            top_detail.get("reasonCode"),
+        )
+        route_family = _first_safe_audit_code(
+            business.get("route_family"),
+            business.get("routeFamily"),
+            business_metadata.get("route_family"),
+            business_metadata.get("routeFamily"),
+            top_detail.get("route_family"),
+            top_detail.get("routeFamily"),
+        )
+        domain = _first_safe_audit_code(
+            business.get("domain"),
+            business_metadata.get("domain"),
+            top_detail.get("domain"),
+        )
+        actor_hash = _first_audit_hash(
+            "actor",
+            meta.get("actor_user_id"),
+            business_metadata.get("actor_user_id"),
+            business_metadata.get("actorUserId"),
+            business.get("userId"),
+            meta.get("actor_session_id"),
+        )
+        target_hash = _first_audit_hash(
+            "target",
+            business.get("targetId"),
+            business.get("recordId"),
+            business_metadata.get("target_id"),
+            business_metadata.get("targetId"),
+            business_metadata.get("target_user_id"),
+            business_metadata.get("targetUserId"),
+            top_detail.get("target_id"),
+            top_detail.get("targetId"),
+            top_detail.get("target_user_id"),
+            top_detail.get("targetUserId"),
+        )
         first_failed_step = next((step for step in steps if step.get("status") == "failed"), {})
         request_id = _first_diagnostic_handle(
             "request",
@@ -3386,7 +3593,16 @@ class ExecutionLogService:
         return {
             "eventType": event_type,
             "actorType": actor_type or "unknown",
-            "actorLabel": actor_label,
+            "actorLabel": _safe_actor_label(actor_label, actor_type),
+            "actorHash": actor_hash,
+            "targetHash": target_hash,
+            "level": level,
+            "severity": _severity_from_level_or_status(level, status),
+            "action": _safe_audit_code(action),
+            "outcome": outcome,
+            "reason_code": reason_code,
+            "route_family": route_family,
+            "domain": domain,
             "contextLabel": context_label,
             "route": route,
             "endpoint": endpoint,
@@ -3466,16 +3682,25 @@ class ExecutionLogService:
             "id": _as_str(business.get("id") or row.get("session_id")),
             "event": event_name,
             "category": category,
+            "level": triage.get("level"),
+            "severity": triage.get("severity"),
             "type": _as_str(business.get("type")) or ("stock_analysis" if category == "analysis" else _as_str(row.get("task_id")) or category),
             "eventType": triage.get("eventType"),
+            "action": triage.get("action"),
             "status": status,
-            "summary": summary_text,
+            "outcome": triage.get("outcome"),
+            "summary": event_name if category in {"user_action", "security"} else summary_text,
             "subject": _as_str(business.get("subject") or symbol or event_name) or None,
             "symbol": symbol,
             "market": business.get("market"),
             "actorType": triage.get("actorType"),
             "actorLabel": triage.get("actorLabel"),
+            "actorHash": triage.get("actorHash"),
+            "targetHash": triage.get("targetHash"),
             "contextLabel": triage.get("contextLabel"),
+            "reason_code": triage.get("reason_code"),
+            "route_family": triage.get("route_family"),
+            "domain": triage.get("domain"),
             "route": triage.get("route"),
             "endpoint": triage.get("endpoint"),
             "provider": triage.get("provider"),
@@ -3491,9 +3716,15 @@ class ExecutionLogService:
             "strategyId": business.get("strategyId"),
             "scannerId": business.get("scannerId"),
             "backtestId": business.get("backtestId"),
-            "userId": business.get("userId") or meta.get("actor_user_id"),
+            "userId": None,
+            "_rawUserId": business.get("userId") or meta.get("actor_user_id"),
             "requestId": triage.get("requestId"),
             "recordId": record_id,
+            "_rawTargetId": (
+                (business.get("metadata") or {}).get("target_id")
+                if isinstance(business.get("metadata"), dict)
+                else None
+            ) or record_id,
             "startedAt": started_at,
             "finishedAt": finished_at,
             "durationMs": business.get("durationMs") if business.get("durationMs") is not None else _duration_ms(started_at, finished_at),
@@ -3502,7 +3733,7 @@ class ExecutionLogService:
             "failedStepCount": int(business.get("failedStepCount") or failed_count),
             "skippedStepCount": int(business.get("skippedStepCount") or skipped_count),
             "unknownStepCount": int(business.get("unknownStepCount") or unknown_count),
-            "metadata": _sanitize_metadata(business.get("metadata") if isinstance(business.get("metadata"), dict) else {}),
+            "metadata": _safe_audit_metadata_projection(business.get("metadata") if isinstance(business.get("metadata"), dict) else {}),
         }
         if include_steps:
             payload["steps"] = [
@@ -3527,6 +3758,11 @@ class ExecutionLogService:
         model: Optional[str] = None,
         channel: Optional[str] = None,
         status: Optional[str] = None,
+        min_level: Optional[str] = None,
+        level: Optional[str] = None,
+        reason_code: Optional[str] = None,
+        route_family: Optional[str] = None,
+        domain: Optional[str] = None,
         query: Optional[str] = None,
         since: Optional[str] = None,
         date_from: Optional[datetime] = None,
@@ -3553,6 +3789,11 @@ class ExecutionLogService:
         model_filter = _as_str(model).lower()
         channel_filter = _as_str(channel).lower()
         status_filter = _normalize_business_status(status) if status else None
+        min_level_normalized = _normalize_log_level(min_level, "DEBUG") if min_level else None
+        exact_level = _normalize_log_level(level, "") if level else None
+        reason_code_filter = _safe_audit_code(reason_code)
+        route_family_filter = _safe_audit_code(route_family)
+        domain_filter = _safe_audit_code(domain)
         query_text = _as_str(query).lower()
         items: List[Dict[str, Any]] = []
         details_by_session = self._load_session_details(rows)
@@ -3563,9 +3804,20 @@ class ExecutionLogService:
             if event is None:
                 continue
             steps = self._build_business_steps_from_session(detail)
+            event_level = _normalize_log_level(event.get("level"), "INFO")
+            if min_level_normalized and _LOG_LEVEL_RANK.get(event_level, 0) < _LOG_LEVEL_RANK[min_level_normalized]:
+                continue
+            if exact_level and event_level != exact_level:
+                continue
             if category_filter and event.get("category") != category_filter:
                 continue
             if status_filter and event.get("status") != status_filter:
+                continue
+            if reason_code_filter and event.get("reason_code") != reason_code_filter:
+                continue
+            if route_family_filter and event.get("route_family") != route_family_filter:
+                continue
+            if domain_filter and event.get("domain") != domain_filter:
                 continue
             if type_filter and event.get("type") != type_filter:
                 continue
@@ -3579,7 +3831,7 @@ class ExecutionLogService:
                 continue
             if request_filter and event.get("requestId") != request_filter:
                 continue
-            if user_filter and event.get("userId") != user_filter:
+            if user_filter and event.get("_rawUserId") != user_filter:
                 continue
             if provider_filter and not self._business_event_matches_dimension(event, steps, provider_filter, "provider"):
                 continue
@@ -3599,9 +3851,18 @@ class ExecutionLogService:
                         "analysisType",
                         "type",
                         "eventType",
+                        "level",
+                        "severity",
+                        "action",
+                        "outcome",
                         "actorType",
                         "actorLabel",
+                        "actorHash",
+                        "targetHash",
                         "contextLabel",
+                        "reason_code",
+                        "route_family",
+                        "domain",
                         "route",
                         "endpoint",
                         "provider",

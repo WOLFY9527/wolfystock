@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 import src.auth as auth
 from api.deps import CurrentUser, get_current_user
+from api.v1.endpoints import admin_logs
 from src.auth import hash_password_for_storage
 from src.admin_rbac import SUPPORT_ADMIN_ROLE
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
@@ -296,6 +297,16 @@ class AdminSecurityApiTestCase(unittest.TestCase):
             self.assertIn(f'"reason_code": "{reason_code}"', text)
             self._assert_onboarding_audit_redacted(text, extra_forbidden=extra_forbidden)
 
+    def _admin_onboarding_read_projection(self, *, reason_code: str | None = None):
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            return admin_logs.list_execution_logs_root(
+                category="security",
+                reason_code=reason_code,
+                query="admin_user_onboarding.user_created",
+                since="",
+                _=_admin_user(),
+            )
+
     def _assert_safe_audit(self, action: str, *, expected_status: str) -> None:
         rows = self._audit_rows(action)
         self.assertEqual(len(rows), 1)
@@ -470,6 +481,17 @@ class AdminSecurityApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["detail"]["error"], "admin_reauth_required")
         self._assert_onboarding_failure_reason_codes(["admin_reauth_required"])
+        projection = self._admin_onboarding_read_projection(reason_code="admin_reauth_required")
+        self.assertEqual(projection.total, 1)
+        item = projection.items[0]
+        self.assertEqual(item.reason_code, "admin_reauth_required")
+        self.assertEqual(item.route_family, "admin_user_onboarding")
+        self.assertEqual(item.level, "ERROR")
+        self.assertEqual(item.status, "failed")
+        self.assertEqual(item.outcome, "failed")
+        self.assertRegex(str(item.actorHash), r"^actor:sha256:[0-9a-f]{16}$")
+        self.assertRegex(str(item.targetHash), r"^target:sha256:[0-9a-f]{16}$")
+        self._assert_onboarding_audit_redacted(json.dumps(projection.model_dump(), ensure_ascii=False))
 
     def test_admin_onboarding_rejects_duplicate_username_and_duplicate_email_safely(self) -> None:
         self._login_admin_session()

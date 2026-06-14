@@ -121,16 +121,31 @@ class BusinessEventModel(BaseModel):
     id: str = Field(description="Bounded admin diagnostic event handle.")
     event: str
     category: str
+    level: Optional[str] = None
+    severity: Optional[str] = None
     type: Optional[str] = None
     eventType: Optional[str] = None
+    action: Optional[str] = None
     status: str
+    outcome: Optional[str] = None
     summary: str
     subject: Optional[str] = None
     symbol: Optional[str] = None
     market: Optional[str] = None
     actorType: Optional[str] = None
     actorLabel: Optional[str] = None
+    actorHash: Optional[str] = Field(
+        default=None,
+        description="Hash-only actor handle; raw actor IDs, usernames, and sessions are omitted.",
+    )
+    targetHash: Optional[str] = Field(
+        default=None,
+        description="Hash-only target handle; raw target IDs and names are omitted.",
+    )
     contextLabel: Optional[str] = None
+    reason_code: Optional[str] = None
+    route_family: Optional[str] = None
+    domain: Optional[str] = None
     route: Optional[str] = None
     endpoint: Optional[str] = None
     provider: Optional[str] = None

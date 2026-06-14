@@ -212,10 +212,15 @@ def list_execution_logs_root(
     task_id_alias: Optional[str] = Query(default=None, alias="taskId", description="Camel-case alias for task_id"),
     stock: Optional[str] = Query(default=None, description="Filter by stock code"),
     status: Optional[str] = Query(default=None, description="Filter by overall status"),
-    min_level: str = Query(default="WARNING", description="Minimum log level"),
+    min_level: Optional[str] = Query(default=None, description="Minimum log level"),
     min_level_alias: Optional[str] = Query(default=None, alias="minLevel", description="Camel-case alias for min_level"),
     level: Optional[str] = Query(default=None, description="Exact log level"),
     category: Optional[str] = Query(default=None, description="Filter by log category"),
+    reason_code: Optional[str] = Query(default=None, description="Filter by safe reason code"),
+    reason_code_alias: Optional[str] = Query(default=None, alias="reasonCode", description="Camel-case alias for reason_code"),
+    route_family: Optional[str] = Query(default=None, description="Filter by safe route family"),
+    route_family_alias: Optional[str] = Query(default=None, alias="routeFamily", description="Camel-case alias for route_family"),
+    domain: Optional[str] = Query(default=None, description="Filter by safe audit domain"),
     type: Optional[str] = Query(default=None, description="Filter by business execution type"),
     subject: Optional[str] = Query(default=None, description="Filter by business subject"),
     symbol: Optional[str] = Query(default=None, description="Filter by stock symbol"),
@@ -237,7 +242,7 @@ def list_execution_logs_root(
     cursor: Optional[str] = Query(default=None),
     _: CurrentUser = Depends(require_admin_capability("ops:logs:read")),
 ):
-    del task_id, task_id_alias, min_level, min_level_alias, level
+    del task_id, task_id_alias
     service = ExecutionLogService()
     effective_limit = _query_int(limit, 50)
     effective_offset = _effective_offset(offset=offset, page=page, cursor=cursor, limit=effective_limit)
@@ -255,6 +260,11 @@ def list_execution_logs_root(
         model=_query_text(model),
         channel=_query_text(channel),
         status=_query_text(status),
+        min_level=_coalesce_query_text(min_level_alias, min_level),
+        level=_query_text(level),
+        reason_code=_coalesce_query_text(reason_code, reason_code_alias),
+        route_family=_coalesce_query_text(route_family, route_family_alias),
+        domain=_query_text(domain),
         query=_query_text(query),
         date_from=_parse_optional_datetime(date_from) or _since_to_date_from(since),
         date_to=_parse_optional_datetime(date_to),
