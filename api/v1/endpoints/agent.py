@@ -14,6 +14,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from api.deps import CurrentUser, get_current_user, require_admin_capability
+from api.v1.errors import safe_api_error
 from api.v1.schemas.research_stock import AIStockResearchResponse
 from src.config import get_config
 from src.services.agent_model_service import list_agent_model_deployments, list_agent_provider_health
@@ -43,6 +44,10 @@ TOOL_DISPLAY_NAMES: Dict[str, str] = {
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+AGENT_VALIDATION_ERROR_MESSAGE = "AI research request could not be processed."
+AGENT_UNAVAILABLE_MESSAGE = "AI research is not available."
+AGENT_INTERNAL_ERROR_MESSAGE = "AI research is temporarily unavailable. Please retry later."
 
 def _actor(current_user: CurrentUser) -> dict:
     return {
@@ -82,19 +87,15 @@ def _conversation_access_http_error(exc: ValueError) -> HTTPException:
     """Normalize conversation ownership errors into stable HTTP responses."""
     message = str(exc)
     if "Conversation session" in message or "Conversation session not found for owner" in message:
-        return HTTPException(
+        return safe_api_error(
             status_code=404,
-            detail={
-                "error": "not_found",
-                "message": "Conversation session not found for the current user",
-            },
+            error="not_found",
+            message="Conversation session not found for the current user",
         )
-    return HTTPException(
+    return safe_api_error(
         status_code=400,
-        detail={
-            "error": "validation_error",
-            "message": message,
-        },
+        error="validation_error",
+        message=message or AGENT_VALIDATION_ERROR_MESSAGE,
     )
 
 class ChatRequest(BaseModel):
@@ -248,7 +249,11 @@ async def agent_chat(
     config = get_config()
     
     if not config.is_agent_available():
-        raise HTTPException(status_code=400, detail="Agent mode is not enabled")
+        raise safe_api_error(
+            status_code=400,
+            error="agent_unavailable",
+            message=AGENT_UNAVAILABLE_MESSAGE,
+        )
         
     session_id = request.session_id or str(uuid.uuid4())
     is_new_session = request.session_id is None
@@ -296,7 +301,12 @@ async def agent_chat(
     except Exception as e:
         logger.error(f"Agent chat API failed: {e}")
         logger.exception("Agent chat error details:")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise safe_api_error(
+            status_code=500,
+            error="internal_error",
+            message=AGENT_INTERNAL_ERROR_MESSAGE,
+            retryable=True,
+        )
 
 
 class SessionItem(BaseModel):
@@ -431,7 +441,11 @@ async def agent_chat_stream(
     """
     config = get_config()
     if not config.is_agent_available():
-        raise HTTPException(status_code=400, detail="Agent mode is not enabled")
+        raise safe_api_error(
+            status_code=400,
+            error="agent_unavailable",
+            message=AGENT_UNAVAILABLE_MESSAGE,
+        )
 
     session_id = request.session_id or str(uuid.uuid4())
     loop = asyncio.get_running_loop()
@@ -477,15 +491,16 @@ async def agent_chat_stream(
             if isinstance(exc, ValueError):
                 exc = _conversation_access_http_error(exc)
             logger.error(f"Agent stream error: {exc}")
+            safe_message = (
+                exc.detail["message"]
+                if isinstance(exc, HTTPException) and isinstance(exc.detail, dict)
+                else AGENT_INTERNAL_ERROR_MESSAGE
+            )
             asyncio.run_coroutine_threadsafe(
                 queue.put(
                     {
                         "type": "error",
-                        "message": (
-                            exc.detail["message"]
-                            if isinstance(exc, HTTPException) and isinstance(exc.detail, dict)
-                            else str(exc)
-                        ),
+                        "message": safe_message,
                     }
                 ),
                 loop,

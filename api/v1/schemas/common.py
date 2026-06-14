@@ -73,14 +73,19 @@ class ErrorResponse(BaseModel):
         json_schema_extra={
             "example": {
                 "error": "not_found",
+                "code": "not_found",
                 "message": "资源不存在",
+                "status": 404,
                 "detail": None,
             }
         }
     )
 
     error: str = Field(..., description="错误类型", json_schema_extra={"example": "validation_error"})
+    code: Optional[str] = Field(None, description="稳定错误代码", json_schema_extra={"example": "validation_error"})
     message: str = Field(..., description="错误详情", json_schema_extra={"example": "请求参数错误"})
+    status: Optional[int] = Field(None, description="HTTP 状态码", json_schema_extra={"example": 400})
+    retryable: Optional[bool] = Field(None, description="是否建议稍后重试")
     detail: Optional[Any] = Field(None, description="附加错误信息")
 
 

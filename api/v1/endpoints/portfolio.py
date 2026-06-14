@@ -72,6 +72,8 @@ router = APIRouter()
 IMPORT_VALIDATION_ERROR_MESSAGE = "Portfolio import request could not be processed."
 IMPORT_CONFLICT_ERROR_MESSAGE = "Portfolio import conflicts with existing records."
 IMPORT_INTERNAL_ERROR_MESSAGE = "Portfolio import is temporarily unavailable. Please retry later."
+PORTFOLIO_VALIDATION_ERROR_MESSAGE = "Portfolio request could not be processed."
+PORTFOLIO_INTERNAL_ERROR_MESSAGE = "Portfolio data is temporarily unavailable. Please retry later."
 IMPORT_ARTIFACT_REDACTED = "<redacted>"
 _IMPORT_ARTIFACT_URL_RE = re.compile(r"\bhttps?://[^\s\"'<>]+", re.IGNORECASE)
 _IMPORT_ARTIFACT_SENSITIVE_TEXT_RE = re.compile(
@@ -169,31 +171,39 @@ def _assert_owned_request(owner_id: Optional[str], current_user: CurrentUser) ->
 
 
 def _bad_request(exc: Exception) -> HTTPException:
-    return HTTPException(
+    return safe_api_error(
         status_code=400,
-        detail={"error": "validation_error", "message": str(exc)},
+        error="validation_error",
+        message=str(exc) or PORTFOLIO_VALIDATION_ERROR_MESSAGE,
+        fallback_message=PORTFOLIO_VALIDATION_ERROR_MESSAGE,
     )
 
 
 def _internal_error(message: str, exc: Exception) -> HTTPException:
     logger.error(f"{message}: {exc}", exc_info=True)
-    return HTTPException(
+    return safe_api_error(
         status_code=500,
-        detail={"error": "internal_error", "message": f"{message}: {str(exc)}"},
+        error="internal_error",
+        message=PORTFOLIO_INTERNAL_ERROR_MESSAGE,
+        retryable=True,
     )
 
 
 def _conflict_error(*, error: str, message: str) -> HTTPException:
-    return HTTPException(
+    return safe_api_error(
         status_code=409,
-        detail={"error": error, "message": message},
+        error=error,
+        message=message,
+        fallback_message="Portfolio request conflicts with current portfolio state.",
     )
 
 
 def _ibkr_sync_error(exc: PortfolioIbkrSyncError) -> HTTPException:
-    return HTTPException(
+    return safe_api_error(
         status_code=max(400, int(exc.status_code or 400)),
-        detail={"error": exc.code, "message": sanitize_message(str(exc))},
+        error=exc.code,
+        message=sanitize_message(str(exc)),
+        fallback_message="Portfolio broker sync could not be processed.",
     )
 
 
@@ -371,6 +381,7 @@ def _import_internal_error(message: str, exc: Exception) -> HTTPException:
         status_code=500,
         error="internal_error",
         message=IMPORT_INTERNAL_ERROR_MESSAGE,
+        retryable=True,
     )
 
 
@@ -581,9 +592,10 @@ def update_account(
             is_active=request.is_active,
         )
         if updated is None:
-            raise HTTPException(
+            raise safe_api_error(
                 status_code=404,
-                detail={"error": "not_found", "message": f"Account not found: {account_id}"},
+                error="not_found",
+                message=f"Account not found: {account_id}",
             )
         _record_user_write_audit(
             event_type="portfolio.account_updated",
@@ -617,9 +629,10 @@ def delete_account(account_id: int, current_user: CurrentUser = Depends(get_curr
     try:
         data = service.delete_account(account_id)
         if data is None:
-            raise HTTPException(
+            raise safe_api_error(
                 status_code=404,
-                detail={"error": "not_found", "message": f"Account not found: {account_id}"},
+                error="not_found",
+                message=f"Account not found: {account_id}",
             )
         _record_portfolio_audit(
             action="account_archive",
@@ -767,9 +780,10 @@ def update_broker_connection(
             sync_metadata=request.sync_metadata,
         )
         if updated is None:
-            raise HTTPException(
+            raise safe_api_error(
                 status_code=404,
-                detail={"error": "not_found", "message": f"Broker connection not found: {connection_id}"},
+                error="not_found",
+                message=f"Broker connection not found: {connection_id}",
             )
         return _build_broker_connection_item(updated)
     except HTTPException:
@@ -811,9 +825,11 @@ def sync_ibkr_account_state(
         raise _bad_request(exc)
     except Exception as exc:
         logger.error("IBKR sync failed: %s", exc, exc_info=True)
-        raise HTTPException(
+        raise safe_api_error(
             status_code=500,
-            detail={"error": "ibkr_sync_internal_error", "message": "IBKR 同步暂时失败，请稍后重试。"},
+            error="ibkr_sync_internal_error",
+            message="IBKR 同步暂时失败，请稍后重试。",
+            retryable=True,
         )
 
 
@@ -916,9 +932,10 @@ def delete_trade(
     try:
         ok = service.delete_trade_event(trade_id)
         if not ok:
-            raise HTTPException(
+            raise safe_api_error(
                 status_code=404,
-                detail={"error": "not_found", "message": f"Trade not found: {trade_id}"},
+                error="not_found",
+                message=f"Trade not found: {trade_id}",
             )
         _record_portfolio_audit(
             action="void_trade",
@@ -964,9 +981,10 @@ def update_trade(
             note=request.note,
         )
         if updated is None:
-            raise HTTPException(
+            raise safe_api_error(
                 status_code=404,
-                detail={"error": "not_found", "message": f"Trade not found: {trade_id}"},
+                error="not_found",
+                message=f"Trade not found: {trade_id}",
             )
         _record_portfolio_audit(
             action="update_trade",
@@ -1079,9 +1097,10 @@ def delete_cash_ledger(
     try:
         ok = service.delete_cash_ledger_event(entry_id)
         if not ok:
-            raise HTTPException(
+            raise safe_api_error(
                 status_code=404,
-                detail={"error": "not_found", "message": f"Cash ledger entry not found: {entry_id}"},
+                error="not_found",
+                message=f"Cash ledger entry not found: {entry_id}",
             )
         return PortfolioDeleteResponse(deleted=1)
     except PortfolioBusyError as exc:
@@ -1182,9 +1201,10 @@ def delete_corporate_action(
     try:
         ok = service.delete_corporate_action_event(action_id)
         if not ok:
-            raise HTTPException(
+            raise safe_api_error(
                 status_code=404,
-                detail={"error": "not_found", "message": f"Corporate action not found: {action_id}"},
+                error="not_found",
+                message=f"Corporate action not found: {action_id}",
             )
         return PortfolioDeleteResponse(deleted=1)
     except PortfolioBusyError as exc:
@@ -1241,9 +1261,10 @@ def list_history(
         if date_from is not None and date_to is not None and date_from > date_to:
             raise ValueError("date_from must be earlier than or equal to date_to")
         if account_id is not None and repo.get_account(account_id, owner_id=current_user.user_id) is None:
-            raise HTTPException(
+            raise safe_api_error(
                 status_code=404,
-                detail={"error": "not_found", "message": f"Account not found: {account_id}"},
+                error="not_found",
+                message=f"Account not found: {account_id}",
             )
         rows = repo.list_daily_snapshot_history(
             account_id=account_id,
