@@ -839,6 +839,10 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
         self.assertTrue(consumer_snapshot["isFallback"])
         self.assertFalse(consumer_snapshot["isStale"])
         self.assertFalse(consumer_snapshot["isPartial"])
+        self.assertEqual(
+            consumer_snapshot["dataQuality"],
+            {"state": "cached", "label": "使用缓存数据", "available": False},
+        )
         self.assertEqual(consumer_snapshot["headlineEligibleThemeCount"], 0)
         self.assertEqual(consumer_snapshot["observationThemeCount"], len(payload["themes"]))
         self.assertEqual(consumer_snapshot["taxonomyThemeCount"], 0)
@@ -855,6 +859,7 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
                 "sourceTier": "static_fallback",
                 "providerTier": "fallback",
                 "freshness": "fallback",
+                "dataQuality": {"state": "cached", "label": "使用缓存数据", "available": False},
                 "asOf": None,
                 "coverage": {
                     "requestedSymbolCount": payload["metadata"]["quoteProvider"]["requestedSymbolCount"],
@@ -884,9 +889,17 @@ class MarketRotationRadarServiceTestCase(unittest.TestCase):
                 "isPartial",
                 "evidenceQuality",
                 "dataGaps",
+                "dataQuality",
                 "breadthEvidence",
             },
         )
+        self.assertEqual(
+            consumer_snapshot["themes"][0]["dataQuality"],
+            {"state": "cached", "label": "使用缓存数据", "available": False},
+        )
+        dumped_quality = json.dumps(consumer_snapshot["themes"][0]["dataQuality"], ensure_ascii=False)
+        for field in ("sourceType", "trustLevel", "reasonCode", "confidence", "isFallback"):
+            self.assertNotIn(field, dumped_quality)
         self.assertEqual(
             set(consumer_snapshot["themes"][0]["breadthEvidence"]),
             {

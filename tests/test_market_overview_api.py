@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -147,6 +148,31 @@ class MarketOverviewApiTestCase(unittest.TestCase):
         self.assertEqual(indices["items"][0]["asOf"], "2026-04-29T10:00:00")
         self.assertEqual(indices["items"][0]["freshness"], "delayed")
         self.assertFalse(indices["items"][0]["isFallback"])
+
+    def test_market_overview_consumer_evidence_snapshot_exposes_safe_data_quality(self) -> None:
+        from src.services.market_overview_service import project_market_overview_consumer_evidence_snapshot
+
+        snapshot = project_market_overview_consumer_evidence_snapshot(
+            {
+                "contractVersion": "market_overview_evidence.v1",
+                "freshness": "stale",
+                "isStale": True,
+                "isFallback": False,
+                "isPartial": False,
+                "confidenceWeight": 0.12,
+                "sourceType": "official_public",
+                "reasonCode": "internal_stale_source",
+            }
+        )
+
+        assert snapshot["dataQuality"] == {
+            "state": "delayed",
+            "label": "数据延迟",
+            "available": False,
+        }
+        dumped_quality = json.dumps(snapshot["dataQuality"], ensure_ascii=False)
+        for field in ("sourceType", "reasonCode", "confidenceWeight", "isStale"):
+            assert field not in dumped_quality
 
     def test_macro_fed_liquidity_cache_bundle_diagnostics_are_cache_only_without_source_calls(self) -> None:
         from src.services.market_overview_service import MarketOverviewService

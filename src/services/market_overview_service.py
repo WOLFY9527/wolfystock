@@ -33,6 +33,7 @@ from src.services.fx_commodities_contracts import FX_COMMODITY_DELAYED_PROXY_SYM
 from src.services.futures_contracts import list_futures_contracts
 from src.services.investor_signal_model import build_consumer_safe_investor_signal
 from src.services.liquidity_monitor_service import LiquidityMonitorService
+from src.services.market_data_quality import build_consumer_data_quality_state
 from src.services.market_data_source_registry import resolve_source_label
 from src.services.market_rotation_radar_service import MarketRotationRadarService
 from src.services.official_macro_source_registry import get_official_macro_source_for_transport_source
@@ -311,6 +312,7 @@ def project_market_overview_consumer_evidence_snapshot(raw_snapshot: Any) -> Dic
         projection["providerHealth"] = {"status": copy.deepcopy(provider_health.get("status"))}
     elif "providerHealth" in raw_snapshot and raw_snapshot.get("providerHealth") is None:
         projection["providerHealth"] = None
+    projection["dataQuality"] = build_consumer_data_quality_state(raw_snapshot)
     return projection
 
 CONFIDENCE_BY_FRESHNESS = {

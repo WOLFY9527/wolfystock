@@ -141,6 +141,7 @@ EVIDENCE_SNAPSHOT_PUBLIC_KEYS = {
     "observationOnly",
     "reasonFamilies",
 }
+CONSUMER_EVIDENCE_SNAPSHOT_PUBLIC_KEYS = EVIDENCE_SNAPSHOT_PUBLIC_KEYS | {"dataQuality"}
 
 EVIDENCE_SNAPSHOT_ADMIN_KEYS = {
     "authorityGrant",
@@ -347,7 +348,8 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
         projection = project_market_overview_consumer_evidence_snapshot(raw_snapshot)
 
         assert raw_snapshot == original_raw_snapshot
-        assert set(projection.keys()) == EVIDENCE_SNAPSHOT_PUBLIC_KEYS
+        assert set(projection.keys()) == CONSUMER_EVIDENCE_SNAPSHOT_PUBLIC_KEYS
+        assert projection["dataQuality"] == {"state": "ready", "label": "正常", "available": True}
         assert projection["providerHealth"] == {"status": "live"}
         assert projection["scoreReliabilityAllowed"] is True
         assert projection["sourceAuthorityAllowed"] is False
@@ -444,8 +446,9 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
                     response["evidenceSnapshot"]
                 )
                 assert response["consumerEvidenceSnapshot"] is not response["evidenceSnapshot"]
-                assert set(response["consumerEvidenceSnapshot"].keys()) == EVIDENCE_SNAPSHOT_PUBLIC_KEYS
+                assert set(response["consumerEvidenceSnapshot"].keys()) == CONSUMER_EVIDENCE_SNAPSHOT_PUBLIC_KEYS
                 assert response["consumerEvidenceSnapshot"]["cardKey"] == response["evidenceSnapshot"]["cardKey"]
+                assert set(response["consumerEvidenceSnapshot"]["dataQuality"]) == {"state", "label", "available"}
                 assert response["consumerEvidenceSnapshot"]["providerHealth"] == {
                     "status": response["evidenceSnapshot"]["providerHealth"]["status"]
                 }
@@ -593,7 +596,7 @@ class MarketOverviewEvidenceSnapshotTestCase(unittest.TestCase):
     def test_unavailable_panel_projects_evidence_snapshot(self) -> None:
         service = MarketOverviewService()
 
-        with patch.object(service, "_latest_quote", side_effect=RuntimeError("provider down")):
+        with patch.object(service, "_fetch_us_breadth_snapshot", side_effect=RuntimeError("provider down")):
             payload = service.get_us_breadth()
 
         evidence = payload["evidenceSnapshot"]
