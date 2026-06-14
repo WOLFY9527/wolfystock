@@ -145,10 +145,10 @@ function getAdminSurfaceCopy(pathname: string, language: UiLanguage, isGuest: bo
     ? {
       eyebrow: isEnglish ? 'Admin Only' : '仅限管理员',
       statusLabel: isEnglish ? 'Admin Sign-in Required' : '需要管理员登录',
-      title: isEnglish ? 'Sign in with an admin account to open admin settings' : '请使用管理员账户登录后打开管理设置',
+      title: isEnglish ? 'Sign in with an admin account to open system settings' : '请使用管理员账户登录后打开系统设置',
       description: isEnglish
-        ? 'System settings, data-source controls, schedules, channels, and admin logs are reserved for admin accounts.'
-        : '系统设置、数据源控制、调度、通道和管理员日志只对管理员账户开放。',
+        ? 'This admin-only system settings surface is separate from personal settings, even though its canonical route lives under /settings/system.'
+        : '这个仅限管理员的系统设置页面与个人设置分离，即使它的规范路由位于 /settings/system。',
       bullets: isEnglish
         ? [
           'Guest mode never maps to admin or initial-setup identities.',
@@ -497,6 +497,7 @@ export const AppContent: React.FC = () => {
         <Route path="/:locale/user/scanner" element={<Navigate to="../scanner" replace />} />
         <Route element={<Shell />}>
           <Route path="/market" element={<Navigate to="/market-overview" replace />} />
+          {/* /settings/system is the canonical admin system settings surface; /admin aliases remain intentional deep links. */}
           <Route path="/admin" element={<Navigate to="/settings/system" replace />} />
           <Route path="/admin/system" element={<Navigate to="/settings/system" replace />} />
           <Route path="/admin/provider" element={<Navigate to="/admin/market-providers" replace />} />
@@ -537,6 +538,7 @@ export const AppContent: React.FC = () => {
         </Route>
         <Route path="/:locale" element={<LocalizedShellRoute />}>
           <Route path="market" element={<Navigate to="../market-overview" replace />} />
+          {/* /:locale/settings/system is the canonical localized admin system settings surface. */}
           <Route path="admin" element={<Navigate to="../settings/system" replace />} />
           <Route path="admin/system" element={<Navigate to="../settings/system" replace />} />
           <Route path="admin/provider" element={<Navigate to="../admin/market-providers" replace />} />

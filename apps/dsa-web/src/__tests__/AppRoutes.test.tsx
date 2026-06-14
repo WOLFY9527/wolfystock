@@ -465,6 +465,8 @@ describe('AppContent route flows', () => {
     renderAtWithLocationProbe('/settings/system');
 
     expect(await screen.findByText('Admin Sign-in Required')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sign in with an admin account to open system settings' })).toBeInTheDocument();
+    expect(screen.getAllByText('This admin-only system settings surface is separate from personal settings, even though its canonical route lives under /settings/system.').length).toBeGreaterThan(0);
     expect(screen.getByTestId('location-path')).toHaveTextContent('/settings/system');
     expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
     expect(screen.queryByText('system-settings-page')).not.toBeInTheDocument();
@@ -503,7 +505,7 @@ describe('AppContent route flows', () => {
     expect(screen.queryByText('auth-guard:Market Overview')).not.toBeInTheDocument();
   });
 
-  it('redirects /admin to the protected system surface instead of silently falling back to Home', async () => {
+  it('redirects /admin to the canonical protected system settings surface instead of silently falling back to Home', async () => {
     useAuthMock.mockReturnValue({
       authEnabled: true,
       loggedIn: true,
@@ -523,6 +525,17 @@ describe('AppContent route flows', () => {
     expect(await screen.findByRole('heading', { name: 'This page requires an admin account' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/settings/system'));
     expect(screen.queryByText('Home Workspace')).not.toBeInTheDocument();
+  });
+
+  it('treats /admin/system as an intentional alias for the canonical admin system settings route', async () => {
+    renderAtWithLocationProbe('/admin/system');
+
+    expect(await screen.findByText('Admin Sign-in Required')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sign in with an admin account to open system settings' })).toBeInTheDocument();
+    expect(screen.getAllByText('This admin-only system settings surface is separate from personal settings, even though its canonical route lives under /settings/system.').length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/settings/system'));
+    expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
+    expect(screen.queryByText('system-settings-page')).not.toBeInTheDocument();
   });
 
   it.each([
