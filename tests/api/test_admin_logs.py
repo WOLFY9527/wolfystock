@@ -359,6 +359,138 @@ class AdminLogsApiTestCase(unittest.TestCase):
         self.assertEqual(detail.steps[0].name, "fetch_news")
         self.assertEqual(detail.steps[0].errorMessage, "News API timeout after 3000ms")
 
+    def test_root_projects_safe_admin_audit_fields_with_reason_code(self) -> None:
+        raw_actor_id = "admin-raw-123"
+        raw_target_id = "target-user-raw-456"
+        raw_reason = "private beta onboarding for beta-user beta@example.com"
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            event_id = service.record_admin_action(
+                action="admin_user_onboarding.user_created",
+                message="Admin onboarding failed password=RAWPASSWORD token=RAWTOKEN",
+                actor={
+                    "user_id": raw_actor_id,
+                    "username": "raw-admin-username",
+                    "display_name": "Raw Admin Name",
+                    "role": "admin",
+                    "actor_type": "admin",
+                    "session_id": "raw-session-token",
+                },
+                subsystem="user_action",
+                overall_status="failed",
+                detail={
+                    "category": "user_action",
+                    "level": "INFO",
+                    "reason_code": "duplicate_email",
+                    "route_family": "admin_user_onboarding",
+                    "domain": "identity",
+                    "target_user_id": raw_target_id,
+                    "username": "beta-user",
+                    "email": "beta@example.com",
+                    "reason": raw_reason,
+                    "request_body": {"initialPassword": "RAWPASSWORD"},
+                    "traceback": "Traceback raw unsafe diagnostics",
+                },
+            )
+
+            payload = admin_logs.list_execution_logs_root(
+                category="user_action",
+                level="INFO",
+                query="duplicate_email",
+                since="",
+                _=_admin_user(),
+            )
+            detail = admin_logs.get_business_event_detail(event_id, _=_admin_user())
+
+        self.assertEqual(payload.total, 1)
+        item = payload.items[0]
+        self.assertEqual(item.event, "admin_user_onboarding.user_created")
+        self.assertEqual(item.category, "user_action")
+        self.assertEqual(item.level, "INFO")
+        self.assertEqual(item.severity, "error")
+        self.assertEqual(item.status, "failed")
+        self.assertEqual(item.outcome, "failed")
+        self.assertEqual(item.action, "admin_user_onboarding.user_created")
+        self.assertEqual(item.reason_code, "duplicate_email")
+        self.assertEqual(item.route_family, "admin_user_onboarding")
+        self.assertEqual(item.domain, "identity")
+        _assert_hashed_diagnostic_handle(self, item.actorHash, "actor")
+        _assert_hashed_diagnostic_handle(self, item.targetHash, "target")
+        self.assertNotEqual(item.actorHash, raw_actor_id)
+        self.assertNotEqual(item.targetHash, raw_target_id)
+        self.assertIsNone(item.userId)
+        self.assertIsNone(item.actorLabel)
+        self.assertEqual(detail.reason_code, "duplicate_email")
+        self.assertEqual(detail.actorHash, item.actorHash)
+        self.assertEqual(detail.targetHash, item.targetHash)
+
+        dumped = str({"list": payload.model_dump(), "detail": detail.model_dump()})
+        for forbidden in (
+            raw_actor_id,
+            raw_target_id,
+            "raw-admin-username",
+            "Raw Admin Name",
+            "raw-session-token",
+            "beta-user",
+            "beta@example.com",
+            "RAWPASSWORD",
+            "RAWTOKEN",
+            "initialPassword",
+            "request_body",
+            "Traceback",
+            raw_reason,
+        ):
+            self.assertNotIn(forbidden, dumped)
+
+    def test_root_level_filter_returns_info_user_action_audit_by_default_projection(self) -> None:
+        with patch("src.services.execution_log_service.get_db", return_value=self.db):
+            service = ExecutionLogService()
+            service.record_user_write_action(
+                event_type="portfolio.account_created",
+                message="portfolio account created",
+                actor={"user_id": "user-raw-123", "username": "alice", "display_name": "Alice"},
+                domain="portfolio",
+                target_type="portfolio_account",
+                target_id="raw-account-id-456",
+                status="completed",
+                metadata={
+                    "route_family": "portfolio",
+                    "domain": "portfolio",
+                    "account_name": "raw-account-name-must-not-leak",
+                },
+            )
+            service.record_admin_action(
+                action="admin_security.account_disabled",
+                message="admin warning event",
+                actor={"user_id": "admin-1", "role": "admin", "actor_type": "admin"},
+                subsystem="security",
+                overall_status="failed",
+                detail={"category": "security", "level": "WARNING", "reason_code": "operator_review"},
+            )
+
+            payload = admin_logs.list_execution_logs_root(
+                category="user_action",
+                level="INFO",
+                query="portfolio.account_created",
+                since="",
+                _=_admin_user(),
+            )
+
+        self.assertEqual(payload.total, 1)
+        item = payload.items[0]
+        self.assertEqual(item.eventType, "portfolio.account_created")
+        self.assertEqual(item.category, "user_action")
+        self.assertEqual(item.level, "INFO")
+        self.assertEqual(item.severity, "info")
+        self.assertEqual(item.route_family, "portfolio")
+        self.assertEqual(item.domain, "portfolio")
+        _assert_hashed_diagnostic_handle(self, item.actorHash, "actor")
+        _assert_hashed_diagnostic_handle(self, item.targetHash, "target")
+        dumped = str(payload.model_dump())
+        self.assertNotIn("user-raw-123", dumped)
+        self.assertNotIn("raw-account-id-456", dumped)
+        self.assertNotIn("raw-account-name-must-not-leak", dumped)
+
     def test_root_exposes_market_overview_triage_fields_without_steps(self) -> None:
         with patch("src.services.execution_log_service.get_db", return_value=self.db):
             service = ExecutionLogService()
@@ -1879,6 +2011,20 @@ class AdminLogsApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["detail"]["error"], "admin_required")
+
+    def test_business_event_list_and_detail_require_admin_authorization(self) -> None:
+        app = FastAPI()
+        app.include_router(admin_logs.router, prefix="/api/v1/admin/logs")
+        app.dependency_overrides[get_current_user] = lambda: _regular_user()
+        client = TestClient(app)
+
+        list_response = client.get("/api/v1/admin/logs")
+        detail_response = client.get("/api/v1/admin/logs/event-1")
+
+        self.assertEqual(list_response.status_code, 403)
+        self.assertEqual(list_response.json()["detail"]["error"], "admin_required")
+        self.assertEqual(detail_response.status_code, 403)
+        self.assertEqual(detail_response.json()["detail"]["error"], "admin_required")
 
     def test_data_missing_drilldown_requires_logs_read_capability(self) -> None:
         app = FastAPI()
