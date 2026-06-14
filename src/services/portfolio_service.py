@@ -42,6 +42,13 @@ PORTFOLIO_FX_REFRESH_DISABLED_REASON = "portfolio_fx_update_disabled"
 FX_STATUS_LIVE = "live"
 FX_STATUS_STALE = "stale"
 FX_STATUS_UNAVAILABLE = "unavailable"
+PORTFOLIO_DATA_STATUS_NO_ACCOUNT = "no_account"
+PORTFOLIO_DATA_STATUS_NO_POSITIONS = "no_positions"
+PORTFOLIO_DATA_STATUS_PROVIDER_UNAVAILABLE = "provider_unavailable"
+PORTFOLIO_DATA_STATUS_STALE_OR_CACHED = "stale_or_cached"
+PORTFOLIO_DATA_STATUS_READY = "ready"
+PORTFOLIO_CALCULATION_STATUS_UNAVAILABLE = "calculation_unavailable"
+PORTFOLIO_CALCULATION_STATUS_READY = "ready"
 PORTFOLIO_PRICE_SOURCE_DAILY_CLOSE = "daily_close_quote"
 PORTFOLIO_PRICE_SOURCE_BROKER_SYNC_SNAPSHOT = "broker_sync_snapshot"
 PORTFOLIO_PRICE_SOURCE_AVG_COST_FALLBACK = "avg_cost_fallback"
@@ -2456,6 +2463,7 @@ class PortfolioService:
                 as_of_date=as_of_date,
                 cost_method=method,
             )
+            loaded_from_cache = account_snapshot is not None
             if account_snapshot is None:
                 account_snapshot = self._build_account_snapshot(
                     account=account,
@@ -2486,6 +2494,7 @@ class PortfolioService:
                 account_payload=account_snapshot["public"],
                 display_currency=account.base_currency,
             )
+            self._attach_account_availability(public_snapshot, loaded_from_cache=loaded_from_cache)
             accounts_payload.append(public_snapshot)
             self._accumulate_market_breakdown(
                 market_breakdown=market_breakdown,
@@ -2580,6 +2589,7 @@ class PortfolioService:
             ),
             "accounts": accounts_payload,
         }
+        self._attach_snapshot_availability(snapshot_payload)
         snapshot_payload["portfolio_attribution"] = self._build_portfolio_attribution(
             snapshot=snapshot_payload,
             as_of_date=as_of_date,
@@ -2600,6 +2610,70 @@ class PortfolioService:
             )
         )
         return snapshot_payload
+
+    def _attach_account_availability(self, account_payload: Dict[str, Any], *, loaded_from_cache: bool) -> None:
+        position_count = len(account_payload.get("positions") or [])
+        if position_count == 0:
+            data_status = PORTFOLIO_DATA_STATUS_NO_POSITIONS
+        elif self._account_has_unavailable_provider_data(account_payload):
+            data_status = PORTFOLIO_DATA_STATUS_PROVIDER_UNAVAILABLE
+        elif loaded_from_cache or bool(account_payload.get("fx_stale")):
+            data_status = PORTFOLIO_DATA_STATUS_STALE_OR_CACHED
+        else:
+            data_status = PORTFOLIO_DATA_STATUS_READY
+
+        calculation_status = (
+            PORTFOLIO_CALCULATION_STATUS_UNAVAILABLE
+            if data_status == PORTFOLIO_DATA_STATUS_NO_POSITIONS
+            else PORTFOLIO_CALCULATION_STATUS_READY
+        )
+        account_payload["data_status"] = data_status
+        account_payload["calculation_status"] = calculation_status
+        account_payload["availability"] = {
+            "status": data_status,
+            "reason": data_status,
+            "metrics_ready": calculation_status == PORTFOLIO_CALCULATION_STATUS_READY,
+            "account_count": 1,
+            "position_count": position_count,
+        }
+
+    def _attach_snapshot_availability(self, snapshot_payload: Dict[str, Any]) -> None:
+        accounts = list(snapshot_payload.get("accounts") or [])
+        position_count = sum(len(account.get("positions") or []) for account in accounts)
+        if not accounts:
+            data_status = PORTFOLIO_DATA_STATUS_NO_ACCOUNT
+        elif position_count == 0:
+            data_status = PORTFOLIO_DATA_STATUS_NO_POSITIONS
+        elif any(account.get("data_status") == PORTFOLIO_DATA_STATUS_PROVIDER_UNAVAILABLE for account in accounts):
+            data_status = PORTFOLIO_DATA_STATUS_PROVIDER_UNAVAILABLE
+        elif any(account.get("data_status") == PORTFOLIO_DATA_STATUS_STALE_OR_CACHED for account in accounts):
+            data_status = PORTFOLIO_DATA_STATUS_STALE_OR_CACHED
+        else:
+            data_status = PORTFOLIO_DATA_STATUS_READY
+
+        calculation_status = (
+            PORTFOLIO_CALCULATION_STATUS_UNAVAILABLE
+            if data_status in {PORTFOLIO_DATA_STATUS_NO_ACCOUNT, PORTFOLIO_DATA_STATUS_NO_POSITIONS}
+            else PORTFOLIO_CALCULATION_STATUS_READY
+        )
+        snapshot_payload["data_status"] = data_status
+        snapshot_payload["calculation_status"] = calculation_status
+        snapshot_payload["availability"] = {
+            "status": data_status,
+            "reason": data_status,
+            "metrics_ready": calculation_status == PORTFOLIO_CALCULATION_STATUS_READY,
+            "account_count": len(accounts),
+            "position_count": position_count,
+        }
+
+    @staticmethod
+    def _account_has_unavailable_provider_data(account_payload: Dict[str, Any]) -> bool:
+        for position in list(account_payload.get("positions") or []):
+            if position.get("display_fx_status") == FX_STATUS_UNAVAILABLE:
+                return True
+            if position.get("is_price_fallback") is True:
+                return True
+        return False
 
     def _build_fx_rate_snapshot(
         self,

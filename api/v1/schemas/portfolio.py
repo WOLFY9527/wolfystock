@@ -294,6 +294,16 @@ class PortfolioAccountSnapshot(BaseModel):
     fee_total: float
     tax_total: float
     fx_stale: bool
+    data_status: Optional[
+        Literal[
+            "no_positions",
+            "provider_unavailable",
+            "stale_or_cached",
+            "ready",
+        ]
+    ] = None
+    calculation_status: Optional[Literal["ready", "calculation_unavailable"]] = None
+    availability: Optional[Dict[str, Any]] = None
     positions: List[PortfolioPositionItem] = Field(default_factory=list)
 
 
@@ -391,6 +401,19 @@ class PortfolioSnapshotResponse(BaseModel):
     fee_total: float
     tax_total: float
     fx_stale: bool
+    data_status: Optional[
+        Literal[
+            "no_account",
+            "no_positions",
+            "data_unavailable",
+            "provider_unavailable",
+            "calculation_unavailable",
+            "stale_or_cached",
+            "ready",
+        ]
+    ] = None
+    calculation_status: Optional[Literal["ready", "calculation_unavailable"]] = None
+    availability: Optional[Dict[str, Any]] = None
     market_breakdown: List[PortfolioMarketBreakdownItem] = Field(default_factory=list)
     fx_rates: List[PortfolioFxRateItem] = Field(default_factory=list)
     portfolio_attribution: Dict[str, Any] = Field(default_factory=dict)
@@ -566,6 +589,19 @@ class PortfolioRiskResponse(BaseModel):
     account_id: Optional[int] = None
     cost_method: str
     currency: str
+    data_status: Optional[
+        Literal[
+            "no_account",
+            "no_positions",
+            "data_unavailable",
+            "provider_unavailable",
+            "calculation_unavailable",
+            "stale_or_cached",
+            "ready",
+        ]
+    ] = None
+    calculation_status: Optional[Literal["ready", "calculation_unavailable"]] = None
+    availability: Optional[Dict[str, Any]] = None
     thresholds: Dict[str, Any] = Field(default_factory=dict)
     concentration: Dict[str, Any] = Field(default_factory=dict)
     sector_concentration: Dict[str, Any] = Field(default_factory=dict)

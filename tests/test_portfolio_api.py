@@ -441,6 +441,107 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(payload["analytics"]["exposure"]["by_symbol"][0]["symbol"], "AAPL")
         self.assertEqual(payload["analytics"]["risk"]["largest_position"]["symbol"], "AAPL")
 
+    def test_snapshot_and_risk_contract_distinguishes_no_account(self) -> None:
+        snapshot_resp = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"as_of": "2026-01-02", "cost_method": "fifo"},
+        )
+        risk_resp = self.client.get(
+            "/api/v1/portfolio/risk",
+            params={"as_of": "2026-01-02", "cost_method": "fifo"},
+        )
+
+        self.assertEqual(snapshot_resp.status_code, 200)
+        self.assertEqual(risk_resp.status_code, 200)
+        snapshot = snapshot_resp.json()
+        risk = risk_resp.json()
+        self.assertEqual(snapshot["account_count"], 0)
+        self.assertEqual(snapshot["data_status"], "no_account")
+        self.assertEqual(snapshot["calculation_status"], "calculation_unavailable")
+        self.assertFalse(snapshot["availability"]["metrics_ready"])
+        self.assertEqual(snapshot["availability"]["reason"], "no_account")
+        self.assertEqual(risk["data_status"], "no_account")
+        self.assertEqual(risk["calculation_status"], "calculation_unavailable")
+        self.assertFalse(risk["availability"]["metrics_ready"])
+        self.assertEqual(risk["availability"]["reason"], "no_account")
+
+    def test_snapshot_and_risk_contract_distinguishes_no_positions(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Empty", "broker": "Demo", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+
+        snapshot_resp = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"account_id": account_id, "as_of": "2026-01-02", "cost_method": "fifo"},
+        )
+        risk_resp = self.client.get(
+            "/api/v1/portfolio/risk",
+            params={"account_id": account_id, "as_of": "2026-01-02", "cost_method": "fifo"},
+        )
+
+        self.assertEqual(snapshot_resp.status_code, 200)
+        self.assertEqual(risk_resp.status_code, 200)
+        snapshot = snapshot_resp.json()
+        risk = risk_resp.json()
+        self.assertEqual(snapshot["data_status"], "no_positions")
+        self.assertEqual(snapshot["calculation_status"], "calculation_unavailable")
+        self.assertEqual(snapshot["accounts"][0]["data_status"], "no_positions")
+        self.assertFalse(snapshot["availability"]["metrics_ready"])
+        self.assertEqual(snapshot["availability"]["reason"], "no_positions")
+        self.assertEqual(risk["data_status"], "no_positions")
+        self.assertEqual(risk["calculation_status"], "calculation_unavailable")
+        self.assertFalse(risk["availability"]["metrics_ready"])
+        self.assertEqual(risk["availability"]["reason"], "no_positions")
+
+    def test_snapshot_and_risk_contract_marks_provider_unavailable_prices(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Provider Gap", "broker": "Demo", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+
+        trade_resp = self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account_id,
+                "symbol": "AAPL",
+                "trade_date": "2026-01-01",
+                "side": "buy",
+                "quantity": 10,
+                "price": 100.0,
+                "market": "us",
+                "currency": "USD",
+            },
+        )
+        self.assertEqual(trade_resp.status_code, 200)
+
+        snapshot_resp = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"account_id": account_id, "as_of": "2026-01-02", "cost_method": "fifo"},
+        )
+        risk_resp = self.client.get(
+            "/api/v1/portfolio/risk",
+            params={"account_id": account_id, "as_of": "2026-01-02", "cost_method": "fifo"},
+        )
+
+        self.assertEqual(snapshot_resp.status_code, 200)
+        self.assertEqual(risk_resp.status_code, 200)
+        snapshot = snapshot_resp.json()
+        risk = risk_resp.json()
+        self.assertEqual(snapshot["data_status"], "provider_unavailable")
+        self.assertEqual(snapshot["calculation_status"], "ready")
+        self.assertEqual(snapshot["accounts"][0]["data_status"], "provider_unavailable")
+        self.assertTrue(snapshot["availability"]["metrics_ready"])
+        self.assertEqual(snapshot["availability"]["reason"], "provider_unavailable")
+        self.assertEqual(risk["data_status"], "provider_unavailable")
+        self.assertEqual(risk["calculation_status"], "ready")
+        self.assertTrue(risk["availability"]["metrics_ready"])
+        self.assertEqual(risk["availability"]["reason"], "provider_unavailable")
+
     def test_snapshot_api_exposes_position_price_fallback_metadata(self) -> None:
         create_resp = self.client.post(
             "/api/v1/portfolio/accounts",
