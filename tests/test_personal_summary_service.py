@@ -94,10 +94,11 @@ def test_contract_serializes_portfolio_and_watchlist_summary() -> None:
     assert payload["portfolioSnapshot"]["cashPercent"] == 12.5
     assert payload["portfolioSnapshot"]["largestExposure"] == 28.1
     assert payload["portfolioSnapshot"]["riskStatus"] == "observe"
-    assert payload["watchlistExceptions"]["items"][0]["symbol"] == "NVDA"
-    assert payload["watchlistExceptions"]["items"][0]["movementStatus"] == "stronger"
+    assert payload["watchlistExceptions"]["items"][0]["symbol"] == "TSLA"
+    assert payload["watchlistExceptions"]["items"][1]["symbol"] == "NVDA"
+    assert payload["watchlistExceptions"]["items"][1]["movementStatus"] == "stronger"
     assert payload["researchCoverage"]["missingSymbols"] == ["TSLA"]
-    assert payload["reviewQueue"]["items"][0]["symbol"] == "NVDA"
+    assert payload["reviewQueue"]["items"][0]["symbol"] == "TSLA"
     assert "not personalized financial advice" in payload["noAdviceDisclosure"].lower()
 
 
@@ -119,6 +120,85 @@ def test_no_connected_portfolio_state_is_safe_and_can_mark_sample_data() -> None
     assert payload["portfolioSnapshot"]["concentrationStatus"] == "sample_data"
     assert payload["dataQuality"]["portfolioStatus"] == "no_evidence"
     assert payload["dataQuality"]["sampleData"] is True
+    assert payload["watchlistExceptions"]["items"] == []
+    assert payload["reviewQueue"]["items"] == []
+
+
+def test_watchlist_exceptions_are_ranked_deduped_and_bounded_for_homepage() -> None:
+    service = PersonalSummaryService()
+
+    response = service.build_summary(
+        watchlist_items=[
+            {
+                "symbol": "msft",
+                "displayName": "Microsoft",
+                "symbolStatus": "review",
+                "evidenceStatus": "review",
+                "researchStatus": "review",
+                "reviewReason": "Momentum changed and requires review.",
+            },
+            {
+                "symbol": "nvda",
+                "displayName": "NVIDIA",
+                "evidenceStatus": "no_evidence",
+                "researchStatus": "no_evidence",
+                "reviewReason": "Research evidence missing.",
+            },
+            {
+                "symbol": "tsla",
+                "displayName": "Tesla",
+                "evidenceStatus": "provider_error",
+                "researchStatus": "provider_error",
+                "lastReviewedAt": "Traceback secret token /Users/root",
+                "reviewReason": "Research context unavailable.",
+            },
+            {
+                "symbol": "aapl",
+                "displayName": "Apple",
+                "evidenceStatus": "stale",
+                "researchStatus": "stale",
+                "reviewReason": "Research evidence is stale.",
+            },
+            {
+                "symbol": "amd",
+                "displayName": "AMD 买入计划",
+                "movementStatus": "stronger",
+                "reviewReason": "立即买入并触发 broker execution。",
+            },
+            {
+                "symbol": "amd",
+                "displayName": "AMD",
+                "movementStatus": "stronger",
+                "reviewReason": "Watchlist item needs observation.",
+            },
+            {
+                "symbol": "shop",
+                "displayName": "Shopify",
+                "movementStatus": "volume_expanded",
+                "reviewReason": "Watchlist item needs observation.",
+            },
+            {
+                "symbol": "goog",
+                "displayName": "Alphabet",
+                "movementStatus": "range_bound",
+                "reviewReason": "Watchlist item needs observation.",
+            },
+        ]
+    )
+
+    payload = response.model_dump(mode="json")
+    exception_symbols = [item["symbol"] for item in payload["watchlistExceptions"]["items"]]
+    review_symbols = [item["symbol"] for item in payload["reviewQueue"]["items"]]
+
+    assert exception_symbols == ["TSLA", "NVDA", "AAPL", "MSFT", "AMD"]
+    assert review_symbols == ["TSLA", "NVDA", "AAPL", "MSFT", "AMD"]
+    assert len(payload["watchlistExceptions"]["items"]) == 5
+    assert len(payload["reviewQueue"]["items"]) == 5
+    assert payload["watchlistExceptions"]["items"][-1]["reviewReason"] == "Watchlist item needs observation."
+    assert payload["watchlistExceptions"]["status"] == "partial"
+    assert payload["watchlistExceptions"]["staleCount"] == 1
+    assert payload["watchlistExceptions"]["noEvidenceCount"] == 1
+    _assert_no_forbidden_markers(payload)
 
 
 def test_watchlist_exceptions_do_not_use_trading_advice_terms() -> None:
