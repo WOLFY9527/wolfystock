@@ -106,8 +106,8 @@ class DashboardMarketBrief(_DashboardOverviewBase):
 
 
 class DashboardMoneyFlow(_DashboardOverviewBase):
-    topInflows: list[str] = Field(min_length=1)
-    topOutflows: list[str] = Field(min_length=1)
+    topInflows: list[str] = Field(default_factory=list)
+    topOutflows: list[str] = Field(default_factory=list)
     styleBias: str
     offensiveDefensiveBias: str
     sourceStatus: DashboardPublicState
@@ -123,8 +123,8 @@ class DashboardLiquidityRisk(_DashboardOverviewBase):
 
 
 class DashboardSectorThemeRotation(_DashboardOverviewBase):
-    leadingThemes: list[str] = Field(min_length=1)
-    laggingThemes: list[str] = Field(min_length=1)
+    leadingThemes: list[str] = Field(default_factory=list)
+    laggingThemes: list[str] = Field(default_factory=list)
     diffusion: str
     summary: str
     status: DashboardOverviewStatus
@@ -139,7 +139,7 @@ class DashboardResearchQueueItem(_DashboardOverviewBase):
 
 class DashboardResearchQueue(_DashboardOverviewBase):
     status: DashboardOverviewStatus
-    items: list[DashboardResearchQueueItem] = Field(min_length=1)
+    items: list[DashboardResearchQueueItem] = Field(default_factory=list)
 
 
 class DashboardDataQuality(_DashboardOverviewBase):
