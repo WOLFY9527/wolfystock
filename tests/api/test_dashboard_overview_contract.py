@@ -91,6 +91,12 @@ FORBIDDEN_INTERNAL_MARKERS = (
     "token",
     "secret",
 )
+FORBIDDEN_PUBLIC_COPY = (
+    "Dollar Index",
+    "10Y Yield",
+    "unknown",
+    "scaffold",
+)
 ALLOWED_RESEARCH_ACTIONS = {
     "观察",
     "复核",
@@ -407,6 +413,8 @@ def test_dashboard_overview_default_response_is_consumer_safe_and_no_advice() ->
 
     assert "不构成投资建议" in payload["noAdviceDisclosure"]
     for term in FORBIDDEN_ADVICE_TERMS:
+        assert term not in dumped
+    for term in FORBIDDEN_PUBLIC_COPY:
         assert term not in dumped
 
 
