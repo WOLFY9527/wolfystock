@@ -247,21 +247,48 @@ class AdminSecurityApiTestCase(unittest.TestCase):
         for needle in forbidden:
             self.assertNotIn(str(needle), text)
 
-    def _assert_safe_onboarding_audit(self, *, expected_status: str) -> None:
-        rows = self._audit_rows("admin_user_onboarding.user_created")
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].overall_status, expected_status)
-        text = json.dumps(rows[0].summary_json, ensure_ascii=False)
-        text += json.dumps(self.db.get_execution_log_session_detail(rows[0].session_id), ensure_ascii=False)
-        self.assertIn("acct:", text)
+    def _onboarding_audit_text(self, row: ExecutionLogSession) -> str:
+        text = json.dumps(row.summary_json, ensure_ascii=False)
+        text += json.dumps(self.db.get_execution_log_session_detail(row.session_id), ensure_ascii=False)
+        return text
+
+    def _assert_onboarding_audit_redacted(self, text: str, *, extra_forbidden: list[str] | None = None) -> None:
         self.assertNotIn("beta-user", text)
         self.assertNotIn("beta@example.com", text)
+        self.assertNotIn("private beta onboarding", text)
         self.assertNotIn("initialPassword", text)
         self.assertNotIn("password_hash", text)
         self.assertNotIn("pbkdf2", text)
         self.assertNotIn("token", text.lower())
         self.assertNotIn("secret", text.lower())
         self.assertNotIn("cookie", text.lower())
+        self.assertNotIn("request_body", text.lower())
+        self.assertNotIn("traceback", text.lower())
+        for needle in extra_forbidden or []:
+            self.assertNotIn(needle, text)
+
+    def _assert_safe_onboarding_audit(self, *, expected_status: str, expected_reason_code: str | None = None) -> None:
+        rows = self._audit_rows("admin_user_onboarding.user_created")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].overall_status, expected_status)
+        text = self._onboarding_audit_text(rows[0])
+        self.assertIn("acct:", text)
+        if expected_reason_code is not None:
+            self.assertIn(f'"reason_code": "{expected_reason_code}"', text)
+        self._assert_onboarding_audit_redacted(text)
+
+    def _assert_onboarding_failure_reason_codes(
+        self,
+        expected_reason_codes: list[str],
+        *,
+        extra_forbidden: list[str] | None = None,
+    ) -> None:
+        rows = self._audit_rows("admin_user_onboarding.user_created")
+        self.assertEqual([row.overall_status for row in rows], ["failed"] * len(expected_reason_codes))
+        texts = [self._onboarding_audit_text(row) for row in rows]
+        for text, reason_code in zip(texts, expected_reason_codes):
+            self.assertIn(f'"reason_code": "{reason_code}"', text)
+            self._assert_onboarding_audit_redacted(text, extra_forbidden=extra_forbidden)
 
     def _assert_safe_audit(self, action: str, *, expected_status: str) -> None:
         rows = self._audit_rows(action)
@@ -402,6 +429,7 @@ class AdminSecurityApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["detail"]["error"], "admin_reauth_required")
+        self._assert_onboarding_failure_reason_codes(["admin_reauth_required"])
 
     def test_admin_onboarding_rejects_duplicate_username_and_duplicate_email_safely(self) -> None:
         self._login_admin_session()
@@ -436,6 +464,10 @@ class AdminSecurityApiTestCase(unittest.TestCase):
         self.assertEqual(duplicate_email.status_code, 409)
         self.assertEqual(duplicate_email.json()["detail"]["error"], "duplicate_email")
         self._assert_safe_payload(duplicate_email)
+        self._assert_onboarding_failure_reason_codes(
+            ["duplicate_username", "duplicate_email"],
+            extra_forbidden=["alice@example.com"],
+        )
 
     def test_admin_onboarding_rejects_invalid_payload_and_admin_username(self) -> None:
         self._login_admin_session()
@@ -463,6 +495,10 @@ class AdminSecurityApiTestCase(unittest.TestCase):
         )
         self.assertEqual(forbidden_admin.status_code, 400)
         self.assertEqual(forbidden_admin.json()["detail"]["error"], "role_not_allowed")
+        self._assert_onboarding_failure_reason_codes(
+            ["validation_error", "role_not_allowed"],
+            extra_forbidden=["not-an-email"],
+        )
 
     def test_authenticated_admin_security_write_rejects_expired_reauth(self) -> None:
         _, identity = self._login_admin_session()
