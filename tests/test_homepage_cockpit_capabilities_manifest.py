@@ -105,6 +105,7 @@ def test_manifest_marks_sample_proxy_and_no_evidence_boundaries_without_live_cla
     assert by_key["eventImpactMap"]["availability"] == "sample"
     assert by_key["researchPriorities"]["availability"] == "no_evidence"
     assert by_key["evidenceQuality"]["availability"] == "sample"
+    assert by_key["evidenceQuality"]["reviewPoint"] == "复核证据质量摘要仍聚焦公开展示核查。"
 
     for module in payload["modules"]:
         assert module["integrationStatus"] == "standalone"
@@ -128,3 +129,9 @@ def test_public_cockpit_metadata_does_not_leak_internal_or_action_markers() -> N
 
     leaked = [marker for marker in FORBIDDEN_PUBLIC_MARKERS if marker.lower() in dumped]
     assert leaked == []
+
+
+def test_manifest_public_copy_does_not_include_internal_diagnostics_marker() -> None:
+    dumped = _dump(HomepageModuleManifestService().build_manifest(as_of="2026-06-15T00:00:00Z"))
+
+    assert "内部诊断" not in dumped
