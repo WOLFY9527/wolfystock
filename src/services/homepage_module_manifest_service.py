@@ -35,6 +35,9 @@ _QUALITY_STATE_BY_AVAILABILITY = {
     "no_evidence": "no_evidence",
     "unavailable": "unavailable",
 }
+_PUBLIC_REVIEW_POINT_REWRITES = {
+    "不暴露内部诊断": "聚焦公开展示核查",
+}
 
 
 class HomepageModuleManifestService:
@@ -65,7 +68,7 @@ class HomepageModuleManifestService:
             availability=availability,
             integrationStatus="standalone",
             publicStatus="public",
-            reviewPoint=item["reviewPoint"],
+            reviewPoint=self._public_review_point(item["reviewPoint"]),
             dataQuality=self._data_quality(
                 state=quality_state,
                 summary=self._module_quality_summary(item["label"], availability=availability),
@@ -99,6 +102,12 @@ class HomepageModuleManifestService:
         if availability == "no_evidence":
             return f"{label}当前暂无足够公开证据，仅保留模块占位。"
         return f"{label}当前暂不可用，仅保留受限状态说明。"
+
+    def _public_review_point(self, review_point: str) -> str:
+        text = str(review_point)
+        for source, target in _PUBLIC_REVIEW_POINT_REWRITES.items():
+            text = text.replace(source, target)
+        return text
 
     def _safe_as_of(self, as_of: str | None) -> str:
         text = str(as_of or "").strip()

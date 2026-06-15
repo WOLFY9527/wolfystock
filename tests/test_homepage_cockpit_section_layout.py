@@ -140,7 +140,7 @@ def test_cockpit_layout_uses_public_research_labels_and_bounded_taxonomy() -> No
     assert data_quality == {
         "state": "ready",
         "label": "布局合同已就绪",
-        "summary": "当前合同仅描述驾驶舱研究工作流顺序、密度与复核点，不包含实时行情、操作结论或内部诊断。",
+        "summary": "当前合同仅描述驾驶舱研究工作流顺序、密度与复核点，不包含实时行情、操作结论或数据质量核查注记。",
     }
 
 
@@ -219,3 +219,9 @@ def test_cockpit_layout_does_not_leak_internal_provider_cache_or_secret_details(
         "/tmp/",
     ]:
         assert forbidden.lower() not in dumped
+
+
+def test_cockpit_layout_public_copy_does_not_include_internal_diagnostics_marker() -> None:
+    dumped = _dump_layout(_build_layout_payload())
+
+    assert "内部诊断" not in dumped

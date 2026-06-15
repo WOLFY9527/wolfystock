@@ -19,7 +19,7 @@ from api.v1.schemas.homepage_section_layout import (
 )
 
 NO_ADVICE_DISCLOSURE = "仅用于市场研究编排与证据复核，不作为任何执行依据。"
-TOP_LEVEL_DATA_QUALITY_SUMMARY = "当前合同仅描述驾驶舱研究工作流顺序、密度与复核点，不包含实时行情、操作结论或内部诊断。"
+TOP_LEVEL_DATA_QUALITY_SUMMARY = "当前合同仅描述驾驶舱研究工作流顺序、密度与复核点，不包含实时行情、操作结论或数据质量核查注记。"
 ALLOWED_REGIONS = {"top_strip", "main_left", "main_center", "main_right", "secondary", "utility"}
 ALLOWED_DENSITIES = {"compact", "standard", "expanded"}
 
