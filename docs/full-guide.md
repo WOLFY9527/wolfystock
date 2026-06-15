@@ -1165,6 +1165,7 @@ export SSL_CERT_FILE="$(python3 -c 'import certifi; print(certifi.where())')"
 | `/api/v1/backtest/rule/runs/{run_id}/cancel` | POST | best-effort 取消规则回测 |
 | `/api/v1/stocks/extract-from-image` | POST | 从图片提取股票代码（multipart，超时 60s） |
 | `/api/v1/stocks/parse-import` | POST | 解析 CSV/Excel/剪贴板（multipart file 或 JSON `{"text":"..."}`，文件≤2MB，文本≤100KB） |
+| `/api/v1/stocks/{stock_code}/structure-decision` | GET | 返回单股结构观察、置信度、组件分数、说明、研究备注、数据质量与缺失证据；OHLCV 不足时 fail-closed 为低置信度 |
 | `/api/health` | GET | 默认就绪检查（readiness alias） |
 | `/api/health/live` | GET | 存活检查（liveness） |
 | `/api/health/ready` | GET | 就绪检查（readiness） |
