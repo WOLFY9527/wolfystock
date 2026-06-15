@@ -20,6 +20,7 @@ from api.v1.errors import safe_api_error
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.scanner import (
     ScannerOperationalStatusResponse,
+    ScannerResearchOverlayResponse,
     ScannerRunDetailResponse,
     ScannerRunHistoryResponse,
     ScannerRunRequest,
@@ -32,6 +33,7 @@ from api.v1.schemas.scanner import (
 from src.core.scanner_theme_registry import create_ai_scanner_theme, list_scanner_themes
 from src.services.market_scanner_ops_service import MarketScannerOperationsService
 from src.services.market_scanner_service import MarketScannerService
+from src.services.scanner_research_overlay_service import ScannerResearchOverlayService
 from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER
 from src.storage import DatabaseManager
 
@@ -376,6 +378,44 @@ def get_scanner_operational_status(
         return ScannerOperationalStatusResponse(**payload)
 
     return _run_endpoint("查询 Scanner 运营状态失败", _operation)
+
+
+@router.get(
+    "/runs/{run_id}/research-overlay",
+    response_model=ScannerResearchOverlayResponse,
+    responses={
+        200: {"description": "Scanner research overlay"},
+        404: {"description": "未找到记录", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取 Scanner 候选研究覆盖层",
+    description=(
+        "Return a read-only research overlay for already-finalized scanner candidates. "
+        "This projection does not run scanners, reorder candidates, or mutate watchlists."
+    ),
+)
+def get_scanner_research_overlay(
+    run_id: int,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ScannerResearchOverlayResponse:
+    def _operation() -> ScannerResearchOverlayResponse:
+        scanner_service = _build_scanner_service(db_manager, current_user)
+        payload = _get_run_detail_payload(
+            service=scanner_service,
+            run_id=run_id,
+            current_user=current_user,
+        )
+        if payload is None:
+            raise _not_found_error(f"未找到扫描记录 {run_id}")
+        consumer_payload = sanitize_scanner_consumer_payload(payload)
+        overlay = ScannerResearchOverlayService().build_overlay(
+            run=consumer_payload,
+            candidates=consumer_payload.get("shortlist") or consumer_payload.get("selected") or [],
+        )
+        return ScannerResearchOverlayResponse(**overlay)
+
+    return _run_endpoint("查询 Scanner 研究覆盖层失败", _operation)
 
 
 @router.get(

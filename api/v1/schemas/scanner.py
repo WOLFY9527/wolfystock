@@ -775,6 +775,67 @@ class ScannerRunDetailResponse(BaseModel):
     shortlist: List[ScannerCandidateResponse] = Field(default_factory=list)
 
 
+class ScannerResearchOverlayOriginalState(BaseModel):
+    ticker: str
+    rank: int = 0
+    score: Optional[float] = None
+    rawScore: Optional[float] = None
+    finalScore: Optional[float] = None
+    status: str = "selected"
+
+
+class ScannerResearchOverlayFitFrame(BaseModel):
+    state: str
+    signals: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ScannerResearchOverlayThemeAlignment(BaseModel):
+    state: str
+    themes: List[str] = Field(default_factory=list)
+    signals: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ScannerResearchOverlayEvidenceQuality(BaseModel):
+    status: str
+    score: int = 0
+    missingEvidence: List[str] = Field(default_factory=list)
+
+
+class ScannerResearchOverlayItem(BaseModel):
+    ticker: str
+    originalScannerCandidateState: ScannerResearchOverlayOriginalState
+    researchPriority: str
+    regimeFit: ScannerResearchOverlayFitFrame
+    themeAlignment: ScannerResearchOverlayThemeAlignment
+    evidenceQuality: ScannerResearchOverlayEvidenceQuality
+    whyThisMattersToday: List[str] = Field(default_factory=list)
+    whatToVerify: List[str] = Field(default_factory=list)
+    riskFlags: List[str] = Field(default_factory=list)
+    evidenceGaps: List[str] = Field(default_factory=list)
+    noAdviceDisclosure: str
+
+
+class ScannerResearchOverlayDataQuality(BaseModel):
+    status: str
+    availableCandidateCount: int = 0
+    reliableCandidateCount: int = 0
+    missingEvidence: List[str] = Field(default_factory=list)
+
+
+class ScannerResearchOverlayResponse(BaseModel):
+    schemaVersion: str
+    generatedAt: str
+    runId: Optional[int] = None
+    market: str = ""
+    profile: str = ""
+    items: List[ScannerResearchOverlayItem] = Field(default_factory=list)
+    aggregateSummary: Dict[str, Any] = Field(default_factory=dict)
+    queueDiversity: Dict[str, Any] = Field(default_factory=dict)
+    dataQuality: ScannerResearchOverlayDataQuality
+    missingEvidence: List[str] = Field(default_factory=list)
+    noAdviceDisclosure: str
+
+
 class ScannerRunHistoryItem(BaseModel):
     id: int
     market: str

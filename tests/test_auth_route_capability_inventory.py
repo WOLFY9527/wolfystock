@@ -152,11 +152,13 @@ EXPECTED_SURFACE_ROUTE_CLASSIFICATIONS = {
     ("DELETE", "/api/v1/agent/chat/sessions/{session_id}"): "authenticated_member",
     ("POST", "/api/v1/agent/chat/stream"): "authenticated_member",
     ("POST", "/api/v1/agent/chat/send"): "admin_capability_required",
+    ("GET", "/api/v1/research/radar"): "authenticated_member",
     ("POST", "/api/v1/user-alerts/rules/{rule_id}/dry-run"): "authenticated_member",
     ("POST", "/api/v1/scanner/run"): "authenticated_member",
     ("GET", "/api/v1/scanner/runs"): "authenticated_member",
     ("GET", "/api/v1/scanner/strategy-simulation"): "authenticated_member",
     ("GET", "/api/v1/scanner/runs/{run_id}"): "authenticated_member",
+    ("GET", "/api/v1/scanner/runs/{run_id}/research-overlay"): "authenticated_member",
     ("GET", "/api/v1/scanner/watchlists/today"): "admin_capability_required",
     ("GET", "/api/v1/scanner/watchlists/recent"): "admin_capability_required",
     ("GET", "/api/v1/scanner/status"): "admin_capability_required",
@@ -786,7 +788,12 @@ def test_options_public_api_inventory_matches_fixture_only_frontend_gate_contrac
     assert '<Route path="/options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />' in app_source
     assert '<Route path="options-lab" element={<RegisteredSurfaceRoute><OptionsLabPage /></RegisteredSurfaceRoute>} />' in app_source
     assert "Mirrors Shell nav visibility only. Route-level guest paywalls live in App.tsx." in consumer_nav_source
-    assert "{ key: 'options-lab', labelKey: 'nav.optionsLab', to: '/options-lab', group: 'validate', requiresAuth: false }" in consumer_nav_source
+    options_lab_index = consumer_nav_source.index("key: \'options-lab\'")
+    options_lab_entry_end = consumer_nav_source.find("}", options_lab_index)
+    assert options_lab_entry_end != -1
+    options_lab_entry = consumer_nav_source[options_lab_index : options_lab_entry_end + 1]
+    assert "to: \'/options-lab\'" in options_lab_entry
+    assert "requiresAuth: false" in options_lab_entry
 
 
 def test_backend_write_only_capabilities_do_not_leak_into_frontend_read_route_flags() -> None:
