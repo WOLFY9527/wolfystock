@@ -37,6 +37,7 @@ from api.v1.endpoints import (
     portfolio,
     provider_usage_ledger,
     quant,
+    research,
     scanner,
     stocks,
     system_config,
@@ -167,6 +168,12 @@ router.include_router(
     scanner.router,
     prefix="/scanner",
     tags=["Scanner"]
+)
+
+router.include_router(
+    research.router,
+    prefix="/research",
+    tags=["Research"]
 )
 
 router.include_router(
