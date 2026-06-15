@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass, replace
 from typing import Any, Iterable, Mapping, Sequence
 
 
@@ -64,6 +64,7 @@ class _ScoredCandidate:
     explanation: dict[str, list[str]]
     evidence_gaps: list[str]
     themes: list[str]
+    duplicate_evidence_merged: int = 0
 
 
 def build_research_radar_candidate_queue(
@@ -82,7 +83,7 @@ def build_research_radar_candidate_queue(
     global_evidence = _mapping(evidence_quality_metadata)
     theme_context = _theme_context(theme_leadership_context)
 
-    scored = [
+    raw_scored = [
         _score_candidate(
             candidate,
             market_context=market_context,
@@ -92,11 +93,17 @@ def build_research_radar_candidate_queue(
         )
         for candidate in candidates or []
     ]
-    scored = [item for item in scored if item.ticker]
-    scored.sort(key=lambda item: (_PRIORITY_RANK[item.priority], -item.weighted_score, item.ticker))
+    scored, duplicate_evidence_merged = _dedupe_scored_candidates(raw_scored)
+    scored.sort(key=_sort_key)
+    scored = _apply_queue_diversity(scored)
 
     research_queue = [_queue_item(item) for item in scored]
-    summary = _summary(scored, market_context=market_context, theme_context=theme_context)
+    summary = _summary(
+        scored,
+        market_context=market_context,
+        theme_context=theme_context,
+        duplicate_evidence_merged=duplicate_evidence_merged,
+    )
 
     return {
         "schemaVersion": RESEARCH_RADAR_CANDIDATE_ENGINE_SCHEMA_VERSION,
@@ -126,7 +133,6 @@ def _score_candidate(
         ),
         "trendStructure": _score_trend_structure(merged),
         "themeAlignment": _score_theme_alignment(themes, theme_context),
-        "regimeFit": _score_regime_fit(themes, market_context),
         "eventCatalyst": _score_event_catalyst(
             _first(merged, ("eventCatalyst", "event_catalyst", "newsCatalyst", "news_catalyst", "catalyst", "events"))
         ),
@@ -135,6 +141,7 @@ def _score_candidate(
         ),
         "evidenceQuality": _score_evidence_quality(evidence_payload),
     }
+    driver_scores["regimeFit"] = _score_regime_fit(themes, market_context, merged, driver_scores)
     risk_flags = _risk_flags(merged, driver_scores, evidence_payload, themes, market_context)
     evidence_gaps = _evidence_gaps(evidence_payload, driver_scores)
     aligned_drivers = sum(
@@ -145,7 +152,7 @@ def _score_candidate(
     weighted_score = _weighted_score(driver_scores, risk_flags)
     priority = _priority(driver_scores, aligned_drivers, risk_flags)
     research_bias = _research_bias(merged, driver_scores, risk_flags)
-    explanation = _explanation(driver_scores, risk_flags, evidence_gaps, themes)
+    explanation = _explanation(driver_scores, risk_flags, evidence_gaps, themes, priority)
 
     return _ScoredCandidate(
         ticker=ticker,
@@ -168,6 +175,7 @@ def _queue_item(item: _ScoredCandidate) -> dict[str, Any]:
         "researchBias": item.research_bias,
         "driverScores": {key: item.driver_scores[key] for key in _DRIVER_KEYS},
         "explanation": item.explanation,
+        "duplicateEvidenceMerged": item.duplicate_evidence_merged,
         "riskFlags": list(item.risk_flags),
         "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
     }
@@ -178,6 +186,7 @@ def _summary(
     *,
     market_context: Mapping[str, Any],
     theme_context: Mapping[str, Any],
+    duplicate_evidence_merged: int,
 ) -> dict[str, Any]:
     evidence_gaps = _dedupe(
         gap
@@ -209,6 +218,8 @@ def _summary(
         "evidenceGaps": evidence_gaps,
         "marketContextFit": market_fit,
         "queueQuality": queue_quality,
+        "duplicateEvidenceMerged": int(duplicate_evidence_merged),
+        "queueDiversity": _queue_diversity(scored),
     }
 
 
@@ -217,7 +228,7 @@ def _priority(driver_scores: Mapping[str, int], aligned_drivers: int, risk_flags
     liquidity = driver_scores["liquidityTradability"]
     trend = driver_scores["trendStructure"]
     volume = driver_scores["volumeExpansion"]
-    hard_flags = {"missing_evidence", "low_liquidity"}
+    hard_flags = {"missing_evidence", "low_liquidity", "low_evidence_quality"}
     if evidence < 45 or liquidity < 35:
         return "low"
     if (
@@ -228,6 +239,8 @@ def _priority(driver_scores: Mapping[str, int], aligned_drivers: int, risk_flags
         and (volume >= 70 or driver_scores["eventCatalyst"] >= 70)
         and "theme_regime_conflict" not in risk_flags
         and "extreme_extension" not in risk_flags
+        and "mixed_regime" not in risk_flags
+        and "theme_concentration" not in risk_flags
     ):
         return "high"
     if aligned_drivers >= 2 and evidence >= 45 and liquidity >= 40 and not hard_flags.intersection(risk_flags):
@@ -249,8 +262,11 @@ def _weighted_score(driver_scores: Mapping[str, int], risk_flags: Sequence[str])
     score = sum(driver_scores[key] * weight for key, weight in weights.items())
     penalties = {
         "missing_evidence": 18,
+        "low_evidence_quality": 10,
         "low_liquidity": 14,
         "theme_regime_conflict": 10,
+        "mixed_regime": 8,
+        "theme_concentration": 5,
         "extreme_extension": 8,
         "elevated_volatility": 6,
     }
@@ -290,8 +306,12 @@ def _risk_flags(
         flags.append("low_liquidity")
     if driver_scores["evidenceQuality"] < 45 or _evidence_gaps(evidence_payload, driver_scores):
         flags.append("missing_evidence")
+    if driver_scores["evidenceQuality"] < 60:
+        flags.append("low_evidence_quality")
     if _has_regime_conflict(themes, market_context):
         flags.append("theme_regime_conflict")
+    if _market_regime(market_context) in {"mixed", "lowconfidence", "rangebound"}:
+        flags.append("mixed_regime")
     if _safe_float(_first(candidate, ("extensionPct", "extension_pct", "distanceFromMA20Pct", "distance_from_ma20_pct"))) is not None:
         extension = abs(float(_first(candidate, ("extensionPct", "extension_pct", "distanceFromMA20Pct", "distance_from_ma20_pct"))))
         if extension >= 18:
@@ -307,6 +327,7 @@ def _explanation(
     risk_flags: Sequence[str],
     evidence_gaps: Sequence[str],
     themes: Sequence[str],
+    priority: str,
 ) -> dict[str, list[str]]:
     leading = [label for key, label in _driver_labels().items() if driver_scores[key] >= 65]
     why = leading[:3] or ["Low-confidence watch because evidence is incomplete."]
@@ -327,6 +348,25 @@ def _explanation(
     if not verify:
         verify.append("Verify core price, volume, structure, and evidence quality inputs.")
 
+    why_not_higher: list[str] = []
+    if priority != "high":
+        if driver_scores["evidenceQuality"] < 60:
+            why_not_higher.append("Evidence quality is below the strong research threshold.")
+        if driver_scores["liquidityTradability"] < 50:
+            why_not_higher.append("Liquidity evidence is not yet strong enough for a higher queue tier.")
+        if driver_scores["trendStructure"] < 72:
+            why_not_higher.append("Trend structure needs stronger confirmation.")
+        if "theme_regime_conflict" in risk_flags:
+            why_not_higher.append("Theme context conflicts with the current market backdrop.")
+        if "mixed_regime" in risk_flags:
+            why_not_higher.append("Mixed market regime lowers conviction.")
+        if "theme_concentration" in risk_flags:
+            why_not_higher.append("Queue diversity keeps repeated theme entries from crowding the top tier.")
+        if not why_not_higher:
+            why_not_higher.append("Driver alignment is not strong enough for the top research tier.")
+    else:
+        why_not_higher.append("Already in the top research tier; continue evidence checks.")
+
     invalidation = []
     if driver_scores["relativeStrength"] >= 65:
         invalidation.append("Relative strength fades below benchmark behavior.")
@@ -344,6 +384,8 @@ def _explanation(
     return {
         "whyOnRadar": _dedupe(why)[:4],
         "whatToVerify": _dedupe(verify)[:4],
+        "whyNotHigherPriority": _dedupe(why_not_higher)[:4],
+        "evidenceGaps": list(evidence_gaps)[:6],
         "invalidationObservations": _dedupe(invalidation)[:4],
     }
 
@@ -417,7 +459,12 @@ def _score_theme_alignment(themes: Sequence[str], theme_context: Mapping[str, An
     return 45
 
 
-def _score_regime_fit(themes: Sequence[str], market_context: Mapping[str, Any]) -> int:
+def _score_regime_fit(
+    themes: Sequence[str],
+    market_context: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+    driver_scores: Mapping[str, int],
+) -> int:
     if not market_context:
         return 50
     if _has_regime_conflict(themes, market_context):
@@ -425,6 +472,25 @@ def _score_regime_fit(themes: Sequence[str], market_context: Mapping[str, Any]) 
     favorable = {_text(item).lower() for item in _sequence(_first(market_context, ("favorableThemes", "favorable_themes")))}
     if favorable and {theme.lower() for theme in themes}.intersection(favorable):
         return 75
+    regime = _market_regime(market_context)
+    strength_or_breakout = (
+        driver_scores["trendStructure"] >= 72
+        and driver_scores["relativeStrength"] >= 65
+    )
+    volatility = _safe_float(_first(candidate, ("volatilityPct", "volatility_pct", "atr20Pct", "atr20_pct")))
+    low_evidence_or_volatility = (
+        driver_scores["evidenceQuality"] < 60
+        or (volatility is not None and volatility >= 8)
+        or "volatile" in _text(_first(candidate, ("trendStructure", "trend_structure", "trendState", "trend_state"))).lower()
+    )
+    if regime in {"riskon", "upsidechaserisk", "upsidechase"}:
+        return 72 if strength_or_breakout else 56
+    if regime in {"riskoff", "eventrisk"}:
+        return 66 if low_evidence_or_volatility else 42
+    if regime in {"mixed", "lowconfidence", "rangebound"}:
+        return 40
+    if regime in {"downsideaccelerationrisk", "volatilitycompression"}:
+        return 38 if strength_or_breakout else 50
     return 50
 
 
@@ -467,13 +533,13 @@ def _score_evidence_quality(value: Mapping[str, Any]) -> int:
     if explicit_score is not None:
         if 0 <= explicit_score <= 1.5:
             explicit_score *= 100
-        return _clamp_int(explicit_score)
+        return _clamp_int(explicit_score - _evidence_quality_penalty(value))
     state = _text(_first(value, ("state", "status", "evidenceQuality", "quality"))).lower()
     if state in _QUALITY_LABEL_SCORES:
-        return _QUALITY_LABEL_SCORES[state]
+        return _clamp_int(_QUALITY_LABEL_SCORES[state] - _evidence_quality_penalty(value))
     if not value:
         return 40
-    return 50
+    return _clamp_int(50 - _evidence_quality_penalty(value))
 
 
 def _theme_context(value: Mapping[str, Any] | Any | None) -> dict[str, Any]:
@@ -513,9 +579,150 @@ def _evidence_gaps(evidence_payload: Mapping[str, Any], driver_scores: Mapping[s
             list(_sequence(_first(evidence_payload, ("missing", "missingEvidence", "evidenceGaps", "gaps"))))
         )
     )
+    if _is_truthy(_first(evidence_payload, ("isStale", "is_stale", "stale"))) or _text(
+        _first(evidence_payload, ("freshnessState", "freshness", "freshness_state"))
+    ).lower() == "stale":
+        gaps.append("staleEvidence")
+    if _is_truthy(_first(evidence_payload, ("isFallback", "is_fallback", "fallback"))) or "fallback" in _text(
+        _first(evidence_payload, ("sourceClass", "source_class", "source"))
+    ).lower():
+        gaps.append("fallbackEvidence")
+    if _is_truthy(_first(evidence_payload, ("isProxy", "is_proxy", "proxy", "proxyObservation"))) or "proxy" in _text(
+        _first(evidence_payload, ("sourceClass", "source_class", "source"))
+    ).lower():
+        gaps.append("proxyEvidence")
+    if _is_truthy(_first(evidence_payload, ("sampleOnly", "sample_only", "isSampleOnly", "is_sample_only"))):
+        gaps.append("sampleOnlyEvidence")
     if driver_scores["evidenceQuality"] < 45 and not gaps:
         gaps.append("evidenceQuality")
-    return gaps
+    return _dedupe(gaps)
+
+
+def _dedupe_scored_candidates(scored: Sequence[_ScoredCandidate]) -> tuple[list[_ScoredCandidate], int]:
+    by_symbol: dict[str, list[_ScoredCandidate]] = {}
+    for item in scored:
+        if not item.ticker:
+            continue
+        by_symbol.setdefault(item.ticker, []).append(item)
+
+    result: list[_ScoredCandidate] = []
+    duplicate_count = 0
+    for symbol in sorted(by_symbol):
+        items = by_symbol[symbol]
+        duplicate_count += max(0, len(items) - 1)
+        strongest = max(items, key=_dedupe_strength_key)
+        result.append(replace(strongest, duplicate_evidence_merged=max(0, len(items) - 1)))
+    return result, duplicate_count
+
+
+def _dedupe_strength_key(item: _ScoredCandidate) -> tuple[int, int, float, str]:
+    return (
+        item.driver_scores["evidenceQuality"],
+        -_PRIORITY_RANK[item.priority],
+        item.weighted_score,
+        item.ticker,
+    )
+
+
+def _sort_key(item: _ScoredCandidate) -> tuple[int, float, int, str]:
+    return (
+        _PRIORITY_RANK[item.priority],
+        -item.weighted_score,
+        -item.driver_scores["evidenceQuality"],
+        item.ticker,
+    )
+
+
+def _apply_queue_diversity(scored: Sequence[_ScoredCandidate]) -> list[_ScoredCandidate]:
+    high_items = [item for item in scored if item.priority == "high"]
+    high_themes = {_primary_theme(item) for item in high_items if _primary_theme(item)}
+    if len(high_themes) < 2:
+        return list(scored)
+
+    seen_high_themes: set[str] = set()
+    adjusted: list[_ScoredCandidate] = []
+    for item in sorted(scored, key=_sort_key):
+        primary_theme = _primary_theme(item)
+        if item.priority == "high" and primary_theme in seen_high_themes:
+            risk_flags = _dedupe([*item.risk_flags, "theme_concentration"])
+            driver_scores = dict(item.driver_scores)
+            driver_scores["themeAlignment"] = max(55, driver_scores["themeAlignment"] - 10)
+            priority = _priority(
+                driver_scores,
+                _aligned_driver_count(driver_scores),
+                risk_flags,
+            )
+            if priority == "high":
+                priority = "medium"
+            explanation = _explanation(
+                driver_scores,
+                risk_flags,
+                item.evidence_gaps,
+                item.themes,
+                priority,
+            )
+            adjusted.append(
+                replace(
+                    item,
+                    priority=priority,
+                    weighted_score=_weighted_score(driver_scores, risk_flags),
+                    driver_scores=driver_scores,
+                    risk_flags=risk_flags,
+                    explanation=explanation,
+                )
+            )
+            continue
+        if item.priority == "high" and primary_theme:
+            seen_high_themes.add(primary_theme)
+        adjusted.append(item)
+    adjusted.sort(key=_sort_key)
+    return adjusted
+
+
+def _queue_diversity(scored: Sequence[_ScoredCandidate]) -> dict[str, Any]:
+    counts: dict[str, int] = {}
+    for item in scored:
+        theme = _primary_theme(item) or "unclassified"
+        counts[theme] = counts.get(theme, 0) + 1
+    high_theme_count = len({_primary_theme(item) for item in scored if item.priority == "high" and _primary_theme(item)})
+    status = "thin"
+    if len(counts) >= 2 and high_theme_count >= 2:
+        status = "diversified"
+    elif len(counts) >= 2:
+        status = "mixed"
+    elif counts:
+        status = "concentrated"
+    return {
+        "status": status,
+        "themeCounts": counts,
+    }
+
+
+def _primary_theme(item: _ScoredCandidate) -> str:
+    return _text(item.themes[0]).lower() if item.themes else ""
+
+
+def _aligned_driver_count(driver_scores: Mapping[str, int]) -> int:
+    return sum(
+        1
+        for key, score in driver_scores.items()
+        if key not in {"regimeFit", "evidenceQuality"} and score >= 65
+    )
+
+
+def _evidence_quality_penalty(value: Mapping[str, Any]) -> int:
+    penalty = 0
+    source_text = _text(_first(value, ("sourceClass", "source_class", "source"))).lower()
+    freshness = _text(_first(value, ("freshnessState", "freshness", "freshness_state"))).lower()
+    if _is_truthy(_first(value, ("isStale", "is_stale", "stale"))) or freshness == "stale":
+        penalty += 18
+    if _is_truthy(_first(value, ("isFallback", "is_fallback", "fallback"))) or "fallback" in source_text:
+        penalty += 16
+    if _is_truthy(_first(value, ("isProxy", "is_proxy", "proxy", "proxyObservation"))) or "proxy" in source_text:
+        penalty += 14
+    if _is_truthy(_first(value, ("sampleOnly", "sample_only", "isSampleOnly", "is_sample_only"))):
+        penalty += 14
+    return penalty
 
 
 def _market_fit(regime_scores: Sequence[int], *, has_context: bool) -> str:
@@ -535,6 +742,11 @@ def _market_fit(regime_scores: Sequence[int], *, has_context: bool) -> str:
 def _has_regime_conflict(themes: Sequence[str], market_context: Mapping[str, Any]) -> bool:
     unfavorable = {_text(item).lower() for item in _sequence(_first(market_context, ("unfavorableThemes", "unfavorable_themes", "avoidThemes", "avoid_themes")))}
     return bool(unfavorable and {theme.lower() for theme in themes}.intersection(unfavorable))
+
+
+def _market_regime(market_context: Mapping[str, Any]) -> str:
+    raw = _text(_first(market_context, ("regime", "marketRegime", "market_regime", "decision", "label")))
+    return "".join(ch for ch in raw.lower() if ch.isalnum())
 
 
 def _symbol_context_map(value: Mapping[str, Any] | Any | None) -> dict[str, dict[str, Any]]:
@@ -604,6 +816,12 @@ def _safe_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _is_truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return _text(value).lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _text(value: Any) -> str:

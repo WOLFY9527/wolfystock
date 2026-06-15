@@ -103,7 +103,8 @@ def _assert_queue_item_shape(item: dict[str, Any]) -> None:
     assert set(item["driverScores"]) == EXPECTED_DRIVER_KEYS
     assert all(isinstance(score, int) for score in item["driverScores"].values())
     assert all(0 <= score <= 100 for score in item["driverScores"].values())
-    assert set(item["explanation"]) == {"whyOnRadar", "whatToVerify", "invalidationObservations"}
+    assert set(item["explanation"]) == {"whyOnRadar", "whatToVerify", "whyNotHigherPriority", "evidenceGaps", "invalidationObservations"}
+    assert isinstance(item["duplicateEvidenceMerged"], int)
     assert item["noAdviceDisclosure"]
 
 
@@ -277,3 +278,214 @@ def test_research_radar_service_has_no_runtime_or_protected_imports() -> None:
         if any(module == prefix or module.startswith(f"{prefix}.") for prefix in FORBIDDEN_IMPORT_PREFIXES)
     )
     assert violations == []
+
+
+def test_duplicate_candidates_keep_strongest_evidence_and_record_merge_count() -> None:
+    payload = build_research_radar_candidate_queue(
+        [
+            {
+                "ticker": "DUPL",
+                "relativeStrength": 48,
+                "volumeExpansion": 0.9,
+                "trendStructure": "range",
+                "themes": ["Defensive"],
+                "avgDollarVolume": 8_000_000,
+                "evidenceQuality": {"state": "missing", "score": 0.18, "missing": ["priceHistory"]},
+            },
+            {
+                "ticker": "DUPL",
+                "relativeStrength": 88,
+                "volumeExpansion": 1.8,
+                "trendStructure": "confirmed_uptrend",
+                "themes": ["AI Infrastructure"],
+                "avgDollarVolume": 120_000_000,
+                "evidenceQuality": {"state": "complete", "score": 0.88},
+            },
+        ],
+        market_regime_context={"regime": "riskOn", "favorableThemes": ["AI Infrastructure"]},
+        theme_leadership_context={"dominantThemes": [{"name": "AI Infrastructure", "leadershipScore": 86}]},
+    )
+
+    assert [item["ticker"] for item in payload["researchQueue"]] == ["DUPL"]
+    item = payload["researchQueue"][0]
+    assert item["priority"] == "high"
+    assert item["driverScores"]["evidenceQuality"] >= 80
+    assert item["duplicateEvidenceMerged"] == 1
+    assert payload["summary"]["duplicateEvidenceMerged"] == 1
+
+
+def test_stable_sort_uses_evidence_quality_before_symbol_when_priority_and_score_tie() -> None:
+    payload = build_research_radar_candidate_queue(
+        [
+            {
+                "ticker": "AAA",
+                "relativeStrength": 85,
+                "volumeExpansion": 1.2,
+                "trendStructure": "range",
+                "avgDollarVolume": 80_000_000,
+                "evidenceQuality": {"state": "partial", "score": 0.60},
+            },
+            {
+                "ticker": "ZZZ",
+                "relativeStrength": 70,
+                "volumeExpansion": 1.2,
+                "trendStructure": "range",
+                "avgDollarVolume": 80_000_000,
+                "evidenceQuality": {"state": "complete", "score": 0.80},
+            },
+        ]
+    )
+
+    assert [item["ticker"] for item in payload["researchQueue"]] == ["ZZZ", "AAA"]
+
+
+def test_regime_labels_adjust_fit_without_creating_advice_or_overriding_mixed_regime() -> None:
+    risk_on = build_research_radar_candidate_queue(
+        [
+            {
+                "ticker": "BRK",
+                "relativeStrength": 82,
+                "volumeExpansion": 1.7,
+                "trendStructure": "breakout",
+                "themes": ["AI Infrastructure"],
+                "avgDollarVolume": 100_000_000,
+                "evidenceQuality": {"state": "complete", "score": 0.86},
+            }
+        ],
+        market_regime_context={"regime": "riskOn"},
+    )["researchQueue"][0]
+    mixed = build_research_radar_candidate_queue(
+        [
+            {
+                "ticker": "BRK",
+                "relativeStrength": 82,
+                "volumeExpansion": 1.7,
+                "trendStructure": "breakout",
+                "themes": ["AI Infrastructure"],
+                "avgDollarVolume": 100_000_000,
+                "evidenceQuality": {"state": "complete", "score": 0.86},
+            }
+        ],
+        market_regime_context={"regime": "mixed"},
+    )["researchQueue"][0]
+
+    assert risk_on["driverScores"]["regimeFit"] >= 70
+    assert risk_on["priority"] == "high"
+    assert mixed["driverScores"]["regimeFit"] <= 45
+    assert mixed["priority"] != "high"
+    assert any("mixed" in text.lower() for text in mixed["explanation"]["whyNotHigherPriority"])
+
+
+def test_risk_off_and_event_risk_support_low_evidence_or_volatility_watch_biases() -> None:
+    payload = build_research_radar_candidate_queue(
+        [
+            {
+                "ticker": "VOLR",
+                "relativeStrength": 62,
+                "volumeExpansion": 1.1,
+                "trendStructure": "volatile",
+                "volatilityPct": 9.2,
+                "avgDollarVolume": 70_000_000,
+                "evidenceQuality": {"state": "partial", "score": 0.56},
+            },
+            {
+                "ticker": "GAPR",
+                "relativeStrength": 86,
+                "volumeExpansion": 1.6,
+                "trendStructure": "confirmed_uptrend",
+                "avgDollarVolume": 70_000_000,
+                "evidenceQuality": {"state": "missing", "score": 0.22},
+            },
+        ],
+        market_regime_context={"regime": "eventRisk"},
+    )
+
+    by_ticker = {item["ticker"]: item for item in payload["researchQueue"]}
+    assert by_ticker["VOLR"]["researchBias"] == "volatilityRisk"
+    assert by_ticker["VOLR"]["driverScores"]["regimeFit"] >= 60
+    assert by_ticker["GAPR"]["researchBias"] == "avoidLowEvidence"
+    assert by_ticker["GAPR"]["driverScores"]["regimeFit"] >= 60
+
+
+def test_stale_fallback_proxy_and_sample_only_evidence_caps_priority_and_explains_gaps() -> None:
+    payload = build_research_radar_candidate_queue(
+        [
+            {
+                "ticker": "WEAK",
+                "relativeStrength": 92,
+                "volumeExpansion": 2.1,
+                "trendStructure": "breakout",
+                "themes": ["AI Infrastructure"],
+                "avgDollarVolume": 140_000_000,
+                "evidenceQuality": {
+                    "state": "complete",
+                    "score": 0.92,
+                    "isStale": True,
+                    "isFallback": True,
+                    "isProxy": True,
+                    "sampleOnly": True,
+                },
+            }
+        ],
+        market_regime_context={"regime": "riskOn"},
+        theme_leadership_context={"dominantThemes": ["AI Infrastructure"]},
+    )
+
+    item = payload["researchQueue"][0]
+    assert item["priority"] != "high"
+    assert item["driverScores"]["evidenceQuality"] < 60
+    assert {"staleEvidence", "fallbackEvidence", "proxyEvidence", "sampleOnlyEvidence"}.issubset(
+        set(item["explanation"]["evidenceGaps"])
+    )
+    assert "low_evidence_quality" in item["riskFlags"]
+
+
+def test_queue_diversity_avoids_all_high_priority_entries_from_same_theme_when_alternatives_exist() -> None:
+    payload = build_research_radar_candidate_queue(
+        [
+            {
+                "ticker": "AI1",
+                "relativeStrength": 90,
+                "volumeExpansion": 1.9,
+                "trendStructure": "confirmed_uptrend",
+                "themes": ["AI Infrastructure"],
+                "avgDollarVolume": 120_000_000,
+                "evidenceQuality": {"state": "complete", "score": 0.9},
+            },
+            {
+                "ticker": "AI2",
+                "relativeStrength": 89,
+                "volumeExpansion": 1.9,
+                "trendStructure": "confirmed_uptrend",
+                "themes": ["AI Infrastructure"],
+                "avgDollarVolume": 120_000_000,
+                "evidenceQuality": {"state": "complete", "score": 0.9},
+            },
+            {
+                "ticker": "SEMI",
+                "relativeStrength": 88,
+                "volumeExpansion": 1.8,
+                "trendStructure": "confirmed_uptrend",
+                "themes": ["Semiconductors"],
+                "avgDollarVolume": 120_000_000,
+                "evidenceQuality": {"state": "complete", "score": 0.9},
+            },
+        ],
+        market_regime_context={"regime": "riskOn", "favorableThemes": ["AI Infrastructure", "Semiconductors"]},
+        theme_leadership_context={
+            "dominantThemes": [
+                {"name": "AI Infrastructure", "leadershipScore": 90},
+                {"name": "Semiconductors", "leadershipScore": 88},
+            ]
+        },
+    )
+
+    high_items = [item for item in payload["researchQueue"] if item["priority"] == "high"]
+    high_themes = [
+        item["ticker"]
+        for item in high_items
+        if item["ticker"] in {"AI1", "AI2", "SEMI"}
+    ]
+    assert "SEMI" in high_themes
+    assert not ({"AI1", "AI2"}.issubset(high_themes) and "SEMI" not in high_themes)
+    assert payload["summary"]["queueDiversity"]["status"] == "diversified"

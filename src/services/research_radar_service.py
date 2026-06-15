@@ -121,6 +121,11 @@ class ResearchRadarService:
                     for item in queue
                     for gap in list(_mapping(item.get("evidenceQuality")).get("missingEvidence") or [])
                 ],
+                *[
+                    gap
+                    for item in queue
+                    for gap in list(item.get("evidenceGaps") or [])
+                ],
             ]
         )
         if not queue:
@@ -166,7 +171,10 @@ class ResearchRadarService:
             "driverScores": dict(driver_scores),
             "whyOnRadar": _safe_text_list(explanation.get("whyOnRadar")),
             "whatToVerify": _safe_text_list(explanation.get("whatToVerify")),
+            "whyNotHigherPriority": _safe_text_list(explanation.get("whyNotHigherPriority")),
+            "evidenceGaps": _safe_text_list(explanation.get("evidenceGaps")),
             "invalidationObservations": _safe_text_list(explanation.get("invalidationObservations")),
+            "duplicateEvidenceMerged": int(item.get("duplicateEvidenceMerged") or 0),
             "riskFlags": _safe_text_list(item.get("riskFlags")),
             "evidenceQuality": evidence_quality,
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
@@ -193,6 +201,8 @@ class ResearchRadarService:
             "priorityCounts": priority_counts,
             "dominantThemes": _safe_text_list(engine_summary.get("dominantThemes")),
             "queueQuality": queue_quality,
+            "duplicateEvidenceMerged": int(engine_summary.get("duplicateEvidenceMerged") or 0),
+            "queueDiversity": dict(_mapping(engine_summary.get("queueDiversity"))),
             "source": dict(source or {"type": "direct"}),
         }
 

@@ -49,12 +49,20 @@ class _FakeResearchRadarService:
                     "driverScores": {"relativeStrength": 70},
                     "whyOnRadar": ["Relative strength is above the research threshold."],
                     "whatToVerify": ["Verify relative strength persists versus the benchmark."],
+                    "whyNotHigherPriority": ["Evidence quality is below the strong research threshold."],
+                    "evidenceGaps": ["themeBreadth"],
                     "invalidationObservations": ["Relative strength fades below benchmark behavior."],
+                    "duplicateEvidenceMerged": 1,
                     "riskFlags": [],
                     "evidenceQuality": {"status": "partial", "score": 54},
                 }
             ],
-            "aggregateSummary": {"queueQuality": "mixed", "priorityCounts": {"medium": 1}},
+            "aggregateSummary": {
+                "queueQuality": "mixed",
+                "priorityCounts": {"medium": 1},
+                "duplicateEvidenceMerged": 1,
+                "queueDiversity": {"status": "mixed"},
+            },
             "evidenceGaps": [],
             "marketContextFit": "neutral",
             "noAdviceDisclosure": "Research-only queue; verify evidence gaps before further review.",
@@ -94,6 +102,12 @@ def test_get_research_radar_endpoint_is_registered_and_returns_contract(monkeypa
         "dataQuality",
     }.issubset(payload)
     assert payload["researchQueue"][0]["symbol"] == "ALFA"
+    assert payload["researchQueue"][0]["whyNotHigherPriority"] == [
+        "Evidence quality is below the strong research threshold."
+    ]
+    assert payload["researchQueue"][0]["evidenceGaps"] == ["themeBreadth"]
+    assert payload["researchQueue"][0]["duplicateEvidenceMerged"] == 1
+    assert payload["aggregateSummary"]["duplicateEvidenceMerged"] == 1
     assert _FakeResearchRadarService.calls == [
         {
             "market": "us",
