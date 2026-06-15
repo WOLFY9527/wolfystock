@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 FORBIDDEN_PUBLIC_TERMS = (
     "buy",
     "sell",
+    "hold",
     "position",
     "target",
     "stop loss",
@@ -40,6 +42,7 @@ FORBIDDEN_IMPORT_PREFIXES = (
     "api.deps",
     "src.auth",
 )
+FORBIDDEN_PUBLIC_WORD_TERMS = {"buy", "sell", "hold", "position", "target", "stop", "guaranteed"}
 
 
 def _item(
@@ -155,6 +158,15 @@ def _serialized_values(payload: object) -> str:
     return json.dumps(values, ensure_ascii=False, sort_keys=True).lower()
 
 
+def _assert_no_forbidden_public_terms(payload: object) -> None:
+    serialized = _serialized_values(payload)
+    for forbidden in FORBIDDEN_PUBLIC_TERMS:
+        if forbidden in FORBIDDEN_PUBLIC_WORD_TERMS:
+            assert re.search(rf"\b{re.escape(forbidden)}\b", serialized) is None
+        else:
+            assert forbidden not in serialized
+
+
 def test_cockpit_uses_regime_engine_as_primary_judgment_and_shapes_safe_aggregate() -> None:
     payload = build_market_decision_cockpit(
         market_inputs=_regime_ready_inputs(),
@@ -183,6 +195,41 @@ def test_cockpit_uses_regime_engine_as_primary_judgment_and_shapes_safe_aggregat
     assert decision["invalidationConditions"] == decision["explanation"]["whatInvalidatesIt"]
     assert decision["researchPriorities"]["watchToday"]
 
+    attribution = payload["driverAttribution"]
+    assert attribution["topPositiveDrivers"][0]["driver"] in decision["driverScores"]
+    assert attribution["topPositiveDrivers"][0]["score"] > 0
+    assert attribution["topPositiveDrivers"][0]["whyItMatters"]
+    assert isinstance(attribution["topNegativeDrivers"], list)
+    assert isinstance(attribution["conflictingDrivers"], list)
+    assert attribution["unavailableDrivers"][0]["driver"] == "dealerGamma"
+    assert "live_gex_not_implemented_v1" in attribution["unavailableDrivers"][0]["reasonCodes"]
+
+    diagnostics = payload["confidenceDiagnostics"]
+    assert diagnostics["evidenceStrength"]["confidence"] == decision["confidence"]
+    assert diagnostics["evidenceStrength"]["confidenceScore"] == decision["confidenceScore"]
+    assert diagnostics["evidenceStrength"]["scoringDriverCount"] >= 3
+    assert diagnostics["confidencePenalties"]
+    assert diagnostics["missingEvidenceImpact"][0]["evidence"] == "dealerGamma:unavailable"
+
+    watch_trigger = payload["watchTriggers"][0]
+    assert set(watch_trigger) == {"triggerName", "driver", "condition", "whyItMatters", "currentEvidence"}
+    assert watch_trigger["condition"]
+    assert watch_trigger["currentEvidence"]
+
+    what_changed = payload["whatChanged"]
+    assert what_changed["status"] == "degraded"
+    assert what_changed["basis"] == "current_snapshot_only"
+    assert "historical_baseline_unavailable" in what_changed["unavailableDrivers"]
+    assert any(item["field"] == "generatedAt" for item in what_changed["observations"])
+
+    readiness = payload["cockpitReadiness"]
+    assert readiness["status"] == "degraded"
+    assert readiness["reasons"] == ["options structure evidence is unavailable"]
+
+    assert payload["scenarioHints"]
+    assert all(isinstance(hint, str) and hint for hint in payload["scenarioHints"])
+    assert all(not any(char.isdigit() for char in hint) for hint in payload["scenarioHints"])
+
     queue = payload["researchQueuePreview"]
     assert queue["previewOnly"] is True
     assert queue["topCandidates"][0]["ticker"] == "ALFA"
@@ -202,9 +249,7 @@ def test_cockpit_uses_regime_engine_as_primary_judgment_and_shapes_safe_aggregat
     assert payload["cockpitSummary"]["confidenceLimits"]
     assert payload["dataQuality"]["status"] == "degraded"
 
-    serialized = _serialized_values(payload)
-    for forbidden in FORBIDDEN_PUBLIC_TERMS:
-        assert forbidden not in serialized
+    _assert_no_forbidden_public_terms(payload)
 
 
 def test_missing_inputs_fail_closed_with_empty_research_preview_and_blocked_options() -> None:
@@ -227,6 +272,94 @@ def test_missing_inputs_fail_closed_with_empty_research_preview_and_blocked_opti
     assert "market_regime_low_confidence" in payload["dataQuality"]["reasonCodes"]
     assert "research_candidates_unavailable" in payload["dataQuality"]["reasonCodes"]
     assert "option_chain_unavailable" in payload["dataQuality"]["reasonCodes"]
+    assert payload["cockpitReadiness"] == {
+        "status": "insufficient",
+        "reasons": [
+            "market regime evidence is insufficient",
+            "research radar candidates are unavailable",
+            "options structure evidence is unavailable",
+        ],
+    }
+    assert payload["confidenceDiagnostics"]["missingEvidenceImpact"]
+    assert payload["whatChanged"]["status"] == "degraded"
+    assert payload["driverAttribution"]["topPositiveDrivers"] == []
+    assert payload["driverAttribution"]["topNegativeDrivers"] == []
+    assert payload["driverAttribution"]["unavailableDrivers"]
+
+
+def test_driver_attribution_surfaces_conflicting_positive_and_negative_drivers() -> None:
+    payload = build_market_decision_cockpit(
+        market_regime_decision={
+            "regime": "mixed",
+            "confidence": "low",
+            "confidenceScore": 0.42,
+            "driverScores": {
+                "breadthParticipation": {
+                    "score": 68,
+                    "evidenceState": "score_grade",
+                    "reasons": [],
+                    "evidenceCount": 2,
+                    "observations": ["breadth participation is broad"],
+                },
+                "volatilityStructure": {
+                    "score": -72,
+                    "evidenceState": "score_grade",
+                    "reasons": [],
+                    "evidenceCount": 2,
+                    "observations": ["volatility pressure is elevated"],
+                },
+                "dealerGamma": {
+                    "score": 0,
+                    "evidenceState": "unavailable",
+                    "reasons": ["live_gex_not_implemented_v1"],
+                    "evidenceCount": 0,
+                    "observations": [],
+                },
+            },
+            "explanation": {
+                "whyThisRegime": ["mixed selected from deterministic driver agreement."],
+                "whatConfirmsIt": ["Breadth participation remains supportive with score-grade evidence."],
+                "whatInvalidatesIt": ["Driver alignment weakens or evidence quality deteriorates."],
+                "keyTriggerLevels": [],
+            },
+            "researchPriorities": {
+                "watchToday": ["Breadth participation"],
+                "needsMoreEvidence": ["dealerGamma:unavailable"],
+                "investigateNext": ["Resolve conflicting driver evidence."],
+            },
+            "dataQuality": {
+                "evidenceGrade": "limited",
+                "availableDriverCount": 2,
+                "scoringDriverCount": 2,
+                "blockedDriverCount": 0,
+                "missingDriverCount": 1,
+                "proxyEvidenceCount": 0,
+                "confidenceCapReasons": ["mixed_driver_alignment"],
+            },
+            "missingEvidence": ["dealerGamma:unavailable"],
+            "updatedAt": "2026-06-14T21:00:00+00:00",
+        },
+        research_candidates=[_candidate()],
+        generated_at="2026-06-15T00:00:00+00:00",
+    )
+
+    attribution = payload["driverAttribution"]
+
+    assert attribution["topPositiveDrivers"][0]["driver"] == "breadthParticipation"
+    assert attribution["topNegativeDrivers"][0]["driver"] == "volatilityStructure"
+    assert attribution["conflictingDrivers"] == [
+        {
+            "driver": "volatilityStructure",
+            "score": -72,
+            "condition": "Negative driver conflicts with positive regime evidence.",
+            "currentEvidence": ["volatility pressure is elevated"],
+        }
+    ]
+    assert payload["whatChanged"]["observations"][0] == {
+        "field": "marketRegimeDecision.updatedAt",
+        "value": "2026-06-14T21:00:00+00:00",
+        "interpretation": "Current payload timestamp is available; no historical baseline is inferred.",
+    }
 
 
 def test_options_evidence_remains_observation_only_even_when_contract_inputs_are_complete() -> None:
@@ -245,6 +378,10 @@ def test_options_evidence_remains_observation_only_even_when_contract_inputs_are
     assert options["decisionGrade"] is False
     assert options["blockedReasonCodes"] == ["observation_only_not_decision_grade"]
     assert options["missingEvidence"] == []
+    assert payload["cockpitReadiness"] == {
+        "status": "ready",
+        "reasons": ["core evidence is available for read-only decision support"],
+    }
 
     serialized = _serialized_values(options)
     for forbidden in ("support level", "resistance level", "dealer book", "position"):
