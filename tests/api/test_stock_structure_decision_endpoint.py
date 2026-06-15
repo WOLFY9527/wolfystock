@@ -38,10 +38,54 @@ class _FakeStructureDecisionService:
     def __init__(self, payload: dict[str, Any]) -> None:
         self.payload = payload
         self.calls: list[str] = []
+        self.batch_calls: list[dict[str, Any]] = []
 
     def get_structure_decision(self, ticker: str) -> dict[str, Any]:
         self.calls.append(ticker)
         return self.payload
+
+    def get_structure_decisions_batch(
+        self,
+        tickers: list[str],
+        *,
+        benchmark: str | None = None,
+        max_items: int | None = None,
+    ) -> dict[str, Any]:
+        self.batch_calls.append({"tickers": tickers, "benchmark": benchmark, "max_items": max_items})
+        return {
+            "schemaVersion": STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION,
+            "items": [
+                _payload(ticker="MSFT", structure_state="mixed", confidence="medium"),
+                _payload(ticker="AAPL", structure_state="breakout", confidence="high"),
+            ],
+            "aggregateSummary": {
+                "requestedCount": 3,
+                "evaluatedCount": 2,
+                "maxItems": 2,
+                "truncated": True,
+                "structureStateCounts": {"mixed": 1, "breakout": 1},
+                "strongestStructures": [{"ticker": "AAPL", "structureState": "breakout", "score": 86}],
+                "weakestEvidence": [{"ticker": "MSFT", "status": "available", "usableBars": 55}],
+                "commonRiskFlags": [],
+                "relativeStrength": {
+                    "status": "available",
+                    "benchmark": "SPY",
+                    "ranking": [
+                        {"rank": 1, "ticker": "AAPL", "relativeStrengthScore": 66},
+                        {"rank": 2, "ticker": "MSFT", "relativeStrengthScore": 51},
+                    ],
+                },
+            },
+            "missingEvidence": [],
+            "dataQuality": {
+                "status": "available",
+                "availableCount": 2,
+                "partialCount": 0,
+                "insufficientCount": 0,
+                "unavailableCount": 0,
+            },
+            "noAdviceDisclosure": "Observation-only research context; not personalized financial advice and not an instruction.",
+        }
 
 
 def _client() -> TestClient:
@@ -161,6 +205,59 @@ def test_structure_decision_endpoint_returns_low_confidence_unavailable_payload(
         assert forbidden not in serialized
 
 
+def test_structure_decision_batch_endpoint_returns_comparative_contract(monkeypatch) -> None:
+    fake_service = _FakeStructureDecisionService(_payload())
+    monkeypatch.setattr(
+        stocks_endpoint,
+        "StockStructureDecisionService",
+        lambda: fake_service,
+        raising=False,
+    )
+
+    response = _client().post(
+        "/api/v1/stocks/structure-decisions/batch",
+        json={"stockCodes": ["msft", "aapl", "msft"], "benchmark": "spy", "maxItems": 2},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert fake_service.batch_calls == [
+        {"tickers": ["msft", "aapl", "msft"], "benchmark": "spy", "max_items": 2}
+    ]
+    assert payload["schemaVersion"] == STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION
+    assert [item["ticker"] for item in payload["items"]] == ["MSFT", "AAPL"]
+    assert payload["aggregateSummary"]["requestedCount"] == 3
+    assert payload["aggregateSummary"]["evaluatedCount"] == 2
+    assert payload["aggregateSummary"]["maxItems"] == 2
+    assert payload["aggregateSummary"]["truncated"] is True
+    assert payload["aggregateSummary"]["relativeStrength"]["status"] == "available"
+    assert payload["aggregateSummary"]["relativeStrength"]["benchmark"] == "SPY"
+    assert "missingEvidence" in payload
+    assert "dataQuality" in payload
+    assert payload["noAdviceDisclosure"]
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+    for forbidden in FORBIDDEN_ADVICE_TOKENS:
+        assert forbidden not in serialized
+
+
+def test_structure_decision_batch_endpoint_rejects_empty_stock_codes(monkeypatch) -> None:
+    fake_service = _FakeStructureDecisionService(_payload())
+    monkeypatch.setattr(
+        stocks_endpoint,
+        "StockStructureDecisionService",
+        lambda: fake_service,
+        raising=False,
+    )
+
+    response = _client().post(
+        "/api/v1/stocks/structure-decisions/batch",
+        json={"stockCodes": [], "maxItems": 3},
+    )
+
+    assert response.status_code == 422
+    assert fake_service.batch_calls == []
+
+
 def test_structure_decision_openapi_locks_required_response_fields() -> None:
     schema = _client().get("/openapi.json").json()["components"]["schemas"]
 
@@ -182,3 +279,13 @@ def test_structure_decision_openapi_locks_required_response_fields() -> None:
     assert properties["ticker"]["type"] == "string"
     assert properties["structureState"]["type"] == "string"
     assert properties["componentScores"]["additionalProperties"]["type"] == "integer"
+
+    batch_schema = schema["StockStructureDecisionBatchResponse"]
+    assert batch_schema["required"] == [
+        "schemaVersion",
+        "items",
+        "aggregateSummary",
+        "missingEvidence",
+        "dataQuality",
+        "noAdviceDisclosure",
+    ]
