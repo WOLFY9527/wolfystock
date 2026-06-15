@@ -12,6 +12,8 @@ HomepageIntelligenceStatus = Literal["ready", "partial", "no_evidence", "unavail
 HomepageIntelligenceScope = Literal["homepage_ui_uat_metadata"]
 
 HOMEPAGE_INTELLIGENCE_SCHEMA_VERSION = "homepage_intelligence_v1"
+HOMEPAGE_INTELLIGENCE_COCKPIT_SCHEMA_VERSION = "homepage_intelligence_cockpit_v1"
+HOMEPAGE_COCKPIT_MODULES_SCHEMA_VERSION = "homepage_cockpit_modules_v1"
 HOMEPAGE_INTELLIGENCE_DEFAULT_AS_OF = "2026-06-14T09:30:00Z"
 HOMEPAGE_INTELLIGENCE_NO_ADVICE_DISCLOSURE = (
     "仅供首页元数据与固定样例联调，不构成投资建议。"
@@ -143,6 +145,103 @@ class HomepageIntelligenceDemoBundle(BaseModel):
         return self
 
 
+class HomepageIntelligenceCockpitSection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(..., min_length=1, max_length=64)
+    label: str = Field(..., min_length=1, max_length=120)
+    status: HomepageIntelligenceStatus
+    asOf: str = Field(..., min_length=1, max_length=40)
+    summary: str = Field(..., min_length=1, max_length=180)
+    dataQuality: dict[str, Any]
+    evidenceQuality: dict[str, Any]
+    payload: dict[str, Any]
+
+
+class HomepageIntelligenceCockpitAggregate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: str = Field(default=HOMEPAGE_INTELLIGENCE_COCKPIT_SCHEMA_VERSION)
+    status: HomepageIntelligenceStatus
+    asOf: str = Field(..., min_length=1, max_length=40)
+    sampleOnly: bool
+    sectionCount: int = Field(..., ge=1)
+    sectionOrder: list[str]
+    sections: list[HomepageIntelligenceCockpitSection]
+    noAdviceDisclosure: str = Field(..., min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def _validate_cockpit(self) -> "HomepageIntelligenceCockpitAggregate":
+        if self.schemaVersion != HOMEPAGE_INTELLIGENCE_COCKPIT_SCHEMA_VERSION:
+            raise ValueError("cockpit schemaVersion mismatch")
+        if self.asOf != HOMEPAGE_INTELLIGENCE_DEFAULT_AS_OF:
+            raise ValueError("cockpit asOf must remain deterministic")
+        if self.sampleOnly is not True:
+            raise ValueError("cockpit sampleOnly must remain true")
+        section_keys = [section.key for section in self.sections]
+        if self.sectionOrder != section_keys:
+            raise ValueError("cockpit sectionOrder mismatch")
+        if self.sectionCount != len(section_keys):
+            raise ValueError("cockpit sectionCount mismatch")
+        if len(set(section_keys)) != len(section_keys):
+            raise ValueError("cockpit section keys must be unique")
+        _assert_safe_text(self.model_dump(mode="json"), field_name=self.__class__.__name__)
+        return self
+
+
+class HomepageCockpitModule(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(..., min_length=1, max_length=64)
+    label: str = Field(..., min_length=1, max_length=120)
+    status: HomepageIntelligenceStatus
+    asOf: str = Field(..., min_length=1, max_length=40)
+    summary: str = Field(..., min_length=1, max_length=180)
+    dataQuality: dict[str, Any]
+    evidenceQuality: dict[str, Any]
+    sampleOnly: bool
+    observationOnly: bool
+    noLiveAvailabilityClaim: bool
+
+
+class HomepageCockpitModulesAggregate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: str = Field(default=HOMEPAGE_COCKPIT_MODULES_SCHEMA_VERSION)
+    status: HomepageIntelligenceStatus
+    asOf: str = Field(..., min_length=1, max_length=40)
+    sampleOnly: bool
+    moduleCount: int = Field(..., ge=1)
+    moduleOrder: list[str]
+    modules: list[HomepageCockpitModule]
+    noAdviceDisclosure: str = Field(..., min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def _validate_modules(self) -> "HomepageCockpitModulesAggregate":
+        if self.schemaVersion != HOMEPAGE_COCKPIT_MODULES_SCHEMA_VERSION:
+            raise ValueError("cockpit modules schemaVersion mismatch")
+        if self.asOf != HOMEPAGE_INTELLIGENCE_DEFAULT_AS_OF:
+            raise ValueError("cockpit modules asOf must remain deterministic")
+        if self.sampleOnly is not True:
+            raise ValueError("cockpit modules sampleOnly must remain true")
+        module_keys = [module.key for module in self.modules]
+        if self.moduleOrder != module_keys:
+            raise ValueError("cockpit modules order mismatch")
+        if self.moduleCount != len(module_keys):
+            raise ValueError("cockpit modules count mismatch")
+        if len(set(module_keys)) != len(module_keys):
+            raise ValueError("cockpit module keys must be unique")
+        for module in self.modules:
+            if module.sampleOnly is not True:
+                raise ValueError(f"{module.key} sampleOnly must remain true")
+            if module.observationOnly is not True:
+                raise ValueError(f"{module.key} observationOnly must remain true")
+            if module.noLiveAvailabilityClaim is not True:
+                raise ValueError(f"{module.key} must not claim live availability")
+        _assert_safe_text(self.model_dump(mode="json"), field_name=self.__class__.__name__)
+        return self
+
+
 class HomepageIntelligenceResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -156,6 +255,10 @@ class HomepageIntelligenceResponse(BaseModel):
     sessionStatus: dict[str, Any]
     sourceFreshness: dict[str, Any]
     demo: HomepageIntelligenceDemoBundle
+    intelligenceCockpit: HomepageIntelligenceCockpitAggregate
+    sectionLayout: dict[str, Any]
+    uatReadiness: dict[str, Any]
+    cockpitModules: HomepageCockpitModulesAggregate
     noAdviceDisclosure: str = Field(..., min_length=1, max_length=120)
 
     @model_validator(mode="after")
@@ -174,10 +277,16 @@ class HomepageIntelligenceResponse(BaseModel):
 
 __all__ = [
     "HOMEPAGE_INTELLIGENCE_ALLOWED_SCENARIOS",
+    "HOMEPAGE_COCKPIT_MODULES_SCHEMA_VERSION",
+    "HOMEPAGE_INTELLIGENCE_COCKPIT_SCHEMA_VERSION",
     "HOMEPAGE_INTELLIGENCE_DEFAULT_AS_OF",
     "HOMEPAGE_INTELLIGENCE_DEFAULT_SCENARIO",
     "HOMEPAGE_INTELLIGENCE_NO_ADVICE_DISCLOSURE",
     "HOMEPAGE_INTELLIGENCE_SCHEMA_VERSION",
+    "HomepageCockpitModule",
+    "HomepageCockpitModulesAggregate",
+    "HomepageIntelligenceCockpitAggregate",
+    "HomepageIntelligenceCockpitSection",
     "HomepageIntelligenceDemoBundle",
     "HomepageIntelligenceResponse",
     "HomepageIntelligenceScope",

@@ -63,9 +63,11 @@ FORBIDDEN_ADVICE_TERMS = (
     "清仓",
     "下单",
     "立即交易",
+    "交易建议",
     "交易信号",
     "交易指令",
     "交易执行",
+    "投资建议",
     "目标价",
     "止损",
     "止盈",
@@ -110,6 +112,69 @@ FORBIDDEN_LIVE_DATA_CLAIMS = (
     "realtime",
 )
 DEMO_MARKER_KEYS = {"sampleData", "demoPayload"}
+DISCLOSURE_KEYS = {"noAdviceDisclosure", "demoDisclosure"}
+LEGACY_TOP_LEVEL_KEYS = {
+    "schemaVersion",
+    "status",
+    "scope",
+    "asOf",
+    "sampleOnly",
+    "capabilities",
+    "moduleManifest",
+    "sessionStatus",
+    "sourceFreshness",
+    "demo",
+    "noAdviceDisclosure",
+}
+ADDITIVE_TOP_LEVEL_KEYS = {
+    "intelligenceCockpit",
+    "sectionLayout",
+    "uatReadiness",
+    "cockpitModules",
+}
+EXPECTED_COCKPIT_MODULE_KEYS = (
+    "dailyMarketBrief",
+    "riskRegime",
+    "crossAssetIndicators",
+    "eventImpactMap",
+    "driverChain",
+    "themeCapitalFlow",
+    "researchPriorities",
+    "evidenceQuality",
+    "ratesPricing",
+    "volatilityPositioning",
+    "liquidityCredit",
+    "marketBreadth",
+    "afterCloseDevelopments",
+    "scenarioWatchlist",
+    "earningsCatalysts",
+    "geopoliticalCommodityRisk",
+    "aiCapexInfrastructure",
+    "policyRegulationWatch",
+    "styleLeadershipRotation",
+    "preSessionResearchChecklist",
+)
+FORBIDDEN_COCKPIT_KEY_FRAGMENTS = (
+    "apikey",
+    "api_key",
+    "broker",
+    "cache",
+    "cookie",
+    "debug",
+    "diagnostic",
+    "fallback",
+    "payload",
+    "provider",
+    "raw",
+    "runtime",
+    "secret",
+    "sessionid",
+    "sourceurl",
+    "source_url",
+    "token",
+    "traceback",
+    "url",
+)
 
 
 def _walk(value, path=()):
@@ -124,6 +189,17 @@ def _walk(value, path=()):
 
 def _path_text(path: tuple[str, ...]) -> str:
     return ".".join(path)
+
+
+def _scrub_disclosures(value):
+    if isinstance(value, dict):
+        return {
+            str(key): "<disclosure>" if key in DISCLOSURE_KEYS else _scrub_disclosures(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_scrub_disclosures(item) for item in value]
+    return value
 
 
 def _is_demo_fixture_path(path: tuple[str, ...]) -> bool:
@@ -150,19 +226,9 @@ def test_homepage_intelligence_endpoint_returns_stable_top_level_shape() -> None
     assert response.status_code == 200
     payload = response.json()
 
-    assert set(payload) == {
-        "schemaVersion",
-        "status",
-        "scope",
-        "asOf",
-        "sampleOnly",
-        "capabilities",
-        "moduleManifest",
-        "sessionStatus",
-        "sourceFreshness",
-        "demo",
-        "noAdviceDisclosure",
-    }
+    assert LEGACY_TOP_LEVEL_KEYS <= set(payload)
+    assert ADDITIVE_TOP_LEVEL_KEYS <= set(payload)
+    assert set(payload) == LEGACY_TOP_LEVEL_KEYS | ADDITIVE_TOP_LEVEL_KEYS
     assert payload["schemaVersion"] == "homepage_intelligence_v1"
     assert payload["status"] in {"ready", "partial", "no_evidence", "unavailable"}
     assert payload["scope"] == "homepage_ui_uat_metadata"
@@ -228,7 +294,7 @@ def test_homepage_intelligence_endpoint_is_anonymous_safe_and_optional_auth() ->
 
 def test_homepage_intelligence_service_build_bundle_validates_and_serializes() -> None:
     payload = HomepageIntelligenceService().build_bundle()
-    serialized = json.dumps(payload, ensure_ascii=False).lower()
+    serialized = json.dumps(_scrub_disclosures(payload), ensure_ascii=False).lower()
 
     assert payload["schemaVersion"] == "homepage_intelligence_v1"
     assert payload["capabilities"]["schemaVersion"] == "homepage_capabilities_v1"
@@ -252,7 +318,7 @@ def test_homepage_intelligence_payload_avoids_advice_diagnostics_and_live_claims
         client.close()
 
     assert response.status_code == 200
-    serialized = json.dumps(response.json(), ensure_ascii=False).lower()
+    serialized = json.dumps(_scrub_disclosures(response.json()), ensure_ascii=False).lower()
 
     for marker in FORBIDDEN_ADVICE_TERMS:
         assert marker.lower() not in serialized
@@ -282,9 +348,17 @@ def test_homepage_intelligence_metadata_sections_do_not_claim_live_data() -> Non
     payload = _build_payload()
     metadata = {
         key: payload[key]
-        for key in ("capabilities", "moduleManifest", "sessionStatus", "sourceFreshness")
+        for key in (
+            "capabilities",
+            "moduleManifest",
+            "sessionStatus",
+            "sourceFreshness",
+            "sectionLayout",
+            "uatReadiness",
+            "cockpitModules",
+        )
     }
-    serialized = json.dumps(metadata, ensure_ascii=False).lower()
+    serialized = json.dumps(_scrub_disclosures(metadata), ensure_ascii=False).lower()
 
     for marker in FORBIDDEN_LIVE_DATA_CLAIMS:
         assert marker.lower() not in serialized
@@ -302,7 +376,7 @@ def test_homepage_intelligence_payload_has_no_internal_keys_or_urls() -> None:
         for marker in FORBIDDEN_INTERNAL_MARKERS
         if marker.lower().replace("_", "") in key.lower().replace("_", "")
     ]
-    serialized = json.dumps(payload, ensure_ascii=False).lower()
+    serialized = json.dumps(_scrub_disclosures(payload), ensure_ascii=False).lower()
 
     assert key_paths == []
     for marker in FORBIDDEN_INTERNAL_MARKERS:
@@ -314,3 +388,65 @@ def test_homepage_intelligence_response_remains_json_serializable() -> None:
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
     assert json.loads(encoded) == payload
+
+
+def test_homepage_intelligence_adds_layout_uat_and_projected_cockpit_modules() -> None:
+    payload = _build_payload()
+
+    section_layout = payload["sectionLayout"]
+    assert section_layout["status"] in {"ready", "partial", "no_evidence", "unavailable"}
+    assert section_layout["asOf"] == payload["asOf"]
+    assert section_layout["sampleOnly"] is True
+    assert section_layout["sections"]
+    assert all(
+        set(section) == {"key", "label", "priority", "region", "density", "required", "reviewPoint"}
+        for section in section_layout["sections"]
+    )
+
+    uat_readiness = payload["uatReadiness"]
+    assert uat_readiness["asOf"] == payload["asOf"]
+    assert uat_readiness["sampleOnly"] is True
+    assert uat_readiness["status"] in {"pass", "review", "blocked", "no_evidence"}
+    assert uat_readiness["checks"]
+
+    cockpit_modules = payload["cockpitModules"]
+    assert cockpit_modules["schemaVersion"] == "homepage_cockpit_modules_v1"
+    assert cockpit_modules["asOf"] == payload["asOf"]
+    assert cockpit_modules["sampleOnly"] is True
+    assert cockpit_modules["moduleOrder"] == list(EXPECTED_COCKPIT_MODULE_KEYS)
+    assert cockpit_modules["moduleCount"] == len(EXPECTED_COCKPIT_MODULE_KEYS)
+    assert [module["key"] for module in cockpit_modules["modules"]] == list(EXPECTED_COCKPIT_MODULE_KEYS)
+
+    for module in cockpit_modules["modules"]:
+        assert set(module) == {
+            "key",
+            "label",
+            "status",
+            "asOf",
+            "summary",
+            "dataQuality",
+            "evidenceQuality",
+            "sampleOnly",
+            "observationOnly",
+            "noLiveAvailabilityClaim",
+        }
+        assert module["sampleOnly"] is True
+        assert module["observationOnly"] is True
+        assert module["noLiveAvailabilityClaim"] is True
+
+
+def test_homepage_cockpit_modules_do_not_expose_raw_or_internal_standalone_fields() -> None:
+    payload = _build_payload()
+    cockpit_modules = payload["cockpitModules"]
+    leaked_key_paths = [
+        _path_text(path)
+        for path, _value in _walk(cockpit_modules)
+        if path
+        for marker in FORBIDDEN_COCKPIT_KEY_FRAGMENTS
+        if marker in path[-1].lower().replace("_", "").replace("-", "")
+    ]
+    serialized = json.dumps(_scrub_disclosures(cockpit_modules), ensure_ascii=False).lower()
+
+    assert leaked_key_paths == []
+    for marker in FORBIDDEN_ADVICE_TERMS:
+        assert marker.lower() not in serialized
