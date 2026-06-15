@@ -76,6 +76,26 @@ class HomepageCapabilitySection(BaseModel):
 class HomepageCapabilityFlags(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    dailyMarketBrief: bool = True
+    riskRegime: bool = True
+    crossAssetIndicators: bool = True
+    eventImpactMap: bool = True
+    driverChain: bool = True
+    themeCapitalFlow: bool = True
+    researchPriorities: bool = True
+    evidenceQuality: bool = True
+    ratesPricing: bool = True
+    volatilityPositioning: bool = True
+    liquidityCredit: bool = True
+    marketBreadth: bool = True
+    afterCloseDevelopments: bool = True
+    scenarioWatchlist: bool = True
+    earningsCatalysts: bool = True
+    geopoliticalCommodityRisk: bool = True
+    aiCapexInfrastructure: bool = True
+    policyRegulationWatch: bool = True
+    styleLeadershipRotation: bool = True
+    preSessionResearchChecklist: bool = True
     marketPulse: bool = True
     moneyFlowProxy: bool = True
     eventRadar: bool = True

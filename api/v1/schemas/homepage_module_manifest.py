@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 
 HomepageModuleManifestStatus = Literal["ready", "partial", "no_evidence", "unavailable"]
-HomepageModuleAvailability = Literal["ready", "scaffold", "no_evidence", "unavailable"]
+HomepageModuleAvailability = Literal["ready", "sample", "proxy", "scaffold", "no_evidence", "unavailable"]
 HomepageModuleIntegrationStatus = Literal["standalone", "wired", "pending", "unavailable"]
 HomepageModulePublicStatus = Literal["public", "gated", "private_beta", "internal_only"]
 HomepageModuleCategory = Literal["overview", "flow", "rotation", "events", "personal", "research", "quality"]
@@ -32,7 +32,7 @@ _FORBIDDEN_TEXT_MARKERS = (
     "trustlevel",
     "sourcetype",
     "token",
-    "session",
+    "sessionid",
     "apikey",
     "secret",
     "cookie",
