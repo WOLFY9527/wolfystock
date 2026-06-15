@@ -580,6 +580,49 @@ class MarketTemperatureApiTestCase(unittest.TestCase):
         self.assertTrue(semantics["claimBoundaries"])
         self.assertTrue(semantics["notInvestmentAdvice"])
 
+    def test_market_regime_decision_route_returns_decision_engine_payload(self) -> None:
+        service = MagicMock()
+        service.get_market_regime_decision.return_value = {
+            "schemaVersion": "market_regime_decision_engine.v1",
+            "regime": "riskOn",
+            "confidence": "medium",
+            "driverScores": {
+                "dealerGamma": {"score": 0, "evidenceState": "unavailable", "reasons": ["live_gex_not_implemented_v1"]},
+                "breadthParticipation": {"score": 42, "evidenceState": "score_grade", "reasons": []},
+                "volatilityStructure": {"score": 35, "evidenceState": "score_grade", "reasons": []},
+                "ratesDollar": {"score": 18, "evidenceState": "score_grade", "reasons": []},
+                "liquidityCredit": {"score": 44, "evidenceState": "score_grade", "reasons": []},
+                "crossAssetRisk": {"score": 37, "evidenceState": "score_grade", "reasons": []},
+                "sectorThemeRotation": {"score": 28, "evidenceState": "score_grade", "reasons": []},
+                "eventCatalyst": {"score": 0, "evidenceState": "unavailable", "reasons": ["event_evidence_missing"]},
+            },
+            "explanation": {
+                "whyThisRegime": ["riskOn selected from deterministic driver agreement."],
+                "whatConfirmsIt": ["Score-grade confirmation."],
+                "whatInvalidatesIt": ["Opposite score-grade evidence."],
+                "keyTriggerLevels": ["VIX value=13.5"],
+            },
+            "researchPriorities": {
+                "watchToday": ["Breadth participation"],
+                "needsMoreEvidence": ["dealerGamma:unavailable"],
+                "investigateNext": ["Confirm driver persistence."],
+            },
+            "dataQuality": {"confidenceCapReasons": []},
+            "missingEvidence": ["dealerGamma:unavailable"],
+            "noAdviceDisclosure": "Research support only; not personalized financial advice.",
+        }
+
+        with patch("api.v1.endpoints.market.MarketOverviewService", return_value=service):
+            payload = market.get_regime_decision()
+
+        self.assertEqual(payload["schemaVersion"], "market_regime_decision_engine.v1")
+        self.assertEqual(payload["regime"], "riskOn")
+        self.assertEqual(payload["confidence"], "medium")
+        self.assertEqual(payload["driverScores"]["dealerGamma"]["evidenceState"], "unavailable")
+        service.get_market_regime_decision.assert_called_once_with(
+            actor={"actor_type": "anonymous", "role": "anonymous", "display_name": "Anonymous"}
+        )
+
     def test_market_temperature_research_readiness_additive_compatibility_preserves_existing_payload(self) -> None:
         service = MarketOverviewService()
 

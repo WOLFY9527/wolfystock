@@ -101,6 +101,7 @@ from src.services.market_intelligence_trust_gate import (
 from src.services.market_decision_semantics import derive_market_decision_semantics
 from src.services.market_intelligence_actionability import build_market_actionability_frame
 from src.services.market_intelligence_evidence import build_market_intelligence_evidence_frame
+from src.services.market_regime_decision_engine import build_market_regime_decision
 from src.services.market_regime_synthesis_adapter import (
     build_liquidity_impulse_synthesis_payload,
     build_market_regime_synthesis_payload,
@@ -1386,6 +1387,18 @@ class MarketOverviewService:
             allow_stale=False,
             background_refresh=False,
         )
+
+    def get_market_regime_decision(self, actor: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        try:
+            inputs = self._get_market_temperature_input_snapshot()
+            input_source = "market_temperature_input_snapshot"
+        except Exception:
+            inputs = self._fallback_market_temperature_inputs()
+            input_source = "fallback_market_temperature_inputs"
+        payload = build_market_regime_decision(inputs)
+        payload["updatedAt"] = _now_iso()
+        payload["inputSource"] = input_source
+        return payload
 
     def _build_market_regime_synthesis_payload(self, inputs: Mapping[str, Any]) -> Dict[str, Any]:
         return build_market_regime_synthesis_payload(inputs)
