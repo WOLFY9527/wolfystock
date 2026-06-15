@@ -482,6 +482,30 @@ class PortfolioHistoryResponse(BaseModel):
     metadata: PortfolioHistoryMetadata = Field(default_factory=PortfolioHistoryMetadata)
 
 
+class PortfolioStructureReviewHolding(BaseModel):
+    ticker: str
+    structureState: str
+    confidence: Literal["high", "medium", "low"]
+    evidenceQuality: Dict[str, Any]
+    riskFlags: List[str] = Field(default_factory=list)
+    researchNotes: Dict[str, List[str]] = Field(default_factory=dict)
+    missingEvidence: List[Dict[str, str]] = Field(default_factory=list)
+
+
+class PortfolioStructureReviewResponse(BaseModel):
+    schemaVersion: str
+    aggregateSummary: Dict[str, Any] = Field(default_factory=dict)
+    exposureByThemeOrSector: List[Dict[str, Any]] = Field(default_factory=list)
+    countsByStructureState: Dict[str, int] = Field(default_factory=dict)
+    holdingsStructure: List[PortfolioStructureReviewHolding] = Field(default_factory=list)
+    strongestStructures: List[Dict[str, Any]] = Field(default_factory=list)
+    weakestEvidence: List[Dict[str, Any]] = Field(default_factory=list)
+    commonRiskFlags: List[Dict[str, Any]] = Field(default_factory=list)
+    missingEvidence: List[Dict[str, str]] = Field(default_factory=list)
+    dataQuality: Dict[str, Any] = Field(default_factory=dict)
+    noAdviceDisclosure: str
+
+
 class PortfolioImportTradeItem(BaseModel):
     trade_date: str
     symbol: str
