@@ -351,3 +351,46 @@ class StockEvidenceResponse(BaseModel):
     symbols: List[str] = Field(default_factory=list, description="归一化后的股票代码列表")
     items: List[StockEvidenceItemResponse] = Field(default_factory=list, description="单股票证据项列表")
     meta: Optional[StockEvidenceMetaResponse] = Field(None, description="响应元信息")
+
+
+class StockStructureDecisionDataQuality(BaseModel):
+    """结构判断输入数据质量。"""
+
+    status: Literal["available", "partial", "insufficient", "unavailable"] = Field(
+        ...,
+        description="OHLCV 证据可用性状态",
+    )
+    source: str = Field(..., description="历史行情来源标签")
+    period: str = Field(..., description="使用的 K 线周期")
+    requested_days: int = Field(..., alias="requestedDays", description="请求的历史天数")
+    observed_bars: int = Field(..., alias="observedBars", description="观察到的日线数量")
+    usable_bars: int = Field(..., alias="usableBars", description="可用于结构判断的日线数量")
+    reason: str = Field(..., description="数据质量原因码")
+
+
+class StockStructureDecisionMissingEvidence(BaseModel):
+    """结构判断缺失证据项。"""
+
+    kind: str = Field(..., description="缺失证据类型")
+    message: str = Field(..., description="面向研究使用的缺失证据说明")
+
+
+class StockStructureDecisionResponse(BaseModel):
+    """单股票结构判断响应。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    schema_version: str = Field(..., alias="schemaVersion", description="API 响应 schema 版本")
+    ticker: str = Field(..., description="股票代码")
+    structure_state: str = Field(..., alias="structureState", description="结构状态")
+    confidence: Literal["high", "medium", "low"] = Field(..., description="结构判断置信度")
+    component_scores: Dict[str, int] = Field(..., alias="componentScores", description="组件分数")
+    explanation: Dict[str, Any] = Field(..., description="结构说明")
+    research_notes: Dict[str, List[str]] = Field(..., alias="researchNotes", description="研究观察备注")
+    data_quality: StockStructureDecisionDataQuality = Field(..., alias="dataQuality", description="输入数据质量")
+    missing_evidence: List[StockStructureDecisionMissingEvidence] = Field(
+        ...,
+        alias="missingEvidence",
+        description="缺失证据列表",
+    )
+    no_advice_disclosure: str = Field(..., alias="noAdviceDisclosure", description="非个性化建议披露")

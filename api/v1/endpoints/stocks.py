@@ -21,6 +21,7 @@ from api.v1.schemas.stocks import (
     ExtractItem,
     IntradayBar,
     KLineData,
+    StockStructureDecisionResponse,
     StockEvidenceResponse,
     StockHistoryResponse,
     StockIntradayResponse,
@@ -40,6 +41,7 @@ from src.services.import_parser import (
 )
 from src.services.agent_stock_evidence_service import StockEvidenceService
 from src.services.stock_service import StockService
+from src.services.stock_structure_decision_service import StockStructureDecisionService
 from src.utils.symbol_validation import (
     ConsumerSymbolPrecheck,
     validate_consumer_symbol_precheck,
@@ -408,6 +410,32 @@ def get_stock_evidence(stock_code: str) -> StockEvidenceResponse:
             detail={
                 "error": "internal_error",
                 "message": f"获取股票证据失败: {str(e)}",
+            },
+        )
+
+
+@router.get(
+    "/{stock_code}/structure-decision",
+    response_model=StockStructureDecisionResponse,
+    response_model_exclude_none=True,
+    responses={
+        200: {"description": "单股票结构判断"},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取股票结构判断",
+    description="返回 Stock Structure Decision Engine 的观察型结构判断；不构成交易建议。",
+)
+def get_stock_structure_decision(stock_code: str) -> StockStructureDecisionResponse:
+    try:
+        payload = StockStructureDecisionService().get_structure_decision(stock_code)
+        return StockStructureDecisionResponse.model_validate(payload)
+    except Exception as e:
+        logger.error("获取股票结构判断失败: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": "获取股票结构判断失败",
             },
         )
 
