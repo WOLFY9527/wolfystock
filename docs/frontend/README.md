@@ -57,6 +57,23 @@ Point-in-time frontend audit and CSS evidence moved to
 | Admin/Ops | OpsConsole | [Admin/Ops domain](../admin-ops/README.md) |
 | Settings | PreferenceConsole | [Visual System](./visual-system.md#route-surface-taxonomy) |
 
+## Additive Rough Shell Routes
+
+The current frontend also exposes three additive rough-shell routes intended
+for information architecture handoff and not for final visual sign-off:
+
+- `GET /market/decision-cockpit` consumer route:
+  `apps/dsa-web/src/pages/MarketDecisionCockpitPage.tsx`
+- `GET /stocks/:stockCode/structure-decision` consumer route:
+  `apps/dsa-web/src/pages/StockStructureDecisionPage.tsx`
+- `GET /research/radar` authenticated route:
+  `apps/dsa-web/src/pages/ResearchRadarPage.tsx`
+
+These routes intentionally reuse the shared Shell plus consumer workspace
+primitives, stay additive, avoid global navigation expansion, and keep
+observation-only / research-only copy boundaries while Open Design prepares the
+later full redesign.
+
 ## Implementation Rules
 
 - Preserve frontend behavior, route permissions, API contracts, provider

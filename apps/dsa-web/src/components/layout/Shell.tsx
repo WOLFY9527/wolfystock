@@ -85,6 +85,15 @@ function resolveMobileRouteLabel(pathname: string, t: (key: string) => string, l
   if (pathname === '/' || pathname === '') {
     return t('nav.home');
   }
+  if (pathname.startsWith('/market/decision-cockpit')) {
+    return language === 'en' ? 'Market Decision Cockpit' : '市场决策驾驶舱';
+  }
+  if (/^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(pathname)) {
+    return language === 'en' ? 'Stock Structure Panel' : '个股结构面板';
+  }
+  if (pathname.startsWith('/research/radar')) {
+    return language === 'en' ? 'Research Radar' : '研究雷达';
+  }
   const adminRouteLabel = resolveAdminOpsRouteLabel(pathname, language);
   if (adminRouteLabel) {
     return adminRouteLabel;
@@ -333,9 +342,12 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const isHomeRoute = surfacePathname === '/' || surfacePathname === '';
   const isBacktestRoute = surfacePathname.startsWith('/backtest');
   const isMarketOverviewRoute = surfacePathname.startsWith('/market-overview');
+  const isMarketDecisionCockpitRoute = surfacePathname.startsWith('/market/decision-cockpit');
   const isLiquidityMonitorRoute = surfacePathname.startsWith('/market/liquidity-monitor');
   const isRotationRadarRoute = surfacePathname.startsWith('/market/rotation-radar');
+  const isStockStructureDecisionRoute = /^\/stocks\/[^/]+\/structure-decision(?:\/)?$/i.test(surfacePathname);
   const isScannerRoute = surfacePathname.startsWith('/scanner');
+  const isResearchRadarRoute = surfacePathname.startsWith('/research/radar');
   const isWatchlistRoute = surfacePathname.startsWith('/watchlist');
   const isPortfolioRoute = surfacePathname.startsWith('/portfolio');
   const isOptionsLabRoute = surfacePathname.startsWith('/options-lab');
@@ -343,9 +355,12 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const isConsumerShellRoute = isHomeRoute
     || isBacktestRoute
     || isMarketOverviewRoute
+    || isMarketDecisionCockpitRoute
     || isLiquidityMonitorRoute
     || isRotationRadarRoute
+    || isStockStructureDecisionRoute
     || isScannerRoute
+    || isResearchRadarRoute
     || isWatchlistRoute
     || isPortfolioRoute
     || isOptionsLabRoute;

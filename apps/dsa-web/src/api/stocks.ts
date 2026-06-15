@@ -103,6 +103,47 @@ export type StockValidationResponse = {
   stockName?: string | null;
 };
 
+export type StockStructureDecisionKeyLevel = {
+  kind?: string | null;
+  value?: number | null;
+  description?: string | null;
+};
+
+export type StockStructureDecisionResponse = {
+  schemaVersion: string;
+  ticker: string;
+  structureState: string;
+  confidence: string;
+  componentScores: Record<string, number>;
+  explanation: {
+    whyThisStructure?: string | null;
+    whatConfirmsIt?: string[];
+    whatInvalidatesIt?: string[];
+    keyLevels?: StockStructureDecisionKeyLevel[];
+  };
+  researchNotes: {
+    watchNext?: string[];
+    needsMoreEvidence?: string[];
+    riskFlags?: string[];
+  };
+  dataQuality: {
+    status?: string | null;
+    source?: string | null;
+    period?: string | null;
+    requestedDays?: number | null;
+    observedBars?: number | null;
+    usableBars?: number | null;
+    reason?: string | null;
+  };
+  missingEvidence: Array<{
+    kind?: string | null;
+    code?: string | null;
+    field?: string | null;
+    message?: string | null;
+  }>;
+  noAdviceDisclosure: string;
+};
+
 export type StockQuoteSourceConfidence = {
   source?: string | null;
   sourceLabel?: string | null;
@@ -202,6 +243,39 @@ function normalizeStockIntradayResponse(payload: unknown): StockIntradayResponse
   };
 }
 
+function normalizeStockStructureDecisionResponse(payload: unknown): StockStructureDecisionResponse {
+  const normalized = toCamelCase<StockStructureDecisionResponse>(payload);
+  return {
+    schemaVersion: normalized.schemaVersion,
+    ticker: normalized.ticker,
+    structureState: normalized.structureState,
+    confidence: normalized.confidence,
+    componentScores: normalized.componentScores ?? {},
+    explanation: {
+      whyThisStructure: normalized.explanation?.whyThisStructure ?? null,
+      whatConfirmsIt: normalized.explanation?.whatConfirmsIt ?? [],
+      whatInvalidatesIt: normalized.explanation?.whatInvalidatesIt ?? [],
+      keyLevels: normalized.explanation?.keyLevels ?? [],
+    },
+    researchNotes: {
+      watchNext: normalized.researchNotes?.watchNext ?? [],
+      needsMoreEvidence: normalized.researchNotes?.needsMoreEvidence ?? [],
+      riskFlags: normalized.researchNotes?.riskFlags ?? [],
+    },
+    dataQuality: {
+      status: normalized.dataQuality?.status ?? null,
+      source: normalized.dataQuality?.source ?? null,
+      period: normalized.dataQuality?.period ?? null,
+      requestedDays: normalized.dataQuality?.requestedDays ?? null,
+      observedBars: normalized.dataQuality?.observedBars ?? null,
+      usableBars: normalized.dataQuality?.usableBars ?? null,
+      reason: normalized.dataQuality?.reason ?? null,
+    },
+    missingEvidence: normalized.missingEvidence ?? [],
+    noAdviceDisclosure: normalized.noAdviceDisclosure,
+  };
+}
+
 export const stocksApi = {
   async verifyTickerExists(stockCode: string): Promise<StockValidationResponse> {
     const response = await apiClient.get(`/api/v1/stocks/${encodeURIComponent(stockCode)}/validate`);
@@ -211,6 +285,11 @@ export const stocksApi = {
   async getQuote(stockCode: string): Promise<StockQuote> {
     const response = await apiClient.get(`/api/v1/stocks/${encodeURIComponent(stockCode)}/quote`);
     return normalizeStockQuoteResponse(response.data);
+  },
+
+  async getStructureDecision(stockCode: string): Promise<StockStructureDecisionResponse> {
+    const response = await apiClient.get(`/api/v1/stocks/${encodeURIComponent(stockCode)}/structure-decision`);
+    return normalizeStockStructureDecisionResponse(response.data);
   },
 
   async getHistory(
