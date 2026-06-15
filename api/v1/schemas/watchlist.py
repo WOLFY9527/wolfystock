@@ -272,3 +272,41 @@ class WatchlistScoreRefreshStatusResponse(BaseModel):
     hk_time: str
     max_symbols: int
     running: bool = False
+
+
+class WatchlistResearchOverlayFreshnessResponse(BaseModel):
+    state: str
+    lastReviewedAt: Optional[str] = None
+    ohlcvState: str
+
+
+class WatchlistResearchOverlayItemResponse(BaseModel):
+    ticker: str
+    structureState: Optional[str] = None
+    researchPriority: Optional[str] = None
+    whyWatching: Optional[str] = None
+    whyOnRadar: Optional[str] = None
+    whatToVerify: List[str] = Field(default_factory=list)
+    riskFlags: List[str] = Field(default_factory=list)
+    evidenceGaps: List[str] = Field(default_factory=list)
+    freshness: WatchlistResearchOverlayFreshnessResponse
+    themeOrSector: Optional[str] = None
+
+
+class WatchlistResearchOverlayDataQualityResponse(BaseModel):
+    state: str
+    itemCount: int = 0
+    readyCount: int = 0
+    degradedCount: int = 0
+    unavailableCount: int = 0
+    missingEvidenceCount: int = 0
+    failClosed: bool = True
+
+
+class WatchlistResearchOverlayResponse(BaseModel):
+    schemaVersion: Literal["watchlist_research_overlay_v1"] = "watchlist_research_overlay_v1"
+    items: List[WatchlistResearchOverlayItemResponse] = Field(default_factory=list)
+    aggregateSummary: Dict[str, Dict[str, int]] = Field(default_factory=dict)
+    missingEvidence: List[str] = Field(default_factory=list)
+    dataQuality: WatchlistResearchOverlayDataQualityResponse
+    noAdviceDisclosure: str

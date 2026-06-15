@@ -15,12 +15,14 @@ from api.v1.schemas.watchlist import (
     WatchlistItemCreateRequest,
     WatchlistItemListResponse,
     WatchlistItemResponse,
+    WatchlistResearchOverlayResponse,
     WatchlistScoreRefreshRequest,
     WatchlistScoreRefreshResponse,
     WatchlistScoreRefreshStatusResponse,
 )
 from src.config import get_config
 from src.services.execution_log_service import ExecutionLogService
+from src.services.watchlist_research_overlay_service import WatchlistResearchOverlayService
 from src.services.watchlist_service import WatchlistService
 
 logger = logging.getLogger(__name__)
@@ -32,6 +34,10 @@ WATCHLIST_INTERNAL_ERROR_MESSAGE = "Watchlist data is temporarily unavailable. P
 
 def _get_watchlist_service() -> WatchlistService:
     return WatchlistService()
+
+
+def _get_watchlist_research_overlay_service() -> WatchlistResearchOverlayService:
+    return WatchlistResearchOverlayService()
 
 
 def service_refresh_running() -> bool:
@@ -124,6 +130,23 @@ def list_watchlist_items(
         )
     except Exception as exc:
         raise _internal_error("List watchlist items failed", exc) from exc
+
+
+@router.get(
+    "/research-overlay",
+    response_model=WatchlistResearchOverlayResponse,
+    responses={500: {"model": ErrorResponse}},
+    summary="Get read-only watchlist research overlay",
+)
+def get_watchlist_research_overlay(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> WatchlistResearchOverlayResponse:
+    service = _get_watchlist_research_overlay_service()
+    try:
+        payload = service.build_overlay(owner_id=current_user.user_id)
+        return WatchlistResearchOverlayResponse(**payload)
+    except Exception as exc:
+        raise _internal_error("Build watchlist research overlay failed", exc) from exc
 
 
 @router.post(
