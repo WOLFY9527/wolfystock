@@ -80,14 +80,20 @@ FORBIDDEN_ADVICE_TERMS = (
 )
 FORBIDDEN_INTERNAL_MARKERS = (
     "provider",
+    "fallback",
     "diagnostic",
     "debug",
     "traceback",
     "raw payload",
     "raw_provider",
+    "raw",
     "reasoncode",
     "trustlevel",
     "sourcetype",
+    "sourceType",
+    "reasonCode",
+    "trustLevel",
+    "scaffold",
     "token",
     "secret",
     "cookie",
@@ -103,6 +109,29 @@ FORBIDDEN_LIVE_DATA_CLAIMS = (
     "real-time",
     "realtime",
 )
+DEMO_MARKER_KEYS = {"sampleData", "demoPayload"}
+
+
+def _walk(value, path=()):
+    yield path, value
+    if isinstance(value, dict):
+        for key, item in value.items():
+            yield from _walk(item, (*path, str(key)))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from _walk(item, (*path, str(index)))
+
+
+def _path_text(path: tuple[str, ...]) -> str:
+    return ".".join(path)
+
+
+def _is_demo_fixture_path(path: tuple[str, ...]) -> bool:
+    return len(path) >= 4 and path[0] == "demo" and path[1] == "scenarios"
+
+
+def _build_payload() -> dict:
+    return HomepageIntelligenceService().build_bundle()
 
 
 def _route_only_client() -> TestClient:
@@ -142,6 +171,42 @@ def test_homepage_intelligence_endpoint_returns_stable_top_level_shape() -> None
     assert payload["capabilities"]["schemaVersion"] == "homepage_capabilities_v1"
     assert payload["moduleManifest"]["asOf"] == "2026-06-14T09:30:00Z"
     assert payload["sessionStatus"]["asOf"] == "2026-06-14T09:30:00Z"
+    assert set(payload["capabilities"]) == {
+        "schemaVersion",
+        "status",
+        "sections",
+        "capabilities",
+        "dataQuality",
+        "noAdviceDisclosure",
+    }
+    assert set(payload["moduleManifest"]) == {
+        "status",
+        "asOf",
+        "modules",
+        "dataQuality",
+        "noAdviceDisclosure",
+    }
+    assert set(payload["sessionStatus"]) == {
+        "status",
+        "market",
+        "sessionState",
+        "label",
+        "asOf",
+        "timezone",
+        "message",
+        "dataQuality",
+        "noAdviceDisclosure",
+    }
+    assert set(payload["sourceFreshness"]) == {
+        "status",
+        "asOf",
+        "sources",
+        "overallFreshness",
+        "staleCount",
+        "unavailableCount",
+        "message",
+        "noAdviceDisclosure",
+    }
     assert payload["demo"]["defaultScenario"] == "happy_path"
     assert set(payload["demo"]["scenarios"]) == {"happy_path", "degraded_example"}
 
@@ -157,6 +222,8 @@ def test_homepage_intelligence_endpoint_is_anonymous_safe_and_optional_auth() ->
     endpoint_source = ENDPOINT_PATH.read_text(encoding="utf-8")
     assert "get_optional_current_user" in endpoint_source
     assert "Depends(get_optional_current_user)" in endpoint_source
+    assert '"/intelligence"' in endpoint_source
+    assert "response_model=HomepageIntelligenceResponse" in endpoint_source
 
 
 def test_homepage_intelligence_service_build_bundle_validates_and_serializes() -> None:
@@ -193,3 +260,57 @@ def test_homepage_intelligence_payload_avoids_advice_diagnostics_and_live_claims
         assert marker.lower() not in serialized
     for marker in FORBIDDEN_LIVE_DATA_CLAIMS:
         assert marker.lower() not in serialized
+
+
+def test_homepage_intelligence_demo_markers_are_scoped_to_demo_fixtures() -> None:
+    payload = _build_payload()
+    marker_paths = [
+        (*path, key)
+        for path, value in _walk(payload)
+        if isinstance(value, dict)
+        for key in value
+        if key in DEMO_MARKER_KEYS
+    ]
+
+    assert marker_paths
+    assert all(_is_demo_fixture_path(path) for path in marker_paths), [
+        _path_text(path) for path in marker_paths
+    ]
+
+
+def test_homepage_intelligence_metadata_sections_do_not_claim_live_data() -> None:
+    payload = _build_payload()
+    metadata = {
+        key: payload[key]
+        for key in ("capabilities", "moduleManifest", "sessionStatus", "sourceFreshness")
+    }
+    serialized = json.dumps(metadata, ensure_ascii=False).lower()
+
+    for marker in FORBIDDEN_LIVE_DATA_CLAIMS:
+        assert marker.lower() not in serialized
+    assert "sampledata" not in serialized
+    assert "demopayload" not in serialized
+
+
+def test_homepage_intelligence_payload_has_no_internal_keys_or_urls() -> None:
+    payload = _build_payload()
+    key_paths = [
+        _path_text((*path, key))
+        for path, value in _walk(payload)
+        if isinstance(value, dict)
+        for key in value
+        for marker in FORBIDDEN_INTERNAL_MARKERS
+        if marker.lower().replace("_", "") in key.lower().replace("_", "")
+    ]
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+
+    assert key_paths == []
+    for marker in FORBIDDEN_INTERNAL_MARKERS:
+        assert marker.lower() not in serialized
+
+
+def test_homepage_intelligence_response_remains_json_serializable() -> None:
+    payload = _build_payload()
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+    assert json.loads(encoded) == payload

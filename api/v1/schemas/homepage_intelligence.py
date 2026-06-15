@@ -7,11 +7,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from api.v1.schemas.homepage_capabilities import HomepageCapabilitiesSnapshot
-from api.v1.schemas.homepage_module_manifest import HomepageModuleManifestResponse
-from api.v1.schemas.market_session_status import MarketSessionStatusContract
-from api.v1.schemas.source_freshness_summary import SourceFreshnessSummary
-
 
 HomepageIntelligenceStatus = Literal["ready", "partial", "no_evidence", "unavailable"]
 HomepageIntelligenceScope = Literal["homepage_ui_uat_metadata"]
@@ -39,17 +34,27 @@ _FORBIDDEN_TEXT_MARKERS = (
     "sellnow",
     "placeorder",
     "targetprice",
+    "buy now",
+    "sell now",
+    "place order",
+    "target price",
     "traceback",
     "provider",
+    "fallback",
+    "diagnostic",
+    "debug",
     "reasoncode",
     "trustlevel",
     "sourcetype",
     "rawpayload",
+    "raw provider",
+    "raw_provider",
     "token",
     "secret",
     "cookie",
     "sessionid",
     "apikey",
+    "api key",
     "http://",
     "https://",
     "livedata",
@@ -57,13 +62,28 @@ _FORBIDDEN_TEXT_MARKERS = (
     "realtime",
     "real-time",
 )
+_FORBIDDEN_KEY_MARKERS = (
+    "fallback",
+    "trustlevel",
+    "sourcetype",
+    "reasoncode",
+    "raw",
+    "provider",
+    "traceback",
+    "scaffold",
+)
+_DEMO_MARKER_KEYS = frozenset({"sampleData", "demoPayload"})
+
+
+def _compact(value: str) -> str:
+    return value.lower().replace("_", "").replace(" ", "").replace("-", "")
 
 
 def _assert_safe_text(value: Any, *, field_name: str) -> None:
     if isinstance(value, str):
-        compact = value.lower().replace("_", "").replace(" ", "").replace("-", "")
+        compact = _compact(value)
         for marker in _FORBIDDEN_TEXT_MARKERS:
-            if marker in compact:
+            if _compact(marker) in compact:
                 raise ValueError(f"{field_name} contains forbidden text marker: {marker}")
         return
     if isinstance(value, BaseModel):
@@ -71,11 +91,35 @@ def _assert_safe_text(value: Any, *, field_name: str) -> None:
         return
     if isinstance(value, dict):
         for key, item in value.items():
+            key_compact = _compact(str(key))
+            for marker in _FORBIDDEN_KEY_MARKERS:
+                if marker in key_compact:
+                    raise ValueError(f"{field_name}.{key} contains forbidden key marker: {marker}")
             _assert_safe_text(item, field_name=f"{field_name}.{key}")
         return
     if isinstance(value, (list, tuple)):
         for index, item in enumerate(value):
             _assert_safe_text(item, field_name=f"{field_name}[{index}]")
+
+
+def _assert_demo_marker_scope(value: Any, *, path: tuple[str, ...] = ()) -> None:
+    if isinstance(value, BaseModel):
+        _assert_demo_marker_scope(value.model_dump(mode="json"), path=path)
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            child_path = (*path, str(key))
+            if key in _DEMO_MARKER_KEYS and not _is_demo_fixture_path(path):
+                raise ValueError(f"{'.'.join(child_path)} must stay inside demo fixture subtree")
+            _assert_demo_marker_scope(item, path=child_path)
+        return
+    if isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            _assert_demo_marker_scope(item, path=(*path, str(index)))
+
+
+def _is_demo_fixture_path(path: tuple[str, ...]) -> bool:
+    return len(path) >= 3 and path[0] == "demo" and path[1] == "scenarios"
 
 
 class HomepageIntelligenceDemoBundle(BaseModel):
@@ -107,10 +151,10 @@ class HomepageIntelligenceResponse(BaseModel):
     scope: HomepageIntelligenceScope
     asOf: str = Field(..., min_length=1, max_length=40)
     sampleOnly: bool
-    capabilities: HomepageCapabilitiesSnapshot
-    moduleManifest: HomepageModuleManifestResponse
-    sessionStatus: MarketSessionStatusContract
-    sourceFreshness: SourceFreshnessSummary
+    capabilities: dict[str, Any]
+    moduleManifest: dict[str, Any]
+    sessionStatus: dict[str, Any]
+    sourceFreshness: dict[str, Any]
     demo: HomepageIntelligenceDemoBundle
     noAdviceDisclosure: str = Field(..., min_length=1, max_length=120)
 
@@ -122,7 +166,9 @@ class HomepageIntelligenceResponse(BaseModel):
             raise ValueError("asOf must remain deterministic for metadata/UAT payloads")
         if self.sampleOnly is not True:
             raise ValueError("sampleOnly must remain true")
-        _assert_safe_text(self.model_dump(mode="json"), field_name=self.__class__.__name__)
+        dumped = self.model_dump(mode="json")
+        _assert_demo_marker_scope(dumped)
+        _assert_safe_text(dumped, field_name=self.__class__.__name__)
         return self
 
 
