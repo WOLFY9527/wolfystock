@@ -60,6 +60,8 @@ class MarketDecisionCockpitService:
             option_contracts=option_contracts,
             option_spot=option_spot,
         )
+        cockpit_summary = self._build_cockpit_summary(decision, research_preview, options_status)
+        data_quality = self._build_data_quality(decision, research_preview, options_status)
 
         return {
             "schemaVersion": SCHEMA_VERSION,
@@ -67,9 +69,30 @@ class MarketDecisionCockpitService:
             "marketRegimeDecision": decision,
             "researchQueuePreview": research_preview,
             "optionsStructureStatus": options_status,
-            "cockpitSummary": self._build_cockpit_summary(decision, research_preview, options_status),
+            "cockpitSummary": cockpit_summary,
+            "driverAttribution": self._build_driver_attribution(decision),
+            "confidenceDiagnostics": self._build_confidence_diagnostics(
+                decision,
+                research_preview,
+                options_status,
+                data_quality,
+            ),
+            "watchTriggers": self._build_watch_triggers(decision, research_preview, options_status),
+            "whatChanged": self._build_what_changed(
+                generated_at,
+                decision,
+                research_preview,
+                options_status,
+            ),
+            "cockpitReadiness": self._build_cockpit_readiness(
+                decision,
+                research_preview,
+                options_status,
+                data_quality,
+            ),
+            "scenarioHints": self._build_scenario_hints(decision),
             "noAdviceDisclosure": NO_ADVICE_DISCLOSURE,
-            "dataQuality": self._build_data_quality(decision, research_preview, options_status),
+            "dataQuality": data_quality,
         }
 
     @staticmethod
@@ -239,6 +262,246 @@ class MarketDecisionCockpitService:
             "proxyEvidenceCount": int(regime_quality.get("proxyEvidenceCount") or 0),
         }
 
+    def _build_driver_attribution(self, market_regime_decision: Mapping[str, Any]) -> dict[str, Any]:
+        drivers = _mapping(market_regime_decision.get("driverScores"))
+        driver_items = [
+            _driver_item(driver_name, driver_payload)
+            for driver_name, driver_payload in drivers.items()
+            if isinstance(driver_payload, Mapping)
+        ]
+        positive = sorted(
+            (
+                item
+                for item in driver_items
+                if item["score"] > 0 and item["evidenceState"] not in {"unavailable", "blocked"}
+            ),
+            key=lambda item: (-item["score"], item["driver"]),
+        )
+        negative = sorted(
+            (
+                item
+                for item in driver_items
+                if item["score"] < 0 and item["evidenceState"] not in {"unavailable", "blocked"}
+            ),
+            key=lambda item: (item["score"], item["driver"]),
+        )
+        unavailable = sorted(
+            (item for item in driver_items if item["evidenceState"] in {"unavailable", "blocked"}),
+            key=lambda item: (item["evidenceState"] != "unavailable", item["driver"]),
+        )
+
+        return {
+            "topPositiveDrivers": positive[:3],
+            "topNegativeDrivers": negative[:3],
+            "conflictingDrivers": _conflicting_driver_items(
+                str(market_regime_decision.get("regime") or ""),
+                positive,
+                negative,
+            ),
+            "unavailableDrivers": unavailable,
+        }
+
+    def _build_confidence_diagnostics(
+        self,
+        market_regime_decision: Mapping[str, Any],
+        research_preview: Mapping[str, Any],
+        options_status: Mapping[str, Any],
+        data_quality: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        regime_quality = _mapping(market_regime_decision.get("dataQuality"))
+        missing_evidence = list(market_regime_decision.get("missingEvidence") or [])
+        reason_codes = list(data_quality.get("reasonCodes") or [])
+        evidence_strength = {
+            "confidence": market_regime_decision.get("confidence", "low"),
+            "confidenceScore": market_regime_decision.get("confidenceScore"),
+            "regimeEvidenceGrade": regime_quality.get("evidenceGrade"),
+            "availableDriverCount": int(regime_quality.get("availableDriverCount") or 0),
+            "scoringDriverCount": int(regime_quality.get("scoringDriverCount") or 0),
+            "blockedDriverCount": int(regime_quality.get("blockedDriverCount") or 0),
+            "missingDriverCount": int(regime_quality.get("missingDriverCount") or 0),
+            "researchQueueQuality": research_preview.get("queueQuality", "thin"),
+            "optionsGammaEvidenceStatus": options_status.get("gammaEvidenceStatus", "unavailable"),
+        }
+
+        return {
+            "confidenceCaps": _dedupe(regime_quality.get("confidenceCapReasons") or []),
+            "confidencePenalties": _dedupe([*missing_evidence, *reason_codes]),
+            "evidenceStrength": evidence_strength,
+            "missingEvidenceImpact": [
+                {
+                    "evidence": str(item),
+                    "impact": _missing_evidence_impact(str(item)),
+                }
+                for item in _dedupe(missing_evidence or reason_codes)
+            ],
+        }
+
+    def _build_watch_triggers(
+        self,
+        market_regime_decision: Mapping[str, Any],
+        research_preview: Mapping[str, Any],
+        options_status: Mapping[str, Any],
+    ) -> list[dict[str, str]]:
+        explanation = _mapping(market_regime_decision.get("explanation"))
+        priorities = _mapping(market_regime_decision.get("researchPriorities"))
+        confirms = _dedupe(explanation.get("whatConfirmsIt") or [])
+        invalidates = _dedupe(explanation.get("whatInvalidatesIt") or [])
+        watch_items = _dedupe([
+            *(priorities.get("watchToday") or []),
+            *(priorities.get("investigateNext") or []),
+        ])
+        triggers: list[dict[str, str]] = []
+
+        for index, condition in enumerate(watch_items[:3], start=1):
+            triggers.append(
+                {
+                    "triggerName": f"Regime watch {index}",
+                    "driver": _infer_driver_name(condition),
+                    "condition": str(condition),
+                    "whyItMatters": "It helps confirm whether the current regime evidence remains coherent.",
+                    "currentEvidence": (
+                        confirms[0]
+                        if confirms
+                        else str(market_regime_decision.get("regime") or "lowConfidence")
+                    ),
+                }
+            )
+        if invalidates:
+            triggers.append(
+                {
+                    "triggerName": "Regime invalidation watch",
+                    "driver": "marketRegimeDecision",
+                    "condition": invalidates[0],
+                    "whyItMatters": "It identifies evidence that would weaken the current regime read.",
+                    "currentEvidence": str(market_regime_decision.get("confidence") or "low"),
+                }
+            )
+        if not research_preview.get("topCandidates"):
+            triggers.append(
+                {
+                    "triggerName": "Research radar availability",
+                    "driver": "researchQueuePreview",
+                    "condition": "Research candidates become available with enough evidence quality.",
+                    "whyItMatters": (
+                        "It determines whether regime context can be paired with concrete research queue evidence."
+                    ),
+                    "currentEvidence": str(research_preview.get("queueQuality") or "thin"),
+                }
+            )
+        if options_status.get("gammaEvidenceStatus") == "unavailable":
+            triggers.append(
+                {
+                    "triggerName": "Options observation availability",
+                    "driver": "optionsStructureStatus",
+                    "condition": "Options structure evidence becomes available for observation only.",
+                    "whyItMatters": (
+                        "It separates options market structure context from decision-grade regime evidence."
+                    ),
+                    "currentEvidence": "unavailable",
+                }
+            )
+        return triggers[:5]
+
+    def _build_what_changed(
+        self,
+        generated_at: str,
+        market_regime_decision: Mapping[str, Any],
+        research_preview: Mapping[str, Any],
+        options_status: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        observations: list[dict[str, str]] = []
+        updated_at = market_regime_decision.get("updatedAt")
+        if updated_at:
+            observations.append(
+                {
+                    "field": "marketRegimeDecision.updatedAt",
+                    "value": str(updated_at),
+                    "interpretation": "Current payload timestamp is available; no historical baseline is inferred.",
+                }
+            )
+        observations.extend(
+            [
+                {
+                    "field": "generatedAt",
+                    "value": generated_at,
+                    "interpretation": "Cockpit generation time is available; no prior cockpit snapshot is inferred.",
+                },
+                {
+                    "field": "marketRegimeDecision.regime",
+                    "value": str(market_regime_decision.get("regime") or "lowConfidence"),
+                    "interpretation": "Current regime field is available without historical delta.",
+                },
+                {
+                    "field": "researchQueuePreview.queueQuality",
+                    "value": str(research_preview.get("queueQuality") or "thin"),
+                    "interpretation": "Current research queue quality is available without historical delta.",
+                },
+                {
+                    "field": "optionsStructureStatus.gammaEvidenceStatus",
+                    "value": str(options_status.get("gammaEvidenceStatus") or "unavailable"),
+                    "interpretation": "Current options observation status is available without historical delta.",
+                },
+            ]
+        )
+        return {
+            "status": "degraded",
+            "basis": "current_snapshot_only",
+            "observations": observations,
+            "unavailableDrivers": ["historical_baseline_unavailable"],
+        }
+
+    def _build_cockpit_readiness(
+        self,
+        market_regime_decision: Mapping[str, Any],
+        research_preview: Mapping[str, Any],
+        options_status: Mapping[str, Any],
+        data_quality: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        reasons: list[str] = []
+        confidence = str(market_regime_decision.get("confidence") or "low").lower()
+        regime_quality = _mapping(market_regime_decision.get("dataQuality"))
+        scoring_driver_count = int(
+            regime_quality.get("scoringDriverCount")
+            or data_quality.get("availableDriverCount")
+            or 0
+        )
+        research_ready = bool(research_preview.get("topCandidates"))
+        options_ready = options_status.get("gammaEvidenceStatus") != "unavailable"
+
+        if confidence == "low" or scoring_driver_count < 3:
+            reasons.append("market regime evidence is insufficient")
+        if not research_ready:
+            reasons.append("research radar candidates are unavailable")
+        if not options_ready:
+            reasons.append("options structure evidence is unavailable")
+
+        if not reasons:
+            return {
+                "status": "ready",
+                "reasons": ["core evidence is available for read-only decision support"],
+            }
+        if data_quality.get("status") == "blocked" or len(reasons) >= 3:
+            return {"status": "insufficient", "reasons": reasons}
+        return {"status": "degraded", "reasons": reasons}
+
+    def _build_scenario_hints(self, market_regime_decision: Mapping[str, Any]) -> list[str]:
+        explanation = _mapping(market_regime_decision.get("explanation"))
+        hints = [
+            "Regime confidence could strengthen if more score-grade drivers align with the current read.",
+            "Regime confidence could weaken if leading drivers move against the current read together.",
+        ]
+        if market_regime_decision.get("missingEvidence"):
+            hints.append("Confidence could improve if missing evidence becomes available through approved inputs.")
+        if _mapping(market_regime_decision.get("dataQuality")).get("confidenceCapReasons"):
+            hints.append("Confidence remains capped until source-quality limits clear.")
+        for item in explanation.get("whatConfirmsIt") or []:
+            hints.append(f"Confirmation hint: {_without_numeric_details(item)}")
+            break
+        for item in explanation.get("whatInvalidatesIt") or []:
+            hints.append(f"Invalidation hint: {_without_numeric_details(item)}")
+            break
+        return _dedupe(hints)[:5]
+
 
 def build_market_decision_cockpit(
     *,
@@ -277,6 +540,120 @@ def _invalidation_conditions(payload: Mapping[str, Any]) -> list[str]:
 
 def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
+
+
+def _driver_item(driver: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+    score = _int_value(payload.get("score"))
+    evidence_state = str(payload.get("evidenceState") or "unavailable")
+    observations = _dedupe(payload.get("observations") or [])
+    reasons = _dedupe(payload.get("reasons") or [])
+    return {
+        "driver": driver,
+        "score": score,
+        "evidenceState": evidence_state,
+        "whyItMatters": _driver_why_it_matters(driver, score),
+        "currentEvidence": observations or ["No current driver observation is available."],
+        "reasonCodes": reasons,
+    }
+
+
+def _conflicting_driver_items(
+    regime: str,
+    positive: Sequence[Mapping[str, Any]],
+    negative: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    if not positive or not negative:
+        return []
+    negative_regimes = {"riskOff", "downsideAccelerationRisk", "eventRisk"}
+    if regime in negative_regimes:
+        return [
+            {
+                "driver": str(item["driver"]),
+                "score": int(item["score"]),
+                "condition": "Positive driver conflicts with negative regime evidence.",
+                "currentEvidence": list(item.get("currentEvidence") or []),
+            }
+            for item in positive[:2]
+        ]
+    return [
+        {
+            "driver": str(item["driver"]),
+            "score": int(item["score"]),
+            "condition": "Negative driver conflicts with positive regime evidence.",
+            "currentEvidence": list(item.get("currentEvidence") or []),
+        }
+        for item in negative[:2]
+    ]
+
+
+def _driver_why_it_matters(driver: str, score: int) -> str:
+    direction = "positive" if score > 0 else "negative" if score < 0 else "neutral"
+    labels = {
+        "dealerGamma": "Options structure context can cap confidence when unavailable.",
+        "breadthParticipation": "Breadth shows whether participation is broad or narrow.",
+        "volatilityStructure": "Volatility helps separate orderly risk from stress.",
+        "ratesDollar": "Rates-dollar pressure can change market liquidity conditions.",
+        "liquidityCredit": (
+            "Liquidity-credit evidence shows whether funding conditions are supportive or restrictive."
+        ),
+        "crossAssetRisk": "Cross-asset evidence checks whether adjacent markets confirm the read.",
+        "sectorThemeRotation": "Sector-theme rotation shows whether leadership is concentrated or broadening.",
+        "eventCatalyst": "Event catalyst evidence flags whether scheduled or unscheduled events dominate.",
+    }
+    return labels.get(driver, f"{driver} is a {direction} contributor to the current regime read.")
+
+
+def _missing_evidence_impact(reason: str) -> str:
+    if reason.startswith("dealerGamma"):
+        return "Options structure remains observation-only and cannot raise regime confidence."
+    if reason.startswith("research") or reason == _RESEARCH_EMPTY_REASON:
+        return "Research queue context is thinner until candidate evidence is available."
+    if reason.startswith("option") or reason == _OPTION_CHAIN_EMPTY_REASON:
+        return "Options market structure remains unavailable for observation context."
+    if "low_confidence" in reason:
+        return "The cockpit should stay degraded until more score-grade drivers align."
+    if "blocked" in reason:
+        return "Blocked evidence cannot contribute to the regime read."
+    return "Missing evidence limits confidence in the current regime read."
+
+
+def _infer_driver_name(condition: Any) -> str:
+    text = str(condition).lower()
+    if "breadth" in text:
+        return "breadthParticipation"
+    if "volatility" in text:
+        return "volatilityStructure"
+    if "rate" in text or "dollar" in text:
+        return "ratesDollar"
+    if "liquidity" in text or "credit" in text:
+        return "liquidityCredit"
+    if "cross-asset" in text:
+        return "crossAssetRisk"
+    if "sector" in text or "theme" in text or "rotation" in text:
+        return "sectorThemeRotation"
+    if "event" in text:
+        return "eventCatalyst"
+    if "gamma" in text:
+        return "dealerGamma"
+    return "marketRegimeDecision"
+
+
+def _without_numeric_details(value: Any) -> str:
+    text = str(value)
+    cleaned = "".join(" " if char.isdigit() else char for char in text)
+    return " ".join(cleaned.split())
+
+
+def _int_value(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0
+    if number != number or number in {float("inf"), float("-inf")}:
+        return 0
+    return int(round(number))
 
 
 def _dedupe(items: Sequence[Any]) -> list[str]:
