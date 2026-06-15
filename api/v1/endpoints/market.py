@@ -15,6 +15,7 @@ from api.v1.schemas.market_rotation import MarketRotationRadarResponse
 from api.v1.schemas.market_temperature import MarketTemperatureConsumedSubsetResponse
 from src.services.cn_provider_health_service import CNProviderHealthService
 from src.services.crypto_realtime_service import get_crypto_realtime_service
+from src.services.market_decision_cockpit_service import MarketDecisionCockpitService
 from src.services.market_data_readiness_diagnostics import build_market_data_readiness_diagnostics
 from src.services.market_overview_service import MarketOverviewService
 from src.services.market_rotation_radar_service import MarketRotationRadarService
@@ -174,6 +175,11 @@ def get_temperature(current_user: Optional[CurrentUser] = Depends(get_optional_c
 @router.get("/regime-decision", summary="Get deterministic market regime decision")
 def get_regime_decision(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
     return MarketOverviewService().get_market_regime_decision(actor=_actor(current_user))
+
+
+@router.get("/decision-cockpit", summary="Get market decision cockpit aggregate")
+def get_decision_cockpit(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
+    return MarketDecisionCockpitService().get_decision_cockpit(actor=_actor(current_user))
 
 
 @router.get("/market-briefing", summary="Get rule-based market briefing")
