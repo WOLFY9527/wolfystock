@@ -118,12 +118,24 @@ vi.mock('../pages/MarketOverviewPage', () => ({
   default: () => <div>market-overview-page</div>,
 }));
 
+vi.mock('../pages/MarketDecisionCockpitPage', () => ({
+  default: () => <div>market-decision-cockpit-page</div>,
+}));
+
 vi.mock('../pages/MarketRotationRadarPage', () => ({
   default: () => <div>market-rotation-radar-page</div>,
 }));
 
 vi.mock('../pages/LiquidityMonitorPage', () => ({
   default: () => <div>liquidity-monitor-page</div>,
+}));
+
+vi.mock('../pages/StockStructureDecisionPage', () => ({
+  default: () => <div>stock-structure-decision-page</div>,
+}));
+
+vi.mock('../pages/ResearchRadarPage', () => ({
+  default: () => <div>research-radar-page</div>,
 }));
 
 vi.mock('../pages/BacktestPage', () => ({
@@ -474,6 +486,7 @@ describe('AppContent route flows', () => {
 
   it.each([
     ['/portfolio', 'auth-guard:Portfolio'],
+    ['/research/radar', 'auth-guard:Research Radar'],
     ['/watchlist', 'auth-guard:Watchlist'],
     ['/backtest', 'auth-guard:Backtest'],
   ])(
@@ -494,6 +507,22 @@ describe('AppContent route flows', () => {
     expect(screen.getByTestId('location-path')).toHaveTextContent('/market-overview');
     expect(screen.queryByText('auth-guard:Market Overview')).not.toBeInTheDocument();
     expect(screen.queryByText('Guest Preview Mode')).not.toBeInTheDocument();
+  });
+
+  it('opens the market decision cockpit route for guest sessions without a paywall', async () => {
+    renderAtWithLocationProbe('/market/decision-cockpit');
+
+    expect(await screen.findByText('market-decision-cockpit-page')).toBeInTheDocument();
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/market/decision-cockpit');
+    expect(screen.queryByText('auth-guard:Market Decision Cockpit')).not.toBeInTheDocument();
+  });
+
+  it('opens the stock structure route for guest sessions without a paywall', async () => {
+    renderAtWithLocationProbe('/stocks/AAPL/structure-decision');
+
+    expect(await screen.findByText('stock-structure-decision-page')).toBeInTheDocument();
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/stocks/AAPL/structure-decision');
+    expect(screen.queryByText('auth-guard:Stock Structure Panel')).not.toBeInTheDocument();
   });
 
   it('redirects /market to the market overview surface instead of silently falling back to Home', async () => {

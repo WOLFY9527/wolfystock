@@ -139,4 +139,66 @@ describe('stocksApi', () => {
     expect(quote.sourceConfidence?.isSynthetic).toBe(true);
     expect(quote.sourceConfidence?.degradationReason).toBe('provider_runtime_unavailable_placeholder');
   });
+
+  it('calls the structure decision endpoint and normalizes explanation arrays', async () => {
+    const { stocksApi } = await import('../stocks');
+
+    get.mockResolvedValueOnce({
+      data: {
+        schema_version: 'stock_structure_decision_api_v1',
+        ticker: 'AAPL',
+        structure_state: 'breakout',
+        confidence: 'high',
+        component_scores: {
+          trend: 78,
+          relative_strength: 71,
+        },
+        explanation: {
+          why_this_structure: 'Price stayed above the recent range.',
+          what_confirms_it: ['Volume remained constructive.'],
+          what_invalidates_it: ['Closes fall back into the prior range.'],
+          key_levels: [
+            {
+              kind: 'recent_range_high',
+              value: 131.2,
+              description: 'Upper observation from recent highs.',
+            },
+          ],
+        },
+        research_notes: {
+          watch_next: ['Observe follow-through on the next close.'],
+          needs_more_evidence: ['Need broader market confirmation.'],
+          risk_flags: ['Extension risk if price outruns volume.'],
+        },
+        data_quality: {
+          status: 'available',
+          source: 'local_db',
+          period: 'daily',
+          requested_days: 90,
+          observed_bars: 55,
+          usable_bars: 55,
+          reason: 'history_available',
+        },
+        missing_evidence: [
+          {
+            kind: 'benchmark_context',
+            message: 'Need benchmark context.',
+          },
+        ],
+        no_advice_disclosure: 'Observation-only research context.',
+      },
+    });
+
+    const payload = await stocksApi.getStructureDecision('AAPL');
+
+    expect(get).toHaveBeenCalledWith('/api/v1/stocks/AAPL/structure-decision');
+    expect(payload.ticker).toBe('AAPL');
+    expect(payload.structureState).toBe('breakout');
+    expect(payload.componentScores.trend).toBe(78);
+    expect(payload.explanation.whatConfirmsIt).toEqual(['Volume remained constructive.']);
+    expect(payload.explanation.keyLevels?.[0]?.kind).toBe('recent_range_high');
+    expect(payload.researchNotes.watchNext).toEqual(['Observe follow-through on the next close.']);
+    expect(payload.dataQuality.usableBars).toBe(55);
+    expect(payload.missingEvidence[0]?.kind).toBe('benchmark_context');
+  });
 });
