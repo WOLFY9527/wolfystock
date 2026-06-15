@@ -184,7 +184,7 @@ _SECTION_BLUEPRINTS: tuple[dict[str, Any], ...] = (
         "region": "secondary",
         "density": "standard",
         "required": True,
-        "reviewPoint": "复核政策、监管与情景线索是否放在宏观背景中观察。",
+        "reviewPoint": "复核政策、监管、宏观驱动链与情景线索是否放在宏观背景中观察。",
         "modules": (
             {
                 "key": "policy_regulation_watch",
@@ -197,6 +197,12 @@ _SECTION_BLUEPRINTS: tuple[dict[str, Any], ...] = (
                 "label": "情景观察表",
                 "required": True,
                 "reviewPoint": "复核情景清单是否呈现待验证问题。",
+            },
+            {
+                "key": "driver_chain",
+                "label": "宏观驱动链",
+                "required": True,
+                "reviewPoint": "复核宏观驱动链是否保持研究口径。",
             },
         ),
     },
