@@ -9,22 +9,48 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 
 HomepageUatReadinessStatus = Literal["pass", "review", "blocked", "no_evidence"]
-HomepageUatReadinessOwnerArea = Literal["backend_contract", "frontend_ui", "data_quality", "copy", "qa"]
+HomepageUatReadinessOwnerArea = Literal["contract", "frontend_ui", "data_quality", "copy", "qa", "integration"]
+HomepageUatReadinessModuleState = Literal["ready", "review", "blocked", "no_evidence"]
+HomepageUatReadinessDataIntegration = Literal[
+    "not_wired_current_data",
+    "static_contract_only",
+    "proxy_only",
+    "no_evidence",
+]
+HomepageUatReadinessEvidenceBoundary = Literal[
+    "static_contract",
+    "deterministic_sample",
+    "placeholder",
+    "proxy_only",
+    "proxy_no_evidence_mix",
+    "sample_proxy",
+]
 
 _FORBIDDEN_TEXT_MARKERS = (
     "买入",
     "卖出",
     "下单",
+    "立即交易",
     "交易信号",
+    "交易指令",
+    "交易建议",
+    "交易执行",
     "止损",
     "止盈",
     "目标价",
+    "投资建议",
+    "收益预测",
     "保证收益",
     "稳赚",
     "buy now",
     "sell now",
+    "place order",
     "trading signal",
+    "trading advice",
+    "trade execution",
+    "investment advice",
     "target price",
+    "recommendation",
     "guaranteed",
     "best contract",
     "ai recommends you buy",
@@ -34,7 +60,8 @@ _FORBIDDEN_TEXT_MARKERS = (
     "trustlevel",
     "sourcetype",
     "token",
-    "session",
+    "sessionid",
+    "session id",
     "apikey",
     "secret",
     "cookie",
@@ -45,11 +72,15 @@ _FORBIDDEN_TEXT_MARKERS = (
 )
 
 
+def _compact_text(value: str) -> str:
+    return value.lower().replace("_", "").replace(" ", "").replace("-", "")
+
+
 def _assert_safe_text(value: Any, *, field_name: str) -> None:
     if isinstance(value, str):
-        compact = value.lower().replace("_", "").replace(" ", "")
+        compact = _compact_text(value)
         for marker in _FORBIDDEN_TEXT_MARKERS:
-            normalized_marker = marker.lower().replace("_", "").replace(" ", "")
+            normalized_marker = _compact_text(marker)
             if normalized_marker in compact:
                 raise ValueError(f"{field_name} contains forbidden text marker: {marker}")
         return
@@ -89,10 +120,36 @@ class HomepageUatReadinessCheck(_HomepageUatReadinessBase):
     required: bool
 
 
+class HomepageUatReadinessModule(_HomepageUatReadinessBase):
+    taskId: str
+    key: str
+    label: str
+    uatReviewable: bool
+    reviewScope: list[str]
+    evidenceBoundary: HomepageUatReadinessEvidenceBoundary
+    evidenceBoundaryLabel: str
+    serializationReadiness: HomepageUatReadinessModuleState
+    publicDisplayReadiness: HomepageUatReadinessModuleState
+    dataIntegrationReadiness: HomepageUatReadinessDataIntegration
+    dataIntegrationLabel: str
+    missingEvidenceCategories: list[str]
+    uatChecklistItems: list[str]
+
+
+class HomepageUatReadinessModuleSummary(_HomepageUatReadinessBase):
+    totalModules: int
+    reviewableModules: int
+    notWiredDataModules: int
+    sampleProxyOrNoEvidenceModules: int
+    publicMessage: str
+
+
 class HomepageUatReadinessResponse(_HomepageUatReadinessBase):
     status: HomepageUatReadinessStatus
     asOf: str
     checks: list[HomepageUatReadinessCheck]
+    cockpitModules: list[HomepageUatReadinessModule]
+    moduleSummary: HomepageUatReadinessModuleSummary
     summary: str
     noAdviceDisclosure: str
     dataQuality: HomepageUatReadinessDataQuality
