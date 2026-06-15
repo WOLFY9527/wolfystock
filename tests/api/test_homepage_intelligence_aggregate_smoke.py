@@ -68,6 +68,10 @@ EXPECTED_TOP_LEVEL_KEYS = {
     "sessionStatus",
     "sourceFreshness",
     "demo",
+    "intelligenceCockpit",
+    "sectionLayout",
+    "uatReadiness",
+    "cockpitModules",
     "noAdviceDisclosure",
 }
 EXPECTED_METADATA_SECTIONS = {
@@ -76,7 +80,32 @@ EXPECTED_METADATA_SECTIONS = {
     "sessionStatus",
     "sourceFreshness",
     "demo",
+    "sectionLayout",
+    "uatReadiness",
+    "cockpitModules",
 }
+EXPECTED_COCKPIT_MODULE_KEYS = (
+    "dailyMarketBrief",
+    "riskRegime",
+    "crossAssetIndicators",
+    "eventImpactMap",
+    "driverChain",
+    "themeCapitalFlow",
+    "researchPriorities",
+    "evidenceQuality",
+    "ratesPricing",
+    "volatilityPositioning",
+    "liquidityCredit",
+    "marketBreadth",
+    "afterCloseDevelopments",
+    "scenarioWatchlist",
+    "earningsCatalysts",
+    "geopoliticalCommodityRisk",
+    "aiCapexInfrastructure",
+    "policyRegulationWatch",
+    "styleLeadershipRotation",
+    "preSessionResearchChecklist",
+)
 SAMPLE_MARKER_KEYS = {"demoPayload", "sampleData", "scenario", "demoDisclosure"}
 DISCLOSURE_KEYS = {"noAdviceDisclosure", "demoDisclosure"}
 SAFE_NEGATED_BOUNDARY_PHRASES = (
@@ -85,6 +114,8 @@ SAFE_NEGATED_BOUNDARY_PHRASES = (
     "不包含交易指令",
     "不提供交易判断",
     "不构成交易指令",
+    "不构成投资建议",
+    "不构成个性化建议",
 )
 FORBIDDEN_LITERAL_TERMS = (
     "买入",
@@ -271,7 +302,7 @@ AGGREGATE_CASES: tuple[tuple[str, Callable[[], object], int], ...] = (
     ("market_session_status_service", _build_market_session_status_payload, 8000),
     ("source_freshness_summary_service", _build_source_freshness_summary_payload, 8000),
     ("homepage_demo_payload_service", _build_homepage_demo_payloads, 30000),
-    ("homepage_intelligence_endpoint", _get_homepage_intelligence_payload, 50000),
+    ("homepage_intelligence_endpoint", _get_homepage_intelligence_payload, 80000),
 )
 
 
@@ -316,11 +347,69 @@ def test_homepage_intelligence_endpoint_exposes_expected_metadata_sections() -> 
     assert isinstance(payload["sessionStatus"], dict)
     assert isinstance(payload["sourceFreshness"], dict)
     assert isinstance(payload["demo"], dict)
+    assert isinstance(payload["sectionLayout"], dict)
+    assert isinstance(payload["uatReadiness"], dict)
+    assert isinstance(payload["cockpitModules"], dict)
     assert payload["capabilities"]["schemaVersion"] == "homepage_capabilities_v1"
     assert payload["moduleManifest"]["asOf"] == payload["asOf"]
     assert payload["sessionStatus"]["asOf"] == payload["asOf"]
+    assert payload["sectionLayout"]["asOf"] == payload["asOf"]
+    assert payload["uatReadiness"]["asOf"] == payload["asOf"]
+    assert payload["cockpitModules"]["asOf"] == payload["asOf"]
     assert payload["demo"]["defaultScenario"] == "happy_path"
     assert set(payload["demo"]["scenarios"]) == {"happy_path", "degraded_example"}
+    assert payload["cockpitModules"]["moduleOrder"] == list(EXPECTED_COCKPIT_MODULE_KEYS)
+    assert payload["cockpitModules"]["moduleCount"] == len(EXPECTED_COCKPIT_MODULE_KEYS)
+    assert [module["key"] for module in payload["cockpitModules"]["modules"]] == list(
+        EXPECTED_COCKPIT_MODULE_KEYS
+    )
+
+
+def test_homepage_intelligence_cockpit_modules_are_projected_not_raw_passthrough() -> None:
+    payload = _get_homepage_intelligence_payload()
+    cockpit_modules = payload["cockpitModules"]
+    forbidden_key_fragments = {
+        "apikey",
+        "broker",
+        "cache",
+        "cookie",
+        "debug",
+        "diagnostic",
+        "fallback",
+        "payload",
+        "provider",
+        "raw",
+        "runtime",
+        "secret",
+        "sessionid",
+        "sourceurl",
+        "token",
+        "traceback",
+        "url",
+    }
+    leaked_paths = [
+        ".".join(path)
+        for path in _walk_key_paths(cockpit_modules)
+        if any(fragment in path[-1].lower().replace("_", "").replace("-", "") for fragment in forbidden_key_fragments)
+    ]
+
+    assert leaked_paths == []
+    for module in cockpit_modules["modules"]:
+        assert set(module) == {
+            "key",
+            "label",
+            "status",
+            "asOf",
+            "summary",
+            "dataQuality",
+            "evidenceQuality",
+            "sampleOnly",
+            "observationOnly",
+            "noLiveAvailabilityClaim",
+        }
+        assert module["sampleOnly"] is True
+        assert module["observationOnly"] is True
+        assert module["noLiveAvailabilityClaim"] is True
 
 
 def test_homepage_intelligence_demo_sample_markers_stay_scoped_to_demo_payloads() -> None:
