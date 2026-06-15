@@ -20,6 +20,8 @@ from api.v1.schemas.stocks import (
     ExtractFromImageResponse,
     ExtractItem,
     IntradayBar,
+    StockStructureDecisionBatchRequest,
+    StockStructureDecisionBatchResponse,
     KLineData,
     StockStructureDecisionResponse,
     StockEvidenceResponse,
@@ -367,6 +369,39 @@ def _validate_stock_ticker(
         stock_name=None,
         message=_VALIDATION_UNKNOWN_MESSAGE,
     )
+
+
+@router.post(
+    "/structure-decisions/batch",
+    response_model=StockStructureDecisionBatchResponse,
+    response_model_exclude_none=True,
+    responses={
+        200: {"description": "批量股票结构判断"},
+        422: {"description": "请求参数无效", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="批量获取股票结构判断",
+    description="返回多个股票的观察型结构判断和批量比较摘要；不生成操作指令。",
+)
+def get_stock_structure_decisions_batch(
+    request: StockStructureDecisionBatchRequest,
+) -> StockStructureDecisionBatchResponse:
+    try:
+        payload = StockStructureDecisionService().get_structure_decisions_batch(
+            request.stock_codes,
+            benchmark=request.benchmark,
+            max_items=request.max_items,
+        )
+        return StockStructureDecisionBatchResponse.model_validate(payload)
+    except Exception as e:
+        logger.error("批量获取股票结构判断失败: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": "批量获取股票结构判断失败",
+            },
+        )
 
 
 @router.get(

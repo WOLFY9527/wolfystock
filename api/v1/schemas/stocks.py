@@ -375,6 +375,18 @@ class StockStructureDecisionMissingEvidence(BaseModel):
     message: str = Field(..., description="面向研究使用的缺失证据说明")
 
 
+class StockStructureDecisionComparativeContext(BaseModel):
+    """单股票结构判断中的比较上下文。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    status: Literal["available", "unavailable"] = Field(..., description="比较上下文状态")
+    benchmark: Optional[str] = Field(None, description="用于比较的基准代码")
+    relative_strength_score: Optional[int] = Field(None, alias="relativeStrengthScore", description="相对强度分数")
+    rank: Optional[int] = Field(None, description="相对强度排序")
+    reason: Optional[str] = Field(None, description="不可用原因码")
+
+
 class StockStructureDecisionResponse(BaseModel):
     """单股票结构判断响应。"""
 
@@ -393,4 +405,53 @@ class StockStructureDecisionResponse(BaseModel):
         alias="missingEvidence",
         description="缺失证据列表",
     )
+    no_advice_disclosure: str = Field(..., alias="noAdviceDisclosure", description="非个性化建议披露")
+
+
+class StockStructureDecisionBatchRequest(BaseModel):
+    """批量股票结构判断请求。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    stock_codes: List[str] = Field(
+        ...,
+        alias="stockCodes",
+        min_length=1,
+        max_length=100,
+        description="股票代码列表",
+    )
+    benchmark: Optional[str] = Field(None, description="可选比较基准代码")
+    max_items: Optional[int] = Field(
+        None,
+        alias="maxItems",
+        ge=1,
+        le=50,
+        description="本次最多评估的股票数量",
+    )
+
+
+class StockStructureDecisionBatchItemResponse(StockStructureDecisionResponse):
+    """批量结构判断中的单股票项。"""
+
+    comparative_context: Optional[StockStructureDecisionComparativeContext] = Field(
+        None,
+        alias="comparativeContext",
+        description="比较上下文；缺少基准证据时显式不可用",
+    )
+
+
+class StockStructureDecisionBatchResponse(BaseModel):
+    """批量股票结构判断响应。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    schema_version: str = Field(..., alias="schemaVersion", description="API 响应 schema 版本")
+    items: List[StockStructureDecisionBatchItemResponse] = Field(..., description="按输入去重后稳定排序的结构判断项")
+    aggregate_summary: Dict[str, Any] = Field(..., alias="aggregateSummary", description="批量结构聚合摘要")
+    missing_evidence: List[StockStructureDecisionMissingEvidence] = Field(
+        ...,
+        alias="missingEvidence",
+        description="批量层面的缺失证据列表",
+    )
+    data_quality: Dict[str, Any] = Field(..., alias="dataQuality", description="批量层面的数据质量摘要")
     no_advice_disclosure: str = Field(..., alias="noAdviceDisclosure", description="非个性化建议披露")

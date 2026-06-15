@@ -46,6 +46,25 @@ class _FakeHistoryService:
         return self.payload
 
 
+class _FakeMultiHistoryService:
+    def __init__(self, payloads: dict[str, dict[str, Any]]) -> None:
+        self.payloads = payloads
+        self.calls: list[dict[str, Any]] = []
+
+    def get_history_data(self, stock_code: str, period: str = "daily", days: int = 30) -> dict[str, Any]:
+        self.calls.append({"stock_code": stock_code, "period": period, "days": days})
+        return self.payloads.get(
+            stock_code,
+            {
+                "stock_code": stock_code,
+                "period": "daily",
+                "data": [],
+                "source": "unavailable",
+                "diagnostics": {"status": "unavailable", "reason": "history_unavailable"},
+            },
+        )
+
+
 def _bar(index: int, close: float, *, volume: float = 1000.0, width: float = 1.0) -> dict[str, Any]:
     return {
         "date": f"2026-01-{index + 1:02d}",
@@ -62,6 +81,14 @@ def _trend_breakout_history() -> list[dict[str, Any]]:
     prior_range_high = max(float(bar["high"]) for bar in bars[-21:-1])
     bars[-1] = _bar(54, prior_range_high * 1.025, volume=2600.0)
     return bars
+
+
+def _flat_history() -> list[dict[str, Any]]:
+    return [_bar(index, 100 + (index % 3) * 0.05, volume=900.0, width=0.4) for index in range(55)]
+
+
+def _weak_history() -> list[dict[str, Any]]:
+    return [_bar(index, 80 - index * 0.35, volume=1000.0 + index * 12, width=0.8) for index in range(55)]
 
 
 def _assert_required_contract(payload: dict[str, Any]) -> None:
@@ -192,6 +219,134 @@ def test_service_output_avoids_recommendation_or_trading_instruction_language() 
     )
 
     payload = StockStructureDecisionService(history_service=fake_history).get_structure_decision("AAPL")
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+
+    for forbidden in FORBIDDEN_ADVICE_TOKENS:
+        assert forbidden not in serialized
+    assert "not personalized financial advice" in serialized
+
+
+def test_batch_structure_decisions_are_bounded_and_stably_ordered() -> None:
+    fake_history = _FakeMultiHistoryService(
+        {
+            "AAPL": {
+                "stock_code": "AAPL",
+                "period": "daily",
+                "data": _trend_breakout_history(),
+                "source": "local_db",
+                "diagnostics": {"status": "ok", "reason": "history_available"},
+            },
+            "MSFT": {
+                "stock_code": "MSFT",
+                "period": "daily",
+                "data": _flat_history(),
+                "source": "local_db",
+                "diagnostics": {"status": "ok", "reason": "history_available"},
+            },
+            "SPY": {
+                "stock_code": "SPY",
+                "period": "daily",
+                "data": _flat_history(),
+                "source": "local_db",
+                "diagnostics": {"status": "ok", "reason": "history_available"},
+            },
+        }
+    )
+
+    payload = StockStructureDecisionService(history_service=fake_history).get_structure_decisions_batch(
+        ["msft", "aapl", "msft", "goog"],
+        benchmark="spy",
+        max_items=2,
+    )
+
+    assert payload["schemaVersion"] == STOCK_STRUCTURE_DECISION_API_SCHEMA_VERSION
+    assert [item["ticker"] for item in payload["items"]] == ["MSFT", "AAPL"]
+    assert [call["stock_code"] for call in fake_history.calls] == ["SPY", "MSFT", "AAPL"]
+    assert payload["aggregateSummary"]["requestedCount"] == 4
+    assert payload["aggregateSummary"]["evaluatedCount"] == 2
+    assert payload["aggregateSummary"]["maxItems"] == 2
+    assert payload["aggregateSummary"]["truncated"] is True
+    assert payload["aggregateSummary"]["structureStateCounts"]
+    relative_strength = payload["aggregateSummary"]["relativeStrength"]
+    assert relative_strength["status"] == "available"
+    assert relative_strength["benchmark"] == "SPY"
+    assert [entry["ticker"] for entry in relative_strength["ranking"]] == ["AAPL", "MSFT"]
+    assert [entry["rank"] for entry in relative_strength["ranking"]] == [1, 2]
+    assert payload["missingEvidence"] == []
+    assert payload["dataQuality"]["status"] == "available"
+
+
+def test_batch_structure_decisions_mark_comparative_context_unavailable_without_benchmark() -> None:
+    fake_history = _FakeMultiHistoryService(
+        {
+            "AAPL": {
+                "stock_code": "AAPL",
+                "period": "daily",
+                "data": _trend_breakout_history(),
+                "source": "local_db",
+                "diagnostics": {"status": "ok", "reason": "history_available"},
+            },
+            "MSFT": {
+                "stock_code": "MSFT",
+                "period": "daily",
+                "data": [],
+                "source": "unavailable",
+                "diagnostics": {"status": "unavailable", "reason": "history_unavailable"},
+            },
+        }
+    )
+
+    payload = StockStructureDecisionService(history_service=fake_history).get_structure_decisions_batch(
+        ["aapl", "msft"],
+    )
+
+    assert [item["comparativeContext"]["status"] for item in payload["items"]] == [
+        "unavailable",
+        "unavailable",
+    ]
+    assert payload["items"][1]["structureState"] == "lowConfidence"
+    assert payload["aggregateSummary"]["relativeStrength"] == {
+        "status": "unavailable",
+        "benchmark": None,
+        "ranking": [],
+        "reason": "benchmark_ohlcv_unavailable",
+    }
+    assert payload["missingEvidence"] == [
+        {
+            "kind": "benchmark_ohlcv",
+            "message": "Benchmark OHLCV is unavailable, so relative-strength ranking is unavailable.",
+        },
+        {
+            "kind": "daily_ohlcv",
+            "message": "At least one symbol has unavailable daily OHLCV evidence.",
+        },
+    ]
+    assert payload["dataQuality"]["status"] == "partial"
+
+
+def test_batch_structure_decision_output_avoids_recommendation_or_trading_instruction_language() -> None:
+    fake_history = _FakeMultiHistoryService(
+        {
+            "AAPL": {
+                "stock_code": "AAPL",
+                "period": "daily",
+                "data": _trend_breakout_history(),
+                "source": "local_db",
+                "diagnostics": {"status": "ok", "reason": "history_available"},
+            },
+            "MSFT": {
+                "stock_code": "MSFT",
+                "period": "daily",
+                "data": _weak_history(),
+                "source": "local_db",
+                "diagnostics": {"status": "ok", "reason": "history_available"},
+            },
+        }
+    )
+
+    payload = StockStructureDecisionService(history_service=fake_history).get_structure_decisions_batch(
+        ["AAPL", "MSFT"],
+    )
     serialized = json.dumps(payload, ensure_ascii=False).lower()
 
     for forbidden in FORBIDDEN_ADVICE_TOKENS:
