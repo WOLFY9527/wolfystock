@@ -171,6 +171,11 @@ def get_temperature(current_user: Optional[CurrentUser] = Depends(get_optional_c
     return MarketOverviewService().get_market_temperature(actor=_actor(current_user))
 
 
+@router.get("/regime-decision", summary="Get deterministic market regime decision")
+def get_regime_decision(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
+    return MarketOverviewService().get_market_regime_decision(actor=_actor(current_user))
+
+
 @router.get("/market-briefing", summary="Get rule-based market briefing")
 def get_market_briefing(current_user: Optional[CurrentUser] = Depends(get_optional_current_user)):
     return MarketOverviewService().get_market_briefing(actor=_actor(current_user))
