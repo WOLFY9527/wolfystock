@@ -42,7 +42,7 @@ EXPECTED_MODULES_BY_GROUP = {
         "style_leadership_rotation",
         "ai_capex_infrastructure",
     ],
-    "policyAndMacro": ["policy_regulation_watch", "scenario_watchlist"],
+    "policyAndMacro": ["policy_regulation_watch", "scenario_watchlist", "driver_chain"],
     "researchQueue": ["research_priorities", "pre_session_research_checklist"],
     "evidenceAndReadiness": ["evidence_quality"],
 }
@@ -63,6 +63,7 @@ EXPECTED_MODULE_KEYS = [
     "ai_capex_infrastructure",
     "policy_regulation_watch",
     "scenario_watchlist",
+    "driver_chain",
     "research_priorities",
     "pre_session_research_checklist",
     "evidence_quality",
@@ -115,6 +116,7 @@ def test_cockpit_layout_groups_modules_into_market_workflow() -> None:
     ]
     assert flattened_module_keys == EXPECTED_MODULE_KEYS
     assert len(flattened_module_keys) == len(set(flattened_module_keys))
+    assert flattened_module_keys.count("driver_chain") == 1
 
 
 def test_cockpit_layout_uses_public_research_labels_and_bounded_taxonomy() -> None:
