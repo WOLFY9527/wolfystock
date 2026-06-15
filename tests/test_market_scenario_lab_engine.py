@@ -270,6 +270,32 @@ def test_normalized_driver_scores_can_be_used_without_base_decision_payload() ->
     ]
 
 
+def test_all_public_named_scenarios_return_research_planning_payloads() -> None:
+    expected_names = {
+        "volatilitySpike",
+        "breadthBreakdown",
+        "ratesUpDollarUp",
+        "liquidityStress",
+        "riskOnConfirmation",
+        "gammaUnavailable",
+    }
+
+    for scenario_name in expected_names:
+        payload = build_market_scenario_lab(
+            base_decision=_base_decision(),
+            scenario={"name": scenario_name},
+        )
+
+        assert payload["schemaVersion"] == "market_scenario_lab_engine.v1"
+        assert payload["baseRegime"]["regime"] == "riskOn"
+        assert payload["scenarioRegime"]["regime"]
+        assert payload["noAdviceDisclosure"] == "Research planning only; not a personalized decision basis."
+
+        serialized = _serialized_values(payload)
+        for forbidden in FORBIDDEN_PUBLIC_TERMS:
+            assert forbidden not in serialized
+
+
 def test_service_does_not_import_protected_runtime_domains() -> None:
     tree = ast.parse((REPO_ROOT / "src/services/market_scenario_lab_engine.py").read_text(encoding="utf-8"))
     imports: list[str] = []
