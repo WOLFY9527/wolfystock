@@ -106,7 +106,10 @@ def test_build_radar_projects_engine_output_to_required_api_contract() -> None:
         "driverScores",
         "whyOnRadar",
         "whatToVerify",
+        "whyNotHigherPriority",
+        "evidenceGaps",
         "invalidationObservations",
+        "duplicateEvidenceMerged",
         "riskFlags",
         "evidenceQuality",
     }.issubset(item)
@@ -116,7 +119,12 @@ def test_build_radar_projects_engine_output_to_required_api_contract() -> None:
     assert item["evidenceQuality"]["status"] == "complete"
     assert item["whyOnRadar"]
     assert item["whatToVerify"]
+    assert item["whyNotHigherPriority"]
+    assert isinstance(item["evidenceGaps"], list)
+    assert item["duplicateEvidenceMerged"] == 0
     assert item["invalidationObservations"]
+    assert payload["aggregateSummary"]["duplicateEvidenceMerged"] == 0
+    assert payload["aggregateSummary"]["queueDiversity"]["status"] in {"thin", "mixed", "diversified", "concentrated"}
 
     leaked = [term for term in FORBIDDEN_PUBLIC_TERMS if term.lower() in _serialized(payload)]
     assert leaked == []
