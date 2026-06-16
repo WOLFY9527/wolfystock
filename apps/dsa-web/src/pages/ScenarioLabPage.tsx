@@ -102,11 +102,11 @@ function labelForDriver(key: string, locale: Locale): string {
   return DRIVER_LABELS[key]?.[locale] ?? humanizeToken(key);
 }
 
-function statusTone(value: string | null | undefined): 'success' | 'warning' | 'error' | 'info' {
+function statusTone(value: string | null | undefined): 'success' | 'caution' | 'danger' | 'info' {
   const normalized = String(value || '').toLowerCase();
   if (['high', 'riskon', 'available', 'complete'].includes(normalized)) return 'success';
-  if (['medium', 'mixed', 'partial', 'rangebound'].includes(normalized)) return 'warning';
-  if (['low', 'unavailable', 'riskoff', 'downsideaccelerationrisk', 'lowconfidence'].includes(normalized)) return 'error';
+  if (['medium', 'mixed', 'partial', 'rangebound'].includes(normalized)) return 'caution';
+  if (['low', 'unavailable', 'riskoff', 'downsideaccelerationrisk', 'lowconfidence'].includes(normalized)) return 'danger';
   return 'info';
 }
 

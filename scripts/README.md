@@ -121,6 +121,16 @@ relevant runbook context:
   raw/advice leakage, console/network/overflow, branch-aware secret scan, and
   rollback fields. It does not run browser UAT, call networks, read
   credentials, mutate runtime state, or approve public launch.
+- `uat_fresh_build_verifier.py`: local fresh-build/provenance verifier for
+  UAT preparation. Safe usage: run
+  `python3 scripts/uat_fresh_build_verifier.py` from a clean worktree to rebuild
+  `apps/dsa-web` into repo-local ignored `static/`, print the produced main
+  asset filename/hash, and optionally compare a captured sanitized admin ops
+  status JSON via `--admin-status-json`. It fails on dirty/conflicted
+  worktrees, tracked generated static/cache/dependency artifacts, missing static
+  roots/assets, build failures, stale local bundles, or mismatched admin
+  `buildProvenance`. It is not a substitute for release/UAT browser evidence,
+  operator evidence validation, or the normal CI gates.
 - `production_config_readiness.py`, `launch_acceptance_evidence.py`,
   `incident_response_evidence.py`, `operator_evidence_template_pack.py`,
   `operator_evidence_schema_reference.py`, `operator_evidence_manifest_check.py`,
